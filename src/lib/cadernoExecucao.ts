@@ -56,6 +56,8 @@ export function limparTecnico(texto: string): string {
   t = t.replace(/\b[a-z][a-z0-9]*_[a-z0-9_]+\s*=\s*[^\s;,)]+/gi, "");
   t = t.replace(/\b[a-z]+=(?:true|false|null|\d+)\b/gi, "");
   t = t.replace(/\/root\/[^\s;,]+/g, "");
+  // Resto de endereço interno sem o id ("aceleriq-file://", "internal/ready/v1") não diz nada a quem lê.
+  t = t.replace(/(?:aceleriq-file|mcp-files|files):\/\/\S*/gi, "arquivo anexado").replace(/[a-z_]+\/[a-z_]+\/v\d+/g, "");
   t = t.replace(/\bsnapshot\d{8}T\d+\b/gi, "");
   t = t.replace(/\b\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z?\b/g, "$1");
   t = t.replace(/\b(\d{2}:\d{2}):\d{2}(?:\.\d+)?Z\b/g, "$1");

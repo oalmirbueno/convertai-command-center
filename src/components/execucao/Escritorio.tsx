@@ -1,3 +1,4 @@
+import { limparTecnico } from "@/lib/cadernoExecucao";
 import { useMemo } from "react";
 import { Bot, FolderOpen, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
@@ -232,10 +233,12 @@ export default function Escritorio({
         </span>
       </p>
 
+      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
       {areas.map(({ area, agentes: doGrupo, urgencia }) => {
         const aberta = estaAberta(area, urgencia);
+        const larga = aberta && doGrupo.length > 2;
         return (
-        <section key={area} aria-label={area} className="min-w-0 rounded-lg border border-border p-3">
+        <section key={area} aria-label={area} className={juntar("min-w-0 rounded-xl border border-border p-3", larga && "lg:col-span-2 2xl:col-span-3")}>
           {/* O nome da área, discreto: separa sem competir com a lista. O
               título recolhe pelo componente do sistema (setinha + título); a
               contagem fica à vista nos dois estados. */}
@@ -252,8 +255,9 @@ export default function Escritorio({
               {!aberta && urgencia >= 90 && " · sem trabalho agora"}
             </span>
           </div>
+          {area === "Sem área" && aberta && <p className="mt-1 text-[12px] text-muted-foreground">Abra o agente e escolha a área dele no topo do perfil.</p>}
           {aberta && (
-            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar(superficie.painel, "mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain border-0 bg-transparent pr-1 [scrollbar-width:thin] sm:grid-cols-2 xl:grid-cols-3")}>
+            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar(superficie.painel, "mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain border-0 bg-transparent pr-1 [scrollbar-width:thin]", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
               {doGrupo.map((a) => {
                 const meus = porAgente.get(a.id) ?? [];
                 const estado = estadoQueManda(meus);
@@ -325,7 +329,7 @@ export default function Escritorio({
                       </span>
                     </div>
 
-                    {!tarefa && emFoco?.last_action && <p className="mt-3 line-clamp-3 text-[13px] text-foreground/85">{emFoco.last_action}</p>}
+                    {!tarefa && emFoco?.last_action && <p className="mt-3 line-clamp-2 text-[13px] text-foreground/85">{limparTecnico(String(emFoco.last_action))}</p>}
                     {/* PARA QUEM. Era isto que faltava para o quadro fazer sentido. */}
                     {tarefa && (
                       <button
@@ -334,36 +338,28 @@ export default function Escritorio({
                         className={juntar(superficie.poco, "mt-2 block w-full min-w-0 px-2.5 py-1.5 text-left transition-colors hover:bg-muted", foco)}
                       >
                         <span className="block truncate text-[13px] text-foreground">{tarefa.title}</span>
-                        <span className="-mx-1 mt-0.5 flex flex-wrap items-center text-[11px] text-muted-foreground [&>*]:mx-1">
-                          {cliente && (
-                            <span className="font-medium text-foreground/80">
-                              {cliente.company_name || cliente.full_name}
-                            </span>
-                          )}
-                          {tarefa.project?.name && <span>{tarefa.project.name}</span>}
-                          <span className="inline-flex items-center">
-                            <UserRound className="mr-1 h-2.5 w-2.5" aria-hidden="true" />
-                            {responsavel || "sem responsável"}
-                          </span>
-                          {tarefa.due_date && (
-                            <span className="inline-flex items-center tabular-nums">
-                              <Clock className="mr-1 h-2.5 w-2.5" aria-hidden="true" /> {tarefa.due_date}
-                            </span>
-                          )}
+                        <span className="-mx-1 mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground [&>*]:mx-1">
+                          {cliente && <span className="min-w-0 truncate font-medium text-foreground/80">{cliente.company_name || cliente.full_name}</span>}
+                          {responsavel && <span className="inline-flex shrink-0 items-center"><UserRound className="mr-1 h-2.5 w-2.5" aria-hidden="true" />{responsavel}</span>}
+                          {tarefa.due_date && <span className="inline-flex shrink-0 items-center tabular-nums"><Clock className="mr-1 h-2.5 w-2.5" aria-hidden="true" />{String(tarefa.due_date).split("-").reverse().slice(0, 2).join("/")}</span>}
                         </span>
                       </button>
                     )}
 
-                    {(emFoco?.next_step || meus.length > 1) && (
-                      <p className="mt-1.5 flex min-w-0 text-[12px] text-muted-foreground">
-                        {emFoco?.next_step && <span className="mr-2 min-w-0 flex-1 truncate">próximo: {emFoco.next_step}</span>}
-                        {meus.length > 1 && (
-                          <span className="ml-auto shrink-0">
-                            +{meus.length - 1} outra{meus.length - 1 > 1 ? "s" : ""}
-                          </span>
-                        )}
-                      </p>
-                    )}
+                    {meus.length > 1 && (() => {
+                      const conta = (st: string) => meus.filter((t) => t.status === st).length;
+                      const pedacos = [
+                        [conta("blocked") + conta("awaiting_input"), "travada", "text-destructive"],
+                        [conta("review"), "em revisão", "text-warning"],
+                        [conta("in_progress") + conta("queued"), "andando", "text-info"],
+                      ].filter(([n]) => Number(n) > 0) as Array<[number, string, string]>;
+                      return (
+                        <p className="mt-2 flex flex-wrap gap-x-2.5 text-[11.5px] text-muted-foreground">
+                          {pedacos.map(([n, r, tom]) => <span key={r}><span className={juntar("font-semibold tabular-nums", tom)}>{n}</span> {r}</span>)}
+                          <span className="ml-auto">{meus.length} no total</span>
+                        </p>
+                      );
+                    })()}
                   </li>
                 );
               })}
@@ -372,6 +368,7 @@ export default function Escritorio({
         </section>
         );
       })}
+      </div>
     </div>
   );
 }

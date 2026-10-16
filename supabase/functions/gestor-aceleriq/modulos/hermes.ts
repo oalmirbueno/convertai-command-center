@@ -69,13 +69,14 @@ const idDa = (v: unknown) => {
 };
 
 /** Linha de referência do contexto do painel (só nomes e ids do OS). */
-export function linhaDeContexto(c: { cliente?: { id: string; nome: string } | null; projeto?: { id: string; nome: string } | null; tarefa?: { id: string; titulo: string } | null; vinculo?: { id: string; titulo: string } | null } | null | undefined): string {
+export function linhaDeContexto(c: { cliente?: { id: string; nome: string } | null; projeto?: { id: string; nome: string } | null; tarefa?: { id: string; titulo: string } | null; vinculo?: { id: string; titulo: string } | null; agente?: { id: string; slug: string; nome: string } | null } | null | undefined): string {
   if (!c) return "";
   const partes = [
     c.cliente ? `cliente ${c.cliente.nome} (${c.cliente.id})` : "",
     c.projeto ? `projeto ${c.projeto.nome} (${c.projeto.id})` : "",
     c.tarefa ? `tarefa ${c.tarefa.titulo} (${c.tarefa.id})` : "",
     c.vinculo ? `execução ${c.vinculo.titulo} (vínculo ${c.vinculo.id})` : "",
+    c.agente ? `agente interno ${c.agente.nome} (operador ${c.agente.slug})` : "",
   ].filter(Boolean);
   return partes.length ? `[Contexto do painel Aceleriq: ${partes.join(" · ")}. Confira no MCP antes de agir.]` : "";
 }
@@ -186,8 +187,13 @@ export async function hermesAcao(acao: string, corpo: Record<string, unknown>, d
     const doDiario = contexto?.vinculo?.id && ID_UUID.test(String(contexto.vinculo.id))
       ? `\n[Conversa aberta pelo dono no diário desta execução (link_id ${contexto.vinculo.id}). Responda em linguagem natural. Quando combinarem algo (instrução, decisão, ajuste ou próximo passo), registre no diário desta execução pela ferramenta do diário (operatorDiary) com o seu operador, sem esperar outro pedido, e diga em uma frase o que registrou. Não diga que fez algo que ainda não foi feito.]`
       : "";
+    // Conversa aberta pelo perfil de um agente (16/10, dono: "clico nele e posso ativar, dar tarefa;
+    // ele vai lá e faz"): o Hermes coordena esse operador pelo MCP e conta o que fez.
+    const doAgente = !doDiario && contexto?.agente?.slug && /^[a-z0-9_-]{2,40}$/i.test(String(contexto.agente.slug))
+      ? `\n[Conversa aberta pelo dono no perfil do agente ${String(contexto.agente.nome).slice(0, 60)} (operador ${contexto.agente.slug}). Quando ele pedir trabalho, coordene esse operador pelo MCP: veja a fila e o quadro dele, encaminhe ou crie a tarefa no Kanban e coloque na fila dele, ou registre a instrução no diário do vínculo certo. Diga em uma frase o que foi feito e onde. Ações externas (publicar, gastar, alterar conta) continuam pedindo aprovação. Não diga que fez algo que ainda não foi feito.]`
+      : "";
     const imagens = imagensParaOHermes(corpo.imagens);
-    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}${doDiario}\n\n${texto}` : texto, imagens, instrucoes: INSTRUCAO_DE_APRESENTACAO }, tempo: 40_000 })).json || {};
+    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}${doDiario}${doAgente}\n\n${texto}` : texto, imagens, instrucoes: INSTRUCAO_DE_APRESENTACAO }, tempo: 40_000 })).json || {};
   }
   throw new ErroDoHermes(400, "acao_desconhecida", "Ação do Hermes desconhecida.");
 }

@@ -39,6 +39,8 @@ export type ContextoDoHermes = {
   /** Conversa aberta pelo Diário: a tarefa e a execução vão junto, e o Hermes registra no diário dela. */
   tarefa?: { id: string; titulo: string } | null;
   vinculo?: { id: string; titulo: string } | null;
+  /** Conversa aberta pelo perfil do agente (16/10): o Hermes sabe de quem se fala e aciona ele. */
+  agente?: { id: string; slug: string; nome: string } | null;
 };
 
 export type OrigemDaSessao = "desktop" | "api_server" | "cron" | "cli" | "kanban" | "subagent" | "tool" | "oneshot";
@@ -494,7 +496,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
         acao: "hermes_enviar",
         sessao_id: sessaoId,
         texto,
-        ...(contexto.vinculo ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto, tarefa: contexto.tarefa || null, vinculo: contexto.vinculo } } : levar && contexto.cliente ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto } } : {}),
+        ...(contexto.vinculo ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto, tarefa: contexto.tarefa || null, vinculo: contexto.vinculo } } : contexto.agente ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto, agente: contexto.agente } } : levar && contexto.cliente ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto } } : {}),
         ...(x.imagens.length ? { imagens: x.imagens.map((i) => i.dataUrl) } : {}),
       });
     },

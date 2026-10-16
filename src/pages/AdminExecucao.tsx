@@ -239,6 +239,8 @@ export default function AdminExecucao() {
   const { data: equipe = [] } = useTeamMembers();
   const { data: projetos = [] } = useProjects();
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
+  // Ida e volta (16/10): o diário aberto pelo perfil do agente devolve para o perfil ao fechar.
+  const [voltarAoAgente, setVoltarAoAgente] = useState<Operador | null>(null);
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
@@ -1967,7 +1969,7 @@ export default function AdminExecucao() {
         operador={agenteAberto}
         vinculos={vinculos}
         tarefas={tarefas}
-        aoAbrirDiario={(id, titulo) => { setAgenteAberto(null); setDiarioAberto({ linkId: id, titulo }); }}
+        aoAbrirDiario={(id, titulo) => { setVoltarAoAgente(agenteAberto); setAgenteAberto(null); setDiarioAberto({ linkId: id, titulo }); }}
         aoFechar={() => setAgenteAberto(null)}
       />
 
@@ -1999,7 +2001,7 @@ export default function AdminExecucao() {
         })()}
         nomesDeAgentes={nomesDeAgentes}
         aberto={Boolean(diarioAberto)}
-        aoFechar={() => setDiarioAberto(null)}
+        aoFechar={() => { setDiarioAberto(null); if (voltarAoAgente) { setAgenteAberto(voltarAoAgente); setVoltarAoAgente(null); } }}
         contextoInicial={diarioAberto?.contextoInicial}
         textoInicial={diarioAberto?.textoInicial}
         substituirRascunho={Boolean(diarioAberto?.contextoInicial || diarioAberto?.textoInicial)}

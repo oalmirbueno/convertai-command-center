@@ -1,5 +1,5 @@
 import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,8 +14,10 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AlertTriangle, ClipboardCopy, History, Lightbulb, ListChecks, TrendingUp } from "lucide-react";
-import { botao, etiqueta, juntar, superficie, texto } from "@/components/sistema";
+import { AlertTriangle, ChevronRight, ClipboardCopy, History, Lightbulb, ListChecks, MessageCircle, Pause, Play, TrendingUp } from "lucide-react";
+import ChatDoHermes from "./central/ChatDoHermes";
+import { limparTecnico } from "@/lib/cadernoExecucao";
+import { botao, etiqueta, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 
 /** Frente AG3: vínculo só com painel_task_id também acha a tarefa (antes aparecia "(sem tarefa vinculada)"). */
 function tarefaDoVinculo<T>(v: { kanban_task_id?: string | null }, tarefas: Map<string, T>): T | null {
@@ -130,19 +132,38 @@ export default function PerfilDoAgente({
     onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   });
 
+  const [limiteTrilha, setLimiteTrilha] = useState(40);
+  const [aba, setAba] = useEstadoDaTela<string>(`execucao:agente:aba:${operador?.id || ""}`, "agora", { validar: (v) => ["agora", "conversar", "historico", "melhorar"].includes(String(v)) });
   const { data: trilha = [], isError: trilhaFalhou } = useQuery({
-    queryKey: ["agente-trilha", operador?.id],
+    queryKey: ["agente-trilha", operador?.id, limiteTrilha],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("operator_audit_log")
-        .select("id, occurred_at, actor, action, old_status, new_status, evidence, from_cron")
+        .select("id, occurred_at, actor, action, old_status, new_status, evidence, from_cron, task_link_id")
         .eq("operator_id", operador!.id)
         .order("occurred_at", { ascending: false })
-        .limit(40);
+        .limit(limiteTrilha);
       if (error) throw new Error(error.message);
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: Boolean(operador?.id),
+  });
+
+  const areas = useQuery({
+    queryKey: ["operadores-internos-areas"], enabled: Boolean(operador?.id), staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("internal_operators").select("area");
+      return [...new Set(((data || []) as Array<{ area: string | null }>).map((o) => (o.area || "").trim()).filter(Boolean))].sort();
+    },
+  });
+  const mudarArea = useMutation({
+    mutationFn: async (area: string) => {
+      const { error } = await (supabase as any).rpc("operator_update", { _slug: operador!.slug, _actor: "painel", _area: area });
+      if (error) throw new Error(error.message);
+      return area;
+    },
+    onSuccess: (area) => { queryClient.invalidateQueries({ queryKey: ["operadores-internos"] }); queryClient.invalidateQueries({ queryKey: ["operadores-internos-areas"] }); toast.success(`${operador?.display_name} agora está em ${area}.`); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   });
 
   const numeros = useMemo(() => {
@@ -256,226 +277,176 @@ export default function PerfilDoAgente({
     </div>
   );
 
+  /* 16/10 (dono: "quando clico nele aparece o progresso, mas não está tão intuitivo e não tem as
+     coisas para me fazer"; "posso conversar com ele... ele vai lá e faz"; "tudo que ele fez: scroll
+     interno, ver mais e abrir, sempre com ida e volta"): cabeçalho com status, área e pausar;
+     quatro abas (Agora, Conversar e dar ordens, Tudo o que fez, Melhorar); cada tarefa e cada item
+     do histórico abre o diário e volta para cá. */
+  const ativo = operador?.status === "active";
+  const abertas = [...meus].filter((v) => v.status !== "done").sort((a, b) => ORDEM_DO_ESTADO.indexOf(a.status) - ORDEM_DO_ESTADO.indexOf(b.status));
+  const concluidas = meus.filter((v) => v.status === "done");
+  const ABAS_DO_AGENTE: Array<[string, string, typeof TrendingUp]> = [["agora", "Agora", ListChecks], ["conversar", "Conversar e dar ordens", MessageCircle], ["historico", "Tudo o que ele fez", History], ["melhorar", "Melhorar", Lightbulb]];
+  const LinhaDaTarefa = ({ v }: { v: Record<string, any> }) => {
+    const t = tarefaDoVinculo(v, tarefas);
+    const cliente = t?.project?.client ? (t.project.client.company_name || t.project.client.full_name) : null;
+    return (
+      <li>
+        <button type="button" onClick={() => aoAbrirDiario(v.id, t?.title || v.last_action)} className="group flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-muted/60">
+          <span className={juntar("h-2 w-2 shrink-0 rounded-full", TOM_DO_ESTADO[v.status] ?? "bg-muted-foreground")} aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-medium text-foreground">{t?.title || limparTecnico(String(v.last_action || "")) || "(tarefa sem título)"}</span>
+            <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
+              {precisaDecisao(v) ? <span className="font-medium text-warning">precisa da sua aprovação</span> : v.status === "done" && !v.last_evidence ? <span className="font-medium text-warning">concluída sem evidência</span> : ROTULO_DO_ESTADO[v.status] ?? v.status}
+              {cliente && ` · ${cliente}`}{v.updated_at && ` · ${quando(v.updated_at)}`}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center text-[12px] text-muted-foreground group-hover:text-foreground">Abrir<ChevronRight className="ml-0.5 h-3.5 w-3.5" aria-hidden="true" /></span>
+        </button>
+        {/* A prova mais recente, em miniatura (a imagem fala antes do texto). */}
+        {v.last_evidence && <div className="ml-7 mt-0.5 w-32 pb-1.5"><EvidenciaVisual url={String(v.last_evidence)} compacto /></div>}
+      </li>
+    );
+  };
+
   return (
-    /* CENTRALIZADO, e nao mais gaveta lateral.
-       A gaveta jogava o conteudo para a borda e, no telefone, cobria a
-       tela inteira sem parecer uma janela. Centralizado, a pessoa ve onde
-       o painel continua atras e entende que aquilo fecha. */
     <Dialog open={Boolean(operador)} onOpenChange={(aberto) => !aberto && aoFechar()}>
-      <DialogContent className="flex max-h-[88vh] w-[calc(100vw-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0">
         {operador && (
           <>
-            <div className="shrink-0 border-b border-border px-5 pb-3 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
-              <DialogTitle className={juntar(texto.tituloPagina, "pr-12 text-left")}>
-                {operador.display_name}
-              </DialogTitle>
-              <DialogDescription className={juntar(texto.auxiliar, "mt-0.5 text-left leading-5")}>
-                {operador.role} · {operador.scope}
-              </DialogDescription>
-              <div className="mt-2 flex min-w-0 flex-wrap items-center [&>*]:mr-2">
-                <p className={texto.auxiliar}>
-                  {operador.last_run_at ? `última execução ${quando(operador.last_run_at)}` : "sem execução ainda"}
-                </p>
-                {operador.status !== "active" && (
-                  <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
-                    {operador.status === "paused" ? "pausado" : operador.status}
-                  </span>
-                )}
-                {/* Pausa POR OPERADOR: ate aqui so existia a chave geral da
-                    camada. Pausado, o banco recusa assign, report,
-                    participacao e aprovacao dele — com erro que diz
-                    "pausado", nao "nao existe". */}
-                <button
-                  type="button"
-                  disabled={pausar.isPending}
-                  onClick={() => {
-                    const pausando = operador.status === "active";
-                    const motivo = window.prompt(
-                      pausando
-                        ? `Pausar ${operador.display_name}? Motivo (fica na trilha):`
-                        : `Reativar ${operador.display_name}? Motivo (opcional):`,
-                    );
-                    if (motivo === null) return; // cancelou
-                    pausar.mutate({ pausarAgora: pausando, motivo });
-                  }}
-                  className={juntar(
-                    botao.secundario,
-                    "h-7 px-2.5 text-[12px]",
-                    operador.status === "active"
-                      ? "border-warning/50 text-warning hover:bg-warning/10"
-                      : "border-success/50 text-success hover:bg-success/10",
-                  )}
-                >
-                  {operador.status === "active" ? "pausar operador" : "reativar"}
-                </button>
+            <div className="shrink-0 border-b border-border px-5 pb-2 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
+              <div className="flex min-w-0 items-center gap-3 pr-10">
+                <span className={juntar("flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[16px] font-semibold", ativo ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")} aria-hidden="true">{operador.display_name.trim()[0]?.toUpperCase()}</span>
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className={juntar(texto.tituloPagina, "truncate text-left")}>{operador.display_name}</DialogTitle>
+                  <DialogDescription className="mt-0.5 truncate text-left text-[12.5px] text-muted-foreground">{operador.role}</DialogDescription>
+                </div>
               </div>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12px]">
+                <span className={juntar(etiqueta, "h-6 px-2", ativo ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>{ativo ? "ativo" : operador.status === "paused" ? "pausado" : operador.status}</span>
+                <span className="text-muted-foreground">{operador.last_run_at ? `trabalhou ${quando(operador.last_run_at)}` : "ainda não trabalhou"}</span>
+                <label className="inline-flex items-center gap-1 text-muted-foreground">
+                  Área
+                  <select aria-label="Área do agente" value={(operador.area || "").trim()} disabled={mudarArea.isPending} onChange={(e) => { const v = e.target.value === "__nova__" ? (window.prompt("Nome da nova área:") || "").trim() : e.target.value; if (v) mudarArea.mutate(v); }} className="h-7 cursor-pointer rounded-md bg-transparent px-1 text-[12px] text-foreground hover:bg-muted">
+                    {!(operador.area || "").trim() && <option value="">Sem área</option>}
+                    {(areas.data || []).map((a) => <option key={a} value={a}>{a}</option>)}
+                    <option value="__nova__">+ nova área…</option>
+                  </select>
+                </label>
+                <span className="ml-auto flex gap-1.5">
+                  <button type="button" onClick={() => setAba("conversar")} className={juntar(botao.primario, "h-8 px-3 text-[12.5px]")}><MessageCircle className="mr-1.5 h-3.5 w-3.5" />Dar uma ordem</button>
+                  {/* Pausa por operador: pausado, o banco recusa assign, report, participação e aprovação dele. */}
+                  <button
+                    type="button"
+                    disabled={pausar.isPending}
+                    onClick={() => {
+                      const motivo = window.prompt(ativo ? `Pausar ${operador.display_name}? Motivo (fica na trilha):` : `Reativar ${operador.display_name}? Motivo (opcional):`);
+                      if (motivo === null) return;
+                      pausar.mutate({ pausarAgora: ativo, motivo });
+                    }}
+                    aria-label={ativo ? "pausar operador" : "reativar operador"}
+                    className={juntar(botao.secundario, "h-8 px-3 text-[12.5px]", ativo ? "text-warning" : "text-success")}
+                  >{ativo ? <><Pause className="mr-1.5 h-3.5 w-3.5" />Pausar</> : <><Play className="mr-1.5 h-3.5 w-3.5" />Ativar</>}</button>
+                </span>
+              </div>
+              <nav aria-label="Partes do agente" className="mt-2 flex gap-0.5 overflow-x-auto">
+                {ABAS_DO_AGENTE.map(([id, rotulo, Icone]) => (
+                  <button key={id} type="button" aria-pressed={aba === id} onClick={() => setAba(id)} className={juntar("inline-flex h-8 shrink-0 items-center rounded-md px-2.5 text-[12.5px]", aba === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}><Icone className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{rotulo}</button>
+                ))}
+              </nav>
             </div>
 
+            {aba === "conversar" ? (
+              <div className="min-h-0 flex-1">
+                <ChatDoHermes
+                  key={operador.id}
+                  chaveDaSessao={`execucao:agente:hermes:${operador.id}`}
+                  tituloDaSessao={`Agente · ${operador.display_name}`}
+                  contexto={{ cliente: null, projeto: null, agente: { id: operador.id, slug: operador.slug, nome: operador.display_name } }}
+                  className="h-full min-h-0"
+                />
+              </div>
+            ) : (
             <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-4">
-              {/* O progresso em números, não em adjetivo. */}
-              <section>
-                <Titulo icone={TrendingUp}>Progresso</Titulo>
-                <dl className={juntar(superficie.poco, "grid grid-cols-2 gap-x-4 gap-y-3 p-3 sm:grid-cols-3")}>
+              {aba === "agora" && <>
+                <dl className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                   {[
-                    { r: "Em andamento", v: numeros.andamento },
-                    { r: "Feitas com evidência", v: numeros.comEvidencia },
-                    { r: "Em revisão", v: numeros.revisao },
-                    { r: "Bloqueadas", v: numeros.bloqueadas },
-                    { r: "Falhas de execução", v: numeros.falhas },
-                    {
-                      r: "Evidência nas conclusões",
-                      v: numeros.taxaEvidencia === null ? "sem dado" : `${numeros.taxaEvidencia}%`,
-                    },
+                    { r: "Em andamento", v: numeros.andamento, tom: "text-info" },
+                    { r: "Em revisão", v: numeros.revisao, tom: "text-warning" },
+                    { r: "Travadas", v: numeros.bloqueadas, tom: "text-destructive" },
+                    { r: "Feitas", v: numeros.comEvidencia, tom: "text-success" },
+                    { r: "Falhas", v: numeros.falhas, tom: "text-destructive" },
+                    { r: "Com prova", v: numeros.taxaEvidencia === null ? "—" : `${numeros.taxaEvidencia}%`, tom: "text-foreground" },
                   ].map((k) => (
-                    <div key={k.r} className="min-w-0">
-                      <dt className={juntar(texto.auxiliar, "truncate")}>{k.r}</dt>
-                      <dd className="mt-0.5 text-[16px] font-semibold tabular-nums leading-6 text-foreground">{k.v}</dd>
+                    <div key={k.r} className={juntar(superficie.poco, "min-w-0 rounded-lg p-2.5 text-center")}>
+                      <dd className={juntar("text-[18px] font-semibold tabular-nums leading-6", k.tom)}>{k.v}</dd>
+                      <dt className="mt-0.5 truncate text-[11px] text-muted-foreground">{k.r}</dt>
                     </div>
                   ))}
                 </dl>
-              </section>
-
-              {/* AS TAREFAS, que era o que faltava.
-                  O perfil sabia contar quantas eram e nao mostrava
-                  nenhuma: quem abria para entender o que o agente fez
-                  ficava com o numero e sem o assunto. Aqui vem o titulo, o
-                  cliente, o estado, a evidencia clicavel e o caminho para
-                  abrir a tarefa no Kanban. */}
-              {meus.length > 0 && (
                 <section>
-                  <Titulo icone={ListChecks}>
-                    Tarefas deste agente <span className="ml-1 font-normal tabular-nums text-muted-foreground">{meus.length}</span>
-                  </Titulo>
-                  <ul className="divide-y divide-border border-y border-border">
-                    {[...meus]
-                      .sort((a, b) => ORDEM_DO_ESTADO.indexOf(a.status) - ORDEM_DO_ESTADO.indexOf(b.status))
-                      .map((v) => {
-                        const t = tarefaDoVinculo(v, tarefas);
-                        const tarefaId = v.kanban_task_id || v.painel_task_id;
+                  <Titulo icone={ListChecks}>Tarefas deste agente <span className="ml-1 font-normal tabular-nums text-muted-foreground">{abertas.length}</span></Titulo>
+                  {abertas.length ? <ul className="-mx-2">{abertas.map((v) => <LinhaDaTarefa key={v.id} v={v} />)}</ul>
+                    : <p className={texto.auxiliar}>Nada aberto com ele. Use "Dar uma ordem" para colocá-lo para trabalhar.</p>}
+                </section>
+                {concluidas.length > 0 && (
+                  <details>
+                    <summary className="cursor-pointer text-[13px] font-semibold">Concluídas <span className="font-normal text-muted-foreground">{concluidas.length}</span></summary>
+                    <ul className="-mx-2 mt-1 max-h-80 overflow-y-auto">{concluidas.map((v) => <LinhaDaTarefa key={v.id} v={v} />)}</ul>
+                  </details>
+                )}
+                <section>
+                  <Titulo icone={AlertTriangle}>Execuções recentes</Titulo>
+                  <ExecucoesRecentes runs={runs} agentes={[operador]} vinculos={vinculos} tarefas={tarefas} aoConversar={aoAbrirDiario} />
+                </section>
+              </>}
+
+              {aba === "historico" && (
+                <section>
+                  {trilha.length === 0 ? <p className={texto.auxiliar}>Sem histórico ainda.</p> : (
+                    <ol className="relative ml-2 border-l border-border">
+                      {trilha.map((a) => {
+                        const podeAbrir = Boolean(a.task_link_id);
+                        const conteudo = <>
+                          <p className="text-[13px] text-foreground/90 [overflow-wrap:anywhere]">
+                            {limparTecnico(falarComoGente(String(a.action)).humano)}
+                            {a.old_status && a.new_status && a.old_status !== a.new_status && <span className="text-muted-foreground"> · {estadoDaExecucao(a.old_status)} → {estadoDaExecucao(a.new_status)}</span>}
+                          </p>
+                          <p className="mt-0.5 text-[11.5px] text-muted-foreground">{quando(a.occurred_at)}{a.from_cron ? " · rotina automática" : ""}{a.evidence ? " · com comprovação" : ""}{podeAbrir ? " · abrir" : ""}</p>
+                        </>;
                         return (
-                          <li key={v.id} className="min-w-0 py-2.5">
-                            <div className="flex min-w-0 items-start">
-                              <span className={juntar(
-                                "mr-2 mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                                TOM_DO_ESTADO[v.status] ?? "bg-muted-foreground",
-                              )} aria-hidden="true" />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-[13px] font-medium text-foreground">
-                                  {t?.title || v.last_action || "(tarefa sem título)"}
-                                </p>
-                                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-                                  {ROTULO_DO_ESTADO[v.status] ?? v.status}
-                                  {t?.project?.client && ` · ${t.project.client.company_name || t.project.client.full_name}`}
-                                  {v.updated_at && ` · ${quando(v.updated_at)}`}
-                                </p>
-                              </div>
-                              <button type="button" onClick={() => aoAbrirDiario(v.id, t?.title || v.last_action)} className={juntar(botao.discreto, "ml-2 h-7 px-2 text-[12px]")}>Ver trabalho e conversar</button>
-                            </div>
-
-                            <div className="pl-3.5">
-                              {v.last_evidence && <EvidenciaVisual url={String(v.last_evidence)} />}
-
-                              {v.status === "done" && !v.last_evidence && (
-                                <p className="mt-1 text-[12px] text-warning">
-                                  concluída sem evidência
-                                </p>
-                              )}
-                              {v.block_reason && (
-                                <p className="mt-1 text-[12px] text-destructive">
-                                  bloqueio: {v.block_reason}
-                                </p>
-                              )}
-                              {v.next_step && (
-                                <p className="mt-1 text-[12px] text-muted-foreground">
-                                  próximo passo: {v.next_step}
-                                </p>
-                              )}
-                              {precisaDecisao(v) && (
-                                <p className="mt-1 text-[12px] font-medium text-warning">
-                                  precisa da sua aprovação
-                                </p>
-                              )}
-                            </div>
+                          <li key={String(a.id)} className="relative pb-3 pl-4">
+                            <span className={juntar("absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full", a.evidence ? "bg-success" : "bg-muted-foreground/60")} aria-hidden="true" />
+                            {podeAbrir ? <button type="button" className="w-full rounded-md px-1 py-0.5 text-left hover:bg-muted/60" onClick={() => aoAbrirDiario(String(a.task_link_id))}>{conteudo}</button> : <div className="px-1">{conteudo}</div>}
+                            {a.evidence && <div className="mt-1.5 w-40"><EvidenciaVisual url={String(a.evidence)} compacto /></div>}
                           </li>
                         );
                       })}
-                  </ul>
+                    </ol>
+                  )}
+                  {trilha.length >= limiteTrilha && <button type="button" className={juntar(botao.secundario, "mt-2")} onClick={() => setLimiteTrilha((n) => n + 40)}>Ver mais</button>}
                 </section>
               )}
 
-              {/* O que melhorar: cada linha sai de um número acima. */}
-              <section>
-                <Titulo icone={Lightbulb}>O que melhorar</Titulo>
-                <ul className="space-y-1.5">
-                  {melhorias.map((m, i) => (
-                    <li
-                      key={i}
-                      className={juntar(
-                        "flex items-start text-[12.5px] leading-5",
-                        m.grave ? "text-warning" : "text-muted-foreground",
-                      )}
-                    >
-                      <span className={juntar("mr-2 mt-2 h-1.5 w-1.5 shrink-0 rounded-full", m.grave ? "bg-warning" : "bg-muted-foreground")} aria-hidden="true" />
-                      <span className="min-w-0">{m.texto}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              {/* O comando pronto: o Hermes recebe o estado sem redigitar. */}
-              <details>
-                <summary className="cursor-pointer text-[12px] text-muted-foreground">Instruções de retomada no Hermes</summary>
-                <Titulo
-                  icone={ClipboardCopy}
-                  acao={
-                    <button
-                      type="button"
-                      onClick={() => void copiar(comandoDeAcionamento, "Comando")}
-                      className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}
-                    >
-                      <ClipboardCopy className="mr-1 h-3 w-3" aria-hidden="true" /> Copiar
-                    </button>
-                  }
-                >
-                  Acionar no grupo
-                </Titulo>
-                <pre className={juntar(superficie.poco, "whitespace-pre-wrap p-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]")}>
-                  {comandoDeAcionamento}
-                </pre>
-              </details>
-
-              <section>
-                <Titulo icone={AlertTriangle}>Execuções recentes</Titulo>
-                <ExecucoesRecentes runs={runs} agentes={[operador]} vinculos={vinculos} tarefas={tarefas} aoConversar={aoAbrirDiario} />
-              </section>
-
-              {/* A trilha imutável: o histórico que ninguém conserta. */}
-              <section>
-                <Titulo icone={History}>Tudo o que ele fez</Titulo>
-                {trilha.length === 0 ? (
-                  <p className={texto.auxiliar}>Sem histórico ainda.</p>
-                ) : (
-                  <ul className="divide-y divide-border border-y border-border">
-                    {trilha.map((a) => (
-                      <li key={String(a.id)} className="min-w-0 py-2">
-                        <p className="text-[12.5px] text-foreground/85 [overflow-wrap:anywhere]">
-                          {falarComoGente(String(a.action)).humano}
-                          {a.old_status && a.new_status && a.old_status !== a.new_status && (
-                            <span className="text-muted-foreground"> · {estadoDaExecucao(a.old_status)} → {estadoDaExecucao(a.new_status)}</span>
-                          )}
-                        </p>
-                        <p className={juntar(texto.auxiliar, "mt-0.5")}>
-                          {quando(a.occurred_at)}
-                          {a.from_cron ? " · rotina automática" : ""}
-                          {a.evidence ? " · com comprovação" : ""}
-                        </p>
-                        {a.evidence && <EvidenciaVisual url={String(a.evidence)} />}
+              {aba === "melhorar" && <>
+                <section>
+                  <Titulo icone={Lightbulb}>O que melhorar</Titulo>
+                  <ul className="space-y-1.5">
+                    {melhorias.map((m, i) => (
+                      <li key={i} className={juntar("flex items-start text-[13px] leading-5", m.grave ? "text-warning" : "text-muted-foreground")}>
+                        <span className={juntar("mr-2 mt-2 h-1.5 w-1.5 shrink-0 rounded-full", m.grave ? "bg-warning" : "bg-muted-foreground")} aria-hidden="true" />
+                        <span className="min-w-0">{m.texto}</span>
                       </li>
                     ))}
                   </ul>
-                )}
-              </section>
+                </section>
+                <details>
+                  <summary className="cursor-pointer text-[12px] text-muted-foreground">Instruções de retomada no Hermes</summary>
+                  <Titulo icone={ClipboardCopy} acao={<button type="button" onClick={() => void copiar(comandoDeAcionamento, "Comando")} className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}><ClipboardCopy className="mr-1 h-3 w-3" aria-hidden="true" /> Copiar</button>}>Acionar no grupo</Titulo>
+                  <pre className={juntar(superficie.poco, "whitespace-pre-wrap p-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]")}>{comandoDeAcionamento}</pre>
+                </details>
+              </>}
             </div>
+            )}
           </>
         )}
       </DialogContent>
