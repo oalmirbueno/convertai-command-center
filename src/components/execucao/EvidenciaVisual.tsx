@@ -22,7 +22,8 @@ function RelatorioDeTexto({ href }: { href: string }) {
   return <article className="prose prose-sm dark:prose-invert mx-auto w-full max-w-4xl overflow-x-auto break-words px-4 py-6 leading-7 prose-p:my-3"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{leitura.data || "Arquivo vazio."}</ReactMarkdown></article>;
 }
 
-export default function EvidenciaVisual({ url, nome = "Comprovação" }: { url: string; nome?: string }) {
+/** `compacto` (16/10): miniatura quadrada para galeria (diário, arquivos), em vez da imagem grande. */
+export default function EvidenciaVisual({ url, nome = "Comprovação", compacto = false }: { url: string; nome?: string; compacto?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const tipo = destinoDaEvidencia(url);
   const { data: assinado, isError, refetch } = useQuery({
@@ -41,16 +42,25 @@ export default function EvidenciaVisual({ url, nome = "Comprovação" }: { url: 
   if (!tipo) return <p className="text-xs text-muted-foreground">A comprovação precisa de um arquivo ou link válido.</p>;
   if (isError) return <button onClick={() => void refetch()} className="text-xs text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
   const href = tipo === "web" ? url : assinado?.href;
-  if (!href) return <p className="text-xs text-muted-foreground">Carregando comprovação…</p>;
+  if (!href) return compacto ? <div className="aspect-square w-full animate-pulse rounded-lg bg-muted/50" aria-label="Carregando comprovação" /> : <p className="text-xs text-muted-foreground">Carregando comprovação…</p>;
   const formato = assinado?.nome || url;
   const imagem = /\.(png|jpe?g|webp|gif)(?:[?#]|$)/i.test(formato);
   const arquivo = tipo !== "web" || /\.(png|jpe?g|webp|gif|pdf|mp4|webm|mp3|wav|docx?|xlsx?|pptx?)(?:[?#]|$)/i.test(formato);
   const titulo = nome === "Arquivo da execução" && assinado?.nome ? assinado.nome : nome;
   return <>
+    {compacto ? (
+      <button type="button" onClick={() => setAberto(true)} className="group block w-full overflow-hidden rounded-lg border border-border bg-muted/30 text-left hover:border-primary/60" aria-label={`Ver ${titulo}`} title={titulo}>
+        {imagem
+          ? <img src={href} loading="lazy" referrerPolicy="no-referrer" alt={titulo} className="aspect-square w-full object-cover transition-transform group-hover:scale-[1.02]" />
+          : <span className="flex aspect-square w-full flex-col items-center justify-center gap-2 p-3 text-center"><FileText className="h-8 w-8 text-primary" aria-hidden="true" /><span className="line-clamp-2 text-[11.5px] text-foreground">{titulo}</span></span>}
+        {imagem && <span className="block truncate px-2 py-1 text-[11px] text-muted-foreground">{titulo}</span>}
+      </button>
+    ) : (
     <button type="button" onClick={() => setAberto(true)} className="group block w-full overflow-hidden rounded-xl border border-border bg-background text-left hover:border-primary/60" aria-label={`Ver ${titulo}`}>
       {imagem && <img src={href} loading="lazy" referrerPolicy="no-referrer" alt={titulo} className="max-h-[400px] w-full object-contain" />}
       <span className="flex items-center gap-2 px-3 py-2 text-sm"><FileText className="h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate">{titulo}</span><Expand className="h-4 w-4 text-muted-foreground" /></span>
     </button>
+    )}
     <Dialog open={aberto} onOpenChange={setAberto}>
       <DialogContent className="max-h-[95vh] w-[96vw] max-w-6xl overflow-y-auto">
         <DialogTitle className="pr-8 break-words">{titulo}</DialogTitle>

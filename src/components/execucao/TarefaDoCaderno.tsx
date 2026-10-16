@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { botao, campo, campoTexto } from "@/components/sistema";
+import { ArrowRight, CheckCircle2, CircleDot } from "lucide-react";
+import { Carregando, botao, campo, campoTexto, juntar } from "@/components/sistema";
 
 export default function TarefaDoCaderno({ linkId }: { linkId: string }) {
   const { user } = useAuth();
@@ -50,17 +51,44 @@ export default function TarefaDoCaderno({ linkId }: { linkId: string }) {
     },
     onError: e => toast.error(e.message),
   });
-  if (tarefa.isPending) return <p>Carregando tarefa…</p>;
+  if (tarefa.isPending) return <Carregando linhas={3} rotulo="Carregando tarefa" />;
   if (tarefa.error) return <div role="alert"><p>{tarefa.error.message}</p><button className={botao.secundario} onClick={() => void tarefa.refetch()}>Tentar novamente</button></div>;
+  // 16/10 (dono: "deixar mais intuitiva e mais visual, vendo o que foi feito, o que está fazendo e o
+  // que está em andamento"): progresso, a etapa de agora em destaque e o resto em ordem.
+  const itens = lista.data || [];
+  const feitos = itens.filter(i => i.checked);
+  const abertos = itens.filter(i => !i.checked);
+  const [agora, ...depois] = abertos;
+  const pct = itens.length ? Math.round((feitos.length / itens.length) * 100) : 0;
+  const marcar = (id: string, checked: boolean) => salvar.mutate({ tipo: "marcar", id, checked });
+  const Linha = ({ i, destaque = false }: { i: { id: string; title: string; checked: boolean }; destaque?: boolean }) => (
+    <label className={juntar("flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2.5 transition-colors", destaque ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted/50")}>
+      <input type="checkbox" checked={i.checked} disabled={salvar.isPending} onChange={e => marcar(i.id, e.target.checked)} className="mt-1 h-4 w-4 accent-primary" />
+      <span className={juntar("text-[14px] leading-6", i.checked && "text-muted-foreground line-through")}>{i.title}</span>
+    </label>
+  );
   return <div className="mx-auto max-w-3xl space-y-6">
-    <section className="space-y-3"><h3 className="font-semibold">Descrição</h3>
-      <textarea aria-label="Descrição da tarefa" className={campoTexto + " min-h-32 w-full"} value={descricao ?? tarefa.data?.description ?? ""} onChange={e => setDescricao(e.target.value)} placeholder="O que será entregue e quais são os critérios de conclusão?" />
-      <button className={botao.secundario} disabled={salvar.isPending || descricao === null} onClick={() => salvar.mutate({ tipo: "descricao" })}>{salvar.isPending ? "Salvando…" : "Salvar descrição"}</button>
+    <section className="rounded-xl bg-card p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[15px] font-semibold">{tarefa.data?.title}</h3>
+        <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">{feitos.length} de {itens.length} etapas</span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso do checklist">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      {!itens.length && !lista.isPending && <p className="mt-3 text-[13px] text-muted-foreground">Sem etapas ainda. O agente preenche o checklist quando começa; você também pode adicionar abaixo.</p>}
     </section>
-    <section className="space-y-3"><h3 className="font-semibold">Checklist <span className="text-sm text-muted-foreground">{(lista.data || []).filter(i => i.checked).length}/{lista.data?.length || 0}</span></h3>
-      {lista.error && <button className="text-warning" onClick={() => void lista.refetch()}>Não consegui ler o checklist. Tentar novamente</button>}
-      {lista.data?.map(i => <label key={i.id} className="flex items-start gap-3 rounded-lg border border-border p-3"><input type="checkbox" checked={i.checked} disabled={salvar.isPending} onChange={e => salvar.mutate({ tipo: "marcar", id: i.id, checked: e.target.checked })} className="mt-1 accent-primary" /><span className={i.checked ? "text-muted-foreground line-through" : ""}>{i.title}</span></label>)}
-      <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (item.trim()) salvar.mutate({ tipo: "adicionar" }); }}><input aria-label="Novo item do checklist" value={item} onChange={e => setItem(e.target.value)} className={campo + " flex-1"} placeholder="Adicionar uma etapa" maxLength={500} /><button className={botao.secundario} disabled={!item.trim() || salvar.isPending || lista.isPending || !!lista.error}>Adicionar</button></form>
-    </section>
+    {lista.error && <button className="text-warning" onClick={() => void lista.refetch()}>Não consegui ler o checklist. Tentar novamente</button>}
+    {agora && <section className="space-y-1.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-primary"><CircleDot className="h-3.5 w-3.5" />Fazendo agora</h4><Linha i={agora} destaque /></section>}
+    {depois.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-muted-foreground"><ArrowRight className="h-3.5 w-3.5" />Depois</h4>{depois.map(i => <Linha key={i.id} i={i} />)}</section>}
+    {feitos.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-success"><CheckCircle2 className="h-3.5 w-3.5" />Feito</h4>{feitos.map(i => <Linha key={i.id} i={i} />)}</section>}
+    <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (item.trim()) salvar.mutate({ tipo: "adicionar" }); }}><input aria-label="Novo item do checklist" value={item} onChange={e => setItem(e.target.value)} className={campo + " flex-1"} placeholder="Adicionar uma etapa" maxLength={500} /><button className={botao.secundario} disabled={!item.trim() || salvar.isPending || lista.isPending || !!lista.error}>Adicionar</button></form>
+    <details className="rounded-xl bg-card p-4">
+      <summary className="cursor-pointer text-[13px] font-medium">Descrição e critérios da tarefa</summary>
+      <div className="mt-3 space-y-3">
+        <textarea aria-label="Descrição da tarefa" className={campoTexto + " min-h-32 w-full"} value={descricao ?? tarefa.data?.description ?? ""} onChange={e => setDescricao(e.target.value)} placeholder="O que será entregue e quais são os critérios de conclusão?" />
+        <button className={botao.secundario} disabled={salvar.isPending || descricao === null} onClick={() => salvar.mutate({ tipo: "descricao" })}>{salvar.isPending ? "Salvando…" : "Salvar descrição"}</button>
+      </div>
+    </details>
   </div>;
 }
