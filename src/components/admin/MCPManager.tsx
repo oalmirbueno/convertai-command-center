@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, Copy, Cpu, Eye, EyeOff,
   ExternalLink, FileJson, Key, Loader2, Network, Plus, RefreshCw,
-  RotateCw, Server, ShieldCheck, Trash2, XCircle, Zap
+  RotateCw, Server, ShieldCheck, SlidersHorizontal, Trash2, XCircle, Zap
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -38,14 +38,17 @@ const MCP_URL = MCP_SERVER_URL;
 const PRM_URL = MCP_OAUTH_METADATA_URL;
 const CONNECT_URL = appPublicUrl("/conectar-mcp");
 
+// As dicas dizem o que cada escopo libera de fato (as expansões ficam em
+// supabase/functions/_shared/mcp-auth.ts, SCOPE_EXPANSIONS_LOCAL).
 const SCOPES: { id: string; label: string; hint: string; danger?: boolean }[] = [
-  { id: "aceleriq:read", label: "aceleriq:read", hint: "Leitura de projetos, tarefas, clientes, relatórios e calendário editorial." },
-  { id: "aceleriq:write", label: "aceleriq:write", hint: "Criar/atualizar tarefas, itens editoriais e rascunhos de relatório. Nunca aprova, agenda ou publica.", danger: true },
-  { id: "editorial:read", label: "editorial:read", hint: "Ler apenas o calendário editorial dos clientes autorizados." },
+  { id: "aceleriq:read", label: "aceleriq:read", hint: "Ler tudo: clientes, projetos, tarefas, relatórios, briefings, arquivos, contratos, comercial e calendário." },
+  { id: "aceleriq:write", label: "aceleriq:write", hint: "Escrever em tudo: projetos, tarefas, relatórios, arquivos, clientes, Mesas (Estúdio, Ads, Fotos), calendário e comercial. O que vai para o cliente segue as aprovações do painel.", danger: true },
+  { id: "contracts:write", label: "contracts:write", hint: "Criar, alterar e cancelar contratos de clientes.", danger: true },
+  { id: "aceleriq:finance", label: "aceleriq:finance", hint: "Ler indicadores financeiros (faturamento, cobrança, investimento)." },
+  { id: "editorial:read", label: "editorial:read", hint: "Ler só o calendário editorial dos clientes autorizados." },
   { id: "editorial:write", label: "editorial:write", hint: "Adicionar pautas com cliente, projeto, formato e data. Nunca aprova, agenda ou publica.", danger: true },
-  { id: "aceleriq:finance", label: "aceleriq:finance", hint: "Leitura de indicadores financeiros agregados." },
-  { id: "memory:read", label: "memory:read", hint: "Consulta ao Segundo Cérebro (GitHub, somente leitura)." },
-  { id: "memory:propose", label: "memory:propose", hint: "Propor arquivos em memory/inbox/chatgpt/ (nunca sobrescreve).", danger: true },
+  { id: "memory:read", label: "memory:read", hint: "Consultar o Segundo Cérebro (somente leitura)." },
+  { id: "memory:propose", label: "memory:propose", hint: "Propor arquivos para o Segundo Cérebro (nunca sobrescreve).", danger: true },
 ];
 
 const EXPIRY_PRESETS: { label: string; days: number | null }[] = [
@@ -246,6 +249,7 @@ export default function MCPManager() {
   const [rotateFor, setRotateFor] = useState<ApiKey | null>(null);
   const [revokeFor, setRevokeFor] = useState<ApiKey | null>(null);
   const [testFor, setTestFor] = useState<ApiKey | null>(null);
+  const [editFor, setEditFor] = useState<ApiKey | null>(null);
 
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [issuedName, setIssuedName] = useState<string>("");
@@ -348,6 +352,14 @@ export default function MCPManager() {
     if (error) return toast.error("Erro ao revogar: " + error.message);
     toast.success("Credencial revogada");
     await loadKeys();
+  };
+
+  const salvarPermissoes = async (k: ApiKey, scopes: string[]) => {
+    const { error } = await supabase.from("api_keys").update({ scopes }).eq("id", k.id);
+    if (error) { toast.error("Erro ao salvar permissões: " + error.message); return false; }
+    toast.success("Permissões atualizadas");
+    await loadKeys();
+    return true;
   };
 
   const tones: Record<string, string> = {
@@ -567,6 +579,9 @@ export default function MCPManager() {
                           <button type="button" className={botao.icone} onClick={() => setTestFor(k)} aria-label={`Testar ${k.name}`} title="Testar">
                             <Zap className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
+                          <button type="button" className={botao.icone} onClick={() => setEditFor(k)} disabled={!!k.revoked_at} aria-label={`Editar permissões de ${k.name}`} title="Editar permissões">
+                            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
                           <button type="button" className={botao.icone} onClick={() => setRotateFor(k)} disabled={!!k.revoked_at} aria-label={`Rotacionar ${k.name}`} title="Rotacionar">
                             <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
@@ -682,6 +697,13 @@ export default function MCPManager() {
         onCreate={createCredential}
         preset={agentPreset ? { name: agentPreset.defaultName, scopes: agentPreset.defaultScopes, expiresAt: null } : null}
         agent={agentPreset}
+      />
+
+      {/* ── Editar permissões ─────────────────────────────── */}
+      <EditarPermissoesDialog
+        credencial={editFor}
+        onOpenChange={o => !o && setEditFor(null)}
+        onSave={salvarPermissoes}
       />
 
       {/* ── Rotate dialog ─────────────────────────────────── */}
@@ -813,6 +835,93 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/* ─── Lista de escopos (criar, rotacionar e editar) ───────── */
+function ListaDeEscopos({
+  scopes, toggle, setScopes,
+}: {
+  scopes: string[];
+  toggle: (id: string) => void;
+  setScopes: (s: string[]) => void;
+}) {
+  const todos = SCOPES.every(s => scopes.includes(s.id));
+  return (
+    <fieldset className="min-w-0 border-0 p-0">
+      <legend className={juntar(texto.rotulo, "mb-1.5 flex w-full min-w-0 items-center p-0")}>
+        <span className="min-w-0 flex-1">
+          Escopos concedidos<span className="ml-0.5 text-destructive" aria-hidden="true">*</span>
+        </span>
+        <button type="button" className={botao.discreto} onClick={() => setScopes(todos ? ["aceleriq:read"] : SCOPES.map(s => s.id))}>
+          {todos ? "Desmarcar todos" : "Marcar todos"}
+        </button>
+      </legend>
+      <ul className={juntar(superficie.poco, "divide-y divide-border")}>
+        {SCOPES.map(s => (
+          <li key={s.id}>
+            <label className="flex min-w-0 cursor-pointer items-start px-3 py-2 transition-colors hover:bg-muted">
+              <Checkbox checked={scopes.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="mr-2.5 mt-0.5" />
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center">
+                  <code className="mr-1.5 font-mono text-[12px] font-semibold">{s.label}</code>
+                  {s.danger && <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>sensível</span>}
+                </span>
+                <span className="mt-0.5 block text-[12px] leading-4 text-muted-foreground">{s.hint}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+}
+
+/* ─── Editar permissões de uma credencial existente ───────── */
+function EditarPermissoesDialog({
+  credencial, onOpenChange, onSave,
+}: {
+  credencial: ApiKey | null;
+  onOpenChange: (o: boolean) => void;
+  onSave: (k: ApiKey, scopes: string[]) => Promise<boolean>;
+}) {
+  const [scopes, setScopes] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (credencial) { setScopes(credencial.scopes ?? []); setSaving(false); }
+  }, [credencial]);
+
+  const toggle = (id: string) =>
+    setScopes(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+
+  const salvar = async () => {
+    if (!credencial) return;
+    if (scopes.length === 0) return toast.error("Selecione ao menos um escopo");
+    setSaving(true);
+    const ok = await onSave(credencial, scopes);
+    setSaving(false);
+    if (ok) onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={!!credencial} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className={texto.tituloSecao}>Editar permissões</DialogTitle>
+          <DialogDescription className="text-[12.5px] leading-5">
+            Credencial <span className="font-medium text-foreground">{credencial?.name}</span>. Vale na próxima chamada do agente, sem trocar o token.
+          </DialogDescription>
+        </DialogHeader>
+        <ListaDeEscopos scopes={scopes} toggle={toggle} setScopes={setScopes} />
+        <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
+          <button type="button" className={botao.secundario} onClick={() => onOpenChange(false)}>Cancelar</button>
+          <button type="button" className={botao.primario} onClick={salvar} disabled={saving}>
+            {saving ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Salvando...</> : "Salvar permissões"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Create / Rotate dialog ─────────────────────────────── */
 function CreateCredentialDialog({
   open, onOpenChange, onCreate, preset, rotate, agent,
@@ -882,27 +991,7 @@ function CreateCredentialDialog({
             </CampoDeFormulario>
           </GrupoDeCampos>
 
-          <fieldset className="min-w-0 border-0 p-0">
-            <legend className={juntar(texto.rotulo, "mb-1.5 p-0")}>
-              Escopos concedidos<span className="ml-0.5 text-destructive" aria-hidden="true">*</span>
-            </legend>
-            <ul className={juntar(superficie.poco, "divide-y divide-border")}>
-              {SCOPES.map(s => (
-                <li key={s.id}>
-                  <label className="flex min-w-0 cursor-pointer items-start px-3 py-2 transition-colors hover:bg-muted">
-                    <Checkbox checked={scopes.includes(s.id)} onCheckedChange={() => toggle(s.id)} className="mr-2.5 mt-0.5" />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center">
-                        <code className="mr-1.5 font-mono text-[12px] font-semibold">{s.label}</code>
-                        {s.danger && <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>sensível</span>}
-                      </span>
-                      <span className="mt-0.5 block text-[12px] leading-4 text-muted-foreground">{s.hint}</span>
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
+          <ListaDeEscopos scopes={scopes} toggle={toggle} setScopes={setScopes} />
         </div>
         <div className="flex min-w-0 flex-wrap justify-end border-t border-border pt-4 [&>*+*]:ml-2">
           <button type="button" className={botao.secundario} onClick={() => onOpenChange(false)}>Cancelar</button>
