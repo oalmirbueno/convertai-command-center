@@ -11,8 +11,8 @@ describe("o trabalho dito como gente", () => {
     expect(tipoDaEntrega(null, "Conferir pendências")).toBeNull();
   });
   it("o agente fala em primeira pessoa, pela situação", () => {
-    expect(fraseDoAgente({ status: "in_progress", titulo: "[ACERBI | 13/10] Carrossel: Seu cliente entendeu a oferta?", cliente: "Acerbi", tipo: "carrossel" })).toBe('Estou fazendo carrossel "Carrossel: Seu cliente entendeu a oferta?" para Acerbi.');
-    expect(fraseDoAgente({ status: "review", titulo: "Post de antes e depois", cliente: "Verzelo", tipo: "post" })).toBe('Terminei post "Post de antes e depois" para Verzelo e estou esperando você aprovar.');
+    expect(fraseDoAgente({ status: "in_progress", titulo: "[ACERBI | 13/10] Carrossel: Seu cliente entendeu a oferta?", cliente: "Acerbi", tipo: "carrossel" })).toBe('Estou fazendo o carrossel "Carrossel: Seu cliente entendeu a oferta?" para Acerbi.');
+    expect(fraseDoAgente({ status: "review", titulo: "Post de antes e depois", cliente: "Verzelo", tipo: "post" })).toBe('Terminei o post "Post de antes e depois" para Verzelo e estou esperando você aprovar.');
     expect(fraseDoAgente({ status: "blocked", titulo: "Coordenar rotina", motivo: "falta o acesso ao Meta" })).toBe('Parei em "Coordenar rotina": falta o acesso ao Meta');
   });
   it("o que foi feito diz o que é e se há prova, sem 'arquivo interno'", () => {

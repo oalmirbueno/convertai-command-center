@@ -620,10 +620,14 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
     ) : (
       <div className="flex flex-col items-center py-10 text-center">
         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary"><Bot className="h-5 w-5" /></span>
-        <p className="mt-3 text-[15px] font-semibold">{daCentral ? "Nenhuma conversa com o Hermes ainda." : "Converse com o Hermes sobre esta execução."}</p>
-        {!daCentral && <p className="mt-1 max-w-xs text-[12px] text-muted-foreground">Fale do seu jeito. O que vocês combinarem ele registra no diário, com a assinatura dele.</p>}
+        {/* 16/10 (dono: "quer conversar comigo? como se fosse uma pessoa"): pelo perfil do agente,
+            a conversa é com ele (o Hermes coordena e responde com o andamento real). */}
+        <p className="mt-3 text-[15px] font-semibold">{contexto.agente ? `Converse com ${contexto.agente.nome}` : daCentral ? "Nenhuma conversa com o Hermes ainda." : "Converse com o Hermes sobre esta execução."}</p>
+        {contexto.agente
+          ? <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Pergunte como está o trabalho, peça uma tarefa ou ajuste. O Hermes coordena {contexto.agente.nome} e responde com o andamento de verdade.</p>
+          : !daCentral && <p className="mt-1 max-w-xs text-[12px] text-muted-foreground">Fale do seu jeito. O que vocês combinarem ele registra no diário, com a assinatura dele.</p>}
         <button type="button" onClick={() => criar.mutate()} disabled={criar.isPending} className={juntar(botao.primario, "mt-4 h-8 rounded-full text-[12px]")}>
-          {criar.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}Nova conversa
+          {criar.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}{contexto.agente ? "Começar a conversa" : "Nova conversa"}
         </button>
       </div>
     );

@@ -35,13 +35,19 @@ export function tipoDaEntrega(tipo?: string | null, titulo?: string | null): str
   return PELO_TITULO.find(([re]) => re.test(t))?.[1] ?? null;
 }
 
+/** O artigo de cada tipo ("o carrossel", "a arte", "as lâminas"). */
+const FEMININO = /^(arte|página|landing page|automação)$/;
+const PLURAL_F = /^(lâminas)$/;
+const PLURAL_M = /^(stories|anúncios)$/;
+const comArtigo = (tipo: string) => `${PLURAL_F.test(tipo) ? "as" : PLURAL_M.test(tipo) ? "os" : FEMININO.test(tipo) ? "a" : "o"} ${tipo}`;
+
 const curto = (t: string, n = 70) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
 
 /** A frase do agente em primeira pessoa, pela situação do trabalho. */
 export function fraseDoAgente(o: { status: string; titulo?: string | null; cliente?: string | null; tipo?: string | null; motivo?: string | null }): string {
   const titulo = curto(limparTecnico(String(o.titulo || "uma tarefa")).replace(/^\[[^\]]+\]\s*/, ""));
   const para = o.cliente ? ` para ${o.cliente}` : "";
-  const oque = o.tipo ? `${o.tipo} "${titulo}"` : `"${titulo}"`;
+  const oque = o.tipo ? `${comArtigo(o.tipo)} "${titulo}"` : `"${titulo}"`;
   switch (o.status) {
     case "in_progress": return `Estou fazendo ${oque}${para}.`;
     case "queued": return `Vou começar ${oque}${para}.`;
