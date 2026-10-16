@@ -60,6 +60,18 @@ export function limparTecnico(texto: string): string {
   t = t.replace(/\b\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z?\b/g, "$1");
   t = t.replace(/\b(\d{2}:\d{2}):\d{2}(?:\.\d+)?Z\b/g, "$1");
   t = t.replace(/(^|[\s,:;])(de|com|e|carteira|total|retornou)(\d+)/gi, "$1$2 $3");
+  // Palavras de status em inglês e palavras coladas em número ("published12:33Z", "projeto09-15/10"),
+  // sem mexer dentro de links.
+  t = t.replace(/([a-zà-ú])(https?:\/\/)/gi, "$1 $2");
+  t = t.split(/(https?:\/\/\S+)/).map((parte, i) => i % 2 ? parte : parte
+    .replace(/([a-zà-ú]{3,})(\d)/g, "$1 $2")
+    .replace(/\b(\d{1,2}(?::\d{2})?)Z\b/g, "$1")
+    .replace(/\b[a-z]+_[a-z_]+\b/g, "")
+    .replace(/\bagency approved\b/gi, "aprovado pela agência")
+    .replace(/\bapproved\b/gi, "aprovado").replace(/\bscheduled\b/gi, "agendado").replace(/\bpublished\b/gi, "publicado")
+    .replace(/\bdone\b/gi, "feito").replace(/\bpending\b/gi, "pendente").replace(/\bfailed\b/gi, "falhou"),
+  ).join("");
+  t = t.replace(/(^|[^.])\.\.(?!\.)/g, "$1.");
   t = t.replace(/\(\s*\)/g, "").replace(/\s+([;,.:])/g, "$1").replace(/([;,])\s*(?=[;,.])/g, "").replace(/[ \t]{2,}/g, " ");
   return t.replace(/(^|\n)\s*[;,]\s*/g, "$1").trim();
 }

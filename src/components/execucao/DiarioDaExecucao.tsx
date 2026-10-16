@@ -113,6 +113,16 @@ const quando = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const inicial = (nome: string) => (nome.trim()[0] || "?").toUpperCase();
 
+/** Links no meio do texto viram "abrir (site)" clicável, em vez do endereço inteiro. */
+function ComLinks({ texto }: { texto: string }) {
+  return <>{texto.split(/(https?:\/\/[^\s;,)]+)/).map((parte, i) => {
+    if (i % 2 === 0) return parte;
+    let site = parte;
+    try { site = new URL(parte).hostname.replace(/^www\./, ""); } catch { /* fica o endereço */ }
+    return <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-2 hover:underline">abrir ({site})</a>;
+  })}</>;
+}
+
 /** Uma entrada do diário em leitura simples: resumo, imagens e os blocos do agente. */
 function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; autor: string; doHumano: boolean; aoResponder: (e: Entrada) => void }) {
   const [aberta, setAberta] = useState(false);
@@ -129,7 +139,7 @@ function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; auto
         <span className="ml-auto shrink-0 pl-2 tabular-nums text-muted-foreground">{quando(e.created_at)}</span>
       </header>
       {e.title && <h3 className="mt-2.5 text-[15px] font-semibold leading-snug text-foreground">{tituloDoCaderno(e.title)}</h3>}
-      <p className="mt-1.5 whitespace-pre-line text-[14px] leading-6 text-foreground/90">{leitura.resumo || "Atualização sem texto."}</p>
+      <p className="mt-1.5 whitespace-pre-line text-[14px] leading-6 text-foreground/90">{leitura.resumo ? <ComLinks texto={leitura.resumo} /> : "Atualização sem texto."}</p>
       {imagens.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {imagens.map((a, i) => <EvidenciaVisual key={i} url={a.url!} nome={a.name || "Comprovação"} compacto />)}
@@ -142,7 +152,7 @@ function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; auto
             return (
               <div key={i} className="flex gap-2.5">
                 <t.Icone className={juntar("mt-0.5 h-4 w-4 shrink-0", t.cor)} aria-hidden="true" />
-                <p className="min-w-0 text-[13.5px] leading-6"><span className={juntar("font-medium", t.cor)}>{s.rotulo}: </span><span className="text-foreground/90">{s.texto}</span></p>
+                <p className="min-w-0 text-[13.5px] leading-6"><span className={juntar("font-medium", t.cor)}>{s.rotulo}: </span><span className="text-foreground/90"><ComLinks texto={s.texto} /></span></p>
               </div>
             );
           })}

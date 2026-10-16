@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Clock, ExternalLink, Zap } from "lucide-react";
 import { Carregando, EstadoDeErro, Secao, botao, juntar, superficie, texto } from "@/components/sistema";
+import EvidenciaVisual from "./EvidenciaVisual";
+import { limparTecnico } from "@/lib/cadernoExecucao";
 
 /**
  * O que já foi AUTORIZADO e ainda espera o agente fazer.
@@ -117,34 +119,31 @@ export default function OrdensAutorizadas() {
           titulo={<span className="inline-flex items-center"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-success" aria-hidden="true" />Feito no mundo, com prova</span>}
           descricao={`${cumpridas.length} ${cumpridas.length === 1 ? "ordem cumprida" : "ordens cumpridas"}`}
         >
-          <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")}>
-            {cumpridas.map((o: any) => (
-              <li key={o.id} className="min-w-0 px-4 py-2.5">
-                <p className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>{o.o_que}</p>
-                <p className={juntar(texto.auxiliar, "mt-0.5")}>
-                  {o.agente} · {quando(o.executed_at)}
-                </p>
-                {o.execution_evidence && (
-                  /* A prova é o ponto: ação externa não pode ser afirmada sem
-                     ela, porque ninguém consegue desfazer depois. */
-                  <p className="mt-0.5 break-all text-[12px]">
-                    {/^https?:\/\//i.test(o.execution_evidence) ? (
-                      <a
-                        href={o.execution_evidence}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center text-primary underline"
-                      >
-                        <ExternalLink className="mr-1 h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-                        {o.execution_evidence}
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">{o.execution_evidence}</span>
-                    )}
-                  </p>
-                )}
-              </li>
-            ))}
+          {/* 16/10 (dono: "feito no mundo, comprovado: mais bonito, mais organizado, não mostre
+              texto"): um cartão por ordem, com o selo, o que foi feito em uma frase e a prova
+              (imagem em miniatura ou o botão para abrir o link). */}
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {cumpridas.map((o: any) => {
+              const prova = String(o.execution_evidence || "").trim();
+              const ehLink = /^https?:\/\//i.test(prova);
+              const ehArquivo = /^(aceleriq-file|files|mcp-files):\/\//i.test(prova) || (ehLink && /\.(png|jpe?g|webp|gif|pdf)(?:[?#]|$)/i.test(prova));
+              let site = "";
+              try { site = ehLink ? new URL(prova).hostname.replace(/^www\./, "") : ""; } catch { site = ""; }
+              return (
+                <li key={o.id} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+                  {ehArquivo && <div className="border-b border-border"><EvidenciaVisual url={prova} nome="Prova do que foi feito" compacto /></div>}
+                  <div className="flex min-w-0 flex-1 flex-col p-3.5">
+                    <span className="inline-flex w-fit items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Feito no mundo</span>
+                    <p className="mt-2 line-clamp-2 text-[14px] font-medium leading-snug text-foreground [overflow-wrap:anywhere]" title={o.o_que}>{limparTecnico(String(o.o_que || "Ordem cumprida"))}</p>
+                    <p className="mt-auto flex items-center gap-1.5 pt-3 text-[12px] text-muted-foreground">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground" aria-hidden="true">{String(o.agente || "?").trim()[0]?.toUpperCase()}</span>
+                      <span className="min-w-0 truncate">{o.agente}</span><span className="shrink-0">· {quando(o.executed_at)}</span>
+                      {ehLink && !ehArquivo && <a href={prova} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex shrink-0 items-center text-primary hover:underline"><ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" />Ver a prova{site ? ` (${site})` : ""}</a>}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </Secao>
       )}

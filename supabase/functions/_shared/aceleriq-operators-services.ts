@@ -1193,3 +1193,70 @@ export async function centralReviewMarcarEnviado(input: {
   if (error) throw new Error(`central_review_marcar_enviado_por_agente: ${error.message}`);
   return data;
 }
+
+/**
+ * O checklist da tarefa de um vinculo (16/10/2026, dono: "na tarefa do checklist ele tem que
+ * preencher os checklists para fazer o que ele esta fazendo"). O painel mostra como
+ * "Fazendo agora / Depois / Feito" no diario. Sem add nem check, lista. add cria as etapas
+ * (titulos curtos, em ordem); check marca ou desmarca pelo id. A autoria vai para o responsavel
+ * humano da tarefa (a coluna exige uma pessoa); sem ele, um admin.
+ */
+export async function operatorChecklist(input: {
+  link_id: string;
+  operator?: string;
+  add?: string[];
+  check?: { id: string; done: boolean }[];
+}) {
+  if (!isUuid(input.link_id)) throw new Error('link_id must be a UUID');
+  const { data: vinculo, error: e1 } = await comPrazo(db().from('operator_task_links')
+    .select('id, kanban_task_id, painel_task_id').eq('id', input.link_id).maybeSingle());
+  if (e1) throw new Error(`operator_task_links: ${e1.message}`);
+  const taskId = texto((vinculo as Record<string, unknown> | null)?.kanban_task_id) ?? texto((vinculo as Record<string, unknown> | null)?.painel_task_id);
+  if (!taskId) throw new Error('este vinculo nao tem tarefa: o checklist mora na tarefa do Kanban');
+
+  const escreve = (input.add?.length ?? 0) > 0 || (input.check?.length ?? 0) > 0;
+  if (escreve) {
+    const slug = texto(input.operator)?.toLowerCase();
+    if (!slug) throw new Error('para mexer no checklist informe operator (slug do operador)');
+    const { data: op } = await comPrazo(db().from('internal_operators').select('id').eq('slug', slug).maybeSingle());
+    if (!op) throw new Error(`operador ${slug} nao existe`);
+  }
+
+  if (input.add?.length) {
+    const { data: tarefa } = await comPrazo(db().from('tasks').select('assigned_to').eq('id', taskId).maybeSingle());
+    let autor = texto((tarefa as Record<string, unknown> | null)?.assigned_to);
+    if (!autor) {
+      const { data: admin } = await comPrazo(db().from('user_roles').select('user_id').eq('role', 'admin').limit(1).maybeSingle());
+      autor = texto((admin as Record<string, unknown> | null)?.user_id);
+    }
+    if (!autor) throw new Error('sem pessoa para assinar o checklist (tarefa sem responsavel e nenhum admin)');
+    const { data: atuais } = await comPrazo(db().from('task_checklist_items').select('title, item_order').eq('task_id', taskId));
+    const existentes = new Set(((atuais ?? []) as Array<Record<string, unknown>>).map((i) => String(i.title).trim().toLowerCase()));
+    let ordem = Math.max(-1, ...((atuais ?? []) as Array<Record<string, unknown>>).map((i) => Number(i.item_order) || 0));
+    const novos = input.add.map((t) => String(t).replace(/\s+/g, ' ').trim().slice(0, 200)).filter((t) => t && !existentes.has(t.toLowerCase()))
+      .map((title) => ({ task_id: taskId, title, item_order: ++ordem, created_by: autor }));
+    if (novos.length) {
+      const { error } = await comPrazo(db().from('task_checklist_items').insert(novos));
+      if (error) throw new Error(`task_checklist_items: ${error.message}`);
+    }
+  }
+  for (const c of input.check ?? []) {
+    if (!isUuid(c.id)) throw new Error('check.id must be a UUID');
+    const { error } = await comPrazo(db().from('task_checklist_items').update({ checked: !!c.done }).eq('id', c.id).eq('task_id', taskId));
+    if (error) throw new Error(`task_checklist_items: ${error.message}`);
+  }
+
+  const { data: itens, error } = await comPrazo(db().from('task_checklist_items')
+    .select('id, title, checked, item_order').eq('task_id', taskId).order('item_order'));
+  if (error) throw new Error(`task_checklist_items: ${error.message}`);
+  const lista = (itens ?? []) as Array<{ id: string; title: string; checked: boolean }>;
+  return {
+    link_id: input.link_id,
+    task_id: taskId,
+    feitos: lista.filter((i) => i.checked).length,
+    total: lista.length,
+    etapas: lista.map((i) => ({ id: i.id, etapa: i.title, feita: i.checked })),
+    como_usar: 'Ao comecar a tarefa, crie as etapas com add (curtas, em portugues simples, na ordem). '
+      + 'Ao terminar cada uma, marque com check [{id, done: true}]. O dono ve "Fazendo agora / Depois / Feito".',
+  };
+}

@@ -39,6 +39,7 @@ import {
   operatorBoard,
   operatorAssign,
   operatorDiary,
+  operatorChecklist,
   operatorProposeAssignee,
   operatorRequestApproval,
   centralReviewFila,
@@ -3551,7 +3552,7 @@ const operatorDigestTool = makeRead(
 const MAPA_DO_PAINEL = [
   { area: 'Esteira', rota: '/ciclo', para: 'Acoes da semana a partir do dossie geral, historico e fatos, separadas entre social e trafego.', pelo_mcp: 'aceleriq_get_client_dossier, aceleriq_get_client_context' },
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
-  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
+  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente, rituais de relacionamento e o Dia Prioritario de cada cliente (clientes do dia, semana, pendencias e registros).', pelo_mcp: 'aceleriq_get_client_context, aceleriq_dia_prioritario (leitura), aceleriq_dia_prioritario_registrar (acao)' },
   { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
@@ -3624,7 +3625,7 @@ const operatorDiaryTool: ToolDefinition = {
   name: 'aceleriq_operator_diary',
   title: 'Diario da execucao: ler instrucoes e participar',
   description:
-    'O caderno de contexto de um vinculo de execucao. SEM body, lista as entradas — inclusive as do Almir: instrucao, decisao e correcao humanas MANDAM, leia antes de continuar. COM body (e operator + entry_type), escreve uma entrada assinada pelo operador. pedido_insumo e pedido_revisao notificam o dono do painel e param o trabalho ate a resposta; comentario e contexto so registram. Nada daqui vai para cliente ou canal externo: e conversa interna, na trilha.',
+    'O caderno de contexto de um vinculo de execucao. SEM body, lista as entradas — inclusive as do Almir: instrucao, decisao e correcao humanas MANDAM, leia antes de continuar. COM body (e operator + entry_type), escreve uma entrada assinada pelo operador. pedido_insumo e pedido_revisao notificam o dono do painel e param o trabalho ate a resposta; comentario e contexto so registram. Nada daqui vai para cliente ou canal externo: e conversa interna, na trilha. COMO ESCREVER (o dono le no painel): portugues simples, frases curtas, para uma pessoa; sem UUID, hash, chave=valor, nome de tabela, caminho de servidor ou status em ingles. Use blocos em maiusculas quando ajudar: FEITO:, EM ANDAMENTO:, PROXIMO PASSO:, TRAVADO: (o painel mostra cada um com icone). Sempre que houver resultado visivel (post, arte, pagina, print da conta, planilha), anexe a imagem ou o arquivo em attachments: a comprovacao aparece como miniatura.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3657,6 +3658,39 @@ const operatorDiaryTool: ToolDefinition = {
       throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
     }
     return await operatorDiary(parsed.data);
+  },
+};
+
+const operatorChecklistTool: ToolDefinition = {
+  name: 'aceleriq_operator_checklist',
+  title: 'Checklist da tarefa: criar e marcar as etapas',
+  description:
+    'O checklist da tarefa de um vinculo de execucao, que o dono ve no diario como "Fazendo agora / Depois / Feito". SEM add nem check, lista as etapas (com id). Ao COMECAR a tarefa, crie as etapas que vai seguir com add (curtas, portugues simples, na ordem; repetidas sao ignoradas). Ao terminar cada uma, marque com check [{id, done: true}]. Exige operator para escrever. Nada vai para o cliente.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      link_id: { type: 'string', description: 'UUID do vinculo (operator_task_links.id).' },
+      operator: { type: 'string', description: 'Slug do operador (obrigatorio para add/check).' },
+      add: { type: 'array', maxItems: 20, items: { type: 'string', maxLength: 200 }, description: 'Etapas novas, na ordem.' },
+      check: { type: 'array', maxItems: 40, items: { type: 'object', properties: { id: { type: 'string' }, done: { type: 'boolean' } }, required: ['id', 'done'], additionalProperties: false }, description: 'Marcar (done true) ou desmarcar etapas pelo id.' },
+    },
+    required: ['link_id'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      link_id: UUID,
+      operator: z.string().min(2).max(40).optional(),
+      add: z.array(z.string().min(1).max(200)).max(20).optional(),
+      check: z.array(z.object({ id: UUID, done: z.boolean() }).strict()).max(40).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorChecklist(parsed.data);
   },
 };
 
@@ -4276,6 +4310,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   operatorReportTool,
   operatorBoardTool,
   operatorDiaryTool,
+  operatorChecklistTool,
   operatorRequestApprovalTool,
   operatorProposeAssigneeTool,
   // Hermes <-> agentes das Mesas (lote B, v2.6.0)

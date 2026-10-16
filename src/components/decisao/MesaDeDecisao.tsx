@@ -31,6 +31,8 @@ export interface ItemDaMesa {
   mensagem?: string | null;
   /** Próximo passo combinado, numa linha. */
   passo?: string | null;
+  /** Desenho que explica o item (ex.: o caminho da tarefa travada), na largura toda do cartão. */
+  diagrama?: ReactNode;
   sinais?: SinalDaMesa[];
   /** O resto (base, dados, risco, versão) fica recolhido. */
   detalhes?: ReactNode;
@@ -185,6 +187,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
           </header>
           <h3 className="mt-3 text-[17px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{item.titulo}</h3>
           {item.mensagem && <p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap text-[14px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{item.mensagem}</p>}
+          {item.diagrama && <div className="mt-4 rounded-xl bg-muted/30 p-3 sm:p-4">{item.diagrama}</div>}
           {item.passo && <p className="mt-2 flex items-start text-[13px] text-muted-foreground"><ChevronRight className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{item.passo}</span></p>}
           {!!item.sinais?.length && <ul className="-m-0.5 mt-3 flex flex-wrap" aria-label="Sinais">
             {item.sinais.map((s, n) => <li key={n} className={juntar("m-0.5 inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[11px]", TOM_DO_SELO[s.tom ?? "neutro"])}>{s.icone && <span className="mr-1 inline-flex shrink-0" aria-hidden="true">{s.icone}</span>}<span className="truncate">{s.texto}</span></li>)}

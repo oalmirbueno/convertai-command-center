@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
-  FileCheck2, FileText, Inbox, ListChecks, MessageSquareReply, PauseCircle, Radar, RefreshCw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
+  FileCheck2, FileText, Inbox, ListChecks, MessageSquareReply, PauseCircle, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
@@ -30,7 +30,8 @@ import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
-import MesaDeDecisao, { type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
+import MesaDeDecisao, { type DecisaoDaMesa, type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
+import CaminhoDaTarefa, { motivoParaGente } from "@/components/execucao/CaminhoDaTarefa";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import {
   ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
@@ -141,8 +142,8 @@ const ABAS = [
   { id: "central", rotulo: "Central", visoes: ["central"] },
   { id: "performance", rotulo: "Performance Meta", visoes: ["performance"] },
   { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
-  { id: "trabalho", rotulo: "Trabalho", visoes: ["atividade", "quadro", "execucoes", "fila", "in_progress", "done", "review"] },
-  { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "awaiting_input", "blocked"] },
+  { id: "trabalho", rotulo: "Trabalho", visoes: ["atividade", "quadro", "execucoes", "fila", "in_progress", "done"] },
+  { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "review", "awaiting_input", "blocked"] },
   { id: "feito", rotulo: "O que foi feito", visoes: [] },
   { id: "relatorios", rotulo: "Relatórios", visoes: ["relatorios"] },
 ] as const;
@@ -1192,6 +1193,37 @@ export default function AdminExecucao() {
   /* "Precisa de você" na mesa de decisão (15/10/2026, pedido do dono): um vínculo por vez, em
      cartão grande. Não há o que aprovar aqui (só nos selos de decisão): o botão principal é
      Responder (abre o diário do agente) ou Decidir; o item sai da mesa quando o estado muda. */
+  /* 16/10 (dono: "não tem algo tipo concluir, aprovar ou não aprovar"; "o bloqueado não tem
+     informação"): em revisão, a mesa decide de verdade (aprovar e concluir, pedir ajuste,
+     reprovar), com o porquê no diário; travada mostra o caminho desenhado e, quando foi só o
+     agente que parou de dar sinal, o botão Retomar. */
+  const decidirVinculo = async (item: ItemDaMesa, decisao: DecisaoDaMesa, nota: string): Promise<boolean> => {
+    if (decisao === "adiado") return false;
+    const quem = profile?.full_name || "a equipe";
+    const plano = decisao === "aprovado"
+      ? { status: "done", nota: `Aprovado por ${quem}.`, entrada: "aprovacao", corpo: nota || "Aprovado. Pode concluir.", resolver: true }
+      : decisao === "ajuste"
+        ? { status: "in_progress", nota: `Ajuste pedido por ${quem}: ${nota}`.slice(0, 900), entrada: "pedido_revisao", corpo: nota, resolver: false }
+        : { status: "in_progress", nota: `Reprovado por ${quem}: ${nota}`.slice(0, 900), entrada: "rejeicao", corpo: nota || "Reprovado. Refazer.", resolver: false };
+    const { data, error } = await (supabase as any).rpc("operator_human_action", { _link_id: item.id, _new_status: plano.status, _note: plano.nota, _resolve_approval: plano.resolver });
+    if (error) { toast.error(error.message || "Não foi possível decidir."); return false; }
+    if (profile?.id && plano.corpo) {
+      const r = await (supabase as any).from("operator_participations").insert({ task_link_id: item.id, author_kind: "humano", author_id: profile.id, entry_type: plano.entrada, title: null, body: plano.corpo, attachments: [] });
+      if (r.error) toast.error(`A decisão valeu, mas não ficou no diário: ${r.error.message}`);
+    }
+    const final = (Array.isArray(data) ? data[0] : data)?.status;
+    toast.success(decisao === "aprovado" ? (final === "done" ? "Aprovada e concluída." : "Aprovada. Sem comprovação, foi para revisão antes de fechar.") : decisao === "ajuste" ? "Ajuste pedido: voltou para o agente." : "Reprovada: voltou para o agente refazer.");
+    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    void queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
+    return true;
+  };
+  const retomarVinculo = async (v: Vinculo) => {
+    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: "Retomar do ponto em que parou.", _resolve_approval: false });
+    if (error) { toast.error(error.message || "Não foi possível retomar."); return; }
+    toast.success("Voltou para a fila: o agente retoma do ponto em que parou.");
+    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+  };
+
   const itensDosVinculos = (lista: Vinculo[]): ItemDaMesa[] => lista.map((v) => {
     const t = tarefaDoVinculo(v, tarefas);
     const cliente = t?.project?.client;
@@ -1200,8 +1232,12 @@ export default function AdminExecucao() {
     const decidir = precisaDecisao(v);
     const titulo = t?.title || v.last_action || "(sem tarefa vinculada)";
     const prazoVencido = t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
-    const fala = v.block_reason ? falarComoGente(v.block_reason).humano : v.last_action ? falarComoGente(v.last_action).humano : null;
+    const travada = v.status === "blocked" || v.status === "awaiting_input";
+    const emRevisao = !decidir && v.status === "review";
+    const motivo = travada ? motivoParaGente(v.block_reason) : null;
+    const fala = motivo ? motivo.texto : v.block_reason ? falarComoGente(v.block_reason).humano : v.last_action ? falarComoGente(v.last_action).humano : null;
     const idTarefa = v.kanban_task_id ?? (v as any).painel_task_id;
+    const feito = v.last_evidence ? falarComoGente(v.last_evidence).humano : v.last_action ? falarComoGente(v.last_action).humano : null;
     return {
       id: v.id,
       tipo: decidir ? "Precisa da sua decisão" : v.status === "blocked" ? "Travada" : v.status === "awaiting_input" ? "Esperando resposta sua" : STATUS_ROTULO[v.status] || v.status,
@@ -1210,7 +1246,10 @@ export default function AdminExecucao() {
       avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
       titulo,
       mensagem: fala,
-      passo: v.next_step ? falarComoGente(v.next_step).humano : null,
+      passo: travada || emRevisao ? null : v.next_step ? falarComoGente(v.next_step).humano : null,
+      diagrama: travada || emRevisao
+        ? <CaminhoDaTarefa feito={feito} parou={travada ? fala : null} destrava={v.next_step ? falarComoGente(v.next_step).humano : null} esperaRevisao={emRevisao} />
+        : undefined,
       sinais: [
         { icone: <Bot className="h-3 w-3" />, texto: op?.display_name || "agente" },
         ...(diasParado(v) >= 1 ? [{ icone: <PauseCircle className="h-3 w-3" />, texto: `parado há ${diasParado(v)} ${diasParado(v) === 1 ? "dia" : "dias"}`, tom: (diasParado(v) >= 3 ? "aviso" : "neutro") as "aviso" | "neutro" }] : []),
@@ -1222,15 +1261,20 @@ export default function AdminExecucao() {
         {v.last_evidence && <p className="break-all">Última prova: {falarComoGente(v.last_evidence).humano}</p>}
         <p>Atualizado em {dataCurta(v.updated_at)}</p>
       </div>,
-      podeAjuste: false,
-      podeRejeitar: false,
+      podeAjuste: emRevisao,
+      podeRejeitar: emRevisao,
+      rejeitarPedeMotivo: true,
       acaoPrincipal: decidir
         ? { rotulo: "Decidir", icone: <ShieldAlert className="h-4 w-4" />, aoClicar: () => void abrirDecisaoDoVinculo(v.id) }
-        : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
-      extras: idTarefa ? <button type="button" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })} title="Abrir a tarefa" className={juntar(botao.discreto, "h-11 px-3")}><SquareArrowOutUpRight className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Tarefa</span></button> : null,
+        : emRevisao ? undefined
+          : { rotulo: travada ? "Responder e destravar" : "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
+      extras: <>
+        {motivo?.retomavel && <button type="button" onClick={() => void retomarVinculo(v)} title="Volta para a fila e o agente retoma de onde parou" className={juntar(botao.secundario, "h-11 px-3")}><RotateCcw className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Retomar</span></button>}
+        {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Abrir o diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
+        {idTarefa ? <button type="button" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })} title="Abrir a tarefa" className={juntar(botao.discreto, "h-11 px-3")}><SquareArrowOutUpRight className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Tarefa</span></button> : null}
+      </>,
     };
   });
-  const MESA_SEM_DECISAO = async () => false;
 
   const ListaDeCartoes = ({ lista, rotulo, pilha = false }: { lista: Vinculo[]; rotulo: string; pilha?: boolean }) => (
     <ul className={pilha ? "space-y-2" : "grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"} aria-label={rotulo}>
@@ -1607,7 +1651,7 @@ export default function AdminExecucao() {
       />
       {filtrados.length > 0 && (
         <Secao nivel={3} titulo="Vínculos marcados com o selo" descricao={`${filtrados.length}`}>
-          <MesaDeDecisao rotulo="Vínculos marcados com o selo" itens={itensDosVinculos(filtrados)} onDecidir={MESA_SEM_DECISAO} />
+          <MesaDeDecisao rotulo="Vínculos marcados com o selo" itens={itensDosVinculos(filtrados)} onDecidir={decidirVinculo} />
         </Secao>
       )}
     </div>
@@ -1621,8 +1665,8 @@ export default function AdminExecucao() {
     />
   ) : (
     <div className="space-y-3">
-      {aba === "decisoes" && (visao === "awaiting_input" || visao === "blocked")
-        ? <MesaDeDecisao rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} itens={itensDosVinculos(filtrados)} onDecidir={MESA_SEM_DECISAO} />
+      {aba === "decisoes" && (visao === "awaiting_input" || visao === "blocked" || visao === "review")
+        ? <MesaDeDecisao rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} itens={itensDosVinculos(filtrados)} onDecidir={decidirVinculo} />
         : <ListaDeCartoes lista={filtrados} rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} />}
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (
         <div className="flex items-center text-[12px] text-warning">

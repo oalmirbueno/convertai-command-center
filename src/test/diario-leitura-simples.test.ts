@@ -26,6 +26,16 @@ describe("leitura simples do diário", () => {
     expect(l.resumo.startsWith("Ciclo interno 09/10/2026")).toBe(true);
     expect(l.temMais).toBe(true);
   });
+  it("descola palavra de número, troca status em inglês e não mexe no link", () => {
+    const t = limparTecnico("calendário vivo por projeto09-15/10; 09/10, approved/agency approved; published12:33Z, permalinkhttps://www.instagram.com/p/DeRgxt2lmow/. 10/10, approved; scheduled14Z; task_id ausente.. fim...");
+    expect(t).toContain("projeto 09-15/10");
+    expect(t).toContain("aprovado/aprovado pela agência");
+    expect(t).toContain("publicado 12:33,");
+    expect(t).toContain("permalink https://www.instagram.com/p/DeRgxt2lmow/");
+    expect(t).toContain("agendado 14;");
+    expect(t).not.toContain("task_id");
+    expect(t).toContain("ausente. fim...");
+  });
   it("texto simples continua igual", () => {
     expect(leituraSimples("Post publicado às 10h. Link no anexo.")).toEqual({ resumo: "Post publicado às 10h. Link no anexo.", secoes: [], temMais: false });
   });
