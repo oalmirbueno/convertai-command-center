@@ -106,7 +106,9 @@ describe("rota /mesa só para a equipe que produz", () => {
   });
 
   it("as entradas da Central e do Calendário só aparecem para quem entra na Mesa", () => {
-    expect(central).toContain('["admin", "manager", "design"].includes(profile?.role || "") && (');
+    // 16/10/2026: a guarda virou a variável podeAbrirMesas (atalhos em ícone no perfil).
+    expect(central).toContain('const podeAbrirMesas = ["admin", "manager", "design"].includes(profile?.role || "");');
+    expect(central).toContain("{podeAbrirMesas && (");
     expect(central).toContain("navigate(`/mesa?client=${client.id}&aba=estudio`)");
     expect(calendario).toContain('["admin", "manager", "design"].includes(effectiveRole || "")');
     expect(calendario).toContain("`/mesa?client=${selectedPost.post.client_id}&aba=estudio&task=${selectedPost.internal.task_id}`");

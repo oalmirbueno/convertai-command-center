@@ -67,8 +67,10 @@ describe("nada vaza para o lado nem prende o toque", () => {
 
   it("os botões dos momentos têm área de toque no celular", () => {
     // Botões do sistema (36 px de altura em toda largura).
+    // 16/10/2026: os três momentos saem de um mesmo botão (seletor segunda/quarta/sexta).
     const momentos = central.split('data-botao-do-momento=""').slice(1);
-    expect(momentos.length).toBe(3);
+    expect(momentos.length).toBeGreaterThanOrEqual(1);
+    expect(central).toContain('{ moment: "fechamento" as const, curto: "Fechamento"');
     for (const trecho of momentos) expect(trecho.slice(0, 700)).toMatch(/className=\{(juntar\()?botao\.discreto/);
   });
 

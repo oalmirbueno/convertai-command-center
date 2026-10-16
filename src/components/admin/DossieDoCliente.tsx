@@ -9,6 +9,7 @@ import {
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import EntregasNoDossie from "@/components/admin/EntregasNoDossie";
 import CerebroDoCliente from "@/components/mesa/CerebroDoCliente";
+import CadernoDoDossie, { useCaderno } from "@/components/admin/CadernoDoDossie";
 import { EstadoVazio, Secao, botao, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 /**
@@ -51,7 +52,6 @@ interface VersaoDoHistorico {
 
 export default function DossieDoCliente({ clientId, clientName }: Props) {
   const queryClient = useQueryClient();
-  const [aberto, setAberto] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const [memoriaAberta, setMemoriaAberta] = useState(false);
 
@@ -143,6 +143,9 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
     (d) => typeof d.updated_at === "string" && (!quando || String(d.updated_at) > String(quando)),
   );
 
+  // A leitura em caderno: seções numeradas, sumário e as longas recolhidas.
+  const caderno = useCaderno(corpo);
+
   const atualizar = async () => {
     await queryClient.invalidateQueries({ queryKey: chave });
     await queryClient.invalidateQueries({ queryKey: ["dossie-historico", clientId] });
@@ -190,62 +193,72 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
         <EstadoVazio compacto titulo={`Nenhum dossiê escrito para ${clientName || "este cliente"} ainda.`} />
       ) : (
         <>
-          {/* O corpo é o que muda entre versões. */}
-          <p className={juntar(texto.corpo, "whitespace-pre-line leading-relaxed text-foreground/90", aberto ? "" : "line-clamp-6")}>
-            {corpo}
-          </p>
-          {atual?.change_reason && (
-            <p className={juntar(texto.auxiliar, "mt-1.5 truncate italic")} title={atual.change_reason}>
-              Última mudança: {atual.change_reason}
-            </p>
-          )}
-          <div className="mt-2 flex min-w-0 flex-wrap items-center [&>*]:mr-3">
-            <button type="button" onClick={() => setAberto((v) => !v)} className={linkDaSecao}>
-              {aberto ? "Mostrar menos" : "Ler o dossiê inteiro"}
-              {aberto ? <ChevronUp className="ml-1 h-3 w-3" aria-hidden="true" /> : <ChevronDown className="ml-1 h-3 w-3" aria-hidden="true" />}
-            </button>
-            {atual && (
-              <button type="button" onClick={() => setHistoricoAberto((v) => !v)} className={linkDaSecao}>
-                <History className="mr-1 h-3 w-3" aria-hidden="true" />
-                {historicoAberto ? "Fechar histórico" : "Ver histórico"}
-              </button>
-            )}
-            {quando && (
-              <span className={juntar(texto.auxiliar, "ml-auto !mr-0 tabular-nums")}>
-                {new Date(quando).toLocaleString("pt-BR", {
-                  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                })}
-              </span>
-            )}
-          </div>
-
-          {historicoAberto && (
-            <ul className="mt-2 space-y-1 border-t border-border pt-2">
-              {(historico || []).map((v) => (
-                <li key={v.id} className="text-[12px]">
-                  <div className="flex min-w-0 items-baseline">
-                    <span className={`mr-2 shrink-0 font-semibold tabular-nums ${v.is_current ? "text-primary" : "text-muted-foreground"}`}>
-                      v{v.version}
-                    </span>
-                    <span className="mr-2 min-w-0 truncate text-muted-foreground">
-                      {v.change_reason || v.summary || v.source || "sem descrição"}
-                    </span>
-                    <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/70">
-                      {new Date(v.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                    </span>
-                  </div>
-                  {(v.entrou || []).length > 0 && (
-                    <ul className="ml-6 mt-0.5 space-y-0.5">
-                      {v.entrou!.map((linha, i) => <li key={i} className="text-[12px] leading-snug text-foreground/85">+ {linha}</li>)}
-                    </ul>
-                  )}
-                </li>
-              ))}
-              {(historico || []).length === 0 && (
-                <li className={texto.auxiliar}>Carregando histórico…</li>
+          {/* O corpo é o que muda entre versões, lido como caderno: coluna de
+              leitura confortável, a data numa linha discreta e, logo abaixo,
+              o sumário com as seções (16/10, dono: "abrindo como se fosse um
+              caderno mesmo"). */}
+          <div className="mx-auto w-full min-w-0 max-w-[72ch]">
+            <div className="flex min-w-0 flex-wrap items-center [&>*]:mr-3">
+              {quando && (
+                <span className={juntar(texto.auxiliar, "tabular-nums")}>
+                  Atualizado em {new Date(quando).toLocaleString("pt-BR", {
+                    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+                  })}
+                </span>
               )}
-            </ul>
-          )}
+              <span className="ml-auto !mr-0 flex min-w-0 flex-wrap items-center justify-end [&>*]:ml-3">
+                {caderno.temOQueRecolher && (
+                  <button type="button" onClick={caderno.alternarTudo} className={linkDaSecao} aria-expanded={caderno.tudoAberto}>
+                    {caderno.tudoAberto ? "Recolher seções" : "Ler o dossiê inteiro"}
+                    {caderno.tudoAberto ? <ChevronUp className="ml-1 h-3 w-3" aria-hidden="true" /> : <ChevronDown className="ml-1 h-3 w-3" aria-hidden="true" />}
+                  </button>
+                )}
+                {atual && (
+                  <button type="button" onClick={() => setHistoricoAberto((v) => !v)} className={linkDaSecao} aria-expanded={historicoAberto}>
+                    <History className="mr-1 h-3 w-3" aria-hidden="true" />
+                    {historicoAberto ? "Fechar histórico" : "Ver histórico"}
+                  </button>
+                )}
+              </span>
+            </div>
+            {atual?.change_reason && (
+              <p className={juntar(texto.auxiliar, "mt-1 truncate italic")} title={atual.change_reason}>
+                Última mudança: {atual.change_reason}
+              </p>
+            )}
+
+            {historicoAberto && (
+              <ul className="mt-2 space-y-1 border-t border-border pt-2">
+                {(historico || []).map((v) => (
+                  <li key={v.id} className="text-[12px]">
+                    <div className="flex min-w-0 items-baseline">
+                      <span className={`mr-2 shrink-0 font-semibold tabular-nums ${v.is_current ? "text-primary" : "text-muted-foreground"}`}>
+                        v{v.version}
+                      </span>
+                      <span className="mr-2 min-w-0 truncate text-muted-foreground">
+                        {v.change_reason || v.summary || v.source || "sem descrição"}
+                      </span>
+                      <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/70">
+                        {new Date(v.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                      </span>
+                    </div>
+                    {(v.entrou || []).length > 0 && (
+                      <ul className="ml-6 mt-0.5 space-y-0.5">
+                        {v.entrou!.map((linha, i) => <li key={i} className="text-[12px] leading-snug text-foreground/85">+ {linha}</li>)}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+                {(historico || []).length === 0 && (
+                  <li className={texto.auxiliar}>Carregando histórico…</li>
+                )}
+              </ul>
+            )}
+
+            <div className="mt-5 min-w-0">
+              <CadernoDoDossie caderno={caderno} />
+            </div>
+          </div>
         </>
       )}
 
@@ -282,7 +295,7 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
           para ele. Vem da mesma memória que o Ciclo e a Central leem. */}
       <EntregasNoDossie clientId={clientId} />
       <div className="mt-3 border-t border-border pt-3">
-        <button type="button" className="text-xs font-medium text-primary" aria-expanded={memoriaAberta} onClick={() => setMemoriaAberta(v => !v)}>{memoriaAberta ? "Recolher segundo cérebro" : "Abrir memória e aprendizados"}</button>
+        <button type="button" className="text-[12px] font-medium text-primary" aria-expanded={memoriaAberta} onClick={() => setMemoriaAberta(v => !v)}>{memoriaAberta ? "Recolher segundo cérebro" : "Abrir memória e aprendizados"}</button>
         {memoriaAberta && <div className="mt-3"><CerebroDoCliente key={clientId} clientId={clientId} somenteMemoria /></div>}
       </div>
     </Secao>
