@@ -10,7 +10,7 @@ import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
   FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
-import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
+import OrganogramaAgentes, { type MovimentoDoOrganograma, type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import RelatorioVisual from "@/components/execucao/RelatorioVisual";
 import CentralPerformanceMeta from "@/components/execucao/CentralPerformanceMeta";
@@ -984,10 +984,58 @@ export default function AdminExecucao() {
       escolheuSozinho,
     );
 
+  /**
+   * 17/10 (dono: "ver eles trabalhando, o que está acontecendo"): o que cada
+   * agente faz AGORA. Primeiro a execução aberta mais recente (a batida do
+   * Hermes ou do Paperclip); sem ela, a tarefa em andamento mais recente.
+   */
+  const agoraDoAgente = useMemo(() => {
+    const mapa = new Map<string, { texto: string; desde: string | null }>();
+    for (const r of runs as any[]) {
+      if (!["started", "progress", "review"].includes(r.status) || mapa.has(r.operator_id)) continue;
+      // Execução sem batida há mais de 6 h não é "trabalhando agora": é presa, e aparece no relatório.
+      const batida = new Date(r.heartbeat_at || r.started_at || 0).getTime();
+      if (!Number.isFinite(batida) || Date.now() - batida > 6 * 3_600_000) continue;
+      const texto = r.detail?.title || r.detail?.action || (r.status === "review" ? "Em revisão" : "Executando");
+      mapa.set(r.operator_id, { texto: String(texto), desde: r.heartbeat_at || r.started_at || null });
+    }
+    const emAndamento = vinculosAtivos
+      .filter((v) => v.status === "in_progress")
+      .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+    for (const v of emAndamento) {
+      if (mapa.has(v.operator_id)) continue;
+      mapa.set(v.operator_id, { texto: v.last_action || "Tarefa em andamento", desde: v.updated_at });
+    }
+    return mapa;
+  }, [runs, vinculosAtivos]);
+
+  /** A faixa "Movimentação agora": as 8 coisas mais recentes, das execuções e das tarefas. */
+  const movimentosDoOrganograma: MovimentoDoOrganograma[] = useMemo(() => {
+    const nome = (id: string) => operadores.find((o) => o.id === id)?.display_name;
+    const tomDe = (status: string): MovimentoDoOrganograma["tom"] =>
+      ["started", "progress", "in_progress", "queued", "review"].includes(status) ? "andamento"
+        : ["done", "finished", "succeeded", "success"].includes(status) ? "feito"
+          : ["blocked", "failed", "error", "timeout"].includes(status) ? "bloqueado" : "outro";
+    const lista: MovimentoDoOrganograma[] = [];
+    for (const r of runs as any[]) {
+      const agente = nome(r.operator_id);
+      const quando = r.heartbeat_at || r.finished_at || r.started_at;
+      if (!agente || !quando) continue;
+      lista.push({ id: `run:${r.id}`, agenteId: r.operator_id, agente, quando, tom: tomDe(r.status), texto: String(r.detail?.title || r.detail?.action || r.error || "Execução") });
+    }
+    for (const v of vinculos) {
+      const agente = nome(v.operator_id);
+      if (!agente || !v.updated_at) continue;
+      lista.push({ id: `link:${v.id}`, agenteId: v.operator_id, agente, quando: v.updated_at, tom: tomDe(v.status), texto: v.block_reason || v.last_action || v.next_step || "Tarefa atualizada" });
+    }
+    return lista.sort((a, b) => (a.quando < b.quando ? 1 : -1)).slice(0, 8);
+  }, [runs, vinculos, operadores]);
+
   /** Os nós do organograma, montados dos operadores reais. */
   const nosDoOrganograma: NoDoOrganograma[] = useMemo(
     () => operadores.map((o) => {
       const n = numerosDoOperador(o.id);
+      const agora = agoraDoAgente.get(o.id);
       return {
         id: o.id,
         nome: o.display_name,
@@ -1003,9 +1051,12 @@ export default function AdminExecucao() {
         chefe: o.parent_slug
           ? operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug
           : null,
+        agora: agora ? agora.texto : null,
+        agoraDesde: agora ? agora.desde : null,
+        ultimaVez: o.last_run_at,
       };
     }),
-    [operadores, vinculosAtivos],
+    [operadores, vinculosAtivos, agoraDoAgente],
   );
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
@@ -1595,6 +1646,7 @@ export default function AdminExecucao() {
   ) : visao === "hierarquia" ? (
     <OrganogramaAgentes
       nos={nosDoOrganograma}
+      movimentos={movimentosDoOrganograma}
       nomeDoDono={profile?.full_name || "Você"}
       aoAbrir={(no) => {
         const op = operadores.find((o) => o.id === no.id);
