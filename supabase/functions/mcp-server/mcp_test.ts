@@ -1294,11 +1294,18 @@ Deno.test('ACE-110: handler refusals preserve JSON-RPC results and subsequent ca
           assertEquals(await dispatch({ jsonrpc: '2.0', id: 'after', method: 'ping' }, auth), rpcResult('after', {}));
           const list = await dispatch({ jsonrpc: '2.0', id: 'list', method: 'tools/list' }, auth);
           assert((list as any).result.tools.some((item: any) => item.name === test.name));
-        } finally { handler.restore(); }
+          handler.restore();
+          // A real, side-effect-free handler still executes after the refusal.
+          const health = await dispatch({ jsonrpc: '2.0', id: 'health-after', method: 'tools/call', params: { name: 'aceleriq_health', arguments: {} } }, auth);
+          assert(health && !('error' in health));
+          assertEquals((health as any).result.structuredContent.ok, true);
+        } finally { if (!handler.restored) handler.restore(); }
       });
     }
-    assertEquals(auditEntries.length, cases.length - 1); // public calls keep existing audit behavior
-    assert(auditEntries.every((entry) => entry.success === false && entry.error_code === 'handler_error'));
+    const failures = auditEntries.filter((entry) => entry.success === false);
+    assertEquals(failures.length, cases.length - 1); // public calls keep existing audit behavior
+    assert(failures.every((entry) => entry.error_code === 'handler_error'));
+    assertEquals(auditEntries.filter((entry) => entry.success === true).length, cases.length);
     await t.step('access and protocol errors stay protected', async () => {
       const tool = TOOL_MAP.get('aceleriq_update_task')!;
       const handler = stub(tool, 'handler', () => Promise.reject(new Error('write:forbidden outside this MCP principal data scope')));
