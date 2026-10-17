@@ -154,7 +154,8 @@ describe("auditoria do servidor (23/09 noite)", () => {
   const compartilhado = ler("supabase/functions/_shared/contexto-cliente.ts");
   it("conversa do agente de contexto grava com client_id e confere o erro", () => {
     // 29/09 (AG1): o pedido é gravado antes da IA, com client_id (conversa-segura.ts), e a falha volta como erro, não calada.
-    expect(contexto).toContain("return await gravarPedidoAntes(servico(), { conversa_id: conversaId, client_id: clientId, conteudo: mensagem });");
+    // Depois a conversa passou a aceitar anexos no pedido (eles vão gravados junto).
+    expect(contexto).toContain("return await gravarPedidoAntes(servico(), { conversa_id: conversaId, client_id: clientId, conteudo: mensagem, anexos });");
     const segura = readFileSync(resolve(__dirname, "../../supabase/functions/_shared/conversa-segura.ts"), "utf8");
     expect(segura).toContain('.insert({ conversa_id: linha.conversa_id, client_id: linha.client_id, papel: "usuario", conteudo: linha.conteudo, anexos: linha.anexos ?? [], criado_em })');
     expect(segura).toContain('console.error("conversa-segura: pedido nao gravado"');

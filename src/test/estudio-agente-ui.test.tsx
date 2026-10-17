@@ -220,6 +220,8 @@ describe("Conversar com o diretor", () => {
     montar({ ordemEmFoco: null });
     expect(await screen.findByText("Converse com o diretor de arte")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Sobre a lâmina/ })).toBeNull();
+    // Os atalhos ficam recolhidos em "Sugestões" (padrão de recolher as sugestões dos agentes).
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     expect(screen.getByRole("button", { name: "Mudar o cenário" })).toBeTruthy();
   });
 });

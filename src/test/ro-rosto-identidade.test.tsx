@@ -214,7 +214,8 @@ describe("3. Automático: o Jev decide pelo pedido, com confiança mínima", () 
   it("arte rápida: pergunta de uso junto com a de papel, só para o que ficou em Automático", () => {
     const p = normalizarPedidoDaArteRapida({ pedido: "faz uma arte com ele falando sobre investimentos", arquivos: [arquivoPedido("auto")] }, CLIENTE);
     const q = perguntasDaArteRapida(p, []);
-    expect(Object.keys(q.questions).sort()).toEqual(["papel_1", "peca", "uso_1"]);
+    // 02/10: a arte rápida também pergunta se o pedido é de mundo real (marca, app ou tela real), na mesma chamada.
+    expect(Object.keys(q.questions).sort()).toEqual(["mundo_real", "papel_1", "peca", "uso_1"]);
     expect(q.usos).toEqual({ uso_1: 0 });
     const equipe = perguntasDaArteRapida(normalizarPedidoDaArteRapida({ pedido: "x", peca: "unica", arquivos: [arquivoPedido("foto")] }, CLIENTE), []);
     expect(Object.keys(equipe.questions)).toEqual([]);

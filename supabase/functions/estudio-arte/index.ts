@@ -1,4 +1,3 @@
-import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 /**
  * estudio-arte: diretor de arte e gerador da Mesa do cliente
  * (docs/mesa-do-cliente/SPEC.md, secao 5).
@@ -99,6 +98,7 @@ import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-aj
  */
 
 import { falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   chamarImagem,

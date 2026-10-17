@@ -344,7 +344,10 @@ describe("7. Imagens no Ajustar e na conversa", () => {
     expect(a).toContain(".concat(recorteDaArea ? [recorteDaArea] : []).concat(imagensDosAnexos),");
     expect(a).toContain("const legenda = legendaParaOGerador(x);");
     expect(a).toContain("img = { ...img, png: await colarFotoNaArea(img.png, imagensDosAnexos[k].bytes, area), mime: \"image/png\" };");
-    expect(a).toContain('comRostoAnexado ? linhasDaIdentidadeDaFoto().join("\\n") : ""');
+    // A identidade vale com o rosto anexado ou com as fotos originais do rosto da versão (temIdentidadeNoAjuste).
+    expect(a).toContain('temIdentidadeNoAjuste ? linhasDaIdentidadeDaFoto().join("\\n") : ""');
+    // 17/10 (dono: "nada colado"): a colagem da foto exata fica desligada; a foto vai ao gerador como referência.
+    expect(a).toContain("if (COLAR_FOTO_EXATA_NO_AJUSTE && !naEmenda && colaAFotoExata(anexosDoAjuste, comMascara)) {");
   });
 });
 
