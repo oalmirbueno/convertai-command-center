@@ -116,6 +116,18 @@ function CartaoDoHype({
           {hype.cuidado && (
             <div><dt className="text-[11px] font-medium text-muted-foreground">Cuidado</dt><dd>{hype.cuidado}</dd></div>
           )}
+          {hype.pauta && hype.pauta.tema && (
+            <div data-pauta-pronta="">
+              <dt className="text-[11px] font-medium text-muted-foreground">Pauta pronta (sem data)</dt>
+              <dd>
+                <p className="font-medium">{hype.pauta.tema}</p>
+                {hype.pauta.gancho && <p className="text-muted-foreground">Capa: {hype.pauta.gancho}</p>}
+                {hype.pauta.laminas.length > 0 && (
+                  <ol className="mt-1 list-decimal space-y-0.5 pl-4">{hype.pauta.laminas.map((l, i) => <li key={i}>{l}</li>)}</ol>
+                )}
+              </dd>
+            </div>
+          )}
           {link && (
             <div>
               <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center text-[11.5px] text-primary hover:underline">
@@ -137,9 +149,9 @@ function CartaoDoHype({
       </button>
       <div className="mt-auto flex flex-wrap items-center pt-2.5">
         <BotaoComCusto
-          rotulo="Criar conteúdo"
+          rotulo={hype.pauta && hype.pauta.tema ? "Usar a pauta" : "Criar conteúdo"}
           titulo={`Conteúdo sobre "${hype.titulo}"`}
-          descricao="O agente do mês prepara o conteúdo com o contexto do cliente; aparece na conversa, pronto para gravar."
+          descricao="O agente do mês prepara o conteúdo com o contexto do cliente e põe no próximo espaço livre da agenda (sem passar do limite de posts por dia); aparece na conversa, pronto para gravar."
           partes={() => partesDoPedido(catalogo, 0)}
           executar={criarConteudo}
           variant="outline"

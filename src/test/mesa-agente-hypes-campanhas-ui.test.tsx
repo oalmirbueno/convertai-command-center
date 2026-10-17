@@ -156,7 +156,7 @@ beforeEach(() => {
 });
 
 describe("agente do mês", () => {
-  it("enviar o pedido com um print sobe a imagem em pedidos/ e chama pedido_livre com o caminho", async () => {
+  it("enviar o pedido com um print sobe a imagem em pedidos/ e chama o agente do mês com o caminho", async () => {
     // Criar conteúdos (pedido livre); o padrão do agente agora é Planejar o mês.
     montar(h(AgenteDoMes, { modoInicial: "criar" }));
     const entrada = screen.getByTestId("entrada-de-anexos") as HTMLInputElement;
@@ -171,21 +171,22 @@ describe("agente do mês", () => {
     const enviar = screen.getByRole("button", { name: /Enviar/ });
     await waitFor(() => expect(enviar).not.toBeDisabled());
     fireEvent.click(enviar);
-    await waitFor(() => expect(chamadasDe("pedido_livre").length).toBe(1));
-    expect(chamadasDe("pedido_livre")[0]).toEqual({
-      acao: "pedido_livre",
-      client_id: CLIENTE,
-      mensagem: "Arte de depoimentos com estes prints",
-      anexos: [caminho],
-      // Frente AM: a mensagem digitada passa pelo roteamento (mudar o que existe x criar novo).
-      rotear: true,
-    });
+    // Toda conversa do Mês (também no Criar) vai para o agente que planeja: ele lê a agenda, o MCP e os arquivos.
+    await waitFor(() => expect(chamadasDe("planejar_mes").length).toBe(1));
+    const corpo = chamadasDe("planejar_mes")[0];
+    expect(corpo.client_id).toBe(CLIENTE);
+    expect(corpo.mensagem).toBe("Arte de depoimentos com estes prints");
+    expect(corpo.anexos).toEqual([caminho]);
+    expect(corpo.aplicar_direto).toBe(true);
+    expect(chamadasDe("pedido_livre").length).toBe(0);
   });
 
   it("os atalhos só preenchem o campo, sem gastar", () => {
     montar(h(AgenteDoMes, { modoInicial: "criar" }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare a agenda de hoje" }));
-    expect((screen.getByLabelText("Pedido ao agente do mês") as HTMLTextAreaElement).value).toBe("Prepare a agenda de hoje.");
+    // Os atalhos ficam dentro de "Sugestões"; os de ação vêm primeiro.
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Criar todos os conteúdos de / }));
+    expect((screen.getByLabelText("Pedido ao agente do mês") as HTMLTextAreaElement).value).toMatch(/^Crie todos os conteúdos de .+\.$/);
     expect(mock.invoke).not.toHaveBeenCalled();
   });
 

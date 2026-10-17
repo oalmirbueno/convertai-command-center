@@ -644,12 +644,13 @@ export default function CardDoEstudio({
                 {campoDeAnexos}
               </ZonaDeAnexos>
               <div className="flex justify-end">
+                {/* 17/10/2026 (dono: "no mobile está faltando um botão ali de ajustar"): no celular e no tablet o botão diz "Ajustar"; no computador fica só o ícone. */}
                 <BotaoDaLamina
                   emAndamento={ocupado}
-                  rotulo={<><PenTool className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Ajustar</span></>}
+                  rotulo={<><PenTool className="h-4 w-4" aria-hidden="true" /><span className="ml-1.5 lg:sr-only" data-rotulo-do-ajustar="">Ajustar</span></>}
                   titulo={`Ajustar a lâmina ${direcao.ordem}`}
                   descricao="Ajustar: o diretor transforma o pedido em instrução de edição e o gerador edita a versão atual. A nova versão passa pela conferência."
-                  className="h-8 gap-0 px-2.5"
+                  className="h-11 gap-0 px-4 lg:h-8 lg:px-2.5"
                   disabled={ocupado || !instrucao.trim() || anexosDoAjuste.subindo}
                   partes={partesAjustar}
                   executar={() => ajustarComMais(instrucao.trim())}

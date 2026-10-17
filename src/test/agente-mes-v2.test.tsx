@@ -363,9 +363,10 @@ describe("material colado vira ações com apelidos", () => {
     expect(normalizarCriacao({ itens: [] }, "2026-09-26")).toBeNull();
   });
 
-  it("lotes de 12 e o texto do lote leva as datas (a janela do pedido livre estica até elas)", () => {
+  it("lotes de 4 e o texto do lote leva as datas (a janela do pedido livre estica até elas)", () => {
     const itens = Array.from({ length: 30 }, (_, i) => ({ data: `2026-12-${String(i + 1).padStart(2, "0")}`, formato: "carrossel" as const, tema: `T${i}`, referencia: "ref" }));
-    expect(lotesDaCriacao(itens).map((l) => l.length)).toEqual([12, 12, 6]);
+    // 17/10: 12 peças completas numa chamada estouravam o tempo; 4 por chamada terminam e gravam a cada lote.
+    expect(lotesDaCriacao(itens).map((l) => l.length)).toEqual([4, 4, 4, 4, 4, 4, 4, 2]);
     expect(LOTE_DA_CRIACAO).toBe(LOTE_SERVIDOR);
     const t = pedidoParaCriarServidor(itens.slice(0, 2), "Falar com o cliente final");
     expect(t).toContain("- 2026-12-01 · carrossel · T0\n  Referência do material: ref");
@@ -547,7 +548,9 @@ describe("área MCP do cliente", () => {
     expect(tools).toContain("name: 'aceleriq_client_instruction'");
     expect(tools).toContain("aceleriq_client_instruction: 'clients:write'");
     expect(tools).toContain("  clientInstructionTool,");
-    expect(ler("supabase/functions/_shared/mcp-release.ts")).toContain("'2.4.0'");
+    // A versão do MCP só sobe: a 2.4.0 trouxe a ferramenta; as seguintes a mantêm.
+    const versao = /MCP_VERSION = '(\d+)\.(\d+)\.(\d+)'/.exec(ler("supabase/functions/_shared/mcp-release.ts"))!;
+    expect(Number(versao[1]) * 1000 + Number(versao[2])).toBeGreaterThanOrEqual(2004);
     const servico = ler("supabase/functions/_shared/mcp-orientacao-services.ts");
     expect(servico).toContain("assertClientAccess(ctx, input.client_id)");
     expect(servico).toContain("exigirClienteExistente(db()");

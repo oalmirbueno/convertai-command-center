@@ -34,6 +34,9 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
+import { salvarRegraDoDia } from "./agendaInteligenteApi";
+import { regraDoCliente } from "../../../supabase/functions/_shared/agenda-inteligente";
+import { supabase } from "@/integrations/supabase/client";
 import { juntar, superficie } from "@/components/sistema/estilos";
 import { ACAO_NO_PE_DO_CELULAR, useCelularEstreito } from "./EstudioAltura";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
@@ -442,6 +445,10 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const [agendar, setAgendar] = useState(true);
   const [posts, setPosts] = useState("");
   const [laminas, setLaminas] = useState("");
+  // 17/10 (dono, "configurar por cliente"): a agenda inteligente; posts comuns e de hype por dia e horas entre eles.
+  const [porDia, setPorDia] = useState("1");
+  const [hypesPorDia, setHypesPorDia] = useState("1");
+  const [horasEntre, setHorasEntre] = useState("3");
   const [salvando, setSalvando] = useState(false);
   const [trocandoAutomatico, setTrocandoAutomatico] = useState(false);
   const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, false);
@@ -451,6 +458,14 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
     staleTime: 10 * 60_000,
     retry: false,
     queryFn: () => lerMelhoresHorarios(clientId),
+  });
+  const regraDoDia = useQuery({
+    queryKey: ["mesa", "regra-do-dia", clientId],
+    retry: false,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts").eq("client_id", clientId).maybeSingle();
+      return regraDoCliente(data);
+    },
   });
   const automatico = useQuery({
     queryKey: ["mesa", "horario-automatico", clientId],
@@ -483,6 +498,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const resumoDosAjustes = [
     horarioAutomatico ? "Horário automático" : `Horário fixo ${(p && p.hora_publicacao) || "09:00"}`,
     p && p.posts_por_mes ? `${p.posts_por_mes} posts por mês` : "",
+    regraDoDia.data ? `até ${regraDoDia.data.porDia} por dia` : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -492,7 +508,12 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
     setAgendar(p.agendar_ao_aprovar);
     setPosts(p.posts_por_mes ? String(p.posts_por_mes) : "");
     setLaminas(p.laminas_por_post ? String(p.laminas_por_post) : "");
-  }, [p, editando]);
+    if (regraDoDia.data) {
+      setPorDia(String(regraDoDia.data.porDia));
+      setHypesPorDia(String(regraDoDia.data.hypesPorDia));
+      setHorasEntre(String(regraDoDia.data.horasEntre));
+    }
+  }, [p, editando, regraDoDia.data]);
 
   const inteiro = (v: string) => {
     const n = parseInt(v, 10);
@@ -510,6 +531,13 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
         postsPorMes: inteiro(posts),
         laminasPorPost: inteiro(laminas),
       });
+      const limite = (v: string, min: number, max: number, padrao: number) => {
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
+      };
+      await salvarRegraDoDia(clientId, { porDia: limite(porDia, 1, 5, 1), hypesPorDia: limite(hypesPorDia, 0, 3, 1), horasEntre: limite(horasEntre, 1, 12, 3) });
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "regra-do-dia", clientId] });
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-inteligente", clientId] });
       toast.success("Ajustes salvos");
       setEditando(false);
       void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
@@ -593,6 +621,12 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
                 ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar."
                 : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda."}
             </p>
+            {regraDoDia.data && (
+              <p className="leading-relaxed text-muted-foreground" data-regra-do-dia="">
+                <span className="font-medium text-foreground">Agenda:</span> até {regraDoDia.data.porDia} {regraDoDia.data.porDia === 1 ? "post" : "posts"} por dia
+                {regraDoDia.data.hypesPorDia ? ` + ${regraDoDia.data.hypesPorDia} de hype` : ", sem hype extra"}, {regraDoDia.data.horasEntre} h entre eles; o que passa disso vai para o próximo dia livre.
+              </p>
+            )}
             <p className="leading-relaxed text-muted-foreground">
               <span className="font-medium text-foreground">Plano:</span>{" "}
               {p?.posts_por_mes ? `${p.posts_por_mes} posts por mês` : "posts por mês não definidos"}
@@ -618,6 +652,20 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="mesa-laminas">Lâminas por post (média)</Label>
               <Input id="mesa-laminas" inputMode="numeric" placeholder="Ex.: 4" value={laminas} onChange={(e) => setLaminas(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3" data-regra-do-dia-editar="">
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="mesa-por-dia">Posts por dia (máximo)</Label>
+              <Input id="mesa-por-dia" inputMode="numeric" value={porDia} onChange={(e) => setPorDia(e.target.value)} />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="mesa-hypes-por-dia">Hypes a mais no mesmo dia</Label>
+              <Input id="mesa-hypes-por-dia" inputMode="numeric" value={hypesPorDia} onChange={(e) => setHypesPorDia(e.target.value)} />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="mesa-horas-entre">Horas entre posts do dia</Label>
+              <Input id="mesa-horas-entre" inputMode="numeric" value={horasEntre} onChange={(e) => setHorasEntre(e.target.value)} />
             </div>
           </div>
           <label className="flex items-center">

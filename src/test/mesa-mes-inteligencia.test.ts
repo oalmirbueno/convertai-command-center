@@ -201,7 +201,8 @@ describe("diagnóstico estruturado (agente-calendario/diagnostico.ts)", () => {
     expect(p).toContain("2026-10-12 Dia das Crianças");
     expect(p).toContain("1. pauta um");
     expect(p).toContain("sem fonte, não é tendência");
-    expect(p).toContain("só carrossel ou post estático");
+    // Os formatos do calendário cresceram (foto real, carrossel de fotos e vídeo rápido).
+    expect(p).toContain("Formatos do calendário: carrossel, post estático, foto real ou carrossel de fotos e vídeo rápido.");
     expect(pedidoDoDiagnostico({ pedido: "", plano: "", datas: [], pautas: [], perfil: null, perfilErro: "x" })).toContain("indisponível agora (x)");
   });
 });

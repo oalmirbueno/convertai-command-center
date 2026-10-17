@@ -9,7 +9,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Clock, GripVertical, MessageSquare } from "lucide-react";
+import { Clock, GripVertical, PenLine } from "lucide-react";
 import { blocosDoTexto, caixaDaZona, ESCALA_DO_PAPEL, zonaPadrao, type Caixa } from "@/lib/mesa/layout";
 import { ImagemDaMesa } from "./MesaContexto";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
@@ -362,7 +362,8 @@ function Lamina({
             <Esboco card={card} total={total} largura={largura} />
           )}
         </button>
-        <div className="mt-1.5 flex h-5 min-w-0 items-center px-0.5">
+        {/* 17/10/2026 (dono: "no mobile está faltando um botão ali de ajustar"): no toque, a linha e o ajuste crescem para 36 px. */}
+        <div className="mt-1.5 flex h-5 min-w-0 items-center px-0.5 [@media(pointer:coarse)]:h-9">
           <span className="min-w-0 flex-1 truncate text-[11px] leading-none">
             <span className={`font-semibold tabular-nums ${ativo ? "text-primary" : "text-foreground"}`}>{card.ordem}</span>
             <span className={funcao === "capa" ? "font-medium text-primary" : "text-muted-foreground"}> {funcao}</span>
@@ -371,11 +372,13 @@ function Lamina({
             <button
               type="button"
               onClick={onAjustar}
-              className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground [@media(pointer:coarse)]:h-9 [@media(pointer:coarse)]:w-9"
               title="Ajustar esta lâmina"
-              aria-label={`Ajustar a lâmina ${card.ordem}`}
+              aria-label={`Ajustar lâmina ${card.ordem}`}
+              data-ajustar-lamina=""
             >
-              <MessageSquare className="h-3.5 w-3.5" />
+              {/* Lápis (não o balão do Diretor): o ajuste é desta lâmina. */}
+              <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
           {versao && onVersoes ? (

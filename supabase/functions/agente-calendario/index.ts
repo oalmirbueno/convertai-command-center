@@ -2,6 +2,7 @@ import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
+import { ehHype, encaixarNaAgenda, type Ocupacao, regraDoCliente, type RegraDoDia } from "../_shared/agenda-inteligente.ts";
 import { resumoDoRecibo } from "./resultado-da-agenda.ts";
 import { ORIENTACAO_DA_REVISAO, PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
 import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
@@ -572,6 +573,39 @@ export function distribuirDatas(n: number, uteis: string[], ocupados: Set<string
   return out;
 }
 
+/**
+ * 17/10: as datas propostas (espalhadas) passam pela agenda inteligente: ficam quando o dia cabe no limite do
+ * cliente; senão vão para o próximo espaço livre do período. Uma leva grande se espalha em vez de empilhar.
+ */
+export function datasPelaAgenda(propostas: string[], uteis: string[], ctx: Pick<Contexto, "ocupacao" | "regraDoDia">): string[] {
+  if (!uteis.length) return propostas;
+  const hoje = hojeSaoPaulo();
+  return encaixarNaAgenda(propostas.map((d) => ({ data: d, hype: false })), ctx.ocupacao, { hoje, inicio: uteis[0], fim: uteis[uteis.length - 1], regra: ctx.regraDoDia })
+    .map((e) => e.data);
+}
+
+/** As datas que o pedido cita (AAAA-MM-DD, DD/MM, DD/MM/AAAA, "hoje", "amanhã"): essas a equipe escolheu. */
+export function datasCitadas(mensagem: string, hoje: string): Set<string> {
+  const t = String(mensagem || "").toLowerCase();
+  const saida = new Set<string>();
+  const ano = Number(hoje.slice(0, 4));
+  for (const m of t.match(/\b\d{4}-\d{2}-\d{2}\b/g) || []) saida.add(m);
+  const re = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t))) {
+    const d = Number(m[1]), mes = Number(m[2]);
+    if (d < 1 || d > 31 || mes < 1 || mes > 12) continue;
+    let a = m[3] ? Number(m[3].length === 2 ? `20${m[3]}` : m[3]) : ano;
+    const iso = (x: number) => `${x}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    // Sem ano e já passou: é o do ano que vem.
+    if (!m[3] && iso(a) < hoje) a += 1;
+    saida.add(iso(a));
+  }
+  if (/\bhoje\b/.test(t)) saida.add(hoje);
+  if (/\bamanh[aã]\b/.test(t)) saida.add(somarDias(hoje, 1));
+  return saida;
+}
+
 // ------------------------------------------------------------ normalizacao
 
 const texto = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -992,6 +1026,9 @@ type Contexto = {
   /** 12/10/2026: moldes dos posts que mais performaram (forma, não texto), para reaproveitar. */
   moldes?: Molde[];
   datasOcupadas: Set<string>;
+  /** 17/10: cada post já marcado no período (dia, hora e se é de hype) e a regra do dia do cliente. */
+  ocupacao: Ocupacao[];
+  regraDoDia: RegraDoDia;
   prompt: string;
   /** Marca por projeto (ex.: Acerbi ou CME, _shared/marca.ts); ausente no cliente sem marca. */
   marca?: string | null;
@@ -1211,6 +1248,10 @@ async function montarContexto(
   const hypeP = Promise.resolve(
     servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1).maybeSingle(),
   ).then(({ data }) => hypesQueValem(data as { semana: string; resumo: string | null; itens: unknown } | null, { inicio, fim }), (e) => (registrarFalha("agente-calendario: hypes não lidos", e), null));
+  // 17/10: a regra do dia do cliente (posts comuns e de hype por dia, horas entre eles); sem linha, a padrão.
+  const regraP = Promise.resolve(
+    servico.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts").eq("client_id", clientId).maybeSingle(),
+  ).then(({ data }) => regraDoCliente(data), () => regraDoCliente(null));
   // 17/10: referências e concorrentes do Instagram da marca aberta (só leitura do banco; nunca lança).
   const perfisP = lerPerfisParaOPrompt(servico, clientId, marca ? { id: marca.id, principal: marca.principal } : null);
   const [
@@ -1249,7 +1290,7 @@ async function montarContexto(
       .select("week_start, week_end, followers, reach, profile_views, accounts_engaged, total_interactions")
       .eq("client_id", clientId)).order("week_start", { ascending: false }).limit(8),
     projectIds.length
-      ? servico.from("tasks").select("title, delivery_type, due_date, status")
+      ? servico.from("tasks").select("title, delivery_type, due_date, status, description")
         .in("project_id", projectIds).not("delivery_type", "is", null).is("deleted_at", null)
         .gte("due_date", inicio).lte("due_date", fim).order("due_date").limit(200)
       : Promise.resolve({ data: [] as unknown[], error: null }),
@@ -1310,7 +1351,25 @@ async function montarContexto(
     }))
     .filter((p) => p.publicacoes.length > 0);
 
-  const tarefas = (tarefasPeriodo.data ?? []) as Array<{ title: string; delivery_type: string; due_date: string; status: string }>;
+  const tarefasComTexto = (tarefasPeriodo.data ?? []) as Array<{ title: string; delivery_type: string; due_date: string; status: string; description?: string | null }>;
+  // A descrição só serve para saber se o post é de hype (linha "Gancho do momento:"); não vai para o pedido.
+  const tarefas = tarefasComTexto.map(({ description: _d, ...t }) => t);
+  // 17/10: a ocupação do período para a agenda inteligente: um post por tarefa; a hora vem da publicação do dia.
+  const ocupacao: Ocupacao[] = tarefasComTexto.filter((t) => t.due_date).map((t) => ({
+    data: t.due_date,
+    hora: null,
+    hype: ehHype((/Gancho do momento:\s*([^\n]+)/.exec(String(t.description || "")) || [])[1]),
+  }));
+  for (const pub of postsNoPeriodo.flatMap((p) => p.publicacoes)) {
+    const quando = Date.parse(String(pub.scheduled_at));
+    if (!Number.isFinite(quando)) continue;
+    const local = new Date(quando - 3 * 3600_000).toISOString();
+    const data = local.slice(0, 10);
+    const hora = local.slice(11, 16);
+    const semHora = ocupacao.find((o) => o.data === data && !o.hora);
+    if (semHora) semHora.hora = hora;
+    else ocupacao.push({ data, hora, hype: false });
+  }
   const datasOcupadas = new Set<string>([
     ...tarefas.map((t) => t.due_date).filter(Boolean),
     ...postsNoPeriodo.flatMap((p) => p.publicacoes.map((x) => String(x.scheduled_at).slice(0, 10))),
@@ -1351,6 +1410,8 @@ async function montarContexto(
     cerebro: await cerebroP.then((c) => (c.falhou ? null : c.texto)),
     planos: planosUnicos((planos.data ?? []) as Array<{ texto: string }>),
     datasOcupadas,
+    ocupacao,
+    regraDoDia: await regraP,
     prompt,
     mcp: (await mcpP).texto,
     memoriaEditorial: await memoriaEditorialP,
@@ -2232,7 +2293,8 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
 
   // Datas calculadas no codigo, em ordem de fase: so segunda a sexta.
   const ordenados = [...escolhidos].sort((a, b) => a.fase.localeCompare(b.fase));
-  const datas = distribuirDatas(ordenados.length, uteis, ctx.datasOcupadas);
+  // 17/10: as datas espalhadas passam pela agenda inteligente (limite de posts por dia do cliente).
+  const datas = datasPelaAgenda(distribuirDatas(ordenados.length, uteis, ctx.datasOcupadas), uteis, ctx);
   const dataDoTema = new Map<string, string>();
   ordenados.forEach((t, i) => {
     // Tema sazonal com data util dentro do periodo fica na propria data.
@@ -3902,6 +3964,24 @@ ${REGRAS_DOS_ITENS}`;
   }).filter((i) => i.tema);
   if (!itens.length) throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
   itens.sort((a, b) => a.data.localeCompare(b.data));
+  // 17/10 (dono: "de vez em quando ele posta 50 artes tudo no mesmo dia; o hype pode até ficar no mesmo dia, em
+  // horário diferente; nunca jogar para dezembro"): a data que o pedido citou fica; o resto vai para o próximo
+  // espaço livre do período, sem passar do limite do cliente; hype nunca passa de 3 semanas a partir de hoje.
+  // O lote do "Criar conteúdos" já vem com uma vaga por dia (cadência) e não passa por aqui.
+  const avisosDaAgenda: string[] = [];
+  if (!lerPecasDoLote(corpo.pecas).length) {
+    const citadas = datasCitadas(mensagem, hojeSaoPaulo());
+    const encaixe = encaixarNaAgenda(
+      itens.map((i) => ({ data: i.data, hype: ehHype(i.gancho_do_momento), fixa: citadas.has(i.data) })),
+      ctx.ocupacao,
+      { hoje: hojeSaoPaulo(), inicio: uteis[0], fim: uteis[uteis.length - 1], regra: ctx.regraDoDia },
+    );
+    encaixe.forEach((e, k) => {
+      itens[k].data = e.data;
+      if (e.aviso) avisosDaAgenda.push(e.aviso);
+    });
+    itens.sort((a, b) => a.data.localeCompare(b.data));
+  }
   // 02/10: lote do "Criar conteúdos" do agente do Mês: data, formato e direção da foto de cada linha valem
   // exatamente (o modelo escreve o conteúdo; a cadência conferida não muda no caminho).
   const pecasDoLote = lerPecasDoLote(corpo.pecas);
@@ -3935,7 +4015,7 @@ ${REGRAS_DOS_ITENS}`;
   if (error || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "O agente preparou os conteúdos, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
 
   // Imagem anexada que ficou de fora: a equipe lê o aviso na resposta.
-  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso, avisoDaChecagem(checagem)]);
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso, avisoDaChecagem(checagem), ...[...new Set(avisosDaAgenda)].slice(0, 2)]);
   // Frente AG1: só o que a equipe digitou ensina (o refazer e o criar em lotes do próprio painel não).
   const aprendizado = corpo.rotear === true
     ? await aprenderComOPedido(servico, {
@@ -4340,7 +4420,8 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
     formato: formatoPedido ?? e.formato,
   }));
   const ocupados = new Set<string>([...ctx.datasOcupadas, ...existentes.map((i) => i.data)]);
-  const datas = distribuirDatas(arco.length, uteis, ocupados);
+  // 17/10: a campanha se espalha pela semana em vez de empilhar (os conteúdos já criados dela contam como ocupados).
+  const datas = datasPelaAgenda(distribuirDatas(arco.length, uteis, ocupados), uteis, { ...ctx, ocupacao: [...ctx.ocupacao, ...existentes.map((i) => ({ data: i.data, hora: null, hype: false }))] });
   let seq = Math.max(0, ...existentes.map((i) => Number(String(i.tema_id).replace(/\D/g, "")) || 0));
   const vagas = arco.map((e, k) => ({ ...e, tema_id: `c${++seq}`, data: datas[k] }));
 
@@ -4507,6 +4588,8 @@ const ESQUEMA_HYPES = {
         como_usar: S("string"),
         formato: S("string", { enum: [...FORMATOS] }),
         cuidado: S("string"),
+        // 17/10 (dono: "o hype automático só sugere"): a pauta pronta, sem data; a equipe decide quando entra.
+        pauta_pronta: obj({ tema: S("string"), gancho: S("string"), laminas: { type: "array", items: S("string") }, legenda: S("string") }),
       }),
     },
     // 17/10: o que está viralizando no nicho agora (temas, formatos e ganchos), além das datas e notícias.
@@ -4521,10 +4604,25 @@ const ESQUEMA_HYPES = {
         como_usar: S("string"),
         formato: S("string", { enum: [...FORMATOS] }),
         cuidado: S("string"),
+        // 17/10 (dono: "o hype automático só sugere"): a pauta pronta, sem data; a equipe decide quando entra.
+        pauta_pronta: obj({ tema: S("string"), gancho: S("string"), laminas: { type: "array", items: S("string") }, legenda: S("string") }),
       }),
     },
   }),
 };
+
+/** A pauta pronta do hype, limpa (sem tema: nenhuma). */
+function pautaDoHype(bruto: unknown): { tema: string; gancho: string; laminas: string[]; legenda: string } | null {
+  const o = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
+  const tema = texto(o.tema, 200);
+  if (!tema) return null;
+  return {
+    tema,
+    gancho: texto(o.gancho, 200),
+    laminas: (Array.isArray(o.laminas) ? o.laminas : []).map((l) => texto(l, 240)).filter(Boolean).slice(0, 8),
+    legenda: texto(o.legenda, 1200),
+  };
+}
 
 /** Item gravado da busca (as duas listas no mesmo `itens`, separadas por `tipo`). */
 function itemGravadoDoHype(h: Record<string, unknown>, tipo: "hype" | "nicho") {
@@ -4539,6 +4637,7 @@ function itemGravadoDoHype(h: Record<string, unknown>, tipo: "hype" | "nicho") {
     formato: String(h.formato) === "estatico" ? "estatico" : "carrossel",
     cuidado: texto(h.cuidado, 400),
     sinal: tipo === "nicho" ? texto(h.sinal, 300) : "",
+    pauta: pautaDoHype(h.pauta_pronta),
     nota: null as number | null,
     forca: null as number | null,
   };
@@ -4617,6 +4716,8 @@ LISTA 2, em_alta_no_nicho: o que está viralizando AGORA dentro do nicho deste c
 - por_que_agora; fonte: um link real (da busca ou o permalink do post lido acima).
 - como_usar: o conteúdo concreto para este cliente surfar o assunto (gancho, ângulo e o que mostrar), ligado à oferta.
 - formato: carrossel ou estatico. cuidado: o que evitar (vazio se não houver).
+
+PAUTA PRONTA (nas duas listas, para cada item): pauta_pronta com o conteúdo já pensado para ESTE cliente, sem data: tema (o título da pauta), gancho (a frase da capa, até 12 palavras), laminas (3 a 6 frases curtas, uma por lâmina, contando a história do começo ao CTA; no estático, 1) e legenda (curta, com o CTA). A equipe decide quando ela entra na agenda.
 
 - resumo: 1 frase sobre o clima da semana para este nicho.
 Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca invente evento, data, número de views nem post: o que não veio da busca ou dos sinais acima não entra.`;

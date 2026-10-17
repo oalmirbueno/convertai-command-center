@@ -162,8 +162,9 @@ describe("refazer_proposta_interno", () => {
 
   it("no servidor: a ação interna passa antes da sessão, confere o autor com is_staff e as atribuições e nunca grava", () => {
     const serve = fonte.slice(fonte.indexOf("Deno.serve("));
-    expect(serve.indexOf("if (acao === ACAO_REFAZER_INTERNO)")).toBeGreaterThan(-1);
-    expect(serve.indexOf("if (acao === ACAO_REFAZER_INTERNO)")).toBeLessThan(serve.indexOf("await identificar(req, servico)"));
+    // 17/10: a busca semanal de hype (agendador) usa a mesma porta interna.
+    expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno")')).toBeGreaterThan(-1);
+    expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno")')).toBeLessThan(serve.indexOf("await identificar(req, servico)"));
     expect(serve).toContain('cronSecretDoPedido: req.headers.get("x-cron-secret")');
     expect(serve).toContain('cronSecret: await chave("CRON_SECRET")');
     const autor = fonte.slice(fonte.indexOf("async function chamadorDoAutor("), fonte.indexOf("async function refazerPropostaInterno("));

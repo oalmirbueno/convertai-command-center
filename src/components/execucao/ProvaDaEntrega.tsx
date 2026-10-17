@@ -118,9 +118,11 @@ export default function ProvaDaEntrega({ linkId, ultimaProva, aoConversar }: { l
             <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[12px] font-medium tabular-nums">{(indice ?? 0) + 1} de {provas.length}</span>
             <DialogDescription className="sr-only">Use as setas para passar as peças. Ao lado, peça um ajuste desta peça.</DialogDescription>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            <div className="relative flex min-h-0 flex-1 flex-col">
-              <div className="min-h-0 flex-1 overflow-auto p-4">{atual && <ConteudoDaProva key={atual.url} url={atual.url} nome={atual.nome} />}</div>
+          {/* 17/10/2026 (dono: "no mobile está faltando um botão ali de ajustar"): abaixo do lg o corpo rola inteiro e a imagem
+              fica em até 55vh, para o "Pedir ajuste desta peça" estar sempre ao alcance (também com o teclado aberto). No lg, igual. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible" data-corpo-da-prova="">
+            <div className="relative flex shrink-0 flex-col lg:min-h-0 lg:flex-1">
+              <div className="max-h-[55vh] overflow-auto p-4 lg:max-h-none lg:min-h-0 lg:flex-1">{atual && <ConteudoDaProva key={atual.url} url={atual.url} nome={atual.nome} />}</div>
               {provas.length > 1 && <>
                 <button type="button" onClick={() => ir(-1)} aria-label="Peça anterior" className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 shadow-lg ring-1 ring-border hover:bg-muted"><ChevronLeft className="h-5 w-5" /></button>
                 <button type="button" onClick={() => ir(1)} aria-label="Próxima peça" className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 shadow-lg ring-1 ring-border hover:bg-muted"><ChevronRight className="h-5 w-5" /></button>
@@ -134,7 +136,7 @@ export default function ProvaDaEntrega({ linkId, ultimaProva, aoConversar }: { l
               </>}
             </div>
             {/* Ajustar com o agente, sem sair da imagem. */}
-            <aside className="flex shrink-0 flex-col gap-3 border-t border-border p-4 lg:w-80 lg:border-l lg:border-t-0">
+            <aside className="flex shrink-0 flex-col gap-3 border-t border-border p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] lg:w-80 lg:border-l lg:border-t-0 lg:pb-4">
               <div>
                 <p className="text-[14px] font-semibold">Ajustar esta peça</p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">O pedido vai para o agente com esta imagem anexada. Ele refaz e manda de novo para você aprovar.</p>

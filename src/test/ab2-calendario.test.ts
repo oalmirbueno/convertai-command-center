@@ -186,11 +186,13 @@ describe("F: mapa do painel só nas conversas do agente do Mês", () => {
 
     expect(fonte).toContain('const MAPA_DO_PAINEL_NA_CONVERSA = blocoDoMapaDoPainel("mes");');
     const sistema = corpoDe("sistemaDoCalendario");
-    expect(sistema).toContain('if (uso === "conversa") return `${ctx.prompt}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n\\n${MAPA_DO_PAINEL_NA_CONVERSA}\\n${REGRAS_DE_SAIDA}`;');
+    // O prompt do banco passa pelo promptAtualDoMes (execucao-do-mes.ts) e continua primeiro.
+    expect(sistema).toContain('if (uso === "conversa") return `${promptAtualDoMes(ctx.prompt)}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n\\n${MAPA_DO_PAINEL_NA_CONVERSA}\\n${REGRAS_DE_SAIDA}`;');
     // Geração continua igual (regras de saída por último, sem o mapa).
-    expect(sistema).toContain("return `${ctx.prompt}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n${REGRAS_DE_SAIDA}`;");
+    expect(sistema).toContain("return `${promptAtualDoMes(ctx.prompt)}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n${REGRAS_DE_SAIDA}`;");
 
-    expect(corpoDe("planejarMes")).toContain('sistema: sistemaDoCalendario(ctx, "mes", "conversa")');
+    // O pedido ganhou a prioridade e o núcleo das mesas depois do sistema da conversa.
+    expect(corpoDe("planejarMes")).toContain('sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}\\n${PRIORIDADE_DO_PEDIDO}');
     expect(corpoDe("planejarMes")).toContain('estimarTokens(sistemaDoCalendario(ctx, "mes", "conversa"))');
     expect(corpoDe("conversar")).toContain('sistema: sistemaDoCalendario(ctx, "mes", "conversa")');
     expect(corpoDe("campanhaConversar")).toContain('sistema: sistemaDoCalendario(ctx, "campanha", "conversa")');

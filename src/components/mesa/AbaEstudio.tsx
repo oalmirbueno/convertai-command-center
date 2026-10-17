@@ -1714,6 +1714,36 @@ function DetalheDoItem({
     />
   ) : null;
 
+  // 17/10/2026 (dono: "no mobile está faltando um botão ali de ajustar [...] ajustar arte, assim por diante, ajustar lâmina"):
+  // no celular e no tablet (a pilha, abaixo do lg), logo embaixo da lâmina grande, os dois ajustes com nome à vista.
+  // "Ajustar lâmina" abre o ajuste livre da lâmina em foco; "Ajustar arte" abre o Diretor, que muda o conjunto todo.
+  // Só aparece com arte gerada na lâmina, sem nada rodando nela e sem o trabalho entregue (aí o caminho é reabrir).
+  const mostrarAjusteNoCelular = !colunas && !!cardSelecionado && !!ultimaDaEscolhida && !laminaOcupada(cardSelecionado.ordem) && !entregue;
+  const barraDeAjusteNoCelular = mostrarAjusteNoCelular && cardSelecionado ? (
+    <div className="mt-3 flex min-w-0 lg:hidden" role="group" aria-label="Ajustar" data-ajuste-no-celular="">
+      <Button
+        type="button"
+        variant="outline"
+        className="mr-2 h-auto min-h-[44px] min-w-0 flex-1 px-3 text-[13px]"
+        aria-label={`Ajustar lâmina ${cardSelecionado.ordem}`}
+        onClick={() => abrirPainel(cardSelecionado.ordem, "livre")}
+      >
+        <PenLine className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="truncate">Ajustar lâmina</span>
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-[44px] min-w-0 flex-1 px-3 text-[13px]"
+        aria-label="Ajustar arte: todas as lâminas, com o Diretor"
+        onClick={() => abrirFerramenta("diretor", false)}
+      >
+        <SlidersHorizontal className="mr-1.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="truncate">Ajustar arte</span>
+      </Button>
+    </div>
+  ) : null;
+
   const centroDaProducao = colunas ? (
     <>
       <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
@@ -1743,6 +1773,7 @@ function DetalheDoItem({
       </p>
       {prancheta(false)}
       <div className="mt-3 flex min-w-0 flex-col">{laminaGrande}</div>
+      {barraDeAjusteNoCelular}
     </div>
   );
 

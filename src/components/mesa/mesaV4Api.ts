@@ -108,6 +108,8 @@ export interface Hype {
   tipo?: "hype" | "nicho";
   /** Só no nicho: onde e quanto está viralizando. */
   sinal?: string;
+  /** 17/10: a pauta pronta, sem data (o hype automático só sugere; a equipe decide quando entra). */
+  pauta?: { tema: string; gancho: string; laminas: string[]; legenda: string } | null;
   titulo: string;
   o_que_e?: string;
   por_que_agora?: string;
@@ -590,6 +592,11 @@ export function mensagemDoHype(h: Hype): string {
   if (h.formato) partes.push(`Formato: ${h.formato === "estatico" ? "estático" : h.formato}.`);
   if (h.janela) partes.push(`Janela: ${ROTULO_DA_JANELA[String(h.janela)] || h.janela}${h.janela === "hoje" ? ", para publicar hoje" : ""}.`);
   if (h.cuidado) partes.push(`Cuidado: ${h.cuidado}`);
+  // 17/10: com a pauta pronta, o agente usa ela (tema, capa, lâminas e legenda) em vez de pensar do zero.
+  if (h.pauta && h.pauta.tema) {
+    partes.push(`Use esta pauta pronta: tema "${h.pauta.tema}"${h.pauta.gancho ? `; capa "${h.pauta.gancho}"` : ""}${h.pauta.laminas.length ? `; lâminas: ${h.pauta.laminas.map((l, i) => `${i + 1}) ${l}`).join(" ")}` : ""}${h.pauta.legenda ? `; legenda: ${h.pauta.legenda}` : ""}.`);
+  }
+  partes.push(`Gancho do momento: ${h.tipo === "nicho" ? "Nicho" : "Hype"}: ${h.titulo}.`);
   return partes.join(" ");
 }
 

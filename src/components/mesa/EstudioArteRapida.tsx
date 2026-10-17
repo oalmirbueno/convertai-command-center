@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { lerAgendaDoCliente } from "./agendaInteligenteApi";
+import { avisoDoDia, dataBr, horaLivre, proximoEspaco, somarDias as somarDiasNaAgenda } from "../../../supabase/functions/_shared/agenda-inteligente";
 import { Link, useSearchParams } from "react-router-dom";
 import { Archive, CalendarPlus, FileText, ImagePlus, Link2, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -844,6 +846,8 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
   // 02/10: todo aviso da arte rápida diz o cliente.
   const aviso = (t: string) => tituloDoAviso(t, clientName);
   const [data, setData] = useState(amanhaEmSaoPaulo);
+  // 17/10: a data só segue a sugestão da agenda enquanto a equipe não escolheu outra.
+  const [dataEscolhida, setDataEscolhida] = useState(false);
   const [hora, setHora] = useState("");
   // Frente RO (29/09, arte rápida da Acerbi que "foi" mas não chegou ao cliente): as 3 opções da entrega (EN),
   // o erro à vista (nada de silêncio) e o "Na Agenda" só quando a arte foi entregue de verdade.
@@ -865,7 +869,30 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
     const porTipo = (melhores.data && (melhores.data as any).por_tipo) || {};
     return horarioSugerido({ diaDaPeca: data, hoje: agora.dia, agoraHHMM: agora.hora, melhorHora: porTipo[tipoDoPost] || null }).hora;
   }, [data, melhores.data, tipoDoPost]);
-  const horaFinal = hora || horaSugerida;
+  // 17/10 (dono: "nunca agendar uma arte de um padrão que já tem no mesmo dia; dividir na semana"): o que já está
+  // marcado nos próximos 60 dias e a regra do dia do cliente. A data padrão é o próximo espaço livre (não mais
+  // "amanhã" às cegas); a data escolhida pela equipe fica, com o aviso e a sugestão de outro dia.
+  const amanha = amanhaEmSaoPaulo();
+  const agenda = useQuery({
+    queryKey: ["mesa", "agenda-inteligente", clientId, trabalho.id],
+    staleTime: 60_000,
+    retry: false,
+    queryFn: () => lerAgendaDoCliente(clientId, amanha, somarDiasNaAgenda(amanha, 60), { taskId: trabalho.task_id, postId: (trabalho as { post_id?: string | null }).post_id ?? null }),
+  });
+  const espacoLivre = useMemo(
+    () => (agenda.data ? proximoEspaco(agenda.data.ocupacao, { desde: amanha, ate: somarDiasNaAgenda(amanha, 60), hype: false, horaPreferida: horaSugerida, regra: agenda.data.regra }) : null),
+    [agenda.data, amanha, horaSugerida],
+  );
+  useEffect(() => {
+    if (!dataEscolhida && espacoLivre && espacoLivre.data !== data) setData(espacoLivre.data);
+  }, [espacoLivre, dataEscolhida]); // eslint-disable-line react-hooks/exhaustive-deps
+  const avisoDaAgenda = agenda.data && data ? avisoDoDia(agenda.data.ocupacao, data, false, agenda.data.regra) : null;
+  const outroDia = avisoDaAgenda && agenda.data
+    ? proximoEspaco(agenda.data.ocupacao, { desde: data > amanha ? data : amanha, ate: somarDiasNaAgenda(amanha, 60), hype: false, horaPreferida: horaSugerida, regra: agenda.data.regra })
+    : null;
+  // Sem hora digitada: a sugerida, longe das outras publicações do dia.
+  const horaComEspaco = agenda.data && data ? horaLivre(agenda.data.ocupacao, data, horaSugerida, agenda.data.regra) : null;
+  const horaFinal = hora || horaComEspaco || horaSugerida;
   const iso = data && horaFinal ? localParaIso(data, horaFinal, EDITORIAL_DEFAULT_TIME_ZONE) : null;
   const problema = iso ? problemaNoHorario(iso, new Date()) : "Escolha a data.";
   const diretor = padraoPara(catalogo, "diretor_arte");
@@ -1074,14 +1101,24 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           <div className="grid grid-cols-2 gap-2">
             <label className="min-w-0 text-[12px] text-muted-foreground">
               Data
-              <Input type="date" value={data} onChange={(e) => setData(e.target.value)} className="mt-1 h-10 min-w-0" aria-label="Data do post" />
+              <Input type="date" value={data} onChange={(e) => { setData(e.target.value); setDataEscolhida(true); }} className="mt-1 h-10 min-w-0" aria-label="Data do post" />
             </label>
             <label className="min-w-0 text-[12px] text-muted-foreground">
               Hora
               <Input type="time" value={horaFinal} onChange={(e) => setHora(e.target.value)} className="mt-1 h-10 min-w-0" aria-label="Hora do post" />
             </label>
           </div>
-          {!hora && <p className="text-[11.5px] text-muted-foreground">Hora sugerida pelo melhor horário do perfil.</p>}
+          {!hora && <p className="text-[11.5px] text-muted-foreground">Hora sugerida pelo melhor horário do perfil{horaComEspaco && horaComEspaco !== horaSugerida ? ", longe do outro post do dia" : ""}.</p>}
+          {avisoDaAgenda && (
+            <p className="rounded-md bg-warning/10 px-2.5 py-2 text-[12px] leading-snug text-warning" role="status" data-aviso-da-agenda="">
+              {avisoDaAgenda}
+              {outroDia && (
+                <button type="button" className="ml-1 font-medium underline" onClick={() => { setData(outroDia.data); setHora(""); setDataEscolhida(true); }}>
+                  Usar {dataBr(outroDia.data)} às {outroDia.hora}
+                </button>
+              )}
+            </p>
+          )}
           {problema && data && <p className="text-[12px] text-destructive">{problema}</p>}
           {seletorDoModo}
           {erro && <p className="text-[12px] leading-snug text-destructive" role="alert">{erro}</p>}

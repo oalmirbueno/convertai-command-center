@@ -567,7 +567,7 @@ import { aplicarFotosDoPlano, fotoNaoPublicavel, pecasDoPlanoGravado } from "../
 // Frente MF (27/09): post de fotos da Mesa Foto no fluxo das artes (entrega, Agenda, aprovação).
 import { ehPostDeFotos } from "../_shared/post-de-fotos.ts";
 import { acoesDasFotosNaAgenda, liberarItemParaArte } from "./fotos-na-agenda.ts";
-import { acoesDaPublicacaoDaPeca, dataDoConteudo, type TrabalhoDaPublicacao } from "./publicacao-da-peca.ts";
+import { acoesDaPublicacaoDaPeca, dataDoConteudo, horaComEspacoNoDia, type TrabalhoDaPublicacao } from "./publicacao-da-peca.ts";
 // Frente EN (28/09): entregar com três opções (pronto para agendar, aprovação, só Arquivos).
 import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-opcoes.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
@@ -8233,7 +8233,9 @@ async function dataProposta(t: Trabalho, agora: Date): Promise<string | null> {
     melhorHora: melhor,
     horaFixa: cfg?.hora_publicacao ? String(cfg.hora_publicacao).slice(0, 5) : null,
   });
-  return localParaIso(s.dia, s.hora, fuso);
+  // 17/10: longe das outras publicações do cliente no mesmo dia (regra do cliente, padrão 3 horas).
+  const hora = await horaComEspacoNoDia(db, { clientId: t.client_id, dia: s.dia, hora: s.hora, fuso, excluirPostId: t.post_id ?? null });
+  return localParaIso(s.dia, hora, fuso);
 }
 
 /**
