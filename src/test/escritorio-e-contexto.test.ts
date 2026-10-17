@@ -94,14 +94,21 @@ describe("o contexto do agente no card do Kanban", () => {
 
   it("a evidência é clicável e a imagem aparece", () => {
     // Uma URL em texto obriga a copiar e colar para conferir a entrega.
-    expect(ctx).toContain("ehImagem");
-    expect(ctx).toContain('alt="Comprovação da entrega"');
-    expect(ctx).toContain('target="_blank" rel="noopener noreferrer"');
+    // Desde 07/10 a entrega passa pelo DocumentoDaExecucao (o mesmo do relatório),
+    // que abre o link em outra aba e mostra a imagem pela EvidenciaVisual.
+    expect(ctx).toContain("<DocumentoDaExecucao texto={l.last_evidence} />");
+    const documento = ler("src/components/execucao/DocumentoDaExecucao.tsx");
+    expect(documento).toContain('target="_blank" rel="noopener noreferrer"');
+    expect(documento).toContain("<EvidenciaVisual");
+    const evidencia = ler("src/components/execucao/EvidenciaVisual.tsx");
+    expect(evidencia).toContain("<img src={p.href}");
+    expect(evidencia).toContain("alt={titulo}");
   });
 
   it("mostra o porquê e o próximo passo, não só o estado", () => {
     expect(ctx).toContain("last_action");
-    expect(ctx).toContain("próximo passo:");
+    expect(ctx).toContain("<DocumentoDaExecucao texto={l.last_action} compacto />");
+    expect(ctx).toContain("Próximo passo</span><DocumentoDaExecucao texto={l.next_step} compacto />");
   });
 
   it("some quando não há NEM trabalho NEM proposta", () => {
@@ -124,13 +131,15 @@ describe("o Escritório é a porta de entrada", () => {
     // A visão agora é guardada (useEstadoDaTela do sistema); o padrão, na
     // primeira visita, continua sendo o Escritório.
     expect(pagina).toContain('useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao", "escritorio"');
-    expect(pagina).toMatch(/VISOES = \[\s*\{ id: "escritorio"/);
+    // A Central de Autonomia e a Performance vieram antes na lista de abas; o Escritório continua nela.
+    expect(pagina).toContain('{ id: "escritorio", rotulo: "Escritório" }');
   });
 
   it("respeita o mesmo recorte dos filtros", () => {
     // Se o Escritório ignorasse o filtro, o número da aba discordaria do
     // que ela mostra.
-    expect(pagina).toContain("trabalhos={vinculosVisiveis as any}");
+    // As execuções externas sem tarefa só entram quando não há filtro de cliente nem de prazo.
+    expect(pagina).toContain("trabalhos={[...vinculosVisiveis, ...(!filtroCliente && filtroPrazo === \"todas\" ?");
   });
 });
 
