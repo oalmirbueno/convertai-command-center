@@ -32,12 +32,15 @@ const API = "https://api.browserbase.com/v1";
 const TEMPO_DA_SESSAO_S = 4 * 3600;
 /** Sem keepAlive (plano gratuito): sessão curta, para não gastar a hora do mês num navegador esquecido. */
 const TEMPO_SEM_PLANO_PAGO_S = 900;
+/** 17/10: a sessão do print de página pública vive no máximo 2 minutos. */
+const TEMPO_DO_PRINT_S = 120;
 /** A região mais perto do Brasil entre as do provedor (us-west-2, us-east-1, eu-central-1, ap-southeast-1). */
 const REGIAO = "us-east-1";
 
 /** Tamanho da tela do navegador remoto (a página "de verdade" que a Live View mostra encolhida ou não). */
 export type Tela = { largura: number; altura: number };
-export type OpcoesDaSessao = { tela?: Tela | null };
+/** `curta` (17/10, print de página pública): sem keepAlive, 2 minutos, sessão que some sozinha. */
+export type OpcoesDaSessao = { tela?: Tela | null; curta?: boolean };
 /**
  * 15/10 (dono: "as letras estão muito pequenas"): a Live View encaixa a tela remota no quadro,
  * então tela remota grande = letra miúda. A tela nasce do tamanho do quadro ampliado de quem abriu
@@ -105,10 +108,12 @@ export function provedorBrowserbase(chave: string, projeto: string | null, f: ty
       });
       // Do melhor para o mínimo: proxy do Brasil para a Meta (Developer+), depois sem ele, e por fim
       // sem keepAlive (só do plano Hobby para cima, docs 09/10), com 15 min. Chave recusada e limite não repetem.
-      const tentativas: Array<[boolean, number, boolean]> = [
-        ...(opcoes.proxyMeta ? [[true, TEMPO_DA_SESSAO_S, true] as [boolean, number, boolean]] : []),
-        [true, TEMPO_DA_SESSAO_S, false], [false, TEMPO_SEM_PLANO_PAGO_S, false],
-      ];
+      const tentativas: Array<[boolean, number, boolean]> = o.curta
+        ? [[false, TEMPO_DO_PRINT_S, false]]
+        : [
+          ...(opcoes.proxyMeta ? [[true, TEMPO_DA_SESSAO_S, true] as [boolean, number, boolean]] : []),
+          [true, TEMPO_DA_SESSAO_S, false], [false, TEMPO_SEM_PLANO_PAGO_S, false],
+        ];
       let s: Record<string, unknown> = {};
       for (const [i, [manterViva, tempo, comProxy]] of tentativas.entries()) {
         try {

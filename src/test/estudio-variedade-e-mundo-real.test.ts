@@ -121,12 +121,39 @@ describe("diretor e ajuste com o contexto do cliente", () => {
     expect(f).toContain("contexto_do_negocio: (await negocioP) || null");
     expect(f).toContain("temasDaEpoca({ data: item.tarefa.due_date");
     expect(f).toContain("perguntasDoMundoRealNoEstudio()");
-    expect(f).toContain('"pessoas_reais", "fontes_da_pesquisa"');
+    expect(f).toContain('"pessoas_reais", "paginas_reais", "fontes_da_pesquisa"');
   });
   it("o ajuste pedido usa o modelo do diretor, vê a série e o negócio e busca a logo real", () => {
     expect(f).toContain('modeloDoPapel(auto ? "leitura" : "diretor_arte")');
     expect(f).toContain("PENSE COMO DIRETOR DE ARTE");
     expect(f).toContain("negocio: negocioDoAjuste");
     expect(f).toContain("logo real do ajuste não veio");
+  });
+});
+
+describe("print real de página pública (17/10)", () => {
+  it("só http ou https sem login, até 2, uma lâmina cada; quadro do lado oposto ao texto", async () => {
+    const { normalizarPaginasReais, areaDaPaginaReal, fraseDaPaginaReal } = await import("../../supabase/functions/estudio-arte/modulos/mundo-real");
+    const p = normalizarPaginasReais([
+      { url: "https://www.aceleriq.com.br/", laminas: [3, 4], celular: false },
+      { url: "javascript:alert(1)", laminas: [1], celular: false },
+      { url: "https://user:senha@site.com", laminas: [1], celular: false },
+      { url: "https://loja.com/produto", laminas: [], celular: true },
+      { url: "https://terceira.com", laminas: [2], celular: false },
+    ], [1, 2, 3, 4]);
+    expect(p).toEqual([{ url: "https://www.aceleriq.com.br/", laminas: [3], celular: false }, { url: "https://loja.com/produto", laminas: [2], celular: true }]);
+    expect(areaDaPaginaReal("topo-centro", false).y0).toBeGreaterThanOrEqual(0.46);
+    expect(areaDaPaginaReal("coluna-esquerda", false).x0).toBeGreaterThan(0.5);
+    const f = fraseDaPaginaReal(areaDaPaginaReal("topo-centro", false), "https://www.aceleriq.com.br/", false);
+    expect(f).toContain("PRINT REAL (aceleriq.com.br)");
+    expect(f).toContain("Não desenhe a página");
+  });
+  it("o navegador tira o print numa sessão própria e curta, nunca a do cliente", () => {
+    const op = readFileSync("supabase/functions/_shared/navegador-operacional.ts", "utf8");
+    expect(op).toContain("export async function printPublico(");
+    expect(op).toContain("p.criarSessao(contexto, { tela, curta: true })");
+    expect(op).toContain('Page.captureScreenshot", { format: "png"');
+    expect(readFileSync("supabase/functions/navegador-remoto/provedor.ts", "utf8")).toContain("[[false, TEMPO_DO_PRINT_S, false]]");
+    expect(readFileSync("supabase/functions/estudio-arte/index.ts", "utf8")).toContain('interno_acao: "print_publico"');
   });
 });

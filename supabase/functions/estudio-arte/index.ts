@@ -366,7 +366,11 @@ import {
   perguntasDoMundoRealNoEstudio,
   urlDaImagemDoVerbete,
   urlDaInfoDaFotoNoCommons,
+  areaDaPaginaReal,
+  fraseDaPaginaReal,
+  normalizarPaginasReais,
 } from "./modulos/mundo-real.ts";
+import { chave as chaveDoCofre } from "../_shared/chaves.ts";
 import { blocoDoTemaDaEpoca, temasDaEpoca } from "./modulos/tema-da-epoca.ts";
 import { avisosDeSemelhanca, cinza, dHash } from "./modulos/semelhanca-das-laminas.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt } from "../_shared/perfis-no-prompt.ts";
@@ -1079,7 +1083,7 @@ function seloDaVersao(v: unknown): { caminho: string; selo_id: string | null } |
 }
 
 /** 02/10: a vitrine de logos de uma lâmina (área no quadro final, as logos e a proporção do quadro). */
-type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number; tipo?: "marca_real" | "pessoa_real" };
+type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number; tipo?: "marca_real" | "pessoa_real" | "pagina_real" | "pagina_real_celular" };
 
 /** Lê a vitrine gravada numa versão (para o ajuste colar de novo as mesmas logos, na mesma grade). */
 function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
@@ -1087,7 +1091,7 @@ function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
   if (!s || typeof s !== "object") return null;
   const o = s as VitrineNaLamina;
   if (o.aplicado !== true || !o.area || !Array.isArray(o.logos) || !o.logos.length) return null;
-  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8, ...(o.tipo === "marca_real" || o.tipo === "pessoa_real" ? { tipo: o.tipo } : {}) };
+  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8, ...(o.tipo === "marca_real" || o.tipo === "pessoa_real" || o.tipo === "pagina_real" || o.tipo === "pagina_real_celular" ? { tipo: o.tipo } : {}) };
 }
 
 /**
@@ -1099,7 +1103,8 @@ async function colarVitrineNaArte(png: Uint8Array, v: VitrineNaLamina, clientId:
   // 17/10: a foto da pessoa pública preenche o quadro inteiro (recorte de capa), sem cartão branco.
   return await colarLogosNaGrade(
     png,
-    { ...v, modo: v.tipo === "pessoa_real" ? "foto" : "logo" },
+    // O print começa do topo da página (o recorte corta embaixo, não o cabeçalho do site).
+    { ...v, modo: v.tipo === "pessoa_real" || v.tipo === "pagina_real" || v.tipo === "pagina_real_celular" ? "foto" : "logo", ancora: v.tipo === "pessoa_real" ? "rosto" : "topo" },
     async (l) => {
       if (!daPasta(l)) throw new Error("logo_fora_da_pasta_do_cliente");
       return (await anexoLeve("mesa", l.caminho, "logo-da-vitrine", true)).bytes;
@@ -3109,7 +3114,7 @@ const ESQUEMA_DIRECAO = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "pessoas_reais", "fontes_da_pesquisa"],
+    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "pessoas_reais", "paginas_reais", "fontes_da_pesquisa"],
     properties: {
       // 02/10: marcas de outras empresas na peça (logo colada pelo código) e as fontes da pesquisa (vazios fora do mundo real).
       ...CAMPOS_DO_MUNDO_REAL,
@@ -3847,6 +3852,23 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       });
     }
     if (fotos.length) avisosDoDiretor = [...avisosDoDiretor, "Foto de pessoa pública com licença livre, para conteúdo informativo. Em anúncio ou como se ela endossasse a marca, precisa da autorização dela."];
+    // 17/10 (dono: "fazer o print real também"): página pública vira print de verdade (navegador remoto, sessão própria
+    // e curta), colado pelo código num quadro da lâmina. Sem o navegador ligado ou com erro: aviso, a lâmina segue.
+    for (const pg of normalizarPaginasReais(brutoDoDiretor ? brutoDoDiretor.paginas_reais : null, ordens)) {
+      const print = await printDaPagina(clientId, pg.url, pg.celular).catch((e) => ({ erro: registrarFalha("estudio-arte: print real não veio", e, { url: pg.url }) }));
+      if ("erro" in print) {
+        avisosDoDiretor = [...avisosDoDiretor, `O print real de ${pg.url} não veio (${print.erro}): a lâmina sai com o quadro liso. Envie o print como foto se precisar.`];
+        continue;
+      }
+      direcao.cards = direcao.cards.map((c) => {
+        const x = c as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[]; vitrine_tipo?: string };
+        if (pg.laminas.indexOf(c.ordem) < 0) return c;
+        // Vitrine de parceiros e foto de pessoa têm a vez; o print toma o lugar da logo de canto.
+        if (x.vitrine_de_logos && x.vitrine_de_logos.length && x.vitrine_tipo !== "marca_real") return c;
+        return { ...c, vitrine_de_logos: [{ caminho: print.caminho, nome: pg.url }], vitrine_area: areaDaPaginaReal(c.layout?.zona_texto ?? "", pg.celular), vitrine_tipo: pg.celular ? "pagina_real_celular" : "pagina_real" } as CardDirecao;
+      });
+      fontesDaWeb = [...fontesDaWeb, { url: print.url, titulo: `Print real: ${print.titulo || pg.url}` }];
+    }
     const fontes = notaDasFontes({ daWeb: fontesDaWeb, doDiretor: brutoDoDiretor ? brutoDoDiretor.fontes_da_pesquisa : null, logos, icones, fotos });
     direcao.fontes_da_pesquisa = fontes.length ? fontes : null;
     if (!fontes.some((f) => f.tipo === "pesquisa")) avisosDoDiretor = [...avisosDoDiretor, "O diretor não trouxe fonte da pesquisa: confira menus, botões e passos antes de publicar."];
@@ -4019,6 +4041,26 @@ async function fotoRealDoCommons(clientId: string, nome: string, arquivoDoDireto
   const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: true });
   if (error) throw error;
   return { caminho, foto: info };
+}
+
+/**
+ * 17/10: o print de uma página pública pelo navegador remoto (ação interna print_publico: sessão própria e curta,
+ * nunca a do cliente). Volta o caminho do PNG na pasta do cliente.
+ */
+async function printDaPagina(clientId: string, url: string, celular: boolean): Promise<{ caminho: string; url: string; titulo: string }> {
+  const segredo = await chaveDoCofre("CRON_SECRET").catch(() => "");
+  const chaveDeServico = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!segredo || !chaveDeServico) throw new Error("navegador sem a chave interna");
+  const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/navegador-remoto`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${chaveDeServico}`, "x-cron-secret": segredo },
+    body: JSON.stringify({ acao: "interno", interno_acao: "print_publico", cliente_id: clientId, url, celular }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  const j = await r.json().catch(() => null) as { print?: { caminho?: string; url?: string; titulo?: string }; mensagem?: string } | null;
+  const caminho = j && j.print && typeof j.print.caminho === "string" ? j.print.caminho : "";
+  if (!r.ok || !caminho || caminho.indexOf(`${clientId}/`) !== 0) throw new Error((j && j.mensagem) || `navegador respondeu ${r.status}`);
+  return { caminho, url: String(j!.print!.url || url), titulo: String(j!.print!.titulo || "") };
 }
 
 // ------------------------------------------------------ fiel ao pedido (frente AG)
@@ -6131,8 +6173,12 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const marcaReal = cardDaVitrine.vitrine_tipo === "marca_real";
   // 17/10: a foto da pessoa pública vai num quadro do lado oposto ao texto, colada pelo código.
   const pessoaReal = cardDaVitrine.vitrine_tipo === "pessoa_real";
+  // 17/10: o print real de página pública, colado pelo código num quadro do lado oposto ao texto.
+  const paginaReal = cardDaVitrine.vitrine_tipo === "pagina_real" || cardDaVitrine.vitrine_tipo === "pagina_real_celular";
   const vitrineAqui: VitrineNaLamina | null = logosDaVitrine.length
-    ? pessoaReal
+    ? paginaReal
+      ? { area: areaDaPaginaReal(String(card.layout?.zona_texto ?? ""), cardDaVitrine.vitrine_tipo === "pagina_real_celular"), logos: logosDaVitrine.slice(0, 1), proporcao: quadro.final.largura / quadro.final.altura, tipo: cardDaVitrine.vitrine_tipo as "pagina_real" | "pagina_real_celular" }
+      : pessoaReal
       ? { area: areaDaPessoaReal(String(card.layout?.zona_texto ?? "")), logos: logosDaVitrine.slice(0, 1), proporcao: quadro.final.largura / quadro.final.altura, tipo: "pessoa_real" }
       : { area: marcaReal ? AREA_DA_LOGO_REAL : areaDaVitrine(total === 1), logos: marcaReal ? logosDaVitrine.slice(0, 2) : logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura, ...(marcaReal ? { tipo: "marca_real" as const } : {}) }
     : null;
@@ -6412,7 +6458,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDaTipografiaAqui,
     // Selo da campanha desenhado pelo gerador junto com a arte, grande e fiel ao anexo.
     blocoDoSelo,
-    vitrineAqui ? (vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
+    vitrineAqui ? (vitrineAqui.tipo === "pagina_real" || vitrineAqui.tipo === "pagina_real_celular" ? fraseDaPaginaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "", vitrineAqui.tipo === "pagina_real_celular") : vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
     // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
     blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
@@ -6564,7 +6610,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDaTipografiaAqui,
       // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
       blocoDoSelo,
-      vitrineAqui ? (vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
+      vitrineAqui ? (vitrineAqui.tipo === "pagina_real" || vitrineAqui.tipo === "pagina_real_celular" ? fraseDaPaginaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "", vitrineAqui.tipo === "pagina_real_celular") : vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,

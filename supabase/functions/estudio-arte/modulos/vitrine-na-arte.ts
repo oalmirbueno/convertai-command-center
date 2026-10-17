@@ -24,7 +24,7 @@ export interface ResultadoDaVitrine {
  */
 export async function colarLogosNaGrade(
   png: Uint8Array,
-  vitrine: { area: Area; logos: LogoDaVitrine[]; proporcao: number; modo?: "logo" | "foto" },
+  vitrine: { area: Area; logos: LogoDaVitrine[]; proporcao: number; modo?: "logo" | "foto"; ancora?: "rosto" | "topo" },
   abrir: (logo: LogoDaVitrine) => Promise<Uint8Array>,
   aoFalhar: (logo: LogoDaVitrine, erro: unknown) => void = () => {},
 ): Promise<ResultadoDaVitrine> {
@@ -50,7 +50,8 @@ export async function colarLogosNaGrade(
         const esc = Math.max(cw / logo.width, ch / logo.height);
         const lw = Math.max(cw, Math.round(logo.width * esc)), lh = Math.max(ch, Math.round(logo.height * esc));
         logo.resize(lw, lh);
-        const cx = Math.round((lw - cw) / 2), cy = Math.round((lh - ch) * 0.3);
+        // Pessoa: centrado um pouco acima (rosto no terço de cima). Print de página: do topo (o cabeçalho fica).
+        const cx = Math.round((lw - cw) / 2), cy = vitrine.ancora === "topo" ? 0 : Math.round((lh - ch) * 0.3);
         logo.crop(cx, cy, cw, ch);
         logo.roundCorners(Math.round(Math.min(cw, ch) * 0.04));
         arte.composite(logo, x0, y0);

@@ -432,6 +432,62 @@ async function guardarCaptura(db: SupabaseClient, clientId: string, sessaoId: st
   return error ? null : caminho;
 }
 
+/** Tamanhos do print de página pública: computador (site) e celular (página que vive no celular). */
+export const TELA_DO_PRINT = { computador: { largura: 1440, altura: 900 }, celular: { largura: 430, altura: 932 } } as const;
+
+/** Some com banners de cookie e janelas de aviso fixas na frente da página (melhor esforço, nunca falha o print). */
+const LIMPAR_SOBREPOSICOES = `(() => {
+  const ruins = /cookie|consent|lgpd|privacidade|privacy|newsletter|inscreva|subscribe|popup|modal|onetrust|didomi/i;
+  let tirados = 0;
+  for (const el of Array.from(document.querySelectorAll("body *"))) {
+    const st = getComputedStyle(el);
+    if ((st.position === "fixed" || st.position === "sticky") && Number(st.zIndex || 0) >= 10 && ruins.test((el.id || "") + " " + (el.className || "") + " " + (el.getAttribute("aria-label") || "") + " " + (el.innerText || "").slice(0, 200))) {
+      el.style.setProperty("display", "none", "important"); tirados++;
+    }
+  }
+  document.documentElement.style.overflow = "auto"; document.body.style.overflow = "auto";
+  return tirados;
+})()`;
+
+/**
+ * 17/10 (dono: "buscar elementos reais e não apenas simulando"): o print de uma página PÚBLICA para a arte,
+ * numa sessão própria e curta do provedor (contexto novo, sem os cookies nem a trava da sessão do cliente,
+ * que é dos agentes). Abre, espera carregar, some com o banner de cookie, tira PNG da tela e encerra.
+ * Página com login aparece como o visitante vê (a tela de entrar); isso fica para a equipe julgar.
+ */
+export async function printPublico(db: SupabaseClient, p: Provedor, e: { clientId: string; url: string; celular?: boolean }): Promise<{ caminho: string; url: string; titulo: string }> {
+  const url = urlSegura(e.url);
+  if (!url) throw new ErroDoNavegador("url_invalida", "Endereço inválido para o print (só http ou https, sem login na URL).", 400);
+  const tela = e.celular ? TELA_DO_PRINT.celular : TELA_DO_PRINT.computador;
+  const contexto = await p.criarContexto("print-publico");
+  const sessao = await p.criarSessao(contexto, { tela, curta: true });
+  let c: Cdp | null = null;
+  try {
+    c = await Cdp.abrir(await p.conectar(sessao));
+    const alvo = (await abas(c))[0]?.id || String((await c.enviar("Target.createTarget", { url: "about:blank" })).targetId || "");
+    const s = await anexar(c, alvo);
+    await c.enviar("Emulation.setDeviceMetricsOverride", { width: tela.largura, height: tela.altura, deviceScaleFactor: e.celular ? 2 : 1, mobile: !!e.celular }, s).catch(() => undefined);
+    await c.enviar("Page.navigate", { url }, s, 30_000);
+    await esperarCarregar(c, s, 20_000);
+    // Fontes, imagens preguiçosas e animação de entrada.
+    await new Promise((r) => setTimeout(r, 2_500));
+    await avaliar<number>(c, s, LIMPAR_SOBREPOSICOES).catch(() => 0);
+    await new Promise((r) => setTimeout(r, 400));
+    const info = await avaliar<{ url: string; titulo: string }>(c, s, "({ url: location.href, titulo: document.title })").catch(() => ({ url, titulo: "" }));
+    const cap = await c.enviar("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, s, 25_000);
+    const base64 = String(cap.data || "");
+    if (!base64) throw new ErroDoNavegador("print_vazio", "A página não devolveu o print.");
+    const bytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+    const caminho = `${e.clientId}/pedidos/prints/${Date.now()}-${e.celular ? "celular" : "site"}.png`;
+    const { error } = await db.storage.from("mesa").upload(caminho, bytes, { contentType: "image/png", upsert: false });
+    if (error) throw new ErroDoNavegador("print_nao_gravado", "O print foi tirado, mas não foi guardado.");
+    return { caminho, url: info.url || url, titulo: String(info.titulo || "").slice(0, 200) };
+  } finally {
+    if (c) c.fechar();
+    await p.encerrar(sessao).catch(() => undefined);
+  }
+}
+
 /** Zelador: encerra sessões paradas (sem atividade há OCIOSA_MIN e sem trava viva). */
 export async function zelar(db: SupabaseClient, p: Provedor): Promise<{ encerradas: number }> {
   const limite = new Date(Date.now() - OCIOSA_MIN * 60_000).toISOString();

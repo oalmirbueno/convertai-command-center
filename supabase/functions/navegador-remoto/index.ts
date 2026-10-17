@@ -21,7 +21,7 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { chave as chaveDoCofre } from "../_shared/chaves.ts";
 import { autorizarChamadaInterna } from "../agente-calendario/modulos/refazer-interno.ts";
-import { ACOES_DO_NAVEGADOR, type AcaoDoNavegador, ErroDoNavegador, sessaoDoCliente, tocar, usarNavegador, zelar } from "../_shared/navegador-operacional.ts";
+import { ACOES_DO_NAVEGADOR, type AcaoDoNavegador, ErroDoNavegador, printPublico, sessaoDoCliente, tocar, usarNavegador, zelar } from "../_shared/navegador-operacional.ts";
 import { ErroDoProvedor, provedorDoAmbiente } from "./provedor.ts";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret", "Access-Control-Allow-Methods": "POST, OPTIONS", ...PREFLIGHT_CACHE };
@@ -55,6 +55,13 @@ async function acao(nome: string, corpo: Record<string, unknown>, userId: string
     const { count } = await servico().from("navegador_sessoes").select("id", { count: "exact", head: true }).gte("aberta_em", desde);
     const { count: abertas } = await servico().from("navegador_sessoes").select("id", { count: "exact", head: true }).eq("estado", "aberta");
     return { ...conta, sessoes_30_dias: count || 0, abertas_agora: abertas || 0 };
+  }
+
+  // 17/10: print de página pública para a arte do Estúdio (sessão própria e curta; nunca a do cliente).
+  if (nome === "print_publico") {
+    const clientId = String(corpo.cliente_id || "");
+    if (!UUID.test(clientId)) throw new ErroHttp(400, "cliente_invalido", "Diga o cliente do print.");
+    return { print: await printPublico(servico(), p, { clientId, url: String(corpo.url || ""), celular: corpo.celular === true }) };
   }
 
   if (nome === "abrir") {

@@ -158,7 +158,7 @@ export function perguntasDoMundoRealNoEstudio(): Record<string, { type: "noul"; 
   return {
     mundo_real: {
       type: "noul",
-      instructions: "O conteúdo em `pedido` mostra ou explica algo REAL de outra empresa que a arte precisa mostrar fiel ao que existe: a tela de uma ferramenta (gerenciador de anúncios do Meta, Google Ads, painel, relatório, app), uma marca de verdade como assunto (logo, produto, comparação entre marcas) ou um passo a passo de um sistema?",
+      instructions: "O conteúdo em `pedido` mostra ou explica algo REAL de outra empresa que a arte precisa mostrar fiel ao que existe: a tela de uma ferramenta (gerenciador de anúncios do Meta, Google Ads, painel, relatório, app), uma marca de verdade como assunto (logo, produto, comparação entre marcas), um site ou página pública de uma empresa (inclusive a do próprio cliente) ou um passo a passo de um sistema?",
       criteria: {
         true: "A peça fala de uma campanha no Meta Ads, de um recurso de um app, de uma marca ou produto real de outra empresa, ou ensina a usar um sistema: mostrar a tela, a logo ou o produto real deixa a arte certa.",
         false: "A peça é só sobre a marca do cliente, uma dica do nicho, um conceito ou uma oferta, sem precisar mostrar tela, logo ou produto de outra empresa (citar \"chame no WhatsApp\" não conta).",
@@ -185,6 +185,7 @@ export const INSTRUCOES_DO_MUNDO_REAL = `MUNDO REAL (o pedido fala de produto, a
 - Ferramenta na tela (17/10): falou de campanha no Meta Ads, Google Ads, relatório ou painel, uma lâmina MOSTRA a tela de verdade dessa ferramenta, recriada em estilo plano e fiel: o nome real da tela ("Gerenciador de Anúncios"), as abas e colunas reais (no Meta: Campanhas, Conjuntos de anúncios, Anúncios; Veiculação, Resultados, Alcance, Custo por resultado, Valor usado), números plausíveis e coerentes com o texto, num notebook ou celular quando ajudar. Pesquise a interface atual antes.
 - Marca como assunto: a logo oficial vem do Commons (marcas_reais) e o produto ou a embalagem aparecem como são de verdade (forma, cores, rótulo), sem inventar versão.
 - pessoas_reais (17/10): cada pessoa pública que a peça precisa mostrar (nome como no verbete da Wikipédia em português; arquivo_wikimedia com o "File:..." de uma foto dela no Commons, quando você achou; laminas onde ela aparece, no máximo 2). A foto real dela entra COLADA PELO CÓDIGO num quadro da lâmina: em layout.imagem descreva o quadro de foto (moldura, lado oposto ao texto) e o resto da cena, e NUNCA desenhe nem descreva o rosto dessa pessoa. Só para conteúdo informativo ou de notícia sobre ela; nunca como se ela endossasse a marca (avise em avisos_para_a_equipe que o uso de imagem de pessoa pública em anúncio pede autorização).
+- paginas_reais (17/10): quando a peça fala de um site, loja, página de produto, página oficial de um recurso ou perfil PÚBLICO que dá para abrir sem login, ponha o endereço exato (confirmado na pesquisa) e a lâmina onde ele aparece; celular verdadeiro quando a página vive no celular. No máximo 2. O print real é tirado por um navegador e COLADO PELO CÓDIGO num quadro da lâmina: em layout.imagem descreva o quadro (moldura de notebook ou celular, do lado oposto ao texto) e NUNCA desenhe a página. Tela que exige login (Gerenciador de Anúncios, painel) não entra aqui: essa continua recriada.
 - Tema e referência real: use elementos reais e reconhecíveis do assunto (o objeto real, o lugar real, o ícone real do app), não um genérico de banco de imagens.`;
 
 /** Campos que o diretor devolve para o mundo real (entram no esquema da direção; vazios quando não é o caso). */
@@ -199,6 +200,20 @@ export const CAMPOS_DO_MUNDO_REAL = {
         nome: { type: "string" },
         arquivo_wikimedia: { type: "string" },
         laminas: { type: "array", items: { type: "integer" } },
+      },
+    },
+  },
+  // 17/10: páginas públicas reais que a peça mostra como print (tirado pelo navegador remoto e colado pelo código).
+  paginas_reais: {
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: ["url", "laminas", "celular"],
+      properties: {
+        url: { type: "string" },
+        laminas: { type: "array", items: { type: "integer" } },
+        celular: { type: "boolean" },
       },
     },
   },
@@ -424,6 +439,54 @@ export function areaDaPessoaReal(zona: string): Area {
   if (/^topo/.test(z)) return { x0: 0.2, y0: 0.5, x1: 0.8, y1: 0.93 };
   if (/^base/.test(z)) return { x0: 0.2, y0: 0.07, x1: 0.8, y1: 0.5 };
   return { x0: 0.62, y0: 0.06, x1: 0.94, y1: 0.4 };
+}
+
+export interface PaginaReal {
+  url: string;
+  laminas: number[];
+  celular: boolean;
+}
+
+/** Até quantas páginas públicas com print por peça. */
+export const MAX_PAGINAS_REAIS = 2;
+
+/** As páginas da direção, limpas: só http ou https, sem login na URL, até 2, lâminas que existem (sem lâmina: a 2ª ou a capa). */
+export function normalizarPaginasReais(bruto: unknown, ordens: number[]): PaginaReal[] {
+  const saida: PaginaReal[] = [];
+  for (const m of (Array.isArray(bruto) ? bruto : []) as Array<Record<string, unknown>>) {
+    if (!m || typeof m !== "object") continue;
+    let u: URL;
+    try {
+      u = new URL(String(m.url || "").trim());
+    } catch {
+      continue;
+    }
+    if ((u.protocol !== "https:" && u.protocol !== "http:") || u.username || u.password) continue;
+    if (saida.some((p) => p.url === u.toString())) continue;
+    const laminas = (Array.isArray(m.laminas) ? m.laminas : []).map(Number).filter((o) => ordens.indexOf(o) >= 0);
+    saida.push({ url: u.toString(), laminas: laminas.length ? Array.from(new Set(laminas)).slice(0, 1) : [ordens.length > 1 ? ordens[1] : ordens[0]], celular: m.celular === true });
+    if (saida.length >= MAX_PAGINAS_REAIS) break;
+  }
+  return saida;
+}
+
+/** O quadro do print: grande, do lado oposto ao texto (site é largo; celular é estreito). */
+export function areaDaPaginaReal(zona: string, celular: boolean): Area {
+  const z = String(zona || "");
+  if (celular) return areaDaPessoaReal(z);
+  if (/^topo/.test(z)) return { x0: 0.06, y0: 0.46, x1: 0.94, y1: 0.94 };
+  if (/^base/.test(z)) return { x0: 0.06, y0: 0.06, x1: 0.94, y1: 0.52 };
+  if (/esquerda/.test(z)) return { x0: 0.56, y0: 0.22, x1: 0.96, y1: 0.78 };
+  if (/direita/.test(z)) return { x0: 0.04, y0: 0.22, x1: 0.44, y1: 0.78 };
+  return { x0: 0.08, y0: 0.55, x1: 0.92, y1: 0.95 };
+}
+
+/** Frase do prompt da lâmina: o quadro liso para o print real entrar pelo código. */
+export function fraseDaPaginaReal(area: Area, url: string, celular: boolean): string {
+  const pct = (n: number) => Math.round(n * 100);
+  let dominio = url;
+  try { dominio = new URL(url).hostname.replace(/^www\./, ""); } catch { /* fica a url */ }
+  return `PRINT REAL (${dominio}): o print verdadeiro da página entra depois, colado pelo código, num quadro de ${pct(area.x0)}% a ${pct(area.x1)}% da largura e de ${pct(area.y0)}% a ${pct(area.y1)}% da altura${celular ? ", como a tela de um celular" : ", como a tela de um notebook ou navegador"}. Esse quadro fica como um painel liso numa cor da paleta (pode ter a moldura fina do aparelho em volta), sem texto e sem desenho dentro, e TODO o texto da lâmina fica fora dele. Não desenhe a página, o site nem a logo de ${dominio}.`;
 }
 
 /** Frase do prompt da lâmina: o quadro que fica liso para a foto real entrar pelo código. */
