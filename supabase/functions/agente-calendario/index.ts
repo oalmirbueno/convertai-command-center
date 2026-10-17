@@ -1,6 +1,7 @@
 import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
+import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
 import { resumoDoRecibo } from "./resultado-da-agenda.ts";
 import { ORIENTACAO_DA_REVISAO, PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
 import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
@@ -1000,6 +1001,8 @@ type Contexto = {
   contextoCompleto?: string | null;
   /** 17/10: hype e o que está em alta no nicho que ainda valem para o período (modulos/hype-no-conteudo.ts). */
   hype?: HypeQueVale | null;
+  /** 17/10: perfis de referência e concorrentes do Instagram (padrão, posts que funcionaram, o que o concorrente postou agora). */
+  perfis?: PerfilNoPrompt[] | null;
 };
 
 /**
@@ -1204,6 +1207,8 @@ async function montarContexto(
   const hypeP = Promise.resolve(
     servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1).maybeSingle(),
   ).then(({ data }) => hypesQueValem(data as { semana: string; resumo: string | null; itens: unknown } | null, { inicio, fim }), (e) => (registrarFalha("agente-calendario: hypes não lidos", e), null));
+  // 17/10: referências e concorrentes do Instagram da marca aberta (só leitura do banco; nunca lança).
+  const perfisP = lerPerfisParaOPrompt(servico, clientId, marca ? { id: marca.id, principal: marca.principal } : null);
   const [
     perfil,
     conta,
@@ -1349,6 +1354,7 @@ async function montarContexto(
     formatoDoPerfil: await perfilP,
     contextoCompleto: await completoP,
     hype: await hypeP,
+    perfis: await perfisP,
   };
 }
 
@@ -1393,7 +1399,9 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
   const moldes = blocoDosMoldes(ctx.moldes ?? []);
   // 17/10: o hype da semana em toda geração (a própria busca de hype não lê o anterior).
   const hype = opcoes.semHype ? "" : blocoDoHype(ctx.hype);
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}${hype ? `\n\n${hype}` : ""}`;
+  // 17/10: referências e concorrentes em toda geração (antecipar, responder, ocupar ou liderar; misturar, nunca copiar).
+  const perfis = blocoDosPerfis(ctx.perfis, "conteudo", { enxuto });
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}${perfis ? `\n\n${perfis}` : ""}${hype ? `\n\n${hype}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */

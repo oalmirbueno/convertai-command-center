@@ -364,6 +364,7 @@ import {
   urlDaInfoDaFotoNoCommons,
 } from "./modulos/mundo-real.ts";
 import { blocoDoTemaDaEpoca, temasDaEpoca } from "./modulos/tema-da-epoca.ts";
+import { blocoDosPerfis, lerPerfisParaOPrompt } from "../_shared/perfis-no-prompt.ts";
 import {
   acoesSemMudarQuantidade,
   blocoDaReescritaTotal,
@@ -3180,7 +3181,7 @@ Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluí
 
 NARRATIVA E CONTINUIDADE (obrigatório)
 - Carrossel é uma história só, nunca frases picotadas: a capa abre uma tensão, cada lâmina avança um passo e prepara a seguinte (conectivos, continuidade de sentido), o final resolve e chama para a ação.
-- Série com identidade, cenas que avançam (17/10, dono: "repete a mesma imagem da capa e a mesma pessoa só mudando o ângulo; quero mais dinâmica, mais carrossel"): o que se repete é o SISTEMA (o fio_visual: paleta, tipografia, grafismos, tratamento e luz); a IMAGEM de cada lâmina é nova e complementa a anterior, como um bom carrossel editorial. Alterne o tipo de imagem ao longo do carrossel: pessoa em ação, objeto ou detalhe em close, tela ou interface real, número ou gráfico, produto, cena ampla, lâmina tipográfica. Nunca duas lâminas seguidas com o mesmo sujeito ou o mesmo tipo de imagem. Pessoa protagonista em no máximo 2 lâminas, em situações e ações diferentes (não a mesma foto com outro ângulo). Nada da capa se repete nas outras: nem a foto, nem a pessoa, nem o objeto, nem o cenário.
+- Série com identidade, cenas que avançam: repete-se o SISTEMA (fio_visual); a IMAGEM de cada lâmina é nova e complementa a anterior. Alterne o tipo: pessoa em ação, detalhe em close, tela real, número ou gráfico, produto, cena ampla, lâmina tipográfica. Nunca duas lâminas seguidas com o mesmo sujeito ou tipo de imagem; pessoa protagonista em no máximo 2 lâminas, em situações diferentes; nada da capa (foto, pessoa, objeto, cenário) volta com outro ângulo.
 - A capa (de carrossel ou de post estático) existe para PARAR A ROLAGEM: gancho de até 7 palavras que gera curiosidade ou identificação, a maior headline do conjunto em peso black com a palavra-chave na cor de destaque, e um elemento visual forte e inesperado (escala, recorte ousado, rosto ou olhar, gesto em ação, objeto real do tema), sempre na paleta e no tratamento da série. Nunca escureça a imagem para criar destaque, e nunca ponha fundo da mesma cor da logo. Zona da capa pela foto: esquerda quando o sujeito está à direita; topo-centro ou centro quando o sujeito está no centro ou embaixo.
 - Nunca escreva o nome da marca no texto das lâminas; a marca aparece pela logo oficial, que o gerador DESENHA junto com a arte na capa e no fechamento (vale sobre qualquer regra anterior de logo aplicada por código): pense o lugar dela na composição (junto do bloco de texto, no mesmo eixo, ou onde o ponto focal pedir), num tamanho que se lê de longe, e nunca peça caixa, cartão ou fundo branco para ela.
 - Formato: \`item.formato_da_arte\` diz o quadro (4:5, 3:4, 1:1 ou 9:16); pense a composição nele (no 9:16 o texto fica longe dos 14% de cima e dos 20% de baixo; no 1:1 a capa perde as laterais na grade do perfil).
@@ -3192,6 +3193,11 @@ NARRATIVA E CONTINUIDADE (obrigatório)
 - Se o plano indicar foto para a lâmina (\`item.campanha.pecas_do_plano\`, pela ordem da lâmina), use imagem_acervo = esse id nessa lâmina (com uso "elemento", descreva em layout.imagem o produto da foto na cena). No carrossel contínuo deixe imagem_acervo vazio: a cena é o panorama.
 
 Seja específico e curto: cada campo em uma ou duas frases.`;
+
+/** 17/10: vai na mensagem (não no sistema): o sistema do diretor tem teto e fica no cache do provedor. */
+const REPERTORIO_E_MISTURA = `REPERTÓRIO E MISTURA (17/10, dono: "não repetir igual o arsenal, mas juntar detalhes que foram usados em um estilo com outro, para diversificar sem sair do gosto e das referências")
+- A base de conhecimento, as referências de técnica, os perfis do Instagram, as artes já publicadas da marca e o acervo são REPERTÓRIO, não molde: em cada peça combine detalhes de duas ou mais fontes (o recorte de uma, o grid de outra, a escala de título de uma terceira) dentro do kit da marca.
+- Nunca reproduza igual uma arte anterior, um post de referência ou um modelo da base; o resultado tem que parecer da marca e ser novo.`;
 
 type ModoDirecao = "diretor" | "roteiro";
 
@@ -3459,6 +3465,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     // estratégia aprovada com tom e tagline, briefing, decisões e Instagram). Antes ia só tom e tipografia.
     const negocioP = contextoCompletoParaPrompt(db as never, clientId, marcaDoItem, { area: "arte", partes: ["contexto", "estrategia", "briefing", "decisoes", "instagram"], teto: 4000 })
       .then((c) => c.bloco || null, (e) => (registrarFalha("estudio-arte: contexto completo da marca não lido (direção)", e, { client_id: clientId }), null));
+    // 17/10: os perfis de referência e concorrentes do Instagram (padrão visual e os posts que funcionaram, com a leitura da imagem).
+    const perfisP = lerPerfisParaOPrompt(db as never, clientId, marcaDoItem ? { id: marcaDoItem.id, principal: marcaDoItem.principal } : null);
     // 02/10: mundo real (produto, app, marca ou tela de outra empresa): a pesquisa liga e as logos vêm do Commons.
     const leituraDaRapida = rapida ? rapida.gravada.leitura_dos_cards ?? null : null;
     const fidelidadeDaRapida = rapida ? rapida.gravada.fidelidade ?? null : null;
@@ -3560,7 +3568,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Frente AE: as regras da arte rápida vão na mensagem (o sistema fica igual e segue no cache do provedor).
       mensagens: [{
         papel: "usuario",
-        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}${pessoaPublica ? "\nO conteúdo fala de uma pessoa pública: preencha pessoas_reais." : ""}\n\n` : ""}${temasDoItem.length ? `${blocoDoTemaDaEpoca(temasDoItem)}\n\n` : ""}Escreva a direção de arte deste item. Use \`marca.contexto_do_negocio\` para a imagem ser do nicho, do público e da oferta DESTE cliente (o lugar, o produto, a situação e a pessoa certos), nunca uma cena genérica que serviria a qualquer marca. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
+        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}${pessoaPublica ? "\nO conteúdo fala de uma pessoa pública: preencha pessoas_reais." : ""}\n\n` : ""}${temasDoItem.length ? `${blocoDoTemaDaEpoca(temasDoItem)}\n\n` : ""}${((b) => (b ? `${b}\n\n` : ""))(blocoDosPerfis(await perfisP, "arte"))}${REPERTORIO_E_MISTURA}\n\nEscreva a direção de arte deste item. Use \`marca.contexto_do_negocio\` para a imagem ser do nicho, do público e da oferta DESTE cliente (o lugar, o produto, a situação e a pessoa certos), nunca uma cena genérica que serviria a qualquer marca. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
         imagens: rapida && rapida.imagens.length ? rapida.imagens : undefined,
       }],
       esquemaJson: ESQUEMA_DIRECAO,

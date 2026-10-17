@@ -81,6 +81,7 @@ import {
   marcasDoCliente,
 } from "../_shared/marca.ts";
 import { contextoCompletoParaPrompt, esquecerContextoCompleto, lerContextoCompletoDaMarca } from "../_shared/contexto-completo-da-marca.ts";
+import { blocoDosPerfis, lerPerfisParaOPrompt } from "../_shared/perfis-no-prompt.ts";
 // Frente MC (29/09): a regra única de herança e a logo achada no que já existe.
 import { linhaDaMarca, projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { type ArquivoLeve, candidatosDaMarca, escolhaDaLogo, type NoDoWorkspaceLeve, perguntaDaLogo } from "./logo-da-marca.ts";
@@ -1546,6 +1547,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     lerRegrasDoDono(db, clientId, { areas: ["geral", "arte", "copy", "conta"], marcaId: corpo.marca_id }),
   ]);
   const completoDaMarca = await completoP;
+  // 17/10: o agente de Contexto lê os perfis de referência e os concorrentes (padrão, posts que funcionaram, o que postaram agora).
+  const perfisDoInstagram = blocoDosPerfis(await lerPerfisParaOPrompt(db, clientId, marcaDaConversa ? { id: marcaDaConversa.id, principal: marcaDaConversa.principal } : null), "contexto", { enxuto: true });
   const anteriores = historicoParaOModelo(linhas, { excluir: pedido.id, max: 16, maxChars: 2500 });
   // Núcleo comum (lote B): consultar antes de responder (o Jev escolhe as leituras; o código lê).
   const cobrarDoContexto = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId });
@@ -1601,6 +1604,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       // Frente CI: preferência, reclamação e "o cliente não gostou" viram diretriz aplicada (todas as mesas).
       REGRAS_DAS_DIRETRIZES_NO_PROMPT,
       completoDaMarca,
+      perfisDoInstagram,
       dadosDasAcoes
         ? blocoDasAcoesDoContexto(dadosDasAcoes)
         : "- acoes: sempre null nesta mensagem (para ler referências pendentes, montar o contexto de novo ou mexer em logo, referências, fotos e arquivos, a equipe pede e a lista vem na próxima).",
