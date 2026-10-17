@@ -196,7 +196,7 @@ describe("agente do Mês: o refazer leva o pedido do dono", () => {
   });
 
   it("a ação na agenda guarda o pedido e a tela usa ele antes do resumo", () => {
-    expect(ler("supabase/functions/agente-calendario/index.ts")).toContain("anexosDaResposta.push({ ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) });");
+    expect(ler("supabase/functions/agente-calendario/index.ts")).toContain("anexosDaResposta.push({ ...acaoNaAgenda, mes, outros_meses: julgamento.contrato.outrosMeses, pedido: mensagem.slice(0, 1500) });");
     expect(ler("src/components/mesa/AgenteDoMes.tsx")).toContain("pedidoParaRefazer(lotes[n], atual.pedido || atual.resumo)");
   });
 });

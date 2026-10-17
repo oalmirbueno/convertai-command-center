@@ -27,6 +27,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useArtesDoMes, SEM_ARTES } from "./MesArtes";
+import RaioXDoMes from "./RaioXDoMes";
 import {
   CartaoDoItem,
   CartaoDoPost,
@@ -796,6 +797,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
               `${itensDaMesa.length} ${itensDaMesa.length === 1 ? "peça" : "peças"} · ${dados.posts.length} ${dados.posts.length === 1 ? "post" : "posts"}`
             ) : null}
           </span>
+          {/* 17/10: raio-x do mês (formatos, pilares e o que pega o momento), aberto só no clique. */}
+          {dados && !vazio && <RaioXDoMes itens={itensDaMesa} />}
           {/* Um conteúdo marcado: agendar (se ainda não tem post) e abrir no Estúdio direto daqui. */}
           {escolhidos.length === 1 && (
             <span className="mr-1 flex shrink-0 items-center" data-acoes-do-marcado="">

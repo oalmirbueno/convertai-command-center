@@ -104,7 +104,7 @@ describe("Central: o método fecha a resposta e a linha 'Método:' aparece", () 
 
   it("o Jev do método corre junto com as regras (não espera sozinho antes do modelo)", () => {
     const aplicar = central.slice(central.indexOf("async function acaoAplicar("), central.indexOf("async function acaoReescrever("));
-    const inicioDoJev = aplicar.indexOf("const spAplicarP = temResposta ? superpoderesPara(db,");
+    const inicioDoJev = aplicar.indexOf("const spAplicarP = precisaConsolidar ? superpoderesPara(db,");
     const regras = aplicar.indexOf("const regras = await regrasDaCentral(db, clientId);");
     expect(inicioDoJev).toBeGreaterThan(0);
     expect(inicioDoJev).toBeLessThan(regras);

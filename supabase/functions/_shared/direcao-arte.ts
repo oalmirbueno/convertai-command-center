@@ -780,7 +780,7 @@ export const PADRAO_DA_LAMINA = [
 export function blocoDasProibicoes(e: { serie: boolean; replicar?: boolean }): string {
   return [
     "PROIBIDO",
-    "- Nenhum texto além do texto exato e das letras da própria logo oficial: sem o nome da marca escrito fora da logo, site, telefone, @, hashtag, preço, data, marca d'água, legenda ou letras de enfeite.",
+    "- Nenhum texto além do texto exato e das letras da própria logo oficial: sem o nome da marca escrito fora da logo, site, telefone, @, hashtag, preço, data, marca d'água, legenda ou letras de enfeite. Placas, quadros, cartazes, livros e cadernos do cenário ficam sem palavras (lisos ou desfocados); só a tela de app ou sistema que a lâmina pede mostra os rótulos dela.",
     "- Nenhuma logo ou marca de outra empresa, pessoa a mais, objeto solto sem função, ícone de banco de imagens ou elemento repetido ou duplicado; os objetos de apoio são só os que a cena pede ou teria naturalmente.",
     "- Pessoas com anatomia correta e natural: cabeça alinhada ao corpo, pescoço natural, cinco dedos em cada mão, mãos segurando os objetos de um jeito possível, braços e pernas inteiros e na proporção certa.",
     e.replicar

@@ -254,7 +254,8 @@ describe("rodada semanal sem laço", () => {
   it("roda só concorrente monitorado, não arquivado e com a semana vencida", () => {
     const base = { papel: "concorrente", monitorar: true, arquivado_em: null, proxima_rodada_em: null };
     expect(podeRodar(base, agora)).toBe(true);
-    expect(podeRodar({ ...base, papel: "referencia" }, agora)).toBe(false);
+    // 17/10: a referência roda toda semana, mesmo sem "monitorar" (que é do concorrente).
+    expect(podeRodar({ ...base, papel: "referencia", monitorar: false }, agora)).toBe(true);
     expect(podeRodar({ ...base, monitorar: false }, agora)).toBe(false);
     expect(podeRodar({ ...base, arquivado_em: "2026-09-20T00:00:00Z" }, agora)).toBe(false);
     expect(podeRodar({ ...base, proxima_rodada_em: "2026-09-28T09:00:00Z" }, agora)).toBe(true);

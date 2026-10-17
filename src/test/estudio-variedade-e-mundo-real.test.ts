@@ -67,12 +67,24 @@ describe("mundo real ampliado", () => {
   });
 
   it("o quadro da foto fica do lado oposto ao texto e o prompt proíbe desenhar a pessoa", () => {
-    expect(areaDaPessoaReal("coluna-esquerda").x0).toBeGreaterThan(0.5);
+    expect(areaDaPessoaReal("coluna-esquerda").x0).toBeGreaterThanOrEqual(0.6);
     expect(areaDaPessoaReal("base-direita").x1).toBeLessThan(0.5);
     expect(areaDaPessoaReal("topo-centro").y0).toBeGreaterThanOrEqual(0.5);
     const f = fraseDaPessoaReal(areaDaPessoaReal("centro-esquerda"), "Anitta");
     expect(f).toContain("colada pelo código");
-    expect(f).toContain("Não desenhe Anitta");
+    expect(f).toContain("NÃO HÁ NENHUMA PESSOA");
+    expect(f).toContain("TODO o texto da lâmina fica fora dele");
+  });
+});
+
+describe("foto de pessoa pública com resolução (teste real de 17/10)", () => {
+  it("só fotos JPG com o nome no título e a maior acima do mínimo", async () => {
+    const { fotosNaBusca, maiorFoto, LARGURA_MINIMA_DA_FOTO } = await import("../../supabase/functions/estudio-arte/modulos/mundo-real");
+    const busca = { query: { search: [{ title: "File:Anitta em show 2024.jpg" }, { title: "File:Anitta logo.jpg" }, { title: "File:Outra pessoa.jpg" }, { title: "File:Anitta capa album.jpg" }] } };
+    expect(fotosNaBusca(busca, "Anitta")).toEqual(["File:Anitta em show 2024.jpg"]);
+    const info = (largura: number) => ({ arquivo: "x", url: "https://upload.wikimedia.org/x.jpg", pagina: null, licenca: "CC BY", autor: null, largura });
+    expect(maiorFoto([info(640), info(LARGURA_MINIMA_DA_FOTO + 400), null])?.largura).toBe(LARGURA_MINIMA_DA_FOTO + 400);
+    expect(maiorFoto([info(500)])).toBeNull();
   });
 });
 

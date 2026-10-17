@@ -447,6 +447,8 @@ type Item = {
   metrica_principal: string;
   palavra_chave: string;
   termo_regional: string | null;
+  /** 17/10: o hype, o assunto em alta no nicho ou o movimento sobre um concorrente que a pauta usa ("" = nenhum). */
+  gancho_do_momento?: string;
   status: string;
   tipo_conteudo: "principal" | "extra_sazonal";
   carrossel_infinito: boolean;
@@ -658,6 +660,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     metrica_principal: texto(o.metrica_principal, 200),
     palavra_chave: texto(o.palavra_chave, 120),
     termo_regional: texto(o.termo_regional, 120) || null,
+    gancho_do_momento: texto(o.gancho_do_momento, 200),
     status: texto(o.status, 60) || "planejado",
     tipo_conteudo: tipo,
     carrossel_infinito: formato === "carrossel" && o.carrossel_infinito === true,
@@ -803,6 +806,7 @@ const ESQUEMA_ITEM = obj({
   metrica_principal: S("string"),
   palavra_chave: S("string"),
   termo_regional: S(["string", "null"]),
+  gancho_do_momento: S("string"),
   status: S("string"),
   tipo_conteudo: S("string", { enum: ["principal", "extra_sazonal"] }),
   carrossel_infinito: S("boolean"),
@@ -1434,7 +1438,7 @@ ${ORIENTACAO_VIDEO_DA_PAUTA}
 - Siga o cérebro do cliente (cerebro_do_cliente): o que evitar, ajustes pedidos, reprovações com motivo e o que performou; regra do dono vale sobre sugestão sua.
 - Português do Brasil, sem travessões.
 - Todo tema e todo conteúdo declara tipo_editorial e framework (ids da base de técnica) e o roteiro segue a estrutura do framework.
-- CONTEXTO VINDO DO MCP (itens ativos) vale como contexto do cliente: siga as orientações.
+- O CONTEXTO VINDO DO MCP (itens ativos) é contexto do cliente: siga.
 ${REGRA_DE_MENOS_TEXTO}
 ${DIVERSIDADE_NO_PLANO}
 - Responda somente com o JSON pedido.`;
@@ -2559,6 +2563,8 @@ export function descricaoDoItem(item: Item, propostaId: string, indice: number, 
     `Palavra-chave: ${item.palavra_chave}`,
   ];
   if (item.termo_regional) linhas.push(`Termo regional: ${item.termo_regional}`);
+  // 17/10: a linha que o raio-x do mês conta (hype, nicho ou concorrente) e a memória editorial guarda com os números.
+  if (item.gancho_do_momento) linhas.push(`Gancho do momento: ${item.gancho_do_momento}`);
   const editorial = rotuloEditorial(item.tipo_editorial ?? "", item.framework ?? "");
   if (editorial) linhas.push(`Tipo e framework: ${editorial}`);
   if (item.etapa) linhas.push(`Etapa da campanha: ${item.etapa}`);
@@ -4534,8 +4540,22 @@ function itemGravadoDoHype(h: Record<string, unknown>, tipo: "hype" | "nicho") {
     cuidado: texto(h.cuidado, 400),
     sinal: tipo === "nicho" ? texto(h.sinal, 300) : "",
     nota: null as number | null,
+    forca: null as number | null,
   };
 }
+
+/**
+ * 17/10 (primeiro teste real): o "em alta no nicho" trouxe discussão com 0 e 8 votos como se fosse viral. A força do
+ * sinal é julgada à parte (Score do Jev) e o que fica abaixo de "sinal médio" sai da lista.
+ */
+const NIVEIS_DO_SINAL = [
+  "Sinal fraco: uma discussão isolada, poucos votos, curtidas ou comentários, sem outra fonte que confirme.",
+  "Sinal pequeno: um caso ou perfil com bom número, mas sem mostrar que o assunto se espalhou no nicho.",
+  "Sinal médio: várias fontes ou perfis do nicho falando do assunto agora, ou um post com número bem acima do normal.",
+  "Sinal forte: assunto dominante no nicho agora (muitos perfis, notícia de veículo grande, milhares de views, curtidas ou comentários).",
+];
+/** Nota mínima (0 a 10) da força do sinal para o item ficar em "em alta no nicho". */
+const NOTA_MINIMA_DO_SINAL = 5;
 
 const NIVEIS_HYPE = [
   "Não serve: fora do nicho, do público ou da região, ou arriscado para a marca.",
@@ -4593,7 +4613,7 @@ ${ORIENTACAO_VIDEO_DA_PAUTA}
 
 LISTA 2, em_alta_no_nicho: o que está viralizando AGORA dentro do nicho deste cliente (não datas): temas que o público do nicho está discutindo, formatos e ganchos que estão bombando, trends de áudio ou de edição, polêmicas leves do setor, novidades de ferramenta, preço ou regra que mudaram, perguntas que todo mundo está fazendo. Use os SINAIS DO INSTAGRAM acima (posts reais em alta nas hashtags e fora da curva nos perfis de referência) e pesquise na web (notícias do setor, TikTok, YouTube, Google Trends, fóruns). De 4 a 8 itens. Para cada um:
 - titulo curto; o_que_e em 1 a 2 frases.
-- sinal: onde e quanto está viralizando, concreto (ex.: "Reels com a trend X passando de 1 milhão de views", "@perfil com post 4,2x a mediana", "#hashtag com posts recentes de muito comentário", "notícia do setor desta semana").
+- sinal: onde e quanto está viralizando, concreto (ex.: "Reels com a trend X passando de 1 milhão de views", "@perfil com post 4,2x a mediana", "#hashtag com posts recentes de muito comentário", "notícia do setor desta semana em veículo grande"). Só entra o que tem sinal FORTE ou médio (várias fontes ou perfis falando agora, número bem acima do normal); discussão isolada com poucos votos não é viral e fica fora. Melhor entregar 2 itens fortes que 6 fracos.
 - por_que_agora; fonte: um link real (da busca ou o permalink do post lido acima).
 - como_usar: o conteúdo concreto para este cliente surfar o assunto (gancho, ângulo e o que mostrar), ligado à oferta.
 - formato: carrossel ou estatico. cuidado: o que evitar (vazio se não houver).
@@ -4627,12 +4647,19 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
   if (hypes.length) {
     try {
       const questions: Record<string, PerguntaJev> = {};
-      hypes.forEach((_, i) => {
+      hypes.forEach((h, i) => {
         questions[`h${i}`] = {
           type: "score",
           instructions: `Quanto o assunto \`hypes[${i}]\` serve para a marca em \`cliente\` falar com o público dela nesta semana?`,
           criteria: NIVEIS_HYPE,
         };
+        if (h.tipo === "nicho") {
+          questions[`s${i}`] = {
+            type: "score",
+            instructions: `Pelo \`hypes[${i}].sinal\` e \`hypes[${i}].por_que_agora\`, quanto este assunto está de fato em alta no nicho agora?`,
+            criteria: NIVEIS_DO_SINAL,
+          };
+        }
       });
       const kit = (ctx.kit_marca ?? {}) as { contexto?: Record<string, unknown> };
       const j = await jevPerguntar({
@@ -4642,7 +4669,9 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
       const cobrado = await cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: "mesa_hypes", id: clientId }, criadoPor: chamador.userId });
       if (cobrado) custo += cobrado.custoUsd;
       hypes = hypes
-        .map((h, i) => ({ ...h, nota: notaDe0a10(notaScore(j.answers[`h${i}`]), NIVEIS_HYPE.length) }))
+        .map((h, i) => ({ ...h, nota: notaDe0a10(notaScore(j.answers[`h${i}`]), NIVEIS_HYPE.length), forca: h.tipo === "nicho" ? notaDe0a10(notaScore(j.answers[`s${i}`]), NIVEIS_DO_SINAL.length) : null }))
+        // Nicho com sinal fraco sai (não é viral); a força fica gravada no item para a tela e o pedido.
+        .filter((h) => h.tipo !== "nicho" || h.forca == null || h.forca >= NOTA_MINIMA_DO_SINAL)
         // Cada lista na ordem da nota; os hypes antes do nicho (a tela separa pelo tipo).
         .sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === "hype" ? -1 : 1) || (b.nota ?? -1) - (a.nota ?? -1));
     } catch (e) {
@@ -7792,6 +7821,43 @@ async function refazerPropostaInterno(servico: SupabaseClient, corpo: Record<str
   return json({ ...dados, proposta_id: novaId, propostas: [novaId], origem: "estrategista", cadencia }, r.status);
 }
 
+/** 17/10: saldo mínimo da carteira de IA para a busca semanal automática (a busca custa cerca de US$ 0,25). */
+const SALDO_MINIMO_DA_SEMANAL = 1;
+/** Tempo da chamada do agendador: o que não coube fica para a próxima chamada da janela. */
+const TEMPO_DA_SEMANAL_MS = 240_000;
+
+/**
+ * hypes_da_semana_interno (agendador, toda segunda): a busca de hype e de em alta no nicho para cada cliente ativo
+ * (proposta ou trabalho do Estúdio nos últimos 45 dias), com saldo na carteira e ainda sem a busca desta semana.
+ * Usa a mesma buscarHypes, em nome de quem mexeu no Mês do cliente por último. Um cliente por vez, até o tempo.
+ */
+async function hypesDaSemanaInterno(servico: SupabaseClient): Promise<Response> {
+  const inicio = Date.now();
+  const semana = segundaDaSemana(hojeSaoPaulo());
+  const ha45 = new Date(Date.now() - 45 * 86_400_000).toISOString();
+  const [carteiras, feitas, propostas] = await Promise.all([
+    servico.from("ia_carteiras").select("client_id, saldo_usd").gte("saldo_usd", SALDO_MINIMO_DA_SEMANAL).limit(200),
+    servico.from("mesa_hypes").select("client_id").eq("semana", semana).limit(500),
+    servico.from("calendario_propostas").select("client_id, criado_por, criado_em").gte("criado_em", ha45).order("criado_em", { ascending: false }).limit(500),
+  ]);
+  if (carteiras.error || propostas.error) return json({ error: "banco_indisponivel" }, 503);
+  const jaFeitos = new Set(((feitas.data ?? []) as Array<{ client_id: string }>).map((x) => x.client_id));
+  const autor = new Map<string, string>();
+  for (const p of (propostas.data ?? []) as Array<{ client_id: string; criado_por: string | null }>) if (p.criado_por && !autor.has(p.client_id)) autor.set(p.client_id, p.criado_por);
+  const fila = ((carteiras.data ?? []) as Array<{ client_id: string }>).map((c) => c.client_id).filter((id) => !jaFeitos.has(id) && autor.has(id));
+  const saida: Array<{ client_id: string; ok: boolean; motivo?: string }> = [];
+  for (const clientId of fila) {
+    if (Date.now() - inicio > TEMPO_DA_SEMANAL_MS) break;
+    try {
+      const r = await buscarHypes(servico, { userId: autor.get(clientId)!, token: "", interno: { clientId } }, { client_id: clientId });
+      saida.push({ client_id: clientId, ok: r.status === 200 });
+    } catch (e) {
+      saida.push({ client_id: clientId, ok: false, motivo: registrarFalha("agente-calendario: hype semanal falhou", e, { client_id: clientId }) });
+    }
+  }
+  return json({ semana, na_fila: fila.length, feitos: saida.length, clientes: saida });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido" }, 405);
@@ -7801,7 +7867,8 @@ Deno.serve(async (req) => {
     try { corpo = await req.json(); } catch { /* corpo vazio */ }
     const acao = String(corpo.acao ?? corpo.action ?? "");
     // 02/10: refazer uma proposta no servidor. Só com a chave de serviço no Authorization e o x-cron-secret.
-    if (acao === ACAO_REFAZER_INTERNO) {
+    // 17/10: a busca semanal de hype (agendador) usa a mesma porta.
+    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno") {
       const autorizado = autorizarChamadaInterna({
         authorization: req.headers.get("Authorization"),
         cronSecretDoPedido: req.headers.get("x-cron-secret"),
@@ -7811,6 +7878,7 @@ Deno.serve(async (req) => {
       if (!autorizado.ok) return json({ error: autorizado.codigo, mensagem: autorizado.mensagem }, autorizado.status);
       return respostaComFolego(async () => {
         try {
+          if (acao === "hypes_da_semana_interno") return await hypesDaSemanaInterno(servico);
           return await refazerPropostaInterno(servico, corpo);
         } catch (err) {
           return respostaDeErro(err);

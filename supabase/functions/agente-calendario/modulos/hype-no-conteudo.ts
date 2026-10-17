@@ -123,7 +123,7 @@ ${JSON.stringify(dados)}
 COMO USAR (tematizar, não só citar):
 - Toda pauta do período que cair na janela de um item desta lista e tiver ligação natural com a oferta nasce dele: o gancho, o ângulo, os exemplos, o visual e a legenda vêm tematizados (data comemorativa ou evento: o clima, as cores, os objetos e a linguagem da data; assunto viral: a referência que o público já reconhece; formato em alta no nicho: a estrutura desse formato).
 - Com itens de nota 7 ou mais, pelo menos 1 em cada 3 pautas do período pega carona em um deles. O resto segue a estratégia de sempre.
-- Diga no por_que_agora (ou no motivo) qual item a pauta usa, com o que está acontecendo.
+- Diga qual item a pauta usa: no campo gancho_do_momento (quando existir), escreva "Hype: <título>" ou "Nicho: <título>"; vazio quando a pauta não usa nenhum.
 - Respeite o "cuidado" de cada item. Não force ligação que o público não faria, não use tragédia nem polêmica, e não repita o mesmo item em pautas seguidas.`;
 }
 

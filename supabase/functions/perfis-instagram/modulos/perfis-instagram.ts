@@ -257,7 +257,8 @@ export type PerfilParaRodada = {
 
 /** A rodada só roda para concorrente monitorado, não arquivado e com a semana vencida. */
 export function podeRodar(p: PerfilParaRodada, agora: Date = new Date()): boolean {
-  if (p.papel !== "concorrente" || !p.monitorar || p.arquivado_em) return false;
+  // 17/10: a referência também roda toda semana (capturar, ler e resumir); o concorrente só com "monitorar".
+  if (p.arquivado_em || (p.papel === "concorrente" ? !p.monitorar : p.papel !== "referencia")) return false;
   if (!p.proxima_rodada_em) return true;
   const t = Date.parse(p.proxima_rodada_em);
   return !Number.isFinite(t) || t <= agora.getTime();

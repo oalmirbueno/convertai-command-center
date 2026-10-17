@@ -311,6 +311,8 @@ export interface LogoDoCommons {
   pagina: string | null;
   licenca: string;
   autor: string | null;
+  /** Largura do original (17/10: a foto de pessoa pública precisa de resolução). */
+  largura?: number | null;
 }
 
 const semHtml = (s: unknown) => String(s == null ? "" : s).replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
@@ -328,7 +330,7 @@ export function lerInfoDoCommons(json: unknown, arquivo: string): LogoDoCommons 
   const meta = ii.extmetadata || {};
   const licenca = semHtml(meta.LicenseShortName && meta.LicenseShortName.value) || semHtml(meta.License && meta.License.value) || "licença não informada";
   const autor = semHtml(meta.Artist && meta.Artist.value) || null;
-  return { arquivo, url, pagina: typeof ii.descriptionurl === "string" ? ii.descriptionurl : null, licenca: licenca.slice(0, 80), autor: autor ? autor.slice(0, 120) : null };
+  return { arquivo, url, pagina: typeof ii.descriptionurl === "string" ? ii.descriptionurl : null, licenca: licenca.slice(0, 80), autor: autor ? autor.slice(0, 120) : null, largura: typeof ii.width === "number" ? ii.width : null };
 }
 
 /**
@@ -377,8 +379,38 @@ export function arquivoDoVerbete(json: unknown): string | null {
   return arquivoDoCommons(p.pageimage.replace(/_/g, " "));
 }
 
-/** A informação da foto no Commons com a largura de foto (a da logo é menor). */
-export const urlDaInfoDaFotoNoCommons = (arquivo: string) => urlDaInfoDoCommons(arquivo).replace(`iiurlwidth=${LARGURA_DA_LOGO_REAL}`, `iiurlwidth=${LARGURA_DA_FOTO_REAL}`);
+/** A informação da foto no Commons com a largura de foto (a da logo é menor) e o tamanho do original. */
+export const urlDaInfoDaFotoNoCommons = (arquivo: string) =>
+  urlDaInfoDoCommons(arquivo).replace(`iiurlwidth=${LARGURA_DA_LOGO_REAL}`, `iiurlwidth=${LARGURA_DA_FOTO_REAL}`).replace("iiprop=url%7Cmime%7Cextmetadata", "iiprop=url%7Cmime%7Cextmetadata%7Csize");
+
+/** 17/10 (primeiro teste: veio um quadro de vídeo pequeno): abaixo disso a foto não entra. */
+export const LARGURA_MINIMA_DA_FOTO = 800;
+
+/** Fotos da pessoa na busca do Commons (JPG, com o nome no título), para conferir o tamanho de cada uma. */
+export const urlDaBuscaDeFotoNoCommons = (nome: string) =>
+  `${API_DO_COMMONS}?action=query&format=json&formatversion=2&list=search&srnamespace=6&srlimit=12&srsearch=${encodeURIComponent(`${nome} filemime:image/jpeg`)}`;
+
+/** Os arquivos da busca que têm todas as palavras do nome no título (sem montagem, logo, assinatura ou capa de disco). */
+export function fotosNaBusca(json: unknown, nome: string): string[] {
+  const q = json && typeof json === "object" ? (json as Record<string, any>).query : null;
+  const lista = q && Array.isArray(q.search) ? (q.search as Array<{ title?: string }>) : [];
+  const partes = semAcento(nome).split(/\s+/).filter((p) => p.length >= 3);
+  if (!partes.length) return [];
+  return lista
+    .map((r) => String(r.title || ""))
+    .filter((t) => /^File:/i.test(t) && /\.(jpe?g)$/i.test(t))
+    .filter((t) => {
+      const s = semAcento(t);
+      return partes.every((p) => s.indexOf(p) >= 0) && !/(logo|assinatura|signature|album|cover|capa|collage|montagem)/.test(s);
+    })
+    .slice(0, 6);
+}
+
+/** A maior foto (largura do original) entre as informações de vários arquivos, ou null abaixo do mínimo. */
+export function maiorFoto(infos: Array<LogoDoCommons | null>): LogoDoCommons | null {
+  const boas = infos.filter((i): i is LogoDoCommons => !!i && (i.largura ?? 0) >= LARGURA_MINIMA_DA_FOTO);
+  return boas.sort((a, b) => (b.largura ?? 0) - (a.largura ?? 0))[0] || null;
+}
 
 /**
  * O quadro da foto da pessoa pública, do lado oposto ao texto da lâmina (fração do quadro final).
@@ -386,8 +418,9 @@ export const urlDaInfoDaFotoNoCommons = (arquivo: string) => urlDaInfoDoCommons(
  */
 export function areaDaPessoaReal(zona: string): Area {
   const z = String(zona || "");
-  if (/esquerda/.test(z)) return { x0: 0.53, y0: 0.2, x1: 0.94, y1: 0.8 };
-  if (/direita/.test(z)) return { x0: 0.06, y0: 0.2, x1: 0.47, y1: 0.8 };
+  // 17/10 (teste real: o quadro cobriu o título): a foto fica mais estreita, deixando 60% para o texto.
+  if (/esquerda/.test(z)) return { x0: 0.6, y0: 0.24, x1: 0.95, y1: 0.8 };
+  if (/direita/.test(z)) return { x0: 0.05, y0: 0.24, x1: 0.4, y1: 0.8 };
   if (/^topo/.test(z)) return { x0: 0.2, y0: 0.5, x1: 0.8, y1: 0.93 };
   if (/^base/.test(z)) return { x0: 0.2, y0: 0.07, x1: 0.8, y1: 0.5 };
   return { x0: 0.62, y0: 0.06, x1: 0.94, y1: 0.4 };
@@ -396,7 +429,7 @@ export function areaDaPessoaReal(zona: string): Area {
 /** Frase do prompt da lâmina: o quadro que fica liso para a foto real entrar pelo código. */
 export function fraseDaPessoaReal(area: Area, nome: string): string {
   const pct = (n: number) => Math.round(n * 100);
-  return `FOTO REAL (${nome}): a foto verdadeira dessa pessoa entra depois, colada pelo código, num quadro de ${pct(area.x0)}% a ${pct(area.x1)}% da largura e de ${pct(area.y0)}% a ${pct(area.y1)}% da altura. Deixe esse quadro como um painel liso numa cor da paleta, sem texto, sem desenho e sem pessoa; a composição conversa com ele (como uma foto de revista na página). Não desenhe ${nome} nem ninguém parecido em lugar nenhum da arte.`;
+  return `FOTO REAL: a foto verdadeira da pessoa citada entra depois, colada pelo código, num quadro de ${pct(area.x0)}% a ${pct(area.x1)}% da largura e de ${pct(area.y0)}% a ${pct(area.y1)}% da altura. Esse quadro fica como um painel liso numa cor da paleta, sem texto, sem desenho e sem pessoa, e TODO o texto da lâmina fica fora dele (quebre as linhas da headline para caber no espaço livre). NESTA LÂMINA NÃO HÁ NENHUMA PESSOA, ROSTO, CORPO OU SILHUETA DESENHADA: o fundo é só cor, textura, objetos e grafismos; a única pessoa será a foto colada.`;
 }
 
 /** Área da logo da marca real no quadro final: o canto de cima à direita, pequena. */

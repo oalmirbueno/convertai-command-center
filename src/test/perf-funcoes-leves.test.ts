@@ -398,7 +398,7 @@ describe("FN-09: item de ação do agente que falha vai para o log", () => {
 describe("FN-06: montar e importar brand book respondem com fôlego", () => {
   it("o fôlego fica no Deno.serve e o mapa de ações não muda", () => {
     const f = ler("supabase/functions/agente-contexto/index.ts");
-    expect(f).toContain('const COM_FOLEGO = new Set(["montar", "importar_brand_book"]);');
+    expect(f).toContain('const COM_FOLEGO = new Set(["montar", "importar_brand_book", "importar_drive"]);');
     expect(f).toContain("return respostaComFolego(() => executar(quem, corpo).catch((e) => respostaDoErro(e, acao)), corsHeaders);");
     expect(f).toContain("importar_brand_book: importarBrandBook");
     expect(f).toContain("sugerir_kit_da_marca: sugerirKitDaMarca");

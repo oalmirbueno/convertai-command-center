@@ -176,7 +176,7 @@ describe("base de conhecimento do diretor", () => {
     const estudio = ler("supabase/functions/estudio-arte/index.ts");
     // A base continua na frente (prefixo cacheado); as regras aprendidas com o cliente vão por último.
     // Frente H: a base de marketing do diretor entra logo depois da de design; cérebro e dossiê no fim.
-    expect(estudio).toContain('sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto].filter(Boolean).join("\\n\\n"),');
+    expect(estudio).toContain("sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, instrucoesDoConteudo(");
     expect(estudio).toContain('sistema: [INSTRUCOES_AJUSTE, PADRAO_NA_IMAGEM, preferencias].filter(Boolean).join("\\n\\n"),');
   });
 });

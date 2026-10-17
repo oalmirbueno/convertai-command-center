@@ -1998,9 +1998,12 @@ async function rodadaDeUmPerfil(perfil: Perfil): Promise<{ ok: boolean; fora: nu
   const inicio = Date.now();
   const agora = new Date();
   // Trava: a semana anda ANTES do trabalho. Quem chegar junto não pega (resposta normal, nunca 40001).
+  // 17/10: referência entra na rodada sem o "monitorar" (que é só do concorrente).
+  const referencia = perfil.papel === "referencia";
   let q = servico().from("cliente_perfis_instagram")
     .update({ proxima_rodada_em: proximaRodadaEm(agora), ultima_rodada_em: agora.toISOString() })
-    .eq("id", perfil.id).eq("monitorar", true).is("arquivado_em", null);
+    .eq("id", perfil.id).is("arquivado_em", null);
+  q = referencia ? q.eq("papel", "referencia") : q.eq("monitorar", true);
   q = perfil.proxima_rodada_em ? q.eq("proxima_rodada_em", perfil.proxima_rodada_em) : q.is("proxima_rodada_em", null);
   const { data: pego, error: erroTrava } = await q.select("id");
   if (erroTrava || !((pego as unknown[] | null) ?? []).length) return { ok: false, fora: 0, motivo: "ja_rodou" };
@@ -2020,7 +2023,20 @@ async function rodadaDeUmPerfil(perfil: Perfil): Promise<{ ok: boolean; fora: nu
     const m = await recalcularMetricas(perfil, perfil.seguidores);
     const idsNovos = novos.map((p) => p.id);
     foraNovos = m.fora.filter((id) => idsNovos.indexOf(id) >= 0).length;
-    if (!novos.length) {
+    if (referencia) {
+      // 17/10 (dono: "nunca ser cego, buscar a fundo"): a referência é lida e resumida toda semana. Os novos primeiro;
+      // sem novos, os que ainda não têm leitura (a primeira rodada lê o acervo capturado). Resumo refeito quando mudou.
+      const ctx = await contextoDoCliente(perfil.client_id);
+      const leitura = await lerPostsDoPerfil(perfil, ctx, null, { ids: idsNovos.length ? idsNovos : undefined, teto: TETO_DE_CUSTO_DA_RODADA_USD });
+      custo += leitura.custo;
+      lidos = leitura.lidos;
+      if (leitura.jevErro === "teto") status = "teto";
+      const total = ((await postsDoPerfil(perfil.id, 40)) || []).length;
+      if (total && (novos.length || lidos || !resumoEmDia(perfil, Math.min(40, total))) && custo < TETO_DE_CUSTO_DA_RODADA_USD) {
+        custo += (await gerarResumo(perfil, null)).custo;
+      }
+      if (!novos.length && !lidos) status = status === "teto" ? "teto" : "sem_novidade";
+    } else if (!novos.length) {
       status = "sem_novidade";
     } else {
       const ctx = await contextoDoCliente(perfil.client_id);
@@ -2076,8 +2092,8 @@ async function rodadaSemanal() {
   const { data, error } = await servico()
     .from("cliente_perfis_instagram")
     .select("*")
-    .eq("papel", "concorrente")
-    .eq("monitorar", true)
+    // 17/10: concorrente monitorado e toda referência (capturar, ler e resumir a semana).
+    .or("and(papel.eq.concorrente,monitorar.eq.true),papel.eq.referencia")
     .is("arquivado_em", null)
     .or(`proxima_rodada_em.is.null,proxima_rodada_em.lte.${agora}`)
     .order("proxima_rodada_em", { ascending: true, nullsFirst: true })

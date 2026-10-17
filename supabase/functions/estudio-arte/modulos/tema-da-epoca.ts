@@ -135,7 +135,7 @@ const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 export function blocoDoTemaDaEpoca(temas: TemaDaEpoca[]): string {
   if (!temas.length) return "";
   const linhas = temas.map((t) => t.origem === "pedido"
-    ? `- ${t.nome} (${dataBr(t.data)}): o conteúdo FALA desta data. A peça inteira entra no clima: ${t.como}. O tema entra no fio_visual, na capa (o elemento forte é da data) e em cada lâmina com um objeto ou detalhe diferente da data, sem repetir o mesmo enfeite.`
+    ? `- ${t.nome} (${dataBr(t.data)}): o conteúdo FALA desta data. A peça inteira entra no clima: ${t.como}. O tema entra no fio_visual, na capa (o elemento forte é da data) e em cada lâmina com um objeto ou detalhe DIFERENTE da data (o objeto da capa não volta nas outras; ex.: abóbora na capa, teia em uma, vela em outra).`
     : `- ${t.nome} (${dataBr(t.data)}): a publicação cai perto desta data. Se o assunto combinar, dê um toque da data (${t.como}) na capa ou no fechamento; se não combinar, ignore e diga em avisos_para_a_equipe que a data está perto.`);
   return `TEMA DA ÉPOCA (lido da data de publicação e do texto do item)\n${linhas.join("\n")}\nAs cores da data são acento dentro da paleta da marca, nunca no lugar dela; a leitura do texto vem antes do enfeite.`;
 }

@@ -357,13 +357,18 @@ import {
   urlDoSimpleIcons,
   areaDaPessoaReal,
   arquivoDoVerbete,
+  fotosNaBusca,
   fraseDaPessoaReal,
+  LARGURA_MINIMA_DA_FOTO,
+  maiorFoto,
+  urlDaBuscaDeFotoNoCommons,
   MAX_BYTES_DA_FOTO_REAL,
   perguntasDoMundoRealNoEstudio,
   urlDaImagemDoVerbete,
   urlDaInfoDaFotoNoCommons,
 } from "./modulos/mundo-real.ts";
 import { blocoDoTemaDaEpoca, temasDaEpoca } from "./modulos/tema-da-epoca.ts";
+import { avisosDeSemelhanca, cinza, dHash } from "./modulos/semelhanca-das-laminas.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt } from "../_shared/perfis-no-prompt.ts";
 import {
   acoesSemMudarQuantidade,
@@ -3194,9 +3199,32 @@ NARRATIVA E CONTINUIDADE (obrigatório)
 
 Seja específico e curto: cada campo em uma ou duas frases.`;
 
+/**
+ * 17/10: as últimas peças do Estúdio que o cliente aprovou (entrega aprovada ou agendada), em texto curto: a régua
+ * de qualidade e de gosto do cliente para o diretor. Sem marca no filtro: a direção já é da marca do item.
+ */
+async function carrosseisAprovados(clientId: string, exceto: string | null): Promise<Array<Record<string, unknown>>> {
+  const { data, error } = await servico()
+    .from("estudio_trabalhos")
+    .select("id, direcao, atualizado_em")
+    .eq("client_id", clientId)
+    .in("entrega_status", ["aprovado", "agendado"])
+    .order("atualizado_em", { ascending: false })
+    .limit(8);
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string; direcao: Direcao | null }>)
+    .filter((t) => t.id !== exceto && t.direcao && Array.isArray(t.direcao.cards) && t.direcao.cards.length)
+    .slice(0, 5)
+    .map((t) => ({
+      conceito: texto(t.direcao!.conceito, 300) || null,
+      identidade: texto(t.direcao!.fio_visual, 300) || null,
+      laminas: t.direcao!.cards.slice(0, 7).map((c) => ({ funcao: c.funcao, texto: texto(c.texto_exato, 90), imagem: texto(c.layout?.imagem ?? c.ilustracao, 160) || null })),
+    }));
+}
+
 /** 17/10: vai na mensagem (não no sistema): o sistema do diretor tem teto e fica no cache do provedor. */
 const REPERTORIO_E_MISTURA = `REPERTÓRIO E MISTURA (17/10, dono: "não repetir igual o arsenal, mas juntar detalhes que foram usados em um estilo com outro, para diversificar sem sair do gosto e das referências")
-- A base de conhecimento, as referências de técnica, os perfis do Instagram, as artes já publicadas da marca e o acervo são REPERTÓRIO, não molde: em cada peça combine detalhes de duas ou mais fontes (o recorte de uma, o grid de outra, a escala de título de uma terceira) dentro do kit da marca.
+- A base de conhecimento, as referências de técnica, os perfis do Instagram, as artes já publicadas da marca, os \`carrosseis_aprovados_pelo_cliente\` (a régua de qualidade e gosto dele) e o acervo são REPERTÓRIO, não molde: em cada peça combine detalhes de duas ou mais fontes (o recorte de uma, o grid de outra, a escala de título de uma terceira) dentro do kit da marca.
 - Nunca reproduza igual uma arte anterior, um post de referência ou um modelo da base; o resultado tem que parecer da marca e ser novo.`;
 
 type ModoDirecao = "diretor" | "roteiro";
@@ -3467,6 +3495,9 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       .then((c) => c.bloco || null, (e) => (registrarFalha("estudio-arte: contexto completo da marca não lido (direção)", e, { client_id: clientId }), null));
     // 17/10: os perfis de referência e concorrentes do Instagram (padrão visual e os posts que funcionaram, com a leitura da imagem).
     const perfisP = lerPerfisParaOPrompt(db as never, clientId, marcaDoItem ? { id: marcaDoItem.id, principal: marcaDoItem.principal } : null);
+    // 17/10 (padrão de qualidade): os carrosséis que o cliente APROVOU viram a régua do que ele gosta (só o texto da
+    // direção: conceito, identidade e o que cada lâmina mostrou). Repertório, nunca molde.
+    const aprovadosP = carrosseisAprovados(clientId, existente?.id ?? null).catch((e) => (registrarFalha("estudio-arte: aprovados do cliente não lidos", e, { client_id: clientId }), []));
     // 02/10: mundo real (produto, app, marca ou tela de outra empresa): a pesquisa liga e as logos vêm do Commons.
     const leituraDaRapida = rapida ? rapida.gravada.leitura_dos_cards ?? null : null;
     const fidelidadeDaRapida = rapida ? rapida.gravada.fidelidade ?? null : null;
@@ -3478,8 +3509,9 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     // peça precisa mostrar de verdade. O Jev (Noul, centavos) decide o que as palavras não decidiram; falha = como antes.
     let pessoaPublica = false;
     let custoDoMundo = 0;
-    const textoDoItem = [instrucao, item.tarefa.title, texto(item.tarefa.description, 3000), texto(item.post?.default_caption, 1200)].filter(Boolean).join("\n");
-    if (!rapida && textoDoItem.trim().length >= 12) {
+    const textoDoItem = [instrucao, rapida ? rapida.gravada.pedido : item.tarefa.title, rapida ? "" : texto(item.tarefa.description, 3000), rapida ? "" : texto(item.post?.default_caption, 1200)].filter(Boolean).join("\n");
+    // Arte rápida: o mundo real já veio decidido; aqui ela ganha a pergunta da pessoa pública (a outra é barata).
+    if (textoDoItem.trim().length >= 12) {
       try {
         const res = await jevPerguntar({ state: { pedido: textoDoItem }, questions: perguntasDoMundoRealNoEstudio() as unknown as Record<string, PerguntaJev> });
         const cobrado = await cobrarJev(res, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
@@ -3553,6 +3585,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         }
         : null,
       variar_agora: await variarAgoraP,
+      carrosseis_aprovados_pelo_cliente: await aprovadosP,
     };
     const r = await chamarTexto({
       clientId,
@@ -3807,7 +3840,10 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         if (p.laminas.indexOf(c.ordem) < 0) return c;
         // Vitrine de parceiros tem a vez; a foto da pessoa toma o lugar da logo de canto (a marca vai em outra lâmina).
         if (x.vitrine_de_logos && x.vitrine_de_logos.length && x.vitrine_tipo !== "marca_real") return c;
-        return { ...c, vitrine_de_logos: [{ caminho: achada.caminho, nome: p.nome }], vitrine_area: areaDaPessoaReal(c.layout?.zona_texto ?? ""), vitrine_tipo: "pessoa_real" } as CardDirecao;
+        // 17/10 (teste real: o gerador desenhou a pessoa pelo nome na cena): o nome sai da descrição da imagem.
+        const semONome = (v: unknown) => typeof v === "string" ? v.split(p.nome).join("a pessoa da foto real") : v;
+        const layout = c.layout ? { ...c.layout, imagem: semONome(c.layout.imagem) as string, ponto_focal: semONome(c.layout.ponto_focal) as string } : c.layout;
+        return { ...c, layout, ilustracao: semONome(c.ilustracao) as string, vitrine_de_logos: [{ caminho: achada.caminho, nome: p.nome }], vitrine_area: areaDaPessoaReal(c.layout?.zona_texto ?? ""), vitrine_tipo: "pessoa_real" } as CardDirecao;
       });
     }
     if (fotos.length) avisosDoDiretor = [...avisosDoDiretor, "Foto de pessoa pública com licença livre, para conteúdo informativo. Em anúncio ou como se ela endossasse a marca, precisa da autorização dela."];
@@ -3957,9 +3993,16 @@ async function logoRealDoCommons(clientId: string, nome: string, arquivoDoDireto
 async function fotoRealDoCommons(clientId: string, nome: string, arquivoDoDiretor: string | null): Promise<{ caminho: string; foto: LogoDoCommons } | null> {
   let arquivo = arquivoDoDiretor ? arquivoDoCommons(arquivoDoDiretor) : null;
   let info = arquivo ? lerInfoDoCommons(await jsonDoCommons(urlDaInfoDaFotoNoCommons(arquivo)), arquivo) : null;
+  if (info && (info.largura ?? 0) < LARGURA_MINIMA_DA_FOTO) info = null;
   if (!info) {
     arquivo = arquivoDoVerbete(await jsonDoCommons(urlDaImagemDoVerbete(nome)));
     info = arquivo ? lerInfoDoCommons(await jsonDoCommons(urlDaInfoDaFotoNoCommons(arquivo)), arquivo) : null;
+    if (info && (info.largura ?? 0) < LARGURA_MINIMA_DA_FOTO) info = null;
+  }
+  // 17/10: o verbete trouxe foto pequena (quadro de vídeo)? Busca outras fotos dela no Commons e fica com a maior.
+  if (!info) {
+    const candidatos = fotosNaBusca(await jsonDoCommons(urlDaBuscaDeFotoNoCommons(nome)), nome);
+    info = maiorFoto(await Promise.all(candidatos.map((c) => jsonDoCommons(urlDaInfoDaFotoNoCommons(c)).then((j) => lerInfoDoCommons(j, c)).catch(() => null))));
   }
   if (!info || !hostDoCommonsPermitido(info.url)) return null;
   const res = await fetch(info.url, { headers: { "User-Agent": "AceleriqEstudio/1.0 (https://aceleriq.com.br)", Accept: "image/jpeg,image/png;q=0.9" }, signal: AbortSignal.timeout(15_000), redirect: "error" });
@@ -6757,6 +6800,33 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
  * ficam em conferir_card, que a tela chama logo depois: assim gerar e ajustar
  * cabem no tempo da funcao.
  */
+const hexDaAssinatura = (bits: boolean[]) => bits.map((b) => (b ? "1" : "0")).join("");
+const bitsDaAssinatura = (v: unknown): boolean[] | null => (typeof v === "string" && /^[01]{64}$/.test(v) ? v.split("").map((c) => c === "1") : null);
+
+/** dHash da imagem (reduzida a 9x8 em cinza). */
+async function assinaturaDaImagem(bytes: Uint8Array): Promise<boolean[]> {
+  const img = await decodificar(bytes);
+  img.resize(9, 8);
+  const tons: number[] = [];
+  for (let y = 1; y <= 8; y++) for (let x = 1; x <= 9; x++) tons.push(cinza(img.getPixelAt(x, y)));
+  return dHash(tons);
+}
+
+/**
+ * 17/10: a lâmina nova contra a capa e a anterior (modulos/semelhanca-das-laminas.ts). A assinatura de cada versão
+ * fica gravada; versão antiga sem assinatura: a capa é aberta uma vez, a anterior fica de fora. No contínuo, nada.
+ */
+async function semelhancaNaSerie(t: Trabalho, ordem: number, png: Uint8Array): Promise<{ assinatura: string | null; avisos: string[] }> {
+  const esta = await assinaturaDaImagem(png);
+  const assinatura = hexDaAssinatura(esta);
+  if (ordem < 2 || t.direcao.carrossel_infinito) return { assinatura, avisos: [] };
+  const capa = versaoAtual(t, 1);
+  const anterior = ordem > 2 ? versaoAtual(t, ordem - 1) : null;
+  const hashCapa = capa ? bitsDaAssinatura((capa as unknown as Record<string, unknown>).assinatura) ?? await assinaturaDaImagem(await baixar("mesa", capa.storage_path)) : null;
+  const hashAnterior = anterior ? bitsDaAssinatura((anterior as unknown as Record<string, unknown>).assinatura) : null;
+  return { assinatura, avisos: avisosDeSemelhanca({ ordem, esta, capa: hashCapa, anterior: hashAnterior ? { ordem: ordem - 1, hash: hashAnterior } : null }) };
+}
+
 async function gravarVersao(
   ch: Chamador,
   t: Trabalho,
@@ -6784,7 +6854,13 @@ async function gravarVersao(
   }
   // Frente FS (29/09): o que falhou no caminho e mudou a arte (logo não lida, referência que não abriu,
   // molde não medido...) fica na versão (a tela mostra na lâmina) e volta em aviso_da_acao.
-  const avisos = [...new Set((meta.avisos ?? []).concat(avisosDoSelo).filter(Boolean))].slice(0, 6);
+  // 17/10 (dono: "repete a mesma imagem da capa"): a assinatura desta lâmina fica na versão; quase igual à capa
+  // ou à anterior vira aviso, nunca nova geração. Só esta imagem é aberta (a capa e a anterior já têm a assinatura).
+  const semelhanca = await semelhancaNaSerie(t, card.ordem, pngFinal).catch((e) => {
+    registrarFalha("estudio-arte: assinatura da lâmina falhou", e, { trabalho_id: t.id, ordem: card.ordem });
+    return { assinatura: null as string | null, avisos: [] as string[] };
+  });
+  const avisos = [...new Set((meta.avisos ?? []).concat(avisosDoSelo, semelhanca.avisos).filter(Boolean))].slice(0, 6);
   const proxima = Math.max(0, ...t.cards.filter((c) => c.ordem === card.ordem).map((c) => c.versao)) + 1;
   const colouPeloCodigo = !!(vitrineGravada && vitrineGravada.aplicado);
   const { caminho, versao } = await salvarNaMesa(t, card.ordem, proxima, pngFinal, colouPeloCodigo ? "image/png" : img.mime);
@@ -6804,6 +6880,7 @@ async function gravarVersao(
     ...(meta.extra ?? {}),
     ...(vitrineGravada ? { vitrine_de_logos: vitrineGravada } : {}),
     ...(avisos.length ? { avisos_da_geracao: avisos } : {}),
+    ...(semelhanca.assinatura ? { assinatura: semelhanca.assinatura } : {}),
     // Frente RO, fase 2: as regras ensinadas que esta geração seguiu ("Segui: ...").
     ...(meta.regras && meta.regras.length ? { regras_seguidas: meta.regras } : {}),
   };

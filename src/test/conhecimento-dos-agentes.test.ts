@@ -183,13 +183,16 @@ describe("Calendário e campanhas: marketing por momento e cérebro", () => {
   });
 
   it("o sistema mantém o prompt do banco primeiro e as regras de saída por último, em todas as ações", () => {
-    expect(corpoDe(calendario, "sistemaDoCalendario")).toContain("return `${ctx.prompt}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n${REGRAS_DE_SAIDA}`;");
+    // O prompt do banco passa pelo promptAtualDoMes (execucao-do-mes.ts) e continua primeiro.
+    expect(corpoDe(calendario, "sistemaDoCalendario")).toContain("return `${promptAtualDoMes(ctx.prompt)}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n${REGRAS_DE_SAIDA}`;");
     expect(calendario).not.toContain("sistema: `${ctx.prompt}\\n${REGRAS_DE_SAIDA}`");
     // Frente O: as três frentes do propor_temas usam "temas" e a pesquisa do mês usa "diagnostico".
     // AB2 (26/09): as três conversas (planejar_mes, conversar e campanha_conversar) levam o mapa do painel ("conversa").
     // Frente AP (27/09): + trocar_angulo (refaz uma pauta com outro ângulo, momento "mes").
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(6);
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes", "conversa"\)/g)?.length).toBe(2);
+    // conversar usa o sistema direto; planejar_mes monta num texto (com a prioridade do pedido e o núcleo).
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes", "conversa"\)/g)?.length).toBe(1);
+    expect(calendario).toContain('sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}');
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "temas"\)/g)?.length).toBe(1);
     expect(calendario.match(/sistema: sistemaDoCalendario\(e\.ctx, "diagnostico"\)/g)?.length).toBe(1);
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(2);
@@ -220,7 +223,9 @@ describe("Estúdio: marketing do diretor, legenda, cérebro e dossiê", () => {
   });
 
   it("a base de design continua primeiro; marketing logo depois; cérebro e dossiê no fim", () => {
-    expect(estudio).toContain("sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto].filter(Boolean).join(\"\\n\\n\"),");
+    // 02/10: as regras de conteúdo (instrucoesDoConteudo) entraram entre as instruções e o cérebro.
+    expect(estudio).toContain("sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, instrucoesDoConteudo(");
+    expect(estudio).toContain("preferencias.texto].filter(Boolean).join(\"\\n\\n\"),");
     expect(estudio).toContain("sistema: `${CONHECIMENTO_DA_LEGENDA}\\n\\n${prompt}\\n\\n${INSTRUCOES_LEGENDA}`,");
     // Frente FS (29/09): a leitura que falha segue opcional, mas agora fica no log.
     expect(estudio).toContain('cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),');

@@ -53,6 +53,8 @@ export type TemaDaMemoria = {
   tema: string;
   angulo: string;
   gancho: string;
+  /** 17/10: o hype, o assunto em alta no nicho ou o concorrente que a pauta usou (o resultado ensina o que puxar mais). */
+  momento?: string;
   task_id: string | null;
   numeros: NumerosDoPost | null;
   /** Chave do tema que este continua (sequência de evolução). */
@@ -180,6 +182,7 @@ export function montarMemoriaEditorial(e: {
         tema,
         angulo: umaLinha(it.angulo || ev.angulo, 80),
         gancho: umaLinha(it.gancho, 140),
+        ...(it.gancho_do_momento ? { momento: umaLinha(it.gancho_do_momento, 100) } : {}),
         task_id: typeof it.task_id === "string" && it.task_id ? it.task_id : null,
         numeros: null,
         continua: typeof de.chave === "string" && de.chave ? de.chave : null,
@@ -250,9 +253,11 @@ export const REGRAS_DA_MEMORIA_EDITORIAL = [
   "(a) NUNCA repita um tema com o mesmo ângulo de um item da memória.",
   "(b) Pode voltar a um tema com ÂNGULO NOVO quando fizer sentido: preencha continua_de com o apelido do item (ex.: E7) e angulo com o passo novo (o passo seguinte, o erro comum, o caso real, a objeção, a prova, o aprofundamento), formando uma sequência de evolução (do básico ao avançado, do problema à solução, da dúvida à prova). Tema novo: continua_de null.",
   "(c) Priorize temas e ângulos parecidos com os MELHORES POSTS REAIS e evite os FORMATOS QUE RENDEM ABAIXO; quando isso guiar a escolha, diga em 1 frase por quê, com o número (em por_que ou resumo).",
+  // 17/10: o resultado do que pegou o momento ensina o que puxar mais.
+  "(d) Itens com \"momento\" pegaram carona num hype, num assunto em alta do nicho ou num concorrente: compare os números deles com os outros e puxe mais do tipo de momento que rendeu acima; o que rendeu abaixo, use menos.",
 ].join("\n");
 
-const linhaDoTema = (t: TemaDaMemoria, enxuto: boolean): string => {
+const linhaDoTema =(t: TemaDaMemoria, enxuto: boolean): string => {
   const partes = [
     t.apelido,
     t.data || "sem data",
@@ -262,6 +267,7 @@ const linhaDoTema = (t: TemaDaMemoria, enxuto: boolean): string => {
     umaLinha(t.tema, enxuto ? 80 : 110),
     t.angulo ? `ângulo ${t.angulo}` : "",
     !enxuto && t.gancho ? `gancho ${umaLinha(t.gancho, 90)}` : "",
+    t.momento ? `momento ${t.momento}` : "",
     t.numeros ? `${pctBr(t.numeros.taxa, 1)} salvos e compart., ${Math.round(t.numeros.alcance)} de alcance${t.numeros.posicao !== "meio" ? ` (${t.numeros.posicao})` : ""}` : "",
   ].filter(Boolean);
   return partes.join(" | ");

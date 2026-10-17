@@ -189,7 +189,8 @@ describe("contrato: cada esquema que as funções mandam ao motor cabe na Anthro
     const porNome = (arquivo: string, nome: string) =>
       todos().find((e) => e.arquivo === arquivo && (e.expressao === nome || e.expressao === `${nome}_COM_METODO`)) as EsquemaColetado;
     for (const [trecho, antes] of [
-      ["agente-contexto/index.ts ESQUEMA_CONVERSA_DO_PLANO", 31],
+      // 31 até o plano ganhar campos novos; a conversão continua levando a 16 ou menos (conferido abaixo).
+      ["agente-contexto/index.ts ESQUEMA_CONVERSA_DO_PLANO", 38],
       ["mesa-foto/index.ts ESQUEMA_AGENTE", 32],
       ["mesa-ads/index.ts ESQUEMA_FICHA", 20],
       ["mesa-ads/index.ts ESQUEMA_OFERTA_CONVERSA", 21],

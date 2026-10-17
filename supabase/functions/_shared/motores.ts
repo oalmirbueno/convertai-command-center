@@ -588,7 +588,7 @@ const LIGACOES_DOS_SUPERPODERES: Record<string, { ligacao: LigacaoDoMetodo; mais
   "assistente.lancador": { ligacao: { arquivo: F("voice-assistant-agent"), trechos: ['const spAgirP = agir ? superpoderesPara(supabase, { agente: "assistente.lancador"', "juntarMetodoAoSistema(sistemaDaConversa, sp)", "spAgir);", "clientId: body.clientId || null });"] } },
   "central.agente": {
     // Revisão 30/09: o método fecha a resposta (prova com a ação feita e a linha "Método:" junto do "Segui").
-    ligacao: { arquivo: F("agente-central"), trechos: ['superpoderesPara(db, { agente: "central.agente"', "escolha, await spP);", "escolha, spAplicar);", "fecharComMetodo(servicoDoMetodo(), {", "comAnexoDoMetodo(anexosDoAprendizado("] },
+    ligacao: { arquivo: F("agente-central"), trechos: ['superpoderesPara(db, { agente: "central.agente"', "escolha, await spP);", "escolha, spAplicar, pesquisa);", "fecharComMetodo(servicoDoMetodo(), {", "comAnexoDoMetodo(anexosDoAprendizado("] },
     mais: [{ arquivo: "supabase/functions/_shared/modelo-da-central.ts", trechos: ["metodo: e.metodo ?? null,", "juntarMetodoAoSistema(p.sistema, p.metodo)", "usoId: r.usoId ?? null"] }],
   },
   "rituais.escritor": {
@@ -624,6 +624,8 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
   "motion.cena": "escreverCena da Mesa Motion: o escritor de cenas tem o método próprio (frente SPM, _shared/cena-hf.ts) e a prova é o lint e o check do worker.",
   mcp: "O MCP não tem prompt próprio: as ações de mesa passam pela ponte e chamam as funções acima, que já levam o método.",
   jev: "O Jev (julgamento) não é modelo de texto: pergunta tipada, sem sistema; o método não se aplica.",
+  revisoes: "Segunda passada curta sobre uma saída que já levou o método (reparo de formato e encaixe na cadência do agente do Mês, correção de tutorial, revisão do texto das lâminas no Estúdio, reescrita da copy na Mesa Ads): conserta e completa o que a primeira chamada fez.",
+  "nucleo.fatos": "Redação presa aos fatos do núcleo comum (Gestor da Central e Mesa Vídeos): responde só com o que as leituras devolveram e o código confere; o método da casa puxaria conteúdo novo.",
   "cfo.explicacao": "Explicação do CFO (frente CFO): a IA só reescreve a conta do motor em código, presa aos números (valor fora da conta faz valer o motor); método de trabalho puxaria conteúdo além da conta.",
 };
 
@@ -637,6 +639,20 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
  * chama e não entra aqui.
  */
 export const CHAMADAS_SEM_METODO: Record<string, string> = {
+  // 17/10: chamadas novas de outras frentes, cada uma com o porquê.
+  "agente-calendario/index.ts#corrigirTutoriais": "revisoes",
+  "agente-calendario/index.ts#planejarMes": "revisoes",
+  "agente-calendario/index.ts#ajustarCriacao": "revisoes",
+  "mesa-ads/index.ts#chamarReescrita": "revisoes",
+  "estudio-arte/index.ts#prepararItem/revisarConteudo": "revisoes",
+  "estudio-arte/index.ts#conversar": "revisoes",
+  "estudio-arte/index.ts#lerCardsDaReferencia/lerCardsDoPost": "leituras",
+  "editor-video/index.ts#agentePesquisar/respostaComFolego": "leituras",
+  "mesa-ads/index.ts#textoLidoDaReferenciaAds/lerTextoDaReferencia": "leituras",
+  "mesa-ads/index.ts#mundoRealDoAssunto/pesquisarFatosReais": "leituras",
+  "mesa-instagram/index.ts#diagnosticar": "leituras",
+  "gestor-aceleriq/modulos/nucleo.ts#chamar": "nucleo.fatos",
+  "mesa-videos/index.ts#respostaPeloNucleo": "nucleo.fatos",
   "agente-cfo/index.ts#explicar": "cfo.explicacao",
   "agente-calendario/selo-da-campanha.ts#classificarReferencia": "leituras",
   "agente-calendario/selo-da-campanha.ts#lerTextoDoSelo": "leituras",
@@ -779,7 +795,7 @@ export const MOTORES: readonly Motor[] = [
       arquivo: ESTUDIO,
       trechos: [
         'const CONHECIMENTO_DA_DIRECAO = conhecimentoEstudioPara("direcao").texto;',
-        "sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto]",
+        "sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, instrucoesDoConteudo(",
       ],
     },
     bases: ["conhecimento-design.ts: CONHECIMENTO_DIRETOR", "direcao-arte.ts: PADRAO_DA_LAMINA e blocoDasProibicoes (texto ao gerador, sem marketing)"],
