@@ -240,7 +240,7 @@ describe("o pedido manda na direção", () => {
   });
 
   it("o diretor devolve avisos para a equipe e tira o nome da marca dos blocos", () => {
-    expect(estudio).toContain('required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "fontes_da_pesquisa"]');
+    expect(estudio).toContain('required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "pessoas_reais", "paginas_reais", "fontes_da_pesquisa"]');
     expect(estudio).toContain("O PEDIDO DA EQUIPE É A FONTE DA VERDADE (\\`pedido_da_equipe\\`");
     expect(estudio).toContain("blocosSemNomeDaMarca(");
   });

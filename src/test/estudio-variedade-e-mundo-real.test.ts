@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { blocoDoTemaDaEpoca, domingoDePascoa, enesimoDiaDaSemana, temasDaEpoca } from "../../supabase/functions/estudio-arte/modulos/tema-da-epoca";
-import { areaDaPessoaReal, arquivoDoVerbete, fraseDaPessoaReal, mundoRealPelaRegra, normalizarPessoasReais, perguntasDoMundoRealNoEstudio } from "../../supabase/functions/estudio-arte/modulos/mundo-real";
+import { areaDaPessoaReal, arquivoDoVerbete, FRASE_DOS_ELEMENTOS_REAIS, rotuloDoElementoReal, mundoRealPelaRegra, normalizarPessoasReais, perguntasDoMundoRealNoEstudio } from "../../supabase/functions/estudio-arte/modulos/mundo-real";
 import { promptDaLamina } from "../../supabase/functions/_shared/direcao-arte";
 
 /**
@@ -66,14 +66,13 @@ describe("mundo real ampliado", () => {
     expect(arquivoDoVerbete({ query: { pages: [{ missing: true }] } })).toBeNull();
   });
 
-  it("o quadro da foto fica do lado oposto ao texto e o prompt proíbe desenhar a pessoa", () => {
+  it("17/10 (nada colado): a foto da pessoa, o print e a logo vão ao gerador para reproduzir fiel e integrado", () => {
     expect(areaDaPessoaReal("coluna-esquerda").x0).toBeGreaterThanOrEqual(0.6);
-    expect(areaDaPessoaReal("base-direita").x1).toBeLessThan(0.5);
-    expect(areaDaPessoaReal("topo-centro").y0).toBeGreaterThanOrEqual(0.5);
-    const f = fraseDaPessoaReal(areaDaPessoaReal("centro-esquerda"), "Anitta");
-    expect(f).toContain("colada pelo código");
-    expect(f).toContain("NÃO HÁ NENHUMA PESSOA");
-    expect(f).toContain("TODO o texto da lâmina fica fora dele");
+    expect(rotuloDoElementoReal("pessoa_real", "Anitta", 0, 1)).toContain("idêntica à foto");
+    expect(rotuloDoElementoReal("pagina_real", "https://www.aceleriq.com.br/", 0, 1)).toContain("PRINT REAL da página aceleriq.com.br");
+    expect(rotuloDoElementoReal("marca_real", "Nike", 0, 1)).toContain("LOGO OFICIAL de Nike");
+    expect(rotuloDoElementoReal("parceiros", "L1", 0, 3)).toContain("(1 de 3)");
+    expect(FRASE_DOS_ELEMENTOS_REAIS).toContain("Nada é colado depois");
   });
 });
 
@@ -133,7 +132,7 @@ describe("diretor e ajuste com o contexto do cliente", () => {
 
 describe("print real de página pública (17/10)", () => {
   it("só http ou https sem login, até 2, uma lâmina cada; quadro do lado oposto ao texto", async () => {
-    const { normalizarPaginasReais, areaDaPaginaReal, fraseDaPaginaReal } = await import("../../supabase/functions/estudio-arte/modulos/mundo-real");
+    const { normalizarPaginasReais, areaDaPaginaReal } = await import("../../supabase/functions/estudio-arte/modulos/mundo-real");
     const p = normalizarPaginasReais([
       { url: "https://www.aceleriq.com.br/", laminas: [3, 4], celular: false },
       { url: "javascript:alert(1)", laminas: [1], celular: false },
@@ -144,9 +143,6 @@ describe("print real de página pública (17/10)", () => {
     expect(p).toEqual([{ url: "https://www.aceleriq.com.br/", laminas: [3], celular: false }, { url: "https://loja.com/produto", laminas: [2], celular: true }]);
     expect(areaDaPaginaReal("topo-centro", false).y0).toBeGreaterThanOrEqual(0.46);
     expect(areaDaPaginaReal("coluna-esquerda", false).x0).toBeGreaterThan(0.5);
-    const f = fraseDaPaginaReal(areaDaPaginaReal("topo-centro", false), "https://www.aceleriq.com.br/", false);
-    expect(f).toContain("PRINT REAL (aceleriq.com.br)");
-    expect(f).toContain("Não desenhe a página");
   });
   it("o navegador tira o print numa sessão própria e curta, nunca a do cliente", () => {
     const op = readFileSync("supabase/functions/_shared/navegador-operacional.ts", "utf8");

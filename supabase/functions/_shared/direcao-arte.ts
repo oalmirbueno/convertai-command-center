@@ -202,11 +202,14 @@ export function valorDaCor(hex: string | null | undefined): number | null {
  * desenhado pelo gerador junto com a arte e não pode ficar de fora).
  */
 // Frente T2 (26/09): "fonte" é a amostra da fonte do título e "fonte_texto" a do texto (quando a família é outra).
-export type TipoDoAnexo = "foto_cliente" | "elemento" | "referencia_equipe" | "logo" | "capa" | "sequencia" | "fonte" | "fonte_texto" | "identidade" | "selo";
+// 17/10 (dono: "não pode ser nada colado, tem que ser gerado junto"): "real" é o elemento do mundo real que o
+// gerador reproduz fiel e integrado (logo de outra marca, foto de pessoa pública, print de página, logo de parceiro).
+export type TipoDoAnexo = "foto_cliente" | "elemento" | "real" | "referencia_equipe" | "logo" | "capa" | "sequencia" | "fonte" | "fonte_texto" | "identidade" | "selo";
 export const MAX_ANEXOS_DA_LAMINA = 6;
 const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   foto_cliente: 0,
   elemento: 1,
+  real: 1.5,
   referencia_equipe: 2,
   logo: 3,
   capa: 4,
@@ -218,7 +221,7 @@ const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   // Dono, 02/10: o selo da campanha vai ao gerador (nada colado por cima), logo depois da logo.
   selo: 3.5,
 };
-const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, referencia_equipe: 2, logo: 1, capa: 1, sequencia: 1, fonte: 1, fonte_texto: 1, identidade: 1, selo: 1 };
+const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, real: 4, referencia_equipe: 2, logo: 1, capa: 1, sequencia: 1, fonte: 1, fonte_texto: 1, identidade: 1, selo: 1 };
 
 /** Os anexos que entram, na ordem em que vão (a ordem da lista entre iguais é mantida). */
 export function anexosDaLamina<T extends { tipo: TipoDoAnexo }>(candidatos: T[], opcoes: { base: boolean; max?: number }): T[] {

@@ -274,8 +274,10 @@ describe("D. mundo real (pesquisa, logos reais e fontes)", () => {
 
   it("instruções e campos do esquema", () => {
     expect(INSTRUCOES_DO_MUNDO_REAL).toContain("documentação oficial");
-    expect(INSTRUCOES_DO_MUNDO_REAL).toContain("colada pelo CÓDIGO");
-    expect(Object.keys(CAMPOS_DO_MUNDO_REAL)).toEqual(["marcas_reais", "fontes_da_pesquisa"]);
+    // 17/10 (dono: "nada colado"): a logo oficial vai anexada ao gerador, que a desenha idêntica.
+    expect(INSTRUCOES_DO_MUNDO_REAL).toContain("A logo oficial vai ANEXADA ao gerador");
+    // 17/10: páginas públicas (print real) e pessoas públicas (foto do Commons), as duas anexadas ao gerador.
+    expect(Object.keys(CAMPOS_DO_MUNDO_REAL)).toEqual(["marcas_reais", "paginas_reais", "pessoas_reais", "fontes_da_pesquisa"]);
     expect(fraseDaLogoReal(AREA_DA_LOGO_REAL, ["WhatsApp"])).toContain("Não desenhe a logo de WhatsApp");
   });
 

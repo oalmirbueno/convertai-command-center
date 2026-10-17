@@ -1,19 +1,21 @@
 /**
  * Vitrine de logos (02/10, dono: "apresentar os parceiros", "as logos das
  * empresas"): quando a arte rápida apresenta várias marcas, as logos que a
- * equipe mandou entram numa grade organizada, coladas pelo CÓDIGO depois da
- * geração (como o selo da campanha): o gerador de imagem nunca redesenha logo
- * de terceiro. Ele só desenha o fundo, o título e um painel liso na área da
- * grade; aqui ficam as contas puras (quantas logos em cada lâmina, onde fica
- * a área e a célula de cada logo).
+ * equipe mandou entram numa grade organizada. Desde 17/10 (dono: "nada colado")
+ * elas vão ANEXADAS ao gerador, que as desenha fiéis junto com a arte (como o
+ * selo da campanha); aqui ficam as contas puras (quantas logos em cada lâmina,
+ * onde fica a área e a célula de cada logo).
  *
  * Sem import de Deno nem de npm: a tela, a função e os testes leem o mesmo arquivo.
  */
 
-/** Logos por lâmina do carrossel (grade de 3 x 3). */
-export const MAX_LOGOS_NA_VITRINE_POR_LAMINA = 9;
-/** Teto de logos numa lâmina só (grade de 4 x 3), na arte única ou quando faltam lâminas. */
-export const MAX_LOGOS_NUMA_LAMINA = 12;
+/**
+ * Logos por lâmina do carrossel. 17/10 (dono: "nada colado, gerado junto"): as logos vão anexadas ao gerador, que
+ * desenha cada uma fiel; com fidelidade ele dá conta de até 4 por lâmina (era 9 coladas numa grade 3 x 3).
+ */
+export const MAX_LOGOS_NA_VITRINE_POR_LAMINA = 4;
+/** Teto de logos numa lâmina só, na arte única ou quando faltam lâminas (era 12 coladas). */
+export const MAX_LOGOS_NUMA_LAMINA = 4;
 /** A partir de quantas logos o pedido pode virar vitrine. */
 export const MIN_LOGOS_PARA_VITRINE = 3;
 
