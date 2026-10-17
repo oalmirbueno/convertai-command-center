@@ -17,6 +17,8 @@ export type RaioXDoMes = {
   ganchos: { hype: number; nicho: number; concorrente: number; nenhum: number };
   /** Um pilar com mais da metade das pautas (com 4 ou mais pautas). */
   pilarDominante: { rotulo: string; pct: number } | null;
+  /** Um formato com 75% ou mais das pautas (com 4 ou mais pautas). */
+  formatoDominante: { rotulo: string; pct: number } | null;
 };
 
 const ROTULO_DO_FORMATO: Record<string, string> = {
@@ -62,12 +64,14 @@ export function raioXDoMes(itens: ItemParaORaioX[]): RaioXDoMes {
     if (p) pilares.push(p.charAt(0).toUpperCase() + p.slice(1).toLowerCase());
   }
   const pilaresContados = contar(pilares);
+  const formatos = contar(itens.map((i) => ROTULO_DO_FORMATO[i.delivery_type] || i.delivery_type || "Outro"));
   const topo = pilaresContados[0];
   return {
     total: itens.length,
-    formatos: contar(itens.map((i) => ROTULO_DO_FORMATO[i.delivery_type] || i.delivery_type || "Outro")),
+    formatos,
     pilares: pilaresContados,
     ganchos,
+    formatoDominante: formatos[0] && itens.length >= 4 && formatos[0].n / itens.length >= 0.75 ? { rotulo: formatos[0].rotulo, pct: Math.round((formatos[0].n / itens.length) * 100) } : null,
     pilarDominante: topo && itens.length >= 4 && topo.n / itens.length > 0.5 ? { rotulo: topo.rotulo, pct: Math.round((topo.n / itens.length) * 100) } : null,
   };
 }

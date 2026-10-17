@@ -18,6 +18,9 @@ describe("raio-x do mês", () => {
     expect(r.ganchos).toEqual({ hype: 1, nicho: 1, concorrente: 1, nenhum: 1 });
     expect(r.pilares[0]).toEqual({ rotulo: "Autoridade", n: 3 });
     expect(r.pilarDominante).toEqual({ rotulo: "Autoridade", pct: 75 });
+    expect(r.formatoDominante).toBeNull();
+    const quase = raioXDoMes([...itens.slice(0, 2), { ...itens[0] }, { ...itens[0] }]);
+    expect(quase.formatoDominante).toEqual({ rotulo: "Carrossel", pct: 100 });
   });
   it("o tipo do gancho pelo texto que o agente grava", () => {
     expect(tipoDoGancho("Hype: Halloween")).toBe("hype");

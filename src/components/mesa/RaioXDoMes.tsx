@@ -43,6 +43,7 @@ export default function RaioXDoMes({ itens }: { itens: ItemParaORaioX[] }) {
         <div>
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Formatos</p>
           <ul className="space-y-1">{r.formatos.map((f) => linha(f.rotulo, f.n))}</ul>
+          {r.formatoDominante && <p className="mt-1 text-warning">{r.formatoDominante.rotulo} ocupa {r.formatoDominante.pct}% do mês: vale alternar formatos.</p>}
         </div>
         {r.pilares.length > 0 && (
           <div>
