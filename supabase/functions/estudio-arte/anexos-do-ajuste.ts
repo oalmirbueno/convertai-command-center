@@ -146,7 +146,7 @@ export function legendaParaOGerador(a: Pick<AnexoDoAjuste, "papel" | "nome">): s
   switch (a.papel) {
     case "estilo": return "referência de ESTILO anexada pela equipe: leve para a área editada a luz, a cor, a textura e o tratamento dela; não copie o texto, as pessoas nem a marca dela";
     case "elemento": return "ELEMENTO real para inserir: coloque este produto, ícone ou objeto na área editada exatamente como é (forma, cor, rótulo), integrado à luz da arte, com sombra de contato, sem caixa nem contorno";
-    case "exata": return "FOTO REAL exata: use como está, sem redesenhar nem trocar nada nela";
+    case "exata": return "FOTO REAL exata: reproduza IDÊNTICA (mesma pessoa, objeto, cores e detalhes), integrada à arte com a luz e a escala certas, sem trocar nada nela";
     case "rosto": return ROTULO_DA_FOTO_DE_IDENTIDADE;
     case "logo": return "LOGO anexada pela equipe: aplique exatamente como está, sem redesenhar, legível";
     case "erro": return null;

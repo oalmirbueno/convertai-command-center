@@ -179,13 +179,13 @@ export const INSTRUCOES_DO_MUNDO_REAL = `MUNDO REAL (o pedido fala de produto, a
 - Pesquise antes de escrever: a documentação oficial ou a central de ajuda da empresa (versão atual, Brasil, português) e, só se faltar, uma fonte confiável recente. Monte os passos EXATAMENTE como estão: nomes de menus, abas, botões e opções com a grafia da tela, na ordem certa, um passo por linha ("Abra o WhatsApp", "Toque em Configurações > Privacidade"). Diferença entre iPhone e Android: diga qual vale ou separe.
 - Nunca invente menu, botão, preço, especificação nem versão. O que você não confirmou fica fora e vira aviso em \`avisos_para_a_equipe\`.
 - fontes_da_pesquisa: as páginas que você usou (título e endereço), as oficiais primeiro.
-- marcas_reais: cada marca de outra empresa que aparece na peça (nome oficial; arquivo_wikimedia com o nome exato do arquivo da logo no Wikimedia Commons, como "File:WhatsApp.svg", quando você achou; senão vazio; laminas com as ordens onde ela aparece). A logo dessas marcas é colada pelo CÓDIGO num canto da lâmina: no layout, NÃO desenhe nem descreva a logo de outra empresa, não escreva o nome dela em estilo de logo e deixe o canto de cima à direita calmo. O nome da marca pode aparecer no texto normal ("no WhatsApp").
+- marcas_reais: cada marca de outra empresa que aparece na peça (nome oficial; arquivo_wikimedia com o nome exato do arquivo da logo no Wikimedia Commons, como "File:WhatsApp.svg", quando você achou; senão vazio; laminas com as ordens onde ela aparece). A logo oficial vai ANEXADA ao gerador, que a desenha idêntica e integrada (17/10: nada é colado depois): em layout.imagem diga onde ela aparece na cena (no produto, na tela do app, num selo, num canto). O nome da marca pode aparecer no texto normal ("no WhatsApp").
 - Tela de app: sem print enviado pela equipe, a lâmina mostra a tela recriada em estilo plano e limpo (moldura de celular simples, os rótulos e a ordem exatos), sem copiar ícones nem a logo da empresa. Com print da equipe (Compor), use o print.
 - Fonte real: quando a tela ou a marca tem fonte conhecida e livre (Google Fonts, como Roboto no Android ou Inter), diga em tratamento; senão, as fontes do cliente.
 - Ferramenta na tela (17/10): falou de campanha no Meta Ads, Google Ads, relatório ou painel, uma lâmina MOSTRA a tela de verdade dessa ferramenta, recriada em estilo plano e fiel: o nome real da tela ("Gerenciador de Anúncios"), as abas e colunas reais (no Meta: Campanhas, Conjuntos de anúncios, Anúncios; Veiculação, Resultados, Alcance, Custo por resultado, Valor usado), números plausíveis e coerentes com o texto, num notebook ou celular quando ajudar. Pesquise a interface atual antes.
 - Marca como assunto: a logo oficial vem do Commons (marcas_reais) e o produto ou a embalagem aparecem como são de verdade (forma, cores, rótulo), sem inventar versão.
-- pessoas_reais (17/10): cada pessoa pública que a peça precisa mostrar (nome como no verbete da Wikipédia em português; arquivo_wikimedia com o "File:..." de uma foto dela no Commons, quando você achou; laminas onde ela aparece, no máximo 2). A foto real dela entra COLADA PELO CÓDIGO num quadro da lâmina: em layout.imagem descreva o quadro de foto (moldura, lado oposto ao texto) e o resto da cena, e NUNCA desenhe nem descreva o rosto dessa pessoa. Só para conteúdo informativo ou de notícia sobre ela; nunca como se ela endossasse a marca (avise em avisos_para_a_equipe que o uso de imagem de pessoa pública em anúncio pede autorização).
-- paginas_reais (17/10): quando a peça fala de um site, loja, página de produto, página oficial de um recurso ou perfil PÚBLICO que dá para abrir sem login, ponha o endereço exato (confirmado na pesquisa) e a lâmina onde ele aparece; celular verdadeiro quando a página vive no celular. No máximo 2. O print real é tirado por um navegador e COLADO PELO CÓDIGO num quadro da lâmina: em layout.imagem descreva o quadro (moldura de notebook ou celular, do lado oposto ao texto) e NUNCA desenhe a página. Tela que exige login (Gerenciador de Anúncios, painel) não entra aqui: essa continua recriada.
+- pessoas_reais (17/10): cada pessoa pública que a peça precisa mostrar (nome como no verbete da Wikipédia em português; arquivo_wikimedia com o "File:..." de uma foto dela no Commons, quando você achou; laminas onde ela aparece, no máximo 2). A foto real dela vai ANEXADA ao gerador, que desenha a pessoa idêntica à foto e integrada à cena (nada é colado depois): em layout.imagem descreva a cena com ela (pose, enquadramento, lado oposto ao texto), sem inventar traços do rosto. Só para conteúdo informativo ou de notícia sobre ela; nunca como se ela endossasse a marca (avise em avisos_para_a_equipe que o uso de imagem de pessoa pública em anúncio pede autorização).
+- paginas_reais (17/10): quando a peça fala de um site, loja, página de produto, página oficial de um recurso ou perfil PÚBLICO que dá para abrir sem login, ponha o endereço exato (confirmado na pesquisa) e a lâmina onde ele aparece; celular verdadeiro quando a página vive no celular. No máximo 2. O print real é tirado por um navegador e vai ANEXADO ao gerador, que mostra a página fiel na tela de um notebook, monitor ou celular da cena (nada é colado depois): em layout.imagem descreva o aparelho e onde ele fica (lado oposto ao texto). Tela que exige login (Gerenciador de Anúncios, painel) não entra aqui: essa continua recriada.
 - Tema e referência real: use elementos reais e reconhecíveis do assunto (o objeto real, o lugar real, o ícone real do app), não um genérico de banco de imagens.`;
 
 /** Campos que o diretor devolve para o mundo real (entram no esquema da direção; vazios quando não é o caso). */
@@ -481,19 +481,29 @@ export function areaDaPaginaReal(zona: string, celular: boolean): Area {
   return { x0: 0.08, y0: 0.55, x1: 0.92, y1: 0.95 };
 }
 
-/** Frase do prompt da lâmina: o quadro liso para o print real entrar pelo código. */
-export function fraseDaPaginaReal(area: Area, url: string, celular: boolean): string {
-  const pct = (n: number) => Math.round(n * 100);
-  let dominio = url;
-  try { dominio = new URL(url).hostname.replace(/^www\./, ""); } catch { /* fica a url */ }
-  return `PRINT REAL (${dominio}): o print verdadeiro da página entra depois, colado pelo código, num quadro de ${pct(area.x0)}% a ${pct(area.x1)}% da largura e de ${pct(area.y0)}% a ${pct(area.y1)}% da altura${celular ? ", como a tela de um celular" : ", como a tela de um notebook ou navegador"}. Esse quadro fica como um painel liso numa cor da paleta (pode ter a moldura fina do aparelho em volta), sem texto e sem desenho dentro, e TODO o texto da lâmina fica fora dele. Não desenhe a página, o site nem a logo de ${dominio}.`;
+
+/**
+ * 17/10 (dono: "o colado fica desproporcional e feio; nada colado, gerar e copiar exatamente"): a legenda de cada
+ * elemento real anexado ao gerador. Ele desenha o elemento IDÊNTICO e integrado à cena (escala, luz, perspectiva).
+ */
+export function rotuloDoElementoReal(tipo: string, nome: string, indice: number, total: number): string {
+  if (tipo === "pessoa_real") {
+    return `FOTO REAL de ${nome || "pessoa pública"} (Wikimedia Commons): a pessoa desta lâmina é ESTA pessoa, idêntica à foto (rosto, traços, cabelo, tom de pele); desenhe-a integrada à cena, com a luz, a escala e o tratamento da arte, como uma foto editorial bem composta; não mude o rosto nem troque por outra pessoa`;
+  }
+  if (tipo === "pagina_real" || tipo === "pagina_real_celular") {
+    let dominio = nome;
+    try { dominio = new URL(nome).hostname.replace(/^www\./, ""); } catch { /* fica o nome */ }
+    return `PRINT REAL da página ${dominio}: mostre ESTA página na tela do ${tipo === "pagina_real_celular" ? "celular" : "notebook ou monitor"} da cena, reproduzindo-a fielmente (layout, cores, imagens e os textos principais), em perspectiva natural e proporção certa da tela, com reflexo leve; não invente outra página`;
+  }
+  if (tipo === "marca_real") {
+    return `LOGO OFICIAL de ${nome || "marca citada"}: desenhe IDÊNTICA (mesmas letras, forma e cores), integrada onde fizer sentido na cena (no produto, na tela, num selo ou num canto), em tamanho legível e proporção certa; nunca outra versão`;
+  }
+  return `LOGO DO PARCEIRO ${nome ? `${nome} ` : ""}(${indice + 1} de ${total}): desenhe IDÊNTICA (mesmas letras, forma e cores), junto das outras logos de parceiros numa grade organizada, todas com o mesmo peso visual e respiro igual`;
 }
 
-/** Frase do prompt da lâmina: o quadro que fica liso para a foto real entrar pelo código. */
-export function fraseDaPessoaReal(area: Area, nome: string): string {
-  const pct = (n: number) => Math.round(n * 100);
-  return `FOTO REAL: a foto verdadeira da pessoa citada entra depois, colada pelo código, num quadro de ${pct(area.x0)}% a ${pct(area.x1)}% da largura e de ${pct(area.y0)}% a ${pct(area.y1)}% da altura. Esse quadro fica como um painel liso numa cor da paleta, sem texto, sem desenho e sem pessoa, e TODO o texto da lâmina fica fora dele (quebre as linhas da headline para caber no espaço livre). NESTA LÂMINA NÃO HÁ NENHUMA PESSOA, ROSTO, CORPO OU SILHUETA DESENHADA: o fundo é só cor, textura, objetos e grafismos; a única pessoa será a foto colada.`;
-}
+/** A linha do prompt quando há elementos reais anexados. */
+export const FRASE_DOS_ELEMENTOS_REAIS = "ELEMENTOS REAIS ANEXADOS (veja a legenda de cada imagem): reproduza cada um fiel ao anexo e INTEGRADO à composição, com a mesma luz, escala e perspectiva da cena, como se tivesse sido fotografado ou desenhado junto. As logos e marcas anexadas aqui são a exceção à regra de nenhuma logo de outra empresa. Nada é colado depois: o que você não desenhar não aparece.";
+
 
 /** Área da logo da marca real no quadro final: o canto de cima à direita, pequena. */
 export const AREA_DA_LOGO_REAL: Area = { x0: 0.74, y0: 0.045, x1: 0.94, y1: 0.145 };

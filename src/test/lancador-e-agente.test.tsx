@@ -278,6 +278,8 @@ describe("pré-contexto do agente", () => {
   it("atalho Resumo do cliente pergunta no modo conversa com o pré-contexto e mostra a resposta", async () => {
     montarAgente(`/clientes/${CLIENTE}`);
     await waitFor(() => expect(document.querySelector("[data-seletor-cliente]")!.textContent).toContain("Mirante"));
+    // Os atalhos ficam recolhidos em "Sugestões" (padrão de recolher as sugestões dos agentes).
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     await act(async () => {
       fireEvent.click(document.querySelector('[data-atalho="resumo"]')!);
     });
@@ -288,6 +290,7 @@ describe("pré-contexto do agente", () => {
 
   it("sem cliente, os atalhos que precisam dele ficam apagados; Novo contrato continua", async () => {
     montarAgente("/dashboard");
+    fireEvent.click(await screen.findByRole("button", { name: "Sugestões" }));
     await waitFor(() => expect(document.querySelector("[data-atalhos-do-agente]")).toBeTruthy());
     expect((document.querySelector('[data-atalho="resumo"]') as HTMLButtonElement).disabled).toBe(true);
     expect((document.querySelector('[data-atalho="novo_contrato"]') as HTMLButtonElement).disabled).toBe(false);

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { ModuleKind, transpileModule } from "typescript";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as freshness from "../../supabase/functions/_shared/operator-freshness";
+import * as progresso from "../../supabase/functions/_shared/operator-progress-detail";
 
 type Row = Record<string, unknown>;
 type Report = { event: string; operator: string; run_key: string; kanban_task_id?: string };
@@ -41,6 +42,10 @@ function harness() {
   const dependencies: Record<string, unknown> = {
     "./aceleriq-read-services.ts": { db: () => ({ from, rpc }), isUuid: (value: string) => /^[a-f0-9-]{36}$/i.test(value), READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } },
     "./operator-freshness.ts": freshness,
+    // 07/10 (#69): o detalhe do progresso do agente (puro). Depois: os arquivos da execução organizados no
+    // Workspace, que este teste de leitura não exercita (o relatório guarda o diário mesmo se organizar falhar).
+    "./operator-progress-detail.ts": progresso,
+    "./arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
   };
   const source = readFileSync(resolve(process.cwd(), "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");
   const compiled = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;

@@ -1,4 +1,3 @@
-import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
 /**
  * Operadores internos (Hermes) — a ponte entre execução e painel.
  *
@@ -25,6 +24,7 @@ import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
 import { progressDetail, type OperatorProgressDetail } from './operator-progress-detail.ts';
 import { operatorRunIsStale } from './operator-freshness.ts';
+import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
 
 const texto = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;

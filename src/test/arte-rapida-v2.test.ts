@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * 2. todo aviso diz o cliente (tela, link do indicador de geração e avisos do banco);
  * 3. até 16 imagens com papéis simples; o diretor vê até 8;
  * 4. link de post do Instagram com 3 modos (sem login, fixtures sintéticas);
- * 5. vitrine de logos (parceiros): grade colada pelo código, distribuída nas lâminas;
+ * 5. vitrine de logos (parceiros): grade desenhada pelo gerador com as logos anexadas (17/10: nada colado), até 4 por lâmina;
  * 6. o diretor na conversa recebe o pedido inteiro.
  */
 
@@ -278,21 +278,21 @@ describe("4. post do Instagram (sem login)", () => {
 // ------------------------------------------------------------------ 5. vitrine de logos
 
 describe("5. vitrine de logos (parceiros)", () => {
-  it("distribuição: arte única até 12; carrossel com a capa livre e grades equilibradas de até 9", () => {
-    expect(distribuirLogosNasLaminas(5, [1]).porLamina).toEqual({ 1: [0, 1, 2, 3, 4] });
-    expect(distribuirLogosNasLaminas(14, [1])).toMatchObject({ fora: 2 });
-    const c = distribuirLogosNasLaminas(10, [1, 2, 3]);
+  it("distribuição (17/10, gerado junto): até 4 logos por lâmina; carrossel com a capa livre e grades equilibradas", () => {
+    expect(distribuirLogosNasLaminas(4, [1]).porLamina).toEqual({ 1: [0, 1, 2, 3] });
+    expect(distribuirLogosNasLaminas(6, [1])).toMatchObject({ fora: 2 });
+    const c = distribuirLogosNasLaminas(8, [1, 2, 3]);
     expect(c.porLamina[1]).toBeUndefined();
-    expect(c.porLamina[2]).toEqual([0, 1, 2, 3, 4]);
-    expect(c.porLamina[3]).toEqual([5, 6, 7, 8, 9]);
+    expect(c.porLamina[2]).toEqual([0, 1, 2, 3]);
+    expect(c.porLamina[3]).toEqual([4, 5, 6, 7]);
     expect(c.fora).toBe(0);
-    // 20 logos e só 2 lâminas de logos: até 12 por lâmina, o resto fica de fora.
-    const apertado = distribuirLogosNasLaminas(26, [1, 2, 3]);
-    expect(apertado.porLamina[2]).toHaveLength(12);
+    // 10 logos e só 2 lâminas de logos: até 4 por lâmina, o resto fica de fora.
+    const apertado = distribuirLogosNasLaminas(10, [1, 2, 3]);
+    expect(apertado.porLamina[2]).toHaveLength(4);
     expect(apertado.fora).toBe(2);
     // 4 logos num carrossel de 4 lâminas: uma lâmina de logos só.
     expect(Object.keys(distribuirLogosNasLaminas(4, [1, 2, 3, 4]).porLamina)).toEqual(["2"]);
-    expect(laminasDoCarrosselDaVitrine(10)).toBe(3);
+    expect(laminasDoCarrosselDaVitrine(10)).toBe(4);
     expect(laminasDoCarrosselDaVitrine(3)).toBe(2);
   });
 
@@ -338,29 +338,32 @@ describe("5. vitrine de logos (parceiros)", () => {
     expect(dc.avisos.join(" ")).toMatch(/Até 2 logos por lâmina/);
   });
 
-  it("nas lâminas: as logos vão para a grade (nunca ao gerador como elemento) e a capa do carrossel fica livre", () => {
-    const arquivos: ArquivoDaArteRapida[] = logos(10).map((l, i) => ({ codigo: `L${i + 1}`, imagem_id: null, caminho: l.caminho, nome: l.nome, papel: "logo", papel_por: "equipe" }));
-    const vitrine = { por: "jev" as const, confianca: 0.9, logos: 10 };
+  it("nas lâminas: as logos vão para a grade da lâmina (anexadas ao gerador como elemento real) e a capa do carrossel fica livre", () => {
+    const arquivos: ArquivoDaArteRapida[] = logos(8).map((l, i) => ({ codigo: `L${i + 1}`, imagem_id: null, caminho: l.caminho, nome: l.nome, papel: "logo", papel_por: "equipe" }));
+    const vitrine = { por: "jev" as const, confianca: 0.9, logos: 8 };
     const cards = aplicarArquivosNasLaminas([{ ordem: 1 }, { ordem: 2 }, { ordem: 3 }], {}, arquivos, "carrossel", vitrine);
     expect(cards[0].vitrine_de_logos).toBeUndefined();
-    expect(cards[1].vitrine_de_logos).toHaveLength(5);
-    expect(cards[2].vitrine_de_logos!.map((l) => l.nome)).toEqual(["empresa-5.png", "empresa-6.png", "empresa-7.png", "empresa-8.png", "empresa-9.png"]);
+    expect(cards[1].vitrine_de_logos).toHaveLength(4);
+    expect(cards[2].vitrine_de_logos!.map((l) => l.nome)).toEqual(["empresa-4.png", "empresa-5.png", "empresa-6.png", "empresa-7.png"]);
     expect(cards.every((c) => !(c.fotos_livres || []).some((f) => f.papel === "elemento"))).toBe(true);
     const [unica] = aplicarArquivosNasLaminas([{ ordem: 1 }], {}, arquivos.slice(0, 6), "unica", vitrine);
-    expect(unica.vitrine_de_logos).toHaveLength(6);
+    expect(unica.vitrine_de_logos).toHaveLength(4);
     // Sem vitrine: o caminho de sempre (até 2 logos como elemento).
     const [sem] = aplicarArquivosNasLaminas([{ ordem: 1 }], {}, arquivos.slice(0, 3), "unica");
     expect(sem.vitrine_de_logos).toBeUndefined();
     expect((sem.fotos_livres || []).filter((f) => f.papel === "elemento")).toHaveLength(2);
   });
 
-  it("diretor e servidor: plano das lâminas com logos, área lisa no prompt e logos coladas pelo código", () => {
-    const arquivos: ArquivoDaArteRapida[] = logos(10).map((l, i) => ({ codigo: `L${i + 1}`, imagem_id: null, caminho: l.caminho, nome: l.nome, papel: "logo", papel_por: "jev" }));
-    const ctx = pedidoParaODiretor({ pedido: "parceiros", peca: "carrossel", arquivos, vitrine: { por: "jev", confianca: 0.9, logos: 10 } }, []) as Record<string, any>;
-    expect(ctx.vitrine_de_logos).toEqual({ total_de_logos: 10, laminas_com_logos: [{ ordem: 2, logos: 5 }, { ordem: 3, logos: 5 }] });
+  it("diretor e servidor: plano das lâminas com logos e as logos anexadas ao gerador (17/10: nada colado)", () => {
+    const arquivos: ArquivoDaArteRapida[] = logos(8).map((l, i) => ({ codigo: `L${i + 1}`, imagem_id: null, caminho: l.caminho, nome: l.nome, papel: "logo", papel_por: "jev" }));
+    const ctx = pedidoParaODiretor({ pedido: "parceiros", peca: "carrossel", arquivos, vitrine: { por: "jev", confianca: 0.9, logos: 8 } }, []) as Record<string, any>;
+    expect(ctx.vitrine_de_logos).toEqual({ total_de_logos: 8, laminas_com_logos: [{ ordem: 2, logos: 4 }, { ordem: 3, logos: 4 }] });
     expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("Vitrine de logos (`item.pedido_avulso.vitrine_de_logos`)");
+    expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("vão anexadas ao gerador");
     const fonte = ler("supabase/functions/estudio-arte/index.ts");
-    expect(fonte).toContain("areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : \"\",");
+    expect(fonte).toContain('tipo: "real",');
+    expect(fonte).toContain("elementosReais.length ? FRASE_DOS_ELEMENTOS_REAIS");
+    // Versões antigas que já tinham a grade colada continuam com ela no ajuste.
     expect(fonte).toContain("const r = await colarVitrineNaArte(pngFinal, vitrinePedida, t.client_id);");
     expect(fonte).toContain("...(vitrineDaVersao(atualVersao) ? { vitrine_de_logos: vitrineDaVersao(atualVersao) } : {}),");
     expect(fonte).toContain("notaDaVitrineParaOLeitor(vitrineColada.area)");

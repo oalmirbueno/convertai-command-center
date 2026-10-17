@@ -105,7 +105,8 @@ describe("custo do Jev na carteira", () => {
     // arte única ou carrossel, a campanha citada e o papel de cada imagem, numa pergunta só).
     // + frente AM (28/09): o roteamento do modo Criar (mudar o que existe x criar novo) e a peça citada
     // no agente do Mês (intenção, qual peça, se está clara e se é uma só, numa pergunta só).
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(8);
+    // + o molde dos posts vencedores no contexto do Mês (12/10).
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(9);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
     // + frente R2 (26/09): conferir_rosto (Noul "outra pessoa?", só aviso, uma vez por versão:
     // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
@@ -117,9 +118,14 @@ describe("custo do Jev na carteira", () => {
     // mensagem fala de foto, rosto ou pose e a lâmina em foco tem foto).
     // + frente RO, fase 2 (29/09): entender o pedido ao diretor (ordem clara e qual lâmina, numa chamada, em
     // paralelo com a leitura) e o papel das imagens anexadas no Ajustar (só com imagem em Automático).
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(11);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(8);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(10);
+    // + a fidelidade do gancho à referência (02/10) e o mundo real e a pessoa pública na direção (17/10).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(13);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(9);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(12);
+    // A regra de fundo: nenhuma pergunta ao Jev fica sem a sua cobrança.
+    for (const f of [calendario, estudio]) {
+      expect((f.match(/await cobrarJev\(/g) || []).length).toBeGreaterThanOrEqual((f.match(/await jevPerguntar\(/g) || []).length);
+    }
     const ajuste = estudio.slice(estudio.indexOf("const jevDoAjuste"), estudio.indexOf("const dir = await chamarTexto({", estudio.indexOf("const jevDoAjuste")));
     expect(ajuste).toContain("jevPerguntar({");
     expect(ajuste).toContain("await cobrarJev(r,");

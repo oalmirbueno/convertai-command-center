@@ -1,4 +1,3 @@
-import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 /**
  * estudio-arte: diretor de arte e gerador da Mesa do cliente
  * (docs/mesa-do-cliente/SPEC.md, secao 5).
@@ -99,6 +98,7 @@ import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-aj
  */
 
 import { falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   chamarImagem,
@@ -340,7 +340,6 @@ import {
   arquivoDoCommons,
   CAMPOS_DO_MUNDO_REAL,
   escolherNaBusca,
-  fraseDaLogoReal,
   hostDoCommonsPermitido,
   INSTRUCOES_DO_MUNDO_REAL,
   LIMIAR_DO_MUNDO_REAL,
@@ -358,7 +357,6 @@ import {
   areaDaPessoaReal,
   arquivoDoVerbete,
   fotosNaBusca,
-  fraseDaPessoaReal,
   LARGURA_MINIMA_DA_FOTO,
   maiorFoto,
   urlDaBuscaDeFotoNoCommons,
@@ -367,8 +365,9 @@ import {
   urlDaImagemDoVerbete,
   urlDaInfoDaFotoNoCommons,
   areaDaPaginaReal,
-  fraseDaPaginaReal,
+  FRASE_DOS_ELEMENTOS_REAIS,
   normalizarPaginasReais,
+  rotuloDoElementoReal,
 } from "./modulos/mundo-real.ts";
 import { chave as chaveDoCofre } from "../_shared/chaves.ts";
 import { blocoDoTemaDaEpoca, temasDaEpoca } from "./modulos/tema-da-epoca.ts";
@@ -3226,6 +3225,9 @@ async function carrosseisAprovados(clientId: string, exceto: string | null): Pro
       laminas: t.direcao!.cards.slice(0, 7).map((c) => ({ funcao: c.funcao, texto: texto(c.texto_exato, 90), imagem: texto(c.layout?.imagem ?? c.ilustracao, 160) || null })),
     }));
 }
+
+/** 17/10 (dono: "nada colado por cima"): a foto exata do Ajustar é reproduzida pelo gerador, não colada. */
+const COLAR_FOTO_EXATA_NO_AJUSTE = false;
 
 /** 17/10: vai na mensagem (não no sistema): o sistema do diretor tem teto e fica no cache do provedor. */
 const REPERTORIO_E_MISTURA = `REPERTÓRIO E MISTURA (17/10, dono: "não repetir igual o arsenal, mas juntar detalhes que foram usados em um estilo com outro, para diversificar sem sair do gosto e das referências")
@@ -6163,25 +6165,27 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       });
     }
   }
-  // 02/10: vitrine de logos (parceiros) desta lâmina da arte rápida. As logos NUNCA vão ao gerador (ele redesenharia
-  // marca de terceiro): o prompt pede só a área lisa e gravarVersao cola as logos numa grade, pelo código.
+  // 17/10 (dono: "não pode ser nada colado; o colado fica desproporcional e feio; tem que ser gerado junto, copiar
+  // exatamente"): a logo real da marca citada, a foto da pessoa pública, o print da página e as logos dos parceiros
+  // vão ANEXADOS ao gerador (como o selo da campanha), que desenha cada um fiel e integrado à cena. Nada é colado
+  // depois da geração (a colagem antiga, de 02/10, só vale para as versões que já a tinham).
   const cardDaVitrine = card as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[]; vitrine_tipo?: string };
   const logosDaVitrine = ads ? [] : (cardDaVitrine.vitrine_de_logos ?? [])
     .filter((l) => l && typeof l.caminho === "string" && l.caminho.indexOf(`${t.client_id}/`) === 0)
     .slice(0, 12);
-  // 02/10: a logo real da marca citada (mundo real) vai no canto, pequena; a vitrine de parceiros, na grade de sempre.
-  const marcaReal = cardDaVitrine.vitrine_tipo === "marca_real";
-  // 17/10: a foto da pessoa pública vai num quadro do lado oposto ao texto, colada pelo código.
-  const pessoaReal = cardDaVitrine.vitrine_tipo === "pessoa_real";
-  // 17/10: o print real de página pública, colado pelo código num quadro do lado oposto ao texto.
-  const paginaReal = cardDaVitrine.vitrine_tipo === "pagina_real" || cardDaVitrine.vitrine_tipo === "pagina_real_celular";
-  const vitrineAqui: VitrineNaLamina | null = logosDaVitrine.length
-    ? paginaReal
-      ? { area: areaDaPaginaReal(String(card.layout?.zona_texto ?? ""), cardDaVitrine.vitrine_tipo === "pagina_real_celular"), logos: logosDaVitrine.slice(0, 1), proporcao: quadro.final.largura / quadro.final.altura, tipo: cardDaVitrine.vitrine_tipo as "pagina_real" | "pagina_real_celular" }
-      : pessoaReal
-      ? { area: areaDaPessoaReal(String(card.layout?.zona_texto ?? "")), logos: logosDaVitrine.slice(0, 1), proporcao: quadro.final.largura / quadro.final.altura, tipo: "pessoa_real" }
-      : { area: marcaReal ? AREA_DA_LOGO_REAL : areaDaVitrine(total === 1), logos: marcaReal ? logosDaVitrine.slice(0, 2) : logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura, ...(marcaReal ? { tipo: "marca_real" as const } : {}) }
-    : null;
+  const tipoDoReal = cardDaVitrine.vitrine_tipo || "parceiros";
+  const fotoReal = tipoDoReal === "pessoa_real" || tipoDoReal === "pagina_real" || tipoDoReal === "pagina_real_celular";
+  const elementosReais = logosDaVitrine.slice(0, fotoReal ? 1 : 4);
+  elementosReais.forEach((l, i) => {
+    candidatos.push({
+      tipo: "real",
+      rotulo: rotuloDoElementoReal(tipoDoReal, String(l.nome || ""), i, elementosReais.length),
+      carregar: () => (fotoReal ? baixarImagem("mesa", l.caminho, `real-${i + 1}`) : anexoLeve("mesa", l.caminho, `logo-real-${i + 1}`, true)),
+    });
+  });
+  if (logosDaVitrine.length > elementosReais.length && !fotoReal) {
+    avisosDaGeracao.push(`Esta lâmina tinha ${logosDaVitrine.length} logos; o gerador desenha até ${elementosReais.length} por lâmina com fidelidade. Divida as outras em mais uma lâmina.`);
+  }
 
   // Imagem editada (foto, fatia ou tela do recorte) é a imagem 1 e empurra os anexos.
   const temBase = (!!baseFoto && !replicar) || !!recorteNaLamina;
@@ -6458,7 +6462,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDaTipografiaAqui,
     // Selo da campanha desenhado pelo gerador junto com a arte, grande e fiel ao anexo.
     blocoDoSelo,
-    vitrineAqui ? (vitrineAqui.tipo === "pagina_real" || vitrineAqui.tipo === "pagina_real_celular" ? fraseDaPaginaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "", vitrineAqui.tipo === "pagina_real_celular") : vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
+    elementosReais.length ? FRASE_DOS_ELEMENTOS_REAIS : "",
     // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
     blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
@@ -6524,8 +6528,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     ...(partesDaLamina ? { texto_em_partes: partesDaLamina } : {}),
     // O selo da campanha que foi ao gerador (o ajuste anexa o mesmo de novo; a troca de selo conta por ele).
     ...(seloAqui ? { selo_da_campanha: seloAqui } : {}),
-    // 02/10: a vitrine de logos que gravarVersao cola por cima (e o ajuste cola de novo, igual).
-    ...(vitrineAqui ? { vitrine_de_logos: vitrineAqui } : {}),
+    // 17/10: os elementos reais que foram ao gerador (nada é colado; o ajuste parte da imagem que já os tem).
+    ...(elementosReais.length ? { elementos_reais: { tipo: tipoDoReal, nomes: elementosReais.map((l) => l.nome || "") } } : {}),
   };
 
   // 0) Replicar a referência escolhida pela equipe (27/09): prompt PRÓPRIO, sem
@@ -6610,7 +6614,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDaTipografiaAqui,
       // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
       blocoDoSelo,
-      vitrineAqui ? (vitrineAqui.tipo === "pagina_real" || vitrineAqui.tipo === "pagina_real_celular" ? fraseDaPaginaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "", vitrineAqui.tipo === "pagina_real_celular") : vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
+      elementosReais.length ? FRASE_DOS_ELEMENTOS_REAIS : "",
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,
@@ -7344,8 +7348,9 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   let img = comMascara && gerado.tamanho === tamanhoAtual && !naEmenda
     ? { ...gerado, png: await devolverOriginalForaDasAreas(atual, gerado.png, abertas, 16), mime: "image/png" }
     : gerado;
-  // Frente RO, fase 2: "usa esta foto aqui, igual" com área marcada: a foto entra INTACTA na área, pelo código.
-  if (!naEmenda && colaAFotoExata(anexosDoAjuste, comMascara)) {
+  // Frente RO, fase 2: "usa esta foto aqui, igual" com área marcada. 17/10 (dono: "nada colado"): a foto vai ao
+  // gerador como referência para reproduzir idêntica e integrada; a colagem pelo código ficou desligada.
+  if (COLAR_FOTO_EXATA_NO_AJUSTE && !naEmenda && colaAFotoExata(anexosDoAjuste, comMascara)) {
     const k = anexosDoAjuste.findIndex((x) => x.papel === "exata");
     const area = uniaoDasAreas(areas);
     if (k >= 0 && imagensDosAnexos[k] && area) {
