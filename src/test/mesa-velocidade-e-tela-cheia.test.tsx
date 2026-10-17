@@ -210,7 +210,10 @@ describe("notebook: coluna lateral só em tela grande", () => {
     expect(f).not.toContain("2xl:grid-cols-[260px_minmax(0,1fr)_400px]");
     expect(f).not.toContain("lg:ml-[266px]");
     expect(f).toContain('data-posicionamentos=""');
-    expect(ler("src/components/mesa-ads/ArteDoCriativo.tsx")).toContain("xl:grid-cols-[minmax(0,1fr)_340px]");
+    // 06/10 (#55): as ferramentas ao lado da arte viraram a classe ads-stage, com a coluna de 340 px por
+    // container query (o painel do estúdio decide, não a tela); sem suporte, fica uma coluna só.
+    expect(ler("src/components/mesa-ads/ArteDoCriativo.tsx")).toContain('<div className="ads-stage">');
+    expect(ler("src/components/mesa-ads/adsStudio.css")).toContain(".ads-stage { grid-template-columns: minmax(0, 1fr) 340px;");
   });
 
   it("Book da Mesa Foto: o book final desce no notebook", () => {
