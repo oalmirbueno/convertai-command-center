@@ -7,8 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   KeyRound, Link2, Server, Plus, Eye, EyeOff, Copy, ExternalLink,
-  Pencil, Trash2, Loader2, Globe,
+  Pencil, Trash2, Loader2, Globe, Bot,
 } from "lucide-react";
+import { agentesPodemUsar } from "@/hooks/usePedidosDeAcesso";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
@@ -38,6 +39,8 @@ interface VaultItem {
   notes: string | null;
   icon_url: string | null;
   created_at: string;
+  /** Selo "Agentes podem usar" (17/10/2026): o agente pega este login no cofre sem perguntar de novo. */
+  agentes_podem_usar?: boolean | null;
 }
 
 const CATEGORY_META: Record<Category, { label: string; plural: string; icon: any; color: string }> = {
@@ -107,8 +110,11 @@ interface Props {
  * cliente (EditClientDrawer): tem de caber numa coluna estreita.
  */
 export default function ClientVault({ clientId, canManage, titulo }: Props) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const qc = useQueryClient();
+  // O selo dos agentes é decisão de quem gere a operação (admin e gestor).
+  const podeLiberarAgentes = canManage && (profile?.role === "admin" || profile?.role === "manager");
+  const [alternandoAgentes, setAlternandoAgentes] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<VaultItem> | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
@@ -174,6 +180,21 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
     toast.success("Item removido");
     setConfirmDelete(null);
     qc.invalidateQueries({ queryKey: ["client-vault", clientId] });
+  };
+
+  const alternarAgentes = async (it: VaultItem) => {
+    if (alternandoAgentes) return;
+    const pode = !it.agentes_podem_usar;
+    setAlternandoAgentes(it.id);
+    try {
+      await agentesPodemUsar(it.id, pode);
+      toast.success(pode ? "Os agentes já podem usar este acesso" : "Os agentes não usam mais este acesso");
+      qc.invalidateQueries({ queryKey: ["client-vault", clientId] });
+    } catch (e: any) {
+      toast.error(e?.message || "Não deu para mudar agora");
+    } finally {
+      setAlternandoAgentes(null);
+    }
   };
 
   const grouped = (items || []).reduce<Record<Category, VaultItem[]>>(
@@ -245,7 +266,14 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className={juntar(texto.corpo, "truncate font-medium")}>{it.title}</p>
+                              <p className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}>
+                                <span className="min-w-0 truncate">{it.title}</span>
+                                {it.agentes_podem_usar ? (
+                                  <span className="ml-1.5 shrink-0 text-primary" title="Os agentes podem usar este acesso" aria-label="Os agentes podem usar este acesso" role="img">
+                                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                                  </span>
+                                ) : null}
+                              </p>
                               {it.url && (
                                 <a
                                   href={normalizeUrl(it.url)}
@@ -260,6 +288,21 @@ export default function ClientVault({ clientId, canManage, titulo }: Props) {
                             </div>
                             {canManage && (
                               <div className="ml-2 flex shrink-0 items-center">
+                                {podeLiberarAgentes && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void alternarAgentes(it)}
+                                    disabled={alternandoAgentes === it.id}
+                                    className={juntar(botao.icone, it.agentes_podem_usar && "text-primary")}
+                                    aria-pressed={!!it.agentes_podem_usar}
+                                    aria-label={`Agentes podem usar ${it.title}`}
+                                    title={it.agentes_podem_usar
+                                      ? "Agentes podem usar: o agente pega este login sozinho quando precisar. Toque para tirar."
+                                      : "Agentes podem usar: toque para o agente pegar este login sozinho quando precisar."}
+                                  >
+                                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                                  </button>
+                                )}
                                 <button type="button" onClick={() => setEditing(it)} className={botao.icone} aria-label={`Editar ${it.title}`} title="Editar">
                                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>

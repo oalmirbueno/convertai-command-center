@@ -8,6 +8,7 @@ import { authenticate, DataScopeError, type AuthContext, type AuthResult } from 
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { MCP_RELEASE_SOURCE } from "../_shared/mcp-release-source.ts";
 import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
+import { COMO_PEDIR_ACESSO } from "./modulos/acesso-regras.ts";
 import {
   ALL_SCOPES,
   canInvoke,
@@ -196,6 +197,7 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
         + "e, quando o dono ou o cliente ensinar algo novo, registre com aceleriq_cerebro_registrar. "
         + "Quando precisar agir nas mesas (conteudo no calendario, campanha, briefing, imagens, oferta, aprovacao), use as tools aceleriq_mesa_* de acao: "
         + "elas rodam com a sessao da pessoa conectada (OAuth), pedem idempotency_key e confirmacao onde ha custo ou efeito no cliente. "
+        + "Login, senha e codigo: " + COMO_PEDIR_ACESSO + " "
         + "Tools com escopo exigem OAuth Bearer antes de tools/call.",
     });
   }

@@ -2185,6 +2185,14 @@
       "remote_name": "agenda_inteligente_por_cliente",
       "remote_statements_sha256": "4f8703779c0039fc9780fae2e8ccabd069fe83815b6c15785a592fee95851e7e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261017190000",
+      "path": "supabase/migrations/20261017190000_pedidos_de_acesso.sql",
+      "local_sha256": "ed1f86f8356fc3fe3098de08e612367942b19935f68c244710e1432fdf8c5118",
+      "remote_name": "pedidos_de_acesso",
+      "remote_statements_sha256": "8728a93049d96fa3e2ad75d593718d3d7dea93a7f52cd2ba54f5477af6744c67",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

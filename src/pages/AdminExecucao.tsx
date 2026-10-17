@@ -26,6 +26,7 @@ import { precisaDecisao } from "@/lib/precisaDecisao";
 import { vinculoEncerrado } from "@/lib/execucaoVinculos";
 import OrdensAutorizadas from "@/components/execucao/OrdensAutorizadas";
 import OQueFoiFeito from "@/components/execucao/OQueFoiFeito";
+import PedidosDeAcesso from "@/components/acesso/PedidosDeAcesso";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
@@ -1862,6 +1863,7 @@ export default function AdminExecucao() {
           >
             <div className="space-y-6 lg:pb-6 lg:pr-1">
               {aba === "feito" && <OQueFoiFeito />}
+              {aba === "decisoes" && <PedidosDeAcesso />}
               {aba !== "feito" && conteudoDaVisao}
               {/* O espelho de "precisa de você": o que já saiu das suas mãos e agora
                   espera o agente. Sem isto, autorizar parecia concluir. */}

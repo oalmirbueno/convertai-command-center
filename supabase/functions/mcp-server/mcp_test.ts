@@ -193,6 +193,9 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
   const names = TOOLS.map(t => t.name).sort();
   assertEquals(new Set(names).size, names.length, 'tool names must be unique');
   assertEquals(names, [
+    'aceleriq_acesso_estado',
+    'aceleriq_acesso_pedir',
+    'aceleriq_acesso_usar',
     'aceleriq_add_opportunity_note',
     'aceleriq_agent_conversations',
     'aceleriq_agent_handoff',

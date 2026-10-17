@@ -2229,6 +2229,125 @@ const diaPrioritarioRegistrarTool: ToolDefinition = {
   },
 };
 
+// MCP 2.13 (17/10/2026): pedidos de acesso. O agente pede senha, código ou "conectar" com o print da tela,
+// o dono responde no painel e a senha fica no cofre. Serviço em mcp-server/modulos/acesso.ts.
+import { acessoEstado as _acessoEstado, acessoPedir as _acessoPedir, acessoUsar as _acessoUsar, COMO_PEDIR_ACESSO } from '../mcp-server/modulos/acesso.ts';
+import { TIPOS_DE_PEDIDO, MIMES_DO_PRINT } from '../mcp-server/modulos/acesso-regras.ts';
+
+const OPERADOR_DO_ACESSO = z.string().regex(/^[a-z][a-z0-9-]{1,38}$/);
+const errosDoAcesso = (e: z.ZodError) => `Invalid input: ${e.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`;
+
+const acessoPedirTool: ToolDefinition = {
+  name: 'aceleriq_acesso_pedir',
+  title: 'Pedir acesso ao dono (senha, código ou conectar)',
+  description:
+    'Abre um pedido de acesso quando o agente chega num login e precisa de senha, código de verificação ou outra confirmação. Mande o print da tela (print_base64, até 3 MB, PNG/JPEG/WEBP) e uma mensagem curta. O dono recebe um aviso, responde num formulário seguro e a senha vai para o cofre do cliente. '
+    + 'Se tipo=senha e o cofre já tem o acesso liberado para aquele cliente e site, responde {ja_lembrado: true, vault_item_id} sem abrir pedido: chame aceleriq_acesso_usar. '
+    + "Facebook, Instagram, Meta e Google (Gmail, YouTube) por senha ou código são recusados: use tipo 'conectar' com o link oficial da Composio em link_para_conectar. "
+    + 'Pedido igual ainda aberto não é duplicado. ' + COMO_PEDIR_ACESSO,
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,38}$', description: 'Slug do agente que pede (como em aceleriq_operator_board).' },
+      tipo: { type: 'string', enum: [...TIPOS_DE_PEDIDO], description: "senha, codigo (verificação), conectar (Meta/Google e afins, com link oficial) ou outro." },
+      site: { type: 'string', minLength: 2, maxLength: 120, description: 'Nome ou domínio do site (ex.: "app.rdstation.com").' },
+      url: { type: 'string', maxLength: 2000, description: 'Endereço da tela de login, sem tokens.' },
+      conta: { type: 'string', maxLength: 200, description: 'Usuário ou e-mail sugerido para a conta.' },
+      mensagem: { type: 'string', minLength: 3, maxLength: 500, description: 'Mensagem curta ao dono: o que você está fazendo e o que precisa. Nunca senha ou código.' },
+      client_id: { type: 'string', format: 'uuid', description: 'Cliente dono do acesso (permite usar o cofre e o ja_lembrado).' },
+      kanban_task_id: { type: 'string', format: 'uuid', description: 'Tarefa em que o agente está (o cliente sai dela quando client_id falta).' },
+      link_para_conectar: { type: 'string', maxLength: 2000, description: "Para tipo 'conectar': o link oficial (Composio/OAuth) que o dono clica." },
+      print_base64: { type: 'string', description: 'Print da tela em base64 (ou data URL), até 3 MB.' },
+      print_mime: { type: 'string', enum: [...MIMES_DO_PRINT], description: 'Opcional: o tipo é conferido pelos bytes.' },
+    },
+    required: ['operator', 'tipo', 'site', 'mensagem'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      operator: OPERADOR_DO_ACESSO,
+      tipo: z.enum(TIPOS_DE_PEDIDO),
+      site: z.string().trim().min(2).max(120),
+      url: z.string().max(2000).optional(),
+      conta: z.string().max(200).optional(),
+      mensagem: z.string().trim().min(3).max(500),
+      client_id: UUID.optional(),
+      kanban_task_id: UUID.optional(),
+      link_para_conectar: z.string().max(2000).optional(),
+      print_base64: z.string().max(4_500_000).optional(),
+      print_mime: z.enum(MIMES_DO_PRINT).optional(),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(errosDoAcesso(parsed.error));
+    return await _acessoPedir(parsed.data, ctx);
+  },
+};
+
+const acessoEstadoTool: ToolDefinition = {
+  name: 'aceleriq_acesso_estado',
+  title: 'Estado do pedido de acesso',
+  description:
+    'Consulta um pedido aberto com aceleriq_acesso_pedir; chame a cada 30 a 60 s. Devolve {status, tipo}. '
+    + 'Código respondido e dentro dos 10 min: devolve {codigo} UMA vez e o código é apagado e o pedido marcado usado na mesma transação. '
+    + 'Senha respondida: devolve {vault_item_id}; chame aceleriq_acesso_usar com ele e o pedido_id. '
+    + 'Conectar/outro respondido: o dono fez o que foi pedido, tente de novo. Cancelado: não insista por outro caminho. '
+    + 'NUNCA escreva o código em diário, comentário, tarefa, relatório ou mensagem.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,38}$', description: 'Slug do agente que abriu o pedido.' },
+      pedido_id: { type: 'string', format: 'uuid' },
+    },
+    required: ['operator', 'pedido_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({ operator: OPERADOR_DO_ACESSO, pedido_id: UUID }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(errosDoAcesso(parsed.error));
+    return await _acessoEstado(parsed.data, ctx);
+  },
+};
+
+const acessoUsarTool: ToolDefinition = {
+  name: 'aceleriq_acesso_usar',
+  title: 'Usar acesso do cofre no login',
+  description:
+    'Primeira chamada ao chegar num login. Devolve {usuario, senha, url} do item do cofre só se o dono liberou o item para agentes (agentes_podem_usar) ou se acabou de responder o seu pedido (vale uma vez; o pedido vira usado). '
+    + 'Mande vault_item_id (de aceleriq_acesso_estado ou ja_lembrado), ou client_id e site. Fica registrado quem usou qual item e quando, sem a senha. '
+    + 'Facebook, Instagram, Meta e Google nunca por senha: use aceleriq_acesso_pedir com tipo conectar. '
+    + 'Use a senha só neste login. NUNCA escreva senha em diário, comentário, tarefa, relatório ou mensagem; depois de usar, não guarde.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,38}$', description: 'Slug do agente que vai usar.' },
+      vault_item_id: { type: 'string', format: 'uuid' },
+      pedido_id: { type: 'string', format: 'uuid', description: 'O pedido respondido, quando houver.' },
+      client_id: { type: 'string', format: 'uuid' },
+      site: { type: 'string', maxLength: 120, description: 'Nome ou domínio do site, com client_id.' },
+      conta: { type: 'string', maxLength: 200, description: 'Usuário, quando o cliente tem mais de uma conta no site.' },
+    },
+    required: ['operator'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      operator: OPERADOR_DO_ACESSO,
+      vault_item_id: UUID.optional(),
+      pedido_id: UUID.optional(),
+      client_id: UUID.optional(),
+      site: z.string().trim().max(120).optional(),
+      conta: z.string().max(200).optional(),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(errosDoAcesso(parsed.error));
+    return await _acessoUsar(parsed.data, ctx);
+  },
+};
+
 // MCP 2.10 (14/10/2026): texto do ritual por automação, com o mesmo escritor da Central e sem efeito colateral.
 import { RITUAIS_DA_AUTOMACAO, ritualRedigirPorAutomacao as _ritualRedigir } from '../mcp-server/modulos/ritual-automatico.ts';
 
@@ -3562,7 +3681,7 @@ const operatorRegisterTool: ToolDefinition = {
 const vaultOverviewTool = makeRead(
   'aceleriq_vault_overview',
   'Cofre do cliente (somente leitura, sem senhas)',
-  'O que existe no cofre de um cliente: titulo, categoria, endereco, usuario e observacoes de cada item, para o agente saber QUAIS sistemas o cliente usa. As SENHAS nao sao retornadas, por construcao e nao por filtro: credencial que entra em contexto de agente sai por grupo, relatorio e log, e o estrago nao se desfaz. Se for preciso entrar de fato em algum sistema, isso e gesto do responsavel humano com o cofre aberto na tela. Editar e apagar item de cofre nao existem neste catalogo.',
+  'O que existe no cofre de um cliente: titulo, categoria, endereco, usuario e observacoes de cada item, para o agente saber QUAIS sistemas o cliente usa. As SENHAS nao sao retornadas, por construcao e nao por filtro: credencial que entra em contexto de agente sai por grupo, relatorio e log, e o estrago nao se desfaz. Para entrar de fato num sistema, use aceleriq_acesso_usar (so itens que o dono liberou para agentes, campo liberado_para_agentes) ou peca com aceleriq_acesso_pedir. Editar e apagar item de cofre nao existem neste catalogo.',
   z.object({ client_id: UUID }).strict(),
   {
     type: 'object',
@@ -3693,7 +3812,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
   { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
   { area: 'Arquivos', rota: '/arquivos', para: 'Acervo de arquivos por cliente e projeto.', pelo_mcp: 'aceleriq_list_files, aceleriq_upload_file, aceleriq_update_file_metadata' },
-  { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes.', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas)' },
+  { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes. Pedidos de acesso dos agentes aparecem na Execucao (/execucao?acesso=<id>).', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas); no login: aceleriq_acesso_usar, aceleriq_acesso_pedir e aceleriq_acesso_estado' },
   { area: 'Financeiro', rota: '/financeiro', para: 'Caixa, mensalidades, custos, investimentos.', pelo_mcp: 'aceleriq_get_finance_dashboard e as demais aceleriq_*finance*' },
   { area: 'Comercial (CRM)', rota: '/comercial/crm', para: 'Funil de negocios, empresas, contatos e agenda comercial. Area da casa.', pelo_mcp: 'aceleriq_list_opportunities, aceleriq_get_opportunity, aceleriq_create_opportunity, aceleriq_update_opportunity, aceleriq_move_opportunity, aceleriq_add_opportunity_note, aceleriq_archive_opportunity, aceleriq_delete_opportunity, aceleriq_list_commercial_activities, aceleriq_create_commercial_activity, aceleriq_complete_commercial_activity, aceleriq_list_commercial_organizations, aceleriq_upsert_commercial_organization, aceleriq_upsert_commercial_contact' },
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
@@ -4535,6 +4654,10 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // MCP 2.9: Dia Prioritário (ler a semana e a preparação; registrar o que aconteceu).
   diaPrioritarioTool,
   diaPrioritarioRegistrarTool,
+  // MCP 2.13: pedidos de acesso (senha, código, conectar) com o dono e o cofre.
+  acessoPedirTool,
+  acessoEstadoTool,
+  acessoUsarTool,
   // MCP 2.10: texto do ritual por automação (sem gravar nada).
   ritualRedigirTool,
   // MCP 2.3: o agente age nas mesas e o cérebro do cliente aprende.

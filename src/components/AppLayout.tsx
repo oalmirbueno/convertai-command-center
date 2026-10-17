@@ -10,6 +10,7 @@ import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import Lancador from "@/components/lancador/Lancador";
 import IndicadorDeGeracoes from "@/components/geracao/IndicadorDeGeracoes";
+import { PedidoDeAcessoPelaUrl } from "@/components/acesso/JanelaDoPedidoDeAcesso";
 import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -801,6 +802,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
 
       <NotificationsPanel open={notifOpen} onOpenChange={setNotifOpen} />
+      <PedidoDeAcessoPelaUrl />
       <BuscaDoPainel aberto={buscaAberta} onAbertoChange={setBuscaAberta} paginas={paginasDaBusca} />
 
       {/* Onboarding Tour */}

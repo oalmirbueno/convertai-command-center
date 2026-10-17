@@ -520,7 +520,7 @@ export async function vaultOverview(opts: { client_id: string }) {
     db().from('client_vault')
       // A coluna `password` NAO entra no select. Nao e filtro depois: e
       // ausencia na origem, para nao existir caminho em que ela escape.
-      .select('id, title, category, url, username, notes, icon_url, item_order, updated_at')
+      .select('id, title, category, url, username, notes, icon_url, item_order, updated_at, agentes_podem_usar')
       .eq('client_id', opts.client_id)
       .order('item_order', { ascending: true }),
   );
@@ -540,9 +540,11 @@ export async function vaultOverview(opts: { client_id: string }) {
       atualizado_em: i.updated_at,
       // A senha existe, e voce sabe disso — so nao passa por aqui.
       tem_senha_guardada: true,
+      // Liberado pelo dono: aceleriq_acesso_usar entrega a senha na hora do login.
+      liberado_para_agentes: i.agentes_podem_usar === true,
     })),
-    senhas: 'NAO retornadas por construcao. Se precisar entrar em algum sistema, peca ao responsavel humano: '
-      + 'credencial que entra em contexto de agente sai por grupo, relatorio e log, e o estrago nao se desfaz.',
+    senhas: 'NAO retornadas por construcao. Para entrar num sistema, use aceleriq_acesso_usar (so itens liberados pelo dono) '
+      + 'ou peca com aceleriq_acesso_pedir: credencial que entra em contexto de agente sai por grupo, relatorio e log, e o estrago nao se desfaz.',
     escrita: 'Somente leitura. Editar e apagar item de cofre nao existe neste catalogo.',
   };
 }
