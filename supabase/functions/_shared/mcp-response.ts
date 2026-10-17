@@ -362,3 +362,17 @@ export function folegoResponse(
     },
   });
 }
+
+// Execution errors belong to CallToolResult, not the JSON-RPC error envelope.
+// Preserve the handler's reason and add recovery steps to legacy refusals.
+export function rpcToolError(id: JsonRpcId, message: string): JsonRpcResponse {
+  let text = message;
+  if (message.includes('O conteúdo vinculado precisa estar publicado antes de concluir a tarefa.')) {
+    text += ' Aguarde a publicação do conteúdo vinculado e confira a agenda antes de tentar concluir novamente.';
+  } else if (message.includes('Uma tarefa editorial publicada não pode voltar de etapa pelo Kanban.')) {
+    text += ' Mantenha a tarefa como histórico; para retirar a pauta da vista, arquive-a na agenda.';
+  } else if (message.startsWith('Invalid input:')) {
+    text += ' Corrija os campos indicados conforme o esquema da ferramenta antes de tentar novamente.';
+  }
+  return rpcResult(id, { content: [{ type: 'text', text }], isError: true });
+}

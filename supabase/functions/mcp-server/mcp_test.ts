@@ -1241,3 +1241,88 @@ Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a de
   assertEquals(d.serverTime, '2026-09-26T12:00:00.000Z');
   assertEquals(Object.keys(d.secondBrain), ['configured']);
 });
+
+// ACE-110: exercise the actual dispatcher; no production data or network.
+Deno.test('ACE-110: handler refusals preserve JSON-RPC results and subsequent calls', async (t) => {
+  const { stub } = await import('https://deno.land/std@0.224.0/testing/mock.ts');
+  const previousUrl = Deno.env.get('SUPABASE_URL');
+  const previousKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const previousApp = Deno.env.get('APP_PUBLIC_URL');
+  Deno.env.set('APP_PUBLIC_URL', 'https://app.example.com');
+  Deno.env.set('SUPABASE_URL', 'https://mcp-test.invalid');
+  Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', 'test-only-not-a-credential');
+  const auditEntries: Record<string, unknown>[] = [];
+  const network = stub(globalThis, 'fetch', async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    assert(url === 'https://mcp-test.invalid/rest/v1/mcp_audit_log', `Unexpected network: ${url}`);
+    auditEntries.push(JSON.parse(String(init?.body)));
+    return new Response(null, { status: 201 });
+  });
+  // Import the production dispatcher without starting its HTTP listener.
+  const server = stub(Deno, 'serve', (() => ({})) as unknown as typeof Deno.serve);
+  try {
+    const { dispatch } = await import('./index.ts');
+    server.restore();
+    const { jsonResponse, sseResponse } = await import('../_shared/mcp-response.ts');
+    const auth = { ok: true as const, ctx: adminCtx };
+    const cases = [
+      { label: 'CME c8c03a89: concluir', name: 'aceleriq_update_task', message: 'write:validation O conteúdo vinculado precisa estar publicado antes de concluir a tarefa.', step: 'Aguarde a publicação' },
+      { label: 'Stop 963a7e4d: concluir', name: 'aceleriq_update_task', message: 'write:validation O conteúdo vinculado precisa estar publicado antes de concluir a tarefa.', step: 'Aguarde a publicação' },
+      { label: 'Softy 1e5e6c1a: excluir', name: 'aceleriq_delete_task', message: 'write:conflict A publicação desta pauta está agendada. Cancele o agendamento na agenda antes de excluir a tarefa.', step: 'Cancele o agendamento' },
+      { label: 'pedido de cliente', name: 'aceleriq_delete_task', message: 'write:conflict Esta tarefa veio de um pedido do cliente. Desvincule e reabra o pedido em vez de excluir.', step: 'Desvincule e reabra' },
+      { label: 'validação', name: 'aceleriq_update_task', message: 'Invalid input: task_id: Invalid uuid', step: 'Corrija os campos' },
+      { label: 'ferramenta pública', name: 'aceleriq_health', message: 'Consulta indisponível; tente novamente.', step: 'tente novamente' },
+    ];
+    for (const [i, test] of cases.entries()) {
+      await t.step(test.label, async () => {
+        const tool = TOOL_MAP.get(test.name)!;
+        const handler = stub(tool, 'handler', () => Promise.reject(new Error(test.message)));
+        try {
+          const reply = await dispatch({ jsonrpc: '2.0', id: i, method: 'tools/call', params: { name: test.name, arguments: {} } },
+            test.name === 'aceleriq_health' ? { ok: false, error: { kind: 'missing' } } : auth);
+          assert(reply && !('error' in reply));
+          assertEquals(reply.id, i);
+          const result = (reply as any).result;
+          assertEquals(result.isError, true);
+          assert(result.content[0].text.includes(test.message));
+          assert(result.content[0].text.includes(test.step));
+          const json = jsonResponse(reply);
+          assertEquals(json.status, 200);
+          assertEquals(await json.json(), reply);
+          const sse = await sseResponse(reply).text();
+          assert(sse.includes(`data: ${JSON.stringify(reply)}`));
+          assertEquals(await dispatch({ jsonrpc: '2.0', id: 'after', method: 'ping' }, auth), rpcResult('after', {}));
+          const list = await dispatch({ jsonrpc: '2.0', id: 'list', method: 'tools/list' }, auth);
+          assert((list as any).result.tools.some((item: any) => item.name === test.name));
+          handler.restore();
+          // A real, side-effect-free handler still executes after the refusal.
+          const health = await dispatch({ jsonrpc: '2.0', id: 'health-after', method: 'tools/call', params: { name: 'aceleriq_health', arguments: {} } }, auth);
+          assert(health && !('error' in health));
+          assertEquals((health as any).result.structuredContent.ok, true);
+        } finally { if (!handler.restored) handler.restore(); }
+      });
+    }
+    const failures = auditEntries.filter((entry) => entry.success === false);
+    assertEquals(failures.length, cases.length - 1); // public calls keep existing audit behavior
+    assert(failures.every((entry) => entry.error_code === 'handler_error'));
+    assertEquals(auditEntries.filter((entry) => entry.success === true).length, cases.length);
+    await t.step('access and protocol errors stay protected', async () => {
+      const tool = TOOL_MAP.get('aceleriq_update_task')!;
+      const handler = stub(tool, 'handler', () => Promise.reject(new Error('write:forbidden outside this MCP principal data scope')));
+      try {
+        const denied = await dispatch({ jsonrpc: '2.0', id: 70, method: 'tools/call', params: { name: tool.name } }, auth);
+        assertEquals((denied as any).error.code, RpcErrors.forbidden);
+        const scope = await dispatch({ jsonrpc: '2.0', id: 71, method: 'tools/call', params: { name: tool.name } }, { ok: true, ctx: emptyCtx });
+        assertEquals((scope as any).error.code, RpcErrors.forbidden);
+        const unknown = await dispatch({ jsonrpc: '2.0', id: 72, method: 'tools/call', params: { name: 'unknown' } }, auth);
+        assertEquals((unknown as any).error.code, RpcErrors.toolNotFound);
+      } finally { handler.restore(); }
+    });
+  } finally {
+    if (!server.restored) server.restore();
+    network.restore();
+    if (previousUrl === undefined) Deno.env.delete('SUPABASE_URL'); else Deno.env.set('SUPABASE_URL', previousUrl);
+    if (previousKey === undefined) Deno.env.delete('SUPABASE_SERVICE_ROLE_KEY'); else Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', previousKey);
+    if (previousApp === undefined) Deno.env.delete('APP_PUBLIC_URL'); else Deno.env.set('APP_PUBLIC_URL', previousApp);
+  }
+});
