@@ -104,6 +104,10 @@ export interface ConversaDoAgente {
 export type JanelaDoHype = "hoje" | "esta_semana" | "proximas_semanas";
 
 export interface Hype {
+  /** 17/10: "hype" (datas, notícias, eventos) ou "nicho" (o que viraliza no nicho agora). Sem tipo: hype. */
+  tipo?: "hype" | "nicho";
+  /** Só no nicho: onde e quanto está viralizando. */
+  sinal?: string;
   titulo: string;
   o_que_e?: string;
   por_que_agora?: string;
@@ -580,7 +584,8 @@ export const ROTULO_DA_JANELA: Record<string, string> = {
 
 /** Pedido ao agente do mês montado a partir do hype. */
 export function mensagemDoHype(h: Hype): string {
-  const partes = [`Um conteúdo sobre o assunto em alta "${h.titulo}".`];
+  const partes = [h.tipo === "nicho" ? `Um conteúdo surfando o que está em alta no nicho: "${h.titulo}".` : `Um conteúdo sobre o assunto em alta "${h.titulo}".`];
+  if (h.tipo === "nicho" && h.sinal) partes.push(`Onde está viralizando: ${h.sinal}`);
   if (h.como_usar) partes.push(`Como usar: ${h.como_usar}`);
   if (h.formato) partes.push(`Formato: ${h.formato === "estatico" ? "estático" : h.formato}.`);
   if (h.janela) partes.push(`Janela: ${ROTULO_DA_JANELA[String(h.janela)] || h.janela}${h.janela === "hoje" ? ", para publicar hoje" : ""}.`);

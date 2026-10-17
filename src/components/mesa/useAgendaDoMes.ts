@@ -178,6 +178,21 @@ function roteirosDasPropostas(
  * 2. o que depende delas: roteiros, trabalhos do estúdio, títulos dos posts e
  *    a ligação post-item.
  */
+/**
+ * Lista de ids em pedaços: um .in() com centenas de ids vira uma URL gigante (já deu 414 com 74 mil
+ * caracteres) e pesa no banco. 17/10/2026 (dono: "dá erro quando carrega demais").
+ */
+const PEDACO_DE_IDS = 80;
+async function emPedacos<T>(ids: string[], ler: (lote: string[]) => Promise<{ data: T[] | null; error: unknown }>): Promise<{ data: T[]; error: unknown }> {
+  const dados: T[] = [];
+  for (let i = 0; i < ids.length; i += PEDACO_DE_IDS) {
+    const r = await ler(ids.slice(i, i + PEDACO_DE_IDS));
+    if (r.error) return { data: dados, error: r.error };
+    dados.push(...((r.data || []) as T[]));
+  }
+  return { data: dados, error: null };
+}
+
 export function useAgendaDoMes(clientId: string, mes: string) {
   // Marca por projeto (Acerbi e CME): só os itens da marca aberta, trocando na hora
   // (a leitura do banco é a mesma, o filtro é na tela). Sem marca, tudo como antes.
@@ -249,23 +264,31 @@ export function useAgendaDoMes(clientId: string, mes: string) {
               .select("id, task_ids, itens, criado_em")
               .eq("client_id", clientId)
               .eq("status", "gravada")
-              .overlaps("task_ids", idsItens)
+              .overlaps("task_ids", idsItens.slice(0, 400))
               .order("criado_em", { ascending: false })
+              .limit(60)
           : vazio,
-        // Trabalho mais recente do estúdio de cada item.
+        // Trabalho mais recente do estúdio de cada item. Antes vinham cards e direção de TODAS as
+        // versões de todos os itens (o que mais pesava); agora: primeiro só id e data de cada versão,
+        // depois o conteúdo apenas da mais recente de cada item.
         idsItens.length
-          ? (supabase as any)
-              .from("estudio_trabalhos")
-              .select("id, task_id, status, cards, direcao, entrega_status, atualizado_em")
-              .eq("client_id", clientId)
-              .in("task_id", idsItens)
-              .order("atualizado_em", { ascending: false })
+          ? (async () => {
+              const leves = await emPedacos<{ id: string; task_id: string; atualizado_em: string }>(idsItens, (lote) => (supabase as any)
+                .from("estudio_trabalhos").select("id, task_id, atualizado_em").eq("client_id", clientId).in("task_id", lote).order("atualizado_em", { ascending: false }));
+              if (leves.error) return { data: [], error: leves.error };
+              const ultimo: Record<string, string> = {};
+              for (const t of leves.data) if (t.task_id && !doItem(ultimo, t.task_id)) ultimo[t.task_id] = t.id;
+              const ids = Object.values(ultimo);
+              return ids.length
+                ? emPedacos<any>(ids, (lote) => (supabase as any).from("estudio_trabalhos").select("id, task_id, status, cards, direcao, entrega_status, atualizado_em").in("id", lote))
+                : { data: [], error: null };
+            })()
           : vazio,
         idsPosts.length
-          ? (supabase as any).from("editorial_posts").select("id, title, content_type, production_status, primary_file_id").in("id", idsPosts)
+          ? emPedacos<any>(idsPosts, (lote) => (supabase as any).from("editorial_posts").select("id, title, content_type, production_status, primary_file_id").in("id", lote))
           : vazio,
         idsPosts.length
-          ? (supabase as any).from("editorial_post_internal").select("post_id, task_id").in("post_id", idsPosts)
+          ? emPedacos<any>(idsPosts, (lote) => (supabase as any).from("editorial_post_internal").select("post_id, task_id").in("post_id", lote))
           : vazio,
       ]);
       if (propostasRes.error) throw propostasRes.error;

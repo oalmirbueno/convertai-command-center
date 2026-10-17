@@ -308,6 +308,6 @@ export function serieNaFidelidade(e: { fidelidade: FidelidadeDaReferencia; ordem
   if (!soltaAComposicao(e.fidelidade) || e.ordem < 2 || e.total < 2 || !e.capa) return "";
   return [
     `SÉRIE (lâmina ${e.ordem} de ${e.total}): a capa desta série já foi gerada (imagem ${e.capa}).`,
-    "- Mantenha dela a marca aplicada: as mesmas cores, fontes, tratamento, a mesma pessoa e o mesmo cenário, para a série parecer uma só; a composição desta lâmina pode ser outra, e o texto é o desta lâmina.",
+    "- Mantenha dela a marca aplicada: as mesmas cores, fontes e tratamento, para a série parecer uma só; a composição e a cena desta lâmina são outras (sem repetir a pessoa, o objeto nem o cenário da capa), e o texto é o desta lâmina.",
   ].join("\n");
 }

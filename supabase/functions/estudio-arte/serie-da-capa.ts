@@ -407,7 +407,7 @@ export function blocoDaIdentidadeDaSerie(e: { ordem: number; total: number; capa
       : "- Herde da capa a IDENTIDADE DA SÉRIE: o mesmo fundo e textura, a mesma paleta com a mesma função de cada cor, a mesma tipografia (família, peso, caixa e hierarquia entre título e apoio), as mesmas linhas, formas e elementos gráficos pequenos que se repetem (mesmo traço, espessura, cantos e cor), as mesmas margens e o mesmo tratamento de foto, luz e textura; quando a lâmina leva logo, no mesmo lugar e tamanho da capa.",
     "- Não repita o que é SÓ DA CAPA: o título gigante de impacto, selo, etiqueta ou sticker de oferta, a foto herói ou a pessoa em destaque (só entra se a direção desta lâmina pedir, e então menor e a serviço do conteúdo), a palavra decorativa gigante de fundo, a seta ou o sinal de arraste e qualquer outro elemento de gancho.",
     "- Não reinvente o estilo: não troque de fonte nem de paleta. Os cartões, conectores, colunas e ícones do conteúdo desta lâmina são desenhados nesse mesmo sistema (mesmo traço, cantos e cores).",
-    "- Não copie o texto nem a composição da capa: é a mesma série, não a mesma lâmina.",
+    "- Não copie o texto nem a composição da capa: é a mesma série, não a mesma lâmina. A cena desta lâmina é nova e mostra o que o texto dela diz; a pessoa, o objeto e o cenário da capa não voltam com outro ângulo.",
     final
       ? "- FECHAMENTO: esta é a última lâmina. Feche voltando à capa pela identidade (a mesma cor dominante ou o mesmo grafismo), como um espelho do começo, com o CTA em destaque; sem repetir o título, o selo nem a foto herói da capa."
       : "",
@@ -416,7 +416,7 @@ export function blocoDaIdentidadeDaSerie(e: { ordem: number; total: number; capa
 
 /** Legenda da capa anexada nas lâminas 2 em diante (post orgânico, fora da cena fixa). */
 export function rotuloDaCapaNaSerie(final: boolean): string {
-  return `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; herde dela o fundo e a textura, a paleta na mesma função, a tipografia e a hierarquia, os grafismos pequenos que se repetem (mesmo traço, espessura e cor), as margens e o tratamento de foto e luz; não repita dela o título gigante, selo ou etiqueta, a foto herói ou a pessoa em destaque, a palavra gigante de fundo, a seta ou o sinal de arraste; não copie o texto nem a composição dela${final ? "; o final fecha voltando a ela" : ""}`;
+  return `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; herde dela o fundo e a textura, a paleta na mesma função, a tipografia e a hierarquia, os grafismos pequenos que se repetem (mesmo traço, espessura e cor), as margens e o tratamento de foto e luz; não repita dela o título gigante, selo ou etiqueta, a foto herói ou a pessoa em destaque, a palavra gigante de fundo, a seta ou o sinal de arraste; a IMAGEM desta lâmina é outra, a descrita no texto (17/10: nada de a mesma pessoa, objeto ou cenário da capa com outro ângulo); não copie o texto nem a composição dela${final ? "; o final fecha voltando a ela" : ""}`;
 }
 
 /** Legenda da referência do conjunto quando ela vira guia da identidade (caso A). */

@@ -349,12 +349,21 @@ import {
   MAX_BYTES_DA_LOGO_REAL,
   mundoRealPelaRegra,
   normalizarMarcasReais,
+  normalizarPessoasReais,
   notaDasFontes,
   slugDoSimpleIcons,
   urlDaBuscaNoCommons,
   urlDaInfoDoCommons,
   urlDoSimpleIcons,
+  areaDaPessoaReal,
+  arquivoDoVerbete,
+  fraseDaPessoaReal,
+  MAX_BYTES_DA_FOTO_REAL,
+  perguntasDoMundoRealNoEstudio,
+  urlDaImagemDoVerbete,
+  urlDaInfoDaFotoNoCommons,
 } from "./modulos/mundo-real.ts";
+import { blocoDoTemaDaEpoca, temasDaEpoca } from "./modulos/tema-da-epoca.ts";
 import {
   acoesSemMudarQuantidade,
   blocoDaReescritaTotal,
@@ -1064,7 +1073,7 @@ function seloDaVersao(v: unknown): { caminho: string; selo_id: string | null } |
 }
 
 /** 02/10: a vitrine de logos de uma lâmina (área no quadro final, as logos e a proporção do quadro). */
-type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number; tipo?: "marca_real" };
+type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number; tipo?: "marca_real" | "pessoa_real" };
 
 /** Lê a vitrine gravada numa versão (para o ajuste colar de novo as mesmas logos, na mesma grade). */
 function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
@@ -1072,7 +1081,7 @@ function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
   if (!s || typeof s !== "object") return null;
   const o = s as VitrineNaLamina;
   if (o.aplicado !== true || !o.area || !Array.isArray(o.logos) || !o.logos.length) return null;
-  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8, ...(o.tipo === "marca_real" ? { tipo: "marca_real" as const } : {}) };
+  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8, ...(o.tipo === "marca_real" || o.tipo === "pessoa_real" ? { tipo: o.tipo } : {}) };
 }
 
 /**
@@ -1081,9 +1090,10 @@ function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
  */
 async function colarVitrineNaArte(png: Uint8Array, v: VitrineNaLamina, clientId: string): Promise<{ png: Uint8Array; coladas: number; falharam: string[] }> {
   const daPasta = (l: LogoDaVitrine) => !!l && typeof l.caminho === "string" && l.caminho.indexOf(`${clientId}/`) === 0 && l.caminho.indexOf("..") < 0;
+  // 17/10: a foto da pessoa pública preenche o quadro inteiro (recorte de capa), sem cartão branco.
   return await colarLogosNaGrade(
     png,
-    v,
+    { ...v, modo: v.tipo === "pessoa_real" ? "foto" : "logo" },
     async (l) => {
       if (!daPasta(l)) throw new Error("logo_fora_da_pasta_do_cliente");
       return (await anexoLeve("mesa", l.caminho, "logo-da-vitrine", true)).bytes;
@@ -3093,7 +3103,7 @@ const ESQUEMA_DIRECAO = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "fontes_da_pesquisa"],
+    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "pessoas_reais", "fontes_da_pesquisa"],
     properties: {
       // 02/10: marcas de outras empresas na peça (logo colada pelo código) e as fontes da pesquisa (vazios fora do mundo real).
       ...CAMPOS_DO_MUNDO_REAL,
@@ -3153,14 +3163,14 @@ const INSTRUCOES_DIRECAO = `COMO ENTREGAR A DIREÇÃO (regras técnicas do estú
 Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluído. O estúdio monta o prompt final em código a partir do que você devolver, já com a área útil, as margens do grid, os tamanhos de letra, a paleta e as fontes da marca. Por isso você decide só o essencial, com precisão:
 
 - conceito: a ideia visual do conjunto em até 3 frases.
-- fio_visual: o que se repete em TODAS as lâminas para o carrossel ser uma série só, em 2 a 5 frases concretas: a protagonista (quem é, idade aproximada, cabelo, roupa) ou o objeto protagonista, o cenário (lugar, cores, objetos fixos), a luz (hora, direção, temperatura), o tratamento de foto e o SISTEMA GRÁFICO da capa que as outras lâminas repetem (linhas e fios, formas, cantos, textura, caixa e peso da headline, onde fica o destaque). Se as artes já publicadas da marca têm uma protagonista real (a dona, a equipe), ela pode voltar; cenário, roupa, luz e enquadramento mudam em relação aos posts anteriores (veja \`variar_agora\`).
+- fio_visual: a IDENTIDADE que se repete em TODAS as lâminas para o carrossel ser uma série só, em 2 a 5 frases concretas: a paleta e a função de cada cor, o tratamento de foto e a luz (hora, temperatura, grão), o tema visual quando houver (data, campanha, hype) e o SISTEMA GRÁFICO da capa que as outras lâminas repetem (linhas e fios, formas, cantos, textura, caixa e peso da headline, onde fica o destaque). O fio NÃO é a mesma pessoa nem o mesmo cenário: a cena muda a cada lâmina. Se as artes já publicadas da marca têm uma protagonista real (a dona, a equipe), ela pode aparecer; cenário, roupa, luz e enquadramento mudam em relação aos posts anteriores (veja \`variar_agora\`).
 - carrossel_infinito: siga \`item.carrossel_infinito_pedido\` quando vier (a equipe decidiu no começo). Verdadeiro: o conjunto é UMA cena panorâmica que atravessa as lâminas (o fundo de uma continua na outra); escreva cada layout.imagem como o trecho seguinte da mesma cena, da esquerda para a direita.
 - cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só. Quantidade pelo conteúdo: o mínimo que conta a história inteira, em geral 4 a 6 lâminas; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos. Se \`item.quantidade_de_laminas_pedida\` vier, use exatamente essa quantidade.
   - funcao: capa, conteudo ou cta (o último card de carrossel é cta).
   - blocos: o texto da lâmina dividido por papel, na ordem de leitura: headline (a frase dominante, curta, quebrada por sentido com \\n), subtitulo, apoio, numero (quando um número é o protagonista), cta, selo. No máximo 3 níveis de hierarquia. Texto exatamente como vai aparecer, com acentos, sem travessão.
   - layout.zona_texto: onde fica o bloco de texto (topo-esquerda, topo-centro, centro-esquerda, centro, base-esquerda, base-centro, base-direita, coluna-esquerda, coluna-direita). Varie entre as lâminas do miolo: lâminas seguidas não repetem a zona nem o lado (esquerda, direita, topo, base, centro); a continuidade vem da tipografia e da identidade da série, não da posição.
   - layout.alinhamento: esquerda na maioria dos casos; centro só em peça curta e simétrica de propósito.
-  - layout.imagem: a imagem concreta (foto real do nicho, objeto, cenário, recorte), com enquadramento e luz.
+  - layout.imagem: a imagem concreta DESTA lâmina, a que mostra o que o texto dela diz (o objeto, o detalhe, a tela real da ferramenta, o número em gráfico, o produto, a situação, o antes e depois, a logo da marca citada), com enquadramento e luz. Nunca a mesma imagem, pessoa, objeto ou cenário de outra lâmina, e nunca a da capa.
   - layout.ponto_focal: o que domina a lâmina e onde fica.
   - layout.fundo: o que ocupa o fundo e como o texto ganha área calma.
   - layout.tratamento: técnica de composição da base de conhecimento aplicada nesta lâmina (planos, recorte, escala, espaço negativo).
@@ -3170,8 +3180,8 @@ Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluí
 
 NARRATIVA E CONTINUIDADE (obrigatório)
 - Carrossel é uma história só, nunca frases picotadas: a capa abre uma tensão, cada lâmina avança um passo e prepara a seguinte (conectivos, continuidade de sentido), o final resolve e chama para a ação.
-- Série contínua com variação: a mesma protagonista, o mesmo cenário, a mesma luz e a mesma paleta do começo ao fim (o fio_visual), como fotos de um mesmo ensaio. Em cada lâmina varie só a pose, o gesto, o plano e o enquadramento (de costas, de frente, pensativa, sorrindo, detalhe das mãos); nunca a mesma pose em duas lâminas seguidas e nunca trocar de pessoa, de cenário ou de clima no meio.
-- A capa (de carrossel ou de post estático) existe para PARAR A ROLAGEM: gancho de até 7 palavras que gera curiosidade ou identificação, a maior headline do conjunto em peso black com a palavra-chave na cor de destaque, e um elemento visual forte e inesperado (escala, recorte ousado, rosto ou olhar, gesto em ação), sempre na mesma luz, cenário e paleta da série. Nunca escureça a imagem para criar destaque, e nunca ponha fundo da mesma cor da logo. Zona da capa pela foto: esquerda quando o sujeito está à direita; topo-centro ou centro quando o sujeito está no centro ou embaixo.
+- Série com identidade, cenas que avançam (17/10, dono: "repete a mesma imagem da capa e a mesma pessoa só mudando o ângulo; quero mais dinâmica, mais carrossel"): o que se repete é o SISTEMA (o fio_visual: paleta, tipografia, grafismos, tratamento e luz); a IMAGEM de cada lâmina é nova e complementa a anterior, como um bom carrossel editorial. Alterne o tipo de imagem ao longo do carrossel: pessoa em ação, objeto ou detalhe em close, tela ou interface real, número ou gráfico, produto, cena ampla, lâmina tipográfica. Nunca duas lâminas seguidas com o mesmo sujeito ou o mesmo tipo de imagem. Pessoa protagonista em no máximo 2 lâminas, em situações e ações diferentes (não a mesma foto com outro ângulo). Nada da capa se repete nas outras: nem a foto, nem a pessoa, nem o objeto, nem o cenário.
+- A capa (de carrossel ou de post estático) existe para PARAR A ROLAGEM: gancho de até 7 palavras que gera curiosidade ou identificação, a maior headline do conjunto em peso black com a palavra-chave na cor de destaque, e um elemento visual forte e inesperado (escala, recorte ousado, rosto ou olhar, gesto em ação, objeto real do tema), sempre na paleta e no tratamento da série. Nunca escureça a imagem para criar destaque, e nunca ponha fundo da mesma cor da logo. Zona da capa pela foto: esquerda quando o sujeito está à direita; topo-centro ou centro quando o sujeito está no centro ou embaixo.
 - Nunca escreva o nome da marca no texto das lâminas; a marca aparece pela logo oficial, que o gerador DESENHA junto com a arte na capa e no fechamento (vale sobre qualquer regra anterior de logo aplicada por código): pense o lugar dela na composição (junto do bloco de texto, no mesmo eixo, ou onde o ponto focal pedir), num tamanho que se lê de longe, e nunca peça caixa, cartão ou fundo branco para ela.
 - Formato: \`item.formato_da_arte\` diz o quadro (4:5, 3:4, 1:1 ou 9:16); pense a composição nele (no 9:16 o texto fica longe dos 14% de cima e dos 20% de baixo; no 1:1 a capa perde as laterais na grade do perfil).
 - As regras da marca aprendidas com este cliente (no fim do sistema, quando houver) valem acima da sua preferência: aplique sem que peçam de novo.
@@ -3444,6 +3454,11 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Frente H: regras aprendidas (cérebro) e dossiê atual do cliente, numa leitura só.
       cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),
     ]);
+    // 17/10 (dono: "use a base de documentação que já foi enviada para a inteligência; está muito genérico"): o diretor
+    // de arte recebe o mesmo contexto completo da marca que a conversa já recebia (negócio, público, oferta, diferenciais,
+    // estratégia aprovada com tom e tagline, briefing, decisões e Instagram). Antes ia só tom e tipografia.
+    const negocioP = contextoCompletoParaPrompt(db as never, clientId, marcaDoItem, { area: "arte", partes: ["contexto", "estrategia", "briefing", "decisoes", "instagram"], teto: 4000 })
+      .then((c) => c.bloco || null, (e) => (registrarFalha("estudio-arte: contexto completo da marca não lido (direção)", e, { client_id: clientId }), null));
     // 02/10: mundo real (produto, app, marca ou tela de outra empresa): a pesquisa liga e as logos vêm do Commons.
     const leituraDaRapida = rapida ? rapida.gravada.leitura_dos_cards ?? null : null;
     const fidelidadeDaRapida = rapida ? rapida.gravada.fidelidade ?? null : null;
@@ -3451,6 +3466,24 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     mundoReal = !!(rapida && rapida.gravada.mundo_real) || regraDoMundo.real;
     regraDoTutorial = regraDoMundo.tutorial || !!(rapida && rapida.gravada.mundo_real && rapida.gravada.mundo_real.tutorial);
     marcasCitadas = Array.from(new Set([...(rapida && rapida.gravada.mundo_real ? rapida.gravada.mundo_real.marcas : []), ...regraDoMundo.marcas]));
+    // 17/10: item da agenda (a arte rápida já pergunta antes): marca, ferramenta, tela ou pessoa pública que a
+    // peça precisa mostrar de verdade. O Jev (Noul, centavos) decide o que as palavras não decidiram; falha = como antes.
+    let pessoaPublica = false;
+    let custoDoMundo = 0;
+    const textoDoItem = [instrucao, item.tarefa.title, texto(item.tarefa.description, 3000), texto(item.post?.default_caption, 1200)].filter(Boolean).join("\n");
+    if (!rapida && textoDoItem.trim().length >= 12) {
+      try {
+        const res = await jevPerguntar({ state: { pedido: textoDoItem }, questions: perguntasDoMundoRealNoEstudio() as unknown as Record<string, PerguntaJev> });
+        const cobrado = await cobrarJev(res, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+        if (cobrado) custoDoMundo = cobrado.custoUsd;
+        pessoaPublica = (probabilidadeNoul(res.answers.pessoa_publica) ?? 0) >= LIMIAR_DO_MUNDO_REAL;
+        if (!mundoReal) mundoReal = pessoaPublica || (probabilidadeNoul(res.answers.mundo_real) ?? 0) >= LIMIAR_DO_MUNDO_REAL;
+      } catch (e) {
+        registrarFalha("estudio-arte: jev do mundo real falhou (segue pela regra)", e, { trabalho_id: trabalhoId });
+      }
+    }
+    // 17/10: data comemorativa pelo texto (obrigatória) ou pela data de publicação (convite).
+    const temasDoItem = temasDaEpoca({ data: item.tarefa.due_date, textos: [textoDoItem, rapida ? rapida.gravada.pedido : ""] });
     const contexto = {
       item: {
         titulo: item.tarefa.title,
@@ -3467,6 +3500,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         formato_da_arte: QUADRO_DO_POST[formato].rotulo,
         // Escolhida na tela antes da direção; nula = o diretor decide pelo conteúdo.
         quantidade_de_laminas_pedida: laminasPedidas,
+        tema_da_epoca: temasDoItem.length ? temasDoItem.map((t) => ({ data: t.nome, dia: t.data, origem: t.origem === "pedido" ? "o texto fala da data" : "a publicação cai perto da data" })) : undefined,
         campanha: campanha
           ? {
             nome: campanha.nome,
@@ -3490,6 +3524,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         tipografia_citada: marca.tipografiaCitada,
         tom_de_voz: marca.tomDeVoz,
         tem_logo_oficial: marca.temLogo,
+        // 17/10: quem é o cliente (negócio, público, oferta, diferenciais, estratégia, briefing): a imagem nasce do nicho dele.
+        contexto_do_negocio: (await negocioP) || null,
       },
       referencias: ((refsRes.data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [])
         .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 600), tags: r.tags })),
@@ -3524,7 +3560,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Frente AE: as regras da arte rápida vão na mensagem (o sistema fica igual e segue no cache do provedor).
       mensagens: [{
         papel: "usuario",
-        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}\n\n` : ""}Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
+        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}${pessoaPublica ? "\nO conteúdo fala de uma pessoa pública: preencha pessoas_reais." : ""}\n\n` : ""}${temasDoItem.length ? `${blocoDoTemaDaEpoca(temasDoItem)}\n\n` : ""}Escreva a direção de arte deste item. Use \`marca.contexto_do_negocio\` para a imagem ser do nicho, do público e da oferta DESTE cliente (o lugar, o produto, a situação e a pessoa certos), nunca uma cena genérica que serviria a qualquer marca. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
         imagens: rapida && rapida.imagens.length ? rapida.imagens : undefined,
       }],
       esquemaJson: ESQUEMA_DIRECAO,
@@ -3549,7 +3585,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     }
     direcao = { conceito, fio_visual: fioVisual, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
     avisosDoDiretor = (Array.isArray(bruto.avisos_para_a_equipe) ? bruto.avisos_para_a_equipe : []).map((a: unknown) => texto(a, 300)).filter(Boolean).slice(0, 4);
-    custo = r.custoUsd;
+    custo = arred(r.custoUsd + custoDoMundo);
     usoId = r.usoId;
     saldo = r.saldoUsd;
     reserva = r.reservaUsada ?? null;
@@ -3748,7 +3784,26 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         return { ...c, vitrine_de_logos: atuais.concat([{ caminho: achada.caminho, nome: m.nome }]), vitrine_area: AREA_DA_LOGO_REAL, vitrine_tipo: "marca_real" } as CardDirecao;
       });
     }
-    const fontes = notaDasFontes({ daWeb: fontesDaWeb, doDiretor: brutoDoDiretor ? brutoDoDiretor.fontes_da_pesquisa : null, logos, icones });
+    // 17/10: a foto real da pessoa pública (Wikimedia Commons, pela imagem do verbete ou o arquivo do diretor),
+    // colada pelo código num quadro do lado oposto ao texto; o gerador nunca desenha o rosto dela.
+    const fotos: Array<LogoDoCommons & { pessoa: string }> = [];
+    for (const p of normalizarPessoasReais(brutoDoDiretor ? brutoDoDiretor.pessoas_reais : null, ordens)) {
+      const achada = await fotoRealDoCommons(clientId, p.nome, p.arquivo).catch((e) => (registrarFalha("estudio-arte: foto real não veio", e, { pessoa: p.nome }), null));
+      if (!achada) {
+        avisosDoDiretor = [...avisosDoDiretor, `A foto de ${p.nome} não foi achada com licença livre: a lâmina sai com o quadro da foto liso. Envie uma foto autorizada se precisar.`];
+        continue;
+      }
+      fotos.push({ ...achada.foto, pessoa: p.nome });
+      direcao.cards = direcao.cards.map((c) => {
+        const x = c as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[]; vitrine_area?: unknown; vitrine_tipo?: string };
+        if (p.laminas.indexOf(c.ordem) < 0) return c;
+        // Vitrine de parceiros tem a vez; a foto da pessoa toma o lugar da logo de canto (a marca vai em outra lâmina).
+        if (x.vitrine_de_logos && x.vitrine_de_logos.length && x.vitrine_tipo !== "marca_real") return c;
+        return { ...c, vitrine_de_logos: [{ caminho: achada.caminho, nome: p.nome }], vitrine_area: areaDaPessoaReal(c.layout?.zona_texto ?? ""), vitrine_tipo: "pessoa_real" } as CardDirecao;
+      });
+    }
+    if (fotos.length) avisosDoDiretor = [...avisosDoDiretor, "Foto de pessoa pública com licença livre, para conteúdo informativo. Em anúncio ou como se ela endossasse a marca, precisa da autorização dela."];
+    const fontes = notaDasFontes({ daWeb: fontesDaWeb, doDiretor: brutoDoDiretor ? brutoDoDiretor.fontes_da_pesquisa : null, logos, icones, fotos });
     direcao.fontes_da_pesquisa = fontes.length ? fontes : null;
     if (!fontes.some((f) => f.tipo === "pesquisa")) avisosDoDiretor = [...avisosDoDiretor, "O diretor não trouxe fonte da pesquisa: confira menus, botões e passos antes de publicar."];
   }
@@ -3884,6 +3939,35 @@ async function logoRealDoCommons(clientId: string, nome: string, arquivoDoDireto
   const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: true });
   if (error) throw error;
   return { caminho, logo: info };
+}
+
+/**
+ * 17/10: a foto real de uma pessoa pública no Wikimedia Commons: o arquivo que o diretor achou ou a imagem principal
+ * do verbete da Wikipédia em português; baixada só de upload.wikimedia.org (até 6 MB), JPG ou PNG, e guardada na
+ * pasta do cliente. Null sem uma que sirva (não chuta outra pessoa).
+ */
+async function fotoRealDoCommons(clientId: string, nome: string, arquivoDoDiretor: string | null): Promise<{ caminho: string; foto: LogoDoCommons } | null> {
+  let arquivo = arquivoDoDiretor ? arquivoDoCommons(arquivoDoDiretor) : null;
+  let info = arquivo ? lerInfoDoCommons(await jsonDoCommons(urlDaInfoDaFotoNoCommons(arquivo)), arquivo) : null;
+  if (!info) {
+    arquivo = arquivoDoVerbete(await jsonDoCommons(urlDaImagemDoVerbete(nome)));
+    info = arquivo ? lerInfoDoCommons(await jsonDoCommons(urlDaInfoDaFotoNoCommons(arquivo)), arquivo) : null;
+  }
+  if (!info || !hostDoCommonsPermitido(info.url)) return null;
+  const res = await fetch(info.url, { headers: { "User-Agent": "AceleriqEstudio/1.0 (https://aceleriq.com.br)", Accept: "image/jpeg,image/png;q=0.9" }, signal: AbortSignal.timeout(15_000), redirect: "error" });
+  const tipo = (res.headers.get("content-type") || "").toLowerCase();
+  if (!res.ok || tipo.indexOf("image/") !== 0) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  const bytes = await lerComTeto(res, MAX_BYTES_DA_FOTO_REAL, false);
+  const mime = bytes ? mimeDe(bytes) : null;
+  if (!bytes || !mime || mime === "image/gif") return null;
+  const slug = slugDoSimpleIcons(nome) || "pessoa";
+  const caminho = `${clientId}/pedidos/pessoas/${slug}-${(await sha256Hex(new TextEncoder().encode(info.url))).slice(0, 10)}.${extensaoDe(mime)}`;
+  const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: true });
+  if (error) throw error;
+  return { caminho, foto: info };
 }
 
 // ------------------------------------------------------ fiel ao pedido (frente AG)
@@ -5919,7 +6003,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         : !ads
         // Frente R4: no post, a capa guia só a identidade da série; o que é só dela (título gigante, selo, foto herói) não repete.
         ? rotuloDaCapaNaSerie(ordem === total)
-        : `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; repita o grid, as margens, as linhas, formas e elementos gráficos (mesmo traço, espessura e cor), a tipografia, a paleta, o tratamento e a mesma protagonista, cenário e luz; não copie o texto nem a composição exata dela${ordem === total ? "; o final fecha voltando a ela" : ""}`,
+        : `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; repita o grid, as margens, as linhas, formas e elementos gráficos (mesmo traço, espessura e cor), a tipografia, a paleta e o tratamento; a cena desta lâmina é OUTRA (a do texto): não reaproveite a foto, a pessoa, o objeto nem o cenário da capa; não copie o texto nem a composição exata dela${ordem === total ? "; o final fecha voltando a ela pela identidade" : ""}`,
       carregar: async () => ({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1-capa.png" }),
     });
   }
@@ -5938,7 +6022,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   if (capa && replicar && (quadroDeSequencia || soltaAComposicao(fidelidade))) {
     candidatos.push({
       tipo: "capa",
-      rotulo: "CAPA desta série (lâmina 1), já gerada: mantenha dela a marca aplicada (cores, fontes, tratamento, a mesma pessoa e o mesmo cenário); o layout desta lâmina não é o da capa; não copie o texto dela",
+      rotulo: "CAPA desta série (lâmina 1), já gerada: mantenha dela a marca aplicada (cores, fontes, tratamento); a cena desta lâmina é outra (não repita a foto, a pessoa nem o cenário dela, a não ser que o texto desta lâmina peça); o layout desta lâmina não é o da capa; não copie o texto dela",
       carregar: async () => ({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1-capa.png" }),
     });
   }
@@ -5994,8 +6078,12 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     .slice(0, 12);
   // 02/10: a logo real da marca citada (mundo real) vai no canto, pequena; a vitrine de parceiros, na grade de sempre.
   const marcaReal = cardDaVitrine.vitrine_tipo === "marca_real";
+  // 17/10: a foto da pessoa pública vai num quadro do lado oposto ao texto, colada pelo código.
+  const pessoaReal = cardDaVitrine.vitrine_tipo === "pessoa_real";
   const vitrineAqui: VitrineNaLamina | null = logosDaVitrine.length
-    ? { area: marcaReal ? AREA_DA_LOGO_REAL : areaDaVitrine(total === 1), logos: marcaReal ? logosDaVitrine.slice(0, 2) : logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura, ...(marcaReal ? { tipo: "marca_real" as const } : {}) }
+    ? pessoaReal
+      ? { area: areaDaPessoaReal(String(card.layout?.zona_texto ?? "")), logos: logosDaVitrine.slice(0, 1), proporcao: quadro.final.largura / quadro.final.altura, tipo: "pessoa_real" }
+      : { area: marcaReal ? AREA_DA_LOGO_REAL : areaDaVitrine(total === 1), logos: marcaReal ? logosDaVitrine.slice(0, 2) : logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura, ...(marcaReal ? { tipo: "marca_real" as const } : {}) }
     : null;
 
   // Imagem editada (foto, fatia ou tela do recorte) é a imagem 1 e empurra os anexos.
@@ -6273,7 +6361,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDaTipografiaAqui,
     // Selo da campanha desenhado pelo gerador junto com a arte, grande e fiel ao anexo.
     blocoDoSelo,
-    vitrineAqui ? (vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
+    vitrineAqui ? (vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
     // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
     blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
@@ -6425,7 +6513,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDaTipografiaAqui,
       // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
       blocoDoSelo,
-      vitrineAqui ? (vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
+      vitrineAqui ? (vitrineAqui.tipo === "pessoa_real" ? fraseDaPessoaReal(vitrineAqui.area, vitrineAqui.logos[0].nome || "a pessoa citada") : vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,
@@ -6766,6 +6854,13 @@ A imagem anexada é a versão atual da lâmina. A pessoa da equipe pediu um ajus
 - proposta (frente RO, 29/09): quando o pedido é VAGO ("deixa mais bonito aqui", "arruma isso", "melhore", "não gostei"), olhe a lâmina inteira e, com área, o recorte ampliado, e escreva UMA proposta concreta do que mudar: o quê, onde e como (ex.: "aumentar o título em 20% e alinhar à esquerda com a foto; tirar a sombra atrás do preço"). A equipe vê a proposta antes de gastar. Pedido claro: proposta vazia.
 - Com \`imagens_anexadas\`, cada imagem depois da lâmina (e do recorte) tem o papel dito na legenda: referência de estilo, elemento para inserir, foto exata, rosto (identidade), logo ou print do erro. Use cada uma pelo papel; o print do erro só mostra o que corrigir.
 
+PENSE COMO DIRETOR DE ARTE (17/10, dono: "o ajuste tem que responder melhor e mais inteligente")
+- Entenda a INTENÇÃO por trás do pedido: o que a pessoa quer que a peça comunique (\`direcao.conceito\`, o texto das lâminas vizinhas em \`serie\` e o negócio em \`negocio\`), e escreva a edição que entrega isso, não só a tradução literal das palavras.
+- Pedido de estilo ou qualidade ("mais dinâmico", "mais profissional", "menos genérico", "mais carrossel", "mais chamativo"): traduza em 2 a 4 mudanças concretas (escala, recorte, ângulo, objeto real do assunto, contraste, respiro, hierarquia) e faça; não pergunte.
+- Mundo real: logo de marca de verdade (quando vier anexada como logo, idêntica), a tela real de uma ferramenta (ex.: o Gerenciador de Anúncios do Meta com os nomes reais das colunas), o tema de uma data ("pegada de Halloween": abóboras, teias, luz baixa, laranja e roxo como acento da paleta) entram com elementos reconhecíveis e certos, nunca genéricos. Nunca desenhe o rosto de uma pessoa pública real: sem foto dela anexada como foto exata, diga em entendi que a foto precisa ser enviada ou marcada a área.
+- Repetição: se o pedido é para a lâmina não repetir a capa ou outra lâmina, troque a cena de verdade (outro sujeito, objeto ou tipo de imagem), mantendo a identidade da série.
+- entendi: 1 a 2 frases, em português simples, com o que vai mudar e por quê (a equipe vê que você entendeu).
+
 O PEDIDO É A FONTE DA VERDADE (frente AG, 28/09)
 - Faça só o que foi pedido; o resto da lâmina fica igual.
 - texto_exato é o texto que a EQUIPE quer escrito: o texto atual da lâmina (\`lamina.texto_exato\`) com só as mudanças pedidas. Nunca ponha nele as letras da logo, o nome da marca nem letras impressas no produto da foto (modelo, fabricante), mesmo que apareçam na imagem.
@@ -6828,9 +6923,11 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
 
   // O ajuste é uma tradução do pedido em instrução de edição: o modelo de
   // leitura (com visão) resolve bem e custa uma fração do diretor.
-  const [kit, leitor, preferencias, campanhaDoAjuste] = await Promise.all([
+  const [kit, leitor, preferencias, campanhaDoAjuste, negocioDoAjuste] = await Promise.all([
     lerKit(t.client_id, t),
-    modeloDoPapel("leitura"),
+    // 17/10 (dono: "responder melhor e mais inteligente"): o ajuste pedido pela equipe usa o modelo do diretor de
+    // arte (a autocorreção, que só conserta texto e logo, segue no de leitura, mais barato).
+    modeloDoPapel(auto ? "leitura" : "diretor_arte"),
     // A autocorreção só conserta texto e logo: as regras do cliente ficam para o ajuste pedido.
     auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch((e) => {
       const motivo = registrarFalha("estudio-arte: regras do cliente não lidas (ajuste)", e, { trabalho_id: t.id });
@@ -6838,6 +6935,12 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       return "";
     }),
     !auto && t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id).catch(nuloComLog("estudio-arte: campanha do ajuste não lida", { trabalho_id: t.id })) : Promise.resolve(null),
+    // 17/10: quem é o cliente (negócio, público, oferta), curto: o ajuste entende o porquê da peça.
+    auto
+      ? Promise.resolve(null)
+      : marcaDe(t.client_id, t)
+        .then((m) => contextoCompletoParaPrompt(servico() as never, t.client_id, m, { area: "arte", partes: ["contexto", "estrategia"], teto: 1500 }))
+        .then((c) => c.bloco || null, (e) => (registrarFalha("estudio-arte: contexto da marca não lido (ajuste)", e, { trabalho_id: t.id }), null)),
   ]);
   const nomeDaMarca = (await marcaDoCliente(t.client_id, kit, undefined, t).catch(nuloComLog("estudio-arte: nome da marca não lido", { trabalho_id: t.id })))?.nomeCliente || "";
   // Frente RO, fase 2: os anexos abertos e conferidos ANTES de gastar (arquivo quebrado volta com o motivo);
@@ -6861,6 +6964,21 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     }
   }
   const anexosDoAjuste: AnexoDoAjuste[] = decidirPapeis(anexosPedidos, respostasDosPapeis, pedido);
+  // 17/10 (dono: "se falei de uma marca, a logo realista correta"): "põe a logo da Nike" sem logo anexada busca a
+  // logo oficial no Commons e anexa como logo (o gerador aplica idêntica). Até 2 marcas; falha vira aviso.
+  if (!auto && !anexosDoAjuste.some((x) => x.papel === "logo") && /\blogo|\blogotipo|\bmarca d[aoe]\b|\bsimbolo d[aoe]\b|\bicone d[aoe]\b/i.test(pedido)) {
+    for (const nome of mundoRealPelaRegra([pedido]).marcas.slice(0, 2)) {
+      const achada = await logoRealDoCommons(t.client_id, nome, null).catch((e) => (registrarFalha("estudio-arte: logo real do ajuste não veio", e, { marca: nome }), null));
+      if (!achada) {
+        avisosDoAjuste.push(`A logo oficial de ${nome} não foi achada com licença: anexe a logo no ajuste se precisar.`);
+        continue;
+      }
+      const img = await anexoLeve("mesa", achada.caminho, `logo-${slugDoSimpleIcons(nome) || "marca"}`, true).catch(nuloComLog("estudio-arte: logo real do ajuste não abriu", { marca: nome }));
+      if (!img) continue;
+      anexosDoAjuste.push({ caminho: achada.caminho, imagem_id: null, nome: `Logo oficial de ${nome} (Wikimedia Commons, ${achada.logo.licenca})`, papel: "logo", papel_por: "regra" });
+      imagensDosAnexos.push(img);
+    }
+  }
   // Frente AG: com área marcada, o leitor vê de perto o que está nela (em 28/09 "apague isso" apagou a linha errada).
   const recorteDaArea = !auto && areas.length ? await recorteDasAreas(atual, areas) : null;
   // Frente AG: o Jev diz, junto com o leitor, se o pedido é claro (ruído do ditado, nome fora do contexto, vago).
@@ -6900,7 +7018,13 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
         recorte_da_area: recorteDaArea ? "a imagem 2 é o recorte ampliado da área marcada" : null,
         imagens_anexadas: anexosDoAjuste.length ? anexosDoAjuste.map((x, i) => legendaParaOLeitor(x, i + (recorteDaArea ? 3 : 2))) : null,
         nova_foto_de_fundo: fotoFundo ? resumoDaFoto(fotoFundo) : null,
-        lamina: { ordem, funcao: card.funcao, texto_exato: card.texto_exato, composicao: card.composicao, leva_logo: levaLogo(t, ordem) },
+        lamina: { ordem, funcao: card.funcao, texto_exato: card.texto_exato, composicao: card.composicao, imagem: card.layout?.imagem ?? card.ilustracao ?? null, leva_logo: levaLogo(t, ordem) },
+        // 17/10: o conjunto, para o ajuste entender a peça (conceito, identidade e o que as vizinhas mostram).
+        direcao: auto ? null : { conceito: t.direcao.conceito || null, fio_visual: t.direcao.fio_visual || null },
+        serie: auto ? null : t.direcao.cards
+          .filter((c) => c.ordem !== ordem && Math.abs(c.ordem - ordem) <= 2)
+          .map((c) => ({ ordem: c.ordem, funcao: c.funcao, texto: texto(c.texto_exato, 200), imagem: texto(c.layout?.imagem ?? c.ilustracao, 200) || null })),
+        negocio: negocioDoAjuste,
         verificacao_atual: atualVersao.verificacao,
         marca: { nome: nomeDaMarca || null, paleta: kit?.paleta ?? [], estilo: kit?.estilo ?? null, regras: kit?.regras ?? null },
         campanha: campanhaDoAjuste ? { nome: campanhaDoAjuste.nome, oferta: briefingDaCampanha(campanhaDoAjuste).oferta || null } : null,
@@ -6908,7 +7032,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       imagens: ([{ bytes: atual, mime: "image/png", nome: `card-${ordem}-v${atualVersao.versao}.png` }] as ImagemEntrada[]).concat(recorteDaArea ? [recorteDaArea] : []).concat(imagensDosAnexos),
     }],
     esquemaJson: ESQUEMA_AJUSTE,
-    maxTokensSaida: 3_000,
+    maxTokensSaida: auto ? 3_000 : 6_000,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
   });

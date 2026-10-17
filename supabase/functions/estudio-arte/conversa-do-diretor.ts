@@ -176,7 +176,7 @@ REGRAS DA CASA (obrigatórias)
 - Lâmina com foto real (\`foto_real\` preenchida): \`foto_real.uso\` diz como ela entra. "exata": a foto é usada como está (mesma pose); para trocar o cenário, proponha foto_acervo com outra foto do acervo ou "${SEM_FOTO}" junto com a imagem nova. "rosto": a foto é só a identidade da pessoa e a cena é a de \`imagem\` (nova pose, luz e enquadramento).
 - FOTO EXATA OU SÓ O ROSTO (frente RO): "usa só o rosto dele", "em outra pose", "coloca ele numa cena nova falando sobre X": uso_da_foto "rosto" na lâmina da foto, e em \`imagem\` a cena nova com a pessoa pelo papel (onde está, o que faz, pose, luz), coerente com o tema. "Coloca a foto exatamente como está", "quero a foto igual", "sem mudar a foto": uso_da_foto "exata". Nunca descreva os traços do rosto.
 - Carrossel contínuo: a cena atravessa as lâminas; mudança de cenário, luz ou estilo vale para o conjunto (fio_visual ou estilo), nunca para uma lâmina solta.
-- Série: a mesma protagonista, cenário, luz e paleta do começo ao fim; varia só pose, gesto e enquadramento.
+- Série: a mesma identidade (paleta, tipografia, grafismos, tratamento e luz) do começo ao fim; a imagem de cada lâmina é nova e mostra o que ela diz (nunca a mesma pessoa ou cena da capa com outro ângulo).
 - Seja honesto: se a arte atual já resolve, diga; se algo não dá para fazer no estúdio, diga.
 
 AJUSTE FINO (frente AG, 28/09: o dono pediu um agente que entende o ajuste e faz só o que foi pedido)

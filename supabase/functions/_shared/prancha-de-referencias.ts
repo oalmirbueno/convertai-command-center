@@ -217,7 +217,7 @@ export function continuidadeDaPrancha(e: { ordem: number; total: number; capa: n
   return [
     `CONTINUIDADE DA PRANCHA (lâmina ${e.ordem} de ${e.total}): esta lâmina é a continuação do carrossel da referência (quadro de sequência ${e.quadro.posicao} de ${e.quadro.de}), no layout dele.`,
     e.capa
-      ? `- A capa desta série já foi gerada (imagem ${e.capa}): mantenha dela a marca aplicada (as mesmas cores, fontes, tratamento, a mesma pessoa e o mesmo cenário), para a série parecer uma só; não copie o texto nem a composição da capa.`
+      ? `- A capa desta série já foi gerada (imagem ${e.capa}): mantenha dela a marca aplicada (as mesmas cores, fontes e tratamento), para a série parecer uma só; a cena desta lâmina é a do quadro, sem repetir a pessoa nem o cenário da capa; não copie o texto nem a composição da capa.`
       : "- Mantenha a mesma marca aplicada da capa desta série (cores, fontes, tratamento).",
     e.ordem === e.total ? "- Esta é a última lâmina: feche com o CTA em destaque, no mesmo sistema." : "",
   ].filter(Boolean).join("\n");

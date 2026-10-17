@@ -45,7 +45,7 @@ describe("hypes da semana", () => {
     expect(h).toContain("pesquisaWeb: true");
     expect(h).toContain("await jevPerguntar(");
     expect(h).toContain("await cobrarJev(");
-    expect(h).toContain("Nunca invente evento nem data.");
+    expect(h).toContain("Nunca invente evento, data, número de views nem post");
   });
 });
 

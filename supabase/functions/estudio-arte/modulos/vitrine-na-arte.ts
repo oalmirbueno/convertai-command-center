@@ -24,7 +24,7 @@ export interface ResultadoDaVitrine {
  */
 export async function colarLogosNaGrade(
   png: Uint8Array,
-  vitrine: { area: Area; logos: LogoDaVitrine[]; proporcao: number },
+  vitrine: { area: Area; logos: LogoDaVitrine[]; proporcao: number; modo?: "logo" | "foto" },
   abrir: (logo: LogoDaVitrine) => Promise<Uint8Array>,
   aoFalhar: (logo: LogoDaVitrine, erro: unknown) => void = () => {},
 ): Promise<ResultadoDaVitrine> {
@@ -32,7 +32,9 @@ export async function colarLogosNaGrade(
   const arte = await decodificar(png);
   const W = arte.width, H = arte.height;
   const area = caixaNoQuadroCentral(vitrine.area, W, H, vitrine.proporcao);
-  const celulas = celulasDaGrade(vitrine.logos.length, area);
+  // 17/10: "foto" (pessoa pública) é uma imagem só, preenchendo a área inteira em recorte de capa.
+  const foto = vitrine.modo === "foto";
+  const celulas = foto ? [area] : celulasDaGrade(vitrine.logos.length, area);
   const falharam: string[] = [];
   let coladas = 0;
   for (let i = 0; i < vitrine.logos.length; i++) {
@@ -43,6 +45,18 @@ export async function colarLogosNaGrade(
       const logo = await decodificar(await abrir(l));
       const x0 = Math.round(c.x0 * W), y0 = Math.round(c.y0 * H);
       const cw = Math.max(16, Math.round((c.x1 - c.x0) * W)), ch = Math.max(16, Math.round((c.y1 - c.y0) * H));
+      if (foto) {
+        // Cobre o quadro (corta o que sobra, centrado um pouco acima: rosto costuma estar no terço de cima).
+        const esc = Math.max(cw / logo.width, ch / logo.height);
+        const lw = Math.max(cw, Math.round(logo.width * esc)), lh = Math.max(ch, Math.round(logo.height * esc));
+        logo.resize(lw, lh);
+        const cx = Math.round((lw - cw) / 2), cy = Math.round((lh - ch) * 0.3);
+        logo.crop(cx, cy, cw, ch);
+        logo.roundCorners(Math.round(Math.min(cw, ch) * 0.04));
+        arte.composite(logo, x0, y0);
+        coladas++;
+        continue;
+      }
       const cartao = new Image(cw, ch);
       cartao.fill(0xffffffff);
       cartao.roundCorners(Math.round(Math.min(cw, ch) * 0.08));

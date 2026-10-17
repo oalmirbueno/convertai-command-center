@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ExternalLink, Flame, Megaphone, RefreshCw } from "lucide-react";
+import { ChevronDown, ExternalLink, Flame, Megaphone, RefreshCw, TrendingUp } from "lucide-react";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { botao, juntar, superficie } from "@/components/sistema/estilos";
@@ -31,6 +31,12 @@ import {
  * busca por semana: a da semana aparece direto, sem custo; "Buscar de novo"
  * refaz. Cada hype vira conteúdo (cai na conversa do agente do mês) ou
  * campanha (abre a aba Campanhas já preenchida).
+ *
+ * 17/10/2026 (dono: "além do hype, ter um para puxar assuntos em alta do nicho"):
+ * a mesma busca traz a segunda lista, "Em alta no nicho" (`tipo: "nicho"`), lida
+ * na web e nos posts reais do Instagram (hashtags do nicho e perfis de
+ * referência), com o "onde está viralizando". As duas listas também entram
+ * sozinhas em toda geração do Mês enquanto valem (o conteúdo já nasce tematizado).
  */
 
 /** Chave antiga (sem cliente): só dá o ponto de partida de quem já tinha escolhido. */
@@ -89,9 +95,15 @@ function CartaoDoHype({
         )}
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        {ROTULO_DA_JANELA[String(hype.janela || "")] || "esta semana"}
+        {hype.tipo === "nicho" ? "em alta agora" : ROTULO_DA_JANELA[String(hype.janela || "")] || "esta semana"}
         {hype.formato ? ` · ${hype.formato === "estatico" ? "estático" : hype.formato}` : ""}
       </p>
+      {hype.tipo === "nicho" && hype.sinal && (
+        <p title={hype.sinal} className="mt-1 flex min-w-0 items-start gap-1 text-[11.5px] font-medium text-primary [overflow-wrap:anywhere]">
+          <TrendingUp className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="line-clamp-2">{hype.sinal}</span>
+        </p>
+      )}
       {hype.o_que_e && <p title={hype.o_que_e} className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{hype.o_que_e}</p>}
       {detalhes && (
         <dl className="mt-2 space-y-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere]">
@@ -163,7 +175,10 @@ export default function HypesDaSemana({
   const dados = hypes.data || null;
   const daSemana = !!dados && dados.semana === semanaAtual;
   const itens = dados ? dados.itens : [];
-  const visiveis = todos ? itens : itens.slice(0, VISIVEIS);
+  // O índice original segue junto: "Criar campanha" aponta o item certo da lista gravada.
+  const comIndice = itens.map((h, indice) => ({ h, indice }));
+  const doMomento = comIndice.filter((x) => x.h.tipo !== "nicho");
+  const doNicho = comIndice.filter((x) => x.h.tipo === "nicho");
 
   const alternar = () => setRecolhido(!recolhido);
 
@@ -189,7 +204,8 @@ export default function HypesDaSemana({
     : "";
   // Uma linha de estado: quantos e de quando (à vista também com o bloco recolhido).
   const linhaDeEstado = [
-    itens.length ? `${itens.length} ${itens.length === 1 ? "hype" : "hypes"}` : "",
+    doMomento.length ? `${doMomento.length} ${doMomento.length === 1 ? "hype" : "hypes"}` : "",
+    doNicho.length ? `${doNicho.length} em alta no nicho` : "",
     dados ? (daSemana ? rotuloQuando : `semana de ${periodoCurto(dados.semana)}`) : "",
   ]
     .filter(Boolean)
@@ -223,7 +239,7 @@ export default function HypesDaSemana({
               <BotaoComCusto
                 rotulo={<><Flame className="h-3.5 w-3.5 sm:mr-1.5" /><span className="max-sm:sr-only">Buscar hypes</span></>}
                 titulo="Hypes da semana"
-                descricao="Pesquisa na web o que está em alta para o público deste cliente, com a nota do Jev. Leva de 60 a 90 segundos."
+                descricao="Pesquisa na web e no Instagram o que está em alta para o público deste cliente e o que está viralizando no nicho, com a nota do Jev. Leva de 60 a 90 segundos."
                 partes={() => partesDosHypes(catalogo)}
                 executar={() => buscar(false)}
                 aoConcluir={aoBuscar}
@@ -250,20 +266,35 @@ export default function HypesDaSemana({
             <p className="text-[12px] text-muted-foreground">Estes são da semana de {periodoCurto(dados.semana)}. Busque os desta semana.</p>
           )}
           {dados && dados.resumo && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{dados.resumo}</p>}
-          {visiveis.length > 0 && (
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-              {visiveis.map((h, i) => (
-                <CartaoDoHype
-                  key={`${h.titulo}-${i}`}
-                  hype={h}
-                  onCriarCampanha={() => onCriarCampanha(i)}
-                  onPedidoInicio={onPedidoInicio}
-                  onPedidoFim={onPedidoFim}
-                />
-              ))}
-            </div>
-          )}
-          {itens.length > VISIVEIS && (
+          {[
+            { chave: "momento", titulo: "Hypes do momento", lista: doMomento },
+            { chave: "nicho", titulo: "Em alta no nicho", lista: doNicho },
+          ].filter((g) => g.lista.length > 0).map((g) => {
+            const visiveis = todos ? g.lista : g.lista.slice(0, VISIVEIS);
+            return (
+              <div key={g.chave} className="space-y-2">
+                {/* Com as duas listas, cada uma ganha o nome; busca antiga (só hypes) fica como era. */}
+                {doNicho.length > 0 && (
+                  <h3 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {g.chave === "nicho" ? <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" /> : <Flame className="h-3.5 w-3.5" aria-hidden="true" />}
+                    {g.titulo}
+                  </h3>
+                )}
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+                  {visiveis.map(({ h, indice }) => (
+                    <CartaoDoHype
+                      key={`${h.titulo}-${indice}`}
+                      hype={h}
+                      onCriarCampanha={() => onCriarCampanha(indice)}
+                      onPedidoInicio={onPedidoInicio}
+                      onPedidoFim={onPedidoFim}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {(doMomento.length > VISIVEIS || doNicho.length > VISIVEIS) && (
             <button type="button" onClick={() => setTodos((v) => !v)} className="text-[12px] font-medium text-primary hover:underline">
               {todos ? "Mostrar menos" : `Ver todos (${itens.length})`}
             </button>

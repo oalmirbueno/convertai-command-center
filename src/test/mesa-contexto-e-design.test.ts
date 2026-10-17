@@ -214,14 +214,15 @@ describe("regressão de 23/09: série contínua, capa da marca e logo legível",
   const capa = { ordem: 1, funcao: "capa", texto_exato: "Roupa acumulada?", ilustracao: "mulher com cesto" };
   const miolo = { ordem: 2, funcao: "conteudo", texto_exato: "Separe antes", ilustracao: "mesma mulher de frente" };
 
-  it("o fio visual mantém protagonista, cenário e luz em todas as lâminas; muda só a pose", () => {
+  it("o fio visual mantém a identidade da série e a cena muda a cada lâmina (17/10)", () => {
     const p = promptDaLamina(miolo, marca(), {
       total: 5, carrosselInfinito: false, levaLogo: false,
       fioVisual: "Mulher de 30 anos, cabelo preso, camiseta branca, lavanderia clara com máquinas verdes, luz da manhã.",
       anteriores: ["mulher de costas carregando o cesto"],
     });
     expect(p).toContain("CONTINUIDADE DA SÉRIE");
-    expect(p).toContain("Mantenha a mesma protagonista, cenário e luz");
+    expect(p).toContain("CONTINUIDADE DA SÉRIE (identidade fixa, cena nova)");
+    expect(p).not.toContain("Mantenha a mesma protagonista");
     expect(p).not.toContain("mude o plano e o assunto");
     expect(p).not.toContain("não repita cena");
   });

@@ -23,6 +23,17 @@
  *    licença; sem isso, a tela é recriada em estilo plano com os rótulos
  *    exatos, sem imitar a logo.
  *
+ *
+ * 17/10 (dono: "se eu falei de uma campanha no Meta Ads tem que aparecer o
+ * gerenciador; se falei de uma marca, a logo realista correta; se falei de um
+ * famoso, a imagem dele; não se limite a esses"): o mundo real liga também
+ * quando a peça mostra uma ferramenta (gerenciador de anúncios, painel,
+ * dashboard), cita uma marca de verdade como assunto ou uma pessoa pública
+ * (o Jev decide o que as palavras não decidem). A foto da pessoa pública vem
+ * do Wikimedia Commons (a imagem principal do verbete da Wikipédia, com a
+ * licença) e entra COLADA PELO CÓDIGO numa área da lâmina, como as logos: o
+ * gerador nunca desenha o rosto de uma pessoa real.
+ *
  * Puro (sem Deno nem npm): a função e os testes leem o mesmo arquivo.
  * Sem lookbehind, propriedade Unicode ou grupo nomeado em regex (Safari 11).
  */
@@ -63,7 +74,42 @@ export const MARCAS_CONHECIDAS: Array<[RegExp, string]> = [
   [/\bamazon\b/, "Amazon"],
   [/\bnotion\b/, "Notion"],
   [/\bgov\.?br\b/, "gov.br"],
+  // 17/10: ferramentas de anúncio e de negócio (a tela delas aparece na peça) e marcas que viram assunto.
+  [/\bmeta ads\b|\bgerenciador de anuncios\b|\bbusiness suite\b|\bfacebook ads\b/, "Meta"],
+  [/\btiktok ads\b/, "TikTok"],
+  [/\bshopify\b/, "Shopify"],
+  [/\bhotmart\b/, "Hotmart"],
+  [/\bkiwify\b/, "Kiwify"],
+  [/\brd station\b/, "RD Station"],
+  [/\bhubspot\b/, "HubSpot"],
+  [/\btrello\b/, "Trello"],
+  [/\bslack\b/, "Slack"],
+  [/\bzoom\b/, "Zoom"],
+  [/\bpinterest\b/, "Pinterest"],
+  [/\bthreads\b/, "Threads"],
+  [/\btwitter\b/, "X"],
+  [/\bkwai\b/, "Kwai"],
+  [/\bdiscord\b/, "Discord"],
+  [/\bgemini\b/, "Google Gemini"],
+  [/\bclaude\b|\banthropic\b/, "Claude"],
+  [/\bmidjourney\b/, "Midjourney"],
+  [/\bsamsung\b/, "Samsung"],
+  [/\bcoca[ -]?cola\b/, "Coca-Cola"],
+  [/\bnike\b/, "Nike"],
+  [/\badidas\b/, "Adidas"],
+  [/\bmc ?donald'?s\b/, "McDonald's"],
+  [/\bstarbucks\b/, "Starbucks"],
+  [/\bmagalu\b|\bmagazine luiza\b/, "Magalu"],
+  [/\bairbnb\b/, "Airbnb"],
+  [/\bpaypal\b/, "PayPal"],
+  [/\bstripe\b/, "Stripe"],
+  [/\bitau\b/, "Itaú"],
+  [/\bbradesco\b/, "Bradesco"],
+  [/\bsantander\b/, "Santander"],
 ];
+
+/** 17/10: a peça mostra a tela de uma ferramenta (o gerenciador, o painel, o relatório): a tela é recriada fiel. */
+const FERRAMENTA_NA_TELA = /gerenciador de anuncios|meta ads|facebook ads|google ads|tiktok ads|business suite|google analytics|search console|campanha (no|na|do|da|de) (meta|facebook|instagram|google|tiktok)|painel d[oae] (meta|google|instagram|shopify)|dashboard d[oae]|relatorio d[oae] (meta|google|instagram)/;
 
 /** Sinal forte de tela real: configuração de app, toque e clique, versão. */
 const TELA_REAL = /configurac(ao|oes) d[oae]|toque em|clique em|abra o (app|aplicativo)|atualizac(ao|oes) do (app|sistema)|versao [0-9]/;
@@ -86,7 +132,7 @@ export function mundoRealPelaRegra(textos: Array<string | null | undefined>): Pe
   for (const [re, nome] of MARCAS_CONHECIDAS) if (re.test(s) && marcas.indexOf(nome) < 0) marcas.push(nome);
   const tela = TELA_REAL.test(s);
   const tutorial = tela || (marcas.length > 0 && TUTORIAL.test(s));
-  return { real: tutorial, tutorial, marcas: marcas.slice(0, 6) };
+  return { real: tutorial || FERRAMENTA_NA_TELA.test(s), tutorial, marcas: marcas.slice(0, 6) };
 }
 
 /** A pergunta ao Jev (Noul) quando as palavras não decidem: o pedido depende de informação real e atual de um produto, app, marca ou tela? */
@@ -104,17 +150,59 @@ export function perguntaDoMundoReal(): { type: "noul"; instructions: string; cri
 /** Limiar do Noul do mundo real (sim a partir daqui). */
 export const LIMIAR_DO_MUNDO_REAL = 0.6;
 
+/**
+ * 17/10: as perguntas do Estúdio quando as palavras não decidem (item da agenda, não só a arte rápida):
+ * a peça depende de algo real (marca, ferramenta, tela) e a peça fala de uma pessoa pública que deveria aparecer.
+ */
+export function perguntasDoMundoRealNoEstudio(): Record<string, { type: "noul"; instructions: string; criteria: { true: string; false: string } }> {
+  return {
+    mundo_real: {
+      type: "noul",
+      instructions: "O conteúdo em `pedido` mostra ou explica algo REAL de outra empresa que a arte precisa mostrar fiel ao que existe: a tela de uma ferramenta (gerenciador de anúncios do Meta, Google Ads, painel, relatório, app), uma marca de verdade como assunto (logo, produto, comparação entre marcas) ou um passo a passo de um sistema?",
+      criteria: {
+        true: "A peça fala de uma campanha no Meta Ads, de um recurso de um app, de uma marca ou produto real de outra empresa, ou ensina a usar um sistema: mostrar a tela, a logo ou o produto real deixa a arte certa.",
+        false: "A peça é só sobre a marca do cliente, uma dica do nicho, um conceito ou uma oferta, sem precisar mostrar tela, logo ou produto de outra empresa (citar \"chame no WhatsApp\" não conta).",
+      },
+    },
+    pessoa_publica: {
+      type: "noul",
+      instructions: "O conteúdo em `pedido` fala de uma PESSOA PÚBLICA real e identificada pelo nome (artista, atleta, influenciador, empresário, apresentador) que a arte deveria mostrar para fazer sentido?",
+      criteria: {
+        true: "A peça é sobre o que essa pessoa fez, disse ou lançou, ou usa o caso dela como exemplo central, e quem vê espera reconhecer a pessoa.",
+        false: "Não cita pessoa pública pelo nome, ou cita só de passagem, ou a pessoa é do cliente (dono, equipe, cliente dele).",
+      },
+    },
+  };
+}
+
 export const INSTRUCOES_DO_MUNDO_REAL = `MUNDO REAL (o pedido fala de produto, app, marca ou tela real; a pesquisa na web está ligada para você)
 - Pesquise antes de escrever: a documentação oficial ou a central de ajuda da empresa (versão atual, Brasil, português) e, só se faltar, uma fonte confiável recente. Monte os passos EXATAMENTE como estão: nomes de menus, abas, botões e opções com a grafia da tela, na ordem certa, um passo por linha ("Abra o WhatsApp", "Toque em Configurações > Privacidade"). Diferença entre iPhone e Android: diga qual vale ou separe.
 - Nunca invente menu, botão, preço, especificação nem versão. O que você não confirmou fica fora e vira aviso em \`avisos_para_a_equipe\`.
 - fontes_da_pesquisa: as páginas que você usou (título e endereço), as oficiais primeiro.
 - marcas_reais: cada marca de outra empresa que aparece na peça (nome oficial; arquivo_wikimedia com o nome exato do arquivo da logo no Wikimedia Commons, como "File:WhatsApp.svg", quando você achou; senão vazio; laminas com as ordens onde ela aparece). A logo dessas marcas é colada pelo CÓDIGO num canto da lâmina: no layout, NÃO desenhe nem descreva a logo de outra empresa, não escreva o nome dela em estilo de logo e deixe o canto de cima à direita calmo. O nome da marca pode aparecer no texto normal ("no WhatsApp").
 - Tela de app: sem print enviado pela equipe, a lâmina mostra a tela recriada em estilo plano e limpo (moldura de celular simples, os rótulos e a ordem exatos), sem copiar ícones nem a logo da empresa. Com print da equipe (Compor), use o print.
-- Fonte real: quando a tela ou a marca tem fonte conhecida e livre (Google Fonts, como Roboto no Android ou Inter), diga em tratamento; senão, as fontes do cliente.`;
+- Fonte real: quando a tela ou a marca tem fonte conhecida e livre (Google Fonts, como Roboto no Android ou Inter), diga em tratamento; senão, as fontes do cliente.
+- Ferramenta na tela (17/10): falou de campanha no Meta Ads, Google Ads, relatório ou painel, uma lâmina MOSTRA a tela de verdade dessa ferramenta, recriada em estilo plano e fiel: o nome real da tela ("Gerenciador de Anúncios"), as abas e colunas reais (no Meta: Campanhas, Conjuntos de anúncios, Anúncios; Veiculação, Resultados, Alcance, Custo por resultado, Valor usado), números plausíveis e coerentes com o texto, num notebook ou celular quando ajudar. Pesquise a interface atual antes.
+- Marca como assunto: a logo oficial vem do Commons (marcas_reais) e o produto ou a embalagem aparecem como são de verdade (forma, cores, rótulo), sem inventar versão.
+- pessoas_reais (17/10): cada pessoa pública que a peça precisa mostrar (nome como no verbete da Wikipédia em português; arquivo_wikimedia com o "File:..." de uma foto dela no Commons, quando você achou; laminas onde ela aparece, no máximo 2). A foto real dela entra COLADA PELO CÓDIGO num quadro da lâmina: em layout.imagem descreva o quadro de foto (moldura, lado oposto ao texto) e o resto da cena, e NUNCA desenhe nem descreva o rosto dessa pessoa. Só para conteúdo informativo ou de notícia sobre ela; nunca como se ela endossasse a marca (avise em avisos_para_a_equipe que o uso de imagem de pessoa pública em anúncio pede autorização).
+- Tema e referência real: use elementos reais e reconhecíveis do assunto (o objeto real, o lugar real, o ícone real do app), não um genérico de banco de imagens.`;
 
 /** Campos que o diretor devolve para o mundo real (entram no esquema da direção; vazios quando não é o caso). */
 export const CAMPOS_DO_MUNDO_REAL = {
   marcas_reais: {
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: ["nome", "arquivo_wikimedia", "laminas"],
+      properties: {
+        nome: { type: "string" },
+        arquivo_wikimedia: { type: "string" },
+        laminas: { type: "array", items: { type: "integer" } },
+      },
+    },
+  },
+  pessoas_reais: {
     type: "array",
     items: {
       type: "object",
@@ -264,6 +352,53 @@ export function escolherNaBusca(json: unknown, nome: string): string | null {
   return candidatos[0] || null;
 }
 
+// ------------------------------------------------------------------ pessoa pública (foto real do Commons)
+
+/** Até quantas pessoas públicas por peça, e até quantas lâminas cada uma. */
+export const MAX_PESSOAS_REAIS = 2;
+/** Largura da foto pedida ao Commons. */
+export const LARGURA_DA_FOTO_REAL = 1080;
+export const MAX_BYTES_DA_FOTO_REAL = 6 * 1024 * 1024;
+
+/** As pessoas públicas da direção, limpas (nome, arquivo do Commons, até 2 lâminas que existem; sem lâmina: a capa). */
+export function normalizarPessoasReais(bruto: unknown, ordens: number[]): MarcaReal[] {
+  return normalizarMarcasReais(bruto, ordens).slice(0, MAX_PESSOAS_REAIS).map((p) => ({ ...p, laminas: p.laminas.slice(0, 2) }));
+}
+
+/** O verbete da Wikipédia em português (e a imagem principal dele): o caminho para a foto quando o diretor não achou o arquivo. */
+export const urlDaImagemDoVerbete = (nome: string) =>
+  `https://pt.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageimages&piprop=name&titles=${encodeURIComponent(nome)}`;
+
+/** O nome do arquivo da imagem principal do verbete ("File:..."), ou null. */
+export function arquivoDoVerbete(json: unknown): string | null {
+  const q = json && typeof json === "object" ? (json as Record<string, any>).query : null;
+  const p = q && Array.isArray(q.pages) ? q.pages[0] : null;
+  if (!p || p.missing || typeof p.pageimage !== "string") return null;
+  return arquivoDoCommons(p.pageimage.replace(/_/g, " "));
+}
+
+/** A informação da foto no Commons com a largura de foto (a da logo é menor). */
+export const urlDaInfoDaFotoNoCommons = (arquivo: string) => urlDaInfoDoCommons(arquivo).replace(`iiurlwidth=${LARGURA_DA_LOGO_REAL}`, `iiurlwidth=${LARGURA_DA_FOTO_REAL}`);
+
+/**
+ * O quadro da foto da pessoa pública, do lado oposto ao texto da lâmina (fração do quadro final).
+ * Texto à esquerda: foto à direita; à direita: à esquerda; no topo: embaixo; na base: em cima; no centro: canto de cima à direita.
+ */
+export function areaDaPessoaReal(zona: string): Area {
+  const z = String(zona || "");
+  if (/esquerda/.test(z)) return { x0: 0.53, y0: 0.2, x1: 0.94, y1: 0.8 };
+  if (/direita/.test(z)) return { x0: 0.06, y0: 0.2, x1: 0.47, y1: 0.8 };
+  if (/^topo/.test(z)) return { x0: 0.2, y0: 0.5, x1: 0.8, y1: 0.93 };
+  if (/^base/.test(z)) return { x0: 0.2, y0: 0.07, x1: 0.8, y1: 0.5 };
+  return { x0: 0.62, y0: 0.06, x1: 0.94, y1: 0.4 };
+}
+
+/** Frase do prompt da lâmina: o quadro que fica liso para a foto real entrar pelo código. */
+export function fraseDaPessoaReal(area: Area, nome: string): string {
+  const pct = (n: number) => Math.round(n * 100);
+  return `FOTO REAL (${nome}): a foto verdadeira dessa pessoa entra depois, colada pelo código, num quadro de ${pct(area.x0)}% a ${pct(area.x1)}% da largura e de ${pct(area.y0)}% a ${pct(area.y1)}% da altura. Deixe esse quadro como um painel liso numa cor da paleta, sem texto, sem desenho e sem pessoa; a composição conversa com ele (como uma foto de revista na página). Não desenhe ${nome} nem ninguém parecido em lugar nenhum da arte.`;
+}
+
 /** Área da logo da marca real no quadro final: o canto de cima à direita, pequena. */
 export const AREA_DA_LOGO_REAL: Area = { x0: 0.74, y0: 0.045, x1: 0.94, y1: 0.145 };
 
@@ -279,7 +414,7 @@ export function fraseDaLogoReal(area: Area, nomes: string[]): string {
 export interface FonteDoResultado {
   titulo: string;
   url: string;
-  tipo: "pesquisa" | "logo" | "icone";
+  tipo: "pesquisa" | "logo" | "icone" | "foto";
   licenca?: string | null;
 }
 
@@ -289,6 +424,7 @@ export function notaDasFontes(e: {
   doDiretor?: unknown;
   logos?: LogoDoCommons[];
   icones?: Array<{ nome: string; url: string }>;
+  fotos?: Array<LogoDoCommons & { pessoa: string }>;
 }): FonteDoResultado[] {
   const saida: FonteDoResultado[] = [];
   const vistos: Record<string, true> = {};
@@ -310,5 +446,6 @@ export function notaDasFontes(e: {
   for (const f of e.daWeb || []) juntar({ titulo: String(f.titulo || f.title || ""), url: String(f.url || ""), tipo: "pesquisa" });
   for (const l of e.logos || []) juntar({ titulo: `Logo: ${l.arquivo.replace(/^File:/, "")}${l.autor ? ` (${l.autor})` : ""}`, url: l.pagina || l.url, tipo: "logo", licenca: l.licenca });
   for (const i of e.icones || []) juntar({ titulo: `Ícone oficial (SVG) de ${i.nome} no Simple Icons`, url: i.url, tipo: "icone" });
+  for (const f of e.fotos || []) juntar({ titulo: `Foto de ${f.pessoa}: ${f.arquivo.replace(/^File:/, "")}${f.autor ? ` (${f.autor})` : ""}`, url: f.pagina || f.url, tipo: "foto", licenca: f.licenca });
   return saida;
 }

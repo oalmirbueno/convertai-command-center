@@ -258,7 +258,8 @@ export function criacaoDaMensagem(anexos: unknown[] | null | undefined): Criacao
 }
 
 /** Espelho de LOTE_DA_CRIACAO (uma geração do pedido livre por lote). */
-export const LOTE_DA_CRIACAO = 12;
+/** 17/10: 12 peças completas numa chamada estouravam o tempo; 4 por chamada terminam e gravam a cada lote. */
+export const LOTE_DA_CRIACAO = 4;
 
 /**
  * Texto do pedido livre de um lote da criação. Espelho de pedidoParaCriar em

@@ -1,4 +1,6 @@
 import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
+import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
+import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 import { resumoDoRecibo } from "./resultado-da-agenda.ts";
 import { ORIENTACAO_DA_REVISAO, PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
 import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
@@ -996,6 +998,8 @@ type Contexto = {
   formatoDoPerfil?: string | null;
   /** Frente SYNC: estratégia aprovada da marca (tom e tagline), briefing mais novo e decisões do conselho (contexto completo da marca). */
   contextoCompleto?: string | null;
+  /** 17/10: hype e o que está em alta no nicho que ainda valem para o período (modulos/hype-no-conteudo.ts). */
+  hype?: HypeQueVale | null;
 };
 
 /**
@@ -1196,6 +1200,10 @@ async function montarContexto(
   // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada com tom e tagline, briefing mais novo e decisões do conselho).
   const completoP = contextoCompletoParaPrompt(servico, clientId, marca, { area: "calendario", partes: ["estrategia", "briefing", "decisoes"], semTitulo: true, teto: 5000 })
     .then((c) => c.bloco || null, (e) => (registrarFalha("agente-calendario: contexto completo não lido", e), null));
+  // 17/10: a busca de hype mais nova; só o que ainda vale para o período entra no pedido (o conteúdo nasce tematizado).
+  const hypeP = Promise.resolve(
+    servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1).maybeSingle(),
+  ).then(({ data }) => hypesQueValem(data as { semana: string; resumo: string | null; itens: unknown } | null, { inicio, fim }), (e) => (registrarFalha("agente-calendario: hypes não lidos", e), null));
   const [
     perfil,
     conta,
@@ -1340,6 +1348,7 @@ async function montarContexto(
     moldes: await moldesP,
     formatoDoPerfil: await perfilP,
     contextoCompleto: await completoP,
+    hype: await hypeP,
   };
 }
 
@@ -1349,7 +1358,7 @@ async function montarContexto(
  * o que escrever um post precisa, sem os 150 movimentos e com o dossiê menor;
  * o diagnóstico feito nos temas vai junto no pedido.
  */
-function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parametros: Record<string, unknown> }, opcoes: { enxuto?: boolean } = {}): string {
+function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parametros: Record<string, unknown> }, opcoes: { enxuto?: boolean; semHype?: boolean } = {}): string {
   const enxuto = opcoes.enxuto === true;
   const dados = {
     cliente: ctx.cliente.nome,
@@ -1382,7 +1391,9 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
   // 02/10: a forma também não repete (formato das últimas pautas; regras em modulos/diversidade-do-mes.ts).
   const variar = variarAgoraNoMes(ctx.memoriaEditorial);
   const moldes = blocoDosMoldes(ctx.moldes ?? []);
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}`;
+  // 17/10: o hype da semana em toda geração (a própria busca de hype não lê o anterior).
+  const hype = opcoes.semHype ? "" : blocoDoHype(ctx.hype);
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}${hype ? `\n\n${hype}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */
@@ -2272,7 +2283,7 @@ ${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.
 Regras dos itens:
 ${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: o indicado no tema: carrossel, estatico, foto ou video (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série pela identidade (paleta, tratamento, luz e sistema gráfico), mas cada card mostra uma imagem NOVA que ilustra o que ele diz (pessoa em ação, objeto ou detalhe, tela real da ferramenta, número ou gráfico, produto, cena ampla), alternando o tipo de imagem; nunca dois cards seguidos com o mesmo sujeito, pessoa protagonista em no máximo 2 cards e nada da capa repetido com outro ângulo; prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - tipo_editorial e framework: os do tema (ou, com "${AGENTE_ESCOLHE}", o que mais serve); a funcao de cada card nomeia o passo do framework (ex.: "capa: atenção", "desejo", "CTA").
 - ${REGRA_DO_CARROSSEL}
 - ${REGRA_DO_ESTATICO}
@@ -2971,7 +2982,7 @@ ${validas.map((t, i) => `- tema_id i${i}: "${t.title}" | formato ${t.delivery_ty
 Regras dos itens:
 ${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: carrossel ou estatico, igual ao do item. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série pela identidade (paleta, tratamento, luz e sistema gráfico), mas cada card mostra uma imagem NOVA que ilustra o que ele diz (pessoa em ação, objeto ou detalhe, tela real da ferramenta, número ou gráfico, produto, cena ampla), alternando o tipo de imagem; nunca dois cards seguidos com o mesmo sujeito, pessoa protagonista em no máximo 2 cards e nada da capa repetido com outro ângulo; prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido.
 - copy: a legenda completa do post. ${REGRA_DA_LEGENDA_NO_PLANO}
 - data: exatamente a data do item.
@@ -3726,7 +3737,7 @@ const resumoDaCampanha = (c: Campanha, fotos: { imagem: ImagemDaCampanha; foto: 
 const REGRAS_DOS_ITENS = `Regras dos itens:
 ${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: carrossel, estatico, foto ou video (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Entre itens diferentes do plano, a ilustracao e o estilo mudam (cenário, roupa, luz, tipo de peça), com a cor da marca só como acento. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série pela identidade (paleta, tratamento, luz e sistema gráfico), mas cada card mostra uma imagem NOVA que ilustra o que ele diz (pessoa em ação, objeto ou detalhe, tela real da ferramenta, número ou gráfico, produto, cena ampla), alternando o tipo de imagem; nunca dois cards seguidos com o mesmo sujeito, pessoa protagonista em no máximo 2 cards e nada da capa repetido com outro ângulo; prefira foto real do cliente quando o contexto tiver. Entre itens diferentes do plano, a ilustracao e o estilo mudam (cenário, roupa, luz, tipo de peça), com a cor da marca só como acento. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
 - copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas. ${REGRA_DA_LEGENDA_NO_PLANO}
 - Menos texto nas lâminas: capa só com o gancho curto (até ${PALAVRAS_DA_CAPA} palavras); cada lâmina seguinte com UMA ideia, título curto (até ${PALAVRAS_DO_TITULO} palavras) na 1ª linha e apoio curto (até ${PALAVRAS_DO_APOIO} palavras) na 2ª, em sequência passo a passo até o CTA; linguagem clara para o cliente final, sem jargão. Confira cada lâmina antes de responder e reescreva agora a que passar.
@@ -4484,8 +4495,39 @@ const ESQUEMA_HYPES = {
         cuidado: S("string"),
       }),
     },
+    // 17/10: o que está viralizando no nicho agora (temas, formatos e ganchos), além das datas e notícias.
+    em_alta_no_nicho: {
+      type: "array",
+      items: obj({
+        titulo: S("string"),
+        o_que_e: S("string"),
+        sinal: S("string"),
+        por_que_agora: S("string"),
+        fonte: S("string"),
+        como_usar: S("string"),
+        formato: S("string", { enum: [...FORMATOS] }),
+        cuidado: S("string"),
+      }),
+    },
   }),
 };
+
+/** Item gravado da busca (as duas listas no mesmo `itens`, separadas por `tipo`). */
+function itemGravadoDoHype(h: Record<string, unknown>, tipo: "hype" | "nicho") {
+  return {
+    tipo,
+    titulo: texto(h.titulo, 160),
+    o_que_e: texto(h.o_que_e, 600),
+    por_que_agora: texto(h.por_que_agora, 600),
+    fonte: texto(h.fonte, 500),
+    janela: tipo === "nicho" ? "esta_semana" : ["hoje", "esta_semana", "proximas_semanas"].includes(String(h.janela)) ? String(h.janela) : "esta_semana",
+    como_usar: texto(h.como_usar, 800),
+    formato: String(h.formato) === "estatico" ? "estatico" : "carrossel",
+    cuidado: texto(h.cuidado, 400),
+    sinal: tipo === "nicho" ? texto(h.sinal, 300) : "",
+    nota: null as number | null,
+  };
+}
 
 const NIVEIS_HYPE = [
   "Não serve: fora do nicho, do público ou da região, ou arriscado para a marca.",
@@ -4509,11 +4551,30 @@ async function buscarHypes(servico: SupabaseClient, chamador: Chamador, corpo: R
     if (ja) return json({ hypes: ja, cache: true, custo_usd: 0 });
   }
 
-  const ctx = await montarContexto(servico, clientId, hoje, somarDias(hoje, 14), marcaDaChamada(servico, clientId, corpo));
+  const marcaP = marcaDaChamada(servico, clientId, corpo);
+  // 17/10: além da web, o Instagram de agora: posts em alta nas hashtags do nicho (Graph, conta conectada),
+  // posts fora da curva dos perfis de referência e o que mais funcionou no próprio cliente. Nunca lança.
+  const sinaisP: Promise<SinaisDoNicho | null> = marcaP.then(async (m) => {
+    const contas = m ? await contasDaMarcaDoCliente(servico, clientId, m) : null;
+    return await lerSinaisDoMundo(servico, {
+      clientId,
+      marca: m ? { id: m.id, principal: m.principal } : null,
+      contas,
+      mensagem: "",
+      hashtags: corpo.hashtags,
+      web: { ligada: true, motivo: null },
+      segredo: Deno.env.get("META_APP_SECRET")?.trim() || null,
+    });
+  }).catch((e) => (registrarFalha("agente-calendario: sinais do instagram não lidos", e), null));
+  const [ctx, sinais] = await Promise.all([montarContexto(servico, clientId, hoje, somarDias(hoje, 14), marcaP), sinaisP]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, { pesquisaWeb: true });
-  const pedido = `${contextoEmTexto(ctx, { inicio: hoje, fim: somarDias(hoje, 14), parametros: {} })}
+  const pedido = `${contextoEmTexto(ctx, { inicio: hoje, fim: somarDias(hoje, 14), parametros: {} }, { semHype: true })}
 
-TAREFA: hoje é ${hoje}. Pesquise na web o que está em alta AGORA (esta semana e as próximas duas) no Brasil e na região deste cliente: datas comemorativas, notícias, eventos locais, tendências e formatos virais no Instagram, memes e assuntos que o público deste nicho está comentando. Escolha de 5 a 8 hypes que ESTE cliente pode usar com naturalidade e segurança.
+${blocoDoNichoAgora(sinais)}
+
+TAREFA: hoje é ${hoje}. Duas listas, as duas para ESTE cliente usar com naturalidade e segurança.
+
+LISTA 1, hypes: pesquise na web o que está em alta AGORA (esta semana e as próximas duas) no Brasil e na região deste cliente: datas comemorativas (incluindo as do varejo, como Halloween, Black Friday, Natal, Dia das Crianças), notícias, eventos locais, lançamentos, memes e assuntos que o público está comentando. Escolha de 5 a 8.
 Para cada um:
 - titulo curto; o_que_e em 1 a 2 frases; por_que_agora (o que está acontecendo, com data); fonte: um link real da pesquisa.
 - janela: hoje, esta_semana ou proximas_semanas.
@@ -4521,8 +4582,16 @@ Para cada um:
 ${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: carrossel ou estatico.
 - cuidado: o que evitar para a marca não parecer oportunista ou errar o tom (vazio se não houver).
+
+LISTA 2, em_alta_no_nicho: o que está viralizando AGORA dentro do nicho deste cliente (não datas): temas que o público do nicho está discutindo, formatos e ganchos que estão bombando, trends de áudio ou de edição, polêmicas leves do setor, novidades de ferramenta, preço ou regra que mudaram, perguntas que todo mundo está fazendo. Use os SINAIS DO INSTAGRAM acima (posts reais em alta nas hashtags e fora da curva nos perfis de referência) e pesquise na web (notícias do setor, TikTok, YouTube, Google Trends, fóruns). De 4 a 8 itens. Para cada um:
+- titulo curto; o_que_e em 1 a 2 frases.
+- sinal: onde e quanto está viralizando, concreto (ex.: "Reels com a trend X passando de 1 milhão de views", "@perfil com post 4,2x a mediana", "#hashtag com posts recentes de muito comentário", "notícia do setor desta semana").
+- por_que_agora; fonte: um link real (da busca ou o permalink do post lido acima).
+- como_usar: o conteúdo concreto para este cliente surfar o assunto (gancho, ângulo e o que mostrar), ligado à oferta.
+- formato: carrossel ou estatico. cuidado: o que evitar (vazio se não houver).
+
 - resumo: 1 frase sobre o clima da semana para este nicho.
-Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca invente evento nem data.`;
+Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca invente evento, data, número de views nem post: o que não veio da busca ou dos sinais acima não entra.`;
 
   const s = await chamarTexto({
     clientId,
@@ -4539,18 +4608,11 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
     referencia: { tipo: "mesa_hypes", id: clientId },
     criadoPor: chamador.userId,
   });
-  const r = (s.json ?? {}) as { resumo?: string; hypes?: Record<string, unknown>[] };
-  let hypes = (Array.isArray(r.hypes) ? r.hypes : []).slice(0, 10).map((h) => ({
-    titulo: texto(h.titulo, 160),
-    o_que_e: texto(h.o_que_e, 600),
-    por_que_agora: texto(h.por_que_agora, 600),
-    fonte: texto(h.fonte, 500),
-    janela: ["hoje", "esta_semana", "proximas_semanas"].includes(String(h.janela)) ? String(h.janela) : "esta_semana",
-    como_usar: texto(h.como_usar, 800),
-    formato: String(h.formato) === "estatico" ? "estatico" : "carrossel",
-    cuidado: texto(h.cuidado, 400),
-    nota: null as number | null,
-  })).filter((h) => h.titulo);
+  const r = (s.json ?? {}) as { resumo?: string; hypes?: Record<string, unknown>[]; em_alta_no_nicho?: Record<string, unknown>[] };
+  let hypes = [
+    ...(Array.isArray(r.hypes) ? r.hypes : []).slice(0, 10).map((h) => itemGravadoDoHype(h, "hype")),
+    ...(Array.isArray(r.em_alta_no_nicho) ? r.em_alta_no_nicho : []).slice(0, 10).map((h) => itemGravadoDoHype(h, "nicho")),
+  ].filter((h) => h.titulo);
   let custo = s.custoUsd;
 
   // Relevância para ESTE cliente pelo Jev (centavos); ordena pela nota.
@@ -4573,7 +4635,8 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
       if (cobrado) custo += cobrado.custoUsd;
       hypes = hypes
         .map((h, i) => ({ ...h, nota: notaDe0a10(notaScore(j.answers[`h${i}`]), NIVEIS_HYPE.length) }))
-        .sort((a, b) => (b.nota ?? -1) - (a.nota ?? -1));
+        // Cada lista na ordem da nota; os hypes antes do nicho (a tela separa pelo tipo).
+        .sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === "hype" ? -1 : 1) || (b.nota ?? -1) - (a.nota ?? -1));
     } catch (e) {
       // Sem Jev a lista vai na ordem da pesquisa. Frente FS: com log.
       console.error("agente-calendario: jev dos hypes falhou (vai a ordem da pesquisa)", { client_id: clientId, motivo: String((e as Error)?.message ?? e).slice(0, 300) });
@@ -4586,7 +4649,7 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
     .select("*")
     .single();
   if (error || !gravado) throw new ErroHttp(503, "hypes_nao_gravados", "A pesquisa foi feita, mas não foi guardada. Tente de novo.", { uso_id: s.usoId });
-  return json({ hypes: gravado, cache: false, custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ hypes: gravado, cache: false, custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null, sinais_do_instagram: contarSinais(sinais) });
 }
 
 // --------------------------------------------------------------- campanhas
@@ -5535,8 +5598,9 @@ async function salvarPlano(servico: SupabaseClient, clientId: string, mes: strin
 
 /**
  * Contexto extra do planejamento, só com dado real: o que saiu publicado e o
- * que foi aprovado nos últimos 90 dias, campanhas ativas, os hypes da semana e
- * a agenda do mês e dos 3 seguintes (quantos, formatos e títulos).
+ * que foi aprovado nos últimos 90 dias, campanhas ativas e a agenda do mês e
+ * dos 3 seguintes (quantos, formatos e títulos). O hype vem do montarContexto
+ * (17/10: só o que ainda vale, com o modo de usar; antes ia a última busca, mesmo vencida).
  */
 async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string, mes: string, marca: MarcaDoCliente | null = null) {
   const inicio = `${mes}-01`;
@@ -5546,7 +5610,7 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
   // Frente MC: a agenda longa do agente do Mês é só dos projetos da marca aberta.
   const projectIds = await projetosDoClienteNaMarca(servico, clientId, marca, ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id));
   const vazio = Promise.resolve({ data: [] as unknown[] });
-  const [publicados, aprovados, campanhas, hypes, agenda] = await Promise.all([
+  const [publicados, aprovados, campanhas, agenda] = await Promise.all([
     servico.from("editorial_publications").select("scheduled_at, editorial_posts(title, content_type)")
       .eq("client_id", clientId).eq("status", "published").gte("scheduled_at", ha90)
       .order("scheduled_at", { ascending: false }).limit(40),
@@ -5555,7 +5619,6 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
       .order("atualizado_em", { ascending: false }).limit(40),
     servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade")
       .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(24),
-    servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1),
     projectIds.length
       ? servico.from("tasks").select("title, due_date, delivery_type")
         .in("project_id", projectIds).is("deleted_at", null).gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(400)
@@ -5579,7 +5642,6 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
     if (linha.titulos.length < 20) linha.titulos.push(`${t.due_date}: ${String(t.title ?? "").slice(0, 120)}`);
   }
 
-  const hype = ((hypes.data ?? []) as Array<{ semana: string; resumo: string | null; itens: unknown }>)[0] ?? null;
   return {
     publicados_nos_ultimos_90_dias: ((publicados.data ?? []) as Array<{ scheduled_at: string; editorial_posts: { title?: string; content_type?: string } | null }>)
       .map((p) => ({ data: String(p.scheduled_at ?? "").slice(0, 10), titulo: corta(p.editorial_posts?.title ?? "", 160), formato: p.editorial_posts?.content_type ?? null })),
@@ -5593,16 +5655,6 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
     campanhas_ativas: ((campanhas.data ?? []) as Array<Record<string, unknown>>).filter((c) => campanhaDaMarca(c.identidade, marca)).slice(0, 12).map((c) => ({
       nome: c.nome, objetivo: corta(c.objetivo, 300), conceito: corta(c.conceito, 400), periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim }, status: c.status,
     })),
-    hypes_da_semana: hype
-      ? {
-        semana: hype.semana,
-        resumo: hype.resumo,
-        itens: (Array.isArray(hype.itens) ? hype.itens : []).slice(0, 8).map((h) => {
-          const o = (h ?? {}) as Record<string, unknown>;
-          return { titulo: o.titulo, janela: o.janela, como_usar: corta(o.como_usar, 300), nota: o.nota ?? null };
-        }),
-      }
-      : null,
     agenda_do_mes_e_dos_3_seguintes: Object.keys(porMes).sort().map((m) => ({ mes: m, ...porMes[m] })),
   };
 }

@@ -217,7 +217,8 @@ export const FORMATOS_DA_CRIACAO = ["carrossel", "estatico", "foto", "video"] as
 export type FormatoDaCriacao = typeof FORMATOS_DA_CRIACAO[number];
 export const MAX_ITENS_DA_CRIACAO = 180;
 /** Uma geração do pedido livre por lote (igual ao refazer). */
-export const LOTE_DA_CRIACAO = 12;
+/** 17/10: 12 peças completas numa chamada estouravam o tempo; 4 por chamada terminam e gravam a cada lote. */
+export const LOTE_DA_CRIACAO = 4;
 
 export type ItemParaCriar = {
   data: string;

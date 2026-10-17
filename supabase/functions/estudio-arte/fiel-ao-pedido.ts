@@ -398,14 +398,14 @@ export function perguntaDoAjusteClaro(): PerguntaDoJev {
     criteria: {
       claro: {
         what: "Claro: dá para saber exatamente o que muda (posição, cor, tamanho, texto, foto) e todo nome citado está na arte, na marca ou na campanha.",
-        examples: ["tira o preço", "troca a cor do título para o verde da marca", "coloque a logo embaixo centralizada", "deixa o selo menor", "sobe um pouco o texto", "deixa mais minimalista, com menos elementos", "mais elegante e com mais respiro"],
+        examples: ["tira o preço", "troca a cor do título para o verde da marca", "coloque a logo embaixo centralizada", "deixa o selo menor", "sobe um pouco o texto", "deixa mais minimalista, com menos elementos", "mais elegante e com mais respiro", "põe a logo da Coca-Cola ao lado do produto", "mostra a tela do gerenciador de anúncios do Meta", "deixa com pegada de Halloween", "não repete a pessoa da capa, mostra o produto"],
       },
       ruido_de_ditado: {
         what: "Tem palavra que não faz sentido nesta arte e parece erro do ditado por voz, e o que ela muda não dá para adivinhar com segurança.",
         examples: ["você também não usou o select", "o label desktop não ficou no centro", "corri isso daí"],
       },
       nome_fora_do_contexto: {
-        what: "Manda escrever ou pôr na arte um nome de loja, site, marketplace, marca, produto ou pessoa que não aparece em `texto_atual`, `marca` nem `campanha`.",
+        what: "Manda ESCREVER na arte um canal de venda (loja, site, marketplace, @) que não aparece em `texto_atual`, `marca` nem `campanha`, como se o cliente vendesse ali. Mostrar uma marca, ferramenta, data ou pessoa pública conhecida como elemento visual (logo da Nike, tela do Meta Ads, Halloween) NÃO conta: isso é claro.",
         examples: ["alinhe 'ou compre agora pelo Lazada'", "coloca o selo da Shopee", "põe o site lojaxyz.com"],
       },
       vago: {

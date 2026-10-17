@@ -64,13 +64,14 @@ describe("agente-calendario v6: planejar_mes", () => {
     expect(planejar).not.toContain("pesquisaWeb: true");
   });
 
-  it("o contexto extra lê publicado, aprovado, campanhas, hypes e a agenda dos próximos meses", () => {
+  it("o contexto extra lê publicado, aprovado, campanhas e a agenda dos próximos meses (o hype vem do montarContexto)", () => {
     const extra = corpoDe("contextoDoPlanejamento");
     expect(extra).toContain('from("editorial_publications")');
     expect(extra).toContain('.eq("status", "published")');
     expect(extra).toContain('.in("entrega_status", ["aprovado", "agendado"])');
     expect(extra).toContain('from("mesa_campanhas")');
-    expect(extra).toContain('from("mesa_hypes")');
+    expect(extra).not.toContain('from("mesa_hypes")');
+    expect(corpoDe("montarContexto")).toContain('from("mesa_hypes")');
     expect(extra).toContain("somarMesesAoMes(mes, 3)");
   });
 
