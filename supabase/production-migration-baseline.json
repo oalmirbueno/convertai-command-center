@@ -2177,6 +2177,14 @@
       "remote_name": "rodadas_semanais_hype_e_perfis",
       "remote_statements_sha256": "3c89ab87987db2c037e3974192223526ca3e5da90c64f3006e99de3cf1453d49",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261017173319",
+      "path": "supabase/migrations/20261017173319_agenda_inteligente_por_cliente.sql",
+      "local_sha256": "bbdfa6767a149573cbdc7702eac89abd30a9b8e6287a9bba195024be540559d4",
+      "remote_name": "agenda_inteligente_por_cliente",
+      "remote_statements_sha256": "4f8703779c0039fc9780fae2e8ccabd069fe83815b6c15785a592fee95851e7e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
