@@ -70,6 +70,7 @@ const TELAS_COM_LOGIN: Record<string, TelaComLogin> = {
   "/ciclo": { equipe: () => import("@/pages/AdminEsteira") },
   "/kanban": { equipe: () => import("@/pages/Kanban") },
   "/execucao": { equipe: () => import("@/pages/AdminExecucao") },
+  "/base-dos-agentes": { equipe: () => import("@/pages/BaseDosAgentes") },
   "/clientes": { equipe: () => import("@/pages/Clients") },
   "/central": { equipe: () => import("@/pages/AdminExperience") },
   "/projetos": { todos: () => import("@/pages/Projects") },

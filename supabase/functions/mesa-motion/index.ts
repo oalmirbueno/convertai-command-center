@@ -40,6 +40,9 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) no agente e nas gerações de brand e storyboards.
 // A escreverCena NÃO recebe: o escritor de cenas tem o método próprio (frente SPM, _shared/cena-hf.ts).
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas do motion entram no fim do sistema do agente, do brand e dos storyboards.
+// A escreverCena fica sem: ela escreve o código técnico da cena (HTML, CSS e GSAP).
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
@@ -522,13 +525,17 @@ async function dadosDoFilme(f: LinhaDoFilme) {
 
 async function gerarBrand(ch: Chamador, f: LinhaDoFilme, modeloId: unknown, pedido: string) {
   const modelo = await modeloDoPedido(f, modeloId);
-  const d = await dadosDoFilme(f);
+  // Base do agente: as fichas do motion para este filme, lidas junto com os dados (nunca lança).
+  const [d, base] = await Promise.all([
+    dadosDoFilme(f),
+    baseDoAgente(servico(), { agente: "motion.agente", clientId: f.client_id, pedido: [pedido, f.nome, f.tipo].filter(Boolean).join(". "), tarefa: PAPEL, referencia: { tipo: "motion_filme", id: f.id }, criadoPor: ch.userId }),
+  ]);
   const saida = await chamarTexto({
     clientId: f.client_id,
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DO_BRAND}${d.regras.bloco ? `\n\n${d.regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_DO_BRAND}${d.regras.bloco ? `\n\n${d.regras.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ ...d.dados, pedido_da_equipe: pedido || null })}` }],
     esquemaJson: ESQUEMA_DO_BRAND,
     maxTokensSaida: 5_000,
@@ -556,13 +563,17 @@ async function gerarStoryboards(ch: Chamador, f: LinhaDoFilme, modeloId: unknown
   const pecas = PECAS_DO_KIT.map((p) => ({ id: p.id, quando: p.quando, parametros: p.parametros.map((x) => `${x.chave} (${x.tipo}${x.obrigatorio ? ", obrigatório" : ""})`) }));
   const acervo = f.tipo === "filme_marca" ? await servico().from("video_arquivos").select("id, nome, tipo, duracao_s").eq("client_id", f.client_id).in("tipo", ["bruto", "take", "gerado"]).order("criado_em", { ascending: false }).limit(20) : { data: [] };
   // 02/10 (dono: "não repetir"): o que os últimos filmes deste cliente já usaram (nunca lança).
-  const variarAgora = await variarAgoraNoMotion(servico(), f.client_id, { excluirId: f.id, pedido });
+  // Base do agente: as fichas do motion para este filme, junto com o que já foi usado (nunca lançam).
+  const [variarAgora, base] = await Promise.all([
+    variarAgoraNoMotion(servico(), f.client_id, { excluirId: f.id, pedido }),
+    baseDoAgente(servico(), { agente: "motion.agente", clientId: f.client_id, pedido: [pedido, f.brand.promessa, f.nome, f.tipo].filter(Boolean).join(". "), tarefa: PAPEL, referencia: { tipo: "motion_filme", id: f.id }, criadoPor: ch.userId }),
+  ]);
   const saida = await chamarTexto({
     clientId: f.client_id,
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DOS_STORYBOARDS}${d.regras.bloco ? `\n\n${d.regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_DOS_STORYBOARDS}${d.regras.bloco ? `\n\n${d.regras.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: `BRAND.md:\n${md}\n\nDADOS:\n${JSON.stringify({ tipo: f.tipo, entrevista: f.entrevista, DURACAO_ALVO: d.dados.DURACAO_ALVO, PROVAS: f.brand.provas, PECAS: pecas, ACERVO: acervo.data || [], pedido_da_equipe: pedido || null, VARIAR_AGORA: variarAgora })}` }],
     esquemaJson: esquemaDosStoryboards(f.tipo),
     maxTokensSaida: 9_000,
@@ -1139,11 +1150,13 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     cobrar: cobrarDoNucleo,
   }));
-  const [modelo, historico, kit, regras] = await Promise.all([
+  const [modelo, historico, kit, regras, base] = await Promise.all([
     modeloDoPapel(PAPEL, typeof c.modelo_id === "string" && c.modelo_id ? c.modelo_id : f.modelo),
     historicoP,
     kitDoFilme(f),
     regrasDaMesa(servico(), { clientId: f.client_id, mesa: "motion", marcaId: f.marca_id }),
+    // Base do agente: as fichas do motion para esta mensagem (nunca lança).
+    baseDoAgente(servico(), { agente: "motion.agente", clientId: f.client_id, pedido: mensagem, tarefa: PAPEL, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId }),
   ]);
   if (!modelo) throw new ErroHttp(409, "sem_modelo", "Nenhum modelo de texto ativo para o papel motion.");
   if (historico.error) registrarFalha("mesa-motion: histórico não lido", historico.error, { conversa_id: conversaId });
@@ -1175,7 +1188,7 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DO_AGENTE}\n\nDADOS:\n${JSON.stringify(dados)}\n${blocoDasAcoesDoMotion(l)}\n\n${blocoDoMapaDoPainel("motion")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, kit.nome)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+    sistema: `${SISTEMA_DO_AGENTE}\n\nDADOS:\n${JSON.stringify(dados)}\n${blocoDasAcoesDoMotion(l)}\n\n${blocoDoMapaDoPainel("motion")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, kit.nome)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_DO_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,

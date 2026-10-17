@@ -672,6 +672,7 @@ import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/
 import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
 import { abrirImagemDaPrancha, camposDaFalhaDaPrancha, type FalhaDaPrancha, lerPranchaComMotivo, MOTIVOS_DO_ARQUIVO } from "./leitura-da-prancha.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -2773,6 +2774,22 @@ async function imagemDaReferenciaCrua(ref: Referencia): Promise<ImagemEntrada> {
 }
 
 /** Prompt efetivo do diretor: global ativo + complemento ativo do cliente. */
+/**
+ * 17/10: a base do diretor de arte e a do gerador de imagem (base-dos-agentes). A do gerador entra
+ * para o diretor porque é ele quem escreve o pedido de imagem de cada lâmina (layout.imagem); o
+ * texto que vai ao gerador continua só o promptDaLamina. Sem fichas, volta vazio.
+ */
+async function basesDoEstudio(clientId: string, pedido: string, referencia: { tipo: string; id: string }, criadoPor: string | null): Promise<string> {
+  const [diretor, imagem] = await Promise.all([
+    baseDoAgente(servico(), { agente: "estudio.diretor", clientId, pedido, teto: 5_000, tarefa: "estudio", referencia, criadoPor }),
+    baseDoAgente(servico(), { agente: "estudio.imagem", clientId, pedido, teto: 3_000, tarefa: "estudio", referencia, criadoPor }),
+  ]);
+  return [
+    diretor.bloco,
+    imagem.bloco ? `PARA O PEDIDO DE IMAGEM DE CADA LÂMINA (layout.imagem), o que o gerador de imagem aprendeu:\n${imagem.bloco}` : "",
+  ].filter(Boolean).join("\n\n");
+}
+
 async function promptDoDiretor(clientId: string): Promise<string> {
   const { data, error } = await servico()
     .from("agente_prompts")
@@ -3529,6 +3546,9 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         registrarFalha("estudio-arte: jev do mundo real falhou (segue pela regra)", e, { trabalho_id: trabalhoId });
       }
     }
+    // 17/10 (dono: "cada um tendo uma base de aprendizado"): o que o dono ensinou ao diretor e ao gerador de
+    // imagem (e o que a pesquisa semanal trouxe). Vai na mensagem: o sistema tem teto e segue no cache do provedor.
+    const basesP = basesDoEstudio(clientId, textoDoItem || item.tarefa.title, { tipo: "estudio_trabalho", id: trabalhoId }, ch.userId);
     // 17/10: data comemorativa pelo texto (obrigatória) ou pela data de publicação (convite).
     const temasDoItem = temasDaEpoca({ data: item.tarefa.due_date, textos: [textoDoItem, rapida ? rapida.gravada.pedido : ""] });
     const contexto = {
@@ -3594,6 +3614,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       variar_agora: await variarAgoraP,
       carrosseis_aprovados_pelo_cliente: await aprovadosP,
     };
+    const textoDasBases = await basesP;
     const r = await chamarTexto({
       clientId,
       tarefa: "estudio",
@@ -3608,7 +3629,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Frente AE: as regras da arte rápida vão na mensagem (o sistema fica igual e segue no cache do provedor).
       mensagens: [{
         papel: "usuario",
-        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}${pessoaPublica ? "\nO conteúdo fala de uma pessoa pública: preencha pessoas_reais." : ""}\n\n` : ""}${temasDoItem.length ? `${blocoDoTemaDaEpoca(temasDoItem)}\n\n` : ""}${((b) => (b ? `${b}\n\n` : ""))(blocoDosPerfis(await perfisP, "arte"))}${REPERTORIO_E_MISTURA}\n\nEscreva a direção de arte deste item. Use \`marca.contexto_do_negocio\` para a imagem ser do nicho, do público e da oferta DESTE cliente (o lugar, o produto, a situação e a pessoa certos), nunca uma cena genérica que serviria a qualquer marca. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
+        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}${pessoaPublica ? "\nO conteúdo fala de uma pessoa pública: preencha pessoas_reais." : ""}\n\n` : ""}${temasDoItem.length ? `${blocoDoTemaDaEpoca(temasDoItem)}\n\n` : ""}${((b) => (b ? `${b}\n\n` : ""))(blocoDosPerfis(await perfisP, "arte"))}${textoDasBases ? `${textoDasBases}\n\n` : ""}${REPERTORIO_E_MISTURA}\n\nEscreva a direção de arte deste item. Use \`marca.contexto_do_negocio\` para a imagem ser do nicho, do público e da oferta DESTE cliente (o lugar, o produto, a situação e a pessoa certos), nunca uma cena genérica que serviria a qualquer marca. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
         imagens: rapida && rapida.imagens.length ? rapida.imagens : undefined,
       }],
       esquemaJson: ESQUEMA_DIRECAO,
@@ -7116,6 +7137,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   }
   // Frente AG: com área marcada, o leitor vê de perto o que está nela (em 28/09 "apague isso" apagou a linha errada).
   const recorteDaArea = !auto && areas.length ? await recorteDasAreas(atual, areas) : null;
+  // 17/10: o ajuste também segue o que o dono ensinou ao diretor e ao gerador de imagem (a correção automática não).
+  const basesDoAjusteP = auto ? Promise.resolve("") : basesDoEstudio(t.client_id, [pedido, card.texto_exato || ""].join(" "), { tipo: "estudio_trabalho", id: t.id }, ch.userId);
   // Frente AG: o Jev diz, junto com o leitor, se o pedido é claro (ruído do ditado, nome fora do contexto, vago).
   const jevDoAjuste: Promise<{ resposta: { choice?: string; confidence?: number } | undefined; custo: number } | null> = !auto && !confirmado
     ? jevPerguntar({
@@ -7134,6 +7157,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       // Frente FS: o Jev fora do ar não para o ajuste (o leitor segue), mas fica no log.
       .catch(nuloComLog("estudio-arte: jev (pedido claro) falhou", { trabalho_id: t.id, ordem }))
     : Promise.resolve(null);
+  const basesDoAjuste = await basesDoAjusteP;
   const dir = await chamarTexto({
     clientId: t.client_id,
     tarefa: "estudio",
@@ -7156,6 +7180,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
         lamina: { ordem, funcao: card.funcao, texto_exato: card.texto_exato, composicao: card.composicao, imagem: card.layout?.imagem ?? card.ilustracao ?? null, leva_logo: levaLogo(t, ordem) },
         // 17/10: o conjunto, para o ajuste entender a peça (conceito, identidade e o que as vizinhas mostram).
         direcao: auto ? null : { conceito: t.direcao.conceito || null, fio_visual: t.direcao.fio_visual || null },
+        // 17/10: a base do diretor e do gerador de imagem (some quando não há ficha).
+        base_do_agente: basesDoAjuste || undefined,
         serie: auto ? null : t.direcao.cards
           .filter((c) => c.ordem !== ordem && Math.abs(c.ordem - ordem) <= 2)
           .map((c) => ({ ordem: c.ordem, funcao: c.funcao, texto: texto(c.texto_exato, 200), imagem: texto(c.layout?.imagem ?? c.ilustracao, 200) || null })),

@@ -18,7 +18,7 @@ import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, Re
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  LayoutGrid, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
+  LayoutGrid, GraduationCap, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
   HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer,
@@ -135,6 +135,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Central", url: "/central", icon: HeartPulse },
       { title: "Mesas", url: "/mesas", icon: LayoutGrid, soCriacao: true },
+      // 17/10: o que cada agente sabe (o dono ensina e a pesquisa semanal complementa).
+      { title: "Base dos agentes", url: "/base-dos-agentes", icon: GraduationCap, soCriacao: true },
       { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
       { title: "Execução da equipe", url: "/execucao", icon: Bot },

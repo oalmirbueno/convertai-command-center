@@ -316,6 +316,9 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // (revisão 30/09). Diretor, variações, leitores e conferências ficam só com a técnica
 // (motores.ts: SEM_METODO_DE_PROPOSITO).
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas do diretor de fotografia entram no fim do sistema do agente,
+// do diretor, das variações e da campanha. Gerador, leitores e conferências ficam sem.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
@@ -2208,11 +2211,13 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     if (desconhecidas.length) throw new ErroHttp(400, "tomada_desconhecida", "Há tomada que não existe nesta receita.", { tomada_ids: desconhecidas });
   }
   const receita = pedidas && pedidas.size ? { ...receitaBase, tomadas: receitaBase.tomadas.filter((t) => pedidas.has(t.id)) } : receitaBase;
-  const [contexto, diretor, regrasEnsinadas] = await Promise.all([
+  const [contexto, diretor, regrasEnsinadas, base] = await Promise.all([
     contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     // AG2: o que a equipe ensinou ao diretor vale também no plano (nunca lança).
     regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null }),
+    // Base do agente: as fichas do diretor para este ensaio (nunca lança).
+    baseDoAgente(servico(), { agente: "foto.diretor", clientId, pedido: [pedido, receita.nome, finalidade].filter(Boolean).join(". "), tarefa: TAREFA_ESTUDIO, referencia: { tipo: REF_KIT, id: kit.id }, criadoPor: ch.userId }),
   ]);
 
   const tomadasDaReceita = receita.tomadas.map((t) => ({
@@ -2241,7 +2246,7 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_DIRETOR}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
+    sistema: `${SISTEMA_DIRETOR}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: `Planeje o ensaio com estes dados reais:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_PLANO,
     maxTokensSaida: 10_000,
@@ -2479,12 +2484,14 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const finalidade = limpo(corpo.finalidade, 200) || "anúncios, feed e loja";
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencia_ids) ? corpo.referencia_ids.map(String) : [];
-  const [contexto, diretor, estilos, regrasEnsinadas] = await Promise.all([
+  const [contexto, diretor, estilos, regrasEnsinadas, base] = await Promise.all([
     contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, MAX_ESTILOS_NO_GERADOR),
     // AG2: o que a equipe ensinou ao diretor vale também nas variações (nunca lança).
     regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null }),
+    // Base do agente: as fichas do diretor para este lote (nunca lança).
+    baseDoAgente(servico(), { agente: "foto.diretor", clientId, pedido: [pedido, ...vagas.map((v) => v.tipo.nome), finalidade].filter(Boolean).join(". "), tarefa: TAREFA_ESTUDIO, referencia: { tipo: REF_KIT, id: kit.id }, criadoPor: ch.userId }),
   ]);
   const doProduto = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: ctxVagas.temIdentidade ? "produto" : "embalagem" }, 2)
     .filter((f) => f.papel !== "estilo" && f.papel !== "cenario") as (RefDoKit & { imagem: LinhaImagem })[];
@@ -2520,7 +2527,7 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_VARIACOES}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
+    sistema: `${SISTEMA_VARIACOES}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{
       papel: "usuario",
       conteudo: `Escreva a direção de arte de cada vaga deste lote com os dados reais:\n${JSON.stringify(dados)}${legenda ? `\n${legenda}` : ""}`,
@@ -2665,12 +2672,14 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const identidade = pedidaPessoa ? await identidadeParaGeracao(servico(), clientId, pedidaPessoa.id, 1) : null;
   if (pedidaPessoa && !identidade) throw new ErroHttp(404, "modelo_inexistente", "O modelo escolhido não existe mais. Escolha outro em Quem aparece.");
   const pessoaEscolhida: PessoaEscolhida | null = pedidaPessoa && identidade ? { tipo: identidade.tipo, id: pedidaPessoa.id, nome: identidade.nome } : null;
-  const [contexto, diretor, estilos, regrasEnsinadas] = await Promise.all([
+  const [contexto, diretor, estilos, regrasEnsinadas, base] = await Promise.all([
     contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, 4),
     // AG2: o que a equipe ensinou ao diretor vale também na campanha (nunca lança).
     regrasDaMesa(servico(), { clientId, mesa: "foto", marcaId: typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null }),
+    // Base do agente: as fichas do diretor para esta campanha (nunca lança).
+    baseDoAgente(servico(), { agente: "foto.diretor", clientId, pedido: [pedido, pedidoModelo.estilo, pedidoModelo.perfil, finalidade].filter(Boolean).join(". "), tarefa: TAREFA_ESTUDIO, referencia: { tipo: REF_KIT, id: kit.id }, criadoPor: ch.userId }),
   ]);
   const comProduto = temIdentidade(kit, refs);
   const doProduto = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: comProduto ? "produto" : "embalagem" }, 2)
@@ -2700,7 +2709,7 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_CAMPANHA}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
+    sistema: `${SISTEMA_CAMPANHA}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     // Frente SPP (revisão 30/09): o plano da campanha recebe o método (aceite e prova, escolhidos pelo código).
     metodo: await superpoderesPara(servico(), { agente: "foto.campanha", momento: "gerar" }),
     mensagens: [{
@@ -4074,17 +4083,19 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const referenciaDoUso = { tipo: ensaio ? REF_ENSAIO : kit ? REF_KIT : REF_CONVERSA, id: ensaio?.id ?? kit?.id ?? conversaId };
   const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA_ESTUDIO, referencia: referenciaDoUso, criadoPor: ch.userId });
   const previasP = prepararNucleo(servico(), { clientId, pedido: mensagem, agente: "diretor_arte (foto)", ultimaResposta, cobrar: cobrarDoNucleo });
+  // Base do agente: as fichas do diretor de fotografia para esta mensagem (em paralelo; nunca lança).
+  const baseP = baseDoAgente(servico(), { agente: "foto.diretor", clientId, pedido: mensagem, tarefa: TAREFA_ESTUDIO, referencia: referenciaDoUso, criadoPor: ch.userId });
   // AG2: "essa", "a segunda", "todas" contra a lista da etapa, na ordem da tela (Jev só quando o pedido aponta).
   const listaDaTela = itensDaReferencia(pacote);
   const referencia = await referenciaDoPedido(mensagem, listaDaTela.itens, { agente: "diretor de fotografia da Mesa Foto", ultimaResposta, selecionados: listaDaTela.selecionados });
-  const previas = await previasP;
+  const [previas, base] = await Promise.all([previasP, baseP]);
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA_ESTUDIO,
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}\n${REGRA_DO_PEDIDO_DE_FAZER}${blocoDaReferencia(referencia, listaDaTela.itens)}${regras.bloco ? `\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}\n${REGRA_DO_PEDIDO_DE_FAZER}${blocoDaReferencia(referencia, listaDaTela.itens)}${regras.bloco ? `\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 12_000,

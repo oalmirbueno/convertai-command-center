@@ -67,6 +67,7 @@ const OUTRAS_AREAS: Record<string, string> = {
   "/comercial": "Comercial",
   "/horas": "Horas e custos",
   "/config": "Configurações",
+  "/base-dos-agentes": "Base dos agentes",
   "/equipe": "Equipe",
   "/perfil": "Perfil",
   "/novidades": "Novidades",

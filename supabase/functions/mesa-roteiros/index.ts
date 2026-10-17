@@ -64,6 +64,8 @@ import { contasDaMarcaDoCliente, lerContextoDaMarca, resolverMarca } from "../_s
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+// Base do agente (17/10): as fichas que o dono ensinou e a pesquisa trouxe entram no fim do sistema.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
@@ -760,7 +762,8 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
       clientId: p.clientId, objetivo: p.objetivoBase || null, modeloBaseId: p.modeloBaseId || null, anterior, tipo: p.tipo, duracaoS: p.duracaoS,
       tema: p.tema, pedido: p.pedido, peca, ctx: c, userId: ch.userId, refId: p.linha ? p.linha.id : p.taskId || p.clientId,
     }));
-  const [ctx, modelo, regras, sp, escolha] = await Promise.all([
+  const refDoRoteiro = { tipo: REF_ROTEIRO, id: p.linha ? p.linha.id : p.taskId || p.clientId };
+  const [ctx, modelo, regras, sp, escolha, baseDoRoteirista] = await Promise.all([
     ctxP,
     modeloDeTexto(p.modeloId),
     // Frente AG2: as regras que a equipe ensinou valem na geração (EVITAR primeiro). Nunca lança.
@@ -768,6 +771,15 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     // Frente SPP: o código escolhe o método (gerar ou ajustar o tom). Nunca lança.
     superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: p.tom ? "ajustar" : "gerar" }),
     escolhaP,
+    // Base do agente: as fichas que servem a este roteiro (sem ficha, bloco vazio; nunca lança).
+    baseDoAgente(servico(), {
+      agente: "roteiros.roteirista",
+      clientId: p.clientId,
+      pedido: [p.tom ? `Mudar o tom do roteiro para ${p.tom}` : "", `Roteiro de ${modoDoTipo(p.tipo).rotulo}`, p.tema || (peca ? peca.titulo : ""), p.objetivo, p.pedido].filter(Boolean).join(". "),
+      tarefa: TAREFA,
+      referencia: refDoRoteiro,
+      criadoPor: ch.userId,
+    }),
   ]);
   const atual = atualDaLinha;
   const modo = modoDoTipo(p.tipo);
@@ -795,7 +807,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (escolha ? `\n\n${blocoDaBaseParaORoteirista(escolha)}` : ""),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (escolha ? `\n\n${blocoDaBaseParaORoteirista(escolha)}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
     mensagens: [{
       papel: "usuario",
       // Frente CPY: o motor de copy da casa (voz, CTA, fatos, promessa, clichê e tamanho da fala); a estrutura é a do modelo da base ou a do modo.
@@ -804,7 +816,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     esquemaJson: ESQUEMA_DO_ROTEIRO,
     maxTokensSaida: 7_000,
     metodo: sp,
-    referencia: { tipo: REF_ROTEIRO, id: p.linha ? p.linha.id : p.taskId || p.clientId },
+    referencia: refDoRoteiro,
     criadoPor: ch.userId,
   });
   const titulo = peca ? peca.titulo : p.tema || "Roteiro avulso";
@@ -831,10 +843,19 @@ async function refazerGancho(ch: Chamador, linha: LinhaDoRoteiro, pedido: string
   if (bloqueio) throw new ErroHttp(409, "roteiro_travado", bloqueio);
   const atual = versaoPorNumero(linha.versoes, linha.versao_atual);
   if (!atual) throw new ErroHttp(409, "roteiro_sem_versao", "Este roteiro ainda não tem versão.");
-  const [modelo, regras, sp] = await Promise.all([
+  const [modelo, regras, sp, baseDoRoteirista] = await Promise.all([
     modeloDeTexto(modeloId),
     regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "roteiro" }),
     superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "ajustar" }),
+    // Base do agente: as fichas de gancho que servem a este roteiro (nunca lança).
+    baseDoAgente(servico(), {
+      agente: "roteiros.roteirista",
+      clientId: linha.client_id,
+      pedido: [`Refazer os ganchos do roteiro "${linha.titulo}"`, pedido].filter(Boolean).join(". "),
+      tarefa: TAREFA,
+      referencia: { tipo: REF_ROTEIRO, id: linha.id },
+      criadoPor: ch.userId,
+    }),
   ]);
   const saida = await chamarTexto({
     clientId: linha.client_id,
@@ -842,7 +863,7 @@ async function refazerGancho(ch: Chamador, linha: LinhaDoRoteiro, pedido: string
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : ""),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
     mensagens: [{
       papel: "usuario",
       conteudo: `Refaça só os ganchos do roteiro: 3 novos, de mecanismos diferentes dos atuais e entre si, que o desenvolvimento do roteiro cumpra. Responda só com ganchos e gancho_escolhido.${pedido ? `\nPedido da equipe: ${pedido}` : ""}\n\nDADOS:\n${JSON.stringify({ roteiro_atual: atual.conteudo })}`,
@@ -1461,7 +1482,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     cobrar: cobrarDoNucleo,
   }));
-  const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp, proprios, previas] = await Promise.all([
+  const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp, proprios, previas, baseDoRoteirista] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     historicoP,
     listasP,
@@ -1479,6 +1500,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     })),
     propriosP,
     previasP,
+    // Base do agente: as fichas do roteirista que servem a esta mensagem (nunca lança).
+    baseDoAgente(servico(), { agente: "roteiros.roteirista", clientId, pedido: mensagem, tarefa: TAREFA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId }),
   ]);
   if (historico.error) registrarFalha("mesa-roteiros: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const hoje = new Date().toISOString().slice(0, 10);
@@ -1496,8 +1519,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const ultimaResposta = anteriores.slice().reverse().find((m) => m.papel === "agente");
   // O roteiro aberto vem primeiro na lista: "este roteiro" vira r1.
   const roteirosOrdenados = aberto ? [...listas.roteiros.filter((r) => r.id === aberto.id), ...listas.roteiros.filter((r) => r.id !== aberto.id)] : listas.roteiros;
-  // Núcleo comum: a instrução e as leituras prévias (com os pedidos ao Hermes) fecham o sistema.
-  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`;
+  // Núcleo comum: a instrução e as leituras prévias (com os pedidos ao Hermes) fecham o sistema; a base do agente vem por último.
+  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA,

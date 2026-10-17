@@ -58,7 +58,8 @@ describe("agente-calendario v6: planejar_mes", () => {
     // Marca por projeto (docs/marcas): o contexto do mês é o da marca escolhida no topo.
     // v2 (26/09): a marca da chamada é lida uma vez e o MCP entra à parte, dentro do orçamento de tokens.
     expect(planejar).toContain("const marcaP = marcaDaChamada(servico, clientId, corpo);");
-    expect(planejar).toContain("montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0 })");
+    // 17/10: o pedido também escolhe as fichas da base do agente do Mês.
+    expect(planejar).toContain("montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0, pedido: mensagem })");
     // Frente MC (29/09): a agenda longa e as campanhas do planejamento são da marca aberta.
     expect(planejar).toContain("contextoDoPlanejamento(servico, clientId, mes, m)");
     expect(planejar).toContain("conversaDoAgenteDoMes(servico, clientId, chamador.userId)");

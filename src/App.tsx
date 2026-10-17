@@ -79,6 +79,7 @@ const AdminReportCreate = rotas.lazy(() => import("@/pages/AdminReportCreate"));
 const ReportDetail = rotas.lazy(() => import("@/pages/ReportDetail"));
 const ProfilePage = rotas.lazy(() => import("@/pages/ProfilePage"));
 const SettingsPage = rotas.lazy(() => import("@/pages/SettingsPage"));
+const BaseDosAgentes = rotas.lazy(() => import("@/pages/BaseDosAgentes"));
 const AdminViewAsClient = rotas.lazy(() => import("@/pages/AdminViewAsClient"));
 const ApiDocs = rotas.lazy(() => import("@/pages/ApiDocs"));
 const AdminQuizSubmissions = rotas.lazy(() => import("@/pages/AdminQuizSubmissions"));
@@ -358,6 +359,7 @@ export function AppRoutes() {
         <Route path="/briefings" element={<StaffRoute><AdminBriefings /></StaffRoute>} />
         <Route path="/kanban" element={<StaffRoute><Kanban /></StaffRoute>} />
         <Route path="/execucao" element={<StaffRoute><AdminExecucao /></StaffRoute>} />
+        <Route path="/base-dos-agentes" element={<StaffRoute><BaseDosAgentes /></StaffRoute>} />
         <Route path="/metricas" element={<StaffRoute><AdminMetricas /></StaffRoute>} />
         <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
         <Route path="/calendario" element={<EditorialCalendar />} />

@@ -173,6 +173,8 @@ import { acaoDoKitNaConversa, MAX_ITENS_DO_KIT, REGRAS_DO_KIT_NA_CONVERSA } from
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 // Frente SPP (30/09): o método da casa (superpoderes) na conversa e no plano do cliente.
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas que o dono ensinou e a pesquisa trouxe entram no fim do sistema (montar, conversa e plano).
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG1 (29/09): a mensagem nunca some (pedido gravado antes da IA) e o agente aprende com cada pedido.
 import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarResposta, historicoParaOModelo, hojeParaOAgente, soltarPedido } from "../_shared/conversa-segura.ts";
@@ -858,7 +860,18 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     });
   }
 
-  const leitor = await modeloDoContexto();
+  const [leitor, base] = await Promise.all([
+    modeloDoContexto(),
+    // Base do agente: as fichas que servem a esta montagem (nunca lança).
+    baseDoAgente(db, {
+      agente: "contexto.agente",
+      clientId,
+      pedido: `Montar o contexto do negócio de ${nome} (público, oferta, concorrência, referências e posicionamento) a partir de: ${fontesAgora.join(", ")}`,
+      tarefa: "contexto",
+      referencia: { tipo: REF_TIPO, id: clientId },
+      criadoPor: ch.userId,
+    }),
+  ]);
   const r = await chamarTexto({
     clientId,
     tarefa: "contexto",
@@ -882,6 +895,8 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     maxTokensSaida: 6000,
     referencia: { tipo: REF_TIPO, id: clientId },
     criadoPor: ch.userId,
+    // Base do agente no fim do sistema; sem ficha, o sistema acima vale como está.
+    ...(base.bloco ? { sistema: `${SISTEMA_CONTEXTO}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\n${base.bloco}` } : {}),
   }).catch(async (e) => {
     // A montagem falhou: espera a leitura terminar (o que ela leu fica gravado) e devolve o erro da montagem.
     console.error("agente-contexto: montagem do contexto falhou", { clientId, erro: descreverErro(e) });
@@ -1004,7 +1019,18 @@ async function montarDaMarca(ch: Chamador, clientId: string, marca: MarcaDoClien
   if (!docs.length && !dossie && !imagens.length) {
     throw new ErroContexto(409, "sem_fontes_da_marca", `Ainda não há documentos, dossiê nem artes no projeto da ${marca.nome} para montar o contexto dela. Envie em Arquivos, no projeto da ${marca.nome}.`);
   }
-  const leitor = await modeloDoContexto();
+  const [leitor, base] = await Promise.all([
+    modeloDoContexto(),
+    // Base do agente: as fichas que servem a esta montagem (nunca lança).
+    baseDoAgente(db, {
+      agente: "contexto.agente",
+      clientId,
+      pedido: `Montar o contexto da marca ${marca.nome}, do cliente ${nome} (público, oferta, concorrência, referências e posicionamento) a partir de: ${docs.map((d) => d.nome).join(", ") || "dossiê e artes publicadas"}`,
+      tarefa: "contexto",
+      referencia: { tipo: REF_TIPO, id: clientId },
+      criadoPor: ch.userId,
+    }),
+  ]);
   const r = await chamarTexto({
     clientId,
     tarefa: "contexto",
@@ -1030,6 +1056,8 @@ async function montarDaMarca(ch: Chamador, clientId: string, marca: MarcaDoClien
     maxTokensSaida: 6000,
     referencia: { tipo: REF_TIPO, id: clientId },
     criadoPor: ch.userId,
+    // Base do agente no fim do sistema; sem ficha, o sistema acima vale como está.
+    ...(base.bloco ? { sistema: `${SISTEMA_CONTEXTO}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\n${base.bloco}` } : {}),
   });
   const c = (r.json ?? {}) as Record<string, any>;
   const paleta = (Array.isArray(c.paleta) ? c.paleta : [])
@@ -1531,6 +1559,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const soLeitura = ehOutraMarca(marcaDaConversa);
   // Frente SPP: o Jev escolhe o método da casa em paralelo com a leitura do contexto (nunca lança).
   const spP = superpoderesPara(db, { agente: "contexto.conversa", pedido: mensagem });
+  // Base do agente: as fichas que servem a esta mensagem, também em paralelo (nunca lança).
+  const baseP = baseDoAgente(db, { agente: "contexto.agente", clientId, pedido: mensagem, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId });
 
   // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada, briefing mais novo, dossiê, decisões do conselho, cérebro filtrado e Instagram).
   const completoP = contextoCompletoParaPrompt(db, clientId, marcaDaConversa, { area: "geral", partes: ["estrategia", "briefing", "dossie", "decisoes", "cerebro", "instagram"], teto: 6000 })
@@ -1564,6 +1594,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const hoje = hojeParaOAgente();
   const sp = await spP;
   const previas = await previasP;
+  const base = await baseP;
   const estado = {
     cliente: nome,
     kit: {
@@ -1612,6 +1643,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDoMapaDoPainel("contexto"),
       INSTRUCAO_DO_NUCLEO_DAS_MESAS,
       previas.bloco,
+      base.bloco,
     ].filter(Boolean).join("\n\n"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_CONVERSA_COM_METODO,
@@ -2412,6 +2444,8 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
 
   // Frente SPP: o método da casa do agente do cliente, escolhido pelo Jev em paralelo (nunca lança).
   const spPlanoP = superpoderesPara(db, { agente: "contexto.plano", pedido: mensagem });
+  // Base do agente: as fichas que servem a este pedido, também em paralelo (nunca lança).
+  const basePlanoP = baseDoAgente(db, { agente: "contexto.agente", clientId, pedido: mensagem, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId });
   const kit = await lerKit(clientId);
   const contexto = ((kit?.contexto ?? {}) as Record<string, unknown>);
   const [nome, linhas, plano, fase, briefing, dossie, regras, dadosDasAcoes, memoria, modelo] = await Promise.all([
@@ -2445,6 +2479,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
     briefing_resumido: linhasDoBriefing(briefing).join("\n").slice(0, 2500) || "briefing ainda não respondido",
     dossie_resumido: dossie ? limparSegredos(dossie) : "sem dossiê",
   };
+  const basePlano = await basePlanoP;
   const sistema = [
     SISTEMA_DO_PLANO,
     hojeParaOAgente().texto,
@@ -2466,6 +2501,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
     dadosDasAcoes ? blocoDasAcoesDoContexto(dadosDasAcoes) : "- acoes: sempre null nesta mensagem.",
     INSTRUCAO_DO_NUCLEO_DAS_MESAS,
     previas.bloco,
+    basePlano.bloco,
   ].filter(Boolean).join("\n\n");
   const spPlano = await spPlanoP;
   const chamar = (mensagens: Array<{ papel: "usuario" | "agente"; conteudo: string; imagens?: ImagemEntrada[] }>, pesquisaWeb = false) =>

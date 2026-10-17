@@ -32,6 +32,8 @@ import { jevPerguntar } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { chaveCarregada } from "../_shared/chaves.ts";
 import { superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas do motion entram no fim do sistema das falas.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { type CenaDaLinha, duracaoTotal, type LinhaDoFilme, pastaDoFilme, TAMANHOS_DO_MOTION } from "./modulos/motion-metodo.ts";
 import {
@@ -435,7 +437,11 @@ export function criarVoz(d: DepsDaVoz) {
     const modelo = await d.modeloDoPedido(f, p.modeloId);
     const n = f.som.narracao;
     const vozModelo = modeloDeVoz(n.modelo);
-    const regras = await regrasDaMesa(d.servico(), { clientId: f.client_id, mesa: "motion", marcaId: f.marca_id });
+    // Base do agente: as fichas do motion para estas falas, junto com as regras (nunca lançam).
+    const [regras, base] = await Promise.all([
+      regrasDaMesa(d.servico(), { clientId: f.client_id, mesa: "motion", marcaId: f.marca_id }),
+      baseDoAgente(d.servico(), { agente: "motion.agente", clientId: f.client_id, pedido: [p.pedido, "narração", f.brand.promessa, f.nome].filter(Boolean).join(". "), tarefa: "motion", referencia: { tipo: "motion_filme", id: f.id }, criadoPor: ch.userId }),
+    ]);
     const dados = {
       filme: { nome: f.nome, tipo: f.tipo, promessa: f.brand.promessa, tom: f.brand.tom, publico: f.brand.publico, evitar: f.brand.evitar, beats: f.brand.beats },
       PROVAS: f.brand.provas,
@@ -448,7 +454,7 @@ export function criarVoz(d: DepsDaVoz) {
       tarefa: "motion",
       agente: "motion",
       modeloId: modelo.id,
-      sistema: `${SISTEMA_DAS_FALAS}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+      sistema: `${SISTEMA_DAS_FALAS}${regras.bloco ? `\n\n${regras.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
       mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(dados)}` }],
       esquemaJson: ESQUEMA_DAS_FALAS,
       maxTokensSaida: 2_500,

@@ -424,6 +424,9 @@ import {
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 // Frente SPP (30/09): o método da casa (superpoderes) no estrategista, no plano, na oferta e no sênior. Nunca no leitor.
 import { comMetodosUsados, fecharComMetodo, type Momento, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10/2026): as fichas de cada papel (ads.estatico, ads.gestor) vão no fim do sistema da geração. Nunca no leitor nem no Jev.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
+
 import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG3 (29/09): o tráfego aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
@@ -508,6 +511,24 @@ const REF_REFERENCIA = "ads_referencia";
 const REF_CLIENTE = "cliente";
 /** Conversa da aba Oferta (agente_conversas.referencia_tipo não tem check; referencia_id = client_id). */
 const REF_OFERTA = "ads_oferta";
+
+/**
+ * 17/10: o plano e as copies servem também ao anúncio em vídeo (o roteiro, o gancho e a fala nascem aqui; a
+ * direção do vídeo na tela só monta o texto). Por isso leem a base do criativo estático e a do criativo em vídeo.
+ */
+async function basesDosCriativos(
+  servico: SupabaseClient,
+  e: Omit<Parameters<typeof baseDoAgente>[1], "agente" | "teto">,
+): Promise<{ bloco: string; ids: string[] }> {
+  const [estatico, video] = await Promise.all([
+    baseDoAgente(servico, { ...e, agente: "ads.estatico", teto: 5_000 }),
+    baseDoAgente(servico, { ...e, agente: "ads.video", teto: 2_500 }),
+  ]);
+  return {
+    bloco: [estatico.bloco, video.bloco ? `PARA OS ANÚNCIOS EM VÍDEO (gancho, roteiro e fala):\n${video.bloco}` : ""].filter(Boolean).join("\n\n"),
+    ids: [...estatico.ids, ...video.ids],
+  };
+}
 
 export const FORMATOS: FormatoAds[] = ["feed_4x5", "quadrado_1x1", "stories_9x16", "carrossel"];
 const ESTAGIOS = ["inconsciente", "problema", "solucao", "produto", "mais_consciente"] as const;
@@ -2129,6 +2150,8 @@ async function chamarReescrita(e: {
   variar: boolean;
   referencia: { tipo: string; id: string };
   criadoPor: string;
+  /** O bloco da base do agente da chamada original (mesmo sistema na reescrita); vazio = nada. */
+  base?: string;
 }): Promise<{ variacoes: Record<string, unknown>[]; custo: number; saldo: number }> {
   const r = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
@@ -2136,7 +2159,7 @@ async function chamarReescrita(e: {
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: e.modeloId,
-    sistema: sistemaDoEstrategista("copy", e.objetivo),
+    sistema: sistemaDoEstrategista("copy", e.objetivo) + (e.base ? `\n\n${e.base}` : ""),
     mensagens: [{ papel: "usuario", conteudo: e.pedido }, { papel: "agente", conteudo: JSON.stringify({ variacoes: e.escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: e.pedidoDaReescrita }],
     raciocinio: e.raciocinio,
     esquemaJson: e.variar ? ESQUEMA_VARIAR : ESQUEMA_COPIES,
@@ -2164,7 +2187,19 @@ function conferenciaParaGravar(angulo: AnguloDeVenda | null, conf: ConferenciaDo
 async function briefingSugerir(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const [ctx, atual] = await Promise.all([montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)), carregarBriefing(servico, clientId)]);
+  const [ctx, atual, baseAds] = await Promise.all([
+    montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
+    carregarBriefing(servico, clientId),
+    // Base do gestor de ads: lida junto com o contexto (sem ficha, o sistema sai igual).
+    baseDoAgente(servico, {
+      agente: "ads.gestor",
+      clientId,
+      pedido: "Briefing de performance do cliente para anúncios na Meta: oferta, público, situações, objeções, provas e objetivo da campanha.",
+      tarefa: TAREFA,
+      referencia: { tipo: REF_CLIENTE, id: clientId },
+      criadoPor: chamador.userId,
+    }),
+  ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const pedido = `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; null ou vazio = não existe):
 ${JSON.stringify({ ...ctx.dados, briefing_atual: resumoDoBriefing(atual) }, null, 1)}
@@ -2180,7 +2215,7 @@ TAREFA: proponha o briefing de performance deste cliente para anúncios na Meta.
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("oferta"),
+    sistema: sistemaDoEstrategista("oferta") + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
@@ -2787,10 +2822,24 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const planoId = crypto.randomUUID();
   const achado = await nichoDoCliente(ctx, briefing, { clientId, referencia: { tipo: REF_PLANO, id: planoId }, criadoPor: chamador.userId }, corpo.nicho);
   // Frente CR: resultado real por estilo e os padrões do nicho, lidos junto com a conversa (sem IA).
-  const [conversaId, desempenho, refsDoNicho] = await Promise.all([
+  const [conversaId, desempenho, refsDoNicho, baseAds] = await Promise.all([
     abrirConversa(servico, clientId, planoId, chamador.userId),
     desempenhoDosEstilos(servico, clientId, achado.nicho?.id ?? null),
     referenciasDoNicho(servico, achado.nicho?.id ?? null).catch((e) => (registrarFalha("mesa-ads: referenciasDoNicho falhou", e), [] as ReferenciaResumo[])),
+    // Base do criativo estático (os ângulos são das peças em imagem) e a do criativo em vídeo (roteiro e fala).
+    basesDosCriativos(servico, {
+      clientId,
+      pedido: [
+        `Ângulos de anúncio estático para um plano de teste${modo === "variar_vencedor" ? ", variando o vencedor escolhido" : ""}.`,
+        pedidoEquipe,
+        oferta ? `Oferta: ${oferta.nome}. ${oferta.promessa}` : "",
+        objetivo ? `Objetivo: ${objetivo.nome}` : "",
+        achado.nicho ? `Nicho: ${achado.nicho.nome}` : "",
+      ].filter(Boolean).join("\n"),
+      tarefa: TAREFA,
+      referencia: { tipo: REF_PLANO, id: planoId },
+      criadoPor: chamador.userId,
+    }),
   ]);
   // Referências: as do cliente, depois os padrões do nicho dele e só então o resto da biblioteca (menos, para o pedido não crescer).
   const idsDoNicho = new Set(refsDoNicho.map((r) => r.id));
@@ -2859,7 +2908,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("angulos", objetivo),
+      sistema: sistemaDoEstrategista("angulos", objetivo) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
       metodo: await metodoDoEstrategista(servico, "gerar"),
       mensagens: [{ papel: "usuario", conteudo: instrucao }],
       raciocinio,
@@ -2927,7 +2976,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
         tarefa: TAREFA,
         agente: AGENTE,
         modeloId: modelo.id,
-        sistema: sistemaDoEstrategista("angulos", objetivo),
+        sistema: sistemaDoEstrategista("angulos", objetivo) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
         metodo: await metodoDoEstrategista(servico, "ajustar"),
         mensagens: [{
           papel: "usuario",
@@ -3055,6 +3104,8 @@ async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const podeMudar = p.status !== "concluido";
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
   const spPlanoP = superpoderesPara(servico, { agente: "ads.plano", pedido: mensagem });
+  // Base do gestor de ads (a conversa do plano), também em paralelo com as leituras (nunca lança).
+  const baseAdsP = baseDoAgente(servico, { agente: "ads.gestor", clientId: p.client_id, pedido: `Plano de teste "${p.nome}": ${mensagem}`, tarefa: TAREFA, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
 
   const [briefing, ctx, refs, anexos] = await Promise.all([
     carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
@@ -3117,6 +3168,7 @@ Aplique o pedido. Devolva:
   // Núcleo comum (lote B): consultar antes (o Jev escolhe as leituras), instrução comum e conferência dos quadros.
   const cobrarDoPlano = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId: p.client_id, tarefa: TAREFA, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
   const previasDoPlano = await prepararNucleo(servico, { clientId: p.client_id, pedido: mensagem, agente: "ads (plano de teste)", ignorar: ["ler_agenda"], cobrar: cobrarDoPlano });
+  const baseAds = await baseAdsP;
   let s;
   try {
     s = await chamarTexto({
@@ -3125,7 +3177,7 @@ Aplique o pedido. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano) + `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previasDoPlano.bloco ? `\n\n${previasDoPlano.bloco}` : ""}`,
+      sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano) + `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previasDoPlano.bloco ? `\n\n${previasDoPlano.bloco}` : ""}${baseAds.bloco ? `\n\n${baseAds.bloco}` : ""}`,
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_CONVERSA_PLANO_COM_METODO,
@@ -3300,6 +3352,8 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
   // e a referência com Fidelidade (a escolhida ou, com fidelidade pedida, a 1ª do ângulo; lida uma vez).
   const fatos = await fatosDoPlano(servico, p.client_id, p, briefing);
   const assunto = [texto(corpo.pedido, 1000), ...angulos.map((a) => `${a.nome}. ${a.situacao} ${a.mecanismo} ${a.gancho_verbal}`)].filter(Boolean).join("\n");
+  // Base do criativo estático: uma leitura para a chamada inteira, em paralelo com a pesquisa do mundo real.
+  const baseAdsP = basesDosCriativos(servico, { clientId: p.client_id, pedido: assunto, tarefa: TAREFA, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
   const mundo = await mundoRealDoAssunto(chamador, p.client_id, assunto, corpo.pesquisar !== false, { tipo: REF_PLANO, id: p.id });
   custo += mundo.custo;
   if (mundo.saldo != null) saldo = mundo.saldo;
@@ -3357,13 +3411,14 @@ Para cada variação (variacao = 1, 2, ...):
 - gancho_visual: o que a imagem mostra (o gancho visual do ângulo, ajustado à variação), descrito para o diretor de arte.
 - carrossel: ${formatos.includes("carrossel") ? "de 3 a 5 cards seguindo a sequência tensão, explicação, demonstração, objeção, próximo passo (cada lâmina acrescenta algo; a primeira é a capa com o gancho, a última o próximo passo); texto_exato curto por card e a ilustracao de cada um" : "null"}.
 Nada de número, depoimento, prazo, preço ou urgência que não esteja no briefing. Nunca peça para escurecer a foto: o destaque vem de contraste, composição, tipografia, escala e cor.`;
+    const baseAds = await baseAdsP;
     const s = await chamarTexto({
       timeoutMs: TIMEOUT_TEXTO_ADS_MS,
       clientId: p.client_id,
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("copy", objetivo),
+      sistema: sistemaDoEstrategista("copy", objetivo) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
       metodo: await metodoDoEstrategista(servico, "gerar"),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
@@ -3377,7 +3432,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     const escritas = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, escrever);
     // 02/10: conferente anti-genérico em código; as reprovadas vão para UMA reescrita (mesma conversa, uma chamada).
     const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
-      const r = await chamarReescrita({ clientId: p.client_id, modeloId: modelo.id, objetivo, raciocinio, pedido, escritas, pedidoDaReescrita, variar: false, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
+      const r = await chamarReescrita({ clientId: p.client_id, modeloId: modelo.id, objetivo, raciocinio, pedido, escritas, pedidoDaReescrita, variar: false, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId, base: baseAds.bloco });
       custo += r.custo;
       saldo = r.saldo;
       return r.variacoes;
@@ -3603,6 +3658,8 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   custoExtra += replicacao.custo;
   if (replicacao.aviso) avisos.push(replicacao.aviso);
   const assunto = [pedidoEquipe, angulo ? `${angulo.nome}. ${angulo.situacao} ${angulo.mecanismo}` : ""].filter(Boolean).join("\n");
+  // Base do criativo estático, em paralelo com a pesquisa do mundo real (sem assunto, a copy atual guia a escolha).
+  const baseAdsP = baseDoAgente(servico, { agente: "ads.estatico", clientId: c.client_id, pedido: assunto || `${c.copy.titulo ?? ""} ${c.copy.texto_principal ?? ""}`, tarefa: TAREFA, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId });
   const mundo = await mundoRealDoAssunto(chamador, c.client_id, assunto, corpo.pesquisar !== false, { tipo: REF_CRIATIVO, id: c.id });
   custoExtra += mundo.custo;
   if (mundo.aviso) avisos.push(mundo.aviso);
@@ -3619,13 +3676,14 @@ ${regrasDoTomParaCopy(tom)}
 
 TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, no tom ${TONS[tom].nome.toLowerCase()}, mudando uma coisa por vez e mantendo o mecanismo do ângulo. Cada variação usa uma estrutura de copy diferente (framework, id da lista), de preferência diferente da atual, e o ângulo de venda pedido (angulo_de_venda). Nada genérico.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
 o_que_mudou: uma frase dizendo a variável que mudou.`;
+  const baseAds = await baseAdsP;
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: c.client_id,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)),
+    sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedidoDaVariacao }],
     raciocinio,
@@ -3647,6 +3705,7 @@ o_que_mudou: uma frase dizendo a variável que mudou.`;
       variar: true,
       referencia: { tipo: REF_CRIATIVO, id: c.id },
       criadoPor: chamador.userId,
+      base: baseAds.bloco,
     });
     custoExtra += r.custo;
     return r.variacoes;
@@ -3779,6 +3838,8 @@ async function criativosReescrever(servico: SupabaseClient, chamador: Chamador, 
   const angulosDoLote = grupos.map((g) => anguloDe(g[0])).filter((a, i, l): a is Angulo => !!a && l.findIndex((x) => x && x.id === a.id) === i);
   const assunto = [pedidoEquipe, ...angulosDoLote.map((a) => `${a.nome}. ${a.situacao} ${a.mecanismo}`)].join("\n");
   const cobrarEm = { tipo: REF_CRIATIVO, id: grupos[0][0].id };
+  // Base do criativo estático, em paralelo com a pesquisa do mundo real.
+  const baseAdsP = baseDoAgente(servico, { agente: "ads.estatico", clientId, pedido: assunto, tarefa: TAREFA, referencia: cobrarEm, criadoPor: chamador.userId });
   const mundo = await mundoRealDoAssunto(chamador, clientId, assunto, corpo.pesquisar !== false, cobrarEm);
   custo += mundo.custo;
   if (mundo.saldo != null) saldo = mundo.saldo;
@@ -3822,13 +3883,14 @@ TAREFA: reescreva TODO o conteúdo das ${n} variação(ões) acima, NO LUGAR: a 
 Para cada variação (variacao = 1, 2, ...): framework, angulo_de_venda, texto_principal (até 125 caracteres), texto_principal_longo, titulo (até 40), descricao, cta_meta, headline_arte (até ${regrasTom.headline_max_palavras} palavras), apoio_arte, cta_arte, gancho_visual, estilo_visual (null para manter) e carrossel: nas variações com cards_do_carrossel, exatamente essa quantidade de cards (tensão, explicação, demonstração, objeção, próximo passo), texto_exato curto e a ilustracao de cada um; nas outras, null.
 Nada de número, depoimento, prazo, preço ou urgência fora dos FATOS.`;
   const objetivoDaTroca = objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao);
+  const baseAds = await baseAdsP;
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("copy", objetivoDaTroca),
+    sistema: sistemaDoEstrategista("copy", objetivoDaTroca) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
@@ -3843,7 +3905,7 @@ Nada de número, depoimento, prazo, preço ou urgência fora dos FATOS.`;
   if (!escritas.length) throw new ErroHttp(502, "sem_copy", "O estrategista não devolveu o conteúdo novo.", { custo_usd: arred6(custo) });
   if (escritas.length < n) avisos.push(`Vieram ${escritas.length} de ${n} variações; as outras ficam como estão.`);
   const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
-    const r = await chamarReescrita({ clientId, modeloId: modelo.id, objetivo: objetivoDaTroca, raciocinio, pedido, escritas, pedidoDaReescrita, variar: false, referencia: cobrarEm, criadoPor: chamador.userId });
+    const r = await chamarReescrita({ clientId, modeloId: modelo.id, objetivo: objetivoDaTroca, raciocinio, pedido, escritas, pedidoDaReescrita, variar: false, referencia: cobrarEm, criadoPor: chamador.userId, base: baseAds.bloco });
     custo += r.custo;
     saldo = r.saldo;
     return r.variacoes;
@@ -4137,14 +4199,25 @@ async function aprendizadoRegistrar(servico: SupabaseClient, chamador: Chamador,
   let saldo: number | null = null;
   let usoId: string | null = null;
   if (!textoFinal) {
-    const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "low");
+    const [{ modelo, raciocinio }, baseAds] = await Promise.all([
+      resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "low"),
+      // Base do gestor de ads: a leitura dos números e o próximo teste.
+      baseDoAgente(servico, {
+        agente: "ads.gestor",
+        clientId: c.client_id,
+        pedido: `Aprendizado do anúncio "${c.nome}" (${c.formato}) de ${inicio} a ${fim} e o próximo teste.${angulo ? ` Hipótese do ângulo: ${angulo.hipotese}` : ""}`,
+        tarefa: TAREFA,
+        referencia: { tipo: REF_CRIATIVO, id: c.id },
+        criadoPor: chamador.userId,
+      }),
+    ]);
     const s = await chamarTexto({
       timeoutMs: TIMEOUT_TEXTO_ADS_MS,
       clientId: c.client_id,
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("conta"),
+      sistema: sistemaDoEstrategista("conta") + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
       metodo: await metodoDoEstrategista(servico, "gerar"),
       mensagens: [{
         papel: "usuario",
@@ -5100,6 +5173,8 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
 
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
   const spOfertaP = superpoderesPara(servico, { agente: "ads.oferta", pedido: mensagem });
+  // Base do gestor de ads (a oferta), também em paralelo com as leituras (nunca lança).
+  const baseAdsP = baseDoAgente(servico, { agente: "ads.gestor", clientId, pedido: `Oferta para anúncios: ${mensagem}`, tarefa: TAREFA, referencia: { tipo: REF_OFERTA, id: conversaId }, criadoPor: chamador.userId });
   const [emFoco, briefing, ctx, anexos, { data: ofertasAtuais }, { data: historico }] = await Promise.all([
     corpo.oferta_id ? carregarOferta(servico, clientId, corpo.oferta_id) : Promise.resolve(null),
     carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
@@ -5150,6 +5225,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
   // Núcleo comum (lote B): consultar antes (o Jev escolhe as leituras), instrução comum e conferência dos quadros.
   const cobrarDaOferta = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: { tipo: REF_OFERTA, id: conversaId }, criadoPor: chamador.userId });
   const previasDaOferta = await prepararNucleo(servico, { clientId, pedido: mensagem, agente: "ads (oferta)", ignorar: ["ler_agenda"], cobrar: cobrarDaOferta });
+  const baseAds = await baseAdsP;
   let s;
   try {
     s = await chamarTexto({
@@ -5158,7 +5234,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta) + `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previasDaOferta.bloco ? `\n\n${previasDaOferta.bloco}` : ""}`,
+      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta) + `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previasDaOferta.bloco ? `\n\n${previasDaOferta.bloco}` : ""}${baseAds.bloco ? `\n\n${baseAds.bloco}` : ""}`,
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_OFERTA_CONVERSA_COM_METODO,
@@ -5200,7 +5276,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
         tarefa: TAREFA,
         agente: AGENTE,
         modeloId: modelo.id,
-        sistema: sistemaDoEstrategista("oferta"),
+        sistema: sistemaDoEstrategista("oferta") + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
         metodo: await metodoDoEstrategista(servico, "ajustar"),
         mensagens: [{
           papel: "usuario",
@@ -5656,14 +5732,25 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
     })),
   };
   // Frente TR: a leitura da conta também é do agente de tráfego (padrão GPT-6 Luna no máximo; a escolha da tela vale).
-  const { modelo, raciocinio } = await modeloDoTrafego(corpo);
+  const [{ modelo, raciocinio }, baseAds] = await Promise.all([
+    modeloDoTrafego(corpo),
+    // Base do gestor de ads: a leitura da conta e os próximos testes.
+    baseDoAgente(servico, {
+      agente: "ads.gestor",
+      clientId,
+      pedido: "Análise da conta de anúncios na Meta: o que escalar, pausar e renovar, achados de copy (ganchos, títulos, CTAs) e os próximos testes.",
+      tarefa: TAREFA,
+      referencia: { tipo: REF_CLIENTE, id: clientId },
+      criadoPor: chamador.userId,
+    }),
+  ]);
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("conta"),
+    sistema: sistemaDoEstrategista("conta") + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{
       papel: "usuario",
@@ -5819,14 +5906,25 @@ async function evolucao(servico: SupabaseClient, chamador: Chamador, corpo: Reco
     const itens = [...leitura.vencedores, ...leitura.manter, ...leitura.descartar, ...leitura.conteudo.destaques, ...leitura.conteudo.abaixo, ...leitura.conteudo.sinais];
     if (itens.length || leitura.aprendizados.length) {
       const ids = new Set(itens.map((i) => i.id));
-      const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "low");
+      const [{ modelo, raciocinio }, baseAds] = await Promise.all([
+        resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "low"),
+        // Base do gestor de ads: o porquê do que funciona e do que não funciona.
+        baseDoAgente(servico, {
+          agente: "ads.gestor",
+          clientId,
+          pedido: "Explicar a evolução dos anúncios e posts: o porquê dos vencedores, dos que ficam e dos descartados, os próximos testes e os cuidados.",
+          tarefa: TAREFA,
+          referencia: { tipo: REF_CLIENTE, id: clientId },
+          criadoPor: chamador.userId,
+        }),
+      ]);
       const s = await chamarTexto({
         timeoutMs: TIMEOUT_TEXTO_ADS_MS,
         clientId,
         tarefa: TAREFA,
         agente: AGENTE,
         modeloId: modelo.id,
-        sistema: sistemaDoEstrategista("conta"),
+        sistema: sistemaDoEstrategista("conta") + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
         metodo: await metodoDoEstrategista(servico, "gerar"),
         mensagens: [{
           papel: "usuario",
@@ -5891,14 +5989,25 @@ async function bibliotecaDoNicho(servico: SupabaseClient, chamador: Chamador, co
   const [ctx, briefing] = await Promise.all([montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)), carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null))]);
   const achado = await nichoDoCliente(ctx, briefing, { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId }, corpo.nicho);
   const nicho = achado.nicho;
-  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
+  const [{ modelo, raciocinio }, baseAds] = await Promise.all([
+    resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
+    // Base do criativo estático: os padrões são de peça em imagem.
+    baseDoAgente(servico, {
+      agente: "ads.estatico",
+      clientId,
+      pedido: `Padrões de criativo estático que param a rolagem e vendem para o nicho ${nicho ? nicho.nome : "do cliente"}.`,
+      tarefa: TAREFA,
+      referencia: { tipo: REF_CLIENTE, id: clientId },
+      criadoPor: chamador.userId,
+    }),
+  ]);
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("angulos"),
+    sistema: sistemaDoEstrategista("angulos") + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{
       papel: "usuario",
@@ -6059,13 +6168,22 @@ async function gerarPacoteDoCriativo(
 ): Promise<PacoteGerado> {
   const angulo = ctx.plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
   const verba = numeroOuNulo((ctx.briefing?.objetivo ?? {}).verba_diaria_brl);
+  // Base do criativo estático: o pacote de copy é do anúncio em imagem (mesmo serviço do método).
+  const baseAds = await baseDoAgente(clienteServico(), {
+    agente: "ads.estatico",
+    clientId: c.client_id,
+    pedido: [`Pacote de copy do anúncio "${c.nome}" (${c.formato}).`, c.copy.texto_principal, angulo ? `${angulo.nome}. ${angulo.situacao}` : ""].filter(Boolean).join("\n"),
+    tarefa: TAREFA,
+    referencia: { tipo: REF_CRIATIVO, id: c.id },
+    criadoPor: chamador.userId,
+  });
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: c.client_id,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista("pacote", ctx.objetivo),
+    sistema: sistemaDoEstrategista("pacote", ctx.objetivo) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(clienteServico(), "lote"),
     mensagens: [{
       papel: "usuario",
@@ -6122,7 +6240,7 @@ TAREFA: escreva o pacote completo de copy deste criativo para o gestor de tráfe
           tarefa: TAREFA,
           agente: AGENTE,
           modeloId: modelo.id,
-          sistema: sistemaDoEstrategista("copy", ctx.objetivo),
+          sistema: sistemaDoEstrategista("copy", ctx.objetivo) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
           metodo: await metodoDoEstrategista(clienteServico(), "ajustar"),
           mensagens: [{
             papel: "usuario",
@@ -7141,6 +7259,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const aprendizadoDaConta = aprenderNoServidor(servico as never, { texto: mensagem, agente: "trafego", clientId, donoId: chamador.userId, contexto: "conversa da conta de anúncios" });
   // Frente SPP: o Jev escolhe o método da casa do sênior em paralelo com a leitura da conta (nunca lança).
   const spSeniorP = superpoderesPara(servico, { agente: "ads.senior", pedido: mensagem });
+  // Base do gestor de ads, também em paralelo com a leitura da conta (nunca lança).
+  const baseAdsP = baseDoAgente(servico, { agente: "ads.gestor", clientId, pedido: mensagem, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: chamador.userId });
   // Núcleo comum (lote B): consultar antes de responder (briefing, contexto, métricas das redes, cérebro); a agenda não entra.
   const cobrarDoSenior = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: chamador.userId });
   const previasP = prepararNucleo(servico, { clientId, pedido: mensagem, agente: "ads (sênior de tráfego)", ignorar: ["ler_agenda"], cobrar: cobrarDoSenior });
@@ -7199,6 +7319,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const camadasDaMemoria = await memoriaMontada(servico, clientId, { memoria, conta: c.conta, feito, limites: limitesDaMemoria.limites, fontes: limitesDaMemoria.fontes, regrasDoDono: regrasDoDono.map((r) => regraEmTexto(r)) })
     .catch((e) => (registrarFalha("mesa-ads: memória da conta não montada", e), [] as CamadaMontada[]));
   const blocoDasFontes = `${camadasDaMemoria.length ? `${blocoDaMemoria(camadasDaMemoria)}\n\n` : ""}${previas.bloco ? `${previas.bloco}\n\n` : ""}FONTE ${fonteDoRetrato.apelido}: o RETRATO_DA_CAMPANHA do CONTEXTO acima. Quadro com número da conta cita ${fonteDoRetrato.apelido} em "fontes".`;
+  // A base do gestor vai no pedido, depois das fontes: o sistema do sênior fica fixo (sem ficha, o pedido sai igual).
+  const baseAds = await baseAdsP;
   await andamento.passo("pensando", `Pensando (${modeloEscolhido.modelo.rotulo || modeloEscolhido.modelo.id}${modeloEscolhido.raciocinio ? `, raciocínio ${modeloEscolhido.raciocinio}` : ""})`);
   const tentativa = await chamarComTetoDeTempo({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
@@ -7212,7 +7334,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
       ...historico.filter((m) => m.id !== pedidoId && (m.papel === "usuario" || m.papel === "agente")).map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
       {
         papel: "usuario",
-        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\n${blocoDasFontes}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir, assumirPlano: modoAssumir })}`,
+        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\n${blocoDasFontes}${baseAds.bloco ? `\n\n${baseAds.bloco}` : ""}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir, assumirPlano: modoAssumir })}`,
       },
     ],
     raciocinio: modeloEscolhido.raciocinio,
@@ -8487,11 +8609,20 @@ async function kitRecepcaoGerar(servico: SupabaseClient, chamador: Chamador, cor
   const { plano, angulo } = await anguloDoPedido(servico, chamador, corpo);
   const clientId = plano.client_id;
   const ofertaId = typeof plano.estrutura.oferta_id === "string" ? plano.estrutura.oferta_id : null;
-  const [briefing, ofertasQ, perfil, modeloEscolhido] = await Promise.all([
+  const [briefing, ofertasQ, perfil, modeloEscolhido, baseAds] = await Promise.all([
     carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(6),
     servico.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
     resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
+    // Base do gestor de ads: o kit nasce da oferta e do ângulo (recepção de quem chega pelo anúncio).
+    baseDoAgente(servico, {
+      agente: "ads.gestor",
+      clientId,
+      pedido: `Kit de recepção do ângulo "${angulo.nome}": post de recepção, ajustes do perfil e roteiro comercial de atendimento. ${angulo.situacao}`,
+      tarefa: TAREFA,
+      referencia: { tipo: REF_PLANO, id: plano.id },
+      criadoPor: chamador.userId,
+    }),
   ]);
   const ofertas = ((ofertasQ.data as LinhaOferta[] | null) ?? []).map(ofertaDaLinha);
   const oferta = ofertas.find((o) => o.id === ofertaId) ?? ofertas.find((o) => o.status === "escolhida") ?? ofertas[0] ?? null;
@@ -8505,7 +8636,7 @@ async function kitRecepcaoGerar(servico: SupabaseClient, chamador: Chamador, cor
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modeloEscolhido.modelo.id,
-    sistema: sistemaDoEstrategista("oferta", angulo.objetivo),
+    sistema: sistemaDoEstrategista("oferta", angulo.objetivo) + (baseAds.bloco ? `\n\n${baseAds.bloco}` : ""),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedidoDoKit(angulo, briefing, ofertaCurta, cliente) }],
     raciocinio: modeloEscolhido.raciocinio,

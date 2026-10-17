@@ -324,6 +324,7 @@ import { acaoDoSeloNaConversa, blocoDoSeloParaOEstrategista, type PedidoDoSeloNa
 import { falaDoSelo, type IntencaoDoSelo } from "../_shared/selo-da-campanha.ts";
 import { acaoDaConversaDaCampanha, CAMPOS_DA_CAMPANHA_NA_CONVERSA, type CampanhaAtual, camposDaCampanhaNaConversa, mudancasDaCampanha, patchParaVoltar } from "./campanha-na-conversa.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -1209,8 +1210,11 @@ async function montarContexto(
   inicio: string,
   fim: string,
   marcaDoPedido: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
-  opcoes: { limiteMcp?: number } = {},
+  opcoes: { limiteMcp?: number; pedido?: string } = {},
 ): Promise<Contexto> {
+  // 17/10 (dono: "cada um tendo uma base de aprendizado"): o que o dono ensinou ao agente do Mês e a pesquisa
+  // semanal trouxe (base-dos-agentes). Soma ao prompt; sem ficha, o prompt sai igual.
+  const baseP = baseDoAgente(servico, { agente: "mes.estrategista", clientId, pedido: opcoes.pedido ?? "", tarefa: "calendario", referencia: { tipo: "cliente", id: clientId } });
   // Itens do MCP ativos para o cliente: todos os geradores leem (o agente do Mês lê com teto maior, à parte).
   const limiteMcp = opcoes.limiteMcp ?? MAX_CHARS_DO_MCP_NOS_GERADORES;
   const mcpP = limiteMcp > 0 ? contextoMcpAtivo(servico, clientId, limiteMcp) : Promise.resolve({ texto: "", ativos: 0 });
@@ -1412,7 +1416,7 @@ async function montarContexto(
     datasOcupadas,
     ocupacao,
     regraDoDia: await regraP,
-    prompt,
+    prompt: ((b) => (b ? `${prompt}\n\n${b}` : prompt))((await baseP).bloco),
     mcp: (await mcpP).texto,
     memoriaEditorial: await memoriaEditorialP,
     moldes: await moldesP,
@@ -2472,7 +2476,7 @@ async function conversar(servico: SupabaseClient, chamador: Chamador, corpo: Rec
   const uteis = diasUteisDaProposta(p);
   // Frente SPP: o Jev escolhe o método da casa em paralelo com a leitura do contexto (nunca lança).
   const spP = superpoderesPara(servico, { agente: "calendario.conversa", pedido: mensagem });
-  const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id));
+  const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id), { pedido: mensagem });
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id ?? p.parametros.modelo, corpo.raciocinio ?? p.parametros.raciocinio);
   const conversaId = await garantirConversa(servico, p, chamador.userId);
 
@@ -3907,7 +3911,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const escolhaDoPedido = lerEscolhaEditorial(corpo);
 
   const [ctx, anexos, projectId, conversaId, fotosDaCamp] = await Promise.all([
-    montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
+    montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo), { pedido: mensagem }),
     baixarAnexos(servico, clientId, corpo.anexos),
     projetoSocialDoCliente(servico, clientId, marcaDaChamada(servico, clientId, corpo)),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
@@ -6344,7 +6348,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const regrasP = lerRegrasDoDono(servico, clientId, { areas: ["calendario", "campanha", "copy"], marcaId: corpo.marca_id });
   const [ctx, extra, imagens, conversaId, acoesCtx, mcp, kit] = await Promise.all([
     // O MCP entra à parte, com teto maior e dentro do orçamento.
-    montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0 }),
+    montarContexto(servico, clientId, inicio, fim, marcaP, { limiteMcp: 0, pedido: mensagem }),
     marcaP.then((m) => contextoDoPlanejamento(servico, clientId, mes, m)),
     baixarAnexos(servico, clientId, corpo.anexos),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),

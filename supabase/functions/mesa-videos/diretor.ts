@@ -74,6 +74,8 @@ import { motorPorId } from "./modulos/modelos-de-video.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) na conversa do diretor de vídeo. A leitura dos quadros fica sem.
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas que o dono ensinou e a pesquisa trouxe entram no fim do sistema.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 // Frente AG2 (29/09): conversa guardada, "essa/a segunda/todos", ordem clara e aprendizado.
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, type ItemReferivel, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
@@ -261,6 +263,8 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   const spP = superpoderesPara(b.servico(), { agente: "videos.diretor", pedido: texto });
   // 02/10 (dono: "não repetir pessoa, roupa e cenário"): o que os últimos filmes deste cliente já usaram (nunca lança).
   const variarP = variarAgoraNoVideo(b.servico(), clientId, { excluirId: atual.id, pedido: texto });
+  // Base do agente: as fichas do diretor de vídeo para este pedido (nunca lança; sem ficha, bloco vazio).
+  const baseP = baseDoAgente(b.servico(), { agente: "videos.diretor", clientId, pedido: texto, tarefa: "conversa", criadoPor: b.userId });
   const conversaP = (async () => {
     const conversaId = atual.id ? await conversaDoProjeto(b, clientId, atual.id, false) : null;
     const historico = conversaId ? await historicoDaConversa(b, conversaId) : [];
@@ -276,13 +280,14 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
     () => prepararNucleo(b.servico(), { clientId, pedido: texto, agente: "diretor_arte (vídeo)", cobrar: cobrarDoNucleo }),
   );
   // Tudo o que é lido corre junto (contexto, regras ensinadas, catálogo, conversa + referência, andamento, leituras do núcleo).
-  const [contexto, regras, cat, conversa, andamento, previas] = await Promise.all([
+  const [contexto, regras, cat, conversa, andamento, previas, base] = await Promise.all([
     contextoDoCliente(b, clientId, corpo.marca_id),
     regrasDaMesa(b.servico(), { clientId, mesa: "video", marcaId: typeof corpo.marca_id === "string" ? corpo.marca_id : null }),
     catalogo(b),
     conversaP,
     atual.id ? andamentoDosPlanos(b, clientId, atual.id) : Promise.resolve({} as Record<string, AndamentoDoPlano>),
     previasP,
+    baseP,
   ]);
   const sistema = [
     // Frente VGN: o diretor só propõe motor que gera hoje (chave existe, com preço, ligado).
@@ -292,6 +297,7 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
     blocoDaReferencia(conversa.referencia, itens),
     regras.bloco ? `\n${regras.bloco}` : "",
     `\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+    base.bloco ? `\n${base.bloco}` : "",
   ].filter(Boolean).join("\n");
   let saida;
   try {
@@ -431,7 +437,11 @@ export async function diretorPrompt(b: BaseDaFuncao, corpo: Record<string, unkno
   if (!modelo) throw b.erro(409, "sem_modelo_de_texto", "Nenhum modelo de texto ativo para o diretor. Ative um em Configurações > Modelos.");
   // Frente SPP: o método da casa vai junto (o mesmo do diretor de vídeo; nunca lança).
   const spP = superpoderesPara(b.servico(), { agente: "videos.diretor", pedido: texto });
-  const contexto = await contextoDoCliente(b, clientId, corpo.marca_id, "prompt");
+  // Base do agente: as fichas do diretor de vídeo, lidas junto com o contexto (nunca lança).
+  const [contexto, base] = await Promise.all([
+    contextoDoCliente(b, clientId, corpo.marca_id, "prompt"),
+    baseDoAgente(b.servico(), { agente: "videos.diretor", clientId, pedido: texto, tarefa: "motion", criadoPor: b.userId }),
+  ]);
   const num = (v: unknown, p: number) => (isFinite(Number(v)) ? Number(v) : p);
   let saida;
   try {
@@ -440,7 +450,7 @@ export async function diretorPrompt(b: BaseDaFuncao, corpo: Record<string, unkno
       tarefa: "motion",
       agente: "diretor_arte",
       modeloId: modelo.id,
-      sistema: sistemaDoPrompt(motor, contexto),
+      sistema: `${sistemaDoPrompt(motor, contexto)}${base.bloco ? `\n\n${base.bloco}` : ""}`,
       mensagens: [{
         papel: "usuario",
         conteudo: mensagemDoPrompt({

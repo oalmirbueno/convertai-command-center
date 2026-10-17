@@ -56,6 +56,8 @@ import {
   STATUS_DO_BOOK,
 } from "./book-regras.ts";
 import type { LinhaClone } from "./clones.ts";
+// Base do agente (17/10): as fichas do diretor de fotografia entram no fim do sistema do diretor do book.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 
 const REF_BOOK = "foto_book";
 const LADO_IDENTIDADE = 1280;
@@ -338,11 +340,13 @@ Responda só com o JSON pedido.`;
     if (!mensagem && !promptIds.length) throw new ErroDeRegra(400, "mensagem_vazia", "Diga ao diretor o que você quer (ou escolha prompts da biblioteca).");
     if (!f.contextoDoCliente) throw new ErroDeRegra(503, "contexto_indisponivel", "O contexto do cliente não está disponível nesta função.");
     const quantidade = Math.max(1, Math.min(8, Math.floor(Number(corpo.quantidade) || 4)));
-    const [contexto, diretor, itens, resumo] = await Promise.all([
+    const [contexto, diretor, itens, resumo, base] = await Promise.all([
       f.contextoDoCliente(b.client_id, corpo.campanha_id, corpo.marca_id),
       f.modeloDeTexto("diretor_arte", corpo.modelo_id),
       f.lerItensDaBiblioteca(b.client_id, promptIds),
       resumoDoAssunto(ch, b.client_id, b.assunto.tipo, b.assunto.id),
+      // Base do agente: as fichas do diretor para este book (nunca lança).
+      baseDoAgente(db(), { agente: "foto.diretor", clientId: b.client_id, pedido: [mensagem, b.nome].filter(Boolean).join(". "), tarefa: "estudio", referencia: { tipo: REF_BOOK, id: b.id }, criadoPor: ch.userId }),
     ]);
     const referencias = await referenciasComUrl(b);
     const saida = await chamarTexto({
@@ -350,7 +354,7 @@ Responda só com o JSON pedido.`;
       tarefa: "estudio",
       agente: "diretor_arte",
       modeloId: diretor.id,
-      sistema: sistemaDoDiretor(),
+      sistema: `${sistemaDoDiretor()}${base.bloco ? `\n\n${base.bloco}` : ""}`,
       mensagens: [
         ...b.conversa.slice(-8).map((m) => ({ papel: m.papel === "diretor" ? "agente" as const : "usuario" as const, conteudo: m.texto })),
         {

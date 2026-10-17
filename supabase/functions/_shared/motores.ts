@@ -650,6 +650,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "editor-video/index.ts#agentePesquisar/respostaComFolego": "leituras",
   "mesa-ads/index.ts#textoLidoDaReferenciaAds/lerTextoDaReferencia": "leituras",
   "mesa-ads/index.ts#mundoRealDoAssunto/pesquisarFatosReais": "leituras",
+  // 17/10: o leitor da base dos agentes transforma documento, link ou pesquisa em fichas (não escreve peça).
+  "base-dos-agentes/index.ts#lerEGravar": "leituras",
   "mesa-instagram/index.ts#diagnosticar": "leituras",
   "gestor-aceleriq/modulos/nucleo.ts#chamar": "nucleo.fatos",
   "mesa-videos/index.ts#respostaPeloNucleo": "nucleo.fatos",

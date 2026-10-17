@@ -129,6 +129,8 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.agente-estilo]
     verify_jwt = true
+  [functions.base-dos-agentes]
+    verify_jwt = true
   [functions.perfis-instagram]
     verify_jwt = true
   [functions.mesa-instagram]

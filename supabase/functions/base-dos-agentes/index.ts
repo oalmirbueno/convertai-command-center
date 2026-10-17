@@ -1,0 +1,454 @@
+/**
+ * base-dos-agentes (17/10/2026): o dono ensina cada agente e a internet
+ * complementa toda semana.
+ *
+ * Dono: "todos os que estão por trás tendo uma base de aprendizado, onde eu
+ * consigo mandar documentos, atualizar, complementar com mais prompt; surgiu
+ * uma técnica nova, eu quero complementar; quanto mais eu carrego, mais
+ * inteligente ele fica". Decisões dele: vale para todos os clientes (com ficha
+ * opcional só de um cliente), o que chega vira ficha já em uso, e a pesquisa
+ * na internet também entra direto.
+ *
+ * Ações (equipe admin/gestor):
+ * - ensinar: texto colado, documento (o texto lido no navegador) ou link. O
+ *   leitor transforma em fichas de técnica para ESTE agente e grava em uso.
+ * - pesquisar: a pesquisa na internet agora, para um agente.
+ * - nova_ficha, editar_ficha, apagar_ficha, apagar_fonte: a mão do dono.
+ * Ação do cron (x-cron-secret):
+ * - pesquisa_semanal: até 2 agentes por chamada (cada leitura leva até 140 s), cada um no máximo 1 vez por
+ *   semana, pago pela carteira da agência.
+ *
+ * Na geração, quem lê é _shared/base-do-agente.ts (baseDoAgente).
+ */
+
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { chamarTexto, IaMotorErro, lerSaldo, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
+import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { type AgenteComBase, agenteComBase, AGENTES_COM_BASE } from "../_shared/agentes-com-base.ts";
+
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+};
+
+/** O material de uma fonte vai até aqui para o leitor (o resto é cortado com aviso). */
+export const MAX_CHARS_DA_FONTE = 120_000;
+/** Fichas por fonte (menos é melhor do que ficha fraca). */
+export const MAX_FICHAS_POR_FONTE = 12;
+/** Fichas novas por pesquisa. */
+export const MAX_FICHAS_DA_PESQUISA = 6;
+/** Agentes por chamada do cron. */
+const AGENTES_POR_RODADA = 2;
+/** Saldo mínimo da carteira da agência para a pesquisa semanal (US$). */
+const SALDO_MINIMO_DA_RODADA = 1;
+
+class ErroHttp extends Error {
+  status: number;
+  codigo: string;
+  constructor(status: number, codigo: string, mensagem: string) {
+    super(mensagem);
+    this.status = status;
+    this.codigo = codigo;
+  }
+}
+
+function json(corpo: unknown, status = 200): Response {
+  return new Response(JSON.stringify(corpo), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+let servicoCache: SupabaseClient | null = null;
+function servico(): SupabaseClient {
+  if (!servicoCache) {
+    servicoCache = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return servicoCache;
+}
+
+function ehCron(req: Request): boolean {
+  const segredo = Deno.env.get("CRON_SECRET")?.trim();
+  return !!segredo && req.headers.get("x-cron-secret")?.trim() === segredo;
+}
+
+type Chamador = { userId: string };
+
+/** Quem ensina os agentes: admin e gestor (a base vale para a casa inteira). */
+async function identificar(req: Request): Promise<Chamador> {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!token) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
+  const { data: user } = await servico().auth.getUser(token);
+  const userId = user?.user?.id;
+  if (!userId) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
+  const { data: papeis, error } = await servico().from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir a permissão agora.");
+  const ok = ((papeis || []) as { role: string }[]).some((p) => p.role === "admin" || p.role === "manager");
+  if (!ok) throw new ErroHttp(403, "sem_permissao", "Só o admin e o gestor ensinam os agentes.");
+  return { userId };
+}
+
+/** A carteira que paga o aprendizado: a da agência (empresa interna com mais saldo). */
+async function carteiraDaAgencia(): Promise<string | null> {
+  const { data } = await servico().from("profiles").select("id").eq("services_config->>internal_company", "true").limit(5);
+  const ids = ((data || []) as { id: string }[]).map((x) => x.id);
+  if (!ids.length) return null;
+  const { data: carteiras } = await servico().from("ia_carteiras").select("client_id, saldo_usd").in("client_id", ids).order("saldo_usd", { ascending: false }).limit(1);
+  const c = ((carteiras || []) as { client_id: string }[])[0];
+  return c ? c.client_id : ids[0];
+}
+
+async function modeloDoLeitor(): Promise<ModeloIa> {
+  const m = (await modeloPadrao("contexto")) ?? (await modeloPadrao("estrategista"));
+  if (!m) throw new ErroHttp(409, "sem_modelo", "Nenhum modelo de texto ligado para ler as fontes.");
+  return m;
+}
+
+/** O travessão vira vírgula (regra do dono: texto sem travessão). */
+const TRAVESSAO = new RegExp(" *" + String.fromCharCode(0x2014) + " *", "g");
+
+function texto(v: unknown, max: number): string {
+  return typeof v === "string" ? v.replace(TRAVESSAO, ", ").trim().slice(0, max) : "";
+}
+
+function exigirAgente(v: unknown): AgenteComBase {
+  const a = agenteComBase(String(v ?? ""));
+  if (!a) throw new ErroHttp(400, "agente_desconhecido", "Esse agente não tem base.");
+  return a;
+}
+
+function uuidOuNulo(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) ? s : null;
+}
+
+/** Título comparável, para não gravar a mesma técnica duas vezes. */
+export function tituloNormalizado(t: string): string {
+  return t.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// ------------------------------------------------------------------ o leitor das fontes
+
+const ESQUEMA_DAS_FICHAS = {
+  nome: "fichas_da_base",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["fichas", "observacao"],
+    properties: {
+      observacao: { type: "string" },
+      fichas: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["titulo", "tecnica", "quando_usar", "exemplo", "fonte_url"],
+          properties: {
+            titulo: { type: "string" },
+            tecnica: { type: "string" },
+            quando_usar: { type: "string" },
+            exemplo: { type: "string" },
+            fonte_url: { type: "string" },
+          },
+        },
+      },
+    },
+  },
+};
+
+export function sistemaDoLeitor(a: AgenteComBase, existentes: string[], pesquisa: boolean): string {
+  return `Você organiza a base de conhecimento de um agente da Aceleriq, agência de marketing.
+AGENTE: ${a.nome} (${a.mesa}). ${a.papel}
+FOCO DELE: ${a.tema}. Tudo a serviço de arte e conteúdo que trazem venda para o cliente.
+
+${pesquisa
+    ? `PESQUISE na internet o que há de mais novo e comprovado (de preferência dos últimos 6 meses) sobre o foco deste agente: técnicas, formatos e práticas que estão dando resultado agora. Traga até ${MAX_FICHAS_DA_PESQUISA} técnicas NOVAS, cada uma com a fonte_url real de onde veio.`
+    : `Do MATERIAL que o dono mandou, extraia as técnicas que este agente pode aplicar ao gerar. Até ${MAX_FICHAS_POR_FONTE} fichas.`}
+
+REGRAS DAS FICHAS
+- Concretas e acionáveis: o como fazer, com o porquê quando houver. Nada de conselho vago ("seja criativo", "conheça seu público").
+- Só o que serve a ESTE agente. Ignore propaganda do autor, opinião sem método e o que já está nas fichas existentes.
+- titulo: o nome da técnica, até 80 caracteres. tecnica: 2 a 6 frases. quando_usar: 1 frase. exemplo: curto (pode ficar vazio). fonte_url: o endereço de onde veio (vazio se não houver).
+- Menos é melhor do que ficha fraca. Se nada servir, devolva a lista vazia e diga o motivo em observacao.
+- Português do Brasil, sem travessão.
+
+FICHAS QUE O AGENTE JÁ TEM (não repita):
+${existentes.length ? existentes.map((t) => `- ${t}`).join("\n") : "- nenhuma ainda"}`;
+}
+
+type FichaLida = { titulo: string; tecnica: string; quando_usar: string; exemplo: string; fonte_url: string };
+
+export function limparFichas(bruto: unknown, max: number, jaTem: Set<string>): FichaLida[] {
+  const lista = (bruto && typeof bruto === "object" && Array.isArray((bruto as { fichas?: unknown }).fichas))
+    ? (bruto as { fichas: unknown[] }).fichas
+    : [];
+  const vistas = new Set(jaTem);
+  const out: FichaLida[] = [];
+  for (const item of lista) {
+    const o = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const titulo = texto(o.titulo, 160);
+    const tecnica = texto(o.tecnica, 2400);
+    if (titulo.length < 3 || tecnica.length < 10) continue;
+    const chave = tituloNormalizado(titulo);
+    if (vistas.has(chave)) continue;
+    vistas.add(chave);
+    const url = texto(o.fonte_url, 600);
+    out.push({
+      titulo,
+      tecnica,
+      quando_usar: texto(o.quando_usar, 400),
+      exemplo: texto(o.exemplo, 600),
+      fonte_url: /^https?:\/\//i.test(url) ? url : "",
+    });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+async function titulosExistentes(agente: string): Promise<string[]> {
+  const { data } = await servico().from("agente_base_fichas").select("titulo").eq("agente", agente).order("criado_em", { ascending: false }).limit(200);
+  return ((data || []) as { titulo: string }[]).map((f) => f.titulo);
+}
+
+/** Lê a fonte (ou pesquisa) e grava as fichas. Devolve a fonte e as fichas gravadas. */
+async function lerEGravar(e: {
+  agente: AgenteComBase;
+  clientId: string | null;
+  tipo: "texto" | "documento" | "link" | "pesquisa";
+  nome: string;
+  url: string | null;
+  material: string;
+  pagador: string;
+  criadoPor: string | null;
+}) {
+  const existentes = await titulosExistentes(e.agente.chave);
+  const pesquisa = e.tipo === "pesquisa";
+  const { data: fonte, error: erroFonte } = await servico().from("agente_base_fontes").insert({
+    agente: e.agente.chave,
+    client_id: e.clientId,
+    tipo: e.tipo,
+    nome: e.nome.slice(0, 300),
+    url: e.url,
+    status: "lendo",
+    criado_por: e.criadoPor,
+  }).select("id").single();
+  if (erroFonte || !fonte) throw new ErroHttp(503, "banco_indisponivel", "Não foi possível guardar a fonte agora.");
+  const fonteId = (fonte as { id: string }).id;
+  try {
+    const modelo = await modeloDoLeitor();
+    const cortado = e.material.length > MAX_CHARS_DA_FONTE;
+    const mensagem = pesquisa
+      ? `Pesquise agora e traga as técnicas novas para este agente.`
+      : e.tipo === "link"
+        ? `Abra e leia este link (página, artigo ou vídeo; se for vídeo, use a descrição e a transcrição que encontrar) e extraia as técnicas: ${e.url}${e.material ? `\n\nO que o dono disse sobre ele: ${e.material}` : ""}`
+        : `MATERIAL (${e.nome}${cortado ? ", cortado no limite" : ""}):\n${e.material.slice(0, MAX_CHARS_DA_FONTE)}`;
+    const s = await chamarTexto({
+      clientId: e.pagador,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: modelo.id,
+      sistema: sistemaDoLeitor(e.agente, existentes, pesquisa),
+      mensagens: [{ papel: "usuario", conteudo: mensagem }],
+      pesquisaWeb: pesquisa || e.tipo === "link",
+      esquemaJson: ESQUEMA_DAS_FICHAS,
+      referencia: { tipo: "agente_base_fonte", id: fonteId },
+      criadoPor: e.criadoPor,
+      timeoutMs: 140_000,
+    });
+    const jaTem = new Set(existentes.map(tituloNormalizado));
+    const fichas = limparFichas(s.json, pesquisa ? MAX_FICHAS_DA_PESQUISA : MAX_FICHAS_POR_FONTE, jaTem);
+    // A pesquisa sem fonte_url própria herda a primeira página que a busca citou.
+    const primeiraFonte = (s.fontes || []).map((f) => f.url || "").find((u) => /^https?:\/\//i.test(u)) || null;
+    if (fichas.length) {
+      const { error } = await servico().from("agente_base_fichas").insert(fichas.map((f) => ({
+        fonte_id: fonteId,
+        agente: e.agente.chave,
+        client_id: e.clientId,
+        titulo: f.titulo,
+        tecnica: f.tecnica,
+        quando_usar: f.quando_usar,
+        exemplo: f.exemplo,
+        fonte_url: f.fonte_url || (pesquisa ? primeiraFonte : e.url) || null,
+        criado_por: e.criadoPor,
+      })));
+      if (error) throw new ErroHttp(503, "banco_indisponivel", "As fichas não foram gravadas. Tente de novo.");
+    }
+    const observacao = texto((s.json as { observacao?: unknown } | undefined)?.observacao, 400);
+    await servico().from("agente_base_fontes").update({
+      status: "pronta",
+      fichas: fichas.length,
+      custo_usd: Number(s.custoUsd.toFixed(4)),
+      erro: fichas.length ? null : (observacao || "Nada aproveitável para este agente."),
+    }).eq("id", fonteId);
+    return { fonte_id: fonteId, fichas: fichas.length, titulos: fichas.map((f) => f.titulo), observacao, custo_usd: s.custoUsd };
+  } catch (err) {
+    const mensagem = err instanceof Error ? err.message.slice(0, 300) : "falha na leitura";
+    await servico().from("agente_base_fontes").update({ status: "erro", erro: mensagem }).eq("id", fonteId);
+    throw err;
+  }
+}
+
+// ------------------------------------------------------------------ ações
+
+async function ensinar(ch: Chamador, corpo: Record<string, unknown>) {
+  const agente = exigirAgente(corpo.agente);
+  const tipo = String(corpo.tipo ?? "");
+  if (tipo !== "texto" && tipo !== "documento" && tipo !== "link") throw new ErroHttp(400, "tipo_invalido", "Mande texto, documento ou link.");
+  const clientId = uuidOuNulo(corpo.client_id);
+  const url = tipo === "link" ? texto(corpo.url, 600) : "";
+  if (tipo === "link" && !/^https?:\/\//i.test(url)) throw new ErroHttp(400, "link_invalido", "Cole um link que comece com http.");
+  const material = typeof corpo.texto === "string" ? corpo.texto.trim() : "";
+  if (tipo !== "link" && material.length < 20) throw new ErroHttp(400, "pouco_material", "Mande pelo menos uma frase completa para o agente aprender.");
+  const nome = texto(corpo.nome, 300) || (tipo === "link" ? url : material.slice(0, 60));
+  const pagador = clientId ?? (await carteiraDaAgencia());
+  if (!pagador) throw new ErroHttp(409, "sem_carteira", "A carteira da agência não foi encontrada.");
+  const r = await lerEGravar({ agente, clientId, tipo, nome, url: url || null, material, pagador, criadoPor: ch.userId });
+  return json({ ok: true, ...r });
+}
+
+async function pesquisar(ch: Chamador, corpo: Record<string, unknown>) {
+  const agente = exigirAgente(corpo.agente);
+  const pagador = await carteiraDaAgencia();
+  if (!pagador) throw new ErroHttp(409, "sem_carteira", "A carteira da agência não foi encontrada.");
+  const r = await lerEGravar({ agente, clientId: null, tipo: "pesquisa", nome: `Pesquisa de ${hojeBr()}`, url: null, material: "", pagador, criadoPor: ch.userId });
+  return json({ ok: true, ...r });
+}
+
+function hojeBr(): string {
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" }).format(new Date());
+}
+
+async function novaFicha(ch: Chamador, corpo: Record<string, unknown>) {
+  const agente = exigirAgente(corpo.agente);
+  const titulo = texto(corpo.titulo, 160);
+  const tecnica = texto(corpo.tecnica, 2400);
+  if (titulo.length < 3 || tecnica.length < 10) throw new ErroHttp(400, "ficha_incompleta", "Dê um título e explique a técnica em pelo menos uma frase.");
+  const { data, error } = await servico().from("agente_base_fichas").insert({
+    agente: agente.chave,
+    client_id: uuidOuNulo(corpo.client_id),
+    titulo,
+    tecnica,
+    quando_usar: texto(corpo.quando_usar, 400),
+    exemplo: texto(corpo.exemplo, 600),
+    criado_por: ch.userId,
+  }).select("id").single();
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "A ficha não foi gravada.");
+  return json({ ok: true, id: (data as { id: string }).id });
+}
+
+async function editarFicha(_ch: Chamador, corpo: Record<string, unknown>) {
+  const id = uuidOuNulo(corpo.id);
+  if (!id) throw new ErroHttp(400, "ficha_invalida", "Ficha não encontrada.");
+  const mudar: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
+  if (typeof corpo.ativa === "boolean") mudar.ativa = corpo.ativa;
+  if (corpo.titulo !== undefined) {
+    const t = texto(corpo.titulo, 160);
+    if (t.length < 3) throw new ErroHttp(400, "ficha_incompleta", "O título precisa de pelo menos 3 letras.");
+    mudar.titulo = t;
+  }
+  if (corpo.tecnica !== undefined) {
+    const t = texto(corpo.tecnica, 2400);
+    if (t.length < 10) throw new ErroHttp(400, "ficha_incompleta", "Explique a técnica em pelo menos uma frase.");
+    mudar.tecnica = t;
+  }
+  if (corpo.quando_usar !== undefined) mudar.quando_usar = texto(corpo.quando_usar, 400);
+  if (corpo.exemplo !== undefined) mudar.exemplo = texto(corpo.exemplo, 600);
+  if (corpo.client_id !== undefined) mudar.client_id = uuidOuNulo(corpo.client_id);
+  const { error } = await servico().from("agente_base_fichas").update(mudar).eq("id", id);
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "A ficha não foi salva.");
+  return json({ ok: true });
+}
+
+async function apagarFicha(_ch: Chamador, corpo: Record<string, unknown>) {
+  const id = uuidOuNulo(corpo.id);
+  if (!id) throw new ErroHttp(400, "ficha_invalida", "Ficha não encontrada.");
+  const { error } = await servico().from("agente_base_fichas").delete().eq("id", id);
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "A ficha não foi apagada.");
+  return json({ ok: true });
+}
+
+async function apagarFonte(_ch: Chamador, corpo: Record<string, unknown>) {
+  const id = uuidOuNulo(corpo.id);
+  if (!id) throw new ErroHttp(400, "fonte_invalida", "Fonte não encontrada.");
+  // As fichas da fonte saem junto (on delete cascade).
+  const { error } = await servico().from("agente_base_fontes").delete().eq("id", id);
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "A fonte não foi apagada.");
+  return json({ ok: true });
+}
+
+/** O cron: até 2 agentes sem pesquisa há 6 dias ou mais, na carteira da agência. */
+async function pesquisaSemanal() {
+  const pagador = await carteiraDaAgencia();
+  if (!pagador) return json({ ok: false, motivo: "sem_carteira" });
+  const saldo = await lerSaldo(pagador).catch(() => 0);
+  if (saldo < SALDO_MINIMO_DA_RODADA) return json({ ok: false, motivo: "saldo_baixo", saldo });
+  const desde = new Date(Date.now() - 6 * 86_400_000).toISOString();
+  const { data } = await servico().from("agente_base_fontes").select("agente").eq("tipo", "pesquisa").gte("criado_em", desde);
+  const feitos = new Set(((data || []) as { agente: string }[]).map((f) => f.agente));
+  const daVez = AGENTES_COM_BASE.filter((a) => !feitos.has(a.chave)).slice(0, AGENTES_POR_RODADA);
+  const resultado: Array<{ agente: string; fichas?: number; erro?: string }> = [];
+  for (const agente of daVez) {
+    try {
+      const r = await lerEGravar({ agente, clientId: null, tipo: "pesquisa", nome: `Pesquisa semanal de ${hojeBr()}`, url: null, material: "", pagador, criadoPor: null });
+      resultado.push({ agente: agente.chave, fichas: r.fichas });
+    } catch (err) {
+      resultado.push({ agente: agente.chave, erro: err instanceof Error ? err.message.slice(0, 160) : "falha" });
+    }
+  }
+  return json({ ok: true, agentes: resultado });
+}
+
+// ------------------------------------------------------------------ servidor
+
+const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  ensinar,
+  pesquisar,
+  nova_ficha: novaFicha,
+  editar_ficha: editarFicha,
+  apagar_ficha: apagarFicha,
+  apagar_fonte: apagarFonte,
+};
+const ACOES_LONGAS = new Set(["ensinar", "pesquisar"]);
+
+function respostaDeErro(err: unknown): Response {
+  if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message }, err.status);
+  if (err instanceof IaMotorErro) return json(err.paraJson(), err.status >= 400 ? err.status : 500);
+  console.error("[base-dos-agentes] erro inesperado", err instanceof Error ? err.message.slice(0, 200) : "");
+  return json({ error: "erro_interno", mensagem: "Falha inesperada na base dos agentes." }, 500);
+}
+
+if (import.meta.main) {
+  Deno.serve(async (req) => {
+    if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+    if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
+    try {
+      let corpo: Record<string, unknown> = {};
+      try {
+        corpo = await req.json();
+      } catch { /* corpo vazio */ }
+      const acao = String(corpo.acao ?? "");
+      if (acao === "pesquisa_semanal") {
+        if (!ehCron(req)) return json({ error: "somente_cron", mensagem: "A pesquisa semanal é só do agendamento." }, 403);
+        return respostaComFolego(async () => {
+          try {
+            return await pesquisaSemanal();
+          } catch (err) {
+            return respostaDeErro(err);
+          }
+        }, corsHeaders);
+      }
+      const ch = await identificar(req);
+      const fn = ACOES[acao];
+      if (!fn) return json({ error: "acao_desconhecida", mensagem: "Ação desconhecida.", aceitas: Object.keys(ACOES) }, 400);
+      const rodar = async () => {
+        try {
+          return await fn(ch, corpo);
+        } catch (err) {
+          return respostaDeErro(err);
+        }
+      };
+      return ACOES_LONGAS.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
+    } catch (err) {
+      return respostaDeErro(err);
+    }
+  });
+}
