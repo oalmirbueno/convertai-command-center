@@ -33,6 +33,7 @@ import {
   rpcError,
   RpcErrors,
   rpcResult,
+  rpcToolError,
   sseResponse,
   validateJsonRpcRequest,
   type JsonRpcId,
@@ -156,7 +157,7 @@ function isPublicRpc(msg: JsonRpcRequest): boolean {
 }
 
 // ─── JSON-RPC dispatch ────────────────────────────────────────
-async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcResponse | null> {
+export async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcResponse | null> {
   const id: JsonRpcId = (msg?.id ?? null) as JsonRpcId;
   const method = String(msg?.method ?? "");
   const params = (msg?.params ?? {}) as Record<string, unknown>;
@@ -229,7 +230,7 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
             structuredContent: result,
           });
         } catch (e) {
-          return rpcError(id, RpcErrors.internalError, (e as Error)?.message ?? String(e));
+          return rpcToolError(id, (e as Error)?.message ?? String(e));
         }
       }
     }
@@ -339,11 +340,12 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
         errorCode: dataScopeDenied ? "data_scope_denied" : "handler_error",
         errorMessage: message,
       });
-      return rpcError(
-        id,
-        dataScopeDenied ? RpcErrors.forbidden : RpcErrors.internalError,
-        dataScopeDenied ? "Resource is outside this restricted client scope" : message,
-      );
+      // Access failures remain protocol errors; tool execution failures are
+      // CallToolResult errors so clients can recover without reconnecting.
+      if (dataScopeDenied) {
+        return rpcError(id, RpcErrors.forbidden, "Resource is outside this restricted client scope");
+      }
+      return rpcToolError(id, message);
     }
   }
 
