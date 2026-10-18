@@ -673,6 +673,9 @@ import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
 import { abrirImagemDaPrancha, camposDaFalhaDaPrancha, type FalhaDaPrancha, lerPranchaComMotivo, MOTIVOS_DO_ARQUIVO } from "./leitura-da-prancha.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { baseDoAgente } from "../_shared/base-do-agente.ts";
+import { CANDIDATAS_DO_PEDIDO, referenciasDoPedido } from "./modulos/referencias-do-pedido.ts";
+import { autorizarChamadaInterna } from "../agente-calendario/modulos/refazer-interno.ts";
+import { lerSaldo } from "../_shared/ia-motor.ts";
 import { escolherCapa, ESQUEMA_CAPAS } from "./modulos/escolha-da-capa.ts";
 
 const corsHeaders = {
@@ -3501,7 +3504,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         marcaDoItem,
       )
         .order("criado_em", { ascending: false })
-        .limit(12),
+        // 17/10: até 40 candidatas; o Jev escolhe as que servem ao pedido (referencias-do-pedido.ts).
+        .limit(CANDIDATAS_DO_PEDIDO),
       db.from("files")
         .select("file_name, file_type, description, caption, created_at")
         .eq("client_id", clientId)
@@ -3550,6 +3554,18 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     // 17/10 (dono: "cada um tendo uma base de aprendizado"): o que o dono ensinou ao diretor e ao gerador de
     // imagem (e o que a pesquisa semanal trouxe). Vai na mensagem: o sistema tem teto e segue no cache do provedor.
     const basesP = basesDoEstudio(clientId, textoDoItem || item.tarefa.title, { tipo: "estudio_trabalho", id: trabalhoId }, ch.userId);
+    // 17/10 (dono: "tudo que entrar na pasta de referências já entra como aprendizado e ele usa sem eu pedir"):
+    // das referências lidas do cliente, as que servem a ESTE pedido (até 10; com mais, o Jev escolhe).
+    const refsDoPedidoP = referenciasDoPedido(
+      (refsRes.data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [],
+      textoDoItem || item.tarefa.title,
+      async (state, questions) => {
+        const rj = await jevPerguntar({ state, questions });
+        const cobrado = await cobrarJev(rj, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+        if (cobrado) custoDoMundo += cobrado.custoUsd;
+        return rj.answers;
+      },
+    );
     // 17/10: data comemorativa pelo texto (obrigatória) ou pela data de publicação (convite).
     const temasDoItem = temasDaEpoca({ data: item.tarefa.due_date, textos: [textoDoItem, rapida ? rapida.gravada.pedido : ""] });
     const contexto = {
@@ -3595,7 +3611,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         // 17/10: quem é o cliente (negócio, público, oferta, diferenciais, estratégia, briefing): a imagem nasce do nicho dele.
         contexto_do_negocio: (await negocioP) || null,
       },
-      referencias: ((refsRes.data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [])
+      referencias: (await refsDoPedidoP)
         .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 600), tags: r.tags })),
       artes_anteriores: ((artesRes.data as Record<string, unknown>[] | null) ?? []).map((a) => ({
         nome: texto(a.file_name, 120),
@@ -8594,6 +8610,15 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 async function sincronizarWorkspace(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
+  return json(await ligarReferenciasDoWorkspace(clientId));
+}
+
+/**
+ * As imagens das pastas "Refer..." do Workspace (e subpastas) ligadas como referência do cliente. 17/10: a
+ * pasta cujo nome cita outra marca do cliente (ex.: "Referências Design CME") liga a imagem àquela marca,
+ * e a ligação antiga sem marca é corrigida (marca nunca herda de outra).
+ */
+async function ligarReferenciasDoWorkspace(clientId: string): Promise<{ pastas: number; imagens: number; novas: number }> {
   const { data, error } = await servico()
     .from("workspace_nodes")
     .select("id, parent_id, kind, name, mime, storage_path")
@@ -8611,28 +8636,37 @@ async function sincronizarWorkspace(ch: Chamador, corpo: Record<string, unknown>
     filhos.set(n.parent_id, lista);
   }
   const pastas = nos.filter((n) => n.kind === "folder" && semAcento(n.name).includes("refer"));
-  const imagens = new Map<string, (typeof nos)[number]>();
+  // A marca da pasta: o nome cita outra marca do cliente (não a principal) => as imagens dela são daquela marca.
+  const outrasMarcas = (await marcasDoCliente(servico(), clientId).catch(() => [])).filter((m) => !m.principal);
+  const marcaDaPasta = (nome: string): string | null => outrasMarcas.find((m) => m.nome && semAcento(nome).includes(semAcento(m.nome)))?.id ?? null;
+  const imagens = new Map<string, { no: (typeof nos)[number]; marca: string | null }>();
   const visitadas = new Set<string>();
-  const fila = pastas.map((p) => p.id);
+  const fila = pastas.map((p) => ({ id: p.id, marca: marcaDaPasta(p.name) }));
   while (fila.length) {
-    const id = fila.shift()!;
+    const { id, marca } = fila.shift()!;
     if (visitadas.has(id)) continue;
     visitadas.add(id);
     for (const f of filhos.get(id) ?? []) {
-      if (f.kind === "folder") fila.push(f.id);
-      else if (f.storage_path && (f.mime ?? "").startsWith("image/")) imagens.set(f.id, f);
+      if (f.kind === "folder") fila.push({ id: f.id, marca: marcaDaPasta(f.name) ?? marca });
+      else if (f.storage_path && (f.mime ?? "").startsWith("image/")) imagens.set(f.id, { no: f, marca });
     }
   }
-  if (!imagens.size) return json({ pastas: pastas.length, imagens: 0, novas: 0 });
+  if (!imagens.size) return { pastas: pastas.length, imagens: 0, novas: 0 };
 
   // So liga: a imagem continua morando no workspace (storage_path nulo).
-  const linhas = [...imagens.values()].map((n) => ({ client_id: clientId, origem: "workspace", workspace_node_id: n.id, ativa: true }));
+  const linhas = [...imagens.values()].map(({ no, marca }) => ({ client_id: clientId, origem: "workspace", workspace_node_id: no.id, ativa: true, ...(marca ? { marca_id: marca } : {}) }));
   const { data: novas, error: erroInsert } = await servico()
     .from("cliente_referencias")
     .upsert(linhas, { onConflict: "client_id,workspace_node_id", ignoreDuplicates: true })
     .select("id");
   if (erroInsert) throw new ErroEstudio(503, "gravacao_falhou", "Não foi possível ligar as referências do workspace.");
-  return json({ pastas: pastas.length, imagens: imagens.size, novas: (novas as unknown[] | null)?.length ?? 0 });
+  // Ligação antiga sem marca numa pasta de outra marca: corrige (uma atualização por marca).
+  const porMarca = new Map<string, string[]>();
+  for (const [noId, x] of imagens) if (x.marca) porMarca.set(x.marca, [...(porMarca.get(x.marca) ?? []), noId]);
+  for (const [marca, ids] of porMarca) {
+    await servico().from("cliente_referencias").update({ marca_id: marca }).eq("client_id", clientId).is("marca_id", null).in("workspace_node_id", ids);
+  }
+  return { pastas: pastas.length, imagens: imagens.size, novas: (novas as unknown[] | null)?.length ?? 0 };
 }
 
 const ESQUEMA_LER = {
@@ -8664,6 +8698,62 @@ async function lerReferencia(ch: Chamador, corpo: Record<string, unknown>) {
   const ref = data as Referencia | null;
   if (!ref) throw new ErroEstudio(404, "referencia_inexistente", "Referência não encontrada.");
   await garantirAcesso(ch, ref.client_id);
+  const r = await lerUmaReferencia(ref, ch.userId);
+  return json({ referencia: r.atualizada, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, reserva_usada: r.reservaUsada });
+}
+
+/** Leituras por rodada da rotina (cada uma é uma chamada de visão na carteira do cliente). */
+const LEITURAS_POR_RODADA = 12;
+/** Abaixo disso a carteira do cliente não paga leitura automática (a tela continua lendo sob pedido). */
+const SALDO_MINIMO_PARA_LER = 0.3;
+
+/**
+ * 17/10 (dono: "a pasta referências de design no Workspace: tudo que entrar lá já entra como aprendizado
+ * para o design e ele já usa sem eu precisar pedir"): a cada rodada do agendamento, liga as imagens novas das
+ * pastas "Refer..." de todos os clientes e lê a técnica das que ainda não foram lidas (as mais novas primeiro).
+ * A imagem quebrada sai da lista (ativa = false) para não ser tentada de novo.
+ */
+async function referenciasAutomaticas(): Promise<{ clientes: number; novas: number; lidas: number; puladas: number }> {
+  const { data: pastas } = await servico().from("workspace_nodes").select("client_id").eq("kind", "folder").ilike("name", "%refer%").not("client_id", "is", null).limit(1000);
+  const clientes = [...new Set(((pastas || []) as { client_id: string }[]).map((p) => p.client_id))];
+  let novas = 0;
+  for (const c of clientes) {
+    try {
+      novas += (await ligarReferenciasDoWorkspace(c)).novas;
+    } catch (e) {
+      registrarFalha("estudio-arte: referências do workspace não ligadas (rotina)", e, { client_id: c });
+    }
+  }
+  const { data: semLeitura } = await servico().from("cliente_referencias")
+    .select("id, client_id, origem, workspace_node_id, url_origem, storage_path, file_id, papel, leitura, tags")
+    .is("leitura", null).eq("ativa", true).order("criado_em", { ascending: false }).limit(60);
+  const saldos = new Map<string, number>();
+  let lidas = 0;
+  let puladas = 0;
+  for (const ref of (semLeitura || []) as Referencia[]) {
+    if (lidas >= LEITURAS_POR_RODADA) break;
+    if (!saldos.has(ref.client_id)) saldos.set(ref.client_id, await lerSaldo(ref.client_id).catch(() => 0));
+    if ((saldos.get(ref.client_id) ?? 0) < SALDO_MINIMO_PARA_LER) {
+      puladas += 1;
+      continue;
+    }
+    try {
+      const r = await lerUmaReferencia(ref, null);
+      saldos.set(ref.client_id, r.saldoUsd);
+      lidas += 1;
+    } catch (e) {
+      if (e instanceof ErroEstudio && (e.codigo === "referencia_quebrada" || e.codigo === "referencia_sem_arquivo" || e.codigo === "imagem_invalida")) {
+        await servico().from("cliente_referencias").update({ ativa: false }).eq("id", ref.id);
+      } else {
+        registrarFalha("estudio-arte: leitura automática de referência falhou", e, { referencia_id: ref.id });
+      }
+    }
+  }
+  return { clientes: clientes.length, novas, lidas, puladas };
+}
+
+/** A leitura da técnica de uma referência (o leitor vê a imagem), gravada nela. Custo na carteira do cliente. */
+async function lerUmaReferencia(ref: Referencia, criadoPor: string | null) {
   const imagem = await imagemDaReferencia(ref);
   if (imagem.mime === "image/gif") throw new ErroEstudio(415, "imagem_invalida", "GIF não pode ser lido. Use PNG, JPG ou WEBP.");
   const leitor = await modeloDoPapel("leitura");
@@ -8678,7 +8768,7 @@ async function lerReferencia(ch: Chamador, corpo: Record<string, unknown>) {
     esquemaJson: ESQUEMA_LER,
     maxTokensSaida: 6_000,
     referencia: { tipo: "cliente_referencia", id: ref.id },
-    criadoPor: ch.userId,
+    criadoPor,
   });
   const l = (r.json ?? {}) as { leitura?: string; tags?: unknown };
   const leitura = texto(l.leitura, 3000);
@@ -8692,7 +8782,7 @@ async function lerReferencia(ch: Chamador, corpo: Record<string, unknown>) {
     .select("*")
     .single();
   if (error) throw new ErroEstudio(503, "gravacao_falhou", "A leitura foi feita, mas não foi gravada.", { uso_id: r.usoId });
-  return json({ referencia: atualizada, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, reserva_usada: r.reservaUsada ?? null });
+  return { atualizada, custoUsd: r.custoUsd, saldoUsd: r.saldoUsd, reservaUsada: r.reservaUsada ?? null };
 }
 
 /**
@@ -10839,6 +10929,28 @@ const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return erro(405, "metodo_nao_permitido", "Use POST.");
+
+  // 17/10: a rotina das referências do Workspace (agendamento com o x-cron-secret e a chave de serviço).
+  if (req.headers.get("x-cron-secret")) {
+    const interno = await req.clone().json().catch(() => ({})) as Record<string, unknown>;
+    if (interno.acao === "referencias_automaticas_interno") {
+      const aut = autorizarChamadaInterna({
+        authorization: req.headers.get("Authorization"),
+        cronSecretDoPedido: req.headers.get("x-cron-secret"),
+        chavesDeServico: [Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")],
+        cronSecret: Deno.env.get("CRON_SECRET"),
+      });
+      if (!aut.ok) return erro(aut.status, aut.codigo, aut.mensagem);
+      return respostaComFolego(async () => {
+        try {
+          return json(await referenciasAutomaticas());
+        } catch (e) {
+          registrarFalha("estudio-arte: rotina das referências falhou", e, {});
+          return erro(500, "erro_interno", "A rotina das referências falhou.");
+        }
+      }, corsHeaders);
+    }
+  }
 
   let ch: Chamador | null = null;
   try {

@@ -681,7 +681,7 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "estudio-arte/index.ts#legenda": "estudio.legenda",
   "estudio-arte/index.ts#leituraDaLogo": "leituras",
   "estudio-arte/index.ts#lerPrancha": "leituras",
-  "estudio-arte/index.ts#lerReferencia": "leituras",
+  "estudio-arte/index.ts#lerUmaReferencia": "leituras",
   "estudio-arte/index.ts#marcarPessoasNasFotos": "leituras",
   "estudio-arte/index.ts#moldeDaReferencia": "leituras",
   "estudio-arte/index.ts#prepararItem/enxugarMiolo": "estudio.enxugar",

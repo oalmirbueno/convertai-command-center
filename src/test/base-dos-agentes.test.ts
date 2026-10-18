@@ -92,4 +92,18 @@ describe("base dos agentes", () => {
     expect(estudio).toContain("!instrucao");
     expect(ler("supabase/functions/_shared/motores.ts")).toContain('"estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes"');
   });
+
+  it("17/10: a pasta de referências do Workspace entra sozinha e o diretor usa as que servem ao pedido", () => {
+    const estudio = ler("supabase/functions/estudio-arte/index.ts");
+    expect(estudio).toContain('if (interno.acao === "referencias_automaticas_interno")');
+    expect(estudio).toContain("novas += (await ligarReferenciasDoWorkspace(c)).novas;");
+    expect(estudio).toContain("const r = await lerUmaReferencia(ref, null);");
+    expect(estudio).toContain(".limit(CANDIDATAS_DO_PEDIDO),");
+    expect(estudio).toContain("referencias: (await refsDoPedidoP)");
+    // A pasta que cita outra marca do cliente (ex.: CME) liga a imagem àquela marca.
+    expect(estudio).toContain("const marcaDaPasta = (nome: string)");
+    const sql = ler("supabase/migrations/20261017234500_referencias_do_workspace_automaticas.sql");
+    expect(sql).toContain("'estudio-referencias-automaticas'");
+    expect(sql).toContain("'referencias_automaticas_interno'");
+  });
 });
