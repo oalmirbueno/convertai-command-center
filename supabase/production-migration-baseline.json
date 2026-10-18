@@ -2209,6 +2209,14 @@
       "remote_name": "base_dos_agentes_resultado",
       "remote_statements_sha256": "e61974b502fe14499539062f25c9248b611f79d21758aadb8bb64284375028d7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261017234500",
+      "path": "supabase/migrations/20261017234500_referencias_do_workspace_automaticas.sql",
+      "local_sha256": "f860cbf7439b68a295feea796922b0ea2c19f7208e5985b9a4c546891f93c778",
+      "remote_name": "referencias_do_workspace_automaticas",
+      "remote_statements_sha256": "fd544847b2b1880e55e6bad20c57b8934e22861704b6440e1de971ae209c8502",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
