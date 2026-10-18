@@ -134,5 +134,15 @@ export const apagarFicha = (id: string) => chamarFuncao("base-dos-agentes", { ac
 
 export const apagarFonte = (id: string) => chamarFuncao("base-dos-agentes", { acao: "apagar_fonte", id });
 
+/** O que a base aprendeu nos últimos 7 dias e as carteiras que travam a pesquisa e a leitura. */
+export interface ResumoDaSemana {
+  novas: { pesquisa: number; materiais: number; numeros: number; concorrentes: number };
+  sairam: number;
+  referenciasLidas: number;
+  carteirasBaixas: Array<{ cliente: string; saldo: number }>;
+  texto: string;
+}
+export const lerResumoDaSemana = () => chamarFuncao<ResumoDaSemana>("base-dos-agentes", { acao: "resumo_da_semana" });
+
 /** Cruza agora as fichas com as aprovações e os números do Instagram (a rotina de terça faz sozinha). */
 export const aprenderComResultados = () => chamarFuncao<{ fichas: number; vencedoras: number }>("base-dos-agentes", { acao: "aprender_com_resultados" });

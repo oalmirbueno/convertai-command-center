@@ -21,6 +21,11 @@ const LIGACOES: Record<string, string[]> = {
   "foto.diretor": ["supabase/functions/mesa-foto/index.ts"],
   "motion.agente": ["supabase/functions/mesa-motion/index.ts"],
   "roteiros.roteirista": ["supabase/functions/mesa-roteiros/index.ts"],
+  // 17/10 (rodada 3): as mesas que ainda não liam base.
+  "publicidade.diretor": ["supabase/functions/mesa-publicidade/index.ts"],
+  "identidade.diretor": ["supabase/functions/mesa-identidade/diretor.ts", "supabase/functions/mesa-identidade/estrategia-acoes.ts", "supabase/functions/mesa-identidade/projeto-acoes.ts"],
+  "site.agente": ["supabase/functions/mesa-site/index.ts", "supabase/functions/mesa-site/estrutura.ts"],
+  "proposta.redator": ["supabase/functions/mesa-proposta/index.ts", "supabase/functions/mesa-proposta/evolucao.ts"],
 };
 
 describe("base dos agentes", () => {
@@ -105,5 +110,20 @@ describe("base dos agentes", () => {
     const sql = ler("supabase/migrations/20261017234500_referencias_do_workspace_automaticas.sql");
     expect(sql).toContain("'estudio-referencias-automaticas'");
     expect(sql).toContain("'referencias_automaticas_interno'");
+  });
+
+  it("17/10 (rodada 3): concorrentes viram fichas, o aviso da semana e as carteiras baixas, e o gerador segue as referências do diretor", () => {
+    const funcao = ler("supabase/functions/base-dos-agentes/index.ts");
+    expect(funcao).toContain("const concorrentes = await fichasDosConcorrentes()");
+    expect(funcao).toContain('notification_type: "base_dos_agentes", link: "/base-dos-agentes"');
+    expect(funcao).toContain("resumo_da_semana: resumoParaATela");
+    const pagina = ler("src/pages/BaseDosAgentes.tsx");
+    expect(pagina).toContain("data-resumo-da-semana");
+    expect(pagina).toContain("data-carteiras-baixas");
+    const estudio = ler("supabase/functions/estudio-arte/index.ts");
+    expect(estudio).toContain("const MAX_CANDIDATAS_JEV = 40;");
+    expect(estudio).toContain(".referencias_do_pedido = (await refsDoPedidoP).map((x) => x.id);");
+    expect(estudio).toContain("n + (doDiretor.has(r.id) ? 0.5 : 0)");
+    expect(ler("supabase/migrations/20261017235500_base_pesquisa_mais_horas.sql")).toContain("'23 9-16 * * 2'");
   });
 });

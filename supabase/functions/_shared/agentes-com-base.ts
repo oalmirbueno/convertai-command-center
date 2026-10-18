@@ -97,6 +97,35 @@ export const AGENTES_COM_BASE: AgenteComBase[] = [
     papel: "Escreve os roteiros de Reels, vídeos e anúncios: gancho, desenvolvimento e chamada.",
     tema: "roteiro de vídeo curto e de anúncio que vende: ganchos, storytelling, estruturas validadas, copy falada e chamada para ação",
   },
+  // 17/10 (rodada 3): as mesas que ainda não liam base nenhuma.
+  {
+    chave: "publicidade.diretor",
+    nome: "Diretor de publicidade",
+    mesa: "Mesa Publicidade",
+    papel: "Cria as campanhas publicitárias: a grande ideia, os títulos, as peças-chave e a direção de arte da campanha.",
+    tema: "conceito criativo de campanha publicitária para marcas locais: grande ideia, títulos, peças-chave, direção de arte e campanhas premiadas recentes",
+  },
+  {
+    chave: "identidade.diretor",
+    nome: "Diretor de identidade",
+    mesa: "Mesa Identidade",
+    papel: "Cria a identidade visual da marca: conceito, logo, paleta, tipografia, sistema gráfico e aplicações.",
+    tema: "identidade visual e branding para pequenas e médias empresas: logo, paleta, tipografia, sistema gráfico, aplicações e tendências de design de marca",
+  },
+  {
+    chave: "site.agente",
+    nome: "Agente do site",
+    mesa: "Mesa Site",
+    papel: "Planeja e escreve sites e landing pages: estrutura, copy, prova e design que convertem.",
+    tema: "sites e landing pages que convertem para pequenos negócios: estrutura, copy, prova social, chamada, velocidade, SEO local e tendências de interface",
+  },
+  {
+    chave: "proposta.redator",
+    nome: "Redator de propostas",
+    mesa: "Mesa Proposta",
+    papel: "Escreve as propostas comerciais da agência: diagnóstico, solução, escopo, investimento e respostas às objeções.",
+    tema: "propostas comerciais de agência de marketing que fecham: estrutura, diagnóstico, ancoragem de preço, prova, escopo, garantias e objeções",
+  },
 ];
 
 export const CHAVES_COM_BASE = AGENTES_COM_BASE.map((a) => a.chave);

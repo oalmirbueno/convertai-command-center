@@ -24,13 +24,15 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, IaMotorErro, lerSaldo, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { type AgenteComBase, agenteComBase, AGENTES_COM_BASE } from "../_shared/agentes-com-base.ts";
-import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, resultadosDasFichas, type UsoParaResultado } from "../_shared/resultado-das-fichas.ts";
+import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, deveSair, resultadosDasFichas, type UsoParaResultado } from "../_shared/resultado-das-fichas.ts";
 import { basesDoPerfil, DESTAQUE_A_PARTIR_DE, type MedidaDoMultiplo, multiploDoPost, type PostParaMultiplo } from "../_shared/multiplo-do-post.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  ...PREFLIGHT_CACHE,
 };
 
 /** O material de uma fonte vai até aqui para o leitor (o resto é cortado com aviso). */
@@ -385,6 +387,10 @@ async function pesquisaSemanal() {
     console.error("[base-dos-agentes] resultados falharam", err instanceof Error ? err.message : err);
     return null;
   });
+  // O aviso da semana sai uma vez, na primeira chamada do dia (a mesma trava dos resultados).
+  if (!(recente || []).length) {
+    await avisarResumoDaSemana().catch((err) => console.error("[base-dos-agentes] resumo da semana falhou", err instanceof Error ? err.message : err));
+  }
   const pagador = await carteiraDaAgencia();
   if (!pagador) return json({ ok: false, motivo: "sem_carteira" });
   const saldo = await lerSaldo(pagador).catch(() => 0);
@@ -561,11 +567,70 @@ async function fichasDosVencedores(): Promise<number> {
   return criadas;
 }
 
+/** Janela dos posts fora da curva de concorrentes e referências que viram ficha. */
+const DIAS_DOS_CONCORRENTES = 45;
+
+/** As fichas de um post fora da curva de um perfil de referência ou concorrente: por formato, para quem faz aquilo. */
+export function fichasDoConcorrente(e: { handle: string; papel: string; vezes: number; formato: string; legenda: string; leitura: string }) {
+  const quem = e.papel === "concorrente" ? "concorrente" : "referência";
+  const linha = texto(String(e.legenda || "").split("\n").filter(Boolean)[0], 140);
+  const video = /reel|video|vídeo/i.test(e.formato);
+  const vezes = numeroBr(e.vezes);
+  const tecnica = `Um ${video ? "Reel" : e.formato || "post"} de @${e.handle}, ${quem} deste cliente, teve ${vezes}x a mediana de engajamento do perfil dele.${e.leitura ? ` O que ele mostra: ${texto(e.leitura, 500)}.` : ""}${linha ? ` Primeira linha da legenda: "${linha}".` : ""} Aproveite o mecanismo (o tipo de gancho, o formato e o ângulo) com a voz e a oferta deste cliente; nunca copie o texto, a imagem ou a ideia ao pé da letra.`.slice(0, 2400);
+  const titulo = `@${e.handle} rendeu ${vezes}x: ${linha || e.formato || "post"}`.slice(0, 160);
+  const agentes = ["mes.estrategista", ...(video ? ["videos.diretor", "roteiros.roteirista"] : ["estudio.diretor"])];
+  return agentes.map((agente) => ({ agente, titulo, tecnica, quando_usar: `Pautas deste cliente em ${video ? "Reel" : "carrossel ou post"}.`, exemplo: linha }));
+}
+
+/** 17/10 (rodada 3): os posts fora da curva dos perfis de referência e concorrentes viram fichas do cliente. */
+async function fichasDosConcorrentes(): Promise<number> {
+  const { data } = await servico().from("cliente_perfis_posts")
+    .select("perfil_id, client_id, formato, legenda, leitura, permalink, vezes_a_mediana, publicado_em")
+    .eq("fora_da_curva", true).is("arquivado_em", null).gte("publicado_em", diasAtras(DIAS_DOS_CONCORRENTES))
+    .order("vezes_a_mediana", { ascending: false }).limit(300);
+  const posts = (data || []) as Array<{ perfil_id: string; client_id: string; formato: string | null; legenda: string | null; leitura: string | null; permalink: string | null; vezes_a_mediana: number | string | null }>;
+  if (!posts.length) return 0;
+  const perfis = new Map<string, { handle: string; papel: string }>();
+  for (const ids of emPedacos([...new Set(posts.map((p) => p.perfil_id))])) {
+    const { data: ps } = await servico().from("cliente_perfis_instagram").select("id, handle, papel").in("id", ids).is("arquivado_em", null);
+    for (const p of (ps || []) as Array<{ id: string; handle: string; papel: string }>) perfis.set(p.id, p);
+  }
+  let criadas = 0;
+  const porCliente = new Map<string, number>();
+  const fontes = new Map<string, string>();
+  for (const post of posts) {
+    const perfil = perfis.get(post.perfil_id);
+    const vezes = Number(post.vezes_a_mediana);
+    if (!perfil || !post.permalink || !Number.isFinite(vezes) || (porCliente.get(post.client_id) || 0) >= VENCEDORES_POR_CLIENTE) continue;
+    const { data: ja } = await servico().from("agente_base_fichas").select("id").eq("client_id", post.client_id).eq("fonte_url", post.permalink).limit(1);
+    if ((ja || []).length) continue;
+    for (const l of fichasDoConcorrente({ handle: perfil.handle, papel: perfil.papel, vezes, formato: post.formato || "", legenda: post.legenda || "", leitura: post.leitura || "" })) {
+      const chaveFonte = `${post.client_id}|${l.agente}`;
+      let fonteId = fontes.get(chaveFonte);
+      if (!fonteId) {
+        const { data: f } = await servico().from("agente_base_fontes").insert({
+          agente: l.agente, client_id: post.client_id, tipo: "texto", nome: `Concorrentes e referências de ${hojeBr()}`, status: "pronta", fichas: 0,
+        }).select("id").single();
+        if (!f) continue;
+        fonteId = (f as { id: string }).id;
+        fontes.set(chaveFonte, fonteId);
+      }
+      const { error } = await servico().from("agente_base_fichas").insert({ fonte_id: fonteId, agente: l.agente, client_id: post.client_id, titulo: l.titulo, tecnica: l.tecnica, quando_usar: l.quando_usar, exemplo: l.exemplo, fonte_url: post.permalink });
+      if (error) continue;
+      criadas += 1;
+      const { count } = await servico().from("agente_base_fichas").select("id", { count: "exact", head: true }).eq("fonte_id", fonteId);
+      await servico().from("agente_base_fontes").update({ fichas: count ?? 0 }).eq("id", fonteId);
+    }
+    porCliente.set(post.client_id, (porCliente.get(post.client_id) || 0) + 1);
+  }
+  return criadas;
+}
+
 /**
  * 17/10 (dono: "a base aprender com o que eu aprovo e reprovo; os números do Instagram voltando para a técnica"):
  * o resultado de cada ficha (desfecho das peças e múltiplo dos posts) gravado nela, e os vencedores viram fichas.
  */
-export async function aprenderComResultados(): Promise<{ fichas: number; vencedoras: number }> {
+export async function aprenderComResultados(): Promise<{ fichas: number; vencedoras: number; concorrentes: number }> {
   const usos: UsoParaResultado[] = [];
   for (let pagina = 0; pagina < 10; pagina += 1) {
     const { data } = await servico().from("agente_base_usos").select("ficha_id, referencia_tipo, referencia_id")
@@ -595,7 +660,95 @@ export async function aprenderComResultados(): Promise<{ fichas: number; vencedo
     console.error("[base-dos-agentes] vencedores falharam", err instanceof Error ? err.message : err);
     return 0;
   });
-  return { fichas, vencedoras };
+  const concorrentes = await fichasDosConcorrentes().catch((err) => {
+    console.error("[base-dos-agentes] concorrentes falharam", err instanceof Error ? err.message : err);
+    return 0;
+  });
+  return { fichas, vencedoras, concorrentes };
+}
+
+// ------------------------------------------------------------------ resumo da semana e carteiras baixas
+
+/** Carteira abaixo disso não paga a pesquisa (US$ 1) nem a leitura automática (US$ 0,30): o aviso começa aqui. */
+export const CARTEIRA_BAIXA = 1;
+
+export type ResumoDaSemana = {
+  novas: { pesquisa: number; materiais: number; numeros: number; concorrentes: number };
+  sairam: number;
+  referenciasLidas: number;
+  carteirasBaixas: Array<{ cliente: string; saldo: number }>;
+};
+
+/** O texto do aviso (o mesmo que a tela mostra em partes). */
+export function textoDoResumo(r: ResumoDaSemana): string {
+  const total = r.novas.pesquisa + r.novas.materiais + r.novas.numeros + r.novas.concorrentes;
+  const origem = [
+    r.novas.pesquisa ? `${r.novas.pesquisa} da pesquisa` : "",
+    r.novas.materiais ? `${r.novas.materiais} do que você mandou` : "",
+    r.novas.numeros ? `${r.novas.numeros} dos posts que renderam` : "",
+    r.novas.concorrentes ? `${r.novas.concorrentes} dos concorrentes e referências` : "",
+  ].filter(Boolean).join(", ");
+  const partes = [
+    `Base dos agentes na semana: ${total} ${total === 1 ? "técnica nova" : "técnicas novas"}${origem ? ` (${origem})` : ""}`,
+    r.sairam ? `${r.sairam} ${r.sairam === 1 ? "ficha saiu" : "fichas saíram"} por atrapalhar` : "",
+    r.referenciasLidas ? `${r.referenciasLidas} ${r.referenciasLidas === 1 ? "referência de design lida" : "referências de design lidas"}` : "",
+  ].filter(Boolean);
+  const carteiras = r.carteirasBaixas.length
+    ? ` Carteira baixa (pesquisa e leitura param): ${r.carteirasBaixas.slice(0, 6).map((c) => `${c.cliente} US$ ${c.saldo.toFixed(2).replace(".", ",")}`).join(", ")}${r.carteirasBaixas.length > 6 ? ` e mais ${r.carteirasBaixas.length - 6}` : ""}.`
+    : "";
+  return `${partes.join("; ")}.${carteiras}`;
+}
+
+async function resumoDaSemana(): Promise<ResumoDaSemana> {
+  const desde = diasAtras(7);
+  const { data: fichas } = await servico().from("agente_base_fichas").select("fonte_id, criado_em").gte("criado_em", desde).limit(3000);
+  const fonteIds = [...new Set(((fichas || []) as Array<{ fonte_id: string | null }>).map((f) => f.fonte_id).filter(Boolean) as string[])];
+  const fontes = new Map<string, { tipo: string; nome: string }>();
+  for (const ids of emPedacos(fonteIds)) {
+    const { data } = await servico().from("agente_base_fontes").select("id, tipo, nome").in("id", ids);
+    for (const f of (data || []) as Array<{ id: string; tipo: string; nome: string }>) fontes.set(f.id, f);
+  }
+  const novas = { pesquisa: 0, materiais: 0, numeros: 0, concorrentes: 0 };
+  for (const f of (fichas || []) as Array<{ fonte_id: string | null }>) {
+    const fonte = f.fonte_id ? fontes.get(f.fonte_id) : undefined;
+    if (fonte?.tipo === "pesquisa") novas.pesquisa += 1;
+    else if (fonte?.nome.indexOf("Números do Instagram") === 0) novas.numeros += 1;
+    else if (fonte?.nome.indexOf("Concorrentes e referências") === 0) novas.concorrentes += 1;
+    else novas.materiais += 1;
+  }
+  const { data: comResultado } = await servico().from("agente_base_fichas").select("aprovadas, ajustadas, reprovadas, posts, multiplo").eq("ativa", true).not("resultado_em", "is", null).limit(3000);
+  const sairam = ((comResultado || []) as Array<{ aprovadas: number; ajustadas: number; reprovadas: number; posts: number; multiplo: number | string | null }>)
+    .filter((f) => deveSair({ aprovadas: f.aprovadas, ajustadas: f.ajustadas, reprovadas: f.reprovadas, posts: f.posts, multiplo: f.multiplo === null ? null : Number(f.multiplo) })).length;
+  const { count: lidas } = await servico().from("ia_usos").select("id", { count: "exact", head: true }).eq("tarefa", "leitura_referencia").eq("referencia_tipo", "cliente_referencia").gte("criado_em", desde);
+  // Carteira baixa só de quem usou IA nos últimos 30 dias (cliente parado não precisa de aviso).
+  const { data: usos } = await servico().from("ia_usos").select("client_id").gte("criado_em", diasAtras(30)).limit(5000);
+  const ativos = [...new Set(((usos || []) as Array<{ client_id: string }>).map((u) => u.client_id))];
+  const carteirasBaixas: ResumoDaSemana["carteirasBaixas"] = [];
+  for (const ids of emPedacos(ativos)) {
+    const { data: cs } = await servico().from("ia_carteiras").select("client_id, saldo_usd").in("client_id", ids).lt("saldo_usd", CARTEIRA_BAIXA);
+    const lista = (cs || []) as Array<{ client_id: string; saldo_usd: number | string }>;
+    if (!lista.length) continue;
+    const { data: nomes } = await servico().from("profiles").select("id, company_name, full_name").in("id", lista.map((c) => c.client_id));
+    const nome = new Map(((nomes || []) as Array<{ id: string; company_name: string | null; full_name: string | null }>).map((p) => [p.id, p.company_name || p.full_name || "Cliente"]));
+    for (const c of lista) carteirasBaixas.push({ cliente: nome.get(c.client_id) || "Cliente", saldo: Number(c.saldo_usd) || 0 });
+  }
+  carteirasBaixas.sort((a, b) => a.saldo - b.saldo);
+  return { novas, sairam, referenciasLidas: lidas ?? 0, carteirasBaixas };
+}
+
+/** O aviso da semana para o admin e o gestor (no sininho do painel, com link para a Base dos agentes). */
+async function avisarResumoDaSemana(): Promise<void> {
+  const r = await resumoDaSemana();
+  const { data } = await servico().from("user_roles").select("user_id").in("role", ["admin", "manager"]);
+  const alvos = [...new Set(((data || []) as Array<{ user_id: string }>).map((x) => x.user_id))];
+  if (!alvos.length) return;
+  const { error } = await servico().from("notifications").insert(alvos.map((u) => ({ user_id: u, message: textoDoResumo(r), notification_type: "base_dos_agentes", link: "/base-dos-agentes" })));
+  if (error) console.error("[base-dos-agentes] aviso da semana não gravado", { code: error.code });
+}
+
+async function resumoParaATela(_ch: Chamador) {
+  const r = await resumoDaSemana();
+  return json({ ok: true, ...r, texto: textoDoResumo(r) });
 }
 
 async function aprenderAgora(_ch: Chamador) {
@@ -612,6 +765,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   apagar_ficha: apagarFicha,
   apagar_fonte: apagarFonte,
   aprender_com_resultados: aprenderAgora,
+  resumo_da_semana: resumoParaATela,
 };
 const ACOES_LONGAS = new Set(["ensinar", "pesquisar", "aprender_com_resultados"]);
 

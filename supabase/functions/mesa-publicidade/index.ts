@@ -122,6 +122,8 @@ import { alvosDaPublicidade, type CustosDaPublicidade, itensDaReferenciaDaPublic
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { blocoDaDiversidadeVisual } from "../_shared/diversidade-visual.ts";
+// Base do agente (17/10): as fichas do diretor (publicidade.diretor) no fim do sistema da direção e da conversa. Nunca no leitor nem no Jev.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -489,13 +491,24 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
   if (c.ensaio_id) throw new ErroHttp(409, "tomadas_ja_pedidas", "As tomadas já foram pedidas com o território aprovado. Abra uma campanha nova para outra direção.");
   // Frente MC: o contexto da marca da campanha (CME não recebe o negócio e o público da Acerbi).
   const marcaDaCampanha = await marcaDoPedidoNaMarca(servico(), c.client_id, { marca_id: (c as { marca_id?: unknown }).marca_id }).catch((e) => (registrarFalha("mesa-publicidade: marca da campanha falhou", e), null));
-  const [{ kit }, contexto, modelo, regras] = await Promise.all([
+  const [{ kit }, contexto, modelo, regrasDaEquipe, base] = await Promise.all([
     lerKit(c.client_id, c.kit_id),
     marcaDaCampanha ? lerContextoDaMarca(servico(), c.client_id, marcaDaCampanha) : lerContextoConsolidado(servico(), c.client_id),
     modeloDeTexto(modeloId),
     // Frente AG2: as regras que a equipe ensinou valem na direção (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId: c.client_id, mesa: "publicidade", marcaId: c.marca_id }),
+    // Base do agente: as fichas do diretor para esta campanha (sem ficha, bloco vazio; nunca lança).
+    baseDoAgente(servico(), {
+      agente: "publicidade.diretor",
+      clientId: c.client_id,
+      pedido: ["Territórios da campanha", c.nome, c.briefing.objetivo_texto, c.briefing.publico, c.briefing.ocasiao, c.briefing.tom, pedido].filter(Boolean).join(". "),
+      tarefa: TAREFA,
+      referencia: c.id ? { tipo: REF_CAMPANHA, id: c.id } : undefined,
+      criadoPor: ch.userId,
+    }),
   ]);
+  // A base entra no fim do sistema, depois das regras (sem ficha, o sistema sai igual ao de antes).
+  const regras = { ...regrasDaEquipe, bloco: [regrasDaEquipe.bloco, base.bloco].filter(Boolean).join("\n\n") };
   const receita = receitaDaCategoria(c.categoria) || receitaParaProduto(kit.nome, kit.tipo);
   const dados = {
     produto: {
@@ -1051,7 +1064,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     const ultima = ((h.data || []) as Linha[]).find((m) => m.papel === "agente");
     return prepararNucleo(servico(), { clientId, pedido: mensagem, agente: "publicidade (diretor de campanha)", ultimaResposta: ultima ? String(ultima.conteudo || "") : null, cobrar: cobrarDoNucleo });
   });
-  const [hist, modelo, contextoDoCliente, regras, referencia, previas] = await Promise.all([
+  const [hist, modelo, contextoDoCliente, regras, referencia, previas, base] = await Promise.all([
     historicoP,
     modeloDeTexto(corpo.modelo_id),
     // Frente SYNC: o contexto completo da marca da campanha (ou da aberta na tela): estratégia, briefing, dossiê, decisões e cérebro pela herança.
@@ -1060,12 +1073,14 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     regrasDaMesa(servico(), { clientId, mesa: "publicidade", marcaId: campanha ? campanha.marca_id : null }),
     referenciaP.catch((e) => (registrarFalha("mesa-publicidade: referência do pedido", e), { r: null, itens: [] })),
     previasP,
+    // Base do agente: as fichas do diretor que servem a esta mensagem (nunca lança).
+    baseDoAgente(servico(), { agente: "publicidade.diretor", clientId, pedido: mensagem, tarefa: "conversa", referencia: campanha && campanha.id ? { tipo: REF_CAMPANHA, id: campanha.id } : undefined, criadoPor: ch.userId }),
   ]);
   if (hist.error) registrarFalha("mesa-publicidade: histórico da conversa não lido", hist.error, { conversa_id: conversaId });
   const historico = ((hist.data || []) as Linha[]).reverse().filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || "").slice(0, 4000) }));
   const ultimaResposta = historico.slice().reverse().find((m) => m.papel === "agente");
-  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`;
+  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: "conversa",

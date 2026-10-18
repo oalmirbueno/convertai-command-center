@@ -24,6 +24,8 @@ import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): headlines, tom e resumo com o método da casa (critério de aceite, revisão e prova).
 import { superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas do redator de propostas no fim do sistema das headlines e do tom. O resumo da reunião (leitura) fica sem.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 // Frente CPY: o motor de copy da casa (headlines conferidas e em ordem).
 import { blocoDoMotor, ofertaDosFatos, regrasDaCasa } from "../_shared/motor-de-copy.ts";
 import { conferirCopies } from "../_shared/motor-de-copy-servidor.ts";
@@ -240,7 +242,11 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
   async function headlines(ch: C, corpo: Record<string, unknown>) {
     const linha = await d.lerLinha(ch, corpo.proposta_id);
     const modelo = await d.modeloDeTexto(corpo.modelo_id);
-    const ctx = await d.contextoDaGeracao(linha);
+    const [ctx, base] = await Promise.all([
+      d.contextoDaGeracao(linha),
+      // Base do agente: as fichas do redator para as headlines da capa (sem ficha, bloco vazio; nunca lança).
+      baseDoAgente(d.servico(), { agente: "proposta.redator", clientId: linha.client_id, pedido: ["Headlines da capa da proposta", linha.titulo, textoLimpo(corpo.orientacao, 300)].filter(Boolean).join(". "), tarefa: PAPEL, referencia: { tipo: d.referencia, id: linha.id }, criadoPor: ch.userId }),
+    ]);
     const capa = blocoDoTipo(linha.conteudo, "capa").dados;
     const saida = await chamarTexto({
       clientId: linha.client_id,
@@ -248,7 +254,7 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       agente: PAPEL,
       modeloId: modelo.id,
       raciocinio: d.raciocinioPara(modelo),
-      sistema: `${SISTEMA_HEADLINES(d.regrasDaVoz)}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, headline_atual: capa.headline, desafio: blocoDoTipo(linha.conteudo, "desafio").dados.texto }).slice(0, 50_000)}`,
+      sistema: `${SISTEMA_HEADLINES(d.regrasDaVoz)}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, headline_atual: capa.headline, desafio: blocoDoTipo(linha.conteudo, "desafio").dados.texto }).slice(0, 50_000)}${base.bloco ? `\n\n${base.bloco}` : ""}`,
       mensagens: [{ papel: "usuario", conteudo: `Escreva 3 headlines para a capa.${textoLimpo(corpo.orientacao, 300) ? ` Orientação: ${textoLimpo(corpo.orientacao, 300)}` : ""}\n\n${blocoDoMotor({ canal: "proposta", objetivo: "venda", variacoes: 3, frameworks: ["4u", "bab", "pas"] })}` }],
       esquemaJson: ESQUEMA_DAS_HEADLINES,
       maxTokensSaida: 800,
@@ -293,7 +299,11 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
     const campos = camposDoBloco(blocoDoTipo(conteudo, tipo));
     if (!campos.length) throw d.erro(400, "bloco_sem_texto", `O bloco ${ROTULO_DO_BLOCO[tipo]} não se reescreve pela IA.`);
     const modelo = await d.modeloDeTexto(corpo.modelo_id);
-    const ctx = await d.contextoDaGeracao(linha);
+    const [ctx, base] = await Promise.all([
+      d.contextoDaGeracao(linha),
+      // Base do agente: as fichas do redator para reescrever este bloco (nunca lança).
+      baseDoAgente(d.servico(), { agente: "proposta.redator", clientId: linha.client_id, pedido: `Reescrever no tom da marca o bloco ${ROTULO_DO_BLOCO[tipo]} da proposta ${linha.titulo}`, tarefa: PAPEL, referencia: { tipo: d.referencia, id: linha.id }, criadoPor: ch.userId }),
+    ]);
     const atuais: Record<string, unknown> = {};
     for (const c of campos) atuais[c.chave.split(".")[1]] = c.valorAtual;
     const saida = await chamarTexto({
@@ -302,7 +312,7 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       agente: PAPEL,
       modeloId: modelo.id,
       raciocinio: d.raciocinioPara(modelo),
-      sistema: `${SISTEMA_TOM(d.regrasDaVoz)}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS:\n${JSON.stringify({ cliente: ctx.dados.cliente, contexto_do_cliente: ctx.dados.contexto_do_cliente }).slice(0, 30_000)}`,
+      sistema: `${SISTEMA_TOM(d.regrasDaVoz)}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS:\n${JSON.stringify({ cliente: ctx.dados.cliente, contexto_do_cliente: ctx.dados.contexto_do_cliente }).slice(0, 30_000)}${base.bloco ? `\n\n${base.bloco}` : ""}`,
       mensagens: [{ papel: "usuario", conteudo: `Reescreva no tom da marca o bloco "${ROTULO_DO_BLOCO[tipo]}". Hoje ele está assim: ${JSON.stringify(atuais)}` }],
       esquemaJson: esquemaDoTom(campos),
       maxTokensSaida: 2_500,

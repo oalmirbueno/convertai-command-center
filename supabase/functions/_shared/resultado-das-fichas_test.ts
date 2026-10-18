@@ -48,3 +48,21 @@ Deno.test("a capa do vencedor é o título com o resto da capa, não só a prime
   assertEquals(textoDaCapa({ texto_exato: "5 PONTOS\nAntes de trocar a bancada", blocos: [{ papel: "selo", texto: "5 PONTOS" }, { papel: "headline", texto: "Antes de trocar a bancada" }] }), "Antes de trocar a bancada · 5 PONTOS");
   assertEquals(textoDaCapa({ texto_exato: "Deu vontade?" }), "Deu vontade?");
 });
+
+Deno.test("post fora da curva de concorrente vira ficha por formato, sem copiar", async () => {
+  const { fichasDoConcorrente } = await import("../base-dos-agentes/index.ts");
+  const reel = fichasDoConcorrente({ handle: "loja", papel: "concorrente", vezes: 8, formato: "reel", legenda: "E disso a gente entende\nresto", leitura: "" });
+  assertEquals(reel.map((f) => f.agente), ["mes.estrategista", "videos.diretor", "roteiros.roteirista"]);
+  assert(reel[0].titulo.startsWith("@loja rendeu 8x: E disso a gente entende"));
+  assert(reel[0].tecnica.includes("nunca copie"));
+  const carrossel = fichasDoConcorrente({ handle: "ref", papel: "referencia", vezes: 7.7, formato: "carrossel", legenda: "", leitura: "lentes coloridas" });
+  assertEquals(carrossel.map((f) => f.agente), ["mes.estrategista", "estudio.diretor"]);
+});
+
+Deno.test("o aviso da semana conta a origem e lista as carteiras baixas", async () => {
+  const { textoDoResumo } = await import("../base-dos-agentes/index.ts");
+  const t = textoDoResumo({ novas: { pesquisa: 12, materiais: 3, numeros: 2, concorrentes: 0 }, sairam: 1, referenciasLidas: 18, carteirasBaixas: [{ cliente: "Para Si", saldo: 0.18 }] });
+  assert(t.startsWith("Base dos agentes na semana: 17 técnicas novas (12 da pesquisa, 3 do que você mandou, 2 dos posts que renderam)"));
+  assert(t.includes("1 ficha saiu por atrapalhar"));
+  assert(t.includes("Carteira baixa (pesquisa e leitura param): Para Si US$ 0,18."));
+});

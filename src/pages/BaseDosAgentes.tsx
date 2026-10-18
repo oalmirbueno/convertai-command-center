@@ -10,6 +10,7 @@ import {
   apagarFicha,
   apagarFonte,
   aprenderComResultados,
+  lerResumoDaSemana,
   editarFicha,
   ensinar,
   type FichaDaBase,
@@ -74,6 +75,8 @@ export default function BaseDosAgentes() {
   const fichas = useQuery({ queryKey: ["base-dos-agentes", "fichas", agente.chave], queryFn: () => lerFichas(agente.chave) });
   const fontes = useQuery({ queryKey: ["base-dos-agentes", "fontes", agente.chave], queryFn: () => lerFontes(agente.chave), refetchInterval: (q) => ((q.state.data as FonteDaBase[] | undefined) || []).some((f) => f.status === "lendo") ? 5_000 : false });
   const clientes = useQuery({ queryKey: ["base-dos-agentes", "clientes"], queryFn: lerClientesDaBase, staleTime: 300_000 });
+  // 17/10: o que a base aprendeu na semana e as carteiras que travam a pesquisa e a leitura automática.
+  const semana = useQuery({ queryKey: ["base-dos-agentes", "semana"], queryFn: lerResumoDaSemana, enabled: podeEnsinar, staleTime: 120_000, retry: false });
   const nomeDoCliente = (id: string | null) => (id ? clientes.data?.find((c) => c.id === id)?.nome || "um cliente" : null);
 
   const recarregar = () => {
@@ -93,6 +96,24 @@ export default function BaseDosAgentes() {
         titulo="Base dos agentes"
         descricao={<span><strong className="tabular-nums text-foreground">{totalAtivas}</strong> técnicas em uso em {AGENTES_COM_BASE.length} agentes</span>}
       />
+
+      {semana.data && (
+        <section aria-label="Esta semana" className="min-w-0 space-y-2" data-resumo-da-semana="">
+          <p className="text-[13px] leading-5 text-foreground">
+            <span className="font-semibold">Esta semana: </span>
+            {semana.data.novas.pesquisa + semana.data.novas.materiais + semana.data.novas.numeros + semana.data.novas.concorrentes} técnicas novas
+            {" "}({semana.data.novas.pesquisa} da pesquisa, {semana.data.novas.materiais} do que você mandou, {semana.data.novas.numeros} dos posts que renderam, {semana.data.novas.concorrentes} dos concorrentes)
+            {semana.data.sairam ? ` · ${semana.data.sairam} saíram por atrapalhar` : ""}
+            {` · ${semana.data.referenciasLidas} referências de design lidas`}
+          </p>
+          {semana.data.carteirasBaixas.length > 0 && (
+            <p className="rounded-md bg-warning/10 px-2.5 py-2 text-[12px] leading-5 text-warning" role="status" data-carteiras-baixas="">
+              Carteira baixa, a pesquisa e a leitura automática param: {semana.data.carteirasBaixas.slice(0, 8).map((c) => `${c.cliente} (${usd(c.saldo)})`).join(", ")}
+              {semana.data.carteirasBaixas.length > 8 ? ` e mais ${semana.data.carteirasBaixas.length - 8}` : ""}. Recarregue na Mesa do cliente.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Os agentes, por mesa. */}

@@ -102,6 +102,8 @@ import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimento
 import { direcaoParaOAgente, lerBaseDeDesign } from "../_shared/uiux/consultas.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+// Base do agente (17/10): as fichas do agente do site no fim do sistema do conteúdo, da estrutura e da conversa. A leitura e o Jev ficam sem.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 
 /** Versão de antes (SIT2): o erro vai para o log e volta como aviso, sem travar a mudança. */
 async function versaoAntes(s: LinhaDoSite, motivo: string, userId: string): Promise<string | null> {
@@ -530,9 +532,11 @@ async function gerarConteudo(ch: Chamador, s: LinhaDoSite, modeloId: unknown, pe
     pedido_da_equipe: pedido || null,
   };
   // Frente CPY: o motor de copy da casa (voz pelo contexto completo, CTA, fatos, promessa, clichê) e a conferência das 3 opções.
-  const [regras, voz] = await Promise.all([
+  const [regras, voz, base] = await Promise.all([
     regrasDaMesa(servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id }),
     vozDaMarca(servico(), s.client_id, s.marca_id ? { marca_id: s.marca_id } : null),
+    // Base do agente: as fichas do agente do site para este conteúdo (sem ficha, bloco vazio; nunca lança).
+    baseDoAgente(servico(), { agente: "site.agente", clientId: s.client_id, pedido: [`Copy das seções do site ${s.nome}`, pacote.tipo ? `tipo ${pacote.tipo}` : "", pedido].filter(Boolean).join(". "), tarefa: PAPEL, referencia: { tipo: "site", id: s.id }, criadoPor: ch.userId }),
   ]);
   const objetivoDoSite = pedido && objetivoDaCopy(pedido) !== "educacao" ? objetivoDaCopy(pedido) : "contato";
   (dados as Record<string, unknown>).motor_de_copy = blocoDoMotor({ canal: "site", objetivo: objetivoDoSite, variacoes: 3, estruturaPedida: "a FORMULA de cada seção em SECOES; o conceito e a headline mudam entre as opções", regras: voz.regras });
@@ -541,7 +545,7 @@ async function gerarConteudo(ch: Chamador, s: LinhaDoSite, modeloId: unknown, pe
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DO_CONTEUDO}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_DO_CONTEUDO}${regras.bloco ? `\n\n${regras.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_DO_CONTEUDO,
     maxTokensSaida: 9_000,
@@ -863,12 +867,14 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     cobrar: cobrarDoNucleo,
   }));
-  const [modelo, historico, l, marca, regras] = await Promise.all([
+  const [modelo, historico, l, marca, regras, fichasDaBase] = await Promise.all([
     modeloDoPapel(PAPEL, typeof c.modelo_id === "string" && c.modelo_id ? c.modelo_id : null),
     historicoP,
     listasDoAgente(s),
     marcaDoSite(s),
     regrasDaMesa(servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id }),
+    // Base do agente: as fichas do agente do site que servem a esta mensagem (nunca lança).
+    baseDoAgente(servico(), { agente: "site.agente", clientId: s.client_id, pedido: mensagem, tarefa: PAPEL, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId }),
   ]);
   if (!modelo) throw new ErroHttp(409, "sem_modelo", "Nenhum modelo de texto ativo para o papel site.");
   if (historico.error) registrarFalha("mesa-site: histórico não lido", historico.error, { conversa_id: conversaId });
@@ -907,7 +913,7 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DO_AGENTE}\n\n${CONHECIMENTO_DA_BASE}\n\nDADOS:\n${JSON.stringify(dados)}${blocoDaBase ? `\n\n${blocoDaBase}` : ""}\n${blocoDasAcoesDoSite(l.listas)}\n\n${blocoDoMapaDoPainel("site")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, direcao.nomeCliente)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+    sistema: `${SISTEMA_DO_AGENTE}\n\n${CONHECIMENTO_DA_BASE}\n\nDADOS:\n${JSON.stringify(dados)}${blocoDaBase ? `\n\n${blocoDaBase}` : ""}\n${blocoDasAcoesDoSite(l.listas)}\n\n${blocoDoMapaDoPainel("site")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, direcao.nomeCliente)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${fichasDaBase.bloco ? `\n\n${fichasDaBase.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: imagensDoAnexo.filter((x): x is ImagemEntrada => !!x) }],
     esquemaJson: ESQUEMA_DO_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,

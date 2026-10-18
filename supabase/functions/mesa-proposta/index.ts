@@ -76,6 +76,8 @@ import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) no estrategista comercial (escrever e evolução) e no agente.
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas do redator de propostas no fim do sistema do escrever, da evolução e da conversa. A conferência fica sem.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
@@ -896,11 +898,13 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
   // Antes de gastar IA: a proposta sai com o nome, o contato e a logo da agência.
   const agencia = await exigirDadosDaAgencia(servico(), "proposta");
   const modelo = await modeloDeTexto(p.modeloId);
-  const [ctx, regras, sp] = await Promise.all([
+  const [ctx, regras, sp, base] = await Promise.all([
     contextoDaGeracao(linha, p.fontes),
     regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "proposta", marcaId: linha.marca_id }),
     // Frente SPP: o código escolhe o método (gerar a proposta ou reescrever um bloco). Nunca lança.
     superpoderesPara(servico(), { agente: "proposta.escrever", momento: p.somente ? "ajustar" : "gerar" }),
+    // Base do agente: as fichas do redator para esta proposta (sem ficha, bloco vazio; nunca lança).
+    baseDoAgente(servico(), { agente: "proposta.redator", clientId: linha.client_id, pedido: [linha.titulo, p.tarefaTexto, p.orientacao].filter(Boolean).join(". "), tarefa: TAREFA_GERAR, referencia: { tipo: REF_PROPOSTA, id: linha.id }, criadoPor: ch.userId }),
   ]);
   const hoje = hojeEmSaoPaulo();
   const pedido = [p.tarefaTexto, p.orientacao ? `ORIENTAÇÃO DA EQUIPE: ${p.orientacao}` : ""].filter(Boolean).join("\n");
@@ -911,7 +915,7 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     pesquisaWeb: p.pesquisar,
-    sistema: `${p.sistema}${regras.bloco ? `\n\n${regras.bloco}` : ""}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS (hoje ${hoje}):\n${JSON.stringify(ctx.dados)}`,
+    sistema: `${p.sistema}${regras.bloco ? `\n\n${regras.bloco}` : ""}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS (hoje ${hoje}):\n${JSON.stringify(ctx.dados)}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     esquemaJson: ESQUEMA_DA_GERACAO,
     maxTokensSaida: 9_000,
@@ -1215,7 +1219,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     cobrar: cobrarDoNucleo,
   }));
-  const [modelo, historico, ctx, regras, semProposta, previas] = await Promise.all([
+  const [modelo, historico, ctx, regras, semProposta, previas, base] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     historicoP,
     linha ? contextoDaGeracao(linha) : Promise.resolve(null),
@@ -1223,6 +1227,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente SYNC: sem proposta aberta, o estrategista ainda conhece a marca aberta (contexto completo).
     linha ? Promise.resolve("") : CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"], { marca: typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null, partes: PARTES_COM_O_CONTEXTO, area: "comercial" }).catch((e) => (registrarFalha("mesa-proposta: contexto sem proposta", e), "")),
     previasP,
+    // Base do agente: as fichas do redator que servem a esta mensagem (nunca lança).
+    baseDoAgente(servico(), { agente: "proposta.redator", clientId, pedido: mensagem, tarefa: TAREFA_CONVERSA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId }),
   ]);
   if (historico.error) registrarFalha("mesa-proposta: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const hoje = hojeEmSaoPaulo();
@@ -1246,7 +1252,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : semProposta ? `\n\n${blocoDoContextoDoCliente(semProposta)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+    sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : semProposta ? `\n\n${blocoDoContextoDoCliente(semProposta)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: anexados.length ? `${mensagem}\n\n(Anexei: ${anexados.map((a) => a.nome).join(", ")}. Já estão no material da proposta.)` : mensagem }],
     esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,

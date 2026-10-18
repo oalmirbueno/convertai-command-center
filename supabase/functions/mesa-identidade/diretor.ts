@@ -14,6 +14,8 @@ import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) no diretor de marca.
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+// Base do agente (17/10): as fichas do diretor de identidade no fim do sistema da conversa.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   type AcaoDoAgente,
@@ -187,7 +189,7 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     cobrar: cobrarDoNucleo,
   }));
-  const [modelo, historico, nome, contextoDoCliente, regrasIdentidade, regrasNaming, estado, previas] = await Promise.all([
+  const [modelo, historico, nome, contextoDoCliente, regrasIdentidade, regrasNaming, estado, previas, base] = await Promise.all([
     modeloDoPapel("identidade", corpo.modelo_id),
     historicoP,
     nomeDaMarca(clientId, marcaId),
@@ -197,6 +199,8 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     regrasDaMesa(servico(), { clientId, mesa: "naming", marcaId }),
     estadoDoProjeto(ch, projeto),
     previasP,
+    // Base do agente: as fichas do diretor que servem a esta mensagem (nunca lança).
+    baseDoAgente(servico(), { agente: "identidade.diretor", clientId, pedido: mensagem, tarefa: TAREFA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId }),
   ]);
   if (historico.error) registrarFalha("mesa-identidade: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const anteriores = (((historico.data as { papel: string; conteudo: string }[] | null) ?? []).slice().reverse())
@@ -213,7 +217,7 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_DO_DIRETOR}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; marca ${nome}):\n${JSON.stringify(estado.dados)}\n${blocoDasAcoesDoDiretor(estado.alvos)}\n\n${blocoDoMapaDoPainel("identidade")}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, nome)}` : ""}${blocoDasRegras ? `\n\n${blocoDasRegras}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+    sistema: `${SISTEMA_DO_DIRETOR}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; marca ${nome}):\n${JSON.stringify(estado.dados)}\n${blocoDasAcoesDoDiretor(estado.alvos)}\n\n${blocoDoMapaDoPainel("identidade")}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, nome)}` : ""}${blocoDasRegras ? `\n\n${blocoDasRegras}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_DO_DIRETOR_COM_METODO,
     maxTokensSaida: TAMANHO_DA_CONVERSA.saida * 2,

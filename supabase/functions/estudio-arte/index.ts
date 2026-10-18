@@ -731,7 +731,8 @@ const MAX_CARDS = 20;
 // Uma referência de identidade (arte da própria marca) e uma de técnica: cada
 // imagem anexada custa tokens de entrada no gerador.
 const MAX_REFERENCIAS = 2;
-const MAX_CANDIDATAS_JEV = 16;
+// 17/10: 40 (era 16), para a pasta inteira de referências do Workspace ter chance em cada lâmina.
+const MAX_CANDIDATAS_JEV = 40;
 const MAX_BYTES_IMAGEM = 20 * 1024 * 1024;
 const TIMEOUT_PINTEREST_MS = 20_000;
 const FORMATOS_FORA_DO_ESTUDIO = new Set(["reel", "video", "short", "story", "article"]);
@@ -3557,7 +3558,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     // 17/10 (dono: "tudo que entrar na pasta de referências já entra como aprendizado e ele usa sem eu pedir"):
     // das referências lidas do cliente, as que servem a ESTE pedido (até 10; com mais, o Jev escolhe).
     const refsDoPedidoP = referenciasDoPedido(
-      (refsRes.data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [],
+      (refsRes.data as { id: string; papel: string; leitura: string; tags: string[] }[] | null) ?? [],
       textoDoItem || item.tarefa.title,
       async (state, questions) => {
         const rj = await jevPerguntar({ state, questions });
@@ -3670,6 +3671,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
     }
     direcao = { conceito, fio_visual: fioVisual, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
+    // 17/10: as referências que o diretor usou neste pedido; na lâmina, o gerador dá preferência a elas (mesma linha).
+    (direcao as unknown as Record<string, unknown>).referencias_do_pedido = (await refsDoPedidoP).map((x) => x.id);
     avisosDoDiretor = (Array.isArray(bruto.avisos_para_a_equipe) ? bruto.avisos_para_a_equipe : []).map((a: unknown) => texto(a, 300)).filter(Boolean).slice(0, 4);
     custo = arred(r.custoUsd + custoDoMundo);
     usoId = r.usoId;
@@ -4873,8 +4876,13 @@ async function escolherReferencias(
       referencia: { tipo: "estudio_trabalho", id: t.id },
       criadoPor,
     });
+    const doDiretor = new Set(((t.direcao as unknown as { referencias_do_pedido?: string[] }).referencias_do_pedido) ?? []);
     const notas = candidatas
-      .map((r, i) => ({ r, nota: notaScore(res.answers[`r${i}`]) }))
+      .map((r, i) => {
+        const n = notaScore(res.answers[`r${i}`]);
+        // A referência que o diretor usou no texto deste pedido ganha meio ponto (texto e imagem na mesma linha).
+        return { r, nota: n == null ? n : n + (doDiretor.has(r.id) ? 0.5 : 0) };
+      })
       .filter((x) => x.nota != null && x.nota >= NOTA_MINIMA_REFERENCIA)
       .sort((a, b) => (b.nota as number) - (a.nota as number));
     // Uma da identidade da marca e uma de técnica (do cliente ou do banco da agência).

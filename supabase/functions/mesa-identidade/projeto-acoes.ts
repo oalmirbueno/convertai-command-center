@@ -13,6 +13,8 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) nas gerações da identidade (o código escolhe).
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
+// Base do agente (17/10): as fichas do diretor de identidade no fim do sistema dos caminhos criativos (a pesquisa fica sem).
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { concluirEtapa, ehEtapaDaIdentidade, ehModoDoProjeto, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "./modulos/identidade-etapas.ts";
 import { montarBriefingDaIdentidade, respostasDoBriefing } from "./modulos/briefing-da-identidade.ts";
@@ -378,7 +380,12 @@ export function resumoDaPesquisa(bruta: unknown): Record<string, unknown> {
 
 export async function gerarCaminhos(ch: Chamador, p: LinhaDoProjeto, quantos: number, pedido: string, modeloId?: unknown) {
   // O que a equipe ensinou ("nada de gradiente", "evitar verde-limão") entra antes de gerar.
-  const [modelo, regras] = await Promise.all([modeloDoPapel("identidade", modeloId), regrasDaMesa(servico(), { clientId: p.client_id, mesa: "identidade", marcaId: p.marca_id })]);
+  const [modelo, regras, base] = await Promise.all([
+    modeloDoPapel("identidade", modeloId),
+    regrasDaMesa(servico(), { clientId: p.client_id, mesa: "identidade", marcaId: p.marca_id }),
+    // Base do agente: as fichas do diretor para estes caminhos (sem ficha, bloco vazio; nunca lança).
+    baseDoAgente(servico(), { agente: "identidade.diretor", clientId: p.client_id, pedido: ["Caminhos criativos da identidade visual: conceito, logo, paleta e tipografia", pedido].filter(Boolean).join(". "), tarefa: TAREFA, referencia: { tipo: "idv_projeto", id: p.id }, criadoPor: ch.userId }),
+  ]);
   const nome = await nomeDaMarca(p.client_id, p.marca_id);
   const naming = (p.dados.naming as Record<string, unknown>) || {};
   const saida = await chamarTexto({
@@ -387,9 +394,7 @@ export async function gerarCaminhos(ch: Chamador, p: LinhaDoProjeto, quantos: nu
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: regras.bloco ? `${SISTEMA_DO_CONCEITO}
-
-${regras.bloco}` : SISTEMA_DO_CONCEITO,
+    sistema: [SISTEMA_DO_CONCEITO, regras.bloco, base.bloco].filter(Boolean).join("\n\n"),
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ quantidade: quantos, marca: naming.nome || nome, modo: p.modo, briefing: p.dados.briefing || {}, estrategia: p.dados.estrategia || null, pesquisa: resumoDaPesquisa(p.dados.pesquisa), pedido_da_equipe: pedido || null })}` }],
     esquemaJson: ESQUEMA_DO_CONCEITO,
     metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),

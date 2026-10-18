@@ -16,6 +16,8 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) no texto de cada seção (o código escolhe).
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
+// Base do agente (17/10): as fichas do agente do site no fim do sistema do texto de cada seção. O Jev fica sem.
+import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { copyEscolhida, imagensDoSite, type LinhaDoSite } from "../_shared/pacote-do-site.ts";
 import { type DnaDoSite, dnaManual, rotuloDaSecao } from "../_shared/site-metodo.ts";
 import {
@@ -236,7 +238,11 @@ async function secaoCopyGerar(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutura,
   const marca = await ctx.marcaDoSite(s);
   const contexto = obj(await lerContextoDaMarca(ctx.servico(), s.client_id, marca).catch((e) => (registrarFalha("mesa-site: contexto da seção", e), {})));
   const copy = copyEscolhida(s.conteudo || {});
-  const regras = await regrasDaMesa(ctx.servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id });
+  const [regras, base] = await Promise.all([
+    regrasDaMesa(ctx.servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id }),
+    // Base do agente: as fichas do agente do site para esta seção (sem ficha, bloco vazio; nunca lança).
+    baseDoAgente(ctx.servico(), { agente: "site.agente", clientId: s.client_id, pedido: [`Copy da seção ${lib ? lib.rotulo : rotuloDaSecao(uid)} do site`, txt(c.pedido, 600)].filter(Boolean).join(". "), tarefa: PAPEL, referencia: { tipo: "site", id: s.id }, criadoPor: ch.userId }),
+  ]);
   const dados = {
     cliente: marca ? marca.nome : s.nome,
     marca: { negocio: contexto.negocio || null, publico: contexto.publico || null, oferta: contexto.oferta || null, diferenciais: contexto.diferenciais || null, tom: contexto.tom_de_voz || null },
@@ -251,7 +257,7 @@ async function secaoCopyGerar(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutura,
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DA_SECAO}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_DA_SECAO}${regras.bloco ? `\n\n${regras.bloco}` : ""}${base.bloco ? `\n\n${base.bloco}` : ""}`,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_DA_SECAO,
     maxTokensSaida: 3_000,
