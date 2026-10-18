@@ -2233,6 +2233,14 @@
       "remote_name": "base_dos_agentes_ads_e_faxina",
       "remote_statements_sha256": "035a8bfe5b945dfedd40e101bd547bc6874fde58228479b4fe6fa32f3085f97e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261018120000",
+      "path": "supabase/migrations/20261018120000_endurecer_banco.sql",
+      "local_sha256": "b6415ff9842413aace3a96b2a03c1edc3026fb17bf779dc1aa436a65bb4a2249",
+      "remote_name": "endurecer_banco",
+      "remote_statements_sha256": "1ce5760f611ae6203aef522714e029e6c52edfe2264b16e9892c2a5ec419a6a2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
