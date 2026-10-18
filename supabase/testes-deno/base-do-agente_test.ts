@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { blocoDaBase, CABECALHO_DA_BASE, encherAteOTeto, type FichaDaBase, ordemPorPalavras, textoDaFicha } from "./base-do-agente.ts";
-import { limparFichas, sistemaDoLeitor, tituloNormalizado } from "../base-dos-agentes/index.ts";
-import { AGENTES_COM_BASE } from "./agentes-com-base.ts";
+import { blocoDaBase, CABECALHO_DA_BASE, encherAteOTeto, type FichaDaBase, ordemPorPalavras, textoDaFicha } from "../functions/_shared/base-do-agente.ts";
+import { limparFichas, sistemaDoLeitor, tituloNormalizado } from "../functions/base-dos-agentes/index.ts";
+import { AGENTES_COM_BASE } from "../functions/_shared/agentes-com-base.ts";
 
 const ficha = (id: string, titulo: string, tecnica: string, client_id: string | null = null): FichaDaBase => ({
   id, titulo, tecnica, quando_usar: "", exemplo: "", client_id,

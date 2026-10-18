@@ -68,7 +68,7 @@ Nenhum texto foi copiado; o que entrou no painel é resumo próprio.
 | Peça | Onde |
 | --- | --- |
 | Conhecimento destilado (blocos) | `supabase/functions/_shared/conhecimento-estilo.ts` |
-| Registro no índice dos motores | `supabase/functions/_shared/motores.ts` (motor `estilo.agente`, fonte `pesquisa_estilo`) |
+| Registro no índice dos motores | `supabase/indice/motores.ts` (motor `estilo.agente`, fonte `pesquisa_estilo`) |
 | Modelo do estilo (tipos, normalização, bloco curto do prompt) | `supabase/functions/_shared/estilo-do-cliente.ts` |
 | Ações do agente (apelidos, contrato comum) | `supabase/functions/agente-estilo/acoes-do-estilo.ts` |
 | Agente (conversa, leitura das referências, testes, aprovar) | `supabase/functions/agente-estilo/index.ts` |

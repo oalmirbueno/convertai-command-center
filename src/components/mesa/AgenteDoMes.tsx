@@ -1,4 +1,5 @@
 import { resumoDoRecibo } from "../../../supabase/functions/agente-calendario/resultado-da-agenda";
+import { caminhosDeImagemDosAnexos } from "@/lib/mesa/imagensDosAnexos";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarRange, Check, ChevronDown, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
@@ -161,8 +162,8 @@ function lerModo(): ModoDoAgente {
 const propostasDaMensagem = (m: MensagemDoAgente) =>
   (m.anexos || []).map((a) => (a && a.proposta_id ? String(a.proposta_id) : "")).filter(Boolean);
 
-const imagensDaMensagem = (m: MensagemDoAgente) =>
-  (m.anexos || []).map((a) => (a && a.caminho ? String(a.caminho) : "")).filter(Boolean);
+// O anexo "Método:" tem `caminho` com o rótulo do método ("grande", "conversa"): não é imagem (imagensDosAnexos.ts).
+const imagensDaMensagem = (m: MensagemDoAgente) => caminhosDeImagemDosAnexos(m.anexos);
 
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (

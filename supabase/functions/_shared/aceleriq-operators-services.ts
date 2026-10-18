@@ -25,6 +25,7 @@ import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
 import { progressDetail, type OperatorProgressDetail } from './operator-progress-detail.ts';
 import { operatorRunIsStale } from './operator-freshness.ts';
 import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
+import { mensagemVinculoInexistente, type VinculoCandidato } from './vinculo-guard.ts';
 
 const texto = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;
@@ -929,6 +930,55 @@ export async function operatorQueue(opts: { operator?: string; limit?: number })
 }
 
 /**
+ * Devolve em silencio quando o vinculo existe; quando nao existe, lanca um
+ * erro que diz qual id usar (id da tarefa trocado pelo do vinculo, ou id
+ * remendado parecido com um vinculo real). Nunca grava no vinculo sugerido.
+ */
+async function exigirVinculoExistente(linkId: string, operador: string | null): Promise<void> {
+  const { data: existe, error } = await comPrazo(db().from('operator_task_links')
+    .select('id').eq('id', linkId).maybeSingle());
+  if (error) throw new Error(`operator_task_links: ${error.message}`);
+  if (existe) return;
+
+  // Daqui em diante a escrita ja falharia. O que resta e falhar ensinando.
+  const campos = 'id, kanban_task_id, painel_task_id, operator_id';
+  let abertos = db().from('operator_task_links').select(campos)
+    .in('status', ['queued', 'in_progress', 'awaiting_input', 'review', 'blocked'])
+    .order('updated_at', { ascending: false })
+    .limit(50);
+  if (operador) {
+    const { data: op } = await comPrazo(db().from('internal_operators')
+      .select('id').eq('slug', operador).maybeSingle());
+    if (op) abertos = abertos.eq('operator_id', (op as Record<string, unknown>).id as string);
+  }
+  const [pelaTarefa, recentes] = await Promise.all([
+    comPrazo(db().from('operator_task_links').select(campos)
+      .or(`kanban_task_id.eq.${linkId},painel_task_id.eq.${linkId}`).limit(5)),
+    comPrazo(abertos),
+  ]);
+  const vistos = new Map<string, Record<string, unknown>>();
+  for (const l of [...(pelaTarefa.data ?? []), ...(recentes.data ?? [])] as Array<Record<string, unknown>>) {
+    vistos.set(String(l.id), l);
+  }
+  const linhas = [...vistos.values()];
+  const tarefaIds = [...new Set(linhas
+    .map((l) => texto(l.kanban_task_id) ?? texto(l.painel_task_id))
+    .filter((id): id is string => Boolean(id)))];
+  const { data: tarefas } = tarefaIds.length
+    ? await comPrazo(db().from('tasks').select('id, title').in('id', tarefaIds))
+    : { data: [] };
+  const titulo = new Map(((tarefas ?? []) as Array<Record<string, unknown>>)
+    .map((t) => [String(t.id), texto(t.title)]));
+  const candidatos: VinculoCandidato[] = linhas.map((l) => ({
+    id: String(l.id),
+    kanban_task_id: texto(l.kanban_task_id),
+    painel_task_id: texto(l.painel_task_id),
+    titulo: titulo.get(texto(l.kanban_task_id) ?? texto(l.painel_task_id) ?? '') ?? null,
+  }));
+  throw new Error(mensagemVinculoInexistente(linkId, candidatos, operador));
+}
+
+/**
  * O diario da execucao: onde o agente le as instrucoes do Almir e escreve
  * as proprias entradas.
  *
@@ -948,6 +998,9 @@ export async function operatorDiary(input: {
   limit?: number;
 }) {
   if (!isUuid(input.link_id)) throw new Error('link_id must be a UUID');
+  // Confere o vinculo antes de ler ou escrever: o RPC recusaria com 400
+  // link_not_found e o agente so veria "nao existe" (68 vezes em 24h).
+  await exigirVinculoExistente(input.link_id, texto(input.operator)?.toLowerCase() ?? null);
 
   if (texto(input.body)) {
     if (!texto(input.operator)) {

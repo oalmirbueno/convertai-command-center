@@ -1,4 +1,6 @@
 import { carregarChaves, chaveCarregada } from "./chaves.ts";
+// 18/10: sem crédito e chave recusada derrubam a conta inteira; limite por minuto não.
+import { classificarRecusa, contaInteiraFora, lerCorpoDaRecusa } from "./recusa-do-provedor.ts";
 
 export type AiProviderEnvName =
   | "AI_BASE_URL"
@@ -277,9 +279,17 @@ export async function requestAiChatCompletion(
   let lastResponse: Response | null = null;
   let lastProvider: AiProvider | null = null;
   let lastError: unknown = null;
+  // 18/10: conta sem crédito (429 insufficient_quota, "no credits remaining")
+  // ou com a chave recusada (401): as outras tentativas na MESMA conta (mesma
+  // URL e mesma chave) são puladas e a cadeia segue para a reserva (o mesmo
+  // modelo pelo OpenRouter, logo depois). O 429 de limite por minuto continua
+  // como antes: só passa para a próxima tentativa.
+  const contasFora = new Set<string>();
+  const contaDe = (p: AiProvider) => `${p.chatCompletionsUrl}|${p.headers.Authorization ?? ""}`;
 
   for (let index = 0; index < providers.length; index += 1) {
     const provider = providers[index];
+    if (contasFora.has(contaDe(provider))) continue;
     const providerPayload = payloadComMetodo(
       typeof payload === "function" ? payload(provider) : payload,
       metodo,
@@ -299,10 +309,14 @@ export async function requestAiChatCompletion(
       if (lastResponse?.body) await lastResponse.body.cancel().catch(() => {});
       // A causa real de cada tentativa vai para o log da função: é o que
       // transforma "a IA não funciona" em "401 no provider X, 402 no Y".
-      const snippet = await response.clone().text()
-        .then((text) => text.slice(0, 300))
-        .catch(() => "");
+      const corpo = await response.clone().text().catch(() => "");
+      const snippet = corpo.slice(0, 300);
       console.warn(`[ai] ${provider.label} -> HTTP ${response.status} ${snippet}`);
+      const motivo = classificarRecusa(provider.kind, response.status, lerCorpoDaRecusa(corpo));
+      if (contaInteiraFora(motivo)) {
+        contasFora.add(contaDe(provider));
+        console.warn(`[ai] ${provider.kind}: ${motivo === "sem_credito" ? "conta sem crédito" : "chave recusada"}; as outras tentativas nesta conta foram puladas`);
+      }
       lastResponse = response;
       lastProvider = provider;
     } catch (error) {

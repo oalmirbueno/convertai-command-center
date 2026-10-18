@@ -57,7 +57,7 @@ import {
 } from "../../supabase/functions/_shared/estilo-do-cliente";
 import { estiloNaGeracao } from "../../supabase/functions/estudio-arte/estilo-na-geracao";
 import { alvosDoEstilo, lerPedidoDeTeste, normalizarAcoesDoEstilo } from "../../supabase/functions/agente-estilo/acoes-do-estilo";
-import { MOTORES, origemDoBloco, MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MOTORES, origemDoBloco, MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import * as ESTILO from "../../supabase/functions/_shared/conhecimento-estilo";
 import { CASOS_DO_REPLICAR, MARCA_CASO } from "./fixtures/replicarCasos";
 

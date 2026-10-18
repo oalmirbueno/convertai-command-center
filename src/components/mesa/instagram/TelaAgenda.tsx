@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { botao, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "../MesaContexto";
-import { estadoNoCalendario, noFuso, semanaDe } from "../../../../supabase/functions/_shared/calendario-da-grade";
+import { estadoNoCalendario, noFuso, semanaDe } from "./calendario-da-grade";
 import { bucketDoItem, TOM_DO_CALENDARIO } from "./DetalheDoPost";
 import PainelDeMudancas from "./PainelDeMudancas";
 import type { ItemDaGradeNaAba, PerfilDaAba } from "./instagramApi";

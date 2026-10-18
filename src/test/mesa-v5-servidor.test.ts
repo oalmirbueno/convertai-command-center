@@ -249,7 +249,9 @@ describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica,
     const motor = ler("supabase/functions/_shared/ia-motor.ts");
     expect(motor).toContain('"provedor_sem_credito"');
     expect(motor).toContain("provedor_sem_credito: 402,");
-    expect(motor).toContain("/credit|quota|billing|insufficient|saldo/i");
+    // 18/10: a classificação virou função pura (recusa-do-provedor.ts), que separa sem crédito de limite por minuto.
+    expect(motor).toContain("mensagemSemCredito(provedor)");
+    expect(ler("supabase/functions/_shared/recusa-do-provedor.ts")).toContain("const TEXTO_DE_COBRANCA = /credit|quota|billing|insufficient|saldo|payment/i;");
   });
 });
 

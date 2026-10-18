@@ -1,4 +1,4 @@
-import { conferirCorte, cortesDaOnda, tomadasQueSaem, CORTE_PELA_ONDA, type ConferenciaDoCorte, type PalavraDaFonte } from "../../../../supabase/functions/_shared/onda-do-audio";
+import { conferirCorte, cortesDaOnda, tomadasQueSaem, CORTE_PELA_ONDA, type ConferenciaDoCorte, type PalavraDaFonte } from "../onda-do-audio";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { emOrdem, trilhaPrincipal } from "../operacoes";
 import { tempoFino } from "../tempo";

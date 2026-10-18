@@ -747,7 +747,7 @@ async function fichasDosComentarios(pagador: string | null): Promise<number> {
     let respostas: Record<string, { noul?: number }> = {};
     try {
       const r = await jevPerguntar({ state: { comentarios: lote.map((c) => c.texto) }, questions });
-      if (pagador) await cobrarJev(r, { clientId: pagador, tarefa: "leitura_referencia", referencia: { tipo: "agente_base", id: "comentarios" }, criadoPor: null }).catch(() => null);
+      if (pagador) await cobrarJev(r, { clientId: pagador, tarefa: "leitura_referencia", criadoPor: null }).catch(() => null);
       respostas = r.answers as typeof respostas;
     } catch (err) {
       console.error("[base-dos-agentes] Jev dos comentários falhou", err instanceof Error ? err.message : err);
@@ -825,7 +825,7 @@ export async function faxinaDaBase(pagador: string | null): Promise<{ semUso: nu
     });
     try {
       const r = await jevPerguntar({ state: { pares: avaliar.map(([a, b]) => ({ a: `${a.titulo}: ${a.tecnica.slice(0, 500)}`, b: `${b.titulo}: ${b.tecnica.slice(0, 500)}` })) }, questions });
-      if (pagador) await cobrarJev(r, { clientId: pagador, tarefa: "leitura_referencia", referencia: { tipo: "agente_base", id: "faxina" }, criadoPor: null }).catch(() => null);
+      if (pagador) await cobrarJev(r, { clientId: pagador, tarefa: "leitura_referencia", criadoPor: null }).catch(() => null);
       const fora = new Set<string>();
       avaliar.forEach(([a, b], i) => {
         if (fora.has(a.id) || fora.has(b.id) || (probabilidadeNoul((r.answers as Record<string, { noul?: number }>)[`p${i}`]) ?? 0) < 0.7) return;

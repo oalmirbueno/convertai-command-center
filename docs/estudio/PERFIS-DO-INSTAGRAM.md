@@ -105,7 +105,7 @@ O Jev custa US$ 0,042 por milhão de tokens de entrada (fração de centavo por 
 ## Arquivos
 
 - Tela: `src/components/perfis/` (`PerfisDoInstagram.tsx`, `PerfilAberto.tsx`, `AgenteDoPerfil.tsx`, `perfisApi.ts`) e um grupo a mais em `src/components/mesa/AbaContexto.tsx`.
-- Função: `supabase/functions/perfis-instagram/index.ts` (registrada em `supabase/config.toml`; motor `perfis.plano` em `_shared/motores.ts`).
+- Função: `supabase/functions/perfis-instagram/index.ts` (registrada em `supabase/config.toml`; motor `perfis.plano` em `supabase/indice/motores.ts`).
 - Regras puras: `supabase/functions/perfis-instagram/modulos/perfis-instagram.ts`.
 - SQL (não aplicado): `P-01-perfis-instagram.sql` no scratchpad da sessão.
 - Testes: `src/test/perfis-instagram.test.tsx`.

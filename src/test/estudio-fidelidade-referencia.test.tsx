@@ -65,7 +65,7 @@ import {
   retanguloDoQuadro,
   serieComQuadroDaPrancha,
 } from "../../supabase/functions/_shared/prancha-de-referencias";
-import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import { CASOS_DA_SERIE, CASOS_DO_REPLICAR, MARCA_CASO, MOLDE_CASO } from "./fixtures/replicarCasos";
 
 const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");

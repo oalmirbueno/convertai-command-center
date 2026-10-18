@@ -32,7 +32,7 @@ import {
 } from "../../supabase/functions/mesa-publicidade/acoes-da-publicidade";
 import { RECEITAS_DE_PUBLICIDADE, receitaDaCategoria, receitaParaProduto } from "../../supabase/functions/_shared/receitas-de-publicidade";
 import { conhecimentoPublicidade } from "../../supabase/functions/_shared/conhecimento-publicidade";
-import { MOTORES, motoresDaFonte } from "../../supabase/functions/_shared/motores";
+import { MOTORES, motoresDaFonte } from "../../supabase/indice/motores";
 import { CRITERIOS_CONFERENCIA, CRITERIOS_DA_TOMADA } from "../../supabase/functions/mesa-foto/receitas";
 
 /**

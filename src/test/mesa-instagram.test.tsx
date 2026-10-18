@@ -92,7 +92,7 @@ import {
   ordemPorData,
   semAgendamento,
   travaDoItem,
-} from "../../supabase/functions/_shared/calendario-da-grade";
+} from "../components/mesa/instagram/calendario-da-grade";
 import { pontosDaLinha } from "@/components/mesa/instagram/MetricasDoPerfil";
 import { semanasDoMes } from "@/components/mesa/instagram/ColunaDoCliente";
 import { AREAS_DO_PAINEL, AGENTES_DO_PAINEL, blocoDoMapaDoPainel } from "../../supabase/functions/_shared/mapa-do-painel";

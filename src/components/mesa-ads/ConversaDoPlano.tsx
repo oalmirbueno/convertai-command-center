@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { caminhosDeImagemDosAnexos } from "@/lib/mesa/imagensDosAnexos";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
@@ -180,7 +181,8 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
       )}
       {mensagens.map((m) => {
         if (m.papel === "sistema") return <p key={m.id} className="text-center text-[11px] text-muted-foreground">{m.conteudo}</p>;
-        const imagens = m.anexos.map((a: any) => (a && a.caminho ? String(a.caminho) : typeof a === "string" ? a : "")).filter(Boolean);
+        // O anexo "Método:" tem `caminho` com o rótulo do método, não um arquivo (imagensDosAnexos.ts).
+        const imagens = caminhosDeImagemDosAnexos(m.anexos, true);
         return (
           <div key={m.id} className="min-w-0 space-y-1.5">
             {m.conteudo && (

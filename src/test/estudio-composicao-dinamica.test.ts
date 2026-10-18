@@ -29,7 +29,7 @@ import {
   termoDecorativoDaLamina,
   textoEsperadoNaConferencia,
 } from "../../supabase/functions/estudio-arte/composicao-dinamica";
-import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import { laminasLongasDoRoteiro, textoDoMioloEnxuto } from "../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
 import { CASOS_DO_REPLICAR, MARCA_CASO, MOLDE_CASO } from "./fixtures/replicarCasos";
 

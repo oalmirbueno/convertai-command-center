@@ -92,6 +92,8 @@ export async function pedirCopiaLeve(bucket: string, caminho: string, prazoMs = 
       signal: ctrl.signal,
     });
     await r.body?.cancel().catch(() => undefined);
+    // A copias-leves acabou de gravar as cópias: a falta lembrada (abaixo) deixa de valer já.
+    if (r.ok) esquecerCopiasAusentes(bucket, caminho);
     return r.ok;
   } catch {
     return false;
@@ -100,10 +102,65 @@ export async function pedirCopiaLeve(bucket: string, caminho: string, prazoMs = 
   }
 }
 
-async function baixarBytes(db: SupabaseClient, bucket: string, caminho: string, maxBytes: number): Promise<Uint8Array | null> {
+/**
+ * Cópia que não existe, lembrada por um tempo neste isolate (log de produção,
+ * 17/10: 111 downloads 400 em 24 h de `marca/logo-...png.media.jpg` e 53 de
+ * `perfis/<perfil>/<post>.jpg.media.jpg`). O painel só grava a cópia média
+ * quando o original passa de 2048 px: a logo de 2048 px e o post do Instagram
+ * (1080 px) nunca a têm, e cada geração tentava baixá-la de novo antes de ir ao
+ * original, que é o que serve. Só entra aqui a cópia que deu "não existe" numa
+ * chamada em que o original serviu (cabe: true); a próxima chamada vai direto
+ * ao original e chega ao mesmo resultado. A copias-leves que grava a cópia
+ * apaga a lembrança (pedirCopiaLeve), e o prazo cobre a cópia gravada pelo painel.
+ */
+export const COPIA_AUSENTE_MS = 30 * 60_000;
+const MAX_COPIAS_AUSENTES = 500;
+const copiasAusentes = new Map<string, number>();
+const chaveDaCopia = (bucket: string, caminhoDaCopia: string) => `${bucket}::${caminhoDaCopia}`;
+
+export function copiaSabidamenteAusente(bucket: string, caminhoDaCopia: string, agora = Date.now()): boolean {
+  const k = chaveDaCopia(bucket, caminhoDaCopia);
+  const ate = copiasAusentes.get(k);
+  if (ate === undefined) return false;
+  if (ate > agora) return true;
+  copiasAusentes.delete(k);
+  return false;
+}
+
+export function lembrarCopiasAusentes(bucket: string, caminhosDasCopias: string[], agora = Date.now()): void {
+  for (const c of caminhosDasCopias) {
+    const k = chaveDaCopia(bucket, c);
+    copiasAusentes.delete(k);
+    copiasAusentes.set(k, agora + COPIA_AUSENTE_MS);
+  }
+  // Teto de memória: sai a lembrança mais antiga (o Map guarda a ordem de entrada).
+  while (copiasAusentes.size > MAX_COPIAS_AUSENTES) {
+    const primeira = copiasAusentes.keys().next().value;
+    if (primeira === undefined) break;
+    copiasAusentes.delete(primeira);
+  }
+}
+
+export function esquecerCopiasAusentes(bucket: string, caminho: string): void {
+  copiasAusentes.delete(chaveDaCopia(bucket, caminhoDaMiniatura(caminho)));
+  copiasAusentes.delete(chaveDaCopia(bucket, caminhoDaMedia(caminho)));
+}
+
+/** Erro do Storage de objeto inexistente (400 com statusCode 404 / "Object not found"). Outro erro (rede, prazo) não vira lembrança. */
+export function objetoNaoExiste(erro: unknown): boolean {
+  if (!erro || typeof erro !== "object") return false;
+  const e = erro as { message?: unknown; status?: unknown; statusCode?: unknown };
+  if (String(e.statusCode ?? "") === "404" || String(e.status ?? "") === "404") return true;
+  return /not[\s_-]?found/i.test(String(e.message ?? ""));
+}
+
+async function baixarBytes(db: SupabaseClient, bucket: string, caminho: string, maxBytes: number, faltas?: string[]): Promise<Uint8Array | null> {
   try {
     const { data, error } = await db.storage.from(bucket).download(caminho);
-    if (error || !data) return null;
+    if (error || !data) {
+      if (faltas && objetoNaoExiste(error)) faltas.push(caminho);
+      return null;
+    }
     if (typeof data.size === "number" && data.size > maxBytes) return null;
     const bytes = new Uint8Array(await data.arrayBuffer());
     return bytes.byteLength > maxBytes ? null : bytes;
@@ -141,9 +198,14 @@ export async function reduzidaSemTransformacao(
   const maxBytes = opcoes.maxBytes ?? 30 * 1024 * 1024;
   const maxPixels = opcoes.maxPixels ?? MAX_PIXELS_REDUCAO_NA_FUNCAO;
 
+  // Cópias que deram "não existe" nesta chamada: lembradas só se o original servir.
+  const faltas: string[] = [];
   if (opcoes.usarCopias !== false) {
     for (const origem of copiasParaACaixa(maxL, maxA)) {
-      const bytes = await baixarBytes(db, bucket, origem === "miniatura" ? caminhoDaMiniatura(caminho) : caminhoDaMedia(caminho), maxBytes);
+      const caminhoDaCopia = origem === "miniatura" ? caminhoDaMiniatura(caminho) : caminhoDaMedia(caminho);
+      // Faltou há pouco e o original serviu: nem tenta (sem um 400 no Storage a cada geração).
+      if (copiaSabidamenteAusente(bucket, caminhoDaCopia)) continue;
+      const bytes = await baixarBytes(db, bucket, caminhoDaCopia, maxBytes, faltas);
       const mime = bytes ? mimeDaImagem(bytes) : null;
       if (!bytes || !mime) continue;
       if (opcoes.copiaSoEmPng && mime !== "image/png") continue;
@@ -163,11 +225,17 @@ export async function reduzidaSemTransformacao(
   const mime = original ? mimeDaImagem(original) : null;
   if (!original || !mime) return null;
   const d = dimensoesDoCabecalho(original);
-  if (cabeNaCaixa(d, maxL, maxA, folga)) return { cabe: true, bytes: original, mime, largura: d!.largura, altura: d!.altura, origem: "original" };
+  if (cabeNaCaixa(d, maxL, maxA, folga)) {
+    lembrarCopiasAusentes(bucket, faltas);
+    return { cabe: true, bytes: original, mime, largura: d!.largura, altura: d!.altura, origem: "original" };
+  }
   const caroDeAbrir = !d || d.largura * d.altura > maxPixels;
   if (!caroDeAbrir) {
     const r = await reduzirParaCaber(original, maxL, maxA, { qualidadeJpeg: opcoes.qualidadeJpeg, maxPixels });
-    if (r) return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem: "original" };
+    if (r) {
+      lembrarCopiasAusentes(bucket, faltas);
+      return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem: "original" };
+    }
   }
   // Caro de abrir aqui: a cópia vem de outra chamada (copias-leves) e é usada como está.
   if (opcoes.pedirCopia && (await pedirCopiaLeve(bucket, caminho))) {

@@ -4,6 +4,7 @@ import { ModuleKind, transpileModule } from "typescript";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as freshness from "../../supabase/functions/_shared/operator-freshness";
 import * as progresso from "../../supabase/functions/_shared/operator-progress-detail";
+import * as guardaDoVinculo from "../../supabase/functions/_shared/vinculo-guard";
 
 type Row = Record<string, unknown>;
 type Report = { event: string; operator: string; run_key: string; kanban_task_id?: string };
@@ -46,6 +47,8 @@ function harness() {
     // Workspace, que este teste de leitura não exercita (o relatório guarda o diário mesmo se organizar falhar).
     "./operator-progress-detail.ts": progresso,
     "./arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
+    // 18/10: o guarda do link_id do diario (puro), que este teste de leitura nao exercita.
+    "./vinculo-guard.ts": guardaDoVinculo,
   };
   const source = readFileSync(resolve(process.cwd(), "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");
   const compiled = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;

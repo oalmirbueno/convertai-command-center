@@ -7,8 +7,10 @@ export async function anexarNoCaderno(file: File, linkId: string, userId: string
   if (v.error) throw v.error;
   const taskId = v.data.kanban_task_id || v.data.painel_task_id;
   if (!taskId) throw new Error("Vincule esta execução a uma tarefa antes de anexar.");
-  const t = await supabase.from("tasks").select("title,project_id").eq("id", taskId).single();
+  // maybeSingle: a tarefa pode ter sido apagada no Kanban (o vinculo nao tem FK dura).
+  const t = await supabase.from("tasks").select("title,project_id").eq("id", taskId).maybeSingle();
   if (t.error) throw t.error;
+  if (!t.data) throw new Error("A tarefa desta execução foi apagada do Kanban: anexe pelo Workspace.");
   const p = t.data.project_id ? await supabase.from("projects").select("client_id").eq("id", t.data.project_id).single() : null;
   if (p?.error) throw p.error;
   const clientId = p?.data?.client_id || null;

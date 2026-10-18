@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { conferirCorte, cortesDaOnda, limiarDaFonte, medirOnda, palavrasNaOnda, pausasDaOnda, rmsEmDb, tomadasQueSaem, CORTE_PELA_ONDA } from "../../supabase/functions/_shared/onda-do-audio";
+import { conferirCorte, cortesDaOnda, limiarDaFonte, medirOnda, palavrasNaOnda, pausasDaOnda, rmsEmDb, tomadasQueSaem, CORTE_PELA_ONDA } from "../lib/editor/onda-do-audio";
 import {
   BIBLIOTECA_DE_SONS,
   filtroLoudnormAplicar,

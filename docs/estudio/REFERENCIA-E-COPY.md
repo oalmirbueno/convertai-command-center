@@ -494,7 +494,7 @@ Testes em `src/test/texto-da-lamina.test.ts`.
 | Identidade da série x só da capa (Jev guardado) | `supabase/functions/estudio-arte/serie-da-capa.ts` |
 | Miolo rico (componentes, tipo, rotação) | `supabase/functions/estudio-arte/miolo-rico.ts` (via `blocoDoMioloDesenhado`) |
 | Testes da série e do miolo | `src/test/estudio-serie-e-miolo.test.ts` |
-| Registro | `_shared/motores.ts` (`referencia_adapta_copy`, `rosto_na_referencia`, `rosto_v2`, `composicao_dinamica`, `serie_e_miolo`) |
+| Registro | `supabase/indice/motores.ts` (`referencia_adapta_copy`, `rosto_na_referencia`, `rosto_v2`, `composicao_dinamica`, `serie_e_miolo`) |
 | Tipografia na geração (kit, amostra com papel, âncora, recusa) | `supabase/functions/estudio-arte/tipografia-do-cliente.ts`; espera da capa em `fila-de-geracao.ts` |
 | Amostra no navegador e regra da marca na tela | `src/lib/mesa/amostraDaFonte.ts`, `src/lib/mesa/tipografiaDoCliente.ts` |
 | Bloqueio e Sugerir da biblioteca | `src/components/mesa/EstudioSemTipografia.tsx`; `agente-contexto` (`fontes_da_biblioteca` com `previa` e `gravar`) |
@@ -503,4 +503,4 @@ Testes em `src/test/texto-da-lamina.test.ts`.
 | Posição que varia na série (plano, espelho, dividido) | `supabase/functions/estudio-arte/posicao-na-serie.ts` |
 | Ganchos e ação `texto_da_lamina` | `supabase/functions/estudio-arte/index.ts` (`textoDaLaminaNaGeracao`, `posicaoDaLaminaNaSerie`, `textoDaLamina`, `areasDeDesenho`) |
 | Tela do texto da lâmina e custo no Gerar | `src/components/mesa/EstudioTextoDaLamina.tsx`; `partesGerarDas` em `AbaEstudio.tsx` |
-| Testes do texto da lâmina | `src/test/texto-da-lamina.test.ts` (registro `texto_da_lamina` em `_shared/motores.ts`) |
+| Testes do texto da lâmina | `src/test/texto-da-lamina.test.ts` (registro `texto_da_lamina` em `supabase/indice/motores.ts`) |

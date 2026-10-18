@@ -7,7 +7,7 @@ import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import NavegadorDePastas, { type ImagemEscolhida } from "../NavegadorDePastas";
 import { ImagemDaMesa, useMesa } from "../MesaContexto";
-import { estadoNoCalendario } from "../../../../supabase/functions/_shared/calendario-da-grade";
+import { estadoNoCalendario } from "./calendario-da-grade";
 import { avisosDaSequencia } from "../../../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
 import DetalheDoPost, { bucketDoItem, TOM_DO_CALENDARIO } from "./DetalheDoPost";
 import PainelDeMudancas from "./PainelDeMudancas";

@@ -12,7 +12,7 @@ import {
   type PecaParaAcao,
   type RoteiroParaAcao,
 } from "../../supabase/functions/mesa-roteiros/acoes-dos-roteiros";
-import { motor } from "../../supabase/functions/_shared/motores";
+import { motor } from "../../supabase/indice/motores";
 
 /**
  * Agente da Mesa Roteiros (contrato comum, _shared/acoes-do-agente.ts): o

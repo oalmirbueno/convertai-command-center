@@ -98,7 +98,7 @@ describe("base dos agentes", () => {
     expect(estudio).toContain("const escolha = await escolherCapa({");
     expect(estudio).toContain('fidelidadePedida !== "identico" && fidelidadePedida !== "proximo"');
     expect(estudio).toContain("!instrucao");
-    expect(ler("supabase/functions/_shared/motores.ts")).toContain('"estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes"');
+    expect(ler("supabase/indice/motores.ts")).toContain('"estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes"');
   });
 
   it("17/10: a pasta de referências do Workspace entra sozinha e o diretor usa as que servem ao pedido", () => {

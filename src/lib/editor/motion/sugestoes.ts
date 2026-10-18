@@ -1,4 +1,4 @@
-import { frasesDaFala } from "../../../../supabase/functions/_shared/onda-do-audio";
+import { frasesDaFala } from "../onda-do-audio";
 import { numerosDitos, type IdDaPeca, type PalavraNoTempo } from "./catalogo";
 
 /**

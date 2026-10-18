@@ -31,15 +31,15 @@ import {
   conhecimentoEstudioPara,
   conhecimentoMesaFoto,
   type TarefaAds,
-} from "./conhecimento-dos-agentes.ts";
-import { VERSAO_CONHECIMENTO_REPOSITORIOS } from "./conhecimento-repositorios.ts";
-import { conhecimentoDoPlano } from "../agente-contexto/modulos/conhecimento-do-plano.ts";
-import { NOMES_DAS_FERRAMENTAS } from "../agente-contexto/modulos/ferramentas-do-cliente.ts";
-import { conhecimentoEdicao } from "../mesa-videos/modulos/conhecimento-edicao.ts";
-import { conhecimentoPublicidade } from "./conhecimento-publicidade.ts";
-import { conhecimentoRoteiros } from "./conhecimento-roteiros.ts";
-import { conhecimentoEstilo } from "./conhecimento-estilo.ts";
-import { conhecimentoDaBaseDeDesign } from "./uiux/citar.ts";
+} from "../functions/_shared/conhecimento-dos-agentes.ts";
+import { VERSAO_CONHECIMENTO_REPOSITORIOS } from "../functions/_shared/conhecimento-repositorios.ts";
+import { conhecimentoDoPlano } from "../functions/agente-contexto/modulos/conhecimento-do-plano.ts";
+import { NOMES_DAS_FERRAMENTAS } from "../functions/agente-contexto/modulos/ferramentas-do-cliente.ts";
+import { conhecimentoEdicao } from "../functions/mesa-videos/modulos/conhecimento-edicao.ts";
+import { conhecimentoPublicidade } from "../functions/_shared/conhecimento-publicidade.ts";
+import { conhecimentoRoteiros } from "../functions/_shared/conhecimento-roteiros.ts";
+import { conhecimentoEstilo } from "../functions/_shared/conhecimento-estilo.ts";
+import { conhecimentoDaBaseDeDesign } from "../functions/_shared/uiux/citar.ts";
 import {
   AGENTES_COM_SUPERPODERES,
   type IdDoMetodo,
@@ -49,7 +49,7 @@ import {
   type SkillDoSuperpowers,
   URL_DO_SUPERPOWERS,
   VERSAO_DOS_SUPERPODERES,
-} from "./superpoderes-catalogo.ts";
+} from "../functions/_shared/superpoderes-catalogo.ts";
 
 export const VERSAO_DOS_MOTORES = `2026-09-30.1 (repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS}; superpoderes ${VERSAO_DOS_SUPERPODERES})`;
 

@@ -46,9 +46,13 @@ export default function OrdensAutorizadas() {
       const linhas = (data || []) as any[];
       if (linhas.length === 0) return { pendentes: [], cumpridas: [] };
 
-      const { data: ops } = await (supabase as any)
-        .from("internal_operators").select("id, display_name")
-        .in("id", [...new Set(linhas.map((l) => l.operator_id))]);
+      // Desde a revisao central (14/09) operator_approvals.operator_id aceita
+      // null; null dentro do in.() vira "id=in.(...,null)" e o PostgREST
+      // devolve 400. So pergunta pelos ids que existem.
+      const opIds = [...new Set(linhas.map((l) => l.operator_id).filter(Boolean))];
+      const { data: ops } = opIds.length
+        ? await (supabase as any).from("internal_operators").select("id, display_name").in("id", opIds)
+        : { data: [] };
       const nome = new Map(((ops || []) as any[]).map((o) => [o.id, o.display_name]));
       const com = linhas.map((l) => ({ ...l, agente: nome.get(l.operator_id) || "agente" }));
 

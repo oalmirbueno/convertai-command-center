@@ -112,8 +112,9 @@ describe("a tela de o que foi feito", () => {
   it("a aba sem visões não quebra a contagem", () => {
     // Lista vazia faz o TypeScript inferir never[]; o tipo explícito
     // resolve sem obrigar a aba a inventar uma visão que ela não tem.
+    // 18/10: o #69 trocou o nome da variável (x por a/alvo?); a regra é o tipo explícito, não o nome.
     expect(ler("src/pages/AdminExecucao.tsx"))
-      .toContain("(x.visoes as readonly string[])");
+      .toMatch(/\(\w+\??\.visoes as readonly string\[\]/);
   });
 });
 

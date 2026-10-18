@@ -391,7 +391,7 @@ describe("ligações: conversa, montagem, perfis e motores", () => {
   });
 
   it("a síntese está registrada nos motores (sem método de propósito: é leitura)", () => {
-    expect(ler("supabase/functions/_shared/motores.ts")).toContain('"agente-contexto/index.ts#sintetizarPerfis": "leituras",');
+    expect(ler("supabase/indice/motores.ts")).toContain('"agente-contexto/index.ts#sintetizarPerfis": "leituras",');
   });
 
   it("arquivos novos sem travessão e sem regex que o Safari 11 não lê", () => {

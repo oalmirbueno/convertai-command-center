@@ -5,7 +5,7 @@ import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import Secao from "@/components/sistema/Secao";
 import { botao, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "../MesaContexto";
-import { estadoNoCalendario, noFuso } from "../../../../supabase/functions/_shared/calendario-da-grade";
+import { estadoNoCalendario, noFuso } from "./calendario-da-grade";
 import DetalheDoPost, { bucketDoItem, TOM_DO_CALENDARIO } from "./DetalheDoPost";
 import PainelDeMudancas from "./PainelDeMudancas";
 import TelaAgenda from "./TelaAgenda";

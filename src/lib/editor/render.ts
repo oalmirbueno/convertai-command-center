@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { apagarEstadoDaTela, gravarEstadoDaTela, lerEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { CONSULTA_MINIMA_MS, FILA_PARADA_MS, ROTULO_DA_ETAPA, ROTULO_DO_ESTADO, type EtapaDoRender, type EstadoDoRender, type TipoDeRender } from "../../../supabase/functions/_shared/render-do-editor";
 import type { OndaDaFonte, ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
-import { palavrasNaOnda } from "../../../supabase/functions/_shared/onda-do-audio";
+import { palavrasNaOnda } from "./onda-do-audio";
 import { trilhaPrincipal, type Operacao } from "./operacoes";
 
 /**

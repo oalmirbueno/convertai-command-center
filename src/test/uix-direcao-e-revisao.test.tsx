@@ -54,7 +54,7 @@ import { promptDaSecao, type PacoteDoSite } from "../../supabase/functions/_shar
 import { checklistDeLancamento, normalizarIntegracoes, normalizarSeo } from "../../supabase/functions/_shared/site-lancamento";
 import { esquemaDosCampos, fontesPadraoDoPapel, limparResposta, montarPedido } from "../../supabase/functions/_shared/preencher-com-ia";
 import { fontesDoSite, urlDasFontesDoSite } from "../../supabase/functions/_shared/uiux/fontes-do-site";
-import { FONTES, MOTORES, motoresDaFonte, SKILLS_MARKETINGSKILLS } from "../../supabase/functions/_shared/motores";
+import { FONTES, MOTORES, motoresDaFonte, SKILLS_MARKETINGSKILLS } from "../../supabase/indice/motores";
 import { cssDaMarca } from "../../workers/motor-codigo/lib/projeto";
 import { montarPagina, urlDasFontes } from "../../workers/motor-codigo/modelo-site/scripts/seo.mjs";
 import { PADROES_DA_BASE } from "../../supabase/functions/_shared/uiux/dados/landing";

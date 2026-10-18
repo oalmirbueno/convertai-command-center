@@ -79,7 +79,7 @@ import {
   normalizarMudancas,
   usoDaFotoNaLamina,
 } from "../../supabase/functions/estudio-arte/conversa-do-diretor";
-import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import EstudioBaseDaLamina, { baseDaLamina, DESCRICAO_DO_MODO, SeletorDoUso } from "@/components/mesa/EstudioBaseDaLamina";
 

@@ -132,6 +132,8 @@ describe("tela: atalho Edição completa (EDIT IA PRO sem modelo)", () => {
     const { estado, controle } = controleDeVerdade(p);
     responder({ conversa_ler: { mensagens: [] }, conversa_gravar: { mensagem_id: "33333333-3333-4333-8333-333333333333" } });
     montar(p, controle);
+    // 18/10: desde o #68 os atalhos ficam dentro de "Sugestões", recolhido; abre antes de procurar o atalho.
+    fireEvent.click(await screen.findByRole("button", { name: "Sugestões" }));
     const botao = await screen.findByRole("button", { name: "Edição completa" });
     await waitFor(() => expect(botao.hasAttribute("disabled")).toBe(false));
     fireEvent.click(botao);

@@ -7,7 +7,7 @@ import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/esti
 import { EDITORIAL_DEFAULT_TIME_ZONE, isoUtcToZonedDateTimeLocal, zonedDateTimeLocalToIso } from "@/lib/editorialDate";
 import { ImagemDaMesa, useMesa } from "../MesaContexto";
 import { JanelaDaPublicacao, type PecaParaPublicar, type PublicacaoParaPublicar } from "../PublicacaoDaPeca";
-import { estadoNoCalendario, type EstadoNoCalendario } from "../../../../supabase/functions/_shared/calendario-da-grade";
+import { estadoNoCalendario, type EstadoNoCalendario } from "./calendario-da-grade";
 import { linkDoPostNaMesaFoto } from "../../../../supabase/functions/_shared/post-de-fotos";
 import type { ItemDaGradeNaAba } from "./instagramApi";
 import { dataCurtaOuSem, type Planejamento } from "./usePlanejamento";

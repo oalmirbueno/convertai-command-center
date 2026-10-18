@@ -19,13 +19,13 @@ import {
   skillsDoMotor,
   SUPERPODERES_DOS_AGENTES,
   VERSAO_DOS_MOTORES,
-} from "../../supabase/functions/_shared/motores";
+} from "../../supabase/indice/motores";
 import { AGENTES_COM_SUPERPODERES, SKILL_DE_ORIGEM, VERSAO_DOS_SUPERPODERES } from "../../supabase/functions/_shared/superpoderes-catalogo";
 import * as REPOS from "../../supabase/functions/_shared/conhecimento-repositorios";
 import { CHECKLIST_CRIATIVO_POR_OBJETIVO } from "../../supabase/functions/_shared/conhecimento-especialistas-ads";
 
 /**
- * Frente W (25/09/2026): o índice único dos motores (_shared/motores.ts) é uma
+ * Frente W (25/09/2026): o índice único dos motores (supabase/indice/motores.ts) é uma
  * promessa. Este teste cobra que cada agente recebe de verdade o conhecimento
  * que o índice diz (queixa real do dono: "o agente não usa as técnicas").
  */
@@ -151,7 +151,7 @@ describe("limites e decisões que não podem voltar atrás", () => {
   });
 
   it("os módulos novos não têm travessão nem número de resultado prometido", () => {
-    for (const p of ["supabase/functions/_shared/conhecimento-repositorios.ts", "supabase/functions/_shared/motores.ts"]) {
+    for (const p of ["supabase/functions/_shared/conhecimento-repositorios.ts", "supabase/indice/motores.ts"]) {
       expect(ler(p), p).not.toMatch(/[—–]/);
     }
     for (const [nome, v] of Object.entries(REPOS)) {

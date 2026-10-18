@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, deveSair, pesoDaFicha, resultadosDasFichas, resumoDoResultado, taxaDeAprovacao } from "./resultado-das-fichas.ts";
-import { fichasDoVencedor } from "../base-dos-agentes/index.ts";
+import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, deveSair, pesoDaFicha, resultadosDasFichas, resumoDoResultado, taxaDeAprovacao } from "../functions/_shared/resultado-das-fichas.ts";
+import { fichasDoVencedor } from "../functions/base-dos-agentes/index.ts";
 
 Deno.test("o desfecho da peça do Estúdio e do Ads", () => {
   assertEquals(desfechoDoEstudio({ entrega_status: "aprovado", entrega_rodada: 1 }), "aprovada");
@@ -44,13 +44,13 @@ Deno.test("o post vencedor vira ficha do diretor e do Mês, sem travessão", () 
 });
 
 Deno.test("a capa do vencedor é o título com o resto da capa, não só a primeira linha", async () => {
-  const { textoDaCapa } = await import("../base-dos-agentes/index.ts");
+  const { textoDaCapa } = await import("../functions/base-dos-agentes/index.ts");
   assertEquals(textoDaCapa({ texto_exato: "5 PONTOS\nAntes de trocar a bancada", blocos: [{ papel: "selo", texto: "5 PONTOS" }, { papel: "headline", texto: "Antes de trocar a bancada" }] }), "Antes de trocar a bancada · 5 PONTOS");
   assertEquals(textoDaCapa({ texto_exato: "Deu vontade?" }), "Deu vontade?");
 });
 
 Deno.test("post fora da curva de concorrente vira ficha por formato, sem copiar", async () => {
-  const { fichasDoConcorrente } = await import("../base-dos-agentes/index.ts");
+  const { fichasDoConcorrente } = await import("../functions/base-dos-agentes/index.ts");
   const reel = fichasDoConcorrente({ handle: "loja", papel: "concorrente", vezes: 8, formato: "reel", legenda: "E disso a gente entende\nresto", leitura: "" });
   assertEquals(reel.map((f) => f.agente), ["mes.estrategista", "videos.diretor", "roteiros.roteirista"]);
   assert(reel[0].titulo.startsWith("@loja rendeu 8x: E disso a gente entende"));
@@ -60,7 +60,7 @@ Deno.test("post fora da curva de concorrente vira ficha por formato, sem copiar"
 });
 
 Deno.test("o aviso da semana conta a origem e lista as carteiras baixas", async () => {
-  const { textoDoResumo } = await import("../base-dos-agentes/index.ts");
+  const { textoDoResumo } = await import("../functions/base-dos-agentes/index.ts");
   const t = textoDoResumo({ novas: { pesquisa: 12, materiais: 3, numeros: 2, concorrentes: 0 }, sairam: 1, referenciasLidas: 18, carteirasBaixas: [{ cliente: "Para Si", saldo: 0.18 }] });
   assert(t.startsWith("Base dos agentes na semana: 17 técnicas novas (12 da pesquisa, 3 do que você mandou, 2 dos posts que renderam)"));
   assert(t.includes("1 ficha saiu por atrapalhar"));
@@ -82,7 +82,7 @@ Deno.test("Ads: a eficiência dos anúncios pesa, e o que queima verba sai", () 
 });
 
 Deno.test("eficiência do anúncio: contra o normal da conta, e o que gastou sem resultado", async () => {
-  const { eficienciaDoAnuncio } = await import("../base-dos-agentes/index.ts");
+  const { eficienciaDoAnuncio } = await import("../functions/base-dos-agentes/index.ts");
   assertEquals(eficienciaDoAnuncio({ gasto: 100, resultados: 10, custo_por_resultado: 10 }, 20), 2);
   assertEquals(eficienciaDoAnuncio({ gasto: 10, resultados: 0, custo_por_resultado: null }, 20), null);
   assertEquals(eficienciaDoAnuncio({ gasto: 50, resultados: 0, custo_por_resultado: null }, 20), 0.4);
@@ -90,14 +90,14 @@ Deno.test("eficiência do anúncio: contra o normal da conta, e o que gastou sem
 });
 
 Deno.test("o comentário duradouro do cliente vira ficha no diretor, no Mês, no Ads e no vídeo", async () => {
-  const { fichasDoComentario } = await import("../base-dos-agentes/index.ts");
+  const { fichasDoComentario } = await import("../functions/base-dos-agentes/index.ts");
   const f = fichasDoComentario("Não gosto de fundo escuro,\n sempre fundo claro");
   assertEquals(f.map((x) => x.agente), ["estudio.diretor", "mes.estrategista", "ads.estatico", "videos.diretor"]);
   assertEquals(f[0].titulo, "Pedido do cliente: Não gosto de fundo escuro, sempre fundo claro");
 });
 
 Deno.test("a faxina acha fichas parecidas pelas palavras em comum", async () => {
-  const { parecidas } = await import("../base-dos-agentes/index.ts");
+  const { parecidas } = await import("../functions/base-dos-agentes/index.ts");
   assert(parecidas("Capa com resultado pronto e promessa numérica", "Capa com promessa numérica e resultado pronto") > 0.9);
   assert(parecidas("Capa com resultado pronto", "Trilha com drone no tom da música") < 0.2);
 });

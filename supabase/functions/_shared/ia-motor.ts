@@ -23,7 +23,13 @@
  *      401 (chave recusada), o motor tenta o equivalente direto com chave na
  *      mesma chamada (conferindo de novo cota e saldo) e devolve o aviso
  *      reservaUsada = "openrouter_sem_credito"; sem equivalente, erro
- *      openrouter_sem_credito (402) pedindo recarga. O registro do uso
+ *      openrouter_sem_credito (402) pedindo recarga. O caminho inverso
+ *      (18/10/2026): a conta DIRETA (OpenAI, Anthropic) sem credito (429
+ *      insufficient_quota, "no credits remaining") ou com a chave recusada
+ *      (401) vai pelo mesmo modelo no OpenRouter, com reservaUsada =
+ *      "direto_sem_credito"; o 429 de limite por minuto nao muda de rota
+ *      (recusa-do-provedor.ts separa os dois). Sem OpenRouter, erro
+ *      provedor_sem_credito com a frase de recarga. O registro do uso
  *      acontece uma vez so, depois da chamada que deu certo: sem cobranca
  *      dupla;
  *   3. estima o custo pela tabela; com chave do cliente, confere a cota do mes
@@ -84,6 +90,8 @@ import {
 import { juntarMetodoAoSistema, type MetodoInjetado } from "./superpoderes-catalogo.ts";
 import { base64 as paraBase64, betasDoCorpoAnthropic, corpoAnthropic, corpoOpenAi, corpoOpenRouter, type EntradaDoCorpo, type FonteDaWeb, fontesDaAnthropic, fontesDaOpenAi, fontesDoOpenRouter, nomeEsquema } from "./corpo-dos-provedores.ts";
 import { ehApelidoDoOpenRouter, type ModeloOpenRouterBruto, niveisDeRaciocinio, por1m, type RecursosDoModelo, recursosDoOpenRouter } from "./recursos-dos-modelos.ts";
+// 18/10: o que a recusa do provedor quer dizer (sem crédito, chave recusada, limite por minuto) e a decisão da reserva.
+import { classificarRecusa, mensagemChaveRecusada, mensagemSemCredito, nomeDoProvedor, vaiPeloOpenRouter } from "./recusa-do-provedor.ts";
 
 export {
   aceitaResolucao,
@@ -555,9 +563,13 @@ export async function rotaOpenRouter(clientId: string, pedido: ModeloIa, soOMesm
   }
 }
 
-/** A conta direta (nao OpenRouter) recusou por falta de credito. */
+/**
+ * A conta direta (nao OpenRouter) recusou por falta de credito ou com a chave
+ * recusada (401, 18/10): a mesma chamada vai pelo OpenRouter. O limite por
+ * minuto nao entra (decisao em recusa-do-provedor.ts, vaiPeloOpenRouter).
+ */
 export function ehDiretoSemCredito(err: unknown, m: ModeloIa): boolean {
-  return m.provedor !== "openrouter" && err instanceof IaMotorErro && err.codigo === "provedor_sem_credito";
+  return err instanceof IaMotorErro && vaiPeloOpenRouter(m.provedor, err);
 }
 
 /** O OpenRouter recusou por falta de credito (402), chave invalida (401) ou limite de gasto da chave (403). */
@@ -659,9 +671,16 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
   if (!res.ok) {
     // A mensagem do provedor vai no erro (nao no log) e cortada.
     let msg = "";
+    let codigoDoCorpo: string | null = null;
+    let tipoDoCorpo: string | null = null;
     try {
-      const corpo = await res.json() as { error?: { message?: string; metadata?: { raw?: unknown } } | string; message?: string };
+      const corpo = await res.json() as { error?: { message?: string; code?: unknown; type?: unknown; metadata?: { raw?: unknown } } | string; message?: string };
       msg = typeof corpo.error === "string" ? corpo.error : corpo.error?.message || corpo.message || "";
+      // 18/10: a OpenAI separa sem crédito (insufficient_quota) de limite por minuto (rate_limit_exceeded) no code.
+      if (typeof corpo.error === "object" && corpo.error) {
+        codigoDoCorpo = corpo.error.code == null ? null : String(corpo.error.code);
+        tipoDoCorpo = corpo.error.type == null ? null : String(corpo.error.type);
+      }
       // Frente LR (29/09): o OpenRouter devolve só "Provider returned error"; o motivo real (ex.: "The image
       // data you provided does not represent a valid image") vem em error.metadata.raw.
       const raw = typeof corpo.error === "object" ? corpo.error?.metadata?.raw : undefined;
@@ -678,29 +697,51 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
     } catch { /* corpo sem JSON */ }
     // Frente LR: toda recusa do provedor fica no log da função (antes só ia no erro, e um catch que engolia apagava o rastro).
     console.warn("[ia-motor] provedor recusou", { provedor, status: res.status, motivo: String(msg).slice(0, 300) });
+    const motivo = classificarRecusa(provedor, res.status, { mensagem: String(msg), codigo: codigoDoCorpo, tipo: tipoDoCorpo });
     // Chave do OpenRouter no limite de gasto DELA (limite por chave, não o saldo da conta). 26/09: a conta
     // estava recarregada e o painel dizia "sem crédito"; o motivo real era "Key limit exceeded (total limit)".
-    if (provedor === "openrouter" && (res.status === 403 || res.status === 402) && /key limit/i.test(String(msg))) {
+    // A regra mora em classificarRecusa (recusa-do-provedor.ts).
+    if (motivo === "limite_da_chave") {
       throw new IaMotorErro("provedor_erro", "A chave que o painel usa na OpenRouter chegou ao limite de gasto dela (o limite é da chave, não o saldo da conta). Aumente ou tire o limite da chave em openrouter.ai/settings/keys.", {
         provedor,
         status_provedor: res.status,
         limite_da_chave: true,
       });
     }
-    // Limite de uso do provedor por minuto (429 sem falar de cobrança): não é falta de crédito.
-    if (res.status === 429 && !/credit|billing|insufficient|saldo|payment/i.test(String(msg))) {
+    // Limite de uso do provedor por minuto: não é falta de crédito e não muda de rota. 18/10: o 429 de limite
+    // da OpenAI fala em "billing" e "payment method"; o code (rate_limit_exceeded) e o "rate limit" decidem antes.
+    if (motivo === "limite_de_uso") {
       throw new IaMotorErro("provedor_erro", `O provedor do modelo está no limite de uso neste momento (${provedor} 429). Tente de novo em instantes ou escolha outro modelo no seletor.`, {
         provedor,
         status_provedor: res.status,
         limite_de_uso: true,
       });
     }
-    // Conta do provedor sem crédito (a da agência ou a do cliente): mensagem clara, não o texto cru.
-    if ((res.status === 429 || res.status === 402) && /credit|quota|billing|insufficient|saldo/i.test(String(msg))) {
-      const onde = provedor === "openai" ? " em platform.openai.com, Billing" : provedor === "anthropic" ? " em console.anthropic.com, Billing" : "";
-      throw new IaMotorErro("provedor_sem_credito", `A conta da ${provedor} que paga este modelo está sem crédito. Recarregue${onde} ou escolha outro modelo no seletor (por exemplo, o Nano Banana).`, {
+    // OpenRouter sem crédito (402) ou com a chave recusada (401): provedor_erro com o status, que é o que
+    // ehOpenRouterSemCredito lê para tentar o equivalente direto (sem ele, erro openrouter_sem_credito).
+    // Antes do 18/10 o 402 com "credits" no texto virava provedor_sem_credito e a reserva direta nunca rodava.
+    if (provedor === "openrouter" && (motivo === "sem_credito" || motivo === "chave_recusada")) {
+      throw new IaMotorErro("provedor_erro", `O OpenRouter recusou a chamada (${res.status}): ${motivo === "sem_credito" ? "sem crédito" : "chave recusada"}.`, {
         provedor,
         status_provedor: res.status,
+        ...(motivo === "sem_credito" ? { sem_credito: true } : { chave_recusada: true }),
+      });
+    }
+    // Conta direta sem crédito (a da agência ou a do cliente): mensagem clara, não o texto cru. O motor tenta
+    // o mesmo modelo pelo OpenRouter antes (comReservaOpenRouter); esta frase só chega à tela sem reserva.
+    if (motivo === "sem_credito") {
+      throw new IaMotorErro("provedor_sem_credito", mensagemSemCredito(provedor), {
+        provedor,
+        provedor_nome: nomeDoProvedor(provedor),
+        status_provedor: res.status,
+      });
+    }
+    // Chave da conta direta recusada (401): também vai pelo OpenRouter quando há rota.
+    if (motivo === "chave_recusada") {
+      throw new IaMotorErro("provedor_erro", mensagemChaveRecusada(provedor), {
+        provedor,
+        status_provedor: res.status,
+        chave_recusada: true,
       });
     }
     throw new IaMotorErro("provedor_erro", `${provedor} respondeu ${res.status}${msg ? `: ${String(msg).slice(0, 300)}` : ""}`, {
@@ -1266,7 +1307,8 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
   garantirCota(rota.chave, estimativa);
   await garantirSaldo(e.clientId, estimativa);
 
-  // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto.
+  // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto; com a conta
+  // direta sem crédito ou chave recusada, o mesmo modelo pelo OpenRouter.
   const { r, m, chave, reserva } = await comReservaOpenRouter(e.clientId, rota, estimativaPara, (mod, segredo) => {
     if (mod.id !== pedido.id) validarRaciocinio(mod, e.raciocinio);
     return mod.provedor === "openai"
@@ -1610,7 +1652,8 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
   garantirCota(rota.chave, estimativa);
   await garantirSaldo(e.clientId, estimativa);
 
-  // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto.
+  // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto; com a conta
+  // direta sem crédito ou chave recusada, o gerador equivalente no OpenRouter.
   const { r, m, chave, reserva } = await comReservaOpenRouter(e.clientId, rota, estimativaPara, (mod, segredo) =>
     mod.provedor === "openai" ? imagemOpenAi(mod, segredo, e) : imagemOpenRouter(mod, segredo, e), !!e.mesmoModelo
   );

@@ -246,7 +246,7 @@ para a F7 (mesmo worker no Modal).
 
 ### 12.2 Corte de verdade (F2)
 
-- **Onda** (`_shared/onda-do-audio.ts`): RMS em janelas de 10 ms; limiar pelo chão de ruído de cada
+- **Onda** (`src/lib/editor/onda-do-audio.ts`): RMS em janelas de 10 ms; limiar pelo chão de ruído de cada
   fonte (percentil 10 mais 35% do caminho até a voz); pausas guardadas em `projeto.ondas[fonte]` com
   o LUFS da voz. Palavra que o transcritor adiantou passa a começar quando a voz volta.
 - **cortar_pela_onda**: nenhuma pausa acima de 0,25 s; emenda de 0,12 s (0,07 depois da fala, 0,05

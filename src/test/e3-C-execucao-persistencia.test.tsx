@@ -12,7 +12,8 @@ import AdminExecucao from "@/pages/AdminExecucao";
 
 const state = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "admin" }, profile: { role: "admin" } }) }));
-vi.mock("@/hooks/useSupabaseData", () => ({ useProjects: () => ({ data: [] }), useTeamMembers: () => ({ data: [] }) }));
+// 18/10: Departamentos monta o CreateProjectModal (d10f712e), que lê useClients; a lista vazia basta aqui.
+vi.mock("@/hooks/useSupabaseData", () => ({ useProjects: () => ({ data: [] }), useTeamMembers: () => ({ data: [] }), useClients: () => ({ data: [] }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: state.from, rpc: state.rpc } }));
 vi.mock("@tanstack/react-query", async (original) => ({
   ...await original<typeof import("@tanstack/react-query")>(),
@@ -52,6 +53,9 @@ describe("Execução: abas no sistema de design", () => {
     const primeira = montar();
     fireEvent.click(document.querySelector('[data-etapa="trabalho"]') as HTMLElement);
     expect(abaAberta()).toBe("trabalho");
+    // 18/10: desde o #69 a aba Trabalho abre na "Visão geral"; o quadro fica na visão "Tarefas".
+    fireEvent.click(screen.getByRole("button", { name: /^Visão: / }));
+    fireEvent.click(screen.getByRole("option", { name: /^Tarefas/ }));
     // O quadro abre com a coluna do vínculo em andamento.
     expect(screen.getByRole("region", { name: "Coluna Em andamento" })).toBeInTheDocument();
     primeira.unmount();

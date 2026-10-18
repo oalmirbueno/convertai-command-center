@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { blocoDaSerie, type MoldeDaReferencia, promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
 import type { ResultadoJev } from "../../supabase/functions/_shared/jev";
-import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import {
   blocoDaIdentidadeDaSerie,
   blocoDaSerieDaReferencia,

@@ -55,7 +55,7 @@ import {
 } from "../../supabase/functions/estudio-arte/posicao-na-serie";
 import { blocosDoTexto, layoutPadrao, type ZonaTexto } from "../../supabase/functions/_shared/direcao-arte";
 import { contarPalavras, LIMITE_DA_CAPA, LIMITE_DO_ESTATICO } from "../../supabase/functions/_shared/menos-texto-nas-laminas";
-import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import EstudioTextoDaLamina, { TEXTO_VAI_ENXUGAR } from "@/components/mesa/EstudioTextoDaLamina";
 
 const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");

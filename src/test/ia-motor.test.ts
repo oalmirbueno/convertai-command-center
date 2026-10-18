@@ -326,7 +326,8 @@ describe("reserva por credito: OpenRouter 402 ou 401 cai no direto na mesma cham
     expect(motor).toContain('if (m.provedor !== "openrouter" || !(err instanceof IaMotorErro) || err.codigo !== "provedor_erro") return false;');
     expect(motor).toContain("return status === 402 || status === 401 || err.detalhes.limite_da_chave === true;");
     // 26/09: limite da chave não é "sem crédito" da conta; 429 sem cobrança é limite de uso do provedor.
-    expect(motor).toContain("/key limit/i.test(String(msg))");
+    // 18/10: a regra do limite da chave mudou para a classificação pura (recusa-do-provedor.ts).
+    expect(ler("supabase/functions/_shared/recusa-do-provedor.ts")).toContain("/key limit/i.test(msg)");
     expect(motor).toContain("limite_de_uso: true");
     expect(reserva).toContain("if (!ehOpenRouterSemCredito(err, rota.m)) throw err;");
   });

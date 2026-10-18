@@ -1,4 +1,5 @@
 import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
+import { caminhosDeImagemDosAnexos } from "@/lib/mesa/imagensDosAnexos";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
@@ -52,8 +53,8 @@ const ATALHOS = [
   { rotulo: "Use a logo como selo", texto: "Use a logo da marca como selo da campanha." },
 ];
 
-const imagensDaMensagem = (m: MensagemDoAgente) =>
-  (m.anexos || []).map((a) => (a && a.caminho ? String(a.caminho) : "")).filter(Boolean);
+// O anexo "Método:" tem `caminho` com o rótulo do método ("grande", "conversa"): não é imagem (imagensDosAnexos.ts).
+const imagensDaMensagem = (m: MensagemDoAgente) => caminhosDeImagemDosAnexos(m.anexos);
 
 const mexeuNosConteudos = (m: MensagemDoAgente) => (m.anexos || []).some((a) => !!(a && a.proposta_id));
 

@@ -65,7 +65,7 @@ import {
   REGRAS_DO_PERFIL,
   resumoNumerico,
 } from "../../supabase/functions/perfis-instagram/modulos/perfis-instagram";
-import { MOTORES } from "../../supabase/functions/_shared/motores";
+import { MOTORES } from "../../supabase/indice/motores";
 
 const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
 const CLIENTE = "11111111-1111-4111-8111-111111111111";

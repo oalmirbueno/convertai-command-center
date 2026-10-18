@@ -38,7 +38,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 import { promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
 import type { FidelidadeDaReferencia } from "../../supabase/functions/_shared/fidelidade-da-referencia";
 import type { ResultadoJev } from "../../supabase/functions/_shared/jev";
-import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
+import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import {
   adaptacaoDaReferencia,
   adaptarConteudoLigado,

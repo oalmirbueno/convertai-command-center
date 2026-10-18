@@ -11,16 +11,21 @@ export async function organizarArquivosDaExecucao(db: any, linkId: string, anexo
   if (!ids.length) return { organizados: 0, avisos: [] as string[] };
   const v = await db.from("operator_task_links").select("operator_id,kanban_task_id,painel_task_id").eq("id", linkId).single();
   if (v.error) throw new Error("Vínculo indisponível para organizar arquivos.");
+  // O vínculo não tem FK dura para a tarefa: a tarefa apagada no Kanban é caso
+  // normal. maybeSingle evita o 406 do PostgREST e cai no aviso abaixo.
   const [t, op] = await Promise.all([
-    db.from("tasks").select("id,title,project:projects!tasks_project_id_fkey(client_id)").eq("id", v.data.kanban_task_id || v.data.painel_task_id).single(),
-    db.from("internal_operators").select("display_name").eq("id", v.data.operator_id).single(),
+    db.from("tasks").select("id,title,project:projects!tasks_project_id_fkey(client_id)").eq("id", v.data.kanban_task_id || v.data.painel_task_id).maybeSingle(),
+    db.from("internal_operators").select("display_name").eq("id", v.data.operator_id).maybeSingle(),
   ]);
-  if (t.error || op.error || !t.data?.project?.client_id) throw new Error("A tarefa precisa de um cliente para organizar os arquivos.");
+  if (t.error || op.error) throw new Error("Não foi possível conferir a tarefa da execução.");
+  if (!t.data) return { organizados: 0, avisos: ["A tarefa desta execução não existe mais no Kanban: os anexos ficaram em Arquivos, sem pasta da execução."] };
+  if (!t.data.project?.client_id) throw new Error("A tarefa precisa de um cliente para organizar os arquivos.");
+  const nomeDoAgente = op.data?.display_name || "Agente";
   const clientId = t.data.project.client_id;
   const arquivos = await db.from("files").select("id,file_name,mime_type,size_bytes,storage_bucket,storage_path").in("id", ids).eq("client_id", clientId).eq("status", "ready").is("archived_at", null);
   if (arquivos.error) throw new Error("Não foi possível confirmar os arquivos do cliente.");
   let parentId: string | null = null;
-  for (const [chave, name] of [["execucao", "Execução"], [v.data.operator_id, op.data.display_name], [t.data.id, t.data.title]]) {
+  for (const [chave, name] of [["execucao", "Execução"], [v.data.operator_id, nomeDoAgente], [t.data.id, t.data.title]]) {
     let consulta = db.from("workspace_nodes").select("id").eq("kind", "folder").eq("scope", "client").eq("client_id", clientId).eq("name", name);
     consulta = parentId ? consulta.eq("parent_id", parentId) : consulta.is("parent_id", null);
     const existente = await consulta.limit(1).maybeSingle();

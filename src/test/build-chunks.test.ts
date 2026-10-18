@@ -102,7 +102,9 @@ describe("o build pronto (só quando há um dist/ com a base)", () => {
       .filter((n) => /\.js$/.test(n))
       .filter((n) => fixo.test(readFileSync(resolve(assets, n), "utf8")));
     expect(fixos).toEqual([]);
-  });
+    // 18/10: lê o dist inteiro (~380 arquivos, 17 MB); na suíte cheia passou do prazo padrão
+    // (o STACK_TRACE_ERROR do vitest é o aviso de tempo). Sozinho leva ~0,5 s; a regra não muda.
+  }, 60_000);
 });
 
 describe("o build usa mesmo esta estratégia", () => {

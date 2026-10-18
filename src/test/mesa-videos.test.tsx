@@ -633,7 +633,7 @@ describe("conhecimento de edição (Brabo destilado)", () => {
   });
 
   it("motor registrado e ligado na função mesa-videos", () => {
-    const motores = ler("supabase/functions/_shared/motores.ts");
+    const motores = ler("supabase/indice/motores.ts");
     expect(motores).toContain('id: "mesa_videos.direcao_de_edicao"');
     expect(ler("supabase/functions/mesa-videos/index.ts")).toContain('const CONHECIMENTO_DA_EDICAO = conhecimentoEdicao("pacote").texto;');
     expect(ler("supabase/config.toml")).toContain("[functions.mesa-videos]\n    verify_jwt = true");

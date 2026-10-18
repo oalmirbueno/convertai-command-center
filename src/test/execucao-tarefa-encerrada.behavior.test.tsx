@@ -6,7 +6,8 @@ import AdminExecucao from "@/pages/AdminExecucao";
 
 const state = vi.hoisted(() => ({ taskRead: true, taskStatus: "done", linkStatus: "awaiting_input", from: vi.fn(), rpc: vi.fn() }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "admin" }, profile: { role: "admin" } }) }));
-vi.mock("@/hooks/useSupabaseData", () => ({ useProjects: () => ({ data: [] }), useTeamMembers: () => ({ data: [] }) }));
+// 18/10: Departamentos monta o CreateProjectModal (d10f712e), que lê useClients; a lista vazia basta aqui.
+vi.mock("@/hooks/useSupabaseData", () => ({ useProjects: () => ({ data: [] }), useTeamMembers: () => ({ data: [] }), useClients: () => ({ data: [] }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: state.from, rpc: state.rpc } }));
 vi.mock("@tanstack/react-query", async (original) => ({
   ...await original<typeof import("@tanstack/react-query")>(),

@@ -10,7 +10,7 @@ Onde está cada peça:
 |---|---|
 | `supabase/functions/_shared/conhecimento-repositorios.ts` | Os 13 blocos novos destilados dos repositórios (texto próprio, fonte citada em cada bloco) |
 | `supabase/functions/_shared/conhecimento-dos-agentes.ts` | Escolhe os blocos por agente e tarefa, com teto e ordem de corte (já existia; ganhou os blocos novos e o agente sênior) |
-| `supabase/functions/_shared/motores.ts` | **Índice único**: por motor, que blocos recebe, de qual skill ou repositório veio cada bloco, onde está a ligação no código e o que fica sem base de propósito |
+| `supabase/indice/motores.ts` | **Índice único**: por motor, que blocos recebe, de qual skill ou repositório veio cada bloco, onde está a ligação no código e o que fica sem base de propósito |
 | `src/test/motores.test.ts` | Cobra a promessa do índice: cada motor recebe os blocos prometidos com qualquer objetivo, a função da mesa chama a montagem, toda skill e todo repositório integrado chega a algum prompt |
 | `docs/conhecimento/SKILLS-NO-SISTEMA.md` | Skills da máquina (plugins da Anthropic, skills de design) que já tinham sido destiladas antes |
 

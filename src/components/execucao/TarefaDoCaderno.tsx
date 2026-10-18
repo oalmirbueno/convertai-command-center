@@ -18,8 +18,10 @@ export default function TarefaDoCaderno({ linkId }: { linkId: string }) {
       if (v.error) throw v.error;
       const id = v.data.kanban_task_id || v.data.painel_task_id;
       if (!id) throw new Error("Esta execução ainda não tem tarefa vinculada.");
-      const t = await supabase.from("tasks").select("id,title,description,due_date,status").eq("id", id).single();
+      // maybeSingle: a tarefa pode ter sido apagada no Kanban (o vinculo nao tem FK dura).
+      const t = await supabase.from("tasks").select("id,title,description,due_date,status").eq("id", id).maybeSingle();
       if (t.error) throw t.error;
+      if (!t.data) throw new Error("A tarefa desta execução foi apagada do Kanban.");
       return t.data;
     },
   });

@@ -119,9 +119,15 @@ describe("custo do Jev na carteira", () => {
     // + frente RO, fase 2 (29/09): entender o pedido ao diretor (ordem clara e qual lâmina, numa chamada, em
     // paralelo com a leitura) e o papel das imagens anexadas no Ajustar (só com imagem em Automático).
     // + a fidelidade do gancho à referência (02/10) e o mundo real e a pessoa pública na direção (17/10).
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(13);
+    // 18/10: + a capa escolhida pelo Jev (37b5256c) e as referências do Workspace que servem ao pedido
+    // (d2a4c32b). Os módulos recebem um `julgar` de fora; a pergunta e a cobrança ficam juntas no index.ts.
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(15);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(9);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(12);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(14);
+    // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
+    for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {
+      expect(ler(`supabase/functions/estudio-arte/modulos/${m}.ts`)).not.toMatch(/jevPerguntar\(/);
+    }
     // A regra de fundo: nenhuma pergunta ao Jev fica sem a sua cobrança.
     for (const f of [calendario, estudio]) {
       expect((f.match(/await cobrarJev\(/g) || []).length).toBeGreaterThanOrEqual((f.match(/await jevPerguntar\(/g) || []).length);

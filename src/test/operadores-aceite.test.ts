@@ -61,12 +61,15 @@ describe("deep-link: onde clicar", () => {
   });
 
   it("sem vinculo nao inventa link", () => {
-    expect(servicos).toContain("if (!linkId) return null;");
+    // 18/10: desde o #69 a execucao sem tarefa tambem leva link (para a run);
+    // sem vinculo E sem run, continua sem link.
+    expect(servicos).toContain("if (!linkId && !runId) return null;");
   });
 
   it("o board e a fila devolvem o deep_link", () => {
     // board, fila e aprovacoes pendentes: tres emissores, um montador.
-    expect((servicos.match(/deep_link: deepLinkDoVinculo/g) ?? []).length).toBe(3);
+    // 18/10: + as runs recentes do board (#69), que agora levam link proprio. Quatro emissores, um montador.
+    expect((servicos.match(/deep_link: deepLinkDoVinculo/g) ?? []).length).toBe(4);
   });
 });
 

@@ -795,7 +795,8 @@ describe("aba Canvas", () => {
 
   it("abre escuro, com os cartões no quadro e o Resultado dizendo o que junta; ajustes numa barra lateral recolhível com o custo à vista", async () => {
     montar(h(EtapaCanvas));
-    await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(3));
+    // 18/10: o quadro (React Flow) demora mais que 1 s para montar na suíte cheia; sozinho passa. Espera maior, mesma regra.
+    await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(3), { timeout: 8000 });
     // A aba inteira usa os tokens escuros do painel.
     expect((document.querySelector("[data-canvas-escuro]") as HTMLElement).className.split(" ")).toContain("dark");
     const resultado = noDoQuadro("gerar");
@@ -829,7 +830,7 @@ describe("aba Canvas", () => {
 
   it("tocar num cartão da paleta abre a escolha com foto; escolher põe o cartão já ligado ao Resultado, com a linha animada", async () => {
     montar(h(EtapaCanvas));
-    await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(3));
+    await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(3), { timeout: 8000 });
     fireEvent.click(document.querySelector('[data-paleta="ambiente"]') as HTMLElement);
     const escolha = await waitFor(() => {
       const d = document.querySelector('[data-escolher-cartao="ambiente"]') as HTMLElement;
@@ -879,7 +880,7 @@ describe("aba Canvas", () => {
       return { imagem: lista[i] };
     };
     montar(h(EtapaCanvas));
-    await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(3));
+    await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(3), { timeout: 8000 });
     const resultado = noDoQuadro("gerar");
     expect(resultado.querySelector('[data-foto-do-resultado=""]')).toBeTruthy();
 

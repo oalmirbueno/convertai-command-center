@@ -87,7 +87,7 @@ Detalhes de cada ponto de entrada, tetos de tamanho e ordem de prioridade: `docs
 
 ## 4. Skills úteis que não estão instaladas
 
-Atualização de 25/09/2026 (Frente W): o marketingskills foi destilado e está nos prompts (`_shared/conhecimento-repositorios.ts`), junto com os outros repositórios pedidos pelo dono. Índice único de quem recebe o quê: `_shared/motores.ts`; tabela com licença e estado: `docs/motores/REPOSITORIOS.md`. O item 1 abaixo fica como registro histórico.
+Atualização de 25/09/2026 (Frente W): o marketingskills foi destilado e está nos prompts (`_shared/conhecimento-repositorios.ts`), junto com os outros repositórios pedidos pelo dono. Índice único de quem recebe o quê: `supabase/indice/motores.ts`; tabela com licença e estado: `docs/motores/REPOSITORIOS.md`. O item 1 abaixo fica como registro histórico.
 
 Nada foi instalado nesta rodada (regra da frente). Se o dono quiser trazer mais conhecimento:
 

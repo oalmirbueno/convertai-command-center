@@ -17,7 +17,7 @@ import { limparSegredos, linhasDoBriefing, montarPacoteExterno, temSegredo } fro
 import { briefingDeIdentidade, paletaDoBrandBook, propostaDoKitPeloBrandBook } from "../../supabase/functions/agente-contexto/modulos/identidade-visual";
 import { executarLeituras, FERRAMENTAS_DO_CLIENTE, NOMES_DAS_FERRAMENTAS, normalizarPedidosDeLeitura, termoDeBusca } from "../../supabase/functions/agente-contexto/modulos/ferramentas-do-cliente";
 import { conhecimentoDoPlano } from "../../supabase/functions/agente-contexto/modulos/conhecimento-do-plano";
-import { ferramentasDoMotor, motor, origemDoBloco } from "../../supabase/functions/_shared/motores";
+import { ferramentasDoMotor, motor, origemDoBloco } from "../../supabase/indice/motores";
 import type { ItemDaAcaoDoAgente } from "../../supabase/functions/_shared/acoes-do-agente";
 
 /**

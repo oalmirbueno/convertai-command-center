@@ -234,9 +234,10 @@ export default function DiarioDaExecucao({
       if (l.error) throw l.error;
       const id = l.data.kanban_task_id || l.data.painel_task_id;
       if (!id) return null;
-      const t = await supabase.from('tasks').select('id,title,assigned_to,delivery_type,project:projects!tasks_project_id_fkey(id,name,client:profiles!projects_client_id_fkey(id,company_name,full_name))').eq('id', id).single();
+      const t = await supabase.from('tasks').select('id,title,assigned_to,delivery_type,project:projects!tasks_project_id_fkey(id,name,client:profiles!projects_client_id_fkey(id,company_name,full_name))').eq('id', id).maybeSingle();
+      // Tarefa apagada no Kanban e caso normal (o vinculo nao tem FK dura): sem contexto, sem 406.
       if (t.error) throw t.error;
-      return t.data as any;
+      return (t.data ?? null) as any;
     },
   });
   const responsavel = useQuery({

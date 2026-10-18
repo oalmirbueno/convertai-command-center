@@ -22,7 +22,7 @@
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "./ai-provider.ts";
 // Frente SPP (30/09): o método da casa entra no fim do sistema, no motor e na cadeia antiga (reserva).
 import { juntarMetodoAoSistema, type MetodoInjetado } from "./superpoderes-catalogo.ts";
@@ -132,7 +132,9 @@ async function motorDeVerdade(e: Parameters<ChamadaDoMotor>[0]) {
 }
 
 async function legadoDeVerdade(sistema: string, usuario: string, temperatura: number) {
-  const providers = resolveAiProviderChain({ primaryModels: CADEIA_LEGADA, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN, openRouterReserve: true });
+  // 18/10: com as chaves do cofre carregadas antes; sem isso a OPENROUTER_API_KEY que só mora no cofre
+  // não entrava, a reserva pelo OpenRouter sumia e a OpenAI sem crédito derrubava a cadeia inteira.
+  const providers = await resolverCadeiaDaIa({ primaryModels: CADEIA_LEGADA, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN, openRouterReserve: true });
   const { response, provider } = await requestAiChatCompletion(providers, {
     messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }],
     temperature: temperatura,
@@ -154,6 +156,7 @@ function motivoLegivel(e: unknown): string {
     cota_da_chave_esgotada: "cota da chave do cliente esgotada",
     provedor_timeout: "o modelo demorou demais",
     openrouter_sem_credito: "OpenRouter sem crédito",
+    provedor_sem_credito: "conta do provedor sem crédito",
     modelo_inativo: "modelo desligado no catálogo",
     modelo_indisponivel: "modelo indisponível no provedor",
     resposta_vazia: "o modelo não devolveu texto",

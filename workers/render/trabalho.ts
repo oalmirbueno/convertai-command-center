@@ -9,7 +9,7 @@ import { createReadStream } from "node:fs";
 import { copyFile, cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { medirOnda } from "../../supabase/functions/_shared/onda-do-audio.ts";
+import { medirOnda } from "../../src/lib/editor/onda-do-audio.ts";
 import { caminhoDaSaida, fontesUsadas, recortarProjeto } from "../../supabase/functions/_shared/render-do-editor.ts";
 import { caminhoDaFonteValido, chaveDaFonteDaMarca } from "../../supabase/functions/_shared/projeto-de-edicao.ts";
 import { ganhoDaTrilhaDb, MIXAGEM_PADRAO } from "../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
