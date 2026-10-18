@@ -2217,6 +2217,14 @@
       "remote_name": "referencias_do_workspace_automaticas",
       "remote_statements_sha256": "fd544847b2b1880e55e6bad20c57b8934e22861704b6440e1de971ae209c8502",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261017235500",
+      "path": "supabase/migrations/20261017235500_base_pesquisa_mais_horas.sql",
+      "local_sha256": "bfebe9802a60757c6b15f336d481b1126e3dc652d5858939cab720b132bd97cf",
+      "remote_name": "base_pesquisa_mais_horas",
+      "remote_statements_sha256": "8de10ef45f0811e9b549509463ec8023040c424c3ac2d97ce1843bd2e7ca09ac",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
