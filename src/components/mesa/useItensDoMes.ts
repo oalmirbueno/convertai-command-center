@@ -11,6 +11,7 @@ import type { BlocoTexto, LayoutLamina } from "@/lib/mesa/layout";
 import { mediaKindFromFile } from "@/lib/fileUrls";
 import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
 import { laminasLongasDoRoteiro } from "../../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
+import { ganchoDaDescricao, momentoDoGancho, type MomentoDoGancho } from "./momentoDoGancho";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
@@ -23,6 +24,10 @@ export interface ItemDoMes {
   project_id: string;
   modo_estudio?: ModoDaPauta;
   video?: DirecaoDeVideoDaPauta;
+  /** 17/10: conteúdo nascido de um hype ou de um assunto em alta no nicho (o foguinho na esteira). */
+  momento?: MomentoDoGancho | null;
+  /** O gancho inteiro ("Hype: título"), para o title do foguinho. */
+  gancho?: string | null;
 }
 
 export interface Verificacao {
@@ -592,6 +597,28 @@ export function paraMapas(d: DadosDosItens): ItensDoMes {
   };
 }
 
+/**
+ * 17/10 (dono: "marca com o foguinho do hype na esteira do Estúdio"): lê só a descrição das tarefas que têm a linha
+ * "Gancho do momento:" (em pedaços de 80 ids) e marca hype ou nicho. Falhar não esconde a esteira: fica sem foguinho.
+ */
+async function comMomentoDoGancho(itens: ItemDoMes[]): Promise<ItemDoMes[]> {
+  const ids = itens.map((i) => i.id).filter((id) => id.indexOf("plano:") !== 0);
+  const ganchos: Record<string, string> = {};
+  try {
+    for (let i = 0; i < ids.length; i += 80) {
+      const { data, error } = await (supabase as any).from("tasks").select("id, description").in("id", ids.slice(i, i + 80)).ilike("description", "%Gancho do momento:%");
+      if (error) throw error;
+      for (const t of (data || []) as { id: string; description: string | null }[]) {
+        const g = ganchoDaDescricao(t.description);
+        if (g) ganchos[t.id] = g;
+      }
+    }
+  } catch {
+    return itens;
+  }
+  return itens.map((i) => (ganchos[i.id] ? { ...i, momento: momentoDoGancho(ganchos[i.id]), gancho: ganchos[i.id] } : i));
+}
+
 async function lerItensDaJanela(clientId: string, mes: string, incluirVideos = false): Promise<DadosDosItens> {
   const { data: projetos, error: erroProjetos } = await (supabase as any)
     .from("projects")
@@ -645,6 +672,7 @@ async function lerItensDaJanela(clientId: string, mes: string, incluirVideos = f
       }
     }
   }
+  itens = await comMomentoDoGancho(itens);
   const dados = await lerDetalhesDosItens(clientId, itens, incluirVideos);
   if (incluirVideos) {
     const { data: propostas, error: erro } = await (supabase as any).from("calendario_propostas")
@@ -710,7 +738,7 @@ export function useItemAvulso(clientId: string, tarefaId: string | null, ativo: 
         .is("deleted_at", null)
         .maybeSingle();
       if (!projeto) return vazio();
-      return lerDetalhesDosItens(clientId, [data as ItemDoMes], true);
+      return lerDetalhesDosItens(clientId, await comMomentoDoGancho([data as ItemDoMes]), true);
     },
     select: paraMapas,
   });

@@ -442,6 +442,8 @@ export interface CorpoDoPedido {
    * planeja o mês (cartão com Confirmar). O refazer e o criar em lotes não mandam.
    */
   rotear?: boolean;
+  /** 17/10: o hype que originou o pedido; o servidor grava o gancho exato em cada conteúdo. */
+  hype?: { tipo?: string | null; titulo: string } | null;
 }
 
 export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
@@ -452,6 +454,7 @@ export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
   if (p.mes) corpo.mes = p.mes.slice(0, 7);
   if (p.rotear) corpo.rotear = true;
   if (p.pecas && p.pecas.length) corpo.pecas = p.pecas.slice(0, 12);
+  if (p.hype && p.hype.titulo) corpo.hype = { tipo: p.hype.tipo === "nicho" ? "nicho" : "hype", titulo: p.hype.titulo };
   return corpo;
 }
 

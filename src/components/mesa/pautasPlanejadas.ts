@@ -1,5 +1,6 @@
 import { normalizarVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
 import { FORMATOS_DE_VIDEO_NO_ESTUDIO } from "./modoDaPauta";
+import { momentoDoGancho } from "./momentoDoGancho";
 import type { DadosDosItens, ItemDoMes } from "./useItensDoMes";
 
 export interface PropostaNaEsteira { id: string; project_id: string | null; status: string; itens: unknown }
@@ -18,7 +19,8 @@ export function incluirPautasPlanejadas(dados: DadosDosItens, propostas: Propost
       if (!fotos && !FORMATOS_DE_VIDEO_NO_ESTUDIO.includes(String(p.formato))) continue;
       const id = `plano:${proposta.id}:${p.tema_id}`;
       if (dados.itens.some((i) => i.id === id)) continue;
-      const item: ItemDoMes = { id, project_id: projeto, title: String(p.tema || p.titulo || "Pauta do mês"), due_date: p.data, delivery_type: fotos ? "static" : String(p.formato), status: "todo", modo_estudio: fotos ? "fotos" : "video", planejamento: { proposta_id: proposta.id, tema_id: p.tema_id }, ...(!fotos ? { video: normalizarVideoDaPauta(p.video) } : {}) };
+      const gancho = typeof p.gancho_do_momento === "string" && p.gancho_do_momento.trim() ? p.gancho_do_momento.trim() : null;
+      const item: ItemDoMes = { momento: momentoDoGancho(gancho), gancho, id, project_id: projeto, title: String(p.tema || p.titulo || "Pauta do mês"), due_date: p.data, delivery_type: fotos ? "static" : String(p.formato), status: "todo", modo_estudio: fotos ? "fotos" : "video", planejamento: { proposta_id: proposta.id, tema_id: p.tema_id }, ...(!fotos ? { video: normalizarVideoDaPauta(p.video) } : {}) };
       dados.itens.push(item);
       dados.roteiros[id] = { laminas: 0, continuo: false, modo_estudio: item.modo_estudio, ...(fotos ? { direcao_foto: p.foto && typeof p.foto === "object" ? p.foto as Record<string, unknown> : {} } : { video: item.video }) };
     }

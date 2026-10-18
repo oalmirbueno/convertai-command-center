@@ -3885,6 +3885,15 @@ export function aplicarPecasDoLote(itens: Item[], pecas: PecaDoLote[], uteis: st
  * prints do Google") e o estrategista devolve os itens prontos numa proposta
  * pronta para gravar (gravar / conversar continuam iguais).
  */
+/** O hype que originou o pedido ("Usar a pauta"): o gancho exato, como a tela grava e lê. */
+export function ganchoDoHypeDoPedido(bruto: unknown): string | null {
+  if (!bruto || typeof bruto !== "object") return null;
+  const h = bruto as Record<string, unknown>;
+  const titulo = texto(h.titulo, 160);
+  if (titulo.length < 3) return null;
+  return `${h.tipo === "nicho" ? "Nicho" : "Hype"}: ${titulo}`;
+}
+
 async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
@@ -3966,6 +3975,10 @@ ${REGRAS_DOS_ITENS}`;
     if (campanha) (item as Item & { campanha_id?: string }).campanha_id = campanha.id;
     return item;
   }).filter((i) => i.tema);
+  // 17/10 (dono: "quando adiciona na agenda os gerados pelo hype, ele some dali e marca com o foguinho"): o pedido
+  // que veio de um hype grava o gancho exato em cada conteúdo (a tela casa pelo título, não pelo que o modelo escreveu).
+  const ganchoDoPedido = ganchoDoHypeDoPedido(corpo.hype);
+  if (ganchoDoPedido) for (const item of itens) item.gancho_do_momento = ganchoDoPedido;
   if (!itens.length) throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
   itens.sort((a, b) => a.data.localeCompare(b.data));
   // 17/10 (dono: "de vez em quando ele posta 50 artes tudo no mesmo dia; o hype pode até ficar no mesmo dia, em

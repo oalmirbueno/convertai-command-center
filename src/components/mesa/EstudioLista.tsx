@@ -19,6 +19,7 @@ import {
   Star,
   TriangleAlert,
   X,
+  Flame,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -295,6 +296,12 @@ function CartaoDoItem({
           {roteiro && (
             <span title={DICA_DO_ROTEIRO} className="ml-1 shrink-0">
               <Star className="h-3 w-3 fill-warning text-warning" aria-label={DICA_DO_ROTEIRO} />
+            </span>
+          )}
+          {/* 17/10: conteúdo de hype ou de assunto em alta no nicho (o mesmo foguinho dos Hypes da semana). */}
+          {item.momento && (
+            <span title={item.gancho || (item.momento === "nicho" ? "Em alta no nicho" : "Hype")} className="ml-1 shrink-0" data-foguinho={item.momento}>
+              <Flame className={`h-3 w-3 ${item.momento === "nicho" ? "text-primary" : "text-warning"}`} aria-label={item.momento === "nicho" ? "Em alta no nicho" : "Hype"} />
             </span>
           )}
           <SeloDoItem tom={situacao.tom} className="ml-1.5 shrink-0">{situacao.rotulo}</SeloDoItem>

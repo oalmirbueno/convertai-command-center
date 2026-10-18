@@ -7,6 +7,8 @@ import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Cronometro } from "./Cronometro";
+import { ganchoDaDescricao, hypeNaAgenda } from "./momentoDoGancho";
+import { supabase } from "@/integrations/supabase/client";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
 import {
   buscarHypes,
@@ -51,6 +53,25 @@ function lerRecolhido(): boolean {
   }
 }
 
+/**
+ * 17/10 (dono: "quando adiciona na agenda os gerados pelo hype, ele some dali"): os ganchos já gravados na
+ * agenda do cliente (tarefas dos últimos 45 dias em diante). O hype cujo título aparece num deles sai da lista.
+ */
+async function lerGanchosNaAgenda(clientId: string): Promise<string[]> {
+  const db = supabase as any;
+  const { data: projetos, error: e1 } = await db.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null).limit(200);
+  if (e1) throw e1;
+  const ids = ((projetos || []) as { id: string }[]).map((p) => p.id);
+  if (!ids.length) return [];
+  const desde = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
+  const { data, error } = await db.from("tasks").select("description").in("project_id", ids).is("deleted_at", null)
+    .gte("due_date", desde).ilike("description", "%Gancho do momento:%").limit(300);
+  if (error) throw error;
+  return ((data || []) as { description: string | null }[])
+    .map((t) => ganchoDaDescricao(t.description) || "")
+    .filter(Boolean);
+}
+
 const corDaNota = (n: number) => (n >= 7 ? "bg-primary text-primary-foreground" : n >= 4 ? "bg-secondary text-foreground" : "bg-muted text-muted-foreground");
 
 function CartaoDoHype({
@@ -74,7 +95,7 @@ function CartaoDoHype({
     const mensagem = mensagemDoHype(hype);
     if (onPedidoInicio) onPedidoInicio({ mensagem, desde: Date.now() });
     try {
-      const data = await pedidoLivre({ clientId, mensagem });
+      const data = await pedidoLivre({ clientId, mensagem, hype: { tipo: hype.tipo, titulo: hype.titulo } });
       await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
       return data;
     } finally {
@@ -183,12 +204,16 @@ export default function HypesDaSemana({
   const [buscandoDesde, setBuscandoDesde] = useState<number | null>(null);
 
   const hypes = useQuery({ queryKey: chaves.hypes(clientId), queryFn: () => lerHypes(clientId) });
+  const naAgenda = useQuery({ queryKey: ["mesa", "hypes-na-agenda", clientId], queryFn: () => lerGanchosNaAgenda(clientId), staleTime: 30_000, retry: false });
   const semanaAtual = segundaDaSemanaIso(hojeIso());
   const dados = hypes.data || null;
   const daSemana = !!dados && dados.semana === semanaAtual;
   const itens = dados ? dados.itens : [];
   // O índice original segue junto: "Criar campanha" aponta o item certo da lista gravada.
-  const comIndice = itens.map((h, indice) => ({ h, indice }));
+  // O que já virou conteúdo na agenda sai da lista (o índice original segue para o "Criar campanha").
+  const ganchos = naAgenda.data || [];
+  const comIndice = itens.map((h, indice) => ({ h, indice })).filter((x) => !hypeNaAgenda(x.h.titulo, ganchos));
+  const jaNaAgenda = itens.length - comIndice.length;
   const doMomento = comIndice.filter((x) => x.h.tipo !== "nicho");
   const doNicho = comIndice.filter((x) => x.h.tipo === "nicho");
 
@@ -218,6 +243,7 @@ export default function HypesDaSemana({
   const linhaDeEstado = [
     doMomento.length ? `${doMomento.length} ${doMomento.length === 1 ? "hype" : "hypes"}` : "",
     doNicho.length ? `${doNicho.length} em alta no nicho` : "",
+    jaNaAgenda ? `${jaNaAgenda} já na agenda` : "",
     dados ? (daSemana ? rotuloQuando : `semana de ${periodoCurto(dados.semana)}`) : "",
   ]
     .filter(Boolean)

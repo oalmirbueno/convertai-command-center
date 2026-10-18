@@ -30,6 +30,7 @@ import {
   Type,
   Wand2,
   X,
+  Flame,
 } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoMioloEnxuto } from "../../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
@@ -1421,6 +1422,12 @@ function DetalheDoItem({
             <p className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground">
               <span className="truncate">{rapida ? rapida.subtitulo : <>{dataCurta(item.due_date)} · {formatoDoItem(item)}</>}</span>
               <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
+              {item.momento && (
+                <span className="ml-2 inline-flex shrink-0 items-center" title={item.gancho || undefined} data-foguinho={item.momento}>
+                  <Flame className={`mr-0.5 h-3 w-3 ${item.momento === "nicho" ? "text-primary" : "text-warning"}`} aria-hidden="true" />
+                  {item.momento === "nicho" ? "em alta no nicho" : "hype"}
+                </span>
+              )}
               {trabalho && trabalho.custo_usd > 0 && (
                 <span className="ml-2 shrink-0 tabular-nums" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
               )}

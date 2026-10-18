@@ -214,7 +214,8 @@ describe("hypes da semana", () => {
     expect(chamadasDe("buscar_hypes").length).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: /Criar conteúdo/ }));
     await waitFor(() => expect(chamadasDe("pedido_livre").length).toBe(1));
-    expect(chamadasDe("pedido_livre")[0]).toEqual({ acao: "pedido_livre", client_id: CLIENTE, mensagem: mensagemDoHype(hype) });
+    // 17/10: o hype vai junto e o servidor grava o gancho exato (some da lista quando vai para a agenda).
+    expect(chamadasDe("pedido_livre")[0]).toEqual({ acao: "pedido_livre", client_id: CLIENTE, mensagem: mensagemDoHype(hype), hype: { tipo: "hype", titulo: hype.titulo } });
     expect(mensagemDoHype(hype)).toContain("Dia das Crianças");
     expect(inicio).toHaveBeenCalled();
     await waitFor(() => expect(fim).toHaveBeenCalled());
