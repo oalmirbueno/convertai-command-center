@@ -2225,6 +2225,14 @@
       "remote_name": "base_pesquisa_mais_horas",
       "remote_statements_sha256": "8de10ef45f0811e9b549509463ec8023040c424c3ac2d97ce1843bd2e7ca09ac",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261018001000",
+      "path": "supabase/migrations/20261018001000_base_dos_agentes_ads_e_faxina.sql",
+      "local_sha256": "0c00e89b4a73014dcdfdd3ca2f7eb4ab4cc3fca9b3ec5d65efda11fce35994cc",
+      "remote_name": "base_dos_agentes_ads_e_faxina",
+      "remote_statements_sha256": "035a8bfe5b945dfedd40e101bd547bc6874fde58228479b4fe6fa32f3085f97e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
