@@ -42,3 +42,9 @@ Deno.test("o post vencedor vira ficha do diretor e do Mês, sem travessão", () 
   assertEquals(mes.agente, "mes.estrategista");
   assert(!/[–—]/.test(diretor.tecnica + mes.tecnica));
 });
+
+Deno.test("a capa do vencedor é o título com o resto da capa, não só a primeira linha", async () => {
+  const { textoDaCapa } = await import("../base-dos-agentes/index.ts");
+  assertEquals(textoDaCapa({ texto_exato: "5 PONTOS\nAntes de trocar a bancada", blocos: [{ papel: "selo", texto: "5 PONTOS" }, { papel: "headline", texto: "Antes de trocar a bancada" }] }), "Antes de trocar a bancada · 5 PONTOS");
+  assertEquals(textoDaCapa({ texto_exato: "Deu vontade?" }), "Deu vontade?");
+});

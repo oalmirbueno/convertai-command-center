@@ -470,6 +470,16 @@ async function lerTrabalhos(ids: string[]): Promise<TrabalhoParaResultado[]> {
 const NOME_DA_MEDIDA: Record<MedidaDoMultiplo, string> = { views: "visualizações", alcance: "alcance", interacoes: "interações" };
 const numeroBr = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
 
+/** O texto da capa que a pessoa leu: o título (headline) e, junto, o resto da capa em uma linha. */
+export function textoDaCapa(card: { texto_exato?: string; blocos?: Array<{ papel?: string; texto?: string }> } | undefined): string {
+  if (!card) return "";
+  const blocos = (card.blocos || []).filter((b) => b && b.texto);
+  const titulo = blocos.find((b) => b.papel === "headline");
+  const resto = blocos.filter((b) => b !== titulo).map((b) => String(b.texto));
+  const linha = titulo ? [String(titulo.texto), ...resto].join(" · ") : String(card.texto_exato || "").split("\n").filter(Boolean).join(" · ");
+  return texto(linha.replace(/\s+/g, " "), 140);
+}
+
 /** As fichas de um post vencedor: uma para o diretor de arte e uma para o agente do Mês, só deste cliente. */
 export function fichasDoVencedor(e: { multiplo: number; medida: MedidaDoMultiplo | null; capa: string; conceito: string; gancho: string; formato: string; tituloDaPauta: string }) {
   const vezes = numeroBr(e.multiplo);
@@ -518,12 +528,12 @@ async function fichasDosVencedores(): Promise<number> {
       const { data: ja } = await servico().from("agente_base_fichas").select("id").eq("client_id", t.client_id).eq("fonte_url", m.permalink).limit(1);
       if ((ja || []).length) continue;
     }
-    const cards = Array.isArray((t.direcao || {}).cards) ? (t.direcao as { cards: Array<{ texto_exato?: string }> }).cards : [];
+    const cards = Array.isArray((t.direcao || {}).cards) ? (t.direcao as { cards: Array<{ texto_exato?: string; blocos?: Array<{ papel?: string; texto?: string }> }> }).cards : [];
     const tarefa = t.task_id ? tarefas.get(t.task_id) : undefined;
     const linhas = fichasDoVencedor({
       multiplo: m.multiplo,
       medida: m.medida,
-      capa: texto(String(cards[0]?.texto_exato || "").split("\n")[0], 140),
+      capa: textoDaCapa(cards[0]),
       conceito: texto((t.direcao || {}).conceito, 300),
       gancho: tarefa ? texto((/Gancho do momento:\s*([^\n]+)/.exec(String(tarefa.description || "")) || [])[1], 200) : "",
       formato: cards.length > 1 ? "carrossel" : "post",
