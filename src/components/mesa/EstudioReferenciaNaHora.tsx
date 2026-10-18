@@ -229,7 +229,7 @@ export default function EstudioReferenciaNaHora({
         onPaste={colarNoCampo}
         placeholder={compacto ? "Cole link ou imagem (Ctrl+V)" : "Cole aqui o link (Pinterest, Behance, imagem) ou a imagem com Ctrl+V"}
         aria-label={`Colar link ou imagem de referência (${alvoRotulo})`}
-        className={`${compacto ? "h-7 text-[11.5px]" : "h-9 text-[12.5px]"} min-w-0 flex-1`}
+        className={`${compacto ? "h-7 text-[12px]" : "h-9 text-[13px]"} min-w-0 flex-1`}
         disabled={bloqueado}
       />
       {link.trim() && (
@@ -280,10 +280,10 @@ export default function EstudioReferenciaNaHora({
         </>
       ) : (
         <>
-          <p className="flex items-center text-[12.5px] font-medium">
+          <p className="flex items-center text-[13px] font-medium">
             <ClipboardPaste className="mr-1.5 h-4 w-4 text-primary" /> Referência na hora ({alvoRotulo})
           </p>
-          <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
+          <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
             Arraste a imagem para cá, escolha o arquivo, cole a imagem (Ctrl+V) ou cole o link. Entra na hora como escolhida (até 2; a mais antiga sai).
           </p>
           <div className="mt-2 flex min-w-0 items-center">

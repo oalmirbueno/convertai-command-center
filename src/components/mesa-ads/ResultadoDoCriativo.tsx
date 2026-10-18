@@ -80,8 +80,8 @@ export default function ResultadoDoCriativo({ criativo, angulo }: { criativo: Cr
       />
       {!recolhido && (
         <div className="mt-2 min-w-0">
-          {criativo.ad_id && conta.isLoading && <p className="text-[11.5px] text-muted-foreground">Lendo a conta…</p>}
-          {criativo.ad_id && conta.isError && <p className="text-[11.5px] text-muted-foreground">A conta não respondeu agora.</p>}
+          {criativo.ad_id && conta.isLoading && <p className="text-[12px] text-muted-foreground">Lendo a conta…</p>}
+          {criativo.ad_id && conta.isError && <p className="text-[12px] text-muted-foreground">A conta não respondeu agora.</p>}
           {anuncio ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-4" aria-label={`Métricas dos últimos ${DIAS_DO_RESULTADO} dias`}>
               <span>Gasto: <b className="tabular-nums">{brl(anuncio.metricas.gasto)}</b></span>
@@ -94,7 +94,7 @@ export default function ResultadoDoCriativo({ criativo, angulo }: { criativo: Cr
           ) : !criativo.ad_id ? (
             <p className="text-[12px] text-muted-foreground">Sem anúncio ligado: ligue ao anúncio da Meta quando subir para acompanhar contra a meta.</p>
           ) : null}
-          {veredito && <p className="mt-1.5 text-[12.5px] font-medium [overflow-wrap:anywhere]">{veredito}</p>}
+          {veredito && <p className="mt-1.5 text-[13px] font-medium [overflow-wrap:anywhere]">{veredito}</p>}
           {angulo && (angulo.corte || angulo.hipotese) && (
             <div className="mt-2 space-y-1 border-t border-border pt-2 text-[12px] leading-snug [overflow-wrap:anywhere]">
               {angulo.hipotese && <p><span className="font-medium">Hipótese: </span>{angulo.hipotese}</p>}

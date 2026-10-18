@@ -835,7 +835,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         type="button"
         onClick={() => { setOpen(true); setMinimized(false); }}
         className={cn(
-          "fixed bottom-4 left-1/2 z-40 hidden h-10 -translate-x-1/2 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-lg transition-colors hover:bg-primary/90 md:flex",
+          "fixed bottom-4 left-1/2 z-40 hidden h-10 -translate-x-1/2 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 md:flex",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         )}
         title="Abrir o Studio"
@@ -991,7 +991,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-border px-2 py-1 sm:px-3">
             <div className="mr-2 flex min-w-0 max-w-full items-center py-0.5">
               <Globe2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-              <span className="min-w-0 truncate text-[12.5px] font-medium text-foreground sm:max-w-[300px]" title={scopeChipLabel}>
+              <span className="min-w-0 truncate text-[13px] font-medium text-foreground sm:max-w-[300px]" title={scopeChipLabel}>
                 {scopeChipLabel}
               </span>
               <button
@@ -1689,7 +1689,7 @@ function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef)
     <div className={cn(rolagem.janela, "absolute bottom-2 left-2 right-2 z-10 max-h-[240px] rounded-md border border-border bg-popover shadow-sm")} aria-label="Arquivos para anexar">
       {items.map(f => (
         <button key={f.id} type="button" onClick={() => onPick(f)}
-          className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px] hover:bg-muted">
+          className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[13px] hover:bg-muted">
           <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="min-w-0 truncate">{f.name}</span>
         </button>
@@ -1705,7 +1705,7 @@ function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd)
       <p className={cn(texto.rotulo, "border-b border-border px-3 py-1.5")}>Comandos</p>
       {items.map(c => (
         <button key={c.key} type="button" onClick={() => onPick(c)}
-          className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px] hover:bg-muted">
+          className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[13px] hover:bg-muted">
           <Sparkles className="mr-2 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
           <span className="shrink-0 font-medium">{c.label}</span>
           <span className="ml-auto min-w-0 truncate pl-2 text-[11px] text-muted-foreground">{c.hint}</span>
@@ -1887,7 +1887,7 @@ function GroupedThreadList({
                       aria-expanded={!folderCollapsed}
                       className={cn("flex w-full min-w-0 items-center py-1 pl-4 pr-2 text-left hover:bg-muted", foco)}>
                       <ChevronRight className={cn("mr-1.5 h-3 w-3 shrink-0 text-muted-foreground transition-transform", !folderCollapsed && "rotate-90")} aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">{label}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{label}</span>
                       <span className="ml-1.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">{list.length}</span>
                     </button>
                     {!folderCollapsed && list.map(t => (
@@ -2864,14 +2864,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     "prose-p:my-2.5 prose-p:leading-[1.7]",
     "prose-headings:font-semibold prose-headings:tracking-normal prose-headings:text-foreground",
     "prose-h1:text-[15px] prose-h1:mt-5 prose-h1:mb-2 prose-h1:first:mt-0",
-    "prose-h2:text-[14.5px] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
+    "prose-h2:text-[15px] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
     "prose-h3:text-[14px] prose-h3:mt-4 prose-h3:mb-1.5",
     "prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1.5",
     "prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1.5",
     "prose-li:my-0 prose-li:leading-[1.65] prose-li:marker:text-primary/60",
     "prose-strong:font-semibold prose-strong:text-foreground",
-    "prose-code:text-[12.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-md prose-pre:text-[12.5px]",
+    "prose-code:text-[13px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-muted prose-code:before:content-none prose-code:after:content-none",
+    "prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-pre:rounded-md prose-pre:text-[13px]",
     "prose-table:my-4 prose-table:text-[13px] prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
     "prose-hr:my-4 prose-hr:border-border/50",
     "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
@@ -3108,7 +3108,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             </article>
           )}
           {streaming && !streamBuf && (
-            <p className="flex items-center text-[12.5px] text-muted-foreground" role="status">
+            <p className="flex items-center text-[12px] text-muted-foreground" role="status">
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-primary" aria-hidden="true" />
               Reunindo contexto
             </p>
@@ -3145,7 +3145,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     type="button"
                     onMouseEnter={() => setMentionIdx(i)}
                     onClick={() => pickMention(f)}
-                    className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px]",
+                    className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[13px]",
                       i === mentionIdx ? "bg-primary/15 text-foreground" : "hover:bg-muted")}>
                     {f.kind === "folder"
                       ? <FolderIcon className="mr-2 h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
@@ -3168,7 +3168,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     type="button"
                     onMouseEnter={() => setSlashIdx(i)}
                     onClick={() => pickSlash(c)}
-                    className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px]",
+                    className={cn("flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[13px]",
                       i === slashIdx ? "bg-primary/15" : "hover:bg-muted")}>
                     <Sparkles className="mr-2 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
                     <span className="shrink-0 font-medium">{c.label}</span>
@@ -3221,7 +3221,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                         setMention({ q: "", start: caret });
                         setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
                       }}
-                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[12.5px] hover:bg-muted"
+                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[13px] hover:bg-muted"
                     >
                       <Paperclip className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
@@ -3242,7 +3242,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                         setInput(prev => (prev ? prev + " " : "") + clean + " ");
                         setTimeout(() => inputRef.current?.focus(), 10);
                       }}
-                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[12.5px] hover:bg-muted"
+                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[13px] hover:bg-muted"
                     >
                       <Link2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
@@ -3253,7 +3253,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     <button
                       type="button"
                       onClick={() => setPickerOpen(true)}
-                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[12.5px] hover:bg-muted"
+                      className="flex w-full min-w-0 items-center rounded px-2 py-2 text-left text-[13px] hover:bg-muted"
                     >
                       <Columns3 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
                       <span className="min-w-0 flex-1">

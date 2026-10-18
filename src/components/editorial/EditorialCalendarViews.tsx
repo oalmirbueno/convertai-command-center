@@ -407,7 +407,7 @@ function ContentDirection({
     <div
       className={cn(
         "min-w-0 text-current",
-        compact ? "space-y-0.5 text-[10px]" : "space-y-1 text-xs",
+        compact ? "space-y-0.5 text-[11px]" : "space-y-1 text-[12px] leading-4",
         className,
       )}
     >
@@ -520,7 +520,7 @@ export function EditorialFileThumbnail({
         <FileImage className="h-5 w-5 text-muted-foreground" />
       )}
       {fileCount > 1 && (
-        <span className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+        <span className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
           <Images className="h-2.5 w-2.5" />
           {fileCount}
         </span>
@@ -528,7 +528,7 @@ export function EditorialFileThumbnail({
       {showArtBadge && (
         <span
           className={cn(
-            "absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-semibold backdrop-blur-sm",
+            "absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold backdrop-blur-sm",
             file
               ? "bg-emerald-600/90 text-white"
               : "bg-amber-500/90 text-black",
@@ -587,7 +587,7 @@ function SeloDaArteDoEstudio({
     <span
       className={cn(
         "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md font-medium",
-        compact ? "text-[9.5px]" : "mt-1.5 px-1.5 py-0.5 text-[10px]",
+        compact ? "text-[11px]" : "mt-1.5 px-1.5 py-0.5 text-[11px]",
         !compact &&
           (selo.alerta
             ? "bg-amber-500/10"
@@ -713,7 +713,7 @@ function PublicationPill({
       >
       {compact ? (
         <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+          <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
             {/* Miniatura da arte direto no calendário mensal. */}
             <EditorialFileThumbnail
               post={item.post}
@@ -737,7 +737,7 @@ function PublicationPill({
             <span className="ml-auto shrink-0 opacity-75">{time}</span>
           </div>
           <p
-            className="mt-0.5 truncate text-[10px] opacity-75"
+            className="mt-0.5 truncate text-[11px] opacity-75"
             title={`Contexto: ${context || "Não informado"}`}
           >
             <span className="font-semibold">Contexto:</span>{" "}
@@ -752,7 +752,7 @@ function PublicationPill({
             className="h-10 w-10"
           />
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5 text-[10px] opacity-80">
+            <div className="flex min-w-0 items-center gap-1.5 text-[11px] opacity-80">
             <span
               className={cn(
                 "h-2 w-2 shrink-0 rounded-full",
@@ -851,15 +851,15 @@ function AnchoredPostPill({
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
-          <span className={cn("truncate text-[9px] font-semibold uppercase tracking-wide", cor.texto)}>
+          <span className={cn("truncate text-[11px] font-semibold", cor.texto)}>
             {nomeEtapa}
           </span>
         </span>
-        <span className={cn("block truncate font-medium", compact ? "text-[10px]" : "text-[11.5px]")}>
+        <span className={cn("block truncate font-medium", compact ? "text-[11px]" : "text-[12px]")}>
           {post.post.title}
         </span>
         {!compact && (
-          <span className="block truncate text-[9.5px] text-muted-foreground">
+          <span className="block truncate text-[11px] text-muted-foreground">
             {etapa === "published"
               ? "Já publicado · dia herdado do prazo da tarefa"
               : "Dia herdado do prazo da tarefa · sem agendamento"}
@@ -906,7 +906,7 @@ function TaskSchedulePill({
     >
       {compact ? (
         <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+          <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
             {arte ? (
               <MiniaturaDaArteDoEstudio
                 arte={arte}
@@ -926,7 +926,7 @@ function TaskSchedulePill({
               {task.title}
             </span>
             <span
-              className="ml-auto shrink-0 text-[9px] text-violet-500"
+              className="ml-auto shrink-0 text-[11px] text-violet-500"
               title={`Prazo do Kanban · ${deliveryType}`}
             >
               Prazo · {deliveryType}
@@ -938,7 +938,7 @@ function TaskSchedulePill({
             </p>
           ) : (
             <p
-              className="mt-0.5 truncate text-[10px] text-muted-foreground"
+              className="mt-0.5 truncate text-[11px] text-muted-foreground"
               title={`Contexto: ${context || "Não informado"}`}
             >
               <span className="font-semibold">Contexto:</span>{" "}
@@ -960,7 +960,7 @@ function TaskSchedulePill({
                 className="h-3.5 w-3.5 shrink-0 text-violet-500"
                 aria-hidden="true"
               />
-              <span className="truncate text-[10px] font-medium text-violet-500">
+              <span className="truncate text-[11px] font-medium text-violet-500">
                 Prazo Kanban · {deliveryType}
                 {projectScopeName ? ` · ${projectScopeName}` : ""}
               </span>
@@ -1307,13 +1307,13 @@ function MobileAgenda({
                 >
                   <span
                     className={cn(
-                      "text-[10px] font-medium uppercase",
+                      "text-[11px] font-medium capitalize",
                       escolhido ? "opacity-85" : "text-muted-foreground",
                     )}
                   >
                     {format(day, "EEEEEE", { locale: ptBR })}
                   </span>
-                  <span className="mt-0.5 text-[17px] font-semibold leading-6 tabular-nums">
+                  <span className="mt-0.5 text-[15px] font-semibold leading-6 tabular-nums">
                     {format(day, "d")}
                   </span>
                   <span
@@ -1513,7 +1513,7 @@ function MonthView({
                 <div
                   key={day}
                   role="columnheader"
-                  className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                  className="px-3 py-2.5 text-center text-[11px] font-medium capitalize text-muted-foreground"
                 >
                   {day}
                 </div>
@@ -1557,7 +1557,7 @@ function MonthView({
                   <div className="mb-2 flex items-center justify-between">
                     <span
                       className={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-xs",
+                        "inline-flex h-7 w-7 items-center justify-center rounded-full text-[12px] leading-4",
                         key === todayKey
                           ? "bg-primary font-semibold text-primary-foreground"
                           : !isSameMonth(day, anchorDate)
@@ -1569,7 +1569,7 @@ function MonthView({
                     </span>
                     <div className="flex items-center gap-1.5">
                       {dayCount > 0 && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           {dayCount}
                         </span>
                       )}
@@ -1622,7 +1622,7 @@ function MonthView({
                         <PopoverTrigger asChild>
                           <button
                             type="button"
-                            className="inline-flex min-h-7 w-full items-center rounded-md px-1 text-left text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            className="inline-flex min-h-7 w-full items-center rounded-md px-1 text-left text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                             aria-label={`Ver mais ${dayCount - visibleCount} itens de ${format(day, "dd 'de' MMMM", { locale: ptBR })}`}
                           >
                             +{dayCount - visibleCount} neste dia
@@ -1632,7 +1632,7 @@ function MonthView({
                           align="start"
                           className="max-h-[70vh] w-[calc(100vw-2rem)] max-w-[22rem] overflow-y-auto overscroll-contain p-3"
                         >
-                          <p className="mb-2 text-xs font-semibold text-foreground">
+                          <p className="mb-2 text-[12px] leading-4 font-semibold text-foreground">
                             {format(day, "EEEE, dd 'de' MMMM", {
                               locale: ptBR,
                             })}
@@ -1764,13 +1764,13 @@ function WeekView({
                     key === todayKey && "bg-primary/5",
                   )}
                 >
-                  <p className="text-[11px] font-medium uppercase text-muted-foreground">
+                  <p className="text-[11px] font-medium capitalize text-muted-foreground">
                     {format(day, "EEE", { locale: ptBR })}
                   </p>
                   <div className="mt-1 flex items-center justify-center gap-1">
                     <p
                       className={cn(
-                        "text-lg font-semibold",
+                        "text-[20px] font-semibold leading-7",
                         key === todayKey
                           ? "text-primary"
                           : "text-foreground",
@@ -1820,7 +1820,7 @@ function WeekView({
                     />
                   ))}
                   {dayItems.length === 0 && dayTasks.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-border/70 py-8 text-center text-[10px] text-muted-foreground/60">
+                    <p className="rounded-lg border border-dashed border-border/70 py-8 text-center text-[11px] text-muted-foreground/60">
                       Solte aqui
                     </p>
                   )}
@@ -1888,7 +1888,7 @@ function BoardPostCard({
       // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
       {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
-        "group rounded-lg border border-border bg-card p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow motion-reduce:transition-none",
+        superficie.painel, "group p-3.5 transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow motion-reduce:transition-none",
         draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
@@ -1915,14 +1915,14 @@ function BoardPostCard({
             <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
               <Icon className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               {contentTypeLabel(post.post.content_type)}
             </span>
           </div>
           <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
             {post.post.title}
           </h3>
-          <p className="mt-1 truncate text-[10px] text-muted-foreground">
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">
             {clientName} · {projectName}
           </p>
         </button>
@@ -1941,14 +1941,14 @@ function BoardPostCard({
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Badge
           variant="outline"
-          className="h-5 rounded-md px-1.5 text-[9px] font-normal"
+          className="h-5 rounded-md px-1.5 text-[11px] font-normal"
         >
           {approvalLabels[approval] || approval}
         </Badge>
         {post.internal?.task_id && (
           <Badge
             variant="secondary"
-            className="h-5 rounded-md px-1.5 text-[9px] font-normal"
+            className="h-5 rounded-md px-1.5 text-[11px] font-normal"
           >
             <Link2 className="mr-1 h-2.5 w-2.5" />
             Kanban
@@ -2045,14 +2045,14 @@ function BoardTaskCard({
             <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Palette className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
+            <span className="text-[11px] font-medium text-primary">
               {taskDeliveryTypeLabel(task)} · Kanban
             </span>
           </div>
           <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
             {task.title}
           </h3>
-          <p className="mt-1 truncate text-[10px] text-muted-foreground">
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">
             {projectScopeName}
           </p>
           {arte && (
@@ -2077,11 +2077,11 @@ function BoardTaskCard({
           </button>
         )}
       </div>
-      <div className="mt-3 flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+      <div className="mt-3 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
         {task.status === "blocked" && (
           <Badge
             variant="outline"
-            className="h-5 shrink-0 border-warning/30 bg-warning/10 px-1.5 text-[9px] text-warning"
+            className="h-5 shrink-0 border-warning/30 bg-warning/10 px-1.5 text-[11px] text-warning"
           >
             Bloqueada
           </Badge>

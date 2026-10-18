@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, CircleDot, Clock3, Loader2, Lock, Paperclip, RotateCcw, Send, Sparkles, ThumbsDown, ThumbsUp, UserRound, X } from "lucide-react";
-import { Carregando, EstadoVazio, SeletorCompacto, botao, campoTexto, etiqueta, juntar, texto as estiloTexto, useEstadoDaTela } from "@/components/sistema";
+import { Carregando, EstadoVazio, SeletorCompacto, botao, campoTexto, etiqueta, juntar, texto as estiloTexto, useEstadoDaTela, superficie } from "@/components/sistema";
 
 /**
  * O diário da execução: onde o dono participa de verdade.
@@ -154,11 +154,11 @@ function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; auto
             return (
               <div key={i} className="flex gap-2.5">
                 <t.Icone className={juntar("mt-0.5 h-4 w-4 shrink-0", t.cor)} aria-hidden="true" />
-                <p className="min-w-0 text-[13.5px] leading-6"><span className={juntar("font-medium", t.cor)}>{s.rotulo}: </span><span className="text-foreground/90"><ComLinks texto={s.texto} /></span></p>
+                <p className="min-w-0 text-[13px] leading-6"><span className={juntar("font-medium", t.cor)}>{s.rotulo}: </span><span className="text-foreground/90"><ComLinks texto={s.texto} /></span></p>
               </div>
             );
           })}
-          <details className="text-[11.5px] text-muted-foreground"><summary className="cursor-pointer">Ver o registro técnico (como o agente escreveu)</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{e.body}</pre></details>
+          <details className="text-[12px] text-muted-foreground"><summary className="cursor-pointer">Ver o registro técnico (como o agente escreveu)</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{e.body}</pre></details>
         </div>
       )}
       <div className="mt-2.5 flex flex-wrap items-center gap-1">
@@ -420,9 +420,9 @@ export default function DiarioDaExecucao({
             <DialogDescription className="sr-only">
               {contextoInicial ? `Pedido para ${contextoInicial.cliente.nome} · conversa compartilhada com a coordenação` : 'Conversa, trabalho e comprovantes no mesmo lugar.'}
             </DialogDescription>
-            {contextoInicial && <span className="truncate text-xs text-primary">Para {contextoInicial.cliente.nome}</span>}
-            {!contextoInicial && contexto.data && <span className="truncate text-xs text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</span>}
-            {!contextoInicial && contexto.isError && <button className="text-xs text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
+            {contextoInicial && <span className="truncate text-[12px] leading-4 text-primary">Para {contextoInicial.cliente.nome}</span>}
+            {!contextoInicial && contexto.data && <span className="truncate text-[12px] leading-4 text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</span>}
+            {!contextoInicial && contexto.isError && <button className="text-[12px] leading-4 text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
             {situacao && <span className={juntar(etiqueta, "h-6 px-2", situacao.cor)}>{situacao.rotulo}</span>}
@@ -450,12 +450,12 @@ export default function DiarioDaExecucao({
             </span>
             <div className="flex shrink-0 flex-wrap gap-1.5">
               {esperaRevisao && <>
-                <button type="button" disabled={ocupado} className={juntar(botao.perigo, "h-8 px-3 text-[12.5px]")} onClick={() => entrarNoModo("reprovar")}><ThumbsDown className="mr-1.5 h-3.5 w-3.5" />Reprovar</button>
-                <button type="button" disabled={ocupado} className={juntar(botao.secundario, "h-8 px-3 text-[12.5px]")} onClick={() => entrarNoModo("ajuste")}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Pedir ajuste</button>
-                <button type="button" disabled={ocupado} className={juntar(botao.primario, "h-8 px-3 text-[12.5px]")} onClick={() => decidir.mutate({ tipo: "aprovar", texto: textoLimpo })}>{decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="mr-1.5 h-3.5 w-3.5" />}Aprovar e concluir</button>
+                <button type="button" disabled={ocupado} className={juntar(botao.perigo, "h-8 px-3 text-[13px]")} onClick={() => entrarNoModo("reprovar")}><ThumbsDown className="mr-1.5 h-3.5 w-3.5" />Reprovar</button>
+                <button type="button" disabled={ocupado} className={juntar(botao.secundario, "h-8 px-3 text-[13px]")} onClick={() => entrarNoModo("ajuste")}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Pedir ajuste</button>
+                <button type="button" disabled={ocupado} className={juntar(botao.primario, "h-8 px-3 text-[13px]")} onClick={() => decidir.mutate({ tipo: "aprovar", texto: textoLimpo })}>{decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="mr-1.5 h-3.5 w-3.5" />}Aprovar e concluir</button>
               </>}
-              {travada && <button type="button" disabled={ocupado} className={juntar(botao.primario, "h-8 px-3 text-[12.5px]")} onClick={() => entrarNoModo("destravar")}>Responder e destravar</button>}
-              {!esperaRevisao && !travada && <button type="button" disabled={ocupado} className={juntar(botao.secundario, "h-8 px-3 text-[12.5px]")} onClick={() => decidir.mutate({ tipo: "concluir" })}><Check className="mr-1.5 h-3.5 w-3.5" />Concluir</button>}
+              {travada && <button type="button" disabled={ocupado} className={juntar(botao.primario, "h-8 px-3 text-[13px]")} onClick={() => entrarNoModo("destravar")}>Responder e destravar</button>}
+              {!esperaRevisao && !travada && <button type="button" disabled={ocupado} className={juntar(botao.secundario, "h-8 px-3 text-[13px]")} onClick={() => decidir.mutate({ tipo: "concluir" })}><Check className="mr-1.5 h-3.5 w-3.5" />Concluir</button>}
             </div>
           </div>
         )}
@@ -509,11 +509,11 @@ export default function DiarioDaExecucao({
             />
           ) : (
             <div className="mx-auto max-w-4xl space-y-3">
-              {contextoInicial && <p className="text-xs text-muted-foreground">Histórico da coordenação · pode incluir outros clientes</p>}
+              {contextoInicial && <p className="text-[12px] leading-4 text-muted-foreground">Histórico da coordenação · pode incluir outros clientes</p>}
               {/* 16/10 (dono: "já trazer o print, a imagem correta, o PDF, para eu aprovar com contexto"):
                   em revisão, a entrega vem primeiro, grande, com o que é e a prova que abre aqui mesmo. */}
               {linkId && esperaRevisao && (
-                <section aria-label="Entrega para aprovar" className="overflow-hidden rounded-lg border border-warning/40 bg-card">
+                <section aria-label="Entrega para aprovar" className={juntar(superficie.painel, "overflow-hidden border-warning/40")}>
                   <p className="border-b border-border px-4 py-2.5 text-[13px] font-medium">{oQueFoiFeito({ status: "review", tipo: tipoDaEntrega(contexto.data?.delivery_type, contexto.data?.title || titulo), temProva: Boolean(vinculo.data?.last_evidence) })}</p>
                   <div className="mx-auto max-w-2xl"><ProvaDaEntrega linkId={linkId} ultimaProva={vinculo.data?.last_evidence} aoConversar={() => setAba("hermes")} /></div>
                 </section>
@@ -565,7 +565,7 @@ export default function DiarioDaExecucao({
           {anexos.length > 0 && (
             <div className="-m-0.5 flex flex-wrap [&>*]:m-0.5">
               {anexos.map((a, i) => (
-                <span key={i} className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11.5px] text-foreground">
+                <span key={i} className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[12px] text-foreground">
                   <Paperclip className="mr-1 h-3 w-3" aria-hidden="true" /> {a.name}
                   <button type="button" aria-label={`Tirar ${a.name}`} className="ml-1 text-muted-foreground hover:text-destructive" onClick={() => setAnexos((x) => x.filter((_, j) => j !== i))}>×</button>
                 </span>

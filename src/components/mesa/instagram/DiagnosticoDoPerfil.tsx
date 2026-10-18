@@ -69,7 +69,7 @@ export default function DiagnosticoDoPerfil({ perfil, diagnostico, onDiagnostico
 
       {diagnostico && (
         <div className="min-w-0 space-y-2">
-          <div className="flex min-w-0 flex-wrap items-center text-[12.5px] [&>*]:mr-3">
+          <div className="flex min-w-0 flex-wrap items-center text-[13px] [&>*]:mr-3">
             {diagnostico.resumo.nota !== null && <span className="font-semibold tabular-nums text-foreground">Nota {diagnostico.resumo.nota}</span>}
             <span className="text-success">{diagnostico.resumo.passa} passam</span>
             <span className="text-warning">{diagnostico.resumo.melhorar} a melhorar</span>
@@ -85,8 +85,8 @@ export default function DiagnosticoDoPerfil({ perfil, diagnostico, onDiagnostico
                   <span className={juntar(etiqueta, "ml-2 shrink-0", ESTADO[l.estado].classe)}>{ESTADO[l.estado].rotulo}</span>
                   <span className="ml-auto shrink-0 pl-2 text-[11px] text-muted-foreground">{FONTE[l.fonte] || ""}</span>
                 </div>
-                {l.detalhe && <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{l.detalhe}</p>}
-                {l.como_corrigir && <p className="mt-0.5 text-[12.5px] leading-5 text-foreground [overflow-wrap:anywhere]">{l.como_corrigir}</p>}
+                {l.detalhe && <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">{l.detalhe}</p>}
+                {l.como_corrigir && <p className="mt-0.5 text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{l.como_corrigir}</p>}
                 {l.parte === "fixados" && diagnostico.para_fixar.length > 0 && (
                   <ul className="mt-1 space-y-0.5">
                     {diagnostico.para_fixar.map((p, i) => (

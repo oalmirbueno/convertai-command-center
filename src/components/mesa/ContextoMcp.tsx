@@ -68,7 +68,7 @@ export default function ContextoMcp() {
   };
 
   if (lista.isLoading) return <Carregando forma="lista" linhas={3} rotulo="Lendo o que chegou pelo MCP" />;
-  if (lista.isError) return <EstadoDeErro descricao={textoDoErro(lista.error)} acao={<button type="button" className="text-[12.5px] underline" onClick={() => void lista.refetch()}>Tentar de novo</button>} />;
+  if (lista.isError) return <EstadoDeErro descricao={textoDoErro(lista.error)} acao={<button type="button" className="text-[13px] underline" onClick={() => void lista.refetch()}>Tentar de novo</button>} />;
   const dados = lista.data || { itens: [], tabela: true };
   const itens = filtrarItensMcp(dados.itens, filtro);
 
@@ -84,7 +84,7 @@ export default function ContextoMcp() {
         )}
       </div>
       {!dados.tabela && dados.itens.length > 0 && (
-        <p className="text-[11.5px] text-muted-foreground">Valem os padrões (orientações e dossiê ligados). Para trocar, falta aplicar o SQL M-01.</p>
+        <p className="text-[12px] text-muted-foreground">Valem os padrões (orientações e dossiê ligados). Para trocar, falta aplicar o SQL M-01.</p>
       )}
       {dados.itens.length === 0 ? (
         <EstadoVazio
@@ -103,7 +103,7 @@ export default function ContextoMcp() {
               <li key={chave} className="flex min-w-0 items-start py-2.5" data-item-mcp={chave} data-ativo={i.ativo ? "sim" : "nao"}>
                 <div className="mr-3 min-w-0 flex-1">
                   <p className="flex min-w-0 items-center text-[13px]">
-                    <span className="mr-1.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">{ROTULO_DA_FONTE[i.fonte]}</span>
+                    <span className="mr-1.5 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{ROTULO_DA_FONTE[i.fonte]}</span>
                     <span className="min-w-0 truncate font-medium">{i.titulo}</span>
                   </p>
                   <p className="mt-0.5 truncate text-[12px] text-muted-foreground">

@@ -163,7 +163,7 @@ export default function ReferenciasDoEstudio({
           <Lock className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <span className="min-w-0 flex-1">Trabalho entregue: as referências não mudam. Reabra para corrigir.</span>
           {onReabrir && (
-            <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2 text-[11.5px]" onClick={onReabrir}>
+            <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2 text-[12px]" onClick={onReabrir}>
               Reabrir
             </Button>
           )}
@@ -197,7 +197,7 @@ export default function ReferenciasDoEstudio({
           </p>
           {salvando > 0 && <Loader2 className="ml-2 mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
           {alvoReal === "lamina" && daLamina.length > 0 && (
-            <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[11.5px]" onClick={() => gravar([])}>
+            <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[12px]" onClick={() => gravar([])}>
               Usar as do conjunto
             </Button>
           )}
@@ -223,7 +223,7 @@ export default function ReferenciasDoEstudio({
         {extrasDoEstudio && escolhidas.length > 0 && (
           <div className="min-w-0 space-y-2 pt-1">
             <div className="min-w-0">
-              <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <p className="mb-1 text-[11px] font-medium text-muted-foreground">
                 Fidelidade à referência{alvoReal === "lamina" && cardSelecionado ? ` (lâmina ${cardSelecionado.ordem})` : " (trabalho)"}
               </p>
               <EstudioFidelidadeDaReferencia

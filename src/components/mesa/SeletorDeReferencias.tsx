@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { botao as estiloDoBotao } from "@/components/sistema/estilos";
+import { botao as estiloDoBotao, superficie } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { resolveFileUrl } from "@/lib/fileUrls";
 import { urlLeve } from "@/lib/miniaturas";
@@ -229,7 +229,7 @@ export function SeloDoPapel({ papel, className = "" }: { papel: PapelDaReferenci
       <TooltipTrigger asChild>
         <span
           tabIndex={0}
-          className={`inline-block max-w-full cursor-help truncate rounded-full px-1.5 py-px text-[10px] font-medium ${
+          className={`inline-block max-w-full cursor-help truncate rounded-full px-1.5 py-px text-[11px] font-medium ${
             papel === "identidade" ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
           } ${className}`}
         >
@@ -244,7 +244,7 @@ export function SeloDoPapel({ papel, className = "" }: { papel: PapelDaReferenci
 /** Uma linha que explica os dois papéis (com tooltip em cada um). */
 export function LegendaDosPapeis() {
   return (
-    <p className="flex min-w-0 flex-wrap items-center text-[11.5px] leading-relaxed text-muted-foreground">
+    <p className="flex min-w-0 flex-wrap items-center text-[12px] leading-relaxed text-muted-foreground">
       <Info className="mr-1 h-3.5 w-3.5 shrink-0" />
       <span className="mr-1">
         <SeloDoPapel papel="identidade" /> o estilo que a marca já usa.
@@ -447,7 +447,7 @@ export default function SeletorDeReferencias({
                 // 16/10/2026: aba só com o ícone; o nome vai no title e no leitor de tela, a contagem fica como número pequeno.
                 aria-label={a.rotulo}
                 title={a.rotulo}
-                className={`mr-1 flex h-9 min-w-9 shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-1.5 text-[12.5px] transition-colors ${
+                className={`mr-1 flex h-9 min-w-9 shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-1.5 text-[13px] transition-colors ${
                   aba === a.valor ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -458,7 +458,7 @@ export default function SeletorDeReferencias({
           })}
         </div>
         {escolher && (
-          <span className="mb-2 ml-2 shrink-0 text-[11.5px] tabular-nums text-muted-foreground" aria-live="polite">
+          <span className="mb-2 ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground" aria-live="polite">
             {selecionados.length} de {max}
           </span>
         )}
@@ -636,7 +636,7 @@ function AbaDoCliente({
               type="button"
               onClick={() => setFiltro(f)}
               aria-pressed={filtro === f}
-              className={`mb-1 mr-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] transition-colors ${
+              className={`mb-1 mr-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition-colors ${
                 filtro === f ? "border-primary bg-primary/10 font-medium text-primary" : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -654,7 +654,7 @@ function AbaDoCliente({
       </div>
       <LegendaDosPapeis />
       {emDestaque > 0 && (
-        <p className="flex items-center text-[11.5px] text-muted-foreground">
+        <p className="flex items-center text-[12px] text-muted-foreground">
           <Star className="mr-1 h-3.5 w-3.5 fill-amber-400 text-amber-400" />
           {emDestaque === 1 ? "1 em destaque, primeiro na lista. O diretor de arte usa sempre." : `${emDestaque} em destaque, primeiro na lista. O diretor de arte usa sempre.`}
         </p>
@@ -763,7 +763,7 @@ function AbaDoWorkspace({
 
   return (
     <div className="min-w-0 space-y-2">
-      <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+      <p className="text-[12px] leading-relaxed text-muted-foreground">
         As mesmas pastas do Workspace do cliente. Abra a pasta e escolha: a imagem entra como {PAPEIS.tecnica.rotulo.toLowerCase()}.
       </p>
       <ExploradorDePastas<NoDoWorkspace>
@@ -795,7 +795,7 @@ function AbaDoWorkspace({
                         </span>
                       )}
                     </Retrato>
-                    <p className="mt-1 flex min-w-0 items-center text-[10.5px] text-muted-foreground">
+                    <p className="mt-1 flex min-w-0 items-center text-[11px] text-muted-foreground">
                       {emUso ? <SeloDoPapel papel={ref.papel} className="mr-1 shrink-0" /> : null}
                       <span className="min-w-0 truncate">{n.name}</span>
                     </p>
@@ -855,7 +855,7 @@ function AbaDoBanco({
   return (
     <div className="min-w-0 space-y-2.5">
       {/* 18/10: explicação no "?" (SISTEMA.md seção 5); na tela só a linha curta. */}
-      <p className="flex items-center text-[11.5px] leading-relaxed text-muted-foreground">
+      <p className="flex items-center text-[12px] leading-relaxed text-muted-foreground">
         Referências do Pinterest da agência, já lidas pela IA.
         <AjudaRecolhida className="ml-1" rotulo="Como buscar no banco">
           As referências do quadro do Pinterest da agência, já lidas pela IA. Busque pela técnica (ex.: tipografia, recorte, colagem).
@@ -863,7 +863,7 @@ function AbaDoBanco({
       </p>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no título, na leitura ou nas tags" aria-label="Buscar no banco da agência" className="h-9 pl-8 text-[12.5px]" />
+        <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no título, na leitura ou nas tags" aria-label="Buscar no banco da agência" className="h-9 pl-8 text-[13px]" />
       </div>
       {(tags.data || []).length > 0 && (
         <div className="flex flex-wrap lg:max-h-[4.5rem] lg:overflow-y-auto lg:overscroll-contain">
@@ -907,7 +907,7 @@ function AbaDoBanco({
                     <ImagemDeReferencia fonte={fonteDaGlobal(g)} alt={g.titulo || "Referência do banco da agência"} className="h-full w-full" />
                   </button>
                 </Retrato>
-                {g.titulo && <p className="mt-1 truncate text-[10.5px] text-muted-foreground">{g.titulo}</p>}
+                {g.titulo && <p className="mt-1 truncate text-[11px] text-muted-foreground">{g.titulo}</p>}
                 {escolher && <BotaoUsar marcada={marcada} bloqueada={cheio} onClick={() => onAlternar(id)} />}
               </li>
             );
@@ -1007,7 +1007,7 @@ function AbaDoPinterest({
 
   return (
     <div className="min-w-0 space-y-3">
-      <div className="rounded-xl border border-border bg-card p-3">
+      <div className={`${superficie.painel} p-3`}>
         <p className="text-[12px] leading-relaxed text-muted-foreground">
           Cole aqui o link do pin. Ele entra como {PAPEIS.tecnica.rotulo.toLowerCase()}.
           <AjudaRecolhida className="ml-1 align-middle" rotulo="Como copiar o link do pin">
@@ -1026,7 +1026,7 @@ function AbaDoPinterest({
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>
           <form onSubmit={(e) => void adicionar(e)} className="mb-2 flex min-w-0 flex-1 basis-64">
-            <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Colar link de pin" aria-label="Link do pin" className="h-9 min-w-0 flex-1 text-[12.5px]" />
+            <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Colar link de pin" aria-label="Link do pin" className="h-9 min-w-0 flex-1 text-[13px]" />
             <Button type="submit" size="sm" className="ml-2 h-9 w-9 shrink-0 p-0" disabled={!link.trim() || enviando} aria-label="Adicionar o pin" title="Adicionar o pin">
               {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
             </Button>
@@ -1036,7 +1036,7 @@ function AbaDoPinterest({
           <button type="button" className={`${botaoIcone} mb-1 mr-2`} disabled={subindo} onClick={() => arquivo.current && arquivo.current.click()} aria-label="Subir imagem" title="Subir imagem">
             {subindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
           </button>
-          <span className="mb-1 min-w-0 text-[11.5px] text-muted-foreground">Print ou arquivo do computador (JPG, PNG ou WEBP).</span>
+          <span className="mb-1 min-w-0 text-[12px] text-muted-foreground">Print ou arquivo do computador (JPG, PNG ou WEBP).</span>
           <input
             ref={arquivo}
             type="file"
@@ -1055,7 +1055,7 @@ function AbaDoPinterest({
 
       {pins.length > 0 && (
         <div className="min-w-0 space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pins e imagens enviadas ({pins.length})</p>
+          <p className="text-[11px] font-medium text-muted-foreground">Pins e imagens enviadas ({pins.length})</p>
           <div className="min-w-0 overflow-y-auto pr-0.5" style={{ maxHeight: alturaMax }}>
             <ul className={`grid gap-2 ${grade}`}>
               {pins.map((r, i) => {

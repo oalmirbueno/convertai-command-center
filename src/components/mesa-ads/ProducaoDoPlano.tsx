@@ -76,7 +76,7 @@ export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoC
           title={t.dica}
           onClick={() => onMudar(t.valor)}
           className={juntar(
-            "inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded px-3 text-[12.5px] font-medium transition-colors",
+            "inline-flex h-8 min-w-0 items-center justify-center whitespace-nowrap rounded px-3 text-[13px] font-medium transition-colors",
             valor === t.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             foco,
           )}
@@ -298,7 +298,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
       {trocando && !andamento && (
         <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-2" aria-label="Trocar a produção">
           <div className="min-w-0">
-            <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Formatos</p>
+            <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formatos</p>
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Formatos">
               <button
                 type="button"
@@ -335,12 +335,12 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
             </div>
           </div>
           <div className="min-w-0">
-            <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Tom</p>
+            <p className="mb-1 text-[12px] font-medium text-muted-foreground">Tom</p>
             <SeletorDeTom valor={tom} onMudar={setTom} rotulo="Tom dos criativos" />
           </div>
           {angulos.some((a) => (a.referencia_ids || []).length > 0) && (
             <div className="min-w-0">
-              <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Referência do ângulo</p>
+              <p className="mb-1 text-[12px] font-medium text-muted-foreground">Referência do ângulo</p>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <label className="inline-flex items-center text-[12px] text-muted-foreground">
                   <input type="checkbox" className="mr-1.5" checked={!!fidelidade} onChange={(e) => setFidelidade(e.target.checked ? "proximo" : "")} />
@@ -351,7 +351,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
             </div>
           )}
           <div className="min-w-0">
-            <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Modelo da copy</p>
+            <p className="mb-1 text-[12px] font-medium text-muted-foreground">Modelo da copy</p>
             <SeletorDoModeloDaCopy estado={modelo} />
           </div>
           <div className="flex min-w-0 flex-wrap items-center">

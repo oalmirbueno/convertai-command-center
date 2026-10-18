@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Loader2, PencilLine, X, Clock3 } from "lucide-react";
-import { AjudaRecolhida, botao, campoTexto, foco, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, botao, campoTexto, foco, juntar, texto, superficie } from "@/components/sistema";
 
 /*
  * Mesa de decisão (15/10/2026, pedido do dono: "um quadro central, eu aprovo,
@@ -192,7 +192,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
         ir(dx < 0 ? 1 : -1);
       }}
       className={juntar(
-        "rounded-lg border border-border bg-card shadow-sm transition-all duration-200 sm:overflow-hidden",
+        superficie.painel, "transition-all duration-200 sm:overflow-hidden",
         !saindo && "animate-in fade-in-0 slide-in-from-right-4",
         saindo === "aprovado" && "translate-x-8 opacity-0",
         saindo === "outro" && "-translate-x-8 opacity-0",
@@ -208,7 +208,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
               <span className={juntar("mt-0.5 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium", TOM_DO_SELO[item.tomDoTipo ?? "primario"])}>{item.tipo}</span>
             </span>
           </header>
-          <h3 className="mt-3 line-clamp-2 text-[17px] font-semibold leading-snug text-foreground" title={item.titulo}>{item.titulo}</h3>
+          <h3 className="mt-3 line-clamp-2 text-[15px] font-semibold leading-snug text-foreground" title={item.titulo}>{item.titulo}</h3>
           {item.mensagem && <p className="mt-2 whitespace-pre-wrap sm:max-h-72 sm:overflow-y-auto text-[14px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{item.mensagem}</p>}
           {item.diagrama && <div className="mt-4 rounded-xl bg-muted/30 p-3 sm:p-4">{item.diagrama}</div>}
           {item.passo && <p className="mt-2 flex items-start text-[13px] text-muted-foreground"><ChevronRight className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{item.passo}</span></p>}

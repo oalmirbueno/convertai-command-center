@@ -193,7 +193,7 @@ export default function IntegrationsManager() {
                   </div>
 
                   {cfg.description && (
-                    <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground">{cfg.description}</p>
+                    <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{cfg.description}</p>
                   )}
 
                   <p className={juntar(texto.auxiliar, "mt-1 truncate")}>

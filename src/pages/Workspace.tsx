@@ -40,14 +40,21 @@ import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel"
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
 import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
 import { Sparkles } from "lucide-react";
-import { StudioPanel } from "@/components/workspace/StudioPanel";
+import { lazyDiscreto } from "@/lib/lazyComPreCarga";
 import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, mensagemDaFuncao, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 import { urlsLevesEmLote } from "@/lib/miniaturas";
 // Frente OR (29/09): o "Organizar" do cliente vê as imagens (carrosséis, antes e depois, duplicatas) com prévia e Desfazer.
-import OrganizadorInteligente from "@/components/workspace/OrganizadorInteligente";
+// 18/10 (painel otimizado): o Estúdio flutuante (quase 200 KB) e o Organizador
+// eram mais da metade do arquivo do Workspace. A lista de arquivos aparece
+// antes; o Estúdio chega logo depois, e o Organizador quando abre ou no ocioso.
+const StudioPanel = lazyDiscreto("workspace/estudio", () => import("@/components/workspace/StudioPanel").then((m) => ({ default: m.StudioPanel })), () => true);
+const OrganizadorInteligente = lazyDiscreto("workspace/organizador", () => import("@/components/workspace/OrganizadorInteligente"), (p) => p.aberto);
+
+const COLUNAS_DO_NO =
+  "id, parent_id, scope, client_id, kind, name, mime, size_bytes, storage_path, duration_sec, sort_index, sent_for_approval_file_id, created_by, created_at, inbox_scan_status";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -414,7 +421,9 @@ export default function Workspace() {
     queryKey: ["workspace-nodes", scope, clientId, parent?.id || null],
     queryFn: async () => {
       if (parent?.id && isVirt(parent.id)) return [] as Node[];
-      let q: any = (supabase as any).from("workspace_nodes").select("*").eq("scope", scope);
+      // Só as colunas do tipo Node: o "*" trazia junto o token da caixa de entrada
+      // (inbox_token) e os carimbos dele, que a tela não lê.
+      let q: any = (supabase as any).from("workspace_nodes").select(COLUNAS_DO_NO).eq("scope", scope);
       if (scope === "client") q = q.eq("client_id", clientId!);
       q = parent ? q.eq("parent_id", parent.id) : q.is("parent_id", null);
       q = q.order("kind", { ascending: true }).order("sort_index", { ascending: true }).order("name", { ascending: true });

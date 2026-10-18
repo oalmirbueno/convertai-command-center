@@ -173,7 +173,7 @@ export default function ContextoMarca() {
               <Button type="button" size="icon" variant="ghost" className="h-9 w-9 sm:order-last" onClick={() => setPaleta((p) => p.filter((_, j) => j !== i))} aria-label="Remover cor">
                 <Trash2 className="h-4 w-4" />
               </Button>
-              <Input value={cor.hex} onChange={(e) => mudarCor(i, "hex", e.target.value)} className="col-span-3 h-9 font-mono text-xs sm:col-span-1" />
+              <Input value={cor.hex} onChange={(e) => mudarCor(i, "hex", e.target.value)} className="col-span-3 h-9 font-mono text-[12px] leading-4 sm:col-span-1" />
               <div className="col-span-3 min-w-0 sm:col-span-1">
                 <Select value={papelNaTela(cor.papel)} onValueChange={(v) => mudarCor(i, "papel", v)}>
                   <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>

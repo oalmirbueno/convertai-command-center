@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: state.signedIn ? { id: "operator" } : null, profile: { role: state.role, full_name: "Operador" }, loading: false }) }));
 vi.mock("@/components/AppLayout", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("@/hooks/useSupabaseData", () => ({ useClients: () => ({ data: state.clients }), useProjects: () => ({ data: state.empty }) }));
-vi.mock("@/hooks/useFinancialData", () => ({ useBilling: () => ({ data: state.empty }) }));
+vi.mock("@/hooks/useFinancialData", () => ({ useBilling: () => ({ data: state.empty }), useCobrancasPendentes: () => ({ data: state.empty }) }));
 vi.mock("@/hooks/useSocialMetrics", async (importOriginal) => ({ ...await importOriginal<object>(), useSocialMetricsWeekly: () => ({ data: state.empty }) }));
 vi.mock("@/hooks/useAdsMetrics", () => ({ useAdsCampaigns: () => ({ data: state.empty }), useAdsDaily: () => ({ data: state.empty }) }));
 vi.mock("@/hooks/useNow", () => ({ useNow: () => state.now }));

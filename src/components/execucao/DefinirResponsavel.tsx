@@ -146,9 +146,9 @@ export default function DefinirResponsavel({
                             <span className="block truncate text-[13px] text-foreground">
                               {p.full_name || "(sem nome)"}
                             </span>
-                            <span className="block text-[11.5px] text-muted-foreground">{p.role}</span>
+                            <span className="block text-[12px] text-muted-foreground">{p.role}</span>
                           </span>
-                          {atual && <span className="ml-2 text-[11.5px] font-medium text-primary">atual</span>}
+                          {atual && <span className="ml-2 text-[12px] font-medium text-primary">atual</span>}
                         </button>
                       </li>
                     );

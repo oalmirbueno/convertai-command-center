@@ -126,9 +126,9 @@ export default function CartaoDaIdentificacao({ identificacao, acoes, compacto =
       <div className="flex min-w-0 items-start">
         <PackageSearch className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold [overflow-wrap:anywhere]">{nome || "Produto não identificado"}</p>
+          <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{nome || "Produto não identificado"}</p>
           {p && (
-            <p className="text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">
+            <p className="text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
               {[p.marca && `Marca ${p.marca}`, p.modelo && `modelo ${p.modelo}`, p.variante && `variante ${p.variante}`, p.categoria].filter(Boolean).join(" · ")}
               {p.confianca ? ` · confiança ${p.confianca}` : ""}
             </p>
@@ -148,7 +148,7 @@ export default function CartaoDaIdentificacao({ identificacao, acoes, compacto =
           <Globe className="mr-1 h-3.5 w-3.5" /> Referências da internet · {refs.length}
         </p>
         {refs.length === 0 ? (
-          <p className="text-[11.5px] text-muted-foreground">A internet não confirmou fotos deste modelo. O produto segue com as fotos do cliente.</p>
+          <p className="text-[12px] text-muted-foreground">A internet não confirmou fotos deste modelo. O produto segue com as fotos do cliente.</p>
         ) : (
           <ul className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6">
             {refs.map((r, i) => {
@@ -159,12 +159,12 @@ export default function CartaoDaIdentificacao({ identificacao, acoes, compacto =
                     {f ? <MiniaturaDaFoto foto={f} /> : <span className="block rounded-lg bg-muted" style={{ paddingBottom: "100%" }} />}
                   </button>
                   {r.pagina ? (
-                    <a href={r.pagina} target="_blank" rel="noopener noreferrer" className="mt-0.5 flex min-w-0 items-center text-[10.5px] text-primary hover:underline" title={r.pagina}>
+                    <a href={r.pagina} target="_blank" rel="noopener noreferrer" className="mt-0.5 flex min-w-0 items-center text-[11px] text-primary hover:underline" title={r.pagina}>
                       <span className="truncate">{r.fonte || "página"}</span>
                       <ExternalLink className="ml-0.5 h-2.5 w-2.5 shrink-0" />
                     </a>
                   ) : (
-                    <span className="mt-0.5 block truncate text-[10.5px] text-muted-foreground">{r.fonte || "sem fonte"}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{r.fonte || "sem fonte"}</span>
                   )}
                 </li>
               );
@@ -178,14 +178,14 @@ export default function CartaoDaIdentificacao({ identificacao, acoes, compacto =
       </div>
 
       {identificacao.aviso_jev && (
-        <p className="flex items-start rounded-lg bg-warning/10 px-2 py-1 text-[11.5px] leading-snug" data-aviso-jev="">
+        <p className="flex items-start rounded-lg bg-warning/10 px-2 py-1 text-[12px] leading-snug" data-aviso-jev="">
           <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-warning" /> <span className="min-w-0 [overflow-wrap:anywhere]">{identificacao.aviso_jev}</span>
         </p>
       )}
       {identificacao.lacunas.length > 0 && (
         <div className="min-w-0">
           {identificacao.lacunas.filter((l) => l !== identificacao.aviso_jev).map((l) => (
-            <p key={l} className="flex items-start text-[11.5px] leading-snug">
+            <p key={l} className="flex items-start text-[12px] leading-snug">
               <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-warning" /> <span className="min-w-0 [overflow-wrap:anywhere]">{l}</span>
             </p>
           ))}

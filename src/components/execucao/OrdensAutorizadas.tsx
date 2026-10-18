@@ -134,13 +134,13 @@ export default function OrdensAutorizadas() {
               let site = "";
               try { site = ehLink ? new URL(prova).hostname.replace(/^www\./, "") : ""; } catch { site = ""; }
               return (
-                <li key={o.id} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+                <li key={o.id} className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden")}>
                   {ehArquivo && <div className="border-b border-border"><EvidenciaVisual url={prova} nome="Prova do que foi feito" compacto /></div>}
                   <div className="flex min-w-0 flex-1 flex-col p-3.5">
                     <span className="inline-flex w-fit items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Feito no mundo</span>
                     <p className="mt-2 line-clamp-2 text-[14px] font-medium leading-snug text-foreground [overflow-wrap:anywhere]" title={o.o_que}>{limparTecnico(String(o.o_que || "Ordem cumprida"))}</p>
                     <p className="mt-auto flex items-center gap-1.5 pt-3 text-[12px] text-muted-foreground">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground" aria-hidden="true">{String(o.agente || "?").trim()[0]?.toUpperCase()}</span>
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground" aria-hidden="true">{String(o.agente || "?").trim()[0]?.toUpperCase()}</span>
                       <span className="min-w-0 truncate">{o.agente}</span><span className="shrink-0">· {quando(o.executed_at)}</span>
                       {ehLink && !ehArquivo && <a href={prova} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex shrink-0 items-center text-primary hover:underline"><ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" />Ver a prova{site ? ` (${site})` : ""}</a>}
                     </p>

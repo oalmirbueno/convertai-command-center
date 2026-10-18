@@ -401,7 +401,7 @@ export default function AdminQuizSubmissions() {
                       <span className={juntar(etiqueta, "border font-mono", score.className)}>{score.label}</span>
                     </td>
                     <td className={juntar(texto.corpo, "py-2.5 pr-3")}>{planLabel}</td>
-                    <td className="whitespace-nowrap py-2.5 pr-3 text-[12.5px] tabular-nums text-muted-foreground">
+                    <td className="whitespace-nowrap py-2.5 pr-3 text-[12px] tabular-nums text-muted-foreground">
                       {lastActivity ? format(new Date(lastActivity), "dd MMM yyyy · HH:mm", { locale: ptBR }) : "-"}
                     </td>
                     <td className="py-2.5 pr-3">

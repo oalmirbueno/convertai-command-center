@@ -696,7 +696,7 @@ function ResultScreen({ score, plan, leadName }: { score: number; plan: string; 
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[28px] font-semibold leading-8 tabular-nums text-primary">{Math.round(score)}</span>
+            <span className="text-[24px] font-semibold leading-8 tabular-nums text-primary">{Math.round(score)}</span>
             <span className={texto.auxiliar}>ICP Score</span>
           </div>
         </div>

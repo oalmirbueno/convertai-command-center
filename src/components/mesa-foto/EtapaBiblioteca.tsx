@@ -776,7 +776,7 @@ export function ExemplosDaBiblioteca() {
                 {modo === "nao_batem" ? `; ${previa.a_limpar} não ${previa.a_limpar === 1 ? "bate" : "batem"} com o prompt` : ""}.
               </p>
               {modo === "nao_batem" && previa.itens.length > 0 && (
-                <ul className="mt-1 text-[11.5px] text-muted-foreground lg:max-h-40 lg:overflow-y-auto lg:overscroll-contain">
+                <ul className="mt-1 text-[12px] text-muted-foreground lg:max-h-40 lg:overflow-y-auto lg:overscroll-contain">
                   {previa.itens.slice(0, 60).map((i) => (
                     <li key={i.id} className="truncate">
                       {i.titulo}
@@ -803,7 +803,7 @@ export function ExemplosDaBiblioteca() {
         </div>
         <div className="min-w-0 space-y-2" data-gerar-exemplos="">
           <p className="text-[12px] font-medium">2. Gerar o exemplo com o próprio prompt</p>
-          <p className="truncate text-[11.5px] text-muted-foreground" title="Uma imagem por prompt, no gerador mais barato de boa qualidade.">
+          <p className="truncate text-[12px] text-muted-foreground" title="Uma imagem por prompt, no gerador mais barato de boa qualidade.">
             Cobra na carteira de {clientName || "o cliente aberto"}.
           </p>
           {!estimativa ? (
@@ -821,7 +821,7 @@ export function ExemplosDaBiblioteca() {
                   <span className="mr-2 inline-flex items-center">
                     <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> {andamento.feitos} de {andamento.total} · {usd(andamento.custo)}
                   </span>
-                  <Button type="button" size="sm" variant="ghost" className="h-7 text-[11.5px]" onClick={() => (parar.current = true)}>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" onClick={() => (parar.current = true)}>
                     Parar
                   </Button>
                 </div>

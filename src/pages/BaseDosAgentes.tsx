@@ -476,7 +476,7 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
       <div className="flex min-w-0 items-start">
         <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setAberta((v) => !v)} aria-expanded={aberta}>
           <p className="text-[13px] font-semibold leading-5 text-foreground">{ficha.titulo}</p>
-          <p className={juntar("mt-0.5 text-[12.5px] leading-5 text-foreground/85", !aberta && "line-clamp-2")}>{ficha.tecnica}</p>
+          <p className={juntar("mt-0.5 text-[13px] leading-5 text-foreground/85", !aberta && "line-clamp-2")}>{ficha.tecnica}</p>
           {aberta && ficha.quando_usar && <p className="mt-1 text-[12px] text-muted-foreground"><span className="font-medium text-foreground">Quando usar:</span> {ficha.quando_usar}</p>}
           {aberta && ficha.exemplo && <p className="mt-1 text-[12px] text-muted-foreground"><span className="font-medium text-foreground">Exemplo:</span> {ficha.exemplo}</p>}
         </button>
@@ -487,7 +487,7 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
           Esta ficha está atrapalhando ({resumoDoResultado(resultadoDe(ficha))}) e já não entra nas gerações. Desligue ou edite.
         </p>
       )}
-      <div className="mt-2 flex min-w-0 flex-wrap items-center text-[11.5px] text-muted-foreground [&>*]:mr-2.5">
+      <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mr-2.5">
         <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? origemDaFonte(fonte) : "À mão"}</span>
         {cliente && <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Só {cliente}</span>}
         {!ficha.ativa && ficha.arquivada_por && (
@@ -566,7 +566,7 @@ function ListaDeFontes({ fontes, podeApagar, nomeDoCliente, aoMudar }: { fontes:
     <Secao titulo="O que ele recebeu" descricao={<span><strong className="tabular-nums text-foreground">{fontes.length}</strong> fontes</span>}>
       <ul className="divide-y divide-border">
         {fontes.map((f) => (
-          <li key={f.id} className="flex min-w-0 items-center py-2 text-[12.5px]">
+          <li key={f.id} className="flex min-w-0 items-center py-2 text-[13px]">
             <span className="mr-2 shrink-0">
               {f.tipo === "pesquisa" ? <Globe className="h-3.5 w-3.5 text-info" /> : f.tipo === "link" ? <Link2 className="h-3.5 w-3.5" /> : f.tipo === "documento" ? <Upload className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
             </span>

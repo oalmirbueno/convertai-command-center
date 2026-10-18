@@ -224,7 +224,7 @@ function ConversaDeContexto({
               onAtalho={(t) => (t === ORGANIZAR_O_WORKSPACE ? navigate(`/workspace?client=${clientId}&organizar=1`) : setTexto(t))}
             />
           )}
-          {pendente && progresso && <p role="status" className="text-xs text-muted-foreground">{progresso}</p>}
+          {pendente && progresso && <p role="status" className="text-[12px] leading-4 text-muted-foreground">{progresso}</p>}
           <ZonaDeAnexos anexos={arquivos.comoAnexos()} rotulo="Solte os documentos e imagens do cliente">
           <MiniaturasDosAnexos anexos={anexos} />
           <ListaDeArquivos arquivos={arquivos} />
@@ -243,7 +243,7 @@ function ConversaDeContexto({
             disabled={!!pendente}
           />
           </ZonaDeAnexos>
-          {(modo === "plano" || temMaterial || temLinkNoPedido(texto)) && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {(modo === "plano" || temMaterial || temLinkNoPedido(texto)) && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-4 text-muted-foreground">
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={executar} onChange={e => setExecutar(e.target.checked)} disabled={!!pendente} /> Aplicar meus pedidos</label>
             <label className="flex items-center gap-1.5" title="Consulta fontes externas quando necessário; prioriza seus documentos"><input type="checkbox" checked={pesquisarWeb} onChange={e => setPesquisarWeb(e.target.checked)} disabled={!!pendente} /> Pesquisar quando necessário</label>
           </div>}

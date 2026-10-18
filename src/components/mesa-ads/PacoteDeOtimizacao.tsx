@@ -47,7 +47,7 @@ export function BaixarPacoteDeOtimizacao({ dias, className = "" }: { dias: numbe
       <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={progresso !== null} onClick={() => void baixar()} title="Prompt completo, dados em CSV, miniaturas e artes num .zip para o agente externo. Grátis." aria-label="Baixar pacote de otimização (.zip)">
         {progresso !== null ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
       </button>
-      {progresso && <span className="ml-2 text-[11.5px] text-muted-foreground" role="status">{progresso}</span>}
+      {progresso && <span className="ml-2 text-[12px] text-muted-foreground" role="status">{progresso}</span>}
     </span>
   );
 }
@@ -150,7 +150,7 @@ export function ImportarPacote({ onImportado, className = "" }: { onImportado?: 
               <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" onClick={() => arquivoRef.current && arquivoRef.current.click()} disabled={lendo} aria-label="Escolher arquivo (.zip ou .json)" title="Escolher arquivo (.zip ou .json)">
                 <FileUp className="h-4 w-4" aria-hidden="true" />
               </button>
-              <span className="mb-1 text-[11.5px] text-muted-foreground">ou cole o texto abaixo</span>
+              <span className="mb-1 text-[12px] text-muted-foreground">ou cole o texto abaixo</span>
             </div>
             <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6} aria-label="Resposta do agente externo" placeholder='Cole a resposta com o bloco ```json { "formato": "mesa-ads-retorno", "criativos": [...] } ```' className="text-[12px]" />
             <div className="flex min-w-0 flex-wrap items-center">
@@ -163,7 +163,7 @@ export function ImportarPacote({ onImportado, className = "" }: { onImportado?: 
             {erro && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{erro}</p>}
             {entendido && (
               <div className="min-w-0 space-y-2 rounded-lg border border-border p-3" aria-label="O que a Mesa Ads entendeu">
-                <p className="text-[12.5px] font-semibold">
+                <p className="text-[13px] font-semibold">
                   Entendi {entendido.aceitos.length} criativo{entendido.aceitos.length === 1 ? "" : "s"}
                   {entendido.recusados.length ? ` e recusei ${entendido.recusados.length}` : ""}
                   {entendido.plano.nome ? ` para o plano "${entendido.plano.nome}"` : ""}.
@@ -189,7 +189,7 @@ export function ImportarPacote({ onImportado, className = "" }: { onImportado?: 
                     </ul>
                   </div>
                 )}
-                {entendido.avisos.map((a) => <p key={a} className="text-[11.5px] text-muted-foreground">{a}</p>)}
+                {entendido.avisos.map((a) => <p key={a} className="text-[12px] text-muted-foreground">{a}</p>)}
                 <div className="flex min-w-0 flex-wrap items-center pt-1">
                   <Button type="button" size="sm" className="mb-1 mr-2 h-9" disabled={!entendido.aceitos.length || criando} onClick={() => void criar()}>
                     {criando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}

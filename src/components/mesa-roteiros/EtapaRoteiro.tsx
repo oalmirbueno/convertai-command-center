@@ -370,7 +370,7 @@ function FormularioDeGeracao({
                 onClick={() => trocarTipo(m.valor)}
                 className={juntar("min-w-0 rounded-md border px-2.5 py-2 text-left transition-colors", tipo === m.valor ? "border-primary bg-primary/5" : "border-border hover:border-primary/40", foco)}
               >
-                <span className="block truncate text-[12.5px] font-semibold">{m.rotulo}</span>
+                <span className="block truncate text-[13px] font-semibold">{m.rotulo}</span>
                 <span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={m.estrutura.join(", ")}>
                   {m.estrutura.join(", ")}
                 </span>
@@ -686,7 +686,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
                 />
                 <span className="min-w-0 [overflow-wrap:anywhere]">{g.texto}</span>
               </label>
-              <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{[g.mecanismo, g.promessa ? `promete: ${g.promessa}` : ""].filter(Boolean).join(" · ")}</p>
+              <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{[g.mecanismo, g.promessa ? `promete: ${g.promessa}` : ""].filter(Boolean).join(" · ")}</p>
             </div>
           ))}
         </div>

@@ -154,7 +154,7 @@ export default function AdminBackfillPage() {
                     {result.errors.map((e, i) => (
                       <li key={i} className="min-w-0 py-2.5">
                         <p className={juntar(texto.auxiliar, "truncate font-mono")}>{e.token}</p>
-                        <p className="mt-0.5 font-mono text-[12.5px] leading-5 text-destructive [overflow-wrap:anywhere]">{e.error}</p>
+                        <p className="mt-0.5 font-mono text-[13px] leading-5 text-destructive [overflow-wrap:anywhere]">{e.error}</p>
                       </li>
                     ))}
                   </ul>

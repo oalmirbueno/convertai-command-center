@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { chamarFuncao } from "@/lib/mesa/api";
 import type { ItemDoMes } from "./useItensDoMes";
+import { superficie } from "@/components/sistema/estilos";
 
 const emCurso = new Map<string, Promise<string>>();
 /** A ação oficial tem chave determinística por tema: repetir não duplica tarefas. */
@@ -22,5 +23,5 @@ export default function PautaPlanejada({ item, children, onPronta }: { item: Ite
   const [erro, setErro] = useState("");
   const [tentativa, setTentativa] = useState(0);
   useEffect(() => { let viva = true; setErro(""); void prepararPautaPlanejada(item).then((id) => { if (viva) { setId(id); onPronta?.(id); } }).catch((e) => { if (viva) setErro(e.message); }); return () => { viva = false; }; }, [item.id, tentativa]);
-  return id ? children({ ...item, id, planejamento: undefined }) : <div className="rounded-xl border bg-card p-6" role={erro ? "alert" : "status"}>{erro || "Preparando esta pauta na Agenda…"}{erro && <button className="ml-3 text-primary" onClick={() => setTentativa((v) => v + 1)}>Tentar novamente</button>}</div>;
+  return id ? children({ ...item, id, planejamento: undefined }) : <div className={`${superficie.painel} p-6`} role={erro ? "alert" : "status"}>{erro || "Preparando esta pauta na Agenda…"}{erro && <button className="ml-3 text-primary" onClick={() => setTentativa((v) => v + 1)}>Tentar novamente</button>}</div>;
 }

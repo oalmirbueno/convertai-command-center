@@ -131,7 +131,7 @@ function ErroNaRegiao({ titulo, erro, onTentar, className = "" }: { titulo: stri
 
 function SeloGerada({ texto = "gerada" }: { texto?: string }) {
   return (
-    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
       <Sparkles className="mr-0.5 h-2.5 w-2.5" /> {texto}
     </span>
   );
@@ -288,7 +288,7 @@ function MenuDoItem({ rotulo, itens, className = "" }: { rotulo: string; itens: 
                   setAberto(false);
                   i.acao();
                 }}
-                className={`flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted disabled:opacity-50 ${i.perigo ? "text-destructive" : ""}`}
+                className={`flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted disabled:opacity-50 ${i.perigo ? "text-destructive" : ""}`}
               >
                 <span className="mr-2 shrink-0">{i.icone}</span>
                 <span className="min-w-0 truncate">{i.rotulo}</span>
@@ -335,7 +335,7 @@ function DialogoDeFotosDaGeracao({
               <li key={r.id} className="min-w-0">
                 <label className={`block cursor-pointer rounded-lg border p-0.5 ${marcada ? "border-primary" : "border-border opacity-60"}`}>
                   <MiniaturaDaFoto foto={r} selo={false} />
-                  <span className="mt-0.5 flex min-w-0 items-center text-[10.5px]">
+                  <span className="mt-0.5 flex min-w-0 items-center text-[11px]">
                     <input type="checkbox" className="mr-1 h-3.5 w-3.5 shrink-0" checked={marcada} onChange={() => alternar(r.id)} aria-label={`Usar ${r.nome}`} />
                     <span className="truncate">{r.principal ? "principal" : r.nome}</span>
                   </span>
@@ -344,7 +344,7 @@ function DialogoDeFotosDaGeracao({
             );
           })}
         </ul>
-        {n === 0 && <p className="text-[11.5px] text-warning">Escolha pelo menos 1 foto.</p>}
+        {n === 0 && <p className="text-[12px] text-warning">Escolha pelo menos 1 foto.</p>}
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={onFechar}>
             Cancelar
@@ -356,7 +356,7 @@ function DialogoDeFotosDaGeracao({
               </>
             }
             titulo={titulo}
-            className="h-9 text-[12.5px]"
+            className="h-9 text-[13px]"
             disabled={n === 0}
             fecharAoConfirmar
             partes={() => partes(Math.max(1, n))}
@@ -594,7 +594,7 @@ function EditorDeFotosDeOrigem({
                 </button>
               </>
             )}
-            {eh && !compacta && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary">principal</span>}
+            {eh && !compacta && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">principal</span>}
           </li>
         );
       })}
@@ -974,19 +974,19 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
                     <ImagemDaFolhaNaTela imagem={img} alt={`${c.nome}, ${v.rotulo}`} />
                   </button>
                 ) : (
-                  <span className={`flex h-full w-full flex-col items-center justify-center text-[10.5px] text-muted-foreground ${gerando ? "animate-pulse bg-muted" : ""}`}>
+                  <span className={`flex h-full w-full flex-col items-center justify-center text-[11px] text-muted-foreground ${gerando ? "animate-pulse bg-muted" : ""}`}>
                     {gerando && <Loader2 className="mb-1 h-4 w-4 animate-spin text-primary" />}
                     {gerando ? "gerando" : "vazia"}
                   </span>
                 )}
                 {img && <SeloGerada />}
                 {img && img.desatualizada && (
-                  <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[9.5px] font-semibold text-warning" data-vista-desatualizada="">
+                  <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[11px] font-semibold text-warning" data-vista-desatualizada="">
                     fotos antigas
                   </span>
                 )}
                 {img && gerando && (
-                  <span className="pointer-events-none absolute bottom-1 left-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[9.5px] text-muted-foreground">
+                  <span className="pointer-events-none absolute bottom-1 left-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground">
                     <Loader2 className="mr-0.5 h-2.5 w-2.5 animate-spin" /> gerando de novo
                   </span>
                 )}
@@ -1006,10 +1006,10 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
               </div>
               {img && img.aprovada === true && (
                 <div className="flex min-w-0 flex-wrap items-center">
-                  <span className="mr-1.5 inline-flex items-center text-[10.5px] font-medium text-success">
+                  <span className="mr-1.5 inline-flex items-center text-[11px] font-medium text-success">
                     <Check className="mr-0.5 h-3 w-3" /> aprovada
                   </span>
-                  <button type="button" className="text-[10.5px] text-muted-foreground hover:text-foreground" onClick={() => void decidir(img, "rejeitar")}>
+                  <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground" onClick={() => void decidir(img, "rejeitar")}>
                     tirar
                   </button>
                 </div>
@@ -1022,7 +1022,7 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
               {img && <BotaoConferirClone cloneId={c.id} imagemId={img.id} origem="folha" onConferencia={(x) => setConferencias({ ...conferencias, [img.id]: x })} />}
               {conf && <NotasDaSemelhanca c={conf} />}
               {a && a.estado === "falhou" && (
-                <p className="text-[10.5px] leading-snug text-destructive [overflow-wrap:anywhere]" role="alert">
+                <p className="text-[11px] leading-snug text-destructive [overflow-wrap:anywhere]" role="alert">
                   {a.erro}
                 </p>
               )}
@@ -1062,7 +1062,7 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
                   <Moldura proporcao={proporcaoDaImagem(img)} className="border border-border">
                     <ImagemDaFolhaNaTela imagem={img} alt={`${c.nome}, ${rotulo} (apagada)`} />
                   </Moldura>
-                  <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">{rotulo}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{rotulo}</p>
                   <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => void restaurar(img)} aria-label="Restaurar" title="Restaurar">
                     <RotateCcw className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -1133,7 +1133,7 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
   return (
     <div className="min-w-0" data-pelo-contexto="">
       <div className="flex min-w-0 flex-wrap items-center">
-        <Input value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Opcional: foco (ex.: atendendo o cliente, com as ferramentas)" aria-label="Foco das sugestões" className="mb-1.5 mr-1.5 h-9 min-w-0 flex-1 text-[12.5px]" />
+        <Input value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Opcional: foco (ex.: atendendo o cliente, com as ferramentas)" aria-label="Foco das sugestões" className="mb-1.5 mr-1.5 h-9 min-w-0 flex-1 text-[13px]" />
         <BotaoComCusto
           rotulo={
             <>
@@ -1176,7 +1176,7 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
                     <span className="truncate">{s.rotulo}</span>
                   </span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{[s.roupa, s.cenario].filter(Boolean).join(" · ")}</span>
-                  {s.porque && <span className="mt-0.5 block text-[10.5px] leading-snug text-primary [overflow-wrap:anywhere]">{s.porque}</span>}
+                  {s.porque && <span className="mt-0.5 block text-[11px] leading-snug text-primary [overflow-wrap:anywhere]">{s.porque}</span>}
                 </button>
               </li>
             );
@@ -1926,7 +1926,7 @@ function DialogoDeTransferir({ clone, aberto, onFechar }: { clone: Clone; aberto
         </DialogHeader>
         <div className="space-y-2">
           <Select value={destino} onValueChange={setDestino}>
-            <SelectTrigger className="h-9 text-[12.5px]" aria-label="Cliente de destino">
+            <SelectTrigger className="h-9 text-[13px]" aria-label="Cliente de destino">
               <SelectValue placeholder={clientes.isLoading ? "Carregando clientes" : "Escolha o cliente certo"} />
             </SelectTrigger>
             <SelectContent>
@@ -2135,7 +2135,7 @@ function DialogoDeDuplicar({ clone, onFechar, onAbrir }: { clone: Clone; onFecha
             <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 shrink-0" checked={levarFolha} onChange={(e) => setLevarFolha(e.target.checked)} aria-label="Levar as vistas aprovadas" />
             <span className="min-w-0">Levar as vistas aprovadas da folha (cópia dos arquivos, sem gerar de novo).</span>
           </label>
-          <p className="flex items-start text-[11.5px] leading-snug text-muted-foreground">
+          <p className="flex items-start text-[12px] leading-snug text-muted-foreground">
             <ShieldCheck className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 [overflow-wrap:anywhere]">{a ? `Vale a mesma autorização de ${a.quem} (${a.data}): ${a.finalidade}. A função confere de novo antes de criar.` : "Sem autorização registrada: não dá para duplicar."}</span>
           </p>

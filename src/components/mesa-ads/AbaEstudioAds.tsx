@@ -110,14 +110,14 @@ export const TODOS_NA_SITUACAO: Record<SituacaoDoCriativo, string> = {
 
 export function SeloDoStatus({ status }: { status: StatusDoCriativo }) {
   const s = STATUS_DO_CRIATIVO.find((x) => x.valor === status) || STATUS_DO_CRIATIVO[0];
-  return <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10.5px] font-medium ${s.tom}`}>{s.rotulo}</span>;
+  return <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium ${s.tom}`}>{s.rotulo}</span>;
 }
 
 export function SeloDaSituacao({ situacao }: { situacao: SituacaoDoCriativo }) {
   const s = situacaoDe(situacao);
   const andando = situacao === "gerando" || situacao === "conferindo" || situacao === "corrigindo";
   return (
-    <span data-situacao={situacao} className={`inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10.5px] font-medium ${s.tom}`}>
+    <span data-situacao={situacao} className={`inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium ${s.tom}`}>
       {andando && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
       {s.rotulo}
     </span>
@@ -554,7 +554,7 @@ export default function AbaEstudioAds({
                 </>
               )}
               {midia === "arte" && selo && (
-                <span className={juntar("ml-1.5 inline-flex h-5 items-center rounded-full px-2 align-middle text-[10.5px] font-medium", unica ? unica.tom : "")} data-selo-da-situacao={unica ? unica.valor : ""}>
+                <span className={juntar("ml-1.5 inline-flex h-5 items-center rounded-full px-2 align-middle text-[11px] font-medium", unica ? unica.tom : "")} data-selo-da-situacao={unica ? unica.valor : ""}>
                   {selo}
                 </span>
               )}
@@ -621,7 +621,7 @@ export default function AbaEstudioAds({
             <ImportarPacote onImportado={onImportado} className="mb-1 mr-2" />
             {planoEmFoco && (
               <span className="mb-1 flex min-w-0 flex-wrap items-center">
-                <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Copy do plano:</span>
+                <span className="mb-1 mr-2 text-[12px] text-muted-foreground">Copy do plano:</span>
                 <span className="mb-1 mr-2 inline-flex items-center">
                   <BotaoComCusto
                     rotulo="Pacote de copy de todos"
@@ -697,7 +697,7 @@ export default function AbaEstudioAds({
         data-estudio-ads-grade=""
       >
         <aside className="ads-creative-list min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain" aria-label={midia === "video" ? "Criativos de vídeo" : "Criativos"}>
-          {midia === "video" && <div className="sticky top-0 z-10 space-y-2 bg-background pb-3"><p className="text-xs font-semibold">Vídeos por campanha</p><input className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" aria-label="Buscar base do vídeo" placeholder="Buscar anúncio…" value={buscaVideo} onChange={(e) => setBuscaVideo(e.target.value)} /><p className="text-[11px] text-muted-foreground">Escolha a base. Cada vídeo tem seu próprio andamento.</p>{(pedidosDeVideo.isError || arquivosDeVideo.isError) && <p role="alert" className="text-xs">Histórico indisponível. <button onClick={() => { void pedidosDeVideo.refetch(); void arquivosDeVideo.refetch(); }}>Conferir</button></p>}</div>}
+          {midia === "video" && <div className="sticky top-0 z-10 space-y-2 bg-background pb-3"><p className="text-[12px] leading-4 font-semibold">Vídeos por campanha</p><input className="w-full rounded-md border bg-background px-2 py-1.5 text-[12px] leading-4" aria-label="Buscar base do vídeo" placeholder="Buscar anúncio…" value={buscaVideo} onChange={(e) => setBuscaVideo(e.target.value)} /><p className="text-[11px] text-muted-foreground">Escolha a base. Cada vídeo tem seu próprio andamento.</p>{(pedidosDeVideo.isError || arquivosDeVideo.isError) && <p role="alert" className="text-[12px] leading-4">Histórico indisponível. <button onClick={() => { void pedidosDeVideo.refetch(); void arquivosDeVideo.refetch(); }}>Conferir</button></p>}</div>}
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
           {grupos.map((g) => {
             // Frente CR: a melhor variação do ângulo à vista (marcada); as outras recolhidas.
@@ -722,15 +722,15 @@ export default function AbaEstudioAds({
                         <span className="min-w-0 truncate">{midia === "video" ? nomeBaseVideo(c) : formatoDe(c.formato).rotulo}</span>
                         {midia === "arte" && <SeloDaVersao criativo={c} className="ml-1" />}
                         {midia === "arte" && ehOMelhor(c) && (
-                          <span className="ml-1 inline-flex shrink-0 items-center text-[10.5px] font-medium text-primary" title="Melhor variação do ângulo pela conferência do Jev">
+                          <span className="ml-1 inline-flex shrink-0 items-center text-[11px] font-medium text-primary" title="Melhor variação do ângulo pela conferência do Jev">
                             <Star className="mr-0.5 h-3 w-3" /> melhor
                           </span>
                         )}
-                        {midia === "arte" && nota && <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
+                        {midia === "arte" && nota && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
                       </span>
                       <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
                         {midia === "video" ? <span className="text-[11px] text-primary">{pedidosDeVideo.isLoading || arquivosDeVideo.isLoading ? "Conferindo…" : pedidosDeVideo.isError || arquivosDeVideo.isError ? "Sem leitura" : `${videoResumo.nome} · ${videoResumo.quantidade ? `${videoResumo.quantidade} versão(ões)` : "sem vídeo"}`}</span> : <SeloDaSituacao situacao={situacao(c)} />}
-                        {midia === "arte" && estaNaConta(c) && <span className="ml-1 text-[10.5px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
+                        {midia === "arte" && estaNaConta(c) && <span className="ml-1 text-[11px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
                         {midia === "arte" && c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
                       </span>
                     </span>
@@ -740,7 +740,7 @@ export default function AbaEstudioAds({
             };
             return (
               <div key={g.chave} className="mb-3" data-grupo-do-angulo={g.chave}>
-                <p className="truncate px-1 text-[10px] uppercase tracking-wider text-muted-foreground" title={g.plano}>
+                <p className="truncate px-1 text-[11px] text-muted-foreground" title={g.plano}>
                   {g.plano}
                 </p>
                 <p className="mb-1.5 truncate px-1 text-[12px] font-semibold" title={g.angulo}>
@@ -753,7 +753,7 @@ export default function AbaEstudioAds({
                       type="button"
                       aria-expanded={outrosAbertos}
                       onClick={() => setAbertosOutros((l) => (l.indexOf(g.chave) >= 0 ? l.filter((x) => x !== g.chave) : l.concat([g.chave])))}
-                      className="mt-1 flex w-full min-w-0 items-center rounded px-1 py-0.5 text-left text-[11.5px] text-muted-foreground hover:text-foreground"
+                      className="mt-1 flex w-full min-w-0 items-center rounded px-1 py-0.5 text-left text-[12px] text-muted-foreground hover:text-foreground"
                     >
                       <ChevronDown className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${outrosAbertos ? "rotate-180" : ""}`} />
                       <span className="min-w-0 truncate">Outras variações ({outros.length})</span>
@@ -777,9 +777,9 @@ export default function AbaEstudioAds({
                       {midia === "video" ? nomeBaseVideo(aberto) : nomeDoCriativo(aberto, listaDePlanos)}
                     </h2>
                     <span className="ml-2 inline-flex shrink-0" title={situacaoAberta === "entregue" ? AVISO_DA_ENTREGA : undefined}>
-                      {midia === "video" ? <span className="text-xs text-primary">{videoDe(aberto).nome}</span> : <SeloDaSituacao situacao={situacaoAberta} />}
+                      {midia === "video" ? <span className="text-[12px] leading-4 text-primary">{videoDe(aberto).nome}</span> : <SeloDaSituacao situacao={situacaoAberta} />}
                     </span>
-                    {midia === "arte" && estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[10.5px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
+                    {midia === "arte" && estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[11px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
                   </div>
                   <p className="truncate text-[12px] text-muted-foreground">
                     {midia === "video" ? "Vídeo · base e copy da campanha" : formatoDe(aberto.formato).rotulo}
@@ -837,7 +837,7 @@ export default function AbaEstudioAds({
               {midia === "arte" && maisDoCriativo && (
                 <div className="mt-1 flex min-w-0 flex-wrap items-center" role="group"
                     aria-label="Mais do criativo">
-                  <label className="mb-1 mr-3 flex items-center text-[11.5px] text-muted-foreground">
+                  <label className="mb-1 mr-3 flex items-center text-[12px] text-muted-foreground">
                     <span className="mr-1.5">Status</span>
                     <select
                       aria-label="Status do criativo"
@@ -852,7 +852,7 @@ export default function AbaEstudioAds({
                       ))}
                     </select>
                   </label>
-                  <label className="mb-1 mr-3 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+                  <label className="mb-1 mr-3 flex min-w-0 items-center text-[12px] text-muted-foreground">
                     <span className="mr-1.5 shrink-0">Anúncio</span>
                     <select
                       aria-label="Anúncio no Meta"
@@ -886,8 +886,8 @@ export default function AbaEstudioAds({
               <div className="h-[50vh] animate-pulse rounded-lg bg-muted/70" />
             ) : (
               <div className="rounded-lg border border-dashed border-border p-8 text-center">
-                <p className="text-[13.5px] font-medium">Sem trabalho de arte ligado</p>
-                <p className="mt-1 text-[12.5px] text-muted-foreground">Produza este ângulo de novo pelo Plano de teste para o diretor montar a direção.</p>
+                <p className="text-[13px] font-medium">Sem trabalho de arte ligado</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Produza este ângulo de novo pelo Plano de teste para o diretor montar a direção.</p>
               </div>
             )}
             {/* Resultado e kit recolhidos por padrão, sem caixa: uma linha de resumo cada. */}

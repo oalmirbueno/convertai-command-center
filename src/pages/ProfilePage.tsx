@@ -120,7 +120,7 @@ export default function ProfilePage() {
             <div className="relative mr-4 h-14 w-14 shrink-0 sm:h-16 sm:w-16">
               <Avatar className="h-full w-full">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt={profile?.full_name} />}
-                <AvatarFallback className="bg-primary/15 text-lg font-semibold text-primary">{initials}</AvatarFallback>
+                <AvatarFallback className="bg-primary/15 text-[20px] font-semibold text-primary">{initials}</AvatarFallback>
               </Avatar>
               <button
                 type="button"

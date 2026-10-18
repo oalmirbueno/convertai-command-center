@@ -189,7 +189,7 @@ export default function ReferenciasDoCriativo({
     <div className="min-w-0 space-y-4">
       <section className="min-w-0 space-y-2 rounded-lg border border-border bg-background p-3" aria-label="Mandar uma referência">
         <p className="text-[12px] font-medium">Mandar uma referência para este criativo</p>
-        <p className="text-[11.5px] leading-snug text-muted-foreground">
+        <p className="text-[12px] leading-snug text-muted-foreground">
           Envie a imagem ou cole o link (Pinterest, Instagram, Behance, imagem ou página). Ela entra nas escolhidas e o gerador segue de perto.
           {valerParaIrmaos && irmaos.length ? ` Vale também para ${irmaos.length} formato(s) irmão(s).` : ""}
         </p>
@@ -222,8 +222,8 @@ export default function ReferenciasDoCriativo({
                 </button>
               ))}
             </div>
-            {referencias.isLoading && <p className="px-1 text-[11.5px] text-muted-foreground">Carregando o banco…</p>}
-            {!referencias.isLoading && !banco.length && <p className="px-1 text-[11.5px] text-muted-foreground">Nada aqui ainda. Traga referências na etapa Referências ou cole um link acima.</p>}
+            {referencias.isLoading && <p className="px-1 text-[12px] text-muted-foreground">Carregando o banco…</p>}
+            {!referencias.isLoading && !banco.length && <p className="px-1 text-[12px] text-muted-foreground">Nada aqui ainda. Traga referências na etapa Referências ou cole um link acima.</p>}
             <ul className="grid grid-cols-2 gap-2 lg:max-h-[360px] lg:overflow-y-auto lg:overscroll-contain">
               {banco.map((r) => {
                 const capa = capaDaReferencia(r);
@@ -242,8 +242,8 @@ export default function ReferenciasDoCriativo({
                       </div>
                     </div>
                     <div className="p-1.5">
-                      <p className="truncate text-[11.5px] font-medium" title={r.titulo}>{r.titulo}</p>
-                      <p className="truncate text-[10.5px] text-muted-foreground">
+                      <p className="truncate text-[12px] font-medium" title={r.titulo}>{r.titulo}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">
                         {r.client_id ? rotuloDaOrigem(r.origem) : nomeDoNicho(r) || "Agência"}
                         {estilo ? ` · ${estilo}` : ""}
                         {estiloDoCriativo && estilo === estiloDoCriativo ? " · mesmo estilo" : ""}

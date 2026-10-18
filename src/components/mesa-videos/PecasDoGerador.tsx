@@ -75,7 +75,7 @@ export function BotaoDeGerar({
         <button type="button" className={botao.primario} disabled={bloqueado || fazendo} onClick={() => setAberto(true)}>
           {fazendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : icone || <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
           {rotulo}
-          <span className="ml-1.5 text-[11.5px] font-normal opacity-80">{textoDoCusto(custo)}</span>
+          <span className="ml-1.5 text-[12px] font-normal opacity-80">{textoDoCusto(custo)}</span>
         </button>
       ) : (
         <div
@@ -317,7 +317,7 @@ export function SeletorDeCamera({ valor, onEscolher, rotulo = "Câmera pronta", 
 /** Poço com a linha de custo (resumo curto). */
 export function LinhaDeCusto({ custo, rotulo }: { custo: CustoDoMotor; rotulo: string }) {
   return (
-    <div className={juntar(superficie.poco, "flex min-w-0 items-baseline px-3 py-2 text-[12.5px]")} data-linha-de-custo="">
+    <div className={juntar(superficie.poco, "flex min-w-0 items-baseline px-3 py-2 text-[13px]")} data-linha-de-custo="">
       <span className="mr-2 min-w-0 flex-1 truncate" title={custo.detalhe}>
         {rotulo}
       </span>

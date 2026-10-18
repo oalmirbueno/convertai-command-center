@@ -65,7 +65,7 @@ export default function DownloadProgressOverlay() {
         return (
           <div
             key={it.id}
-            className="rounded-xl border border-border bg-card/95 backdrop-blur shadow-lg px-3 py-2.5"
+            className="rounded-xl border border-border bg-card/95 backdrop-blur shadow-sm px-3 py-2.5"
           >
             <div className="flex items-center gap-2">
               {it.status === "done" ? (
@@ -76,8 +76,8 @@ export default function DownloadProgressOverlay() {
                 <Download className="h-4 w-4 text-primary shrink-0 animate-pulse" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium truncate">{it.name}</div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-[12px] leading-4 font-medium truncate">{it.name}</div>
+                <div className="text-[11px] text-muted-foreground">
                   {it.status === "done" && "Concluído"}
                   {it.status === "error" && (it.message || "Falha no download")}
                   {it.status === "downloading" && (pct !== null ? `${pct}% • ${size}` : `Baixando... ${size}`)}

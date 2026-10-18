@@ -169,7 +169,7 @@ export function EditorDaLigacaoDeResultado({
           {foto ? <MiniaturaDoStorage bucket={foto.storage_bucket} caminho={foto.storage_path || foto.url} alt="" largura={120} className="h-full w-full" /> : null}
         </span>
         <div className="ml-2.5 min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-semibold">De: {nomeDoResultado(canvas, origem)}</p>
+          <p className="truncate text-[13px] font-semibold">De: {nomeDoResultado(canvas, origem)}</p>
           <p className={`truncate text-[11px] ${foto ? "text-zinc-400" : "text-amber-300"}`}>{foto ? "A foto desta cena entra aqui" : "Gere a foto dele antes"}</p>
         </div>
         {onDesligar && (

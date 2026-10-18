@@ -159,7 +159,7 @@ function EscolhaDaCampanha({
   const ativas = campanhas.filter((c) => c.status !== "encerrada" || c.id === valor);
   const escolhida = valor && valor !== "auto" ? ativas.filter((c) => c.id === valor)[0] || null : null;
   const pilula = (ativa: boolean) =>
-    `mb-1.5 mr-1.5 inline-flex h-9 max-w-full shrink-0 items-center rounded-full border px-3 text-[12.5px] transition-colors ${
+    `mb-1.5 mr-1.5 inline-flex h-9 max-w-full shrink-0 items-center rounded-full border px-3 text-[13px] transition-colors ${
       ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
     }`;
   return (
@@ -185,17 +185,17 @@ function EscolhaDaCampanha({
           <button key={c.id} type="button" role="radio" aria-checked={valor === c.id} className={pilula(valor === c.id)} onClick={() => onValor(c.id)} title={resumoDaBaseDaCampanha(c) || c.nome}>
             <SeloDaCampanha campanha={c} tamanho="mr-1.5 h-5 w-5" />
             <span className="truncate">{c.nome}</span>
-            {emUso === c.id && <span className={`ml-1.5 shrink-0 text-[10.5px] ${valor === c.id ? "opacity-90" : "text-primary"}`}>em uso</span>}
+            {emUso === c.id && <span className={`ml-1.5 shrink-0 text-[11px] ${valor === c.id ? "opacity-90" : "text-primary"}`}>em uso</span>}
           </button>
         ))}
         {carregando && <span className="mb-1.5 inline-flex h-9 items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> campanhas</span>}
       </div>
       {escolhida ? (
-        <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-base-da-campanha={escolhida.id}>
+        <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-base-da-campanha={escolhida.id}>
           A arte puxa a base inteira: {resumoDaBaseDaCampanha(escolhida) || "tema e identidade"}. {periodoCurto(escolhida.periodo_inicio, escolhida.periodo_fim)}.
         </p>
       ) : valor === "auto" ? (
-        <p className="mt-0.5 text-[11.5px] text-muted-foreground">O agente procura a campanha que o pedido cita; sem certeza, segue só a marca e avisa.</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">O agente procura a campanha que o pedido cita; sem certeza, segue só a marca e avisa.</p>
       ) : null}
     </div>
   );
@@ -220,7 +220,7 @@ function SeletorDoPapel({ valor, onValor, rotulo }: { valor: PapelPedido; onValo
       onChange={(e) => onValor(e.target.value as PapelPedido)}
       aria-label={`Papel de ${rotulo}`}
       title={valor === "auto" ? "O agente decide pelo pedido" : DICA_DO_PAPEL[valor]}
-      className="mt-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-1.5 text-[11.5px]"
+      className="mt-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-1.5 text-[12px]"
     >
       <option value="auto">Automático</option>
       {PAPEIS_NA_TELA.map((p) => (
@@ -480,7 +480,7 @@ function PedidoDaArteRapida({
             <ul className="grid grid-cols-3 gap-2 px-3 pb-2 sm:grid-cols-4 xl:grid-cols-6" aria-label="Imagens do pedido">
               {fotosDoAcervo.map((f) => (
                 <li key={f.id} className="min-w-0">
-                  <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                  <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
                     <ImagemDaMesa caminho={f.caminho} bucket={f.bucket} alt={f.nome} className="absolute inset-0 h-full w-full object-cover" />
                     <button type="button" onClick={() => setFotosDoAcervo((l) => l.filter((x) => x.id !== f.id))} aria-label={`Tirar ${f.nome}`} title={`Tirar ${f.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
                       <X className="h-3.5 w-3.5" />
@@ -491,7 +491,7 @@ function PedidoDaArteRapida({
               ))}
               {anexos.lista.map((a) => (
                 <li key={a.id} className="min-w-0">
-                  <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: "100%" }}>
+                  <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: "100%" }}>
                     {a.previa ? <img src={a.previa} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" /> : <ImagemDaMesa caminho={a.caminho} alt={a.nome} className="absolute inset-0 h-full w-full object-cover" />}
                     {a.estado === "subindo" && (
                       <span className="absolute inset-0 flex items-center justify-center bg-background/60"><Loader2 className="h-4 w-4 animate-spin" /></span>
@@ -546,7 +546,7 @@ function PedidoDaArteRapida({
               }}
             />
             <Ditado valor={pedido} onChange={setPedido} className="my-0.5 min-w-0 [&_button]:h-9 [&_button]:w-9 [&_button]:border-transparent [&_button]:bg-secondary [&_button]:text-foreground" />
-            <span className="ml-auto hidden truncate pl-2 text-[11.5px] text-muted-foreground md:inline">
+            <span className="ml-auto hidden truncate pl-2 text-[12px] text-muted-foreground md:inline">
               <Paperclip className="mr-0.5 inline h-3 w-3" /> Arraste, cole ou envie (até {MAX_IMAGENS_DA_ARTE_RAPIDA} imagens)
             </span>
           </div>
@@ -586,7 +586,7 @@ function PedidoDaArteRapida({
             {lendoPost ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
-        {linkDoPost.trim() && !codigoDoLink && <p className="mt-1 text-[11.5px] text-destructive">Use o link de um post ou reel (instagram.com/p/... ou /reel/...).</p>}
+        {linkDoPost.trim() && !codigoDoLink && <p className="mt-1 text-[12px] text-destructive">Use o link de um post ou reel (instagram.com/p/... ou /reel/...).</p>}
         {postLido && (
           <div className="mt-2 space-y-2 rounded-lg bg-muted px-3 py-2.5">
             <div role="radiogroup" aria-label="Como usar o post" className="flex min-w-0 flex-wrap" data-modo-do-post={modoDoPost}>
@@ -607,7 +607,7 @@ function PedidoDaArteRapida({
                 </button>
               ))}
             </div>
-            <p className="text-[11.5px] leading-snug text-muted-foreground">{DICA_DO_MODO_DO_POST[modoDoPost]}</p>
+            <p className="text-[12px] leading-snug text-muted-foreground">{DICA_DO_MODO_DO_POST[modoDoPost]}</p>
             {usaConteudoDoPost(modoDoPost) && <SeletorDeFidelidade valor={fidelidadeNaTela} escolhida={!!fidelidade} onValor={setFidelidade} />}
             {usaImagensDoPost(modoDoPost) && postLido.imagens.length > 0 && (
               <ul className="grid grid-cols-5 gap-1.5 sm:grid-cols-8" aria-label="Imagens do post">
@@ -626,7 +626,7 @@ function PedidoDaArteRapida({
                 {postLido.post.legenda ? `${postLido.post.legenda.slice(0, 220)}${postLido.post.legenda.length > 220 ? "..." : ""}` : "Sem legenda."}
               </p>
             )}
-            <button type="button" className="text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => { setPostLido(null); setLinkDoPost(""); }}>
+            <button type="button" className="text-[12px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => { setPostLido(null); setLinkDoPost(""); }}>
               Tirar o post
             </button>
           </div>
@@ -649,7 +649,7 @@ function PedidoDaArteRapida({
                 aria-checked={peca === v}
                 onClick={() => setPeca(v)}
                 className={juntar(
-                  "toque-compacto h-8 min-w-0 rounded-md px-3 text-[12.5px] font-medium transition-colors",
+                  "toque-compacto h-8 min-w-0 rounded-md px-3 text-[13px] font-medium transition-colors",
                   peca === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 )}
                 title={v === "auto" ? "O agente decide pelo pedido: arte única ou carrossel" : undefined}
@@ -661,7 +661,7 @@ function PedidoDaArteRapida({
           {peca === "carrossel" && (
             <label className="mb-1 inline-flex items-center text-[12px] text-muted-foreground">
               Lâminas
-              <select value={laminas} onChange={(e) => setLaminas(e.target.value)} className="ml-1.5 h-8 rounded-md border border-border bg-background px-2 text-[12.5px] text-foreground" aria-label="Quantidade de lâminas">
+              <select value={laminas} onChange={(e) => setLaminas(e.target.value)} className="ml-1.5 h-8 rounded-md border border-border bg-background px-2 text-[13px] text-foreground" aria-label="Quantidade de lâminas">
                 <option value="auto">Pelo conteúdo</option>
                 {["2", "3", "4", "5", "6", "7", "8"].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -678,11 +678,11 @@ function PedidoDaArteRapida({
               <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Formato</p>
               <SeletorDeFormatoCompacto valor={formato} onMudar={setFormato} />
             </div>
-            <label className="flex min-w-0 items-start text-[12.5px]">
+            <label className="flex min-w-0 items-start text-[13px]">
               <Switch checked={gerarLogo} onCheckedChange={setGerarLogo} className="mr-2 mt-0.5 shrink-0" aria-label="Gerar a arte logo em seguida" />
               <span className="min-w-0">
                 Gerar a arte logo em seguida
-                <span className="block text-[11.5px] text-muted-foreground">Arte única: a lâmina entra na fila assim que a direção fica pronta. Carrossel: você confere a direção e gera.</span>
+                <span className="block text-[12px] text-muted-foreground">Arte única: a lâmina entra na fila assim que a direção fica pronta. Carrossel: você confere a direção e gera.</span>
               </span>
             </label>
           </div>
@@ -693,7 +693,7 @@ function PedidoDaArteRapida({
 
   const acao = (
     <div className="flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center sm:justify-end">
-      <p className="mt-2 text-[11.5px] leading-snug text-muted-foreground sm:mr-3 sm:mt-0">
+      <p className="mt-2 text-[12px] leading-snug text-muted-foreground sm:mr-3 sm:mt-0">
         {geraJunto ? "Direção e arte em seguida." : "Direção pronta para você conferir e gerar."} Foto real entra como está.
       </p>
       <BotaoComCusto
@@ -712,7 +712,7 @@ function PedidoDaArteRapida({
 
   const cabecalho = (
     <div className="flex min-w-0 items-baseline">
-      <h2 className="mr-2 shrink-0 text-[15.5px] font-semibold leading-tight">Arte rápida</h2>
+      <h2 className="mr-2 shrink-0 text-[15px] font-semibold leading-tight">Arte rápida</h2>
       <p className="min-w-0 truncate text-[12px] text-muted-foreground">Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre.</p>
     </div>
   );
@@ -725,7 +725,7 @@ function PedidoDaArteRapida({
       </div>
       <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="space-y-4 p-4" sobre="cartao">
         <div className="mx-auto w-full max-w-[220px]">
-          <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
+          <div className="relative overflow-hidden rounded-md border border-border bg-muted" style={{ paddingBottom: `${Math.round(100 / (FORMATOS_DO_POST.filter((f) => f.valor === formato)[0] || FORMATOS_DO_POST[0]).proporcao)}%` }}>
             {primeiraImagem ? (
               primeiraImagem.src ? (
                 <img src={primeiraImagem.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -740,10 +740,10 @@ function PedidoDaArteRapida({
                 <SeloDaCampanha campanha={escolhida} tamanho="h-8 w-8" />
               </span>
             )}
-            <span className="absolute bottom-2 right-2 rounded bg-background/90 px-1.5 text-[10.5px] font-medium tabular-nums">{rotuloDoFormato}</span>
+            <span className="absolute bottom-2 right-2 rounded bg-background/90 px-1.5 text-[11px] font-medium tabular-nums">{rotuloDoFormato}</span>
           </div>
         </div>
-        <dl className="space-y-2.5 text-[12.5px]">
+        <dl className="space-y-2.5 text-[13px]">
           <div className="flex min-w-0 justify-between">
             <dt className="text-muted-foreground">Peça</dt>
             <dd className="ml-3 min-w-0 truncate text-right font-medium">{peca === "auto" ? "o agente decide" : ROTULO_DA_PECA[peca]}</dd>
@@ -752,7 +752,7 @@ function PedidoDaArteRapida({
             <dt className="text-muted-foreground">Campanha</dt>
             <dd className="ml-3 min-w-0 truncate text-right font-medium">{escolhida ? escolhida.nome : campanha === "auto" ? "se o pedido citar" : "só a marca"}</dd>
           </div>
-          {escolhida && resumoDaBaseDaCampanha(escolhida) && <p className="text-[11.5px] leading-snug text-muted-foreground">{resumoDaBaseDaCampanha(escolhida)}</p>}
+          {escolhida && resumoDaBaseDaCampanha(escolhida) && <p className="text-[12px] leading-snug text-muted-foreground">{resumoDaBaseDaCampanha(escolhida)}</p>}
           <div className="flex min-w-0 justify-between">
             <dt className="text-muted-foreground">Imagens</dt>
             <dd className="ml-3 text-right font-medium tabular-nums">{arquivos.length}</dd>
@@ -762,7 +762,7 @@ function PedidoDaArteRapida({
             <dd className="ml-3 text-right font-medium tabular-nums">{documentos.length}</dd>
           </div>
         </dl>
-        <ol className="space-y-1.5 border-t border-border pt-3 text-[11.5px] leading-snug text-muted-foreground">
+        <ol className="space-y-1.5 border-t border-border pt-3 text-[12px] leading-snug text-muted-foreground">
           <li>1. O diretor lê o pedido com a marca{escolhida ? " e a campanha" : ""}.</li>
           <li>2. {geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera."}</li>
           <li>3. Depois: ajustar no Estúdio e levar para a Agenda com a data.</li>
@@ -818,7 +818,7 @@ function ItemDoHistorico({ t, ativo, onAbrir }: { t: Trabalho; ativo: boolean; o
         {mini ? <ImagemDaMesa caminho={mini} alt="" className="h-full w-full object-cover" /> : <Zap className="h-4 w-4 text-muted-foreground" />}
       </span>
       <span className="ml-2 min-w-0 flex-1">
-        <span className={`block truncate text-[12.5px] ${ativo ? "font-semibold" : "font-medium"}`}>{a ? a.titulo : "Arte rápida"}</span>
+        <span className={`block truncate text-[13px] ${ativo ? "font-semibold" : "font-medium"}`}>{a ? a.titulo : "Arte rápida"}</span>
         <span className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground">
           <span className="mr-1.5 truncate">{a ? ROTULO_DA_PECA[a.peca] : ""} · {dataCurta(t.atualizado_em)}</span>
           <SeloDoItem tom={s.tom} className="shrink-0">{s.rotulo}</SeloDoItem>
@@ -1031,13 +1031,13 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
     <div className="space-y-4" data-levar-para-agenda={trabalho.id}>
       {a && (
         <div className="rounded-lg bg-muted px-3 py-2.5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">O pedido</p>
-          <p className="mt-0.5 text-[12.5px] leading-snug [overflow-wrap:anywhere]">{a.pedido || a.titulo}</p>
-          <p className="mt-1 text-[11.5px] text-muted-foreground">
+          <p className="text-[11px] font-medium text-muted-foreground">O pedido</p>
+          <p className="mt-0.5 text-[13px] leading-snug [overflow-wrap:anywhere]">{a.pedido || a.titulo}</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
             {ROTULO_DA_PECA[a.peca]} {a.peca_por === "jev" ? "(o agente reconheceu)" : a.peca_por === "regra" ? "(pelo pedido)" : ""}
             {a.arquivos.length ? ` · ${a.arquivos.map((x) => `${x.nome} (${ROTULO_DO_PAPEL[x.papel].toLowerCase()}${x.papel_por !== "equipe" && (x.papel === "foto" || x.papel === "rosto") ? ", pelo agente" : ""})`).join(", ")}` : ""}
           </p>
-          {a.avisos.length > 0 && <p className="mt-1 text-[11.5px] text-warning">{a.avisos.join(" ")}</p>}
+          {a.avisos.length > 0 && <p className="mt-1 text-[12px] text-warning">{a.avisos.join(" ")}</p>}
           <ConteudoDaReferencia arte={a} fontes={fontesDoTrabalho(trabalho)} />
         </div>
       )}
@@ -1108,7 +1108,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
               <Input type="time" value={horaFinal} onChange={(e) => setHora(e.target.value)} className="mt-1 h-10 min-w-0" aria-label="Hora do post" />
             </label>
           </div>
-          {!hora && <p className="text-[11.5px] text-muted-foreground">Hora sugerida pelo melhor horário do perfil{horaComEspaco && horaComEspaco !== horaSugerida ? ", longe do outro post do dia" : ""}.</p>}
+          {!hora && <p className="text-[12px] text-muted-foreground">Hora sugerida pelo melhor horário do perfil{horaComEspaco && horaComEspaco !== horaSugerida ? ", longe do outro post do dia" : ""}.</p>}
           {avisoDaAgenda && (
             <p className="rounded-md bg-warning/10 px-2.5 py-2 text-[12px] leading-snug text-warning" role="status" data-aviso-da-agenda="">
               {avisoDaAgenda}
@@ -1253,19 +1253,19 @@ export default function EstudioArteRapida({
   ) : daOutraMarca ? (
     <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-arte-de-outra-marca="">
       <p className="text-[14px] font-semibold">Esta arte é de outra marca</p>
-      <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. Aqui o Estúdio mostra e gera só a marca {marca ? marca.nome : "aberta"}.</p>
+      <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. Aqui o Estúdio mostra e gera só a marca {marca ? marca.nome : "aberta"}.</p>
       <Button type="button" className="mt-4 h-10 w-10 p-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} aria-label="Nova arte" title="Nova arte">
         <Plus className="h-4 w-4" aria-hidden="true" />
       </Button>
     </div>
   ) : carregandoPeca ? (
-    <div className={juntar(superficie.painel, "flex min-h-[280px] flex-1 items-center justify-center text-[12.5px] text-muted-foreground")}>
+    <div className={juntar(superficie.painel, "flex min-h-[280px] flex-1 items-center justify-center text-[12px] text-muted-foreground")}>
       <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a arte…
     </div>
   ) : (
     <div className={juntar(superficie.painel, "flex min-h-[280px] flex-1 flex-col items-center justify-center p-6 text-center")}>
       <p className="text-[14px] font-semibold">Esta arte rápida não está mais aqui</p>
-      <p className="mt-1 text-[12.5px] text-muted-foreground">Ela pode ter sido arquivada. Comece outra ou escolha no histórico.</p>
+      <p className="mt-1 text-[12px] text-muted-foreground">Ela pode ter sido arquivada. Comece outra ou escolha no histórico.</p>
       <Button type="button" className="mt-4 h-10 w-10 p-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} aria-label="Nova arte" title="Nova arte">
         <Plus className="h-4 w-4" aria-hidden="true" />
       </Button>
@@ -1380,7 +1380,7 @@ function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade;
             title={DICA_DA_FIDELIDADE[f]}
             onClick={() => onValor(f)}
             className={juntar(
-              "toque-compacto h-8 min-w-0 rounded-md px-3 text-[12.5px] font-medium transition-colors",
+              "toque-compacto h-8 min-w-0 rounded-md px-3 text-[13px] font-medium transition-colors",
               valor === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
             )}
           >
@@ -1388,7 +1388,7 @@ function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade;
           </button>
         ))}
       </div>
-      <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground">
+      <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
         {DICA_DA_FIDELIDADE[valor]}
         {!escolhida && " (pelo pedido)"}
       </p>
@@ -1410,7 +1410,7 @@ function ConteudoDaReferencia({ arte, fontes }: { arte: { fidelidade?: Fidelidad
   const l = arte.leitura_dos_cards;
   if (!arte.fidelidade && !l && !fontes.length) return null;
   return (
-    <div className="mt-1.5 space-y-1 text-[11.5px] leading-snug text-muted-foreground" data-conteudo-da-referencia="">
+    <div className="mt-1.5 space-y-1 text-[12px] leading-snug text-muted-foreground" data-conteudo-da-referencia="">
       {(arte.fidelidade || l) && (
         <p className="[overflow-wrap:anywhere]">
           {arte.fidelidade ? `Fidelidade: ${ROTULO_DA_FIDELIDADE[arte.fidelidade]}` : ""}

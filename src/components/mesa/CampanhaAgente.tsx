@@ -162,7 +162,7 @@ export default function CampanhaAgente({
             <Sparkles className="h-3.5 w-3.5 text-primary" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-semibold">Agente da campanha</span>
+            <span className="block truncate text-[13px] font-semibold">Agente da campanha</span>
             <span className="block truncate text-[11px] text-muted-foreground">{campanha.nome}</span>
           </span>
         </div>

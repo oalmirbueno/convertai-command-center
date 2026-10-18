@@ -32,7 +32,7 @@ const FAIXA: Record<AuditoriaNaTela["faixa"], string> = { valendo: "nota valendo
 
 function Controle({ c }: { c: ControleNaTela }) {
   return (
-    <li className="flex min-w-0 items-start gap-2.5 py-2 text-[12.5px] leading-5">
+    <li className="flex min-w-0 items-start gap-2.5 py-2 text-[13px] leading-5">
       {ICONE[c.resultado]}
       <div className="min-w-0 flex-1">
         <p className="min-w-0 break-words">
@@ -95,13 +95,13 @@ export default function AbaAuditoria() {
           <div className="flex min-w-0 flex-wrap items-end gap-x-8 gap-y-3">
             <div>
               <p className="text-[12px] text-muted-foreground">Nota</p>
-              <p className="text-[32px] font-semibold leading-none tabular-nums">{atual.nota !== null ? atual.nota : "sem nota"}</p>
+              <p className="text-[24px] font-semibold leading-none tabular-nums">{atual.nota !== null ? atual.nota : "sem nota"}</p>
             </div>
             <div>
               <p className="text-[12px] text-muted-foreground">Cobertura</p>
               <p className="text-[20px] font-semibold tabular-nums">{atual.cobertura}%</p>
             </div>
-            <div className="min-w-0 text-[12.5px] text-muted-foreground">
+            <div className="min-w-0 text-[12px] text-muted-foreground">
               <p>{FAIXA[atual.faixa]}</p>
               <p>{atual.criado_em ? dataEHora(atual.criado_em) : ""}{anterior && anterior.nota !== null && atual.nota !== null ? ` · antes: ${anterior.nota} (${atual.nota - anterior.nota >= 0 ? "+" : ""}${atual.nota - anterior.nota})` : ""}</p>
             </div>
@@ -110,7 +110,7 @@ export default function AbaAuditoria() {
           <div className="grid min-w-0 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
             {atual.categorias.map((c) => (
               <div key={c.categoria} className="min-w-0">
-                <div className="flex justify-between text-[12.5px]">
+                <div className="flex justify-between text-[13px]">
                   <span>{c.rotulo}</span>
                   <span className="tabular-nums text-muted-foreground">{c.saude !== null ? `${c.saude}` : "sem dado"} · cobre {c.cobertura}%</span>
                 </div>

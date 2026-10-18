@@ -35,7 +35,7 @@ function Opcao({ ativa, onClick, titulo, detalhe, icone }: { ativa: boolean; onC
       <span className={`mr-2 mt-0.5 shrink-0 ${ativa ? "text-primary" : "text-muted-foreground"}`}>{icone}</span>
       <span className="min-w-0">
         <span className="block text-[13px] font-medium leading-tight">{titulo}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">{detalhe}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">{detalhe}</span>
       </span>
     </button>
   );
@@ -81,7 +81,7 @@ export function SeletorDeFormato({
               <span className={`mr-1 inline-block rounded-[2px] border ${ativo ? "border-primary-foreground" : "border-current"}`} style={{ width: largura, height: 14 }} aria-hidden />
               <span className={`text-[12px] tabular-nums ${ativo ? "font-medium" : ""}`}>{f.rotulo}</span>
             </span>
-            {!compacto && <span className={`mt-0.5 text-[9.5px] tabular-nums ${ativo ? "text-primary-foreground/80" : ""}`}>{f.tamanho}</span>}
+            {!compacto && <span className={`mt-0.5 text-[11px] tabular-nums ${ativo ? "text-primary-foreground/80" : ""}`}>{f.tamanho}</span>}
           </button>
         );
       })}
@@ -165,7 +165,7 @@ export default function EstudioPreparar({
       </div>
 
       <div className="mt-4">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Formato</p>
+        <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Formato</p>
         <SeletorDeFormato valor={formato} onMudar={setFormato} />
       </div>
 
@@ -173,7 +173,7 @@ export default function EstudioPreparar({
         <div className="mt-4 space-y-4">
           {modo === "diretor" && (
             <div>
-              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Quantidade de lâminas</p>
+              <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Quantidade de lâminas</p>
               <div className="flex flex-wrap" role="radiogroup" aria-label="Quantidade de lâminas">
                 {[null as number | null].concat(QUANTIDADES_DE_LAMINAS).map((n) => (
                   <button
@@ -183,7 +183,7 @@ export default function EstudioPreparar({
                     aria-checked={laminas === n}
                     onClick={() => setLaminas(n)}
                     title={n === null ? "O diretor decide pelo conteúdo" : `${n} lâminas`}
-                    className={`mb-1.5 mr-1.5 h-9 min-w-[40px] rounded-md border px-2.5 text-[12.5px] tabular-nums transition-colors ${
+                    className={`mb-1.5 mr-1.5 h-9 min-w-[40px] rounded-md border px-2.5 text-[13px] tabular-nums transition-colors ${
                       laminas === n ? "border-primary bg-primary font-medium text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -194,11 +194,11 @@ export default function EstudioPreparar({
             </div>
           )}
 
-          <label className="flex cursor-pointer items-start rounded-lg border border-border px-3 py-2.5">
+          <label className="flex cursor-pointer items-start rounded-md border border-border px-3 py-2.5">
             <Switch checked={continuo && formato === "feed_4x5"} onCheckedChange={setContinuo} disabled={formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
             <span className="min-w-0">
               <span className="block text-[13px] font-medium">Carrossel contínuo</span>
-              <span className="block text-[11.5px] leading-snug text-muted-foreground">
+              <span className="block text-[12px] leading-snug text-muted-foreground">
                 {formato === "feed_4x5"
                   ? "A cena atravessa as lâminas, como um panorama. Gera uma de cada vez. Sem ele, as lâminas seguem a capa como série."
                   : "Só no 4:5. Neste formato as lâminas seguem a capa como série."}
@@ -210,7 +210,7 @@ export default function EstudioPreparar({
 
       {modo === "diretor" && (
         <div className="mt-4">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pedido para o diretor (opcional)</p>
+          <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Pedido para o diretor (opcional)</p>
           <Textarea
             value={pedido}
             onChange={(e) => setPedido(e.target.value)}
@@ -242,7 +242,7 @@ export default function EstudioPreparar({
           // 16/10/2026 (dono: "texto + ícone vira só o ícone"): como os vizinhos com custo, o nome vai no title e no leitor de tela; o preço (grátis) fica à vista.
           <Button type="button" className="h-10" onClick={() => void montarDoRoteiro()} disabled={desde !== null} aria-label="Montar do roteiro (grátis)" title="Montar do roteiro (grátis)">
             {desde !== null ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-            <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[10.5px] font-normal opacity-80 dark:bg-white/10" aria-hidden="true">grátis</span>
+            <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[11px] font-normal opacity-80 dark:bg-white/10" aria-hidden="true">grátis</span>
           </Button>
         ) : (
           <BotaoComCusto

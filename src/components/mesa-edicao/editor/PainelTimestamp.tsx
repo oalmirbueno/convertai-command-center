@@ -168,7 +168,7 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
         <span className="flex items-center">
           <span className={juntar(texto.rotulo, "mr-auto")}>Legenda ou roteiro (opcional)</span>
           {srtDaEntrada && (
-            <button type="button" className="text-[11.5px] text-primary hover:underline" onClick={() => setTextoDado(segmentosDoSrt(srtDaEntrada).map((s) => s.t).join(" "))}>
+            <button type="button" className="text-[12px] text-primary hover:underline" onClick={() => setTextoDado(segmentosDoSrt(srtDaEntrada).map((s) => s.t).join(" "))}>
               Usar a legenda da Entrada
             </button>
           )}
@@ -185,7 +185,7 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
         </div>
       ) : confirmando ? (
         <div className="flex flex-wrap items-center rounded-md bg-muted/50 px-2.5 py-2">
-          <span className="mb-1 mr-auto text-[12.5px]">
+          <span className="mb-1 mr-auto text-[13px]">
             {modo === "alinhar" ? "Alinhar" : "Transcrever"} {tempoFino(duracao)}: <strong className="tabular-nums">{usd(custo)}</strong>
           </span>
           <button type="button" className={juntar(botao.primario, "mb-1 mr-1 h-8")} onClick={() => void rodar()}>
@@ -213,7 +213,7 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
       {fase.tipo === "em_preparacao" && <p className={texto.auxiliar} data-em-preparacao="">{fase.texto}</p>}
       {fase.tipo === "pronto" && (
         <div className="space-y-2 border-t border-border pt-3" data-resultado-timestamp="">
-          <p className="flex items-center text-[12.5px]">
+          <p className="flex items-center text-[13px]">
             <Check className="mr-1.5 h-3.5 w-3.5 text-primary" />
             {fase.palavras.length} palavras{fase.letras ? `, ${fase.letras} letras` : ""} · {usd(fase.custo)}
           </p>
@@ -227,16 +227,16 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
             {/* 16/10/2026: copiar em ícone; o formato fica pequeno ao lado para os dois não parecerem a mesma ação. */}
             <button type="button" className={juntar(botao.icone, "mb-1 mr-1 w-auto px-1.5")} onClick={() => copiar(linhas.map((l) => l.texto).join("\n"))} aria-label="Copiar o texto" title="Copiar o texto">
               <Copy className="h-4 w-4" />
-              <span className="ml-0.5 text-[10px] font-medium">TXT</span>
+              <span className="ml-0.5 text-[11px] font-medium">TXT</span>
             </button>
             <button type="button" className={juntar(botao.icone, "mb-1 w-auto px-1.5")} onClick={() => copiar(srtDasLinhas(linhas))} aria-label="Copiar a legenda (SRT)" title="Copiar a legenda (SRT)">
               <Copy className="h-4 w-4" />
-              <span className="ml-0.5 text-[10px] font-medium">SRT</span>
+              <span className="ml-0.5 text-[11px] font-medium">SRT</span>
             </button>
           </div>
           <ol className="divide-y divide-border">
             {linhas.slice(0, 400).map((l, k) => (
-              <li key={k} className="flex min-w-0 py-1 text-[12.5px]">
+              <li key={k} className="flex min-w-0 py-1 text-[13px]">
                 <span className="mr-2 w-14 shrink-0 tabular-nums text-muted-foreground">{tempoFino(l.i)}</span>
                 <span className="min-w-0 [overflow-wrap:anywhere]">{l.texto}</span>
               </li>

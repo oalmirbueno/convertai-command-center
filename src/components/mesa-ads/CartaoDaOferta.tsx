@@ -211,7 +211,7 @@ export default function CartaoDaOferta({
         {ocupada && <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
       </div>
 
-      {o.promessa && <p className="mt-2 font-serif text-[18px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{o.promessa}</p>}
+      {o.promessa && <p className="mt-2 font-serif text-[20px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{o.promessa}</p>}
 
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         {o.mecanismo && <Bloco rotulo="Mecanismo">{o.mecanismo}</Bloco>}

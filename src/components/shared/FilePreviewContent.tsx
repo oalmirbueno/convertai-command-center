@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
 import { mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { superficie } from "@/components/sistema/estilos";
 
 type ImagemParaPreCarregar = string | { fileUrl: string; storageBucket?: string | null; storagePath?: string | null };
 
@@ -51,7 +52,7 @@ function InlineImage({ fileName, fileUrl }: { fileName: string; fileUrl: string 
     return (
       <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-3">
         <FileText className="w-10 h-10 text-muted-foreground/40" />
-        <p className="text-xs text-muted-foreground">Não foi possível carregar. Tente novamente.</p>
+        <p className="text-[12px] leading-4 text-muted-foreground">Não foi possível carregar. Tente novamente.</p>
         <Button size="sm" variant="outline" onClick={() => { setErrored(false); setLoaded(false); }}>
           Recarregar
         </Button>
@@ -207,7 +208,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
 
   if (resolvingUrl && isStorageBacked) {
     return (
-      <div className="h-64 bg-secondary rounded-xl flex items-center justify-center gap-2 text-xs text-muted-foreground">
+      <div className="h-64 bg-secondary rounded-xl flex items-center justify-center gap-2 text-[12px] leading-4 text-muted-foreground">
         <Loader2 className="w-4 h-4 animate-spin" /> Carregando arquivo...
       </div>
     );
@@ -217,8 +218,8 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     return (
       <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-3 text-center px-6">
         <FileText className="w-10 h-10 text-muted-foreground/40" />
-        <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
-        <p className="text-xs text-muted-foreground">Não foi possível carregar o arquivo agora.</p>
+        <p className="text-[13px] leading-5 font-medium text-foreground break-all">{fileName}</p>
+        <p className="text-[12px] leading-4 text-muted-foreground">Não foi possível carregar o arquivo agora.</p>
         <Button size="sm" variant="outline" onClick={reload}>Tentar novamente</Button>
       </div>
     );
@@ -252,7 +253,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
       {!officeLike && (
         <button
           onClick={() => setTab("viewer")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] leading-4 font-medium rounded-md transition-colors ${
             tab === "viewer" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -261,7 +262,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
       )}
       <button
         onClick={() => setTab("frames")}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] leading-4 font-medium rounded-md transition-colors ${
           tab === "frames" || officeLike ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
         }`}
       >
@@ -295,14 +296,14 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
           <button
             type="button"
             onClick={() => openFile(previewUrl)}
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-primary hover:underline"
           >
             <ExternalLink className="w-3 h-3" /> Abrir em nova aba
           </button>
           <button
             type="button"
             onClick={() => downloadFile(previewUrl, fileName)}
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-primary hover:underline"
           >
             <Download className="w-3 h-3" /> Baixar
           </button>
@@ -315,14 +316,14 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     const encoded = encodeURIComponent(previewUrl);
     const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
     return (
-      <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-card">
+      <div className={`${superficie.painel} overflow-hidden flex flex-col`}>
         <div className="min-h-[320px] flex flex-col items-center justify-center gap-4 px-6 py-12 text-center bg-secondary/30">
-          <div className="w-16 h-16 rounded-lg bg-background border border-border flex items-center justify-center">
+          <div className="w-16 h-16 rounded-md bg-background border border-border flex items-center justify-center">
             <FileText className="w-8 h-8 text-muted-foreground" />
           </div>
           <div className="space-y-1 max-w-md">
-            <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[13px] leading-5 font-medium text-foreground break-all">{fileName}</p>
+            <p className="text-[12px] leading-4 text-muted-foreground">
               Este arquivo precisa ser processado para aparecer como páginas internas. Enquanto isso, você pode abrir ou baixar o original.
             </p>
           </div>
@@ -333,13 +334,13 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
           )}
         </div>
         <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border flex-wrap">
-          <a href={gviewSrc} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+          <a href={gviewSrc} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-primary hover:underline">
             <Eye className="w-3 h-3" /> Visualizador alternativo
           </a>
-          <button type="button" onClick={() => openFile(previewUrl)} className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+          <button type="button" onClick={() => openFile(previewUrl)} className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-primary hover:underline">
             <ExternalLink className="w-3 h-3" /> Nova aba
           </button>
-          <button type="button" onClick={() => downloadFile(previewUrl, fileName)} className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+          <button type="button" onClick={() => downloadFile(previewUrl, fileName)} className="inline-flex items-center gap-1.5 text-[12px] leading-4 text-primary hover:underline">
             <Download className="w-3 h-3" /> Baixar
           </button>
         </div>
@@ -364,7 +365,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
   if (mediaKind === "audio" || isAudio(fileName, previewUrl)) {
     return (
       <div className="bg-secondary rounded-xl p-6 flex flex-col items-center gap-3">
-        <p className="text-sm font-medium text-foreground text-center break-all">{fileName}</p>
+        <p className="text-[13px] leading-5 font-medium text-foreground text-center break-all">{fileName}</p>
         <audio src={previewUrl} controls className="w-full" />
       </div>
     );
@@ -377,8 +378,8 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
         <FileText className="w-8 h-8 text-muted-foreground" />
       </div>
       <div className="text-center space-y-1 px-6">
-        <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
-        <p className="text-xs text-muted-foreground">Pré-visualização não disponível neste formato</p>
+        <p className="text-[13px] leading-5 font-medium text-foreground break-all">{fileName}</p>
+        <p className="text-[12px] leading-4 text-muted-foreground">Pré-visualização não disponível neste formato</p>
       </div>
       <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={() => openFile(previewUrl)} className="gap-1.5">

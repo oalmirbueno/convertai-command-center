@@ -82,7 +82,7 @@ export function SeloDaArte({ arte, className = "" }: { arte: ArteDoEstudioNaAgen
   const selo = seloDaArteDoEstudio(arte);
   return (
     <span
-      className={`inline-flex min-w-0 max-w-full items-center rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ${
+      className={`inline-flex min-w-0 max-w-full items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
         selo.alerta ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
       } ${className}`}
       title={[selo.texto, selo.laminas].filter(Boolean).join(" · ")}
@@ -161,7 +161,7 @@ export function CartaoDoItem({
   );
 
   const linhaDaEtapa = (
-    <span className={`flex min-w-0 items-center text-[10.5px] font-semibold uppercase tracking-wide ${cor.texto}`}>
+    <span className={`flex min-w-0 items-center text-[11px] font-semibold ${cor.texto}`}>
       <span className={`mr-1 h-1.5 w-1.5 shrink-0 rounded-full ${cor.ponto}`} />
       <span className="truncate">{rotuloDaEtapa}</span>
       {hora && (
@@ -204,7 +204,7 @@ export function CartaoDoItem({
             {linhaDaEtapa}
             <span className="flex min-w-0 items-start">
               {caixa}
-              <span className="ml-1.5 line-clamp-3 min-w-0 flex-1 text-[13.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{item.title}</span>
+              <span className="ml-1.5 line-clamp-3 min-w-0 flex-1 text-[13px] font-semibold leading-snug [overflow-wrap:anywhere]">{item.title}</span>
             </span>
             {resumo && <span className="line-clamp-2 block text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{resumo}</span>}
             {linhaDoFormato}
@@ -217,7 +217,7 @@ export function CartaoDoItem({
           {linhaDaEtapa}
           <span className="mt-1 flex min-w-0 items-start">
             {caixa}
-            <span className="ml-1.5 line-clamp-3 min-w-0 flex-1 text-[12.5px] font-medium leading-[1.3] [overflow-wrap:anywhere]">{item.title}</span>
+            <span className="ml-1.5 line-clamp-3 min-w-0 flex-1 text-[13px] font-medium leading-[1.3] [overflow-wrap:anywhere]">{item.title}</span>
           </span>
           <span className="mt-1">{linhaDoFormato}</span>
           {arte ? <SeloDaArte arte={arte} className="mt-1 self-start" /> : <SeloDiscreto selo={selo} className="mt-0.5" />}
@@ -241,7 +241,7 @@ export function CartaoDoPost({ post, arte, tamanho = "mes" }: { post: PostDaAgen
     >
       {arte && (grande ? <span className="mr-3 shrink-0"><Miniatura arte={arte} tamanho="grande" /></span> : <Miniatura arte={arte} tamanho="mes" />)}
       <span className="min-w-0 flex-1">
-        <span className={`flex min-w-0 items-center text-[10.5px] font-semibold uppercase tracking-wide ${cor.texto}`}>
+        <span className={`flex min-w-0 items-center text-[11px] font-semibold ${cor.texto}`}>
           <span className={`mr-1 h-1.5 w-1.5 shrink-0 rounded-full ${cor.ponto}`} />
           <span className="truncate">{rotulo}</span>
           {hora && (
@@ -252,7 +252,7 @@ export function CartaoDoPost({ post, arte, tamanho = "mes" }: { post: PostDaAgen
           )}
         </span>
         <span
-          className={`mt-1 line-clamp-3 block min-w-0 [overflow-wrap:anywhere] ${grande ? "text-[13.5px] font-semibold leading-snug" : "text-[12.5px] font-medium leading-[1.3]"}`}
+          className={`mt-1 line-clamp-3 block min-w-0 [overflow-wrap:anywhere] ${grande ? "text-[13px] font-semibold leading-snug" : "text-[13px] font-medium leading-[1.3]"}`}
         >
           {post.titulo}
         </span>

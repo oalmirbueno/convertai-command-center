@@ -40,6 +40,7 @@ import { Andamento, useAndamento } from "./Comuns";
 import { SeletorDoModeloDaCopy, useModeloDaCopy } from "./ModeloDaCopy";
 import PacoteDaCopy from "./PacoteDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
+import { superficie } from "@/components/sistema/estilos";
 
 /**
  * A copy do anúncio ao lado da arte: texto principal (o Meta mostra cerca de
@@ -123,12 +124,12 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
           {(nome || "?").trim().charAt(0).toUpperCase()}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12.5px] font-semibold">{nome || "Cliente"}</span>
+          <span className="block truncate text-[13px] font-semibold">{nome || "Cliente"}</span>
           <span className="flex items-center text-[11px] text-muted-foreground">Patrocinado <Globe className="ml-1 h-3 w-3" /></span>
         </span>
         <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
       </div>
-      <p className="whitespace-pre-wrap px-3 pb-2 text-[12.5px] leading-snug [overflow-wrap:anywhere]">
+      <p className="whitespace-pre-wrap px-3 pb-2 text-[13px] leading-snug [overflow-wrap:anywhere]">
         {visivel || <span className="text-muted-foreground">Texto principal</span>}
         {cortado && <span className="text-muted-foreground">… mais</span>}
       </p>
@@ -139,10 +140,10 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
       </div>
       <div className="flex items-center bg-muted/60 px-3 py-2">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12.5px] font-semibold">{copy.titulo || <span className="font-normal text-muted-foreground">Título</span>}</span>
+          <span className="block truncate text-[13px] font-semibold">{copy.titulo || <span className="font-normal text-muted-foreground">Título</span>}</span>
           {copy.descricao && <span className="block truncate text-[11px] text-muted-foreground">{copy.descricao}</span>}
         </span>
-        <span className="ml-2 shrink-0 rounded-md bg-secondary px-2.5 py-1.5 text-[11.5px] font-medium">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
+        <span className="ml-2 shrink-0 rounded-md bg-secondary px-2.5 py-1.5 text-[12px] font-medium">{rotuloDoCta(copy.cta_meta) || "CTA"}</span>
       </div>
     </div>
   );
@@ -223,9 +224,9 @@ export default function PainelDaCopy({
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4" aria-label="Copy do anúncio">
+      <section className={`${superficie.painel} space-y-3 p-4`} aria-label="Copy do anúncio">
         <div className="flex items-center">
-          <h3 className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Copy do anúncio</h3>
+          <h3 className="flex-1 text-[11px] font-medium text-muted-foreground">Copy do anúncio</h3>
           {salvando ? (
             <span className="inline-flex items-center text-[11px] text-muted-foreground"><Loader2 className="mr-1 h-3 w-3 animate-spin" /> salvando</span>
           ) : mudou ? (
@@ -235,7 +236,7 @@ export default function PainelDaCopy({
           )}
         </div>
         {porqueDaCopy && (
-          <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-porque-da-copy="">
+          <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-porque-da-copy="">
             <span className="font-medium text-foreground">Por que esta copy: </span>
             {porqueDaCopy}
           </p>
@@ -250,7 +251,7 @@ export default function PainelDaCopy({
           </p>
         )}
         <label className="block">
-          <span className="mb-1 flex items-center text-[11.5px] font-medium text-foreground/80">
+          <span className="mb-1 flex items-center text-[12px] font-medium text-foreground/80">
             <span className="flex-1">Texto principal</span>
             <Contador atual={texto.length} limite={LIMITE_TEXTO_VISIVEL} rotulo="Texto principal" />
           </span>
@@ -258,25 +259,25 @@ export default function PainelDaCopy({
           <span className="mt-1 block text-[11px] text-muted-foreground">Os primeiros {LIMITE_TEXTO_VISIVEL} caracteres aparecem sem o "mais": a promessa e o motivo para clicar vão aqui.</span>
         </label>
         <label className="block">
-          <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Texto longo (opcional)</span>
+          <span className="mb-1 block text-[12px] font-medium text-foreground/80">Texto longo (opcional)</span>
           <Textarea aria-label="Texto principal longo" rows={3} className="text-[13px] leading-relaxed" value={copy.texto_principal_longo || ""} onChange={(e) => campo("texto_principal_longo", e.target.value)} onBlur={() => void salvar(true)} />
         </label>
         <label className="block">
-          <span className="mb-1 flex items-center text-[11.5px] font-medium text-foreground/80">
+          <span className="mb-1 flex items-center text-[12px] font-medium text-foreground/80">
             <span className="flex-1">Título</span>
             <Contador atual={titulo.length} limite={LIMITE_TITULO} rotulo="Título" />
           </span>
           <Input aria-label="Título" className="h-9 text-[13px]" value={titulo} onChange={(e) => campo("titulo", e.target.value)} onBlur={() => void salvar(true)} />
         </label>
         <label className="block">
-          <span className="mb-1 flex items-center text-[11.5px] font-medium text-foreground/80">
+          <span className="mb-1 flex items-center text-[12px] font-medium text-foreground/80">
             <span className="flex-1">Descrição</span>
             <Contador atual={(copy.descricao || "").length} limite={LIMITE_DESCRICAO} rotulo="Descrição" />
           </span>
           <Input aria-label="Descrição" className="h-9 text-[13px]" value={copy.descricao || ""} onChange={(e) => campo("descricao", e.target.value)} onBlur={() => void salvar(true)} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Botão (CTA do Meta)</span>
+          <span className="mb-1 block text-[12px] font-medium text-foreground/80">Botão (CTA do Meta)</span>
           <select
             aria-label="CTA do Meta"
             value={copy.cta_meta || ""}
@@ -292,7 +293,7 @@ export default function PainelDaCopy({
 
         <div className="border-t border-border pt-3">
           <div className="flex min-w-0 items-center">
-            <Input aria-label="Pedido para refinar a copy" className="mr-2 h-9 min-w-0 flex-1 text-[12.5px]" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido (tom, objeção, prova) ou muda todo o conteúdo" />
+            <Input aria-label="Pedido para refinar a copy" className="mr-2 h-9 min-w-0 flex-1 text-[13px]" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido (tom, objeção, prova) ou muda todo o conteúdo" />
             <BotaoComCusto
               rotulo={<><Shuffle className="mr-1 h-3.5 w-3.5" /> {refazerTudo ? "Refazer tudo" : "Refinar copy"}</>}
               titulo={refazerTudo ? "Trocar todo o conteúdo" : "Refinar a copy"}
@@ -336,7 +337,7 @@ export default function PainelDaCopy({
           <div className="mt-1"><Andamento desde={desde} rotulo={refazerTudo ? "Reescrevendo todo o conteúdo" : "Escrevendo variações"} /></div>
           {troca && <div className="mt-2"><TrocaDeConteudo troca={troca} onFechar={() => setTroca(null)} /></div>}
           {loteFeito && (
-            <button type="button" className="mt-1.5 text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => {
+            <button type="button" className="mt-1.5 text-[12px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => {
               const guardada = trocaGuardada(criativo, queryClient.getQueryData<CriativoAds[]>(chavesAds.criativos(clientId)) || []);
               if (guardada) setTroca(guardada);
             }}>
@@ -346,16 +347,16 @@ export default function PainelDaCopy({
           {variacoes.length > 0 && (
             <ul className="mt-2 space-y-2" aria-label="Variações de copy">
               {variacoes.map((v, i) => (
-                <li key={i} className={`rounded-lg border bg-background p-2.5 ${v.melhor ? "border-primary/50" : "border-border"}`}>
+                <li key={i} className={`rounded-md border bg-background p-2.5 ${v.melhor ? "border-primary/50" : "border-border"}`}>
                   {(v.melhor || v.framework || rotuloDoAnguloDeVenda(v.angulo_de_venda)) && (
-                    <p className="mb-1 flex min-w-0 flex-wrap items-center text-[10.5px]">
+                    <p className="mb-1 flex min-w-0 flex-wrap items-center text-[11px]">
                       {v.melhor && <span className="mr-1.5 rounded-full bg-primary px-1.5 py-px font-medium text-primary-foreground">Melhor</span>}
                       {rotuloDoAnguloDeVenda(v.angulo_de_venda) && <span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-px font-medium text-primary" data-angulo-da-variacao={v.angulo_de_venda}>{rotuloDoAnguloDeVenda(v.angulo_de_venda)}</span>}
                       {v.framework && <span className="text-muted-foreground">{ESTRUTURAS_DE_COPY[v.framework] || v.framework}</span>}
                       {v.jev && notaCurta(v.jev.clareza) ? <span className="ml-1.5 text-muted-foreground">{`· clareza ${notaCurta(v.jev.clareza)}`}</span> : null}
                     </p>
                   )}
-                  <p className="whitespace-pre-wrap text-[12.5px] leading-snug [overflow-wrap:anywhere]">{v.texto_principal}</p>
+                  <p className="whitespace-pre-wrap text-[13px] leading-snug [overflow-wrap:anywhere]">{v.texto_principal}</p>
                   {v.titulo && <p className="mt-1 text-[12px] font-semibold">{v.titulo}</p>}
                   {v.porque && <p className="mt-1 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{v.porque}</p>}
                   <div className="mt-1.5 flex items-center">

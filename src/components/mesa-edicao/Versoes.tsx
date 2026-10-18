@@ -85,19 +85,19 @@ function Versao({ v, ehAtual }: { v: VersaoDeVideo; ehAtual: boolean }) {
 
   return (
     <li className="py-2" data-versao={v.id}>
-      <p className="flex min-w-0 flex-wrap items-center text-[12.5px]">
+      <p className="flex min-w-0 flex-wrap items-center text-[13px]">
         <span className="mr-2 font-medium">Versão {v.numero}</span>
-        <span className={`mr-2 rounded-full px-2 py-px text-[10.5px] font-medium ${COR_DO_ESTADO[v.estado] || ""}`}>{ROTULO_DO_ESTADO[v.estado]}</span>
+        <span className={`mr-2 rounded-full px-2 py-px text-[11px] font-medium ${COR_DO_ESTADO[v.estado] || ""}`}>{ROTULO_DO_ESTADO[v.estado]}</span>
         {v.custo_usd !== null && <span className="mr-2 text-[11px] text-muted-foreground">{usd(v.custo_usd)}</span>}
         {v.projeto && <span className="mr-2 text-[11px] text-muted-foreground" data-versao-com-projeto="">projeto rev. {String((v.projeto as { revisao?: unknown }).revisao ?? 0)}</span>}
         <span className="text-[11px] text-muted-foreground">{v.criado_em ? new Date(v.criado_em).toLocaleDateString("pt-BR") : ""}</span>
       </p>
-      {v.nota && <p className="mt-0.5 text-[11.5px] text-muted-foreground">{v.nota}</p>}
-      {v.motivo && <p className="mt-0.5 text-[11.5px] text-muted-foreground">Motivo: {v.motivo}</p>}
+      {v.nota && <p className="mt-0.5 text-[12px] text-muted-foreground">{v.nota}</p>}
+      {v.motivo && <p className="mt-0.5 text-[12px] text-muted-foreground">Motivo: {v.motivo}</p>}
       {v.feedback.length > 0 && (
         <ul className="mt-1 space-y-0.5">
           {v.feedback.map((f, i) => (
-            <li key={`${f.em}-${i}`} className="flex min-w-0 text-[11.5px]">
+            <li key={`${f.em}-${i}`} className="flex min-w-0 text-[12px]">
               <MessageSquare className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
               <span className="min-w-0 [overflow-wrap:anywhere]">
                 {f.tempo_s !== null && <span className="mr-1 font-medium">{tempoDoVideo(f.tempo_s)}</span>}
@@ -282,7 +282,7 @@ export default function Versoes({ troca }: { troca?: ReactNode } = {}) {
                 <button type="button" className="flex w-full min-w-0 items-center text-left" onClick={() => setAberto(expandido ? null : v.video_id)} aria-expanded={expandido}>
                   <History className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{v.titulo}</span>
-                  <span className={`ml-2 shrink-0 rounded-full px-2 py-px text-[10.5px] font-medium ${COR_DO_ESTADO[v.atual.estado] || ""}`}>
+                  <span className={`ml-2 shrink-0 rounded-full px-2 py-px text-[11px] font-medium ${COR_DO_ESTADO[v.atual.estado] || ""}`}>
                     v{v.atual.numero} · {ROTULO_DO_ESTADO[v.atual.estado]}
                   </span>
                   <span className="ml-2 hidden shrink-0 text-[11px] text-muted-foreground sm:inline">

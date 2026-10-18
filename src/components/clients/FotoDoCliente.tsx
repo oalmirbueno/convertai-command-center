@@ -5,7 +5,7 @@ const TAMANHO = {
   sm: { caixa: "h-9 w-9", texto: "text-[12px]", borda: "p-1" },
   md: { caixa: "h-10 w-10", texto: "text-[13px]", borda: "p-1" },
   lg: { caixa: "h-12 w-12", texto: "text-[14px]", borda: "p-1.5" },
-  xl: { caixa: "h-16 w-16", texto: "text-lg", borda: "p-2" },
+  xl: { caixa: "h-16 w-16", texto: "text-[20px]", borda: "p-2" },
 } as const;
 
 interface Props {

@@ -241,7 +241,7 @@ function CartaoDaSugestao({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente
   };
   return (
     <li className="min-w-0 rounded-md border border-primary/30 p-2.5" data-sugestao={sugestao.chave}>
-      <p className="text-[13.5px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
+      <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{sugestao.titulo}</p>
       {sugestao.descricao && <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{sugestao.descricao}</p>}
       <div className="mt-2 flex items-center">
         <Button type="button" size="sm" variant={aplicada ? "ghost" : "outline"} className="h-7 text-[11px]" disabled={bloqueada || aplicando || aplicada} onClick={() => void aplicar()}>
@@ -613,7 +613,7 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
         {/* Núcleo comum: balões, quadros conferidos e fontes clicáveis (o texto antigo sem quadro sai igual). */}
         <TextoDoAgente texto={m.entendi || m.proximo_passo ? semBlocos(m.texto) : m.texto} clientId={clientId} />
         {m.proximo_passo && (
-          <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[13.5px]" data-proximo-do-diretor="">
+          <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[13px]" data-proximo-do-diretor="">
             <span className="font-semibold text-primary">Próximo passo: </span>
             {m.proximo_passo}
           </p>

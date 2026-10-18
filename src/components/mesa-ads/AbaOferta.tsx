@@ -79,7 +79,7 @@ const seletorNativo = "h-9 min-w-0 max-w-full rounded-md border border-input bg-
 
 /** Marca de campo sem dado (nada é inventado). */
 function Lacuna() {
-  return <span className="ml-1.5 shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-[10px] font-medium text-warning">lacuna</span>;
+  return <span className="ml-1.5 shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-[11px] font-medium text-warning">lacuna</span>;
 }
 
 /** Campo do briefing: rótulo em cima (com a marca de lacuna), controle e uma linha de apoio. */
@@ -199,8 +199,8 @@ function Ideias({ ideias, onLevar }: { ideias: Ideia[]; onLevar: (i: Ideia) => v
         {ideias.map((i, k) => (
           <li key={`${i.titulo}-${k}`} className="flex min-w-0 flex-wrap items-start py-2.5">
             <div className="mr-3 min-w-0 flex-1">
-              <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">{i.titulo}</p>
-              {i.gancho_verbal && <p className="mt-0.5 font-serif text-[14.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{`“${i.gancho_verbal}”`}</p>}
+              <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{i.titulo}</p>
+              {i.gancho_verbal && <p className="mt-0.5 font-serif text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{`“${i.gancho_verbal}”`}</p>}
               {i.gancho_visual && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{i.gancho_visual}</p>}
               {(i.estilo_visual || i.formato) && (
                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{[i.estilo_visual ? humanizar(i.estilo_visual) : "", i.formato ? humanizar(i.formato) : ""].filter(Boolean).join(" · ")}</p>
@@ -506,7 +506,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
             )}
 
             {ultima && ultima.resposta && (
-              <p className={juntar(superficie.poco, "px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]")} aria-label="Resumo do agente">
+              <p className={juntar(superficie.poco, "px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]")} aria-label="Resumo do agente">
                 {ultima.resposta}
               </p>
             )}
@@ -679,7 +679,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
                       onMudar={(v) => mudar((x) => { x.publico.estagio_consciencia = v; return x; })}
                     />
                     {b.publico.estagio_consciencia && (
-                      <p className="text-[11.5px] leading-snug text-muted-foreground">{(ESTAGIOS.find((e) => e.valor === b.publico.estagio_consciencia) || ESTAGIOS[0]).dica}</p>
+                      <p className="text-[12px] leading-snug text-muted-foreground">{(ESTAGIOS.find((e) => e.valor === b.publico.estagio_consciencia) || ESTAGIOS[0]).dica}</p>
                     )}
                   </div>
                   <div className="min-w-0 space-y-2">

@@ -66,7 +66,7 @@ function Resultado({ arquivo }: { arquivo: ArquivoDeVideo }) {
   return (
     <li className="min-w-0" data-resultado={arquivo.id}>
       <Previa arquivo={arquivo} />
-      <p className="mt-1.5 truncate text-[12.5px] font-medium" title={arquivo.nome_original}>
+      <p className="mt-1.5 truncate text-[13px] font-medium" title={arquivo.nome_original}>
         {arquivo.nome}
       </p>
       <p className={juntar(texto.auxiliar, "truncate")}>{detalhes.join(" · ") || "Gerado"}</p>

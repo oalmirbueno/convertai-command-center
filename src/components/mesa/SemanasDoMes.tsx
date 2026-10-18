@@ -113,8 +113,8 @@ export function DetalheDoConteudo({ item }: { item: ItemProposto }) {
           ))}
         </ul>
       )}
-      {item.gancho && <p className="text-[12.5px] font-medium [overflow-wrap:anywhere]">{item.gancho}</p>}
-      {texto && <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{texto}</p>}
+      {item.gancho && <p className="text-[13px] font-medium [overflow-wrap:anywhere]">{item.gancho}</p>}
+      {texto && <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{texto}</p>}
       {cards.length > 0 && (
         <ol className={juntar(estiloDeLista.divisoria, "min-w-0")}>
           {cards.map((c) => (
@@ -313,8 +313,8 @@ export default function SemanasDoMes({
         const abaixo = !!esperadoPorSemana && total < esperadoPorSemana;
         return (
           <section key={s.semana} className="min-w-0" aria-label={s.inicio ? `Semana de ${dataCurtaDaSemana(s.inicio)}` : "Sem data"}>
-            <p className="flex min-w-0 flex-wrap items-baseline border-b border-border/60 pb-1 text-[11.5px]" data-cabecalho-da-semana="">
-              <span className="mr-2 font-semibold uppercase tracking-wide text-muted-foreground">{s.inicio ? `Semana de ${dataCurtaDaSemana(s.inicio)}` : "Sem data"}</span>
+            <p className="flex min-w-0 flex-wrap items-baseline border-b border-border/60 pb-1 text-[12px]" data-cabecalho-da-semana="">
+              <span className="mr-2 font-semibold text-muted-foreground">{s.inicio ? `Semana de ${dataCurtaDaSemana(s.inicio)}` : "Sem data"}</span>
               <span className="text-muted-foreground">{resumoDaMistura(s.formatos)}</span>
               {abaixo && <span className="ml-2 text-warning">abaixo de {esperadoPorSemana} por semana</span>}
             </p>

@@ -504,7 +504,7 @@ export default function MCPManager() {
                       <h4 className={juntar(texto.corpo, "mr-2 min-w-0 truncate font-semibold")}>{agent.name}</h4>
                       <span className={juntar(etiqueta, "uppercase", agent.auth === "oauth" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")}>{agent.auth}</span>
                     </div>
-                    <p className="mt-0.5 text-[12.5px] leading-5 text-muted-foreground">{agent.title}. {agent.description}</p>
+                    <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{agent.title}. {agent.description}</p>
                     <div className="-m-0.5 mt-1.5 flex flex-wrap">
                       {agent.defaultScopes.map(scope => <span key={scope} className={juntar(etiqueta, "m-0.5 border border-border font-mono text-muted-foreground")}>{scope}</span>)}
                     </div>
@@ -613,7 +613,7 @@ export default function MCPManager() {
               <Carregando linhas={1} rotulo="Lendo o servidor" />
             ) : (
               <p className="flex items-baseline">
-                <span className="mr-2 text-[28px] font-semibold leading-8 tabular-nums text-primary">{discovery?.toolCount ?? 0}</span>
+                <span className="mr-2 text-[24px] font-semibold leading-8 tabular-nums text-primary">{discovery?.toolCount ?? 0}</span>
                 <span className={texto.auxiliar}>tools expostos pelo servidor</span>
               </p>
             )}
@@ -673,7 +673,7 @@ export default function MCPManager() {
                   {audit.map(a => (
                     <li key={a.id} className="min-w-0 py-2.5">
                       <div className="flex min-w-0 items-center">
-                        <code className="mr-2 min-w-0 flex-1 truncate font-mono text-[12.5px]">{a.tool_name}</code>
+                        <code className="mr-2 min-w-0 flex-1 truncate font-mono text-[13px]">{a.tool_name}</code>
                         {a.success
                           ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>{a.status_code ?? 200}</span>
                           : <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")} title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</span>}
@@ -727,7 +727,7 @@ export default function MCPManager() {
             <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}>
               <ShieldCheck className="mr-2 h-4 w-4 text-primary" aria-hidden="true" /> Credencial criada
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-5">
+            <DialogDescription className="text-[13px] leading-5">
               <span className="font-medium text-warning">O token aparece só esta vez.</span> Guarde num local seguro (gerenciador de senhas, cofre da equipe). Depois de fechar, só dá para rotacionar ou revogar.
             </DialogDescription>
           </DialogHeader>
@@ -906,7 +906,7 @@ function EditarPermissoesDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className={texto.tituloSecao}>Editar permissões</DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-5">
+          <DialogDescription className="text-[13px] leading-5">
             Credencial <span className="font-medium text-foreground">{credencial?.name}</span>. Vale na próxima chamada do agente, sem trocar o token.
           </DialogDescription>
         </DialogHeader>
@@ -966,7 +966,7 @@ function CreateCredentialDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className={texto.tituloSecao}>{rotate ? "Rotacionar credencial" : agent ? `Conectar ${agent.name}` : "Nova conexão MCP"}</DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-5">
+          <DialogDescription className="text-[13px] leading-5">
             {rotate
               ? "Cria uma credencial nova com os mesmos escopos e revoga a anterior."
               : agent
@@ -1050,7 +1050,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className={juntar(texto.tituloSecao, "flex items-center")}><Zap className="mr-2 h-4 w-4 text-primary" aria-hidden="true" /> Testar conexão</DialogTitle>
-          <DialogDescription className="text-[12.5px] leading-5">
+          <DialogDescription className="text-[13px] leading-5">
             Credencial <span className="font-medium text-foreground">{keyName}</span>. Valida <code>initialize</code> e <code>tools/list</code>.
           </DialogDescription>
         </DialogHeader>

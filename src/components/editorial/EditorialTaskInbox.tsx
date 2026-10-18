@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { superficie } from "@/components/sistema/estilos";
 
 export interface EditorialInboxTask {
   id: string;
@@ -146,11 +147,11 @@ function TaskCard({
       }
       className={cn(
         "relative flex min-h-52 w-[min(82vw,19rem)] shrink-0 snap-start flex-col rounded-xl border border-border bg-background p-3.5 shadow-sm transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none sm:w-[19rem]",
-        "hover:border-primary/30 hover:shadow-md",
-        isDragging && "z-20 border-primary/45 opacity-55 shadow-lg",
+        "hover:border-primary/30 hover:shadow-sm",
+        isDragging && "z-20 border-primary/45 opacity-55 shadow-sm",
       )}
     >
-      <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-primary">
+      <div className="flex min-w-0 items-center gap-2 text-[12px] leading-4 font-medium text-primary">
         <Palette className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="truncate" title={projectScopeName}>
           {projectScopeName}
@@ -183,7 +184,7 @@ function TaskCard({
           <dd className="mt-1">
             <Badge
               variant="secondary"
-              className="h-6 max-w-full rounded-md px-2 text-[10px] font-medium"
+              className="h-6 max-w-full rounded-md px-2 text-[11px] font-medium"
             >
               <span className="truncate">
                 {statusLabels[task.status] || task.status}
@@ -210,7 +211,7 @@ function TaskCard({
           <dd className="mt-1">
             <span
               className={cn(
-                "inline-flex h-6 items-center rounded-md border px-2 text-[10px] font-medium text-foreground",
+                "inline-flex h-6 items-center rounded-md border px-2 text-[11px] font-medium text-foreground",
                 priority.className,
               )}
             >
@@ -227,7 +228,7 @@ function TaskCard({
         </span>
         <button
           type="button"
-          className="inline-flex h-11 min-w-11 touch-none cursor-grab items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-11 min-w-11 touch-none cursor-grab items-center justify-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/35 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
           aria-label={`Arrastar tarefa ${task.title}`}
           disabled={disabled}
           {...listeners}
@@ -242,7 +243,7 @@ function TaskCard({
           type="button"
           onClick={onCreate}
           disabled={disabled}
-          className="h-11 flex-1 px-3 text-xs sm:flex-none"
+          className="h-11 flex-1 px-3 text-[12px] leading-4 sm:flex-none"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           Criar conteúdo
@@ -297,7 +298,7 @@ export default function EditorialTaskInbox({
 
   return (
     <section
-      className="w-full min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+      className={`${superficie.painel} w-full min-w-0 overflow-hidden`}
       aria-labelledby={titleId}
       aria-busy={loading}
     >
@@ -316,19 +317,19 @@ export default function EditorialTaskInbox({
             <div className="flex flex-wrap items-center gap-2">
               <h2
                 id={titleId}
-                className="text-base font-semibold text-foreground"
+                className="text-[15px] font-semibold text-foreground"
               >
                 {scopeTitle}
               </h2>
               <Badge
                 variant="secondary"
-                className="h-6 rounded-md px-2 text-[10px] tabular-nums"
+                className="h-6 rounded-md px-2 text-[11px] tabular-nums"
                 aria-label={`${totalTasks} tarefas no escopo atual`}
               >
                 {totalTasks}
               </Badge>
             </div>
-            <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+            <p className="mt-1 max-w-3xl text-[12px] leading-5 text-muted-foreground">
               Vêm do Kanban central e ainda não têm conteúdo vinculado.
               A ordem considera prioridade, etapa e prazo. Arraste para o
               calendário ou crie o conteúdo direto daqui.
@@ -360,7 +361,7 @@ export default function EditorialTaskInbox({
         {expanded && (
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
             <div
-              className="inline-flex min-h-[52px] w-full shrink-0 items-center rounded-lg border border-border bg-background p-1 sm:w-auto"
+              className="inline-flex min-h-[52px] w-full shrink-0 items-center rounded-md border border-border bg-background p-1 sm:w-auto"
               role="group"
               aria-label="Filtrar tarefas por área"
             >
@@ -369,7 +370,7 @@ export default function EditorialTaskInbox({
                 onClick={() => onScopeChange("design")}
                 aria-pressed={scope === "design"}
                 className={cn(
-                  "h-11 flex-1 rounded-md px-4 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:flex-none",
+                  "h-11 flex-1 rounded-md px-4 text-[12px] leading-4 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:flex-none",
                   scope === "design"
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground",
@@ -382,7 +383,7 @@ export default function EditorialTaskInbox({
                 onClick={() => onScopeChange("all")}
                 aria-pressed={scope === "all"}
                 className={cn(
-                  "h-11 flex-1 rounded-md px-4 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:flex-none",
+                  "h-11 flex-1 rounded-md px-4 text-[12px] leading-4 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:flex-none",
                   scope === "all"
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground",
@@ -406,14 +407,14 @@ export default function EditorialTaskInbox({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar por tarefa, cliente, projeto ou responsável"
-                className="h-11 bg-background pl-10 text-base sm:text-sm"
+                className="h-11 bg-background pl-10 text-[16px] sm:text-[13px] sm:leading-5"
               />
             </div>
 
             <Button
               asChild
               variant="outline"
-              className="h-11 shrink-0 justify-center px-4 text-xs"
+              className="h-11 shrink-0 justify-center px-4 text-[12px] leading-4"
             >
               <Link to={kanbanHref}>
                 Abrir Kanban central
@@ -441,14 +442,14 @@ export default function EditorialTaskInbox({
             </div>
           ) : error ? (
             <div
-              className="flex min-h-28 flex-col items-center justify-between gap-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-center sm:flex-row sm:text-left"
+              className="flex min-h-28 flex-col items-center justify-between gap-4 rounded-md border border-destructive/25 bg-destructive/5 p-4 text-center sm:flex-row sm:text-left"
               role="alert"
             >
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-[13px] leading-5 font-medium text-foreground">
                   Não foi possível carregar as tarefas
                 </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                   Abra o Kanban central para continuar ou tente novamente
                   mais tarde.
                 </p>
@@ -487,10 +488,10 @@ export default function EditorialTaskInbox({
                 className="h-6 w-6 text-muted-foreground/50"
                 aria-hidden="true"
               />
-              <p className="mt-2 text-sm font-medium text-foreground">
+              <p className="mt-2 text-[13px] leading-5 font-medium text-foreground">
                 {search ? "Nenhuma tarefa encontrada" : "Tudo organizado"}
               </p>
-              <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+              <p className="mt-1 max-w-md text-[12px] leading-5 text-muted-foreground">
                 {search
                   ? "Tente buscar por outro nome de tarefa, cliente, projeto ou responsável."
                   : scope === "design"
@@ -501,7 +502,7 @@ export default function EditorialTaskInbox({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="mt-2 h-11 text-xs"
+                  className="mt-2 h-11 text-[12px] leading-4"
                   onClick={() => setSearch("")}
                 >
                   Limpar busca

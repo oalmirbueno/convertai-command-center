@@ -61,10 +61,10 @@ export function AcaoDoErro({ erro, onDepois }: { erro: unknown; onDepois?: () =>
   if (!(erro instanceof ErroDaMesa) || !erro.acao) return null;
   const { acao } = erro;
   if (acao === "recarregar" && !mesa.podeRecarregar) {
-    return <p className="text-[11.5px] text-muted-foreground">Peça a um admin ou gestor para recarregar a carteira deste cliente.</p>;
+    return <p className="text-[12px] text-muted-foreground">Peça a um admin ou gestor para recarregar a carteira deste cliente.</p>;
   }
   if ((acao === "cota" || acao === "chave" || acao === "modelo") && !mesa.isAdmin) {
-    return <p className="text-[11.5px] text-muted-foreground">Peça a um admin para resolver em {acao === "modelo" ? "Modelos de IA" : "Chaves e cotas"}.</p>;
+    return <p className="text-[12px] text-muted-foreground">Peça a um admin para resolver em {acao === "modelo" ? "Modelos de IA" : "Chaves e cotas"}.</p>;
   }
   const abrir = () => {
     if (acao === "recarregar") mesa.abrirRecarga();
@@ -322,7 +322,7 @@ export function BotaoComCusto({
       {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
       {armado ? (valor === undefined ? "Sem estimativa: clique de novo" : "Clique de novo para confirmar") : rotulo}
       {!rodando && valor !== undefined && (
-        <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[10.5px] font-normal opacity-80 dark:bg-white/10">
+        <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[11px] font-normal opacity-80 dark:bg-white/10">
           ~{usd(valor)}
         </span>
       )}

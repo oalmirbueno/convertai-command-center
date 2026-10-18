@@ -31,15 +31,15 @@ function Passo({ feito, atual, titulo, detalhe }: { feito: boolean; atual: boole
   return (
     <li className="flex items-start">
       <span
-        className={`mr-2.5 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10.5px] font-semibold ${
+        className={`mr-2.5 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
           feito ? "border-success bg-success/10 text-success" : atual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"
         }`}
       >
         {feito ? <Check className="h-3 w-3" /> : null}
       </span>
       <span className="min-w-0">
-        <span className="block text-[12.5px] font-medium leading-tight">{titulo}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{detalhe}</span>
+        <span className="block text-[13px] font-medium leading-tight">{titulo}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{detalhe}</span>
       </span>
     </li>
   );
@@ -104,7 +104,7 @@ export default function EstudioEntrega({
   return (
     <div className="min-w-0 space-y-4">
       {trabalho.entrega_status === "reprovado" && trabalho.status !== "entregue" && (
-        <div className="rounded-lg border border-warning/50 bg-background p-3 text-[12.5px]">
+        <div className="rounded-lg border border-warning/50 bg-background p-3 text-[13px]">
           <p className="font-semibold text-warning">Pediram ajuste nesta arte</p>
           {trabalho.entrega_aviso && <p className="mt-1 [overflow-wrap:anywhere]">“{trabalho.entrega_aviso}”</p>}
           <p className="mt-1 leading-snug text-muted-foreground">Ajuste as lâminas e entregue de novo: vira um arquivo novo e volta para a aprovação.</p>
@@ -177,7 +177,7 @@ export default function EstudioEntrega({
             {entregando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <IconeDoModo className="mr-1.5 h-4 w-4" />}
             {rotuloDaOpcao(opcao, ehDesign)}
           </Button>
-          {!todas && <p className="text-center text-[11.5px] text-muted-foreground">Gere todas as lâminas para entregar.</p>}
+          {!todas && <p className="text-center text-[12px] text-muted-foreground">Gere todas as lâminas para entregar.</p>}
         </div>
       ) : (
         <div className="space-y-2">

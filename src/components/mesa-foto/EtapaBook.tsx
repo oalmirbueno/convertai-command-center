@@ -759,7 +759,7 @@ function ReferenciasDoBook({ aberto }: { aberto: BookAberto }) {
                 ) : r.url ? (
                   <img src={r.url} alt={r.titulo} loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                 ) : (
-                  <span className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">sem imagem</span>
+                  <span className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">sem imagem</span>
                 )}
               </Moldura>
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground" title={r.titulo}>

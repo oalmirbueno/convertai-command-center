@@ -105,7 +105,7 @@ function TestarPrimeiro({ plano }: { plano: PlanoAds }) {
               <span className="mr-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground">{t.ordem || i + 1}</span>
               {t.nome}
             </p>
-            {t.porque && <p className="mt-1 text-[12.5px] leading-snug [overflow-wrap:anywhere]"><span className="font-medium">Por quê: </span>{t.porque}</p>}
+            {t.porque && <p className="mt-1 text-[13px] leading-snug [overflow-wrap:anywhere]"><span className="font-medium">Por quê: </span>{t.porque}</p>}
             {t.metrica && <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Métrica que decide: {t.metrica}</p>}
             {t.corte && <p className="mt-1 text-[12px] leading-snug [overflow-wrap:anywhere]"><span className="font-medium">Corte: </span>{t.corte}</p>}
           </li>
@@ -120,7 +120,7 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <p className={texto.rotulo}>{rotulo}</p>
-      <p className="mt-0.5 whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{children}</p>
+      <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</p>
     </div>
   );
 }
@@ -131,8 +131,8 @@ function SeloDaPontuacao({ nota }: { nota: number | null }) {
   const tom = nota >= 7.5 ? "border-success/40 bg-success/10 text-success" : nota >= 6 ? "border-warning/40 bg-warning/10 text-warning" : "border-destructive/30 bg-destructive/10 text-destructive";
   return (
     <span className={`ml-2 inline-flex shrink-0 flex-col items-center rounded-lg border px-2 py-1 leading-none ${tom}`} aria-label={`Pontuação ${nota.toLocaleString("pt-BR")} de 10`}>
-      <span className="text-[17px] font-semibold tabular-nums">{nota.toLocaleString("pt-BR")}</span>
-      <span className="mt-0.5 text-[9px] uppercase tracking-wider opacity-80">de 10</span>
+      <span className="text-[15px] font-semibold tabular-nums">{nota.toLocaleString("pt-BR")}</span>
+      <span className="mt-0.5 text-[11px] opacity-80">de 10</span>
     </span>
   );
 }
@@ -174,7 +174,7 @@ function CartaoDoAngulo({
   const rodadas = typeof angulo.rodadas === "number" ? angulo.rodadas : 0;
   return (
     <article
-      className={`min-w-0 rounded-lg border bg-card p-4 transition-colors ${marcado ? "border-primary ring-1 ring-primary/40" : "border-border"}`}
+      className={juntar(superficie.painel, "min-w-0 p-4 transition-colors", marcado && "border-primary ring-1 ring-primary/40")}
       aria-label={`Ângulo ${indice + 1}: ${angulo.nome}`}
     >
       <div className="flex min-w-0 items-start">
@@ -183,11 +183,11 @@ function CartaoDoAngulo({
         </label>
         <div className="min-w-0 flex-1">
           <p className={texto.rotulo}>Ângulo {indice + 1}</p>
-          <h3 className="text-[14.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{angulo.nome}</h3>
+          <h3 className="text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{angulo.nome}</h3>
           <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
             {temQualidade && (
               <span
-                className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[10.5px] font-medium ${aprovado ? "bg-success/10 text-success" : "bg-warning/15 text-warning"}`}
+                className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium ${aprovado ? "bg-success/10 text-success" : "bg-warning/15 text-warning"}`}
                 data-aprovado={aprovado ? "sim" : "nao"}
               >
                 {aprovado ? <ShieldCheck className="mr-1 h-3 w-3" /> : <AlertTriangle className="mr-1 h-3 w-3" />}
@@ -224,7 +224,7 @@ function CartaoDoAngulo({
       )}
 
       {angulo.gancho_verbal && (
-        <p className="mt-3 font-serif text-[18px] font-semibold leading-snug [overflow-wrap:anywhere]">
+        <p className="mt-3 font-serif text-[20px] font-semibold leading-snug [overflow-wrap:anywhere]">
           {"“"}
           {angulo.gancho_verbal}
           {"”"}
@@ -240,8 +240,8 @@ function CartaoDoAngulo({
       </div>
 
       {angulo.hipotese && (
-        <blockquote className="mt-3 rounded-lg border-l-2 border-primary bg-primary/5 px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
-          <span className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Hipótese</span>
+        <blockquote className="mt-3 rounded-lg border-l-2 border-primary bg-primary/5 px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
+          <span className="mb-0.5 block text-[11px] font-medium text-muted-foreground">Hipótese</span>
           {angulo.hipotese}
         </blockquote>
       )}
@@ -553,7 +553,7 @@ export default function AbaPlano({
                       {n}
                     </button>
                   ))}
-                  <span className="px-2 text-[11.5px] text-muted-foreground">ângulos</span>
+                  <span className="px-2 text-[12px] text-muted-foreground">ângulos</span>
                 </div>
                 <span className="mb-1 ml-auto flex min-w-0 flex-wrap items-center">
                   <Andamento desde={desdeGerar} rotulo={rotuloDoPedido ? `${rotuloDoPedido}: montando e conferindo` : "Montando e conferindo os ângulos"} />
@@ -619,7 +619,7 @@ export default function AbaPlano({
             {(qualidade.rodadas !== null || qualidade.aprovados !== null || qualidade.objetivo || ofertaDoPlano) && (
               <div className={juntar(superficie.poco, "flex min-w-0 flex-wrap items-center px-3 py-2")} aria-label="Qualidade do plano">
                 <ShieldCheck className="mb-0.5 mr-2 mt-0.5 h-4 w-4 shrink-0 text-success" />
-                <span className="mb-0.5 mr-3 mt-0.5 text-[12.5px]">
+                <span className="mb-0.5 mr-3 mt-0.5 text-[13px]">
                   Conferência do Jev
                   {qualidade.rodadas !== null ? `: ${qualidade.rodadas} rodada${qualidade.rodadas === 1 ? "" : "s"} de qualidade` : ""}
                 </span>
@@ -628,7 +628,7 @@ export default function AbaPlano({
                   <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{qualidade.descartados.length} descartados</span>
                 )}
                 {qualidade.objetivo && <span className="mb-0.5 mr-1.5 mt-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(qualidade.objetivo)}</span>}
-                {ofertaDoPlano && <span className="mb-0.5 mt-0.5 min-w-0 truncate text-[11.5px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}
+                {ofertaDoPlano && <span className="mb-0.5 mt-0.5 min-w-0 truncate text-[12px] text-muted-foreground">Oferta: {ofertaDoPlano.nome}</span>}
               </div>
             )}
 

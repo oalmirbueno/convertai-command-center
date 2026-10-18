@@ -103,7 +103,7 @@ export default function EstudioRefinarTexto({
                   type="button"
                   aria-pressed={marcado}
                   onClick={() => alternar(o.id)}
-                  className={`mb-1 mr-1.5 h-7 rounded-full border px-2.5 text-[11.5px] transition-colors ${
+                  className={`mb-1 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] transition-colors ${
                     marcado ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                   }`}
                 >
@@ -155,7 +155,7 @@ export default function EstudioRefinarTexto({
               }}
             />
           </div>
-          {vazio && <p className="text-[11.5px] text-muted-foreground">Escreva o texto primeiro.</p>}
+          {vazio && <p className="text-[12px] text-muted-foreground">Escreva o texto primeiro.</p>}
           {opcoes.length > 0 && (
             <ol className="space-y-2" aria-label="Opções refinadas">
               {opcoes.map((o, i) => (
@@ -169,7 +169,7 @@ export default function EstudioRefinarTexto({
                   )}
                   <NotaDaCopy nota={o.nota} alerta={o.alerta} avisos={o.avisos} />
                   <div className="mt-1.5 flex justify-end">
-                    <Button type="button" size="sm" variant={aplicada === i ? "ghost" : "default"} className="h-7 px-2.5 text-[11.5px]" disabled={bloqueado || aplicando !== null} onClick={() => void aplicar(i)}>
+                    <Button type="button" size="sm" variant={aplicada === i ? "ghost" : "default"} className="h-7 px-2.5 text-[12px]" disabled={bloqueado || aplicando !== null} onClick={() => void aplicar(i)}>
                       {aplicando === i ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : aplicada === i ? <Check className="mr-1 h-3.5 w-3.5 text-success" /> : null}
                       {aplicada === i ? "Aplicada" : "Usar esta"}
                     </Button>

@@ -258,7 +258,7 @@ export function SeletorDeCliente({
           aria-expanded={aberto}
           aria-haspopup="listbox"
           aria-label={valor ? `Cliente: ${rotulo}. Trocar de cliente` : "Escolher o cliente"}
-          className="flex h-8 min-w-0 max-w-full items-center rounded-lg border border-border bg-card px-2.5 text-left text-[13px] font-semibold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[240px]"
+          className="flex h-8 min-w-0 max-w-full items-center rounded-md border border-border bg-card px-2.5 text-left text-[13px] font-semibold text-foreground transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:max-w-[240px]"
         >
           <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className={`min-w-0 flex-1 truncate ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
@@ -284,11 +284,11 @@ export function SeletorDeCliente({
         </div>
         <ul id="mesa-lista-de-clientes" ref={lista} role="listbox" aria-label="Clientes" className="max-h-[50vh] overflow-y-auto overscroll-contain p-1">
           {carregando && clientes.length === 0 && (
-            <li className="flex items-center px-2 py-3 text-[12.5px] text-muted-foreground">
+            <li className="flex items-center px-2 py-3 text-[12px] text-muted-foreground">
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Carregando clientes...
             </li>
           )}
-          {!carregando && filtrados.length === 0 && <li className="px-2 py-3 text-[12.5px] text-muted-foreground">Nenhum cliente com essa busca.</li>}
+          {!carregando && filtrados.length === 0 && <li className="px-2 py-3 text-[12px] text-muted-foreground">Nenhum cliente com essa busca.</li>}
           {filtrados.map((c, i) => (
             <li key={c.id} role="option" aria-selected={c.id === valor} data-indice={i}>
               <button
@@ -577,7 +577,7 @@ export default function MesaDoCliente() {
           >
             <ListOrdered className="h-4 w-4" aria-hidden="true" />
             {urgentes > 0 && (
-              <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10.5px] font-semibold leading-4 text-destructive-foreground tabular-nums">{urgentes}</span>
+              <span className="ml-1 rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-4 text-destructive-foreground tabular-nums">{urgentes}</span>
             )}
           </button>
           {podeVerCustos && (

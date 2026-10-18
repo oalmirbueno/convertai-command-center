@@ -29,13 +29,13 @@ export default function IndicadorDeGeracoes({ userId }: { userId: string | null 
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-1.5">
-        <p className="px-2 pb-1 pt-1.5 text-[11.5px] text-muted-foreground">A geração segue no servidor, mesmo com a tela fechada.</p>
+        <p className="px-2 pb-1 pt-1.5 text-[12px] text-muted-foreground">A geração segue no servidor, mesmo com a tela fechada.</p>
         <ul>
           {clientes.map((c) => (
             <li key={c.client_id}>
               <Link to={c.link} className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[13px] hover:bg-secondary/60">
                 <span className="min-w-0 truncate">{c.nome}</span>
-                <span className="shrink-0 text-[11.5px] text-muted-foreground">
+                <span className="shrink-0 text-[12px] text-muted-foreground">
                   {c.laminas} {c.laminas === 1 ? "lâmina" : "lâminas"}
                 </span>
               </Link>

@@ -94,7 +94,7 @@ function CartaoDeArquivo({
       <li className="flex min-w-0 items-center rounded-md px-1.5 py-1 hover:bg-muted" {...drag}>
         <button type="button" onClick={onAbrir} className="flex min-w-0 flex-1 items-center text-left">
           <span className="relative mr-2.5 block h-10 w-10 shrink-0 overflow-hidden rounded bg-muted">{quadro}</span>
-          <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{nome}</span>
+          <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{nome}</span>
           {!imagem && <ExternalLink className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
         </button>
         {onSimular && (
@@ -114,7 +114,7 @@ function CartaoDeArquivo({
         {imagem && <Maximize2 className="absolute right-1.5 top-1.5 h-4 w-4 text-white opacity-0 drop-shadow transition-opacity group-hover:opacity-100" aria-hidden="true" />}
       </button>
       <div className="mt-1 flex min-w-0 items-center">
-        <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground" title={nome}>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground" title={nome}>
           {nome}
         </span>
         {onSimular && (
@@ -295,7 +295,7 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
 
       {fonte === "workspace" && (
         <div className="min-w-0 space-y-3">
-          <nav aria-label="Caminho da pasta" className="flex min-w-0 flex-wrap items-center text-[12.5px]">
+          <nav aria-label="Caminho da pasta" className="flex min-w-0 flex-wrap items-center text-[13px]">
             <button type="button" onClick={() => setPasta("")} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (arrastado) void moverNo(arrastado, null); }} className={pasta ? "rounded px-1 text-primary hover:underline" : "rounded px-1 font-semibold"}>
               Workspace
             </button>
@@ -349,7 +349,7 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
 
       {fonte === "arquivos" && (
         <div className="min-w-0 space-y-3">
-          <nav aria-label="Pasta de Arquivos" className="flex min-w-0 items-center text-[12.5px]">
+          <nav aria-label="Pasta de Arquivos" className="flex min-w-0 items-center text-[13px]">
             <button type="button" onClick={() => setPastaDeArquivos(null)} className={pastaDeArquivos ? "rounded px-1 text-primary hover:underline" : "rounded px-1 font-semibold"}>
               Arquivos
             </button>

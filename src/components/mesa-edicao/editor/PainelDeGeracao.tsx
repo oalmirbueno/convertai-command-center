@@ -195,7 +195,7 @@ export default function PainelDeGeracao({
                   type="button"
                   role="radio"
                   aria-checked={pose === p.id}
-                  className={juntar("h-8 truncate rounded-md border px-1 text-[11.5px]", pose === p.id ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted")}
+                  className={juntar("h-8 truncate rounded-md border px-1 text-[12px]", pose === p.id ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted")}
                   onClick={() => setPose(p.id)}
                   title={`azimute ${p.azimute}°, elevação ${p.elevacao}°`}
                 >

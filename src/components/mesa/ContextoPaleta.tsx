@@ -136,7 +136,7 @@ export function PaletaDaMarca({ paleta, carregando = false }: { paleta: CorDoKit
                 </span>
               </span>
               <span className="block min-w-0 px-2.5 py-2">
-                <span className="block truncate text-[12.5px] font-medium text-foreground">{temTexto(c.nome) ? c.nome : "Sem nome"}</span>
+                <span className="block truncate text-[13px] font-medium text-foreground">{temTexto(c.nome) ? c.nome : "Sem nome"}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">{copiado === i ? "Copiado" : papel || "Cor da marca"}</span>
               </span>
             </button>

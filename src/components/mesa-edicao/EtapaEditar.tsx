@@ -377,7 +377,7 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
             </CampoDeFormulario>
           </GrupoDeCampos>
           <div className={juntar(superficie.poco, "mt-4 px-3 py-2.5")} data-previa-do-pacote="">
-            <p className="text-[12.5px] font-medium">
+            <p className="text-[13px] font-medium">
               {pacote.resumo.takes} {pacote.resumo.takes === 1 ? "take" : "takes"}
               {pacote.resumo.melhores ? `, ${pacote.resumo.melhores} ${pacote.resumo.melhores === 1 ? "melhor" : "melhores"}` : ""}
               {pacote.resumo.duracao_melhores_s ? ` (${duracaoCurta(pacote.resumo.duracao_melhores_s)})` : ""}

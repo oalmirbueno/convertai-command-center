@@ -247,7 +247,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13.5px] font-semibold">{t.nome}</p>
+            <p className="truncate text-[13px] font-semibold">{t.nome}</p>
             <p className={juntar(texto.auxiliar, "truncate")}>
               {rotuloDoTipo(t)} · v{t.versao_atual}
               {t.status === "arquivado" ? " · arquivado" : ""}
@@ -618,7 +618,7 @@ export default function AbaTemplates({ modeloImagemId, referencias = [], convers
                     )}
                   </MiniaturaDoTemplate>
                   <p className="mt-1 truncate text-[11px]">{o.nome}</p>
-                  <p className="truncate text-[10.5px] text-muted-foreground">{o.detalhe}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{o.detalhe}</p>
                 </button>
               );
             })}

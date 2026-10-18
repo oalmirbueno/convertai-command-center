@@ -20,8 +20,8 @@ function RelatorioDeTexto({ href }: { href: string }) {
     if (blob.size > 1024 * 1024) throw new Error("Arquivo grande demais para a leitura rápida");
     return blob.text();
   } });
-  if (leitura.isLoading) return <p className="p-4 text-sm text-muted-foreground">Abrindo relatório…</p>;
-  if (leitura.error) return <p className="p-4 text-sm">Não foi possível mostrar o texto. <a className="text-primary" href={href} target="_blank" rel="noopener noreferrer">Abrir arquivo</a></p>;
+  if (leitura.isLoading) return <p className="p-4 text-[13px] leading-5 text-muted-foreground">Abrindo relatório…</p>;
+  if (leitura.error) return <p className="p-4 text-[13px] leading-5">Não foi possível mostrar o texto. <a className="text-primary" href={href} target="_blank" rel="noopener noreferrer">Abrir arquivo</a></p>;
   return <article className="prose prose-sm dark:prose-invert mx-auto w-full max-w-4xl overflow-x-auto break-words px-4 py-6 leading-7 prose-p:my-3"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{leitura.data || "Arquivo vazio."}</ReactMarkdown></article>;
 }
 
@@ -68,8 +68,8 @@ export function useProva(url: string) {
 /** O conteúdo da prova, grande: imagem, PDF, documento, texto, tela do painel ou site. */
 export function ConteudoDaProva({ url, nome }: { url: string; nome: string }) {
   const p = useProva(url);
-  if (!p.tipo) return <p className="p-4 text-sm text-muted-foreground">Esta prova é só texto, sem arquivo nem link.</p>;
-  if (p.isError) return <button onClick={() => void p.refetch()} className="p-4 text-sm text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
+  if (!p.tipo) return <p className="p-4 text-[13px] leading-5 text-muted-foreground">Esta prova é só texto, sem arquivo nem link.</p>;
+  if (p.isError) return <button onClick={() => void p.refetch()} className="p-4 text-[13px] leading-5 text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
   if (!p.href) return <div className="h-[60vh] w-full animate-pulse rounded-lg bg-muted/40" aria-label="Carregando" />;
   if (p.tipo !== "web" && /\.(md|txt)(?:[?#]|$)/i.test(p.formato)) return <RelatorioDeTexto href={p.href} />;
   if (p.arquivo) return <FilePreviewContent fileName={p.formato} fileUrl={p.href} fileId={p.tipo === "arquivo" ? url.slice("aceleriq-file://".length) : undefined} />;
@@ -79,7 +79,7 @@ export function ConteudoDaProva({ url, nome }: { url: string; nome: string }) {
   if (caminho) return <div className="h-[70vh] overflow-y-auto rounded-lg border border-border"><Suspense fallback={<div className="h-full animate-pulse bg-muted/40" />}><FerramentaNativa caminho={caminho} /></Suspense></div>;
   return <>
     <iframe title={nome} src={p.href} sandbox="allow-scripts allow-forms allow-popups" referrerPolicy="no-referrer" className="h-[70vh] w-full rounded-lg border border-border bg-white" />
-    <p className="mt-2 text-xs text-muted-foreground">Alguns sites bloqueiam a exibição aqui dentro. <a href={p.href} target="_blank" rel="noopener noreferrer" className="text-primary">Abrir o site</a></p>
+    <p className="mt-2 text-[12px] leading-4 text-muted-foreground">Alguns sites bloqueiam a exibição aqui dentro. <a href={p.href} target="_blank" rel="noopener noreferrer" className="text-primary">Abrir o site</a></p>
   </>;
 }
 
@@ -91,9 +91,9 @@ export default function EvidenciaVisual({ url, nome = "Comprovação", compacto 
   const [aberto, setAberto] = useState(false);
   const p = useProva(url);
   // Miniatura de galeria: prova só em texto (sem arquivo nem link) não vira aviso no meio da lista.
-  if (!p.tipo) return compacto ? null : <p className="text-xs text-muted-foreground">A comprovação precisa de um arquivo ou link válido.</p>;
-  if (p.isError) return <button onClick={() => void p.refetch()} className="text-xs text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
-  if (!p.href) return compacto ? <div className="aspect-square w-full animate-pulse rounded-lg bg-muted/50" aria-label="Carregando comprovação" /> : <p className="text-xs text-muted-foreground">Carregando comprovação…</p>;
+  if (!p.tipo) return compacto ? null : <p className="text-[12px] leading-4 text-muted-foreground">A comprovação precisa de um arquivo ou link válido.</p>;
+  if (p.isError) return <button onClick={() => void p.refetch()} className="text-[12px] leading-4 text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
+  if (!p.href) return compacto ? <div className="aspect-square w-full animate-pulse rounded-lg bg-muted/50" aria-label="Carregando comprovação" /> : <p className="text-[12px] leading-4 text-muted-foreground">Carregando comprovação…</p>;
   const titulo = nome === "Arquivo da execução" && p.nomeDoArquivo ? p.nomeDoArquivo : nome;
   const abrir = () => (aoAbrir ? aoAbrir() : setAberto(true));
   return <>
@@ -101,13 +101,13 @@ export default function EvidenciaVisual({ url, nome = "Comprovação", compacto 
       <button type="button" onClick={abrir} className="group block w-full overflow-hidden rounded-lg border border-border bg-muted/30 text-left hover:border-primary/60" aria-label={`Ver ${titulo}`} title={titulo}>
         {p.imagem
           ? <img src={p.href} loading="lazy" referrerPolicy="no-referrer" alt={titulo} className="aspect-square w-full object-cover transition-transform group-hover:scale-[1.02]" />
-          : <span className="flex aspect-square w-full flex-col items-center justify-center gap-2 p-3 text-center"><FileText className="h-8 w-8 text-primary" aria-hidden="true" /><span className="line-clamp-2 text-[11.5px] text-foreground">{titulo}</span></span>}
+          : <span className="flex aspect-square w-full flex-col items-center justify-center gap-2 p-3 text-center"><FileText className="h-8 w-8 text-primary" aria-hidden="true" /><span className="line-clamp-2 text-[12px] text-foreground">{titulo}</span></span>}
         {p.imagem && <span className="block truncate px-2 py-1 text-[11px] text-muted-foreground">{titulo}</span>}
       </button>
     ) : (
     <button type="button" onClick={abrir} className="group block w-full overflow-hidden rounded-xl border border-border bg-background text-left hover:border-primary/60" aria-label={`Ver ${titulo}`}>
       {p.imagem && <img src={p.href} loading="lazy" referrerPolicy="no-referrer" alt={titulo} className="max-h-[400px] w-full object-contain" />}
-      <span className="flex items-center gap-2 px-3 py-2 text-sm"><FileText className="h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate">{titulo}</span><Expand className="h-4 w-4 text-muted-foreground" /></span>
+      <span className="flex items-center gap-2 px-3 py-2 text-[13px] leading-5"><FileText className="h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate">{titulo}</span><Expand className="h-4 w-4 text-muted-foreground" /></span>
     </button>
     )}
     {!aoAbrir && (

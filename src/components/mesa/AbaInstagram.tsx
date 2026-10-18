@@ -89,7 +89,7 @@ function Chip({ ativo, onClick, icone, children, rotulo }: { ativo: boolean; onC
       title={rotulo}
       onClick={onClick}
       className={juntar(
-        "toque-compacto mr-1 inline-flex h-8 max-w-[168px] shrink-0 items-center rounded-full border px-2.5 text-[12.5px] transition-colors",
+        "toque-compacto mr-1 inline-flex h-8 max-w-[168px] shrink-0 items-center rounded-full border px-2.5 text-[13px] transition-colors",
         ativo ? "border-primary bg-primary/10 font-medium text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
       )}
     >
@@ -103,7 +103,7 @@ function Chip({ ativo, onClick, icone, children, rotulo }: { ativo: boolean; onC
 function Grupo({ rotulo, children, primeiro = false }: { rotulo: string; children: ReactNode; primeiro?: boolean }) {
   return (
     <div className={juntar("flex shrink-0 items-center", primeiro ? "" : "ml-1 border-l border-border pl-2")} role="group" aria-label={rotulo}>
-      <span className="mr-1.5 hidden text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground xl:inline">{rotulo}</span>
+      <span className="mr-1.5 hidden text-[11px] font-semibold text-muted-foreground xl:inline">{rotulo}</span>
       {children}
     </div>
   );
@@ -185,7 +185,7 @@ function Contas({
               <span className="sr-only">Adicionar outra rede</span>
               <Plus className="-mr-6 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
               <select
-                className="toque-compacto h-8 w-[96px] rounded-full border border-dashed border-border bg-background pl-7 pr-2 text-[12.5px] text-muted-foreground"
+                className="toque-compacto h-8 w-[96px] rounded-full border border-dashed border-border bg-background pl-7 pr-2 text-[12px] text-muted-foreground"
                 value=""
                 onChange={(e) => e.target.value && onAlvo(`rede:${e.target.value}`)}
                 aria-label="Adicionar outra rede"
@@ -210,30 +210,30 @@ function Contas({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[280px] p-2">
-        <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{marca ? marca.nome : "Contas"}</p>
+        <p className="px-1 pb-1 text-[11px] font-semibold text-muted-foreground">{marca ? marca.nome : "Contas"}</p>
         {contas.map((c) => (
-          <button key={c.id} type="button" onClick={() => onAlvo(`ig:${c.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+          <button key={c.id} type="button" onClick={() => onAlvo(`ig:${c.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted">
             <Instagram className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 truncate">@{c.username}</span>
           </button>
         ))}
         {paginas.map((p) => (
-          <button key={p.id} type="button" onClick={() => onAlvo(`fb:${p.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+          <button key={p.id} type="button" onClick={() => onAlvo(`fb:${p.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted">
             <Facebook className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 truncate">{p.nome}</span>
           </button>
         ))}
         {outrasMarcas.map((m) => (
           <div key={m.id} className="mt-1 border-t border-border pt-1">
-            <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{m.nome}</p>
+            <p className="px-1 pb-1 text-[11px] font-semibold text-muted-foreground">{m.nome}</p>
             {m.contas.map((c) => (
-              <button key={c.id} type="button" onClick={() => onOutraMarca(m.id, `ig:${c.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+              <button key={c.id} type="button" onClick={() => onOutraMarca(m.id, `ig:${c.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted">
                 <Instagram className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0 truncate">@{c.username}</span>
               </button>
             ))}
             {m.paginas.map((p) => (
-              <button key={p.id} type="button" onClick={() => onOutraMarca(m.id, `fb:${p.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+              <button key={p.id} type="button" onClick={() => onOutraMarca(m.id, `fb:${p.id}`)} className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted">
                 <Facebook className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0 truncate">{p.nome}</span>
               </button>
@@ -269,7 +269,7 @@ function AtalhosDoCliente({ painel, vista, onAbrir }: { painel: PainelDoInstagra
           {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): o rótulo fica no title e no leitor de tela. */}
           <span aria-hidden="true">{a.icone}</span>
           {a.parte === "proximos" && proximos > 0 && (
-            <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10.5px] font-semibold tabular-nums text-primary" aria-hidden="true">
+            <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
               {proximos}
             </span>
           )}

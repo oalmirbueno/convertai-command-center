@@ -248,7 +248,7 @@ export default function EditorialArtDropZone({
 
   const classeDoAlvo = (intencao: Intencao) =>
     cn(
-      "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-3 py-2.5 text-[11.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+      "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-3 py-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
       alvoAtivo === intencao
         ? "border-primary bg-primary/15 text-primary"
         : "border-primary/40 bg-primary/[0.04] text-primary hover:bg-primary/10",
@@ -280,12 +280,12 @@ export default function EditorialArtDropZone({
           onChange={(e) => setNome(e.target.value)}
           disabled={disabled || enviando}
           placeholder="Nome da peça (opcional — sem isto vale o nome do arquivo)"
-          className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11.5px] text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none disabled:opacity-50"
+          className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none disabled:opacity-50"
         />
       </label>
 
       {enviando ? (
-        <p className="mb-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary">
+        <p className="mb-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[12px] font-medium text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Enviando e vinculando…
         </p>
@@ -331,7 +331,7 @@ export default function EditorialArtDropZone({
                 disabled={disabled}
                 onClick={() => setDestino(opcao.valor)}
                 className={cn(
-                  "flex-1 cursor-pointer rounded-md border-none px-2 py-1.5 text-[10.5px] font-semibold transition-colors disabled:opacity-50",
+                  "flex-1 cursor-pointer rounded-md border-none px-2 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-50",
                   destino === opcao.valor
                     ? "bg-card text-foreground shadow-sm"
                     : "bg-transparent text-muted-foreground hover:text-foreground",
@@ -341,7 +341,7 @@ export default function EditorialArtDropZone({
               </button>
             ))}
           </div>
-          <p className="mb-2 text-center text-[10px] leading-snug text-muted-foreground">
+          <p className="mb-2 text-center text-[11px] leading-snug text-muted-foreground">
             Clique para escolher, ou arraste até o alvo certo. No carrossel, a ordem é a da seleção.
           </p>
         </>

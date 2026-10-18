@@ -1,4 +1,3 @@
-import Mesas from "./pages/Mesas";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { agendarPreCargaEmSegundoPlano } from "@/lib/appRefresh";
@@ -103,6 +102,9 @@ const MetaOAuthCallback = rotas.lazy(() => import("@/pages/MetaOAuthCallback"));
 const MCPConnect = rotas.lazy(() => import("@/pages/MCPConnect"));
 const Novidades = rotas.lazy(() => import("@/pages/Novidades"));
 const AdminHoras = rotas.lazy(() => import("@/pages/AdminHoras"));
+// O hub das mesas era import fixo e levava o seletor de clientes da Mesa para
+// o primeiro arquivo de todo mundo, até do /login (medido em 18/10).
+const Mesas = rotas.lazy(() => import("@/pages/Mesas"));
 // As três mesas baixam antes do clique (painel ocioso, mouse no link) e a
 // etapa que vai abrir baixa junto com a página: src/lib/mesa/preCarga.ts.
 const MesaDoCliente = PaginaMesaDoCliente;
@@ -267,22 +269,22 @@ function ProfileErrorScreen() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center bg-background">
       <img src={aceleriqLogo} alt="Aceleriq" className="brand-logo h-20 w-auto opacity-90" />
-      <p className="text-lg font-semibold text-foreground">Não conseguimos carregar o seu perfil</p>
-      <p className="max-w-[420px] text-sm leading-relaxed text-muted-foreground">
+      <p className="text-[20px] leading-7 font-semibold text-foreground">Não conseguimos carregar o seu perfil</p>
+      <p className="max-w-[420px] text-[13px] leading-relaxed text-muted-foreground">
         O servidor não respondeu a tempo. Confira a internet e tente de novo; a sua sessão continua válida.
       </p>
       <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
         <button
           type="button"
           onClick={() => { void retryProfile(); }}
-          className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+          className="rounded-xl bg-primary px-5 py-2.5 text-[13px] leading-5 font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
         >
           Tentar de novo
         </button>
         <button
           type="button"
           onClick={() => { void logout(); }}
-          className="rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-foreground hover:border-primary/50 transition-colors cursor-pointer bg-transparent"
+          className="rounded-xl border border-border px-5 py-2.5 text-[13px] leading-5 font-medium text-foreground hover:border-primary/50 transition-colors cursor-pointer bg-transparent"
         >
           Sair
         </button>

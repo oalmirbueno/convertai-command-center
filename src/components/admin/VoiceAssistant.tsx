@@ -1418,7 +1418,7 @@ export default function VoiceAssistant({
                       className="mr-1"
                     />
                   )}
-                  <kbd className="mr-1 hidden shrink-0 rounded border border-border px-1 font-mono text-[10px] leading-4 text-muted-foreground md:inline" title="Atalho para abrir o agente">{ATALHO_DO_AGENTE}</kbd>
+                  <kbd className="mr-1 hidden shrink-0 rounded border border-border px-1 font-mono text-[11px] leading-4 text-muted-foreground md:inline" title="Atalho para abrir o agente">{ATALHO_DO_AGENTE}</kbd>
                   <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" title="Fechar (Esc)" className={juntar(botao.icone, "h-9 w-9")}>
                     <X className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -1465,7 +1465,7 @@ export default function VoiceAssistant({
                       <div className="flex items-center justify-between rounded-lg border border-border p-3">
                         <div className="mr-3 min-w-0">
                           <p className="text-[11px] font-medium text-muted-foreground">Última ação</p>
-                          <p className="truncate text-[12.5px] text-foreground">{lastAction.label}</p>
+                          <p className="truncate text-[13px] text-foreground">{lastAction.label}</p>
                           <p className="text-[11px] text-muted-foreground">
                             {lastAction.refs.projectIds.length} projeto · {lastAction.refs.milestoneIds.length} etapas · {lastAction.refs.taskIds.length} tarefas · {lastAction.refs.checklistItemIds.length} checklists
                           </p>
@@ -1498,7 +1498,7 @@ export default function VoiceAssistant({
                                   {r.passos.map((p, i) => <li key={i} className="[overflow-wrap:anywhere]">{p}</li>)}
                                 </ol>
                               )}
-                              {r.aviso && <p className="mt-1 text-[12.5px] text-muted-foreground">{r.aviso}</p>}
+                              {r.aviso && <p className="mt-1 text-[12px] text-muted-foreground">{r.aviso}</p>}
                               {r.destino && <BotaoDaArea destino={r.destino} onAbrir={(link) => navigate(link)} className="mt-1.5" />}
                               <AprendizadoDoAgente
                                 anexos={r.aprendizado}
@@ -1536,7 +1536,7 @@ export default function VoiceAssistant({
 
                     {destino && (
                       <div className="flex min-w-0 flex-wrap items-center" data-destino-do-aceleriq="">
-                        <p className="mr-2 min-w-0 text-[12.5px] text-muted-foreground">Isso é na {destino.nome}.</p>
+                        <p className="mr-2 min-w-0 text-[12px] text-muted-foreground">Isso é na {destino.nome}.</p>
                         <BotaoDaArea destino={destino} onAbrir={(link) => { setDestino(null); navigate(link); }} />
                       </div>
                     )}
@@ -1547,10 +1547,10 @@ export default function VoiceAssistant({
                           <Sparkles className="mr-1.5 h-3 w-3 text-primary" />
                           <p className="text-[11px] font-medium text-primary">Plano do agente</p>
                           {aiConfidence !== null && (
-                            <span className="ml-auto font-mono text-[10px] text-muted-foreground">{Math.round(aiConfidence * 100)}% de certeza</span>
+                            <span className="ml-auto font-mono text-[11px] text-muted-foreground">{Math.round(aiConfidence * 100)}% de certeza</span>
                           )}
                         </div>
-                        <p className="text-[12.5px] leading-relaxed text-foreground">{aiNarrative}</p>
+                        <p className="text-[13px] leading-relaxed text-foreground">{aiNarrative}</p>
                         {aiPlan?.milestones?.length ? (
                           <details className="text-[11px] text-muted-foreground">
                             <summary className="cursor-pointer hover:text-foreground">
@@ -1562,7 +1562,7 @@ export default function VoiceAssistant({
                                   <p className="font-medium text-foreground">{m.title} <span className="font-normal text-muted-foreground">· +{m.offsetDays}d</span></p>
                                   <ul className="list-outside list-disc pl-3">
                                     {(m.tasks || []).map((t, j) => (
-                                      <li key={j}>{t.title} <span className="text-[9px] uppercase">[{t.role}]</span></li>
+                                      <li key={j}>{t.title} <span className="text-[11px]">[{t.role}]</span></li>
                                     ))}
                                   </ul>
                                 </li>
@@ -1665,40 +1665,40 @@ export default function VoiceAssistant({
                     {(files.length > 0 || fileReading || systemDocsLoading || systemDocs.length > 0) && (
                       <div className="space-y-1.5">
                         {systemDocsLoading && (
-                          <div className="flex items-center rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-xs text-primary">
+                          <div className="flex items-center rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-[12px] leading-4 text-primary">
                             <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
                             <span>Lendo documentos do cliente…</span>
                           </div>
                         )}
                         {systemDocs.map((d, i) => (
-                          <div key={`sys-${i}`} className="rounded-lg border border-border p-2.5 text-xs">
+                          <div key={`sys-${i}`} className="rounded-lg border border-border p-2.5 text-[12px] leading-4">
                             <div className="flex items-center text-foreground">
                               <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
                               <span className="flex-1 truncate">{d.fileName}</span>
-                              <span className="ml-2 text-[10px] text-muted-foreground">{d.source}</span>
+                              <span className="ml-2 text-[11px] text-muted-foreground">{d.source}</span>
                             </div>
                           </div>
                         ))}
                         {fileReading && (
-                          <div className="flex items-center rounded-lg border border-border bg-muted/50 p-2.5 text-xs">
+                          <div className="flex items-center rounded-lg border border-border bg-muted/50 p-2.5 text-[12px] leading-4">
                             <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
                             <span>Lendo anexos…</span>
                           </div>
                         )}
                         {fileCtxs.map((ctx, i) => (
-                          <div key={`att-${i}`} className="rounded-lg border border-border bg-muted/40 p-2.5 text-xs">
+                          <div key={`att-${i}`} className="rounded-lg border border-border bg-muted/40 p-2.5 text-[12px] leading-4">
                             <div className="flex items-center text-foreground">
                               <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
                               <span className="flex-1 truncate">{describeContext(ctx)}</span>
                               <button type="button" onClick={() => removeAttachment(i)} className="ml-2 text-destructive">remover</button>
                             </div>
                             {ctx.text && (
-                              <p className="mt-1.5 line-clamp-2 text-[10px] italic text-muted-foreground">
+                              <p className="mt-1.5 line-clamp-2 text-[11px] italic text-muted-foreground">
                                 "{ctx.text.slice(0, 200).replace(/\s+/g, " ")}…"
                               </p>
                             )}
                             {ctx.warning && (
-                              <p className="mt-1.5 text-[10px] text-amber-500">{ctx.warning}</p>
+                              <p className="mt-1.5 text-[11px] text-amber-500">{ctx.warning}</p>
                             )}
                           </div>
                         ))}
@@ -1707,7 +1707,7 @@ export default function VoiceAssistant({
                     {log.length > 0 && (
                       <div className="space-y-1.5 border-t border-border pt-2">
                         {log.map((l) => (
-                          <div key={l.id} className={`flex items-start whitespace-pre-line text-xs ${l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-primary" : "text-muted-foreground"}`}>
+                          <div key={l.id} className={`flex items-start whitespace-pre-line text-[12px] leading-4 ${l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-primary" : "text-muted-foreground"}`}>
                             {l.kind === "ok" ? <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" /> : l.kind === "error" ? <AlertCircle className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" /> : <FileText className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0" />}
                             <span>{l.text}</span>
                           </div>
@@ -1909,8 +1909,8 @@ export default function VoiceAssistant({
                 {phase === "preview" && parsed?.kind === "create_project" && scopePreview && (
                   <div className="space-y-3">
                     <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider text-primary">{selectedExistingProject ? "Atualização do projeto" : "Escopo do projeto"}</p>
-                      <h3 className="text-base font-semibold text-foreground">{answers.project_name}</h3>
+                      <p className="text-[11px] text-primary">{selectedExistingProject ? "Atualização do projeto" : "Escopo do projeto"}</p>
+                      <h3 className="text-[15px] font-semibold text-foreground">{answers.project_name}</h3>
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div>
                           <span className="text-muted-foreground">Cliente:</span>{" "}
@@ -1946,19 +1946,19 @@ export default function VoiceAssistant({
                       if (!answers.apply_template || !ms.length) return null;
                       return (
                         <div className="rounded-xl border border-border bg-secondary/40 p-3">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                          <p className="text-[11px] text-muted-foreground mb-2">
                             Vai criar · {ms.length} milestones · {total} tarefas · checklists
                             {aiPlan?.milestones?.length ? <span className="text-primary"> · derivado do contrato</span> : null}
                           </p>
                           <ul className="space-y-1.5">
                             {ms.map((m: any) => (
-                              <li key={m.title} className="text-xs">
+                              <li key={m.title} className="text-[12px] leading-4">
                                 <p className="font-medium text-foreground">▸ {m.title}{m.offsetDays != null ? <span className="text-muted-foreground font-normal"> · +{m.offsetDays}d</span> : null}</p>
                                 <ul className="ml-4 mt-0.5 space-y-0.5 text-muted-foreground">
                                   {(m.tasks || []).slice(0, 5).map((t: any) => (
                                     <li key={t.title} className="text-[11px]">· {t.title}</li>
                                   ))}
-                                  {(m.tasks?.length || 0) > 5 && <li className="text-[10px] italic">+ {m.tasks.length - 5} tarefas</li>}
+                                  {(m.tasks?.length || 0) > 5 && <li className="text-[11px] italic">+ {m.tasks.length - 5} tarefas</li>}
                                 </ul>
                               </li>
                             ))}
@@ -1969,14 +1969,14 @@ export default function VoiceAssistant({
 
                     {/* 🎙️ Ajustar o escopo com voz · re-roda a IA com instrução extra. */}
                     <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         Não ficou bom? Ajuste com voz ou texto
                       </p>
                       <textarea
                         value={refineText}
                         onChange={(e) => setRefineText(e.target.value)}
                         placeholder='Ex.: "São 12 vídeos de 30 a 40 segundos, vídeo com IA, sem captação"'
-                        className="w-full text-xs bg-background border border-border rounded p-2 min-h-[50px]"
+                        className="w-full text-[12px] leading-4 bg-background border border-border rounded p-2 min-h-[50px]"
                       />
                       <div className="flex items-center gap-2">
                         <button
@@ -2007,7 +2007,7 @@ export default function VoiceAssistant({
                         </button>
                       </div>
                       {refineInterim && (
-                        <p className="text-[10px] italic text-muted-foreground">"{refineInterim}"</p>
+                        <p className="text-[11px] italic text-muted-foreground">"{refineInterim}"</p>
                       )}
                     </div>
                   </div>
@@ -2019,7 +2019,7 @@ export default function VoiceAssistant({
                     {acaoAberta ? (
                       <CartaoDeAcao acao={acaoAberta} onPedido={onPedidoDaAcao} titulo="O Aceleriq vai fazer" />
                     ) : (
-                      <p className="text-[12.5px] text-muted-foreground">Nada para confirmar. Volte e revise o pedido.</p>
+                      <p className="text-[12px] text-muted-foreground">Nada para confirmar. Volte e revise o pedido.</p>
                     )}
                     {stageIdx >= stages.length && stages.length > 0 && parsed.kind === "create_project" && (
                       <p className="text-[12px] text-muted-foreground">Já está no Kanban e na ficha do projeto.</p>

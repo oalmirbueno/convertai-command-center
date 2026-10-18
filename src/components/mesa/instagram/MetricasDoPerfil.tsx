@@ -31,7 +31,7 @@ function Variacao({ pct }: { pct: number | null }) {
   if (pct === null || !isFinite(pct)) return null;
   const alta = pct >= 0;
   return (
-    <span className={juntar("text-[11.5px] tabular-nums", alta ? "text-success" : "text-destructive")}>
+    <span className={juntar("text-[12px] tabular-nums", alta ? "text-success" : "text-destructive")}>
       {alta ? "+" : ""}
       {pct.toFixed(1).replace(".", ",")}%
     </span>
@@ -168,15 +168,15 @@ export default function MetricasDoPerfil({ clientId, contaId }: { clientId: stri
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] leading-4 text-foreground">{p.caption ? p.caption.slice(0, 90) : "(sem legenda)"}</span>
-                    <span className="block text-[11.5px] leading-4 text-muted-foreground">
+                    <span className="block truncate text-[13px] leading-4 text-foreground">{p.caption ? p.caption.slice(0, 90) : "(sem legenda)"}</span>
+                    <span className="block text-[12px] leading-4 text-muted-foreground">
                       {p.posted_at ? p.posted_at.slice(0, 10).split("-").reverse().join("/") : ""} · {ROTULO_DO_TIPO[String(p.media_type || "")] || "Post"}
                     </span>
                     <span className="mt-0.5 block h-1 w-full overflow-hidden rounded bg-muted" aria-hidden="true">
                       <span className="block h-full rounded bg-primary/70" style={{ width: `${Math.max(3, Math.round((interacoes(p) / maior) * 100))}%` }} />
                     </span>
                   </span>
-                  <span className="ml-2 w-[92px] shrink-0 text-right text-[11.5px] leading-4 tabular-nums text-muted-foreground">
+                  <span className="ml-2 w-[92px] shrink-0 text-right text-[12px] leading-4 tabular-nums text-muted-foreground">
                     <span className="block text-foreground">{formatMetricNumber(interacoes(p))} inter.</span>
                     {p.reach ? <span className="block">{formatMetricNumber(p.reach)} alcance</span> : null}
                     {p.saved ? <span className="block">{formatMetricNumber(p.saved)} salvos</span> : null}

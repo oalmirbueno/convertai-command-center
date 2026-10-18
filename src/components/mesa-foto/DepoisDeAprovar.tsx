@@ -69,7 +69,7 @@ export default function DepoisDeAprovar({ fotos, onFeito, className = "" }: { fo
   };
   return (
     <div className={juntar("flex min-w-0 flex-wrap items-center rounded-lg border border-success/40 px-3 py-2", className)} data-depois-de-aprovar={prontas.length}>
-      <span className="mb-1 mr-2 text-[12.5px] font-medium">
+      <span className="mb-1 mr-2 text-[13px] font-medium">
         {prontas.length} {prontas.length === 1 ? "aprovada" : "aprovadas"}. E agora?
       </span>
       {opcoes.map((o, i) => {

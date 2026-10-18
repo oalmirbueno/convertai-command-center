@@ -66,7 +66,7 @@ function Lista({
 }
 
 const gatilho = juntar(
-  "inline-flex h-8 min-w-0 max-w-full items-center rounded-md border border-border bg-background px-2.5 text-[12.5px] text-foreground transition-colors hover:bg-muted",
+  "inline-flex h-8 min-w-0 max-w-full items-center rounded-md border border-border bg-background px-2.5 text-[13px] text-foreground transition-colors hover:bg-muted",
   foco,
 );
 
@@ -103,12 +103,12 @@ export function SeletorDeCliente({
             onChange={(e) => setBusca(e.target.value)}
             placeholder={`Buscar entre ${clientes.length} clientes`}
             aria-label="Buscar cliente"
-            className={juntar(campo, "h-8 pl-8 text-[12.5px]")}
+            className={juntar(campo, "h-8 pl-8 text-[13px]")}
           />
         </div>
         <ul className="max-h-60 overflow-y-auto">
           <li>
-            <button type="button" role="option" aria-selected={!valor} onClick={() => { onEscolher(null); fechar(); }} className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[12.5px] text-muted-foreground hover:bg-muted">
+            <button type="button" role="option" aria-selected={!valor} onClick={() => { onEscolher(null); fechar(); }} className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[12px] text-muted-foreground hover:bg-muted">
               <span className="min-w-0 flex-1 truncate">Sem cliente (geral)</span>
               {!valor && <Check className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
             </button>
@@ -121,7 +121,7 @@ export function SeletorDeCliente({
                 aria-selected={c.id === valor}
                 data-cliente-id={c.id}
                 onClick={() => { onEscolher(c.id); fechar(); }}
-                className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] text-foreground hover:bg-muted"
+                className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] text-foreground hover:bg-muted"
               >
                 <span className="min-w-0 flex-1 truncate">{nomeDoCliente(c)}</span>
                 {c.id === valor && <Check className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
@@ -163,10 +163,10 @@ export function SeletorDeServico({
                 aria-selected={s.chave === valor}
                 data-servico={s.chave}
                 onClick={() => { onEscolher(s.chave); setAberto(false); }}
-                className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[12.5px] text-foreground hover:bg-muted"
+                className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] text-foreground hover:bg-muted"
               >
                 <span className="min-w-0 flex-1 truncate">{s.rotulo}</span>
-                {s.contratado && <span className="ml-2 shrink-0 text-[10.5px] text-muted-foreground">contratado</span>}
+                {s.contratado && <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">contratado</span>}
                 {s.chave === valor && <Check className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
               </button>
             </li>
@@ -200,7 +200,7 @@ export function AtalhosDoAgente({
             title={a.precisaCliente && !temCliente ? "Escolha um cliente primeiro" : undefined}
             onClick={() => onAtalho(a.chave)}
             className={juntar(
-              "mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border border-border bg-background px-2.5 text-[11.5px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+              "mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border border-border bg-background px-2.5 text-[12px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
               foco,
             )}
           >

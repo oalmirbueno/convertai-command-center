@@ -142,13 +142,13 @@ function Autorizacao({ kit, onMudar }: { kit: KitDeFoto; onMudar: (k: KitDeFoto)
   const mudar = (campo: string, valor: string | boolean) => onMudar({ ...kit, autorizacao: { ...a, [campo]: valor } as any });
   return (
     <div className={`space-y-2 rounded-lg border p-3 ${a.confirmada ? "border-success/40" : "border-warning/50"}`} data-autorizacao="">
-      <label className="flex items-start text-[12.5px]">
+      <label className="flex items-start text-[13px]">
         <Switch checked={a.confirmada} onCheckedChange={(v) => mudar("confirmada", v)} className="mr-2 mt-0.5" aria-label="Autorização confirmada" />
         <span className="min-w-0">
           <span className="flex items-center font-medium">
             <ShieldCheck className="mr-1 h-3.5 w-3.5" /> O cliente autorizou o uso destas fotos da pessoa
           </span>
-          <span className="block text-[11.5px] text-muted-foreground">Só fotos da própria pessoa, do cliente certo. O retoque não muda anatomia, idade ou rosto.</span>
+          <span className="block text-[12px] text-muted-foreground">Só fotos da própria pessoa, do cliente certo. O retoque não muda anatomia, idade ou rosto.</span>
         </span>
       </label>
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
@@ -257,7 +257,7 @@ function CartaoDaProposta({ proposta, fotos, onUsar }: { proposta: PropostaDeKit
       <div className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold">{proposta.nome}</p>
-          <p className="text-[11.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             {rotuloDoTipo(proposta.tipo)}
             {proposta.variante ? ` · ${proposta.variante}` : ""} · {proposta.refs.length} {proposta.refs.length === 1 ? "foto" : "fotos"}
             {salva ? " · salvo como rascunho" : ""}
@@ -273,7 +273,7 @@ function CartaoDaProposta({ proposta, fotos, onUsar }: { proposta: PropostaDeKit
           return (
             <div key={`${r.imagem_id}-${r.papel}`} className="mb-1 mr-1 w-11" title={rotuloDoPapel(r.papel)}>
               {f ? <MiniaturaDaFoto foto={f} selo={false} /> : <div className="h-11 w-11 rounded-lg bg-muted" />}
-              <span className="block truncate text-center text-[10px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
+              <span className="block truncate text-center text-[11px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
             </div>
           );
         })}
@@ -465,7 +465,7 @@ export default function EtapaKits() {
                     >
                       <span className="w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-lg bg-muted" />}</span>
                       <span className="ml-2 min-w-0 flex-1">
-                        <span className="block truncate text-[12.5px] font-medium">{k.nome}</span>
+                        <span className="block truncate text-[13px] font-medium">{k.nome}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">
                           {k.status === "rascunho" ? "Rascunho · " : ""}
                           {rotuloDoTipo(k.tipo)} · {k.refs.length} {k.refs.length === 1 ? "foto" : "fotos"}
@@ -528,7 +528,7 @@ export default function EtapaKits() {
                   }}
                 />
                 {selecionadas.length > MAX_FOTOS_NA_SUGESTAO && (
-                  <p className="mt-1.5 text-[11.5px] text-warning">A leitura olha até {MAX_FOTOS_NA_SUGESTAO} fotos por vez. Desmarque algumas no Acervo.</p>
+                  <p className="mt-1.5 text-[12px] text-warning">A leitura olha até {MAX_FOTOS_NA_SUGESTAO} fotos por vez. Desmarque algumas no Acervo.</p>
                 )}
               </>
             )}
@@ -551,7 +551,7 @@ export default function EtapaKits() {
                 titulo="Produto identificado"
                 descricao="Lê a embalagem ou a foto e pesquisa o produto real na internet. As fotos achadas são só para fidelidade, não para publicar."
                 variant={!lista.length && !identificacao ? "default" : "outline"}
-                className="mb-1.5 mr-2 h-9 text-[12.5px]"
+                className="mb-1.5 mr-2 h-9 text-[13px]"
                 disabled={!fotosParaLer.length}
                 partes={() => partesDaIdentificacao(catalogo, fotosParaLer.length)}
                 executar={() => identificarProduto(clientId, fotosParaLer)}
@@ -562,7 +562,7 @@ export default function EtapaKits() {
                   if (data && data.kit && data.kit.id) abrirSalvos([data.kit.id]);
                 }}
               />
-              <span className="mb-1.5 mr-2 text-[11.5px] text-muted-foreground">
+              <span className="mb-1.5 mr-2 text-[12px] text-muted-foreground">
                 {fotosParaLer.length
                   ? `${fotosParaLer.length} ${fotosParaLer.length === 1 ? "foto" : "fotos"} ${selecionadas.length ? "marcadas" : "do kit aberto"}${selecionadas.length > MAX_FOTOS_NA_IDENTIFICACAO ? ` (lê as ${MAX_FOTOS_NA_IDENTIFICACAO} primeiras)` : ""}`
                   : "Escolha as fotos da embalagem ou do produto."}

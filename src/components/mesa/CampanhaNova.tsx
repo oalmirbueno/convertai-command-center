@@ -56,7 +56,7 @@ export function EscolhaDoTipo({ valor, onValor, desabilitado }: { valor: TipoDeC
           </button>
         ))}
       </div>
-      {valor && <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{DEFINICAO_DO_TIPO[valor].dica} Selo: {DEFINICAO_DO_TIPO[valor].selo.split(".")[0].toLowerCase()}.</p>}
+      {valor && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">{DEFINICAO_DO_TIPO[valor].dica} Selo: {DEFINICAO_DO_TIPO[valor].selo.split(".")[0].toLowerCase()}.</p>}
     </div>
   );
 }
@@ -190,7 +190,7 @@ export default function CampanhaNova({
             rows={5}
             aria-label="Pedido da campanha"
             placeholder={tipo ? `Ex.: ${DEFINICAO_DO_TIPO[tipo].exemplo}` : "Ex.: promoção do amor no Dia dos Namorados, 20% em kits para casal, tom leve e romântico"}
-            className="min-h-[120px] resize-y border-0 bg-transparent px-1 py-1 text-[13.5px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="min-h-[120px] resize-y border-0 bg-transparent px-1 py-1 text-[13px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <MiniaturasDosAnexos anexos={anexos} />
           <div className="mt-1 flex min-w-0 items-center">
@@ -209,7 +209,7 @@ export default function CampanhaNova({
           </Campo>
           <Campo rotulo="Conteúdos" className="col-span-2 sm:col-span-1">
             <Select value={quantidade} onValueChange={setQuantidade}>
-              <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Quantidade de conteúdos"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Quantidade de conteúdos"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Automático</SelectItem>
                 {QUANTIDADES.map((q) => <SelectItem key={q} value={q}>{q}</SelectItem>)}

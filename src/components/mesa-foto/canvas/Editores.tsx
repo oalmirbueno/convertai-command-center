@@ -200,7 +200,7 @@ export function EditorDoCartao({
           <MiniaturaGrande m={desc.miniatura} alt={desc.titulo} />
         </span>
         <div className="ml-2.5 min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-semibold">{desc.titulo}</p>
+          <p className="truncate text-[13px] font-semibold">{desc.titulo}</p>
           <p className={`truncate text-[11px] ${falta ? "text-amber-300" : "text-zinc-400"}`}>{desc.subtitulo}</p>
         </div>
       </div>
@@ -240,7 +240,7 @@ export function EditorDoCartao({
         )}
       </div>
       {no.tipo === "modelo" && !d.modelo_id && d.imagem_id && (
-        <label className="flex items-start rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-[11.5px] leading-snug text-amber-100">
+        <label className="flex items-start rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-[12px] leading-snug text-amber-100">
           <input type="checkbox" className="mr-2 mt-0.5" checked={!!d.autorizada} onChange={(e) => onMudar({ autorizada: e.target.checked })} aria-label="Tenho autorização desta pessoa" />
           Tenho autorização desta pessoa para usar a imagem dela.
         </label>
@@ -265,7 +265,7 @@ export function EditorDoCartao({
           titulo="Ambiente pelo contexto"
           descricao="O agente lê a marca, o público e a campanha do cliente e escreve o lugar."
           variant="outline"
-          className="h-8 border-white/10 bg-white/5 text-[11.5px] text-zinc-100 hover:bg-white/10"
+          className="h-8 border-white/10 bg-white/5 text-[12px] text-zinc-100 hover:bg-white/10"
           partes={() => partesDaConversa(catalogo)}
           executar={onAgente}
         />
@@ -328,7 +328,7 @@ export function FotoDoResultado({
   return (
     <div className="min-w-0 rounded-xl border border-white/10 bg-zinc-900/60 p-2" data-resultado={r.geracao_id}>
       <div className="flex min-w-0 items-start">
-        <button type="button" className="block shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-white/10 bg-zinc-900" style={{ width: 64, height: 80 }} onClick={() => setAmpliada(true)} aria-label="Ver grande">
+        <button type="button" className="block shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-white/10 bg-zinc-900" style={{ width: 64, height: 80 }} onClick={() => setAmpliada(true)} aria-label="Ver grande">
           <MiniaturaDoStorage bucket={r.storage_bucket} caminho={caminho} alt="Foto do Canvas" largura={200} className="h-full w-full" />
         </button>
         <div className="ml-2 min-w-0 flex-1">
@@ -578,7 +578,7 @@ export function AjustesDoResultado({
         <Escolha rotulo="Variações por vez" opcoes={OPCOES_DE_VARIACOES} valor={String(lerVariacoes(d.variacoes))} onEscolher={(v) => onMudar({ variacoes: Number(v) })} />
       </div>
       <details className="min-w-0 rounded-lg border border-white/10 px-2.5 py-1.5" data-mais-opcoes="">
-        <summary className="cursor-pointer select-none text-[11.5px] font-medium text-zinc-300 hover:text-white">Mais opções</summary>
+        <summary className="cursor-pointer select-none text-[12px] font-medium text-zinc-300 hover:text-white">Mais opções</summary>
         <div className="mt-2 min-w-0 space-y-3">
           <div className="min-w-0">
             <p className={ROTULO}>Ação</p>
@@ -643,11 +643,11 @@ export function AjustesDoResultado({
       <div className="min-w-0">
         <p className={ROTULO}>O que o Resultado junta, na ordem</p>
         {entradas.length === 0 ? (
-          <p className="text-[11.5px] text-zinc-400">Nada ainda. Ponha um produto ou uma pessoa pela barra à esquerda.</p>
+          <p className="text-[12px] text-zinc-400">Nada ainda. Ponha um produto ou uma pessoa pela barra à esquerda.</p>
         ) : (
           <ol className="min-w-0 space-y-1" aria-label="Entradas do Resultado">
             {entradas.map((e) => (
-              <li key={e.ligacao.id} className="flex min-w-0 items-center text-[11.5px]">
+              <li key={e.ligacao.id} className="flex min-w-0 items-center text-[12px]">
                 <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold">{e.numero}</span>
                 <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: e.no.tipo === "gerar" ? "#34d399" : TIPOS_DE_NO[e.no.tipo].cor }} />
                 <span className="min-w-0 flex-1 truncate">
@@ -661,14 +661,14 @@ export function AjustesDoResultado({
       {bloqueios.length > 0 && (
         <ul className="space-y-0.5" aria-label="O que falta para gerar">
           {bloqueios.map((b) => (
-            <li key={b} className="text-[11.5px] text-amber-300">
+            <li key={b} className="text-[12px] text-amber-300">
               {b}
             </li>
           ))}
         </ul>
       )}
       {avisos.map((a) => (
-        <p key={a} className="text-[11.5px] text-zinc-400">
+        <p key={a} className="text-[12px] text-zinc-400">
           {a}
         </p>
       ))}
@@ -686,7 +686,7 @@ export function AjustesDoResultado({
             }
             titulo="Geração do Canvas"
             descricao="O que sair entra no acervo, marcado como gerado, e aparece no Resultado."
-            className="mb-1.5 h-9 text-[12.5px]"
+            className="mb-1.5 h-9 text-[13px]"
             disabled={bloqueios.length > 0 || gerando.length > 0}
             fecharAoConfirmar
             partes={() => partesDoResultado(no, entradas.length)}
@@ -704,14 +704,14 @@ export function AjustesDoResultado({
             const fotoDoAcervo = ultima ? fontes.fotos.find((f) => f.id === ultima.imagem_id) || null : null;
             return fotoDoAcervo ? (
               <details className="min-w-0 rounded-lg border border-white/10 px-2.5 py-1.5" data-ferramentas-da-caixa="">
-                <summary className="cursor-pointer select-none text-[11.5px] font-medium text-zinc-300 hover:text-white">Ampliar ou tirar fundo da mais nova</summary>
+                <summary className="cursor-pointer select-none text-[12px] font-medium text-zinc-300 hover:text-white">Ampliar ou tirar fundo da mais nova</summary>
                 <AcoesProDaFoto foto={fotoDoAcervo} className="mt-2" />
               </details>
             ) : null;
           })()}
           {resultados.slice(0, 8).map((r) =>
             r.status === "falhou" ? (
-              <p key={r.geracao_id} className="text-[11.5px] text-red-400">
+              <p key={r.geracao_id} className="text-[12px] text-red-400">
                 {rotuloDoMotor(catalogo, r.motor_id)}: {r.erro || "falhou"}
               </p>
             ) : (

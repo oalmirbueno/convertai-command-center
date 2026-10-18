@@ -41,7 +41,7 @@ export function MiniaturaDaImagem({ imagem, className = "" }: { imagem: ImagemVi
       {imagem ? (
         <ImagemDaMesa caminho={imagem.storage_path} bucket={imagem.storage_bucket || "mesa"} alt={imagem.nome} className="absolute inset-0 h-full w-full" />
       ) : (
-        <span className="absolute inset-0 flex items-center justify-center p-1 text-center text-[10px] text-muted-foreground">fora do acervo</span>
+        <span className="absolute inset-0 flex items-center justify-center p-1 text-center text-[11px] text-muted-foreground">fora do acervo</span>
       )}
     </div>
   );
@@ -109,7 +109,7 @@ function CartaoDaImagem({
               aria-pressed={imagem.papel === p.valor}
               disabled={desabilitado}
               onClick={() => (imagem.papel === p.valor ? undefined : onMudar({ ...imagem, papel: p.valor as PapelDaImagemDaCampanha }))}
-              className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[10.5px] transition-colors ${
+              className={`mb-1 mr-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
                 imagem.papel === p.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -231,7 +231,7 @@ export default function CampanhaImagens({
           ))}
         </ul>
       ) : (
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">{vazio}</p>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">{vazio}</p>
       )}
 
       <div className="flex min-w-0 flex-wrap items-center">
@@ -260,7 +260,7 @@ export default function CampanhaImagens({
           aria-label="Enviar imagens da campanha"
           onChange={(e) => void enviar(Array.prototype.slice.call(e.target.files || []) as File[])}
         />
-        <span className="mb-1 text-[11.5px] text-muted-foreground">
+        <span className="mb-1 text-[12px] text-muted-foreground">
           {envio ? (
             <>
               <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />

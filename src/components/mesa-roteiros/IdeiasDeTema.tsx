@@ -424,7 +424,7 @@ function LinhaDaIdeia({
             {ranking === "jev" ? ` · nota ${nota10(ideia.notas.total)}` : ""}
           </p>
           {ideia.por_que_agora && (
-            <p className="mt-1 text-[12.5px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+            <p className="mt-1 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
               Por que agora: {ideia.por_que_agora}
               {ideia.fonte && (
                 <a href={ideia.fonte.url} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center text-primary underline-offset-2 hover:underline">
@@ -434,9 +434,9 @@ function LinhaDaIdeia({
               )}
             </p>
           )}
-          {ideia.promessa && <p className="mt-1 text-[12.5px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">Promessa: {ideia.promessa}</p>}
+          {ideia.promessa && <p className="mt-1 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">Promessa: {ideia.promessa}</p>}
           {aberta && ideia.esqueleto.length > 0 && (
-            <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-[12.5px] leading-5 [overflow-wrap:anywhere]" data-esqueleto="">
+            <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-[13px] leading-5 [overflow-wrap:anywhere]" data-esqueleto="">
               {ideia.esqueleto.map((p, k) => (
                 <li key={k}>{p}</li>
               ))}
@@ -492,7 +492,7 @@ function CartaoDePreencher({
     <div className="mr-2 min-w-0 rounded-lg border border-primary/30 px-3.5 py-3" data-cartao-preencher={ideia.apelido}>
       <p className="text-[13px] font-semibold">{feito ? `Formulário preenchido com a ideia ${numeroDa(ideia.apelido)}` : `Preencher o roteiro com a ideia ${numeroDa(ideia.apelido)}?`}</p>
       {!feito && (
-        <ul className="mt-1.5 space-y-0.5 text-[12.5px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        <ul className="mt-1.5 space-y-0.5 text-[12px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
           {linhasDoPreenchimento(valores, ideia.modelo_base_nome).map((l) => (
             <li key={l}>{l}</li>
           ))}

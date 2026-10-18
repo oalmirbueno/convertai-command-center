@@ -58,12 +58,12 @@ export type CampanhaEscolhida = ReturnType<typeof useCampanhaEscolhida>;
 function DetalheDaCampanha({ c }: { c: CampanhaDaMesa }) {
   return (
     <div className="mt-2 min-w-0 space-y-1.5 rounded-lg border border-border bg-background p-2.5" data-campanha-escolhida={c.id}>
-      <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">
+      <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">
         {c.nome}
         <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">{periodoDaCampanha(c)}</span>
       </p>
-      {c.objetivo && <p className="text-[11.5px] leading-snug [overflow-wrap:anywhere]">Objetivo: {c.objetivo}</p>}
-      {c.tema_visual && <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Tema visual: {c.tema_visual}</p>}
+      {c.objetivo && <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">Objetivo: {c.objetivo}</p>}
+      {c.tema_visual && <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Tema visual: {c.tema_visual}</p>}
       {c.paleta_apoio.length > 0 && (
         <div className="flex min-w-0 flex-wrap items-center">
           <span className="mr-1.5 text-[11px] text-muted-foreground">Cores de apoio:</span>
@@ -80,7 +80,7 @@ function DetalheDaCampanha({ c }: { c: CampanhaDaMesa }) {
           <p className="text-[11px] font-medium text-muted-foreground">No calendário deste mês</p>
           <ul className="mt-0.5 space-y-0.5">
             {c.pautas_no_mes.slice(0, 4).map((t) => (
-              <li key={t} className="truncate text-[11.5px]" title={t}>
+              <li key={t} className="truncate text-[12px]" title={t}>
                 {t}
               </li>
             ))}

@@ -44,7 +44,7 @@ function DestaquesDoAnexo({ anexos, onUsar }: { anexos: unknown; onUsar: (l: Des
   if (!itens.length) return null;
   return (
     <div className="mt-1.5 min-w-0 rounded-md border border-border bg-background px-2.5 py-2" data-destaques-propostos="">
-      <ol className="list-decimal pl-5 text-[12.5px] leading-5">
+      <ol className="list-decimal pl-5 text-[13px] leading-5">
         {itens.map((d) => (
           <li key={d.nome} className="mb-1">
             <span className="font-medium">{d.nome}</span>

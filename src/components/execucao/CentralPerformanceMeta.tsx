@@ -54,8 +54,11 @@ export default function CentralPerformanceMeta({ aoAbrir, clienteExterno = "" }:
       ]);
       const clientes: any[] = [];
       const idsClientes = [...new Set(papeisClientes.map(c => c.user_id))];
-      for (let i = 0; i < idsClientes.length; i += 150) {
-        clientes.push(...await paginas(() => supabase.from('profiles').select('id,company_name,full_name,plan_status').in('id', idsClientes.slice(i, i + 150)).order('id')));
+      // Lotes de perfis em paralelo (antes, um esperava o outro).
+      const lotesDeClientes: string[][] = [];
+      for (let i = 0; i < idsClientes.length; i += 150) lotesDeClientes.push(idsClientes.slice(i, i + 150));
+      for (const lote of await Promise.all(lotesDeClientes.map((ids) => paginas(() => supabase.from('profiles').select('id,company_name,full_name,plan_status').in('id', ids).order('id'))))) {
+        clientes.push(...lote);
       }
       clientes.sort((a, b) => nomeCliente(a).localeCompare(nomeCliente(b), 'pt-BR'));
       const tarefas = projetos.length ? await paginas(() => supabase.from("tasks").select("id,title,assigned_to,status").in("project_id", projetos.map(p => p.id)).order("id")) : [];

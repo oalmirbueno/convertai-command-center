@@ -80,22 +80,22 @@ export function CustoCompacto({
         <PopoverContent align="end" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[340px] p-3">
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-muted px-2.5 py-2">
-              <p className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Saldo</p>
+              <p className="text-[11px] text-muted-foreground">Saldo</p>
               <p className={`text-[15px] font-semibold tabular-nums ${negativo ? "text-destructive" : "text-foreground"}`}>{saldoUsd === null ? "?" : usd(saldoUsd)}</p>
             </div>
             <div className="rounded-lg bg-muted px-2.5 py-2">
-              <p className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Gasto do mês</p>
+              <p className="text-[11px] text-muted-foreground">Gasto do mês</p>
               <p className="text-[15px] font-semibold tabular-nums text-foreground">{usd((consumo && consumo.total_usd) || 0)}</p>
             </div>
           </div>
           {alerta && (
-            <p className="mt-2 rounded-lg bg-warning/15 px-2.5 py-1.5 text-[11.5px] text-foreground">
+            <p className="mt-2 rounded-lg bg-warning/15 px-2.5 py-1.5 text-[12px] text-foreground">
               {negativo ? "Saldo negativo." : "Saldo baixo: não cobre um post pelo custo médio."}
               {podeRecarregar ? " Recarregue para seguir gerando." : ""}
             </p>
           )}
           {previsao && (
-            <p className="mt-2 text-[11.5px] text-muted-foreground">
+            <p className="mt-2 text-[12px] text-muted-foreground">
               {previsao.posts_por_mes ? `Plano ${previsao.posts_por_mes} posts` : "Por post"}:{" "}
               <strong className="font-semibold text-foreground">
                 ≈ {usd(previsao.previsao_mes_usd != null ? previsao.previsao_mes_usd : previsao.custo_por_post_usd)}
@@ -103,7 +103,7 @@ export function CustoCompacto({
               {previsao.posts_que_o_saldo_cobre != null ? ` · o saldo cobre ${previsao.posts_que_o_saldo_cobre}` : ""}
             </p>
           )}
-          <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground">Por modelo</p>
+          <p className="mt-3 text-[11px] text-muted-foreground">Por modelo</p>
           <ul className="mt-1.5 max-h-40 space-y-1 overflow-y-auto">
             {((consumo && consumo.por_modelo) || []).length === 0 && <li className="text-[12px] text-muted-foreground">Nada gasto neste mês.</li>}
             {((consumo && consumo.por_modelo) || []).map((m) => (
@@ -117,7 +117,7 @@ export function CustoCompacto({
           </ul>
           {((consumo && consumo.por_tarefa) || []).length > 0 && (
             <>
-              <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground">Por tarefa</p>
+              <p className="mt-3 text-[11px] text-muted-foreground">Por tarefa</p>
               <ul className="mt-1.5 space-y-1">
                 {((consumo && consumo.por_tarefa) || []).map((t) => (
                   <li key={t.tarefa} className="flex items-baseline justify-between text-[12px]">
@@ -130,22 +130,22 @@ export function CustoCompacto({
               </ul>
             </>
           )}
-          {!!(consumo && consumo.recargas_usd) && <p className="mt-3 text-[11.5px] text-muted-foreground">Recargas no mês: {usd(consumo!.recargas_usd)}</p>}
+          {!!(consumo && consumo.recargas_usd) && <p className="mt-3 text-[12px] text-muted-foreground">Recargas no mês: {usd(consumo!.recargas_usd)}</p>}
           {/* No celular os atalhos ao lado do saldo saem do topo e moram aqui (16/10/2026). */}
           {(podeRecarregar || isAdmin) && (
             <div className="mt-3 flex flex-wrap border-t border-border pt-2 sm:hidden [&>*]:mr-1.5 [&>*]:mt-1" data-atalhos-do-saldo="">
               {podeRecarregar && (
-                <button type="button" onClick={onRecarregar} className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-[12.5px] font-medium text-primary-foreground">
+                <button type="button" onClick={onRecarregar} className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground">
                   <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Recarregar
                 </button>
               )}
               {isAdmin && (
-                <button type="button" onClick={onModelos} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[12.5px]">
+                <button type="button" onClick={onModelos} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[13px]">
                   <Sparkles className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Modelos de IA
                 </button>
               )}
               {isAdmin && (
-                <button type="button" onClick={onChaves} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[12.5px]">
+                <button type="button" onClick={onChaves} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[13px]">
                   <KeyRound className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Chaves e cotas
                 </button>
               )}
@@ -167,10 +167,10 @@ export function CustoCompacto({
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" sideOffset={6} className="w-52 p-1">
-            <button type="button" onClick={onModelos} className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+            <button type="button" onClick={onModelos} className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted">
               <Sparkles className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Modelos de IA
             </button>
-            <button type="button" onClick={onChaves} className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-muted">
+            <button type="button" onClick={onChaves} className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted">
               <KeyRound className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Chaves e cotas
             </button>
           </PopoverContent>

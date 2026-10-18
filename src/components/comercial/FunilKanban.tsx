@@ -357,7 +357,7 @@ export default function FunilKanban({
 
             <DragOverlay dropAnimation={null}>
               {arrastando && (
-                <div className="w-[230px] rotate-2 rounded-md border border-primary bg-card p-2.5 shadow-lg">
+                <div className="w-[230px] rotate-2 rounded-md border border-primary bg-card p-2.5 shadow-sm">
                   <p className="truncate text-[13px] font-medium text-foreground">
                     {arrastando.name}
                   </p>

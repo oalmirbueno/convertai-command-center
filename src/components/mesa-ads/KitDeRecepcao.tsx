@@ -44,7 +44,7 @@ async function copiar(texto: string, rotulo: string) {
 function Nota({ rotulo, nota }: { rotulo: string; nota: number | null }) {
   if (nota === null) return null;
   const tom = nota >= 7 ? "bg-success/10 text-success" : nota >= 5 ? "bg-warning/15 text-warning" : "bg-destructive/10 text-destructive";
-  return <span className={`mb-1 mr-1.5 rounded-full px-2 py-0.5 text-[10.5px] ${tom}`}>{rotulo} {nota.toFixed(1).replace(".", ",")}</span>;
+  return <span className={`mb-1 mr-1.5 rounded-full px-2 py-0.5 text-[11px] ${tom}`}>{rotulo} {nota.toFixed(1).replace(".", ",")}</span>;
 }
 
 function Bloco({ titulo, icone, children, acao }: { titulo: string; icone: ReactNode; children: ReactNode; acao?: ReactNode }) {
@@ -104,7 +104,7 @@ function PostNaAgenda({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo
   if (kit.agenda) {
     return (
       <span className="flex min-w-0 flex-wrap items-center">
-        <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px]">
+        <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[12px]">
           <Check className="mr-1 h-3 w-3" /> Na agenda em {dataCurta(kit.agenda.data)}
         </span>
         <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" disabled={fazendo} onClick={() => void desfazer()} aria-label="Desfazer" title="Desfazer">
@@ -126,7 +126,7 @@ function PostNaAgenda({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo
         Vai entrar na agenda da Mesa: <span className="font-medium">{kit.post.titulo || `Recepção: ${angulo.nome}`}</span> ({kit.post.formato === "estatico" ? "post estático" : kit.post.formato === "reels" ? "reels" : "carrossel"}, {kit.post.roteiro.length} {kit.post.roteiro.length === 1 ? "card" : "cards"}), com a legenda e o roteiro.
       </p>
       <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
-        <label className="mb-1 mr-2 inline-flex items-center text-[11.5px] text-muted-foreground">
+        <label className="mb-1 mr-2 inline-flex items-center text-[12px] text-muted-foreground">
           <span className="mr-1.5">Dia</span>
           <Input type="date" aria-label="Dia do post de recepção" value={data} onChange={(e) => setData(e.target.value)} className="h-8 w-[150px] max-w-full text-[12px]" />
         </label>
@@ -149,7 +149,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
   return (
     <div className="min-w-0 space-y-2">
       {kit.promessa_do_anuncio && (
-        <p className="text-[12.5px] leading-snug [overflow-wrap:anywhere]">
+        <p className="text-[13px] leading-snug [overflow-wrap:anywhere]">
           <span className="font-medium">Promessa do anúncio:</span> {kit.promessa_do_anuncio}
         </p>
       )}
@@ -172,7 +172,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
         icone={<CalendarPlus className="mr-1 h-3.5 w-3.5 text-primary" />}
         acao={<PostNaAgenda plano={plano} angulo={angulo} kit={kit} onPlano={onPlano} />}
       >
-        <p className="text-[12.5px] font-semibold [overflow-wrap:anywhere]">{kit.post.titulo}</p>
+        <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{kit.post.titulo}</p>
         {kit.post.gancho && <p className="text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Gancho: {kit.post.gancho}</p>}
         {kit.post.roteiro.length > 0 && (
           <ol className="ml-4 mt-1 list-decimal space-y-0.5 text-[12px] leading-snug">
@@ -192,7 +192,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
             </button>
           </div>
         )}
-        {kit.post.por_que_recebe && <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Por que recebe quem veio do anúncio: {kit.post.por_que_recebe}</p>}
+        {kit.post.por_que_recebe && <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Por que recebe quem veio do anúncio: {kit.post.por_que_recebe}</p>}
         {kit.perfil.length > 0 && (
           <div className="mt-1.5 text-[12px]">
             <p className="font-medium">Ajustes no perfil</p>
@@ -229,7 +229,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
                 {c.objecoes.map((o, k) => (
                   <li key={k} className="min-w-0 rounded-md bg-muted/60 px-2 py-1 [overflow-wrap:anywhere]">
                     <span className="font-medium">{o.objecao}</span>
-                    {o.fonte === "briefing" && <span className="ml-1.5 rounded bg-primary/10 px-1 text-[10px] text-primary">do briefing</span>}
+                    {o.fonte === "briefing" && <span className="ml-1.5 rounded bg-primary/10 px-1 text-[11px] text-primary">do briefing</span>}
                     <span className="block text-muted-foreground">{o.resposta}</span>
                   </li>
                 ))}
@@ -251,7 +251,7 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
       </Bloco>
 
       {kit.lacunas.length > 0 && (
-        <p className="text-[11.5px] text-warning [overflow-wrap:anywhere]">Falta confirmar: {kit.lacunas.join("; ")}.</p>
+        <p className="text-[12px] text-warning [overflow-wrap:anywhere]">Falta confirmar: {kit.lacunas.join("; ")}.</p>
       )}
     </div>
   );
@@ -281,7 +281,7 @@ export default function KitDeRecepcao({ plano, angulo, compacto = false }: { pla
       titulo="Kit de recepção"
       descricao="O post que recebe quem veio do anúncio e o roteiro de atendimento e vendas no WhatsApp ou Direct, a partir da oferta e das objeções do briefing. O Jev confere se tudo confirma a promessa do anúncio."
       variant={kit ? "ghost" : "outline"}
-      className="h-7 text-[11.5px]"
+      className="h-7 text-[12px]"
       partes={() => partesDoKit(catalogo, 1)}
       executar={() => gerarKit(plano.id, angulo.id)}
       aoConcluir={(data) => {

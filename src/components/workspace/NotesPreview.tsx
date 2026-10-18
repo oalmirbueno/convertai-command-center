@@ -297,7 +297,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
               onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void quickAdd(); } }}
               placeholder="+ nova tarefa (Enter)"
               className="flex-1 h-7 px-2 rounded border border-border bg-background text-[11px] focus:outline-none focus:border-primary/50" />
-            <button onClick={() => void quickAdd()} disabled={!newTitle.trim()} className="h-7 px-2 rounded bg-primary text-primary-foreground text-[10px] disabled:opacity-40">Add</button>
+            <button onClick={() => void quickAdd()} disabled={!newTitle.trim()} className="h-7 px-2 rounded bg-primary text-primary-foreground text-[11px] disabled:opacity-40">Add</button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-2">
             {cols.map(col => (
@@ -322,19 +322,19 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                     onDragStart={() => setDragId(t.id)}
                     onDragEnd={() => { setDragId(null); setDropCol(null); }}
                     className={cn(
-                      "bg-card rounded p-1.5 border border-border text-[10.5px] space-y-1 cursor-grab active:cursor-grabbing",
+                      "bg-card rounded p-1.5 border border-border text-[11px] space-y-1 cursor-grab active:cursor-grabbing",
                       dragId === t.id && "opacity-50"
                     )}
                   >
                     <div className="font-medium leading-snug">{t.title}</div>
-                    <div className="flex items-center gap-1 flex-wrap text-[9px] text-muted-foreground">
+                    <div className="flex items-center gap-1 flex-wrap text-[11px] text-muted-foreground">
                       {editing?.id === t.id && editing.field === "priority" ? (
                         <select
                           autoFocus
                           value={t.priority ?? "medium"}
                           onChange={e => { void patch(t.id, { priority: e.target.value }); setEditing(null); }}
                           onBlur={() => setEditing(null)}
-                          className="h-5 px-1 rounded border border-border bg-background text-[9px]"
+                          className="h-5 px-1 rounded border border-border bg-background text-[11px]"
                         >
                           <option value="low">low</option>
                           <option value="medium">medium</option>
@@ -358,7 +358,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                           defaultValue={t.due_date ?? ""}
                           onBlur={e => { const v = e.target.value || null; if (v !== t.due_date) void patch(t.id, { due_date: v }); setEditing(null); }}
                           onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditing(null); }}
-                          className="h-5 px-1 rounded border border-border bg-background text-[9px]"
+                          className="h-5 px-1 rounded border border-border bg-background text-[11px]"
                         />
                       ) : (
                         <button

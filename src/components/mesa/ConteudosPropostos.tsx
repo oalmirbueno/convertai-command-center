@@ -68,7 +68,7 @@ export function CartaoDoConteudo({
           <SeloDaPauta evolucao={item.evolucao} onTrocarAngulo={onTrocarAngulo} className="mr-2" />
           {apagar && <BotaoDeApagar onApagar={apagar} className="ml-auto" />}
         </div>
-        {item.tema && <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema}</p>}
+        {item.tema && <p className="mt-1 line-clamp-2 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema}</p>}
         {item.gancho && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.gancho}</p>}
         {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
         <AvisosDoTexto avisos={item.avisos_de_texto} className="mt-0.5" />
@@ -78,7 +78,7 @@ export function CartaoDoConteudo({
               type="button"
               onClick={() => setAberto((v) => !v)}
               aria-expanded={aberto}
-              className="mr-3 inline-flex items-center text-[11.5px] font-medium text-primary hover:underline"
+              className="mr-3 inline-flex items-center text-[12px] font-medium text-primary hover:underline"
             >
               {aberto ? "Fechar roteiro" : "Ver roteiro"}
               <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`} />
@@ -105,7 +105,7 @@ export function CartaoDoConteudo({
             <ol className="space-y-1.5">
               {cards.map((c) => (
                 <li key={c.ordem} className="rounded-md bg-muted px-2.5 py-2">
-                  <p className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className="text-[11px] font-medium text-muted-foreground">
                     Lâmina {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}
                   </p>
                   {c.texto && <p className="mt-0.5 text-[12px] leading-snug [overflow-wrap:anywhere]">{c.texto}</p>}

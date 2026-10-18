@@ -1,4 +1,4 @@
-import { createElement, lazy, type ComponentType } from "react";
+import { createElement, lazy, Suspense, useEffect, useState, type ComponentType } from "react";
 
 /**
  * Tela sob demanda que pode ser baixada ANTES do clique (dono, 25/09: "eu
@@ -75,6 +75,43 @@ export function lazyComPreCarga<P = any>(chave: string, carregar: () => Promise<
   }
   const c = ComPreCarga as unknown as ComponenteComPreCarga<P>;
   c.preCarregar = baixar;
+  c.chave = chave;
+  return c;
+}
+
+/**
+ * Peça que não precisa vir no primeiro arquivo do painel (janela que só abre
+ * no clique, tour, indicador que só aparece com fila). Medido em 18/10: a casca
+ * levava essas peças no index-*.js e todo mundo baixava, até no /login.
+ *
+ * - Não monta nada até o navegador ficar ocioso, ou até `ja(props)` dizer que
+ *   a peça é necessária agora (janela aberta, parâmetro no endereço).
+ * - Enquanto baixa, não mostra nada no lugar: o Suspense é dela, então a
+ *   página em volta não cai no esqueleto.
+ * - Depois de baixada, aparece direto, como no lazyComPreCarga.
+ */
+export function lazyDiscreto<P = any>(
+  chave: string,
+  carregar: () => Promise<{ default: ComponentType<P> }>,
+  ja: (props: P) => boolean = () => false,
+): ComponenteComPreCarga<P> {
+  const Interno = lazyComPreCarga<P>(chave, carregar);
+  let ociosoJaPassou = false;
+  function Discreto(props: P) {
+    const [ocioso, setOcioso] = useState(ociosoJaPassou);
+    useEffect(() => {
+      if (ocioso) return;
+      return quandoOcioso(() => {
+        ociosoJaPassou = true;
+        setOcioso(true);
+      });
+    }, [ocioso]);
+    if (moduloPronto(chave)) return createElement(Interno as ComponentType<any>, props as any);
+    if (!ocioso && !ja(props)) return null;
+    return createElement(Suspense, { fallback: null }, createElement(Interno as ComponentType<any>, props as any));
+  }
+  const c = Discreto as unknown as ComponenteComPreCarga<P>;
+  c.preCarregar = Interno.preCarregar;
   c.chave = chave;
   return c;
 }

@@ -48,9 +48,9 @@ function LinhaDaPeca({ peca, item, achar }: { peca: PecaDoPlanoDeImagens; item: 
             {peca.imagem_id ? ` · ${peca.uso === "fundo" ? "foto de fundo" : "produto como elemento"}` : ""}
           </span>
         </p>
-        {card && card.texto && <p className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">"{card.texto}"</p>}
+        {card && card.texto && <p className="mt-0.5 line-clamp-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">"{card.texto}"</p>}
         {peca.por_que && <p className="mt-1 text-[12px] leading-relaxed [overflow-wrap:anywhere]">{peca.por_que}</p>}
-        <p className="mt-1 text-[10.5px] text-muted-foreground">
+        <p className="mt-1 text-[11px] text-muted-foreground">
           {peca.escolha === "jev"
             ? `Escolha do Jev${peca.confianca !== null ? ` (${Math.round(peca.confianca * 100)}%)` : ""} entre ${peca.candidatas.length} candidatas`
             : peca.candidatas.length > 1 && peca.confianca !== null
@@ -58,7 +58,7 @@ function LinhaDaPeca({ peca, item, achar }: { peca: PecaDoPlanoDeImagens; item: 
               : "Escolha do estrategista"}
         </p>
         {peca.aviso && (
-          <p className="mt-1 flex items-start rounded-md bg-warning/10 px-2 py-1 text-[11.5px]">
+          <p className="mt-1 flex items-start rounded-md bg-warning/10 px-2 py-1 text-[12px]">
             <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-warning" />
             <span className="min-w-0">{peca.aviso}</span>
           </p>
@@ -160,11 +160,11 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
               </section>
             );
           })}
-          {plano.pecas.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma lâmina com foto real neste plano.</p>}
+          {plano.pecas.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhuma lâmina com foto real neste plano.</p>}
 
           {plano.analise.length > 0 && (
             <section className="min-w-0">
-              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">O que cada imagem tem</p>
+              <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">O que cada imagem tem</p>
               <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
                 {plano.analise.map((a) => {
                   const vista = achar(a.imagem_id);
@@ -174,7 +174,7 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
                       <div className="mr-2.5 w-14 shrink-0">
                         <MiniaturaDaImagem imagem={vista} />
                       </div>
-                      <div className="min-w-0 flex-1 text-[11.5px] leading-relaxed">
+                      <div className="min-w-0 flex-1 text-[12px] leading-relaxed">
                         <p className="truncate text-[12px] font-medium">
                           {vista ? vista.nome : "Imagem do acervo"}
                           {papel ? <span className="font-normal text-muted-foreground"> · {rotuloDoPapelDaImagem(papel.papel)}</span> : null}
@@ -192,8 +192,8 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
 
           {plano.lacunas.length > 0 && (
             <section className="min-w-0">
-              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Imagens que faltam</p>
-              <ul className="list-disc space-y-0.5 pl-4 text-[12.5px]">
+              <p className="mb-1 text-[11px] font-medium text-muted-foreground">Imagens que faltam</p>
+              <ul className="list-disc space-y-0.5 pl-4 text-[13px]">
                 {plano.lacunas.map((l, i) => <li key={`${l}-${i}`} className="[overflow-wrap:anywhere]">{l}</li>)}
               </ul>
             </section>

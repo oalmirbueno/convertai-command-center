@@ -983,7 +983,7 @@ export default function AbaMes({
           <button
             type="button"
             onClick={() => abrirAgente()}
-            className="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.04]"
+            className="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm ring-4 ring-background transition-transform hover:scale-[1.04]"
             aria-label="Abrir o Agente do mês"
             title="Agente do mês"
           >

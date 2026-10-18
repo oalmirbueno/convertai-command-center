@@ -20,6 +20,27 @@ export function useBilling(clientId?: string) {
   });
 }
 
+/**
+ * Só as cobranças pendentes, com as colunas da conta de atraso. A Central
+ * (AdminExperience) lia o histórico inteiro de cobranças, com o perfil de cada
+ * cliente junto, para olhar apenas as pendentes vencidas.
+ */
+export function useCobrancasPendentes() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["billing", "pendentes", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("billing")
+        .select("client_id, status, type, due_date, amount")
+        .eq("status", "pending");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+}
+
 export function useAdsWallet(clientId?: string) {
   const { user } = useAuth();
   return useQuery({

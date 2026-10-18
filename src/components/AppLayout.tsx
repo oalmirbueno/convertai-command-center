@@ -9,10 +9,8 @@ import { avisoParaMostrar, mostrarAvisoNoNavegador } from "@/lib/avisosDoNavegad
 import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import Lancador from "@/components/lancador/Lancador";
-import IndicadorDeGeracoes from "@/components/geracao/IndicadorDeGeracoes";
 import { PedidoDeAcessoPelaUrl } from "@/components/acesso/JanelaDoPedidoDeAcesso";
 import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
-import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw } from "lucide-react";
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
@@ -29,13 +27,48 @@ import MobileBottomNav, { destinosDaBarra, type DestinoDoCelular } from "@/compo
 import { rotuloDoLugar } from "@/lib/navegacao/lugares";
 import BuscaDoPainel, { type PaginaDaBusca } from "@/components/casca/BuscaDoPainel";
 import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
-import { quandoOcioso } from "@/lib/lazyComPreCarga";
+import { lazyDiscreto, preCarregarModulo, quandoOcioso } from "@/lib/lazyComPreCarga";
 import CronometroDoTopo from "@/components/cronometro/CronometroDoTopo";
 import VoltarParaOndeEstava from "@/components/navegacao/VoltarParaOndeEstava";
 
 // O assistente de voz traz o leitor de PDF e as animações (mais de 1 MB de
 // código): fora da abertura do painel, baixa logo depois, sem segurar a tela.
 const VoiceAssistant = lazy(() => import("@/components/admin/VoiceAssistant"));
+
+// 18/10 (painel otimizado): o indicador de geração (e a fila e a API da Mesa
+// que ele puxa) sai do primeiro arquivo e chega quando o navegador fica ocioso.
+// Só a equipe vê; para o cliente o arquivo nem baixa. Ver lazyDiscreto.
+// Medido: a janela do pedido de acesso e o painel de avisos ficam fixos de
+// propósito. Fora do primeiro arquivo, os componentes pequenos do sistema que
+// eles usam grudavam (piso de tamanho) em pedaços de outras telas, e o /login
+// e quase toda rota passaram a baixar mais do que a abertura economizava.
+const IndicadorDeGeracoes = lazyDiscreto("casca/geracoes", () => import("@/components/geracao/IndicadorDeGeracoes"));
+
+// Os roteiros do tour (cerca de 30 KB de texto) também chegam no ocioso: o
+// lançador só os mostra quando abre, e o tour automático pede na hora.
+type RoteirosDoTour = typeof import("@/components/onboarding/tourConfigs");
+const carregarRoteirosDoTour = () => preCarregarModulo("casca/roteiros-do-tour", () => import("@/components/onboarding/tourConfigs")) as unknown as Promise<RoteirosDoTour>;
+let roteirosDoTour: RoteirosDoTour | null = null;
+function useRoteirosDoTour(precisaJa: boolean): RoteirosDoTour | null {
+  const [roteiros, setRoteiros] = useState<RoteirosDoTour | null>(roteirosDoTour);
+  useEffect(() => {
+    if (roteiros) return;
+    let vivo = true;
+    const baixar = () => {
+      carregarRoteirosDoTour().then((m) => {
+        roteirosDoTour = m;
+        if (vivo) setRoteiros(m);
+      }, () => undefined);
+    };
+    if (precisaJa) {
+      baixar();
+      return () => { vivo = false; };
+    }
+    const cancelar = quandoOcioso(baixar);
+    return () => { vivo = false; cancelar(); };
+  }, [roteiros, precisaJa]);
+  return roteiros;
+}
 
 
 /**
@@ -309,11 +342,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     });
   }, [notifData, isAdminOrTeam, navigate]);
 
-  const fullTourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
+  const roteiros = useRoteirosDoTour(tourOpen || Boolean(profile && !profile.onboarding_done));
+  const fullTourSteps = !roteiros ? [] : isAdmin ? roteiros.adminTourSteps : isTeam ? roteiros.teamTourSteps : roteiros.clientTourSteps;
 
   // Page-specific tour
-  const pageSteps = getPageTour(location.pathname, role);
-  const pageTourConfig = pageTours.find(p => location.pathname.startsWith(p.route));
+  const pageSteps = roteiros ? roteiros.getPageTour(location.pathname, role) : null;
+  const pageTourConfig = roteiros?.pageTours.find(p => location.pathname.startsWith(p.route));
   const activeTourSteps = tourMode === "page" && pageSteps ? pageSteps : fullTourSteps;
 
   // Auto-start tour on first visit (using DB flag)
@@ -522,7 +556,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {isAdminOrTeam ? (
                   gruposDoMenu.map((group) => (
                     <div key={group.label} className="mb-1 last:mb-0">
-                      <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                      <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold text-muted-foreground/70">
                         {group.label}
                       </p>
                       {group.items.map((item) => (

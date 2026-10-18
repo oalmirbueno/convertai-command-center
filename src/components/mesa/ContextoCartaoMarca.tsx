@@ -60,7 +60,7 @@ export function ChipsDaPaleta({ paleta }: { paleta: CorDoKit[] }) {
 function Subtitulo({ children, acao }: { children: string; acao?: ReactNode }) {
   return (
     <div className="mb-1.5 flex min-w-0 items-center justify-between">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>
+      <p className="text-[11px] font-semibold text-muted-foreground">{children}</p>
       {acao}
     </div>
   );
@@ -93,7 +93,7 @@ export function FontesDaMarca() {
     <div className="min-w-0">
       <Subtitulo
         acao={
-          <button type="button" onClick={() => setGaleria("titulo")} className="inline-flex items-center text-[11.5px] font-medium text-foreground hover:underline">
+          <button type="button" onClick={() => setGaleria("titulo")} className="inline-flex items-center text-[12px] font-medium text-foreground hover:underline">
             <Library className="mr-1 h-3.5 w-3.5" />
             Escolher da biblioteca
           </button>
@@ -122,7 +122,7 @@ export function FontesDaMarca() {
               </button>
               <div className="flex min-w-0 items-center px-2.5 py-2">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                  <span className="block text-[11px] text-muted-foreground">
                     {rotulo}
                     {f && ROTULO_DA_ORIGEM[f.origem] ? ` · ${ROTULO_DA_ORIGEM[f.origem]}` : ""}
                   </span>
@@ -130,7 +130,7 @@ export function FontesDaMarca() {
                     {f ? f.nome : fontes.isLoading ? "Lendo..." : "Sem fonte"}
                   </span>
                 </span>
-                <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[11.5px]" onClick={() => setGaleria(papel)}>
+                <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[12px]" onClick={() => setGaleria(papel)}>
                   {f ? "Trocar" : "Escolher"}
                 </Button>
               </div>
@@ -150,7 +150,7 @@ export function FontesDaMarca() {
             titulo="Fontes sugeridas da biblioteca"
             descricao="O Jev escolhe um par de título e texto da biblioteca da agência pelo contexto da marca. Custa centavos; o custo real aparece ao terminar."
             variant="outline"
-            className="mb-1 mr-2 h-7 text-[11.5px]"
+            className="mb-1 mr-2 h-7 text-[12px]"
             fecharAoConfirmar
             partes={(): ParteDaEstimativa[] => [
               { modeloId: modelo?.id, tipo: "texto", tokensEntrada: TOKENS_DA_SUGESTAO.entrada, tokensSaida: TOKENS_DA_SUGESTAO.saida },
@@ -198,7 +198,7 @@ export default function CartaoMarca({
         <Subtitulo
           acao={
             onEditar ? (
-              <button type="button" onClick={onEditar} className="text-[11.5px] font-medium text-foreground hover:underline">
+              <button type="button" onClick={onEditar} className="text-[12px] font-medium text-foreground hover:underline">
                 Editar cores
               </button>
             ) : undefined

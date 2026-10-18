@@ -1390,7 +1390,7 @@ export default function Clients() {
         >
           <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
           {filtrosNoMenu > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground" aria-hidden="true">
+            <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground" aria-hidden="true">
               {filtrosNoMenu}
             </span>
           )}
@@ -1636,7 +1636,7 @@ export default function Clients() {
           aria-label="Novo cliente"
           title="Novo cliente"
           className={juntar(
-            "fixed bottom-[calc(env(safe-area-inset-bottom)+84px)] right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background active:scale-[0.97]",
+            "fixed bottom-[calc(env(safe-area-inset-bottom)+84px)] right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm ring-4 ring-background active:scale-[0.97]",
             foco,
           )}
         >

@@ -71,7 +71,7 @@ export default function EstudioAdaptarConteudo({
         <AjudaRecolhida rotulo="O que faz Adaptar conteúdo à copy">{AJUDA_DO_ADAPTAR}</AjudaRecolhida>
         {salvando && <Loader2 className="ml-1 h-3 w-3 shrink-0 animate-spin" aria-label="Salvando" />}
       </div>
-      <p className="mt-0.5 truncate text-[10.5px] leading-snug text-muted-foreground">
+      <p className="mt-0.5 truncate text-[11px] leading-snug text-muted-foreground">
         {ligado ? "Estética da referência, conteúdo da sua copy." : "Copia também o conteúdo da referência."}
       </p>
     </div>

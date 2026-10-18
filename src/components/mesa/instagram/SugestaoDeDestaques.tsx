@@ -145,7 +145,7 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
           )}
           <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
             {guardada && guardada.destaques.length > 0 && (
-              <button type="button" className={juntar(botao.primario, "h-8 px-3 text-[12.5px]")} onClick={() => onUsar(guardada.destaques.map((d) => ({ nome: d.nome, icone: d.icone })))} disabled={usada}>
+              <button type="button" className={juntar(botao.primario, "h-8 px-3 text-[13px]")} onClick={() => onUsar(guardada.destaques.map((d) => ({ nome: d.nome, icone: d.icone })))} disabled={usada}>
                 {usada ? "Em uso na lista" : "Usar esta sugestão"}
               </button>
             )}

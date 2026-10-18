@@ -183,13 +183,13 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
           {jaTem.srt_path && (
             <button type="button" className={juntar(botao.icone, "mr-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "srt", jaTem.srt_path || null, null)} aria-label="Baixar SRT" title="Baixar SRT">
               <Download className="h-4 w-4" />
-              <span className="ml-0.5 text-[10px] font-medium">SRT</span>
+              <span className="ml-0.5 text-[11px] font-medium">SRT</span>
             </button>
           )}
           {jaTem.vtt_path && (
             <button type="button" className={juntar(botao.icone, "w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "vtt", jaTem.vtt_path || null, null)} aria-label="Baixar VTT" title="Baixar VTT">
               <Download className="h-4 w-4" />
-              <span className="ml-0.5 text-[10px] font-medium">VTT</span>
+              <span className="ml-0.5 text-[11px] font-medium">VTT</span>
             </button>
           )}
         </div>
@@ -207,11 +207,11 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
           <div className="flex min-w-0 flex-wrap items-center">
             <button type="button" className={juntar(botao.icone, "mb-1 mr-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "srt", caminhoDaLegenda("srt"), urlDaLegenda("srt"))} disabled={!caminhoDaLegenda("srt") && !urlDaLegenda("srt")} aria-label="Baixar SRT" title="Baixar SRT">
               <Download className="h-4 w-4" />
-              <span className="ml-0.5 text-[10px] font-medium">SRT</span>
+              <span className="ml-0.5 text-[11px] font-medium">SRT</span>
             </button>
             <button type="button" className={juntar(botao.icone, "mb-1 mr-3 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "vtt", caminhoDaLegenda("vtt"), urlDaLegenda("vtt"))} disabled={!caminhoDaLegenda("vtt") && !urlDaLegenda("vtt")} aria-label="Baixar VTT" title="Baixar VTT">
               <Download className="h-4 w-4" />
-              <span className="ml-0.5 text-[10px] font-medium">VTT</span>
+              <span className="ml-0.5 text-[11px] font-medium">VTT</span>
             </button>
             {doEditor && !amostra && (
               <>

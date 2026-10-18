@@ -144,7 +144,7 @@ export default function SeletorDoAcervo({
         >
           <FotoDoAcervo imagem={i} />
         </button>
-        <p className="mt-1 flex items-start text-[10.5px] leading-tight text-muted-foreground">
+        <p className="mt-1 flex items-start text-[11px] leading-tight text-muted-foreground">
           {marcada && <Check className="mr-0.5 h-3 w-3 shrink-0 text-primary" />}
           <span className="min-w-0 line-clamp-2 [overflow-wrap:anywhere]">{i.nome}</span>
         </p>
@@ -170,7 +170,7 @@ export default function SeletorDoAcervo({
   return (
     <div className="space-y-3 rounded-xl border border-border bg-background p-3">
       <div className="flex items-center justify-between">
-        <p className="text-[12.5px] font-semibold">{titulo}</p>
+        <p className="text-[13px] font-semibold">{titulo}</p>
         {onFechar && (
           <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={onFechar} aria-label="Fechar o acervo" title="Fechar o acervo">
             <X className="h-4 w-4" />
@@ -179,7 +179,7 @@ export default function SeletorDoAcervo({
       </div>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, pasta, descrição ou tag" className="h-9 pl-8 text-[12.5px]" />
+        <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, pasta, descrição ou tag" className="h-9 pl-8 text-[13px]" />
       </div>
       {categorias.length > 1 && (
         <div className="flex flex-wrap">
@@ -227,7 +227,7 @@ export default function SeletorDoAcervo({
         )}
         {buscando && grupos.map((g) => (
           <section key={g.categoria} className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{ROTULO_DA_CATEGORIA[g.categoria] || g.categoria}</p>
+            <p className="text-[11px] font-semibold text-muted-foreground">{ROTULO_DA_CATEGORIA[g.categoria] || g.categoria}</p>
             {g.pastas.map((p) => (
               <div key={p.pasta} className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{p.pasta}</p>
@@ -237,7 +237,7 @@ export default function SeletorDoAcervo({
           </section>
         ))}
         {buscando && filtradas.length > LIMITE_NA_TELA && (
-          <p className="text-[11.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             Mostrando {LIMITE_NA_TELA} de {filtradas.length}. Refine a busca para achar mais rápido.
           </p>
         )}

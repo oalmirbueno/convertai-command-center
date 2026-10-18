@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { superficie } from "@/components/sistema/estilos";
 
 /**
  * Peças de layout compartilhadas por TODAS as telas (cliente, equipe, admin).
@@ -40,11 +41,11 @@ export function PageHeader({
     >
       <div className="min-w-0 space-y-1">
         {eyebrow && (
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <p className="text-[11px] font-semibold text-muted-foreground">
             {eyebrow}
           </p>
         )}
-        <h1 className="truncate text-xl font-semibold leading-tight text-foreground sm:text-2xl">
+        <h1 className="truncate text-[20px] font-semibold leading-tight text-foreground">
           {title}
         </h1>
         {description && (
@@ -79,11 +80,11 @@ export function PageSection({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             {title && (
-              <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <h2 className="text-[13px] font-semibold text-muted-foreground">
                 {title}
               </h2>
             )}
-            {hint && <p className="mt-0.5 text-xs text-muted-foreground/80">{hint}</p>}
+            {hint && <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground/80">{hint}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
@@ -135,7 +136,7 @@ export const SurfaceCard = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "flex h-full min-w-0 flex-col rounded-xl border border-border bg-card",
+      superficie.painel, "flex h-full min-w-0 flex-col",
       padded && "p-5",
       className,
     )}
@@ -166,7 +167,7 @@ export function EmptyState({
       )}
     >
       {Icon && <Icon className="h-6 w-6 text-muted-foreground/60" />}
-      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="text-[13px] leading-5 font-medium text-foreground">{title}</p>
       {description && (
         <p className="max-w-sm text-[13px] leading-relaxed text-muted-foreground">
           {description}

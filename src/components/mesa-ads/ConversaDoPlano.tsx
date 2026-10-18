@@ -231,7 +231,7 @@ function MudancaDoPlano({ mensagemId, anexos, aoDesfazer }: { mensagemId: string
   const nomes: Record<string, string> = { nome: "nome", angulos: "ângulos", estrutura: "estrutura" };
   const campos = (mud.campos || []).map((c) => nomes[c] || c).join(", ");
   return (
-    <p className="ml-8 flex min-w-0 flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground" data-mudanca-do-plano={desfeita ? "desfeita" : "feita"}>
+    <p className="ml-8 flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-muted-foreground" data-mudanca-do-plano={desfeita ? "desfeita" : "feita"}>
       <span>{desfeita ? `Mudança desfeita (${campos}).` : `Feito no plano: ${campos}.`}</span>
       {!desfeita && (
         <button

@@ -156,7 +156,7 @@ function AindaComErro({ motivos, acaoCorrigir }: { motivos: string[]; acaoCorrig
         {acaoCorrigir}
       </div>
       {aberto && resto.length > 0 && (
-        <ul className="mb-1 ml-5 space-y-0.5 text-[11.5px] leading-snug text-muted-foreground">
+        <ul className="mb-1 ml-5 space-y-0.5 text-[12px] leading-snug text-muted-foreground">
           {resto.map((m, i) => (
             <li key={i} className="[overflow-wrap:anywhere]">{m}</li>
           ))}
@@ -230,7 +230,7 @@ function Conferencia({
           {identidade && <p className="text-muted-foreground">Identidade: {identidade}</p>}
           {v.texto_lido && (
             <div>
-              <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Texto lido na imagem</p>
+              <p className="text-[11px] text-muted-foreground">Texto lido na imagem</p>
               <p className="mt-0.5 whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">{v.texto_lido}</p>
             </div>
           )}

@@ -17,7 +17,7 @@ import {
   type CriativoAds,
   type LogoRealAds,
 } from "./adsApi";
-import { botao, juntar } from "@/components/sistema";
+import { botao, juntar, superficie } from "@/components/sistema";
 
 /**
  * Mundo real do criativo (pedido do dono em 02/10/2026: "quando falar de
@@ -114,9 +114,9 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
   const pesquisa = mundo && mundo.pesquisa;
 
   return (
-    <section className="space-y-2 rounded-lg border border-border bg-card p-4" aria-label="Mundo real">
+    <section className={juntar(superficie.painel, "space-y-2 p-4")} aria-label="Mundo real">
       <div className="flex min-w-0 items-center">
-        <h3 className="min-w-0 flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Marcas reais e fontes</h3>
+        <h3 className="min-w-0 flex-1 text-[11px] font-medium text-muted-foreground">Marcas reais e fontes</h3>
         <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={buscando} onClick={() => void achar()} aria-label="Achar logos" title="Achar logos">
           {buscando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
         </button>
@@ -133,10 +133,10 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
           }}
         />
       </div>
-      {!mundo && <p className="text-[11.5px] text-muted-foreground">Nenhuma marca ou app real citado ainda.</p>}
+      {!mundo && <p className="text-[12px] text-muted-foreground">Nenhuma marca ou app real citado ainda.</p>}
       {mundo && mundo.entidades.length > 0 && <p className="text-[12px]">Cita: {mundo.entidades.join(", ")}</p>}
       {pesquisa && pesquisa.passos.length > 0 && (
-        <ol className="list-decimal space-y-0.5 pl-5 text-[11.5px]" aria-label="Passo a passo pesquisado">
+        <ol className="list-decimal space-y-0.5 pl-5 text-[12px]" aria-label="Passo a passo pesquisado">
           {pesquisa.passos.map((p, i) => <li key={i} className="[overflow-wrap:anywhere]">{p}</li>)}
         </ol>
       )}
@@ -148,7 +148,7 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
               <li key={`${l.url}-${i}`} className="flex min-w-0 items-center">
                 <input type="radio" name={`logo-${criativo.id}`} aria-label={`${l.nome} (${l.fonte})`} checked={escolhido === i} onChange={() => setEscolhido(i)} className="mr-2" />
                 <img src={l.png_url || l.url} alt={l.nome} crossOrigin="anonymous" className="mr-2 h-6 w-6 shrink-0 object-contain" />
-                <span className="min-w-0 flex-1 truncate text-[11.5px]" title={l.licenca}>
+                <span className="min-w-0 flex-1 truncate text-[12px]" title={l.licenca}>
                   {l.nome} · {l.fonte}
                 </span>
                 <a href={l.pagina} target="_blank" rel="noreferrer" className="ml-1 shrink-0 text-muted-foreground hover:text-foreground" aria-label={`Licença de ${l.nome}`}>
@@ -170,7 +170,7 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
       )}
       {comLogos && (
         <div className="space-y-1">
-          <p className="text-[11.5px] text-muted-foreground">Arte com logo real: {comLogos.logos.join(", ")}</p>
+          <p className="text-[12px] text-muted-foreground">Arte com logo real: {comLogos.logos.join(", ")}</p>
           <ImagemDaMesa caminho={comLogos.caminho} alt="Arte com o logo real" className="max-h-64 w-full rounded-md object-contain" />
         </div>
       )}

@@ -128,7 +128,7 @@ export default function ContextoRosto() {
             <Input type="date" value={quando} max={hoje()} onChange={(e) => setQuando(e.target.value)} className="h-9" />
           </Campo>
         </div>
-        <label className="flex items-start text-[12.5px]">
+        <label className="flex items-start text-[13px]">
           <Checkbox checked={confirmo} onCheckedChange={(v) => setConfirmo(v === true)} className="mr-2 mt-0.5" />
           <span>Confirmo que a autorização existe e está guardada.</span>
         </label>

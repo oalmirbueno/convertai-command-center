@@ -107,7 +107,7 @@ export default function TrilhoDeFerramentas({ ferramentas, valor, onEscolher }: 
                   )}
                 >
                   <Icone className="h-[18px] w-[18px]" />
-                  <span className="max-w-full truncate px-0.5 text-[10px] leading-none">{CURTO[f.valor] || f.rotulo}</span>
+                  <span className="max-w-full truncate px-0.5 text-[11px] leading-none">{CURTO[f.valor] || f.rotulo}</span>
                 </button>
               );
             })}

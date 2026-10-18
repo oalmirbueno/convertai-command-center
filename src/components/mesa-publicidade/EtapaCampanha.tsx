@@ -279,7 +279,7 @@ function FormularioDoBriefing() {
                     aria-pressed={ligado}
                     onClick={() => mudar({ formatos: ligado ? b.formatos.filter((x) => x !== f) : b.formatos.concat([f]) })}
                     className={juntar(
-                      "mb-1 mr-1.5 inline-flex h-8 items-center rounded-md border px-3 text-[12.5px] tabular-nums transition-colors",
+                      "mb-1 mr-1.5 inline-flex h-8 items-center rounded-md border px-3 text-[13px] tabular-nums transition-colors",
                       ligado ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground",
                       foco,
                     )}

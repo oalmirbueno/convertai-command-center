@@ -10,16 +10,11 @@ import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
   FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
-import OrganogramaAgentes, { type MovimentoDoOrganograma, type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
+import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
-import RelatorioVisual from "@/components/execucao/RelatorioVisual";
-import CentralPerformanceMeta from "@/components/execucao/CentralPerformanceMeta";
-import CentralDeAutonomia, { type PedidoAoHermes } from "@/components/execucao/CentralDeAutonomia";
+import type { PedidoAoHermes } from "@/components/execucao/CentralDeAutonomia";
 import Departamentos from "@/components/execucao/Departamentos";
-import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
-import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
-import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
 import { contagensDasAbas, falhaDaExecucao } from "@/lib/execucaoApresentacao";
 import { falarComoGente } from "@/lib/falarComoGente";
 import { precisaDecisao } from "@/lib/precisaDecisao";
@@ -27,7 +22,6 @@ import { vinculoEncerrado } from "@/lib/execucaoVinculos";
 import OrdensAutorizadas from "@/components/execucao/OrdensAutorizadas";
 import OQueFoiFeito from "@/components/execucao/OQueFoiFeito";
 import PedidosDeAcesso from "@/components/acesso/PedidosDeAcesso";
-import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
@@ -44,11 +38,30 @@ import {
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 import { excluirTarefa } from "@/lib/taskDelete";
+import { lazyDiscreto, quandoOcioso } from "@/lib/lazyComPreCarga";
 import {
   AjudaRecolhida, AreaDeTrabalho, BarraDeControles, CabecalhoDePagina, CampoDeBusca, Carregando,
   EstadoDeErro, EstadoVazio, Etapas, Painel, RegiaoRolavel, Secao, SeletorCompacto, botao, etiqueta,
   juntar, superficie, texto, useAreaDeTrabalho, useEstadoDaTela,
 } from "@/components/sistema";
+
+/**
+ * 18/10 (painel otimizado): a Execução abre no Escritório, e a Central, a
+ * Performance, a Hierarquia, os Relatórios e as janelas (agente, diário,
+ * tarefa, responsável) eram mais da metade do arquivo da tela. Agora cada um
+ * baixa quando é aberto e, com a tela parada, todos baixam no ocioso
+ * (efeito no começo de AdminExecucao), para a troca de aba seguir instantânea.
+ */
+const sempre = () => true;
+const CentralDeAutonomia = lazyDiscreto("execucao/central", () => import("@/components/execucao/CentralDeAutonomia"), sempre);
+const CentralPerformanceMeta = lazyDiscreto("execucao/performance", () => import("@/components/execucao/CentralPerformanceMeta"), sempre);
+const OrganogramaAgentes = lazyDiscreto("execucao/hierarquia", () => import("@/components/execucao/OrganogramaAgentes"), sempre);
+const RelatorioVisual = lazyDiscreto("execucao/relatorios", () => import("@/components/execucao/RelatorioVisual"), sempre);
+const PerfilDoAgente = lazyDiscreto("execucao/perfil-do-agente", () => import("@/components/execucao/PerfilDoAgente"), (p) => Boolean(p.operador));
+const DiarioDaExecucao = lazyDiscreto("execucao/diario", () => import("@/components/execucao/DiarioDaExecucao"), (p) => p.aberto);
+const DefinirResponsavel = lazyDiscreto("execucao/responsavel", () => import("@/components/execucao/DefinirResponsavel"), (p) => p.aberto);
+const TaskDetailDrawer = lazyDiscreto("execucao/tarefa", () => import("@/components/admin/TaskDetailDrawer"), sempre);
+const PECAS_SOB_DEMANDA = [CentralDeAutonomia, CentralPerformanceMeta, OrganogramaAgentes, RelatorioVisual, PerfilDoAgente, DiarioDaExecucao, DefinirResponsavel, TaskDetailDrawer];
 
 /**
  * Na gaveta do celular a lateral (o resumo) não tem cabeçalho de agente:
@@ -212,6 +225,9 @@ const dataCurta = (iso?: string | null) =>
 
 export default function AdminExecucao() {
   const { profile } = useAuth();
+  useEffect(() => quandoOcioso(() => {
+    for (const peca of PECAS_SOB_DEMANDA) peca.preCarregar().catch(() => undefined);
+  }), []);
   const [searchParams] = useSearchParams();
   const vinculoAlvo = searchParams.get("vinculo");
   const aprovacaoAlvo = searchParams.get("aprovacao");
@@ -361,10 +377,12 @@ export default function AdminExecucao() {
 
   // Os dois campos: um vinculo criado pelo painel_task_id tem tarefa, e
   // ignora-lo devolvia uma linha sem contexto nenhum.
+  // Ordenados: os vínculos chegam por updated_at, e sem ordenar a chave da
+  // consulta mudava a cada vínculo atualizado e a leitura recomeçava sem cache.
   const taskIds = useMemo(
-    () => [...new Set(
+    () => ([...new Set(
       vinculos.flatMap((v) => [v.kanban_task_id, (v as any).painel_task_id]).filter(Boolean),
-    )] as string[],
+    )] as string[]).sort(),
     [vinculos],
   );
   const { data: tarefas = new Map(), isSuccess: tarefasProntas } = useQuery({
@@ -392,7 +410,7 @@ export default function AdminExecucao() {
   const humanIds = useMemo(() => {
     const ids = new Set<string>();
     for (const t of tarefas.values()) if (t?.assigned_to) ids.add(String(t.assigned_to));
-    return [...ids];
+    return [...ids].sort();
   }, [tarefas]);
   const { data: humanos = new Map() } = useQuery({
     queryKey: ["operador-humanos", humanIds.join(",")],
@@ -1148,7 +1166,7 @@ export default function AdminExecucao() {
         }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={juntar(
-          "flex h-full min-w-0 cursor-pointer flex-col rounded-xl border border-border/60 bg-card p-3 shadow-sm transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          superficie.painel, "flex h-full min-w-0 cursor-pointer flex-col p-3 transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           destacado && "ring-2 ring-primary/50",
         )}
       >
@@ -1175,7 +1193,7 @@ export default function AdminExecucao() {
 
         <div className="mt-auto flex min-w-0 items-center gap-2 pt-2.5 text-[12px] text-muted-foreground">
           <span className="inline-flex min-w-0 items-center gap-1.5" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
             <span className="truncate">{op?.display_name || "?"}</span>
           </span>
           {t?.due_date && (
@@ -1341,9 +1359,9 @@ export default function AdminExecucao() {
         ? <div className="space-y-4">
           {/* Para que serve: o quê, por quê e o resultado, da descrição da tarefa. */}
           <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-wide text-primary">Sobre esta tarefa</p>
+            <p className="text-[12px] font-semibold text-primary">Sobre esta tarefa</p>
             {(t as any)?.description
-              ? <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13.5px] leading-6 text-foreground/90" title={leituraSimples(String((t as any).description)).resumo}>{leituraSimples(String((t as any).description)).resumo}</p>
+              ? <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13px] leading-6 text-foreground/90" title={leituraSimples(String((t as any).description)).resumo}>{leituraSimples(String((t as any).description)).resumo}</p>
               : <p className="mt-1 text-[13px] text-muted-foreground">O agente não explicou o quê, o porquê e o resultado esperado. <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => void pedirAoAgente(v, "explicacao")}>Pedir explicação</button></p>}
           </div>
           <CaminhoDaTarefa feito={feito} parou={travada ? fala : null} destrava={v.next_step ? falarComoGente(v.next_step).humano : null} esperaRevisao={emRevisao} />
@@ -1355,7 +1373,7 @@ export default function AdminExecucao() {
         ...(t?.due_date ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${String(t.due_date).split("-").reverse().slice(0, 2).join("/")}`, tom: (prazoVencido ? "perigo" : "neutro") as "perigo" | "neutro" }] : []),
         ...(t?.project?.name ? [{ texto: t.project.name }] : []),
       ],
-      detalhes: <div className="space-y-2 text-[12.5px]">
+      detalhes: <div className="space-y-2 text-[13px]">
         <p>Responsável humano: <span className="text-foreground">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span> · agente <span className="text-foreground">{op?.display_name || "?"}</span> · atualizado em {dataCurta(v.updated_at)}</p>
         {v.last_action && <p>O que o agente disse por último: <span className="text-foreground">{leituraSimples(String(v.last_action)).resumo}</span></p>}
         {v.next_step && <p>Próximo passo: <span className="text-foreground">{leituraSimples(String(v.next_step)).resumo}</span></p>}

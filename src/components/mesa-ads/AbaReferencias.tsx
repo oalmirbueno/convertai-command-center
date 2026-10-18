@@ -98,8 +98,8 @@ function Miniatura({ r }: { r: ReferenciaAds }) {
     <div className="flex h-full w-full flex-col items-center justify-center bg-secondary/60 px-3 text-center">
       <Link2 className="h-5 w-5 text-muted-foreground" />
       <span className="mt-1.5 text-[11px] font-medium text-foreground/80">{rotuloDaOrigem(r.origem)}</span>
-      {dominio && <span className="mt-0.5 max-w-full truncate text-[10.5px] text-muted-foreground">{dominio}</span>}
-      <span className="mt-1 text-[10px] text-muted-foreground">abra para buscar as imagens</span>
+      {dominio && <span className="mt-0.5 max-w-full truncate text-[11px] text-muted-foreground">{dominio}</span>}
+      <span className="mt-1 text-[11px] text-muted-foreground">abra para buscar as imagens</span>
     </div>
   );
 }
@@ -127,7 +127,7 @@ function CartaoDaReferencia({ r, onAbrir, onEstrela }: { r: ReferenciaAds; onAbr
           <Miniatura r={r} />
         </div>
         {r.destaque && (
-          <span className="absolute left-2 top-2 inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-semibold text-foreground">
+          <span className="absolute left-2 top-2 inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-semibold text-foreground">
             <Star className="mr-1 h-3 w-3 fill-warning text-warning" /> Destaque
           </span>
         )}
@@ -151,18 +151,18 @@ function CartaoDaReferencia({ r, onAbrir, onEstrela }: { r: ReferenciaAds; onAbr
             <Star className={`h-3.5 w-3.5 ${r.destaque ? "fill-warning text-warning" : "text-muted-foreground"}`} />
           </button>
         </div>
-        <p className="line-clamp-2 text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{r.titulo}</p>
+        <p className="line-clamp-2 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{r.titulo}</p>
         {(r.mecanismo || estilo) && (
           <p className="truncate text-[11px] text-muted-foreground" title={r.mecanismo || humanizar(estilo)}>
             {r.mecanismo || humanizar(estilo)}
           </p>
         )}
         {metricas.length > 0 && (
-          <p className="truncate text-[10.5px] tabular-nums text-muted-foreground">
+          <p className="truncate text-[11px] tabular-nums text-muted-foreground">
             {metricas.map((m) => `${m.formato((r.metricas as any)[m.chave])} ${m.rotulo}`).join(" · ")}
           </p>
         )}
-        {!fichaLida(r.ficha) && r.origem !== "padrao" && <p className="text-[10.5px] text-warning">ficha por completar</p>}
+        {!fichaLida(r.ficha) && r.origem !== "padrao" && <p className="text-[11px] text-warning">ficha por completar</p>}
       </div>
     </div>
   );

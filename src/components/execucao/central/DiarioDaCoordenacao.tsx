@@ -200,7 +200,7 @@ export default function DiarioDaCoordenacao({ contexto }: { contexto: ContextoDo
           <div key={m.id} className={m.author_kind === "humano" ? "ml-auto max-w-[88%] rounded-[18px] rounded-tr-md bg-primary/90 px-3 py-2 text-[13px] text-primary-foreground" : "max-w-[92%] rounded-[18px] rounded-tl-md bg-muted/70 px-3 py-2 text-[13px]"}>
             {m.title && <p className="text-[11px] font-semibold opacity-80">{m.title}</p>}
             <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.body.length > 2500 ? `${m.body.slice(0, 2500)}…` : m.body}</p>
-            <p className="mt-0.5 text-[10px] opacity-60">{m.entry_type} · {hora(m.created_at)}</p>
+            <p className="mt-0.5 text-[11px] opacity-60">{m.entry_type} · {hora(m.created_at)}</p>
           </div>
         ))}
         <div ref={fim} />

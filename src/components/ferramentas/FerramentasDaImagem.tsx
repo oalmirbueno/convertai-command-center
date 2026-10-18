@@ -153,13 +153,13 @@ export function FerramentasDaImagem({ clientId, imagemId, mostrarCriativo = fals
   return (
     <div className={`flex flex-col gap-2 ${className}`} data-ferramentas-da-imagem="">
       {semChave ? (
-        <div role="status" className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+        <div role="status" className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{semChave}</span>
         </div>
       ) : null}
       {erroDaEstimativa ? (
-        <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{erroDaEstimativa}</span>
           <Button variant="link" size="sm" className="h-auto p-0" onClick={carregar}>
             Tentar de novo
@@ -168,7 +168,7 @@ export function FerramentasDaImagem({ clientId, imagemId, mostrarCriativo = fals
       ) : null}
       <div className="flex flex-wrap gap-2">
         {carregando && !estimativa ? (
-          <span className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculando o custo
           </span>
         ) : null}

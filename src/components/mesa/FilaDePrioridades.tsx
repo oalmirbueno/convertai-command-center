@@ -268,8 +268,8 @@ export default function FilaDePrioridades({
         {consulta.dataUpdatedAt > 0 && <span className="ml-auto text-[11px] text-muted-foreground max-sm:hidden">Conferido às {new Date(consulta.dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
       </div>
       {primeiro && !consulta.isError && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Próxima ação recomendada">
-        <div className="min-w-0 flex-1"><p className="text-xs font-medium text-primary">Comece por aqui · {primeiro.nome}</p><p className="mt-1 text-sm font-semibold">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1 text-xs text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>
-        <button type="button" className={juntar(botao.primario, "h-9 px-3 text-xs")} onClick={() => onAbrir(primeiro.client_id, primeiro.acoes[0].aba, primeiro.acoes[0].mes)}>Começar <ArrowRight className="ml-2 h-4 w-4" /></button>
+        <div className="min-w-0 flex-1"><p className="text-[12px] leading-4 font-medium text-primary">Comece por aqui · {primeiro.nome}</p><p className="mt-1 text-[13px] leading-5 font-semibold">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1 text-[12px] leading-4 text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>
+        <button type="button" className={juntar(botao.primario, "h-9 px-3 text-[12px] leading-4")} onClick={() => onAbrir(primeiro.client_id, primeiro.acoes[0].aba, primeiro.acoes[0].mes)}>Começar <ArrowRight className="ml-2 h-4 w-4" /></button>
       </div>}
 
       {fila && fila.grupos.length > 0 && (
@@ -328,7 +328,7 @@ export default function FilaDePrioridades({
                   <div className="flex min-w-0 items-center">
                     <span className="mr-2 w-5 shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">{i + 1}</span>
                     <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{g.nome}</h3>
-                    <button type="button" className="ml-2 text-xs text-muted-foreground hover:text-primary" aria-label={`Abrir conhecimento de ${g.nome}`} onClick={() => onAbrir(g.client_id, "contexto", null)}>Contexto</button>
+                    <button type="button" className="ml-2 text-[12px] leading-4 text-muted-foreground hover:text-primary" aria-label={`Abrir conhecimento de ${g.nome}`} onClick={() => onAbrir(g.client_id, "contexto", null)}>Contexto</button>
                     <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${nivel.selo}`}>{nivel.rotulo}</span>
                   </div>
                   {g.pronto && (
@@ -349,7 +349,7 @@ export default function FilaDePrioridades({
                       />
                     ))}
                   </ul>
-                  {g.acoes.length > 1 && <button type="button" aria-expanded={!!expandidos[g.client_id]} className="mb-2 ml-11 text-xs text-muted-foreground hover:text-foreground" onClick={() => setExpandidos(v => ({ ...v, [g.client_id]: !v[g.client_id] }))}>{expandidos[g.client_id] ? "Recolher outras ações" : `Mais ${g.acoes.length - 1} ${g.acoes.length === 2 ? "ação" : "ações"} deste cliente`}</button>}
+                  {g.acoes.length > 1 && <button type="button" aria-expanded={!!expandidos[g.client_id]} className="mb-2 ml-11 text-[12px] leading-4 text-muted-foreground hover:text-foreground" onClick={() => setExpandidos(v => ({ ...v, [g.client_id]: !v[g.client_id] }))}>{expandidos[g.client_id] ? "Recolher outras ações" : `Mais ${g.acoes.length - 1} ${g.acoes.length === 2 ? "ação" : "ações"} deste cliente`}</button>}
                 </div>
               </li>
             );
@@ -362,7 +362,7 @@ export default function FilaDePrioridades({
       )}
 
       {fila && emDia.length > 0 && (
-        <div className="text-[12.5px] text-muted-foreground">
+        <div className="text-[12px] text-muted-foreground">
           <button type="button" onClick={() => setVerEmDia((v) => !v)} className="inline-flex items-center hover:text-foreground" aria-expanded={verEmDia}>
             <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-success" />
             {emDia.length === 1 ? "1 cliente em dia" : `${emDia.length} clientes em dia`}
@@ -386,15 +386,15 @@ export default function FilaDePrioridades({
         </div>
       )}
 
-      {revisoes.isError && <p className="text-xs text-muted-foreground">A revisão dos dossiês não pôde ser consultada. Atualize para tentar novamente.</p>}
+      {revisoes.isError && <p className="text-[12px] leading-4 text-muted-foreground">A revisão dos dossiês não pôde ser consultada. Atualize para tentar novamente.</p>}
       {revisoesVisiveis.length > 0 && <details className="rounded-lg border border-border p-3">
-        <summary className="cursor-pointer text-sm font-medium">Contextos a conferir <span className="text-muted-foreground">({revisoesVisiveis.length})</span></summary>
-        <p className="mt-2 text-xs text-muted-foreground">A data sinaliza uma revisão; não significa que as informações estejam erradas.</p>
-        <ul className="mt-2 divide-y divide-border">{revisoesVisiveis.map(c => <li key={c.id} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-sm">{c.nome}</p><p className="text-xs text-muted-foreground">{c.motivo}</p></div><button className={juntar(botao.secundario, "h-8 px-3 text-xs")} onClick={() => onAbrir(c.id, "contexto", null)}>Revisar</button></li>)}</ul>
+        <summary className="cursor-pointer text-[13px] leading-5 font-medium">Contextos a conferir <span className="text-muted-foreground">({revisoesVisiveis.length})</span></summary>
+        <p className="mt-2 text-[12px] leading-4 text-muted-foreground">A data sinaliza uma revisão; não significa que as informações estejam erradas.</p>
+        <ul className="mt-2 divide-y divide-border">{revisoesVisiveis.map(c => <li key={c.id} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-[13px] leading-5">{c.nome}</p><p className="text-[12px] leading-4 text-muted-foreground">{c.motivo}</p></div><button className={juntar(botao.secundario, "h-8 px-3 text-[12px] leading-4")} onClick={() => onAbrir(c.id, "contexto", null)}>Revisar</button></li>)}</ul>
       </details>}
 
       {fila && marcados.length > 0 && (
-        <div className="text-[12.5px] text-muted-foreground">
+        <div className="text-[12px] text-muted-foreground">
           <button type="button" onClick={() => setVerMarcados((v) => !v)} className="inline-flex items-center hover:text-foreground" aria-expanded={verMarcados}>
             <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
             {marcados.length === 1 ? "1 marcado como feito" : `${marcados.length} marcados como feito`}
@@ -407,7 +407,7 @@ export default function FilaDePrioridades({
                     <p className="truncate text-[13px] text-foreground">
                       <strong className="font-semibold">{m.nome}</strong>: {tituloComMes(m.acao)}
                     </p>
-                    <p className="truncate text-[11.5px]">
+                    <p className="truncate text-[12px]">
                       Feito{m.feito.marcado_por_nome ? ` por ${m.feito.marcado_por_nome}` : ""}
                       {m.feito.marcado_em ? ` em ${dataCurtinha(m.feito.marcado_em)}` : ""}
                     </p>

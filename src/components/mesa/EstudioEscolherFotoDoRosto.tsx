@@ -298,10 +298,10 @@ export default function EstudioEscolherFotoDoRosto({
             <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">{n + 1}</span>
           )}
           {f.pessoa === null && !marcada && (
-            <span className="absolute left-1 top-1 rounded bg-background/85 px-1 text-[10px] text-muted-foreground" title="Ainda sem leitura de pessoa">?</span>
+            <span className="absolute left-1 top-1 rounded bg-background/85 px-1 text-[11px] text-muted-foreground" title="Ainda sem leitura de pessoa">?</span>
           )}
         </button>
-        <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">{f.detalhe ? `${f.detalhe} · ${f.nome}` : f.nome}</p>
+        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{f.detalhe ? `${f.detalhe} · ${f.nome}` : f.nome}</p>
       </li>
     );
   };
@@ -324,7 +324,7 @@ export default function EstudioEscolherFotoDoRosto({
       rodape={
         <div className="border-t border-border px-4 py-3 sm:px-5" data-rodape="foto-do-rosto">
           {precisaDeAutorizacao(escolha) && (
-            <label className="mb-2 flex items-start text-[11.5px] leading-snug text-muted-foreground">
+            <label className="mb-2 flex items-start text-[12px] leading-snug text-muted-foreground">
               <Checkbox checked={autorizado} onCheckedChange={(v) => onAutorizado(v === true)} className="mr-1.5 mt-px h-3.5 w-3.5" aria-label="Tenho a autorização de uso da imagem" />
               <span>Tenho a autorização de uso da imagem desta pessoa.</span>
             </label>
@@ -354,7 +354,7 @@ export default function EstudioEscolherFotoDoRosto({
           </label>
         </div>
         {semLeitura.length > 0 && (
-          <div className="flex min-w-0 items-center text-[11.5px] text-muted-foreground" data-aviso="sem-leitura">
+          <div className="flex min-w-0 items-center text-[12px] text-muted-foreground" data-aviso="sem-leitura">
             <span className="min-w-0 flex-1 truncate">
               {semLeitura.length} {semLeitura.length === 1 ? "foto sem leitura" : "fotos sem leitura"} de pessoa aqui.
             </span>

@@ -214,7 +214,7 @@ function JanelaDoHistorico({ chave, aoFechar, aoTrocar }: { chave: ChaveDaConver
               <div key={c.id} className={juntar("group relative rounded-lg", c.id === aberta ? "bg-muted" : "hover:bg-muted/50")}>
                 <button type="button" onClick={() => setAberta(c.id)} className="block w-full min-w-0 px-2.5 py-2 text-left" aria-current={c.id === aberta ? "true" : undefined}>
                   <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    {c.id === ativa?.id ? <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold text-primary">Atual</span> : c.arquivada_em ? <span>Arquivada</span> : null}
+                    {c.id === ativa?.id ? <span className="rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">Atual</span> : c.arquivada_em ? <span>Arquivada</span> : null}
                     <span className="ml-auto shrink-0">{quando(c.atualizado_em || c.criado_em)}</span>
                   </span>
                   <span className="mt-0.5 block truncate text-[13px] font-medium text-foreground">{c.titulo || "Conversa sem título"}</span>

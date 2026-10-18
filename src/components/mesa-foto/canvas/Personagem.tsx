@@ -111,7 +111,7 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
           </label>
           <textarea value={tracos} onChange={(e) => setTracos(e.target.value)} rows={2} placeholder="Traços que não mudam, um por linha: cabelo cacheado castanho; jaqueta jeans; brinco de argola" aria-label="Traços fixos da personagem" className={CAMPO} />
           <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={2} placeholder="Quem ela é na história (opcional)" aria-label="Descrição da personagem" className={CAMPO} />
-          <label className="flex items-start text-[11.5px] leading-snug text-zinc-200">
+          <label className="flex items-start text-[12px] leading-snug text-zinc-200">
             <input type="checkbox" className="mr-2 mt-0.5" checked={etica} onChange={(e) => setEtica(e.target.checked)} aria-label="Declaração da personagem" />
             A personagem é sintética, adulta e não imita nenhuma pessoa real.
           </label>
@@ -132,7 +132,7 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
             titulo="Folha da personagem"
             descricao="Uma imagem por vista, pelo mesmo gerador da âncora. Aprove as que ficaram iguais."
             variant="outline"
-            className="h-8 border-white/10 bg-white/5 text-[11.5px] text-zinc-100 hover:bg-white/10"
+            className="h-8 border-white/10 bg-white/5 text-[12px] text-zinc-100 hover:bg-white/10"
             fecharAoConfirmar
             disabled={vistas.length > 0}
             partes={() => partesDaVista(criada.motor_id, qualidade, 1, criada.folha_sugerida.length)}
@@ -149,7 +149,7 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
               <div className="flex min-w-0 flex-wrap">
                 {vistas.map((v) => (
                   <div key={v.id} className="mb-1.5 mr-1.5 w-16">
-                    <span className="block overflow-hidden rounded-lg border border-white/10 bg-zinc-900" style={{ width: 64, height: 80 }}>
+                    <span className="block overflow-hidden rounded-md border border-white/10 bg-zinc-900" style={{ width: 64, height: 80 }}>
                       <MiniaturaDoStorage bucket={v.storage_bucket} caminho={v.storage_path || v.url} alt={rotuloDaVista(v.vista)} largura={160} className="h-full w-full" />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{rotuloDaVista(v.vista)}</span>

@@ -77,14 +77,14 @@ export default function TrocaDeConteudo({ troca, onFechar }: { troca: TrocaParaA
   return (
     <section className="space-y-2 rounded-lg border border-primary/40 bg-background p-3" aria-label="Troca de todo o conteúdo" data-troca={estado}>
       <div className="flex min-w-0 items-center">
-        <h4 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+        <h4 className="min-w-0 flex-1 truncate text-[13px] font-semibold">
           {estado === "pendente" ? `Conteúdo novo para ${troca.ids.length} criativo${troca.ids.length === 1 ? "" : "s"}` : estado === "feita" ? "Conteúdo trocado" : "Troca desfeita"}
         </h4>
         <button type="button" aria-label="Fechar" className="ml-2 rounded p-1 text-muted-foreground hover:text-foreground" onClick={onFechar}>
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      {estado === "pendente" && <p className="text-[11.5px] text-muted-foreground">Troca no lugar: os mesmos criativos e cards, com texto novo. Nada muda até confirmar.</p>}
+      {estado === "pendente" && <p className="text-[12px] text-muted-foreground">Troca no lugar: os mesmos criativos e cards, com texto novo. Nada muda até confirmar.</p>}
       {(troca.avisos || []).length > 0 && estado === "pendente" && (
         <ul className="space-y-0.5 text-[11px] text-warning" aria-label="Avisos da troca">
           {(troca.avisos || []).slice(0, 6).map((a, i) => <li key={i} className="[overflow-wrap:anywhere]">{a}</li>)}
@@ -94,15 +94,15 @@ export default function TrocaDeConteudo({ troca, onFechar }: { troca: TrocaParaA
         <ul className="space-y-2" aria-label="Antes e depois">
           {linhas.map(({ variacao, formatos, proposta }) => (
             <li key={variacao} className="rounded-md border border-border p-2">
-              <p className="mb-1 flex flex-wrap items-center text-[10.5px] text-muted-foreground">
+              <p className="mb-1 flex flex-wrap items-center text-[11px] text-muted-foreground">
                 <span className="mr-1.5 font-medium text-foreground">V{variacao}</span>
                 {rotuloDoAnguloDeVenda(proposta.depois.angulo_de_venda) && <span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-px text-primary">{rotuloDoAnguloDeVenda(proposta.depois.angulo_de_venda)}</span>}
                 <span>{formatos.join(", ")}</span>
               </p>
-              {proposta.antes.texto_principal && <p className="text-[11.5px] text-muted-foreground line-through [overflow-wrap:anywhere]">{proposta.antes.texto_principal}</p>}
-              <p className="mt-0.5 whitespace-pre-wrap text-[12.5px] leading-snug [overflow-wrap:anywhere]">{proposta.depois.texto_principal}</p>
+              {proposta.antes.texto_principal && <p className="text-[12px] text-muted-foreground line-through [overflow-wrap:anywhere]">{proposta.antes.texto_principal}</p>}
+              <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-snug [overflow-wrap:anywhere]">{proposta.depois.texto_principal}</p>
               {(proposta.depois.headline_arte || proposta.depois.titulo) && (
-                <p className="mt-1 text-[11.5px] [overflow-wrap:anywhere]">
+                <p className="mt-1 text-[12px] [overflow-wrap:anywhere]">
                   {proposta.depois.headline_arte && <span className="font-semibold">Na arte: {proposta.depois.headline_arte}</span>}
                   {proposta.depois.headline_arte && proposta.depois.titulo ? " · " : ""}
                   {proposta.depois.titulo && <span>Título: {proposta.depois.titulo}</span>}

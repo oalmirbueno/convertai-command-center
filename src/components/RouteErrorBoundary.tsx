@@ -73,8 +73,8 @@ class RouteErrorBoundaryInner extends Component<Props, State> {
 
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-        <p className="text-lg font-semibold text-foreground">Algo travou nesta tela</p>
-        <p className="max-w-[420px] text-sm leading-relaxed text-muted-foreground">
+        <p className="text-[20px] leading-7 font-semibold text-foreground">Algo travou nesta tela</p>
+        <p className="max-w-[420px] text-[13px] leading-relaxed text-muted-foreground">
           O resto do painel continua funcionando. Você pode tentar abrir esta tela de novo
           ou voltar para o início.
         </p>
@@ -82,13 +82,13 @@ class RouteErrorBoundaryInner extends Component<Props, State> {
           <button
             type="button"
             onClick={this.reset}
-            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+            className="rounded-xl bg-primary px-5 py-2.5 text-[13px] leading-5 font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
           >
             Tentar de novo
           </button>
           <Link
             to="/dashboard"
-            className="rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-foreground hover:border-primary/50 transition-colors"
+            className="rounded-xl border border-border px-5 py-2.5 text-[13px] leading-5 font-medium text-foreground hover:border-primary/50 transition-colors"
           >
             Voltar para o painel
           </Link>

@@ -312,7 +312,7 @@ export default function CadernoDoDossie({ caderno }: { caderno: EstadoDoCaderno 
                   onClick={() => irPara(i)}
                   title={s.titulo}
                   className={juntar(
-                    "inline-flex h-7 max-w-full min-w-0 items-center rounded-full bg-muted/50 pl-1 pr-3 text-[12.5px] text-foreground/75 transition-colors hover:bg-primary/10 hover:text-primary",
+                    "inline-flex h-7 max-w-full min-w-0 items-center rounded-full bg-muted/50 pl-1 pr-3 text-[13px] text-foreground/75 transition-colors hover:bg-primary/10 hover:text-primary",
                     foco,
                   )}
                   data-atalho-do-sumario=""

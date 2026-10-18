@@ -69,7 +69,7 @@ export function SeletorDeFormatoCompacto({
     <SeletorCompacto
       modo="lista"
       rotulo="Formato do post"
-      className={juntar("h-8 text-[12.5px]", className)}
+      className={juntar("h-8 text-[13px]", className)}
       opcoes={FORMATOS_DO_POST.map((f) => ({
         valor: f.valor,
         rotulo: f.rotulo,
@@ -109,7 +109,7 @@ export function SeletorDeQualidadeCompacto({
     <SeletorCompacto
       modo="lista"
       rotulo="Qualidade da lâmina"
-      className="h-8 text-[12.5px]"
+      className="h-8 text-[13px]"
       opcoes={ordem.map((q) => ({
         valor: q,
         rotulo: `${ROTULO_DA_QUALIDADE[q].rotulo}${precos[q] ? ` ${precos[q]}` : ""}`,

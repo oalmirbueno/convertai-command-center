@@ -132,7 +132,7 @@ function CarouselPreview({ images, small, grande }: { images: any[]; small?: boo
           <button
             type="button"
             aria-label="Card anterior"
-            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/85 border border-border rounded-full p-2 shadow-md opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/85 border border-border rounded-full p-2 shadow-sm opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
             onClick={(e) => { e.stopPropagation(); prev(); }}
           >
             <ChevronLeft className="w-4 h-4" />
@@ -140,7 +140,7 @@ function CarouselPreview({ images, small, grande }: { images: any[]; small?: boo
           <button
             type="button"
             aria-label="Próximo card"
-            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/85 border border-border rounded-full p-2 shadow-md opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/85 border border-border rounded-full p-2 shadow-sm opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
             onClick={(e) => { e.stopPropagation(); next(); }}
           >
             <ChevronRight className="w-4 h-4" />
@@ -153,7 +153,7 @@ function CarouselPreview({ images, small, grande }: { images: any[]; small?: boo
         </>
       )}
       {images.length > 1 && (
-        <span className="absolute top-1 right-1 bg-background/80 text-[10px] px-1.5 py-0.5 rounded-md text-muted-foreground">
+        <span className="absolute top-1 right-1 bg-background/80 text-[11px] px-1.5 py-0.5 rounded-md text-muted-foreground">
           {idx + 1}/{images.length}
         </span>
       )}
@@ -389,7 +389,7 @@ export default function ClientApprovals() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Ver detalhes de ${f.file_name}`}
-                className={juntar("min-w-0 overflow-hidden rounded-xl border border-border bg-card", foco)}
+                className={juntar(superficie.painel, "min-w-0 overflow-hidden", foco)}
                 onClick={() => setPreviewFile(f)}
                 onKeyDown={(e) => abrirComTeclado(e, f)}
               >
@@ -409,13 +409,13 @@ export default function ClientApprovals() {
                 {f.approval_status === "rejected" && f.feedback && (
                   <div className={juntar(superficie.poco, "mt-2 px-3 py-2")}>
                     <p className={texto.auxiliar}>Seu pedido de ajuste</p>
-                    <p className="line-clamp-3 text-xs text-foreground break-words">{f.feedback}</p>
+                    <p className="line-clamp-3 text-[12px] leading-4 text-foreground break-words">{f.feedback}</p>
                   </div>
                 )}
                 {atualPendente && previaDoAtual.isError && (
                   <div role="alert" className="mt-2 flex min-w-0 items-center rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
                     <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-                    <p className="min-w-0 flex-1 text-xs text-destructive">Não foi possível conferir o conteúdo. A decisão fica bloqueada até a prévia ser validada.</p>
+                    <p className="min-w-0 flex-1 text-[12px] leading-4 text-destructive">Não foi possível conferir o conteúdo. A decisão fica bloqueada até a prévia ser validada.</p>
                     <button type="button" onClick={() => previaDoAtual.refetch()} className={juntar(botao.discreto, "ml-1 h-11 px-2 text-primary")}>
                       Tentar
                     </button>
@@ -482,7 +482,7 @@ export default function ClientApprovals() {
                   {f.approval_status === "rejected" && f.feedback && (
                     <div className={juntar(superficie.poco, "mt-2 px-3 py-2")}>
                       <p className={texto.auxiliar}>Seu pedido de ajuste</p>
-                      <p className="line-clamp-3 text-xs text-foreground">{f.feedback}</p>
+                      <p className="line-clamp-3 text-[12px] leading-4 text-foreground">{f.feedback}</p>
                     </div>
                   )}
                 </div>
@@ -496,10 +496,10 @@ export default function ClientApprovals() {
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
-            <DialogTitle className="flex items-center gap-2 truncate pr-6 text-base">
+            <DialogTitle className="flex items-center gap-2 truncate pr-6 text-[15px]">
               {previewFile?.file_name}
               {previewFile && getCarouselImages(previewFile).length > 1 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
                   Carrossel • {getCarouselImages(previewFile).length} itens
                 </span>
               )}
@@ -543,16 +543,16 @@ export default function ClientApprovals() {
                 {items.length > 1 && (
                   <>
                     <button type="button"
-                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background shadow-md"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background shadow-sm"
                       onClick={() => setIdx((currentIdx - 1 + items.length) % items.length)}>
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background shadow-md"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background shadow-sm"
                       onClick={() => setIdx((currentIdx + 1) % items.length)}>
                       <ChevronRight className="w-4 h-4" />
                     </button>
-                    <span className="absolute top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+                    <span className="absolute top-2 right-2 bg-background/80 text-[11px] px-2 py-0.5 rounded-md text-muted-foreground">
                       {currentIdx + 1}/{items.length}
                     </span>
                   </>
@@ -585,12 +585,12 @@ export default function ClientApprovals() {
                 </Button>
               </div>
 
-              <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}</p>
-              {previewFile.caption && <div className="space-y-0.5"><p className={texto.rotulo}>Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
-              {previewFile.carousel_text && <div className="space-y-0.5"><p className={texto.rotulo}>Texto do carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
-              {previewFile.description && <div className="space-y-0.5"><p className={texto.rotulo}>Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              <p className="text-[12px] leading-4 text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}</p>
+              {previewFile.caption && <div className="space-y-0.5"><p className={texto.rotulo}>Legenda</p><p className="text-[13px] leading-5 text-foreground">{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div className="space-y-0.5"><p className={texto.rotulo}>Texto do carrossel</p><p className="text-[13px] leading-5 text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div className="space-y-0.5"><p className={texto.rotulo}>Descrição</p><p className="text-[13px] leading-5 text-foreground">{previewFile.description}</p></div>}
               {editorialPreview.isLoading && (
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-[12px] leading-4 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Conferindo o conteúdo editorial vinculado…
                 </div>
@@ -603,7 +603,7 @@ export default function ClientApprovals() {
                   <div className="flex gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                     <div>
-                      <p className="text-xs font-medium text-destructive">
+                      <p className="text-[12px] leading-4 font-medium text-destructive">
                         Não foi possível conferir o conteúdo editorial.
                       </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -633,10 +633,10 @@ export default function ClientApprovals() {
                       <p className="text-[12px] font-medium text-primary">
                         Conteúdo editorial vinculado
                       </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">
+                      <p className="mt-1 text-[13px] leading-5 font-semibold text-foreground">
                         {snapshot.title}
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">
                         Formato: {snapshot.content_type}
                       </p>
                     </div>
@@ -645,7 +645,7 @@ export default function ClientApprovals() {
                         <p className={texto.rotulo}>
                           Objetivo
                         </p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                        <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-foreground">
                           {snapshot.objective}
                         </p>
                       </div>
@@ -655,7 +655,7 @@ export default function ClientApprovals() {
                         <p className={texto.rotulo}>
                           Legenda base
                         </p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                        <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5 text-foreground">
                           {snapshot.default_caption}
                         </p>
                       </div>
@@ -666,7 +666,7 @@ export default function ClientApprovals() {
                         className="space-y-2 rounded-md bg-muted/50 p-3"
                       >
                         <div>
-                          <p className="text-xs font-medium text-foreground">
+                          <p className="text-[12px] leading-4 font-medium text-foreground">
                             {PLATFORM_LABELS[
                               plan.platform as EditorialPlatform
                             ] || plan.platform}
@@ -682,7 +682,7 @@ export default function ClientApprovals() {
                             <p className={texto.rotulo}>
                               Legenda da plataforma
                             </p>
-                            <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                            <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-foreground">
                               {plan.caption}
                             </p>
                           </div>
@@ -692,7 +692,7 @@ export default function ClientApprovals() {
                             <p className={texto.rotulo}>
                               Primeiro comentário
                             </p>
-                            <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                            <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-foreground">
                               {plan.first_comment}
                             </p>
                           </div>
@@ -702,7 +702,7 @@ export default function ClientApprovals() {
                             <p className={texto.rotulo}>
                               Texto alternativo
                             </p>
-                            <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                            <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-foreground">
                               {plan.alt_text}
                             </p>
                           </div>
@@ -714,7 +714,7 @@ export default function ClientApprovals() {
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
                 <div className="rounded-md bg-destructive/5 px-3 py-2">
                   <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
-                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                  <p className="text-[12px] leading-4 text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
             </div>
@@ -741,7 +741,7 @@ export default function ClientApprovals() {
       <Dialog open={!!confirmApprove} onOpenChange={() => setConfirmApprove(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Confirmar aprovação?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <Textarea
             placeholder="Algum comentário? (opcional)"
             aria-label="Comentário da aprovação (opcional)"

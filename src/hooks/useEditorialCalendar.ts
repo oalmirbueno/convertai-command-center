@@ -440,15 +440,25 @@ async function readAllPages<T>(
   }
 }
 
+const LOTES_EM_PARALELO = 4;
+
 async function readInChunks<T>(
   ids: string[],
   fetchChunk: (chunk: string[]) => CursorQuery<T>,
   cursor = "id",
 ) {
-  const rows: T[] = [];
+  // Até 4 lotes ao mesmo tempo, na mesma ordem de antes (eram todos em fila:
+  // com 1000 posts, 10 idas e voltas uma depois da outra a cada leitura).
+  const chunks: string[][] = [];
   for (let index = 0; index < ids.length; index += EDITORIAL_ID_CHUNK_SIZE) {
-    const chunk = ids.slice(index, index + EDITORIAL_ID_CHUNK_SIZE);
-    rows.push(...(await readAllPages(() => fetchChunk(chunk), cursor)));
+    chunks.push(ids.slice(index, index + EDITORIAL_ID_CHUNK_SIZE));
+  }
+  const rows: T[] = [];
+  for (let start = 0; start < chunks.length; start += LOTES_EM_PARALELO) {
+    const wave = await Promise.all(
+      chunks.slice(start, start + LOTES_EM_PARALELO).map((chunk) => readAllPages(() => fetchChunk(chunk), cursor)),
+    );
+    for (const part of wave) rows.push(...part);
   }
   return rows;
 }

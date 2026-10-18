@@ -141,7 +141,7 @@ export function BotaoDeApagar({
       <button
         type="button"
         onClick={() => setEtapa("perguntando")}
-        className={`inline-flex items-center rounded-md px-1.5 py-1 text-[11.5px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive ${className}`}
+        className={`inline-flex items-center rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive ${className}`}
         aria-label={rotulo}
         title={rotulo}
       >
@@ -151,7 +151,7 @@ export function BotaoDeApagar({
   }
 
   return (
-    <span className={`inline-flex min-w-0 flex-wrap items-center rounded-md bg-destructive/10 px-2 py-1 text-[11.5px] ${className}`} role="group" aria-label="Confirmar apagar">
+    <span className={`inline-flex min-w-0 flex-wrap items-center rounded-md bg-destructive/10 px-2 py-1 text-[12px] ${className}`} role="group" aria-label="Confirmar apagar">
       <span className="mr-2 min-w-0 text-foreground [overflow-wrap:anywhere]">{extra || pergunta}</span>
       <button
         type="button"

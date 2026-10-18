@@ -73,7 +73,7 @@ export function ModoLista({
             <li key={e.ligacao.id} className="min-w-0 rounded-xl border border-white/10 p-2.5" data-entrada-da-lista={e.no.id}>
               <div className="mb-2 flex min-w-0 items-center">
                 <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold">{e.numero}</span>
-                <span className={`min-w-0 flex-1 truncate text-[12.5px] font-semibold ${e.no.tipo === "gerar" ? "text-emerald-300" : TIPOS_DE_NO[e.no.tipo].texto}`}>{e.no.tipo === "gerar" ? `${rotuloDoPapel(e.ligacao.papel)} de outra cena` : TIPOS_DE_NO[e.no.tipo].rotulo}</span>
+                <span className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${e.no.tipo === "gerar" ? "text-emerald-300" : TIPOS_DE_NO[e.no.tipo].texto}`}>{e.no.tipo === "gerar" ? `${rotuloDoPapel(e.ligacao.papel)} de outra cena` : TIPOS_DE_NO[e.no.tipo].rotulo}</span>
                 {/* Outra cena: tirar só desliga (o Resultado de origem continua no quadro). */}
                 <button type="button" aria-label={e.no.tipo === "gerar" ? "Desligar a outra cena" : "Tirar o cartão"} onClick={() => onMudarCanvas((c) => (e.no.tipo === "gerar" ? desligar(c, e.ligacao.id) : removerNo(c, e.no.id)))} className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-white/10">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -117,7 +117,7 @@ export function ModoLista({
         titulo="Resultado"
         className="!border-white/10 !bg-zinc-950 text-zinc-100"
         acao={
-          <span className="text-[11.5px] font-semibold">
+          <span className="text-[12px] font-semibold">
             <CustoDoResultado canvas={canvas} no={resultado} />
           </span>
         }

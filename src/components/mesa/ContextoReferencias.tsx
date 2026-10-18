@@ -63,7 +63,7 @@ function AcoesDaReferencia({ r, onMudou }: { r: ReferenciaComDestaque; onMudou: 
             }}
             aria-pressed={r.papel === p}
             title={PAPEIS[p].dica}
-            className={`min-w-0 truncate rounded px-1 py-0.5 text-[10.5px] ${r.papel === p ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            className={`min-w-0 truncate rounded px-1 py-0.5 text-[11px] ${r.papel === p ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
           >
             {PAPEIS[p].curto}
           </button>
@@ -95,7 +95,7 @@ function AcoesDaReferencia({ r, onMudou }: { r: ReferenciaComDestaque; onMudou: 
           titulo="Ler a referência"
           descricao="O leitor descreve a técnica da peça (composição, hierarquia, tipografia, luz) para o diretor de arte usar."
           variant="outline"
-          className="h-7 w-full text-[11.5px]"
+          className="h-7 w-full text-[12px]"
           partes={() => [{ modeloId: leitor?.id, tipo: "texto", tokensEntrada: TAMANHOS.lerReferencia.entrada, tokensSaida: TAMANHOS.lerReferencia.saida }]}
           executar={() => chamarFuncao("estudio-arte", { acao: "referencias", subacao: "ler", referencia_id: r.id })}
           aoConcluir={() => onMudou()}

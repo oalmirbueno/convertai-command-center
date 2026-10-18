@@ -48,7 +48,7 @@ function BuscaComFiltros({
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             type="search"
-            className={juntar(campo, "h-8 pl-7 pr-2 text-[12.5px]")}
+            className={juntar(campo, "h-8 pl-7 pr-2 text-[13px]")}
             placeholder="Buscar por nome ou c3"
             value={filtro.texto}
             onChange={(e) => mudar({ texto: e.target.value })}

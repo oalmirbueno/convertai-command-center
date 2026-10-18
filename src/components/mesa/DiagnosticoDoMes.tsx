@@ -212,7 +212,7 @@ function ListaDePontos({ itens, tom }: { itens: Ponto[]; tom: "bom" | "ruim" }) 
   return (
     <ul className="space-y-1.5">
       {itens.map((p, i) => (
-        <li key={i} className="flex items-start text-[12.5px] leading-relaxed">
+        <li key={i} className="flex items-start text-[13px] leading-relaxed">
           <Icone className={`mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 ${tom === "bom" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`} />
           <span className="min-w-0 [overflow-wrap:anywhere]">
             <span className="font-medium">{p.ponto}</span>
@@ -242,7 +242,7 @@ function BarraDaMistura({ m }: { m: Mistura }) {
       <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" role="img" aria-label={`Topo ${m.topo}%, meio ${m.meio}%, fundo ${m.fundo}%`}>
         {partes.map((p) => (p.valor > 0 ? <span key={p.rotulo} className={`h-full ${p.cor}`} style={{ width: `${p.valor}%` }} /> : null))}
       </div>
-      <div className="mt-2 flex flex-wrap text-[11.5px]">
+      <div className="mt-2 flex flex-wrap text-[12px]">
         {partes.map((p) => (
           <span key={p.rotulo} className="mb-1 mr-3 inline-flex items-center">
             <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${p.cor}`} />
@@ -262,7 +262,7 @@ function SecoesDoTexto({ secoes }: { secoes: SecaoDoTexto[] }) {
         const corpo = s.corrido ? (
           <div className="space-y-2">
             {s.itens.map((t, j) => (
-              <p key={j} className="whitespace-pre-line text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
+              <p key={j} className="whitespace-pre-line text-[13px] leading-relaxed [overflow-wrap:anywhere]">
                 <ComLinks texto={t} />
               </p>
             ))}
@@ -270,7 +270,7 @@ function SecoesDoTexto({ secoes }: { secoes: SecaoDoTexto[] }) {
         ) : (
           <ul className="space-y-1">
             {s.itens.map((t, j) => (
-              <li key={j} className="flex items-start text-[12.5px] leading-relaxed">
+              <li key={j} className="flex items-start text-[13px] leading-relaxed">
                 <span className="mr-2 mt-2 inline-block h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
                 <span className="min-w-0 [overflow-wrap:anywhere]">{t}</span>
               </li>
@@ -372,7 +372,7 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
                 <Secao titulo="Oportunidades do mês" icone={<CalendarDays className="h-3.5 w-3.5" />}>
                   <ul className="space-y-2">
                     {d.oportunidades_do_mes.map((o, i) => (
-                      <li key={i} className="flex items-start text-[12.5px] leading-relaxed">
+                      <li key={i} className="flex items-start text-[13px] leading-relaxed">
                         <span className="mr-2.5 mt-0.5 w-12 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-center text-[11px] font-medium text-primary">
                           {o.data ? dataCurta(o.data) : "mês"}
                         </span>
@@ -389,11 +389,11 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
                 <Secao titulo="Tendências do nicho" icone={<TrendingUp className="h-3.5 w-3.5" />}>
                   <ul className="space-y-2.5">
                     {d.tendencias_do_nicho.map((t, i) => (
-                      <li key={i} className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
+                      <li key={i} className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">
                         <p className="font-medium">{t.tendencia}</p>
                         {t.como_usar && <p className="text-muted-foreground">{t.como_usar}</p>}
                         {t.fonte && (
-                          <a href={t.fonte} target="_blank" rel="noreferrer noopener" className="mt-0.5 inline-flex items-center text-[11.5px] text-primary hover:underline">
+                          <a href={t.fonte} target="_blank" rel="noreferrer noopener" className="mt-0.5 inline-flex items-center text-[12px] text-primary hover:underline">
                             <ExternalLink className="mr-1 h-3 w-3" /> {dominio(t.fonte)}
                           </a>
                         )}
@@ -406,11 +406,11 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
                 <Secao titulo="Recomendações" icone={<Lightbulb className="h-3.5 w-3.5" />}>
                   <ol className="space-y-2">
                     {d.recomendacoes.map((r, i) => (
-                      <li key={i} className="flex items-start text-[12.5px] leading-relaxed">
+                      <li key={i} className="flex items-start text-[13px] leading-relaxed">
                         <span className="mr-2.5 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium">{i + 1}</span>
                         <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                           <span className="font-medium">{r.acao}</span>
-                          <span className={`ml-1.5 inline-block rounded-full px-1.5 py-px align-middle text-[10.5px] ${COR_PRIORIDADE[r.prioridade]}`}>{ROTULO_PRIORIDADE[r.prioridade]}</span>
+                          <span className={`ml-1.5 inline-block rounded-full px-1.5 py-px align-middle text-[11px] ${COR_PRIORIDADE[r.prioridade]}`}>{ROTULO_PRIORIDADE[r.prioridade]}</span>
                           {r.por_que && <span className="block text-muted-foreground">{r.por_que}</span>}
                         </span>
                       </li>

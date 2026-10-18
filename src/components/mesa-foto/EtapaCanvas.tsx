@@ -270,14 +270,14 @@ function NoCartao({ data, selected }: NodeProps<NoDeCartao>) {
   return (
     <div
       style={{ width: TAMANHO_DO_CARTAO.largura, height: TAMANHO_DO_CARTAO.altura }}
-      className={`relative overflow-visible rounded-xl border bg-zinc-950 text-left text-zinc-100 shadow-lg shadow-black/30 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/10"}`}
+      className={`relative overflow-visible rounded-xl border bg-zinc-950 text-left text-zinc-100 shadow-sm shadow-black/30 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/10"}`}
       data-no-do-canvas={no.id}
       data-tipo={no.tipo}
     >
       <span className="pointer-events-none absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full" style={{ background: tipo.cor }} />
       <div className="flex h-6 items-center pl-3 pr-2 pt-1">
         <Icone className={`mr-1 h-3 w-3 shrink-0 ${tipo.texto}`} />
-        <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider ${tipo.texto}`}>{tipo.rotulo}</span>
+        <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold ${tipo.texto}`}>{tipo.rotulo}</span>
         {numero !== null && (
           <span className="rounded-full bg-white/10 px-1.5 text-[11px] font-semibold text-white" title="Ordem em que vai ao gerador">
             {numero}
@@ -331,7 +331,7 @@ function NoAgente({ data, selected }: NodeProps<NoDeCartao>) {
   return (
     <div style={{ width: TAMANHO_DO_AGENTE.largura, height: TAMANHO_DO_AGENTE.altura }} className="relative flex flex-col items-center" data-no-do-canvas={no.id} data-tipo="agente">
       <span
-        className={`relative flex h-[60px] w-[60px] items-center justify-center rounded-full border bg-zinc-950 shadow-lg shadow-violet-500/20 ${selected ? "border-violet-300 ring-2 ring-violet-400/70" : "border-violet-400/50"}`}
+        className={`relative flex h-[60px] w-[60px] items-center justify-center rounded-full border bg-zinc-950 shadow-sm shadow-violet-500/20 ${selected ? "border-violet-300 ring-2 ring-violet-400/70" : "border-violet-400/50"}`}
         title={tipo.dica}
       >
         <Icone className="h-6 w-6 text-violet-300" />
@@ -406,7 +406,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   return (
     <div
       style={{ width: TAMANHO_DA_SAIDA.largura, height: TAMANHO_DA_SAIDA.altura }}
-      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
+      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-sm shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
       data-no-do-canvas={no.id}
       data-tipo="gerar"
     >
@@ -420,7 +420,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
             {cena.titulo}
           </span>
         ) : (
-          <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider">Resultado</span>
+          <span className="flex-1 text-[11px] font-semibold">Resultado</span>
         )}
         {ctx && atual && gerando.length === 0 && (
           <button className={juntar(BOTAO_ICONE, "nodrag mr-1.5 text-orange-200 hover:bg-orange-400/20 disabled:opacity-50")} type="button" onClick={() => ctx.animar(no.id)} aria-label="Animar esta foto" title="Vira vídeo: cartão Vídeo com esta foto no 1º quadro" data-animar-resultado={no.id}>
@@ -438,7 +438,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
       <p className="h-8 shrink-0 overflow-hidden px-3 text-[11px] leading-snug text-zinc-400 [overflow-wrap:anywhere]" data-junta="" title={junta || undefined}>
         {junta ? <span className="text-zinc-100">{junta}</span> : "Junta o que você puser no quadro. Comece por um produto ou uma pessoa."}
       </p>
-      <div className="relative mx-2.5 mt-0.5 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-zinc-900" style={{ height: ALTURA_DA_FOTO }} data-foto-do-resultado={atual ? atual.geracao_id : ""}>
+      <div className="relative mx-2.5 mt-0.5 shrink-0 overflow-hidden rounded-md border border-white/10 bg-zinc-900" style={{ height: ALTURA_DA_FOTO }} data-foto-do-resultado={atual ? atual.geracao_id : ""}>
         {atual ? (
           <button type="button" className="nodrag block h-full w-full cursor-zoom-in" onClick={() => setAmpliada(true)} aria-label="Ver a foto grande">
             <ImagemDaMesa caminho={caminho} bucket={atual.storage_bucket} alt="Foto gerada no Canvas" className="h-full w-full !object-contain" />
@@ -464,7 +464,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
               <button
                 key={m.chave}
                 type="button"
-                className="nodrag mb-1 flex w-full items-center rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-left text-[11.5px] font-medium transition-colors hover:border-emerald-400/60"
+                className="nodrag mb-1 flex w-full items-center rounded-md border border-white/10 bg-white/[0.04] px-2 py-1.5 text-left text-[12px] font-medium transition-colors hover:border-emerald-400/60"
                 onClick={() => ctx.aplicarModelo(m.chave)}
                 data-modelo-pronto={m.chave}
                 title={m.dica}
@@ -477,7 +477,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-5 text-center text-zinc-400">
             <Sparkles className="mb-1.5 h-5 w-5 text-emerald-300/70" />
-            <p className="text-[11.5px]">A foto aparece aqui.</p>
+            <p className="text-[12px]">A foto aparece aqui.</p>
           </div>
         )}
       </div>
@@ -568,7 +568,7 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
           }
           titulo="Geração do Canvas"
           descricao={carrossel ? "Fotos coerentes no primeiro motor, uma de cada vez a partir da capa. Tudo entra no acervo, marcado como gerado." : "Uma foto por motor ligado. O que sair entra no acervo, marcado como gerado, e aparece aqui."}
-          className="nodrag h-9 w-full rounded-xl bg-emerald-400 text-[12.5px] font-semibold text-black hover:bg-emerald-300"
+          className="nodrag h-9 w-full rounded-xl bg-emerald-400 text-[13px] font-semibold text-black hover:bg-emerald-300"
           disabled={!ctx || bloqueios.length > 0 || gerando.length > 0}
           fecharAoConfirmar
           partes={() => partesDoResultado(no, entradas)}
@@ -1809,7 +1809,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     tituloDoPainel = "Ligação";
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
-        <p className="flex items-center text-[11.5px] text-zinc-400">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado.<AjudaRecolhida className="ml-1" rotulo="Como mudar a ligação">Arraste a ponta da linha para outro Resultado; solte no vazio para desligar.</AjudaRecolhida></p>
+        <p className="flex items-center text-[12px] text-zinc-400">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado.<AjudaRecolhida className="ml-1" rotulo="Como mudar a ligação">Arraste a ponta da linha para outro Resultado; solte no vazio para desligar.</AjudaRecolhida></p>
         <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => { mudar((c) => desligar(c, ligacaoAberta.id)); setSelecionado(null); }} aria-label="Desligar" title="Desligar">
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -1946,7 +1946,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   } else {
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
-        <p className="text-[11.5px] text-zinc-400">O quadro está sem Resultado. Ele junta os cartões e gera a foto.</p>
+        <p className="text-[12px] text-zinc-400">O quadro está sem Resultado. Ele junta os cartões e gera a foto.</p>
         <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => porNoQuadro("gerar")} aria-label="Pôr um Resultado" title="Pôr um Resultado">
           <Sparkles className="h-4 w-4" aria-hidden="true" />
         </button>

@@ -5,7 +5,7 @@ import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import type { Trabalho } from "@/components/mesa/useItensDoMes";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { botao, juntar } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { ehOMelhor, formatoDe, notaCurta, type CriativoAds, type PlanoAds } from "./adsApi";
 import { capaDoTrabalho } from "./ArteDoCriativo";
 import KitDeRecepcao from "./KitDeRecepcao";
@@ -58,8 +58,8 @@ function agruparPorAngulo(criativos: CriativoAds[], planos: PlanoAds[]): GrupoDo
 }
 
 function SeloDaConta({ c }: { c: CriativoAds }) {
-  if (c.status === "no_ar") return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-success/10 px-2 text-[10.5px] font-medium text-success">No ar</span>;
-  if (estaNaConta(c)) return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[10.5px] font-medium text-primary">Na conta</span>;
+  if (c.status === "no_ar") return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-success/10 px-2 text-[11px] font-medium text-success">No ar</span>;
+  if (estaNaConta(c)) return <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[11px] font-medium text-primary">Na conta</span>;
   return null;
 }
 
@@ -153,7 +153,7 @@ export default function AcervoDoEstudio({
                 const s = situacaoDe(situacao(c));
                 const nota = notaCurta(c.copy.escolha ? c.copy.escolha.nota : null);
                 return (
-                  <li key={c.id} className="flex min-w-0 rounded-lg border border-border bg-card p-2" data-item-do-acervo={c.id}>
+                  <li key={c.id} className={juntar(superficie.painel, "flex min-w-0 p-2")} data-item-do-acervo={c.id}>
                     <span className="mr-2.5 block w-16 shrink-0">
                       <span className="relative block w-full overflow-hidden rounded-md bg-secondary" style={{ paddingBottom: `${Math.min(178, Math.round((f.altura / f.largura) * 100))}%` }}>
                         <span className="absolute inset-0">{capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
@@ -163,15 +163,15 @@ export default function AcervoDoEstudio({
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
                         <span className="min-w-0 truncate">{f.rotulo}</span>
                         <SeloDaVersao criativo={c} className="ml-1" />
-                        {ehOMelhor(c) && <span className="ml-1 shrink-0 text-[10.5px] text-primary">melhor</span>}
-                        {nota && <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
+                        {ehOMelhor(c) && <span className="ml-1 shrink-0 text-[11px] text-primary">melhor</span>}
+                        {nota && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
                       </span>
                       <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
-                        <span className={juntar("mb-0.5 mr-1 inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10.5px] font-medium", s.tom)}>{s.rotulo}</span>
+                        <span className={juntar("mb-0.5 mr-1 inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[11px] font-medium", s.tom)}>{s.rotulo}</span>
                         <SeloDaConta c={c} />
                       </span>
                       {(c.copy.titulo || c.copy.texto_principal) && (
-                        <span className="mt-0.5 block min-w-0 text-[11.5px] leading-snug">
+                        <span className="mt-0.5 block min-w-0 text-[12px] leading-snug">
                           {c.copy.titulo && <span className="block truncate font-medium" title={c.copy.titulo}>{c.copy.titulo}</span>}
                           {c.copy.texto_principal && <span className="line-clamp-2 block text-muted-foreground [overflow-wrap:anywhere]">{c.copy.texto_principal}</span>}
                         </span>

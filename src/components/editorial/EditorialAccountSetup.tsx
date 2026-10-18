@@ -601,7 +601,7 @@ export default function EditorialAccountSetup({
 
         {!canManage && (
           <div
-            className="mt-3 flex items-start first:mt-0 gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3 text-xs text-amber-700 dark:text-amber-300"
+            className="mt-3 flex items-start first:mt-0 gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3 text-[12px] leading-4 text-amber-700 dark:text-amber-300"
             role="alert"
           >
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -620,7 +620,7 @@ export default function EditorialAccountSetup({
                 key={account.id}
                 className={embutido ? "flex flex-wrap items-center gap-2 py-2" : "flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2"}
               >
-                <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-foreground">
                   {PLATFORM_LABELS[account.platform as EditorialPlatform] ||
                     account.platform}
                   {" · "}
@@ -632,7 +632,7 @@ export default function EditorialAccountSetup({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2 text-xs text-muted-foreground"
+                    className="h-7 px-2 text-[12px] leading-4 text-muted-foreground"
                     onClick={() => handleDisconnectMetaAccount(account.id)}
                     disabled={pending}
                     aria-label={`Desconectar ${account.display_name}`}
@@ -855,17 +855,17 @@ export default function EditorialAccountSetup({
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-[11px] font-semibold text-muted-foreground">
               Destino obrigatório do vínculo
             </p>
-            <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+            <div className="mt-2 grid gap-2 text-[13px] leading-5 sm:grid-cols-2">
               <div className="flex min-w-0 items-center gap-2">
                 <Building2
                   className="h-4 w-4 shrink-0 text-primary"
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
-                  <span className="block text-[10px] text-muted-foreground">
+                  <span className="block text-[11px] text-muted-foreground">
                     Cliente
                   </span>
                   <span className="block truncate font-medium text-foreground">
@@ -879,7 +879,7 @@ export default function EditorialAccountSetup({
                   aria-hidden="true"
                 />
                 <span className="min-w-0">
-                  <span className="block text-[10px] text-muted-foreground">
+                  <span className="block text-[11px] text-muted-foreground">
                     Projeto
                   </span>
                   <span className="block truncate text-foreground">
@@ -934,10 +934,10 @@ export default function EditorialAccountSetup({
                         <MetaPlatformIcon platform={resource.platform} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-foreground">
+                        <span className="block truncate text-[13px] leading-5 font-medium text-foreground">
                           {resource.display_name}
                         </span>
-                        <span className="block truncate text-xs text-muted-foreground">
+                        <span className="block truncate text-[12px] leading-4 text-muted-foreground">
                           {resource.platform === "instagram"
                             ? "Instagram profissional"
                             : "Página do Facebook"}
@@ -945,7 +945,7 @@ export default function EditorialAccountSetup({
                         </span>
                       </span>
                       {connected ? (
-                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        <span className="flex items-center gap-1 text-[12px] leading-4 font-medium text-emerald-700 dark:text-emerald-300">
                           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                           Conectada
                         </span>
@@ -960,7 +960,7 @@ export default function EditorialAccountSetup({
                           </span>
                         </span>
                       ) : (
-                        <span className="text-xs font-semibold text-primary">
+                        <span className="text-[12px] leading-4 font-semibold text-primary">
                           Vincular
                         </span>
                       )}

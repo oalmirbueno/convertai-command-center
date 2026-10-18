@@ -888,7 +888,7 @@ export default function AgenteDaCentral() {
       >
         {carregandoLista || rodando ? <Loader2 className="h-[18px] w-[18px] animate-spin text-primary" aria-hidden="true" /> : <Bot className="h-[18px] w-[18px] text-primary" aria-hidden="true" />}
         {selo && (
-          <span className={juntar("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[9.5px] font-semibold leading-4 tabular-nums", TOM_DO_SELO[selo.tom])} data-selo-da-rodada="">
+          <span className={juntar("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[11px] font-semibold leading-4 tabular-nums", TOM_DO_SELO[selo.tom])} data-selo-da-rodada="">
             <span aria-hidden="true">{/^\d/.test(selo.curto) ? selo.curto.split(" ")[0] : "•"}</span>
             <span className="sr-only">{selo.texto}</span>
           </span>

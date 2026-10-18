@@ -106,8 +106,11 @@ function useDadosDaCentral(chave: PeriodoDaCentral) {
       const links = (vinculos.data || []) as Array<VinculoContado & { last_action: string | null; next_step: string | null; block_reason: string | null }>;
       const idsDeTarefa = [...new Set(links.map((v) => v.kanban_task_id || v.painel_task_id).filter(Boolean))] as string[];
       const tarefas = new Map<string, { id: string; title: string; status: string; cliente: string | null; tipo: string | null }>();
-      for (let i = 0; i < idsDeTarefa.length; i += 150) {
-        const q = await s.from("tasks").select("id,title,status,delivery_type,project:projects!tasks_project_id_fkey(client:profiles!projects_client_id_fkey(company_name,full_name))").in("id", idsDeTarefa.slice(i, i + 150));
+      // Os lotes de 150 saem juntos (antes, um esperava o outro: com 2000 vínculos, 14 idas em fila).
+      const lotes: string[][] = [];
+      for (let i = 0; i < idsDeTarefa.length; i += 150) lotes.push(idsDeTarefa.slice(i, i + 150));
+      const respostas = await Promise.all(lotes.map((lote) => s.from("tasks").select("id,title,status,delivery_type,project:projects!tasks_project_id_fkey(client:profiles!projects_client_id_fkey(company_name,full_name))").in("id", lote)));
+      for (const q of respostas as any[]) {
         if (q.error) throw new Error(q.error.message);
         for (const t of q.data || []) tarefas.set(t.id, { id: t.id, title: t.title, status: t.status, cliente: t.project?.client?.company_name || t.project?.client?.full_name || null, tipo: tipoDaEntrega(t.delivery_type, t.title) });
       }
@@ -175,7 +178,7 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
         <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${faixas.map((f) => `${f.n} ${f.rotulo.toLowerCase()}`).join(", ")}, ${feitas} feitas no período`}>
           {total > 0 && [...faixas, { rotulo: "Feitas", n: feitas, cor: "bg-success" }].map((f) => f.n > 0 && <span key={f.rotulo} className={f.cor} style={{ width: `${(f.n / total) * 100}%` }} />)}
         </div>
-        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-muted-foreground">
+        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-muted-foreground">
           {[...faixas, { rotulo: "Feitas no período", n: feitas, cor: "bg-success" }].map((f) => <span key={f.rotulo} className="inline-flex items-center gap-1"><span className={juntar("h-2 w-2 rounded-full", f.cor)} aria-hidden="true" /><span className="font-semibold tabular-nums text-foreground">{f.n}</span> {f.rotulo.toLowerCase()}</span>)}
         </p>
       </div>
@@ -192,14 +195,14 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
                   <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[12px] font-semibold text-primary" aria-hidden="true">{p.agente.trim()[0]?.toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-background bg-success" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium">{p.agente}</span>
-                    <span className="block truncate text-[11.5px] text-muted-foreground">{p.titulo}{p.cliente ? ` · ${p.cliente}` : ""}</span>
+                    <span className="block truncate text-[12px] text-muted-foreground">{p.titulo}{p.cliente ? ` · ${p.cliente}` : ""}</span>
                   </span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">{ha(p.desde)}</span>
                 </button>
               </li>
             ))}
           </ul>
-        ) : <button type="button" onClick={() => setVerTodos(true)} className="text-left text-[12.5px] text-muted-foreground hover:text-foreground">Ninguém trabalhando neste momento.{comTrabalho.length > 0 ? ` ${comTrabalho.length} ${comTrabalho.length === 1 ? "agente tem" : "agentes têm"} trabalho aberto: ver e conversar.` : ""}</button>}
+        ) : <button type="button" onClick={() => setVerTodos(true)} className="text-left text-[12px] text-muted-foreground hover:text-foreground">Ninguém trabalhando neste momento.{comTrabalho.length > 0 ? ` ${comTrabalho.length} ${comTrabalho.length === 1 ? "agente tem" : "agentes têm"} trabalho aberto: ver e conversar.` : ""}</button>}
       </div>
       <QuemEstaTrabalhando
         aberto={verTodos}
@@ -336,7 +339,7 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
           const agente = nomeDoAgente.get(r.operator_id) || "Agente";
           return (
             <div key={r.id}>
-            {novoDia && <p className="sticky top-0 z-10 bg-card/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">{dia}</p>}
+            {novoDia && <p className="sticky top-0 z-10 bg-card/95 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground backdrop-blur">{dia}</p>}
             <div className="px-3 py-3">
               <button type="button" className="flex w-full min-w-0 items-center gap-3 text-left" aria-expanded={aberto} onClick={() => setAberta(aberto ? null : r.id)}>
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold" aria-hidden="true">{agente.trim()[0]?.toUpperCase()}</span>
@@ -649,7 +652,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
                   className={juntar("flex min-w-0 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[12px] font-medium transition-colors", aba === a.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
                 >
                   {areaEstreita ? <a.icone className="h-4 w-4 shrink-0" aria-hidden="true" /> : <span className="truncate">{a.rotulo}</span>}
-                  {!!a.contador && <span className="rounded-full bg-warning/15 px-1.5 text-[10px] text-warning">{a.contador}</span>}
+                  {!!a.contador && <span className="rounded-full bg-warning/15 px-1.5 text-[11px] text-warning">{a.contador}</span>}
                 </button>
               ))}
             </div>

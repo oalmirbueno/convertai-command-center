@@ -189,7 +189,7 @@ export default function MemoriaDaConta() {
                 <span className="font-medium">{c.titulo}</span>
                 <span className="text-[11px] text-muted-foreground">{c.fonte}</span>
               </summary>
-              <ul className="mt-1.5 min-w-0 space-y-1 pl-9 text-[12.5px] leading-5 text-muted-foreground">
+              <ul className="mt-1.5 min-w-0 space-y-1 pl-9 text-[12px] leading-5 text-muted-foreground">
                 {c.linhas.map((l, i) => <li key={i} className="break-words">{l}</li>)}
               </ul>
             </details>

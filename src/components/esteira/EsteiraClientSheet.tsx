@@ -61,7 +61,7 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
           <div key={n.rotulo} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
             <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
             {/* 16/10/2026: no celular o número encolhe um pouco e quebra em vez de vazar. */}
-            <p className="break-words text-[17px] font-semibold leading-7 tabular-nums text-foreground sm:text-[20px]">{fmtNumero(n)}</p>
+            <p className="break-words text-[15px] font-semibold leading-7 tabular-nums text-foreground sm:text-[20px]">{fmtNumero(n)}</p>
             <p className={`flex items-center text-[12px] tabular-nums ${cor(n.tendencia)}`}>
               <span className="mr-1 inline-flex"><IconeTendencia t={n.tendencia} /></span>
               {n.variacao !== null ? `${n.variacao > 0 ? "+" : ""}${n.variacao}%` : n.anterior !== null ? "igual" : "sem base"}

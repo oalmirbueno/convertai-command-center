@@ -35,7 +35,7 @@ export default function ProgressoComParada({
   return (
     <div className={juntar("min-w-0", className)} role="status" aria-label={`${rotulo}: ${feitas} de ${total} ${unidade}`} data-progresso-do-lote="">
       <div className="flex min-w-0 items-center">
-        <p className="mr-2 min-w-0 flex-1 truncate text-[12.5px]">
+        <p className="mr-2 min-w-0 flex-1 truncate text-[13px]">
           <span className="font-medium">{rotulo}</span>
           <span className="tabular-nums text-muted-foreground">{` ${feitas} de ${total} ${unidade}`}</span>
           {atual ? <span className="text-muted-foreground">{` · ${atual}`}</span> : null}
@@ -48,7 +48,7 @@ export default function ProgressoComParada({
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
-      {parando && <p className="mt-1 text-[11.5px] text-muted-foreground">O que já está saindo termina e fica; o resto não é gerado nem cobrado.</p>}
+      {parando && <p className="mt-1 text-[12px] text-muted-foreground">O que já está saindo termina e fica; o resto não é gerado nem cobrado.</p>}
     </div>
   );
 }

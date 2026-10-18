@@ -33,7 +33,7 @@ import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 // 02/10: a cadência pedida (por semana, mistura e dias) vira a grade de datas e formatos do mês.
 import { gradeDoMes, type CadenciaDoMes } from "../../../supabase/functions/agente-calendario/modulos/cadencia-do-mes";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
-import { botao, juntar } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 
 /**
  * Planejamento automático: a pessoa escolhe o período (de um mês até 12), a
@@ -386,7 +386,7 @@ const ROTULO_DA_FASE: Record<Fase, string> = {
 
 function Passo({ rotulo, feito, agora }: { rotulo: string; feito: boolean; agora: boolean }) {
   return (
-    <span className={`mr-3 inline-flex items-center text-[11.5px] ${feito ? "text-foreground" : agora ? "text-primary" : "text-muted-foreground"}`}>
+    <span className={`mr-3 inline-flex items-center text-[12px] ${feito ? "text-foreground" : agora ? "text-primary" : "text-muted-foreground"}`}>
       {feito ? (
         <Check className="mr-1 h-3.5 w-3.5 text-success" />
       ) : agora ? (
@@ -402,7 +402,7 @@ function Passo({ rotulo, feito, agora }: { rotulo: string; feito: boolean; agora
 function ErroDoMes({ erro }: { erro: unknown }) {
   if (erro instanceof ErroDaMesa && erro.codigo === "provedor_timeout") {
     return (
-      <p className="flex items-start rounded-lg border border-destructive/40 bg-card p-2.5 text-[12px] leading-relaxed">
+      <p className={juntar(superficie.painel, "flex items-start border-destructive/40 p-2.5 text-[12px] leading-relaxed")}>
         <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" />
         <span className="min-w-0 [overflow-wrap:anywhere]">
           O provedor de IA demorou demais e o tempo esgotou (504). O que este mês já tinha pronto fica guardado: tente este mês de novo.
@@ -460,7 +460,7 @@ function LinhaDoMes({
         >
           {ROTULO_DA_FASE[f]}
         </span>
-        <span className="text-[11.5px] text-muted-foreground">
+        <span className="text-[12px] text-muted-foreground">
           {estado.alvo} {estado.alvo === 1 ? "publicação" : "publicações"}
           {estado.itens !== null ? ` · ${estado.itens} na agenda` : ""}
           {rodando && parcial.data && f === "temas" && parcial.data.temas > 0 ? ` · ${parcial.data.temas} temas chegaram` : ""}
@@ -468,7 +468,7 @@ function LinhaDoMes({
           {estado.custo > 0 ? ` · ${usd(estado.custo)}` : ""}
         </span>
         {f === "gravado" && (
-          <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 px-2 text-[11.5px]" onClick={onVer}>
+          <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 px-2 text-[12px]" onClick={onVer}>
             Ver na agenda
           </Button>
         )}
@@ -707,7 +707,7 @@ export default function PlanejamentoAutomatico() {
 
   return (
     <div className="space-y-4">
-      <section className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+      <section className={juntar(superficie.painel, "space-y-4 p-4 sm:p-5")}>
         <CabecalhoDeSecao
           nivel={3}
           icone={<CalendarRange className="h-4 w-4" />}
@@ -718,7 +718,7 @@ export default function PlanejamentoAutomatico() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Campo rotulo="De">
             <Select value={de} onValueChange={setDe} disabled={rodando}>
-              <SelectTrigger className="h-9 text-[12.5px] capitalize"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-[13px] capitalize"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {opcoesDe.map((m) => <SelectItem key={m} value={m} className="capitalize">{rotuloDoMes(m)}</SelectItem>)}
               </SelectContent>
@@ -726,7 +726,7 @@ export default function PlanejamentoAutomatico() {
           </Campo>
           <Campo rotulo="Até (no máximo 12 meses)">
             <Select value={ate} onValueChange={setAte} disabled={rodando}>
-              <SelectTrigger className="h-9 text-[12.5px] capitalize"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-[13px] capitalize"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {opcoesAte.map((m) => <SelectItem key={m} value={m} className="capitalize">{rotuloDoMes(m)}</SelectItem>)}
               </SelectContent>
@@ -749,7 +749,7 @@ export default function PlanejamentoAutomatico() {
           <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
           <Campo rotulo="Projeto de social">
             <Select value={projetoId} onValueChange={setProjetoId} disabled={rodando || candidatos.length === 0}>
-              <SelectTrigger className="h-9 text-[12.5px]">
+              <SelectTrigger className="h-9 text-[13px]">
                 <SelectValue placeholder={projetos.isLoading ? "Lendo projetos..." : candidatos.length ? "Escolha o projeto" : "Cliente sem projeto ativo"} />
               </SelectTrigger>
               <SelectContent>
@@ -809,7 +809,7 @@ export default function PlanejamentoAutomatico() {
       </section>
 
       {execucao && linhas.length > 0 && (
-        <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+        <section className={juntar(superficie.painel, "min-w-0 overflow-hidden")}>
           <div className="flex flex-wrap items-center border-b border-border px-3.5 py-2.5">
             <p className="mr-2 text-[13px] font-medium">Andamento</p>
             <span className="text-[12px] text-muted-foreground">
@@ -820,7 +820,7 @@ export default function PlanejamentoAutomatico() {
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="ml-auto h-7 px-2 text-[11.5px]"
+                className="ml-auto h-7 px-2 text-[12px]"
                 onClick={() => {
                   delete execucoes[clientId];
                   avisar(clientId);

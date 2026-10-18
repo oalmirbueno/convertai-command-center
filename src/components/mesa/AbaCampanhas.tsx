@@ -387,7 +387,7 @@ export default function AbaCampanhas({
           <button
             type="button"
             onClick={() => setGaveta(true)}
-            className="fixed bottom-[72px] right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg md:bottom-6 md:right-6"
+            className="fixed bottom-[72px] right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm md:bottom-6 md:right-6"
             aria-label="Agente da campanha"
             title="Agente da campanha"
           >

@@ -76,7 +76,7 @@ export default function EntradaDoArsenal() {
           ))}
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Nome do prompt" aria-label="Nome do prompt" className={juntar(campo, "h-8 text-[12.5px]")} />
+          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Nome do prompt" aria-label="Nome do prompt" className={juntar(campo, "h-8 text-[13px]")} />
           <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder="O prompt que gerou a foto" aria-label="Prompt para o Arsenal" className={campoTexto} />
           <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" disabled={!prompt.trim() || salvando || !vindas.length} onClick={() => void salvar()} aria-label="Guardar" title="Guardar">
             {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}

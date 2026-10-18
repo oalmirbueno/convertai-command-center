@@ -236,12 +236,12 @@ export function PromptDoCliente() {
               <div className="mr-3 min-w-0 flex-1">
                 <p className="text-[12px] font-medium">
                   v{p.versao} <span className="font-normal text-muted-foreground">· {new Date(p.criado_em).toLocaleDateString("pt-BR")}</span>
-                  {p.ativo && <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">em uso</span>}
+                  {p.ativo && <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] text-primary">em uso</span>}
                 </p>
-                <p className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground">{p.conteudo}</p>
+                <p className="mt-0.5 line-clamp-2 text-[12px] text-muted-foreground">{p.conteudo}</p>
               </div>
               {!p.ativo && (
-                <Button type="button" size="sm" variant="outline" className="h-7 text-[11.5px]" onClick={() => void usarVersao(p)} disabled={salvando}>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => void usarVersao(p)} disabled={salvando}>
                   Usar esta
                 </Button>
               )}
@@ -313,11 +313,11 @@ export function MemoriaDoAgente() {
       <Secao titulo="Ensinar algo ao agente" recolher={`mesa:contexto:memoria:ensinar:${clientId}`} corpoClassName="space-y-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Select value={novoAgente} onValueChange={(v) => setNovoAgente(v as Agente)}>
-            <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
             <SelectContent>{AGENTES.map((a) => <SelectItem key={a.valor} value={a.valor}>{a.rotulo}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={novoTipo} onValueChange={setNovoTipo}>
-            <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
             <SelectContent>{TIPOS.map((t) => <SelectItem key={t.valor} value={t.valor}>{t.rotulo}</SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -350,13 +350,13 @@ export function MemoriaDoAgente() {
           </div>
         }
       >
-      {memoria.data && lista.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nada guardado ainda. A memória cresce com as escolhas, os ajustes e as aprovações.</p>}
+      {memoria.data && lista.length === 0 && <p className="text-[12px] text-muted-foreground">Nada guardado ainda. A memória cresce com as escolhas, os ajustes e as aprovações.</p>}
       {lista.length > 0 && (
       <ul className="divide-y divide-border rounded-xl border border-border">
         {lista.map((m) => (
           <li key={m.id} className={`flex items-start px-3 py-2.5 ${m.ativa ? "" : "opacity-60"}`}>
             <div className="mr-3 min-w-0 flex-1">
-              <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{m.texto}</p>
+              <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{m.texto}</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {TIPOS.find((t) => t.valor === m.tipo)?.rotulo || m.tipo} · {AGENTES.find((a) => a.valor === m.agente)?.rotulo || m.agente} · {ORIGENS[m.origem] || m.origem}
               </p>

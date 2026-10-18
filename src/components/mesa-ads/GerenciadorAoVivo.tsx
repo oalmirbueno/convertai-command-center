@@ -121,14 +121,14 @@ function MarcaDaAcao({ n, fazendo, onDesfazer }: { n: NoNoGerenciador; fazendo: 
   const hora = horaDeBrasilia(m.quando);
   if (m.estado === "falhou") {
     return (
-      <p className="mt-0.5 truncate text-[11.5px] leading-snug text-destructive" data-marca="falhou" title={m.resumo}>
+      <p className="mt-0.5 truncate text-[12px] leading-snug text-destructive" data-marca="falhou" title={m.resumo}>
         {hora ? `${hora}: ` : ""}
         {m.resumo}
       </p>
     );
   }
   return (
-    <p className="mt-0.5 flex min-w-0 items-center text-[11.5px] leading-snug text-primary" data-marca={m.estado}>
+    <p className="mt-0.5 flex min-w-0 items-center text-[12px] leading-snug text-primary" data-marca={m.estado}>
       <span className="mr-1.5 min-w-0 truncate" title={m.resumo}>
         {m.estado === "desfeita" ? "Desfeito: " : ""}
         {m.resumo.replace(/\.$/, "")} {QUEM[m.origem] || ""}
@@ -240,7 +240,7 @@ function PainelDaAcao({
   return (
     <div className="min-w-0 rounded-md border border-border bg-background p-2.5" aria-label={`Ações em ${n.nome}`} role="group">
       {gestao && !gestao.disponivel && (
-        <p className="mb-2 flex items-start rounded bg-warning/10 px-2 py-1.5 text-[11.5px] leading-snug">
+        <p className="mb-2 flex items-start rounded bg-warning/10 px-2 py-1.5 text-[12px] leading-snug">
           <AlertTriangle className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <span className="min-w-0 [overflow-wrap:anywhere]">Agora a Meta não deixa mexer: {gestao.motivo || "sem permissão de gestão."} Se tentar, o painel confere de novo e diz o motivo.</span>
         </p>
@@ -263,7 +263,7 @@ function PainelDaAcao({
           {tipo === "renomear" && (
             <label className="block min-w-0">
               <span className="mb-1 block text-muted-foreground">Nome novo</span>
-              <input className={juntar(campo, "h-8 text-[12.5px]")} value={nome} onChange={(e) => setNome(e.target.value)} maxLength={250} aria-label="Nome novo" />
+              <input className={juntar(campo, "h-8 text-[13px]")} value={nome} onChange={(e) => setNome(e.target.value)} maxLength={250} aria-label="Nome novo" />
             </label>
           )}
           {tipo === "orcamento" && (
@@ -271,7 +271,7 @@ function PainelDaAcao({
               <span className="mb-1 block text-muted-foreground">
                 Verba diária em reais (hoje {brl(n.orcamento_diario_brl)}; pelo painel, de {brl(faixa ? faixa.min : null)} a {brl(faixa ? faixa.max : null)}, 30% por vez)
               </span>
-              <input className={juntar(campo, "h-8 w-40 text-[12.5px] tabular-nums")} inputMode="decimal" value={verba} onChange={(e) => setVerba(e.target.value)} aria-label="Verba diária nova" />
+              <input className={juntar(campo, "h-8 w-40 text-[13px] tabular-nums")} inputMode="decimal" value={verba} onChange={(e) => setVerba(e.target.value)} aria-label="Verba diária nova" />
             </label>
           )}
           <p className="mt-1.5 leading-snug text-muted-foreground [overflow-wrap:anywhere]">
@@ -323,7 +323,7 @@ const NIVEIS: NivelNoGerenciador[] = ["campanha", "conjunto", "anuncio"];
 
 function Celula({ children, className = "", titulo }: { children?: ReactNode; className?: string; titulo?: string }) {
   return (
-    <div role="cell" className={juntar("min-w-0 px-2.5 py-2 text-right text-[12.5px] tabular-nums", className)} title={titulo}>
+    <div role="cell" className={juntar("min-w-0 px-2.5 py-2 text-right text-[13px] tabular-nums", className)} title={titulo}>
       {children}
     </div>
   );
@@ -334,8 +334,8 @@ const semDado = <span className="text-muted-foreground/60">sem dado</span>;
 function orcamentoDe(n: NoNoGerenciador): ReactNode {
   if (n.orcamento_diario_brl !== null) return <>{brl(n.orcamento_diario_brl)}<span className="block text-[11px] text-muted-foreground">por dia</span></>;
   if (n.orcamento_total_brl !== null) return <>{brl(n.orcamento_total_brl)}<span className="block text-[11px] text-muted-foreground">total</span></>;
-  if (n.nivel === "conjunto") return <span className="text-[11.5px] text-muted-foreground">Na campanha</span>;
-  if (n.nivel === "campanha") return <span className="text-[11.5px] text-muted-foreground">Nos conjuntos</span>;
+  if (n.nivel === "conjunto") return <span className="text-[12px] text-muted-foreground">Na campanha</span>;
+  if (n.nivel === "campanha") return <span className="text-[12px] text-muted-foreground">Nos conjuntos</span>;
   return null;
 }
 
@@ -398,7 +398,7 @@ function Linha(p: LinhaProps) {
   const mini = n.nivel === "anuncio" ? p.miniaturas[n.id] : undefined;
   const acoesAqui = p.acoesDe && p.acoesDe.id === n.id;
   const recuo = profundidade === 0 ? "pl-3" : profundidade === 1 ? "pl-7" : "pl-11";
-  const linkPequeno = juntar("toque-compacto inline-flex h-6 items-center rounded px-1.5 text-[11.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50", foco);
+  const linkPequeno = juntar("toque-compacto inline-flex h-6 items-center rounded px-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50", foco);
   return (
     <>
       <div
@@ -432,7 +432,7 @@ function Linha(p: LinhaProps) {
               >
                 {n.nome}
               </button>
-              {mostrarMotivo && <p className="truncate text-[11.5px] leading-snug text-muted-foreground" title={n.entrega.motivo || undefined}>{n.entrega.motivo}</p>}
+              {mostrarMotivo && <p className="truncate text-[12px] leading-snug text-muted-foreground" title={n.entrega.motivo || undefined}>{n.entrega.motivo}</p>}
               <MarcaDaAcao n={n} fazendo={!!n.marca && p.desfazendo === n.marca.acao_id} onDesfazer={() => n.marca && p.onDesfazer(n.marca.acao_id)} />
               {/* Na linha, como pediu o dono: Pausar ou Retomar, Otimizar e o resto no "...". */}
               <div className="-ml-1.5 mt-0.5 flex min-w-0 items-center">
@@ -476,13 +476,13 @@ function LinhaDeTotal({ nos, nivel }: { nos: NoNoGerenciador[]; nivel: NivelNoGe
   const nome = nivel === "campanha" ? (t.quantos === 1 ? "campanha" : "campanhas") : nivel === "conjunto" ? (t.quantos === 1 ? "conjunto" : "conjuntos") : t.quantos === 1 ? "anúncio" : "anúncios";
   return (
     <div role="row" className="grid min-w-0 border-t-2 border-border bg-muted/40 font-medium" style={{ gridTemplateColumns: COLUNAS }} data-total="">
-      <div role="cell" className="sticky left-0 z-[1] min-w-0 bg-muted py-2 pl-3 pr-2 text-[12.5px]">
+      <div role="cell" className="sticky left-0 z-[1] min-w-0 bg-muted py-2 pl-3 pr-2 text-[13px]">
         Total de {t.quantos} {nome}
       </div>
       <Celula />
       <Celula>{t.verba_diaria !== null ? <>{brl(t.verba_diaria)}<span className="block text-[11px] font-normal text-muted-foreground">por dia, ativos</span></> : null}</Celula>
       <Celula>
-        {t.resultados === null ? <span className="text-[11.5px] font-normal text-muted-foreground">Vários tipos</span> : inteiro(t.resultados)}
+        {t.resultados === null ? <span className="text-[12px] font-normal text-muted-foreground">Vários tipos</span> : inteiro(t.resultados)}
         {t.resultado_rotulo ? <span className="block truncate text-[11px] font-normal text-muted-foreground">{t.resultado_rotulo}</span> : null}
       </Celula>
       <Celula>{t.custo_por_resultado !== null ? brl(t.custo_por_resultado) : null}</Celula>
@@ -605,7 +605,7 @@ function PainelDoAnuncio({
               )}
             </div>
             {cr && cr.video && !cr.video.fonte && (
-              <p className="mt-1.5 flex items-center text-[11.5px] text-muted-foreground">
+              <p className="mt-1.5 flex items-center text-[12px] text-muted-foreground">
                 <PlayCircle className="mr-1 h-3.5 w-3.5" />
                 Vídeo: a Meta não liberou o arquivo por aqui; veja na prévia.
               </p>
@@ -643,13 +643,13 @@ function PainelDoAnuncio({
               </div>
             )}
             {(cta || destino) && (
-              <p className="mt-1.5 flex min-w-0 flex-wrap items-center text-[11.5px] text-muted-foreground">
+              <p className="mt-1.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                 {cta && <span className="mr-2 rounded-full border border-border px-2 py-0.5 font-medium text-foreground">{cta}</span>}
                 {destino && <span className="min-w-0 truncate">{destino}</span>}
               </p>
             )}
-            {a && a.aviso && <p className="mt-1.5 text-[11.5px] leading-snug text-warning [overflow-wrap:anywhere]">{a.aviso}</p>}
-            {q.isError && <p className="mt-1.5 text-[11.5px] text-muted-foreground">A leitura na Meta não veio agora; os números abaixo são da coleta.</p>}
+            {a && a.aviso && <p className="mt-1.5 text-[12px] leading-snug text-warning [overflow-wrap:anywhere]">{a.aviso}</p>}
+            {q.isError && <p className="mt-1.5 text-[12px] text-muted-foreground">A leitura na Meta não veio agora; os números abaixo são da coleta.</p>}
           </section>
 
           <section aria-label="Números do período" className="min-w-0 border-t border-border pt-3">
@@ -669,14 +669,14 @@ function PainelDoAnuncio({
           <section aria-label="Diagnóstico" className="min-w-0 border-t border-border pt-3">
             <ul className="min-w-0 space-y-2">
               {diag.map((d) => (
-                <li key={d.chave} className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] gap-x-2 text-[12.5px]" data-diagnostico-curto={d.chave}>
+                <li key={d.chave} className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] gap-x-2 text-[13px]" data-diagnostico-curto={d.chave}>
                   <span className="text-muted-foreground">{d.rotulo}</span>
                   <span className="min-w-0">
                     <span className="flex items-center font-medium">
                       <span className={juntar("mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full", TOM_DO_DIAGNOSTICO[d.tom])} aria-hidden="true" />
                       {q.isLoading && d.chave !== "fadiga" ? "Lendo na Meta" : d.valor}
                     </span>
-                    {d.dica && !q.isLoading && <span className="block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{d.dica}</span>}
+                    {d.dica && !q.isLoading && <span className="block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{d.dica}</span>}
                   </span>
                 </li>
               ))}
@@ -816,7 +816,7 @@ function LinhaDaConta({ c, gestao }: { c: ContaNaTela; gestao: LeituraDoGerencia
           )}
         </p>
       )}
-      {c.aviso && <p className="mt-1 truncate text-[11.5px] leading-snug text-warning" title={c.aviso}>{c.aviso}</p>}
+      {c.aviso && <p className="mt-1 truncate text-[12px] leading-snug text-warning" title={c.aviso}>{c.aviso}</p>}
     </div>
   );
 }
@@ -996,7 +996,7 @@ export default function GerenciadorAoVivo({
       )}
       {l && l.avisos.length > 0 && (
         <ul className="mb-2 min-w-0 space-y-0.5">
-          {l.avisos.map((a, k) => <li key={k} className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{a}</li>)}
+          {l.avisos.map((a, k) => <li key={k} className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{a}</li>)}
         </ul>
       )}
 
@@ -1020,7 +1020,7 @@ export default function GerenciadorAoVivo({
                   role="tab"
                   aria-selected={nivel === nv}
                   className={juntar(
-                    "toque-compacto mr-1 inline-flex h-9 items-center border-b-2 px-2.5 text-[12.5px] font-medium",
+                    "toque-compacto mr-1 inline-flex h-9 items-center border-b-2 px-2.5 text-[13px] font-medium",
                     foco,
                     nivel === nv ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
@@ -1036,7 +1036,7 @@ export default function GerenciadorAoVivo({
               ))}
             </div>
             {escolhido && (
-              <span className="mb-1 ml-auto inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-muted/50 py-0.5 pl-2.5 pr-1 text-[11.5px]" data-dentro-de={escolhido.id}>
+              <span className="mb-1 ml-auto inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-muted/50 py-0.5 pl-2.5 pr-1 text-[12px]" data-dentro-de={escolhido.id}>
                 <span className={juntar("mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full", COR_DO_NIVEL[escolhido.nivel].ponto)} aria-hidden="true" />
                 <span className="min-w-0 truncate">
                   {NIVEL_ROTULO[escolhido.nivel]}: {escolhido.nome}
@@ -1047,14 +1047,14 @@ export default function GerenciadorAoVivo({
               </span>
             )}
             {escolhido && escolhido.nivel === "campanha" && onVerCriativos && (
-              <button type="button" className={juntar("mb-1 ml-2 text-[11.5px] font-medium text-primary hover:underline", foco)} onClick={() => onVerCriativos(escolhido.id)}>
+              <button type="button" className={juntar("mb-1 ml-2 text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => onVerCriativos(escolhido.id)}>
                 Ver os criativos desta campanha
               </button>
             )}
           </div>
 
           {!daAba.length ? (
-            <p className="px-3 py-3 text-[12.5px] text-muted-foreground">
+            <p className="px-3 py-3 text-[12px] text-muted-foreground">
               {filtro === "entregando" ? "Nada está entregando agora." : filtro === "ativos" ? "Nada ativo agora." : "Nada neste nível."}{" "}
               {filtro !== "todos" && (
                 <button type="button" className={juntar("font-medium text-primary hover:underline", foco)} onClick={() => setFiltro("todos")}>
@@ -1065,7 +1065,7 @@ export default function GerenciadorAoVivo({
           ) : (
             <div className="min-w-0 overflow-x-auto overscroll-x-contain">
               <div role="table" aria-label={`${ROTULO_DAS_ABAS[nivel]} no gerenciador`} className={juntar("relative", LARGURA_MINIMA)}>
-                <div role="row" className="grid min-w-0 bg-muted/30 text-[11.5px] font-medium text-muted-foreground" style={{ gridTemplateColumns: COLUNAS }}>
+                <div role="row" className="grid min-w-0 bg-muted/30 text-[12px] font-medium text-muted-foreground" style={{ gridTemplateColumns: COLUNAS }}>
                   <div role="columnheader" className="sticky left-0 z-[1] bg-muted py-2 pl-3 pr-2">
                     {NIVEL_ROTULO[nivel]}
                   </div>

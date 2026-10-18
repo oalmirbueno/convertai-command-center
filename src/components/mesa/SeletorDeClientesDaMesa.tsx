@@ -142,8 +142,8 @@ export default function SeletorDeClientesDaMesa({
   const linhaDeGerenciar = (c: ClienteDaMesa) => (
     <li key={c.id} className="flex min-w-0 items-center rounded-md px-2 py-1.5" data-cliente-da-mesa={c.id}>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] text-foreground">{c.nome}</span>
-        <span className="block truncate text-[10.5px] text-muted-foreground">{c.motivo}</span>
+        <span className="block truncate text-[13px] text-foreground">{c.nome}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">{c.motivo}</span>
       </span>
       {c.escolha && (
         <button
@@ -231,7 +231,7 @@ export default function SeletorDeClientesDaMesa({
               <ArrowLeft className="h-3.5 w-3.5" />
             </button>
             <div className="min-w-0 pt-0.5">
-              <p className="text-[12.5px] font-semibold">Clientes da {NOME_DA_MESA[mesa]}</p>
+              <p className="text-[13px] font-semibold">Clientes da {NOME_DA_MESA[mesa]}</p>
               <p className="text-[11px] leading-snug text-muted-foreground">{REGRA_DA_MESA[mesa]} Inclua ou retire quem quiser. Vale para a equipe toda.</p>
             </div>
           </div>
@@ -257,27 +257,27 @@ export default function SeletorDeClientesDaMesa({
           <div className="max-h-[50vh] overflow-y-auto overscroll-contain p-1" data-gerenciar-clientes={mesa}>
             {naMesa.length > 0 && (
               <>
-                <p className="px-2 pb-0.5 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Na mesa ({naMesa.length})</p>
+                <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold text-muted-foreground">Na mesa ({naMesa.length})</p>
                 <ul aria-label="Clientes na mesa">{naMesa.map(linhaDeGerenciar)}</ul>
               </>
             )}
             {fora.length > 0 && (
               <>
-                <p className="px-2 pb-0.5 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Fora da mesa ({fora.length})</p>
+                <p className="px-2 pb-0.5 pt-2 text-[11px] font-semibold text-muted-foreground">Fora da mesa ({fora.length})</p>
                 <ul aria-label="Clientes fora da mesa">{fora.map(linhaDeGerenciar)}</ul>
               </>
             )}
-            {paraGerenciar.length === 0 && <p className="px-2 py-3 text-[12.5px] text-muted-foreground">Nenhum cliente com essa busca.</p>}
+            {paraGerenciar.length === 0 && <p className="px-2 py-3 text-[12px] text-muted-foreground">Nenhum cliente com essa busca.</p>}
           </div>
         ) : (
           <>
             <ul id={`mesa-${mesa}-lista-de-clientes`} ref={lista} role="listbox" aria-label="Clientes" className="max-h-[50vh] overflow-y-auto overscroll-contain p-1">
               {carregando && daLista.length === 0 && (
-                <li className="flex items-center px-2 py-3 text-[12.5px] text-muted-foreground">
+                <li className="flex items-center px-2 py-3 text-[12px] text-muted-foreground">
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Carregando clientes...
                 </li>
               )}
-              {!carregando && filtrados.length === 0 && <li className="px-2 py-3 text-[12.5px] text-muted-foreground">Nenhum cliente com essa busca.</li>}
+              {!carregando && filtrados.length === 0 && <li className="px-2 py-3 text-[12px] text-muted-foreground">Nenhum cliente com essa busca.</li>}
               {filtrados.map((c, i) => {
                 const foraDaMesa = !mostrandoTodos && !c.naMesa;
                 return (
@@ -295,7 +295,7 @@ export default function SeletorDeClientesDaMesa({
                         </span>
                       )}
                       {foraDaMesa && (
-                        <span aria-hidden="true" className="ml-2 shrink-0 text-[10.5px] text-muted-foreground">
+                        <span aria-hidden="true" className="ml-2 shrink-0 text-[11px] text-muted-foreground">
                           fora desta mesa
                         </span>
                       )}
@@ -324,7 +324,7 @@ export default function SeletorDeClientesDaMesa({
             )}
             {(mostrandoTodos || podeGerenciar) && (
               <div className="flex min-w-0 items-center border-t border-border px-2 py-1.5">
-                <p className="min-w-0 flex-1 truncate text-[10.5px] text-muted-foreground">
+                <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
                   {mostrandoTodos ? "Ninguém no padrão desta mesa. Mostrando todos." : `${visiveis.length} ${visiveis.length === 1 ? "cliente" : "clientes"} nesta mesa`}
                 </p>
                 {podeGerenciar && (

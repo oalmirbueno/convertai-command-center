@@ -91,14 +91,14 @@ export default function EstudioLogoDaLamina({
 
   if (q.isLoading) {
     return (
-      <span className="inline-flex items-center text-[11.5px] text-muted-foreground">
+      <span className="inline-flex items-center text-[12px] text-muted-foreground">
         <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> logos do kit…
       </span>
     );
   }
-  if (q.isError) return <span className="text-[11.5px] text-muted-foreground" title={textoDoErro(q.error)}>logos do kit indisponíveis</span>;
+  if (q.isError) return <span className="text-[12px] text-muted-foreground" title={textoDoErro(q.error)}>logos do kit indisponíveis</span>;
   if (!logos.length) {
-    return <span className="text-[11.5px] text-muted-foreground">Sem logo no kit desta marca: a arte sai sem logo.</span>;
+    return <span className="text-[12px] text-muted-foreground">Sem logo no kit desta marca: a arte sai sem logo.</span>;
   }
 
   // Frente AE-3: no compacto (base da lâmina) as opções viram um seletor segmentado pequeno, de uma linha.
@@ -122,10 +122,10 @@ export default function EstudioLogoDaLamina({
             onClick={() => void escolher(o.valor)}
             className={
               compacto
-                ? `inline-flex h-7 shrink-0 items-center rounded px-2 text-[11.5px] transition-colors disabled:opacity-50 ${
+                ? `inline-flex h-7 shrink-0 items-center rounded px-2 text-[12px] transition-colors disabled:opacity-50 ${
                     marcada ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`
-                : `mb-1 mr-1.5 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors disabled:opacity-50 ${
+                : `mb-1 mr-1.5 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[12px] transition-colors disabled:opacity-50 ${
                     marcada ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                   }`
             }

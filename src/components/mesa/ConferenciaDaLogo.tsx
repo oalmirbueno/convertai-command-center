@@ -91,11 +91,11 @@ export function useConferenciaDaLogo(): { conferir: (blob: Blob, nome?: string) 
       <Dialog open onOpenChange={(v) => !v && fechar({ acao: "cancelar" })}>
         <DialogContent className="max-w-md" data-conferencia-da-logo={analise.ilegivel ? "ilegivel" : "fundo"}>
           <DialogHeader>
-            <DialogTitle className="flex items-center text-base">
+            <DialogTitle className="flex items-center text-[15px]">
               <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-warning" />
               {analise.ilegivel ? "Essa logo não dá para ler" : `A logo tem fundo ${fundo}`}
             </DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-snug">
+            <DialogDescription className="text-[13px] leading-snug">
               {analise.ilegivel
                 ? "Parece letra branca sobre fundo branco: ninguém lê, nem os agentes. Falta a versão certa. Envie a logo em PNG com fundo transparente ou a versão para fundo escuro."
                 : pergunta.limpa

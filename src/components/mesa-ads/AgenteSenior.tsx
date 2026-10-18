@@ -209,7 +209,7 @@ export function EstrategiaNaTela({
           <ul className="min-w-0 space-y-1" aria-label="Diagnóstico">
             {e.diagnostico.map((d, k) => (
               <li key={k} className="min-w-0 text-[12px] leading-snug">
-                <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${d.gravidade === "alta" ? "bg-destructive/10 text-destructive" : d.gravidade === "media" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground"}`}>
+                <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold capitalize ${d.gravidade === "alta" ? "bg-destructive/10 text-destructive" : d.gravidade === "media" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground"}`}>
                   {ROTULO_DA_GRAVIDADE[d.gravidade]}
                 </span>
                 <span className="font-medium">{d.titulo}</span>
@@ -252,7 +252,7 @@ export function EstrategiaNaTela({
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold text-primary">Reestruturação recomendada</p>
                 <p className="mt-1 text-[12px] leading-snug">
-                  {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
+                  {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
                   {re.evento_otimizacao && <span className="text-muted-foreground">Otimizar para {re.evento_otimizacao}. </span>}
                   <span className="text-muted-foreground">Verba diária total: {re.verba_total_diaria_brl !== null ? brl(re.verba_total_diaria_brl) : "sem base para definir"}.</span>
                 </p>
@@ -293,7 +293,7 @@ export function EstrategiaNaTela({
                         titulo="Plano com os próximos criativos"
                         descricao="Gera ângulos novos no Plano de teste a partir destes criativos (o Jev confere cada um). Para usar a análise como está, sem custo, use Levar ao Plano de teste."
                         variant="ghost"
-                        className="h-7 text-[11.5px]"
+                        className="h-7 text-[12px]"
                         fecharAoConfirmar
                         partes={() => partesDoPlanoV2(catalogo, Math.min(6, Math.max(3, e.proximos_criativos.length)))}
                         executar={async () => {
@@ -340,14 +340,14 @@ export function EstrategiaNaTela({
 function FalaDaEquipe({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-w-0 justify-end">
-      <div className="min-w-0 max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-1.5 text-[12.5px] leading-relaxed text-primary-foreground [overflow-wrap:anywhere]">{children}</div>
+      <div className="min-w-0 max-w-[85%] rounded-xl rounded-br-md bg-primary px-3 py-1.5 text-[13px] leading-relaxed text-primary-foreground [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }
 
 /** A resposta do agente: sem caixa, com uma linha de destaque à esquerda. */
 function FalaDoAgente({ children }: { children: ReactNode }) {
-  return <div className="min-w-0 border-l-2 border-primary/40 pl-3 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>;
+  return <div className="min-w-0 border-l-2 border-primary/40 pl-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>;
 }
 
 /** Quantas mensagens ficam à vista: a última troca (pedido da equipe, resposta e avisos depois dela). */
@@ -359,7 +359,7 @@ export function inicioDaUltimaTroca(mensagens: { papel: string }[]): number {
 function Esqueleto() {
   return (
     <div className="space-y-2" aria-busy="true" aria-label="Lendo a conversa">
-      <div className="ml-auto h-7 w-2/5 animate-pulse rounded-2xl bg-muted" />
+      <div className="ml-auto h-7 w-2/5 animate-pulse rounded-xl bg-muted" />
       <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
       <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
       <div className="h-16 w-full animate-pulse rounded-lg bg-muted/70" />
@@ -376,7 +376,7 @@ function Andamento({ desde, pesquisar, assumindo = false, servidor = null }: { d
       <div className="min-w-0 space-y-1" data-andamento-real={servidor.etapa}>
         <ul className="min-w-0 space-y-0.5">
           {feitas.map((h, k) => (
-            <li key={k} className="flex items-start text-[11.5px] leading-snug text-muted-foreground">
+            <li key={k} className="flex items-start text-[12px] leading-snug text-muted-foreground">
               <Check className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-success" />
               <span className="min-w-0 [overflow-wrap:anywhere]">{h.rotulo}</span>
             </li>
@@ -403,7 +403,7 @@ function LinhaDoModelo({ escolha, onEscolher }: { escolha: EscolhaDoModelo; onEs
     <div className="mb-1.5 min-w-0" data-modelo-do-agente={m ? m.id : ""}>
       <button
         type="button"
-        className={juntar("flex w-full min-w-0 items-center rounded text-left text-[11.5px] text-muted-foreground hover:text-foreground", foco)}
+        className={juntar("flex w-full min-w-0 items-center rounded text-left text-[12px] text-muted-foreground hover:text-foreground", foco)}
         onClick={() => setAberta(!aberta)}
         aria-expanded={aberta}
         aria-label="Modelo do agente sênior"
@@ -429,7 +429,7 @@ function LinhaDoModelo({ escolha, onEscolher }: { escolha: EscolhaDoModelo; onEs
           />
           <SeletorDeRaciocinio modelo={m} valor={efetivo.raciocinio} onChange={(r) => onEscolher({ modelo: m ? m.id : escolha.modelo, raciocinio: r })} />
           {escolha.modelo && (
-            <button type="button" className={juntar("justify-self-start rounded text-[11.5px] text-primary hover:underline sm:col-span-2", foco)} onClick={() => onEscolher({ modelo: "", raciocinio: "" })}>
+            <button type="button" className={juntar("justify-self-start rounded text-[12px] text-primary hover:underline sm:col-span-2", foco)} onClick={() => onEscolher({ modelo: "", raciocinio: "" })}>
               Voltar ao padrão (GPT-6 Luna, raciocínio máximo)
             </button>
           )}
@@ -679,11 +679,11 @@ export default function AgenteSenior({
               className="max-h-40 min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             <div className="mt-1 flex min-w-0 flex-wrap items-center">
-              <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Resposta curta e ele já faz o que é seguro; o resto fica pronto para confirmar">
+              <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[12px] text-muted-foreground" title="Resposta curta e ele já faz o que é seguro; o resto fica pronto para confirmar">
                 <input type="checkbox" className="mr-1.5" checked={agir} onChange={(e) => mudarAgir(e.target.checked)} />
                 Direto às ações
               </label>
-              <label className="mb-1 mr-2 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Pesquisar na web e na Biblioteca de Anúncios">
+              <label className="mb-1 mr-2 inline-flex min-w-0 items-center text-[12px] text-muted-foreground" title="Pesquisar na web e na Biblioteca de Anúncios">
                 <input type="checkbox" className="mr-1.5" checked={pesquisar} onChange={(e) => setPesquisar(e.target.checked)} />
                 Pesquisar na web e na Biblioteca de Anúncios
               </label>

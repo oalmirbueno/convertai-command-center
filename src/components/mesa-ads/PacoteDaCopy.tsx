@@ -57,7 +57,7 @@ export function pacoteDaResposta(data: any, criativoId: string): PacoteDeCopy | 
 
 function Contagem({ atual, limite }: { atual: number; limite: number }) {
   return (
-    <span className={`shrink-0 text-[10.5px] tabular-nums ${atual > limite ? "font-medium text-warning" : "text-muted-foreground"}`} aria-label={`${atual} de ${limite} caracteres`}>
+    <span className={`shrink-0 text-[11px] tabular-nums ${atual > limite ? "font-medium text-warning" : "text-muted-foreground"}`} aria-label={`${atual} de ${limite} caracteres`}>
       {atual}/{limite}
     </span>
   );
@@ -89,7 +89,7 @@ function Grupo({
         type="button"
         onClick={aoAlternar}
         aria-expanded={aberto}
-        className="mb-1.5 flex w-full min-w-0 items-center rounded text-left text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+        className="mb-1.5 flex w-full min-w-0 items-center rounded text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
       >
         <ChevronRight className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${aberto ? "rotate-90" : ""}`} />
         <span className="min-w-0 flex-1 truncate">
@@ -103,7 +103,7 @@ function Grupo({
 
 function BotaoUsar({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="h-7 shrink-0 rounded-md px-2 text-[11.5px] font-medium text-primary hover:bg-primary/10">
+    <button type="button" onClick={onClick} className="h-7 shrink-0 rounded-md px-2 text-[12px] font-medium text-primary hover:bg-primary/10">
       Usar
     </button>
   );
@@ -155,7 +155,7 @@ export function BaixarZipDoGestor({ corpo, className = "" }: { corpo: () => Reco
       <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" disabled={ocupado} onClick={() => void baixar()} title="Montado no seu navegador, sem custo de IA" aria-label="Baixar pacote completo (.zip)">
         {ocupado ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileArchive className="h-4 w-4" aria-hidden="true" />}
       </button>
-      <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground" aria-live="polite">
+      <span className="mb-1 mr-2 text-[12px] text-muted-foreground" aria-live="polite">
         {ocupado ? textoDoProgresso(progresso) : "sem custo"}
       </span>
     </span>
@@ -188,7 +188,7 @@ export function EnvioAoGestor({ corpo, rotulo = "Enviar ao gestor de tráfego", 
       <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" disabled={enviando} onClick={() => void enviar()} aria-label={rotulo} title={rotulo}>
         {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
       </button>
-      <label className="mb-1 inline-flex items-center text-[11.5px] text-muted-foreground">
+      <label className="mb-1 inline-flex items-center text-[12px] text-muted-foreground">
         <input type="checkbox" checked={criarTarefa} onChange={(e) => setCriarTarefa(e.target.checked)} className="mr-1.5 h-3.5 w-3.5 accent-primary" />
         criar tarefa para o gestor
       </label>
@@ -311,11 +311,11 @@ export default function PacoteDaCopy({
                 <li key={i} className="min-w-0 rounded-lg border border-border bg-background p-2.5">
                   <div className="flex min-w-0 items-center">
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary">{rotuloDoEstilo(t.estilo) || `Texto ${i + 1}`}</span>
-                    <span className="mr-1 text-[10.5px] tabular-nums text-muted-foreground">{t.texto.length}</span>
+                    <span className="mr-1 text-[11px] tabular-nums text-muted-foreground">{t.texto.length}</span>
                     <BotaoUsar onClick={() => onUsar(t.texto.length > 300 ? { texto_principal_longo: t.texto } : { texto_principal: t.texto })} />
                     <BotaoCopiar texto={t.texto} rotulo="Copiar texto" />
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-snug [overflow-wrap:anywhere]">{t.texto}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] leading-snug [overflow-wrap:anywhere]">{t.texto}</p>
                 </li>
               ))}
             </ul>
@@ -325,7 +325,7 @@ export default function PacoteDaCopy({
             <ul className="divide-y divide-border rounded-lg border border-border bg-background">
               {pacote.titulos.map((t, i) => (
                 <li key={i} className="flex min-w-0 items-center px-2.5 py-1.5">
-                  <span className="mr-2 min-w-0 flex-1 text-[12.5px] [overflow-wrap:anywhere]">{t}</span>
+                  <span className="mr-2 min-w-0 flex-1 text-[13px] [overflow-wrap:anywhere]">{t}</span>
                   <Contagem atual={t.length} limite={LIMITE_TITULO} />
                   <BotaoUsar onClick={() => onUsar({ titulo: t })} />
                   <BotaoCopiar texto={t} rotulo="Copiar título" />
@@ -338,7 +338,7 @@ export default function PacoteDaCopy({
             <ul className="divide-y divide-border rounded-lg border border-border bg-background">
               {pacote.descricoes.map((t, i) => (
                 <li key={i} className="flex min-w-0 items-center px-2.5 py-1.5">
-                  <span className="mr-2 min-w-0 flex-1 text-[12.5px] [overflow-wrap:anywhere]">{t}</span>
+                  <span className="mr-2 min-w-0 flex-1 text-[13px] [overflow-wrap:anywhere]">{t}</span>
                   <Contagem atual={t.length} limite={LIMITE_DESCRICAO} />
                   <BotaoUsar onClick={() => onUsar({ descricao: t })} />
                   <BotaoCopiar texto={t} rotulo="Copiar descrição" />
@@ -352,8 +352,8 @@ export default function PacoteDaCopy({
               {pacote.ctas.map((c, i) => (
                 <li key={i} className="flex min-w-0 items-start rounded-lg border border-border bg-background px-2.5 py-1.5">
                   <span className="mr-2 min-w-0 flex-1">
-                    <span className="block text-[12.5px] font-medium">{rotuloDoCta(c.cta)}</span>
-                    {c.porque && <span className="block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{c.porque}</span>}
+                    <span className="block text-[13px] font-medium">{rotuloDoCta(c.cta)}</span>
+                    {c.porque && <span className="block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{c.porque}</span>}
                   </span>
                   {CTAS_DO_META.some((x) => x.valor === c.cta) && <BotaoUsar onClick={() => onUsar({ cta_meta: c.cta })} />}
                 </li>
@@ -365,7 +365,7 @@ export default function PacoteDaCopy({
             <ul className="divide-y divide-border rounded-lg border border-border bg-background">
               {pacote.ganchos.map((g, i) => (
                 <li key={i} className="flex min-w-0 items-center px-2.5 py-1.5">
-                  <span className="mr-2 min-w-0 flex-1 text-[12.5px] [overflow-wrap:anywhere]">{g}</span>
+                  <span className="mr-2 min-w-0 flex-1 text-[13px] [overflow-wrap:anywhere]">{g}</span>
                   <BotaoCopiar texto={g} rotulo="Copiar gancho" />
                 </li>
               ))}
@@ -378,7 +378,7 @@ export default function PacoteDaCopy({
                 type="button"
                 onClick={() => alternar("gestor")}
                 aria-expanded={estaAberto("gestor")}
-                className="flex w-full min-w-0 items-center text-left text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                className="flex w-full min-w-0 items-center text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
               >
                 <ChevronRight className={`mr-1 h-3.5 w-3.5 shrink-0 transition-transform ${estaAberto("gestor") ? "rotate-90" : ""}`} />
                 Orientação ao gestor de tráfego

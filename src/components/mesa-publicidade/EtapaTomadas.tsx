@@ -49,7 +49,7 @@ function PlanoEditavel({ lista, mudar }: { lista: TomadaDePublicidade[]; mudar: 
       {lista.map((t, i) => (
         <li key={t.funcao} className="min-w-0 px-4 py-3" data-tomada={t.funcao}>
           <div className="flex min-w-0 items-center">
-            <span className="mr-2 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10.5px] font-semibold text-primary-foreground">{t.ordem}</span>
+            <span className="mr-2 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">{t.ordem}</span>
             <p className="mr-2 min-w-0 truncate text-[13px] font-semibold">{rotuloDaFuncao(t.funcao)}</p>
             <span className={juntar(texto.auxiliar, "ml-auto shrink-0")}>{t.com_pessoa ? "com a pessoa" : "sem pessoa"}</span>
           </div>

@@ -161,7 +161,7 @@ export default function SeletorDeGuia({ guia, onMudar }: { guia: Guia; onMudar: 
             maxLength={MAX_TEXTO_DO_GUIA}
             placeholder="Ex.: luz de fim de tarde vinda da esquerda, bancada de madeira clara, sombra suave"
             aria-label="Seu prompt"
-            className="pr-10 text-[12.5px]"
+            className="pr-10 text-[13px]"
           />
           <Ditado valor={guia.texto || ""} onChange={(v) => onMudar({ modo: "livre", texto: v })} className="absolute bottom-1.5 right-1.5" />
         </div>

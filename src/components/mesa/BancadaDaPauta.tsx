@@ -51,7 +51,7 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
     </header>
     <div className={`grid min-h-0 flex-1 grid-cols-1 lg:overflow-hidden ${escolhendo || selecaoAberta ? 'lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(290px,360px)]' : 'lg:grid-cols-[144px_minmax(0,1fr)_minmax(290px,400px)]'}`}>
       <aside aria-label="Prancheta" className="min-h-0 min-w-0 border-b p-3 lg:overflow-y-auto lg:border-b-0 lg:border-r">
-        <p className="mb-3 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">Prancheta</p><div hidden={selecaoAberta}>{prancheta}</div><div ref={setDestinoSelecao} hidden={!selecaoAberta} />
+        <p className="mb-3 text-[12px] font-medium text-muted-foreground">Prancheta</p><div hidden={selecaoAberta}>{prancheta}</div><div ref={setDestinoSelecao} hidden={!selecaoAberta} />
       </aside>
       <main aria-label="Prévia do conteúdo" className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4">{previa}</main>
       <div className="flex min-h-0 min-w-0 border-t lg:border-l lg:border-t-0"><aside aria-label={tipo === "fotos" ? "Ferramentas de fotos" : "Ferramentas de vídeo"} className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><h3 className="mb-4 border-b pb-3 text-[13px] font-semibold">{abas.find((a) => a.id === ativa)?.nome || "Ferramentas"}</h3>{ferramentas}</aside>

@@ -151,7 +151,7 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
     seletorMotor={<SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor?.id || ""} nivel={r.nivel} onNivel={(nivel) => mudar({ nivel, motor: "" })} onEscolher={(id) => mudar({ motor: id })} />}
     diretor={<DiretorDoPrompt motor={motor} modo={modo} formato={r.formato} duracao={duracao} audio={!!(motor?.cap.audio && r.audio)} referencias={r.referencias.length} temInicial={!!r.inicial} temFinal={!!r.final} texto={r.prompt} atual={{ prompt: r.prompt, negativo: r.negativo }} onAplicar={(p) => mudar({ prompt: p.prompt, negativo: p.negativo })} />}
     gerar={<BotaoDeGerar custo={custo} motivo={motivo} rotulo="Gerar vídeo" onConfirmar={gerar} extra={`${motor?.rotulo || ""}, ${duracao} s, ${r.variacoes} variações`} />}
-    resultado={pedidoEnviado && <div role="status" className="mb-3 flex items-center justify-between text-sm"><span>Pedido enviado. Acompanhe seu vídeo nos resultados.</span>{irResultados && <button type="button" className={botao.secundario} onClick={irResultados}>Ver resultado</button>}</div>}
+    resultado={pedidoEnviado && <div role="status" className="mb-3 flex items-center justify-between text-[13px] leading-5"><span>Pedido enviado. Acompanhe seu vídeo nos resultados.</span>{irResultados && <button type="button" className={botao.secundario} onClick={irResultados}>Ver resultado</button>}</div>}
   />;
 
   return (

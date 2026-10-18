@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import JanelaDoCelular from "@/components/sistema/JanelaDoCelular";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { botao, campo, juntar } from "@/components/sistema/estilos";
+import { botao, campo, juntar, superficie } from "@/components/sistema/estilos";
 import { retryAutopublish, useAutopublishStatus } from "@/hooks/useAutopublishStatus";
 import { EDITORIAL_DEFAULT_TIME_ZONE, isoUtcToZonedDateTimeLocal, zonedDateTimeLocalToIso } from "@/lib/editorialDate";
 import {
@@ -309,7 +309,7 @@ export function JanelaDaPublicacao({
             </CampoDeFormulario>
             <label className={`flex items-center ${podePublicar ? "" : "opacity-70"}`}>
               <Switch checked={logoQueAprovar} onCheckedChange={setLogoQueAprovar} disabled={!podePublicar || ocupado} className="mr-2 shrink-0" />
-              <span className="min-w-0 text-[12.5px]">Se o cliente aprovar depois do horário, publicar assim que aprovar</span>
+              <span className="min-w-0 text-[13px]">Se o cliente aprovar depois do horário, publicar assim que aprovar</span>
             </label>
             {!podePublicar && <p className="text-[12px] text-muted-foreground">Só admin ou gestor confirma a data e publica.</p>}
           </>
@@ -379,10 +379,10 @@ export function PublicacaoDaMesaNaAgenda({
   const linkDaMesaFoto = soFotos && !linkDoEstudio && peca.data.taskId ? linkDoPostNaMesaFoto(clientId, { taskId: peca.data.taskId, trabalhoId: peca.data.peca.id }) : null;
   return (
     <>
-    <section className="flex min-w-0 items-center rounded-xl border border-border bg-card px-4 py-3">
+    <section className={juntar(superficie.painel, "flex min-w-0 items-center px-4 py-3")}>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Publicação da Mesa</p>
-        <p className="mt-1 flex min-w-0 items-center text-[12.5px]">
+        <p className="text-[11px] font-medium text-muted-foreground">Publicação da Mesa</p>
+        <p className="mt-1 flex min-w-0 items-center text-[13px]">
           <span className={`mr-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>
           <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{estado.detalhe}</span>
         </p>

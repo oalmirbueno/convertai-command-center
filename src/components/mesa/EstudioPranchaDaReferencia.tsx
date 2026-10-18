@@ -154,7 +154,7 @@ export default function EstudioPranchaDaReferencia({
 
   return (
     <div className="min-w-0 rounded-md border border-border bg-background p-2" data-prancha="quadros">
-      <p className="mb-1.5 flex min-w-0 items-center text-[11.5px] leading-snug">
+      <p className="mb-1.5 flex min-w-0 items-center text-[12px] leading-snug">
         <LayoutGrid className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 flex-1">
           {rotulo[0].toUpperCase() + rotulo.slice(1)}: {TIPO[r.prancha.tipo || "mosaico"] || "prancha"} com {quadros.length} artes. {capas} capa{capas === 1 ? "" : "s"}, {seq} de sequência.
@@ -184,14 +184,14 @@ export default function EstudioPranchaDaReferencia({
                   {r.url ? <img src={r.url} alt="" style={e.imagem} loading="lazy" /> : null}
                 </span>
               </button>
-              <span className="mt-0.5 block truncate text-center text-[10px] text-muted-foreground">
+              <span className="mt-0.5 block truncate text-center text-[11px] text-muted-foreground">
                 {i + 1} · {ROTULO_DO_PAPEL[x.papel]}
               </span>
             </li>
           );
         })}
       </ul>
-      <p className="mt-1 flex min-w-0 items-start text-[10.5px] leading-snug text-muted-foreground">
+      <p className="mt-1 flex min-w-0 items-start text-[11px] leading-snug text-muted-foreground">
         <span className="min-w-0 flex-1">
           A capa usa um quadro de capa (troca a cada versão quando há vários). A lâmina 2 usa a 1ª sequência, a 3 a 2ª, e assim por diante.
           {seq === 0 ? " Sem sequência, as outras lâminas seguem a capa gerada." : ""}

@@ -24,12 +24,12 @@ export default function TesteDoAgente({ plano }: { plano: PlanoAds }) {
   ] as [string, string][]);
   return (
     <section className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-4" aria-label="Teste montado pelo agente sênior">
-      <h3 className="flex items-center text-[13.5px] font-semibold">
+      <h3 className="flex items-center text-[13px] font-semibold">
         <Briefcase className="mr-1.5 h-4 w-4 text-primary" />
         Teste montado pelo agente sênior
       </h3>
-      <p className="text-[11.5px] text-muted-foreground">Preenchido com a análise da conta. Revise e produza os criativos.</p>
-      <dl className="mt-2 min-w-0 space-y-1 text-[12.5px] leading-snug">
+      <p className="text-[12px] text-muted-foreground">Preenchido com a análise da conta. Revise e produza os criativos.</p>
+      <dl className="mt-2 min-w-0 space-y-1 text-[13px] leading-snug">
         {linhas.map(([r, v]) => (
           <div key={r} className="flex min-w-0 flex-col sm:flex-row">
             <dt className="shrink-0 text-muted-foreground sm:mr-2 sm:w-40">{r}</dt>

@@ -468,7 +468,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
           </div>
         </div>
 
-        {catalogo.isLoading && <p className="mt-4 text-sm text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo catálogo…</p>}
+        {catalogo.isLoading && <p className="mt-4 text-[13px] leading-5 text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo catálogo…</p>}
         {catalogo.isError && <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-[13px]">{textoDoErro(catalogo.error)}</p>}
 
         <ul className="mt-3 divide-y divide-border border-y border-border">

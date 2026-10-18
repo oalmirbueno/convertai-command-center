@@ -136,10 +136,10 @@ export default function PlanoDaGrade({
                   <ImagemDaMesa caminho={item.imagem ? item.imagem.caminho : null} bucket={bucketDoItem(item)} alt={item.titulo} className="absolute inset-0 h-full w-full" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-medium leading-4 text-foreground" title={item.titulo}>
+                  <span className="block truncate text-[13px] font-medium leading-4 text-foreground" title={item.titulo}>
                     {item.titulo}
                   </span>
-                  <span className="block truncate text-[11.5px] leading-4 text-muted-foreground">
+                  <span className="block truncate text-[12px] leading-4 text-muted-foreground">
                     {ROTULO_DO_FORMATO[item.formato] || "Post"} · {ROTULO_DA_ORIGEM[item.origem]} · {proposta ? <strong className="text-primary">{dataCurtaOuSem(item.data)} (proposta)</strong> : dataCurtaOuSem(item.data)}
                   </span>
                 </span>

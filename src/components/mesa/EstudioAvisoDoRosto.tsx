@@ -53,7 +53,7 @@ export default function EstudioAvisoDoRosto({ trabalhoId, versao }: { trabalhoId
   const c = (versao && versao.conferencia_rosto) || q.data || null;
   if (!c || !c.aviso) return null;
   return (
-    <p className="mt-1 flex items-start text-[11.5px] leading-snug text-warning" data-aviso="rosto">
+    <p className="mt-1 flex items-start text-[12px] leading-snug text-warning" data-aviso="rosto">
       <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {c.resumo || "Confira o rosto antes de aprovar."}
     </p>
   );
@@ -95,7 +95,7 @@ export function EstudioAvisosDaGeracao({ versao }: { versao: { avisos_da_geracao
         <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
       {aberto && (
-        <ul className="mb-1 ml-5 mt-0.5 space-y-1 text-[11.5px] leading-snug text-muted-foreground">
+        <ul className="mb-1 ml-5 mt-0.5 space-y-1 text-[12px] leading-snug text-muted-foreground">
           {avisos.map((a, i) => (
             <li key={i} className="[overflow-wrap:anywhere]">{a}</li>
           ))}

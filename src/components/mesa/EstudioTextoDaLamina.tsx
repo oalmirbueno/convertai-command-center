@@ -102,7 +102,7 @@ export default function EstudioTextoDaLamina({
   return (
     <div className="space-y-1.5" data-texto-da-lamina={card.ordem}>
       {enxuto && (
-        <p className="flex min-w-0 items-center text-[11.5px] leading-snug text-muted-foreground">
+        <p className="flex min-w-0 items-center text-[12px] leading-snug text-muted-foreground">
           <span className="min-w-0 flex-1">{enxuto}</span>
           {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
           <Button
@@ -119,9 +119,9 @@ export default function EstudioTextoDaLamina({
           </Button>
         </p>
       )}
-      {vaiEnxugar && <p className="text-[11.5px] leading-snug text-muted-foreground">{TEXTO_VAI_ENXUGAR}</p>}
+      {vaiEnxugar && <p className="text-[12px] leading-snug text-muted-foreground">{TEXTO_VAI_ENXUGAR}</p>}
       {sugestao && !confirmando && (
-        <p className="flex min-w-0 items-center text-[11.5px] leading-snug text-muted-foreground">
+        <p className="flex min-w-0 items-center text-[12px] leading-snug text-muted-foreground">
           <span className="min-w-0 flex-1">Não cabe numa lâmina só.</span>
           <Button
             type="button"
@@ -144,10 +144,10 @@ export default function EstudioTextoDaLamina({
           <p className="mt-1.5 text-[11px] font-medium text-muted-foreground">Lâmina {card.ordem + 1} (nova)</p>
           <p className="whitespace-pre-wrap text-[12px] leading-snug [overflow-wrap:anywhere]">{sugestao.segunda}</p>
           <div className="mt-2 flex justify-end">
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => setConfirmando(false)} disabled={!!ocupado}>
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => setConfirmando(false)} disabled={!!ocupado}>
               Cancelar
             </Button>
-            <Button type="button" size="sm" className="ml-2 h-7 px-2.5 text-[11.5px]" onClick={() => void dividir()} disabled={bloqueado || !!ocupado}>
+            <Button type="button" size="sm" className="ml-2 h-7 px-2.5 text-[12px]" onClick={() => void dividir()} disabled={bloqueado || !!ocupado}>
               {ocupado === "dividir" && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
               Dividir
             </Button>

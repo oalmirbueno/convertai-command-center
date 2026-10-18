@@ -72,15 +72,15 @@ export function CartaoTipografico({ r, grande = false, className = "" }: { r: Re
   const nicho = nichoDaReferencia(r) ? nomeDoNicho(r) : "";
   return (
     <div data-tipografico="" className={`flex h-full w-full flex-col justify-between bg-primary/5 ${grande ? "p-8" : "p-3"} ${className}`}>
-      <p className={`truncate font-medium uppercase tracking-widest text-primary ${grande ? "text-[11px]" : "text-[9.5px]"}`}>
+      <p className={`truncate font-medium text-primary ${grande ? "text-[11px]" : "text-[11px]"}`}>
         {[nicho, estilo ? humanizar(estilo) : ""].filter(Boolean).join(" · ") || rotuloDaOrigem(r.origem)}
       </p>
-      <p className={`font-serif font-semibold leading-tight text-foreground [overflow-wrap:anywhere] ${grande ? "text-[28px] sm:text-[34px]" : "line-clamp-5 text-[15px]"}`}>
+      <p className={`font-serif font-semibold leading-tight text-foreground [overflow-wrap:anywhere] ${grande ? "text-[24px]" : "line-clamp-5 text-[15px]"}`}>
         {"“"}
         {gancho}
         {"”"}
       </p>
-      <p className={`truncate text-muted-foreground ${grande ? "text-[12.5px]" : "text-[10px]"}`}>{r.mecanismo || String(r.ficha.gancho_visual || "")}</p>
+      <p className={`truncate text-muted-foreground ${grande ? "text-[13px]" : "text-[11px]"}`}>{r.mecanismo || String(r.ficha.gancho_visual || "")}</p>
     </div>
   );
 }
@@ -167,7 +167,7 @@ function Linha({ rotulo, valor, copiar = true, link = false }: { rotulo: string;
   return (
     <div className="min-w-0 border-b border-border py-2.5 last:border-b-0">
       <div className="flex min-w-0 items-center">
-        <p className="min-w-0 flex-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{rotulo}</p>
+        <p className="min-w-0 flex-1 text-[11px] font-medium text-muted-foreground">{rotulo}</p>
         {copiar && <BotaoCopiar texto={valor} rotulo={`Copiar ${rotulo.toLowerCase()}`} />}
       </div>
       {ehLink ? (
@@ -199,7 +199,7 @@ export function Indicadores({ m, className = "" }: { m: MetricasDaConta; classNa
     <dl className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${className}`}>
       {visiveis.map((k) => (
         <div key={k.chave} className={juntar(superficie.painel, "min-w-0 px-3 py-2")}>
-          <dt className="truncate text-[10.5px] uppercase tracking-wider text-muted-foreground">{k.rotulo}</dt>
+          <dt className="truncate text-[11px] text-muted-foreground">{k.rotulo}</dt>
           <dd className="mt-0.5 truncate text-[15px] font-semibold tabular-nums">{k.formato(m[k.chave])}</dd>
         </div>
       ))}
@@ -220,9 +220,9 @@ function SerieDiaria({ serie }: { serie: PontoDaSerie[] }) {
           </div>
         ))}
       </div>
-      <table className="mt-3 w-full table-fixed text-left text-[11.5px]">
+      <table className="mt-3 w-full table-fixed text-left text-[12px]">
         <thead>
-          <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <tr className="text-[11px] text-muted-foreground">
             <th className="py-1 font-medium">Dia</th>
             <th className="py-1 text-right font-medium">Gasto</th>
             <th className="py-1 text-right font-medium">Cliques</th>
@@ -444,7 +444,7 @@ export default function JanelaDaReferencia({
                   {nicho && <span className="mb-1 mr-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px]">{nicho}</span>}
                   {estilo && <span className="mb-1 mr-1.5 rounded-full bg-secondary px-2 py-0.5 text-[11px]">{humanizar(estilo)}</span>}
                   {detalhe.isFetching && (
-                    <span className="mb-1 inline-flex items-center text-[11.5px]">
+                    <span className="mb-1 inline-flex items-center text-[12px]">
                       <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> buscando imagens e dados
                     </span>
                   )}
@@ -547,7 +547,7 @@ export default function JanelaDaReferencia({
                     value={evidencia}
                     disabled={daAgencia}
                     onChange={(e) => setEvidencia(e.target.value as Evidencia)}
-                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-[12.5px]"
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-[13px]"
                   >
                     {ESCALA_DE_EVIDENCIA.filter((e) => evidenciasPossiveis.indexOf(e.valor) >= 0).map((e) => (
                       <option key={e.valor} value={e.valor}>
@@ -557,8 +557,8 @@ export default function JanelaDaReferencia({
                   </select>
                 </div>
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Mecanismo</span>
-                  <Input aria-label="Mecanismo" className="h-9 text-[12.5px]" value={mecanismo} readOnly={daAgencia} placeholder="Sem citar a marca" onChange={(e) => setMecanismo(e.target.value)} />
+                  <span className="mb-1 block text-[12px] font-medium text-foreground/80">Mecanismo</span>
+                  <Input aria-label="Mecanismo" className="h-9 text-[13px]" value={mecanismo} readOnly={daAgencia} placeholder="Sem citar a marca" onChange={(e) => setMecanismo(e.target.value)} />
                 </label>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -566,13 +566,13 @@ export default function JanelaDaReferencia({
                   const valor = typeof ficha[c.chave] === "string" ? String(ficha[c.chave]) : "";
                   return (
                     <label key={String(c.chave)} className={`block min-w-0 ${c.longo ? "sm:col-span-2" : ""}`}>
-                      <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">{c.rotulo}</span>
+                      <span className="mb-1 block text-[12px] font-medium text-foreground/80">{c.rotulo}</span>
                       {daAgencia ? (
-                        <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{valor || <span className="text-muted-foreground">Sem registro.</span>}</p>
+                        <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{valor || <span className="text-muted-foreground">Sem registro.</span>}</p>
                       ) : c.longo ? (
-                        <Textarea aria-label={c.rotulo} className="min-h-[56px] text-[12.5px]" value={valor} onChange={(e) => { const v = e.target.value; setFicha((f) => ({ ...f, [c.chave]: v })); }} />
+                        <Textarea aria-label={c.rotulo} className="min-h-[56px] text-[13px]" value={valor} onChange={(e) => { const v = e.target.value; setFicha((f) => ({ ...f, [c.chave]: v })); }} />
                       ) : (
-                        <Input aria-label={c.rotulo} className="h-9 text-[12.5px]" value={valor} onChange={(e) => { const v = e.target.value; setFicha((f) => ({ ...f, [c.chave]: v })); }} />
+                        <Input aria-label={c.rotulo} className="h-9 text-[13px]" value={valor} onChange={(e) => { const v = e.target.value; setFicha((f) => ({ ...f, [c.chave]: v })); }} />
                       )}
                     </label>
                   );

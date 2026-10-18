@@ -238,7 +238,7 @@ export function ZonaDeAnexos({ anexos, children, className = "", rotulo = "Solte
     >
       {children}
       {sobre && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/90 text-[12.5px] font-medium text-foreground">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/90 text-[13px] font-medium text-foreground">
           {rotulo}
         </div>
       )}

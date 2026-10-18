@@ -61,7 +61,7 @@ export function FormularioDoBriefing({
                 placeholder="Produto ou serviço"
                 aria-label={`Produto ${i + 1}`}
                 disabled={desabilitado}
-                className="mb-1 h-8 text-[12.5px] sm:mb-0 sm:mr-1.5 sm:w-2/5"
+                className="mb-1 h-8 text-[13px] sm:mb-0 sm:mr-1.5 sm:w-2/5"
               />
               <div className="flex min-w-0 flex-1 items-center">
                 <Input
@@ -70,7 +70,7 @@ export function FormularioDoBriefing({
                   placeholder="Por que este produto nesta campanha"
                   aria-label={`Por que o produto ${i + 1}`}
                   disabled={desabilitado}
-                  className="h-8 min-w-0 flex-1 text-[12.5px]"
+                  className="h-8 min-w-0 flex-1 text-[13px]"
                 />
                 {produtos.length > 1 && (
                   <button
@@ -102,19 +102,19 @@ export function FormularioDoBriefing({
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <Campo rotulo="Oferta" id={`${prefixo}-oferta`}>
-          <Input id={`${prefixo}-oferta`} value={valor.oferta} onChange={(e) => mudar({ oferta: e.target.value })} disabled={desabilitado} placeholder="Ex.: 20% nos kits até 12/06" className="h-8 text-[12.5px]" />
+          <Input id={`${prefixo}-oferta`} value={valor.oferta} onChange={(e) => mudar({ oferta: e.target.value })} disabled={desabilitado} placeholder="Ex.: 20% nos kits até 12/06" className="h-8 text-[13px]" />
         </Campo>
         <Campo rotulo="Chamada para ação (CTA)" id={`${prefixo}-cta`}>
-          <Input id={`${prefixo}-cta`} value={valor.cta} onChange={(e) => mudar({ cta: e.target.value })} disabled={desabilitado} placeholder="Ex.: chame no WhatsApp" className="h-8 text-[12.5px]" />
+          <Input id={`${prefixo}-cta`} value={valor.cta} onChange={(e) => mudar({ cta: e.target.value })} disabled={desabilitado} placeholder="Ex.: chame no WhatsApp" className="h-8 text-[13px]" />
         </Campo>
         <div className="sm:col-span-2">
           <Campo rotulo="Mensagem central" id={`${prefixo}-mensagem`}>
-            <Input id={`${prefixo}-mensagem`} value={valor.mensagem_central} onChange={(e) => mudar({ mensagem_central: e.target.value })} disabled={desabilitado} placeholder="A frase que o público precisa entender" className="h-8 text-[12.5px]" />
+            <Input id={`${prefixo}-mensagem`} value={valor.mensagem_central} onChange={(e) => mudar({ mensagem_central: e.target.value })} disabled={desabilitado} placeholder="A frase que o público precisa entender" className="h-8 text-[13px]" />
           </Campo>
         </div>
         <div className="sm:col-span-2">
           <Campo rotulo="Público" id={`${prefixo}-publico`}>
-            <Textarea id={`${prefixo}-publico`} value={valor.publico} onChange={(e) => mudar({ publico: e.target.value })} disabled={desabilitado} rows={2} placeholder="Quem é, o que quer, o que trava a compra" className="min-h-[56px] text-[12.5px]" />
+            <Textarea id={`${prefixo}-publico`} value={valor.publico} onChange={(e) => mudar({ publico: e.target.value })} disabled={desabilitado} rows={2} placeholder="Quem é, o que quer, o que trava a compra" className="min-h-[56px] text-[13px]" />
           </Campo>
         </div>
         <div className="sm:col-span-2">
@@ -126,12 +126,12 @@ export function FormularioDoBriefing({
               disabled={desabilitado}
               rows={3}
               placeholder={"Depoimento da cliente Ana\n4,9 estrelas no Google\nGarantia de 30 dias"}
-              className="min-h-[72px] text-[12.5px]"
+              className="min-h-[72px] text-[13px]"
             />
           </Campo>
         </div>
         <Campo rotulo="Tom" id={`${prefixo}-tom`}>
-          <Input id={`${prefixo}-tom`} value={valor.tom} onChange={(e) => mudar({ tom: e.target.value })} disabled={desabilitado} placeholder="Ex.: leve, próximo, com humor" className="h-8 text-[12.5px]" />
+          <Input id={`${prefixo}-tom`} value={valor.tom} onChange={(e) => mudar({ tom: e.target.value })} disabled={desabilitado} placeholder="Ex.: leve, próximo, com humor" className="h-8 text-[13px]" />
         </Campo>
       </div>
     </div>
@@ -146,7 +146,7 @@ export function briefingParaEnviar(b: BriefingDaCampanha): BriefingDaCampanha {
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">{rotulo}</dt>
+      <dt className="text-[11px] font-medium text-muted-foreground">{rotulo}</dt>
       <dd className="mt-0.5 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{children}</dd>
     </div>
   );

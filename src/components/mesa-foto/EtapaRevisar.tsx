@@ -58,10 +58,10 @@ function ConferenciaNaTela({ conferencia }: { conferencia: Conferencia }) {
   return (
     <div className={`space-y-1 rounded-lg p-2 ${falhas.length || conferencia.alertas.length || conferencia.aviso_jev ? "bg-warning/10" : "bg-success/10"}`} data-conferencia="">
       <p className="text-[11px] font-medium">Conferência (aviso, a decisão é sua)</p>
-      {conferencia.resumo && <p className="text-[11.5px] leading-snug [overflow-wrap:anywhere]">{conferencia.resumo}</p>}
+      {conferencia.resumo && <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">{conferencia.resumo}</p>}
       <ul className="space-y-0.5">
         {conferencia.pontos.map((p) => (
-          <li key={p.criterio} className="flex items-start text-[11.5px] leading-snug">
+          <li key={p.criterio} className="flex items-start text-[12px] leading-snug">
             {p.ok === true ? (
               <Check className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-success" />
             ) : p.ok === false ? (
@@ -77,12 +77,12 @@ function ConferenciaNaTela({ conferencia }: { conferencia: Conferencia }) {
         ))}
       </ul>
       {conferencia.aviso_jev && (
-        <p className="flex items-start text-[11.5px] leading-snug">
+        <p className="flex items-start text-[12px] leading-snug">
           <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-warning" /> <span className="min-w-0">O Jev vê divergência crítica com o assunto real. Compare antes de aprovar.</span>
         </p>
       )}
       {conferencia.alertas.map((a) => (
-        <p key={a} className="flex items-start text-[11.5px] leading-snug">
+        <p key={a} className="flex items-start text-[12px] leading-snug">
           <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0 text-warning" /> <span className="min-w-0 [overflow-wrap:anywhere]">{a}</span>
         </p>
       ))}
@@ -111,10 +111,10 @@ function Rejeitar({ onRejeitar, ocupado }: { onRejeitar: (motivo: string) => voi
       </div>
       <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="O que está errado" aria-label="Motivo da rejeição" className="h-8 text-[12px]" />
       <div className="flex justify-end">
-        <Button type="button" size="sm" variant="ghost" className="mr-1 h-7 text-[11.5px]" onClick={() => setAberto(false)}>
+        <Button type="button" size="sm" variant="ghost" className="mr-1 h-7 text-[12px]" onClick={() => setAberto(false)}>
           Cancelar
         </Button>
-        <Button type="button" size="sm" variant="destructive" className="h-7 text-[11.5px]" disabled={!motivo.trim() || ocupado} onClick={() => onRejeitar(motivo)}>
+        <Button type="button" size="sm" variant="destructive" className="h-7 text-[12px]" disabled={!motivo.trim() || ocupado} onClick={() => onRejeitar(motivo)}>
           Rejeitar com motivo
         </Button>
       </div>
@@ -181,7 +181,7 @@ function CartaoDaVersao({
         {versao.rejeitada && <span className="mr-1.5 rounded-full bg-destructive/10 px-1.5 py-px text-[11px] font-medium text-destructive">rejeitada</span>}
         {versao.custo_usd !== null && <span className="text-muted-foreground">{usd(versao.custo_usd)}</span>}
       </div>
-      {versao.rejeitada && versao.motivo_rejeicao && <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Motivo: {versao.motivo_rejeicao}</p>}
+      {versao.rejeitada && versao.motivo_rejeicao && <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Motivo: {versao.motivo_rejeicao}</p>}
       {conferencia && (
         <div className="mt-1.5">
           <ConferenciaNaTela conferencia={conferencia} />
@@ -228,7 +228,7 @@ function CartaoDaVersao({
 }
 
 function FontesDoKit({ kit, fotos, onAbrir }: { kit: KitDeFoto | null; fotos: FotoDoAcervo[]; onAbrir: (f: FotoDoAcervo) => void }) {
-  if (!kit || !kit.refs.length) return <p className="text-[11.5px] text-muted-foreground">Sem fotos do produto.</p>;
+  if (!kit || !kit.refs.length) return <p className="text-[12px] text-muted-foreground">Sem fotos do produto.</p>;
   return (
     <div className="grid min-w-0 grid-cols-4 gap-1.5 md:grid-cols-2">
       {kit.refs.slice(0, 8).map((r) => {
@@ -270,8 +270,8 @@ function LinhaDaTomada({
     <li className="min-w-0 border-t border-border pt-4 first:border-t-0 first:pt-0" data-revisar-tomada={tomada.id}>
       <div className="mb-2 flex min-w-0 flex-wrap items-center">
         <p className="mr-2 min-w-0 truncate text-[13px] font-semibold">{tomada.nome}</p>
-        <span className={`mr-2 rounded-full px-1.5 py-px text-[10.5px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
-        <span className="mr-auto min-w-0 truncate text-[11.5px] text-muted-foreground">{rotuloDaCamera(tomada.camera)}</span>
+        <span className={`mr-2 rounded-full px-1.5 py-px text-[11px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
+        <span className="mr-auto min-w-0 truncate text-[12px] text-muted-foreground">{rotuloDaCamera(tomada.camera)}</span>
         {!travada && tomada.status !== "bloqueada" && tomada.status !== "gerando" && (
           <BotaoComCusto
             rotulo={
@@ -358,11 +358,11 @@ function Comparar({
         )}
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="min-w-0">
-            <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Fonte real</p>
+            <p className="mb-1 text-[12px] font-medium text-muted-foreground">Fonte real</p>
             {fonte ? <FotoInteira foto={fonte} /> : <p className="text-[12px] text-muted-foreground">Sem foto do produto.</p>}
           </div>
           <div className="min-w-0">
-            <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">
+            <p className="mb-1 text-[12px] font-medium text-muted-foreground">
               {tomada ? tomada.nome : "Versão"}
               {versao ? `, v${versao.versao}` : ""} <span className="text-primary">(gerada)</span>
             </p>
@@ -437,7 +437,7 @@ export default function EtapaRevisar() {
   return (
     <div className="min-w-0 space-y-4">
       <div className="flex min-w-0 flex-wrap items-center">
-        <p className="mb-1.5 mr-auto min-w-0 text-[12.5px] text-muted-foreground">
+        <p className="mb-1.5 mr-auto min-w-0 text-[12px] text-muted-foreground">
           <span className="font-semibold text-foreground">{resumo.paraRevisar}</span> esperando aprovação · {resumo.aprovadas} de {resumo.total} aprovadas · {resumo.versoes} versões · {usd(resumo.custo)} no lote
         </p>
         <Pilulas

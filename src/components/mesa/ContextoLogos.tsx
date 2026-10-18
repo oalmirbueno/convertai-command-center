@@ -262,7 +262,7 @@ function QuadroDaLogo({
   const altura = compacto ? "h-24 sm:h-28" : "h-32";
   if (!imagem) {
     return (
-      <div className={`flex ${altura} w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted text-[11.5px] text-muted-foreground`}>
+      <div className={`flex ${altura} w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted text-[12px] text-muted-foreground`}>
         {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sem logo"}
       </div>
     );
@@ -500,7 +500,7 @@ export default function LogosDaMarca({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2 text-[11.5px]"
+                      className="h-7 px-2 text-[12px]"
                       onClick={() => void tirar(t.qual)}
                       disabled={tirando === t.qual}
                     >
@@ -512,7 +512,7 @@ export default function LogosDaMarca({
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-[11.5px]"
+                    className="h-7 px-2 text-[12px]"
                     onClick={() => void usarFotoDoInstagram(t.qual)}
                     disabled={!!puxandoIg || !!gravando}
                     title={marca ? `Usar a foto do perfil do Instagram da ${marca.nome}` : "Usar a foto do perfil do Instagram do cliente"}
@@ -520,7 +520,7 @@ export default function LogosDaMarca({
                   >
                     {puxandoIg === t.qual ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Instagram className="h-3.5 w-3.5" />}
                   </Button>
-                  <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => setEscolhendo(t.qual)}>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => setEscolhendo(t.qual)}>
                     <FolderOpen className="mr-1 h-3.5 w-3.5" />
                     {t.imagem ? "Trocar" : "Escolher"}
                   </Button>

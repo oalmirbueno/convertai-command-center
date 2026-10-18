@@ -120,7 +120,7 @@ export default function GaleriaDeReferencias({
               onClick={() => setFiltro(f)}
               aria-pressed={filtro === f}
               title={f === "todas" ? undefined : PAPEIS[f].dica}
-              className={`mb-1 mr-1 rounded-full px-2.5 py-0.5 text-[11.5px] ${
+              className={`mb-1 mr-1 rounded-full px-2.5 py-0.5 text-[12px] ${
                 filtro === f ? "bg-primary/15 font-medium text-primary" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -134,7 +134,7 @@ export default function GaleriaDeReferencias({
             titulo="Ler as referências pendentes"
             descricao="O leitor descreve a técnica de cada referência sem leitura (até 12 por vez) para o diretor de arte usar. Com o contexto já montado, nada mais é refeito; se faltar fonte, escolhe um par da biblioteca."
             variant="outline"
-            className="mb-1 h-7 text-[11.5px]"
+            className="mb-1 h-7 text-[12px]"
             partes={partes}
             executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId })}
             aoConcluir={(data) => aoLer?.(data)}
@@ -159,7 +159,7 @@ export default function GaleriaDeReferencias({
         </div>
       ) : lista.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border px-4 py-6 text-center">
-          <p className="text-[12.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             {ativas.length
               ? "Nenhuma referência neste filtro."
               : 'Nenhuma referência ainda. Em Gerenciar, escolha imagens nas pastas do workspace ou cole um pin do Pinterest.'}

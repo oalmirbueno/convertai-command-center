@@ -304,7 +304,7 @@ export function useFotosDaMesaFoto(ativo = true) {
 function RotuloDaFotoDaMesaFoto({ f }: { f: FotoDaMesaFoto }) {
   const rotulo = f.aprovada ? "aprovada" : f.modo === "canvas" ? "canvas" : f.modo === "detalhe" ? "detalhe 4K" : f.gerada ? "gerada" : "original";
   return (
-    <span className={`absolute left-1 top-1 rounded-full px-1.5 py-px text-[9.5px] font-medium ${f.aprovada ? "bg-success text-white" : "bg-background/90 text-muted-foreground"}`}>
+    <span className={`absolute left-1 top-1 rounded-full px-1.5 py-px text-[11px] font-medium ${f.aprovada ? "bg-success text-white" : "bg-background/90 text-muted-foreground"}`}>
       {rotulo}
     </span>
   );
@@ -323,7 +323,7 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
     <div className="min-w-0 space-y-2.5">
       <div className="flex min-w-0 items-start">
         {/* 18/10: explicação no "?" (SISTEMA.md seção 5); na tela só a linha curta. */}
-        <p className="flex min-w-0 flex-1 items-center text-[11.5px] leading-relaxed text-muted-foreground">
+        <p className="flex min-w-0 flex-1 items-center text-[12px] leading-relaxed text-muted-foreground">
           Fotos da Mesa Foto deste cliente. Clique para usar.
           <AjudaRecolhida className="ml-1" rotulo="Quais fotos aparecem aqui">
             Fotos feitas na Mesa Foto deste cliente (ensaios, Canvas, detalhe 4K, preparadas). Clique para usar nesta lâmina.
@@ -377,7 +377,7 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
                   <FotoDoAcervo imagem={f} />
                   <RotuloDaFotoDaMesaFoto f={f} />
                 </button>
-                <p className="mt-1 flex items-start text-[10.5px] leading-tight text-muted-foreground">
+                <p className="mt-1 flex items-start text-[11px] leading-tight text-muted-foreground">
                   {usada && <Check className="mr-0.5 h-3 w-3 shrink-0 text-primary" />}
                   <span className="min-w-0 line-clamp-2 [overflow-wrap:anywhere]">{f.nome}</span>
                 </p>
@@ -794,7 +794,7 @@ export default function EstudioFotos({
           <Lock className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <span className="min-w-0 flex-1">Trabalho entregue: as fotos não mudam. Reabra para corrigir; a entrega anterior fica no histórico.</span>
           {onReabrir && (
-            <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2 text-[11.5px]" onClick={onReabrir}>
+            <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2 text-[12px]" onClick={onReabrir}>
               Reabrir
             </Button>
           )}
@@ -803,7 +803,7 @@ export default function EstudioFotos({
       {/* Na lâmina agora: grava na hora, aparece na faixa em cima da lâmina grande. */}
       <section aria-label="Fotos desta lâmina" className="space-y-2">
         <div className="flex min-h-6 min-w-0 items-center">
-          <p className="min-w-0 flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Na lâmina {card.ordem}</p>
+          <p className="min-w-0 flex-1 text-[11px] font-medium text-muted-foreground">Na lâmina {card.ordem}</p>
           {(gravando > 0 || enviando > 0) && (
             <span className="inline-flex shrink-0 items-center text-[11px] text-muted-foreground">
               <Loader2 className="mr-1 h-3 w-3 animate-spin" /> {enviando > 0 ? "Subindo…" : "Gravando…"}
@@ -815,7 +815,7 @@ export default function EstudioFotos({
             <p className="flex items-start text-[12px] font-medium text-destructive">
               <TriangleAlert className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" /> Não foi possível tirar o fundo de {falhaDoFundo.imagem.nome || "a foto"}
             </p>
-            <p className="mt-1 text-[11.5px] leading-snug [overflow-wrap:anywhere]">{falhaDoFundo.mensagem}</p>
+            <p className="mt-1 text-[12px] leading-snug [overflow-wrap:anywhere]">{falhaDoFundo.mensagem}</p>
             {falhaDoFundo.metodo === "antigo" && (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">Método antigo (sem o removedor profissional): o gerador redesenha o assunto.</p>
             )}
@@ -835,7 +835,7 @@ export default function EstudioFotos({
               <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} disabled={tirandoFundo > 0} onClick={() => void tirarFundo(falhaDoFundo.imagem, falhaDoFundo.trocar, { metodo: falhaDoFundo.metodo })} aria-label="Tentar de novo" title="Tentar de novo">
                 {tirandoFundo > 0 ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
               </button>
-              <button type="button" className="mb-1 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setFalhaDoFundo(null)}>
+              <button type="button" className="mb-1 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setFalhaDoFundo(null)}>
                 Fechar
               </button>
             </div>
@@ -851,7 +851,7 @@ export default function EstudioFotos({
                 <div className="shrink-0">
                   <MiniaturaDaFoto foto={f} indice={i} onAmpliar={() => setAmpliada(i)} />
                   {f.recortada && (
-                    <span className="mt-1 flex items-center justify-center text-[10px] text-muted-foreground" title="Pessoa ou produto sem fundo: entra inteiro, do lado oposto ao texto">
+                    <span className="mt-1 flex items-center justify-center text-[11px] text-muted-foreground" title="Pessoa ou produto sem fundo: entra inteiro, do lado oposto ao texto">
                       <Scissors className="mr-0.5 h-3 w-3" /> sem fundo
                     </span>
                   )}
@@ -1016,7 +1016,7 @@ export default function EstudioFotos({
           >
             <Scissors className={`mr-2 h-4 w-4 shrink-0 ${semFundo ? "text-primary" : "text-muted-foreground"}`} />
             <span className="min-w-0 flex-1">
-              <span className="block text-[12.5px] font-medium">Tirar fundo {semFundo ? "(ligado)" : ""}</span>
+              <span className="block text-[13px] font-medium">Tirar fundo {semFundo ? "(ligado)" : ""}</span>
               <span className="block text-[11px] leading-snug text-muted-foreground">
                 {semFundo ? "Escolha a foto: ela sai sem fundo e entra na lâmina como elemento. Custa 1 imagem." : "Ligue e escolha a foto: pessoa ou produto entra sem fundo, integrado à lâmina."}
               </span>
@@ -1024,7 +1024,7 @@ export default function EstudioFotos({
             {tirandoFundo > 0 && <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin text-primary" aria-label="Tirando o fundo" />}
           </button>
         )}
-        {cheio && !semFundo && <p className="flex items-center text-[11.5px] text-muted-foreground">Lâmina cheia: 1 fundo e 2 elementos. Tire uma para pôr outra.<AjudaRecolhida className="ml-1" rotulo="Como tirar uma foto">A lâmina já tem 1 fundo e 2 elementos. Tire uma foto para pôr outra (clique na marcada para tirar).</AjudaRecolhida></p>}
+        {cheio && !semFundo && <p className="flex items-center text-[12px] text-muted-foreground">Lâmina cheia: 1 fundo e 2 elementos. Tire uma para pôr outra.<AjudaRecolhida className="ml-1" rotulo="Como tirar uma foto">A lâmina já tem 1 fundo e 2 elementos. Tire uma foto para pôr outra (clique na marcada para tirar).</AjudaRecolhida></p>}
 
         {/* As pastas sempre abrem; o que impede a escolha aparece no clique (antes o acervo inteiro ficava travado). */}
         {aba === "acervo" && (
@@ -1043,7 +1043,7 @@ export default function EstudioFotos({
               <p className="inline-flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Subindo a foto…</p>
             ) : (
               <>
-                <p className="flex items-center justify-center text-[12.5px] font-medium">
+                <p className="flex items-center justify-center text-[13px] font-medium">
                   <ClipboardPaste className="mr-1.5 h-4 w-4 text-primary" /> Cole com Ctrl+V ou solte a foto aqui
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">JPG, PNG ou WEBP · até 1 fundo e 2 elementos</p>
@@ -1073,10 +1073,10 @@ export default function EstudioFotos({
 
       {antigas.length > 0 && (
         <section className="border-t border-border pt-3">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Foto base do acervo (modo anterior)</p>
+          <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Foto base do acervo (modo anterior)</p>
           <div className="flex min-w-0 items-center rounded-lg border border-border bg-background p-2">
             <div className="mr-2.5 w-12 shrink-0">{fotoAntiga ? <FotoDoAcervo imagem={fotoAntiga} /> : <div className="h-12 w-12 animate-pulse rounded-md bg-secondary" />}</div>
-            <p className="min-w-0 flex-1 truncate text-[12.5px]">{fotoAntiga ? fotoAntiga.nome : acervo.isLoading ? "carregando…" : "não está mais no acervo"}</p>
+            <p className="min-w-0 flex-1 truncate text-[13px]">{fotoAntiga ? fotoAntiga.nome : acervo.isLoading ? "carregando…" : "não está mais no acervo"}</p>
             {onTirarFotoAntiga && (
               <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-[12px] text-destructive hover:text-destructive" disabled={tirandoAntiga || ocupado || entregue} onClick={() => void tirarAntiga()}>
                 {tirandoAntiga && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}

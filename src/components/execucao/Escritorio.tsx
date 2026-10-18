@@ -257,7 +257,7 @@ export default function Escritorio({
           </div>
           {area === "Sem área" && aberta && <p className="mt-1 text-[12px] text-muted-foreground">Abra o agente e escolha a área dele no topo do perfil.</p>}
           {aberta && (
-            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar(superficie.painel, "mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain border-0 bg-transparent pr-1 [scrollbar-width:thin]", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
+            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar("mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain rounded-lg pr-1 [scrollbar-width:thin]", doGrupo.length === 2 && "sm:grid-cols-2", doGrupo.length > 2 && "sm:grid-cols-2 xl:grid-cols-3")}>
               {doGrupo.map((a) => {
                 const meus = porAgente.get(a.id) ?? [];
                 const estado = estadoQueManda(meus);
@@ -272,7 +272,7 @@ export default function Escritorio({
                   : null;
 
                 return (
-                  <li key={a.id} className={juntar("min-w-0 rounded-xl border border-border bg-card px-3.5 py-4", pausado && "opacity-60")}>
+                  <li key={a.id} className={juntar(superficie.painel, "min-w-0 px-3.5 py-4", pausado && "opacity-60")}>
                     <div className="flex min-w-0 items-start">
                       <button
                         type="button"
@@ -354,7 +354,7 @@ export default function Escritorio({
                         [conta("in_progress") + conta("queued"), "andando", "text-info"],
                       ].filter(([n]) => Number(n) > 0) as Array<[number, string, string]>;
                       return (
-                        <p className="mt-2 flex flex-wrap gap-x-2.5 text-[11.5px] text-muted-foreground">
+                        <p className="mt-2 flex flex-wrap gap-x-2.5 text-[12px] text-muted-foreground">
                           {pedacos.map(([n, r, tom]) => <span key={r}><span className={juntar("font-semibold tabular-nums", tom)}>{n}</span> {r}</span>)}
                           <span className="ml-auto">{meus.length} no total</span>
                         </p>

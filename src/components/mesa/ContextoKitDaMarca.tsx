@@ -149,7 +149,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
               const daMarca = mapaFontes[f.id] === marca.id;
               return (
                 <li key={f.id}>
-                  <label className="flex cursor-pointer items-center text-[12.5px]">
+                  <label className="flex cursor-pointer items-center text-[13px]">
                     <input
                       type="checkbox"
                       className="mr-2 h-3.5 w-3.5 shrink-0"

@@ -35,7 +35,7 @@ export default function AlertasDaConta({ onPedirAoAgente }: { onPedirAoAgente?: 
       </div>
       <ul className="min-w-0 divide-y divide-border border-y border-border">
         {alertas.slice(0, 8).map((a, i) => (
-          <li key={i} className="flex min-w-0 items-start gap-2.5 py-2 text-[12.5px] leading-5">
+          <li key={i} className="flex min-w-0 items-start gap-2.5 py-2 text-[13px] leading-5">
             {a.nivel === "critico" ? <OctagonAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />}
             <div className="min-w-0 flex-1">
               <p className="min-w-0 break-words">
@@ -52,7 +52,7 @@ export default function AlertasDaConta({ onPedirAoAgente }: { onPedirAoAgente?: 
           </li>
         ))}
       </ul>
-      {alertas.length > 8 && <p className="mt-1 text-[11.5px] text-muted-foreground">E mais {alertas.length - 8}. O agente sênior vê todos.</p>}
+      {alertas.length > 8 && <p className="mt-1 text-[12px] text-muted-foreground">E mais {alertas.length - 8}. O agente sênior vê todos.</p>}
     </section>
   );
 }

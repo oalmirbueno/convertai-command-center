@@ -297,7 +297,7 @@ export default function TelaDoCliente({
               role="tab"
               aria-selected={vista === p.valor}
               onClick={() => onVista(p.valor)}
-              className={juntar("toque-compacto whitespace-nowrap rounded-md px-2.5 py-1 text-[12.5px] font-medium", vista === p.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              className={juntar("toque-compacto whitespace-nowrap rounded-md px-2.5 py-1 text-[13px] font-medium", vista === p.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
             >
               {p.rotulo}
             </button>

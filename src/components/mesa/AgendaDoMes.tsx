@@ -575,7 +575,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
           <button
             type="button"
             onClick={() => setDiasAbertos((d) => ({ ...d, [dia]: !aberto }))}
-            className="w-full rounded-md px-1 py-1 text-left text-[11.5px] font-medium text-primary hover:bg-primary/10"
+            className="w-full rounded-md px-1 py-1 text-left text-[12px] font-medium text-primary hover:bg-primary/10"
           >
             {aberto ? "mostrar menos" : `+${escondidos} neste dia`}
           </button>

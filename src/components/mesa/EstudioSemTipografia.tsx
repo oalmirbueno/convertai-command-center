@@ -154,7 +154,7 @@ export default function EstudioSemTipografia({ clientId }: { clientId: string })
     <div className="mb-3 min-w-0 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2" role="alert" data-aviso="sem-tipografia">
       <div className="flex min-w-0 flex-wrap items-center">
         <Type className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" />
-        <p className="mr-auto flex min-w-0 items-center text-[12.5px] font-medium text-foreground">
+        <p className="mr-auto flex min-w-0 items-center text-[13px] font-medium text-foreground">
           <span className="min-w-0 truncate">{TEXTO_SEM_TIPOGRAFIA}</span>
           <AjudaRecolhida className="ml-1.5" rotulo="Por que a geração está parada">{AJUDA_SEM_TIPOGRAFIA}</AjudaRecolhida>
         </p>

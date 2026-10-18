@@ -86,7 +86,7 @@ export function SeloDaPauta({
   if (!selo) return null;
   return (
     <span className={juntar("inline-flex min-w-0 max-w-full flex-wrap items-center", className)}>
-      <span className={juntar("mr-1.5 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10.5px] font-medium", COR_DO_TOM[selo.tom])} title={selo.dica}>
+      <span className={juntar("mr-1.5 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium", COR_DO_TOM[selo.tom])} title={selo.dica}>
         {selo.tom === "neutro" && <GitBranch className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />}
         <span className="truncate">{selo.rotulo}</span>
       </span>
@@ -153,7 +153,7 @@ export default function LinhaDeEvolucaoDoMes({ clientId }: { clientId: string })
             <p className="text-[12px] font-medium text-muted-foreground">{l.pilar}</p>
             <ol className="mt-1 space-y-0.5">
               {l.passos.map((p, k) => (
-                <li key={k} className="flex min-w-0 items-baseline text-[12.5px] leading-snug">
+                <li key={k} className="flex min-w-0 items-baseline text-[13px] leading-snug">
                   <span className="mr-2 w-11 shrink-0 tabular-nums text-muted-foreground">{dataCurtaBr(p.data) || "sem data"}</span>
                   <span className="min-w-0 [overflow-wrap:anywhere]">
                     {p.tema}

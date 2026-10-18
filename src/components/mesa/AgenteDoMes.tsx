@@ -248,7 +248,7 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
         </ul>
       )}
       {(mudanca.ajustes || []).length > 0 && (
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{(mudanca.ajustes || []).join(" ")}</p>
+        <p className="mt-1.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{(mudanca.ajustes || []).join(" ")}</p>
       )}
       <div className="mt-2.5 flex flex-wrap items-center">
         {estado === "aberta" ? (
@@ -264,7 +264,7 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
             <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Sem custo: nada muda até aplicar.</span>
           </>
         ) : (
-          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] ${estado === "aplicada" ? "bg-success/15 text-foreground" : "bg-muted text-muted-foreground"}`}>
+          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[12px] ${estado === "aplicada" ? "bg-success/15 text-foreground" : "bg-muted text-muted-foreground"}`}>
             {estado === "aplicada" ? <Check className="mr-1 h-3 w-3" /> : <X className="mr-1 h-3 w-3" />}
             {estado === "aplicada" ? "Aplicada na proposta" : "Descartada"}
           </span>
@@ -393,9 +393,9 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           <span className="text-muted-foreground">Reescrever: </span>
           <span className="font-medium">{i.titulo}</span>
           <span className="text-muted-foreground"> · {i.data ? diaCurto(i.data) : "sem data"}{o_que ? ` · ${o_que}` : ""}</span>
-          {(c.tema || c.publico) && <span className="block text-[11.5px] text-muted-foreground">{c.tema ? `Tema: ${c.tema}` : ""}{c.tema && c.publico ? " · " : ""}{c.publico ? `Público: ${c.publico}` : ""}</span>}
+          {(c.tema || c.publico) && <span className="block text-[12px] text-muted-foreground">{c.tema ? `Tema: ${c.tema}` : ""}{c.tema && c.publico ? " · " : ""}{c.publico ? `Público: ${c.publico}` : ""}</span>}
           {(c.titulo || c.tema || c.gancho) && (
-            <span className="mt-0.5 block text-[11.5px] leading-snug" data-antes-depois>
+            <span className="mt-0.5 block text-[12px] leading-snug" data-antes-depois>
               <span className="text-muted-foreground">Antes: </span>
               <span className="line-through decoration-muted-foreground/60">{i.titulo}</span>
               <span className="text-muted-foreground"> · Depois: </span>
@@ -404,12 +404,12 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
             </span>
           )}
           {feito && feito.ok && feito.depois && feito.depois.title && (
-            <span className="block text-[11.5px] text-foreground" data-prova>
+            <span className="block text-[12px] text-foreground" data-prova>
               <Check className="mr-1 inline h-3 w-3 text-success" />
               Gravado na agenda: {feito.depois.title}
             </span>
           )}
-          {motivo && <span className="block text-[11.5px] text-destructive">{motivo}</span>}
+          {motivo && <span className="block text-[12px] text-destructive">{motivo}</span>}
         </span>
       </li>
     );
@@ -429,7 +429,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           {sinal === "refaz" && <span className="text-muted-foreground">Refazer: </span>}
           <span className="font-medium">{i.titulo}</span>
           <span className="text-muted-foreground"> · {quando}{sinal !== "formato" && i.formato ? ` · ${i.formato}` : ""}</span>
-          {motivo && <span className="block text-[11.5px] text-destructive">{motivo}</span>}
+          {motivo && <span className="block text-[12px] text-destructive">{motivo}</span>}
         </span>
       </li>
     );
@@ -441,13 +441,13 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
         Mudança na agenda gravada · {total} {total === 1 ? "item" : "itens"}
       </p>
-      {atual.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {atual.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {(atual.avisos || []).map((a) => (
-        <p key={a} className="mt-1 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-aviso-duplicado>{a}</p>
+        <p key={a} className="mt-1 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-aviso-duplicado>{a}</p>
       ))}
       {opcoes && estado === "aberta" && (
         <div className="mt-2 min-w-0" data-qual-delas>
-          <p className="text-[12.5px] font-medium">{escolhida ? "Escolhida:" : "Qual delas?"}</p>
+          <p className="text-[13px] font-medium">{escolhida ? "Escolhida:" : "Qual delas?"}</p>
           <div className="mt-1 flex min-w-0 flex-col">
             {opcoes.map((o) => {
               const marcada = escolhida === o.task_id;
@@ -462,13 +462,13 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
                   className={`mb-1 min-w-0 rounded-md border px-2.5 py-1.5 text-left text-[13px] leading-snug [overflow-wrap:anywhere] ${marcada ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/60"}`}
                 >
                   <span className="font-medium">{o.titulo}</span>
-                  <span className="block text-[11.5px] text-muted-foreground">{o.detalhe}</span>
+                  <span className="block text-[12px] text-muted-foreground">{o.detalhe}</span>
                 </button>
               );
             })}
           </div>
           {escolhida && (
-            <button type="button" className="text-[11.5px] text-muted-foreground underline-offset-2 hover:underline" onClick={() => setEscolha(null)} disabled={!!fazendo}>
+            <button type="button" className="text-[12px] text-muted-foreground underline-offset-2 hover:underline" onClick={() => setEscolha(null)} disabled={!!fazendo}>
               Trocar a escolha
             </button>
           )}
@@ -490,14 +490,14 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
                 <span className="text-muted-foreground">Campanha: </span>
                 <span className="font-medium">{c.nome_atual}</span>
                 <span className="text-muted-foreground"> · {camposDaCampanha(c.campos)}</span>
-                {r && !r.ok && <span className="block text-[11.5px] text-destructive">{r.motivo || "Não foi possível."}</span>}
+                {r && !r.ok && <span className="block text-[12px] text-destructive">{r.motivo || "Não foi possível."}</span>}
               </span>
             </li>
           );
         })}
       </ul>
       {lote && lote.total > 1 && (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground tabular-nums" aria-live="polite">
+        <p className="mt-1.5 text-[12px] text-muted-foreground tabular-nums" aria-live="polite">
           {lote.feito < lote.total ? `Refazendo lote ${lote.feito + 1} de ${lote.total}` : `${lote.total} lotes refeitos`}
         </p>
       )}
@@ -543,7 +543,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         )}
         {estado === "feita" && (
           <>
-            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
+            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[12px] text-foreground">
               <Check className="mr-1 h-3 w-3" />
               {falhas ? "Não concluído integralmente" : "Feito"}{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
@@ -554,7 +554,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           </>
         )}
         {(estado === "descartada" || estado === "desfeita") && (
-          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[12px] text-muted-foreground">
             <X className="mr-1 h-3 w-3" />
             {estado === "desfeita" ? "Desfeito: a agenda voltou como estava" : "Cancelado: nada mudou"}
           </span>
@@ -629,12 +629,12 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
         esperadoPorSemana={criacao.conferencia && criacao.conferencia.cadencia ? criacao.conferencia.cadencia.por_semana : null}
       />
       {criacao.itens.length > 12 && (
-        <button type="button" onClick={() => setAberta((v) => !v)} className="mt-1 text-[11.5px] text-muted-foreground hover:text-foreground" aria-expanded={aberta}>
+        <button type="button" onClick={() => setAberta((v) => !v)} className="mt-1 text-[12px] text-muted-foreground hover:text-foreground" aria-expanded={aberta}>
           {aberta ? "Mostrar menos" : `Ver todos (${criacao.itens.length})`}
         </button>
       )}
       {(andando !== null || (feitos.length > 0 && faltam.length > 0)) && (
-        <p className="mt-1.5 text-[11.5px] text-muted-foreground tabular-nums" aria-live="polite">
+        <p className="mt-1.5 text-[12px] text-muted-foreground tabular-nums" aria-live="polite">
           {andando !== null ? `Criando lote ${feitos.length + 1} de ${lotes.length}` : `${feitos.length} de ${lotes.length} lotes feitos`}
         </p>
       )}
@@ -659,7 +659,7 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
             <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Cria pautas na agenda; não gera mídia nem publica.</span>
           </>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
+          <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[12px] text-foreground">
             <Check className="mr-1 h-3 w-3" />
             Gravados na agenda · continuar no Estúdio
           </span>
@@ -726,7 +726,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Gerar os conteúdos · {atual.meses.length} {atual.meses.length === 1 ? "mês" : "meses"}
       </p>
-      {atual.resumo && <p className="mt-1 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {atual.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       <p className="mt-1.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
         <span className="capitalize">{atual.meses.map((m) => nomeDoMes(m)).join(", ")}</span> · {atual.frequencia_semanal} por semana · cerca de {estimativa.total}{" "}
         {estimativa.total === 1 ? "publicação" : "publicações"}
@@ -753,7 +753,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
           </>
         )}
         {estado === "feita" && (
-          <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
+          <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[12px] text-foreground">
             {andamento && andamento.rodando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
             {andamento
               ? `${andamento.gravados} de ${andamento.total} ${andamento.total === 1 ? "mês gravado" : "meses gravados"}${andamento.falhas ? ` · ${andamento.falhas} com erro` : ""}`
@@ -761,7 +761,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
           </span>
         )}
         {estado === "descartada" && (
-          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[12px] text-muted-foreground">
             <X className="mr-1 h-3 w-3" />
             Cancelado: nada foi gerado
           </span>
@@ -1030,7 +1030,7 @@ export default function AgenteDoMes({
         </span>
         <div className="mr-3 min-w-0 flex-1">
           <h2 className="truncate text-[15px] font-semibold leading-5">Agente do mês</h2>
-          <p className="truncate text-[12.5px] leading-[18px] text-muted-foreground">
+          <p className="truncate text-[12px] leading-[18px] text-muted-foreground">
             {planejando ? "Planeja com você, seguindo o prompt geral do cliente" : "Cria e organiza fotos, vídeos e artes no mês escolhido"}
           </p>
         </div>
@@ -1053,7 +1053,7 @@ export default function AgenteDoMes({
               role="tab"
               aria-selected={modo === m.valor}
               onClick={() => trocarModo(m.valor)}
-              className={`inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-3 text-[12.5px] font-medium sm:flex-none ${
+              className={`inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-3 text-[13px] font-medium sm:flex-none ${
                 modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -1083,7 +1083,7 @@ export default function AgenteDoMes({
               type="button"
               onClick={() => setPlanoAberto((v) => !v)}
               aria-expanded={planoAberto}
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-medium ${painelDoPlano ? "lg:hidden" : ""} ${
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-medium ${painelDoPlano ? "lg:hidden" : ""} ${
                 planoDoMes ? "bg-success/15 text-foreground" : "bg-card text-muted-foreground"
               }`}
             >
@@ -1115,12 +1115,12 @@ export default function AgenteDoMes({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Casca fixa do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
           <MensagensDoAgente ref={listaRef} rotulo="Conversa com o agente do mês" className="px-4 py-4">
-            {conversa.isLoading && <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo a conversa…</p>}
+            {conversa.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo a conversa…</p>}
             {conversa.isError && <AvisoDeErro erro={conversa.error} />}
             {conversaVazia && (
               <div className="mx-auto max-w-md py-8 text-center">
                 <p className="text-[15px] font-semibold">{planejando ? `Vamos planejar ${nome}?` : "O que o mês precisa?"}</p>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted-foreground">
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                   {planejando
                     ? "Converse sobre estratégia, datas, campanhas, frequência e formatos. O agente lê o que já foi publicado e aprovado, as métricas, as campanhas e os hypes."
                     : "Peça em português. Os conteúdos chegam prontos para gravar na agenda."}
@@ -1161,7 +1161,7 @@ export default function AgenteDoMes({
                     </p>
                   )}
                   {decisao && decisao.frase && (
-                    <p className="mr-6 flex min-w-0 items-start text-[11.5px] text-muted-foreground" data-decisao-publico={decisao.decisao}>
+                    <p className="mr-6 flex min-w-0 items-start text-[12px] text-muted-foreground" data-decisao-publico={decisao.decisao}>
                       <Users className="mr-1 mt-0.5 h-3 w-3 shrink-0" />
                       <span className="[overflow-wrap:anywhere]">{decisao.frase}</span>
                     </p>
@@ -1261,7 +1261,7 @@ export default function AgenteDoMes({
             <ZonaDeAnexos anexos={arquivos.comoAnexos()} rotulo="Solte os arquivos aqui">
               <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
                 {ajustando && (
-                  <div className="mb-1.5 flex min-w-0 items-center rounded-md bg-muted px-2 py-1 text-[11.5px]">
+                  <div className="mb-1.5 flex min-w-0 items-center rounded-md bg-muted px-2 py-1 text-[12px]">
                     <span className="min-w-0 flex-1 truncate">
                       Ajustando: {(ajustando.itens || []).map((i) => i.tema).filter(Boolean).join(", ") || "a proposta"}
                     </span>
@@ -1291,7 +1291,7 @@ export default function AgenteDoMes({
                   {!ajustando && <BotaoDeAnexarArquivos arquivos={arquivos} anexos={anexos} className="mr-1.5" />}
                   {!ajustando && !planejando && campanhasAtivas.length > 0 && (
                     <Select value={campanhaEscolhida ? campanhaEscolhida.id : SEM_CAMPANHA} onValueChange={setCampanhaId}>
-                      <SelectTrigger className="mr-1.5 h-8 min-w-0 flex-1 text-[11.5px]" aria-label="Campanha do pedido">
+                      <SelectTrigger className="mr-1.5 h-8 min-w-0 flex-1 text-[12px]" aria-label="Campanha do pedido">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

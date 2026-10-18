@@ -119,7 +119,7 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
                     {foto && <MiniaturaDoStorage bucket={foto.storage_bucket} caminho={foto.storage_path} alt={`Cena ${c.numero}`} className="absolute inset-0 h-full w-full" />}
                   </div>
                   <div className="mt-1.5 flex min-w-0 items-center">
-                    <p className="min-w-0 flex-1 truncate text-[12.5px] font-medium" title={c.acao || undefined}>
+                    <p className="min-w-0 flex-1 truncate text-[13px] font-medium" title={c.acao || undefined}>
                       {c.numero}. {c.titulo || "Cena"}
                     </p>
                     <button

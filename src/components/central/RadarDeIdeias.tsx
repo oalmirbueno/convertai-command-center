@@ -584,7 +584,7 @@ function IdeiaAberta({
         </div>
         <div className="px-4 py-3 sm:px-5 lg:py-4">
           <span className={juntar(etiqueta, proposta ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{proposta ? "Nova versão" : "Ideia atual"}</span>
-          <p className={juntar(texto.tituloSecao, "mt-1.5 lg:text-[18px] lg:leading-7")}>{titulo}</p>
+          <p className={juntar(texto.tituloSecao, "mt-1.5 lg:text-[20px] lg:leading-7")}>{titulo}</p>
           <p className={juntar(texto.corpo, "mt-1 text-foreground/85")}>{vista.pitch}</p>
 
           <div className="-m-1 mt-3 flex min-w-0 flex-wrap items-center [&>*]:m-1">

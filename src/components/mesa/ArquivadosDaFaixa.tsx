@@ -152,9 +152,9 @@ export default function ArquivadosDaFaixa({ onMudou }: { onMudou: () => void }) 
         ajuda="Restaurar volta a pauta para a faixa e o mês. Apagar de vez não dá para desfazer."
       >
           <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="p-3" sobre="cartao" rotulo="Pautas arquivadas">
-            {lista.isLoading && <p className="flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Lendo os arquivados…</p>}
-            {lista.isError && <p className="rounded-md bg-destructive/10 p-2.5 text-[12.5px]">{textoDoErro(lista.error)}</p>}
-            {lista.isSuccess && !itens.length && <p className="py-8 text-center text-[12.5px] text-muted-foreground">Nenhuma pauta arquivada.</p>}
+            {lista.isLoading && <p className="flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Lendo os arquivados…</p>}
+            {lista.isError && <p className="rounded-md bg-destructive/10 p-2.5 text-[13px]">{textoDoErro(lista.error)}</p>}
+            {lista.isSuccess && !itens.length && <p className="py-8 text-center text-[12px] text-muted-foreground">Nenhuma pauta arquivada.</p>}
             {/* 16/10/2026 (dono: "só o ícone, sem bordas"): uma linha por pauta, ações em ícone à direita. */}
             <ul className={juntar(estiloDeLista.aberta, estiloDeLista.divisoria)} aria-label="Pautas arquivadas">
               {itens.map((t) => (

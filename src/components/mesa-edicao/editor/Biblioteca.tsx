@@ -30,7 +30,7 @@ const LinhaDaMidia = memo(function LinhaDaMidia({ i, noProjeto, onInserir, onVir
     <li className="flex min-w-0 items-center py-1.5" data-item-da-biblioteca={i.id}>
       <Icone className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px]" title={i.nome}>
+        <span className="block truncate text-[13px]" title={i.nome}>
           {i.nome}
         </span>
         <span className={juntar(texto.auxiliar, "block truncate")}>

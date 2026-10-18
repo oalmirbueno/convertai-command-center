@@ -141,7 +141,7 @@ export function EscolherCartao({
     <div className="min-w-0">
       <div className="mb-1.5 flex min-w-0 flex-wrap items-center">
         <p className={`${ROTULO} mb-0 mr-2 min-w-0 flex-1`}>Fotos do acervo</p>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome" aria-label="Buscar foto do acervo" className={`${CAMPO} mb-1 mr-1.5 h-7 !w-32 !py-1 text-[11.5px]`} />
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome" aria-label="Buscar foto do acervo" className={`${CAMPO} mb-1 mr-1.5 h-7 !w-32 !py-1 text-[12px]`} />
         <MandarFoto rotulo={rotuloDoEnvio} onPronta={onFoto} />
       </div>
       {fotos.length ? (
@@ -151,7 +151,7 @@ export function EscolherCartao({
           ))}
         </div>
       ) : (
-        <p className="text-[11.5px] text-zinc-400">Nenhuma foto no acervo{termo ? " com esse nome" : ""}. Mande uma pelo botão.</p>
+        <p className="text-[12px] text-zinc-400">Nenhuma foto no acervo{termo ? " com esse nome" : ""}. Mande uma pelo botão.</p>
       )}
     </div>
   );
@@ -208,8 +208,8 @@ export function EscolherCartao({
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-white/15 p-4 text-center">
-                <p className="text-[12.5px] font-medium">Nenhum produto confirmado neste cliente.</p>
-                <p className="mt-1 text-[11.5px] text-zinc-400">O produto nasce no passo Produto, a partir das fotos.</p>
+                <p className="text-[13px] font-medium">Nenhum produto confirmado neste cliente.</p>
+                <p className="mt-1 text-[12px] text-zinc-400">O produto nasce no passo Produto, a partir das fotos.</p>
                 <button type="button" className={`${BOTAO} mt-2`} onClick={() => { onFechar(); irPara("kits"); }}>
                   Ir para Produto
                 </button>
@@ -238,7 +238,7 @@ export function EscolherCartao({
               (() => {
                 const clones = modelosParaEscolher([], clonesQ.data || []);
                 return clonesQ.isLoading ? (
-                  <p className="text-[11.5px] text-zinc-400">Lendo os clones...</p>
+                  <p className="text-[12px] text-zinc-400">Lendo os clones...</p>
                 ) : clones.length ? (
                   <div className={grade} aria-label="Clones">
                     {clones.map((o) => (
@@ -256,7 +256,7 @@ export function EscolherCartao({
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-white/15 p-4 text-center">
-                    <p className="text-[12.5px] font-medium">Nenhum clone ainda.</p>
+                    <p className="text-[13px] font-medium">Nenhum clone ainda.</p>
                     <button type="button" className={`${BOTAO} mt-2`} onClick={() => { onFechar(); irPara("clones"); }}>
                       Ir para Clones
                     </button>
@@ -281,7 +281,7 @@ export function EscolherCartao({
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-white/15 p-4 text-center">
-                  <p className="text-[12.5px] font-medium">Nenhuma modelo ainda.</p>
+                  <p className="text-[13px] font-medium">Nenhuma modelo ainda.</p>
                   <button type="button" className={`${BOTAO} mt-2`} onClick={() => { onFechar(); irPara("modelos"); }}>
                     Ir para Modelos
                   </button>
@@ -289,7 +289,7 @@ export function EscolherCartao({
               )
             ) : (
               <div className="min-w-0 space-y-2">
-                <label className="flex items-start rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-[11.5px] leading-snug text-amber-100">
+                <label className="flex items-start rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-[12px] leading-snug text-amber-100">
                   <input type="checkbox" className="mr-2 mt-0.5" checked={autorizada} onChange={(e) => setAutorizada(e.target.checked)} aria-label="Tenho autorização desta pessoa" />
                   Tenho autorização desta pessoa para usar a imagem dela em foto gerada (sem autorização, o cartão não gera).
                 </label>

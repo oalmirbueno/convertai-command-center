@@ -98,7 +98,7 @@ export default function TesteDeAvisos({ idsNoSino }: { idsNoSino: readonly strin
             </li>
           ))}
           {!rodando && !terminou && (
-            <li className="text-[10.5px] text-muted-foreground">Passou de 1 minuto sem resposta. Tente de novo.</li>
+            <li className="text-[11px] text-muted-foreground">Passou de 1 minuto sem resposta. Tente de novo.</li>
           )}
         </ul>
       )}

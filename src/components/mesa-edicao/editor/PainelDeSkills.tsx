@@ -91,7 +91,7 @@ function PropostaEmLinha({ x, confirmar, cancelar, desfazer }: { x: PropostaNaTe
   const n = x.lista.length;
   if (!x.p.operacoes.length) {
     return (
-      <div className="mt-1.5 border-l-2 border-border pl-3 text-[12.5px]" data-proposta-da-skill="vazia">
+      <div className="mt-1.5 border-l-2 border-border pl-3 text-[13px]" data-proposta-da-skill="vazia">
         <p className="text-muted-foreground">{x.p.resumo}</p>
         {x.p.avisos.map((a) => (
           <p key={a} className="text-muted-foreground">
@@ -105,7 +105,7 @@ function PropostaEmLinha({ x, confirmar, cancelar, desfazer }: { x: PropostaNaTe
     );
   }
   return (
-    <div className={juntar("mt-1.5 border-l-2 pl-3 text-[12.5px]", x.estado === "feita" ? "border-success" : x.estado === "desfeita" ? "border-border" : "border-primary")} data-proposta-da-skill={x.estado} role="status" aria-live="polite">
+    <div className={juntar("mt-1.5 border-l-2 pl-3 text-[13px]", x.estado === "feita" ? "border-success" : x.estado === "desfeita" ? "border-border" : "border-primary")} data-proposta-da-skill={x.estado} role="status" aria-live="polite">
       <p className="[overflow-wrap:anywhere]">
         <span className="font-medium">
           {n} {n === 1 ? "mudança" : "mudanças"}
@@ -240,7 +240,7 @@ export default function PainelDeSkills({ projeto, contexto, controle, ids }: { p
       {visiveis.length > 5 && (
         <label className="relative block">
           <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input type="search" className={juntar(campo, "h-8 pl-7 text-[12.5px]")} placeholder="Buscar skill (ex.: silêncio, legenda)" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar skill" />
+          <input type="search" className={juntar(campo, "h-8 pl-7 text-[13px]")} placeholder="Buscar skill (ex.: silêncio, legenda)" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar skill" />
         </label>
       )}
       {!batem.length && <p className={juntar(texto.auxiliar, "py-2")}>Nenhuma skill com esse nome.</p>}

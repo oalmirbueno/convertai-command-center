@@ -94,7 +94,7 @@ export default function TaskChecklistTemplatePicker({
       >
         <div className="px-3 py-2 border-b border-border flex items-center gap-2">
           <ListChecks className="w-3.5 h-3.5 text-primary" />
-          <p className="text-xs font-medium text-foreground">Biblioteca de checklists</p>
+          <p className="text-[12px] leading-4 font-medium text-foreground">Biblioteca de checklists</p>
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-6 text-muted-foreground">
@@ -111,8 +111,8 @@ export default function TaskChecklistTemplatePicker({
                   className="w-full text-left px-3 py-2.5 hover:bg-secondary/50 transition-colors disabled:opacity-60"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-foreground">{tpl.title}</p>
-                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                    <p className="text-[12px] leading-4 font-semibold text-foreground">{tpl.title}</p>
+                    <span className="text-[11px] font-mono text-muted-foreground shrink-0">
                       {tpl.items.length} itens
                     </span>
                   </div>
@@ -122,7 +122,7 @@ export default function TaskChecklistTemplatePicker({
                     </p>
                   )}
                   {tpl.service_type && (
-                    <span className="inline-block mt-1 text-[9px] uppercase tracking-wider text-primary/80">
+                    <span className="inline-block mt-1 text-[11px] text-primary/80">
                       {tpl.service_type}
                     </span>
                   )}
@@ -130,7 +130,7 @@ export default function TaskChecklistTemplatePicker({
               </li>
             ))}
             {!ordered.length && (
-              <li className="px-3 py-4 text-center text-xs text-muted-foreground">
+              <li className="px-3 py-4 text-center text-[12px] leading-4 text-muted-foreground">
                 Nenhum template cadastrado.
               </li>
             )}

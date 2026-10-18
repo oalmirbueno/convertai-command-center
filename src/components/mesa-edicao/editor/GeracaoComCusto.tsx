@@ -72,7 +72,7 @@ export default function GeracaoComCusto({
       )}
       {(e.estado === "preparado" || e.estado === "custo_mudou") && (
         <div className="flex min-w-0 flex-wrap items-center rounded-md bg-muted/50 px-2.5 py-2">
-          <span className="mb-1 mr-auto text-[12.5px]">
+          <span className="mb-1 mr-auto text-[13px]">
             {e.estado === "custo_mudou" ? "O custo mudou: " : "Custo estimado: "}
             <strong className="tabular-nums">{e.custo_usd !== null ? usd(e.custo_usd) : "sem preço de referência"}</strong>
           </span>
@@ -91,7 +91,7 @@ export default function GeracaoComCusto({
         </div>
       )}
       {e.estado === "confirmado" && (
-        <p className="flex items-center text-[12.5px]">
+        <p className="flex items-center text-[13px]">
           <Check className="mr-1.5 h-3.5 w-3.5 text-primary" />
           Pedido enviado. O resultado aparece na Mídia.
         </p>

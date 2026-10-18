@@ -19,6 +19,7 @@ import {
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
+import { superficie, juntar } from "@/components/sistema/estilos";
 
 /**
  * Navegador de pastas da Mesa: escolhe uma imagem do cliente em qualquer
@@ -64,7 +65,7 @@ function MiniaturaDeArquivo({ arquivo }: { arquivo: ArquivoDePasta }) {
     storagePath: arquivo.storage_path,
     miniatura: true,
   });
-  if (error) return <div className="flex h-full w-full items-center justify-center text-[10.5px] text-muted-foreground">indisponível</div>;
+  if (error) return <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">indisponível</div>;
   if (!url) return <div className="h-full w-full animate-pulse bg-muted" />;
   return <img src={url} alt={arquivo.file_name} loading="lazy" decoding="async" className="h-full w-full object-contain p-1" />;
 }
@@ -90,13 +91,11 @@ function CartaoDeImagem({
       onClick={onClick}
       disabled={ocupado}
       title={nome}
-      className={`relative min-w-0 rounded-xl border bg-card p-1.5 text-left transition-colors disabled:opacity-60 ${
-        marcado ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/60"
-      }`}
+      className={juntar(superficie.painel, "relative min-w-0 p-1.5 text-left transition-colors disabled:opacity-60", marcado ? "border-primary ring-1 ring-primary" : "hover:border-primary/60")}
     >
       <Quadrado>{children}</Quadrado>
-      <span className="mt-1 block truncate text-[11.5px] text-foreground">{nome}</span>
-      {detalhe && <span className="block truncate text-[10.5px] text-muted-foreground">{detalhe}</span>}
+      <span className="mt-1 block truncate text-[12px] text-foreground">{nome}</span>
+      {detalhe && <span className="block truncate text-[11px] text-muted-foreground">{detalhe}</span>}
       {marcado && <Check className="absolute right-2 top-2 h-5 w-5 rounded-full bg-primary p-0.5 text-primary-foreground" />}
     </button>
   );
@@ -111,10 +110,10 @@ function LinhaDePasta({ nome, detalhe, onClick }: { nome: string; detalhe?: stri
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full min-w-0 items-center rounded-lg border border-border bg-card px-3 py-2 text-left hover:border-primary/50"
+      className={juntar(superficie.painel, "flex w-full min-w-0 items-center px-3 py-2 text-left hover:border-primary/50")}
     >
       <Folder className="mr-2 h-4 w-4 shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate text-[12.5px]">{nome}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px]">{nome}</span>
       {detalhe && <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{detalhe}</span>}
       <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-muted-foreground" />
     </button>
@@ -225,7 +224,7 @@ export function ExploradorDePastas<T>({
               >
                 <Folder className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
                 <span className="min-w-0 flex-1 truncate">{p.nome}</span>
-                <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{arvore.total[p.id] || 0}</span>
+                <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">{arvore.total[p.id] || 0}</span>
               </button>
             </div>
             {aberta && filhos.length > 0 && ramo(p.id, nivel + 1)}
@@ -282,7 +281,7 @@ export function ExploradorDePastas<T>({
             >
               <HardDrive className="mr-1.5 h-3.5 w-3.5 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{raizNome}</span>
-              <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{arvore.total[RAIZ] || 0}</span>
+              <span className="ml-1 shrink-0 text-[11px] tabular-nums text-muted-foreground">{arvore.total[RAIZ] || 0}</span>
             </button>
             {ramo(RAIZ, 0)}
           </aside>
@@ -461,7 +460,7 @@ function ImagensDoAcervo({ onEscolher, marcadoId, ocupado }: { onEscolher: (e: I
       {acervo.isError && <p className="text-[12px] text-destructive">Não foi possível ler o acervo.</p>}
       {grupos.map(([categoria, imagens]) => (
         <section key={categoria || "sem"} className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-[11px] font-medium text-muted-foreground">
             {rotuloDaCategoria(categoria)} ({imagens.length})
           </p>
           <Grade>
@@ -520,7 +519,7 @@ export default function NavegadorDePastas({
       <DialogContent className="flex max-h-[88vh] w-[calc(100vw-2rem)] max-w-3xl flex-col overflow-hidden bg-background">
         <DialogHeader className="text-left">
           <DialogTitle>{titulo}</DialogTitle>
-          <DialogDescription className="text-[12.5px]">
+          <DialogDescription className="text-[13px]">
             {descricao || "Navegue pelas pastas do Workspace, de Arquivos ou pelo acervo e clique na imagem."}
           </DialogDescription>
         </DialogHeader>
@@ -534,7 +533,7 @@ export default function NavegadorDePastas({
                 role="tab"
                 aria-selected={fonte === f.valor}
                 onClick={() => setFonte(f.valor)}
-                className={`flex min-w-0 items-center justify-center rounded-lg px-2 py-1.5 text-[12.5px] font-medium ${
+                className={`flex min-w-0 items-center justify-center rounded-lg px-2 py-1.5 text-[13px] font-medium ${
                   fonte === f.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >

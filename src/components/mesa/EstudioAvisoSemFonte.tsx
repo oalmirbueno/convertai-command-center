@@ -23,7 +23,7 @@ export function kitSemCor(kit: { paleta?: unknown } | null | undefined): boolean
 
 function Linha({ texto, clientId, ajuda }: { texto: string; clientId: string; ajuda: string }) {
   return (
-    <p className="flex min-w-0 items-center text-[10.5px] leading-snug text-muted-foreground">
+    <p className="flex min-w-0 items-center text-[11px] leading-snug text-muted-foreground">
       <span className="min-w-0 truncate">{texto}</span>
       <a href={`/mesa?client=${encodeURIComponent(clientId)}&aba=contexto`} className="ml-1 shrink-0 text-primary underline-offset-2 hover:underline">
         Definir no Contexto

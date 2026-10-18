@@ -94,7 +94,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center h-64 gap-2 text-[12px] leading-4 text-muted-foreground">
         <Loader2 className="w-4 h-4 animate-spin" /> Carregando páginas extraídas...
       </div>
     );
@@ -105,11 +105,11 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
       <div className="flex flex-col items-center justify-center gap-3 py-12 bg-secondary rounded-xl border border-border">
         <Icon className="w-10 h-10 text-muted-foreground/40" />
         <div className="text-center space-y-1">
-          <p className="text-sm font-medium">Conteúdo ainda não extraído</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[13px] leading-5 font-medium">Conteúdo ainda não extraído</p>
+          <p className="text-[12px] leading-4 text-muted-foreground">
             Status: <span className="font-mono">{status || "pending"}</span>
           </p>
-          {erroDoPedido && <p className="text-xs text-muted-foreground">{erroDoPedido}</p>}
+          {erroDoPedido && <p className="text-[12px] leading-4 text-muted-foreground">{erroDoPedido}</p>}
         </div>
         <Button size="sm" variant="outline" onClick={reprocess} disabled={reprocessing} className="gap-1.5">
           {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -134,7 +134,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
             <button
               key={c.id}
               onClick={() => setActiveIdx(i)}
-              className={`w-full text-left rounded-lg border transition-all overflow-hidden ${
+              className={`w-full text-left rounded-md border transition-all overflow-hidden ${
                 active
                   ? "border-primary bg-primary/5 ring-1 ring-primary/40"
                   : "border-border bg-background hover:border-primary/40"
@@ -144,11 +144,11 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
                 <div className="text-[6px] leading-[8px] text-muted-foreground/80 whitespace-pre-wrap font-mono line-clamp-[14]">
                   {preview || "-"}
                 </div>
-                <div className="absolute top-1 right-1 bg-background/80 border border-border rounded px-1 text-[9px] font-medium">
+                <div className="absolute top-1 right-1 bg-background/80 border border-border rounded px-1 text-[11px] font-medium">
                   {i + 1}
                 </div>
               </div>
-              <div className="px-2 py-1 text-[10px] font-medium truncate">{label}</div>
+              <div className="px-2 py-1 text-[11px] font-medium truncate">{label}</div>
             </button>
           );
         })}
@@ -157,7 +157,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
       {/* Active frame */}
       <div className="overflow-y-auto p-6 bg-white">
         <div className="max-w-3xl mx-auto space-y-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground border-b border-border pb-2">
+          <div className="flex items-center gap-2 text-[12px] leading-4 text-muted-foreground border-b border-border pb-2">
             <Icon className="w-3.5 h-3.5" />
             <span className="font-medium text-foreground">{frameLabel}</span>
             <span>·</span>
@@ -166,7 +166,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
           {kind === "xlsx" ? (
             <TableRenderer text={active?.text || ""} />
           ) : (
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
+            <pre className="text-[13px] text-foreground whitespace-pre-wrap font-sans leading-relaxed">
               {active?.text || "(sem texto)"}
             </pre>
           )}
@@ -185,12 +185,12 @@ function TableRenderer({ text }: { text: string }) {
     return lines.map((l) => l.split(sep).map((c) => c.trim()));
   }, [text]);
 
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">(vazio)</p>;
+  if (rows.length === 0) return <p className="text-[13px] leading-5 text-muted-foreground">(vazio)</p>;
 
   const [head, ...body] = rows;
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-xs">
+      <table className="w-full text-[12px] leading-4">
         <thead className="bg-secondary">
           <tr>
             {head.map((h, i) => (

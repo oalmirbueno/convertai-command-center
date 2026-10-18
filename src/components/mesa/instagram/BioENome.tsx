@@ -33,7 +33,7 @@ export function modeloDaAba(catalogo: ModeloIa[]): ModeloIa | null {
 
 function Contador({ texto: t, limite }: { texto: string; limite: number }) {
   const n = caracteres(t);
-  return <span className={juntar("text-[11.5px] tabular-nums", n > limite ? "text-destructive" : "text-muted-foreground")}>{n}/{limite}</span>;
+  return <span className={juntar("text-[12px] tabular-nums", n > limite ? "text-destructive" : "text-muted-foreground")}>{n}/{limite}</span>;
 }
 
 function BotaoCopiar({ valor, rotulo }: { valor: string; rotulo: string }) {
@@ -97,7 +97,7 @@ function Escolhas<T extends SugestaoDeBio | SugestaoDeNome>({
           >
             <span className="flex min-w-0 items-center">
               {doJev === s.id && <span className={juntar(etiqueta, "mr-1.5 bg-success/15 text-success")}>Escolha do Jev{typeof probabilidades[s.id] === "number" ? ` ${Math.round(probabilidades[s.id] * 100)}%` : ""}</span>}
-              <span className="ml-auto text-[11.5px] tabular-nums text-muted-foreground">{s.caracteres}</span>
+              <span className="ml-auto text-[12px] tabular-nums text-muted-foreground">{s.caracteres}</span>
             </span>
             <span className="mt-0.5 block whitespace-pre-line text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{s.texto}</span>
             {s.por_que && <span className="mt-0.5 block text-[12px] leading-4 text-muted-foreground">{s.por_que}</span>}
@@ -203,7 +203,7 @@ export default function BioENome({ perfil, analise, onAnalise }: { perfil: Perfi
           ) : (
             <div className="min-w-0 rounded-md border border-warning/40 bg-warning/5 px-3 py-2" data-bio-precisa="">
               <p className="text-[13px] font-medium text-foreground">A bio precisa mudar</p>
-              <ul className="mt-1 list-disc pl-5 text-[12.5px] leading-5 text-foreground">
+              <ul className="mt-1 list-disc pl-5 text-[13px] leading-5 text-foreground">
                 {v.motivos.map((m) => (
                   <li key={m.codigo}>{m.texto}</li>
                 ))}

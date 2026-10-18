@@ -96,7 +96,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
   return (
     <section className={`min-w-0 rounded-lg border border-primary/30 p-3 ${className}`} aria-label="Andamento do lote" data-lote={ensaioId}>
       <div className="flex min-w-0 flex-wrap items-center">
-        <p className="mr-auto min-w-0 text-[12.5px] font-semibold" role="status" aria-live="polite">
+        <p className="mr-auto min-w-0 text-[13px] font-semibold" role="status" aria-live="polite">
           {lote.ativo ? (
             <span className="inline-flex items-center">
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-primary" />
@@ -131,7 +131,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
           <li
             key={i.tomada_id}
             title={i.erro || undefined}
-            className={`mb-1 mr-1 inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10.5px] ${
+            className={`mb-1 mr-1 inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] ${
               i.estado === "feita"
                 ? "border-success/40 text-success"
                 : i.estado === "falhou"
@@ -149,7 +149,7 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
           </li>
         ))}
       </ul>
-      {lote.motivo_parada && !lote.ativo && <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{lote.motivo_parada}</p>}
+      {lote.motivo_parada && !lote.ativo && <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{lote.motivo_parada}</p>}
       {lote.ativo && <p className="mt-1 text-[11px] text-muted-foreground">Pode trocar de etapa. Cada foto pronta já fica salva.</p>}
     </section>
   );

@@ -95,7 +95,7 @@ export function VeuDaLamina({ andamento, compacto = false }: { andamento: Andame
       {compacto ? (
         <span className="h-2 w-2 animate-pulse rounded-full bg-primary" aria-label={textoDoAndamento(andamento)} />
       ) : (
-        <span className="inline-flex max-w-full items-center rounded-full bg-card px-3 py-1.5 text-[12.5px] font-medium text-foreground shadow-sm">
+        <span className="inline-flex max-w-full items-center rounded-full bg-card px-3 py-1.5 text-[13px] font-medium text-foreground shadow-sm">
           <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden="true" />
           <span className="min-w-0 [overflow-wrap:anywhere]">{textoDoAndamento(andamento)}</span>
         </span>
@@ -392,7 +392,7 @@ function Lamina({
               v{versao.versao}
             </button>
           ) : (
-            !versao && <span className="ml-1 shrink-0 text-[10.5px] text-muted-foreground">sem arte</span>
+            !versao && <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">sem arte</span>
           )}
           {arrastavel && (
             <span

@@ -291,7 +291,7 @@ function CartaoDoItem({
       )}
       <span className="ml-2 min-w-0 flex-1">
         <span className="block truncate text-[12px] font-medium leading-4 text-foreground">{item.title}</span>
-        <span className="mt-0.5 flex min-w-0 items-center text-[10.5px] leading-4 text-muted-foreground">
+        <span className="mt-0.5 flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground">
           <span className="min-w-0 truncate">{dataCurta(item.due_date)} · {modoDaPauta(item, t) === "fotos" ? "Fotos" : formatoDoItem(item)}</span>
           {roteiro && (
             <span title={DICA_DO_ROTEIRO} className="ml-1 shrink-0">
@@ -439,7 +439,7 @@ export default function EstudioLista({
       {inicio}
       <div className="w-[160px] shrink-0">
         <Select value={janela} onValueChange={onJanela}>
-          <SelectTrigger className="h-8 min-w-0 text-[12.5px] font-medium first-letter:uppercase" aria-label="Período da lista">
+          <SelectTrigger className="h-8 min-w-0 text-[13px] font-medium first-letter:uppercase" aria-label="Período da lista">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -459,7 +459,7 @@ export default function EstudioLista({
             onClick={() => onFiltro(f.valor)}
             aria-selected={filtro === f.valor}
             title={f.dica}
-            className={`flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[11.5px] transition-colors ${
+            className={`flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[12px] transition-colors ${
               filtro === f.valor ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -472,7 +472,7 @@ export default function EstudioLista({
       {recolhida && filtrados.length > 0 && (
         <div className="w-[300px] min-w-0 max-w-full shrink" data-pauta-no-seletor="">
           <Select value={tarefaId && filtrados.some((i) => i.id === tarefaId) ? tarefaId : ""} onValueChange={onEscolher}>
-            <SelectTrigger className="h-8 min-w-0 text-[12.5px]" aria-label="Pauta aberta">
+            <SelectTrigger className="h-8 min-w-0 text-[13px]" aria-label="Pauta aberta">
               <SelectValue placeholder="Escolha a pauta" />
             </SelectTrigger>
             <SelectContent>
@@ -574,7 +574,7 @@ export default function EstudioLista({
               <div className="inline-flex items-start pb-1 pt-0.5">
                 {itemFora && (
                   <div className="mr-3 flex shrink-0 flex-col">
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Aberto, fora do período</p>
+                    <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Aberto, fora do período</p>
                     <CartaoDoItem item={itemFora} ativo={itemFora.id === tarefaId} fontes={fontes} onEscolher={onEscolher} {...propsDoCartao(itemFora)} />
                   </div>
                 )}
@@ -583,7 +583,7 @@ export default function EstudioLista({
                   const passada = !!s.semana && s.semana < semanaDeHoje;
                   return (
                     <div key={s.semana || "sem-data"} data-semana={s.semana} className={`flex shrink-0 flex-col ${i < semanas.length - 1 ? "mr-3 border-r border-border pr-3" : ""}`}>
-                      <p className={`mb-1 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider ${atual ? "text-primary" : "text-muted-foreground"}`}>
+                      <p className={`mb-1 whitespace-nowrap text-[11px] font-semibold ${atual ? "text-primary" : "text-muted-foreground"}`}>
                         {s.semana ? `${atual ? "Esta semana · " : passada ? "Já passou · " : ""}${rotuloDaSemana(s.semana)}` : "Sem data"}
                       </p>
                       <ul className="flex">

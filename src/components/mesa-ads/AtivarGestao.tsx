@@ -30,13 +30,13 @@ const NOME_DO_ESCOPO: Record<string, string> = { ads_management: "ads_management
 function Situacao({ g }: { g: SituacaoDaGestao }) {
   if (g.disponivel) {
     return (
-      <span className="inline-flex items-center text-[12.5px] font-medium text-success">
+      <span className="inline-flex items-center text-[13px] font-medium text-success">
         <CheckCircle2 className="mr-1 h-4 w-4" /> Gestão ativa
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center text-[12.5px] font-medium text-warning">
+    <span className="inline-flex items-center text-[13px] font-medium text-warning">
       <KeyRound className="mr-1 h-4 w-4" />
       {!g.tem_token ? "Sem acesso de anúncios" : precisaConectar(g) ? "Só leitura" : "Travada na conta da Meta"}
     </span>

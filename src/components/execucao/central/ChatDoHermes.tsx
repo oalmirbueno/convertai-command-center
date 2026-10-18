@@ -289,7 +289,7 @@ function SeletorDeSessoes({ aberta, aoEscolher, aoCriar, criando, habilitado }: 
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium">{s.titulo || "Sem título"}</span>
                       <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <span className="rounded-full bg-muted px-1.5 py-px text-[10px]">{ORIGEM[s.origem] || s.origem}</span>
+                        <span className="rounded-full bg-muted px-1.5 py-px text-[11px]">{ORIGEM[s.origem] || s.origem}</span>
                         <span className="truncate">{tempoRelativo(s.ultima_atividade ?? s.iniciada_em)}</span>
                         {!s.pode_enviar && <span className="shrink-0">· leitura</span>}
                       </span>
@@ -662,7 +662,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
               {m.texto.trim() && <RespostaEmPartes texto={m.texto} partes={m.partes} recusados={m.recusados} evidencias={m.evidencias} aoAbrirObjeto={aoAbrirObjeto} classeDoBalao={BALAO_HERMES} />}
               {m.chamadas.length > 0 && (
                 <div className="flex max-w-full flex-wrap gap-1">
-                  {m.chamadas.map((c, k) => <span key={`${c}-${k}`} className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"><Wrench className="h-2.5 w-2.5 shrink-0" /><span className="truncate">usou {c}</span></span>)}
+                  {m.chamadas.map((c, k) => <span key={`${c}-${k}`} className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"><Wrench className="h-2.5 w-2.5 shrink-0" /><span className="truncate">usou {c}</span></span>)}
                 </div>
               )}
               {hora(m.quando) && <span className="px-1 text-[11px] text-muted-foreground">{hora(m.quando)}</span>}

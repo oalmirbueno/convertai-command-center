@@ -96,7 +96,7 @@ export default function DetalheDoPost({ item, plano, onFechar, podePublicar, onM
             <p className="mt-0.5 whitespace-pre-line text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{item.legenda || <span className="text-muted-foreground">Sem legenda ainda.</span>}</p>
           </div>
           {trava ? (
-            <p className="flex items-start rounded-md bg-muted px-3 py-2 text-[12.5px] leading-5">
+            <p className="flex items-start rounded-md bg-muted px-3 py-2 text-[13px] leading-5">
               <Lock className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               {trava}
             </p>
@@ -120,7 +120,7 @@ export default function DetalheDoPost({ item, plano, onFechar, podePublicar, onM
               </CampoDeFormulario>
               {semAgenda && <p className={juntar(texto.auxiliar, "leading-5")}>{semAgenda}</p>}
               {item.origem === "simulado" && (
-                <Link to={linkDoPostNaMesaFoto(clientId)} className="inline-flex text-[12.5px] font-medium text-primary hover:underline">
+                <Link to={linkDoPostNaMesaFoto(clientId)} className="inline-flex text-[13px] font-medium text-primary hover:underline">
                   Criar o post de fotos na Mesa Foto
                 </Link>
               )}

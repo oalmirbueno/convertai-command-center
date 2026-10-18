@@ -272,11 +272,11 @@ export function PainelDeExportar({ ctx }: { ctx: ContextoDoPainel }) {
         {/* 16/10/2026: baixar em ícone; o formato fica pequeno ao lado para os dois não parecerem a mesma ação. */}
         <button type="button" className={juntar(botao.icone, "mb-1 mr-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} disabled={!legendas.length} onClick={() => baixarTexto(srtDasLinhas(legendas), `${nomeDoArquivo(p.titulo)}.srt`, "application/x-subrip")} aria-label="Legenda .srt" title="Baixar a legenda (.srt)">
           <Download className="h-4 w-4" />
-          <span className="ml-0.5 text-[10px] font-medium">SRT</span>
+          <span className="ml-0.5 text-[11px] font-medium">SRT</span>
         </button>
         <button type="button" className={juntar(botao.icone, "mb-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} disabled={!youtube} onClick={() => baixarTexto(youtube, `${nomeDoArquivo(p.titulo)}-capitulos.txt`)} aria-label="Capítulos" title="Baixar os capítulos (.txt)">
           <Download className="h-4 w-4" />
-          <span className="ml-0.5 text-[10px] font-medium">TXT</span>
+          <span className="ml-0.5 text-[11px] font-medium">TXT</span>
         </button>
       </div>
       {!legendas.length && <p className={texto.auxiliar}>Sem legenda na linha do tempo (gere em Legendas e textos).</p>}

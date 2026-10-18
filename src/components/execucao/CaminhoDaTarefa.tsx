@@ -83,8 +83,8 @@ export default function CaminhoDaTarefa({ feito, parou, destrava, depois = "O ag
             {i < passos.length - 1 && <span className="absolute left-4 top-8 h-[calc(100%-2rem)] w-px bg-border" aria-hidden="true" />}
             <span className={juntar("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", e.circulo)}><Icone className="h-4 w-4" aria-hidden="true" /></span>
             <span className="min-w-0 flex-1 pt-0.5">
-              <span className={juntar("block text-[11.5px] font-semibold uppercase tracking-wide", e.texto)}>{p.rotulo}</span>
-              {p.texto && <span className="mt-0.5 line-clamp-3 text-[13.5px] leading-6 text-foreground/90" title={p.texto}>{p.texto}</span>}
+              <span className={juntar("block text-[12px] font-semibold", e.texto)}>{p.rotulo}</span>
+              {p.texto && <span className="mt-0.5 line-clamp-3 text-[13px] leading-6 text-foreground/90" title={p.texto}>{p.texto}</span>}
             </span>
           </li>
         );

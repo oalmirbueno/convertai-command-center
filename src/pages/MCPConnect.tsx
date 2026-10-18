@@ -94,7 +94,7 @@ export default function MCPConnect() {
                     <Key className="mr-1 h-3 w-3" aria-hidden="true" /> {agent.auth}
                   </span>
                 </div>
-                <p className="mt-1 text-[12.5px] leading-5 text-muted-foreground">{agent.text}</p>
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{agent.text}</p>
               </li>
             ))}
           </ul>

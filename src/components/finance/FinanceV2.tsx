@@ -365,7 +365,7 @@ function OverviewTab({
               ["60 dias", data.forecast60Days],
               ["90 dias", data.forecast90Days],
             ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-lg border bg-muted/15 p-4">
+              <div key={String(label)} className="rounded-md border bg-muted/15 p-4">
                 <p className={texto.rotulo}>{label}</p>
                 <p className={cn(
                   "mt-2 font-mono text-[20px] font-semibold tabular-nums",
@@ -394,7 +394,7 @@ function OverviewTab({
               ["Receita recorrente", data.recurringRevenue, "text-primary"],
               ["Saldo projetado", data.openingBalance + data.net, "text-foreground"],
             ].map(([label, value, color]) => (
-              <div key={String(label)} className="rounded-lg border bg-muted/15 p-4">
+              <div key={String(label)} className="rounded-md border bg-muted/15 p-4">
                 <p className={texto.rotulo}>{label}</p>
                 <p className={cn("mt-2 font-mono text-[20px] font-semibold tabular-nums", color)}>
                   {currency(Number(value), currencyCode)}
@@ -415,7 +415,7 @@ function OverviewTab({
             ) : clients.error ? (
               <p className="text-[13px] text-destructive">{messageOf(clients.error)}</p>
             ) : (clients.data || []).filter((client) => client.overdueAmount > 0).length === 0 ? (
-              <div className="flex items-center gap-3 rounded-lg border border-success/30 bg-success/5 p-4">
+              <div className="flex items-center gap-3 rounded-md border border-success/30 bg-success/5 p-4">
                 <CircleCheck className="h-5 w-5 text-success" aria-hidden="true" />
                 <p className="text-[13px] text-foreground">Nenhum saldo vencido entre os clientes listados.</p>
               </div>
@@ -426,7 +426,7 @@ function OverviewTab({
                   .sort((left, right) => right.overdueAmount - left.overdueAmount)
                   .slice(0, 5)
                   .map((client) => (
-                    <div key={client.clientId} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                    <div key={client.clientId} className="flex items-center justify-between gap-3 rounded-md border p-3">
                       <div className="min-w-0">
                         <p className="truncate text-[13px] font-medium text-foreground">{client.clientName}</p>
                         <p className="text-[12px] text-muted-foreground">{client.planName || "Sem plano vinculado"}</p>
@@ -1123,7 +1123,7 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
         </div>
         <p className="mt-4 min-h-10 text-[13px] leading-5 text-muted-foreground">{plan.description || "Sem descrição cadastrada."}</p>
         {version ? (
-          <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-3">
+          <div className="mt-4 space-y-3 rounded-md border bg-muted/20 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
               <span>V{version.version} · vigente desde <strong className="text-foreground">{dateLabel(version.effectiveFrom)}</strong></span>
               {version.amountKind === "needs_review" && <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">Revisar imposto</Badge>}
@@ -1136,10 +1136,10 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
             </div>
           </div>
         ) : !upcoming ? (
-          <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-[12px] text-muted-foreground">Crie a primeira versão de preço para ativar a contratação.</div>
+          <div className="mt-4 rounded-md border bg-muted/20 p-3 text-[12px] text-muted-foreground">Crie a primeira versão de preço para ativar a contratação.</div>
         ) : null}
         {upcoming && (
-          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-[12px]">
+          <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-[12px]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-foreground">V{upcoming.version} programada para {dateLabel(upcoming.effectiveFrom)}</span>
               <span className="font-mono font-semibold tabular-nums text-primary">{currency(upcoming.finalAmount)}</span>
@@ -1441,7 +1441,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
               <div className="space-y-2"><Label htmlFor="settings-target-pro-labore">Pró-labore alvo</Label><Input id="settings-target-pro-labore" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.targetProLabore} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, targetProLabore: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-default-direct-cost">Custo direto padrão</Label><Input id="settings-default-direct-cost" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.defaultDirectCost} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, defaultDirectCost: Number(event.target.value) }))} /></div>
               <div className="space-y-2 sm:col-span-2 lg:col-span-1"><Label htmlFor="settings-allocation-method">Método de alocação</Label><Select value={settingsDraft.allocationMethod} onValueChange={(value) => setSettingsDraft((draft) => ({ ...draft, allocationMethod: value as FinanceAllocationMethod }))}><SelectTrigger id="settings-allocation-method" className="h-11"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ALLOCATION_METHOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
-              <div className="flex min-h-16 items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3 sm:col-span-2">
+              <div className="flex min-h-16 items-center justify-between gap-4 rounded-md border bg-muted/20 p-3 sm:col-span-2">
                 <div><Label htmlFor="settings-include-pro-labore">Incluir pró-labore na alocação</Label><p className="mt-1 text-[12px] leading-5 text-muted-foreground">Distribui o pró-labore junto dos custos compartilhados.</p></div>
                 <Switch id="settings-include-pro-labore" checked={settingsDraft.includeProLaboreInAllocation} onCheckedChange={(checked) => setSettingsDraft((draft) => ({ ...draft, includeProLaboreInAllocation: checked }))} />
               </div>

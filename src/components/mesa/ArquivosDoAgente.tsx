@@ -140,7 +140,7 @@ export function ListaDeArquivos({ arquivos }: { arquivos: ControleDeArquivos }) 
         type="button"
         onClick={() => setAberta((v) => !v)}
         aria-expanded={aberta}
-        className="flex w-full min-w-0 items-center rounded-md bg-muted px-2 py-1 text-left text-[11.5px]"
+        className="flex w-full min-w-0 items-center rounded-md bg-muted px-2 py-1 text-left text-[12px]"
       >
         <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate">{partes.join(" · ")}</span>
@@ -149,7 +149,7 @@ export function ListaDeArquivos({ arquivos }: { arquivos: ControleDeArquivos }) 
       {aberta && (
         <ul className="mt-1 divide-y divide-border" aria-label="Arquivos do pedido">
           {lidos.map((a) => (
-            <li key={a.id} className="flex min-w-0 items-center py-1 text-[11.5px]">
+            <li key={a.id} className="flex min-w-0 items-center py-1 text-[12px]">
               <FileText className="mr-1.5 h-3 w-3 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate" title={a.origem ? `${a.origem} / ${a.nome}` : a.nome}>
                 {a.nome}
@@ -161,7 +161,7 @@ export function ListaDeArquivos({ arquivos }: { arquivos: ControleDeArquivos }) 
             </li>
           ))}
           {naoLidos.map((a) => (
-            <li key={a.id} className="flex min-w-0 items-center py-1 text-[11.5px]">
+            <li key={a.id} className="flex min-w-0 items-center py-1 text-[12px]">
               <AlertCircle className="mr-1.5 h-3 w-3 shrink-0 text-destructive" />
               <span className="min-w-0 flex-1 truncate" title={a.motivo}>
                 {a.nome}

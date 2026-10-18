@@ -439,7 +439,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
       )}
 
       <details className="video-detalhes" data-video-conexoes="">
-      <summary>Conexões e andamento <span className="text-xs text-muted-foreground">{fila.length ? `${fila.length} na fila` : "sem pedidos na fila"}</span></summary>
+      <summary>Conexões e andamento <span className="text-[12px] leading-4 text-muted-foreground">{fila.length ? `${fila.length} na fila` : "sem pedidos na fila"}</span></summary>
       <div className="grid min-w-0 gap-5 pt-3 lg:grid-cols-2">
       {/* Frente VGN: o que falta para gerar (chave do provedor, carteira do cliente), antes do clique. */}
       <SituacaoDoGerador />

@@ -178,7 +178,7 @@ export default function CarouselSlider({
       <button
         type="button"
         aria-label="Anterior"
-        className="absolute left-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-md transition-all hover:bg-background hover:opacity-100"
+        className="absolute left-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-sm transition-all hover:bg-background hover:opacity-100"
         onClick={(e) => { e.stopPropagation(); setIdx((aberta - 1 + files.length) % files.length); }}
       >
         <ChevronLeft className="w-4 h-4" />
@@ -186,7 +186,7 @@ export default function CarouselSlider({
       <button
         type="button"
         aria-label="Próximo"
-        className="absolute right-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-md transition-all hover:bg-background hover:opacity-100"
+        className="absolute right-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-sm transition-all hover:bg-background hover:opacity-100"
         onClick={(e) => { e.stopPropagation(); setIdx((aberta + 1) % files.length); }}
       >
         <ChevronRight className="w-4 h-4" />
@@ -200,7 +200,7 @@ export default function CarouselSlider({
           />
         ))}
       </div>
-      <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+      <span className="absolute z-10 top-2 right-2 bg-background/80 text-[11px] px-2 py-0.5 rounded-md text-muted-foreground">
         {aberta + 1}/{files.length}
       </span>
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hidden">
@@ -215,7 +215,7 @@ export default function CarouselSlider({
             }`}
           >
             <SlideThumb slide={file} />
-            <span className="absolute bottom-1 right-1 rounded bg-background/80 px-1 text-[9px] font-mono text-muted-foreground">
+            <span className="absolute bottom-1 right-1 rounded bg-background/80 px-1 text-[11px] font-mono text-muted-foreground">
               {i + 1}
             </span>
           </button>

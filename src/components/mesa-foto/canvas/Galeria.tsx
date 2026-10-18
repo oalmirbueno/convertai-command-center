@@ -71,7 +71,7 @@ export function GaleriaDeModelos({ onAplicar, onFechar, onMontarPeloContexto, co
             titulo="Quadro montado pelo contexto"
             descricao="O agente lê o contexto do cliente, escolhe o modelo e preenche produto, pessoa, ambiente e pedido."
             variant="outline"
-            className="mr-1.5 h-7 border-white/10 bg-white/5 text-[11.5px] text-zinc-100 hover:bg-white/10"
+            className="mr-1.5 h-7 border-white/10 bg-white/5 text-[12px] text-zinc-100 hover:bg-white/10"
             partes={() => partesDaConversa(catalogo)}
             executar={onMontarPeloContexto}
           />
@@ -116,7 +116,7 @@ export function ComoFunciona({ onFechar, noQuadro = true }: { onFechar: () => vo
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <ol className="space-y-1 text-[11.5px] leading-snug text-zinc-300">
+      <ol className="space-y-1 text-[12px] leading-snug text-zinc-300">
         <li>
           <b className="text-white">1.</b> Ponha o que vai na foto: produto (da esteira no topo, até de outro cliente), pessoa, ambiente, estilo, um pedido ou o agente.
         </li>

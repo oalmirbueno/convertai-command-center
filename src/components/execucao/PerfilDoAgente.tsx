@@ -298,7 +298,7 @@ export default function PerfilDoAgente({
         <button type="button" onClick={() => aoAbrirDiario(v.id, t?.title || v.last_action)} className="group flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-muted/60">
           <span className={juntar("h-2 w-2 shrink-0 rounded-full", TOM_DO_ESTADO[v.status] ?? "bg-muted-foreground")} aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13.5px] font-medium text-foreground">{t?.title || limparTecnico(String(v.last_action || "")) || "(tarefa sem título)"}</span>
+            <span className="block truncate text-[13px] font-medium text-foreground">{t?.title || limparTecnico(String(v.last_action || "")) || "(tarefa sem título)"}</span>
             <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
               {precisaDecisao(v) ? <span className="font-medium text-warning">precisa da sua aprovação</span> : v.status === "done" && !v.last_evidence ? <span className="font-medium text-warning">concluída sem evidência</span> : ROTULO_DO_ESTADO[v.status] ?? v.status}
               {cliente && ` · ${cliente}`}{v.updated_at && ` · ${quando(v.updated_at)}`}
@@ -319,10 +319,10 @@ export default function PerfilDoAgente({
           <>
             <div className="shrink-0 border-b border-border px-5 pb-2 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
               <div className="flex min-w-0 items-center gap-3 pr-10">
-                <span className={juntar("flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[16px] font-semibold", ativo ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")} aria-hidden="true">{operador.display_name.trim()[0]?.toUpperCase()}</span>
+                <span className={juntar("flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold", ativo ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")} aria-hidden="true">{operador.display_name.trim()[0]?.toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
                   <DialogTitle className={juntar(texto.tituloPagina, "truncate text-left")}>{operador.display_name}</DialogTitle>
-                  <DialogDescription className="mt-0.5 truncate text-left text-[12.5px] text-muted-foreground">{operador.role}</DialogDescription>
+                  <DialogDescription className="mt-0.5 truncate text-left text-[12px] text-muted-foreground">{operador.role}</DialogDescription>
                 </div>
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12px]">
@@ -337,7 +337,7 @@ export default function PerfilDoAgente({
                   </select>
                 </label>
                 <span className="ml-auto flex gap-1.5">
-                  <button type="button" onClick={() => setAba("conversar")} className={juntar(botao.primario, "h-8 px-3 text-[12.5px]")}><MessageCircle className="mr-1.5 h-3.5 w-3.5" />Dar uma ordem</button>
+                  <button type="button" onClick={() => setAba("conversar")} className={juntar(botao.primario, "h-8 px-3 text-[13px]")}><MessageCircle className="mr-1.5 h-3.5 w-3.5" />Dar uma ordem</button>
                   {/* Pausa por operador: pausado, o banco recusa assign, report, participação e aprovação dele. */}
                   <button
                     type="button"
@@ -348,13 +348,13 @@ export default function PerfilDoAgente({
                       pausar.mutate({ pausarAgora: ativo, motivo });
                     }}
                     aria-label={ativo ? "pausar operador" : "reativar operador"}
-                    className={juntar(botao.secundario, "h-8 px-3 text-[12.5px]", ativo ? "text-warning" : "text-success")}
+                    className={juntar(botao.secundario, "h-8 px-3 text-[13px]", ativo ? "text-warning" : "text-success")}
                   >{ativo ? <><Pause className="mr-1.5 h-3.5 w-3.5" />Pausar</> : <><Play className="mr-1.5 h-3.5 w-3.5" />Ativar</>}</button>
                 </span>
               </div>
               <nav aria-label="Partes do agente" className="mt-2 flex gap-0.5 overflow-x-auto">
                 {ABAS_DO_AGENTE.map(([id, rotulo, Icone]) => (
-                  <button key={id} type="button" aria-pressed={aba === id} onClick={() => setAba(id)} className={juntar("inline-flex h-8 shrink-0 items-center rounded-md px-2.5 text-[12.5px]", aba === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}><Icone className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{rotulo}</button>
+                  <button key={id} type="button" aria-pressed={aba === id} onClick={() => setAba(id)} className={juntar("inline-flex h-8 shrink-0 items-center rounded-md px-2.5 text-[13px]", aba === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}><Icone className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{rotulo}</button>
                 ))}
               </nav>
             </div>
@@ -382,7 +382,7 @@ export default function PerfilDoAgente({
                     { r: "Com prova", v: numeros.taxaEvidencia === null ? "—" : `${numeros.taxaEvidencia}%`, tom: "text-foreground" },
                   ].map((k) => (
                     <div key={k.r} className={juntar(superficie.poco, "min-w-0 rounded-lg p-2.5 text-center")}>
-                      <dd className={juntar("text-[18px] font-semibold tabular-nums leading-6", k.tom)}>{k.v}</dd>
+                      <dd className={juntar("text-[20px] font-semibold tabular-nums leading-6", k.tom)}>{k.v}</dd>
                       <dt className="mt-0.5 truncate text-[11px] text-muted-foreground">{k.r}</dt>
                     </div>
                   ))}
@@ -415,7 +415,7 @@ export default function PerfilDoAgente({
                             {limparTecnico(falarComoGente(String(a.action)).humano)}
                             {a.old_status && a.new_status && a.old_status !== a.new_status && <span className="text-muted-foreground"> · {estadoDaExecucao(a.old_status)} → {estadoDaExecucao(a.new_status)}</span>}
                           </p>
-                          <p className="mt-0.5 text-[11.5px] text-muted-foreground">{quando(a.occurred_at)}{a.from_cron ? " · rotina automática" : ""}{a.evidence ? " · com comprovação" : ""}{podeAbrir ? " · abrir" : ""}</p>
+                          <p className="mt-0.5 text-[12px] text-muted-foreground">{quando(a.occurred_at)}{a.from_cron ? " · rotina automática" : ""}{a.evidence ? " · com comprovação" : ""}{podeAbrir ? " · abrir" : ""}</p>
                         </>;
                         return (
                           <li key={String(a.id)} className="relative pb-3 pl-4">

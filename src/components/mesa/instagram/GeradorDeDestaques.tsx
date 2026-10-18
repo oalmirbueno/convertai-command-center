@@ -335,7 +335,7 @@ export default function GeradorDeDestaques({
               onClick={() => adicionar(t.nome, t.icone)}
               disabled={lista.length >= LIMITES_DO_PERFIL.destaquesMaximo}
               title={t.para}
-              className="mb-1 mr-1 rounded-full border border-border px-2.5 py-0.5 text-[11.5px] text-muted-foreground hover:border-primary/60 hover:text-foreground disabled:opacity-50"
+              className="mb-1 mr-1 rounded-full border border-border px-2.5 py-0.5 text-[12px] text-muted-foreground hover:border-primary/60 hover:text-foreground disabled:opacity-50"
             >
               + {t.nome}
             </button>
@@ -354,7 +354,7 @@ export default function GeradorDeDestaques({
         />
       )}
       {semPaleta ? (
-        <div className="rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-[12.5px] leading-5">
+        <div className="rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-[13px] leading-5">
           O cliente ainda não tem cores no kit. As capas usam só as cores da marca (trava da marca).{" "}
           <Link to={`/mesa?client=${clientId}&aba=contexto`} className="font-medium text-primary hover:underline">
             Definir a paleta em Contexto
@@ -442,7 +442,7 @@ export default function GeradorDeDestaques({
           )}
           {andamento && (
             <>
-              <span className="text-[12.5px] text-muted-foreground" aria-live="polite">
+              <span className="text-[12px] text-muted-foreground" aria-live="polite">
                 {andamento.feitos + 1} de {andamento.total}: {andamento.atual}
               </span>
               <button type="button" className={botao.icone} onClick={() => (parar.current = true)} aria-label="Parar" title="Parar">

@@ -374,7 +374,7 @@ function BotaoVerContas({ contas, aberto, aoAlternar }: { contas: Conta[]; abert
       <AlertTriangle className="h-4 w-4" aria-hidden="true" />
       <span
         aria-hidden="true"
-        className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-muted px-1 text-center text-[9.5px] font-semibold leading-4 tabular-nums text-foreground"
+        className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-muted px-1 text-center text-[11px] font-semibold leading-4 tabular-nums text-foreground"
       >
         {comProblema.length}
       </span>

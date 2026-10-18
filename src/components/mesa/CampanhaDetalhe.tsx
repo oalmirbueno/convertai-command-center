@@ -44,7 +44,7 @@ export const ROTULO_DO_ESTADO: Record<string, string> = { planejada: "planejada"
 
 export function SeloDoEstado({ estado }: { estado: string }) {
   const cor = estado === "gravada" ? "bg-success/15 text-success" : estado === "encerrada" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary";
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${cor}`}>{ROTULO_DO_ESTADO[estado] || estado}</span>;
 }
 
 // ------------------------------------------------------------------ seções

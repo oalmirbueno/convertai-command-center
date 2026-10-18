@@ -92,7 +92,7 @@ export interface PropsDoDiretor {
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (
     <div
-      className={`min-w-0 rounded-xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${
+      className={`min-w-0 rounded-xl px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere] ${
         papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "mr-4 rounded-bl-md bg-muted text-foreground"
       }`}
     >
@@ -303,13 +303,13 @@ export default function DiretorDoEstudio({
     return (
       <div key={mud.id} className={`min-w-0 rounded-lg border bg-background p-2.5 ${aplicada ? "border-success/40" : "border-border"}`} data-mudanca={mud.id}>
         <div className="flex min-w-0 items-start">
-          <span className="mr-2 mt-px shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] font-medium text-primary">{rotuloDoAlvo(mud)}</span>
-          <p className="min-w-0 flex-1 text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{mud.titulo}</p>
+          <span className="mr-2 mt-px shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{rotuloDoAlvo(mud)}</span>
+          <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{mud.titulo}</p>
         </div>
-        {mud.motivo && <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{mud.motivo}</p>}
+        {mud.motivo && <p className="mt-1 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{mud.motivo}</p>}
         <dl className="mt-2 space-y-1">
           {campos.map((c) => (
-            <div key={c.campo} className="min-w-0 text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-campo-da-mudanca={c.campo}>
+            <div key={c.campo} className="min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]" data-campo-da-mudanca={c.campo}>
               <dt className="inline font-medium">{c.rotulo}: </dt>
               {/* Frente AG: antes e depois, para a equipe ver que só isto muda. */}
               {c.antes !== null && (
@@ -342,7 +342,7 @@ export default function DiretorDoEstudio({
                   titulo={rotuloDeRefazer(ordens, "Refazer")}
                   descricao="Refaz pelo fluxo normal do estúdio: gera, confere e corrige sozinho quando a chave estiver ligada."
                   variant="ghost"
-                  className="h-8 px-2.5 text-[11.5px]"
+                  className="h-8 px-2.5 text-[12px]"
                   disabled={travado}
                   partes={() => partesRefazer(ordens, false)}
                   executar={() => refazerSo(ordens, `${chaveDoBotao}:refazer`)}
@@ -356,7 +356,7 @@ export default function DiretorDoEstudio({
               type="button"
               size="sm"
               variant="ghost"
-              className="mb-1 mr-1.5 h-8 px-2.5 text-[11.5px]"
+              className="mb-1 mr-1.5 h-8 px-2.5 text-[12px]"
               disabled={travado}
               onClick={() => void aplicarSo(m, [mud], chaveDoBotao)}
               title="Grava a mudança na direção, sem custo. A arte muda quando a lâmina for refeita."
@@ -370,7 +370,7 @@ export default function DiretorDoEstudio({
                   rotulo={<><Type className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Aplicar e ajustar o texto</span></>}
                   titulo="Aplicar e ajustar só o texto"
                   descricao="Grava a mudança e edita só a área do texto da lâmina: a foto, a cena e a logo ficam como estão. É uma edição de imagem (não há camada de texto), mais barata que refazer a lâmina."
-                  className="h-8 px-2.5 text-[11.5px]"
+                  className="h-8 px-2.5 text-[12px]"
                   disabled={travado}
                   partes={() => partesDoAjusteDeTexto(catalogo, trabalho.modelo_imagem_id, trabalho.qualidade)}
                   executar={() => aplicarEAjustarTexto(m, mud, `${chaveDoBotao}:texto`)}
@@ -388,7 +388,7 @@ export default function DiretorDoEstudio({
                       ? "Grava a mudança e refaz as lâminas. No carrossel contínuo o fundo panorâmico nasce de novo (o preço inclui o fundo)."
                       : "Grava a mudança e refaz pelo fluxo normal: gera, confere e corrige sozinho quando a chave estiver ligada."
                   }
-                  className="h-8 px-2.5 text-[11.5px]"
+                  className="h-8 px-2.5 text-[12px]"
                   disabled={travado}
                   partes={() => partesRefazer(ordens, refazFundoContinuo([mud], continuo))}
                   executar={() => aplicarERefazer(m, [mud], `${chaveDoBotao}:refazer`)}
@@ -443,12 +443,12 @@ export default function DiretorDoEstudio({
             {m.mudancas.map((mud) => cartao(m, mud))}
             {pendentes.length > 1 && (
               <div className="flex min-w-0 flex-wrap items-center rounded-lg bg-muted/50 px-2.5 py-2">
-                <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Todas as {pendentes.length} sugestões:</span>
+                <span className="mb-1 mr-2 text-[12px] text-muted-foreground">Todas as {pendentes.length} sugestões:</span>
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="mb-1 mr-1.5 h-8 px-2.5 text-[11.5px]"
+                  className="mb-1 mr-1.5 h-8 px-2.5 text-[12px]"
                   disabled={travado}
                   onClick={() => void aplicarSo(m, pendentes, chaveDaMensagem)}
                   title="Aplicar todas: grava as mudanças na direção, sem custo"
@@ -462,7 +462,7 @@ export default function DiretorDoEstudio({
                       rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{rotuloDeRefazer(ordensDeTodas, "Aplicar todas e refazer")}</span></>}
                       titulo={rotuloDeRefazer(ordensDeTodas, "Aplicar todas e refazer")}
                       descricao="Grava todas as sugestões e refaz as lâminas pelo fluxo normal do estúdio."
-                      className="h-8 px-2.5 text-[11.5px]"
+                      className="h-8 px-2.5 text-[12px]"
                       disabled={travado}
                       partes={() => partesRefazer(ordensDeTodas, refazFundoContinuo(pendentes, continuo))}
                       executar={() => aplicarERefazer(m, pendentes, `${chaveDaMensagem}:refazer`)}
@@ -558,12 +558,12 @@ export default function DiretorDoEstudio({
       {/* Casca fixa de agente do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
       <MensagensDoAgente ref={listaRef} rotulo="Conversa com o diretor de arte" className="px-4 py-3">
         {estiloPedido && (
-          <p className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug [overflow-wrap:anywhere]">
+          <p className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug [overflow-wrap:anywhere]">
             <span className="font-medium">Estilo pedido para este trabalho:</span> <span className="text-muted-foreground">{estiloPedido}</span>
           </p>
         )}
         {bloqueado && (
-          <p className="text-[11.5px] leading-snug text-muted-foreground">Arte já entregue: dá para conversar, mas as mudanças não se aplicam mais neste trabalho.</p>
+          <p className="text-[12px] leading-snug text-muted-foreground">Arte já entregue: dá para conversar, mas as mudanças não se aplicam mais neste trabalho.</p>
         )}
         {conversa.isLoading && (
           <p className="text-[12px] text-muted-foreground">
@@ -575,7 +575,7 @@ export default function DiretorDoEstudio({
         {conversa.data && mensagens.length === 0 && !envio && (
           <div className="px-1 py-6 text-center">
             <MessageSquare className="mx-auto h-5 w-5 text-primary" />
-            <p className="mt-2 inline-flex items-center text-[12.5px] font-medium">
+            <p className="mt-2 inline-flex items-center text-[13px] font-medium">
               Converse com o diretor de arte
               <AjudaRecolhida className="ml-1.5" rotulo="O que o diretor faz">
                 Peça outro cenário, outro estilo, outra luz ou a opinião dele. Ele lê o texto de cada lâmina, a marca e as fotos e propõe mudanças que você
@@ -591,7 +591,7 @@ export default function DiretorDoEstudio({
           if (m.papel === "agente") return respostaDoDiretor(m);
           return (
             <div key={m.id} className="min-w-0 space-y-1">
-              {m.emFoco !== null && <p className="ml-8 text-right text-[10.5px] text-muted-foreground">sobre a lâmina {m.emFoco}</p>}
+              {m.emFoco !== null && <p className="ml-8 text-right text-[11px] text-muted-foreground">sobre a lâmina {m.emFoco}</p>}
               <Bolha papel="usuario">
                 <p className="whitespace-pre-wrap">{m.conteudo}</p>
               </Bolha>

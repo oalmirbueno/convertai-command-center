@@ -46,7 +46,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
           {listas.map(({ c, lista }) => (
             <div key={c.id} className="flex items-center gap-3">
               <span className={juntar("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted/60", c.cor)}><c.Icone className="h-5 w-5" aria-hidden="true" /></span>
-              <span><span className="block text-[22px] font-semibold tabular-nums leading-7">{lista.length}</span><span className="block text-[12px] text-muted-foreground">{c.nome}</span></span>
+              <span><span className="block text-[24px] font-semibold tabular-nums leading-7">{lista.length}</span><span className="block text-[12px] text-muted-foreground">{c.nome}</span></span>
             </div>
           ))}
         </div>
@@ -82,7 +82,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
                           </span>
                           <span className="mt-1.5 line-clamp-2 block text-[13px] font-medium leading-snug">{titulo}</span>
                           <span className="mt-2 flex items-start gap-2 text-[12px] text-muted-foreground">
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground" aria-hidden="true">{nome(v.operator_id).trim()[0]?.toUpperCase()}</span>
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground" aria-hidden="true">{nome(v.operator_id).trim()[0]?.toUpperCase()}</span>
                             <span className="line-clamp-2">{fraseDoAgente({ status: v.status, titulo, cliente, tipo, motivo: v.block_reason ? limparTecnico(v.block_reason) : null })}</span>
                           </span>
                         </button>

@@ -1188,7 +1188,7 @@ export default function AdminCiclo() {
   };
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
-    return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
+    return <div className="p-6 text-[13px] leading-5 text-muted-foreground">Esta área é da equipe.</div>;
   }
 
   const etapaFeita = (client: any, step: number) =>
@@ -1256,7 +1256,7 @@ export default function AdminCiclo() {
           onClick={() =>
             void (avulso ? marcarEtapaAvulsa(client, step) : toggle(client, step))
           }
-          className={`flex h-8 items-center justify-center rounded-lg border text-[11.5px] font-bold tabular-nums transition-colors active:scale-95 ${
+          className={`flex h-8 items-center justify-center rounded-lg border text-[12px] font-bold tabular-nums transition-colors active:scale-95 ${
             done
               ? onboardingTrack
                 ? "border-info bg-info text-white"
@@ -1423,7 +1423,7 @@ export default function AdminCiclo() {
               <p className="text-[11px] font-medium text-primary">
                 Agora · {doneCount + 1} de {clientTotal}
               </p>
-              <p className="truncate text-[12.5px] font-semibold leading-snug text-foreground">
+              <p className="truncate text-[13px] font-semibold leading-snug text-foreground">
                 {stepLabelOf(client, nextStep)}
               </p>
             </div>
@@ -1487,7 +1487,7 @@ export default function AdminCiclo() {
                     type="button"
                     disabled={!canWrite || pendingKey === chaveBotao}
                     onClick={() => void toggle(client, aberta)}
-                    className={`flex h-8 shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11.5px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50 ${
+                    className={`flex h-8 shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 text-[12px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50 ${
                       pendingKey === chaveBotao ? "opacity-50" : ""
                     }`}
                   >
@@ -1538,7 +1538,7 @@ export default function AdminCiclo() {
                 <span className="min-w-0">
                   {etapa.titulo}
                   {etapa.atual && (
-                    <span className="block text-[10px] font-normal text-muted-foreground">
+                    <span className="block text-[11px] font-normal text-muted-foreground">
                       {etapa.comoFecha}
                     </span>
                   )}
@@ -1549,7 +1549,7 @@ export default function AdminCiclo() {
         )}
 
         {/* Linha de estado: altura reservada, nunca muda o tamanho do card */}
-        <p className="mt-2 flex h-4 items-center truncate text-[11.5px]">
+        <p className="mt-2 flex h-4 items-center truncate text-[12px]">
           {complete ? (
             <span className="font-semibold text-success">
               {avulso ? "Entrega completa" : "Semana fechada"}
@@ -1599,7 +1599,7 @@ export default function AdminCiclo() {
     <button
       type="button"
       onClick={() => setAvulsosAbertos(true)}
-      className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+      className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
         avulsosAbertos ? "text-primary" : "text-muted-foreground"
       }`}
     >
@@ -1622,7 +1622,7 @@ export default function AdminCiclo() {
       <button
         type="button"
         onClick={() => { setArea(target); setAvulsosAbertos(false); setServicoAvulso(null); }}
-        className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+        className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
           selected ? "text-primary" : "text-muted-foreground"
         }`}
       >
@@ -1687,10 +1687,10 @@ export default function AdminCiclo() {
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button type="button" onClick={() => setWeekOffset(0)} className="min-w-0 flex-1 text-center">
-            <span className="block truncate text-[12.5px] font-semibold capitalize leading-tight text-foreground">
+            <span className="block truncate text-[13px] font-semibold capitalize leading-tight text-foreground">
               {weekLabel(weekStart)}
             </span>
-            <span className="block text-[9.5px] leading-tight text-muted-foreground">
+            <span className="block text-[11px] leading-tight text-muted-foreground">
               {isCurrentWeek
                 ? "Semana atual"
                 : `${Math.abs(weekOffset)} ${Math.abs(weekOffset) === 1 ? "semana" : "semanas"} ${weekOffset < 0 ? "atrás" : "à frente"} · voltar para hoje`}
@@ -1722,7 +1722,7 @@ export default function AdminCiclo() {
                 }`}
                 aria-label={`Dia ${day.getDate()}: ${count} ${count === 1 ? "marcação" : "marcações"}`}
               >
-                <span className={`text-[10px] leading-none ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                <span className={`text-[11px] leading-none ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}>
                   {WEEKDAY_INITIALS[index]}
                 </span>
                 <span className={`text-[13px] font-semibold leading-tight tabular-nums ${isToday ? "text-primary" : "text-foreground"}`}>
@@ -1745,7 +1745,7 @@ export default function AdminCiclo() {
               style={{ width: `${Math.round(weekTotals.pct * 100)}%` }}
             />
           </div>
-          <span className="w-16 shrink-0 text-right text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+          <span className="w-16 shrink-0 text-right text-[11px] font-semibold tabular-nums text-muted-foreground">
             {weekTotals.done}/{weekTotals.total}
           </span>
         </div>
@@ -1765,7 +1765,7 @@ export default function AdminCiclo() {
                     : "bg-success"
               }`}
             />
-            <span className="truncate text-[10.5px] text-muted-foreground">
+            <span className="truncate text-[11px] text-muted-foreground">
               {leitura.frase}
             </span>
           </div>
@@ -1819,7 +1819,7 @@ export default function AdminCiclo() {
                   <RefreshCw className={`h-3 w-3 ${coachLoading ? "animate-spin" : ""}`} />
                 </button>
               </div>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-foreground/90">{coach.coach}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-foreground/90">{coach.coach}</p>
             </div>
           )}
 
@@ -1898,7 +1898,7 @@ export default function AdminCiclo() {
                           isto parecer genérico com a informação a um campo
                           de distância. */}
                       {(acao.detalhes?.length || acao.rota) && (
-                        <p className="ml-3.5 mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[10.5px] leading-snug">
+                        <p className="ml-3.5 mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[11px] leading-snug">
                           {acao.detalhes?.length ? (
                             <span className="text-muted-foreground">
                               {acao.detalhes.slice(0, 3).join(" · ")}
@@ -1945,7 +1945,7 @@ export default function AdminCiclo() {
           {/* Sumiu da lista? Foi concluído. Dizer para onde foi evita a
               procura por um cliente que ninguém tirou do ar. */}
           {avulsosAbertos && avulsosConcluidos > 0 && (
-            <p className="px-1 pt-1 text-center text-[10.5px] text-muted-foreground">
+            <p className="px-1 pt-1 text-center text-[11px] text-muted-foreground">
               {avulsosConcluidos}{" "}
               {avulsosConcluidos === 1 ? "projeto concluído" : "projetos concluídos"} —{" "}
               <Link to="/clientes" className="font-semibold text-primary hover:underline">
@@ -1961,10 +1961,10 @@ export default function AdminCiclo() {
                 onClick={() => setShowClosed((current) => !current)}
                 className="flex h-10 w-full items-center justify-between rounded-lg border border-success/25 bg-success/5 px-3 text-left"
               >
-                <span className="text-[11.5px] font-semibold text-success">
+                <span className="text-[12px] font-semibold text-success">
                   {closedClients.length} {closedClients.length === 1 ? "cliente fechado" : "clientes fechados"}
                 </span>
-                <span className="text-[10.5px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground">
                   {showClosed ? "esconder" : "ver"}
                 </span>
               </button>
@@ -2018,9 +2018,9 @@ export default function AdminCiclo() {
                       </span>
                       {/* O motivo de estar fora fica visível: incluir uma
                           empresa do grupo é escolha legítima, mas consciente. */}
-                      <span className="truncate text-[10px] text-muted-foreground">{nota}</span>
+                      <span className="truncate text-[11px] text-muted-foreground">{nota}</span>
                     </span>
-                    <span className="shrink-0 text-[10px] font-semibold text-primary">incluir</span>
+                    <span className="shrink-0 text-[11px] font-semibold text-primary">incluir</span>
                   </button>
                 ))}
               </div>
@@ -2031,7 +2031,7 @@ export default function AdminCiclo() {
 
           {/* Quem está aqui por inclusão manual pode sair pelo mesmo caminho. */}
           {activeClients.filter((client) => extraAreas(client).includes(area)).length > 0 && (
-            <p className="px-1 pt-2 text-[10px] leading-relaxed text-muted-foreground">
+            <p className="px-1 pt-2 text-[11px] leading-relaxed text-muted-foreground">
               Incluídos à mão nesta frente:{" "}
               {activeClients
                 .filter((client) => extraAreas(client).includes(area))
@@ -2155,7 +2155,7 @@ export default function AdminCiclo() {
       >
           <div className="space-y-1.5">
             {dayList.length === 0 && (
-              <p className="py-6 text-center text-[12.5px] text-muted-foreground">
+              <p className="py-6 text-center text-[12px] text-muted-foreground">
                 Nenhuma etapa marcada neste dia.
               </p>
             )}
@@ -2171,11 +2171,11 @@ export default function AdminCiclo() {
                 : null;
               return (
                 <div key={row.id} className="flex items-start gap-2.5 border-b border-border py-2.5 last:border-b-0">
-                  <span className="w-10 shrink-0 text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+                  <span className="w-10 shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">
                     {hourOf(row.done_at)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] font-semibold text-foreground">
+                    <span className="block truncate text-[13px] font-semibold text-foreground">
                       {client?.company_name || client?.full_name || "Cliente"}
                     </span>
                     <span className="block text-[11px] leading-snug text-muted-foreground">
@@ -2189,7 +2189,7 @@ export default function AdminCiclo() {
               );
             })}
             {dayList.length > 0 && (
-              <p className="pt-1 text-center text-[10.5px] text-muted-foreground">
+              <p className="pt-1 text-center text-[11px] text-muted-foreground">
                 {dayList.length} {dayList.length === 1 ? "etapa marcada" : "etapas marcadas"} neste dia
               </p>
             )}
@@ -2201,7 +2201,7 @@ export default function AdminCiclo() {
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="flex w-[280px] flex-col gap-0 overflow-y-auto p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
           <SheetHeader className="border-b border-border px-4 pb-3 pt-5">
-            <SheetTitle className="flex items-center gap-2 text-left text-base">
+            <SheetTitle className="flex items-center gap-2 text-left text-[15px]">
               <ListChecks className="h-4 w-4 text-primary" /> Ciclo Aceleriq
             </SheetTitle>
             <SheetDescription className="sr-only">
@@ -2221,7 +2221,7 @@ export default function AdminCiclo() {
                 <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span className="min-w-0">
                   Instalar o Ciclo no celular
-                  <span className="block text-[10.5px] font-normal leading-snug text-muted-foreground">
+                  <span className="block text-[11px] font-normal leading-snug text-muted-foreground">
                     você já está na página certa: abra o menu do navegador e
                     toque em "Adicionar à tela inicial". O atalho sai com o
                     ícone e o nome do Ciclo.
@@ -2278,7 +2278,7 @@ export default function AdminCiclo() {
                     className="flex flex-1 flex-col items-center gap-1"
                     aria-label={`Semana de ${week.range}: ${Math.round(week.pct * 100)}%`}
                   >
-                    <span className="text-[9px] font-semibold tabular-nums text-muted-foreground">
+                    <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
                       {Math.round(week.pct * 100)}%
                     </span>
                     <span className="flex h-24 w-full items-end overflow-hidden rounded-md bg-secondary/40">
@@ -2289,7 +2289,7 @@ export default function AdminCiclo() {
                         style={{ height: `${Math.max(week.pct * 100, week.pct > 0 ? 8 : 3)}%` }}
                       />
                     </span>
-                    <span className={`text-[9px] tabular-nums ${selected ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                    <span className={`text-[11px] tabular-nums ${selected ? "font-bold text-primary" : "text-muted-foreground"}`}>
                       {week.label}
                     </span>
                   </button>
@@ -2301,7 +2301,7 @@ export default function AdminCiclo() {
                 <p className={texto.rotulo}>
                   Sequência
                 </p>
-                <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+                <p className="mt-0.5 text-[20px] leading-7 font-bold tabular-nums text-foreground">
                   {carteiraStreak}{" "}
                   <span className="text-[11px] font-medium text-muted-foreground">
                     {carteiraStreak === 1 ? "semana 100%" : "semanas 100%"}
@@ -2312,7 +2312,7 @@ export default function AdminCiclo() {
                 <p className={texto.rotulo}>
                   Esta semana
                 </p>
-                <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+                <p className="mt-0.5 text-[20px] leading-7 font-bold tabular-nums text-foreground">
                   {Math.round(weekTotals.pct * 100)}%{" "}
                   <span className="text-[11px] font-medium text-muted-foreground">
                     de {weekTotals.total}
@@ -2344,7 +2344,7 @@ export default function AdminCiclo() {
               weekKey,
               activeClients[0] ? stepOptionsFor(activeClients[0]) : undefined,
             ).map((slot) => (
-              <li key={slot.step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
+              <li key={slot.step} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-foreground">
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${
                     slot.fixed ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
@@ -2368,7 +2368,7 @@ export default function AdminCiclo() {
           </p>
           <ol className="mt-2 space-y-2">
             {ONBOARDING_STEPS.map((step, index) => (
-              <li key={step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
+              <li key={step} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-foreground">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-info/15 text-[11px] font-bold tabular-nums text-info">
                   {index + 7}
                 </span>

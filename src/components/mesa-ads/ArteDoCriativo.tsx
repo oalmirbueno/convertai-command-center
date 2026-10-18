@@ -42,7 +42,7 @@ import { formatoDe, instrucaoComTom, ZONA_SEGURA, type CriativoAds } from "./ads
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import ReferenciasDoCriativo from "./ReferenciasDoCriativo";
-import { botao, juntar } from "@/components/sistema";
+import { botao, juntar, superficie } from "@/components/sistema";
 
 /** Formato irmão (mesmo ângulo e variação, outro formato) com o trabalho de arte dele. */
 export interface IrmaoDoCriativo {
@@ -114,10 +114,10 @@ export function GuiaDaZonaSegura() {
   return (
     <div className="pointer-events-none absolute inset-0" aria-hidden="true" data-zona-segura="">
       <div className="absolute inset-x-0 top-0 border-b border-dashed border-white/80 bg-black/35" style={{ height: `${Math.round(ZONA_SEGURA.topo * 100)}%` }}>
-        <span className="absolute bottom-1 left-2 text-[10px] font-medium text-white">zona do perfil</span>
+        <span className="absolute bottom-1 left-2 text-[11px] font-medium text-white">zona do perfil</span>
       </div>
       <div className="absolute inset-x-0 bottom-0 border-t border-dashed border-white/80 bg-black/35" style={{ height: `${Math.round(ZONA_SEGURA.base * 100)}%` }}>
-        <span className="absolute left-2 top-1 text-[10px] font-medium text-white">zona do CTA e da legenda</span>
+        <span className="absolute left-2 top-1 text-[11px] font-medium text-white">zona do CTA e da legenda</span>
       </div>
     </div>
   );
@@ -183,7 +183,7 @@ function PreviaNoFormato({
             <button type="button" className="flex h-7 w-7 items-center justify-center text-muted-foreground disabled:opacity-40" onClick={() => ordenadas[posicao - 1] && onVersaoVista(ordenadas[posicao - 1].versao)} disabled={posicao <= 0} aria-label="Versão anterior">
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            <span className="px-1 text-[11.5px] tabular-nums text-muted-foreground">v{vista && vista.versao} de {ordenadas.length}</span>
+            <span className="px-1 text-[12px] tabular-nums text-muted-foreground">v{vista && vista.versao} de {ordenadas.length}</span>
             <button type="button" className="flex h-7 w-7 items-center justify-center text-muted-foreground disabled:opacity-40" onClick={() => ordenadas[posicao + 1] && onVersaoVista(ordenadas[posicao + 1].versao)} disabled={posicao >= ordenadas.length - 1} aria-label="Próxima versão">
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
@@ -213,7 +213,7 @@ function PreviaNoFormato({
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center">
                 <p className="text-[12px] font-medium text-foreground/80">Arte ainda não gerada</p>
-                {card.texto_exato && <p className="mt-2 line-clamp-4 text-[11.5px] leading-snug text-muted-foreground">{card.texto_exato}</p>}
+                {card.texto_exato && <p className="mt-2 line-clamp-4 text-[12px] leading-snug text-muted-foreground">{card.texto_exato}</p>}
               </div>
             )}
             {zonaSegura && !desenhandoAreas && !velada && <GuiaDaZonaSegura />}
@@ -531,8 +531,8 @@ export default function ArteDoCriativo({
   if (!cards.length) {
     return (
       <div className="rounded-xl border border-dashed border-border p-8 text-center">
-        <p className="text-[13.5px] font-medium">A direção de arte deste criativo ainda não chegou</p>
-        <p className="mt-1 text-[12.5px] text-muted-foreground">
+        <p className="text-[13px] font-medium">A direção de arte deste criativo ainda não chegou</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
           {trabalho.status === "erro" ? "A última tentativa terminou com erro. Produza o criativo de novo pelo plano." : "O diretor está montando. A tela atualiza sozinha em instantes."}
         </p>
       </div>
@@ -585,8 +585,8 @@ export default function ArteDoCriativo({
                     onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
                     className={`flex h-9 min-w-[66px] flex-col items-center justify-center rounded-md px-2 leading-tight ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
                   >
-                    <span className="text-[11.5px]">{q.rotulo}</span>
-                    <span className={`text-[10px] tabular-nums ${ativa ? "text-primary-foreground/80" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
+                    <span className="text-[12px]">{q.rotulo}</span>
+                    <span className={`text-[11px] tabular-nums ${ativa ? "text-primary-foreground/80" : ""}`}>{precoDe(q.valor) || "sem preço"}</span>
                   </button>
                 );
               })}
@@ -661,7 +661,7 @@ export default function ArteDoCriativo({
               </span>
             );
           })}
-          <button type="button" className="mb-1 ml-auto mt-1 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setAndamentoIrmaos({})}>
+          <button type="button" className="mb-1 ml-auto mt-1 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setAndamentoIrmaos({})}>
             Fechar
           </button>
         </div>
@@ -722,7 +722,7 @@ export default function ArteDoCriativo({
           ) : null}
         </div>
 
-        <div className="ads-stage-tools min-w-0 rounded-xl border border-border bg-card">
+        <div className={juntar(superficie.painel, "ads-stage-tools min-w-0")}>
           <nav aria-label="Ferramentas da arte" className="flex border-b border-border p-1">
             {FERRAMENTAS.map((t) => {
               const Icone = t.icone;

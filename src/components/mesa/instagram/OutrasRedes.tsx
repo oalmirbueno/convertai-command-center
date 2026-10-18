@@ -29,7 +29,7 @@ export function SeletorDeRede({ valor, onEscolher, redes }: { valor: ChaveDaRede
           aria-selected={valor === r.valor}
           onClick={() => onEscolher(r.valor)}
           className={juntar(
-            "mb-1 mr-1 inline-flex h-8 items-center rounded-full border px-3 text-[12.5px] transition-colors",
+            "mb-1 mr-1 inline-flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors",
             valor === r.valor ? "border-primary bg-primary/10 font-medium text-foreground" : "border-border text-muted-foreground hover:text-foreground",
           )}
         >
@@ -39,7 +39,7 @@ export function SeletorDeRede({ valor, onEscolher, redes }: { valor: ChaveDaRede
       ))}
       {outras.length > 0 && (
         <select
-          className={juntar(campo, "mb-1 h-8 w-auto rounded-full px-3 text-[12.5px]")}
+          className={juntar(campo, "mb-1 h-8 w-auto rounded-full px-3 text-[13px]")}
           value=""
           onChange={(e) => e.target.value && onEscolher(e.target.value as ChaveDaRede)}
           aria-label="Adicionar outra rede"
@@ -92,8 +92,8 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
     <div className="min-w-0 space-y-3" data-outra-rede={rede}>
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <div className="min-w-0 rounded-md bg-success/5 px-3 py-2">
-          <p className="text-[12.5px] font-medium text-foreground">O que dá para fazer hoje</p>
-          <ul className="mt-1 space-y-0.5 text-[12.5px] leading-5 text-foreground">
+          <p className="text-[13px] font-medium text-foreground">O que dá para fazer hoje</p>
+          <ul className="mt-1 space-y-0.5 text-[13px] leading-5 text-foreground">
             {info.permite.map((p) => (
               <li key={p} className="flex items-start">
                 <Check className="mr-1.5 mt-1 h-3 w-3 shrink-0 text-success" aria-hidden="true" />
@@ -103,8 +103,8 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
           </ul>
         </div>
         <div className="min-w-0 rounded-md bg-muted/50 px-3 py-2">
-          <p className="text-[12.5px] font-medium text-foreground">O que a API não faz (ou o painel ainda não faz)</p>
-          <ul className="mt-1 space-y-0.5 text-[12.5px] leading-5 text-foreground">
+          <p className="text-[13px] font-medium text-foreground">O que a API não faz (ou o painel ainda não faz)</p>
+          <ul className="mt-1 space-y-0.5 text-[13px] leading-5 text-foreground">
             {info.naoPermite.map((p) => (
               <li key={p} className="flex items-start">
                 <X className="mr-1.5 mt-1 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -124,13 +124,13 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
         {conectadas.length === 0 && adicionadas.length === 0 && <p className={juntar(texto.auxiliar, "mt-1")}>Nenhuma ainda.</p>}
         <ul className="mt-1 space-y-1">
           {conectadas.map((c, i) => (
-            <li key={`c-${i}`} className="flex min-w-0 items-center text-[12.5px]">
+            <li key={`c-${i}`} className="flex min-w-0 items-center text-[13px]">
               <span className="min-w-0 truncate">{c.endereco || "Conta conectada"}</span>
               <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>conectada</span>
             </li>
           ))}
           {adicionadas.map((c) => (
-            <li key={c.id} className="flex min-w-0 items-center text-[12.5px]">
+            <li key={c.id} className="flex min-w-0 items-center text-[13px]">
               <span className="min-w-0 truncate">{c.endereco}</span>
               <span className={juntar(etiqueta, "ml-2 bg-secondary text-muted-foreground")}>guardada à mão</span>
               <button type="button" className={juntar(botao.icone, "ml-1 h-7 w-7")} onClick={() => void arquivar(c.id)} aria-label={`Arquivar ${c.endereco}`} title={`Arquivar ${c.endereco}`}>

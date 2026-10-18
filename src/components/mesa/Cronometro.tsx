@@ -20,7 +20,7 @@ export function Cronometro({ desde, rotulo, previsao }: { desde: number | null; 
   const s = useSegundos(desde);
   if (desde === null) return null;
   return (
-    <span role="status" className="inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+    <span role="status" className="inline-flex min-w-0 items-center text-[12px] text-muted-foreground">
       <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin" />
       <span className="min-w-0 truncate">{rotulo}</span>
       <span className="ml-1.5 shrink-0 tabular-nums">{tempoCurto(s)}{previsao ? ` de ${previsao}` : ""}</span>

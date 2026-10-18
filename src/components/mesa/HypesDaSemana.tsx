@@ -120,7 +120,7 @@ function CartaoDoHype({
         {hype.formato ? ` · ${hype.formato === "estatico" ? "estático" : hype.formato}` : ""}
       </p>
       {hype.tipo === "nicho" && hype.sinal && (
-        <p title={hype.sinal} className="mt-1 flex min-w-0 items-start gap-1 text-[11.5px] font-medium text-primary [overflow-wrap:anywhere]">
+        <p title={hype.sinal} className="mt-1 flex min-w-0 items-start gap-1 text-[12px] font-medium text-primary [overflow-wrap:anywhere]">
           <TrendingUp className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
           <span className="line-clamp-2">{hype.sinal}</span>
         </p>
@@ -151,7 +151,7 @@ function CartaoDoHype({
           )}
           {link && (
             <div>
-              <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center text-[11.5px] text-primary hover:underline">
+              <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center text-[12px] text-primary hover:underline">
                 <span className="truncate">{dominioDoLink(link)}</span>
                 <ExternalLink className="ml-1 h-3 w-3 shrink-0" />
               </a>
@@ -163,7 +163,7 @@ function CartaoDoHype({
         type="button"
         onClick={() => setDetalhes((v) => !v)}
         aria-expanded={detalhes}
-        className="mt-1.5 inline-flex items-center self-start text-[11.5px] font-medium text-primary hover:underline"
+        className="mt-1.5 inline-flex items-center self-start text-[12px] font-medium text-primary hover:underline"
       >
         {detalhes ? "Menos" : "Como usar"}
         <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${detalhes ? "rotate-180" : ""}`} />
@@ -303,7 +303,7 @@ export default function HypesDaSemana({
           {dados && !daSemana && itens.length > 0 && (
             <p className="text-[12px] text-muted-foreground">Estes são da semana de {periodoCurto(dados.semana)}. Busque os desta semana.</p>
           )}
-          {dados && dados.resumo && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{dados.resumo}</p>}
+          {dados && dados.resumo && <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{dados.resumo}</p>}
           {[
             { chave: "momento", titulo: "Hypes do momento", lista: doMomento },
             { chave: "nicho", titulo: "Em alta no nicho", lista: doNicho },
@@ -313,7 +313,7 @@ export default function HypesDaSemana({
               <div key={g.chave} className="space-y-2">
                 {/* Com as duas listas, cada uma ganha o nome; busca antiga (só hypes) fica como era. */}
                 {doNicho.length > 0 && (
-                  <h3 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <h3 className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground">
                     {g.chave === "nicho" ? <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" /> : <Flame className="h-3.5 w-3.5" aria-hidden="true" />}
                     {g.titulo}
                   </h3>

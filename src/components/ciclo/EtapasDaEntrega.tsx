@@ -104,7 +104,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
           <p className="text-[12px] font-medium text-primary">
             O seu time é
           </p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-foreground">{resumo}</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-foreground">{resumo}</p>
         </div>
       )}
 
@@ -113,7 +113,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
           Entrega de {nomeDoServico}
         </p>
         {etapas.length > 0 && (
-          <span className="shrink-0 text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">
             {etapas.filter((_, i) => concluidas.has(i + 1)).length}/{etapas.length}
           </span>
         )}
@@ -152,13 +152,13 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
                 </span>
                 <span className="min-w-0 flex-1">
                   <span
-                    className={`block text-[12.5px] leading-snug ${
+                    className={`block text-[13px] leading-snug ${
                       done ? "text-foreground" : "text-muted-foreground"
                     }`}
                   >
                     {rotulo}
                   </span>
-                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
                     {done ? "concluído" : "pendente"}
                   </span>
                 </span>
@@ -185,18 +185,18 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
         <div className="mt-4 border-t border-border pt-3">
           {concluido ? (
             <>
-              <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-success">
+              <p className="flex items-center gap-1.5 text-[12px] font-semibold text-success">
                 <CircleCheckBig className="h-3.5 w-3.5" />
                 Projeto concluído
               </p>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                 Ele saiu da lista de avulsos e ficou no histórico do cliente.
               </p>
               <button
                 type="button"
                 disabled={concluindo}
                 onClick={() => void alternarConclusao()}
-                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Reabrir projeto
@@ -208,7 +208,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
                 type="button"
                 disabled={concluindo}
                 onClick={() => void alternarConclusao()}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-success/40 bg-success/10 text-[12.5px] font-semibold text-success transition-colors hover:bg-success/20 disabled:opacity-50"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-success/40 bg-success/10 text-[13px] font-semibold text-success transition-colors hover:bg-success/20 disabled:opacity-50"
               >
                 <CircleCheckBig className="h-4 w-4" />
                 Concluir projeto
@@ -217,7 +217,7 @@ export default function EtapasDaEntrega({ client, servico, canWrite, onConcluido
                   trabalho, não erro: nem toda entrega passa por todas. O
                   aviso informa, não impede. */}
               {etapas.length > 0 && concluidas.size < etapas.length && (
-                <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+                <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
                   {etapas.length - concluidas.size}{" "}
                   {etapas.length - concluidas.size === 1 ? "etapa segue" : "etapas seguem"} sem
                   marcação — dá para concluir assim mesmo.

@@ -215,7 +215,7 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
                     <p className="truncate text-[13px] font-medium">{t.nome}</p>
                     <p className={juntar(texto.auxiliar, "truncate")}>{t.client_id ? "Do cliente" : "Da agência"}{t.kit_id ? ` · ${(kitPorId(t.kit_id) || { nome: t.kit_id }).nome}` : ""}</p>
                   </div>
-                  <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12.5px]")} onClick={() => usarTemplate(t)}>
+                  <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[13px]")} onClick={() => usarTemplate(t)}>
                     Usar
                   </button>
                   {(t.client_id || isAdmin) && (

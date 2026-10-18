@@ -44,7 +44,7 @@ function Seta({ valor, bomQuandoSobe }: { valor: number | null; bomQuandoSobe: b
   const sobe = valor > 0;
   const bom = sobe === bomQuandoSobe;
   return (
-    <span className={`ml-1 whitespace-nowrap text-[10.5px] font-medium tabular-nums ${bom ? "text-success" : "text-destructive"}`} title="Comparado ao período anterior do mesmo tamanho">
+    <span className={`ml-1 whitespace-nowrap text-[11px] font-medium tabular-nums ${bom ? "text-success" : "text-destructive"}`} title="Comparado ao período anterior do mesmo tamanho">
       {sobe ? "+" : ""}
       {Math.round(valor)}%
     </span>
@@ -54,7 +54,7 @@ function Seta({ valor, bomQuandoSobe }: { valor: number | null; bomQuandoSobe: b
 function Kpi({ rotulo, valor, variacao, bomQuandoSobe = true, dica }: { rotulo: string; valor: string; variacao?: number | null; bomQuandoSobe?: boolean; dica?: string }) {
   return (
     <div className={juntar(superficie.painel, "min-w-0 px-3 py-2")} title={dica}>
-      <dt className="truncate text-[10.5px] uppercase tracking-wider text-muted-foreground">{rotulo}</dt>
+      <dt className="truncate text-[11px] text-muted-foreground">{rotulo}</dt>
       <dd className="mt-0.5 flex min-w-0 items-baseline">
         <span className="truncate text-[15px] font-semibold tabular-nums">{valor}</span>
         {variacao !== undefined && <Seta valor={variacao} bomQuandoSobe={bomQuandoSobe} />}
@@ -99,7 +99,7 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
           <p className="flex min-w-0 items-center text-[13px] font-semibold">
             <Wallet className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate">{c.nome || `Conta ${c.numero}`}</span>
-            {c.status && <span className="ml-2 shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-normal text-muted-foreground">{c.status}</span>}
+            {c.status && <span className="ml-2 shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{c.status}</span>}
           </p>
           <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-4">
             <div className="min-w-0">
@@ -120,7 +120,7 @@ export function SaldosDasContas({ contas }: { contas: SaldoDaConta[] }) {
             </div>
           </dl>
           {(c.pagamento || c.coletado_em) && (
-            <p className="mt-1 truncate text-[10.5px] text-muted-foreground">
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">
               {[c.pagamento, c.empresa, c.coletado_em ? `lida ${dataEHora(c.coletado_em)}` : ""].filter(Boolean).join(" · ")}
             </p>
           )}
@@ -151,7 +151,7 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
     <section aria-label="Tendência diária" className="min-w-0 pt-1">
       <div className="flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
         <TrendingUp className="mr-1.5 h-3.5 w-3.5 text-primary" />
-        <span className="mr-3 font-medium uppercase tracking-wider">Por dia</span>
+        <span className="mr-3 font-medium">Por dia</span>
         <span className="mr-3 inline-flex items-center"><span className="mr-1 inline-block h-2 w-3 rounded-sm bg-primary/60" />Investimento</span>
         <span className="inline-flex items-center"><span className="mr-1 inline-block h-2 w-2 rounded-full bg-foreground" />{rotulo}</span>
       </div>
@@ -166,7 +166,7 @@ export function TendenciaDiaria({ serie, rotulo }: { serie: PontoDaConta[]; rotu
         })}
         <polyline points={pontos} fill="none" className="stroke-foreground" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="mt-1 flex justify-between text-[10px] tabular-nums text-muted-foreground">
+      <div className="mt-1 flex justify-between text-[11px] tabular-nums text-muted-foreground">
         <span>{dataCurta(serie[0].dia)}</span>
         <span>{dataCurta(serie[serie.length - 1].dia)}</span>
       </div>
@@ -242,7 +242,7 @@ export function PainelDoDesempenho({ dias }: { dias: PeriodoDaConsulta }) {
                         <Foto src={p.imagem_url} alt={p.legenda || "Post"} className="h-full w-full" />
                       </div>
                     </div>
-                    <p className="mt-0.5 truncate text-[10.5px] tabular-nums text-muted-foreground">{inteiro(p.alcance)} alcance</p>
+                    <p className="mt-0.5 truncate text-[11px] tabular-nums text-muted-foreground">{inteiro(p.alcance)} alcance</p>
                   </a>
                 ))}
               </div>
@@ -364,7 +364,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
             </div>
           )}
           {l.observar.length > 0 && (
-            <p className="text-[11.5px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               {l.observar.length} anúncio{l.observar.length === 1 ? "" : "s"} ainda sem volume para decidir: {l.observar.slice(0, 4).map((i) => i.nome).join(", ")}
               {l.observar.length > 4 ? "..." : ""}.
             </p>
@@ -392,13 +392,13 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
               <ul className="mt-1.5 space-y-1.5">
                 {l.aprendizados.map((a, k) => (
                   <li key={k} className="min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
-                    <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${a.tipo === "evitar" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{a.tipo}</span>
-                    <span className="mr-1 text-[10.5px] text-muted-foreground">{a.canal === "organico" ? "orgânico" : "anúncios"}:</span>
+                    <span className={`mr-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold capitalize ${a.tipo === "evitar" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>{a.tipo}</span>
+                    <span className="mr-1 text-[11px] text-muted-foreground">{a.canal === "organico" ? "orgânico" : "anúncios"}:</span>
                     {a.texto}
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-[10.5px] text-muted-foreground">
+              <p className="mt-2 text-[11px] text-muted-foreground">
                 {l.memorias.erro
                   ? `Não gravado na memória dos agentes: ${l.memorias.erro}`
                   : `Gravados na memória dos agentes: ${l.memorias.gravadas} novo${l.memorias.gravadas === 1 ? "" : "s"}${l.memorias.repetidas ? `, ${l.memorias.repetidas} já estava${l.memorias.repetidas === 1 ? "" : "m"} lá` : ""}.`}
@@ -406,7 +406,7 @@ export function PainelDaEvolucao({ dias }: { dias: PeriodoDaConsulta }) {
             </div>
           )}
           {(l.limites.length > 0 || (l.explicacao && l.explicacao.atencao.length > 0)) && (
-            <ul className="space-y-0.5 text-[10.5px] text-muted-foreground">
+            <ul className="space-y-0.5 text-[11px] text-muted-foreground">
               {(l.explicacao ? l.explicacao.atencao : []).concat(l.limites).map((x, k) => (
                 <li key={k}>{x}</li>
               ))}

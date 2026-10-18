@@ -165,6 +165,7 @@ import {
   type PublicacaoDoPost,
   type Trabalho,
 } from "./useItensDoMes";
+import { superficie, juntar } from "@/components/sistema/estilos";
 
 /**
  * Aba Estúdio (pedido do dono em 23/09: "o estúdio ficou muito pequeno para
@@ -309,7 +310,7 @@ function gravarUltimo(clientId: string, id: string) {
 function Rotulo({ children, acao }: { children: ReactNode; acao?: ReactNode }) {
   return (
     <div className="mb-1.5 flex min-h-7 items-center">
-      <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{children}</p>
+      <p className="flex-1 text-[11px] font-medium text-muted-foreground">{children}</p>
       {acao}
     </div>
   );
@@ -329,8 +330,8 @@ function EtapasDaEsteira({ atual }: { atual: number }) {
             {i < atual ? <Check className="h-3.5 w-3.5" /> : i + 1}
           </span>
           <span className="min-w-0">
-            <span className={`block text-[12.5px] font-medium leading-tight ${i === atual ? "text-foreground" : "text-muted-foreground"}`}>{e.rotulo}</span>
-            <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">{e.dica}</span>
+            <span className={`block text-[13px] font-medium leading-tight ${i === atual ? "text-foreground" : "text-muted-foreground"}`}>{e.rotulo}</span>
+            <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">{e.dica}</span>
           </span>
         </li>
       ))}
@@ -375,13 +376,13 @@ function BarraDeFerramentas({
                   } ${aberta ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
                 >
                   <Icone className="h-[18px] w-[18px]" />
-                  {!vertical && <span className="mt-0.5 text-[10px] leading-none">{def.rotulo}</span>}
+                  {!vertical && <span className="mt-0.5 text-[11px] leading-none">{def.rotulo}</span>}
                   {marca(f) && <span className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${aberta ? "bg-primary-foreground" : "bg-primary"}`} aria-label="pede atenção" />}
                 </button>
               </TooltipTrigger>
               <TooltipContent side={vertical ? "left" : "top"} className="max-w-[240px]">
                 <p className="text-[12px] font-medium">{def.rotulo}</p>
-                <p className="text-[11.5px] text-muted-foreground">{def.dica}</p>
+                <p className="text-[12px] text-muted-foreground">{def.dica}</p>
               </TooltipContent>
             </Tooltip>
           );
@@ -1754,7 +1755,7 @@ function DetalheDoItem({
   const centroDaProducao = colunas ? (
     <>
       <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
-        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title={`${trabalho?.direcao?.origem === "roteiro" ? "Direção do roteiro" : "Direção do diretor"}${infinito ? ", carrossel contínuo" : ""}. ${ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}`}>
+        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium text-muted-foreground" title={`${trabalho?.direcao?.origem === "roteiro" ? "Direção do roteiro" : "Direção do diretor"}${infinito ? ", carrossel contínuo" : ""}. ${ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}`}>
           <span className="min-w-0 flex-1 truncate">Prancheta</span>
           <span className="ml-1 shrink-0 normal-case tracking-normal tabular-nums" data-resumo-da-prancheta="">{laminasComArte}/{cardsDaDirecao.length}</span>
         </p>
@@ -1775,7 +1776,7 @@ function DetalheDoItem({
       {avisoDeAjuste}
       <EstudioSemTipografia clientId={clientId} />
       <p className="mb-2 flex min-w-0 items-center text-[11px] text-muted-foreground">
-        <span className="mr-2 shrink-0 font-medium uppercase tracking-wider">Prancheta</span>
+        <span className="mr-2 shrink-0 font-medium">Prancheta</span>
         {resumoDaPrancheta}
       </p>
       {prancheta(false)}
@@ -1880,7 +1881,7 @@ function DetalheDoItem({
       }
     />
   ) : (
-    <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
+    <p className="text-[12px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
   );
 
   /** Refazer depois de aplicar: no contínuo com a cena nova, o fundo panorâmico inteiro entra no preço. */
@@ -1949,7 +1950,7 @@ function DetalheDoItem({
 
   const ferramentaFotos = cardSelecionado && trabalho ? (
     <div className="min-w-0 space-y-3">
-      <p className="text-[12.5px] font-semibold">Lâmina {cardSelecionado.ordem}</p>
+      <p className="text-[13px] font-semibold">Lâmina {cardSelecionado.ordem}</p>
       <EstudioFotos
         key={cardSelecionado.ordem}
         card={cardSelecionado}
@@ -1962,7 +1963,7 @@ function DetalheDoItem({
       />
     </div>
   ) : (
-    <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
+    <p className="text-[12px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
   );
 
   const referenciasDoConjunto = (trabalho?.direcao?.referencias_ids || []).length;
@@ -1971,7 +1972,7 @@ function DetalheDoItem({
     <div className="min-w-0 space-y-3">
       {/* Frente AE-2 (padrão do painel): a explicação fica no "?", à vista só o título e a contagem. */}
       <div className="min-w-0">
-        <p className="flex min-w-0 items-center text-[12.5px] font-medium leading-snug">
+        <p className="flex min-w-0 items-center text-[13px] font-medium leading-snug">
           <span className="min-w-0">Escolha 1 ou 2: o gerador replica o layout delas</span>
           <AjudaRecolhida className="ml-1.5" rotulo="Como a referência entra na lâmina">
             Estrutura, posição dos blocos, escala do texto, recorte e tratamento da imagem saem da referência; as cores, as fontes e a logo são da marca, o
@@ -2011,7 +2012,7 @@ function DetalheDoItem({
       {trabalho.direcao?.fio_visual && (
         <section>
           <Rotulo>Fio visual</Rotulo>
-          <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" title="O que se repete em todas as lâminas">
+          <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" title="O que se repete em todas as lâminas">
             {trabalho.direcao.fio_visual}
           </p>
         </section>
@@ -2019,12 +2020,12 @@ function DetalheDoItem({
       {(trabalho.direcao as { estilo_pedido?: string | null } | undefined)?.estilo_pedido && (
         <section>
           <Rotulo>Estilo pedido</Rotulo>
-          <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" title="Pedido na conversa com o diretor; vale em todas as lâminas">
+          <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" title="Pedido na conversa com o diretor; vale em todas as lâminas">
             {(trabalho.direcao as { estilo_pedido?: string | null }).estilo_pedido}
           </p>
         </section>
       )}
-      <p className="text-[11.5px] text-muted-foreground">
+      <p className="text-[12px] text-muted-foreground">
         {trabalho.direcao?.origem === "roteiro" ? "Direção montada do roteiro" : "Direção do diretor de arte"} · {cardsDaDirecao.length} lâmina{cardsDaDirecao.length === 1 ? "" : "s"}
       </p>
 
@@ -2056,8 +2057,8 @@ function DetalheDoItem({
         <label className="flex cursor-pointer items-start rounded-lg border border-border bg-background px-3 py-2.5">
           <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue || formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
           <span className="min-w-0">
-            <span className="block text-[12.5px] font-medium">Carrossel contínuo</span>
-            <span className="block text-[11.5px] leading-snug text-muted-foreground">
+            <span className="block text-[13px] font-medium">Carrossel contínuo</span>
+            <span className="block text-[12px] leading-snug text-muted-foreground">
               {formato === "feed_4x5"
                 ? "A cena atravessa as lâminas, como um panorama. Gera uma de cada vez. Desligado, as lâminas seguem a capa como série (mesmo grid, linhas, tipografia e paleta)."
                 : AVISO_CONTINUO_FORA_DO_4X5}
@@ -2066,13 +2067,13 @@ function DetalheDoItem({
         </label>
       )}
       {continuoSemModelo && (
-        <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11.5px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
+        <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
           {AVISO_CONTINUO_SEM_MODELO}
         </p>
       )}
       {comFundoContinuo && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-2">
-          <span className="min-w-0 text-[11.5px] leading-snug text-muted-foreground">
+          <span className="min-w-0 text-[12px] leading-snug text-muted-foreground">
             {Object.keys((trabalho.direcao as any)?.panorama?.fundos ?? {}).length
               ? "O fundo panorâmico está pronto: refazer uma lâmina troca só o texto, a emenda continua."
               : "O fundo panorâmico nasce ao gerar a primeira lâmina."}
@@ -2124,7 +2125,7 @@ function DetalheDoItem({
             }}
           />
         </div>
-        {entregue && <p className="text-[11.5px] text-muted-foreground">Arte já entregue: reabra para corrigir (o aviso fica em cima da lâmina).</p>}
+        {entregue && <p className="text-[12px] text-muted-foreground">Arte já entregue: reabra para corrigir (o aviso fica em cima da lâmina).</p>}
       </section>
     </div>
   ) : null;
@@ -2132,7 +2133,7 @@ function DetalheDoItem({
   const ferramentaLegenda = trabalho ? (
     <div className="space-y-3">
       <div className="flex min-w-0 items-center">
-        <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Legenda</p>
+        <p className="flex-1 text-[11px] font-medium text-muted-foreground">Legenda</p>
         <BotaoComCusto
           rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{legenda ? "Reescrever" : "Escrever"}</span></>}
           titulo="Escrever a legenda"
@@ -2182,12 +2183,12 @@ function DetalheDoItem({
         onConcluido={() => mesa.atualizarCusto()}
       />
       <div className="space-y-2">
-        <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><Hash className="mr-1 h-3.5 w-3.5" /> Hashtags</p>
-        <Input value={hashtagsTexto} onChange={(e) => setHashtagsTexto(e.target.value)} onBlur={salvarAoSair} placeholder="#exemplo #outra" className="h-9 text-[12.5px]" disabled={entregue} />
+        <p className="flex items-center text-[11px] font-medium text-muted-foreground"><Hash className="mr-1 h-3.5 w-3.5" /> Hashtags</p>
+        <Input value={hashtagsTexto} onChange={(e) => setHashtagsTexto(e.target.value)} onBlur={salvarAoSair} placeholder="#exemplo #outra" className="h-9 text-[13px]" disabled={entregue} />
         {hashtags.length > 0 && (
           <div className="flex flex-wrap">
             {hashtags.map((h) => (
-              <span key={h} className="mb-1 mr-1.5 max-w-full truncate rounded-full bg-primary/10 px-2.5 py-0.5 text-[11.5px] text-primary">{h}</span>
+              <span key={h} className="mb-1 mr-1.5 max-w-full truncate rounded-full bg-primary/10 px-2.5 py-0.5 text-[12px] text-primary">{h}</span>
             ))}
           </div>
         )}
@@ -2203,11 +2204,11 @@ function DetalheDoItem({
       </div>
       <div className="flex min-h-9 items-center justify-end">
         {salvandoLegenda ? (
-          <span className="inline-flex items-center text-[11.5px] text-muted-foreground"><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> salvando</span>
+          <span className="inline-flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> salvando</span>
         ) : legendaMudou ? (
           <Button type="button" size="sm" onClick={() => void salvarLegenda()} disabled={entregue}>Salvar legenda</Button>
         ) : (
-          <span className="inline-flex items-center text-[11.5px] text-muted-foreground"><Check className="mr-1 h-3.5 w-3.5 text-success" /> salva</span>
+          <span className="inline-flex items-center text-[12px] text-muted-foreground"><Check className="mr-1 h-3.5 w-3.5 text-success" /> salva</span>
         )}
       </div>
     </div>
@@ -2304,7 +2305,7 @@ function DetalheDoItem({
 
   if (colunas) {
     return (
-      <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card" aria-label="Estúdio">
+      <section className={juntar(superficie.painel, "flex h-full min-h-0 min-w-0 flex-col overflow-hidden")} aria-label="Estúdio">
         {barraDoItem}
         <div className="flex min-h-0 flex-1">
           <div className="flex min-h-0 min-w-0 flex-1">{centro}</div>
@@ -2333,7 +2334,7 @@ function DetalheDoItem({
   }
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card" aria-label="Estúdio">
+    <section className={juntar(superficie.painel, "min-w-0 overflow-hidden")} aria-label="Estúdio">
       {barraDoItem}
       {centro}
       {barraDeFerramentas}
@@ -2376,14 +2377,14 @@ function mesesDoSeletor(mesAtual: string): string[] {
 /** O estúdio antes de haver pauta para abrir (lista vazia ou ainda lendo). */
 function SemPauta({ carregando, vazia }: { carregando: boolean; vazia: boolean }) {
   return (
-    <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center">
+    <div className={juntar(superficie.painel, "flex min-h-[320px] flex-1 flex-col items-center justify-center p-8 text-center")}>
       {carregando ? (
-        <p className="inline-flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…</p>
+        <p className="inline-flex items-center text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…</p>
       ) : (
         <>
           <ListChecks className="h-6 w-6 text-primary" />
           <p className="mt-3 text-[15px] font-semibold">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
-          <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">
+          <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
             {vazia ? "Troque o período na faixa ou complete a agenda pela aba Mês." : "O estúdio abre com a pauta escolhida."}
           </p>
         </>
@@ -2712,7 +2713,7 @@ export default function AbaEstudio({
   const vazio = itemDeOutraMarca ? (
     <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-item-de-outra-marca="">
       <p className="text-[14px] font-semibold">Este item é de outra marca</p>
-      <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. O Estúdio mostra e gera só a marca {marcaAberta ? marcaAberta.nome : "aberta"}, com o kit dela.</p>
+      <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. O Estúdio mostra e gera só a marca {marcaAberta ? marcaAberta.nome : "aberta"}, com o kit dela.</p>
     </div>
   ) : (
     <SemPauta carregando={carregando} vazia={listaPronta && itens.length === 0} />

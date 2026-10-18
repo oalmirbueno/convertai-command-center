@@ -243,7 +243,7 @@ export function SeloDaSerie({ card, total, refsDoConjunto }: { card: CardDaDirec
   if (!selo) return null;
   return (
     <span
-      className="mb-1 mr-3 inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10.5px] text-muted-foreground"
+      className="mb-1 mr-3 inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[11px] text-muted-foreground"
       data-selo="serie"
       title={selo.tipo === "capa"
         ? "Da lâmina 2 em diante, a capa gerada vai junto. Esta lâmina herda a identidade dela (fundo, fontes, cores, grafismos), sem repetir o que é só da capa."
@@ -425,8 +425,8 @@ export default function EstudioBaseDaLamina({
             {separador}
             {/* Marca: a logo do kit que o gerador desenha junto. */}
             <div className="flex min-w-0 items-center" aria-label="Logo da lâmina" data-grupo="logo" title="Logo do kit que o gerador desenha junto com a arte">
-              <span className="mr-1.5 text-[11.5px] text-muted-foreground">Logo</span>
-              {logo ? logo : <span className="text-[11.5px] text-muted-foreground" title="A logo vai na capa e no fechamento">nesta não</span>}
+              <span className="mr-1.5 text-[12px] text-muted-foreground">Logo</span>
+              {logo ? logo : <span className="text-[12px] text-muted-foreground" title="A logo vai na capa e no fechamento">nesta não</span>}
             </div>
             <div className="ml-auto flex shrink-0 items-center pl-1">
               <AjudaRecolhida rotulo="Como esta lâmina vai ser gerada" titulo="Como vai ser gerada" lado="bottom">
@@ -443,7 +443,7 @@ export default function EstudioBaseDaLamina({
       </div>
       {!recolhido && fidelidade && base.modo === "replicar_referencia" && (
         <div className="mt-1 flex min-w-0 flex-wrap items-center" data-faixa="fidelidade">
-          <span className="mb-1 mr-1.5 mt-1 text-[11.5px] text-muted-foreground" title="Quanto a lâmina segue a referência: da cópia mais fiel à mais livre">
+          <span className="mb-1 mr-1.5 mt-1 text-[12px] text-muted-foreground" title="Quanto a lâmina segue a referência: da cópia mais fiel à mais livre">
             Fidelidade
           </span>
           <div className="min-w-0 flex-1">{fidelidade}</div>
@@ -453,30 +453,30 @@ export default function EstudioBaseDaLamina({
       {temAvisos && (
         <div className="mt-1 space-y-1">
           {continuoSemModelo && (
-            <p className="flex items-start text-[11.5px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
+            <p className="flex items-start text-[12px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
               <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_CONTINUO_SEM_MODELO}
             </p>
           )}
           {continuo && base.temFoto && (
-            <p className="flex items-start text-[11.5px] leading-snug text-muted-foreground" data-aviso="foto-no-continuo">
+            <p className="flex items-start text-[12px] leading-snug text-muted-foreground" data-aviso="foto-no-continuo">
               <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_FOTO_NO_CONTINUO}
             </p>
           )}
           {(foraDoFundo || foraDaEmenda) && (
             <div className="flex min-w-0 flex-wrap items-center" data-aviso="fora-do-fundo">
-              <p className="mr-2 flex min-w-0 flex-1 items-start text-[11.5px] leading-snug text-warning">
+              <p className="mr-2 flex min-w-0 flex-1 items-start text-[12px] leading-snug text-warning">
                 <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {foraDoFundo ? AVISO_FORA_DO_FUNDO : AVISO_FORA_DA_EMENDA}
               </p>
               {acaoDoFundo}
             </div>
           )}
           {base.fotoRecomposta && (
-            <p className="flex items-start text-[11.5px] leading-snug text-warning">
+            <p className="flex items-start text-[12px] leading-snug text-warning">
               <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_FOTO_RECOMPOSTA}
             </p>
           )}
           {versaoRecompos(versao) && !base.fotoRecomposta && (
-            <p className="flex items-start text-[11.5px] leading-snug text-warning">
+            <p className="flex items-start text-[12px] leading-snug text-warning">
               <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> Esta versão recompôs a foto pela referência; confira o rosto.
             </p>
           )}

@@ -26,7 +26,7 @@ export default function Mesas() {
   return <main className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
     <header className="flex flex-wrap items-center gap-2">
       <LayoutGrid className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-      <h1 className="text-xl font-semibold">Mesas</h1>
+      <h1 className="text-[20px] leading-7 font-semibold">Mesas</h1>
       <AjudaRecolhida rotulo="O que são as mesas?">Escolha o cliente e abra o espaço de produção dele. Cada mesa leva o cliente junto no endereço.</AjudaRecolhida>
       <div className="ml-auto min-w-0 max-w-full">
         <SeletorDeClientesDaMesa mesa="foto" clientesBrutos={clientes.data} valor={clientId} nome={nome} carregando={clientes.isLoading} onEscolher={(id) => setParams({ client: id })} />

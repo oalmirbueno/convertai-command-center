@@ -27,13 +27,13 @@ export default function RaioXDoMes({ itens }: { itens: ItemParaORaioX[] }) {
           <ScanSearch className="h-4 w-4" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 space-y-3 text-[12.5px]">
+      <PopoverContent align="end" className="w-80 space-y-3 text-[13px]">
         <div>
           <p className="text-[13px] font-semibold">Raio-x do mês</p>
           <p className="text-muted-foreground">{r.total} {r.total === 1 ? "peça" : "peças"} na Mesa</p>
         </div>
         <div>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pega o momento</p>
+          <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Pega o momento</p>
           <p>
             <strong className="tabular-nums">{comMomento}</strong> de {r.total}
             {comMomento ? ` (${[r.ganchos.hype ? `${r.ganchos.hype} hype` : "", r.ganchos.nicho ? `${r.ganchos.nicho} em alta no nicho` : "", r.ganchos.concorrente ? `${r.ganchos.concorrente} concorrente` : ""].filter(Boolean).join(", ")})` : ""}
@@ -41,13 +41,13 @@ export default function RaioXDoMes({ itens }: { itens: ItemParaORaioX[] }) {
           {!comMomento && <p className="mt-0.5 text-muted-foreground">Nenhuma pauta usa hype, nicho ou concorrente. Pautas novas do agente já marcam o gancho.</p>}
         </div>
         <div>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Formatos</p>
+          <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Formatos</p>
           <ul className="space-y-1">{r.formatos.map((f) => linha(f.rotulo, f.n))}</ul>
           {r.formatoDominante && <p className="mt-1 text-warning">{r.formatoDominante.rotulo} ocupa {r.formatoDominante.pct}% do mês: vale alternar formatos.</p>}
         </div>
         {r.pilares.length > 0 && (
           <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pilares</p>
+            <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Pilares</p>
             <ul className="space-y-1">{r.pilares.slice(0, 6).map((p) => linha(p.rotulo, p.n))}</ul>
             {r.pilarDominante && <p className="mt-1 text-warning">{r.pilarDominante.rotulo} ocupa {r.pilarDominante.pct}% do mês: vale variar.</p>}
           </div>

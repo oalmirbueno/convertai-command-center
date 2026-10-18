@@ -302,7 +302,7 @@ export default function EditorialToolbar({
                 <Search className="h-[18px] w-[18px]" aria-hidden="true" />
                 {filtrosAtivos > 0 && (
                   <span
-                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground"
+                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
                     aria-hidden="true"
                   >
                     {filtrosAtivos}
@@ -512,7 +512,7 @@ export default function EditorialToolbar({
               <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
               {advancedFilterCount > 0 && (
                 <span
-                  className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground"
+                  className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground"
                   aria-hidden="true"
                 >
                   {advancedFilterCount}

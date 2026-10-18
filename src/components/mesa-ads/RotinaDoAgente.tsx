@@ -64,12 +64,12 @@ function Prova({ p }: { p: ProvaNaTela }) {
   const [aberta, setAberta] = useState(false);
   return (
     <div className="mt-1 min-w-0">
-      <button type="button" className={juntar("inline-flex items-center rounded text-[11.5px] font-medium text-primary hover:underline", foco)} onClick={() => setAberta(!aberta)} aria-expanded={aberta}>
+      <button type="button" className={juntar("inline-flex items-center rounded text-[12px] font-medium text-primary hover:underline", foco)} onClick={() => setAberta(!aberta)} aria-expanded={aberta}>
         <ChevronDown className={`mr-0.5 h-3.5 w-3.5 transition-transform ${aberta ? "rotate-180" : ""}`} />
         Prova
       </button>
       {aberta && (
-        <dl className="mt-1 grid min-w-0 grid-cols-1 gap-y-1 rounded-md bg-muted/50 px-2.5 py-2 text-[11.5px] leading-snug sm:grid-cols-2 sm:gap-x-4" data-prova="">
+        <dl className="mt-1 grid min-w-0 grid-cols-1 gap-y-1 rounded-md bg-muted/50 px-2.5 py-2 text-[12px] leading-snug sm:grid-cols-2 sm:gap-x-4" data-prova="">
           {p.periodo && (
             <div className="min-w-0">
               <dt className="text-muted-foreground">Números ({p.periodo.inicio.split("-").reverse().join("/")} a {p.periodo.fim.split("-").reverse().join("/")})</dt>
@@ -136,10 +136,10 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
     a.estado === "desfeita" ? "Desfeito" : a.estado === "falhou" ? "Não deu" : a.estado === "proposta" ? "Proposta" : a.estado === "descartada" ? "Descartada" : a.tipo === "parada" ? "Parou" : null;
   return (
     <li className="min-w-0 py-2" data-acao-feita={a.estado}>
-      <p className="flex min-w-0 flex-wrap items-center text-[12.5px] leading-snug">
+      <p className="flex min-w-0 flex-wrap items-center text-[13px] leading-snug">
         {a.estado === "feita" && a.tipo !== "parada" ? <Check className="mr-1.5 h-3.5 w-3.5 shrink-0 text-success" /> : a.estado === "proposta" ? <Bot className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" /> : <X className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <span className="mr-2 min-w-0 font-medium [overflow-wrap:anywhere]">{a.resumo}</span>
-        {selo && <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">{selo}</span>}
+        {selo && <span className="mr-2 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{selo}</span>}
         <span className="text-[11px] text-muted-foreground">
           {dataEHora(a.criado_em)} · {a.origem === "rotina" ? "rotina" : a.origem === "equipe" ? "você, no Gerenciador" : "agente sênior"}
           {a.alvo ? ` · ${NIVEL[a.alvo.nivel] || "Item"}` : ""}
@@ -148,12 +148,12 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
       {a.porque && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{a.porque}</p>}
       {a.prova && <Prova p={a.prova} />}
       {a.resultado_depois && a.resultado_depois.custo_por_resultado !== null && (
-        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+        <p className="mt-0.5 text-[12px] text-muted-foreground">
           Depois: a conta em 7 dias ficou com {inteiro(a.resultado_depois.resultados)} resultados a {brl(a.resultado_depois.custo_por_resultado)} cada.
         </p>
       )}
       <div className="mt-1 flex min-w-0 flex-wrap items-center">
-        {a.estado === "feita" && a.prova && a.prova.caminho && <CaminhoPronto caminho={a.prova.caminho} className="h-7 text-[11.5px]" />}
+        {a.estado === "feita" && a.prova && a.prova.caminho && <CaminhoPronto caminho={a.prova.caminho} className="h-7 text-[12px]" />}
         {a.pode_desfazer && (
           <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={onDesfazer} aria-label={`Desfazer: ${a.resumo}`} title="Desfazer">
             {fazendo === `desfazer:${a.id}` ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
@@ -162,11 +162,11 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
         {a.estado === "proposta" && (
           <>
             {onLevar && a.prova && a.prova.pedido_ao_agente && (
-              <Button type="button" size="sm" className="mb-1 mr-1.5 h-7 text-[11.5px]" disabled={!!fazendo} onClick={() => onLevar(a.prova ? a.prova.pedido_ao_agente : "")}>
+              <Button type="button" size="sm" className="mb-1 mr-1.5 h-7 text-[12px]" disabled={!!fazendo} onClick={() => onLevar(a.prova ? a.prova.pedido_ao_agente : "")}>
                 Montar com o agente sênior
               </Button>
             )}
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-7 text-[11.5px] text-muted-foreground" disabled={!!fazendo} onClick={onDescartar}>
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-7 text-[12px] text-muted-foreground" disabled={!!fazendo} onClick={onDescartar}>
               Descartar
             </Button>
           </>
@@ -196,7 +196,7 @@ function Ajustes({ l, fazendo, onSalvar }: { l: LeituraDaRotina; fazendo: string
   };
   const entrada = (rotulo: string, valor: string, mudar: (v: string) => void, dica: string) => (
     <Campo rotulo={rotulo}>
-      <input className={juntar(campo, "h-8 text-[12.5px] tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => mudar(e.target.value)} placeholder={dica} aria-label={rotulo} />
+      <input className={juntar(campo, "h-8 text-[13px] tabular-nums")} inputMode="decimal" value={valor} onChange={(e) => mudar(e.target.value)} placeholder={dica} aria-label={rotulo} />
     </Campo>
   );
   return (
@@ -374,7 +374,7 @@ export default function RotinaDoAgente({ onPedirAoAgente, abrirFeito = false }: 
       {regras.length > 0 && (
         <ul className="mt-1.5 flex min-w-0 flex-wrap" aria-label="Regras da rotina">
           {regras.map((g) => (
-            <li key={g.id} className={juntar("mb-1 mr-1.5 inline-flex min-w-0 max-w-full items-center rounded-full px-2.5 py-1 text-[11.5px]", g.vale ? "bg-primary/10 text-foreground" : "bg-muted text-muted-foreground line-through")} title={`Você escreveu: ${g.texto}`}>
+            <li key={g.id} className={juntar("mb-1 mr-1.5 inline-flex min-w-0 max-w-full items-center rounded-full px-2.5 py-1 text-[12px]", g.vale ? "bg-primary/10 text-foreground" : "bg-muted text-muted-foreground line-through")} title={`Você escreveu: ${g.texto}`}>
               <span className="min-w-0 truncate">{g.texto_da_regra || g.texto}</span>
               <button type="button" className={juntar("ml-1.5 shrink-0 rounded text-muted-foreground hover:text-foreground", foco)} aria-label={`Tirar a regra: ${g.texto}`} disabled={!!fazendo} onClick={() => void agir(`tirar:${g.id}`, () => tirarRegra(clientId, g.id), "Regra tirada")}>
                 <X className="h-3 w-3" />

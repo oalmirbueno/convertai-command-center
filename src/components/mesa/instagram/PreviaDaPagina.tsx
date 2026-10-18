@@ -32,7 +32,7 @@ export default function PreviaDaPagina({ pagina, carregando }: { pagina: PaginaN
             <FotoDoPerfil url={pagina.foto_url} nome={pagina.nome} tamanho={64} />
           </span>
         </div>
-        <p className="mt-1 text-[16px] font-semibold leading-6 text-foreground [overflow-wrap:anywhere]">{pagina.nome || "Página"}</p>
+        <p className="mt-1 text-[15px] font-semibold leading-6 text-foreground [overflow-wrap:anywhere]">{pagina.nome || "Página"}</p>
         <p className={texto.auxiliar}>
           {[pagina.categoria, pagina.seguidores !== null ? `${numeroDoPerfil(pagina.seguidores)} seguidores` : "", pagina.curtidas !== null ? `${numeroDoPerfil(pagina.curtidas)} curtidas` : ""].filter(Boolean).join(" · ")}
         </p>
@@ -40,7 +40,7 @@ export default function PreviaDaPagina({ pagina, carregando }: { pagina: PaginaN
         {pagina.sobre && <p className="mt-2 whitespace-pre-line text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">{pagina.sobre}</p>}
         <div className="mt-1.5 flex min-w-0 flex-wrap">
           {pagina.site && (
-            <a href={pagina.site} target="_blank" rel="noreferrer" className="mr-3 inline-flex max-w-full items-center text-[12.5px] font-medium text-primary hover:underline">
+            <a href={pagina.site} target="_blank" rel="noreferrer" className="mr-3 inline-flex max-w-full items-center text-[13px] font-medium text-primary hover:underline">
               <ExternalLink className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">{pagina.site.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
             </a>
@@ -59,10 +59,10 @@ export default function PreviaDaPagina({ pagina, carregando }: { pagina: PaginaN
               <li key={p.id} className="flex min-w-0 rounded-md border border-border p-2">
                 {p.imagem && <ImagemDaMeta url={p.imagem} alt={p.texto.slice(0, 60) || "Post"} className="mr-2 h-14 w-14 shrink-0 rounded object-cover" />}
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11.5px] tabular-nums text-muted-foreground">{p.data ? dataEHoraCurta(p.data) : ""}</p>
-                  <p className="text-[12.5px] leading-4 text-foreground [overflow-wrap:anywhere]">{p.texto ? p.texto.slice(0, 160) : "(sem texto)"}</p>
+                  <p className="text-[12px] tabular-nums text-muted-foreground">{p.data ? dataEHoraCurta(p.data) : ""}</p>
+                  <p className="text-[13px] leading-4 text-foreground [overflow-wrap:anywhere]">{p.texto ? p.texto.slice(0, 160) : "(sem texto)"}</p>
                   {p.link && (
-                    <a href={p.link} target="_blank" rel="noreferrer" className="text-[11.5px] text-primary hover:underline">
+                    <a href={p.link} target="_blank" rel="noreferrer" className="text-[12px] text-primary hover:underline">
                       Ver no Facebook
                     </a>
                   )}

@@ -310,7 +310,7 @@ export default function ClientFinanceiro() {
               return (
                 <Painel key={w.id}>
                   <p className={texto.rotulo}>{platformLabels[w.platform] || w.platform}</p>
-                  <p className="mt-1.5 text-xl font-light tabular-nums text-foreground">{formatCurrency(balance)}</p>
+                  <p className="mt-1.5 text-[20px] leading-7 font-light tabular-nums text-foreground">{formatCurrency(balance)}</p>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
                     <div className={`h-full rounded-full ${gaugeColor}`} style={{ width: `${gaugePercent}%` }} />
                   </div>
@@ -382,7 +382,7 @@ export default function ClientFinanceiro() {
                         <p className="mr-2 truncate text-[14px] font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
                         <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")}>{getProjectBrand(pp.project?.project_type)}</span>
                       </div>
-                      <p className="mt-1 text-xl font-light tabular-nums text-foreground">{formatCurrency(Number(pp.total_value))}</p>
+                      <p className="mt-1 text-[20px] leading-7 font-light tabular-nums text-foreground">{formatCurrency(Number(pp.total_value))}</p>
                     </div>
                     <div className="text-right tabular-nums">
                       <p className="text-[12px] text-success">{formatCurrency(paid)} pago</p>
@@ -487,7 +487,7 @@ export default function ClientFinanceiro() {
 
                 <div className="space-y-4 px-5 py-5">
                   <div className="text-center">
-                    <p className="text-3xl font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</p>
+                    <p className="text-[24px] leading-8 font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</p>
                     {isPeriodic && <p className={juntar(texto.auxiliar, "mt-1")}>Investimento {period} em anúncios</p>}
                   </div>
 

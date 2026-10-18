@@ -12,7 +12,7 @@ import { useGravadorDeVoz, type ResultadoDaVoz } from "@/lib/voz/useGravadorDeVo
 import { transcreverNoServidor } from "@/lib/voz/transcreverNoServidor";
 import { BotaoDeVoz, EstadoDaVoz, PilulaDeGravacao, vozEmCurso } from "@/components/agentes/BotaoDeVoz";
 import { chamarFuncao, textoDoErro, usd } from "@/lib/mesa/api";
-import { Carregando, EstadoDeErro, botao, juntar, useEstadoDaTela } from "@/components/sistema";
+import { Carregando, EstadoDeErro, botao, juntar, useEstadoDaTela, superficie } from "@/components/sistema";
 
 /** Gasto da conversa (ação "consumo" do gestor-aceleriq). */
 type ConsumoDaConversa = {
@@ -160,7 +160,7 @@ function CartaoDoRecorte({ d }: { d: RespostaDoGestor }) {
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         {itens.map((s) => (
           <div key={s} className="min-w-0">
-            <p className={juntar("text-[22px] font-semibold leading-none tabular-nums", SECAO[s].cor)}>{c[s]}</p>
+            <p className={juntar("text-[24px] font-semibold leading-none tabular-nums", SECAO[s].cor)}>{c[s]}</p>
             <p className="mt-1 truncate text-[12px] text-muted-foreground">{SECAO[s].rotulo}</p>
           </div>
         ))}
@@ -176,7 +176,7 @@ function FonteAberta({ f, aoAbrirDiario, aoAbrirObjeto }: { f: Fonte; aoAbrirDia
   const objeto = objetoDaFonte(f);
   return (
     <div className="w-full max-w-[560px] rounded-lg border border-border bg-background p-3 text-[12px] shadow-sm">
-      <p className="font-medium text-foreground"><span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{f.apelido}</span>{f.titulo}</p>
+      <p className="font-medium text-foreground"><span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">{f.apelido}</span>{f.titulo}</p>
       <p className="mt-1 text-muted-foreground">{ROTULO_DO_ESTADO[f.estado]}{f.cliente ? ` · ${f.cliente}` : ""}{f.agente ? ` · ${f.agente}` : ""}</p>
       <p className="mt-2 line-clamp-6 whitespace-pre-wrap break-words text-foreground/85">{f.texto}</p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -263,7 +263,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
               <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">
                 {(item as { conferido?: string }).conferido === "a_conferir" && <span className="text-[11px] font-medium text-warning" title="O Jev não achou isto escrito na fonte. Abra a fonte para conferir.">a conferir</span>}
                 {item.fontes.map((a) => fontes.get(a) ? (
-                  <button key={a} type="button" aria-expanded={aberta === a} onClick={() => setAberta(aberta === a ? null : a)} className={juntar("rounded-full px-1.5 py-px text-[10px] font-semibold transition-colors", aberta === a ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a}</button>
+                  <button key={a} type="button" aria-expanded={aberta === a} onClick={() => setAberta(aberta === a ? null : a)} className={juntar("rounded-full px-1.5 py-px text-[11px] font-semibold transition-colors", aberta === a ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a}</button>
                 ) : null)}
               </span>
             </div>
@@ -304,7 +304,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
           })}
           {(d.bloqueadas || []).map((b, i) => (
             <div key={i} className="mt-1 w-full max-w-[560px] rounded-lg border border-warning/40 bg-warning/5 p-3" data-decisao-do-gestor="">
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning"><ShieldAlert className="h-3.5 w-3.5" />Precisa da sua decisão</p>
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-warning"><ShieldAlert className="h-3.5 w-3.5" />Precisa da sua decisão</p>
               <p className="mt-1 text-[14px] text-foreground">{b.pedido}</p>
               <p className="mt-0.5 text-[12px] text-muted-foreground">{b.motivo}</p>
               {b.link && (
@@ -588,7 +588,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
   return (
     <section
       aria-label="Gestor Aceleriq"
-      className={juntar("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card", className || "h-full min-h-[480px]")}
+      className={juntar(superficie.painel, "relative flex min-h-0 min-w-0 flex-col overflow-hidden", className || "h-full min-h-[480px]")}
       onDragOver={(e) => { const t = e.dataTransfer?.types; if (t && (t.indexOf("Files") >= 0 || t.indexOf(TIPO_ARQUIVO_DO_WORKSPACE) >= 0)) { e.preventDefault(); setSoltando(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setSoltando(false); }}
       onDrop={(e) => {
@@ -648,10 +648,10 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
           ) : mensagens.length === 0 ? (
             <div className="flex flex-col items-center py-10 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-5 w-5" /></span>
-              <p className="mt-4 text-[18px] font-semibold">O que você quer saber da operação?</p>
+              <p className="mt-4 text-[20px] font-semibold">O que você quer saber da operação?</p>
               <p className="mt-1 max-w-md text-[13px] text-muted-foreground">Pergunte como a um gerente: por cliente, por período, por agente. Pode mandar arquivo, print ou áudio.</p>
               <div className="mt-6 grid w-full max-w-xl gap-2 sm:grid-cols-2">
-                {COMECOS.map((s) => <button key={s} type="button" className="rounded-lg border border-border bg-background px-4 py-3 text-left text-[13px] hover:bg-muted" onClick={() => enviar(s)}>{s}</button>)}
+                {COMECOS.map((s) => <button key={s} type="button" className="rounded-md border border-border bg-background px-4 py-3 text-left text-[13px] hover:bg-muted" onClick={() => enviar(s)}>{s}</button>)}
               </div>
             </div>
           ) : mensagens.map((m, k) => (
@@ -692,7 +692,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               {imagens.map((i) => (
                 <span key={i.id} className="relative">
-                  <img src={i.previa} alt={i.nome} className="h-14 w-14 rounded-xl border border-border object-cover" />
+                  <img src={i.previa} alt={i.nome} className="h-14 w-14 rounded-md border border-border object-cover" />
                   <button type="button" aria-label={`Tirar ${i.nome}`} onClick={() => setImagens((l) => l.filter((x) => x.id !== i.id))} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background"><X className="h-3 w-3" /></button>
                 </span>
               ))}

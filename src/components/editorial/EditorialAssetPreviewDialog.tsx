@@ -58,7 +58,7 @@ export default function EditorialAssetPreviewDialog({
               <Badge variant="secondary">{asset.files.length} arquivos</Badge>
             )}
           </div>
-          <DialogTitle className="break-words pr-2 text-base sm:text-lg">
+          <DialogTitle className="break-words pr-2 text-[15px]">
             {asset.root.file_name}
           </DialogTitle>
           <DialogDescription>
@@ -93,20 +93,20 @@ export default function EditorialAssetPreviewDialog({
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {asset.root.caption && (
                 <section className="rounded-xl border border-border bg-muted/20 p-4">
-                  <h3 className="text-xs font-semibold text-foreground">
+                  <h3 className="text-[12px] leading-4 font-semibold text-foreground">
                     Legenda aprovada
                   </h3>
-                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                  <p className="mt-2 whitespace-pre-wrap text-[12px] leading-5 text-muted-foreground">
                     {asset.root.caption}
                   </p>
                 </section>
               )}
               {asset.root.description && (
                 <section className="rounded-xl border border-border bg-muted/20 p-4">
-                  <h3 className="text-xs font-semibold text-foreground">
+                  <h3 className="text-[12px] leading-4 font-semibold text-foreground">
                     Direção do conteúdo
                   </h3>
-                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                  <p className="mt-2 whitespace-pre-wrap text-[12px] leading-5 text-muted-foreground">
                     {asset.root.description}
                   </p>
                 </section>

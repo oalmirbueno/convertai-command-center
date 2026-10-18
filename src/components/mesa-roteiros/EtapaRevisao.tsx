@@ -188,7 +188,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
             <ol className="divide-y divide-border">
               {versao.conteudo.blocos.map((b, i) => (
                 <li key={b.id} className={juntar("min-w-0 py-2.5", i === 0 && "border-l-2 border-primary pl-3")}>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  <p className="text-[11px] font-semibold text-primary">
                     {String(i + 1).padStart(2, "0")} {b.funcao} · {b.segundos}s
                   </p>
                   <p className="mt-0.5 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{b.fala}</p>
@@ -199,7 +199,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
               ))}
             </ol>
             {versao.conteudo.cta && (
-              <p className="text-[12.5px] [overflow-wrap:anywhere]">
+              <p className="text-[13px] [overflow-wrap:anywhere]">
                 <span className="font-medium">CTA:</span> {versao.conteudo.cta}
               </p>
             )}
@@ -227,7 +227,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
                   <button
                     type="button"
                     onClick={() => setVendo(v.numero)}
-                    className={juntar("w-full rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors", versao && versao.numero === v.numero ? "bg-primary/10" : "hover:bg-muted", foco)}
+                    className={juntar("w-full rounded-md px-2 py-1.5 text-left text-[13px] transition-colors", versao && versao.numero === v.numero ? "bg-primary/10" : "hover:bg-muted", foco)}
                     aria-pressed={!!versao && versao.numero === v.numero}
                   >
                     <span className="font-medium">Versão {v.numero}</span>
@@ -238,7 +238,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
                         aprovada
                       </span>
                     )}
-                    <span className="block truncate text-[11.5px] text-muted-foreground">
+                    <span className="block truncate text-[12px] text-muted-foreground">
                       {ORIGEM[v.origem] || v.origem} · {dataEHora(v.criado_em)}
                       {v.custo_usd ? ` · ${usd(v.custo_usd)}` : ""}
                       {v.nota ? ` · ${v.nota}` : ""}
@@ -264,7 +264,7 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
               .slice()
               .reverse()
               .map((c) => (
-                <li key={c.id} className={juntar("py-2 text-[12.5px]", c.resolvido && "opacity-60")}>
+                <li key={c.id} className={juntar("py-2 text-[13px]", c.resolvido && "opacity-60")}>
                   <p className={juntar("[overflow-wrap:anywhere]", !c.resolvido && "border-l-2 border-primary/50 pl-2")}>{c.texto}</p>
                   <p className="mt-1 flex min-w-0 items-center text-[11px] text-muted-foreground">
                     <span className="mr-auto min-w-0 truncate">

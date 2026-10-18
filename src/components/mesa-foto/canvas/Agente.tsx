@@ -111,7 +111,7 @@ export function ChatDoAgente({
       {/* Casca do sistema (PainelDoAgente em peças): a conversa rola por dentro, numa caixa de altura fixa; o campo fica logo abaixo, sempre à vista. */}
       <div className="flex h-[30vh] min-h-[120px] min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-zinc-900/60" data-caixa-da-conversa="">
       <MensagensDoAgente ref={conversa} rotulo="Conversa com o agente" className="nowheel nopan nodrag !space-y-2 !p-2.5">
-        {mensagens.length === 0 && <p className="text-[12.5px] leading-snug text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
+        {mensagens.length === 0 && <p className="text-[13px] leading-snug text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
         {mensagens.map((msg, i) => (
           <Fragment key={i}>
           <p
@@ -133,7 +133,7 @@ export function ChatDoAgente({
       <CompositorDoAgente className="!border-t-0 !px-0 !pb-0 !pt-0 [&_textarea]:text-[13px]">
       <div className="flex min-w-0 flex-wrap">
         {ATALHOS.map((a) => (
-          <button key={a} type="button" disabled={enviando} onClick={() => void enviar(a)} className="mb-1 mr-1 rounded-full border border-white/10 px-2 py-0.5 text-[11.5px] text-zinc-400 hover:text-white disabled:opacity-50">
+          <button key={a} type="button" disabled={enviando} onClick={() => void enviar(a)} className="mb-1 mr-1 rounded-full border border-white/10 px-2 py-0.5 text-[12px] text-zinc-400 hover:text-white disabled:opacity-50">
             {a}
           </button>
         ))}
@@ -177,7 +177,7 @@ export function ChatDoAgente({
             }
             titulo="Geração do Canvas"
             descricao="Salva, junta tudo o que está ligado (com o pedido do agente) e gera no Resultado."
-            className="h-9 w-full text-[12.5px]"
+            className="h-9 w-full text-[13px]"
             disabled={bloqueios.length > 0}
             fecharAoConfirmar
             partes={() => partesDoResultado(resultado, entradasDoGerar(canvas, resultado.id).length)}

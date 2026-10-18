@@ -156,9 +156,9 @@ function CartaoDaFamilia({
       </span>
       <span className="block min-w-0 px-2.5 pb-2 pt-1.5">
         <span className="flex min-w-0 items-center">
-          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">{f.familia}</span>
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{f.familia}</span>
           {sugerida && !marcado && (
-            <span className="ml-1.5 shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">par sugerido</span>
+            <span className="ml-1.5 shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[11px] font-medium text-primary">par sugerido</span>
           )}
         </span>
         <span className="block truncate text-[11px] text-muted-foreground">
@@ -166,7 +166,7 @@ function CartaoDaFamilia({
         </span>
       </span>
       {marcado && (
-        <span className="absolute right-1.5 top-1.5 flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
+        <span className="absolute right-1.5 top-1.5 flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground">
           <Check className="mr-0.5 h-3 w-3" />
           {marcadoComo.map((p) => ROTULO_DO_PAPEL[p]).join(" e ")}
         </span>
@@ -323,8 +323,8 @@ export default function BibliotecaDeFontes({
       >
         <div className="shrink-0 space-y-2.5 border-b border-border px-3.5 pb-3 pt-3.5 sm:px-5 sm:pt-4">
           <DialogHeader className="pr-8 text-left">
-            <DialogTitle className="text-[15px] sm:text-lg">Biblioteca de fontes da agência</DialogTitle>
-            <DialogDescription className={`text-[12px] sm:text-[12.5px] ${baixa ? "sr-only" : ""}`}>
+            <DialogTitle className="text-[15px]">Biblioteca de fontes da agência</DialogTitle>
+            <DialogDescription className={`text-[12px] sm:text-[13px] ${baixa ? "sr-only" : ""}`}>
               Escolha a fonte de título e a de texto. A amostra mostra a família com os acentos do português.
             </DialogDescription>
           </DialogHeader>
@@ -339,8 +339,8 @@ export default function BibliotecaDeFontes({
                 onClick={() => setPapel(p)}
                 className={`min-w-0 rounded-lg px-2.5 py-1 text-left ${papel === p ? "bg-card shadow-sm" : "hover:bg-card/60"}`}
               >
-                <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">{ROTULO_DO_PAPEL[p]}</span>
-                <span className={`block truncate text-[12.5px] font-medium ${escolha[p] ? "text-foreground" : "text-muted-foreground"}`}>
+                <span className="block text-[11px] text-muted-foreground">{ROTULO_DO_PAPEL[p]}</span>
+                <span className={`block truncate text-[13px] font-medium ${escolha[p] ? "text-foreground" : "text-muted-foreground"}`}>
                   {escolha[p] ? escolha[p]!.familia : "Escolher na galeria"}
                 </span>
               </button>
@@ -361,7 +361,7 @@ export default function BibliotecaDeFontes({
                 className="h-9 pl-8"
               />
             </div>
-            <p className="ml-2.5 shrink-0 text-[11.5px] tabular-nums text-muted-foreground">
+            <p className="ml-2.5 shrink-0 text-[12px] tabular-nums text-muted-foreground">
               {biblioteca.isLoading ? "Lendo..." : `${filtradas.length} de ${familias.length}`}
             </p>
           </div>
@@ -377,7 +377,7 @@ export default function BibliotecaDeFontes({
                     setLimite(POR_PAGINA);
                   }}
                   aria-pressed={categoria === c}
-                  className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] capitalize ${
+                  className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[12px] capitalize ${
                     categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -389,7 +389,7 @@ export default function BibliotecaDeFontes({
         </div>
 
         <div data-lista-de-fontes className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-3 sm:px-5">
-          {biblioteca.isError && <p className="text-[12.5px] text-destructive">Não foi possível ler a biblioteca de fontes: {textoDoErro(biblioteca.error)}</p>}
+          {biblioteca.isError && <p className="text-[13px] text-destructive">Não foi possível ler a biblioteca de fontes: {textoDoErro(biblioteca.error)}</p>}
           {biblioteca.isLoading && (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -398,7 +398,7 @@ export default function BibliotecaDeFontes({
             </div>
           )}
           {biblioteca.data && filtradas.length === 0 && (
-            <p className="rounded-lg border border-dashed border-border p-6 text-center text-[12.5px] text-muted-foreground">
+            <p className="rounded-lg border border-dashed border-border p-6 text-center text-[12px] text-muted-foreground">
               {familias.length ? "Nenhuma família com essa busca." : "A biblioteca de fontes ainda está vazia."}
             </p>
           )}
@@ -427,7 +427,7 @@ export default function BibliotecaDeFontes({
         </div>
 
         <div className="flex shrink-0 flex-col border-t border-border bg-background px-3.5 py-2.5 sm:flex-row sm:items-center sm:px-5 sm:py-3">
-          <p className="line-clamp-2 min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:mr-3">
+          <p className="line-clamp-2 min-w-0 flex-1 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:mr-3">
             {substituiEnviada.length
               ? `Substitui a fonte enviada ${substituiEnviada.map((a) => a.nome).join(" e ")}.`
               : plano.inserir.length

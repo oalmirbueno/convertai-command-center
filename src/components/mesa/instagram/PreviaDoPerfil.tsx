@@ -113,7 +113,7 @@ export default function PreviaDoPerfil({
         <div className="flex min-w-0 items-center">
           <FotoDoPerfil url={perfil.foto_url} nome={nome} tamanho={40} />
           <p className="ml-2 min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{perfil.username ? `@${perfil.username}` : nome}</p>
-          <span className="ml-2 shrink-0 text-[11.5px] tabular-nums text-muted-foreground">
+          <span className="ml-2 shrink-0 text-[12px] tabular-nums text-muted-foreground">
             {numeroDoPerfil(perfil.posts)} posts · {numeroDoPerfil(perfil.seguidores)} seg.
           </span>
         </div>
@@ -130,7 +130,7 @@ export default function PreviaDoPerfil({
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 w-full truncate text-center text-[10.5px] leading-4 text-foreground">{b.nome}</span>
+                <span className="mt-0.5 w-full truncate text-center text-[11px] leading-4 text-foreground">{b.nome}</span>
               </li>
             ))}
           </ul>

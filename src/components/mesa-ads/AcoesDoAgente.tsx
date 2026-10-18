@@ -26,7 +26,7 @@ import {
   type NumerosVistos,
 } from "./acoesDoAgenteApi";
 import { chavesRotina } from "./rotinaApi";
-import { botao, juntar } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 
 /**
  * Agente sênior que age (pedido do dono em 25/09 à noite): o que ele viu
@@ -41,9 +41,9 @@ const variacao = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${
 function Numero({ rotulo, valor, sub }: { rotulo: string; valor: string; sub?: string }) {
   return (
     <div className="min-w-0">
-      <p className="truncate text-[10.5px] text-muted-foreground">{rotulo}</p>
+      <p className="truncate text-[11px] text-muted-foreground">{rotulo}</p>
       <p className="truncate text-[13px] font-semibold tabular-nums">{valor}</p>
-      {sub && <p className="truncate text-[10.5px] text-muted-foreground">{sub}</p>}
+      {sub && <p className="truncate text-[11px] text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -65,8 +65,8 @@ export function NumerosQueEleViu({ n, carregando = false }: { n: NumerosVistos; 
       <button type="button" className="flex w-full min-w-0 items-start text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
         <span className="min-w-0 flex-1">
           <span className="block text-[12px] font-semibold text-muted-foreground">O que ele viu{carregando ? " (lendo a conta...)" : ""}</span>
-          <span className="block text-[12.5px] font-medium tabular-nums [overflow-wrap:anywhere]">{resumo}</span>
-          <span className="block text-[10.5px] text-muted-foreground">
+          <span className="block text-[13px] font-medium tabular-nums [overflow-wrap:anywhere]">{resumo}</span>
+          <span className="block text-[11px] text-muted-foreground">
             Fonte: {n.fonte}
             {n.periodo ? `, de ${dataCurta(n.periodo.inicio)} a ${dataCurta(n.periodo.fim)} (${n.periodo.dias} dias)` : ""}
             {n.atualizado_em ? `, coletado ${tempoDesde(n.atualizado_em)}` : ""}.
@@ -83,12 +83,12 @@ export function NumerosQueEleViu({ n, carregando = false }: { n: NumerosVistos; 
             <Numero rotulo="CTR do link" valor={porcento(n.ctr_link_pct)} sub={n.cpm !== null ? `CPM ${brl(n.cpm)}` : undefined} />
           </div>
           {n.mix.length > 0 && (
-            <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Onde o dinheiro está: {n.mix.map((m) => `${m.rotulo} ${Math.round(m.pct)}%`).join(" · ")}</p>
+            <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Onde o dinheiro está: {n.mix.map((m) => `${m.rotulo} ${Math.round(m.pct)}%`).join(" · ")}</p>
           )}
         </div>
       )}
       {n.alertas.map((a, k) => (
-        <p key={k} className="mt-1 flex items-start text-[11.5px] leading-snug text-warning">
+        <p key={k} className="mt-1 flex items-start text-[12px] leading-snug text-warning">
           <ShieldAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 [overflow-wrap:anywhere]">{a}</span>
         </p>
@@ -116,11 +116,11 @@ function AntesDepois({ i }: { i: ItemDaAcao }) {
   }
   if (!antes && !depois) return null;
   return (
-    <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[11.5px]">
+    <span className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px]">
       <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground [overflow-wrap:anywhere]">{antes}</span>
       <ArrowRight className="mx-1 h-3 w-3 shrink-0 text-muted-foreground" />
       <span className="rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary [overflow-wrap:anywhere]">{depois}</span>
-      {i.limitado && <span className="ml-1.5 text-[10.5px] text-muted-foreground">limitado a 30% por vez</span>}
+      {i.limitado && <span className="ml-1.5 text-[11px] text-muted-foreground">limitado a 30% por vez</span>}
     </span>
   );
 }
@@ -144,7 +144,7 @@ function ResumoDaTroca({ i }: { i: ItemDaAcao }) {
     t.frequencia !== null ? `frequência ${decimal(t.frequencia)}` : null,
   ].filter(Boolean);
   return (
-    <span className="mt-0.5 block text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-troca="">
+    <span className="mt-0.5 block text-[12px] leading-snug [overflow-wrap:anywhere]" data-troca="">
       <span className="block text-muted-foreground">
         Antes{t.periodo ? ` (${t.periodo.inicio.slice(8, 10)}/${t.periodo.inicio.slice(5, 7)} a ${t.periodo.fim.slice(8, 10)}/${t.periodo.fim.slice(5, 7)})` : ""}: {numeros.join(" · ")}
         {t.saude !== null ? ` · Jev: saúde ${decimal(t.saude)} de 4` : ""}
@@ -162,7 +162,7 @@ function ResumoDaTroca({ i }: { i: ItemDaAcao }) {
 export function AvisoDeGestao({ motivo }: { motivo: string | null }) {
   const { isAdmin } = useMesa();
   return (
-    <div className="mt-2 flex min-w-0 items-start rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-2 text-[11.5px] leading-snug">
+    <div className="mt-2 flex min-w-0 items-start rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-2 text-[12px] leading-snug">
       <KeyRound className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
       <span className="min-w-0 [overflow-wrap:anywhere]">
         {motivo || "O acesso de anúncios deste cliente não tem permissão de gestão."} As ações na Meta ficam indisponíveis até lá; o resto funciona.{" "}
@@ -308,8 +308,8 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
     // Depois da escolha, só o item escolhido fica (os outros não foram tocados).
     const visiveis = estado === "aberta" ? atual.itens : atual.itens.filter((i) => !(i.resultado && !i.resultado.ok && i.resultado.motivo === "Não marcado nesta confirmação."));
     return (
-      <section className="min-w-0 rounded-lg border border-primary/30 bg-card p-3" aria-label="Qual delas?" data-escolher-um={estado}>
-        <p className="flex min-w-0 items-center text-[12.5px] font-semibold">
+      <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-3")} aria-label="Qual delas?" data-escolher-um={estado}>
+        <p className="flex min-w-0 items-center text-[13px] font-semibold">
           <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
           {estado === "aberta" ? `Qual delas? (${atual.itens.length} com o mesmo nome)` : "Escolhido"}
         </p>
@@ -322,10 +322,10 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   <span className="block font-medium [overflow-wrap:anywhere]">{i.alvo ? i.alvo.nome : ROTULO_DA_ACAO[i.tipo]}</span>
                   {i.detalhe && <span className="block text-muted-foreground [overflow-wrap:anywhere]">{i.detalhe}</span>}
                   <AntesDepois i={i} />
-                  {i.indisponivel && estado === "aberta" && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
-                  {r && !r.ok && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">Não fiz: {r.motivo}</span>}
+                  {i.indisponivel && estado === "aberta" && <span className="mt-0.5 block text-[12px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
+                  {r && !r.ok && r.motivo && <span className="mt-0.5 block text-[12px] text-destructive [overflow-wrap:anywhere]">Não fiz: {r.motivo}</span>}
                   {r && r.ok && !r.desfeito && r.depois && <ProvaNaMeta i={i} />}
-                  {r && r.desfeito && <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Desfeito.</span>}
+                  {r && r.desfeito && <span className="mt-0.5 block text-[12px] text-muted-foreground">Desfeito.</span>}
                 </span>
                 {estado === "aberta" && !i.indisponivel && (
                   <button className={juntar(botao.icone, "mt-0.5 text-primary disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={() => void escolherUm(i.id)} aria-label={`É esta: ${i.detalhe || i.id}`} title="É esta">
@@ -337,7 +337,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
           })}
         </ul>
         {fazendo && fazendo.indexOf("escolher:") === 0 && (
-          <p className="mt-2 flex items-center text-[11.5px] leading-snug" role="status">
+          <p className="mt-2 flex items-center text-[12px] leading-snug" role="status">
             <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
             Fazendo na Meta: relê o item, faz e relê de novo para provar.
           </p>
@@ -353,23 +353,23 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
               {fazendo === "desfazer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
             </button>
           )}
-          {estado === "descartada" && <span className="text-[11.5px] text-muted-foreground">Nenhuma escolhida: nada mudou.</span>}
-          {estado === "desfeita" && <span className="text-[11.5px] text-muted-foreground">Desfeito: voltou como estava.</span>}
+          {estado === "descartada" && <span className="text-[12px] text-muted-foreground">Nenhuma escolhida: nada mudou.</span>}
+          {estado === "desfeita" && <span className="text-[12px] text-muted-foreground">Desfeito: voltou como estava.</span>}
         </div>
       </section>
     );
   }
 
   return (
-    <section className="min-w-0 rounded-lg border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
-      <p className="flex min-w-0 flex-wrap items-center text-[12.5px] font-semibold">
+    <section className={juntar(superficie.painel, "min-w-0 border-primary/30 p-3")} aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
+      <p className="flex min-w-0 flex-wrap items-center text-[13px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
         {feitosSozinho.length && estado === "aberta" ? `Já fiz ${feitosSozinho.length} · o resto espera você` : `Ações propostas · ${atual.itens.length}`}
-        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-warning">Modo ensaio</span>}
+        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">Modo ensaio</span>}
       </p>
       {atual.resumo && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {ensaio && estado === "aberta" && (
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+        <p className="mt-1.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
           Não mexi na conta: {atual.gestao && atual.gestao.motivo ? atual.gestao.motivo : "sem permissão de gestão."} Os itens da Meta mostram como seria feito. Resolvido isso, peça de novo.
         </p>
       )}
@@ -405,36 +405,36 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {i.alvo ? <span className="font-normal text-muted-foreground">{` · ${nomeDoNivel(i.alvo.nivel)} `}</span> : null}
                   {i.alvo ? i.alvo.nome : i.tipo === "tarefa_equipe" && i.texto ? `: ${i.texto}` : ""}
                   {i.criativo ? <span className="font-normal text-muted-foreground">{` com ${i.criativo.nome}`}</span> : null}
-                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[10.5px] font-medium text-success">Já fiz</span>}
+                  {sozinho && r && r.ok && !r.desfeito && <span className="ml-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Já fiz</span>}
                 </span>
                 <AntesDepois i={i} />
                 {i.troca && <ResumoDaTroca i={i} />}
                 {i.montagem && <ResumoDaMontagem i={i} />}
-                {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-medium text-warning">Seria feito assim</span>}
+                {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">Seria feito assim</span>}
                 {i.motivo && <span className="mt-0.5 block text-muted-foreground [overflow-wrap:anywhere]">{i.motivo}</span>}
-                {i.indisponivel && estado === "aberta" && !sozinho && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
-                {r && !r.ok && (estado !== "aberta" || sozinho) && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
-                {r && r.ok && r.motivo && <span className="mt-0.5 block text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{r.motivo}</span>}
+                {i.indisponivel && estado === "aberta" && !sozinho && <span className="mt-0.5 block text-[12px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
+                {r && !r.ok && (estado !== "aberta" || sozinho) && r.motivo && <span className="mt-0.5 block text-[12px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
+                {r && r.ok && r.motivo && <span className="mt-0.5 block text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{r.motivo}</span>}
                 {r && r.ok && !r.desfeito && r.depois && <ProvaNaMeta i={i} />}
                 {r && r.ok && !r.desfeito && i.tipo === "trocar_anuncio" && (
-                  <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Anúncio novo no mesmo conjunto (mesmo público e verba), em análise na Meta; o antigo ficou pausado. O Desfazer pausa o novo e volta o antigo.</span>
+                  <span className="mt-0.5 block text-[12px] text-muted-foreground">Anúncio novo no mesmo conjunto (mesmo público e verba), em análise na Meta; o antigo ficou pausado. O Desfazer pausa o novo e volta o antigo.</span>
                 )}
                 {r && r.ok && (i.tipo === "duplicar_anuncio" || i.tipo === "trocar_criativo") && (
-                  <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Criado pausado na Meta. Nada entra no ar sem alguém ativar.</span>
+                  <span className="mt-0.5 block text-[12px] text-muted-foreground">Criado pausado na Meta. Nada entra no ar sem alguém ativar.</span>
                 )}
-                {r && r.desfeito && <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Desfeito.</span>}
-                {r && r.motivo_desfazer && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">Não desfeito: {r.motivo_desfazer}</span>}
+                {r && r.desfeito && <span className="mt-0.5 block text-[12px] text-muted-foreground">Desfeito.</span>}
+                {r && r.motivo_desfazer && <span className="mt-0.5 block text-[12px] text-destructive [overflow-wrap:anywhere]">Não desfeito: {r.motivo_desfazer}</span>}
                 {r && r.ok && i.tipo === "plano_de_teste" && r.criado.plano_id && onPlanoPronto && (
-                  <button type="button" className="mt-0.5 text-[11.5px] font-medium text-primary hover:underline" onClick={() => onPlanoPronto(r.criado.plano_id)}>
+                  <button type="button" className="mt-0.5 text-[12px] font-medium text-primary hover:underline" onClick={() => onPlanoPronto(r.criado.plano_id)}>
                     Abrir o plano de teste
                   </button>
                 )}
                 {r && r.ok && !r.desfeito && i.tipo === "montar_campanha_do_plano" && (
                   <span className="mt-1 flex min-w-0 flex-wrap items-center">
                     {r.ativada_em ? (
-                      <span className="mb-1 mr-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[10.5px] font-medium text-success">Ativada</span>
+                      <span className="mb-1 mr-1.5 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">Ativada</span>
                     ) : (
-                      <Button type="button" size="sm" className="mb-1 mr-1.5 h-7 text-[11.5px]" disabled={!!fazendo} onClick={() => void ativar(i)} title="Começa a gastar a verba do plano. O Desfazer arquiva a campanha.">
+                      <Button type="button" size="sm" className="mb-1 mr-1.5 h-7 text-[12px]" disabled={!!fazendo} onClick={() => void ativar(i)} title="Começa a gastar a verba do plano. O Desfazer arquiva a campanha.">
                         {fazendo === `ativar:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
                         Ativar campanha{i.montagem && i.montagem.verba_diaria_brl !== null ? ` (${brl(i.montagem.verba_diaria_brl)} por dia)` : ""}
                       </Button>
@@ -452,7 +452,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         })}
       </ul>
       {fazendo === "confirmar" && (
-        <p className="mt-2 flex items-center rounded-md bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug" role="status" data-fazendo-na-meta="">
+        <p className="mt-2 flex items-center rounded-md bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug" role="status" data-fazendo-na-meta="">
           <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
           Fazendo na Meta, um item por vez: relê o item, faz e relê de novo para provar.
         </p>
@@ -462,12 +462,12 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       )}
       <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
         {estado === "aberta" && resolvidoSozinho ? (
-          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px]", falhasSozinho.length && !feitosSozinho.length ? "bg-destructive/10 text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
+          <span className={juntar("mb-1 mr-2 inline-flex items-center rounded-full px-2.5 py-1 text-[12px]", falhasSozinho.length && !feitosSozinho.length ? "bg-destructive/10 text-destructive" : "bg-success/15")} data-resolvido={falhasSozinho.length ? (feitosSozinho.length ? "em-parte" : "nao-feito") : "feito"}>
             {falhasSozinho.length && !feitosSozinho.length ? <X className="mr-1 h-3 w-3" /> : <Check className="mr-1 h-3 w-3" />}
             {falhasSozinho.length ? (feitosSozinho.length ? `Feito em parte: ${feitosSozinho.length} feito, ${falhasSozinho.length} não deu` : "Não feito: o motivo está no item") : "Feito e conferido na Meta"}
           </span>
         ) : estado === "aberta" && confirmaveis === 0 && feitosSozinho.length > 0 && !ensaio ? (
-          <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Feito o que era seguro. Nada espera confirmação.</span>
+          <span className="mb-1 mr-2 text-[12px] text-muted-foreground">Feito o que era seguro. Nada espera confirmação.</span>
         ) : estado === "aberta" ? (
           <>
             {confirmaveis > 0 || !ensaio ? (
@@ -476,7 +476,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                 Confirmar {marcados.length}
               </Button>
             ) : (
-              <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Ensaio: nada para confirmar agora.</span>
+              <span className="mb-1 mr-2 text-[12px] text-muted-foreground">Ensaio: nada para confirmar agora.</span>
             )}
             <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" disabled={!!fazendo} onClick={() => void agir("descartar")}>
               {fazendo === "descartar" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
@@ -487,7 +487,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
         ) : null}
         {estado === "feita" && (
           <>
-            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px]">
+            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[12px]">
               <Check className="mr-1 h-3 w-3" />
               Feito
             </span>
@@ -499,7 +499,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
           </>
         )}
         {(estado === "descartada" || estado === "desfeita") && (
-          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[12px] text-muted-foreground">
             <X className="mr-1 h-3 w-3" />
             {estado === "desfeita" ? "Desfeito: a conta voltou como estava onde deu" : feitosSozinho.length ? "Cancelado o resto: o que já fiz continua, com o Voltar de cada um" : "Cancelado: nada mudou"}
           </span>
@@ -523,7 +523,7 @@ function ProvaNaMeta({ i }: { i: ItemDaAcao }) {
   const quando = r.relido_em || r.feito_em;
   const hora = quando && isFinite(Date.parse(quando)) ? new Date(Date.parse(quando) - 3 * 3600_000).toISOString().slice(11, 16) : "";
   return (
-    <span className="mt-0.5 block text-[11.5px] text-success [overflow-wrap:anywhere]" data-prova-na-meta="">
+    <span className="mt-0.5 block text-[12px] text-success [overflow-wrap:anywhere]" data-prova-na-meta="">
       Conferido na Meta{hora ? ` às ${hora}` : ""}: {valor}
       {r.resposta && typeof r.resposta.success === "boolean" ? ` (a Meta respondeu ${r.resposta.success ? "sucesso" : "sem sucesso"})` : ""}.
     </span>
@@ -537,7 +537,7 @@ function ResumoDaMontagem({ i }: { i: ItemDaAcao }) {
   const r = i.resultado;
   const anuncios = r && r.ok && r.criado.anuncio_ids ? r.criado.anuncio_ids.split(",").filter(Boolean).length : 0;
   return (
-    <span className="mt-0.5 block text-[11.5px] leading-snug [overflow-wrap:anywhere]" data-montagem="">
+    <span className="mt-0.5 block text-[12px] leading-snug [overflow-wrap:anywhere]" data-montagem="">
       <span className="block">
         {m.campanha_nome || m.plano_nome}
         {m.verba_diaria_brl !== null ? ` · ${brl(m.verba_diaria_brl)} por dia` : ""}

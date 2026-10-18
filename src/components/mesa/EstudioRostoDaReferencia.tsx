@@ -222,7 +222,7 @@ export default function EstudioRostoDaReferencia({
   return (
     <div className="min-w-0" data-controle="rosto-da-referencia">
       <div className="mb-1 flex min-w-0 items-center">
-        <p className="min-w-0 flex-1 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Rosto</p>
+        <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">Rosto</p>
         <AjudaRecolhida rotulo="O que faz o Rosto">{AJUDA_DO_ROSTO}</AjudaRecolhida>
         {salvando && <Loader2 className="ml-1 h-3 w-3 shrink-0 animate-spin" aria-label="Salvando o rosto" />}
       </div>
@@ -248,10 +248,10 @@ export default function EstudioRostoDaReferencia({
 
       {(fonte === "cliente" || fonte === "equipe") && (
         <div className="mt-1.5 min-w-0">
-          {lista.isLoading && <p className="text-[10.5px] text-muted-foreground">Carregando rostos...</p>}
-          {lista.isError && <p className="text-[10.5px] text-destructive">Não foi possível ler os rostos.</p>}
+          {lista.isLoading && <p className="text-[11px] text-muted-foreground">Carregando rostos...</p>}
+          {lista.isError && <p className="text-[11px] text-destructive">Não foi possível ler os rostos.</p>}
           {lista.data && disponiveis.length === 0 && (
-            <p className="text-[10.5px] leading-snug text-muted-foreground">
+            <p className="text-[11px] leading-snug text-muted-foreground">
               Nenhum rosto autorizado. Registre em Contexto, Rosto, ou crie um clone na Mesa Foto.
             </p>
           )}
@@ -270,7 +270,7 @@ export default function EstudioRostoDaReferencia({
                       className={`flex max-w-[88px] flex-col items-center rounded-md border p-0.5 disabled:opacity-50 ${escolhido ? "border-primary ring-1 ring-primary" : "border-border"}`}
                     >
                       <Miniatura url={r.url} alt={r.nome} />
-                      <span className="mt-0.5 w-full truncate text-[10px] text-muted-foreground">{r.nome}</span>
+                      <span className="mt-0.5 w-full truncate text-[11px] text-muted-foreground">{r.nome}</span>
                     </button>
                   </li>
                 );
@@ -307,7 +307,7 @@ export default function EstudioRostoDaReferencia({
               })}
             </div>
           )}
-          <label className="flex items-start gap-1.5 text-[10.5px] leading-snug text-muted-foreground">
+          <label className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
             <Checkbox checked={autorizado} onCheckedChange={(v) => setAutorizado(v === true)} className="mt-px h-3.5 w-3.5" />
             <span>Tenho a autorização de uso da imagem desta pessoa.</span>
           </label>
@@ -403,7 +403,7 @@ export default function EstudioRostoDaReferencia({
       )}
 
       {salvo && fonte !== "nenhum" && (
-        <label className="mt-1.5 flex min-w-0 items-center text-[11.5px] text-foreground">
+        <label className="mt-1.5 flex min-w-0 items-center text-[12px] text-foreground">
           <Switch
             checked={!!salvo.destacar}
             disabled={bloqueado || salvando}

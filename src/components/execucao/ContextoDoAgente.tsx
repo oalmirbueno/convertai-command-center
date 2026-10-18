@@ -199,7 +199,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
               <span className="text-muted-foreground"> · confiança {(p.confianca * 100).toFixed(0)}%</span>
             )}
           </p>
-          <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-foreground/85">
+          <p className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/85">
             {p.justificativa}
           </p>
           <div className="mt-2.5">
@@ -263,7 +263,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                     <DocumentoDaExecucao texto={l.last_action} compacto />
                   )}
                   {l.next_step && (
-                    <div className="border-l-2 border-primary/40 pl-3"><span className="text-xs font-semibold">Próximo passo</span><DocumentoDaExecucao texto={l.next_step} compacto /></div>
+                    <div className="border-l-2 border-primary/40 pl-3"><span className="text-[12px] leading-4 font-semibold">Próximo passo</span><DocumentoDaExecucao texto={l.next_step} compacto /></div>
                   )}
                   {l.block_reason && (
                     <p className="text-[12px] text-destructive">
@@ -312,7 +312,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                 <p className={texto.auxiliar}>
                   {m.kind} · {quando(m.created_at)}
                 </p>
-                <p className="text-[12.5px] font-semibold text-foreground">{m.title}</p>
+                <p className="text-[13px] font-semibold text-foreground">{m.title}</p>
                 <p className="mt-0.5 whitespace-pre-wrap break-words text-[12px] text-foreground/85">
                   {m.content}
                 </p>
@@ -340,7 +340,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                   {d.author_kind === "humano" ? "você" : "o agente"} ·{" "}
                   {String(d.entry_type).replace(/_/g, " ")} · {quando(d.created_at)}
                 </p>
-                {d.title && <p className="text-[12.5px] font-semibold text-foreground">{d.title}</p>}
+                {d.title && <p className="text-[13px] font-semibold text-foreground">{d.title}</p>}
                 <DocumentoDaExecucao texto={d.body} compacto />
               </div>
             ))}
@@ -358,10 +358,10 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
           <ul className="mt-2 divide-y divide-border">
             {(data?.trilha ?? []).map((e: any) => (
               <li key={e.id} className="-mx-1 flex flex-wrap items-baseline py-1.5 [&>*]:mx-1">
-                <span className="text-[11.5px] tabular-nums text-muted-foreground">{quando(e.occurred_at)}</span>
+                <span className="text-[12px] tabular-nums text-muted-foreground">{quando(e.occurred_at)}</span>
                 <span className="text-[12px] text-foreground/90">{e.action}</span>
                 {e.old_status && e.new_status && (
-                  <span className="text-[11.5px] text-muted-foreground">
+                  <span className="text-[12px] text-muted-foreground">
                     {e.old_status} → {e.new_status}
                   </span>
                 )}

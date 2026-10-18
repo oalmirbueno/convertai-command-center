@@ -149,8 +149,8 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
         <ul className="mt-3 divide-y divide-border border-t border-border">
           {lista.map((v) => (
             <li key={v.id} className="flex min-w-0 items-center py-2">
-              <span className="mr-2 w-10 shrink-0 text-[11.5px] tabular-nums text-muted-foreground">{fmtDia(v.data)}</span>
-              <span className="mr-2 min-w-0 flex-1 truncate text-[12.5px] text-foreground">
+              <span className="mr-2 w-10 shrink-0 text-[12px] tabular-nums text-muted-foreground">{fmtDia(v.data)}</span>
+              <span className="mr-2 min-w-0 flex-1 truncate text-[13px] text-foreground">
                 <span className="font-semibold tabular-nums">{v.quantidade}</span> {v.quantidade === 1 ? "venda" : "vendas"}
                 {v.valor !== null ? <span className="tabular-nums"> · {fmtBrl(v.valor)}</span> : <span className="text-muted-foreground"> · sem valor</span>}
                 <span className="text-muted-foreground"> · {rotuloDoCanal(v.canal)}{v.campanhaNome ? ` · ${v.campanhaNome}` : ""}{v.origem !== "manual" ? " · rastreada" : ""}</span>

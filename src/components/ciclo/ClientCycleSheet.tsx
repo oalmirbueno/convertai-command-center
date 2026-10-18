@@ -763,7 +763,7 @@ export default function ClientCycleSheet({
                     O painel está pedindo
                   </p>
                   {pendencias.length === 0 ? (
-                    <p className="text-[11.5px] font-semibold text-success">
+                    <p className="text-[12px] font-semibold text-success">
                       Tudo em dia por aqui: nenhuma pendência neste cliente.
                     </p>
                   ) : (
@@ -771,7 +771,7 @@ export default function ClientCycleSheet({
                       {pendencias.map((p) => (
                         <div key={p.chave}>
                           <p
-                            className={`flex items-start gap-1.5 text-[11.5px] leading-snug ${
+                            className={`flex items-start gap-1.5 text-[12px] leading-snug ${
                               p.gravidade === "urgente" ? "text-destructive" : "text-warning"
                             }`}
                           >
@@ -780,7 +780,7 @@ export default function ClientCycleSheet({
                             {p.rota && (
                               <a
                                 href={p.rota}
-                                className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-foreground no-underline"
+                                className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] font-semibold text-foreground no-underline"
                               >
                                 Abrir
                               </a>
@@ -791,7 +791,7 @@ export default function ClientCycleSheet({
                                 disabled={criandoTarefa === p.chave}
                                 onClick={() => void criarTarefaDaPendencia(p)}
                                 title="Criar uma tarefa no Kanban a partir desta pendencia"
-                                className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary disabled:opacity-50"
+                                className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary disabled:opacity-50"
                               >
                                 + Tarefa
                               </button>
@@ -802,7 +802,7 @@ export default function ClientCycleSheet({
                           {(p.detalhes?.length ?? 0) > 0 && (
                             <div className="ml-3 mt-0.5 space-y-0.5">
                               {p.detalhes!.map((nome) => (
-                                <p key={nome} className="truncate text-[10.5px] text-muted-foreground">
+                                <p key={nome} className="truncate text-[11px] text-muted-foreground">
                                   · {nome}
                                 </p>
                               ))}
@@ -825,11 +825,11 @@ export default function ClientCycleSheet({
                   </p>
                   <div className="mt-1.5 space-y-1">
                     {tarefasDoCiclo.map((t) => (
-                      <div key={t.id} className="flex items-center gap-2 text-[11.5px]">
+                      <div key={t.id} className="flex items-center gap-2 text-[12px]">
                         <span className="min-w-0 flex-1 truncate text-foreground" title={t.title}>
                           {t.title}
                           {t.due_date && (
-                            <span className="ml-1 text-[10px] text-muted-foreground">· até {t.due_date.slice(8, 10)}/{t.due_date.slice(5, 7)}</span>
+                            <span className="ml-1 text-[11px] text-muted-foreground">· até {t.due_date.slice(8, 10)}/{t.due_date.slice(5, 7)}</span>
                           )}
                         </span>
                         {canWrite && (
@@ -838,7 +838,7 @@ export default function ClientCycleSheet({
                               type="button"
                               disabled={mexendoTarefa === t.id}
                               onClick={() => void concluirTarefaDoCiclo(t)}
-                              className="shrink-0 rounded border border-success/40 bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success disabled:opacity-50"
+                              className="shrink-0 rounded border border-success/40 bg-success/10 px-1.5 py-0.5 text-[11px] font-semibold text-success disabled:opacity-50"
                               title="Marcar como concluída"
                             >
                               Concluir
@@ -847,7 +847,7 @@ export default function ClientCycleSheet({
                               type="button"
                               disabled={mexendoTarefa === t.id}
                               onClick={() => void descartarTarefaDoCiclo(t)}
-                              className="shrink-0 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive disabled:opacity-50"
+                              className="shrink-0 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[11px] font-semibold text-destructive disabled:opacity-50"
                               title="Excluir: a tarefa não faz mais sentido"
                             >
                               Excluir
@@ -869,7 +869,7 @@ export default function ClientCycleSheet({
                   {jornada.map((etapa) => (
                     <p
                       key={etapa.chave}
-                      className={`flex items-start gap-1.5 text-[11.5px] leading-snug ${
+                      className={`flex items-start gap-1.5 text-[12px] leading-snug ${
                         etapa.feita
                           ? "text-muted-foreground line-through decoration-muted-foreground/40"
                           : etapa.atual
@@ -881,7 +881,7 @@ export default function ClientCycleSheet({
                       <span className="min-w-0">
                         {etapa.titulo}
                         {etapa.atual && (
-                          <span className="block text-[10px] font-normal text-muted-foreground">
+                          <span className="block text-[11px] font-normal text-muted-foreground">
                             {etapa.comoFecha}
                           </span>
                         )}
@@ -897,7 +897,7 @@ export default function ClientCycleSheet({
                   type="button"
                   onClick={() => void fecharSemana()}
                   disabled={!canWrite || complete || bulkRunning}
-                  className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[10.5px] font-semibold text-foreground disabled:opacity-40"
+                  className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[11px] font-semibold text-foreground disabled:opacity-40"
                 >
                   <CheckCheck className={`h-4 w-4 text-primary ${bulkRunning ? "animate-pulse" : ""}`} />
                   {complete ? "Semana fechada" : "Fechar semana"}
@@ -905,7 +905,7 @@ export default function ClientCycleSheet({
                 <button
                   type="button"
                   onClick={abrirWhatsApp}
-                  className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[10.5px] font-semibold text-foreground"
+                  className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[11px] font-semibold text-foreground"
                 >
                   <MessageCircle className="h-4 w-4 text-primary" />
                   WhatsApp
@@ -913,7 +913,7 @@ export default function ClientCycleSheet({
                 <button
                   type="button"
                   onClick={() => void copiarResumo()}
-                  className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[10.5px] font-semibold text-foreground"
+                  className="flex flex-col items-center gap-1 rounded-md border border-border bg-card px-2 py-2.5 text-[11px] font-semibold text-foreground"
                 >
                   <ClipboardCopy className="h-4 w-4 text-primary" />
                   Copiar resumo
@@ -955,15 +955,15 @@ export default function ClientCycleSheet({
                     type="button"
                     onClick={() => void copiarMensagemGrupo(opcao.momento, opcao.texto)}
                     disabled={carregandoMensagem}
-                    className="flex flex-col items-center gap-0.5 rounded-md border border-border bg-card px-2 py-2 text-[10.5px] font-semibold text-foreground disabled:opacity-40"
+                    className="flex flex-col items-center gap-0.5 rounded-md border border-border bg-card px-2 py-2 text-[11px] font-semibold text-foreground disabled:opacity-40"
                   >
                     <ClipboardCopy className="h-3.5 w-3.5 text-primary" />
                     {opcao.texto}
-                    <span className="text-[9px] font-normal text-muted-foreground">{opcao.dia}</span>
+                    <span className="text-[11px] font-normal text-muted-foreground">{opcao.dia}</span>
                   </button>
                 ))}
               </div>
-              <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
                 Montada agora com as entregas, o ciclo, os avulsos e as campanhas deste
                 cliente. Cada momento conta uma coisa diferente.
               </p>
@@ -979,7 +979,7 @@ export default function ClientCycleSheet({
               ) : (
                 <>
                 {heranca !== null && (
-                  <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400">
+                  <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[12px] font-medium text-amber-600 dark:text-amber-400">
                     Semana passada fechou {heranca}/{totalSteps}. O que ficou para trás continua valendo aqui.
                   </p>
                 )}
@@ -1008,7 +1008,7 @@ export default function ClientCycleSheet({
                           key={opcao.texto}
                           type="button"
                           onClick={() => setEditandoAnterior(opcao.valor)}
-                          className={`rounded-md px-2 py-1 text-[10.5px] font-semibold transition-colors ${
+                          className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
                             editandoAnterior === opcao.valor
                               ? "bg-card text-foreground shadow-sm"
                               : "text-muted-foreground"
@@ -1103,10 +1103,10 @@ export default function ClientCycleSheet({
                                 {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
+                                <span className={`block text-[13px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
                                   {rotuloDe(step)}
                                 </span>
-                                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                <span className="mt-0.5 block text-[11px] text-muted-foreground">
                                   {done ? "feita naquela semana" : "ficou sem marcar"}
                                 </span>
                               </span>
@@ -1146,7 +1146,7 @@ export default function ClientCycleSheet({
                             {pendentes.length === 0 ? (
                               <div className="flex h-9 items-center gap-2 rounded-md border border-success/25 bg-success/[0.05] px-2.5">
                                 <Check className="h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
-                                <span className="text-[11.5px] font-semibold text-success">
+                                <span className="text-[12px] font-semibold text-success">
                                   Frente completa — tudo desta fila esta no historico abaixo
                                 </span>
                               </div>
@@ -1178,10 +1178,10 @@ export default function ClientCycleSheet({
                                             {step}
                                           </span>
                                           <span className="min-w-0 flex-1">
-                                            <span className={`block text-[12.5px] leading-snug ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                                            <span className={`block text-[13px] leading-snug ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
                                               {rotuloDe(step)}
                                             </span>
-                                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
                                               {atual ? "agora" : "na fila"}
                                               {ctx ? " · toque para ver o contexto" : ""}
                                             </span>
@@ -1191,7 +1191,7 @@ export default function ClientCycleSheet({
                                           type="button"
                                           disabled={!canWrite || pendingKey === key || bulkRunning}
                                           onClick={() => void onToggle(client, step)}
-                                          className={`flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[11.5px] font-bold transition-transform active:scale-95 disabled:opacity-50 ${
+                                          className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-[12px] font-bold transition-transform active:scale-95 disabled:opacity-50 ${
                                             atual
                                               ? "bg-primary text-primary-foreground"
                                               : "border border-border bg-card text-muted-foreground"
@@ -1209,7 +1209,7 @@ export default function ClientCycleSheet({
                                           {(ctx.detalhes?.length ?? 0) > 0 && (
                                             <div className="mt-1 space-y-0.5">
                                               {ctx.detalhes!.map((nome) => (
-                                                <p key={nome} className="truncate text-[10.5px] text-muted-foreground">
+                                                <p key={nome} className="truncate text-[11px] text-muted-foreground">
                                                   · {nome}
                                                 </p>
                                               ))}
@@ -1218,7 +1218,7 @@ export default function ClientCycleSheet({
                                           {ctx.rota && (
                                             <a
                                               href={ctx.rota}
-                                              className="mt-1.5 inline-block rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-foreground no-underline"
+                                              className="mt-1.5 inline-block rounded border border-border px-2 py-0.5 text-[11px] font-semibold text-foreground no-underline"
                                             >
                                               Abrir onde se resolve
                                             </a>
@@ -1259,10 +1259,10 @@ export default function ClientCycleSheet({
                                   >
                                     <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
                                     <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-[11.5px] text-foreground/80">
+                                      <span className="block truncate text-[12px] text-foreground/80">
                                         {rotuloDe(step)}
                                       </span>
-                                      <span className="block text-[9.5px] text-muted-foreground">
+                                      <span className="block text-[11px] text-muted-foreground">
                                         reconhecido pelo painel · {prova}
                                       </span>
                                     </span>
@@ -1281,10 +1281,10 @@ export default function ClientCycleSheet({
                                 >
                                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
                                   <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-[11.5px] text-foreground/80">
+                                    <span className="block truncate text-[12px] text-foreground/80">
                                       {rotuloDe(step)}
                                     </span>
-                                    <span className="block text-[9.5px] text-muted-foreground">
+                                    <span className="block text-[11px] text-muted-foreground">
                                       {row?.done_at
                                         ? `${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} as ${hourOf(row.done_at)}${who ? ` por ${who}` : ""} · toque para desfazer`
                                         : "toque para desfazer"}
@@ -1317,12 +1317,12 @@ export default function ClientCycleSheet({
                   </div>
                   {!contextoRecolhido && <div className="mt-2 space-y-1.5">
                     {(contexto0?.agendadas || []).map((pub: any) => (
-                      <div key={pub.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
+                      <div key={pub.id} className="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-2">
                         <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
                           Publicação agendada
                         </span>
-                        <span className="shrink-0 text-[10.5px] tabular-nums text-muted-foreground">
+                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                           {new Date(pub.scheduled_at).toLocaleDateString("pt-BR", {
                             day: "2-digit", month: "2-digit",
                           })}
@@ -1330,9 +1330,9 @@ export default function ClientCycleSheet({
                       </div>
                     ))}
                     {(contexto0?.arquivos || []).map((file: any, index: number) => (
-                      <div key={`${file.file_name}-${index}`} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
+                      <div key={`${file.file_name}-${index}`} className="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-2">
                         <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
                           {file.file_name}
                         </span>
                         {file.approval_status === "approved" && (
@@ -1360,13 +1360,13 @@ export default function ClientCycleSheet({
                     if (event.key === "Enter") void adicionarAvulso();
                   }}
                   placeholder="Ex: gravação na loja com o time"
-                  className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => void adicionarAvulso()}
                   disabled={novoAvulso.trim().length < 3 || salvandoAvulso}
-                  className="shrink-0 rounded-md bg-secondary px-3 text-[11.5px] font-bold text-foreground disabled:opacity-40"
+                  className="shrink-0 rounded-md bg-secondary px-3 text-[12px] font-bold text-foreground disabled:opacity-40"
                 >
                   Somar
                 </button>
@@ -1401,7 +1401,7 @@ export default function ClientCycleSheet({
                       <button
                         type="button"
                         onClick={() => void apagarAvulso(avulso.id)}
-                        className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
+                        className="shrink-0 text-[11px] text-muted-foreground hover:text-destructive"
                       >
                         remover
                       </button>
@@ -1420,13 +1420,13 @@ export default function ClientCycleSheet({
                   onChange={(event) => setPedidoChecklist(event.target.value)}
                   placeholder="Descreva o que precisa ser feito para este cliente. Ex: gravar depoimento na loja, refazer a arte do cardápio e pedir as fotos novas."
                   rows={2}
-                  className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
+                  className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => void gerarChecklist()}
                   disabled={pedidoChecklist.trim().length < 3 || gerandoChecklist}
-                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary py-2 text-[11.5px] font-bold text-primary-foreground disabled:opacity-40"
+                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary py-2 text-[12px] font-bold text-primary-foreground disabled:opacity-40"
                 >
                   <Sparkles className={`h-3.5 w-3.5 ${gerandoChecklist ? "animate-pulse" : ""}`} />
                   {gerandoChecklist ? "Montando a lista..." : "Montar checklist"}
@@ -1446,7 +1446,7 @@ export default function ClientCycleSheet({
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="min-w-0 flex-1 text-[12.5px] font-semibold leading-snug text-foreground">
+                          <p className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-foreground">
                             {lista.title}
                           </p>
                           <span className="shrink-0 text-[11px] font-bold tabular-nums text-muted-foreground">
@@ -1513,13 +1513,13 @@ export default function ClientCycleSheet({
                   onChange={(event) => setNovaNota(event.target.value)}
                   placeholder="Anote uma decisão, um combinado, algo que mudou de rumo..."
                   rows={2}
-                  className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
+                  className="w-full resize-none rounded-md border border-border bg-card px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => void salvarNota()}
                   disabled={!novaNota.trim() || salvandoNota}
-                  className="mt-1.5 w-full rounded-md bg-primary/10 py-2 text-[11.5px] font-semibold text-primary disabled:opacity-40"
+                  className="mt-1.5 w-full rounded-md bg-primary/10 py-2 text-[12px] font-semibold text-primary disabled:opacity-40"
                 >
                   {salvandoNota ? "Guardando..." : "Guardar na história"}
                 </button>
@@ -1530,18 +1530,18 @@ export default function ClientCycleSheet({
                   {historia.map((entrada: MemoryEntry) => (
                     <div key={entrada.id} className="relative">
                       <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-primary/60" />
-                      <p className="text-[11.5px] text-muted-foreground">
+                      <p className="text-[12px] text-muted-foreground">
                         {new Date(entrada.created_at).toLocaleDateString("pt-BR", {
                           day: "2-digit", month: "2-digit", year: "2-digit",
                         })}{" "}
                         · {MEMORY_LABELS[entrada.kind] || entrada.kind}
                       </p>
                       {entrada.title && (
-                        <p className="text-[12.5px] font-semibold leading-snug text-foreground">
+                        <p className="text-[13px] font-semibold leading-snug text-foreground">
                           {entrada.title}
                         </p>
                       )}
-                      <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                      <p className="text-[12px] leading-relaxed text-muted-foreground">
                         {entrada.content.length > 220
                           ? `${entrada.content.slice(0, 220)}...`
                           : entrada.content}
@@ -1550,7 +1550,7 @@ export default function ClientCycleSheet({
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
                   Ainda não há história registrada. Cada mensagem publicada, semana
                   fechada e anotação passa a aparecer aqui, em ordem.
                 </p>
@@ -1582,7 +1582,7 @@ export default function ClientCycleSheet({
                           style={{ height: `${Math.max(fill * 100, fill > 0 ? 8 : 3)}%` }}
                         />
                       </span>
-                      <span className="text-[8.5px] tabular-nums text-muted-foreground">
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
                         {start.getDate()}
                       </span>
                     </div>
@@ -1599,7 +1599,7 @@ export default function ClientCycleSheet({
                     {servicos.map((servico) => (
                       <span
                         key={servico}
-                        className="rounded-md bg-secondary px-2 py-1 text-[10.5px] font-medium text-muted-foreground"
+                        className="rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-muted-foreground"
                       >
                         {servico}
                       </span>
@@ -1623,7 +1623,7 @@ export default function ClientCycleSheet({
                     key={link.to}
                     to={link.to}
                     onClick={onClose}
-                    className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-[11.5px] font-semibold text-muted-foreground hover:text-foreground"
+                    className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
                   >
                     <link.icon className="h-3.5 w-3.5" /> {link.label}
                   </Link>

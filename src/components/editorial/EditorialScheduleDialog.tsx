@@ -821,7 +821,7 @@ export default function EditorialScheduleDialog({
                           visual de que a peça certa foi escolhida — com um
                           clipe de papel, quem confere no celular precisa ler o
                           nome do arquivo para ter certeza. */}
-                      <span className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border">
+                      <span className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border">
                         <AssetPreview asset={selectedAsset} />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -830,10 +830,10 @@ export default function EditorialScheduleDialog({
                         </span>
                         {/* Duas linhas em vez de corte: no celular o nome
                             terminava em "..." e virava adivinhação. */}
-                        <span className="mt-1 block line-clamp-2 text-sm font-medium leading-snug text-foreground">
+                        <span className="mt-1 block line-clamp-2 text-[13px] font-medium leading-snug text-foreground">
                           {selectedAsset.root.file_name}
                         </span>
-                        <span className="mt-1 block text-xs text-muted-foreground">
+                        <span className="mt-1 block text-[12px] leading-4 text-muted-foreground">
                           {selectedAsset.contentType === "carousel"
                             ? `Carrossel · ${selectedAsset.files.length} arquivos`
                             : selectedAsset.contentType === "video"
@@ -844,7 +844,7 @@ export default function EditorialScheduleDialog({
                             aprovação — só o publicar exige. O selo diz isso
                             antes de o dono descobrir na prática. */}
                         {!isFilePublishable(selectedAsset.root as never) && (
-                          <span className="mt-1.5 inline-flex rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">
+                          <span className="mt-1.5 inline-flex rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning">
                             Entra na agenda · publica após aprovação
                           </span>
                         )}
@@ -1018,10 +1018,10 @@ export default function EditorialScheduleDialog({
                               aria-label={`Selecionar ${account.display_name}`}
                             />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-xs font-medium text-foreground">
+                              <span className="block truncate text-[12px] leading-4 font-medium text-foreground">
                                 {account.handle || account.display_name}
                               </span>
-                              <span className="block text-[10px] text-muted-foreground">
+                              <span className="block text-[11px] text-muted-foreground">
                                 {PLATFORM_LABELS[
                                   account.platform as keyof typeof PLATFORM_LABELS
                                 ] || account.platform}
@@ -1035,7 +1035,7 @@ export default function EditorialScheduleDialog({
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-[9px]",
+                                "text-[11px]",
                                 account.connection_status === "connected"
                                   ? "border-success/25 bg-success/10 text-success"
                                   : unavailable
@@ -1049,17 +1049,17 @@ export default function EditorialScheduleDialog({
                         );
                       })}
                       {visibleAccounts.length === 0 && (
-                        <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
+                        <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-[12px] leading-4 text-muted-foreground">
                           Nenhuma conta corresponde à busca.
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 p-4 text-center">
-                      <p className="text-xs font-medium text-foreground">
+                      <p className="text-[12px] leading-4 font-medium text-foreground">
                         Nenhuma conta vinculada a este projeto
                       </p>
-                      <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
                         Conecte ou vincule a conta aqui mesmo para continuar.
                       </p>
                     </div>
@@ -1085,7 +1085,7 @@ export default function EditorialScheduleDialog({
                   {hasUnavailableSelection && (
                     <p
                       role="alert"
-                      className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[10px] leading-4 text-destructive"
+                      className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] leading-4 text-destructive"
                     >
                       Uma conta deste plano precisa ser reconectada antes do
                       agendamento.
@@ -1094,7 +1094,7 @@ export default function EditorialScheduleDialog({
                   {hasMissingSelectedAccounts && (
                     <p
                       role="alert"
-                      className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[10px] leading-4 text-destructive"
+                      className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] leading-4 text-destructive"
                     >
                       {missingSelectedAccountIds.length === 1
                         ? "Uma conta deste plano foi inativada ou removida do projeto."

@@ -83,7 +83,7 @@ export default function EstudioArteDaAgenda({
 
       {confirmando && (
         <div className="mb-3 flex flex-col rounded-lg border border-warning/50 bg-background p-3 sm:flex-row sm:items-center">
-          <p className="mb-2 min-w-0 flex-1 text-[12.5px] leading-snug sm:mb-0 sm:mr-3">
+          <p className="mb-2 min-w-0 flex-1 text-[13px] leading-snug sm:mb-0 sm:mr-3">
             Fazer uma arte nova para este item? A arte atual continua na Agenda até a nova ser entregue.
           </p>
           <div className="flex shrink-0 items-center">
@@ -98,7 +98,7 @@ export default function EstudioArteDaAgenda({
       )}
 
       {laminas.isLoading && !lista.length && (
-        <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo as lâminas…</p>
+        <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo as lâminas…</p>
       )}
       {laminas.isError && <p className="mb-2 rounded-lg bg-destructive/10 p-2.5 text-[12px] [overflow-wrap:anywhere]">{textoDoErro(laminas.error)}</p>}
 
@@ -131,7 +131,7 @@ export default function EstudioArteDaAgenda({
       {atual && (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-2 flex h-8 shrink-0 items-center">
-            <p className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
+            <p className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
               Lâmina {Math.min(selecionada, lista.length - 1) + 1} de {lista.length}
             </p>
             <button type="button" className={botao.icone} onClick={() => setAmpliada(Math.min(selecionada, lista.length - 1))} aria-label="Ver grande" title="Ver grande">
@@ -167,7 +167,7 @@ export function InspetorDaArte({ arte, publicacao, linkAgenda }: { arte: ArteNaA
   return (
     <div className="min-w-0 space-y-4">
       <div>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{arte.origem === "anexo" ? "Imagem anexada à tarefa" : "Post na Agenda"}</p>
+        <p className="text-[11px] font-medium text-muted-foreground">{arte.origem === "anexo" ? "Imagem anexada à tarefa" : "Post na Agenda"}</p>
         <p className="mt-1 text-[14px] font-semibold leading-snug [overflow-wrap:anywhere]">{arte.titulo || "Sem título"}</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
           {publicacao?.status === "published" ? "Publicado" : quando ? "Agendado" : "Sem data de publicação"}
@@ -181,14 +181,14 @@ export function InspetorDaArte({ arte, publicacao, linkAgenda }: { arte: ArteNaA
       </div>
       <div>
         <div className="mb-1.5 flex min-h-7 items-center">
-          <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Legenda do post</p>
+          <p className="flex-1 text-[11px] font-medium text-muted-foreground">Legenda do post</p>
           {arte.legenda && (
             <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => void copiar()} aria-label="Copiar a legenda" title="Copiar a legenda">
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
         </div>
-        <p className="whitespace-pre-wrap rounded-lg border border-border bg-background px-3 py-2.5 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
+        <p className="whitespace-pre-wrap rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
           {arte.legenda || "Sem legenda no post."}
         </p>
       </div>

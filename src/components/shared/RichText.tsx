@@ -91,7 +91,7 @@ export default function RichText({ text, className }: { text: string; className?
           return (
             <p
               key={index}
-              className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary first:mt-0"
+              className="mb-1.5 mt-4 text-[11px] font-semibold text-primary first:mt-0"
             >
               {block.text}
             </p>

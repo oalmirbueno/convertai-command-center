@@ -115,7 +115,7 @@ function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; lar
     const marcas: number[] = [];
     for (let s = 0; s <= total + passo; s += passo) marcas.push(Math.round(s * 1000) / 1000);
     return marcas.map((s) => (
-      <span key={s} className="absolute top-0 h-full border-l border-border/70 pl-1 text-[10px] leading-[24px] text-muted-foreground tabular-nums" style={{ left: s * px }}>
+      <span key={s} className="absolute top-0 h-full border-l border-border/70 pl-1 text-[11px] leading-[24px] text-muted-foreground tabular-nums" style={{ left: s * px }}>
         {passo < 1 ? tempoFino(s).replace(/,00$/, "") : tempoCurto(s)}
       </span>
     ));
@@ -157,7 +157,7 @@ const CabecalhoDaTrilha = memo(function CabecalhoDaTrilha({ t, onOps }: { t: Tri
   const som = t.tipo === "video" || t.tipo === "audio";
   return (
     <div className="sticky left-0 z-10 flex shrink-0 items-center border-b border-r border-border bg-background px-1.5" style={{ width: LARGURA_DO_CABECALHO, height: ALTURA[t.tipo] }}>
-      <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium" title={t.nome}>
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium" title={t.nome}>
         {t.nome || ROTULO_DA_TRILHA[t.tipo]}
       </span>
       {som && (
@@ -193,7 +193,7 @@ const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, f
   const rotulo = rotuloDoClipe(projeto, c);
   return (
     <div
-      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left transition-opacity", COR[t.tipo], ativo && "ring-2 ring-primary", destacado && !ativo && "ring-2 ring-amber-400", apagado && !ativo && "opacity-25", a && "z-20 opacity-90 shadow-lg")}
+      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left transition-opacity", COR[t.tipo], ativo && "ring-2 ring-primary", destacado && !ativo && "ring-2 ring-amber-400", apagado && !ativo && "opacity-25", a && "z-20 opacity-90 shadow-sm")}
       style={{ left: esquerda, width: Math.max(2, w), transform: a && a.tipo === "mover" ? `translateY(${a.dy}px)` : undefined, cursor: "grab" }}
       title={`${apelido} · ${rotulo} · ${tempoFino(c.inicio_s)} a ${tempoFino(fimDoClipe(c))}`}
       data-clipe={c.id}
@@ -229,7 +229,7 @@ const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, f
         {c.velocidade !== 1 ? ` · ${c.velocidade}x` : ""}
         {c.comparar ? " · antes e depois" : ""}
       </span>
-      {c.zoom && <span className="pointer-events-none absolute bottom-0.5 right-1 rounded bg-black/50 px-1 text-[9.5px] text-white">zoom {c.zoom.para}</span>}
+      {c.zoom && <span className="pointer-events-none absolute bottom-0.5 right-1 rounded bg-black/50 px-1 text-[11px] text-white">zoom {c.zoom.para}</span>}
       <span
         className="absolute bottom-0 left-0 top-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40"
         onMouseDown={(e) => {

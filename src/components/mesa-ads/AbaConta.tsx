@@ -336,8 +336,8 @@ function PainelDaAnalise({
                 <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">{t.titulo}</p>
                 {t.hipotese && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{t.hipotese}</p>}
                 <div className="mt-auto flex min-w-0 flex-wrap items-center pt-2">
-                  {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[10.5px]">{humanizar(t.estilo_visual)}</span>}
-                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
+                  {t.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">{humanizar(t.estilo_visual)}</span>}
+                  {t.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(t.objetivo)}</span>}
                   <span className="mb-1 ml-auto">
                     <BotaoComCusto
                       rotulo="Criar plano deste teste"

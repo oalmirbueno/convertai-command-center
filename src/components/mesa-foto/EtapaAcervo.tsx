@@ -183,7 +183,7 @@ function LeituraNaTela({ leitura }: { leitura: LeituraDaFoto }) {
   const q = leitura.qualidade;
   return (
     <div className="space-y-2 rounded-md bg-muted/50 p-3" data-leitura-da-foto="">
-      {leitura.descricao && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{leitura.descricao}</p>}
+      {leitura.descricao && <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{leitura.descricao}</p>}
       <ListaCurta titulo="Observado na foto" itens={leitura.observado} />
       {leitura.texto_lido && (
         <div>
@@ -192,7 +192,7 @@ function LeituraNaTela({ leitura }: { leitura: LeituraDaFoto }) {
         </div>
       )}
       {(q.nitidez || q.luz || q.enquadramento) && (
-        <p className="text-[11.5px] text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground">
           {q.nitidez && <>Nitidez: <span className="text-foreground">{q.nitidez}</span>. </>}
           {q.luz && <>Luz: <span className="text-foreground">{q.luz}</span>. </>}
           {q.enquadramento && <>Enquadramento: <span className="text-foreground">{q.enquadramento}</span>.</>}
@@ -200,7 +200,7 @@ function LeituraNaTela({ leitura }: { leitura: LeituraDaFoto }) {
       )}
       {q.problemas.length > 0 && <ListaCurta titulo="Defeitos: prefira outra fonte se afetarem o assunto" itens={q.problemas} tom="alerta" />}
       {leitura.sugestao && (leitura.sugestao.tipo || leitura.sugestao.papel) && (
-        <p className="text-[11.5px] text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground">
           Sugestão: {leitura.sugestao.nome ? <span className="text-foreground">{leitura.sugestao.nome}</span> : "kit"}
           {leitura.sugestao.tipo ? ` · ${rotuloDoTipo(leitura.sugestao.tipo)}` : ""}
           {leitura.sugestao.papel ? ` · papel ${rotuloDoPapel(leitura.sugestao.papel).toLowerCase()}` : ""}
@@ -304,7 +304,7 @@ function DetalheDaFoto({
         <FotoInteira foto={foto} />
       </button>
       {classeDaFoto(foto) === "gerada" && (
-        <p className="rounded-md bg-primary/5 px-2.5 py-1.5 text-[11.5px] leading-snug text-foreground">
+        <p className="rounded-md bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug text-foreground">
           Imagem gerada por IA. Partes que não aparecem nas fotos originais podem ter sido criadas.
         </p>
       )}
@@ -414,7 +414,7 @@ function GuiaDaArea() {
   ];
   return (
     <div className="p-4" data-guia-das-fotos="">
-      <p className="flex items-center text-[12.5px] font-medium">
+      <p className="flex items-center text-[13px] font-medium">
         <Eye className="mr-1.5 h-4 w-4 text-primary" /> Nenhuma foto aberta
       </p>
       <ul className="mt-2.5 space-y-2">
@@ -569,7 +569,7 @@ function EntradaDeFotos({ lado, onArquivos, andamento, onLink }: { lado: LadoDaF
           }}
           data-link-da-foto=""
         >
-          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https:// link da imagem" aria-label="Link da imagem" className={juntar(campo, "h-8 text-[12.5px]")} autoFocus />
+          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https:// link da imagem" aria-label="Link da imagem" className={juntar(campo, "h-8 text-[13px]")} autoFocus />
           <Button type="submit" size="sm" className="ml-1.5 h-8 shrink-0 text-[12px]" disabled={!valido || trazendo}>
             {trazendo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null} Trazer
           </Button>
@@ -873,7 +873,7 @@ export default function EtapaAcervo() {
                   <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, descrição ou tag" className={juntar(campo, "pl-8")} aria-label="Buscar no acervo" />
                 </div>
                 <Select value={kitValido} onValueChange={setKitFiltro}>
-                  <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Filtrar por produto">
+                  <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Filtrar por produto">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -957,7 +957,7 @@ export default function EtapaAcervo() {
                 data-barra-de-selecao=""
               >
                 <div
-                  className="pointer-events-auto flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-contain scrollbar-hidden rounded-lg border border-border bg-card px-2 py-1.5 shadow-xl lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none"
+                  className="pointer-events-auto flex min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-x-auto overscroll-contain scrollbar-hidden rounded-md border border-border bg-card px-2 py-1.5 shadow-sm lg:rounded-none lg:border-0 lg:px-1 lg:shadow-none"
                   data-linha-da-selecao=""
                 >
                   <span className="mr-1 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-primary" title={`${escolhidas.length} ${escolhidas.length === 1 ? "foto marcada" : "fotos marcadas"}`}>

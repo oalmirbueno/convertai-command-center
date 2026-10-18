@@ -20,7 +20,7 @@ export const ICONE_DO_VIDEO = Film;
 /** Painel flutuante preto (paleta, ajustes, esteira, galeria, conversa). */
 export const PAINEL = "border border-white/10 bg-zinc-950/95 text-zinc-100 shadow-2xl";
 /** Botão pequeno sobre fundo preto. */
-export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-2 text-[11.5px] text-zinc-100 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50";
+export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-2 text-[12px] text-zinc-100 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50";
 /**
  * Botão só ícone sobre fundo preto, sem borda (dono, 16/10/2026: "deixa só o
  * ícone, sem as bordinhas; passo em cima e ele fala o que é"). Sempre com
@@ -29,11 +29,11 @@ export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border bo
 export const BOTAO_ICONE = "nodrag toque-compacto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 /** Pílula de escolha sobre fundo preto (ligada ou não). */
 export const pilula = (ligada: boolean) =>
-  `mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[11.5px] transition-colors ${ligada ? "border-emerald-400/70 bg-emerald-400/15 text-white" : "border-white/10 bg-white/5 text-zinc-400 hover:text-white"}`;
+  `mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[12px] transition-colors ${ligada ? "border-emerald-400/70 bg-emerald-400/15 text-white" : "border-white/10 bg-white/5 text-zinc-400 hover:text-white"}`;
 /** Rótulo pequeno de seção nos painéis pretos. */
-export const ROTULO = "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400";
+export const ROTULO = "mb-1.5 text-[11px] font-semibold text-zinc-400";
 /** Campo de texto sobre fundo preto. */
-export const CAMPO = "w-full min-w-0 rounded-lg border border-white/10 bg-zinc-900/70 px-2.5 py-2 text-[12.5px] text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-400/60 focus:outline-none";
+export const CAMPO = "w-full min-w-0 rounded-lg border border-white/10 bg-zinc-900/70 px-2.5 py-2 text-[13px] text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-400/60 focus:outline-none";
 
 /**
  * Rolagem (dono, 26/09: "quando eu rolo, ele fica mexendo todo o canvas").

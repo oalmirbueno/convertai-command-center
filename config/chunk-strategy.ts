@@ -52,6 +52,10 @@ export const PISO_DE_TAMANHO = 10_000;
  * fragmento vizinho para a abertura e ela cresceu mais do que solto.
  */
 const BASE_DE_DESIGN_NA_TELA: Array<[RegExp, string]> = [
+  // Os roteiros do tour (só texto, sem import) saíram da abertura em 18/10 e
+  // chegam no ocioso (AppLayout). Soltos, viraram destino do piso: o /login
+  // passou a baixar o tour inteiro porque um componente pequeno grudou nele.
+  [/[\\/]src[\\/]components[\\/]onboarding[\\/]tourConfigs\.ts$/, "roteiros-do-tour"],
   [/[\\/]src[\\/]lib[\\/]uiux[\\/]dados[\\/]indice-leve\.ts$/, "base-uiux"],
   [/[\\/]_shared[\\/]uiux[\\/]pt\.ts$/, "base-uiux-pt"],
   [/[\\/]_shared[\\/]uiux[\\/]dados[\\/]ux\.ts$/, "base-uiux-regras"],

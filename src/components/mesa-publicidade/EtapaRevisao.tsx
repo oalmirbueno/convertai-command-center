@@ -209,7 +209,7 @@ export default function EtapaRevisao() {
               // 16/10/2026: ações só em ícone; o número fica num selo no canto. ListX (não o X do Reprovar de cada foto): o pedido vai ao agente.
               <button type="button" className={juntar(botao.icone, "relative")} onClick={() => pedirAoAgente("Reprove as fotos que mudaram o produto.")} aria-label={`Reprovar as ${mudaram} que mudaram o produto`} title={`Reprovar as ${mudaram} que mudaram o produto`}>
                 <ListX className="h-4 w-4" />
-                <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-destructive px-1 text-center text-[9.5px] font-semibold leading-4 text-destructive-foreground">{mudaram}</span>
+                <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-destructive px-1 text-center text-[11px] font-semibold leading-4 text-destructive-foreground">{mudaram}</span>
               </button>
             )}
             <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={atualizando || !revisaveis} onClick={() => void atualizar()} aria-label="Atualizar a revisão" title="Atualizar a revisão">

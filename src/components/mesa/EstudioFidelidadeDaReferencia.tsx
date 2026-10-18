@@ -84,7 +84,7 @@ export default function EstudioFidelidadeDaReferencia({
           );
         })}
       </div>
-      <p className="mt-0.5 flex min-w-0 items-center text-[10.5px] leading-snug text-muted-foreground">
+      <p className="mt-0.5 flex min-w-0 items-center text-[11px] leading-snug text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">
           {alvo === "lamina" && !propria ? `Segue o trabalho (${ROTULO_DA_FIDELIDADE[herdada]}). ` : ""}
           {(FIDELIDADES.find((f) => f.valor === atual) || FIDELIDADES[0]).dica}

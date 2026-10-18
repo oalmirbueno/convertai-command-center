@@ -106,7 +106,7 @@ export default function OQueFoiFeito({ clientId }: { clientId?: string }) {
                   {autonoma ? "por conta" : "sua ordem"}
                 </span>
                 <span className="min-w-0 truncate text-[12px] font-medium text-foreground/80">{d.agente}</span>
-                <span className="ml-auto shrink-0 pl-2 text-[11.5px] tabular-nums text-muted-foreground">{quando(d.occurred_at)}</span>
+                <span className="ml-auto shrink-0 pl-2 text-[12px] tabular-nums text-muted-foreground">{quando(d.occurred_at)}</span>
               </div>
 
               <p className="mt-1 text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{d.o_que}</p>
@@ -114,7 +114,7 @@ export default function OQueFoiFeito({ clientId }: { clientId?: string }) {
 
               {/* O ACESSO. É a linha mais importante do item: sem ela, saber
                   que algo foi feito não ajuda em nada. */}
-              <p className="mt-1.5 min-w-0 text-[12.5px]">
+              <p className="mt-1.5 min-w-0 text-[13px]">
                 <span className="mr-1.5 text-[12px] font-medium text-muted-foreground">onde acessar</span>
                 {acesso.tipo === "url" ? (
                   <a

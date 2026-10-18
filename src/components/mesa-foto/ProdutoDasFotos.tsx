@@ -68,7 +68,7 @@ function ChipDoProduto({ kit, capa, ativo, onEscolher, grande = false }: { kit: 
       <button type="button" onClick={onEscolher} className="flex min-w-0 flex-1 items-center text-left" aria-pressed={ativo} aria-label={`Escolher o produto ${kit.nome}`}>
         <span className={`mr-2 shrink-0 ${grande ? "w-14" : "w-10"}`}>{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className={`block rounded-lg bg-muted ${grande ? "h-14 w-14" : "h-10 w-10"}`} />}</span>
         <span className="min-w-0">
-          <span className="block truncate text-[12.5px] font-semibold">{kit.nome || "Produto sem nome"}</span>
+          <span className="block truncate text-[13px] font-semibold">{kit.nome || "Produto sem nome"}</span>
           <span className="block truncate text-[11px] text-muted-foreground">
             {rotuloDoTipo(kit.tipo)}
             {kit.variante ? ` · ${kit.variante}` : ""} · {kit.refs.length} {kit.refs.length === 1 ? "foto" : "fotos"}
@@ -76,7 +76,7 @@ function ChipDoProduto({ kit, capa, ativo, onEscolher, grande = false }: { kit: 
         </span>
       </button>
       {kit.status === "rascunho" ? (
-        <Button type="button" size="sm" variant={ativo ? "default" : "outline"} className="ml-1.5 h-7 shrink-0 px-2 text-[11.5px]" disabled={confirmando} onClick={() => void confirmar()}>
+        <Button type="button" size="sm" variant={ativo ? "default" : "outline"} className="ml-1.5 h-7 shrink-0 px-2 text-[12px]" disabled={confirmando} onClick={() => void confirmar()}>
           {confirmando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
           Confirmar
         </Button>

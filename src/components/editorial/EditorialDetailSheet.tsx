@@ -204,21 +204,21 @@ export function PublicationDeliveryStatus({ publicationId }: { publicationId: st
         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-sky-500" />
       )}
       <div className="min-w-0 flex-1">
-        <p className={cn("text-xs font-medium", failed ? "text-destructive" : "text-sky-500")}>
+        <p className={cn("text-[12px] leading-4 font-medium", failed ? "text-destructive" : "text-sky-500")}>
           {AUTOPUBLISH_STAGE_LABELS[data.stage]}
           {/* "Tentativas" é contagem de idas à Meta, não de erros; mostrar
               durante o processo assustava sem motivo. Só aparece na falha. */}
           {failed && data.attempts > 1 && ` · ${data.attempts} idas à Meta`}
         </p>
         {(failed || cancelled) && data.last_error && (
-          <p className="mt-0.5 break-words text-xs text-muted-foreground">{data.last_error}</p>
+          <p className="mt-0.5 break-words text-[12px] leading-4 text-muted-foreground">{data.last_error}</p>
         )}
         {failed && (
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="mt-2 h-7 gap-1 px-2 text-xs"
+            className="mt-2 h-7 gap-1 px-2 text-[12px] leading-4"
             disabled={retrying}
             onClick={handleRetry}
           >
@@ -1411,10 +1411,10 @@ export default function EditorialDetailSheet({
                       <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                         <div>
-                          <p className="text-xs font-medium text-destructive">
+                          <p className="text-[12px] leading-4 font-medium text-destructive">
                             {bundle.internal.failure_code || "Falha"}
                           </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
+                          <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">
                             {bundle.internal.failure_reason}
                           </p>
                         </div>
@@ -1822,7 +1822,7 @@ export default function EditorialDetailSheet({
               </>
             )}
             {(action === "cancel" || action === "reopen") && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[13px] leading-5 text-muted-foreground">
                 {action === "cancel"
                   ? "O registro permanece no histórico e pode ser reaberto depois."
                   : "A publicação volta ao estado planejado para ser revisada."}

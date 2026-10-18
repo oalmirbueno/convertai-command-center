@@ -144,7 +144,7 @@ export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
           // 16/10/2026 (dono: "só o ícone", sem bordinha): a seta verde; o próximo passo vai no aria-label e no title.
           // No celular (< 640 px) ela é a ação principal no polegar: fixa no canto de baixo, acima da barra do painel,
           // sem ocupar uma linha só para ela no topo.
-          className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:fixed max-sm:bottom-[calc(env(safe-area-inset-bottom)+84px)] max-sm:right-4 max-sm:z-30 max-sm:h-12 max-sm:w-12 max-sm:shadow-xl max-sm:ring-4 max-sm:ring-background"
+          className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:fixed max-sm:bottom-[calc(env(safe-area-inset-bottom)+84px)] max-sm:right-4 max-sm:z-30 max-sm:h-12 max-sm:w-12 max-sm:shadow-sm max-sm:ring-4 max-sm:ring-background"
           aria-label={`Próximo: ${proximo.rotulo}`}
           title={`Próximo: ${proximo.rotulo}`}
           data-proximo-passo=""

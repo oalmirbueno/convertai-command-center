@@ -479,7 +479,7 @@ export default function ProjectJournal({
                     </span>
                   </div>
                   {entry.body && (
-                    <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
+                    <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-muted-foreground">
                       {entry.body}
                     </p>
                   )}

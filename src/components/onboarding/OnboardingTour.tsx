@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { X, ChevronRight, ChevronLeft, SkipForward } from "lucide-react";
 import { TourStep } from "./tourConfigs";
 import { cn } from "@/lib/utils";
+import { superficie } from "@/components/sistema/estilos";
 
 interface OnboardingTourProps {
   steps: TourStep[];
@@ -190,7 +191,7 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
       <div
         ref={tooltipRef}
         className={cn(
-          "z-[10000] w-[340px] sm:w-[380px] rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-200",
+          superficie.painel, "z-[10000] w-[340px] sm:w-[380px] shadow-2xl animate-in fade-in zoom-in-95 duration-200",
           isCentered && "w-[90vw] max-w-[420px]"
         )}
         style={{ ...tooltipStyle, pointerEvents: "auto" }}
@@ -199,7 +200,7 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-primary/15">
-              <span className="text-[10px] font-bold text-primary">{currentStep + 1}</span>
+              <span className="text-[11px] font-bold text-primary">{currentStep + 1}</span>
             </div>
             <span className="text-[11px] text-muted-foreground">
               Passo {currentStep + 1} de {steps.length}
@@ -236,7 +237,7 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
             onClick={handlePrev}
             disabled={isFirst}
             className={cn(
-              "flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] transition-colors bg-transparent border border-border cursor-pointer",
+              "flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] transition-colors bg-transparent border border-border cursor-pointer",
               isFirst ? "opacity-30 cursor-not-allowed" : "text-muted-foreground hover:text-foreground"
             )}
           >

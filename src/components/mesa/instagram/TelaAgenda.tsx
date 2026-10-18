@@ -74,10 +74,10 @@ function PostNoDia({ item, plano, grande, onAbrir, onArrastar }: { item: ItemDaG
           <ImagemDaMesa caminho={item.imagem ? item.imagem.caminho : null} bucket={bucketDoItem(item)} alt={item.titulo} className="absolute inset-0 h-full w-full" />
         </span>
         <span className="ml-1.5 min-w-0 flex-1">
-          <span className="block truncate text-[11.5px] font-medium leading-4 text-foreground">{item.titulo}</span>
+          <span className="block truncate text-[12px] font-medium leading-4 text-foreground">{item.titulo}</span>
           <span className="flex min-w-0 items-center">
-            <span className="mr-1 text-[10.5px] tabular-nums text-muted-foreground">{hora}</span>
-            <span className={juntar(etiqueta, "h-4 truncate px-1 text-[10px]", TOM_DO_CALENDARIO[estado.tom])}>{estado.rotulo}</span>
+            <span className="mr-1 text-[11px] tabular-nums text-muted-foreground">{hora}</span>
+            <span className={juntar(etiqueta, "h-4 truncate px-1 text-[11px]", TOM_DO_CALENDARIO[estado.tom])}>{estado.rotulo}</span>
             {trava && <Lock className="ml-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />}
           </span>
           {grande && item.legenda && <span className="block truncate text-[11px] leading-4 text-muted-foreground">{item.legenda}</span>}
@@ -154,7 +154,7 @@ export default function TelaAgenda({ plano, perfil, podePublicar, onAbrir }: { p
             <thead>
               <tr>
                 {DIAS.map((d) => (
-                  <th key={d} className="pb-1 text-left text-[11.5px] font-medium text-muted-foreground">
+                  <th key={d} className="pb-1 text-left text-[12px] font-medium text-muted-foreground">
                     {d}
                   </th>
                 ))}
@@ -189,7 +189,7 @@ export default function TelaAgenda({ plano, perfil, podePublicar, onAbrir }: { p
                       >
                         {k && (
                           <div className="flex h-full min-w-0 flex-col">
-                            <span className={juntar("mb-1 text-[11.5px] tabular-nums", k === hoje ? "font-semibold text-primary" : "text-muted-foreground")}>{Number(k.slice(8))}</span>
+                            <span className={juntar("mb-1 text-[12px] tabular-nums", k === hoje ? "font-semibold text-primary" : "text-muted-foreground")}>{Number(k.slice(8))}</span>
                             <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
                               {info &&
                                 info.planejados.map((item) => (
@@ -204,7 +204,7 @@ export default function TelaAgenda({ plano, perfil, podePublicar, onAbrir }: { p
                                       </span>
                                       <span className="ml-1.5 min-w-0 flex-1">
                                         <span className="block truncate text-[11px] leading-4 text-muted-foreground">{p.legenda || "Post"}</span>
-                                        <span className={juntar(etiqueta, "h-4 px-1 text-[10px]", TOM_DO_CALENDARIO.trava)}>Publicado</span>
+                                        <span className={juntar(etiqueta, "h-4 px-1 text-[11px]", TOM_DO_CALENDARIO.trava)}>Publicado</span>
                                       </span>
                                     </a>
                                   </li>

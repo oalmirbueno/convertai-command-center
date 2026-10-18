@@ -242,7 +242,7 @@ function CopyButton({ text, className = "", rotulo = "Copiar" }: { text: string;
 function CodeBlock({ code, language = "json" }: { code: string; language?: string }) {
   return (
     <div className="group relative min-w-0" data-linguagem={language}>
-      <pre className={juntar(superficie.poco, "overflow-x-auto whitespace-pre-wrap p-3 pr-10 font-mono text-[11.5px] leading-5 [overflow-wrap:anywhere]")}>{code}</pre>
+      <pre className={juntar(superficie.poco, "overflow-x-auto whitespace-pre-wrap p-3 pr-10 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]")}>{code}</pre>
       <div className="absolute right-1.5 top-1.5 transition-opacity focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"><CopyButton text={code} rotulo="Copiar código" /></div>
     </div>
   );
@@ -252,7 +252,7 @@ function CodeBlock({ code, language = "json" }: { code: string; language?: strin
 function Copiavel({ valor, rotulo }: { valor: string; rotulo: string }) {
   return (
     <div className={juntar(superficie.poco, "flex min-w-0 items-center py-1 pl-3 pr-1")}>
-      <code className="mr-2 min-w-0 flex-1 font-mono text-[11.5px] leading-5 [overflow-wrap:anywhere]">{valor}</code>
+      <code className="mr-2 min-w-0 flex-1 font-mono text-[12px] leading-5 [overflow-wrap:anywhere]">{valor}</code>
       <CopyButton text={valor} rotulo={rotulo} />
     </div>
   );
@@ -509,7 +509,7 @@ function ApiKeysSection() {
           <DialogHeader>
             <DialogTitle className={texto.tituloSecao}>{createdKey ? "Chave criada" : "Nova chave de API"}</DialogTitle>
             {createdKey && (
-              <DialogDescription className="text-[12.5px]">
+              <DialogDescription className="text-[13px]">
                 Copie agora. <span className="font-medium text-destructive">A chave não será exibida novamente.</span>
               </DialogDescription>
             )}
@@ -526,7 +526,7 @@ function ApiKeysSection() {
               </div>
               <div className="min-w-0">
                 <p className={juntar(texto.rotulo, "mb-1.5")}>Perfil e escopos</p>
-                <div className={juntar(superficie.poco, "space-y-1 px-3 py-2 text-[11.5px] leading-5")}>
+                <div className={juntar(superficie.poco, "space-y-1 px-3 py-2 text-[12px] leading-5")}>
                   <p className="font-medium text-foreground">{gatewayPresetOptions[newKeyPreset].label}</p>
                   <p className="text-muted-foreground">
                     audience: <code>{API_GATEWAY_AUDIENCE}</code> · origin: <code>{API_GATEWAY_KEY_ORIGIN}</code>
@@ -538,7 +538,7 @@ function ApiKeysSection() {
               </div>
               <div className="min-w-0">
                 <p className={juntar(texto.rotulo, "mb-1.5")}>Headers obrigatórios</p>
-                <div className={juntar(superficie.poco, "space-y-1 px-3 py-2 font-mono text-[11.5px] leading-5")}>
+                <div className={juntar(superficie.poco, "space-y-1 px-3 py-2 font-mono text-[12px] leading-5")}>
                   <p><span className="text-primary">Content-Type:</span> application/json</p>
                   <p><span className="text-primary">X-API-Key:</span> {createdKey.slice(0, 12)}...</p>
                 </div>
@@ -863,7 +863,7 @@ function AuditLogViewer() {
             {logs.map((log: any) => (
               <li key={log.id} className="min-w-0 py-2.5">
                 <div className="flex min-w-0 items-center">
-                  <code className="mr-2 min-w-0 flex-1 truncate font-mono text-[12.5px] text-primary">{log.action}</code>
+                  <code className="mr-2 min-w-0 flex-1 truncate font-mono text-[13px] text-primary">{log.action}</code>
                   <span className={juntar("shrink-0 text-[12px] font-semibold tabular-nums", statusColor(log.status_code))}>{log.status_code || "-"}</span>
                 </div>
                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate tabular-nums")}>
@@ -899,9 +899,9 @@ function ActionCategory({ cat, isOpen, onToggle }: { cat: typeof actionDocs[0]; 
             <li key={a.name} className="min-w-0 space-y-2 py-3">
               <div className="flex min-w-0 flex-wrap items-center">
                 <span className={juntar(etiqueta, "mr-2 border border-border font-mono text-muted-foreground")}>POST</span>
-                <code className="mr-2 font-mono text-[12.5px] font-semibold text-primary">{a.name}</code>
+                <code className="mr-2 font-mono text-[13px] font-semibold text-primary">{a.name}</code>
                 <span className={juntar(etiqueta, "mr-2 bg-muted font-mono text-muted-foreground")}>{API_GATEWAY_ACTION_SCOPES[a.name]}</span>
-                <span className="min-w-0 text-[12.5px] text-muted-foreground">{a.desc}</span>
+                <span className="min-w-0 text-[12px] text-muted-foreground">{a.desc}</span>
               </div>
               {a.required && (
                 <p className="text-[12px] leading-5 text-muted-foreground">
@@ -1180,12 +1180,12 @@ Body (JSON):
               <li className="grid min-w-0 grid-cols-1 gap-1 py-2 sm:grid-cols-[180px_200px_minmax(0,1fr)] sm:gap-3">
                 <code className={juntar(codigo, "justify-self-start")}>Content-Type</code>
                 <code className="font-mono text-[12px] text-muted-foreground">application/json</code>
-                <span className="text-[12.5px] text-muted-foreground">Obrigatório em todas as requisições.</span>
+                <span className="text-[12px] text-muted-foreground">Obrigatório em todas as requisições.</span>
               </li>
               <li className="grid min-w-0 grid-cols-1 gap-1 py-2 sm:grid-cols-[180px_200px_minmax(0,1fr)] sm:gap-3">
                 <code className={juntar(codigo, "justify-self-start")}>X-API-Key</code>
                 <code className="font-mono text-[12px] text-muted-foreground">acq_xxx...</code>
-                <span className="text-[12.5px] text-muted-foreground">Chave criada em "Chaves de API". Hash SHA-256 validado no banco.</span>
+                <span className="text-[12px] text-muted-foreground">Chave criada em "Chaves de API". Hash SHA-256 validado no banco.</span>
               </li>
             </ul>
           </Secao>
@@ -1206,7 +1206,7 @@ Body (JSON):
               {referencia.map((r) => (
                 <div key={r.rotulo} className="grid min-w-0 grid-cols-1 gap-1 py-2 sm:grid-cols-[200px_minmax(0,1fr)] sm:items-center sm:gap-3">
                   <dt className={texto.rotulo}>{r.rotulo}</dt>
-                  <dd className="min-w-0 text-[12.5px] leading-5 text-muted-foreground">{r.valor}</dd>
+                  <dd className="min-w-0 text-[12px] leading-5 text-muted-foreground">{r.valor}</dd>
                 </div>
               ))}
             </dl>
@@ -1259,8 +1259,8 @@ Body (JSON):
                 <li key={w.name} className="min-w-0 space-y-2 py-3">
                   <div className="flex min-w-0 flex-wrap items-center">
                     <span className={juntar(etiqueta, "mr-2 border border-border font-mono text-muted-foreground")}>POST</span>
-                    <code className="mr-2 font-mono text-[12.5px] font-semibold text-primary">/{w.name}</code>
-                    <span className="min-w-0 text-[12.5px] text-muted-foreground">{w.desc}</span>
+                    <code className="mr-2 font-mono text-[13px] font-semibold text-primary">/{w.name}</code>
+                    <span className="min-w-0 text-[12px] text-muted-foreground">{w.desc}</span>
                   </div>
                   <p className={texto.auxiliar}><span className="font-medium text-foreground">Gatilho:</span> {w.trigger}</p>
                   <div className="grid min-w-0 gap-2 md:grid-cols-2">
@@ -1283,9 +1283,9 @@ Body (JSON):
               {edgeFunctions.map(ef => (
                 <li key={ef.name} className="min-w-0 space-y-1.5 py-3">
                   <div className="flex min-w-0 flex-wrap items-center">
-                    <code className="mr-2 font-mono text-[12.5px] font-semibold text-primary">{ef.name}</code>
+                    <code className="mr-2 font-mono text-[13px] font-semibold text-primary">{ef.name}</code>
                     <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>{ef.auth}</span>
-                    <span className="min-w-0 text-[12.5px] text-muted-foreground">{ef.desc}</span>
+                    <span className="min-w-0 text-[12px] text-muted-foreground">{ef.desc}</span>
                   </div>
                   <div className="sm:max-w-3xl"><Copiavel valor={`${SUPABASE_FUNCTIONS_URL}/${ef.name}`} rotulo={`Copiar URL de ${ef.name}`} /></div>
                 </li>
@@ -1299,7 +1299,7 @@ Body (JSON):
                 <li key={v.nome} className="grid min-w-0 grid-cols-1 gap-1 py-2.5 sm:grid-cols-[260px_140px_minmax(0,1fr)] sm:items-center sm:gap-3">
                   <code className="min-w-0 truncate font-mono text-[12px] text-foreground">{v.nome}</code>
                   <span><span className={juntar(etiqueta, v.perigo ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground")}>{v.tipo}</span></span>
-                  <span className="text-[12.5px] leading-5 text-muted-foreground">{v.uso}</span>
+                  <span className="text-[12px] leading-5 text-muted-foreground">{v.uso}</span>
                 </li>
               ))}
             </ul>
@@ -1336,7 +1336,7 @@ Body (JSON):
         {/* ── Segurança ───────────────────────────────────── */}
         <TabsContent value="security" className="mt-0 space-y-6">
           <Secao titulo="Fluxo de autenticação">
-            <ol className="list-decimal space-y-1.5 pl-5 text-[12.5px] leading-5 text-muted-foreground marker:text-primary">
+            <ol className="list-decimal space-y-1.5 pl-5 text-[12px] leading-5 text-muted-foreground marker:text-primary">
               <li>Admin gera 32 bytes aleatórios com <code className={codigo}>crypto.getRandomValues()</code></li>
               <li>A chave é hasheada com SHA-256 e salva com <code className={codigo}>audience=api-gateway</code>, origem e escopos explícitos</li>
               <li>A cada request, o gateway hasheia a chave recebida via <code className={codigo}>X-API-Key</code></li>
@@ -1364,7 +1364,7 @@ Body (JSON):
                   <span className="mr-2 mt-0.5 shrink-0 text-primary" aria-hidden="true">{g.icone}</span>
                   <span className="min-w-0">
                     <span className={juntar(texto.corpo, "block font-medium")}>{g.titulo}</span>
-                    <span className="block text-[12.5px] leading-5 text-muted-foreground">{g.texto}</span>
+                    <span className="block text-[12px] leading-5 text-muted-foreground">{g.texto}</span>
                   </span>
                 </li>
               ))}
@@ -1374,7 +1374,7 @@ Body (JSON):
           <Secao titulo="Boas práticas" divisoria>
             <ul className="space-y-1.5">
               {praticas.map((p) => (
-                <li key={p} className="flex min-w-0 items-start text-[12.5px] leading-5 text-muted-foreground">
+                <li key={p} className="flex min-w-0 items-start text-[12px] leading-5 text-muted-foreground">
                   <CheckCircle2 className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /> <span className="min-w-0">{p}</span>
                 </li>
               ))}
@@ -1386,7 +1386,7 @@ Body (JSON):
               {tabelasDoBanco.map((t) => (
                 <li key={t.nome} className="grid min-w-0 grid-cols-1 gap-1 py-2.5 sm:grid-cols-[260px_minmax(0,1fr)] sm:gap-3">
                   <code className="min-w-0 truncate font-mono text-[12px] font-semibold text-primary">{t.nome}</code>
-                  <span className="text-[12.5px] leading-5 text-muted-foreground">{t.texto}</span>
+                  <span className="text-[12px] leading-5 text-muted-foreground">{t.texto}</span>
                 </li>
               ))}
             </ul>

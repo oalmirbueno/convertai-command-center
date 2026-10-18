@@ -143,7 +143,7 @@ export default function MesConteudoRapido({
 
         {resultado ? (
           <div className="min-w-0 space-y-3" data-rapido="pronto">
-            {resultado.resposta && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{resultado.resposta}</p>}
+            {resultado.resposta && <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{resultado.resposta}</p>}
             {resultado.item && <CartaoDoConteudo item={resultado.item} />}
             {resultado.sem_projeto && resultado.proposta ? (
               <div className="space-y-1.5">
@@ -208,7 +208,7 @@ export default function MesConteudoRapido({
                 <p className="mb-1 text-[11px] font-medium text-muted-foreground">Dia</p>
                 <div className="flex min-w-0">
                   <Select value={dia} onValueChange={(v) => setDia(v as Dia)} disabled={rodando}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 text-[12.5px]" aria-label="Dia do conteúdo"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 text-[13px]" aria-label="Dia do conteúdo"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="hoje">Hoje</SelectItem>
                       <SelectItem value="livre">Próximo dia livre</SelectItem>
@@ -231,7 +231,7 @@ export default function MesConteudoRapido({
                       aria-checked={formato === v}
                       disabled={rodando}
                       onClick={() => setFormato(v)}
-                      className={`min-w-0 truncate rounded-md px-1.5 py-1.5 text-[11.5px] font-medium ${formato === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+                      className={`min-w-0 truncate rounded-md px-1.5 py-1.5 text-[12px] font-medium ${formato === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
                     >
                       {r}
                     </button>

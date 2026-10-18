@@ -80,7 +80,7 @@ export default function BarraDeCusto({
           <button
             type="button"
             onClick={podeRecarregar ? onRecarregar : undefined}
-            className="rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-foreground"
+            className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-foreground"
           >
             {negativo ? "saldo negativo" : "saldo baixo"}{podeRecarregar ? ", recarregar" : ""}
           </button>
@@ -94,7 +94,7 @@ export default function BarraDeCusto({
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-[92vw] max-w-[340px] p-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Por modelo</p>
+          <p className="text-[11px] text-muted-foreground">Por modelo</p>
           <ul className="mt-1.5 space-y-1">
             {(consumo?.por_modelo || []).length === 0 && <li className="text-[12px] text-muted-foreground">Nada gasto neste mês.</li>}
             {(consumo?.por_modelo || []).map((m) => (
@@ -104,7 +104,7 @@ export default function BarraDeCusto({
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground">Por tarefa</p>
+          <p className="mt-3 text-[11px] text-muted-foreground">Por tarefa</p>
           <ul className="mt-1.5 space-y-1">
             {(consumo?.por_tarefa || []).map((t) => (
               <li key={t.tarefa} className="flex items-baseline justify-between gap-3 text-[12px]">
@@ -114,7 +114,7 @@ export default function BarraDeCusto({
             ))}
           </ul>
           {!!consumo?.recargas_usd && (
-            <p className="mt-3 text-[11.5px] text-muted-foreground">Recargas no mês: {usd(consumo.recargas_usd)}</p>
+            <p className="mt-3 text-[12px] text-muted-foreground">Recargas no mês: {usd(consumo.recargas_usd)}</p>
           )}
         </PopoverContent>
       </Popover>
@@ -216,7 +216,7 @@ export function DialogoDeRecarga({
                   key={v}
                   type="button"
                   onClick={() => setValor(String(v) + ",00")}
-                  className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11.5px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
                 >
                   US$ {v}
                 </button>
@@ -225,7 +225,7 @@ export function DialogoDeRecarga({
             {!!sugestaoUsd && sugestaoUsd > 0 && (
               <button
                 type="button"
-                className="text-[11.5px] text-primary underline-offset-2 hover:underline"
+                className="text-[12px] text-primary underline-offset-2 hover:underline"
                 onClick={() => setValor(sugestaoUsd.toFixed(2).replace(".", ","))}
               >
                 Sugestão para cobrir o plano do mês: {usd(sugestaoUsd)}

@@ -81,9 +81,9 @@ export default function TarefaDoCaderno({ linkId }: { linkId: string }) {
       {!itens.length && !lista.isPending && <p className="mt-3 text-[13px] text-muted-foreground">Sem etapas ainda. O agente preenche o checklist quando começa; você também pode adicionar abaixo.</p>}
     </section>
     {lista.error && <button className="text-warning" onClick={() => void lista.refetch()}>Não consegui ler o checklist. Tentar novamente</button>}
-    {agora && <section className="space-y-1.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-primary"><CircleDot className="h-3.5 w-3.5" />Fazendo agora</h4><Linha i={agora} destaque /></section>}
-    {depois.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-muted-foreground"><ArrowRight className="h-3.5 w-3.5" />Depois</h4>{depois.map(i => <Linha key={i.id} i={i} />)}</section>}
-    {feitos.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-success"><CheckCircle2 className="h-3.5 w-3.5" />Feito</h4>{feitos.map(i => <Linha key={i.id} i={i} />)}</section>}
+    {agora && <section className="space-y-1.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium text-primary"><CircleDot className="h-3.5 w-3.5" />Fazendo agora</h4><Linha i={agora} destaque /></section>}
+    {depois.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground"><ArrowRight className="h-3.5 w-3.5" />Depois</h4>{depois.map(i => <Linha key={i.id} i={i} />)}</section>}
+    {feitos.length > 0 && <section className="space-y-0.5"><h4 className="flex items-center gap-1.5 text-[12px] font-medium text-success"><CheckCircle2 className="h-3.5 w-3.5" />Feito</h4>{feitos.map(i => <Linha key={i.id} i={i} />)}</section>}
     <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (item.trim()) salvar.mutate({ tipo: "adicionar" }); }}><input aria-label="Novo item do checklist" value={item} onChange={e => setItem(e.target.value)} className={campo + " flex-1"} placeholder="Adicionar uma etapa" maxLength={500} /><button className={botao.secundario} disabled={!item.trim() || salvar.isPending || lista.isPending || !!lista.error}>Adicionar</button></form>
     <details className="rounded-xl bg-card p-4">
       <summary className="cursor-pointer text-[13px] font-medium">Descrição e critérios da tarefa</summary>

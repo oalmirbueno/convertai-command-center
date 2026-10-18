@@ -55,10 +55,10 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
           {auto ? <span className={juntar(etiqueta, "ml-1.5 bg-primary/15 text-primary")}>pelo painel</span> : null}
         </p>
         {!compacto && item.fatos.length > 0 && (
-          <p className="mt-0.5 text-[11.5px] leading-4 text-muted-foreground/80">{item.fatos.join(" · ")}</p>
+          <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground/80">{item.fatos.join(" · ")}</p>
         )}
         {!compacto && item.estado?.note && (
-          <p className="mt-0.5 text-[11.5px] italic leading-4 text-muted-foreground/80">Obs: {item.estado.note}</p>
+          <p className="mt-0.5 text-[12px] italic leading-4 text-muted-foreground/80">Obs: {item.estado.note}</p>
         )}
         {anotando && (
           <div className="mt-2 flex min-w-0 items-center">

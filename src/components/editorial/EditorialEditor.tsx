@@ -1464,12 +1464,12 @@ export default function EditorialEditor({
               return (
                 <div
                   key={publication.id || publication.idempotencyKey}
-                  className="space-y-4 rounded-lg border border-border bg-card p-4"
+                  className={juntar(superficie.painel, "space-y-4 p-4")}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <CalendarClock className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-[13px] leading-5 font-medium text-foreground">
                         {account
                           ? PLATFORM_LABELS[
                               account.platform as EditorialPlatform

@@ -90,11 +90,11 @@ function EditorDoConteudo({
     <div className="space-y-2.5 border-t border-border px-3 py-3" data-editor-do-conteudo>
       <label className="block text-[11px] font-medium text-muted-foreground">
         Título
-        <Input value={tema} onChange={(e) => setTema(e.target.value)} className="mt-1 h-8 text-[12.5px]" />
+        <Input value={tema} onChange={(e) => setTema(e.target.value)} className="mt-1 h-8 text-[13px]" />
       </label>
       <label className="block text-[11px] font-medium text-muted-foreground">
         Gancho
-        <Input value={gancho} onChange={(e) => setGancho(e.target.value)} className="mt-1 h-8 text-[12.5px]" />
+        <Input value={gancho} onChange={(e) => setGancho(e.target.value)} className="mt-1 h-8 text-[13px]" />
       </label>
       {cards.map((c, i) => (
         <label key={c.ordem} className="block text-[11px] font-medium text-muted-foreground">
@@ -104,13 +104,13 @@ function EditorDoConteudo({
             value={c.texto}
             rows={2}
             onChange={(e) => setCards((l) => l.map((x) => (x.ordem === c.ordem ? { ...x, texto: e.target.value } : x)))}
-            className="mt-1 min-h-[48px] text-[12.5px]"
+            className="mt-1 min-h-[48px] text-[13px]"
           />
         </label>
       ))}
       <label className="block text-[11px] font-medium text-muted-foreground">
         CTA
-        <Input value={cta} onChange={(e) => setCta(e.target.value)} className="mt-1 h-8 text-[12.5px]" />
+        <Input value={cta} onChange={(e) => setCta(e.target.value)} className="mt-1 h-8 text-[13px]" />
       </label>
       <label className="block text-[11px] font-medium text-muted-foreground">
         Instrução de arte
@@ -118,12 +118,12 @@ function EditorDoConteudo({
           value={instrucao}
           onChange={(e) => setInstrucao(e.target.value)}
           placeholder="Ex.: troque o céu por um pôr do sol; produto maior na capa"
-          className="mt-1 h-8 text-[12.5px]"
+          className="mt-1 h-8 text-[13px]"
         />
       </label>
       <label className="block text-[11px] font-medium text-muted-foreground">
         Legenda
-        <Textarea value={copy} rows={3} onChange={(e) => setCopy(e.target.value)} className="mt-1 min-h-[60px] text-[12.5px]" />
+        <Textarea value={copy} rows={3} onChange={(e) => setCopy(e.target.value)} className="mt-1 min-h-[60px] text-[13px]" />
       </label>
       <div className="flex items-center justify-end">
         <Button type="button" size="sm" variant="ghost" className="mr-1 h-8 w-8 p-0" onClick={onCancelar} disabled={salvando} aria-label="Cancelar" title="Cancelar"><X className="h-4 w-4" aria-hidden="true" /></Button>
@@ -192,7 +192,7 @@ function LinhaDoConteudo({
           </div>
           <p className="mt-0.5 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema || "Sem título"}</p>
           {item.gancho && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.gancho}</p>}
-          {item.instrucao_arte && <p className="mt-1 text-[11.5px] text-foreground [overflow-wrap:anywhere]">Arte: {item.instrucao_arte}</p>}
+          {item.instrucao_arte && <p className="mt-1 text-[12px] text-foreground [overflow-wrap:anywhere]">Arte: {item.instrucao_arte}</p>}
           {/* Frente CPY: os avisos do texto (motor de copy e lâminas), recolhidos. */}
           <AvisosDoTexto avisos={item.avisos_de_texto} className="mt-0.5" />
           <div className="mt-1.5 flex flex-wrap items-center">
@@ -204,10 +204,10 @@ function LinhaDoConteudo({
                   min={hojeIso()}
                   aria-label={`Dia de ${item.tema || "conteúdo"}`}
                   onChange={(e) => { if (e.target.value) void onEditar({ data: e.target.value }); }}
-                  className="mb-1 mr-1.5 h-7 w-[140px] text-[11.5px]"
+                  className="mb-1 mr-1.5 h-7 w-[140px] text-[12px]"
                 />
                 <Select value={item.formato === "estatico" ? "estatico" : "carrossel"} onValueChange={(v) => void onEditar({ formato: v as "estatico" | "carrossel" })}>
-                  <SelectTrigger className="mb-1 mr-1.5 h-7 w-[112px] text-[11.5px]" aria-label="Formato"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="mb-1 mr-1.5 h-7 w-[112px] text-[12px]" aria-label="Formato"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="estatico">Estático</SelectItem>
                     <SelectItem value="carrossel">Carrossel</SelectItem>
@@ -244,12 +244,12 @@ function LinhaDoConteudo({
         <ol className="space-y-1.5 border-t border-border px-3 py-2.5">
           {(item.cards || []).slice().sort((a, b) => a.ordem - b.ordem).map((c) => (
             <li key={c.ordem} className="rounded-md bg-muted px-2.5 py-2">
-              <p className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">Lâmina {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
+              <p className="text-[11px] font-medium text-muted-foreground">Lâmina {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
               {c.texto && <p className="mt-0.5 text-[12px] leading-snug [overflow-wrap:anywhere]">{c.texto}</p>}
               {c.ilustracao && <p className="mt-1 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{c.ilustracao}</p>}
             </li>
           ))}
-          {item.cta && <li className="text-[11.5px] text-muted-foreground">CTA: {item.cta}</li>}
+          {item.cta && <li className="text-[12px] text-muted-foreground">CTA: {item.cta}</li>}
         </ol>
       )}
     </li>

@@ -148,7 +148,7 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
         </>
       )}
       {images.length > 1 && (
-        <span className="absolute right-1 top-1 rounded-md bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+        <span className="absolute right-1 top-1 rounded-md bg-background/80 px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
           {idx + 1}/{images.length}
         </span>
       )}

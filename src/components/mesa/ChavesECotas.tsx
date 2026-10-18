@@ -102,16 +102,16 @@ function FormDeChave({
     <div className="space-y-2.5 rounded-lg border border-dashed border-border p-3">
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <div className="min-w-0 space-y-1">
-          <Label className="text-[11.5px]">Rótulo</Label>
+          <Label className="text-[12px]">Rótulo</Label>
           <Input value={rotulo} onChange={(e) => setRotulo(e.target.value)} placeholder="Ex.: conta do cliente" className="h-9" />
         </div>
         <div className="min-w-0 space-y-1">
-          <Label className="text-[11.5px]">Cota do mês (US$, vazio = sem teto)</Label>
+          <Label className="text-[12px]">Cota do mês (US$, vazio = sem teto)</Label>
           <Input value={cota} onChange={(e) => setCota(e.target.value)} inputMode="decimal" placeholder="50" className="h-9" />
         </div>
       </div>
       <div className="space-y-1">
-        <Label className="text-[11.5px]">{trocando ? "Nova chave" : "Chave"}</Label>
+        <Label className="text-[12px]">{trocando ? "Nova chave" : "Chave"}</Label>
         <Input
           type="password"
           autoComplete="new-password"
@@ -119,7 +119,7 @@ function FormDeChave({
           value={novaChave}
           onChange={(e) => setNovaChave(e.target.value)}
           placeholder="Cole aqui; ela vai para o cofre e some da tela"
-          className="h-9 font-mono text-xs"
+          className="h-9 font-mono text-[12px] leading-4"
         />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -161,7 +161,7 @@ function CotaDaChave({ chave, onSalvo }: { chave: ChaveListada; onSalvo: () => v
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div className="min-w-0 flex-1 space-y-1">
-        <Label className="text-[11.5px]">Cota do mês (US$)</Label>
+        <Label className="text-[12px]">Cota do mês (US$)</Label>
         <Input value={cota} onChange={(e) => setCota(e.target.value)} inputMode="decimal" placeholder="sem teto" className="h-9" />
       </div>
       <Button type="button" size="sm" variant="outline" onClick={() => void salvar()} disabled={salvando}>

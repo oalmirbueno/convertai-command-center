@@ -15,7 +15,7 @@ import {
   weekDeltaPct,
   type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
-import { useBilling } from "@/hooks/useFinancialData";
+import { useCobrancasPendentes } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
 import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
@@ -209,7 +209,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading: carregandoClientes } = useClients();
   const { data: projects } = useProjects();
-  const { data: billing } = useBilling();
+  const { data: billing } = useCobrancasPendentes();
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [genClientId, setGenClientId] = useState("__all__");
   const [genRitual, setGenRitual] = useState<string>(ritualForToday());
@@ -2758,7 +2758,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                 </span>
                               </button>
                               {status.curto && (
-                                <span className={juntar("pointer-events-none absolute -right-1 -top-1.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums shadow-sm", status.selo)} aria-hidden="true">
+                                <span className={juntar("pointer-events-none absolute -right-1 -top-1.5 rounded-full px-1.5 py-px text-[11px] font-semibold tabular-nums shadow-sm", status.selo)} aria-hidden="true">
                                   {status.curto}
                                 </span>
                               )}
@@ -2843,8 +2843,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               )}
                             </div>
                             <div className="mt-3 max-w-[62ch] min-w-0">
-                              <div className="rounded-2xl rounded-tl-md bg-primary/[0.07] px-4 pb-1.5 pt-3">
-                                <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-foreground">{textoParaCopiar}</p>
+                              <div className="rounded-xl rounded-tl-md bg-primary/[0.07] px-4 pb-1.5 pt-3">
+                                <p className="whitespace-pre-line text-[13px] leading-relaxed text-foreground">{textoParaCopiar}</p>
                                 <div className="-mr-2 mt-1 flex items-center justify-end">
                                   {escrita && <span className="mr-auto flex items-center text-[11px] text-primary" title={`Escrita pela IA${escrita.model ? ` (${escrita.model})` : ""}`}><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />IA</span>}
                                   <button type="button" onClick={() => void escreverMomentoComIA(client, aberto.moment)} disabled={aiMomentLoading !== null} aria-label={escrita ? "Reescrever com IA" : "Escrever com IA"} title={escrita ? "Reescrever com IA" : "Escrever com IA a partir do dossiê, da esteira, dos números e das vendas de agora"} className={juntar(botao.icone, "h-8 w-8 text-primary disabled:opacity-50")}>
@@ -3340,7 +3340,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <span className="absolute bottom-0 left-3 top-0 w-px bg-border md:left-1/2" aria-hidden="true" />
                         {dias.map(({ dia, eventos }) => (
                           <section key={dia} aria-label={dia} className="relative min-w-0 pb-4">
-                            <h4 className="relative z-10 mb-3 ml-7 inline-flex max-sm:mb-2 rounded-full bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:ml-0 md:flex md:w-fit md:mx-auto">{dia}</h4>
+                            <h4 className="relative z-10 mb-3 ml-7 inline-flex max-sm:mb-2 rounded-full bg-muted px-3 py-1 text-[11px] font-semibold text-muted-foreground md:ml-0 md:flex md:w-fit md:mx-auto">{dia}</h4>
                             <ol className="space-y-1 sm:space-y-3">
                               {eventos.map((event, index) => {
                                 const EventIcon = iconMap[event.icon];
@@ -3592,7 +3592,7 @@ function MiniaturaDoEvento({ midia }: { midia: MidiaDoEvento }) {
   return (
     <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-muted text-muted-foreground" aria-hidden="true">
       <Icone className="h-4 w-4" />
-      {ext && ext.length <= 5 && <span className="mt-0.5 text-[9px] font-semibold uppercase">{ext}</span>}
+      {ext && ext.length <= 5 && <span className="mt-0.5 text-[11px] font-semibold uppercase">{ext}</span>}
     </span>
   );
 }

@@ -1475,7 +1475,7 @@ function EditorDeLead({
                       onClick={() => void mover(estagio.id as EstagioId)}
                       title={estagio.ajuda}
                       className={juntar(
-                        "inline-flex h-8 items-center rounded-md border px-2.5 text-[12.5px] font-medium transition-colors",
+                        "inline-flex h-8 items-center rounded-md border px-2.5 text-[13px] font-medium transition-colors",
                         foco,
                         estagio.id === "ganho"
                           ? "border-success/40 text-success hover:bg-success/10"

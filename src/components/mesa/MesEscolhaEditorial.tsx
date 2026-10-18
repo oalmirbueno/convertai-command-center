@@ -23,7 +23,7 @@ function Chips({
 }) {
   return (
     <div className="min-w-0">
-      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{titulo}</p>
+      <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">{titulo}</p>
       <div className="flex flex-wrap" role="group" aria-label={titulo}>
         {opcoes.map((o) => {
           const ativo = marcados.indexOf(o.id) >= 0;
@@ -35,7 +35,7 @@ function Chips({
               aria-pressed={ativo}
               disabled={disabled}
               onClick={() => onAlternar(o.id)}
-              className={`mb-1.5 mr-1.5 inline-flex items-center rounded-full border px-2.5 py-1 text-[11.5px] transition-colors ${
+              className={`mb-1.5 mr-1.5 inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
                 ativo ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
               }`}
             >

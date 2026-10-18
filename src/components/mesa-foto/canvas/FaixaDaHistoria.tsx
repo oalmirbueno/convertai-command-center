@@ -156,7 +156,7 @@ export function HistoriaDoCanvas({
                     </button>
                     {personagem && <UserRoundCheck className="ml-1 h-3.5 w-3.5 shrink-0 text-sky-300" aria-label="Com personagem" />}
                   </div>
-                  <button type="button" className="relative block w-full overflow-hidden rounded-lg border border-white/10 bg-zinc-900" style={{ height: 112 }} onClick={() => acoes.onAbrir(h.no.id)} aria-label={`Abrir a cena ${h.numero}`}>
+                  <button type="button" className="relative block w-full overflow-hidden rounded-md border border-white/10 bg-zinc-900" style={{ height: 112 }} onClick={() => acoes.onAbrir(h.no.id)} aria-label={`Abrir a cena ${h.numero}`}>
                     {foto ? (
                       <MiniaturaDoStorage bucket={foto.storage_bucket} caminho={foto.storage_path || foto.url} alt={`Foto da cena ${h.numero}`} largura={320} className="h-full w-full" />
                     ) : (
@@ -172,7 +172,7 @@ export function HistoriaDoCanvas({
                     rows={3}
                     placeholder="Narrativa desta cena"
                     aria-label={`Narrativa da cena ${h.numero}`}
-                    className={`${CAMPO} mt-1.5 text-[11.5px]`}
+                    className={`${CAMPO} mt-1.5 text-[12px]`}
                   />
                   <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
                     <button type="button" className={juntar(BOTAO_ICONE, "mb-1 mr-1")} disabled={i === 0} onClick={() => onMudarCanvas((c) => moverCena(c, h.no.id, h.numero - 1))} aria-label={`Trazer a cena ${h.numero} para antes`} title="Trazer a cena para antes">
@@ -210,7 +210,7 @@ export function HistoriaDoCanvas({
                       }
                       titulo={`Cena ${h.numero}`}
                       descricao="Gera a foto desta cena com as entradas dela. Entra no acervo, marcada como gerada."
-                      className="mr-1 h-8 flex-1 bg-emerald-400 px-2 text-[11.5px] font-semibold text-black hover:bg-emerald-300"
+                      className="mr-1 h-8 flex-1 bg-emerald-400 px-2 text-[12px] font-semibold text-black hover:bg-emerald-300"
                       fecharAoConfirmar
                       disabled={!(h.no.dados.motores || []).length}
                       partes={() => partesDoResultado(h.no, entradas.length)}

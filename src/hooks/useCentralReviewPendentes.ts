@@ -26,7 +26,8 @@ export function useCentralReviewPendentes(ativo = true) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("operator_approvals")
-        .select("id, client_id, o_que, status, created_at, payload")
+        // Só o título do relatório, não o payload inteiro (o relatório completo vinha a cada minuto).
+        .select("id, client_id, o_que, status, created_at, titulo:payload->report->>title")
         .eq("origin", "central")
         .in("status", ["pendente", "adiado"])
         .order("created_at", { ascending: false })
@@ -35,7 +36,7 @@ export function useCentralReviewPendentes(ativo = true) {
       return ((data ?? []) as Array<Record<string, any>>).map((a) => ({
         id: String(a.id),
         client_id: a.client_id ? String(a.client_id) : null,
-        titulo: String(a.payload?.report?.title || a.o_que || "mensagem"),
+        titulo: String(a.titulo || a.o_que || "mensagem"),
         status: String(a.status),
         created_at: String(a.created_at),
       }));

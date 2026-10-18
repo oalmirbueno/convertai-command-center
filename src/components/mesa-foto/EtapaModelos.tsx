@@ -127,7 +127,7 @@ const ehFiltro = (v: unknown) => FILTROS.some((f) => f.valor === v);
 /** Pílula "gerada" em cima da imagem (clara, nunca véu escuro). */
 function SeloGerada() {
   return (
-    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+    <span className="pointer-events-none absolute left-1 top-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
       <Sparkles className="mr-0.5 h-2.5 w-2.5" /> gerada
     </span>
   );
@@ -317,7 +317,7 @@ function CartaoDaPersona({ persona, ancora, vistas, aberta, onAbrir }: { persona
   const status = STATUS_DA_PERSONA[persona.status];
   return (
     <li
-      className={juntar("min-w-0 rounded-lg border bg-card p-2 transition-colors", aberta ? "border-primary" : "border-border hover:border-primary/40")}
+      className={juntar(superficie.painel, "min-w-0 p-2 transition-colors", aberta ? "border-primary" : "hover:border-primary/40")}
       data-persona={persona.id}
       data-cartao-da-persona=""
     >
@@ -1175,8 +1175,8 @@ export function AntesEDepois({ antes, depois, proporcao }: { antes: ImagemDaPers
           <ImagemDaPersonaNaTela imagem={depois} alt="Depois, 4K" className="!object-contain" />
         </span>
         <span className="pointer-events-none absolute bottom-0 top-0 w-px bg-card" style={{ left: `${pos}%` }} />
-        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary">depois 4K</span>
-        <span className="pointer-events-none absolute right-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[9.5px] font-medium text-foreground">antes</span>
+        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary">depois 4K</span>
+        <span className="pointer-events-none absolute right-1 top-1 rounded-full border border-border bg-card px-1.5 py-px text-[11px] font-medium text-foreground">antes</span>
       </Moldura>
       <input type="range" min={0} max={100} value={pos} onChange={(e) => setPos(Number(e.target.value))} aria-label="Cortina entre antes e depois" className="mt-2 w-full" />
     </div>

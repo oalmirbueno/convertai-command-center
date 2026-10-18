@@ -94,7 +94,7 @@ export default function ProvaDaEntrega({ linkId, ultimaProva, aoConversar }: { l
     return (
       <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
         <ImageOff className="h-7 w-7" aria-hidden="true" />
-        <p className="text-[12.5px]">O agente ainda não anexou imagem, print ou documento desta entrega.</p>
+        <p className="text-[13px]">O agente ainda não anexou imagem, print ou documento desta entrega.</p>
       </div>
     );
   }
@@ -104,7 +104,7 @@ export default function ProvaDaEntrega({ linkId, ultimaProva, aoConversar }: { l
       <EvidenciaVisual url={principal.url} nome={principal.nome} aoAbrir={() => setIndice(0)} />
       {provas.length > 1 && (
         <>
-          <p className="px-0.5 text-[11.5px] text-muted-foreground">{provas.length} peças · clique para ver em tamanho grande</p>
+          <p className="px-0.5 text-[12px] text-muted-foreground">{provas.length} peças · clique para ver em tamanho grande</p>
           <div className="grid grid-cols-4 gap-1.5">
             {provas.slice(1).map((p, i) => <EvidenciaVisual key={p.url} url={p.url} nome={`${i + 2} de ${provas.length}`} compacto aoAbrir={() => setIndice(i + 1)} />)}
           </div>
@@ -124,8 +124,8 @@ export default function ProvaDaEntrega({ linkId, ultimaProva, aoConversar }: { l
             <div className="relative flex shrink-0 flex-col lg:min-h-0 lg:flex-1">
               <div className="max-h-[55vh] overflow-auto p-4 lg:max-h-none lg:min-h-0 lg:flex-1">{atual && <ConteudoDaProva key={atual.url} url={atual.url} nome={atual.nome} />}</div>
               {provas.length > 1 && <>
-                <button type="button" onClick={() => ir(-1)} aria-label="Peça anterior" className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 shadow-lg ring-1 ring-border hover:bg-muted"><ChevronLeft className="h-5 w-5" /></button>
-                <button type="button" onClick={() => ir(1)} aria-label="Próxima peça" className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 shadow-lg ring-1 ring-border hover:bg-muted"><ChevronRight className="h-5 w-5" /></button>
+                <button type="button" onClick={() => ir(-1)} aria-label="Peça anterior" className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 shadow-sm ring-1 ring-border hover:bg-muted"><ChevronLeft className="h-5 w-5" /></button>
+                <button type="button" onClick={() => ir(1)} aria-label="Próxima peça" className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 shadow-sm ring-1 ring-border hover:bg-muted"><ChevronRight className="h-5 w-5" /></button>
                 <div className="flex shrink-0 gap-1.5 overflow-x-auto border-t border-border p-2">
                   {provas.map((p, i) => (
                     <div key={p.url} className={juntar("w-16 shrink-0 rounded-lg", i === indice && "ring-2 ring-primary")}>

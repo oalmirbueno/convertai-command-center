@@ -22,6 +22,7 @@ import {
   type EditorialMediaFile,
 } from "@/lib/editorialMedia";
 import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { superficie } from "@/components/sistema/estilos";
 
 interface ApprovedMediaPickerProps {
   files: readonly EditorialMediaFile[];
@@ -211,7 +212,7 @@ export default function ApprovedMediaPicker({
               aria-pressed={contentType === filter.value}
               onClick={() => setContentType(filter.value)}
               className={cn(
-                "inline-flex h-10 shrink-0 items-center rounded-lg border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
+                "inline-flex h-10 shrink-0 items-center rounded-lg border px-3 text-[12px] leading-4 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
                 contentType === filter.value
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-background text-muted-foreground hover:border-primary/35 hover:text-foreground",
@@ -247,7 +248,7 @@ export default function ApprovedMediaPicker({
           className="flex flex-col items-center rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-6 text-center"
         >
           <AlertCircle className="h-5 w-5 text-destructive" />
-          <p className="mt-2 text-xs text-muted-foreground">{error}</p>
+          <p className="mt-2 text-[12px] leading-4 text-muted-foreground">{error}</p>
           {onRetry && (
             <Button
               type="button"
@@ -276,7 +277,7 @@ export default function ApprovedMediaPicker({
               <article
                 key={asset.id}
                 className={cn(
-                  "group overflow-hidden rounded-lg border bg-card text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow",
+                  superficie.painel, "group overflow-hidden text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow",
                   selected
                     ? "border-primary ring-1 ring-primary/30"
                     : "border-border",
@@ -294,7 +295,7 @@ export default function ApprovedMediaPicker({
                   <span className="absolute inset-0 block">
                     <AssetPreview asset={asset} />
                   </span>
-                  <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md border border-white/15 bg-black/65 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+                  <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md border border-white/15 bg-black/65 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
                     <TypeIcon className="h-3 w-3" />
                     {contentTypeLabels[asset.contentType]}
                     {asset.contentType === "carousel"
@@ -306,19 +307,19 @@ export default function ApprovedMediaPicker({
                       <Check className="h-4 w-4" />
                     </span>
                   )}
-                  <span className="absolute bottom-2 right-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/20 bg-black/70 px-2.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                  <span className="absolute bottom-2 right-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/20 bg-black/70 px-2.5 text-[11px] font-semibold text-white backdrop-blur-sm">
                     <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                     Ver completo
                   </span>
                 </button>
                 <div className="block min-w-0 p-3">
                   <span
-                    className="block truncate text-xs font-semibold text-foreground"
+                    className="block truncate text-[12px] leading-4 font-semibold text-foreground"
                     title={asset.root.file_name}
                   >
                     {asset.root.file_name}
                   </span>
-                  <span className="mt-1 line-clamp-2 block min-h-8 text-[10px] leading-4 text-muted-foreground">
+                  <span className="mt-1 line-clamp-2 block min-h-8 text-[11px] leading-4 text-muted-foreground">
                     {asset.root.caption ||
                       asset.root.description ||
                       "Mídia aprovada e pronta para publicação"}
