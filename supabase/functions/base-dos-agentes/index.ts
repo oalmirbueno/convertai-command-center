@@ -25,6 +25,8 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, IaMotorErro, lerSaldo, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { type AgenteComBase, agenteComBase, AGENTES_COM_BASE } from "../_shared/agentes-com-base.ts";
+import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, resultadosDasFichas, type UsoParaResultado } from "../_shared/resultado-das-fichas.ts";
+import { basesDoPerfil, DESTAQUE_A_PARTIR_DE, type MedidaDoMultiplo, multiploDoPost, type PostParaMultiplo } from "../_shared/multiplo-do-post.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -377,6 +379,12 @@ async function apagarFonte(_ch: Chamador, corpo: Record<string, unknown>) {
 
 /** O cron: até 2 agentes sem pesquisa há 6 dias ou mais, na carteira da agência. */
 async function pesquisaSemanal() {
+  // O resultado das fichas e os vencedores: uma vez por dia de rodada (sem custo de IA).
+  const { data: recente } = await servico().from("agente_base_fichas").select("id").gte("resultado_em", diasAtras(0.5)).limit(1);
+  const resultados = (recente || []).length ? null : await aprenderComResultados().catch((err) => {
+    console.error("[base-dos-agentes] resultados falharam", err instanceof Error ? err.message : err);
+    return null;
+  });
   const pagador = await carteiraDaAgencia();
   if (!pagador) return json({ ok: false, motivo: "sem_carteira" });
   const saldo = await lerSaldo(pagador).catch(() => 0);
@@ -394,7 +402,194 @@ async function pesquisaSemanal() {
       resultado.push({ agente: agente.chave, erro: err instanceof Error ? err.message.slice(0, 160) : "falha" });
     }
   }
-  return json({ ok: true, agentes: resultado });
+  return json({ ok: true, agentes: resultado, resultados });
+}
+
+// ------------------------------------------------------------------ aprender com os resultados
+
+/** Janela dos usos e dos posts que contam no resultado. */
+const DIAS_DO_RESULTADO = 180;
+/** Janela das peças que podem virar ficha de vencedor. */
+const DIAS_DOS_VENCEDORES = 60;
+/** Fichas de vencedor por cliente a cada rodada. */
+const VENCEDORES_POR_CLIENTE = 3;
+
+const emPedacos = <T>(lista: T[], n = 100): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < lista.length; i += n) out.push(lista.slice(i, i + n));
+  return out;
+};
+const diasAtras = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+
+type TrabalhoParaResultado = { id: string; client_id: string; entrega_status: string | null; entrega_rodada: number | null; post_id: string | null; task_id: string | null; direcao: Record<string, unknown> | null };
+type MedidaDoTrabalho = { multiplo: number; medida: MedidaDoMultiplo | null; permalink: string | null };
+
+const semBarraNoFim = (u: string | null | undefined) => String(u || "").replace(/\/+$/, "");
+
+/** O múltiplo do post publicado de cada trabalho (publicação do post da entrega, depois a métrica pela mídia ou pelo link). */
+async function multiplosDosTrabalhos(trabalhos: TrabalhoParaResultado[]): Promise<Map<string, MedidaDoTrabalho>> {
+  const saida = new Map<string, MedidaDoTrabalho>();
+  const comPost = trabalhos.filter((t) => t.post_id);
+  if (!comPost.length) return saida;
+  const pubs: Array<{ post_id: string; status: string; external_post_id: string | null; permalink: string | null }> = [];
+  for (const ids of emPedacos([...new Set(comPost.map((t) => t.post_id as string))])) {
+    const { data } = await servico().from("editorial_publications").select("post_id, status, external_post_id, permalink").in("post_id", ids).eq("status", "published");
+    pubs.push(...((data || []) as typeof pubs));
+  }
+  for (const cliente of [...new Set(comPost.map((t) => t.client_id))]) {
+    const { data } = await servico().from("social_post_metrics")
+      .select("media_id, permalink, posted_at, views, reach, total_interactions, like_count, comments_count, saved, shares")
+      .eq("client_id", cliente).gte("posted_at", diasAtras(DIAS_DO_RESULTADO)).order("posted_at", { ascending: false }).limit(300);
+    const posts = (data || []) as Array<PostParaMultiplo & { media_id: string; permalink: string | null }>;
+    if (!posts.length) continue;
+    const bases = basesDoPerfil(posts, DIAS_DO_RESULTADO);
+    const porMidia = new Map(posts.map((p) => [String(p.media_id), p]));
+    const porLink = new Map(posts.filter((p) => p.permalink).map((p) => [semBarraNoFim(p.permalink), p]));
+    for (const t of comPost.filter((x) => x.client_id === cliente)) {
+      for (const pub of pubs.filter((p) => p.post_id === t.post_id)) {
+        const m = (pub.external_post_id && porMidia.get(String(pub.external_post_id))) || (pub.permalink && porLink.get(semBarraNoFim(pub.permalink))) || null;
+        if (!m) continue;
+        const r = multiploDoPost(m, bases);
+        if (r.multiplo !== null) saida.set(t.id, { multiplo: r.multiplo, medida: r.medida, permalink: m.permalink || pub.permalink || null });
+        break;
+      }
+    }
+  }
+  return saida;
+}
+
+async function lerTrabalhos(ids: string[]): Promise<TrabalhoParaResultado[]> {
+  const out: TrabalhoParaResultado[] = [];
+  for (const pedaco of emPedacos(ids)) {
+    const { data } = await servico().from("estudio_trabalhos").select("id, client_id, entrega_status, entrega_rodada, post_id, task_id, direcao").in("id", pedaco);
+    out.push(...((data || []) as TrabalhoParaResultado[]));
+  }
+  return out;
+}
+
+const NOME_DA_MEDIDA: Record<MedidaDoMultiplo, string> = { views: "visualizações", alcance: "alcance", interacoes: "interações" };
+const numeroBr = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
+
+/** As fichas de um post vencedor: uma para o diretor de arte e uma para o agente do Mês, só deste cliente. */
+export function fichasDoVencedor(e: { multiplo: number; medida: MedidaDoMultiplo | null; capa: string; conceito: string; gancho: string; formato: string; tituloDaPauta: string }) {
+  const vezes = numeroBr(e.multiplo);
+  const medida = e.medida ? NOME_DA_MEDIDA[e.medida] : "desempenho";
+  return [
+    {
+      agente: "estudio.diretor",
+      titulo: `Rendeu ${vezes}x: ${e.capa || e.conceito || "peça do cliente"}`.slice(0, 160),
+      tecnica: `Este ${e.formato} do cliente rendeu ${vezes}x o normal do perfil em ${medida}.${e.capa ? ` Capa: "${e.capa}".` : ""}${e.conceito ? ` Conceito: ${e.conceito}.` : ""}${e.gancho ? ` Gancho do momento: ${e.gancho}.` : ""} Repita a estrutura que funcionou (o tipo de capa, o ângulo e o formato) em assuntos novos, sem copiar o texto.`.slice(0, 2400),
+      quando_usar: "Peças deste cliente com o mesmo objetivo ou pilar.",
+      exemplo: e.capa,
+    },
+    {
+      agente: "mes.estrategista",
+      titulo: `Pauta que rendeu ${vezes}x: ${e.tituloDaPauta || e.capa || "pauta do cliente"}`.slice(0, 160),
+      tecnica: `A pauta "${e.tituloDaPauta || e.capa}" (${e.formato}) rendeu ${vezes}x o normal do perfil em ${medida}.${e.gancho ? ` Ela nasceu do gancho do momento: ${e.gancho}.` : ""}${e.conceito ? ` Conceito: ${e.conceito}.` : ""} Planeje pautas novas com o mesmo ângulo e formato, variando o assunto.`.slice(0, 2400),
+      quando_usar: "Planejar o mês deste cliente.",
+      exemplo: "",
+    },
+  ];
+}
+
+/** Os posts que renderam 1,5x ou mais viram fichas DESTE cliente para o diretor de arte e o agente do Mês. */
+async function fichasDosVencedores(): Promise<number> {
+  const { data } = await servico().from("estudio_trabalhos").select("id, client_id, entrega_status, entrega_rodada, post_id, task_id, direcao")
+    .not("post_id", "is", null).gte("criado_em", diasAtras(DIAS_DOS_VENCEDORES)).limit(600);
+  const trabalhos = (data || []) as TrabalhoParaResultado[];
+  if (!trabalhos.length) return 0;
+  const medidas = await multiplosDosTrabalhos(trabalhos);
+  const vencedores = trabalhos
+    .map((t) => ({ t, m: medidas.get(t.id) }))
+    .filter((x): x is { t: TrabalhoParaResultado; m: MedidaDoTrabalho } => !!x.m && x.m.multiplo >= DESTAQUE_A_PARTIR_DE)
+    .sort((a, b) => b.m.multiplo - a.m.multiplo);
+  if (!vencedores.length) return 0;
+  const tarefas = new Map<string, { title: string; description: string | null }>();
+  for (const ids of emPedacos([...new Set(vencedores.map((v) => v.t.task_id).filter(Boolean) as string[])])) {
+    const { data: ts } = await servico().from("tasks").select("id, title, description").in("id", ids);
+    for (const t of (ts || []) as Array<{ id: string; title: string; description: string | null }>) tarefas.set(t.id, t);
+  }
+  let criadas = 0;
+  const porCliente = new Map<string, number>();
+  const fontes = new Map<string, string>();
+  for (const { t, m } of vencedores) {
+    if ((porCliente.get(t.client_id) || 0) >= VENCEDORES_POR_CLIENTE) continue;
+    if (m.permalink) {
+      const { data: ja } = await servico().from("agente_base_fichas").select("id").eq("client_id", t.client_id).eq("fonte_url", m.permalink).limit(1);
+      if ((ja || []).length) continue;
+    }
+    const cards = Array.isArray((t.direcao || {}).cards) ? (t.direcao as { cards: Array<{ texto_exato?: string }> }).cards : [];
+    const tarefa = t.task_id ? tarefas.get(t.task_id) : undefined;
+    const linhas = fichasDoVencedor({
+      multiplo: m.multiplo,
+      medida: m.medida,
+      capa: texto(String(cards[0]?.texto_exato || "").split("\n")[0], 140),
+      conceito: texto((t.direcao || {}).conceito, 300),
+      gancho: tarefa ? texto((/Gancho do momento:\s*([^\n]+)/.exec(String(tarefa.description || "")) || [])[1], 200) : "",
+      formato: cards.length > 1 ? "carrossel" : "post",
+      tituloDaPauta: texto(tarefa?.title, 120),
+    });
+    for (const l of linhas) {
+      const chaveFonte = `${t.client_id}|${l.agente}`;
+      let fonteId = fontes.get(chaveFonte);
+      if (!fonteId) {
+        const { data: f } = await servico().from("agente_base_fontes").insert({
+          agente: l.agente, client_id: t.client_id, tipo: "texto", nome: `Números do Instagram de ${hojeBr()}`, status: "pronta", fichas: 0,
+        }).select("id").single();
+        if (!f) continue;
+        fonteId = (f as { id: string }).id;
+        fontes.set(chaveFonte, fonteId);
+      }
+      const { error } = await servico().from("agente_base_fichas").insert({ fonte_id: fonteId, agente: l.agente, client_id: t.client_id, titulo: l.titulo, tecnica: l.tecnica, quando_usar: l.quando_usar, exemplo: l.exemplo, fonte_url: m.permalink });
+      if (error) continue;
+      criadas += 1;
+      const { count } = await servico().from("agente_base_fichas").select("id", { count: "exact", head: true }).eq("fonte_id", fonteId);
+      await servico().from("agente_base_fontes").update({ fichas: count ?? 0 }).eq("id", fonteId);
+    }
+    porCliente.set(t.client_id, (porCliente.get(t.client_id) || 0) + 1);
+  }
+  return criadas;
+}
+
+/**
+ * 17/10 (dono: "a base aprender com o que eu aprovo e reprovo; os números do Instagram voltando para a técnica"):
+ * o resultado de cada ficha (desfecho das peças e múltiplo dos posts) gravado nela, e os vencedores viram fichas.
+ */
+export async function aprenderComResultados(): Promise<{ fichas: number; vencedoras: number }> {
+  const usos: UsoParaResultado[] = [];
+  for (let pagina = 0; pagina < 10; pagina += 1) {
+    const { data } = await servico().from("agente_base_usos").select("ficha_id, referencia_tipo, referencia_id")
+      .gte("criado_em", diasAtras(DIAS_DO_RESULTADO)).order("criado_em", { ascending: false }).range(pagina * 1000, pagina * 1000 + 999);
+    const lote = (data || []) as UsoParaResultado[];
+    usos.push(...lote);
+    if (lote.length < 1000) break;
+  }
+  const desfechos = new Map<string, DesfechoDaPeca>();
+  const multiplos = new Map<string, number>();
+  const idsEstudio = [...new Set(usos.filter((u) => u.referencia_tipo === "estudio_trabalho" && u.referencia_id).map((u) => u.referencia_id as string))];
+  const trabalhos = await lerTrabalhos(idsEstudio);
+  for (const t of trabalhos) desfechos.set(`estudio_trabalho:${t.id}`, desfechoDoEstudio(t));
+  (await multiplosDosTrabalhos(trabalhos)).forEach((m, id) => multiplos.set(`estudio_trabalho:${id}`, m.multiplo));
+  const idsAds = [...new Set(usos.filter((u) => u.referencia_tipo === "ads_criativo" && u.referencia_id).map((u) => u.referencia_id as string))];
+  for (const pedaco of emPedacos(idsAds)) {
+    const { data } = await servico().from("ads_criativos").select("id, status").in("id", pedaco);
+    for (const c of (data || []) as Array<{ id: string; status: string | null }>) desfechos.set(`ads_criativo:${c.id}`, desfechoDoAds(c.status));
+  }
+  const agora = new Date().toISOString();
+  let fichas = 0;
+  for (const [id, r] of resultadosDasFichas(usos, desfechos, multiplos)) {
+    const { error } = await servico().from("agente_base_fichas").update({ ...r, resultado_em: agora }).eq("id", id);
+    if (!error) fichas += 1;
+  }
+  const vencedoras = await fichasDosVencedores().catch((err) => {
+    console.error("[base-dos-agentes] vencedores falharam", err instanceof Error ? err.message : err);
+    return 0;
+  });
+  return { fichas, vencedoras };
+}
+
+async function aprenderAgora(_ch: Chamador) {
+  return json({ ok: true, ...(await aprenderComResultados()) });
 }
 
 // ------------------------------------------------------------------ servidor
@@ -406,8 +601,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   editar_ficha: editarFicha,
   apagar_ficha: apagarFicha,
   apagar_fonte: apagarFonte,
+  aprender_com_resultados: aprenderAgora,
 };
-const ACOES_LONGAS = new Set(["ensinar", "pesquisar"]);
+const ACOES_LONGAS = new Set(["ensinar", "pesquisar", "aprender_com_resultados"]);
 
 function respostaDeErro(err: unknown): Response {
   if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message }, err.status);

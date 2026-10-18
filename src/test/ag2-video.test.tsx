@@ -606,6 +606,8 @@ describe("tela: a mensagem nunca some e o estado volta do banco", () => {
   it("agente da mesa: falha do servidor na ação tira a bolha e devolve o texto", async () => {
     tela.invoke.mockImplementation((_f: string, { body }: any) => Promise.resolve({ data: body.acao === "resultados_para_edicao_propor" ? { error: "banco_indisponivel", mensagem: "Banco fora do ar." } : {}, error: null }));
     montar(h(AgenteDaMesaDeVideo, { mesa: "videos", etapa: "resultados", irPara: vi.fn() } as any));
+    // 17/10: os atalhos ficam recolhidos em "Sugestões" (OQuePossoFazer); abre antes de clicar no atalho.
+    fireEvent.click(await screen.findByRole("button", { name: "Sugestões" }));
     fireEvent.click(await screen.findByRole("button", { name: "Mandar para a Edição" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toMatch(/Banco fora do ar/);

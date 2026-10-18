@@ -1470,10 +1470,13 @@ describe("v2: diretor que trabalha", () => {
     const escolherKit = vi.fn();
     const escolherEnsaio = vi.fn();
     montar(h(AgenteAberto), { kitId: KIT, escolherKit, escolherEnsaio });
+    // 17/10: os atalhos ficam recolhidos em "Sugestões" (OQuePossoFazer); abre antes de procurar o grupo.
+    fireEvent.click(await screen.findByRole("button", { name: "Sugestões" }));
     const atalhos = await screen.findByRole("group", { name: "Atalhos do diretor" });
     // Frente FTL, rodada 2 (30/09): os atalhos usam os termos simples da linha de produção. Mudança de
     // propósito: antes "8 variações" e "Campanha com modelo"; o pedido ao diretor continua o mesmo.
-    expect(within(atalhos).getAllByRole("button").map((b) => b.textContent)).toEqual(["Identificar produto", "Tirar da caixa", "8 fotos do produto", "Foto com modelo"]);
+    // 17/10: atalho só com ícone (16/10); o nome fica no aria-label, então a ordem é conferida por ele.
+    expect(within(atalhos).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Identificar produto", "Tirar da caixa", "8 fotos do produto", "Foto com modelo"]);
     fireEvent.click(within(atalhos).getByRole("button", { name: "8 fotos do produto" }));
     await waitFor(() => expect(chamadasDe("agente_conversar")).toHaveLength(1));
     expect(chamadasDe("agente_conversar")[0].mensagem).toContain("8 variações");

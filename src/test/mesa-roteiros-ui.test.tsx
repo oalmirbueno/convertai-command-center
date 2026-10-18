@@ -298,6 +298,8 @@ describe("agente da mesa", () => {
     const agente = await screen.findByRole("region", { name: "Agente de roteiros" });
     expect(agente.closest("[data-agente-roteiros]")).toBeTruthy();
     await waitFor(() => expect(chamadasDe("agente_historico")).toHaveLength(1));
+    // 17/10: os atalhos ficam recolhidos em "Sugestões" (OQuePossoFazer); abre antes de clicar no atalho.
+    fireEvent.click(within(agente).getByRole("button", { name: "Sugestões" }));
     fireEvent.click(screen.getByRole("button", { name: "Roteiros da semana" }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar ao agente" }));
     await waitFor(() => expect(chamadasDe("agente_conversar")).toHaveLength(1));

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ExternalLink, FileText, Globe, GraduationCap, Link2, Loader2, Pencil, Search, Trash2, Upload } from "lucide-react";
+import { BookOpen, ExternalLink, FileText, Globe, GraduationCap, Link2, Loader2, Pencil, Search, Trash2, TrendingUp, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, campo, campoTexto, etiqueta, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
@@ -9,6 +9,7 @@ import { AGENTES_COM_BASE, type AgenteComBase } from "../../supabase/functions/_
 import {
   apagarFicha,
   apagarFonte,
+  aprenderComResultados,
   editarFicha,
   ensinar,
   type FichaDaBase,
@@ -21,6 +22,13 @@ import {
   pesquisarAgora,
 } from "@/components/base-dos-agentes/baseDosAgentesApi";
 import { lerArquivosDoAgente } from "@/components/mesa/leituraDeArquivos";
+import { deveSair, resumoDoResultado, type ResultadoDaFicha } from "../../supabase/functions/_shared/resultado-das-fichas";
+
+/** O resultado gravado na ficha, no formato do módulo puro (a coluna numeric chega como texto). */
+function resultadoDe(f: FichaDaBase): ResultadoDaFicha {
+  const m = f.multiplo === null || f.multiplo === undefined ? null : Number(f.multiplo);
+  return { aprovadas: f.aprovadas || 0, ajustadas: f.ajustadas || 0, reprovadas: f.reprovadas || 0, posts: f.posts || 0, multiplo: m !== null && Number.isFinite(m) ? m : null };
+}
 
 /**
  * Base dos agentes (17/10/2026). Dono: "todos os que estão por trás, como se
@@ -136,7 +144,7 @@ export default function BaseDosAgentes() {
                 novo sobre {agente.tema} e as fichas novas também entram em uso. Desligue o que não ajudar.
               </>
             }
-            acao={podeEnsinar ? <BotaoDePesquisa agente={agente} aoTerminar={recarregar} /> : undefined}
+            acao={podeEnsinar ? <span className="inline-flex items-center"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></span> : undefined}
           >
             {podeEnsinar && <CaixaDeEnsino agente={agente} clientes={clientes.data || []} aoTerminar={recarregar} />}
           </Secao>
@@ -157,6 +165,29 @@ export default function BaseDosAgentes() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Cruza agora as fichas com as aprovações e os números do Instagram (sem custo de IA). */
+function BotaoDosResultados({ aoTerminar }: { aoTerminar: () => void }) {
+  const [rodando, setRodando] = useState(false);
+  const clicar = async () => {
+    if (rodando) return;
+    setRodando(true);
+    try {
+      const r = await aprenderComResultados();
+      toast.success(`Resultados atualizados em ${r.fichas} ${r.fichas === 1 ? "ficha" : "fichas"}`, { description: r.vencedoras ? `${r.vencedoras} fichas novas dos posts que renderam acima do normal.` : "Nenhum post novo acima de 1,5x o normal." });
+    } catch (e) {
+      toast.error("Não deu para atualizar os resultados", { description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setRodando(false);
+      aoTerminar();
+    }
+  };
+  return (
+    <button type="button" className={juntar(botao.icone, "mr-1")} onClick={() => void clicar()} disabled={rodando} aria-label="Aprender com os resultados agora" title="Cruza as fichas com o que foi aprovado e com os números do Instagram (toda terça isso roda sozinho)">
+      {rodando ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
+    </button>
   );
 }
 
@@ -411,10 +442,16 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
         </button>
         {podeEditar && <Switch checked={ficha.ativa} onCheckedChange={(v) => void alternar(v)} className="ml-3 mt-0.5 shrink-0" aria-label={ficha.ativa ? "Desligar a ficha" : "Ligar a ficha"} />}
       </div>
+      {ficha.ativa && deveSair(resultadoDe(ficha)) && (
+        <p className="mt-2 rounded-md bg-warning/10 px-2.5 py-1.5 text-[12px] text-warning" role="status" data-sugestao-desligar="">
+          Esta ficha está atrapalhando ({resumoDoResultado(resultadoDe(ficha))}) e já não entra nas gerações. Desligue ou edite.
+        </p>
+      )}
       <div className="mt-2 flex min-w-0 flex-wrap items-center text-[11.5px] text-muted-foreground [&>*]:mr-2.5">
-        <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? ROTULO_DO_TIPO[fonte.tipo] : "À mão"}</span>
+        <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? (fonte.nome.indexOf("Números do Instagram") === 0 ? "Números do Instagram" : ROTULO_DO_TIPO[fonte.tipo]) : "À mão"}</span>
         {cliente && <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Só {cliente}</span>}
         <span className="tabular-nums">{ficha.usos ? `usada ${ficha.usos} ${ficha.usos === 1 ? "vez" : "vezes"} · ${haQuanto(ficha.ultimo_uso)}` : "ainda não usada"}</span>
+        {resumoDoResultado(resultadoDe(ficha)) && <span className="tabular-nums text-foreground" data-resultado-da-ficha="">{resumoDoResultado(resultadoDe(ficha))}</span>}
         {fonte && fonte.tipo !== "pesquisa" && <span className="min-w-0 max-w-[16rem] truncate" title={fonte.nome}>{fonte.nome}</span>}
         {ficha.fonte_url && (
           <a href={ficha.fonte_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-primary hover:underline">

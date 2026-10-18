@@ -69,4 +69,27 @@ describe("base dos agentes", () => {
       expect(pagina, t).toContain(t);
     }
   });
+
+  it("17/10: a base aprende com aprovação e com os números (resultado gravado na ficha, a que atrapalha sai)", () => {
+    const sql = ler("supabase/migrations/20261017233000_base_dos_agentes_resultado.sql");
+    for (const c of ["aprovadas", "ajustadas", "reprovadas", "posts", "multiplo", "resultado_em"]) expect(sql, c).toContain(`ADD COLUMN IF NOT EXISTS ${c}`);
+    const geracao = ler("supabase/functions/_shared/base-do-agente.ts");
+    expect(geracao).toContain(".filter((f) => !deveSair(resultadoDaFicha(f)))");
+    expect(geracao).toContain("0.5 * pesoDaFicha(resultadoDaFicha(f))");
+    const funcao = ler("supabase/functions/base-dos-agentes/index.ts");
+    expect(funcao).toContain("aprender_com_resultados: aprenderAgora");
+    expect(funcao).toContain("x.m.multiplo >= DESTAQUE_A_PARTIR_DE");
+    expect(funcao).toContain("const resultados = (recente || []).length ? null : await aprenderComResultados()");
+    const pagina = ler("src/pages/BaseDosAgentes.tsx");
+    expect(pagina).toContain("data-sugestao-desligar");
+    expect(pagina).toContain("Aprender com os resultados agora");
+  });
+
+  it("17/10: a capa sai da melhor entre a do diretor e 3 alternativas, antes de qualquer imagem", () => {
+    const estudio = ler("supabase/functions/estudio-arte/index.ts");
+    expect(estudio).toContain("const escolha = await escolherCapa({");
+    expect(estudio).toContain('fidelidadePedida !== "identico" && fidelidadePedida !== "proximo"');
+    expect(estudio).toContain("!instrucao");
+    expect(ler("supabase/functions/_shared/motores.ts")).toContain('"estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes"');
+  });
 });

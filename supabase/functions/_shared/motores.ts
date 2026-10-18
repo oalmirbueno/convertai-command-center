@@ -645,6 +645,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "agente-calendario/index.ts#ajustarCriacao": "revisoes",
   "mesa-ads/index.ts#chamarReescrita": "revisoes",
   "estudio-arte/index.ts#prepararItem/revisarConteudo": "revisoes",
+  // 17/10: o redator das capas alternativas (o Jev escolhe a melhor antes de qualquer imagem).
+  "estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes",
   "estudio-arte/index.ts#conversar": "revisoes",
   "estudio-arte/index.ts#lerCardsDaReferencia/lerCardsDoPost": "leituras",
   "editor-video/index.ts#agentePesquisar/respostaComFolego": "leituras",

@@ -19,6 +19,13 @@ export interface FichaDaBase {
   usos: number;
   ultimo_uso: string | null;
   criado_em: string;
+  /** 17/10: o resultado das peças feitas com a ficha (rotina da base). */
+  aprovadas: number;
+  ajustadas: number;
+  reprovadas: number;
+  posts: number;
+  multiplo: number | string | null;
+  resultado_em: string | null;
 }
 
 export interface FonteDaBase {
@@ -45,7 +52,7 @@ const db = supabase as any;
 export async function lerFichas(agente: string): Promise<FichaDaBase[]> {
   const { data, error } = await db
     .from("agente_base_fichas")
-    .select("id, fonte_id, agente, client_id, titulo, tecnica, quando_usar, exemplo, fonte_url, ativa, usos, ultimo_uso, criado_em")
+    .select("id, fonte_id, agente, client_id, titulo, tecnica, quando_usar, exemplo, fonte_url, ativa, usos, ultimo_uso, criado_em, aprovadas, ajustadas, reprovadas, posts, multiplo, resultado_em")
     .eq("agente", agente)
     .order("criado_em", { ascending: false })
     .limit(500);
@@ -126,3 +133,6 @@ export const editarFicha = (id: string, mudar: Partial<Pick<FichaDaBase, "titulo
 export const apagarFicha = (id: string) => chamarFuncao("base-dos-agentes", { acao: "apagar_ficha", id });
 
 export const apagarFonte = (id: string) => chamarFuncao("base-dos-agentes", { acao: "apagar_fonte", id });
+
+/** Cruza agora as fichas com as aprovações e os números do Instagram (a rotina de terça faz sozinha). */
+export const aprenderComResultados = () => chamarFuncao<{ fichas: number; vencedoras: number }>("base-dos-agentes", { acao: "aprender_com_resultados" });

@@ -18,6 +18,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { cobrarJev, type ReferenciaUso, type Tarefa } from "./ia-motor.ts";
 import { jevPerguntar, notaScore, type PerguntaJev } from "./jev.ts";
+import { deveSair, pesoDaFicha, type ResultadoDaFicha } from "./resultado-das-fichas.ts";
 
 export { AGENTES_COM_BASE, agenteComBase, CHAVES_COM_BASE } from "./agentes-com-base.ts";
 
@@ -28,6 +29,18 @@ export interface FichaDaBase {
   quando_usar: string;
   exemplo: string;
   client_id: string | null;
+  /** 17/10: o resultado gravado pela rotina da base (aprovações e múltiplo dos posts). */
+  aprovadas?: number;
+  ajustadas?: number;
+  reprovadas?: number;
+  posts?: number;
+  multiplo?: number | string | null;
+}
+
+/** O resultado da ficha no formato do módulo puro (a coluna numeric chega como texto). */
+export function resultadoDaFicha(f: FichaDaBase): ResultadoDaFicha {
+  const m = f.multiplo === null || f.multiplo === undefined ? null : Number(f.multiplo);
+  return { aprovadas: f.aprovadas ?? 0, ajustadas: f.ajustadas ?? 0, reprovadas: f.reprovadas ?? 0, posts: f.posts ?? 0, multiplo: m !== null && Number.isFinite(m) ? m : null };
 }
 
 /** Teto padrão do bloco no prompt (caracteres). */
@@ -96,7 +109,7 @@ export async function lerFichasDoAgente(
 ): Promise<FichaDaBase[]> {
   let q = db
     .from("agente_base_fichas")
-    .select("id, titulo, tecnica, quando_usar, exemplo, client_id")
+    .select("id, titulo, tecnica, quando_usar, exemplo, client_id, aprovadas, ajustadas, reprovadas, posts, multiplo")
     .eq("agente", agente)
     .eq("ativa", true);
   q = clientId ? q.or(`client_id.is.null,client_id.eq.${clientId}`) : q.is("client_id", null);
@@ -126,10 +139,12 @@ export async function baseDoAgente(
 ): Promise<{ bloco: string; ids: string[] }> {
   try {
     const teto = e.teto ?? TETO_DA_BASE;
-    const todas = await lerFichasDoAgente(db, e.agente, e.clientId);
+    // 17/10: a ficha que só reprova (ou cujos posts rendem bem abaixo do normal) não entra mais.
+    const todas = (await lerFichasDoAgente(db, e.agente, e.clientId)).filter((f) => !deveSair(resultadoDaFicha(f)));
     if (!todas.length) return { bloco: "", ids: [] };
-    // As do cliente primeiro: são a regra mais específica.
-    const ordenadas = [...todas.filter((f) => f.client_id), ...todas.filter((f) => !f.client_id)];
+    // As do cliente primeiro (a regra mais específica); dentro de cada grupo, as que aprovam e rendem antes.
+    const porPeso = (lista: FichaDaBase[]) => lista.map((f, i) => ({ f, i, p: pesoDaFicha(resultadoDaFicha(f)) })).sort((a, b) => b.p - a.p || a.i - b.i).map((x) => x.f);
+    const ordenadas = [...porPeso(todas.filter((f) => f.client_id)), ...porPeso(todas.filter((f) => !f.client_id))];
     const caberiam = encherAteOTeto(ordenadas, teto);
     let escolhidas = caberiam;
     if (caberiam.length < ordenadas.length && e.pedido.trim()) {
@@ -176,7 +191,8 @@ async function ordemPeloJev(
     if (e.clientId) {
       await cobrarJev(r, { clientId: e.clientId, tarefa: e.tarefa, referencia: e.referencia, criadoPor: e.criadoPor ?? null }).catch(() => null);
     }
-    const notas = avaliadas.map((f, i) => ({ f, nota: (notaScore(r.answers[`f${i}`]) ?? 0) + (f.client_id ? 0.25 : 0) }));
+    // A nota do Jev (0 a 3) com o empurrão do resultado da ficha (aprovação e posts).
+    const notas = avaliadas.map((f, i) => ({ f, nota: (notaScore(r.answers[`f${i}`]) ?? 0) + (f.client_id ? 0.25 : 0) + 0.5 * pesoDaFicha(resultadoDaFicha(f)) }));
     const boas = notas.filter((n) => n.nota >= NOTA_MINIMA).sort((a, b) => b.nota - a.nota).map((n) => n.f);
     return boas.length ? boas : reserva;
   } catch (erro) {

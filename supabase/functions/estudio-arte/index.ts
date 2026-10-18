@@ -673,6 +673,7 @@ import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
 import { abrirImagemDaPrancha, camposDaFalhaDaPrancha, type FalhaDaPrancha, lerPranchaComMotivo, MOTIVOS_DO_ARQUIVO } from "./leitura-da-prancha.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { baseDoAgente } from "../_shared/base-do-agente.ts";
+import { escolherCapa, ESQUEMA_CAPAS } from "./modulos/escolha-da-capa.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3796,6 +3797,54 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   } else if (!postUnico) {
     mioloLongo = direcao.cards.filter((c) => passaDoLimite(c, direcao.cards.length)).map((c) => c.ordem);
   }
+  // 17/10 (dono: "nota de 'isto vende?' antes de te mostrar"): a capa sai da melhor entre a do diretor e 3
+  // alternativas, pelas notas do Jev (gancho, clareza do ganho, leitura no celular), antes de qualquer imagem.
+  // Fica de fora quando a equipe pediu o texto (instrução ao diretor, fidelidade Idêntico ou Próximo).
+  const fidelidadePedida = rapida ? rapida.gravada.fidelidade ?? null : null;
+  if (direcao.origem === "diretor" && direcao.cards.length && !instrucao && fidelidadePedida !== "identico" && fidelidadePedida !== "proximo" && corpo.escolher_capa !== false) {
+    try {
+      const capa = direcao.cards[0];
+      const assunto = rapida ? rapida.gravada.pedido : item.tarefa.title;
+      const escolha = await escolherCapa({
+        capa,
+        assunto,
+        conceito: direcao.conceito || "",
+        outras: direcao.cards.slice(1, 4).map((c) => c.texto_exato),
+        fatos: fontesConfirmadas(campanha, rapida ? rapida.documentos : [], marca.nomeCliente, rapida ? null : item),
+      }, async (sistema, pedido) => {
+        const redator = await modeloDoPapel("diretor_arte");
+        const rc = await chamarTexto({
+          clientId,
+          tarefa: "estudio",
+          agente: "diretor_arte",
+          modeloId: redator.id,
+          raciocinio: raciocinioPara(redator, ["low"]),
+          sistema,
+          mensagens: [{ papel: "usuario", conteudo: pedido }],
+          esquemaJson: ESQUEMA_CAPAS,
+          maxTokensSaida: 600,
+          timeoutMs: 60_000,
+          referencia: { tipo: "estudio_trabalho", id: trabalhoId },
+          criadoPor: ch.userId,
+        });
+        if (typeof rc.saldoUsd === "number") saldo = rc.saldoUsd;
+        return { json: rc.json, custoUsd: rc.custoUsd };
+      }, async (state, questions) => {
+        const rj = await jevPerguntar({ state, questions });
+        const cobrado = await cobrarJev(rj, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+        return { answers: rj.answers, custoUsd: cobrado?.custoUsd ?? 0 };
+      });
+      custo = arred(custo + escolha.custoUsd);
+      if (escolha.card) {
+        const n = direcao.cards.length;
+        direcao.cards[0] = { ...escolha.card, prompt_imagem: promptDaLamina(escolha.card, marca, { total: n, carrosselInfinito: direcao.carrossel_infinito, levaLogo: levaLogoFn(escolha.card.ordem, n), conceito: direcao.conceito, fioVisual: direcao.fio_visual ?? null }) };
+      }
+      if (escolha.notas.length) (direcao as unknown as Record<string, unknown>).escolha_da_capa = { notas: escolha.notas, escolhida: escolha.escolhida, em: new Date().toISOString() };
+    } catch (err) {
+      registrarFalha("estudio-arte: escolha da capa falhou (fica a do diretor)", err, { trabalho_id: trabalhoId });
+    }
+  }
+
   // Frente R5: a lâmina que ainda passa do limite e tem mais de uma ideia recebe a sugestão "dividir em 2 lâminas"
   // (a tela mostra; só a confirmação da equipe divide, pela ação texto_da_lamina).
   const dividirEmDuas = mioloLongo.filter((o) => mioloEnxuto.indexOf(o) < 0).filter((o) => {
