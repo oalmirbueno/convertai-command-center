@@ -136,6 +136,8 @@ describe("base dos agentes", () => {
     const funcao = ler("supabase/functions/base-dos-agentes/index.ts");
     expect(funcao).toContain("resultadosDasFichas(usos, desfechos, multiplos, eficiencias)");
     expect(funcao).toContain("const comentarios = await fichasDosComentarios(");
+    // A memória de entrega tem a mesma origem da reprovação: só o "evitar" é pedido do cliente.
+    expect(funcao).toContain('.eq("origem", "aprovacao").eq("tipo", "evitar")');
     expect(funcao).toContain('if (!(recente || []).length && new Date().getUTCDate() <= 7) {');
     expect(funcao).toContain('arquivada_por: "repetida"');
     // Arquivar é desligar: nada é apagado pela faxina.

@@ -721,8 +721,9 @@ async function fichasDosComentarios(pagador: string | null): Promise<number> {
       comentarios.push({ chave: `comentario:${String(o.evento_id || `${t.id}:${o.pedido_em || txt.slice(0, 20)}`)}`, client_id: t.client_id, texto: txt });
     }
   }
+  // Só a reprovação com texto (o gatilho grava tipo "evitar"); a memória de entrega tem a mesma origem e não é pedido.
   const { data: memorias } = await servico().from("agente_memoria").select("id, client_id, texto")
-    .eq("origem", "aprovacao").gte("criado_em", diasAtras(DIAS_DOS_COMENTARIOS)).limit(300);
+    .eq("origem", "aprovacao").eq("tipo", "evitar").gte("criado_em", diasAtras(DIAS_DOS_COMENTARIOS)).limit(300);
   for (const m of (memorias || []) as Array<{ id: string; client_id: string; texto: string }>) {
     const txt = texto(m.texto, 500);
     if (txt.length >= 8 && !comentarios.some((c) => c.client_id === m.client_id && c.texto === txt)) comentarios.push({ chave: `comentario:mem:${m.id}`, client_id: m.client_id, texto: txt });
