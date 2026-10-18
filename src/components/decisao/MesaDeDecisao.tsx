@@ -192,14 +192,14 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
         ir(dx < 0 ? 1 : -1);
       }}
       className={juntar(
-        "rounded-2xl border border-border bg-card shadow-sm transition-all duration-200 sm:overflow-hidden",
+        "rounded-lg border border-border bg-card shadow-sm transition-all duration-200 sm:overflow-hidden",
         !saindo && "animate-in fade-in-0 slide-in-from-right-4",
         saindo === "aprovado" && "translate-x-8 opacity-0",
         saindo === "outro" && "-translate-x-8 opacity-0",
       )}
     >
       <div className={juntar("grid min-w-0", item.midia && "md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
-        {item.midia && <div className="min-w-0 bg-muted/40 max-sm:overflow-hidden max-sm:rounded-t-2xl md:border-r md:border-border">{item.midia}</div>}
+        {item.midia && <div className="min-w-0 bg-muted/40 max-sm:overflow-hidden max-sm:rounded-t-lg md:border-r md:border-border">{item.midia}</div>}
         <div className="min-w-0 p-4 sm:p-5">
           <header className="flex min-w-0 items-center">
             {item.avatar && <span className="mr-2.5 shrink-0">{item.avatar}</span>}
@@ -208,7 +208,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
               <span className={juntar("mt-0.5 inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium", TOM_DO_SELO[item.tomDoTipo ?? "primario"])}>{item.tipo}</span>
             </span>
           </header>
-          <h3 className="mt-3 text-[17px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{item.titulo}</h3>
+          <h3 className="mt-3 line-clamp-2 text-[17px] font-semibold leading-snug text-foreground" title={item.titulo}>{item.titulo}</h3>
           {item.mensagem && <p className="mt-2 whitespace-pre-wrap sm:max-h-72 sm:overflow-y-auto text-[14px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{item.mensagem}</p>}
           {item.diagrama && <div className="mt-4 rounded-xl bg-muted/30 p-3 sm:p-4">{item.diagrama}</div>}
           {item.passo && <p className="mt-2 flex items-start text-[13px] text-muted-foreground"><ChevronRight className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{item.passo}</span></p>}
@@ -225,7 +225,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
       </div>
 
       {/* Rodapé: decidir. Ajuste e rejeição pedem uma frase curta antes de enviar. */}
-      <footer className="border-t border-border bg-muted/20 p-3 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:rounded-b-2xl max-sm:bg-card/95 max-sm:shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.35)] max-sm:backdrop-blur sm:p-4" data-decidir-no-pe="">
+      <footer className="border-t border-border bg-muted/20 p-3 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:rounded-b-lg max-sm:bg-card/95 max-sm:shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.35)] max-sm:backdrop-blur sm:p-4" data-decidir-no-pe="">
         {modo ? <div className="space-y-2">
           <label className={juntar(texto.rotulo, "block")}>{modo === "ajuste" ? (item.rotuloAjuste ? "O que precisa ficar claro" : "O que ajustar") : "Por que rejeitar"}{!notaObrigatoria && " (opcional)"}
             <textarea ref={campoRef} value={nota} onChange={(e) => setNota(e.target.value)} rows={2} maxLength={2000} className={juntar(campoTexto, "mt-1.5 min-h-[56px]")} />

@@ -92,7 +92,7 @@ export interface PropsDoDiretor {
 function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
   return (
     <div
-      className={`min-w-0 rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${
+      className={`min-w-0 rounded-xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${
         papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "mr-4 rounded-bl-md bg-muted text-foreground"
       }`}
     >
@@ -605,7 +605,7 @@ export default function DiretorDoEstudio({
                 <p className="whitespace-pre-wrap">{envio.mensagem}</p>
               </Bolha>
             )}
-            <div className="mr-4 rounded-2xl rounded-bl-md bg-muted px-3 py-2">
+            <div className="mr-4 rounded-xl rounded-bl-md bg-muted px-3 py-2">
               <Cronometro desde={envio.desde} rotulo="O diretor está lendo o trabalho" />
             </div>
           </div>

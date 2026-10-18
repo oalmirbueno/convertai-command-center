@@ -32,6 +32,10 @@ export interface ResultadoDaFicha {
   posts: number;
   /** Média do múltiplo desses posts (1 = o normal do perfil). */
   multiplo: number | null;
+  /** 17/10 (rodada 4): anúncios no ar feitos com a ficha, com gasto suficiente para julgar. */
+  anuncios?: number;
+  /** Eficiência média desses anúncios: custo por resultado normal da conta ÷ o do anúncio (acima de 1 = mais barato). */
+  eficiencia?: number | null;
 }
 
 export const RESULTADO_VAZIO: ResultadoDaFicha = { aprovadas: 0, ajustadas: 0, reprovadas: 0, posts: 0, multiplo: null };
@@ -43,16 +47,17 @@ export function resultadosDasFichas(
   usos: UsoParaResultado[],
   desfechos: Map<string, DesfechoDaPeca>,
   multiplos: Map<string, number>,
+  eficiencias: Map<string, number> = new Map(),
 ): Map<string, ResultadoDaFicha> {
   const vistos = new Set<string>();
-  const soma = new Map<string, { r: ResultadoDaFicha; somaMultiplo: number }>();
+  const soma = new Map<string, { r: ResultadoDaFicha; somaMultiplo: number; somaEficiencia: number }>();
   for (const u of usos) {
     if (!u.referencia_tipo || !u.referencia_id) continue;
     const peca = `${u.referencia_tipo}:${u.referencia_id}`;
     const chave = `${u.ficha_id}|${peca}`;
     if (vistos.has(chave)) continue;
     vistos.add(chave);
-    const atual = soma.get(u.ficha_id) || { r: { ...RESULTADO_VAZIO }, somaMultiplo: 0 };
+    const atual = soma.get(u.ficha_id) || { r: { ...RESULTADO_VAZIO, anuncios: 0 }, somaMultiplo: 0, somaEficiencia: 0 };
     const d = desfechos.get(peca);
     if (d === "aprovada") atual.r.aprovadas += 1;
     else if (d === "ajustada") atual.r.ajustadas += 1;
@@ -62,11 +67,22 @@ export function resultadosDasFichas(
       atual.r.posts += 1;
       atual.somaMultiplo += m;
     }
+    const ef = eficiencias.get(peca);
+    if (typeof ef === "number" && Number.isFinite(ef)) {
+      atual.r.anuncios = (atual.r.anuncios || 0) + 1;
+      atual.somaEficiencia += ef;
+    }
     soma.set(u.ficha_id, atual);
   }
   const saida = new Map<string, ResultadoDaFicha>();
   soma.forEach((v, id) => {
-    saida.set(id, { ...v.r, multiplo: v.r.posts ? Math.round((v.somaMultiplo / v.r.posts) * 100) / 100 : null });
+    const anuncios = v.r.anuncios || 0;
+    saida.set(id, {
+      ...v.r,
+      multiplo: v.r.posts ? Math.round((v.somaMultiplo / v.r.posts) * 100) / 100 : null,
+      anuncios,
+      eficiencia: anuncios ? Math.round((v.somaEficiencia / anuncios) * 100) / 100 : null,
+    });
   });
   return saida;
 }
@@ -85,6 +101,8 @@ export function deveSair(r: ResultadoDaFicha | null | undefined): boolean {
   if (!r) return false;
   const taxa = taxaDeAprovacao(r);
   if (julgadas(r) >= 3 && taxa !== null && taxa <= 0.25) return true;
+  // Anúncio que queima verba: com 3 ou mais no ar, custo por resultado o dobro do normal da conta.
+  if ((r.anuncios || 0) >= 3 && r.eficiencia != null && r.eficiencia <= 0.5) return true;
   return r.posts >= 3 && r.multiplo !== null && r.multiplo <= 0.6;
 }
 
@@ -95,6 +113,8 @@ export function pesoDaFicha(r: ResultadoDaFicha | null | undefined): number {
   const taxa = taxaDeAprovacao(r);
   if (julgadas(r) >= 2 && taxa !== null) p += taxa >= 0.75 ? 0.5 : taxa <= 0.4 ? -0.5 : 0;
   if (r.posts >= 2 && r.multiplo !== null) p += r.multiplo >= 1.2 ? 0.5 : r.multiplo <= 0.8 ? -0.5 : 0;
+  // Ads pesa mais: é venda medida (resultado no anúncio), não só atenção.
+  if ((r.anuncios || 0) >= 2 && r.eficiencia != null) p += r.eficiencia >= 1.2 ? 0.75 : r.eficiencia <= 0.8 ? -0.75 : 0;
   return p;
 }
 
@@ -105,5 +125,6 @@ export function resumoDoResultado(r: ResultadoDaFicha | null | undefined): strin
   const n = julgadas(r);
   if (n) partes.push(`aprovou ${r.aprovadas + r.ajustadas} de ${n}${r.ajustadas ? ` (${r.ajustadas} com ajuste)` : ""}`);
   if (r.posts && r.multiplo !== null) partes.push(`${r.posts} ${r.posts === 1 ? "post" : "posts"} com ${String(r.multiplo).replace(".", ",")}x o normal`);
+  if (r.anuncios && r.eficiencia != null) partes.push(`${r.anuncios} ${r.anuncios === 1 ? "anúncio" : "anúncios"} com custo por resultado ${r.eficiencia >= 1 ? `${String(r.eficiencia).replace(".", ",")}x melhor` : `${String(Math.round((1 / r.eficiencia) * 10) / 10).replace(".", ",")}x pior`} que o normal`);
   return partes.join(" · ");
 }

@@ -38,7 +38,7 @@ import { ESTADOS_VIDEO_ADS, resumoVideoAds, nomeBaseVideo, type EstadoVideoAds }
 import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
 import { ImportarPacote } from "./PacoteDeOtimizacao";
 import ResultadoDoCriativo from "./ResultadoDoCriativo";
-import { Andamento, useAndamento } from "./Comuns";
+import { Andamento, SeloDaVersao, useAndamento } from "./Comuns";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { botao, juntar } from "@/components/sistema/estilos";
@@ -720,6 +720,7 @@ export default function AbaEstudioAds({
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
                         <span className="min-w-0 truncate">{midia === "video" ? nomeBaseVideo(c) : formatoDe(c.formato).rotulo}</span>
+                        {midia === "arte" && <SeloDaVersao criativo={c} className="ml-1" />}
                         {midia === "arte" && ehOMelhor(c) && (
                           <span className="ml-1 inline-flex shrink-0 items-center text-[10.5px] font-medium text-primary" title="Melhor variação do ângulo pela conferência do Jev">
                             <Star className="mr-0.5 h-3 w-3" /> melhor

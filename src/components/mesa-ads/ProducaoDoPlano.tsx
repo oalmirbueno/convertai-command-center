@@ -9,6 +9,7 @@ import { custoDaResposta, ErroDaMesa, usd } from "@/lib/mesa/api";
 import { foco, juntar } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import {
+  arteSobDemanda,
   caminhoDoEstudio,
   chamarAds,
   chavesAds,
@@ -21,6 +22,7 @@ import {
   type FormatoAds,
   type PlanoAds,
   type TomDoCriativo,
+  versoesDoAngulo,
 } from "./adsApi";
 import { gerarKit, kitDoAngulo, partesDoKit } from "./acoesDoAgenteApi";
 import { pedirArteDoPlano, type AndamentoDoLote } from "./loteDoEstudio";
@@ -44,6 +46,9 @@ import type { FidelidadeAds } from "./adsApi";
  *   saiu fica, o resto não é escrito nem cobrado. No fim abre o Estúdio Ads e
  *   as artes começam sozinhas (custo já mostrado e confirmado no botão), com
  *   o andamento e o Parar de lá.
+ * - Teste A/B (18/10): cada ângulo sai com duas versões (A e B), cada uma o seu
+ *   criativo; sem o teste sai uma só (versoes: 1). A B que o plano não pediu
+ *   fica com a arte para gerar no Estúdio (não entra na arte automática nem na estimativa dela).
  */
 
 /** Corpo de criativos_produzir: ângulos na ordem do plano, formatos na ordem da lista, tom e modelo quando vierem. */
@@ -92,7 +97,7 @@ function textoDosFormatos(lista: FormatoAds[]): string {
 
 /** O que criativos_produzir devolve e a tela usa. */
 interface RespostaDaProducao {
-  criativos?: { id?: unknown; angulo_id?: unknown }[];
+  criativos?: { id?: unknown; angulo_id?: unknown; copy?: unknown }[];
   caminho?: { rotulo?: unknown; destino?: unknown } | null;
   custo_usd?: number;
 }
@@ -117,6 +122,8 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
   const [formatosEscolhidos, setFormatosEscolhidos] = useState<FormatoAds[] | null>(null);
   const [comKit, setComKit] = useState(true);
   const [comArte, setComArte] = useState(true);
+  const [comTesteAB, setComTesteAB] = useState(true);
+  const versoes: 1 | 2 = comTesteAB ? 2 : 1;
   // 02/10: seguir a referência do ângulo com a Fidelidade (Idêntico, Próximo, Criativo); vazio = não seguir.
   const [fidelidade, setFidelidade] = useState<FidelidadeAds | "">("");
   const [trocando, setTrocando] = useState(false);
@@ -133,7 +140,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
   const angulos = plano.angulos.filter((a) => marcados.indexOf(a.id) >= 0);
   const formatosDo = (a: Pick<PlanoAds["angulos"][number], "formatos">): FormatoAds[] =>
     formatosEscolhidos && formatosEscolhidos.length ? FORMATOS.map((f) => f.valor).filter((f) => formatosEscolhidos.indexOf(f) >= 0) : formatosAutomaticos(a);
-  const pecas = angulos.reduce((s, a) => s + (a.variacoes || 1) * formatosDo(a).length, 0);
+  const pecas = angulos.reduce((s, a) => s + versoesDoAngulo(a, versoes) * formatosDo(a).length, 0);
   const formatosEmUso: FormatoAds[] = [];
   angulos.forEach((a) => formatosDo(a).forEach((f) => formatosEmUso.indexOf(f) < 0 && formatosEmUso.push(f)));
   const semKit = angulos.filter((a) => !kitDoAngulo(a)).map((a) => a.id);
@@ -158,6 +165,8 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
     setFim(null);
     let custo = 0;
     const ids: string[] = [];
+    // Teste A/B: a B extra não entra na arte automática.
+    const comArteSozinha: string[] = [];
     const angulosFeitos: string[] = [];
     const falhas: unknown[] = [];
     let caminho: FimDaCriacao["caminho"] = null;
@@ -171,10 +180,15 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
         try {
           const corpo = corpoDaProducao(plano, [a.id], formatosDaVez[i], tomDaVez, corpoDoModelo);
           if (fidelidade && (a.referencia_ids || []).length) corpo.fidelidade = fidelidade;
+          if (versoes === 1) corpo.versoes = 1;
           const data = await chamarAds<RespostaDaProducao>("criativos_produzir", corpo);
           custo += custoDaResposta(data) || 0;
           const novos = data && Array.isArray(data.criativos) ? data.criativos : [];
-          novos.forEach((c) => c && c.id && ids.push(String(c.id)));
+          novos.forEach((c) => {
+            if (!c || !c.id) return;
+            ids.push(String(c.id));
+            if (!arteSobDemanda(c)) comArteSozinha.push(String(c.id));
+          });
           if (novos.length) angulosFeitos.push(a.id);
           if (data && data.caminho && typeof data.caminho.destino === "string") caminho = { rotulo: String(data.caminho.rotulo || "Abrir no Estúdio Ads"), destino: data.caminho.destino };
           void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
@@ -191,7 +205,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
       setAndamento(null);
     }
     if (!ids.length && falhas.length) throw falhas[0];
-    return { custo_usd: custo, ids, angulosFeitos, parado: parar.current, falhas, feitos, total: lista.length, caminho };
+    return { custo_usd: custo, ids, comArteSozinha, angulosFeitos, parado: parar.current, falhas, feitos, total: lista.length, caminho };
   };
 
   const aoCriar = (r: Awaited<ReturnType<typeof criar>>) => {
@@ -209,7 +223,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
     toast.success("Criativos criados", {
       description: `${r.ids.length} criativo(s), copy por ${usd(r.custo_usd)}.${comArte && r.ids.length ? " As artes começam no Estúdio Ads, com o andamento e o Parar." : ""}`,
     });
-    if (comArte && r.ids.length) pedirArteDoPlano(plano.id, r.ids);
+    if (comArte && r.comArteSozinha.length) pedirArteDoPlano(plano.id, r.comArteSozinha);
     onProduzido(plano.id);
   };
 
@@ -226,7 +240,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
   };
 
   // O resumo da produção numa frase (a linha trunca; o "?" e o title mostram inteiro).
-  const resumoDaProducao = `${angulos.length} ângulo${angulos.length === 1 ? "" : "s"} · ${pecas} criativo${pecas === 1 ? "" : "s"} · ${formatosEscolhidos ? textoDosFormatos(formatosEmUso) : `${textoDosFormatos(formatosEmUso)} (automático)`} · tom ${rotuloDoTom(tom).toLowerCase()} · copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)}${comKit ? " · com kit de recepção" : ""}${comArte ? "" : " · só a copy"}`;
+  const resumoDaProducao = `${angulos.length} ângulo${angulos.length === 1 ? "" : "s"} · ${pecas} criativo${pecas === 1 ? "" : "s"}${comTesteAB ? " · teste A/B" : ""} · ${formatosEscolhidos ? textoDosFormatos(formatosEmUso) : `${textoDosFormatos(formatosEmUso)} (automático)`} · tom ${rotuloDoTom(tom).toLowerCase()} · copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)}${comKit ? " · com kit de recepção" : ""}${comArte ? "" : " · só a copy"}`;
 
   return (
     // 28/09 (frente AD4, dono: "não no meio"): a barra é o rodapé da coluna principal, fora da
@@ -256,7 +270,7 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
               {` · ${formatosEscolhidos ? textoDosFormatos(formatosEmUso) : `${textoDosFormatos(formatosEmUso)} (automático)`} · tom ${rotuloDoTom(tom).toLowerCase()} · copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)}${comKit ? " · com kit de recepção" : ""}${comArte ? "" : " · só a copy"}`}
             </p>
             <AjudaRecolhida className="ml-1 shrink-0" rotulo="O que vai ser produzido">
-              {resumoDaProducao}. Para cada ângulo marcado: a copy escrita a mais (o Jev escolhe a melhor), a direção de arte{comArte ? " e as artes no Estúdio Ads, com o andamento e o Parar" : ""}{comKit ? ", e o kit de recepção de quem ainda não tem" : ""}. Trocar muda formatos, tom, modelo da copy, artes e kit.
+              {resumoDaProducao}. Para cada ângulo marcado: a copy escrita a mais (o Jev escolhe a melhor{comTesteAB ? "; a versão B é a próxima que traz outra ideia, para o teste A/B" : ""}), a direção de arte{comArte ? " e as artes no Estúdio Ads, com o andamento e o Parar" : ""}{comKit ? ", e o kit de recepção de quem ainda não tem" : ""}.{comTesteAB && comArte ? " A B de ângulo com uma variação no plano fica com a arte para gerar no Estúdio, com o custo lá." : ""} Trocar muda formatos, tom, modelo da copy, teste A/B, artes e kit.
             </AjudaRecolhida>
             <button type="button" onClick={() => setTrocando((v) => !v)} aria-expanded={trocando} className={juntar("ml-1.5 shrink-0 rounded font-medium text-primary hover:underline", foco)}>
               {trocando ? "Pronto" : "Trocar"}
@@ -270,11 +284,11 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
           <BotaoComCusto
             rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Criar criativos</>}
             titulo="Criar criativos"
-            descricao={`Para cada ângulo: a copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)} (escrita a mais, o Jev escolhe a melhor), a direção de arte${comArte ? " e as artes no Estúdio Ads" : ""}. Um ângulo por vez, com Parar.`}
+            descricao={`Para cada ângulo: a copy no ${resumoDoModelo(modelo.modelo, modelo.raciocinio)} (escrita a mais, o Jev escolhe a melhor${comTesteAB ? "; versões A e B para o teste" : ""}), a direção de arte${comArte ? " e as artes no Estúdio Ads" : ""}. Um ângulo por vez, com Parar.`}
             className="h-8"
             disabled={!angulos.length || pecas === 0 || andamento !== null}
             fecharAoConfirmar
-            partes={() => partesDaCriacao(catalogo, modelo, angulos, formatosDo, comArte).concat(comKit && semKit.length ? partesDoKit(catalogo, semKit.length) : [])}
+            partes={() => partesDaCriacao(catalogo, modelo, angulos, formatosDo, comArte, versoes).concat(comKit && semKit.length ? partesDoKit(catalogo, semKit.length) : [])}
             executar={criar}
             aoConcluir={aoCriar}
           />
@@ -341,6 +355,10 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
             <SeletorDoModeloDaCopy estado={modelo} />
           </div>
           <div className="flex min-w-0 flex-wrap items-center">
+            <label className="mb-1 mr-4 inline-flex items-center text-[12px] text-muted-foreground" title="Duas versões por ângulo (A e B), cada uma o seu criativo; o resultado de cada uma alimenta o aprendizado">
+              <input type="checkbox" className="mr-1.5" checked={comTesteAB} onChange={(e) => setComTesteAB(e.target.checked)} />
+              Teste A/B
+            </label>
             <label className="mb-1 mr-4 inline-flex items-center text-[12px] text-muted-foreground" title="As artes começam no Estúdio Ads assim que a copy sai, com o andamento e o Parar">
               <input type="checkbox" className="mr-1.5" checked={comArte} onChange={(e) => setComArte(e.target.checked)} />
               Gerar as artes junto

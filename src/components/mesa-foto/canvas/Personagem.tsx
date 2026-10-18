@@ -9,6 +9,7 @@ import { textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { chaveDasPersonas, decidirImagemDaPersona, gerarVista, partesDaVista, rotuloDaVista, type ImagemDaPersona } from "../modelosApi";
 import { criarPersonagem, type PersonagemCriada, type ResultadoDoCanvas } from "../canvasApi";
 import { BOTAO, CAMPO, ROTULO } from "./comum";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
  * "Virar personagem" (dono, 25/09 à noite: "a pessoa gerada vira personagem
@@ -101,7 +102,8 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
       </div>
       {!criada ? (
         <>
-          <p className="text-[11px] leading-snug text-zinc-400">A pessoa desta foto vira uma personagem fixa, com esta foto como âncora. Pessoa real não entra aqui: ela vira clone, com a autorização, na aba Clones.</p>
+          {/* 18/10: explicação no "?" (SISTEMA.md seção 5); na tela só a linha curta. */}
+          <p className="flex items-center text-[11px] leading-snug text-zinc-400">Vira personagem fixa, com esta foto como âncora. Pessoa real vai para Clones.<AjudaRecolhida className="ml-1" rotulo="Sobre a personagem">A pessoa desta foto vira uma personagem fixa, com esta foto como âncora. Pessoa real não entra aqui: ela vira clone, com a autorização, na aba Clones.</AjudaRecolhida></p>
           <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome (ex.: Lia)" aria-label="Nome da personagem" className={CAMPO} />
           <label className="flex min-w-0 items-center text-[11px] text-zinc-400">
             <span className="mr-2 shrink-0">Idade aparente</span>
@@ -121,8 +123,9 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
       ) : (
         <>
           <p className="text-[11px] leading-snug text-zinc-400">
-            A folha de identidade ({criada.folha_sugerida.map(rotuloDaVista).join(", ")}) segura o rosto nas próximas cenas. Sai pelo mesmo gerador da foto, uma vista por vez.
+            A folha de identidade ({criada.folha_sugerida.map(rotuloDaVista).join(", ")}) segura o rosto nas próximas cenas.
             {criada.estimativa_vista_usd !== null ? ` Cerca de ${usd(criada.estimativa_vista_usd)} por vista.` : ""}
+            <AjudaRecolhida className="ml-1 align-middle" rotulo="Como sai a folha">Sai pelo mesmo gerador da foto, uma vista por vez.</AjudaRecolhida>
           </p>
           <BotaoComCusto
             rotulo={<>Gerar a folha ({criada.folha_sugerida.length} vistas)</>}

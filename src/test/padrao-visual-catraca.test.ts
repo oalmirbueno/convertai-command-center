@@ -64,21 +64,21 @@ type Metrica =
  * O que cada número conta está em `medir` abaixo e em src/components/sistema/regras.ts.
  */
 const TETO: Record<Metrica, number> = {
-  fonteForaDaEscala: 1228, // 06/10: estúdios de foto/vídeo e ferramentas na escala
-  fonteComNomeDoTailwind: 279, // 28/09: ondas 1 e 2 da padronização somadas
-  translucidoEmBloco: 7, // 28/09: ondas 1 e 2 da padronização somadas
-  rolagemPresaNoCelular: 11, // 28/09: ondas 1 e 2 da padronização somadas
+  fonteForaDaEscala: 1223, // 18/10: catraca baixada (rodada de padronização)
+  fonteComNomeDoTailwind: 249, // 18/10: catraca baixada (rodada de padronização)
+  translucidoEmBloco: 5, // 18/10: catraca baixada (rodada de padronização)
+  rolagemPresaNoCelular: 6, // 18/10: catraca baixada (rodada de padronização)
   rolagemDentroDeRolagem: 2, // 28/09: ondas 1 e 2 da padronização somadas
   alturaFixaDaJanela: 0, // 28/09: ondas 1 e 2 da padronização somadas
-  cartaoFeitoAMao: 54, // 28/09: ondas 1 e 2 da padronização somadas
+  cartaoFeitoAMao: 49, // 18/10: catraca baixada (rodada de padronização)
   secaoEmCartao: 0,
-  cartaoDentroDeCartao: 40, // 28/09: ondas 1 e 2 da padronização somadas
-  paragrafoFixo: 35, // 28/09: ondas 1 e 2 da padronização somadas
+  cartaoDentroDeCartao: 38, // 18/10: catraca baixada (rodada de padronização)
+  paragrafoFixo: 29, // 18/10: catraca baixada (rodada de padronização)
   descricaoExplicativa: 1, // 28/09: ondas 1 e 2 da padronização somadas
-  cantoForaDoToken: 13, // 28/09: ondas 1 e 2 da padronização somadas
-  tituloQueQuebra: 4, // 28/09: ondas 1 e 2 da padronização somadas
-  sombraForte: 39, // 28/09: ondas 1 e 2 da padronização somadas
-  caixaAlta: 126, // 28/09: ondas 1 e 2 da padronização somadas
+  cantoForaDoToken: 4, // 18/10: catraca baixada (rodada de padronização)
+  tituloQueQuebra: 2, // 18/10: catraca baixada (rodada de padronização)
+  sombraForte: 36, // 18/10: catraca baixada (rodada de padronização)
+  caixaAlta: 117, // 18/10: catraca baixada (rodada de padronização)
   h1FeitoAMao: 10, // 28/09: ondas 1 e 2 da padronização somadas
 };
 

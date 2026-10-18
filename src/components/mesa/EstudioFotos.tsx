@@ -8,6 +8,7 @@ import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { botao, juntar } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { chamarFuncao, ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
 import { FerramentasDaImagem } from "@/components/ferramentas/FerramentasDaImagem";
 import { ehSemChave, tirarFundoPro, type ResultadoDaFerramenta } from "@/components/ferramentas/ferramentasApi";
@@ -321,8 +322,12 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
   return (
     <div className="min-w-0 space-y-2.5">
       <div className="flex min-w-0 items-start">
-        <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted-foreground">
-          Fotos feitas na Mesa Foto deste cliente (ensaios, Canvas, detalhe 4K, preparadas). Clique para usar nesta lâmina.
+        {/* 18/10: explicação no "?" (SISTEMA.md seção 5); na tela só a linha curta. */}
+        <p className="flex min-w-0 flex-1 items-center text-[11.5px] leading-relaxed text-muted-foreground">
+          Fotos da Mesa Foto deste cliente. Clique para usar.
+          <AjudaRecolhida className="ml-1" rotulo="Quais fotos aparecem aqui">
+            Fotos feitas na Mesa Foto deste cliente (ensaios, Canvas, detalhe 4K, preparadas). Clique para usar nesta lâmina.
+          </AjudaRecolhida>
         </p>
         {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
         <button type="button" className={juntar(botao.icone, "ml-1 h-7 w-7")} onClick={() => void fotos.refetch()} disabled={fotos.isFetching} aria-label="Recarregar as fotos da Mesa Foto" title="Recarregar as fotos da Mesa Foto">
@@ -835,7 +840,7 @@ export default function EstudioFotos({
               </button>
             </div>
             {!falhaDoFundo.recorteDoGerador && falhaDoFundo.podeAceitar && (
-              <p className="text-[11px] leading-snug text-muted-foreground">Usar o recorte do gerador pede de novo (custa 1 imagem) e os pixels podem não ser os da foto original.</p>
+              <p className="flex items-center text-[11px] leading-snug text-muted-foreground">O recorte do gerador custa 1 imagem e pode mudar os pixels.<AjudaRecolhida className="ml-1" rotulo="Sobre o recorte do gerador">Usar o recorte do gerador pede de novo (custa 1 imagem) e os pixels podem não ser os da foto original.</AjudaRecolhida></p>
             )}
           </div>
         )}
@@ -945,8 +950,10 @@ export default function EstudioFotos({
           </p>
         )}
         <p className="text-[11px] leading-snug text-muted-foreground">
-          <span className="text-foreground">Fundo</span>: a foto é o fundo da lâmina. <span className="text-foreground">Elemento</span>: pessoa, rosto ou objeto que
-          entra como é. Com referência escolhida, a foto é recomposta para seguir a referência.
+          <span className="text-foreground">Fundo</span>: fundo da lâmina. <span className="text-foreground">Elemento</span>: entra como é.
+          <AjudaRecolhida className="ml-1 align-middle" rotulo="Fundo e elemento">
+            Fundo: a foto é o fundo da lâmina. Elemento: pessoa, rosto ou objeto que entra como é. Com referência escolhida, a foto é recomposta para seguir a referência.
+          </AjudaRecolhida>
         </p>
       </section>
 
@@ -1017,7 +1024,7 @@ export default function EstudioFotos({
             {tirandoFundo > 0 && <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin text-primary" aria-label="Tirando o fundo" />}
           </button>
         )}
-        {cheio && !semFundo && <p className="text-[11.5px] text-muted-foreground">A lâmina já tem 1 fundo e 2 elementos. Tire uma foto para pôr outra (clique na marcada para tirar).</p>}
+        {cheio && !semFundo && <p className="flex items-center text-[11.5px] text-muted-foreground">Lâmina cheia: 1 fundo e 2 elementos. Tire uma para pôr outra.<AjudaRecolhida className="ml-1" rotulo="Como tirar uma foto">A lâmina já tem 1 fundo e 2 elementos. Tire uma foto para pôr outra (clique na marcada para tirar).</AjudaRecolhida></p>}
 
         {/* As pastas sempre abrem; o que impede a escolha aparece no clique (antes o acervo inteiro ficava travado). */}
         {aba === "acervo" && (

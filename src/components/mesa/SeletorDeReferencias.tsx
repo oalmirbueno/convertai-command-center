@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { botao as estiloDoBotao } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { resolveFileUrl } from "@/lib/fileUrls";
 import { urlLeve } from "@/lib/miniaturas";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -295,7 +296,7 @@ export function BotaoDestaque({ ativo, ocupado, onClick, className = "" }: { ati
       aria-label={rotulo}
       title={ativo ? "Em destaque: o diretor de arte usa sempre. Clique para tirar." : "Marcar como destaque: o diretor de arte usa sempre, antes das outras."}
       className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${
-        ativo ? "bg-amber-400 text-white" : "bg-background/90 text-muted-foreground hover:text-amber-500"
+        ativo ? "bg-amber-400 text-white" : "bg-background text-muted-foreground hover:text-amber-500"
       } ${className}`}
     >
       {ocupado ? <Loader2 className="h-3 w-3 animate-spin" /> : <Star className={`h-3.5 w-3.5 ${ativo ? "fill-current" : ""}`} />}
@@ -853,15 +854,19 @@ function AbaDoBanco({
 
   return (
     <div className="min-w-0 space-y-2.5">
-      <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-        As referências do quadro do Pinterest da agência, já lidas pela IA. Busque pela técnica (ex.: tipografia, recorte, colagem).
+      {/* 18/10: explicação no "?" (SISTEMA.md seção 5); na tela só a linha curta. */}
+      <p className="flex items-center text-[11.5px] leading-relaxed text-muted-foreground">
+        Referências do Pinterest da agência, já lidas pela IA.
+        <AjudaRecolhida className="ml-1" rotulo="Como buscar no banco">
+          As referências do quadro do Pinterest da agência, já lidas pela IA. Busque pela técnica (ex.: tipografia, recorte, colagem).
+        </AjudaRecolhida>
       </p>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no título, na leitura ou nas tags" aria-label="Buscar no banco da agência" className="h-9 pl-8 text-[12.5px]" />
       </div>
       {(tags.data || []).length > 0 && (
-        <div className="flex max-h-[4.5rem] flex-wrap overflow-y-auto">
+        <div className="flex flex-wrap lg:max-h-[4.5rem] lg:overflow-y-auto lg:overscroll-contain">
           {(tags.data || []).map((t) => (
             <button
               key={t}
@@ -1004,7 +1009,10 @@ function AbaDoPinterest({
     <div className="min-w-0 space-y-3">
       <div className="rounded-xl border border-border bg-card p-3">
         <p className="text-[12px] leading-relaxed text-muted-foreground">
-          Abra o Pinterest, escolha o pin, copie o link (Compartilhar, Copiar link) e cole aqui. Ele entra como {PAPEIS.tecnica.rotulo.toLowerCase()}.
+          Cole aqui o link do pin. Ele entra como {PAPEIS.tecnica.rotulo.toLowerCase()}.
+          <AjudaRecolhida className="ml-1 align-middle" rotulo="Como copiar o link do pin">
+            Abra o Pinterest, escolha o pin, copie o link (Compartilhar, Copiar link) e cole aqui.
+          </AjudaRecolhida>
         </p>
         <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
           <a

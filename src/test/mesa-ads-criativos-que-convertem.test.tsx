@@ -429,7 +429,8 @@ describe("tela: criar criativos em um clique, com andamento e Parar", () => {
     montar(h(ProducaoDoPlano, { plano: planoDeTeste(), marcados: ["a1"], onProduzido: vi.fn() }));
     fireEvent.click(screen.getByRole("button", { name: "Trocar" }));
     fireEvent.click(screen.getByRole("button", { name: /Quadrado 1:1/ }));
-    expect(screen.getByText("3 criativos")).toBeTruthy();
+    // 18/10 (teste A/B): 3 formatos x 2 versões (A e B).
+    expect(screen.getByText("6 criativos")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Modelo da copy"), { target: { value: SOL.id } });
     expect((screen.getByLabelText("Raciocínio da copy") as HTMLSelectElement).value).toBe("max");
     fireEvent.click(screen.getByRole("button", { name: "Pronto" }));

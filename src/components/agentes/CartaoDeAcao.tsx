@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import CaminhoPronto from "./CaminhoPronto";
 import MenuMais from "@/components/sistema/MenuMais";
-import { toqueCompacto } from "@/components/sistema/estilos";
+import { juntar, superficie, toqueCompacto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import {
   acaoDoAnexo,
@@ -180,7 +180,7 @@ export default function CartaoDeAcao({
   const total = atual.itens.length;
   const feitosAgora = resultados.length;
   return (
-    <section className="mr-6 min-w-0 rounded-2xl border border-primary/30 bg-card p-3.5" data-acao-agente={estado} data-andamento={andando ? `${feitosAgora}/${total}` : undefined}>
+    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-primary/30 p-3.5")} data-acao-agente={estado} data-andamento={andando ? `${feitosAgora}/${total}` : undefined}>
       <p className="flex items-center text-[12px] font-semibold">
         <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span className="min-w-0 truncate">{titulo || "O agente vai fazer"} · {total} {total === 1 ? "item" : "itens"}</span>

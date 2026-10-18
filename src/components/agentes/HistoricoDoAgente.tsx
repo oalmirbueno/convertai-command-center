@@ -264,9 +264,9 @@ function JanelaDoHistorico({ chave, aoFechar, aoTrocar }: { chave: ChaveDaConver
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
                 {mensagens.isLoading ? <Carregando linhas={3} rotulo="Carregando as mensagens" /> : (mensagens.data || []).filter((m) => m.conteudo).map((m) => (
                   m.papel === "usuario" ? (
-                    <div key={m.id} className="ml-8 rounded-2xl rounded-br-md bg-primary/10 px-3 py-2 text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]">{m.conteudo}</div>
+                    <div key={m.id} className="ml-8 rounded-xl rounded-br-md bg-primary/10 px-3 py-2 text-[13px] whitespace-pre-wrap [overflow-wrap:anywhere]">{m.conteudo}</div>
                   ) : m.papel === "agente" ? (
-                    <div key={m.id} className="mr-8 rounded-2xl rounded-bl-md bg-muted/60 px-3 py-2"><TextoDoAgente texto={m.conteudo} clientId={chave.clientId} /></div>
+                    <div key={m.id} className="mr-8 rounded-xl rounded-bl-md bg-muted/60 px-3 py-2"><TextoDoAgente texto={m.conteudo} clientId={chave.clientId} /></div>
                   ) : (
                     <p key={m.id} className="text-center text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{m.conteudo}</p>
                   )

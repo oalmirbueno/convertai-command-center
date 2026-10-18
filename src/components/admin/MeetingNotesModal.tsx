@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { juntar, superficie } from "@/components/sistema/estilos";
 import { useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 
@@ -229,7 +230,7 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={isProcessing ? undefined : onClose} />
-      <div className="relative bg-card border border-border rounded-2xl w-full max-w-[580px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 flex flex-col max-h-[90vh]"
+      <div className={juntar(superficie.painel, "relative w-full max-w-[580px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 flex flex-col max-h-[90vh]")}
         style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
 
         {/* Header */}

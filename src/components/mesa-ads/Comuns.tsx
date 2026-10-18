@@ -7,7 +7,7 @@ import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { juntar, texto } from "@/components/sistema/estilos";
-import { AVISO_DA_EVIDENCIA, copiarTexto, ESCALA_DE_EVIDENCIA, sinalDe, type DiagnosticoDoCriativo, type Evidencia } from "./adsApi";
+import { AVISO_DA_EVIDENCIA, copiarTexto, ESCALA_DE_EVIDENCIA, sinalDe, versaoDoTeste, type CriativoAds, type DiagnosticoDoCriativo, type Evidencia } from "./adsApi";
 
 /**
  * Cabeçalho de uma parte da etapa: título curto, o "?" com a explicação, uma
@@ -97,6 +97,22 @@ export function SeloDeEvidencia({ valor, className = "" }: { valor: Evidencia; c
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+/** Teste A/B: a letra da versão ao lado do criativo do par; fora de teste, nada. */
+export function SeloDaVersao({ criativo, className = "" }: { criativo: Pick<CriativoAds, "copy">; className?: string }) {
+  const v = versaoDoTeste(criativo);
+  if (!v) return null;
+  return (
+    <span
+      className={`inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded border border-border px-1 text-[10px] font-semibold leading-none text-muted-foreground ${className}`}
+      title={`Versão ${v} do teste A/B do ângulo`}
+      aria-label={`Versão ${v} do teste A/B`}
+      data-versao-do-teste={v}
+    >
+      {v}
+    </span>
   );
 }
 

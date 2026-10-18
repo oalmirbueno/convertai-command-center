@@ -21,7 +21,7 @@ Deno.test("cada peça conta uma vez por ficha, com a média dos posts", () => {
   const desfechos = new Map<string, DesfechoDaPeca>([["estudio_trabalho:t1", "aprovada"], ["estudio_trabalho:t2", "ajustada"]]);
   const multiplos = new Map([["estudio_trabalho:t1", 2], ["estudio_trabalho:t2", 1]]);
   const r = resultadosDasFichas(usos, desfechos, multiplos).get("f1")!;
-  assertEquals(r, { aprovadas: 1, ajustadas: 1, reprovadas: 0, posts: 2, multiplo: 1.5 });
+  assertEquals(r, { aprovadas: 1, ajustadas: 1, reprovadas: 0, posts: 2, multiplo: 1.5, anuncios: 0, eficiencia: null });
   assertEquals(taxaDeAprovacao(r), 0.75);
   assertEquals(resumoDoResultado(r), "aprovou 2 de 2 (1 com ajuste) · 2 posts com 1,5x o normal");
 });
@@ -65,4 +65,39 @@ Deno.test("o aviso da semana conta a origem e lista as carteiras baixas", async 
   assert(t.startsWith("Base dos agentes na semana: 17 técnicas novas (12 da pesquisa, 3 do que você mandou, 2 dos posts que renderam)"));
   assert(t.includes("1 ficha saiu por atrapalhar"));
   assert(t.includes("Carteira baixa (pesquisa e leitura param): Para Si US$ 0,18."));
+});
+
+Deno.test("Ads: a eficiência dos anúncios pesa, e o que queima verba sai", () => {
+  const usos = [
+    { ficha_id: "f", referencia_tipo: "ads_criativo", referencia_id: "a" },
+    { ficha_id: "f", referencia_tipo: "ads_criativo", referencia_id: "b" },
+    { ficha_id: "f", referencia_tipo: "ads_criativo", referencia_id: "c" },
+  ];
+  const ef = new Map([["ads_criativo:a", 0.4], ["ads_criativo:b", 0.5], ["ads_criativo:c", 0.45]]);
+  const r = resultadosDasFichas(usos, new Map(), new Map(), ef).get("f")!;
+  assertEquals(r.anuncios, 3);
+  assert(deveSair(r));
+  assertEquals(pesoDaFicha({ aprovadas: 0, ajustadas: 0, reprovadas: 0, posts: 0, multiplo: null, anuncios: 2, eficiencia: 1.5 }), 0.75);
+  assertEquals(resumoDoResultado({ aprovadas: 0, ajustadas: 0, reprovadas: 0, posts: 0, multiplo: null, anuncios: 2, eficiencia: 0.5 }), "2 anúncios com custo por resultado 2x pior que o normal");
+});
+
+Deno.test("eficiência do anúncio: contra o normal da conta, e o que gastou sem resultado", async () => {
+  const { eficienciaDoAnuncio } = await import("../base-dos-agentes/index.ts");
+  assertEquals(eficienciaDoAnuncio({ gasto: 100, resultados: 10, custo_por_resultado: 10 }, 20), 2);
+  assertEquals(eficienciaDoAnuncio({ gasto: 10, resultados: 0, custo_por_resultado: null }, 20), null);
+  assertEquals(eficienciaDoAnuncio({ gasto: 50, resultados: 0, custo_por_resultado: null }, 20), 0.4);
+  assertEquals(eficienciaDoAnuncio({ gasto: 30, resultados: 0, custo_por_resultado: null }, 20), null);
+});
+
+Deno.test("o comentário duradouro do cliente vira ficha no diretor, no Mês, no Ads e no vídeo", async () => {
+  const { fichasDoComentario } = await import("../base-dos-agentes/index.ts");
+  const f = fichasDoComentario("Não gosto de fundo escuro,\n sempre fundo claro");
+  assertEquals(f.map((x) => x.agente), ["estudio.diretor", "mes.estrategista", "ads.estatico", "videos.diretor"]);
+  assertEquals(f[0].titulo, "Pedido do cliente: Não gosto de fundo escuro, sempre fundo claro");
+});
+
+Deno.test("a faxina acha fichas parecidas pelas palavras em comum", async () => {
+  const { parecidas } = await import("../base-dos-agentes/index.ts");
+  assert(parecidas("Capa com resultado pronto e promessa numérica", "Capa com promessa numérica e resultado pronto") > 0.9);
+  assert(parecidas("Capa com resultado pronto", "Trilha com drone no tom da música") < 0.2);
 });

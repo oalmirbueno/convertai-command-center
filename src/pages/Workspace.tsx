@@ -1751,7 +1751,7 @@ export default function Workspace() {
           <button
             type="button"
             aria-label={`Ações de ${n.name}`}
-            className={juntar(botao.icone, "h-7 w-7 bg-background/85 backdrop-blur-sm")}
+            className={juntar(botao.icone, "h-7 w-7 bg-background")}
           >
             <MoreVertical className="w-3.5 h-3.5" />
           </button>
@@ -2703,10 +2703,10 @@ export default function Workspace() {
                         {(isWorkspaceFileLinked(n) || isInboxQuarantined(n)) && (
                           <span className="pointer-events-none absolute left-1.5 top-1.5 z-[2] flex flex-col items-start">
                             {isWorkspaceFileLinked(n) && (
-                              <span className={juntar(etiqueta, "bg-background/85 text-success")}>Em Arquivos</span>
+                              <span className={juntar(etiqueta, "bg-background text-success")}>Em Arquivos</span>
                             )}
                             {isInboxQuarantined(n) && (
-                              <span className={juntar(etiqueta, "mt-1 bg-background/85 text-amber-500")}>Quarentena</span>
+                              <span className={juntar(etiqueta, "mt-1 bg-background text-amber-500")}>Quarentena</span>
                             )}
                           </span>
                         )}

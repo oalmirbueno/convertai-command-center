@@ -317,7 +317,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-card">
         <div className="min-h-[320px] flex flex-col items-center justify-center gap-4 px-6 py-12 text-center bg-secondary/30">
-          <div className="w-16 h-16 rounded-2xl bg-background border border-border flex items-center justify-center">
+          <div className="w-16 h-16 rounded-lg bg-background border border-border flex items-center justify-center">
             <FileText className="w-8 h-8 text-muted-foreground" />
           </div>
           <div className="space-y-1 max-w-md">
@@ -373,7 +373,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
   // Generic file — nice card with actions
   return (
     <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-4">
-      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+      <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
         <FileText className="w-8 h-8 text-muted-foreground" />
       </div>
       <div className="text-center space-y-1 px-6">

@@ -35,12 +35,15 @@ export interface FichaDaBase {
   reprovadas?: number;
   posts?: number;
   multiplo?: number | string | null;
+  anuncios?: number;
+  eficiencia?: number | string | null;
 }
 
 /** O resultado da ficha no formato do módulo puro (a coluna numeric chega como texto). */
 export function resultadoDaFicha(f: FichaDaBase): ResultadoDaFicha {
   const m = f.multiplo === null || f.multiplo === undefined ? null : Number(f.multiplo);
-  return { aprovadas: f.aprovadas ?? 0, ajustadas: f.ajustadas ?? 0, reprovadas: f.reprovadas ?? 0, posts: f.posts ?? 0, multiplo: m !== null && Number.isFinite(m) ? m : null };
+  const ef = f.eficiencia === null || f.eficiencia === undefined ? null : Number(f.eficiencia);
+  return { aprovadas: f.aprovadas ?? 0, ajustadas: f.ajustadas ?? 0, reprovadas: f.reprovadas ?? 0, posts: f.posts ?? 0, multiplo: m !== null && Number.isFinite(m) ? m : null, anuncios: f.anuncios ?? 0, eficiencia: ef !== null && Number.isFinite(ef) ? ef : null };
 }
 
 /** Teto padrão do bloco no prompt (caracteres). */
@@ -109,7 +112,7 @@ export async function lerFichasDoAgente(
 ): Promise<FichaDaBase[]> {
   let q = db
     .from("agente_base_fichas")
-    .select("id, titulo, tecnica, quando_usar, exemplo, client_id, aprovadas, ajustadas, reprovadas, posts, multiplo")
+    .select("id, titulo, tecnica, quando_usar, exemplo, client_id, aprovadas, ajustadas, reprovadas, posts, multiplo, anuncios, eficiencia")
     .eq("agente", agente)
     .eq("ativa", true);
   q = clientId ? q.or(`client_id.is.null,client_id.eq.${clientId}`) : q.is("client_id", null);

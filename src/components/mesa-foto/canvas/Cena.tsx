@@ -16,7 +16,7 @@ import {
 } from "../canvasApi";
 import { BOTAO_ICONE, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
 import { cenaNova, cenasDaHistoria } from "./historia";
-import { juntar } from "@/components/sistema";
+import { AjudaRecolhida, juntar } from "@/components/sistema";
 
 /**
  * Peças da cena no painel (sem React Flow): os campos da cena no Resultado e
@@ -84,7 +84,8 @@ export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canva
         <p className="mb-1.5 flex items-center text-[12px] font-semibold">
           <Clapperboard className="mr-1.5 h-3.5 w-3.5 text-emerald-300" /> Cena da história
         </p>
-        <p className="mb-2 text-[11px] leading-snug text-zinc-400">Marque para este Resultado entrar na História do quadro, com ação, enquadramento e narrativa. A mesma pessoa segue nas outras cenas.</p>
+        {/* 18/10: explicação no "?" (SISTEMA.md seção 5); na tela só a linha curta. */}
+        <p className="mb-2 flex items-center text-[11px] leading-snug text-zinc-400">Marque para entrar na História do quadro.<AjudaRecolhida className="ml-1" rotulo="Sobre a cena da história">Marque para este Resultado entrar na História do quadro, com ação, enquadramento e narrativa. A mesma pessoa segue nas outras cenas.</AjudaRecolhida></p>
         <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => onMudar({ cena: cenaNova(historia.length + 1) })} data-marcar-cena={no.id} aria-label="Esta é uma cena" title="Esta é uma cena">
           <Clapperboard className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -114,7 +115,7 @@ export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canva
       </div>
       <input value={cena.cenario} onChange={(e) => mudar({ cenario: e.target.value })} placeholder="Lugar da cena (ex.: sala clara com janela)" aria-label="Lugar da cena" className={CAMPO} />
       <textarea value={cena.narrativa} onChange={(e) => mudar({ narrativa: e.target.value })} rows={2} placeholder="Narrativa: o texto que conta esta parte da história" aria-label="Narrativa da cena" className={CAMPO} />
-      {pessoas > 0 && cena.enquadramento === "plano_geral" && <p className="text-[11px] text-amber-300">Plano geral deixa o rosto pequeno e a pessoa pode mudar. Para a foto-chave, prefira plano médio.</p>}
+      {pessoas > 0 && cena.enquadramento === "plano_geral" && <p className="flex items-center text-[11px] text-amber-300">Plano geral deixa o rosto pequeno. Prefira plano médio.<AjudaRecolhida className="ml-1" rotulo="Por que plano médio">Plano geral deixa o rosto pequeno e a pessoa pode mudar. Para a foto-chave, prefira plano médio.</AjudaRecolhida></p>}
       {pessoas > 2 && <p className="text-[11px] text-amber-300">Mais de 2 pessoas na cena misturam os rostos. Se puder, divida em duas cenas.</p>}
       <div className="min-w-0">
         <p className={ROTULO}>Foto da cena na história</p>
@@ -186,7 +187,7 @@ export function EditorDaLigacaoDeResultado({
         <p className={ROTULO}>Qual foto</p>
         <FotosParaEscolher no={origem} escolhida={ligacao.imagem_id || null} onEscolher={onFoto} rotulo="Foto que entra" />
       </div>
-      {ligacao.papel === "personagem" && <p className="text-[11px] leading-snug text-zinc-400">Se a pessoa veio de uma modelo, o rosto volta à âncora dela e esta foto dá só a roupa e o cabelo. Para a pessoa ficar para sempre, use Virar personagem na foto.</p>}
+      {ligacao.papel === "personagem" && <p className="flex items-center text-[11px] leading-snug text-zinc-400">Vinda de modelo: o rosto é o da âncora; esta foto dá roupa e cabelo.<AjudaRecolhida className="ml-1" rotulo="Sobre a personagem">Se a pessoa veio de uma modelo, o rosto volta à âncora dela e esta foto dá só a roupa e o cabelo. Para a pessoa ficar para sempre, use Virar personagem na foto.</AjudaRecolhida></p>}
     </div>
   );
 }

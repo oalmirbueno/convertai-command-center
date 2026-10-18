@@ -352,7 +352,8 @@ describe("etapa 3, plano de teste", () => {
     // copy no modelo da copy (padrão do estrategista no raciocínio máximo que ele aceita), um ângulo por chamada.
     fireEvent.click(screen.getByRole("checkbox", { name: "Produzir o ângulo Prova do resultado" }));
     expect(screen.getByText(/Feed 4:5 e Stories e Reels 9:16 \(automático\)/)).toBeTruthy();
-    expect(screen.getByText("2 criativos")).toBeTruthy();
+    // 18/10 (teste A/B): duas versões por ângulo, 2 formatos x 2 versões.
+    expect(screen.getByText("4 criativos")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Criar criativos/ }));
     await waitFor(() => expect(chamadasDe("criativos_produzir")).toHaveLength(1));
     expect(chamadasDe("criativos_produzir")[0]).toEqual({

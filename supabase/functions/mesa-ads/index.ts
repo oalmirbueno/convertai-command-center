@@ -414,12 +414,15 @@ import {
   type EstiloRankeado,
   escolherMelhores,
   estiloConhecido,
+  LETRAS_DO_TESTE,
   notaDaCopy,
   porqueDaCopy,
   porqueDoEstilo,
   rankearEstilos,
   rankingParaOPrompt,
   sinaisDaOferta,
+  versoesDiferentes,
+  versoesDoAngulo,
 } from "./melhores-criativos.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 // Frente SPP (30/09): o método da casa (superpoderes) no estrategista, no plano, na oferta e no sênior. Nunca no leitor.
@@ -3300,7 +3303,7 @@ async function planoDesfazer(servico: SupabaseClient, chamador: Chamador, corpo:
 }
 
 /**
- * criativos_produzir { plano_id, angulo_ids[], formatos[], modelo_id?, raciocinio?, tom?, extras? }
+ * criativos_produzir { plano_id, angulo_ids[], formatos[], modelo_id?, raciocinio?, tom?, extras?, versoes? }
  * -> { criativos, trabalho_ids, avisos, falhas, custo_usd, saldo_usd, jev_erro }
  * Uma chamada de copy por ângulo; cada variação x formato vira um ads_criativo
  * e um estudio_trabalhos tipo 'ads' já dirigido (direção em código).
@@ -3309,12 +3312,18 @@ async function planoDesfazer(servico: SupabaseClient, chamador: Chamador, corpo:
  * copy.alternativas da V1. Cada criativo leva copy.escolha (posição, nota e o
  * porquê) e copy.porque_do_estilo. A tela chama um ângulo por vez (progresso e
  * parar entre um e outro).
+ * Teste A/B (18/10): por padrão cada ângulo sai com duas versões (A = a melhor do
+ * Jev, B = a próxima que é outra ideia), cada uma o seu ads_criativo, com
+ * copy.teste_ab { grupo, versao }; `versoes: 1` produz uma só. A B que o plano não
+ * pediu (ângulo de 1 variação) leva arte_sob_demanda: a tela não gera a arte dela sozinha.
  */
 async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const p = await carregarPlano(servico, corpo.plano_id);
   await exigirAcessoAoCliente(chamador, p.client_id);
   const ids = new Set((Array.isArray(corpo.angulo_ids) ? corpo.angulo_ids : []).map(String));
-  const angulos = p.angulos.filter((a) => ids.has(a.id));
+  // Teste A/B: a.variacoes passa a ser o número de versões; o que o plano pediu fica para saber qual B é extra.
+  const doPlano = new Map(p.angulos.map((a) => [a.id, a.variacoes]));
+  const angulos = p.angulos.filter((a) => ids.has(a.id)).map((a) => ({ ...a, variacoes: versoesDoAngulo(a.variacoes, corpo.versoes) }));
   if (!angulos.length) throw new ErroHttp(400, "nenhum_angulo_valido", "Escolha ao menos um ângulo do plano.");
   const pedidos = [...new Set((Array.isArray(corpo.formatos) ? corpo.formatos : []).map(String).filter((f) => (FORMATOS as string[]).includes(f)))] as FormatoAds[];
   const formatosDo = (a: Angulo) => (pedidos.length ? pedidos : a.formatos.length ? a.formatos : (["feed_4x5"] as FormatoAds[]));
@@ -3456,7 +3465,9 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     custo += conferencia.custo;
     if (conferencia.jev_erro) jevErro = conferencia.jev_erro;
     // As melhores pela nota composta do Jev (política como trava); as outras ficam guardadas como alternativas.
-    const escolha = escolherMelhores(conferencia.notas, a.variacoes);
+    // Teste A/B: a B é a próxima da ordem que traz outra ideia (gancho, estrutura ou ângulo de venda).
+    const assinaturas = variacoes.map((v, i) => ({ framework: doEnum(v.framework, FRAMEWORKS_IDS), angulo_de_venda: anguloDeVenda(v.angulo_de_venda) ?? angulosDeVenda[i] ?? null, gancho: texto(v.headline_arte, 120) || copies[i].texto_principal }));
+    const escolha = versoesDiferentes(escolherMelhores(conferencia.notas, a.variacoes), assinaturas, conferencia.notas);
     return { angulo: a, formatos, variacoes, copies, notas: conferencia.notas, escolha, usoId: s.usoId, estilo, objetivo, revisao, angulosDeVenda, rep };
   };
 
@@ -3489,6 +3500,8 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
   for (const f of feitos) {
     const a = f.angulo;
     const escritas = f.variacoes.length;
+    // Teste A/B: um grupo por ângulo e por produção (o mesmo ângulo produzido de novo é outro teste).
+    const grupoDoTeste = f.escolha.escolhidos.length > 1 ? crypto.randomUUID() : null;
     // As que não entraram ficam guardadas na melhor (a equipe vê em Refinar e pode usar).
     const alternativas = f.escolha.descartados.map((k) => ({
       ...f.copies[k],
@@ -3566,7 +3579,7 @@ ${regrasDoMundo}`;
           plano_id: p.id,
           angulo_id: a.id,
           trabalho_id: trabalhoId,
-          nome: `${a.nome} | V${i + 1} | ${formato}`.slice(0, 200),
+          nome: `${a.nome}${grupoDoTeste ? ` · ${LETRAS_DO_TESTE[i]}` : ""} | V${i + 1} | ${formato}`.slice(0, 200),
           formato,
           copy: {
             ...copy,
@@ -3585,8 +3598,9 @@ ${regrasDoMundo}`;
             // Frente CR: prova do porquê, em uma linha cada (estilo com o dado real ou padrão do nicho; copy com a nota do Jev).
             framework: doEnum(v.framework, FRAMEWORKS_IDS),
             porque_do_estilo: (porqueDoEstilo(estiloDaVariacao?.id, ordemDosEstilos) ?? { porque: a.porque_do_estilo ?? null }).porque,
-            escolha: { posicao: i + 1, de: escritas, nota: notaDaCopy(nota), porque: porqueDaCopy(nota, doEnum(v.framework, FRAMEWORKS_IDS), i + 1, escritas) },
+            escolha: { posicao: i + 1, de: escritas, nota: notaDaCopy(nota), porque: porqueDaCopy(nota, doEnum(v.framework, FRAMEWORKS_IDS), f.escolha.ordem.indexOf(k) + 1, escritas) },
             ...(i === 0 && alternativas.length ? { alternativas } : {}),
+            ...(grupoDoTeste ? { teste_ab: { grupo: grupoDoTeste, versao: LETRAS_DO_TESTE[i], ...(i >= (doPlano.get(a.id) ?? 1) ? { arte_sob_demanda: true } : {}) } } : {}),
           },
           roteiro_video: null,
           status: "rascunho",

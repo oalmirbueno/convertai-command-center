@@ -22,9 +22,12 @@
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { chamarTexto, IaMotorErro, lerSaldo, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
+import { chamarTexto, cobrarJev, IaMotorErro, lerSaldo, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
+import { jevPerguntar, type PerguntaJev, probabilidadeNoul } from "../_shared/jev.ts";
+import { type Diaria, somarMetricas } from "../mesa-ads/calculos.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { evolucaoDoCliente } from "./evolucao.ts";
 import { type AgenteComBase, agenteComBase, AGENTES_COM_BASE } from "../_shared/agentes-com-base.ts";
 import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, deveSair, resultadosDasFichas, type UsoParaResultado } from "../_shared/resultado-das-fichas.ts";
 import { basesDoPerfil, DESTAQUE_A_PARTIR_DE, type MedidaDoMultiplo, multiploDoPost, type PostParaMultiplo } from "../_shared/multiplo-do-post.ts";
@@ -387,6 +390,10 @@ async function pesquisaSemanal() {
     console.error("[base-dos-agentes] resultados falharam", err instanceof Error ? err.message : err);
     return null;
   });
+  // A faxina: na primeira terça do mês (dia 1 a 7), na primeira chamada do dia.
+  if (!(recente || []).length && new Date().getUTCDate() <= 7) {
+    await faxinaDaBase(await carteiraDaAgencia()).catch((err) => console.error("[base-dos-agentes] faxina falhou", err instanceof Error ? err.message : err));
+  }
   // O aviso da semana sai uma vez, na primeira chamada do dia (a mesma trava dos resultados).
   if (!(recente || []).length) {
     await avisarResumoDaSemana().catch((err) => console.error("[base-dos-agentes] resumo da semana falhou", err instanceof Error ? err.message : err));
@@ -626,11 +633,221 @@ async function fichasDosConcorrentes(): Promise<number> {
   return criadas;
 }
 
+// ------------------------------------------------------------------ rodada 4: Ads, comentários e faxina
+
+/** Janela do desempenho dos anúncios. */
+const DIAS_DOS_ANUNCIOS = 60;
+
+/** A eficiência de um anúncio: o custo por resultado normal da conta dividido pelo dele (teto 5). Sem gasto suficiente, null. */
+export function eficienciaDoAnuncio(m: { gasto: number; resultados: number; custo_por_resultado: number | null }, medianaDaConta: number): number | null {
+  if (!(medianaDaConta > 0) || m.gasto < medianaDaConta) return null;
+  if (m.resultados > 0 && m.custo_por_resultado) return Math.min(5, Math.round((medianaDaConta / m.custo_por_resultado) * 100) / 100);
+  // Gastou o dobro do normal sem nenhum resultado: queimou verba.
+  return m.gasto >= 2 * medianaDaConta ? Math.round((medianaDaConta / m.gasto) * 100) / 100 : null;
+}
+
+/** 17/10 (dono: "Ads aprendendo com o resultado real"): a eficiência de cada criativo (e média por plano) usado pela base. */
+async function eficienciasDosAnuncios(idsCriativos: string[], idsPlanos: string[]): Promise<Map<string, number>> {
+  const saida = new Map<string, number>();
+  type Criativo = { id: string; client_id: string; ad_id: string | null; plano_id: string | null };
+  const criativos: Criativo[] = [];
+  for (const ids of emPedacos(idsCriativos)) {
+    const { data } = await servico().from("ads_criativos").select("id, client_id, ad_id, plano_id").in("id", ids);
+    criativos.push(...((data || []) as Criativo[]));
+  }
+  for (const ids of emPedacos(idsPlanos)) {
+    const { data } = await servico().from("ads_criativos").select("id, client_id, ad_id, plano_id").in("plano_id", ids);
+    for (const c of (data || []) as Criativo[]) if (!criativos.some((x) => x.id === c.id)) criativos.push(c);
+  }
+  const comAnuncio = criativos.filter((c) => c.ad_id);
+  for (const cliente of [...new Set(comAnuncio.map((c) => c.client_id))]) {
+    const { data } = await servico().from("ads_creative_daily")
+      .select("ad_id, day, spend, impressions, reach, clicks, link_clicks, frequency, actions")
+      .eq("client_id", cliente).gte("day", diasAtras(DIAS_DOS_ANUNCIOS).slice(0, 10)).limit(10000);
+    const porAnuncio = new Map<string, Diaria[]>();
+    for (const l of (data || []) as Diaria[]) porAnuncio.set(l.ad_id, [...(porAnuncio.get(l.ad_id) || []), l]);
+    const metricas = new Map([...porAnuncio].map(([ad, linhas]) => [ad, somarMetricas(linhas)]));
+    // O normal da conta: a mediana do custo por resultado dos anúncios com resultado (pelo menos 3).
+    const custos = [...metricas.values()].map((m) => m.custo_por_resultado).filter((x): x is number => typeof x === "number" && x > 0).sort((a, b) => a - b);
+    if (custos.length < 3) continue;
+    const meio = Math.floor(custos.length / 2);
+    const mediana = custos.length % 2 ? custos[meio] : (custos[meio - 1] + custos[meio]) / 2;
+    for (const c of comAnuncio.filter((x) => x.client_id === cliente)) {
+      const m = metricas.get(String(c.ad_id));
+      const ef = m ? eficienciaDoAnuncio(m, mediana) : null;
+      if (ef !== null) saida.set(`ads_criativo:${c.id}`, ef);
+    }
+  }
+  // O plano vale a média dos criativos dele (a ficha do gestor entra pelo plano).
+  for (const plano of idsPlanos) {
+    const efs = criativos.filter((c) => c.plano_id === plano).map((c) => saida.get(`ads_criativo:${c.id}`)).filter((x): x is number => typeof x === "number");
+    if (efs.length) saida.set(`ads_plano:${plano}`, Math.round((efs.reduce((a, b) => a + b, 0) / efs.length) * 100) / 100);
+  }
+  return saida;
+}
+
+/** Janela dos comentários de cliente lidos a cada rodada. */
+const DIAS_DOS_COMENTARIOS = 14;
+/** Agentes que recebem a preferência do cliente (o dono: "vale também para o Mês, o Ads e o vídeo"). */
+const AGENTES_DO_COMENTARIO = ["estudio.diretor", "mes.estrategista", "ads.estatico", "videos.diretor"];
+
+/** As fichas de uma preferência duradoura do cliente, em cada agente que faz peça para ele. */
+export function fichasDoComentario(comentario: string) {
+  const c = texto(comentario.replace(/\s+/g, " "), 400);
+  return AGENTES_DO_COMENTARIO.map((agente) => ({
+    agente,
+    titulo: `Pedido do cliente: ${c}`.slice(0, 160),
+    tecnica: `O cliente pediu numa peça: "${c}". Trate como preferência dele em todas as próximas peças, sem precisar que ele peça de novo.`,
+    quando_usar: "Toda peça deste cliente.",
+    exemplo: "",
+  }));
+}
+
+/**
+ * 17/10 (dono: "o comentário do cliente vira técnica"): os pedidos de ajuste do cliente (estudio_trabalhos.ajustes_do_cliente)
+ * e as reprovações com texto (agente_memoria, origem aprovacao) das últimas 2 semanas; o Jev separa o que é gosto duradouro
+ * do ajuste só daquela peça, e o duradouro vira ficha do cliente para o diretor, o Mês, o Ads e o vídeo.
+ */
+async function fichasDosComentarios(pagador: string | null): Promise<number> {
+  type Comentario = { chave: string; client_id: string; texto: string };
+  const comentarios: Comentario[] = [];
+  const { data: trabalhos } = await servico().from("estudio_trabalhos").select("id, client_id, ajustes_do_cliente")
+    .not("ajustes_do_cliente", "is", null).gte("atualizado_em", diasAtras(DIAS_DOS_COMENTARIOS)).limit(300);
+  for (const t of (trabalhos || []) as Array<{ id: string; client_id: string; ajustes_do_cliente: unknown }>) {
+    for (const a of Array.isArray(t.ajustes_do_cliente) ? t.ajustes_do_cliente : []) {
+      const o = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+      const txt = texto(o.texto, 500);
+      if (txt.length < 8 || o.decisao === "aprovado") continue;
+      comentarios.push({ chave: `comentario:${String(o.evento_id || `${t.id}:${o.pedido_em || txt.slice(0, 20)}`)}`, client_id: t.client_id, texto: txt });
+    }
+  }
+  const { data: memorias } = await servico().from("agente_memoria").select("id, client_id, texto")
+    .eq("origem", "aprovacao").gte("criado_em", diasAtras(DIAS_DOS_COMENTARIOS)).limit(300);
+  for (const m of (memorias || []) as Array<{ id: string; client_id: string; texto: string }>) {
+    const txt = texto(m.texto, 500);
+    if (txt.length >= 8 && !comentarios.some((c) => c.client_id === m.client_id && c.texto === txt)) comentarios.push({ chave: `comentario:mem:${m.id}`, client_id: m.client_id, texto: txt });
+  }
+  // Só os que ainda não viraram ficha (a chave do comentário fica em fonte_url).
+  const novos: Comentario[] = [];
+  for (const c of comentarios.slice(0, 120)) {
+    const { data: ja } = await servico().from("agente_base_fichas").select("id").eq("fonte_url", c.chave).limit(1);
+    if (!(ja || []).length) novos.push(c);
+  }
+  if (!novos.length) return 0;
+  let criadas = 0;
+  for (const lote of emPedacos(novos, 30)) {
+    const questions: Record<string, PerguntaJev> = {};
+    lote.forEach((_, i) => {
+      questions[`c${i}`] = {
+        type: "noul",
+        instructions: `O comentário do cliente em \`comentarios[${i}]\` é uma preferência duradoura dele (gosto, regra da marca, algo que vale para as próximas peças), e não um ajuste só daquela peça (corrigir um erro, trocar um dado, mudar uma foto específica)?`,
+      };
+    });
+    let respostas: Record<string, { noul?: number }> = {};
+    try {
+      const r = await jevPerguntar({ state: { comentarios: lote.map((c) => c.texto) }, questions });
+      if (pagador) await cobrarJev(r, { clientId: pagador, tarefa: "leitura_referencia", referencia: { tipo: "agente_base", id: "comentarios" }, criadoPor: null }).catch(() => null);
+      respostas = r.answers as typeof respostas;
+    } catch (err) {
+      console.error("[base-dos-agentes] Jev dos comentários falhou", err instanceof Error ? err.message : err);
+      continue;
+    }
+    const fontes = new Map<string, string>();
+    for (let i = 0; i < lote.length; i += 1) {
+      const c = lote[i];
+      if ((probabilidadeNoul(respostas[`c${i}`]) ?? 0) < 0.6) continue;
+      for (const l of fichasDoComentario(c.texto)) {
+        const chaveFonte = `${c.client_id}|${l.agente}`;
+        let fonteId = fontes.get(chaveFonte);
+        if (!fonteId) {
+          const { data: f } = await servico().from("agente_base_fontes").insert({ agente: l.agente, client_id: c.client_id, tipo: "texto", nome: `Pedidos do cliente de ${hojeBr()}`, status: "pronta", fichas: 0 }).select("id").single();
+          if (!f) continue;
+          fonteId = (f as { id: string }).id;
+          fontes.set(chaveFonte, fonteId);
+        }
+        const { error } = await servico().from("agente_base_fichas").insert({ fonte_id: fonteId, agente: l.agente, client_id: c.client_id, titulo: l.titulo, tecnica: l.tecnica, quando_usar: l.quando_usar, exemplo: l.exemplo, fonte_url: c.chave });
+        if (error) continue;
+        criadas += 1;
+        const { count } = await servico().from("agente_base_fichas").select("id", { count: "exact", head: true }).eq("fonte_id", fonteId);
+        await servico().from("agente_base_fontes").update({ fichas: count ?? 0 }).eq("id", fonteId);
+      }
+    }
+  }
+  return criadas;
+}
+
+/** Dias sem nenhum uso para a ficha ser arquivada na faxina. */
+const DIAS_SEM_USO = 60;
+/** Pares de fichas parecidas que o Jev julga por rodada. */
+const PARES_POR_FAXINA = 40;
+
+/** Palavras de 4 letras ou mais, sem acento (para achar fichas parecidas). */
+function palavrasDaFicha(t: string): Set<string> {
+  return new Set(t.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").split(/[^a-z0-9]+/).filter((p) => p.length >= 4));
+}
+export function parecidas(a: string, b: string): number {
+  const x = palavrasDaFicha(a);
+  const y = palavrasDaFicha(b);
+  if (!x.size || !y.size) return 0;
+  let comum = 0;
+  x.forEach((p) => { if (y.has(p)) comum += 1; });
+  return comum / (x.size + y.size - comum);
+}
+
+/**
+ * 17/10 (dono: "faxina mensal da base"): arquiva (desliga, com o porquê) as fichas sem nenhum uso em 60 dias e, entre
+ * pares parecidos do mesmo agente e do mesmo cliente, a repetida que o Jev confirmar (fica a mais usada, ou a mais velha).
+ */
+export async function faxinaDaBase(pagador: string | null): Promise<{ semUso: number; repetidas: number }> {
+  const { data: velhas } = await servico().from("agente_base_fichas").update({ ativa: false, arquivada_por: "sem_uso", atualizado_em: new Date().toISOString() })
+    .eq("ativa", true).eq("usos", 0).lt("criado_em", diasAtras(DIAS_SEM_USO)).select("id");
+  const { data } = await servico().from("agente_base_fichas").select("id, agente, client_id, titulo, tecnica, usos, criado_em").eq("ativa", true).limit(5000);
+  const fichas = (data || []) as Array<{ id: string; agente: string; client_id: string | null; titulo: string; tecnica: string; usos: number; criado_em: string }>;
+  const pares: Array<[typeof fichas[number], typeof fichas[number], number]> = [];
+  const porGrupo = new Map<string, typeof fichas>();
+  for (const f of fichas) porGrupo.set(`${f.agente}|${f.client_id || ""}`, [...(porGrupo.get(`${f.agente}|${f.client_id || ""}`) || []), f]);
+  porGrupo.forEach((lista) => {
+    for (let i = 0; i < lista.length; i += 1) {
+      for (let j = i + 1; j < lista.length; j += 1) {
+        const s = parecidas(`${lista[i].titulo} ${lista[i].tecnica}`, `${lista[j].titulo} ${lista[j].tecnica}`);
+        if (s >= 0.4) pares.push([lista[i], lista[j], s]);
+      }
+    }
+  });
+  pares.sort((a, b) => b[2] - a[2]);
+  const avaliar = pares.slice(0, PARES_POR_FAXINA);
+  let repetidas = 0;
+  if (avaliar.length) {
+    const questions: Record<string, PerguntaJev> = {};
+    avaliar.forEach((_, i) => {
+      questions[`p${i}`] = { type: "noul", instructions: `As duas fichas em \`pares[${i}]\` ensinam a mesma técnica (uma deixa a outra sem nada a acrescentar)?` };
+    });
+    try {
+      const r = await jevPerguntar({ state: { pares: avaliar.map(([a, b]) => ({ a: `${a.titulo}: ${a.tecnica.slice(0, 500)}`, b: `${b.titulo}: ${b.tecnica.slice(0, 500)}` })) }, questions });
+      if (pagador) await cobrarJev(r, { clientId: pagador, tarefa: "leitura_referencia", referencia: { tipo: "agente_base", id: "faxina" }, criadoPor: null }).catch(() => null);
+      const fora = new Set<string>();
+      avaliar.forEach(([a, b], i) => {
+        if (fora.has(a.id) || fora.has(b.id) || (probabilidadeNoul((r.answers as Record<string, { noul?: number }>)[`p${i}`]) ?? 0) < 0.7) return;
+        // Fica a mais usada; empate, a mais velha.
+        const sai = a.usos !== b.usos ? (a.usos < b.usos ? a : b) : (a.criado_em > b.criado_em ? a : b);
+        fora.add(sai.id);
+      });
+      for (const ids of emPedacos([...fora])) {
+        const { data: arquivadas } = await servico().from("agente_base_fichas").update({ ativa: false, arquivada_por: "repetida", atualizado_em: new Date().toISOString() }).in("id", ids).select("id");
+        repetidas += (arquivadas || []).length;
+      }
+    } catch (err) {
+      console.error("[base-dos-agentes] Jev da faxina falhou", err instanceof Error ? err.message : err);
+    }
+  }
+  return { semUso: (velhas || []).length, repetidas };
+}
+
 /**
  * 17/10 (dono: "a base aprender com o que eu aprovo e reprovo; os números do Instagram voltando para a técnica"):
  * o resultado de cada ficha (desfecho das peças e múltiplo dos posts) gravado nela, e os vencedores viram fichas.
  */
-export async function aprenderComResultados(): Promise<{ fichas: number; vencedoras: number; concorrentes: number }> {
+export async function aprenderComResultados(): Promise<{ fichas: number; vencedoras: number; concorrentes: number; comentarios: number }> {
   const usos: UsoParaResultado[] = [];
   for (let pagina = 0; pagina < 10; pagina += 1) {
     const { data } = await servico().from("agente_base_usos").select("ficha_id, referencia_tipo, referencia_id")
@@ -646,13 +863,19 @@ export async function aprenderComResultados(): Promise<{ fichas: number; vencedo
   for (const t of trabalhos) desfechos.set(`estudio_trabalho:${t.id}`, desfechoDoEstudio(t));
   (await multiplosDosTrabalhos(trabalhos)).forEach((m, id) => multiplos.set(`estudio_trabalho:${id}`, m.multiplo));
   const idsAds = [...new Set(usos.filter((u) => u.referencia_tipo === "ads_criativo" && u.referencia_id).map((u) => u.referencia_id as string))];
+  const idsPlanos = [...new Set(usos.filter((u) => u.referencia_tipo === "ads_plano" && u.referencia_id).map((u) => u.referencia_id as string))];
   for (const pedaco of emPedacos(idsAds)) {
     const { data } = await servico().from("ads_criativos").select("id, status").in("id", pedaco);
     for (const c of (data || []) as Array<{ id: string; status: string | null }>) desfechos.set(`ads_criativo:${c.id}`, desfechoDoAds(c.status));
   }
   const agora = new Date().toISOString();
   let fichas = 0;
-  for (const [id, r] of resultadosDasFichas(usos, desfechos, multiplos)) {
+  // 17/10 (rodada 4): o resultado real dos anúncios (custo por resultado contra o normal da conta).
+  const eficiencias = await eficienciasDosAnuncios(idsAds, idsPlanos).catch((err) => {
+    console.error("[base-dos-agentes] eficiência dos anúncios falhou", err instanceof Error ? err.message : err);
+    return new Map<string, number>();
+  });
+  for (const [id, r] of resultadosDasFichas(usos, desfechos, multiplos, eficiencias)) {
     const { error } = await servico().from("agente_base_fichas").update({ ...r, resultado_em: agora }).eq("id", id);
     if (!error) fichas += 1;
   }
@@ -664,7 +887,11 @@ export async function aprenderComResultados(): Promise<{ fichas: number; vencedo
     console.error("[base-dos-agentes] concorrentes falharam", err instanceof Error ? err.message : err);
     return 0;
   });
-  return { fichas, vencedoras, concorrentes };
+  const comentarios = await fichasDosComentarios(await carteiraDaAgencia()).catch((err) => {
+    console.error("[base-dos-agentes] comentários falharam", err instanceof Error ? err.message : err);
+    return 0;
+  });
+  return { fichas, vencedoras, concorrentes, comentarios };
 }
 
 // ------------------------------------------------------------------ resumo da semana e carteiras baixas
@@ -766,8 +993,20 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   apagar_fonte: apagarFonte,
   aprender_com_resultados: aprenderAgora,
   resumo_da_semana: resumoParaATela,
+  faxina: async () => json({ ok: true, ...(await faxinaDaBase(await carteiraDaAgencia())) }),
+  // 17/10 (rodada 4): o painel de evolução do cliente (aprovação de primeira, rodadas, posts e Ads por mês).
+  evolucao: async (_ch, corpo) => {
+    const clientId = uuidOuNulo(corpo.client_id);
+    if (!clientId) throw new ErroHttp(400, "cliente_invalido", "Escolha um cliente.");
+    try {
+      return json({ ok: true, meses: await evolucaoDoCliente(servico(), clientId, new Date()) });
+    } catch (err) {
+      console.error("[base-dos-agentes] evolução falhou", err instanceof Error ? err.message : err);
+      throw new ErroHttp(503, "evolucao_indisponivel", "Não foi possível montar a evolução agora.");
+    }
+  },
 };
-const ACOES_LONGAS = new Set(["ensinar", "pesquisar", "aprender_com_resultados"]);
+const ACOES_LONGAS = new Set(["ensinar", "pesquisar", "aprender_com_resultados", "faxina"]);
 
 function respostaDeErro(err: unknown): Response {
   if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message }, err.status);

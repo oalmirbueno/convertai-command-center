@@ -150,7 +150,7 @@ function CartaoDoRecorte({ d }: { d: RespostaDoGestor }) {
   const total = itens.reduce((t, s) => t + (c[s] || 0), 0);
   if (!total) return null;
   return (
-    <div className="w-full max-w-[560px] rounded-2xl border border-border bg-background p-4 shadow-sm">
+    <div className="w-full max-w-[560px] rounded-lg border border-border bg-background p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] font-semibold text-foreground">{d.cabecalho}</p>
         <span className={juntar("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", d.origem === "ia_conferida" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
@@ -175,7 +175,7 @@ function CartaoDoRecorte({ d }: { d: RespostaDoGestor }) {
 function FonteAberta({ f, aoAbrirDiario, aoAbrirObjeto }: { f: Fonte; aoAbrirDiario: (linkId: string, titulo?: string) => void; aoAbrirObjeto?: (o: ObjetoAberto) => void }) {
   const objeto = objetoDaFonte(f);
   return (
-    <div className="w-full max-w-[560px] rounded-2xl border border-border bg-background p-3 text-[12px] shadow-sm">
+    <div className="w-full max-w-[560px] rounded-lg border border-border bg-background p-3 text-[12px] shadow-sm">
       <p className="font-medium text-foreground"><span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{f.apelido}</span>{f.titulo}</p>
       <p className="mt-1 text-muted-foreground">{ROTULO_DO_ESTADO[f.estado]}{f.cliente ? ` · ${f.cliente}` : ""}{f.agente ? ` · ${f.agente}` : ""}</p>
       <p className="mt-2 line-clamp-6 whitespace-pre-wrap break-words text-foreground/85">{f.texto}</p>
@@ -303,7 +303,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
             );
           })}
           {(d.bloqueadas || []).map((b, i) => (
-            <div key={i} className="mt-1 w-full max-w-[560px] rounded-2xl border border-warning/40 bg-warning/5 p-3" data-decisao-do-gestor="">
+            <div key={i} className="mt-1 w-full max-w-[560px] rounded-lg border border-warning/40 bg-warning/5 p-3" data-decisao-do-gestor="">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning"><ShieldAlert className="h-3.5 w-3.5" />Precisa da sua decisão</p>
               <p className="mt-1 text-[14px] text-foreground">{b.pedido}</p>
               <p className="mt-0.5 text-[12px] text-muted-foreground">{b.motivo}</p>
@@ -588,7 +588,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
   return (
     <section
       aria-label="Gestor Aceleriq"
-      className={juntar("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card", className || "h-full min-h-[480px]")}
+      className={juntar("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card", className || "h-full min-h-[480px]")}
       onDragOver={(e) => { const t = e.dataTransfer?.types; if (t && (t.indexOf("Files") >= 0 || t.indexOf(TIPO_ARQUIVO_DO_WORKSPACE) >= 0)) { e.preventDefault(); setSoltando(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setSoltando(false); }}
       onDrop={(e) => {
@@ -604,7 +604,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
       }}
     >
       {soltando && (
-        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-background/90 text-[14px] font-medium text-primary">
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-background/90 text-[14px] font-medium text-primary">
           Solte aqui: documentos, imagens ou áudio
         </div>
       )}
@@ -651,7 +651,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
               <p className="mt-4 text-[18px] font-semibold">O que você quer saber da operação?</p>
               <p className="mt-1 max-w-md text-[13px] text-muted-foreground">Pergunte como a um gerente: por cliente, por período, por agente. Pode mandar arquivo, print ou áudio.</p>
               <div className="mt-6 grid w-full max-w-xl gap-2 sm:grid-cols-2">
-                {COMECOS.map((s) => <button key={s} type="button" className="rounded-2xl border border-border bg-background px-4 py-3 text-left text-[13px] hover:bg-muted" onClick={() => enviar(s)}>{s}</button>)}
+                {COMECOS.map((s) => <button key={s} type="button" className="rounded-lg border border-border bg-background px-4 py-3 text-left text-[13px] hover:bg-muted" onClick={() => enviar(s)}>{s}</button>)}
               </div>
             </div>
           ) : mensagens.map((m, k) => (

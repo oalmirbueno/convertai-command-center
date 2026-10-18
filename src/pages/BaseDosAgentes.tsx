@@ -23,12 +23,14 @@ import {
   pesquisarAgora,
 } from "@/components/base-dos-agentes/baseDosAgentesApi";
 import { lerArquivosDoAgente } from "@/components/mesa/leituraDeArquivos";
+import EvolucaoDoCliente from "@/components/base-dos-agentes/EvolucaoDoCliente";
 import { deveSair, resumoDoResultado, type ResultadoDaFicha } from "../../supabase/functions/_shared/resultado-das-fichas";
 
 /** O resultado gravado na ficha, no formato do módulo puro (a coluna numeric chega como texto). */
 function resultadoDe(f: FichaDaBase): ResultadoDaFicha {
   const m = f.multiplo === null || f.multiplo === undefined ? null : Number(f.multiplo);
-  return { aprovadas: f.aprovadas || 0, ajustadas: f.ajustadas || 0, reprovadas: f.reprovadas || 0, posts: f.posts || 0, multiplo: m !== null && Number.isFinite(m) ? m : null };
+  const ef = f.eficiencia === null || f.eficiencia === undefined ? null : Number(f.eficiencia);
+  return { aprovadas: f.aprovadas || 0, ajustadas: f.ajustadas || 0, reprovadas: f.reprovadas || 0, posts: f.posts || 0, multiplo: m !== null && Number.isFinite(m) ? m : null, anuncios: f.anuncios || 0, eficiencia: ef !== null && Number.isFinite(ef) ? ef : null };
 }
 
 /**
@@ -60,7 +62,26 @@ function haQuanto(iso: string | null): string {
   return `há ${Math.round(s / 86_400)} d`;
 }
 
+/** De onde a ficha veio, como a tela mostra. */
+function origemDaFonte(f: FonteDaBase): string {
+  if (f.nome.indexOf("Números do Instagram") === 0) return "Números do Instagram";
+  if (f.nome.indexOf("Concorrentes e referências") === 0) return "Concorrentes";
+  if (f.nome.indexOf("Pedidos do cliente") === 0) return "Pedido do cliente";
+  return ROTULO_DO_TIPO[f.tipo];
+}
+
 const usd = (v: number) => `US$ ${v.toFixed(2).replace(".", ",")}`;
+
+/** A linha do "Esta semana" (montada aqui: a explicação fica no "?" da seção). */
+function linhaDaSemana(r: { novas: { pesquisa: number; materiais: number; numeros: number; concorrentes: number }; sairam: number; referenciasLidas: number }): string {
+  const total = r.novas.pesquisa + r.novas.materiais + r.novas.numeros + r.novas.concorrentes;
+  const partes = [
+    `${total} técnicas novas (${r.novas.pesquisa} da pesquisa, ${r.novas.materiais} do que você mandou, ${r.novas.numeros} dos posts que renderam, ${r.novas.concorrentes} dos concorrentes)`,
+    r.sairam ? `${r.sairam} saíram por atrapalhar` : "",
+    `${r.referenciasLidas} referências de design lidas`,
+  ];
+  return partes.filter(Boolean).join(" · ");
+}
 
 export default function BaseDosAgentes() {
   const { profile } = useAuth();
@@ -101,19 +122,17 @@ export default function BaseDosAgentes() {
         <section aria-label="Esta semana" className="min-w-0 space-y-2" data-resumo-da-semana="">
           <p className="text-[13px] leading-5 text-foreground">
             <span className="font-semibold">Esta semana: </span>
-            {semana.data.novas.pesquisa + semana.data.novas.materiais + semana.data.novas.numeros + semana.data.novas.concorrentes} técnicas novas
-            {" "}({semana.data.novas.pesquisa} da pesquisa, {semana.data.novas.materiais} do que você mandou, {semana.data.novas.numeros} dos posts que renderam, {semana.data.novas.concorrentes} dos concorrentes)
-            {semana.data.sairam ? ` · ${semana.data.sairam} saíram por atrapalhar` : ""}
-            {` · ${semana.data.referenciasLidas} referências de design lidas`}
+            {linhaDaSemana(semana.data)}
           </p>
           {semana.data.carteirasBaixas.length > 0 && (
-            <p className="rounded-md bg-warning/10 px-2.5 py-2 text-[12px] leading-5 text-warning" role="status" data-carteiras-baixas="">
-              Carteira baixa, a pesquisa e a leitura automática param: {semana.data.carteirasBaixas.slice(0, 8).map((c) => `${c.cliente} (${usd(c.saldo)})`).join(", ")}
-              {semana.data.carteirasBaixas.length > 8 ? ` e mais ${semana.data.carteirasBaixas.length - 8}` : ""}. Recarregue na Mesa do cliente.
+            <p className="rounded-md bg-warning/10 px-2.5 py-2 text-[12px] leading-5 text-warning" role="status" data-carteiras-baixas="" title="Com menos de US$ 1, a pesquisa da semana e a leitura automática das referências param. Recarregue na Mesa do cliente.">
+              {`Carteira baixa: ${semana.data.carteirasBaixas.slice(0, 8).map((c) => `${c.cliente} (${usd(c.saldo)})`).join(", ")}${semana.data.carteirasBaixas.length > 8 ? ` e mais ${semana.data.carteirasBaixas.length - 8}` : ""}.`}
             </p>
           )}
         </section>
       )}
+
+      {podeEnsinar && <EvolucaoDoCliente clientes={clientes.data || []} />}
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Os agentes, por mesa. */}
@@ -469,8 +488,13 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
         </p>
       )}
       <div className="mt-2 flex min-w-0 flex-wrap items-center text-[11.5px] text-muted-foreground [&>*]:mr-2.5">
-        <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? (fonte.nome.indexOf("Números do Instagram") === 0 ? "Números do Instagram" : ROTULO_DO_TIPO[fonte.tipo]) : "À mão"}</span>
+        <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? origemDaFonte(fonte) : "À mão"}</span>
         {cliente && <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Só {cliente}</span>}
+        {!ficha.ativa && ficha.arquivada_por && (
+          <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")} data-arquivada-por={ficha.arquivada_por} title="A faxina do mês desligou esta ficha. Ligue de novo se quiser.">
+            {ficha.arquivada_por === "repetida" ? "Arquivada: repetida" : "Arquivada: sem uso em 60 dias"}
+          </span>
+        )}
         <span className="tabular-nums">{ficha.usos ? `usada ${ficha.usos} ${ficha.usos === 1 ? "vez" : "vezes"} · ${haQuanto(ficha.ultimo_uso)}` : "ainda não usada"}</span>
         {resumoDoResultado(resultadoDe(ficha)) && <span className="tabular-nums text-foreground" data-resultado-da-ficha="">{resumoDoResultado(resultadoDe(ficha))}</span>}
         {fonte && fonte.tipo !== "pesquisa" && <span className="min-w-0 max-w-[16rem] truncate" title={fonte.nome}>{fonte.nome}</span>}

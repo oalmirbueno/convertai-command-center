@@ -512,7 +512,7 @@ export default function DiarioDaExecucao({
               {/* 16/10 (dono: "já trazer o print, a imagem correta, o PDF, para eu aprovar com contexto"):
                   em revisão, a entrega vem primeiro, grande, com o que é e a prova que abre aqui mesmo. */}
               {linkId && esperaRevisao && (
-                <section aria-label="Entrega para aprovar" className="overflow-hidden rounded-2xl border border-warning/40 bg-card">
+                <section aria-label="Entrega para aprovar" className="overflow-hidden rounded-lg border border-warning/40 bg-card">
                   <p className="border-b border-border px-4 py-2.5 text-[13px] font-medium">{oQueFoiFeito({ status: "review", tipo: tipoDaEntrega(contexto.data?.delivery_type, contexto.data?.title || titulo), temProva: Boolean(vinculo.data?.last_evidence) })}</p>
                   <div className="mx-auto max-w-2xl"><ProvaDaEntrega linkId={linkId} ultimaProva={vinculo.data?.last_evidence} aoConversar={() => setAba("hermes")} /></div>
                 </section>

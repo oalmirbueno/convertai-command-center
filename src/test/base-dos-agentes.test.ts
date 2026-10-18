@@ -62,7 +62,10 @@ describe("base dos agentes", () => {
     expect(f).toContain('p.role === "admin" || p.role === "manager"');
     expect(f).toContain('if (!ehCron(req)) return json({ error: "somente_cron"');
     // Decisão do dono: a ficha nasce ativa (a coluna tem default true e o insert não a desliga).
-    expect(f).not.toContain("ativa: false");
+    // (Só a faxina mensal desliga, com o porquê em arquivada_por; onde a ficha nasce, nunca.)
+    const nasce = f.slice(f.indexOf("async function lerEGravar"), f.indexOf("// ------------------------------------------------------------------ ações"));
+    expect(nasce).toContain('from("agente_base_fichas").insert(');
+    expect(nasce).not.toContain("ativa: false");
     expect(ler("supabase/config.toml")).toContain("[functions.base-dos-agentes]");
   });
 
@@ -125,5 +128,19 @@ describe("base dos agentes", () => {
     expect(estudio).toContain(".referencias_do_pedido = (await refsDoPedidoP).map((x) => x.id);");
     expect(estudio).toContain("n + (doDiretor.has(r.id) ? 0.5 : 0)");
     expect(ler("supabase/migrations/20261017235500_base_pesquisa_mais_horas.sql")).toContain("'23 9-16 * * 2'");
+  });
+
+  it("17/10 (rodada 4): Ads aprende com o custo por resultado, comentário do cliente vira ficha e faxina mensal", () => {
+    const sql = ler("supabase/migrations/20261018001000_base_dos_agentes_ads_e_faxina.sql");
+    for (const c of ["anuncios", "eficiencia", "arquivada_por"]) expect(sql, c).toContain(`ADD COLUMN IF NOT EXISTS ${c}`);
+    const funcao = ler("supabase/functions/base-dos-agentes/index.ts");
+    expect(funcao).toContain("resultadosDasFichas(usos, desfechos, multiplos, eficiencias)");
+    expect(funcao).toContain("const comentarios = await fichasDosComentarios(");
+    expect(funcao).toContain('if (!(recente || []).length && new Date().getUTCDate() <= 7) {');
+    expect(funcao).toContain('arquivada_por: "repetida"');
+    // Arquivar é desligar: nada é apagado pela faxina.
+    const faxina = funcao.slice(funcao.indexOf("export async function faxinaDaBase"), funcao.indexOf("export async function aprenderComResultados"));
+    expect(faxina).not.toContain(".delete()");
+    expect(ler("supabase/functions/_shared/base-do-agente.ts")).toContain("multiplo, anuncios, eficiencia\")");
   });
 });

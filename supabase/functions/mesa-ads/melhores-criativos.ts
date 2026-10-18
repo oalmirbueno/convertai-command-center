@@ -382,6 +382,56 @@ export function escolherMelhores(notas: (NotasDaCopy | null | undefined)[], quan
   return { ordem, escolhidos: ordem.slice(0, q), descartados: ordem.slice(q) };
 }
 
+// ------------------------------------------------------------------ teste A/B
+
+/**
+ * Teste A/B (dono, 18/10/2026: "cada ângulo sai com duas versões de criativo para
+ * teste"). Cada versão é o seu próprio ads_criativo, então o resultado real de
+ * cada uma (ads_creative_daily pelo ad_id) alimenta o aprendizado sozinho.
+ */
+export const LETRAS_DO_TESTE = ["A", "B", "C"] as const;
+
+/** Versões de um ângulo: `versoes: 1` produz uma só; o padrão é o par A/B, sem tirar a 3ª que o plano pediu. */
+export function versoesDoAngulo(variacoesDoPlano: number, versoes: unknown): number {
+  const plano = Math.min(3, Math.max(1, Math.round(Number(variacoesDoPlano)) || 1));
+  return Number(versoes) === 1 ? 1 : Math.max(2, plano);
+}
+
+/** O que torna uma copy diferente de outra: a estrutura, o ângulo de venda e o gancho (frase da arte ou 1ª linha). */
+export type AssinaturaDaVersao = { framework?: string | null; angulo_de_venda?: string | null; gancho?: string | null };
+
+const ganchoNormalizado = (s: string | null | undefined) =>
+  String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Mesma peça com outra roupa: o mesmo gancho, ou a mesma estrutura com o mesmo ângulo de venda. */
+export function versoesParecidas(x: AssinaturaDaVersao, y: AssinaturaDaVersao): boolean {
+  const gx = ganchoNormalizado(x.gancho);
+  if (gx && gx === ganchoNormalizado(y.gancho)) return true;
+  return !!x.framework && x.framework === y.framework && !!x.angulo_de_venda && x.angulo_de_venda === y.angulo_de_venda;
+}
+
+/**
+ * Sobre a ordem do Jev (escolherMelhores): a A é a melhor; cada versão seguinte é
+ * a próxima da ordem que NÃO é parecida com as já escolhidas, para o teste comparar
+ * ideias e não a mesma copy duas vezes. Copy com risco de política só entra pela
+ * ordem (nunca passa na frente por ser diferente). Sem candidata diferente, fica a ordem.
+ */
+export function versoesDiferentes(
+  escolha: { ordem: number[]; escolhidos: number[]; descartados: number[] },
+  assinaturas: AssinaturaDaVersao[],
+  notas: (NotasDaCopy | null | undefined)[] = [],
+): { ordem: number[]; escolhidos: number[]; descartados: number[] } {
+  const q = escolha.escolhidos.length;
+  if (q < 2) return escolha;
+  const escolhidos = [escolha.ordem[0]];
+  while (escolhidos.length < q) {
+    const livres = escolha.ordem.filter((k) => escolhidos.indexOf(k) < 0);
+    const diferente = livres.find((k) => !copyArriscada(notas[k]) && escolhidos.every((e) => !versoesParecidas(assinaturas[e] ?? {}, assinaturas[k] ?? {})));
+    escolhidos.push(diferente ?? livres[0]);
+  }
+  return { ordem: escolha.ordem, escolhidos, descartados: escolha.ordem.filter((k) => escolhidos.indexOf(k) < 0) };
+}
+
 const virgula = (v: number) => String(v).replace(".", ",");
 
 /** Por que esta copy, em uma linha: posição entre as escritas, notas do Jev e a estrutura. */

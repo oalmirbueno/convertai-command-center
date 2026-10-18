@@ -85,6 +85,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { CabecalhoDePagina, superficie, texto } from "@/components/sistema";
 
 type FinanceTab = "overview" | "cash-flow" | "subscriptions" | "fixed-costs" | "plans";
 
@@ -221,8 +222,8 @@ function EmptyPanel({
       <div className="mb-4 rounded-full border bg-background p-3 shadow-sm">
         <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
       </div>
-      <h3 className="text-base font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">{description}</p>
+      <h3 className={texto.tituloSecao}>{title}</h3>
+      <p className="mt-1 max-w-md text-[13px] leading-6 text-muted-foreground">{description}</p>
       {action && <div className="mt-5">{action}</div>}
     </div>
   );
@@ -251,14 +252,14 @@ function MetricCard({
     <Card className="overflow-hidden shadow-none">
       <CardContent className="flex min-h-36 flex-col justify-between p-5">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
           <span className={cn("rounded-lg p-2", toneClass)}>
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
         </div>
         <div className="mt-5">
-          <p className="font-mono text-2xl font-semibold tabular-nums tracking-tight text-foreground">{value}</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
+          <p className="font-mono text-[24px] font-semibold tabular-nums tracking-tight text-foreground">{value}</p>
+          <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{detail}</p>
         </div>
       </CardContent>
     </Card>
@@ -355,7 +356,7 @@ function OverviewTab({
       {mode === "forecast" && (
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle className="text-lg">Horizonte de caixa</CardTitle>
+            <CardTitle className="text-[15px]">Horizonte de caixa</CardTitle>
             <CardDescription>Saldo líquido acumulado dos lançamentos abertos, já descontada a reserva tributária proporcional.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-3">
@@ -365,9 +366,9 @@ function OverviewTab({
               ["90 dias", data.forecast90Days],
             ].map(([label, value]) => (
               <div key={String(label)} className="rounded-lg border bg-muted/15 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                <p className={texto.rotulo}>{label}</p>
                 <p className={cn(
-                  "mt-2 font-mono text-xl font-semibold tabular-nums",
+                  "mt-2 font-mono text-[20px] font-semibold tabular-nums",
                   Number(value) >= 0 ? "text-success" : "text-destructive",
                 )}>
                   {currency(Number(value), currencyCode)}
@@ -381,7 +382,7 @@ function OverviewTab({
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle className="text-lg">Composição do período</CardTitle>
+            <CardTitle className="text-[15px]">Composição do período</CardTitle>
             <CardDescription>Realizado e valores ainda em aberto usam a mesma fonte canônica.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -394,8 +395,8 @@ function OverviewTab({
               ["Saldo projetado", data.openingBalance + data.net, "text-foreground"],
             ].map(([label, value, color]) => (
               <div key={String(label)} className="rounded-lg border bg-muted/15 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-                <p className={cn("mt-2 font-mono text-lg font-semibold tabular-nums", color)}>
+                <p className={texto.rotulo}>{label}</p>
+                <p className={cn("mt-2 font-mono text-[20px] font-semibold tabular-nums", color)}>
                   {currency(Number(value), currencyCode)}
                 </p>
               </div>
@@ -405,18 +406,18 @@ function OverviewTab({
 
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle className="text-lg">Clientes que pedem atenção</CardTitle>
+            <CardTitle className="text-[15px]">Clientes que pedem atenção</CardTitle>
             <CardDescription>Maiores saldos vencidos no portfólio atual.</CardDescription>
           </CardHeader>
           <CardContent>
             {clients.isLoading ? (
               <div className="space-y-3"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
             ) : clients.error ? (
-              <p className="text-sm text-destructive">{messageOf(clients.error)}</p>
+              <p className="text-[13px] text-destructive">{messageOf(clients.error)}</p>
             ) : (clients.data || []).filter((client) => client.overdueAmount > 0).length === 0 ? (
               <div className="flex items-center gap-3 rounded-lg border border-success/30 bg-success/5 p-4">
                 <CircleCheck className="h-5 w-5 text-success" aria-hidden="true" />
-                <p className="text-sm text-foreground">Nenhum saldo vencido entre os clientes listados.</p>
+                <p className="text-[13px] text-foreground">Nenhum saldo vencido entre os clientes listados.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -427,10 +428,10 @@ function OverviewTab({
                   .map((client) => (
                     <div key={client.clientId} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">{client.clientName}</p>
-                        <p className="text-xs text-muted-foreground">{client.planName || "Sem plano vinculado"}</p>
+                        <p className="truncate text-[13px] font-medium text-foreground">{client.clientName}</p>
+                        <p className="text-[12px] text-muted-foreground">{client.planName || "Sem plano vinculado"}</p>
                       </div>
-                      <p className="shrink-0 font-mono text-sm font-semibold tabular-nums text-destructive">
+                      <p className="shrink-0 font-mono text-[13px] font-semibold tabular-nums text-destructive">
                         {currency(client.overdueAmount, currencyCode)}
                       </p>
                     </div>
@@ -458,30 +459,30 @@ function EntryCard({
   const canSettle = !readOnly && entry.canSettle;
   const cashMode = mode === "cash";
   return (
-    <article className="rounded-xl border bg-card p-4 shadow-sm">
+    <article className={cn(superficie.painel, "p-4 shadow-sm")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {entry.direction === "income" ? (
               <ArrowDownToLine className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             ) : (
               <ArrowUpFromLine className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
             )}
-            <h3 className="break-words text-sm font-semibold text-foreground">{entry.description}</h3>
+            <h3 className="min-w-0 truncate text-[13px] font-semibold text-foreground" title={entry.description}>{entry.description}</h3>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{entry.clientName || entry.category || "Sem vínculo"}</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">{entry.clientName || entry.category || "Sem vínculo"}</p>
         </div>
         <StatusBadge status={entry.status} />
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <div><p className="text-xs text-muted-foreground">{cashMode ? "Valor líquido" : "Valor"}</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</p></div>
-        <div><p className="text-xs text-muted-foreground">{cashMode ? "Liquidação" : "Vencimento"}</p><p className="mt-1 font-medium">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</p></div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
+        <div><p className="text-[12px] text-muted-foreground">{cashMode ? "Valor líquido" : "Valor"}</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</p></div>
+        <div><p className="text-[12px] text-muted-foreground">{cashMode ? "Liquidação" : "Vencimento"}</p><p className="mt-1 font-medium">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</p></div>
         {cashMode ? (
-          <div className="col-span-2"><p className="text-xs text-muted-foreground">Competência de origem</p><p className="mt-1 font-medium">{entry.competence ? competenceLabel(entry.competence.slice(0, 7)) : "-"}</p></div>
+          <div className="col-span-2"><p className="text-[12px] text-muted-foreground">Competência de origem</p><p className="mt-1 font-medium">{entry.competence ? competenceLabel(entry.competence.slice(0, 7)) : "-"}</p></div>
         ) : (
           <>
-            <div><p className="text-xs text-muted-foreground">Liquidado</p><p className="mt-1 font-mono tabular-nums">{currency(entry.settledAmount)}</p></div>
-            <div><p className="text-xs text-muted-foreground">Em aberto</p><p className="mt-1 font-mono tabular-nums">{currency(entry.outstandingAmount)}</p></div>
+            <div><p className="text-[12px] text-muted-foreground">Liquidado</p><p className="mt-1 font-mono tabular-nums">{currency(entry.settledAmount)}</p></div>
+            <div><p className="text-[12px] text-muted-foreground">Em aberto</p><p className="mt-1 font-mono tabular-nums">{currency(entry.outstandingAmount)}</p></div>
           </>
         )}
       </div>
@@ -564,9 +565,9 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
 
       <Card className="hidden overflow-hidden shadow-none md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-sm">
+          <table className="w-full min-w-[850px] text-[13px]">
             <caption className="sr-only">Lançamentos de {competenceLabel(competence)}</caption>
-            <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className={cn("border-b bg-muted/40 text-left", texto.rotulo)}>
               <tr>
                 <th className="px-4 py-3 font-medium">Lançamento</th>
                 <th className="px-4 py-3 font-medium">{cashMode ? "Liquidação" : "Vencimento"}</th>
@@ -586,7 +587,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                         <span className={cn("mt-0.5 rounded-md p-1.5", entry.direction === "income" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
                           {entry.direction === "income" ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />}
                         </span>
-                        <div><p className="font-medium text-foreground">{entry.description}</p><p className="mt-0.5 text-xs text-muted-foreground">{entry.clientName || entry.category || "Sem vínculo"}</p></div>
+                        <div><p className="font-medium text-foreground">{entry.description}</p><p className="mt-0.5 text-[12px] text-muted-foreground">{entry.clientName || entry.category || "Sem vínculo"}</p></div>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-muted-foreground">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</td>
@@ -594,7 +595,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                     <td className="px-4 py-4 text-right font-mono tabular-nums">{cashMode ? "-" : currency(entry.outstandingAmount)}</td>
                     <td className="px-4 py-4"><StatusBadge status={entry.status} /></td>
                     <td className="px-4 py-4 text-right">
-                      {canSettle ? <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => openSettlement(entry)}>Liquidar</Button> : <span className="text-xs text-muted-foreground">Somente leitura</span>}
+                      {canSettle ? <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => openSettlement(entry)}>Liquidar</Button> : <span className="text-[12px] text-muted-foreground">Somente leitura</span>}
                     </td>
                   </tr>
                 );
@@ -611,7 +612,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
             <DialogDescription>{selectedEntry?.description}. O lançamento original será preservado.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="rounded-lg border bg-muted/30 p-3 text-[13px]">
               <div className="flex justify-between gap-3"><span className="text-muted-foreground">Saldo em aberto</span><strong className="font-mono tabular-nums">{currency(selectedEntry?.outstandingAmount || 0)}</strong></div>
             </div>
             <div className="space-y-2">
@@ -705,24 +706,24 @@ function ClientRow({
   const summary = client.summary;
   const hasConfiguredTerm = !!summary && summary.status !== "not_configured";
   return (
-    <div className="grid gap-4 rounded-xl border bg-card p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(110px,0.55fr))_auto] lg:items-center">
+    <div className={cn(superficie.painel, "grid gap-4 p-4 shadow-sm lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(110px,0.55fr))_auto] lg:items-center")}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="break-words text-sm font-semibold text-foreground">{client.name}</h3>
+          <h3 className="min-w-0 max-w-full truncate text-[13px] font-semibold text-foreground" title={client.name}>{client.name}</h3>
           <StatusBadge status={hasConfiguredTerm ? summary.billingStatus : "unlinked"} />
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-[12px] text-muted-foreground">
           {hasConfiguredTerm ? `${summary.planName || "Plano personalizado"} · próximo vencimento ${dateLabel(summary.nextDueDate)}` : "Sem termo financeiro vigente"}
         </p>
         {summary?.upcomingStartsOn && (
-          <p className="mt-1 text-xs font-medium text-primary">
+          <p className="mt-1 text-[12px] font-medium text-primary">
             Programado: {summary.upcomingPlanName || "nova condição"} a partir de {dateLabel(summary.upcomingStartsOn)}
           </p>
         )}
       </div>
-      <div><p className="text-xs text-muted-foreground">Operacional mensal</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.planAmount) : "-"}</p></div>
-      <div><p className="text-xs text-muted-foreground">Bruto mensal</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.finalPlanAmount) : "-"}</p></div>
-      <div><p className="text-xs text-muted-foreground">Em aberto</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums text-warning">{summary ? currency(summary.openAmount) : "-"}</p></div>
+      <div><p className="text-[12px] text-muted-foreground">Operacional mensal</p><p className="mt-1 font-mono text-[13px] font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.planAmount) : "-"}</p></div>
+      <div><p className="text-[12px] text-muted-foreground">Bruto mensal</p><p className="mt-1 font-mono text-[13px] font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.finalPlanAmount) : "-"}</p></div>
+      <div><p className="text-[12px] text-muted-foreground">Em aberto</p><p className="mt-1 font-mono text-[13px] font-semibold tabular-nums text-warning">{summary ? currency(summary.openAmount) : "-"}</p></div>
       {!readOnly && (
         <Button type="button" variant="outline" className="min-h-11 w-full lg:w-auto" onClick={() => onAssign(client)}>
           {hasConfiguredTerm ? "Alterar vínculo" : "Vincular plano"}
@@ -889,8 +890,8 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="text-sm font-semibold text-foreground">Carteira de mensalidades</p><p className="mt-1 text-sm text-muted-foreground">{unlinked} cliente(s) sem termo financeiro vigente.</p></div>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+        <div><p className="text-[13px] font-semibold text-foreground">Carteira de mensalidades</p><p className="mt-1 text-[13px] text-muted-foreground">{unlinked} cliente(s) sem termo financeiro vigente.</p></div>
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openAssign()}><Plus className="h-4 w-4" />Vincular cliente</Button>}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -910,34 +911,34 @@ function SubscriptionsTab({ readOnly }: { readOnly: boolean }) {
           <div className="space-y-5">
             {assignError && <Alert variant="destructive" role="alert"><CircleAlert className="h-4 w-4" /><AlertTitle>Revise o vínculo</AlertTitle><AlertDescription>{assignError}</AlertDescription></Alert>}
             <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2">
-              <legend className="px-2 text-sm font-semibold text-foreground">Cliente e vigência</legend>
+              <legend className="px-2 text-[13px] font-semibold text-foreground">Cliente e vigência</legend>
               <div className="space-y-2"><Label htmlFor="assignment-client">Cliente *</Label><Select value={assignDraft.clientId} onValueChange={(value) => { const client = clients.find((item) => item.id === value); const effectiveCompetence = minimumCompetenceForClient(client); setAssignDraft((draft) => ({ ...draft, clientId: value, effectiveCompetence, planVersionId: "" })); }}><SelectTrigger id="assignment-client" className="h-11"><SelectValue placeholder="Selecione o cliente" /></SelectTrigger><SelectContent>{clients.map((client) => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="assignment-competence">Vigência por competência *</Label><Input id="assignment-competence" type="month" min={minimumAssignmentCompetence} className="h-11" value={assignDraft.effectiveCompetence} onChange={(event) => setAssignDraft((draft) => ({ ...draft, effectiveCompetence: event.target.value || minimumAssignmentCompetence, planVersionId: "" }))} /></div>
-              <div className="space-y-2 sm:col-span-2"><Label htmlFor="assignment-version">Plano e versão válidos *</Label><Select value={assignDraft.planVersionId} onValueChange={selectVersion}><SelectTrigger id="assignment-version" className="h-11"><SelectValue placeholder="Selecione plano e versão" /></SelectTrigger><SelectContent>{versionOptions.map(({ plan, version }) => <SelectItem key={version.id} value={version.id}>{plan.name} · V{version.version} · {currency(version.finalAmount)}</SelectItem>)}</SelectContent></Select>{versionOptions.length === 0 && <p className="text-xs text-warning">Nenhuma versão cobre esta competência. Crie ou ajuste uma versão em Planos e preços.</p>}</div>
+              <div className="space-y-2 sm:col-span-2"><Label htmlFor="assignment-version">Plano e versão válidos *</Label><Select value={assignDraft.planVersionId} onValueChange={selectVersion}><SelectTrigger id="assignment-version" className="h-11"><SelectValue placeholder="Selecione plano e versão" /></SelectTrigger><SelectContent>{versionOptions.map(({ plan, version }) => <SelectItem key={version.id} value={version.id}>{plan.name} · V{version.version} · {currency(version.finalAmount)}</SelectItem>)}</SelectContent></Select>{versionOptions.length === 0 && <p className="text-[12px] text-warning">Nenhuma versão cobre esta competência. Crie ou ajuste uma versão em Planos e preços.</p>}</div>
             </fieldset>
 
             <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
-              <legend className="px-2 text-sm font-semibold text-foreground">Condição comercial</legend>
+              <legend className="px-2 text-[13px] font-semibold text-foreground">Condição comercial</legend>
               <div className="space-y-2"><Label htmlFor="assignment-pricing-mode">Tipo de preço *</Label><Select value={assignDraft.pricingMode} onValueChange={(value) => setAssignDraft((draft) => ({ ...draft, pricingMode: value as FinancePricingMode }))}><SelectTrigger id="assignment-pricing-mode" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="linked">Vinculado ao plano</SelectItem><SelectItem value="custom">Personalizado</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="assignment-due-day">Dia de vencimento *</Label><Input id="assignment-due-day" type="number" inputMode="numeric" min="1" max="28" className="h-11" value={assignDraft.dueDay} onChange={(event) => setAssignDraft((draft) => ({ ...draft, dueDay: event.target.value }))} /></div>
               <div className="space-y-2"><Label htmlFor="assignment-payment-method">Forma de pagamento</Label><Select value={assignDraft.paymentMethod} onValueChange={(value) => setAssignDraft((draft) => ({ ...draft, paymentMethod: value }))}><SelectTrigger id="assignment-payment-method" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="unspecified">Não informada</SelectItem><SelectItem value="pix">Pix</SelectItem><SelectItem value="bank_transfer">Transferência</SelectItem><SelectItem value="card">Cartão</SelectItem><SelectItem value="boleto">Boleto</SelectItem><SelectItem value="other">Outro</SelectItem></SelectContent></Select></div>
               {assignDraft.pricingMode === "custom" && <>
                 <div className="space-y-2"><Label htmlFor="assignment-operational">Valor operacional *</Label><Input id="assignment-operational" type="number" inputMode="decimal" min="0.01" step="0.01" className="h-11" value={assignDraft.operationalAmount} onChange={(event) => setAssignDraft((draft) => ({ ...draft, operationalAmount: event.target.value }))} /></div>
-                <div className="space-y-2"><Label htmlFor="assignment-tax">Alíquota (%)</Label><Input id="assignment-tax" type="number" inputMode="decimal" min="0" max="99.99" step="0.01" className="h-11" value={assignDraft.taxRatePercent} onChange={(event) => setAssignDraft((draft) => ({ ...draft, taxRatePercent: event.target.value }))} /><p className="text-xs text-muted-foreground">Em branco mantém o termo em revisão.</p></div>
+                <div className="space-y-2"><Label htmlFor="assignment-tax">Alíquota (%)</Label><Input id="assignment-tax" type="number" inputMode="decimal" min="0" max="99.99" step="0.01" className="h-11" value={assignDraft.taxRatePercent} onChange={(event) => setAssignDraft((draft) => ({ ...draft, taxRatePercent: event.target.value }))} /><p className="text-[12px] text-muted-foreground">Em branco mantém o termo em revisão.</p></div>
                 <div className="space-y-2"><Label htmlFor="assignment-direct-cost">Custo direto *</Label><Input id="assignment-direct-cost" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={assignDraft.directCost} onChange={(event) => setAssignDraft((draft) => ({ ...draft, directCost: event.target.value }))} /></div>
                 <div className="space-y-2 sm:col-span-2 lg:col-span-3"><Label htmlFor="assignment-justification">Justificativa da condição personalizada *</Label><Textarea id="assignment-justification" value={assignDraft.justification} onChange={(event) => setAssignDraft((draft) => ({ ...draft, justification: event.target.value }))} placeholder="Descreva a exceção comercial acordada" /></div>
               </>}
             </fieldset>
 
             <section className="rounded-xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="assignment-preview-title" aria-live="polite">
-              <h3 id="assignment-preview-title" className="text-sm font-semibold text-foreground">Preview do novo termo</h3>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                <div><p className="text-xs text-muted-foreground">Operacional</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewOperational)}</p></div>
-                <div><p className="text-xs text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(Math.max(previewFinal - previewOperational, 0))}</p></div>
-                <div><p className="text-xs text-muted-foreground">Valor final</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewFinal)}</p></div>
-                <div><p className="text-xs text-muted-foreground">Custo direto</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewDirectCost)}</p></div>
+              <h3 id="assignment-preview-title" className="text-[13px] font-semibold text-foreground">Preview do novo termo</h3>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
+                <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewOperational)}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(Math.max(previewFinal - previewOperational, 0))}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Valor final</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewFinal)}</p></div>
+                <div><p className="text-[12px] text-muted-foreground">Custo direto</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(previewDirectCost)}</p></div>
               </div>
-              {previewNeedsReview && <p className="mt-3 text-xs font-medium text-warning">Sem alíquota validada, o termo será salvo como “Revisar” e não gerará mensalidade até a revisão.</p>}
+              {previewNeedsReview && <p className="mt-3 text-[12px] font-medium text-warning">Sem alíquota validada, o termo será salvo como “Revisar” e não gerará mensalidade até a revisão.</p>}
             </section>
           </div>
           <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => setAssignOpen(false)}>Cancelar</Button><Button type="button" className="min-h-11" disabled={assignClientPlan.isPending || !selectedOption} onClick={() => void submitAssignment()}>{assignClientPlan.isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}Salvar vínculo</Button></DialogFooter>
@@ -1018,8 +1019,8 @@ function FixedCostsTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="text-sm font-medium text-muted-foreground">Base mensal ativa</p><p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{currency(activeTotal)}</p></div>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+        <div><p className="text-[13px] font-medium text-muted-foreground">Base mensal ativa</p><p className="mt-1 font-mono text-[24px] font-semibold tabular-nums">{currency(activeTotal)}</p></div>
         {!readOnly && <Button type="button" className="min-h-11" onClick={() => openRule()}><Plus className="h-4 w-4" />Novo custo fixo</Button>}
       </div>
 
@@ -1031,10 +1032,10 @@ function FixedCostsTab({ readOnly }: { readOnly: boolean }) {
             <Card key={rule.id} className={cn("shadow-none", !rule.isActive && "opacity-65")}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{rule.name}</h3><StatusBadge status={rule.isActive ? "active" : "inactive"} /></div><p className="mt-1 text-sm text-muted-foreground">{rule.category || "Sem categoria"} · vence no dia {rule.dueDay || "-"}</p></div>
-                  <p className="shrink-0 font-mono text-lg font-semibold tabular-nums">{currency(rule.amount)}</p>
+                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{rule.name}</h3><StatusBadge status={rule.isActive ? "active" : "inactive"} /></div><p className="mt-1 text-[13px] text-muted-foreground">{rule.category || "Sem categoria"} · vence no dia {rule.dueDay || "-"}</p></div>
+                  <p className="shrink-0 font-mono text-[20px] font-semibold tabular-nums">{currency(rule.amount)}</p>
                 </div>
-                {rule.description && <p className="mt-4 text-sm leading-6 text-muted-foreground">{rule.description}</p>}
+                {rule.description && <p className="mt-4 text-[13px] leading-6 text-muted-foreground">{rule.description}</p>}
                 {!readOnly && <div className="mt-5 flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => openRule(rule)}><Pencil className="h-4 w-4" />Editar</Button>
                   {rule.isActive && <Button type="button" variant="ghost" size="sm" className="min-h-11 text-muted-foreground" onClick={() => setArchiveTarget(rule)}><Archive className="h-4 w-4" />Arquivar</Button>}
@@ -1114,20 +1115,20 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
     <Card className={cn("shadow-none", !plan.isActive && "opacity-65")}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{plan.name}</h3><StatusBadge status={plan.isActive ? "active" : "inactive"} /></div><p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{plan.code || "Sem código"}</p></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{plan.name}</h3><StatusBadge status={plan.isActive ? "active" : "inactive"} /></div><p className={cn(texto.auxiliar, "mt-1")}>{plan.code ? plan.code.toUpperCase() : "Sem código"}</p></div>
           <div className="shrink-0 text-right">
-            <p className="font-mono text-xl font-semibold tabular-nums">{version ? currency(version.finalAmount) : "Sem preço vigente"}</p>
-            {version && <p className="mt-1 text-xs text-muted-foreground">operacional {currency(version.amount)}</p>}
+            <p className="font-mono text-[20px] font-semibold tabular-nums">{version ? currency(version.finalAmount) : "Sem preço vigente"}</p>
+            {version && <p className="mt-1 text-[12px] text-muted-foreground">operacional {currency(version.amount)}</p>}
           </div>
         </div>
-        <p className="mt-4 min-h-10 text-sm leading-5 text-muted-foreground">{plan.description || "Sem descrição cadastrada."}</p>
+        <p className="mt-4 min-h-10 text-[13px] leading-5 text-muted-foreground">{plan.description || "Sem descrição cadastrada."}</p>
         {version ? (
           <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
               <span>V{version.version} · vigente desde <strong className="text-foreground">{dateLabel(version.effectiveFrom)}</strong></span>
               {version.amountKind === "needs_review" && <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">Revisar imposto</Badge>}
             </div>
-            <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 text-[12px] sm:grid-cols-4">
               <div><p className="text-muted-foreground">Imposto</p><p className="mt-1 font-medium text-foreground">{percentageLabel(version.taxRate)}</p></div>
               <div><p className="text-muted-foreground">Custo direto</p><p className="mt-1 font-mono font-medium tabular-nums text-foreground">{currency(version.directCost)}</p></div>
               <div><p className="text-muted-foreground">Cobrança</p><p className="mt-1 font-medium text-foreground">{BILLING_PERIOD_LABELS[version.billingPeriod]}</p></div>
@@ -1135,10 +1136,10 @@ function PlanCard({ plan, readOnly, onEdit, onVersion, onArchive }: { plan: Fina
             </div>
           </div>
         ) : !upcoming ? (
-          <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">Crie a primeira versão de preço para ativar a contratação.</div>
+          <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-[12px] text-muted-foreground">Crie a primeira versão de preço para ativar a contratação.</div>
         ) : null}
         {upcoming && (
-          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
+          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-[12px]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-foreground">V{upcoming.version} programada para {dateLabel(upcoming.effectiveFrom)}</span>
               <span className="font-mono font-semibold tabular-nums text-primary">{currency(upcoming.finalAmount)}</span>
@@ -1311,24 +1312,24 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="text-sm font-semibold text-foreground">Catálogo comercial</p><p className="mt-1 text-sm text-muted-foreground">Preços são versionados por vigência; o passado não é reescrito.</p></div>
+      <div className={cn(superficie.painel, "flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between")}>
+        <div><p className="text-[13px] font-semibold text-foreground">Catálogo comercial</p><p className="mt-1 text-[13px] text-muted-foreground">Preços são versionados por vigência; o passado não é reescrito.</p></div>
         {!readOnly && <div className="flex flex-col gap-2 sm:flex-row"><Button type="button" variant="outline" className="min-h-11" onClick={openSettings}><Settings2 className="h-4 w-4" />Configurações</Button><Button type="button" className="min-h-11" onClick={() => openPlan()}><Plus className="h-4 w-4" />Novo plano</Button></div>}
       </div>
 
       <Card className="shadow-none">
         <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Moeda</p><p className="mt-1 font-semibold">{settings.data?.currency || "BRL"}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Saldo inicial</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.openingBalance || 0)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Reserva alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.reserveTarget || 0)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Janela de previsão</p><p className="mt-1 font-semibold">{settings.data?.forecastMonths || 6} meses</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Meta mensal</p><p className="mt-1 font-mono font-semibold tabular-nums">{settings.data?.monthlyGoal === null ? "-" : currency(settings.data?.monthlyGoal || 0)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Retenção do crescimento</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.growthRetentionRate ?? null)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Margem mínima</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.desiredMinimumMargin ?? null)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Pró-labore atual / alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.currentProLabore || 0)} / {currency(settings.data?.targetProLabore || 0)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Custo direto padrão</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.defaultDirectCost || 0)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Reserva mínima</p><p className="mt-1 font-semibold">{settings.data?.minimumReserveMonths ?? "-"} meses</p></div>
-          <div className="sm:col-span-2"><p className="text-xs uppercase tracking-wide text-muted-foreground">Alocação de custos</p><p className="mt-1 font-semibold">{ALLOCATION_METHOD_LABELS[settings.data?.allocationMethod || "equal"]}{settings.data?.includeProLaboreInAllocation ? " · inclui pró-labore" : " · sem pró-labore"}</p></div>
+          <div><p className={texto.rotulo}>Moeda</p><p className="mt-1 font-semibold">{settings.data?.currency || "BRL"}</p></div>
+          <div><p className={texto.rotulo}>Saldo inicial</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.openingBalance || 0)}</p></div>
+          <div><p className={texto.rotulo}>Reserva alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.reserveTarget || 0)}</p></div>
+          <div><p className={texto.rotulo}>Janela de previsão</p><p className="mt-1 font-semibold">{settings.data?.forecastMonths || 6} meses</p></div>
+          <div><p className={texto.rotulo}>Meta mensal</p><p className="mt-1 font-mono font-semibold tabular-nums">{settings.data?.monthlyGoal === null ? "-" : currency(settings.data?.monthlyGoal || 0)}</p></div>
+          <div><p className={texto.rotulo}>Retenção do crescimento</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.growthRetentionRate ?? null)}</p></div>
+          <div><p className={texto.rotulo}>Margem mínima</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.desiredMinimumMargin ?? null)}</p></div>
+          <div><p className={texto.rotulo}>Pró-labore atual / alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.currentProLabore || 0)} / {currency(settings.data?.targetProLabore || 0)}</p></div>
+          <div><p className={texto.rotulo}>Custo direto padrão</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.defaultDirectCost || 0)}</p></div>
+          <div><p className={texto.rotulo}>Reserva mínima</p><p className="mt-1 font-semibold">{settings.data?.minimumReserveMonths ?? "-"} meses</p></div>
+          <div className="sm:col-span-2"><p className={texto.rotulo}>Alocação de custos</p><p className="mt-1 font-semibold">{ALLOCATION_METHOD_LABELS[settings.data?.allocationMethod || "equal"]}{settings.data?.includeProLaboreInAllocation ? " · inclui pró-labore" : " · sem pró-labore"}</p></div>
         </CardContent>
       </Card>
 
@@ -1363,12 +1364,12 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
             <div className="space-y-2">
               <Label htmlFor="version-amount">Valor operacional *</Label>
               <Input id="version-amount" type="number" inputMode="decimal" min="0.01" step="0.01" className="h-11" value={versionDraft.amount} onChange={(event) => setVersionDraft((draft) => ({ ...draft, amount: event.target.value }))} aria-describedby="version-amount-help" />
-              <p id="version-amount-help" className="text-xs leading-5 text-muted-foreground">Valor líquido necessário para entregar o serviço, antes do gross-up de impostos.</p>
+              <p id="version-amount-help" className="text-[12px] leading-5 text-muted-foreground">Valor líquido necessário para entregar o serviço, antes do gross-up de impostos.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="version-tax-rate">Alíquota de impostos (%)</Label>
               <Input id="version-tax-rate" type="number" inputMode="decimal" min="0" max="99.99" step="0.01" className="h-11" value={versionDraft.taxRatePercent} onChange={(event) => setVersionDraft((draft) => ({ ...draft, taxRatePercent: event.target.value }))} aria-describedby="version-tax-help" />
-              <p id="version-tax-help" className="text-xs leading-5 text-muted-foreground">Deixe vazio apenas se a alíquota ainda precisar de revisão.</p>
+              <p id="version-tax-help" className="text-[12px] leading-5 text-muted-foreground">Deixe vazio apenas se a alíquota ainda precisar de revisão.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="version-direct-cost">Custo direto *</Label>
@@ -1388,10 +1389,10 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
             <div className="space-y-2">
               <Label htmlFor="version-date">Vigência a partir de *</Label>
               <Input id="version-date" type="date" min={versionPlan ? minimumVersionDate(versionPlan) : effectiveDateForCompetence(currentCompetence())} className="h-11" value={versionDraft.effectiveFrom} onChange={(event) => setVersionDraft((draft) => ({ ...draft, effectiveFrom: event.target.value }))} aria-describedby="version-date-help" />
-              <p id="version-date-help" className="text-xs leading-5 text-muted-foreground">Use sempre o primeiro dia do mês. Versões existentes exigem a competência seguinte.</p>
+              <p id="version-date-help" className="text-[12px] leading-5 text-muted-foreground">Use sempre o primeiro dia do mês. Versões existentes exigem a competência seguinte.</p>
             </div>
             <div className="flex min-h-16 items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3 sm:col-span-2">
-              <div><Label htmlFor="version-direct-cost-estimated">Custo direto estimado</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">Marque enquanto o custo ainda não tiver confirmação real.</p></div>
+              <div><Label htmlFor="version-direct-cost-estimated">Custo direto estimado</Label><p className="mt-1 text-[12px] leading-5 text-muted-foreground">Marque enquanto o custo ainda não tiver confirmação real.</p></div>
               <Switch id="version-direct-cost-estimated" checked={versionDraft.directCostEstimated} onCheckedChange={(checked) => setVersionDraft((draft) => ({ ...draft, directCostEstimated: checked }))} />
             </div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="version-description">Motivo ou observação</Label><Textarea id="version-description" value={versionDraft.description} onChange={(event) => setVersionDraft((draft) => ({ ...draft, description: event.target.value }))} /></div>
@@ -1399,14 +1400,14 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
 
           <section className="rounded-xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="version-preview-title" aria-live="polite">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div><h3 id="version-preview-title" className="text-sm font-semibold text-foreground">Preview com gross-up</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">O servidor recalcula estes valores ao criar a versão.</p></div>
-              <div className="text-left sm:text-right"><p className="text-xs uppercase tracking-wide text-muted-foreground">Valor final</p><p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-primary">{currency(previewFinalAmount)}</p></div>
+              <div><h3 id="version-preview-title" className="text-[13px] font-semibold text-foreground">Preview com gross-up</h3><p className="mt-1 text-[12px] leading-5 text-muted-foreground">O servidor recalcula estes valores ao criar a versão.</p></div>
+              <div className="text-left sm:text-right"><p className={texto.rotulo}>Valor final</p><p className="mt-1 font-mono text-[24px] font-semibold tabular-nums text-primary">{currency(previewFinalAmount)}</p></div>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-              <div><p className="text-xs text-muted-foreground">Operacional</p><p className="mt-1 font-mono font-medium tabular-nums">{currency(previewOperationalAmount)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-mono font-medium tabular-nums">{currency(Math.max(previewFinalAmount - previewOperationalAmount, 0))}</p></div>
-              <div><p className="text-xs text-muted-foreground">Margem após custo direto</p><p className="mt-1 font-medium">{percentageLabel(previewMargin)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Classificação</p><p className="mt-1 font-medium">{previewAmountKind === "needs_review" ? "Revisão necessária" : "Valor operacional"}</p></div>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
+              <div><p className="text-[12px] text-muted-foreground">Operacional</p><p className="mt-1 font-mono font-medium tabular-nums">{currency(previewOperationalAmount)}</p></div>
+              <div><p className="text-[12px] text-muted-foreground">Reserva fiscal</p><p className="mt-1 font-mono font-medium tabular-nums">{currency(Math.max(previewFinalAmount - previewOperationalAmount, 0))}</p></div>
+              <div><p className="text-[12px] text-muted-foreground">Margem após custo direto</p><p className="mt-1 font-medium">{percentageLabel(previewMargin)}</p></div>
+              <div><p className="text-[12px] text-muted-foreground">Classificação</p><p className="mt-1 font-medium">{previewAmountKind === "needs_review" ? "Revisão necessária" : "Valor operacional"}</p></div>
             </div>
           </section>
           <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => setVersionPlan(null)}>Cancelar</Button><Button type="button" className="min-h-11" disabled={createPlanVersion.isPending} onClick={() => void saveVersion()}>{createPlanVersion.isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}Criar versão</Button></DialogFooter>
@@ -1418,7 +1419,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
           <DialogHeader><DialogTitle>Configurações financeiras</DialogTitle><DialogDescription>Parâmetros usados no consolidado e nas previsões.</DialogDescription></DialogHeader>
           <div className="space-y-6">
             <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
-              <legend className="px-2 text-sm font-semibold text-foreground">Base e metas</legend>
+              <legend className="px-2 text-[13px] font-semibold text-foreground">Base e metas</legend>
               <div className="space-y-2"><Label htmlFor="settings-currency">Moeda</Label><Select value={settingsDraft.currency} onValueChange={(value) => setSettingsDraft((draft) => ({ ...draft, currency: value }))}><SelectTrigger id="settings-currency" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="BRL">BRL · Real</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="settings-due-day">Vencimento padrão</Label><Input id="settings-due-day" type="number" inputMode="numeric" min="1" max="28" className="h-11" value={settingsDraft.defaultDueDay} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, defaultDueDay: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-forecast">Meses de previsão</Label><Input id="settings-forecast" type="number" inputMode="numeric" min="1" max="24" className="h-11" value={settingsDraft.forecastMonths} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, forecastMonths: Number(event.target.value) }))} /></div>
@@ -1429,19 +1430,19 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
             </fieldset>
 
             <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2">
-              <legend className="px-2 text-sm font-semibold text-foreground">Crescimento e rentabilidade</legend>
-              <div className="space-y-2"><Label htmlFor="settings-growth-retention">Retenção do crescimento (%)</Label><Input id="settings-growth-retention" type="number" inputMode="decimal" min="0" max="100" step="0.1" className="h-11" value={percentageInputValue(settingsDraft.growthRetentionRate)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, growthRetentionRate: percentageFromInput(event.target.value) }))} /><p className="text-xs leading-5 text-muted-foreground">Parcela do crescimento que deve permanecer no caixa.</p></div>
-              <div className="space-y-2"><Label htmlFor="settings-minimum-margin">Margem mínima desejada (%)</Label><Input id="settings-minimum-margin" type="number" inputMode="decimal" min="-100" max="100" step="0.1" className="h-11" value={percentageInputValue(settingsDraft.desiredMinimumMargin)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, desiredMinimumMargin: percentageFromInput(event.target.value) }))} /><p className="text-xs leading-5 text-muted-foreground">Guardrail para precificação e análise de contribuição.</p></div>
+              <legend className="px-2 text-[13px] font-semibold text-foreground">Crescimento e rentabilidade</legend>
+              <div className="space-y-2"><Label htmlFor="settings-growth-retention">Retenção do crescimento (%)</Label><Input id="settings-growth-retention" type="number" inputMode="decimal" min="0" max="100" step="0.1" className="h-11" value={percentageInputValue(settingsDraft.growthRetentionRate)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, growthRetentionRate: percentageFromInput(event.target.value) }))} /><p className="text-[12px] leading-5 text-muted-foreground">Parcela do crescimento que deve permanecer no caixa.</p></div>
+              <div className="space-y-2"><Label htmlFor="settings-minimum-margin">Margem mínima desejada (%)</Label><Input id="settings-minimum-margin" type="number" inputMode="decimal" min="-100" max="100" step="0.1" className="h-11" value={percentageInputValue(settingsDraft.desiredMinimumMargin)} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, desiredMinimumMargin: percentageFromInput(event.target.value) }))} /><p className="text-[12px] leading-5 text-muted-foreground">Guardrail para precificação e análise de contribuição.</p></div>
             </fieldset>
 
             <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
-              <legend className="px-2 text-sm font-semibold text-foreground">Pró-labore e custos</legend>
+              <legend className="px-2 text-[13px] font-semibold text-foreground">Pró-labore e custos</legend>
               <div className="space-y-2"><Label htmlFor="settings-current-pro-labore">Pró-labore atual</Label><Input id="settings-current-pro-labore" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.currentProLabore} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, currentProLabore: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-target-pro-labore">Pró-labore alvo</Label><Input id="settings-target-pro-labore" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.targetProLabore} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, targetProLabore: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-default-direct-cost">Custo direto padrão</Label><Input id="settings-default-direct-cost" type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={settingsDraft.defaultDirectCost} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, defaultDirectCost: Number(event.target.value) }))} /></div>
               <div className="space-y-2 sm:col-span-2 lg:col-span-1"><Label htmlFor="settings-allocation-method">Método de alocação</Label><Select value={settingsDraft.allocationMethod} onValueChange={(value) => setSettingsDraft((draft) => ({ ...draft, allocationMethod: value as FinanceAllocationMethod }))}><SelectTrigger id="settings-allocation-method" className="h-11"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(ALLOCATION_METHOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
               <div className="flex min-h-16 items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3 sm:col-span-2">
-                <div><Label htmlFor="settings-include-pro-labore">Incluir pró-labore na alocação</Label><p className="mt-1 text-xs leading-5 text-muted-foreground">Distribui o pró-labore junto dos custos compartilhados.</p></div>
+                <div><Label htmlFor="settings-include-pro-labore">Incluir pró-labore na alocação</Label><p className="mt-1 text-[12px] leading-5 text-muted-foreground">Distribui o pró-labore junto dos custos compartilhados.</p></div>
                 <Switch id="settings-include-pro-labore" checked={settingsDraft.includeProLaboreInAllocation} onCheckedChange={(checked) => setSettingsDraft((draft) => ({ ...draft, includeProLaboreInAllocation: checked }))} />
               </div>
             </fieldset>
@@ -1489,26 +1490,22 @@ export default function FinanceV2({
 
   return (
     <main className="mx-auto w-full max-w-[1500px] space-y-6 overflow-x-hidden pb-8" aria-labelledby="finance-v2-title">
-      <section className="relative overflow-hidden rounded-2xl border bg-card px-4 py-5 shadow-sm sm:px-6 sm:py-6">
-        <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/3 bg-gradient-to-l from-primary/10 to-transparent lg:block" aria-hidden="true" />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary"><Landmark className="h-4 w-4" aria-hidden="true" />Controle financeiro</div>
-            <h1 id="finance-v2-title" className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Financeiro V2</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">Uma leitura por competência, caixa ou previsão, com planos versionados e liquidações sem reescrever o histórico.</p>
-          </div>
-          <div className={cn("grid gap-3 sm:items-end", !readOnly && "sm:grid-cols-[minmax(180px,220px)_auto]")}>
-            <div className="space-y-2"><Label htmlFor="finance-competence">Competência</Label><Input id="finance-competence" type="month" className="h-11 bg-background" value={competence} onChange={(event) => setCompetence(event.target.value || currentCompetence())} /></div>
-            {!readOnly && <AlertDialog>
-              <AlertDialogTrigger asChild><Button type="button" className="min-h-11" disabled={!competence || generateCompetence.isPending}><CalendarDays className="h-4 w-4" />Gerar competência</Button></AlertDialogTrigger>
-              <AlertDialogContent className="w-[calc(100%-2rem)]">
-                <AlertDialogHeader><AlertDialogTitle>Gerar {competenceLabel(competence)}?</AlertDialogTitle><AlertDialogDescription>Esta ação cria apenas os lançamentos recorrentes ausentes. A operação é idempotente, mas exige sua confirmação e nunca acontece ao abrir a página.</AlertDialogDescription></AlertDialogHeader>
-                <AlertDialogFooter><AlertDialogCancel className="min-h-11">Cancelar</AlertDialogCancel><AlertDialogAction className="min-h-11" disabled={generateCompetence.isPending} onClick={() => void generate()}>{generateCompetence.isPending ? "Gerando…" : "Confirmar geração"}</AlertDialogAction></AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>}
-          </div>
-        </div>
-      </section>
+      {/* 18/10: cabeçalho do sistema (h1 com texto.tituloPagina); a explicação foi para o "?". */}
+      <CabecalhoDePagina
+        titulo={<span id="finance-v2-title">Financeiro V2</span>}
+        descricao={<span className="inline-flex items-center"><Landmark className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />Controle financeiro</span>}
+        ajuda="Uma leitura por competência, caixa ou previsão, com planos versionados e liquidações sem reescrever o histórico."
+        acoes={<>
+          <div className="flex min-w-0 items-center"><Label htmlFor="finance-competence" className="mr-2 shrink-0">Competência</Label><Input id="finance-competence" type="month" className="h-11 w-[180px] bg-background" value={competence} onChange={(event) => setCompetence(event.target.value || currentCompetence())} /></div>
+          {!readOnly && <AlertDialog>
+            <AlertDialogTrigger asChild><Button type="button" className="min-h-11" disabled={!competence || generateCompetence.isPending}><CalendarDays className="h-4 w-4" />Gerar competência</Button></AlertDialogTrigger>
+            <AlertDialogContent className="w-[calc(100%-2rem)]">
+              <AlertDialogHeader><AlertDialogTitle>Gerar {competenceLabel(competence)}?</AlertDialogTitle><AlertDialogDescription>Esta ação cria apenas os lançamentos recorrentes ausentes. A operação é idempotente, mas exige sua confirmação e nunca acontece ao abrir a página.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel className="min-h-11">Cancelar</AlertDialogCancel><AlertDialogAction className="min-h-11" disabled={generateCompetence.isPending} onClick={() => void generate()}>{generateCompetence.isPending ? "Gerando…" : "Confirmar geração"}</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>}
+        </>}
+      />
 
       {readOnly && (
         <Alert className="border-primary/20 bg-primary/5">
@@ -1518,9 +1515,9 @@ export default function FinanceV2({
         </Alert>
       )}
 
-      <section aria-labelledby="finance-mode-title" className="rounded-xl border bg-card p-3 shadow-sm">
+      <section aria-labelledby="finance-mode-title" className={cn(superficie.painel, "p-3 shadow-sm")}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="px-1"><h2 id="finance-mode-title" className="text-sm font-semibold text-foreground">Modo de leitura</h2><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{modeDescription}</p></div>
+          <div className="px-1"><h2 id="finance-mode-title" className="text-[13px] font-semibold text-foreground">Modo de leitura</h2><p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{modeDescription}</p></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Modo de leitura financeira">
             {MODES.map((item) => (
               <Button key={item.value} type="button" variant={mode === item.value ? "default" : "ghost"} className="min-h-11 justify-start sm:justify-center" aria-pressed={mode === item.value} onClick={() => setMode(item.value)}>

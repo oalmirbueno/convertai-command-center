@@ -2160,6 +2160,24 @@ export function parteDeTexto(m: ModeloDaCopy, entrada: number, saida: number, ve
 /** Copy escrita a mais por ângulo para o Jev escolher as melhores (servidor: MAX_COPIES_A_MAIS). */
 export const COPIES_A_MAIS = 2;
 
+/**
+ * Teste A/B (18/10): versões por ângulo, espelho de versoesDoAngulo do servidor.
+ * Padrão: o par A/B sem tirar a 3ª variação que o plano pediu; `versoes` 1 produz uma só.
+ */
+export function versoesDoAngulo(a: Pick<Angulo, "variacoes">, versoes: 1 | 2 = 2): number {
+  const plano = Math.min(3, Math.max(1, Math.round(Number(a.variacoes)) || 1));
+  return versoes === 1 ? 1 : Math.max(2, plano);
+}
+
+/** Versão do criativo no teste A/B do ângulo ("A", "B", "C"), ou null fora de teste. */
+export function versaoDoTeste(c: Pick<CriativoAds, "copy">): string | null {
+  const v = obj(obj(c.copy).teste_ab).versao;
+  return v === "A" || v === "B" || v === "C" ? v : null;
+}
+
+/** A B que o plano não pediu: a arte fica para gerar no Estúdio, não sai sozinha (sem dobrar o custo calado). */
+export const arteSobDemanda = (c: { copy?: unknown } | null | undefined): boolean => !!c && obj(obj(c.copy).teste_ab).arte_sob_demanda === true;
+
 /** Formatos que a Mesa escolhe sozinha: 4:5 e 9:16 (carrossel no lugar do 4:5 quando o ângulo pediu). */
 export function formatosAutomaticos(a: Pick<Angulo, "formatos">): FormatoAds[] {
   return (a.formatos || []).indexOf("carrossel") >= 0 ? ["carrossel", "stories_9x16"] : ["feed_4x5", "stories_9x16"];
@@ -2169,9 +2187,10 @@ export function formatosAutomaticos(a: Pick<Angulo, "formatos">): FormatoAds[] {
 export const laminasDoFormato = (f: FormatoAds) => (f === "carrossel" ? 4 : 1);
 
 /**
- * Estimativa de "Criar criativos": uma chamada de copy por ângulo (variações +
+ * Estimativa de "Criar criativos": uma chamada de copy por ângulo (versões +
  * as escritas a mais, no modelo escolhido) e, com a arte junto, cada lâmina
- * gerada e conferida.
+ * gerada e conferida. Teste A/B: a B extra (ângulo de 1 variação) não entra na
+ * arte automática, então não entra aqui; a arte dela é pedida no Estúdio, com o custo lá.
  */
 export function partesDaCriacao(
   catalogo: ModeloIa[],
@@ -2179,12 +2198,13 @@ export function partesDaCriacao(
   angulos: Pick<Angulo, "variacoes" | "formatos">[],
   formatosDo: (a: Pick<Angulo, "variacoes" | "formatos">) => FormatoAds[],
   comArte: boolean,
+  versoes: 1 | 2 = 2,
 ): ParteDaEstimativa[] {
   const partes: ParteDaEstimativa[] = angulos.map((a) =>
-    parteDeTexto(m, TAMANHOS_ADS.produzirPorPeca.entrada + 4000, ((a.variacoes || 1) + COPIES_A_MAIS) * 1200),
+    parteDeTexto(m, TAMANHOS_ADS.produzirPorPeca.entrada + 4000, (versoesDoAngulo(a, versoes) + COPIES_A_MAIS) * 1200),
   );
   if (!comArte) return partes;
-  const laminas = angulos.reduce((s, a) => s + (a.variacoes || 1) * formatosDo(a).reduce((n, f) => n + laminasDoFormato(f), 0), 0);
+  const laminas = angulos.reduce((s, a) => s + Math.min(versoesDoAngulo(a, versoes), a.variacoes || 1) * formatosDo(a).reduce((n, f) => n + laminasDoFormato(f), 0), 0);
   return laminas ? partes.concat(partesDaArte(catalogo, laminas)) : partes;
 }
 
@@ -2241,9 +2261,11 @@ export function melhoresDoAngulo(criativos: CriativoAds[]): { melhores: Criativo
     return i < 0 ? 9 : i;
   };
   const ordenados = comVariacao.slice().sort((a, b) => (a.v === null ? 99 : a.v) - (b.v === null ? 99 : b.v) || ordemDoFormato(a.c.formato) - ordemDoFormato(b.c.formato));
+  // Teste A/B: as versões do par ficam lado a lado, à vista.
+  const aVista = (x: { c: CriativoAds; v: number | null }) => x.v === primeira || x.v === null || versaoDoTeste(x.c) !== null;
   return {
-    melhores: ordenados.filter((x) => x.v === primeira || x.v === null).map((x) => x.c),
-    outros: ordenados.filter((x) => x.v !== primeira && x.v !== null).map((x) => x.c),
+    melhores: ordenados.filter(aVista).map((x) => x.c),
+    outros: ordenados.filter((x) => !aVista(x)).map((x) => x.c),
   };
 }
 

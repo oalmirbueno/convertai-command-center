@@ -4,7 +4,7 @@ import { falhaDaExecucao, estadoDaExecucao, destinoDaEvidencia } from "@/lib/exe
 import { fraseDoAgente, tipoDaEntrega } from "@/lib/execucaoHumana";
 import { limparTecnico } from "@/lib/cadernoExecucao";
 import EvidenciaVisual from "./EvidenciaVisual";
-import { botao, juntar } from "@/components/sistema";
+import { botao, juntar, superficie } from "@/components/sistema";
 
 /**
  * Relatório da execução em quadro (16/10/2026, dono: "a aba de relatório está muito confusa...
@@ -41,7 +41,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
   return (
     <div className="space-y-5">
       {/* O fluxo numa barra: de onde para onde o trabalho está andando. */}
-      <div className="rounded-2xl border border-border bg-card p-4">
+      <div className={juntar(superficie.painel, "p-4")}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {listas.map(({ c, lista }) => (
             <div key={c.id} className="flex items-center gap-3">
@@ -62,7 +62,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
           const tudo = abertas[c.id];
           const visiveis = tudo ? lista : lista.slice(0, POR_COLUNA);
           return (
-            <section key={c.id} aria-label={c.nome} className="flex min-w-0 flex-col rounded-2xl bg-muted/30 p-2.5">
+            <section key={c.id} aria-label={c.nome} className="flex min-w-0 flex-col rounded-lg bg-muted/30 p-2.5">
               <h3 className={juntar("mb-2 flex items-center gap-1.5 px-1 text-[13px] font-semibold", c.cor)}><c.Icone className="h-4 w-4" aria-hidden="true" />{c.nome}<span className="ml-auto font-normal tabular-nums text-muted-foreground">{lista.length}</span></h3>
               {lista.length === 0 ? <p className="px-1 py-6 text-center text-[12px] text-muted-foreground">Nada aqui.</p> : (
                 <ul className="space-y-2">
@@ -73,7 +73,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
                     const tipo = tipoDaEntrega(t?.delivery_type, titulo);
                     const prova = v.last_evidence && destinoDaEvidencia(String(v.last_evidence)) ? String(v.last_evidence) : null;
                     return (
-                      <li key={v.id} className="overflow-hidden rounded-xl border border-border bg-card">
+                      <li key={v.id} className={juntar(superficie.painel, "overflow-hidden")}>
                         {prova && c.id !== "fila" && <EvidenciaVisual url={prova} nome={titulo} compacto />}
                         <button type="button" className="block w-full p-3 text-left hover:bg-muted/40" onClick={() => aoAbrir(v.id, titulo)}>
                           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -97,7 +97,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
         })}
       </div>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
+      <section className={juntar(superficie.painel, "p-4")}>
         <h3 className="flex items-center gap-1.5 text-[14px] font-semibold"><AlertTriangle className={juntar("h-4 w-4", incidentes.length ? "text-warning" : "text-success")} aria-hidden="true" />Últimos 7 dias</h3>
         <p className="mt-1 text-[13px] text-muted-foreground">{recentes.length} execuções registradas · {incidentes.length ? `${incidentes.length} pararam no meio ou falharam` : "nenhuma falhou"}</p>
         {incidentes.length > 0 && (

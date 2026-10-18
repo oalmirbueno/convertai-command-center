@@ -9,6 +9,7 @@ import { botao, juntar } from "@/components/sistema/estilos";
 import { ehOMelhor, formatoDe, notaCurta, type CriativoAds, type PlanoAds } from "./adsApi";
 import { capaDoTrabalho } from "./ArteDoCriativo";
 import KitDeRecepcao from "./KitDeRecepcao";
+import { SeloDaVersao } from "./Comuns";
 import { situacaoDe, type SituacaoDoCriativo } from "./loteDoEstudio";
 
 /**
@@ -161,6 +162,7 @@ export default function AcervoDoEstudio({
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
                         <span className="min-w-0 truncate">{f.rotulo}</span>
+                        <SeloDaVersao criativo={c} className="ml-1" />
                         {ehOMelhor(c) && <span className="ml-1 shrink-0 text-[10.5px] text-primary">melhor</span>}
                         {nota && <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
                       </span>

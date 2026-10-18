@@ -31,7 +31,7 @@ import { imagemParaOcr, pareceImagem } from "@/lib/imagemParaOcr";
 import { mensagemDaFuncao } from "@/lib/fileUrls";
 import {
   AjudaRecolhida, SeletorCompacto, Secao, RegiaoRolavel, CampoDeFormulario, GrupoDeCampos, EstadoVazio, Carregando, EstadoDeErro,
-  botao, campo, campoTexto, superficie, texto, etiqueta, foco, useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela,
+  botao, campo, campoTexto, superficie, texto, etiqueta, foco, rolagem, useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela,
 } from "@/components/sistema";
 import { CabecalhoDoAgente, MensagensDoAgente, CompositorDoAgente } from "@/components/sistema/PainelDoAgente";
 import { CaminhoDoTexto } from "@/components/agentes/CaminhoPronto";
@@ -1401,7 +1401,7 @@ function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void 
           ref={iframeRef}
           srcDoc={html}
           title="PDF preview"
-          className="w-full max-w-[820px] h-full bg-white border-0 shadow-2xl rounded-none sm:rounded-md"
+          className="w-full max-w-[820px] h-full bg-white border-0 shadow-sm rounded-none sm:rounded-md"
         />
       </div>
     </div>
@@ -1686,7 +1686,7 @@ function mdToHtml(md: string): string {
 
 function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef) => void }) {
   return (
-    <div className="absolute bottom-2 left-2 right-2 z-10 max-h-[240px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl" aria-label="Arquivos para anexar">
+    <div className={cn(rolagem.janela, "absolute bottom-2 left-2 right-2 z-10 max-h-[240px] rounded-md border border-border bg-popover shadow-sm")} aria-label="Arquivos para anexar">
       {items.map(f => (
         <button key={f.id} type="button" onClick={() => onPick(f)}
           className="flex w-full min-w-0 items-center px-3 py-1.5 text-left text-[12.5px] hover:bg-muted">
@@ -1701,7 +1701,7 @@ function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef)
 function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd) => void }) {
   if (!items.length) return null;
   return (
-    <div className="absolute bottom-2 left-2 right-2 z-10 max-h-[240px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl">
+    <div className={cn(rolagem.janela, "absolute bottom-2 left-2 right-2 z-10 max-h-[240px] rounded-md border border-border bg-popover shadow-sm")}>
       <p className={cn(texto.rotulo, "border-b border-border px-3 py-1.5")}>Comandos</p>
       {items.map(c => (
         <button key={c.key} type="button" onClick={() => onPick(c)}
@@ -2895,7 +2895,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           className={cn(
             "flex min-h-0 flex-col border-r border-border bg-card",
             isMobile
-              ? "absolute inset-y-0 left-0 z-30 w-[78%] max-w-[280px] shadow-2xl animate-in slide-in-from-left"
+              ? "absolute inset-y-0 left-0 z-30 w-[78%] max-w-[280px] shadow-sm animate-in slide-in-from-left"
               : "w-[180px] shrink-0"
           )}
         >
@@ -3133,7 +3133,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           <div className="relative">
             {/* Lista do @: busca por aproximação, setas e Enter */}
             {mention && (
-              <div className="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-[260px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl">
+              <div className={cn(rolagem.janela, "absolute bottom-full left-0 right-0 z-20 mb-1 max-h-[260px] rounded-md border border-border bg-popover shadow-sm")}>
                 <div className="flex items-center border-b border-border px-3 py-1.5">
                   <span className={cn(texto.rotulo, "min-w-0 flex-1 truncate")}>Anexar do workspace</span>
                   <span className={cn(texto.auxiliar, "ml-2 shrink-0")}>{mention.q ? `"${mention.q}"` : "digite para filtrar"} · ↑↓ ⏎</span>
@@ -3161,7 +3161,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             )}
             {/* Lista do /: ações do agente */}
             {slash && slashMatches.length > 0 && (
-              <div className="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-[240px] overflow-y-auto overscroll-contain rounded-md border border-border bg-popover shadow-xl">
+              <div className={cn(rolagem.janela, "absolute bottom-full left-0 right-0 z-20 mb-1 max-h-[240px] rounded-md border border-border bg-popover shadow-sm")}>
                 <p className={cn(texto.rotulo, "border-b border-border px-3 py-1.5")}>Ações do agente</p>
                 {slashMatches.map((c, i) => (
                   <button key={c.key}

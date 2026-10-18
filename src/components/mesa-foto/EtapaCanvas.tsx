@@ -54,7 +54,7 @@ import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { ErroDaMesa, padraoPara, textoDoErro } from "@/lib/mesa/api";
 import { useModoFoco } from "@/lib/modoFoco";
-import { AjudaRecolhida, EstadoDeErro, MenuMais, botao, juntar, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, EstadoDeErro, MenuMais, botao, juntar, rolagem, useEstadoDaTela } from "@/components/sistema";
 import { useBiblioteca, useFotos, useKits } from "./fotoApi";
 import { lerPedidoAoCanvas, motoresDaRodada, rotuloDoMotor, useAncoras, useAndamentos, usePersonas } from "./modelosApi";
 import {
@@ -691,7 +691,7 @@ function Paleta({ onTipo, onAdicionar }: { onTipo: (t: TipoDeNo) => void; onAdic
     <nav
       ref={roda}
       aria-label="Cartões para o quadro"
-      className={`${PAINEL} ${FLUTUANTE} absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] overflow-y-auto rounded-xl p-1`}
+      className={`${PAINEL} ${FLUTUANTE} ${juntar(rolagem.janela, "absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] rounded-xl p-1")}`}
       data-paleta-lateral=""
       data-rolagem-propria=""
     >
@@ -1079,7 +1079,7 @@ function Quadro({
         {/* 02/10: zoom, enquadrar e tela cheia moram na barra do quadro (BarraDoQuadro), no alto. */}
       </ReactFlow>
       <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[11px] text-zinc-500 md:block" data-ajuda-do-quadro="">
-        Rolar move o quadro. Ctrl (ou Cmd) + rolar, ou pinça: zoom. Nos painéis, rola só o painel.
+        Rolar move o quadro. Ctrl/Cmd + rolar ou pinça: zoom. Nos painéis, rola só o painel.
       </p>
     </div>
   );
@@ -1809,7 +1809,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     tituloDoPainel = "Ligação";
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
-        <p className="text-[11.5px] text-zinc-400">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado. Arraste a ponta da linha para outro Resultado; solte no vazio para desligar.</p>
+        <p className="flex items-center text-[11.5px] text-zinc-400">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado.<AjudaRecolhida className="ml-1" rotulo="Como mudar a ligação">Arraste a ponta da linha para outro Resultado; solte no vazio para desligar.</AjudaRecolhida></p>
         <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => { mudar((c) => desligar(c, ligacaoAberta.id)); setSelecionado(null); }} aria-label="Desligar" title="Desligar">
           <X className="h-4 w-4" aria-hidden="true" />
         </button>

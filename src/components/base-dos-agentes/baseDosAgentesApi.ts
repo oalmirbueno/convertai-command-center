@@ -26,6 +26,11 @@ export interface FichaDaBase {
   posts: number;
   multiplo: number | string | null;
   resultado_em: string | null;
+  /** 17/10 (rodada 4): anúncios no ar feitos com a ficha e a eficiência média (custo por resultado contra o normal da conta). */
+  anuncios: number;
+  eficiencia: number | string | null;
+  /** Arquivada pela faxina: sem uso em 60 dias ou repetida de outra. */
+  arquivada_por: "sem_uso" | "repetida" | null;
 }
 
 export interface FonteDaBase {
@@ -52,7 +57,7 @@ const db = supabase as any;
 export async function lerFichas(agente: string): Promise<FichaDaBase[]> {
   const { data, error } = await db
     .from("agente_base_fichas")
-    .select("id, fonte_id, agente, client_id, titulo, tecnica, quando_usar, exemplo, fonte_url, ativa, usos, ultimo_uso, criado_em, aprovadas, ajustadas, reprovadas, posts, multiplo, resultado_em")
+    .select("id, fonte_id, agente, client_id, titulo, tecnica, quando_usar, exemplo, fonte_url, ativa, usos, ultimo_uso, criado_em, aprovadas, ajustadas, reprovadas, posts, multiplo, resultado_em, anuncios, eficiencia, arquivada_por")
     .eq("agente", agente)
     .order("criado_em", { ascending: false })
     .limit(500);

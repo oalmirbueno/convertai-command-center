@@ -43,7 +43,7 @@ export default function QuemEstaTrabalhando({ aberto, aoFechar, pessoas, aoConve
           {pessoas.length === 0 ? <p className="p-6 text-center text-[13px] text-muted-foreground">Nenhum agente com trabalho aberto agora.</p> : (
             <ul className="grid gap-3 sm:grid-cols-2">
               {pessoas.map((p) => (
-                <li key={p.operatorId} className="flex min-w-0 flex-col rounded-2xl border border-border bg-card p-4">
+                <li key={p.operatorId} className="flex min-w-0 flex-col rounded-lg border border-border bg-card p-4">
                   <div className="flex items-center gap-3">
                     <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[16px] font-semibold text-primary" aria-hidden="true">
                       {p.agente.trim()[0]?.toUpperCase()}
@@ -55,7 +55,7 @@ export default function QuemEstaTrabalhando({ aberto, aoFechar, pessoas, aoConve
                     </span>
                   </div>
                   {/* A fala do agente, como um balão de conversa. */}
-                  <p className="mt-3 rounded-2xl rounded-tl-sm bg-muted/50 px-3.5 py-2.5 text-[14px] leading-6 text-foreground">{p.frase}</p>
+                  <p className="mt-3 rounded-xl rounded-tl-sm bg-muted/50 px-3.5 py-2.5 text-[14px] leading-6 text-foreground">{p.frase}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" className={juntar(botao.primario, "h-9 px-3 text-[13px]")} onClick={() => aoConversar(p.operatorId)}><MessageCircle className="mr-1.5 h-4 w-4" />Conversar comigo</button>
                     {p.linkId && <button type="button" className={juntar(botao.secundario, "h-9 px-3 text-[13px]")} onClick={() => aoVerTrabalho(p.linkId!, p.titulo || undefined)}><SquareArrowOutUpRight className="mr-1.5 h-4 w-4" />Ver o trabalho</button>}

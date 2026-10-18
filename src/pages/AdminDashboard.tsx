@@ -1,3 +1,4 @@
+import { superficie } from "@/components/sistema/estilos";
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -321,7 +322,7 @@ export default function AdminDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children" data-tour="dash-stats">
         {stats.map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors">
+          <div key={s.label} className={`${superficie.painel} p-5 hover:border-muted-foreground/30 transition-colors`}>
             <p className="label-sm">{s.label}</p>
             <p className="font-mono font-light text-[28px] leading-none text-foreground mt-2">{s.value}</p>
             <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
@@ -338,7 +339,7 @@ export default function AdminDashboard() {
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
           {financeStats.map((s) => (
-            <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer" onClick={() => navigate("/financeiro")}>
+            <div key={s.label} className={`${superficie.painel} p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer`} onClick={() => navigate("/financeiro")}>
               <p className="label-sm">{s.label}</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{s.value}</p>
               {(s as any).sub && <p className="text-[10px] text-muted-foreground mt-1.5">{(s as any).sub}</p>}
@@ -360,22 +361,22 @@ export default function AdminDashboard() {
             Projetos Individuais
           </p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children mb-4">
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className={`${superficie.painel} p-5`}>
               <p className="label-sm">Total Contratado</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualTotal)}</p>
               <div className="h-0.5 w-8 bg-primary rounded-full mt-3 opacity-60" />
             </div>
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className={`${superficie.painel} p-5`}>
               <p className="label-sm">Recebido</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualPaid)}</p>
               <div className="h-0.5 w-8 bg-success rounded-full mt-3 opacity-60" />
             </div>
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className={`${superficie.painel} p-5`}>
               <p className="label-sm">Pendente</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualPending)}</p>
               <div className="h-0.5 w-8 bg-warning rounded-full mt-3 opacity-60" />
             </div>
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className={`${superficie.painel} p-5`}>
               <p className="label-sm">Atrasado</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualOverdue)}</p>
               <div className="h-0.5 w-8 bg-destructive rounded-full mt-3 opacity-60" />
@@ -389,7 +390,7 @@ export default function AdminDashboard() {
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
               const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
               return (
-                <div key={pp.id} className="bg-card border border-border rounded-xl px-5 py-3 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors">
+                <div key={pp.id} className={`${superficie.painel} px-5 py-3 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors`}>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
                     <p className="text-[11px] text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
@@ -420,7 +421,7 @@ export default function AdminDashboard() {
             {(wallets || []).map((w: any) => (
               <div
                 key={w.id}
-                className="bg-card border border-border rounded-xl p-5 h-full flex flex-col hover:border-muted-foreground/30 transition-colors cursor-pointer"
+                className={`${superficie.painel} p-5 h-full flex flex-col hover:border-muted-foreground/30 transition-colors cursor-pointer`}
                 onClick={() => navigate("/financeiro")}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -574,7 +575,7 @@ export default function AdminDashboard() {
       {isAdmin && (clientsRenewalAlert.length > 0 || stalledProjects.length > 0) && (
         <div className="grid lg:grid-cols-2 gap-6">
           {clientsRenewalAlert.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className={`${superficie.painel} p-5`}>
               <p className="label-sm mb-4 flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5 text-warning" />
                 Clientes com Vencimento Próximo
@@ -609,7 +610,7 @@ export default function AdminDashboard() {
           )}
 
           {stalledProjects.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-5">
+            <div className={`${superficie.painel} p-5`}>
               <p className="label-sm mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground" />
                 Projetos sem Progresso Recente
@@ -641,7 +642,7 @@ export default function AdminDashboard() {
 
       {/* Updates + Urgent Tasks */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-card border border-border rounded-xl p-5">
+        <div className={`${superficie.painel} p-5`}>
           {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
               clientes (ritual, entrega, avulso, decisão, relatório). Antes só
               a primeira aparecia, e o painel mostrava menos movimento do que
@@ -682,7 +683,7 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5">
+        <div className={`${superficie.painel} p-5`}>
           <p className="label-sm mb-4 flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-warning" />
             Tarefas Urgentes
