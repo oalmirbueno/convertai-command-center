@@ -2193,6 +2193,14 @@
       "remote_name": "pedidos_de_acesso",
       "remote_statements_sha256": "8728a93049d96fa3e2ad75d593718d3d7dea93a7f52cd2ba54f5477af6744c67",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261017220000",
+      "path": "supabase/migrations/20261017220000_base_dos_agentes.sql",
+      "local_sha256": "e5341ae7fc5805329f7909a9db3c46bb237159d943d3ce1fc112de88d0798984",
+      "remote_name": "base_dos_agentes",
+      "remote_statements_sha256": "80cf879c40659b5a2c2701cf1d82afcd08456d5fb3d64fad361af093d0d145d7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
