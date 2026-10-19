@@ -116,8 +116,10 @@ export const ehNotaDaProposta = (evento: EventoDoLead) => {
 
 /** Nota gerada pelo sistema (criação pelo MCP), que não é conversa de ninguém. */
 // 20/10/2026: a nota que o formulário do site grava ao criar o lead também é automática (não é conversa de gente).
+// Laboratório v4: as do quiz refeito e da venda pelo checkout (vendas-webhook) também.
+const NOTAS_AUTOMATICAS = ["Criado pelo MCP", "Chegou pelo formulário do site", "Refez o quiz do site", "Venda pelo checkout"];
 const ehNotaAutomatica = (evento: EventoDoLead) =>
-  ehNotaDaProposta(evento) || nota(evento).indexOf("Criado pelo MCP") === 0 || nota(evento).indexOf("Chegou pelo formulário do site") === 0;
+  ehNotaDaProposta(evento) || NOTAS_AUTOMATICAS.some((inicio) => nota(evento).indexOf(inicio) === 0);
 
 export const propostaAbertaPeloCliente = (evento: EventoDoLead) =>
   ehNotaDaProposta(evento) && minusculo(nota(evento)).indexOf("aberta pelo cliente") >= 0;
