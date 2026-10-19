@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Building2, CalendarDays, ChevronDown, Facebook, FolderOpen, Instagram, ListChecks, Plus, RefreshCw } from "lucide-react";
+import { BarChart3, Building2, CalendarDays, ChevronDown, Facebook, FolderOpen, Instagram, LayoutGrid, ListChecks, Plus, RefreshCw, SlidersHorizontal, Stethoscope, Star, Type } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
@@ -25,6 +25,7 @@ import { usePlanejamento } from "./instagram/usePlanejamento";
 import { useFonteDaMarca } from "./instagram/fonteDaMarca";
 import OutrasRedes from "./instagram/OutrasRedes";
 import AgenteDoInstagram from "./instagram/AgenteDoInstagram";
+import AjustesDoApp from "./instagram/AjustesDoApp";
 import {
   horaDaLeitura,
   marcaDaAba,
@@ -55,16 +56,18 @@ import { ehBloco, ehRede, REDES_SOCIAIS, type ChaveDaRede } from "../../../supab
  *   Métricas), uma por vez, cada uma com blocos que recolhem.
  * O agente fica ao lado (gaveta no celular) e sempre deixa o caminho. No
  * celular tudo empilha e a página rola normal.
- * Endereço: /mesa?client=<id>&aba=instagram[&bloco=diagnostico|bio|destaques|grade|metricas|perfil|redes]
+ * Endereço: /mesa?client=<id>&aba=instagram[&bloco=diagnostico|bio|destaques|grade|metricas|ajustes|perfil|redes]
  */
 
-type Ferramenta = "diagnostico" | "bio" | "destaques" | "grade" | "metricas";
-const FERRAMENTAS: Array<{ valor: Ferramenta; rotulo: string }> = [
-  { valor: "diagnostico", rotulo: "Diagnóstico" },
-  { valor: "bio", rotulo: "Bio e nome" },
-  { valor: "destaques", rotulo: "Destaques" },
-  { valor: "grade", rotulo: "Grade e simulador" },
-  { valor: "metricas", rotulo: "Métricas" },
+type Ferramenta = "diagnostico" | "bio" | "destaques" | "grade" | "metricas" | "ajustes";
+// 20/10/2026: "Ajustes do app" (o checklist do perfil perfeito) e um ícone por ferramenta.
+const FERRAMENTAS: Array<{ valor: Ferramenta; rotulo: string; icone: ReactNode }> = [
+  { valor: "diagnostico", rotulo: "Diagnóstico", icone: <Stethoscope className="h-3.5 w-3.5" /> },
+  { valor: "bio", rotulo: "Bio e nome", icone: <Type className="h-3.5 w-3.5" /> },
+  { valor: "destaques", rotulo: "Destaques", icone: <Star className="h-3.5 w-3.5" /> },
+  { valor: "grade", rotulo: "Grade e simulador", icone: <LayoutGrid className="h-3.5 w-3.5" /> },
+  { valor: "metricas", rotulo: "Métricas", icone: <BarChart3 className="h-3.5 w-3.5" /> },
+  { valor: "ajustes", rotulo: "Ajustes do app", icone: <SlidersHorizontal className="h-3.5 w-3.5" /> },
 ];
 const ehFerramenta = (v: unknown): v is Ferramenta => FERRAMENTAS.some((f) => f.valor === v);
 
@@ -548,13 +551,20 @@ export default function AbaInstagram() {
                     opcoes={FERRAMENTAS.map((f) => ({
                       valor: f.valor,
                       rotulo: f.rotulo,
+                      icone: f.icone,
                       contador: f.valor === "grade" ? plano.ordenados.length || null : f.valor === "destaques" ? dados.capas.length || null : null,
                     }))}
                   />
                 }
               >
                 {ferramenta === "diagnostico" && (
-                  <DiagnosticoDoPerfil perfil={perfil} diagnostico={dados.diagnostico} onDiagnostico={(d) => atualizar.mudar((p) => ({ ...p, diagnostico: d }))} />
+                  <DiagnosticoDoPerfil
+                    perfil={perfil}
+                    diagnostico={dados.diagnostico}
+                    onDiagnostico={(d) => atualizar.mudar((p) => ({ ...p, diagnostico: d }))}
+                    ajustes={dados.ajustes_do_app}
+                    onAbrirAjustes={() => setFerramenta("ajustes")}
+                  />
                 )}
                 {ferramenta === "bio" && (
                   <BioENome perfil={perfil} analise={dados.bio_analise} onAnalise={(a: AnaliseDaBio) => atualizar.mudar((p) => ({ ...p, bio_analise: a }))} />
@@ -581,6 +591,9 @@ export default function AbaInstagram() {
                   <PlanoDaGrade plano={plano} podePublicar={podeRecarregar} onVerNaPrevia={() => setModoDaPrevia("simulacao")} onMudou={() => void atualizar.reler()} />
                 )}
                 {ferramenta === "metricas" && <MetricasDoPerfil clientId={clientId} contaId={contaId} />}
+                {ferramenta === "ajustes" && (
+                  <AjustesDoApp clientId={clientId} contaId={contaId} estado={dados.ajustes_do_app} onMudar={(fn) => atualizar.mudar((p) => ({ ...p, ajustes_do_app: fn(p.ajustes_do_app) }))} />
+                )}
               </Coluna>
             )}
           </div>

@@ -486,7 +486,7 @@ async function verifyRepository({ includeCompat, sourceOnly, sourceRoot, rollbac
   const metadata = await load("supabase/functions/mcp-oauth-metadata/index.ts", deploymentRoot);
   const auth = await load("supabase/functions/_shared/mcp-auth.ts", deploymentRoot);
   const tools = await load("supabase/functions/_shared/mcp-tools.ts", deploymentRoot);
-  const response = await load("supabase/functions/_shared/mcp-response.ts", deploymentRoot);
+  const response = await load("supabase/functions/mcp-server/modulos/mcp-response.ts", deploymentRoot);
 
   verifyJwtIsFalse(config, "mcp-server", problems);
   verifyJwtIsFalse(config, "mcp-oauth-metadata", problems);
@@ -528,7 +528,7 @@ async function verifyRepository({ includeCompat, sourceOnly, sourceRoot, rollbac
     ["supabase/functions/mcp-oauth-metadata/index.ts", metadata],
     ["supabase/functions/_shared/mcp-auth.ts", auth],
     ["supabase/functions/_shared/mcp-tools.ts", tools],
-    ["supabase/functions/_shared/mcp-response.ts", response],
+    ["supabase/functions/mcp-server/modulos/mcp-response.ts", response],
   ]) {
     rejectLegacyOauthClientBypass(relativePath, source, problems);
   }

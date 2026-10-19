@@ -58,6 +58,8 @@ export interface PecaEntregue {
   /** Descrição do arquivo raiz (a Agenda usa como objetivo do post aprovado). */
   objetivo?: string | null;
   rodada: number;
+  /** 20/10 (Stories): formato da peça no Estúdio (direcao.formato); stories_9x16 com uma lâmina vira story. */
+  formato?: string | null;
 }
 
 export interface PublicacaoExistente {
@@ -129,9 +131,14 @@ export function legendaComHashtags(legenda: string | null | undefined, hashtags:
   return tags.length ? `${base}${base ? "\n\n" : ""}${tags.join(" ")}` : base;
 }
 
-/** Uma lâmina = estático; mais de uma = carrossel. */
-export function tipoDoConteudo(fileIds: string[]): "carousel" | "static" {
-  return fileIds.length > 1 ? "carousel" : "static";
+/**
+ * Uma lâmina = estático; mais de uma = carrossel. 20/10 (Stories): uma lâmina no
+ * formato stories_9x16 = story (o motor publica com media_type=STORIES). Mais de
+ * uma lâmina 9:16 segue carrossel: o story do Instagram leva uma mídia só.
+ */
+export function tipoDoConteudo(fileIds: string[], formato?: string | null): "carousel" | "static" | "story" {
+  if (fileIds.length > 1) return "carousel";
+  return formato === "stories_9x16" ? "story" : "static";
 }
 
 /**
@@ -159,7 +166,7 @@ export function sementesDaPeca(trabalhoId: string, rodada: number) {
 
 /** Assinatura curta do que a entrega leva (arquivos, legenda, título, tipo): mesma entrega = mesma assinatura. */
 export function assinaturaDaEntrega(peca: PecaEntregue): string {
-  const partes = [peca.fileIds.join(","), legendaComHashtags(peca.legenda, peca.hashtags) || "", texto(peca.titulo, 300), tipoDoConteudo(peca.fileIds)];
+  const partes = [peca.fileIds.join(","), legendaComHashtags(peca.legenda, peca.hashtags) || "", texto(peca.titulo, 300), tipoDoConteudo(peca.fileIds, peca.formato)];
   // djb2: curto, estável e sem depender de crypto (a chave final passa por uuidEstavel).
   let h = 5381;
   const s = partes.join("|");
@@ -225,7 +232,7 @@ export async function planoDaSincronizacao(
     return { acao: "bloqueado", motivo: `O Instagram aceita até ${MAX_MIDIAS_DO_CARROSSEL} lâminas por carrossel; esta entrega tem ${fileIds.length}.` };
   }
   const legenda = legendaComHashtags(peca.legenda, peca.hashtags);
-  const tipo = tipoDoConteudo(fileIds);
+  const tipo = tipoDoConteudo(fileIds, peca.formato);
   const titulo = texto(peca.titulo, 300) || "Arte do Estúdio";
   const sementes = sementesDaPeca(peca.trabalhoId, peca.rodada);
   const assinatura = assinaturaDaEntrega(peca);

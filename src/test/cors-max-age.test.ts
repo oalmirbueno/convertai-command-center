@@ -53,7 +53,7 @@ describe("CORS das Edge Functions guarda o preflight", () => {
 
   it("os cabeçalhos compartilhados entre módulos também têm Max-Age", () => {
     for (const rel of [
-      "_shared/mcp-response.ts",
+      "mcp-server/modulos/mcp-response.ts",
       "briefing-agente/base.ts",
       "contratos/base.ts",
       "mesa-identidade/comum.ts",

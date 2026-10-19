@@ -532,7 +532,8 @@ describe("textos, rótulos, licença e atribuição", () => {
     expect(Object.keys(SKILLS_DO_SUPERPOWERS)).toHaveLength(15);
     const liberadas = new Set(Object.values(SKILLS_LIBERADAS_NO_MOTOR).flat());
     expect(liberadas.size).toBe(6);
-    expect(Object.keys(SKILLS_LIBERADAS_NO_MOTOR).sort()).toEqual(["ajustar", "construir"]);
+    // 20/10: "corrigir" entrou com o Laboratório v2/v3 (301e5f6c), para o motor de código depurar.
+    expect(Object.keys(SKILLS_LIBERADAS_NO_MOTOR).sort()).toEqual(["ajustar", "construir", "corrigir"]);
     for (const s of liberadas) expect(SKILLS_DO_SUPERPOWERS[s].motor, s).toBe("liberada");
     const negadas = Object.keys(SKILLS_DO_SUPERPOWERS).filter((s) => SKILLS_DO_SUPERPOWERS[s].motor === "negada");
     expect(negadas).toHaveLength(9);

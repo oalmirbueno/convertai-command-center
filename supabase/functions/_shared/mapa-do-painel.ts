@@ -92,9 +92,9 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   { chave: "relatorios", nome: "Relatórios", rota: "/relatorios", comCliente: true, faz: "relatórios do cliente", palavras: ["relatorio"] },
   { chave: "comercial", nome: "Comercial", rota: "/comercial", comCliente: false, faz: "CRM, leads e metas (/comercial/crm)", palavras: ["crm", "lead", "oportunidade", "comercial", "venda", "prospect"] },
   {
-    chave: "mesa", nome: "Mesa", rota: "/mesa", parametro: "aba", etapas: ["contexto", "instagram", "mes", "campanhas", "estudio", "entrega"], comCliente: true,
-    faz: "kit e contexto da marca, perfis do Instagram, aba Redes (Instagram e Facebook: bio, destaques, grade), plano do mês, Estúdio de artes, entrega",
-    agente: "mes", palavras: ["mesa", "plano do mes", "calendario do mes", "estudio", "carrossel", "arte", "post", "lamina", "kit da marca", "contexto", "logo", "paleta", "perfis do instagram", "concorrente", "entrega", "bio", "destaque", "grade do perfil", "redes sociais", "pagina do facebook"],
+    chave: "mesa", nome: "Mesa", rota: "/mesa", parametro: "aba", etapas: ["contexto", "instagram", "mes", "campanhas", "estudio", "entrega", "stories"], comCliente: true,
+    faz: "kit e contexto da marca, perfis do Instagram, aba Redes (Instagram e Facebook: bio, destaques, grade, ajustes do app), plano do mês, Estúdio de artes, entrega, aba Stories (sequência do dia, stories virais, destaques, agenda de stories)",
+    agente: "mes", palavras: ["mesa", "plano do mes", "calendario do mes", "estudio", "carrossel", "arte", "post", "lamina", "kit da marca", "contexto", "logo", "paleta", "perfis do instagram", "concorrente", "entrega", "bio", "destaque", "grade do perfil", "redes sociais", "pagina do facebook", "stories", "story", "sequencia de stories", "stories virais", "enquete", "caixinha"],
   },
   {
     chave: "mesa_ads", nome: "Mesa Ads", rota: "/mesa-ads", parametro: "etapa", etapas: ["oferta", "referencias", "plano", "estudio", "conta", "auditoria", "resultados"], comCliente: true,
@@ -171,6 +171,7 @@ export const AGENTES_DO_PAINEL: AgenteDoPainel[] = [
   { chave: "estilo", nome: "agente de estilo", area: "mesa", funcao: "agente-estilo", faz: "estilo de design" },
   { chave: "perfis", nome: "agente dos perfis do Instagram", area: "mesa", funcao: "perfis-instagram", faz: "posts ao estilo, pautas na agenda" },
   { chave: "instagram", nome: "agente das redes", area: "mesa", funcao: "mesa-instagram", faz: "bio, nome, destaques, grade e páginas do cliente" },
+  { chave: "stories", nome: "agente dos stories", area: "mesa", funcao: "mesa-stories", faz: "sequência de stories do dia, moldes virais, destaques e agenda de stories" },
   { chave: "ads", nome: "estrategista de ads", area: "mesa_ads", funcao: "mesa-ads", faz: "plano, criativos, ações na conta" },
   { chave: "foto", nome: "diretor de fotografia", area: "mesa_foto", funcao: "mesa-foto", faz: "organiza e gera fotos, books" },
   { chave: "publicidade", nome: "diretor de campanha", area: "mesa_publicidade", funcao: "mesa-publicidade", faz: "campanha, territórios, tomadas, envio" },

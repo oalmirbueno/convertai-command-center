@@ -26,6 +26,8 @@ const LIGACOES: Record<string, string[]> = {
   "identidade.diretor": ["supabase/functions/mesa-identidade/diretor.ts", "supabase/functions/mesa-identidade/estrategia-acoes.ts", "supabase/functions/mesa-identidade/projeto-acoes.ts"],
   "site.agente": ["supabase/functions/mesa-site/index.ts", "supabase/functions/mesa-site/estrutura.ts"],
   "proposta.redator": ["supabase/functions/mesa-proposta/index.ts", "supabase/functions/mesa-proposta/evolucao.ts"],
+  // 20/10: a aba Stories da Mesa.
+  "stories.roteirista": ["supabase/functions/mesa-stories/index.ts"],
 };
 
 describe("base dos agentes", () => {

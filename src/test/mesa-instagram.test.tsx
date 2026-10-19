@@ -364,7 +364,8 @@ describe("contrato da função mesa-instagram e da aba", () => {
     // Rodada 2 (28/09): +1 Jev e +1 texto na sugestão de destaques (o modelo escreve
     // destaques próprios só com "Com IA"; o Jev pontua todos numa chamada só).
     // 12/10/2026: +1 Jev e +1 texto (visão da foto e da grade) no diagnóstico do perfil.
-    expect((f.match(/jevPerguntar\(/g) || []).length).toBe(4);
+    // 20/10/2026: +1 Jev (Choice do tipo de negócio dos ajustes do app, uma vez por conta).
+    expect((f.match(/jevPerguntar\(/g) || []).length).toBe(5);
     expect(f).not.toMatch(/while\s*\(/);
     // O texto gera de uma vez: bio (3 bios e 3 nomes), conversa, destaques com IA e a visão do diagnóstico.
     expect((f.match(/chamarTexto\(/g) || []).length).toBe(4);
@@ -389,11 +390,14 @@ describe("contrato da função mesa-instagram e da aba", () => {
     expect(f).toContain("corDoKitOuNulo(e.fundo, kit.paleta)");
   });
 
-  it("a Mesa tem seis abas, Redes (aba=instagram) logo depois de Contexto, com pré-carga", () => {
+  it("a Mesa tem sete abas, Redes (aba=instagram) logo depois de Contexto e Stories depois de Redes, com pré-carga", () => {
     expect(pagina).toContain('{ valor: "instagram", rotulo: "Redes" }');
+    expect(pagina).toContain('{ valor: "stories", rotulo: "Stories" }');
     const abas = pagina.slice(pagina.indexOf("const ABAS = ["), pagina.indexOf("] as const;"));
     const ordem = (abas.match(/valor: "([a-z]+)"/g) || []).map((x) => x.replace(/valor: "|"/g, ""));
-    expect(ordem).toEqual(["contexto", "instagram", "mes", "campanhas", "estudio", "entrega"]);
+    expect(ordem).toEqual(["contexto", "instagram", "stories", "mes", "campanhas", "estudio", "entrega"]);
+    expect(pagina).toContain('lazyComPreCarga("mesa/stories", carregarStories)');
+    expect(ler("src/lib/mesa/preCarga.ts")).toContain('stories: () => import("@/components/mesa/AbaStories")');
     expect(pagina).toContain('lazyComPreCarga("mesa/instagram", carregarInstagram)');
     expect(ler("src/lib/mesa/preCarga.ts")).toContain('instagram: () => import("@/components/mesa/AbaInstagram")');
   });

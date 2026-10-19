@@ -72,6 +72,7 @@ const ABAS_DA_MESA: Record<string, string> = {
   contexto: "Contexto",
   instagram: "Redes",
   redes: "Redes",
+  stories: "Stories",
   mes: "Mês",
   campanhas: "Campanhas",
   estudio: "Estúdio",
