@@ -68,7 +68,7 @@ export default function CaminhoDaTarefa({ feito, parou, destrava, depois = "O ag
   const passos: Passo[] = [
     { rotulo: "Já foi feito", texto: feito ? simples(feito, "O agente registrou o trabalho feito (detalhe técnico no diário).") : "Ainda sem comprovação registrada.", tom: "feito" },
     { rotulo: esperaRevisao ? "Espera a sua revisão" : "Parou aqui", texto: parou || (esperaRevisao ? "A entrega está pronta para você olhar." : null), tom: esperaRevisao ? "voce" : "parou" },
-    { rotulo: esperaRevisao ? "Você decide" : "O que destrava", texto: destrava ? simples(destrava, "O agente anotou o próximo passo; abra o diário para ver o que ele pede.") : esperaRevisao ? "Aprovar e concluir, pedir ajuste ou reprovar." : "Responder ao agente (texto, link ou arquivo).", tom: "voce" },
+    { rotulo: esperaRevisao ? "Você decide" : "O que destrava", texto: destrava ? simples(destrava, "O agente anotou o próximo passo; abra o diário para ver o que ele pede.") : esperaRevisao ? "Aprovar e concluir, pedir ajuste ou reprovar." : "Um toque: Pode seguir, Concluir ou Encerrar. Ou responda ao agente.", tom: "voce" },
     { rotulo: "Depois", texto: depois, tom: "depois" },
   ];
   // 16/10 (dono: "o texto está um por cima do outro, espremido"): em pé, um passo por linha, com

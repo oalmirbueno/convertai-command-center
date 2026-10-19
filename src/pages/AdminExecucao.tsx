@@ -32,6 +32,7 @@ import EvidenciaVisual from "@/components/execucao/EvidenciaVisual";
 import { oQueFoiFeito, tipoDaEntrega } from "@/lib/execucaoHumana";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import {
   ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
 } from "@/lib/execucaoBadges";
@@ -225,6 +226,8 @@ const dataCurta = (iso?: string | null) =>
 
 export default function AdminExecucao() {
   const { profile } = useAuth();
+  // 19/10 (dono: "opção de ficar em tela cheia na Execução"): mesma tela cheia das mesas; Esc volta.
+  const telaCheia = useTelaCheiaDaMesa();
   useEffect(() => quandoOcioso(() => {
     for (const peca of PECAS_SOB_DEMANDA) peca.preCarregar().catch(() => undefined);
   }), []);
@@ -403,7 +406,8 @@ export default function AdminExecucao() {
       return mapa;
     },
     enabled: flag === "on" && taskIds.length > 0,
-    refetchInterval: 10_000,
+    // 19/10 (dono: "mais rápido"): título e descrição mudam pouco e são a leitura mais pesada da tela.
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 
@@ -1309,41 +1313,45 @@ export default function AdminExecucao() {
     if (r.error) { toast.error(r.error.message); return; }
     toast.success(qual === "prova" ? "Pedido enviado: o agente vai anexar a entrega aqui." : "Pedido enviado: o agente vai explicar o quê, o porquê e o resultado.");
   };
-  const aprovarESeguir = async (v: Vinculo) => {
+  const aprovarESeguir = async (v: Vinculo): Promise<boolean> => {
     const quem = profile?.full_name || "a equipe";
     const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `Aprovado por ${quem}: pode executar agora e trazer o resultado pronto para eu aprovar.`, _resolve_approval: true });
-    if (error) { toast.error(error.message || "Não foi possível aprovar."); return; }
+    if (error) { toast.error(error.message || "Não foi possível aprovar."); return false; }
     if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Aprovado: pode seguir", body: "Aprovado. Pode executar agora: faça o trabalho, use o navegador do cliente ou pesquise na internet se precisar, e volte com o resultado pronto (com a prova) para eu aprovar.", attachments: [] });
     toast.success("Aprovado: voltou para a fila do agente executar e trazer pronto.");
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    return true;
   };
 
   /* 19/10 (dono: "responder e destravar está complexo demais, nem sei o que responder; não tem
      aprovar ali"): o travado decide com um toque. Pode seguir devolve para o agente com a
      autorização de usar o melhor julgamento (conferência ou divergência vão para o revisor);
      Encerrar fecha sem continuar. */
-  const podeSeguir = async (v: Vinculo) => {
+  const podeSeguir = async (v: Vinculo): Promise<boolean> => {
     const quem = profile?.full_name || "a equipe";
     const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `${quem} liberou: pode seguir com o melhor julgamento.`, _resolve_approval: true });
-    if (error) { toast.error(error.message || "Não foi possível liberar."); return; }
+    if (error) { toast.error(error.message || "Não foi possível liberar."); return false; }
     if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Pode seguir", body: "Pode seguir. Use o seu melhor julgamento: se for conferência, divergência ou prova faltando, peça ao revisor e siga com o que ele decidir. Volte com o resultado pronto, com a prova.", attachments: [] });
     toast.success("Liberado: o agente segue e volta com o resultado.");
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    return true;
   };
-  const encerrarVinculo = async (v: Vinculo) => {
+  const encerrarVinculo = async (v: Vinculo): Promise<boolean> => {
     const quem = profile?.full_name || "a equipe";
     const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "done", _note: `Encerrada por ${quem}: não continuar.`, _resolve_approval: true });
-    if (error) { toast.error(error.message || "Não foi possível encerrar."); return; }
+    if (error) { toast.error(error.message || "Não foi possível encerrar."); return false; }
     if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "decisao", title: null, body: "Encerrada: não continuar.", attachments: [] });
     toast.success("Encerrada: saiu da lista.");
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    return true;
   };
 
-  const retomarVinculo = async (v: Vinculo) => {
+  const retomarVinculo = async (v: Vinculo): Promise<boolean> => {
     const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: "Retomar do ponto em que parou.", _resolve_approval: false });
-    if (error) { toast.error(error.message || "Não foi possível retomar."); return; }
+    if (error) { toast.error(error.message || "Não foi possível retomar."); return false; }
     toast.success("Voltou para a fila: o agente retoma do ponto em que parou.");
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    return true;
   };
 
   const itensDosVinculos = (lista: Vinculo[]): ItemDaMesa[] => lista.map((v) => {
@@ -1374,7 +1382,8 @@ export default function AdminExecucao() {
       cliente: nomeCliente,
       avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
       titulo,
-      mensagem: fechada ? "A tarefa foi cancelada, arquivada ou excluída no Kanban. Esta execução ficou sobrando e pode sair da lista." : fala,
+      // Travada: o motivo já aparece no desenho ("Parou aqui"); não repete em cima.
+      mensagem: fechada ? "A tarefa foi cancelada, arquivada ou excluída no Kanban. Esta execução ficou sobrando e pode sair da lista." : travada ? null : fala,
       passo: travada || emRevisao ? null : v.next_step ? falarComoGente(v.next_step).humano : null,
       diagrama: travada || emRevisao
         ? <div className="space-y-4">
@@ -1400,25 +1409,32 @@ export default function AdminExecucao() {
         {v.next_step && <p>Próximo passo: <span className="text-foreground">{leituraSimples(String(v.next_step)).resumo}</span></p>}
         {/* A prova abre ali mesmo (imagem, documento, site ou tela do painel), sem trocar de tela. */}
         {v.last_evidence && (destinoDaEvidencia(String(v.last_evidence)) ? <div className="max-w-sm"><EvidenciaVisual url={String(v.last_evidence)} nome="Abrir a prova" /></div> : <p>Prova: <span className="text-foreground">{leituraSimples(String(v.last_evidence)).resumo}</span></p>)}
-        <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })}>Ver o diário completo</button>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })}>Ver o diário completo</button>
+          {idTarefa ? <button type="button" className="inline-flex items-center text-primary underline-offset-2 hover:underline" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })}><SquareArrowOutUpRight className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Abrir a tarefa</button> : null}
+        </p>
       </div>,
       podeAjuste: emRevisao,
       podeRejeitar: emRevisao,
       rejeitarPedeMotivo: true,
+      /* 19/10 (dono: "fica rodando e não aprova"; "só o que realmente importa"): o que resolve roda
+         pela mesa (mostra que salva e o cartão sai na hora); no rodapé ficam no máximo quatro botões. */
       acaoPrincipal: decidir
         ? { rotulo: "Decidir", icone: <ShieldAlert className="h-4 w-4" />, aoClicar: () => void abrirDecisaoDoVinculo(v.id) }
         : emRevisao ? undefined
-          : travada ? { rotulo: "Pode seguir", icone: <Play className="h-4 w-4" />, aoClicar: () => void podeSeguir(v) }
-            : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
+          : travada && motivo?.retomavel ? { rotulo: "Retomar", icone: <RotateCcw className="h-4 w-4" />, aoClicar: () => retomarVinculo(v) }
+            : travada ? { rotulo: "Pode seguir", icone: <Play className="h-4 w-4" />, aoClicar: () => podeSeguir(v) }
+              : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
+      acoes: [
+        ...(emRevisao ? [{ rotulo: "Aprovar e seguir", icone: <Play className="h-4 w-4" />, tom: "sucesso" as const, dica: "Aprova e devolve para o agente executar e trazer pronto", aoClicar: () => aprovarESeguir(v) }] : []),
+        ...(travada ? [
+          { rotulo: "Concluir", icone: <CheckCircle2 className="h-4 w-4" />, tom: "sucesso" as const, dica: "Fecha a tarefa: está resolvida", aoClicar: () => decidirVinculo({ id: v.id } as ItemDaMesa, "aprovado", "Concluída por você.") },
+          { rotulo: "Encerrar", icone: <XCircle className="h-4 w-4" />, tom: "discreto" as const, dica: "Encerra sem continuar", aoClicar: () => encerrarVinculo(v) },
+        ] : []),
+      ],
       extras: <>
-        {emRevisao && <button type="button" onClick={() => void aprovarESeguir(v)} title="Aprova e devolve para o agente executar e trazer pronto" className={juntar(botao.secundario, "h-11 px-3 text-success")}><Play className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Aprovar e seguir</span></button>}
-        {travada && <button type="button" onClick={() => void decidirVinculo({ id: v.id } as ItemDaMesa, "aprovado", "Concluída por você.")} title="Fecha a tarefa: está resolvida" className={juntar(botao.secundario, "h-11 px-3 text-success")}><CheckCircle2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Concluir</span></button>}
-        {travada && <button type="button" onClick={() => void encerrarVinculo(v)} title="Encerra sem continuar" className={juntar(botao.discreto, "h-11 px-3")}><XCircle className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Encerrar</span></button>}
-        {travada && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Escrever uma resposta ao agente" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Responder</span></button>}
-        {(emRevisao || travada) && !v.last_evidence && <button type="button" onClick={() => void pedirAoAgente(v, "prova")} title="Pede ao agente para anexar a entrega pronta" className={juntar(botao.discreto, "h-11 px-3")}><ImagePlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Pedir a prova</span></button>}
-        {motivo?.retomavel && <button type="button" onClick={() => void retomarVinculo(v)} title="Volta para a fila e o agente retoma de onde parou" className={juntar(botao.secundario, "h-11 px-3")}><RotateCcw className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Retomar</span></button>}
-        {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Abrir o diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
-        {idTarefa ? <button type="button" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })} title="Abrir a tarefa" className={juntar(botao.discreto, "h-11 px-3")}><SquareArrowOutUpRight className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Tarefa</span></button> : null}
+        {emRevisao && !v.last_evidence && <button type="button" onClick={() => void pedirAoAgente(v, "prova")} title="Pede ao agente para anexar a entrega pronta" aria-label="Pedir a prova" className={juntar(botao.discreto, "h-11 px-3")}><ImagePlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Pedir a prova</span></button>}
+        {(emRevisao || travada) && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Escrever ao agente ou ler o diário" aria-label="Responder" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Responder</span></button>}
       </>,
     };
   });
@@ -1971,7 +1987,7 @@ export default function AdminExecucao() {
   );
 
   return (
-    <div className="min-w-0">
+    <div className={juntar("min-w-0", telaCheia.cheia && "bg-background px-4 pt-3 md:px-6", classeDaRaiz(telaCheia.cheia))}>
       <CabecalhoDePagina
         titulo="Execução"
         ajuda="Operadores internos executam e relatam; o responsável humano continua sendo quem responde. Feito só conta com evidência. A fila só anda com o Hermes ligado: o painel não dispara agente."
@@ -2020,6 +2036,7 @@ export default function AdminExecucao() {
             >
               <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />
             </button>
+            <BotaoDeTelaCheia tela={telaCheia} className="h-9 px-2.5" />
           </div>
         }
       />
