@@ -2331,19 +2331,11 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261020120000",
-      "path": "supabase/migrations/20261020120000_stories_da_mesa.sql",
-      "local_sha256": "dabbce151007b8112fcdf3f767ee5720105e8383783c1ad1a183ee150ab0ddc0",
-      "remote_name": "stories_da_mesa",
-      "remote_statements_sha256": "9ee91cf485633145baad2ee0b986cf58998d6628c8a2ef9fb20b2dddb81da6f0",
-      "remote_hash_mode": "supabase_cli_split"
-    },
-    {
-      "version": "20261020121000",
-      "path": "supabase/migrations/20261020121000_ajustes_do_app_instagram.sql",
-      "local_sha256": "b7058031d374297f95d57b125acd44929828dff81d0ca9b472aec49e1cddbcb0",
-      "remote_name": "ajustes_do_app_instagram",
-      "remote_statements_sha256": "8d42af588fdc9db21187db9f345f614c83c728fa5213ffcfaa8eb7d92ce10bb8",
+      "version": "20261020050000",
+      "path": "supabase/migrations/20261020050000_laboratorio_creditos.sql",
+      "local_sha256": "e3ae8f6e0151281327f9f591b03acf17fddeaf7ece613955d605f6e6ed6fb4b7",
+      "remote_name": "laboratorio_creditos",
+      "remote_statements_sha256": "59b109673ee24a98706b644cd96d150b009761de5a63174ad197b54406a80eb7",
       "remote_hash_mode": "supabase_cli_split"
     },
     {
@@ -2360,6 +2352,22 @@
       "local_sha256": "6ae6a094d35d5b8468c19b36671e2abb31c42037a7d70665f46de9cdd23fbe8d",
       "remote_name": "vendas_quiz_ab",
       "remote_statements_sha256": "caa750adcf5abfb60af47e72d02a6a3e5d237293ba39f53e4e85dbf032e6c195",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261020120000",
+      "path": "supabase/migrations/20261020120000_stories_da_mesa.sql",
+      "local_sha256": "dabbce151007b8112fcdf3f767ee5720105e8383783c1ad1a183ee150ab0ddc0",
+      "remote_name": "stories_da_mesa",
+      "remote_statements_sha256": "9ee91cf485633145baad2ee0b986cf58998d6628c8a2ef9fb20b2dddb81da6f0",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261020121000",
+      "path": "supabase/migrations/20261020121000_ajustes_do_app_instagram.sql",
+      "local_sha256": "b7058031d374297f95d57b125acd44929828dff81d0ca9b472aec49e1cddbcb0",
+      "remote_name": "ajustes_do_app_instagram",
+      "remote_statements_sha256": "8d42af588fdc9db21187db9f345f614c83c728fa5213ffcfaa8eb7d92ce10bb8",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
