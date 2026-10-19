@@ -224,6 +224,36 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
  * O quadro dos operadores: vínculos com contexto humano, runs recentes e
  * incidentes. Sem heartbeat é um aviso calculado, sem alterar registros.
  */
+/**
+ * Quando cada vínculo recebeu a última entrada humana (autor humano ou tipo instrução, decisão ou
+ * correção). Em lotes de 150 ids para a URL do PostgREST não crescer demais. Falha: null (quem chama
+ * omite o campo e o leitor lê tudo).
+ */
+export async function ultimasEntradasHumanas(ids: string[]): Promise<Map<string, string> | null> {
+  const unicos = [...new Set(ids.filter((id) => isUuid(id)))];
+  const mapa = new Map<string, string>();
+  if (!unicos.length) return mapa;
+  const lotes: string[][] = [];
+  for (let i = 0; i < unicos.length; i += 150) lotes.push(unicos.slice(i, i + 150));
+  try {
+    const respostas = await Promise.all(lotes.map((lote) => comPrazo(db().from('operator_participations')
+      .select('task_link_id, created_at')
+      .in('task_link_id', lote)
+      .or('author_kind.eq.humano,entry_type.in.(instrucao,decisao,correcao)')
+      .order('created_at', { ascending: false })
+      .limit(2000))));
+    for (const r of respostas) {
+      if (r.error) return null;
+      for (const linha of (r.data ?? []) as Array<{ task_link_id: string; created_at: string }>) {
+        if (!mapa.has(String(linha.task_link_id))) mapa.set(String(linha.task_link_id), String(linha.created_at));
+      }
+    }
+    return mapa;
+  } catch {
+    return null;
+  }
+}
+
 export async function operatorBoard(opts: { operator?: string; status?: string; limit?: number }) {
   const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), READ_LIMITS.maxPageSize);
 
@@ -274,6 +304,13 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
     vinculos = alvo ? vinculos.filter((l) => String(l.operator_id) === String(alvo.id)) : [];
   }
   if (opts.status) vinculos = vinculos.filter((l) => l.status === opts.status);
+
+  // 19/10: a última entrada humana de cada vínculo (autor humano ou instrução, decisão e correção, o mesmo
+  // critério do leitor do Hermes em integrations/hermes-operational/diary_consumer.py). O leitor lia o
+  // diário de todos os ~70 vínculos a cada 2 minutos (2.000 leituras por hora desde 08/10) só para achar
+  // instrução nova; com este campo ele abre só o diário que mudou. Falha de leitura: o campo não vem e o
+  // leitor volta a ler tudo, como antes.
+  const ultimaHumana = await ultimasEntradasHumanas(vinculos.map((l) => String(l.id)));
 
   // Contexto humano: tarefa, projeto, cliente e o responsável de gente.
   //
@@ -474,6 +511,7 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
         bloqueio: l.block_reason,
         aprovacao_necessaria: l.approval_required === true,
         atualizado_em: l.updated_at,
+        ...(ultimaHumana ? { ultima_entrada_humana_em: ultimaHumana.get(String(l.id)) ?? null } : {}),
       };
     }),
     runs_recentes: execucoes.slice(0, 20).map((r) => ({
