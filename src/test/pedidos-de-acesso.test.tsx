@@ -264,6 +264,26 @@ describe("lista de pedidos em 'Precisa de você'", () => {
     fireEvent.click(linha);
     expect(screen.getByTestId("onde").textContent).toBe("/execucao?aba=decisoes&acesso=p2");
   });
+
+  /* 19/10/2026 (dono: "opção de concluir para ele sair dali"; "fique persistente e cuide para não cair"). */
+  it("Concluir tira o pedido da lista com um toque, sem abrir a janela", async () => {
+    banco.tabelas.pedidos_de_acesso = [pedido({ id: "p2", tipo: "codigo", site: "Registro.br" })];
+    montar(h(PedidosDeAcesso), "/execucao?aba=decisoes");
+    fireEvent.click(await screen.findByRole("button", { name: "Concluir o pedido de Registro.br" }));
+    await waitFor(() => expect(banco.rpc).toHaveBeenCalledWith("pedido_acesso_concluir", { p_pedido: "p2" }));
+    expect(avisos.success).toHaveBeenCalled();
+    expect(screen.getByTestId("onde").textContent).toBe("/execucao?aba=decisoes");
+  });
+
+  it("se o agente já tinha entrado neste site, o pedido diz que a sessão caiu e quando", async () => {
+    const recente = new Date(Date.now() - 3 * 3600_000).toISOString();
+    banco.tabelas.pedidos_de_acesso = [
+      pedido({ id: "p2", tipo: "codigo", site: "Registro.br" }),
+      pedido({ id: "p0", tipo: "codigo", site: "Registro.br", status: "usado", usado_em: recente }),
+    ];
+    montar(h(PedidosDeAcesso), "/execucao?aba=decisoes");
+    expect(await screen.findByText(/Já tinha entrado/)).toBeTruthy();
+  });
 });
 
 describe("cofre: agentes podem usar", () => {

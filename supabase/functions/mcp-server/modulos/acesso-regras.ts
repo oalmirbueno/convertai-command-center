@@ -22,6 +22,15 @@ export const REGRAS_DA_SENHA =
   'Use só neste login, agora. Não escreva a senha nem o código em diário, comentário, tarefa, relatório, '
   + 'mensagem ou arquivo. Depois de usar, não guarde: na próxima vez, chame aceleriq_acesso_usar de novo.';
 
+/**
+ * 19/10/2026 (dono: "fique persistente e cuide para não cair"): depois de entrar, a sessão fica. Cada
+ * login novo é senha e código de novo para o dono; o perfil persistente do navegador guarda a entrada.
+ */
+export const MANTER_A_SESSAO =
+  'Depois de entrar, mantenha a sessão: use sempre o perfil persistente do navegador deste cliente (nunca um navegador '
+  + 'descartável), não saia da conta e não limpe os cookies. Assim o site não pede senha nem código de novo; '
+  + 'só abra outro pedido se ele realmente pedir.';
+
 /** Como o agente deve agir num login. Vai nas descrições das ferramentas e nas instruções do servidor. */
 export const COMO_PEDIR_ACESSO =
   'Ao chegar num login: 1) chame aceleriq_acesso_usar (client_id e site, ou vault_item_id); se o dono já liberou, '
@@ -29,7 +38,8 @@ export const COMO_PEDIR_ACESSO =
   + 'e uma mensagem curta. 3) Consulte aceleriq_acesso_estado a cada 30 a 60 s até mudar de aberto. '
   + "Código de verificação: aceleriq_acesso_pedir com tipo 'codigo' e espere; o código chega uma vez só e vale 10 min. "
   + "Facebook, Instagram, Meta e Google: nunca senha; use tipo 'conectar' com o link oficial da Composio. "
-  + 'NUNCA escreva senha ou código em diário, comentário, tarefa, relatório ou mensagem; depois de usar, não guarde.';
+  + 'NUNCA escreva senha ou código em diário, comentário, tarefa, relatório ou mensagem; depois de usar, não guarde. '
+  + MANTER_A_SESSAO;
 
 const DOMINIOS_META_GOOGLE = [
   'facebook.com', 'fb.com', 'messenger.com', 'instagram.com', 'meta.com', 'threads.net',

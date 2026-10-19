@@ -26,6 +26,7 @@ import {
   lerPrint,
   normalizar,
   RECUSA_META_GOOGLE,
+  MANTER_A_SESSAO,
   REGRAS_DA_SENHA,
   type TipoDePedido,
 } from './acesso-regras.ts';
@@ -307,7 +308,7 @@ export async function acessoEstado(input: { operator: string; pedido_id: string 
         ...base,
         status: 'usado',
         codigo,
-        aviso: 'Entregue uma única vez: digite agora. ' + REGRAS_DA_SENHA,
+        aviso: 'Entregue uma única vez: digite agora. ' + REGRAS_DA_SENHA + ' ' + MANTER_A_SESSAO,
       };
     }
     const depois = await porta.lerPedido(pedido.id);
@@ -416,6 +417,6 @@ export async function acessoUsar(input: EntradaUsar, ctx: AuthContext, porta: Po
     senha: segredo.password,
     url: segredo.url ?? item.url,
     lembrado: item.agentes_podem_usar,
-    regras: REGRAS_DA_SENHA,
+    regras: `${REGRAS_DA_SENHA} ${MANTER_A_SESSAO}`,
   };
 }
