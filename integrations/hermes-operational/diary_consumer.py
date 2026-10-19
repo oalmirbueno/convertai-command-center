@@ -80,8 +80,24 @@ def _is_human(entry: dict[str, Any]) -> bool:
     return False
 
 
-def _has_operator_response(raw_entries: Iterable[Any], entry_id: str) -> bool:
-    """Return true only for a non-human diary entry that cites the source entry_id."""
+def _entry_time(entry: dict[str, Any]) -> dt.datetime | None:
+    raw = entry.get("created_at") or entry.get("createdAt") or entry.get("quando")
+    if not raw:
+        return None
+    try:
+        return _as_utc(dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+    except ValueError:
+        return None
+
+
+def _has_operator_response(raw_entries: Iterable[Any], entry_id: str, after: dt.datetime | None = None) -> bool:
+    """Return true for a non-human diary entry that cites the source entry_id or comes after it.
+
+    19/10/2026: the diary tool tells operators to write without UUIDs, so replies never
+    cited the entry_id; the lease expired every 15 minutes and the same instruction woke
+    the agent again (50 to 80 near-identical replies a day on one link). An operator
+    entry written after the human entry now also counts as the reply.
+    """
     reference_keys = (
         "reply_to_entry_id", "parent_entry_id", "source_entry_id", "in_reply_to",
     )
@@ -93,6 +109,9 @@ def _has_operator_response(raw_entries: Iterable[Any], entry_id: str) -> bool:
         title = entry.get("title") or entry.get("titulo") or ""
         body = entry.get("body") or entry.get("texto") or ""
         if entry_id in f"{title}\n{body}":
+            return True
+        quando = _entry_time(entry)
+        if after is not None and quando is not None and quando > after:
             return True
     return False
 
@@ -139,7 +158,7 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             "title": _safe_text(entry.get("title") or entry.get("titulo") or ""),
             "body": _safe_text(entry.get("body") or entry.get("texto") or ""),
             "created_at": _safe_text(entry.get("created_at") or entry.get("createdAt") or entry.get("quando") or ""),
-            "response_confirmed": _has_operator_response(raw_entries, entry_id),
+            "response_confirmed": _has_operator_response(raw_entries, entry_id, _entry_time(entry)),
         })
     return candidates
 

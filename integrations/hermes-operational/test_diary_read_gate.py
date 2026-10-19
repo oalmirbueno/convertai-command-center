@@ -9,6 +9,7 @@ from diary_consumer import (
     SEEN_FIELD,
     claim_new_entries,
     collect_candidates,
+    human_candidates,
     load_read_state,
     remember_read,
     should_read_diary,
@@ -67,6 +68,24 @@ class ReadGateTest(unittest.TestCase):
             self.assertEqual(pending, {A})
             claim_new_entries(db, [{"link_id": A, "entry_id": "e1", "response_confirmed": True}])
             self.assertEqual(load_read_state(db)[1], set())
+
+
+class ReplyWithoutUuidTest(unittest.TestCase):
+    """The diary tool forbids UUIDs in text, so a later operator entry is the reply."""
+
+    def test_operator_entry_after_the_instruction_confirms_it(self):
+        diary = {"entradas": [
+            {"id": "h1", "autor_kind": "humano", "tipo": "correcao", "texto": "Corrija o destino", "quando": T1},
+            {"id": "o1", "autor_kind": "operador", "texto": "Correção recebida; destino ajustado.", "quando": T2},
+        ]}
+        self.assertTrue(human_candidates({"id": A}, diary)[0]["response_confirmed"])
+
+    def test_operator_entry_before_the_instruction_does_not(self):
+        diary = {"entradas": [
+            {"id": "o0", "autor_kind": "operador", "texto": "Status anterior.", "quando": T1},
+            {"id": "h1", "autor_kind": "humano", "tipo": "instrucao", "texto": "Faça o vídeo", "quando": T2},
+        ]}
+        self.assertFalse(human_candidates({"id": A}, diary)[0]["response_confirmed"])
 
 
 if __name__ == "__main__":
