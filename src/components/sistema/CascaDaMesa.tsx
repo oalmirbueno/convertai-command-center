@@ -25,6 +25,14 @@ import { juntar, larguraDaMesa } from "./estilos";
  * abaixo da barra do painel a partir de 768 px (o Estúdio e o Contexto medem
  * a altura dele pelo nav das etapas), a tela cheia (classe da raiz + botão)
  * e o h1 só para leitor de tela.
+ *
+ * Abaixo de 768 px (19/10/2026) o cabeçalho também gruda: no topo da área que
+ * rola (o <main> do AppLayout, logo abaixo do topo do celular, ou a própria
+ * mesa na tela cheia), com o mesmo fundo opaco do computador. O -top-4 desconta
+ * o pt-4 do <main>: o sticky para na borda do padding, e sem isso sobrava uma
+ * fresta de 16 px por onde o conteúdo passava acima do cabeçalho. Ele segue no
+ * fluxo (não cobre o começo do corpo) e nenhum ancestral até o <main> pode ter
+ * overflow-x-hidden, que viraria a área de rolagem do sticky e o mataria.
  */
 export default function CascaDaMesa({
   mesa,
@@ -73,7 +81,7 @@ export default function CascaDaMesa({
   const ate2xl = etapasEmLinhaPropriaAte === "2xl";
   return (
     <div className={juntar("relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6", classeDaRaiz(telaCheia.cheia), className)} data-casca-da-mesa={mesa}>
-      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 pt-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
+      <header data-cabecalho-da-mesa="" className="sticky -top-4 z-20 -mx-4 border-b border-border bg-background px-4 pt-2 md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
         <h1 className="sr-only">{titulo}</h1>
         <div className={juntar(larguraDaMesa, "flex flex-wrap items-center", ate2xl ? "2xl:flex-nowrap" : "xl:flex-nowrap", etapas ? "" : "pb-2")}>
           {/* Onde estou: mesa / cliente / marca. */}

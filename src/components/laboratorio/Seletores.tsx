@@ -1,21 +1,31 @@
 import type { ReactNode } from "react";
-import { Bot, Building2 } from "lucide-react";
+import { Bot, Building2, ChevronDown } from "lucide-react";
 import { useClients } from "@/hooks/useSupabaseData";
-import { foco, juntar } from "@/components/sistema";
 import { MODELOS_DO_LAB } from "@/lib/laboratorio/nos";
 
 /**
- * Seletores compactos do Laboratório: um ícone e um select sem moldura (o
- * nome fica no aria-label e no title). Cliente é opcional: "Livre" usa a
- * carteira do cliente interno e o resultado fica só no Laboratório.
+ * Seletores compactos do Laboratório: ícone + nome curto truncado, sem
+ * moldura (o nome inteiro fica no aria-label do select e no title). O select
+ * nativo fica invisível por cima (abre a lista do aparelho no celular) e o
+ * texto à vista é curto, para a caixa de pedido caber numa linha a 390 px.
+ * Cliente é opcional: "Livre" usa a carteira do cliente interno e o
+ * resultado fica só no Laboratório.
  */
 
-const SELECT = juntar("h-8 min-w-0 max-w-[180px] truncate rounded-md bg-transparent pl-1 pr-6 text-[12px] text-foreground hover:bg-muted", foco);
+const SELECT = "absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0";
 
-function Envoltorio({ icone, titulo, children }: { icone: ReactNode; titulo: string; children: ReactNode }) {
+function Compacto({ icone, titulo, visivel, children }: { icone: ReactNode; titulo: string; visivel: string; children: ReactNode }) {
   return (
-    <span className="inline-flex min-w-0 items-center text-muted-foreground" title={titulo}>
-      <span className="mr-0.5 inline-flex shrink-0" aria-hidden="true">{icone}</span>
+    <span
+      className="relative inline-flex h-8 min-w-0 items-center rounded-md px-1 text-muted-foreground hover:bg-muted focus-within:ring-2 focus-within:ring-ring"
+      title={titulo}
+      data-seletor-compacto=""
+    >
+      <span className="mr-1 inline-flex shrink-0" aria-hidden="true">{icone}</span>
+      <span className="min-w-0 max-w-[76px] truncate text-[12px] text-foreground sm:max-w-[160px]" aria-hidden="true" data-nome-curto="">
+        {visivel}
+      </span>
+      <ChevronDown className="ml-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
       {children}
     </span>
   );
@@ -33,27 +43,29 @@ export function useClientesDoLab(): ClienteDoLab[] {
 }
 
 export function SeletorDeCliente({ valor, onMudar, clientes }: { valor: string | null; onMudar: (id: string | null) => void; clientes: ClienteDoLab[] }) {
+  const nome = nomeDoCliente(clientes, valor);
   return (
-    <Envoltorio icone={<Building2 className="h-3.5 w-3.5" />} titulo="Cliente (opcional): Livre usa a carteira da agência">
+    <Compacto icone={<Building2 className="h-3.5 w-3.5" />} titulo={`Cliente: ${nome} (opcional: Livre usa a carteira da agência)`} visivel={nome}>
       <select aria-label="Cliente" className={SELECT} value={valor || ""} onChange={(e) => onMudar(e.target.value || null)}>
         <option value="">Livre</option>
         {clientes.map((c) => (
           <option key={c.id} value={c.id}>{c.nome}</option>
         ))}
       </select>
-    </Envoltorio>
+    </Compacto>
   );
 }
 
 export function SeletorDeModelo({ valor, onMudar, rotulo = "Modelo" }: { valor: string; onMudar: (v: string) => void; rotulo?: string }) {
+  const atual = MODELOS_DO_LAB.find((m) => m.valor === valor) || MODELOS_DO_LAB[0];
   return (
-    <Envoltorio icone={<Bot className="h-3.5 w-3.5" />} titulo={rotulo}>
+    <Compacto icone={<Bot className="h-3.5 w-3.5" />} titulo={`${rotulo}: ${atual.rotulo}`} visivel={atual.curto}>
       <select aria-label={rotulo} className={SELECT} value={valor} onChange={(e) => onMudar(e.target.value)}>
         {MODELOS_DO_LAB.map((m) => (
           <option key={m.valor} value={m.valor}>{m.rotulo}</option>
         ))}
       </select>
-    </Envoltorio>
+    </Compacto>
   );
 }
 

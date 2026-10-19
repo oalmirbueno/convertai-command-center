@@ -191,8 +191,8 @@ describe("tela cheia padrão das mesas", () => {
     const casca = ler("src/components/sistema/CascaDaMesa.tsx");
     expect(casca).toContain("<BotaoDeTelaCheia tela={telaCheia}");
     expect(casca).toContain("classeDaRaiz(telaCheia.cheia)");
-    // Celular: o cabeçalho da mesa não gruda (a Mesa Foto passava de 250 px presos no topo).
-    expect(casca).toContain('<header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 pt-2 md:sticky');
+    // Celular (19/10/2026): o cabeçalho, já enxuto desde 16/10 (uma linha + etapas que rolam), gruda também abaixo de 768 px.
+    expect(casca).toContain('<header data-cabecalho-da-mesa="" className="sticky -top-4 z-20 -mx-4 border-b border-border bg-background px-4 pt-2 md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)]');
     const css = ler("src/index.css");
     expect(css).toContain('body[data-tela-cheia-da-mesa] [data-casca="rodape"]');
     expect(css).toContain('body[data-tela-cheia-da-mesa] [data-casca="topo"]');

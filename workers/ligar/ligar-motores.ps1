@@ -185,7 +185,7 @@ function Conferir-Navegador([switch]$instalar) {
 
 function Guardar-Chaves {
   Escrever 'Guardar as chaves nas variáveis do Windows (Usuário). Enter vazio mantém a que já existe.' 'White'
-  foreach ($n in 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VERCEL_TOKEN') {
+  foreach ($n in 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VERCEL_TOKEN', 'VERCEL_TEAM_ID') {
     $existe = [bool](Ler-Variavel $n)
     $seguro = Read-Host -AsSecureString "$n$(if ($existe) { ' (já definida)' } else { '' })"
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($seguro)

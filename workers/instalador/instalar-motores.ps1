@@ -61,7 +61,7 @@ $ProgressPreference = 'SilentlyContinue'
 $MOTORES_VALIDOS = @('render', 'codigo', 'navegador')
 $NOMES = @{ render = 'Render (Motion e Edição)'; codigo = 'Motor de código (Site)'; navegador = 'Navegador do agente' }
 $ENTROPIA = 'Aceleriq Motores v1'
-$CHAVES_DO_COFRE = @('SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'VERCEL_TOKEN')
+$CHAVES_DO_COFRE = @('SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'VERCEL_TOKEN', 'VERCEL_TEAM_ID')
 $NODE_MINIMO = [version]'22.18.0'
 
 if (-not $Pasta) { $Pasta = Join-Path $env:LOCALAPPDATA 'Aceleriq\Motores' }

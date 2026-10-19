@@ -139,6 +139,14 @@ describe("temperatura do lead (regra fixa)", () => {
     expect(recusada.valor).toBeLessThan(antes);
   });
 
+  it("20/10/2026: a nota do formulário do site é automática e não conta como conversa", () => {
+    const base = [entrouEmProposta(5)];
+    const antes = temperaturaDoLead(lead({}), [], base, AGORA);
+    const doSite = temperaturaDoLead(lead({}), [], [...base, evento({ note: "Chegou pelo formulário do site Loja (/contato).", created_at: diasAtras(1) })], AGORA);
+    expect(doSite.motivos.some((m) => m.rotulo.indexOf("conversa") >= 0)).toBe(false);
+    expect(doSite.valor).toBe(antes.valor);
+  });
+
   it("compromisso atrasado esfria e a origem pesa", () => {
     const eventos = [entrouEmProposta(5)];
     const emDia = temperaturaDoLead(lead({}), [atividade({ due_at: diasAFrente(1) })], eventos, AGORA);

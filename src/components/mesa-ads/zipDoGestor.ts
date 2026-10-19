@@ -203,9 +203,12 @@ function destinoEmTexto(b: BriefingAds | null): string {
   return [tipo, limpo(b.destino.url)].filter(Boolean).join(": ");
 }
 
-/** UTM padrão da casa (conhecimento de ads): utm_content é o nome do anúncio, casado com o arquivo. */
+/**
+ * UTM padrão da casa (conhecimento de ads): utm_content é o nome do anúncio, casado com o arquivo.
+ * 20/10/2026: ad_id e campaign_id da Meta vão junto, para o formulário do site ligar o lead ao anúncio pelo id.
+ */
 export function utmPadrao(nomeDoAnuncio: string): string {
-  return `utm_source=meta&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_content=${nomeDoAnuncio}`;
+  return `utm_source=meta&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_content=${nomeDoAnuncio}&ad_id={{ad.id}}&campaign_id={{campaign.id}}`;
 }
 
 function utmDoItem(b: BriefingAds | null, gestor: OrientacaoAoGestor | null, nomeDoAnuncio: string): string {
@@ -389,7 +392,7 @@ export function leiaMe(dados: DadosDoZip, itens: ItemDoZip[]): string {
   if (b && b.destino.primeira_mensagem) L.push(`Primeira mensagem pronta (WhatsApp ou Direct): ${b.destino.primeira_mensagem}`, "");
 
   L.push("## Passo 5. UTM", "");
-  L.push("Nos anúncios com destino em página ou formulário, cole a UTM em Parâmetros de URL. O `utm_content` é o nome do anúncio, que é o mesmo nome do arquivo: assim cada resultado volta para a arte certa.");
+  L.push("Nos anúncios com destino em página ou formulário, cole a UTM em Parâmetros de URL. O `utm_content` é o nome do anúncio, que é o mesmo nome do arquivo: assim cada resultado volta para a arte certa. O `ad_id` e o `campaign_id` vão junto para o painel ligar cada contato ao anúncio que trouxe.");
   if (gestor && gestor.utm) L.push("", `Orientação do pacote: ${gestor.utm}`);
   L.push("");
 

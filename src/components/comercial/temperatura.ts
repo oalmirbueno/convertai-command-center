@@ -115,7 +115,9 @@ export const ehNotaDaProposta = (evento: EventoDoLead) => {
 };
 
 /** Nota gerada pelo sistema (criação pelo MCP), que não é conversa de ninguém. */
-const ehNotaAutomatica = (evento: EventoDoLead) => ehNotaDaProposta(evento) || nota(evento).indexOf("Criado pelo MCP") === 0;
+// 20/10/2026: a nota que o formulário do site grava ao criar o lead também é automática (não é conversa de gente).
+const ehNotaAutomatica = (evento: EventoDoLead) =>
+  ehNotaDaProposta(evento) || nota(evento).indexOf("Criado pelo MCP") === 0 || nota(evento).indexOf("Chegou pelo formulário do site") === 0;
 
 export const propostaAbertaPeloCliente = (evento: EventoDoLead) =>
   ehNotaDaProposta(evento) && minusculo(nota(evento)).indexOf("aberta pelo cliente") >= 0;

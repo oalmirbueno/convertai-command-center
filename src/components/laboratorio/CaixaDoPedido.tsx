@@ -94,15 +94,17 @@ const CaixaDoPedido = forwardRef<HTMLTextAreaElement, Props>(function CaixaDoPed
             }
           }}
         />
-        <div className={juntar("flex min-w-0 flex-wrap items-center", p.compacta ? "mt-1" : "mt-2")}>
-          <SeletorDeModelo valor={p.modelo} onMudar={p.onModelo} />
-          <span className="mx-1" />
-          <SeletorDeCliente valor={p.clienteId} onMudar={p.onCliente} clientes={p.clientes} />
-          {p.compacta ? <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden="true" /> : null}
-          {p.compacta ? atalhos : null}
-          {p.extra}
-          <span className="flex-1" />
-          <button type="submit" className={juntar(botao.primario, p.compacta ? "h-8 w-8 px-0" : "h-9 w-9 px-0")} disabled={p.enviando || !p.valor.trim()} aria-label="Enviar o pedido" title={p.tituloDoEnviar}>
+        {/* Modelo e cliente compactos à esquerda (o resto quebra só ali dentro); enviar sempre na 1ª linha, à direita. */}
+        <div className={juntar("flex min-w-0 items-start", p.compacta ? "mt-1" : "mt-2")} data-linha-do-pedido="">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center">
+            <SeletorDeModelo valor={p.modelo} onMudar={p.onModelo} />
+            <span className="mx-0.5" />
+            <SeletorDeCliente valor={p.clienteId} onMudar={p.onCliente} clientes={p.clientes} />
+            {p.compacta ? <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden="true" /> : null}
+            {p.compacta ? atalhos : null}
+            {p.extra}
+          </div>
+          <button type="submit" className={juntar(botao.primario, "ml-2 shrink-0", p.compacta ? "h-8 w-8 px-0" : "h-9 w-9 px-0")} disabled={p.enviando || !p.valor.trim()} aria-label="Enviar o pedido" title={p.tituloDoEnviar} data-enviar-pedido="">
             {p.enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>

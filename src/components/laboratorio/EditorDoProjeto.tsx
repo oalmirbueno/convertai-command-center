@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ReactFlowProvider } from "@xyflow/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, ArrowLeft, BookmarkPlus, Check, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Play, RefreshCw, Workflow } from "lucide-react";
+import { Archive, ArrowLeft, BookmarkPlus, Check, Copy, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Play, RefreshCw, Workflow } from "lucide-react";
 import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,7 +56,8 @@ import AgenteDoProjeto from "./AgenteDoProjeto";
 import CanvasStudio, { type ResultadoDaConstrucao } from "./CanvasStudio";
 import JanelaDeCusto, { type LinhaDeCusto } from "./JanelaDeCusto";
 import { emAndamento } from "./ResultadoDoNo";
-import type { ClienteDoLab } from "./Seletores";
+import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
+import { duplicarProjeto, nomeDaCopia as nomeDaCopiaNaTela } from "@/lib/laboratorio/duplicar";
 
 /**
  * Editor de um projeto do Laboratório: o canvas de nós (paleta, quadro,
@@ -115,12 +116,14 @@ interface PropsDoEditor {
   projetoId: string;
   clientes: ClienteDoLab[];
   onVoltar: () => void;
+  /** Abre outro projeto no lugar deste (o duplicado para outro cliente). */
+  onAbrirOutro?: (id: string) => void;
   /** Tela cheia vinda da página (todas as abas); sem isso, o editor guarda a sua. */
   telaCheia?: boolean;
   onTelaCheia?: (v: boolean) => void;
 }
 
-function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: PropsDoEditor) {
+function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTelaCheia }: PropsDoEditor) {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: ["laboratorio", "projeto", projetoId], queryFn: () => lerProjeto(projetoId), staleTime: 0, gcTime: 0 });
 
@@ -149,6 +152,9 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
   const [largo, setLargo] = useState<boolean>(() => typeof window === "undefined" || (window.innerWidth || 1024) >= 1024);
   const [agente, setAgente] = useState<boolean>(() => typeof window === "undefined" || (window.innerWidth || 1024) >= 1280);
   const [salvarComo, setSalvarComo] = useState<string | null>(null);
+  /** Janela "Duplicar para outro cliente": null fechada; "" é Livre; senão o id do cliente. */
+  const [duplicarPara, setDuplicarPara] = useState<string | null>(null);
+  const [duplicando, setDuplicando] = useState(false);
 
   const atual = useRef<CanvasDoLab>(canvas);
   const versao = useRef(1);
@@ -594,7 +600,8 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
         </button>
         <input
           aria-label="Nome do projeto"
-          className={juntar(campo, "mr-2 h-8 w-auto min-w-0 max-w-[260px] flex-1 border-transparent bg-transparent px-1.5 text-[15px] font-semibold hover:border-input")}
+          title={nome}
+          className={juntar(campo, "mr-2 h-8 w-auto min-w-[96px] max-w-[260px] flex-1 truncate border-transparent bg-transparent px-1.5 text-[15px] font-semibold hover:border-input")}
           value={nome}
           onChange={(e) => {
             setNome(e.target.value);
@@ -602,9 +609,10 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
             setSalvar((s) => (s.estado === "conflito" ? s : { estado: "pendente", erro: "" }));
           }}
         />
-        <span role="status" className={juntar(texto.auxiliar, "mr-2 inline-flex items-center", (salvar.estado === "erro" || salvar.estado === "conflito") && "text-warning")} data-estado-do-salvar={salvar.estado} title={salvar.erro || undefined}>
+        {/* Celular (< 640): "Salvo"/"Salvando" só no ícone (nome no title); aviso de erro ou conflito continua com texto. */}
+        <span role="status" className={juntar(texto.auxiliar, "mr-2 inline-flex shrink-0 items-center", (salvar.estado === "erro" || salvar.estado === "conflito") && "text-warning")} data-estado-do-salvar={salvar.estado} title={salvar.erro || rotuloDoSalvar}>
           {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" aria-hidden="true" /> : null}
-          {rotuloDoSalvar}
+          <span className={salvar.estado === "salvo" || salvar.estado === "salvando" ? "sr-only sm:not-sr-only" : undefined}>{rotuloDoSalvar}</span>
         </span>
         {salvar.estado === "conflito" && (
           <button type="button" className={juntar(botao.secundario, "mr-2 h-8")} onClick={() => void recarregar()} data-recarregar-projeto="">
@@ -617,10 +625,12 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
             Tentar salvar
           </button>
         )}
-        <span className="flex-1" />
-        <button type="button" className={juntar(botao.primario, "h-8 px-3")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} data-rodar-tudo="">
-          {estimando === "tudo" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-          Rodar tudo
+        {/* No celular o nome ocupa a sobra (sem espaçador); de 640 para cima o espaçador empurra as ações. */}
+        <span className="hidden flex-1 sm:block" />
+        {/* Celular (< 640): só ícone, nome no title; o nome do projeto fica visível ao lado. */}
+        <button type="button" className={juntar(botao.primario, "h-8 w-8 shrink-0 px-0 sm:w-auto sm:px-3")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)" data-rodar-tudo="">
+          {estimando === "tudo" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" aria-hidden="true" /> : <Play className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />}
+          <span className="hidden sm:inline">Rodar tudo</span>
         </button>
         <button type="button" className={juntar(botao.icone, "ml-1", agente && "text-primary")} onClick={() => setAgente(!agente)} aria-label={agente ? "Fechar o agente do projeto" : "Abrir o agente do projeto"} title="Agente do projeto" aria-pressed={agente}>
           {agente ? <PanelRightClose className="h-4 w-4" aria-hidden="true" /> : <PanelRightOpen className="h-4 w-4" aria-hidden="true" />}
@@ -636,6 +646,7 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
           itens={[
             { rotulo: "Organizar o quadro", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => mudar(organizar) },
             { rotulo: "Salvar como fluxo pessoal", icone: <BookmarkPlus className="h-4 w-4" />, aoEscolher: () => setSalvarComo(nome) },
+            { rotulo: "Duplicar para outro cliente", icone: <Copy className="h-4 w-4" />, aoEscolher: () => setDuplicarPara("") },
             {
               rotulo: "Arquivar o projeto",
               icone: <Archive className="h-4 w-4" />,
@@ -679,7 +690,7 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
               execucoes={execucoes}
               selecionado={selecionado}
               rodandoNo={estimando && estimando !== "tudo" ? estimando : null}
-              semTeclas={!!custo || salvarComo !== null}
+              semTeclas={!!custo || salvarComo !== null || duplicarPara !== null}
               onSelecionar={setSelecionado}
               onMudarCanvas={mudar}
               onTentarLigar={(de, para) => tentarLigar(de, para, true)}
@@ -760,6 +771,52 @@ function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: Props
       >
         <label className={juntar(texto.rotulo, "mb-1 block")} htmlFor="nome-do-fluxo">Nome do fluxo</label>
         <input id="nome-do-fluxo" className={campo} value={salvarComo || ""} onChange={(e) => setSalvarComo(e.target.value)} />
+      </JanelaCentral>
+
+      {/* Duplicar para outro cliente: o mesmo canvas num projeto novo, sem saídas nem mídias (src/lib/laboratorio/duplicar.ts). */}
+      <JanelaCentral
+        aberta={duplicarPara !== null}
+        onFechar={() => (duplicando ? undefined : setDuplicarPara(null))}
+        titulo="Duplicar para outro cliente"
+        icone={<Copy className="h-4 w-4" />}
+        largura="sm"
+        rodape={
+          <>
+            <button type="button" className={botao.discreto} onClick={() => setDuplicarPara(null)} disabled={duplicando}>Cancelar</button>
+            <button
+              type="button"
+              className={botao.primario}
+              disabled={duplicando}
+              data-confirmar-duplicar=""
+              onClick={() => {
+                const cid = duplicarPara || null;
+                setDuplicando(true);
+                garantirSalvo()
+                  .then(() => duplicarProjeto(projetoId, cid, nomeDoCliente(clientes, cid)))
+                  .then((novo) => {
+                    toast.success("Projeto duplicado", { description: `${novo.nome}: mesmo canvas, sem saídas nem mídias.` });
+                    void queryClient.invalidateQueries({ queryKey: chaveDosProjetos });
+                    setDuplicarPara(null);
+                    if (onAbrirOutro) onAbrirOutro(novo.id);
+                  })
+                  .catch((e) => toast.error("Não deu para duplicar", { description: textoDoErro(e) }))
+                  .finally(() => setDuplicando(false));
+              }}
+            >
+              {duplicando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+              Duplicar
+            </button>
+          </>
+        }
+      >
+        <label className={juntar(texto.rotulo, "mb-1 block")} htmlFor="duplicar-para">Cliente do projeto novo</label>
+        <select id="duplicar-para" className={campo} value={duplicarPara || ""} onChange={(e) => setDuplicarPara(e.target.value)}>
+          <option value="">Livre</option>
+          {clientes.map((c) => (
+            <option key={c.id} value={c.id}>{c.nome}</option>
+          ))}
+        </select>
+        <p className={juntar(texto.auxiliar, "mt-2")}>Nome: {nomeDaCopiaNaTela(nome, nomeDoCliente(clientes, duplicarPara || null))}</p>
       </JanelaCentral>
     </div>
   );
