@@ -1,7 +1,8 @@
 import EvidenciaVisual from "./EvidenciaVisual";
 import { contextoDoPedido } from '@/lib/carteiraOperacao';
 import { useEffect, useRef, useState } from "react";
-import { leituraSimples, prepararEntrada, tituloDoCaderno, type TomDaSecao } from "@/lib/cadernoExecucao";
+import { leituraSimples, limparTecnico, prepararEntrada, tituloDoCaderno } from "@/lib/cadernoExecucao";
+import LeituraEmBlocos, { ComLinks } from "./LeituraEmBlocos";
 import { anexarNoCaderno } from "@/lib/arquivosDoCaderno";
 import { chamarFuncao } from "@/lib/mesa/api";
 import TarefaDoCaderno from "./TarefaDoCaderno";
@@ -19,7 +20,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowRight, Check, CheckCircle2, ChevronDown, CircleDot, Clock3, Loader2, Lock, Paperclip, RotateCcw, Send, Sparkles, ThumbsDown, ThumbsUp, UserRound, X } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, ChevronDown, Clock3, Loader2, Lock, Paperclip, RotateCcw, Send, Sparkles, ThumbsDown, ThumbsUp, UserRound, X } from "lucide-react";
 import { Carregando, EstadoVazio, SeletorCompacto, botao, campoTexto, etiqueta, juntar, texto as estiloTexto, useEstadoDaTela, superficie } from "@/components/sistema";
 
 /**
@@ -78,14 +79,6 @@ const ENTENDI: Record<string, string> = {
   contexto: "Registrei como contexto. Vale para esta tarefa daqui em diante.",
 };
 
-const TOM_DA_SECAO: Record<TomDaSecao, { cor: string; Icone: typeof Check; nome?: string }> = {
-  feito: { cor: "text-success", Icone: CheckCircle2 },
-  andamento: { cor: "text-primary", Icone: CircleDot },
-  proximo: { cor: "text-muted-foreground", Icone: ArrowRight },
-  travado: { cor: "text-warning", Icone: Lock },
-  nota: { cor: "text-muted-foreground", Icone: CircleDot },
-};
-
 const SITUACAO: Record<string, { rotulo: string; cor: string }> = {
   queued: { rotulo: "Na fila", cor: "bg-muted text-muted-foreground" },
   in_progress: { rotulo: "Em andamento", cor: "bg-primary/15 text-primary" },
@@ -115,21 +108,12 @@ const quando = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const inicial = (nome: string) => (nome.trim()[0] || "?").toUpperCase();
 
-/** Links no meio do texto viram "abrir (site)" clicável, em vez do endereço inteiro. */
-function ComLinks({ texto }: { texto: string }) {
-  return <>{texto.split(/(https?:\/\/[^\s;,)]+)/).map((parte, i) => {
-    if (i % 2 === 0) return parte;
-    let site = parte;
-    try { site = new URL(parte).hostname.replace(/^www\./, ""); } catch { /* fica o endereço */ }
-    return <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-2 hover:underline">abrir ({site})</a>;
-  })}</>;
-}
-
 /** Uma entrada do diário em leitura simples: resumo, imagens e os blocos do agente. */
 function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; autor: string; doHumano: boolean; aoResponder: (e: Entrada) => void }) {
   const [aberta, setAberta] = useState(false);
   const documento = prepararEntrada(e.body, e.attachments || []);
   const leitura = leituraSimples(e.body);
+  const emBlocos = leitura.secoes.length > 0;
   const imagens = documento.anexos;
   const pedeAlgo = !doHumano && e.entry_type === "pedido_insumo";
   return (
@@ -141,28 +125,21 @@ function EntradaDoDiario({ e, autor, doHumano, aoResponder }: { e: Entrada; auto
         <span className="ml-auto shrink-0 pl-2 tabular-nums text-muted-foreground">{quando(e.created_at)}</span>
       </header>
       {e.title && <h3 className="mt-2.5 text-[15px] font-semibold leading-snug text-foreground">{tituloDoCaderno(e.title)}</h3>}
-      <p className="mt-1.5 whitespace-pre-line text-[14px] leading-6 text-foreground/90">{leitura.resumo ? <ComLinks texto={leitura.resumo} /> : "Atualização sem texto."}</p>
+      {/* 19/10 (dono: "no diário também melhor"): os blocos do agente (travado, próximo passo, feito)
+          aparecem na hora, em caixas; texto sem blocos fica o resumo, com "Ler tudo". */}
+      {emBlocos
+        ? <LeituraEmBlocos texto={e.body} className="mt-2" />
+        : <p className="mt-1.5 whitespace-pre-line text-[14px] leading-6 text-foreground/90">{leitura.resumo ? <ComLinks texto={aberta ? limparTecnico(e.body) : leitura.resumo} /> : "Atualização sem texto."}</p>}
       {imagens.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {imagens.map((a, i) => <EvidenciaVisual key={i} url={a.url!} nome={a.name || "Comprovação"} compacto />)}
         </div>
       )}
-      {aberta && (
-        <div className="mt-3 space-y-2.5 border-t border-border/60 pt-3">
-          {leitura.secoes.map((s, i) => {
-            const t = TOM_DA_SECAO[s.tom];
-            return (
-              <div key={i} className="flex gap-2.5">
-                <t.Icone className={juntar("mt-0.5 h-4 w-4 shrink-0", t.cor)} aria-hidden="true" />
-                <p className="min-w-0 text-[13px] leading-6"><span className={juntar("font-medium", t.cor)}>{s.rotulo}: </span><span className="text-foreground/90"><ComLinks texto={s.texto} /></span></p>
-              </div>
-            );
-          })}
-          <details className="text-[12px] text-muted-foreground"><summary className="cursor-pointer">Ver o registro técnico (como o agente escreveu)</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{e.body}</pre></details>
-        </div>
+      {(aberta || emBlocos) && (
+        <details className="mt-2 text-[12px] text-muted-foreground"><summary className="cursor-pointer">Ver o registro técnico (como o agente escreveu)</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{e.body}</pre></details>
       )}
       <div className="mt-2.5 flex flex-wrap items-center gap-1">
-        {leitura.temMais && <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => setAberta((v) => !v)} aria-expanded={aberta}><ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", aberta && "rotate-180")} />{aberta ? "Mostrar menos" : "Ler tudo"}</button>}
+        {!emBlocos && leitura.temMais && <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => setAberta((v) => !v)} aria-expanded={aberta}><ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", aberta && "rotate-180")} />{aberta ? "Mostrar menos" : "Ler tudo"}</button>}
         <button type="button" className={juntar(pedeAlgo ? botao.secundario : botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => aoResponder(e)}>{pedeAlgo ? "Responder ao pedido" : "Responder"}</button>
       </div>
     </article>

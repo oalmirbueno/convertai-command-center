@@ -139,7 +139,9 @@ export default function AprovacoesExplicadas({
       if (error) throw new Error(error.message);
       return data;
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (resposta, vars) => {
+      // 19/10: a decisão do dono vale mesmo se os dados do cliente mudaram depois do texto (fonte_antiga); só avisa.
+      const fonteAntiga = !!(resposta && typeof resposta === "object" && (resposta as { fonte_antiga?: boolean }).fonte_antiga);
       // Só retirar depois do recibo do servidor; não aguardar outra leitura para atualizar a lista.
       if (vars.decisao !== "adiado") queryClient.setQueryData<Aprovacao[]>(["aprovacoes-explicadas", filtroVinculos], anterior => anterior?.filter(a => a.id !== vars.id));
       queryClient.invalidateQueries({ queryKey: ["execucao-performance-meta"] });
@@ -150,7 +152,7 @@ export default function AprovacoesExplicadas({
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       toast.success(
         vars.decisao === "aprovado"
-          ? "Aprovado. O envio ainda precisa ser executado e confirmado pelo agente."
+          ? `Aprovado. O envio ainda precisa ser executado e confirmado pelo agente.${fonteAntiga ? " Os dados do cliente mudaram depois do texto; sua aprovação vale e ficou registrada." : ""}`
           : vars.decisao === "rejeitado"
             ? "Rejeitado. O agente não executa e fica registrado o porquê."
             : vars.decisao === "alteracoes_pedidas"

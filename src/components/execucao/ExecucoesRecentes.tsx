@@ -3,6 +3,7 @@ import { Activity, CheckCircle2, Clock, MessageSquare } from "lucide-react";
 import { estadoDaExecucao, falhaDaExecucao } from "@/lib/execucaoApresentacao";
 import { botao, juntar, superficie } from "@/components/sistema";
 import EvidenciaVisual from "./EvidenciaVisual";
+import LeituraEmBlocos from "./LeituraEmBlocos";
 
 export default function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, destaque, aoConversar }: {
   runs: Record<string, any>[]; agentes: { id: string; display_name: string; area?: string | null }[];
@@ -41,8 +42,10 @@ export default function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, de
       </summary>
       <div className="max-h-[50vh] space-y-3 overflow-y-auto border-t border-border/60 p-4">
         <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><Clock className="h-3 w-3" />Último registro: {new Date(r.heartbeat_at || r.started_at).toLocaleString("pt-BR")}</p>
-        {d.action && <p className="whitespace-pre-wrap text-[13px]">{d.action}</p>}
-        {d.summary && <p className="whitespace-pre-wrap text-[13px]">{d.summary}</p>}
+        {d.action && <p className="whitespace-pre-wrap text-[13px] font-medium">{d.action}</p>}
+        {/* 19/10 (dono: "quando vem assim fica muito confuso"): FEITO / TRAVADO / PRÓXIMO PASSO em blocos, o travado primeiro. */}
+        {d.summary && <LeituraEmBlocos texto={d.summary} />}
+        {d.summary && <details className="text-[12px] text-muted-foreground"><summary className="cursor-pointer">Ver o texto original do agente</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{d.summary}</pre></details>}
         {d.page_url && <EvidenciaVisual url={d.page_url} nome="Página consultada" />}
         {r.error && <p className="text-[13px] text-warning">{falhaDaExecucao(r.error)}</p>}
         {(d.evidence || v?.last_evidence) && <EvidenciaVisual url={d.evidence || v.last_evidence} />}
