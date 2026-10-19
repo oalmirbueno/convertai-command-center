@@ -17,6 +17,8 @@ import {
 } from "../../../supabase/functions/mesa-identidade/modulos/coerencia-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, podeIrPara, useProjetoDaMesa } from "./Comuns";
+// 19/10/2026: o núcleo da marca (o que vai junto em toda geração) mora no fio, ao lado da coerência.
+import NucleoDaMarca from "./NucleoDaMarca";
 
 /**
  * O fio da marca (frente IDR, 30/09). Dono: "deixe mais inteligente o motor
@@ -70,7 +72,13 @@ export default function FioDaMarca() {
   const direcao = f.arquetipo ? DIRECAO_DO_ARQUETIPO[f.arquetipo.id as keyof typeof DIRECAO_DO_ARQUETIPO] : null;
   const titulo = f.fontes.filter((t) => t.uso === "titulo")[0] || f.fontes[0];
   const vazio = !f.nome && !f.arquetipo && !f.cores.length && !f.fontes.length;
-  if (vazio && projeto.etapa === "briefing") return null;
+  // Início do projeto: só o núcleo (para ler o site e o Instagram antes de tudo).
+  if (vazio && projeto.etapa === "briefing")
+    return (
+      <div className="mb-3 flex min-w-0 items-center justify-end border-b border-border/60 pb-2" data-fio-da-marca="" data-fio-vazio="">
+        <NucleoDaMarca />
+      </div>
+    );
 
   const conferir = async () => {
     setConferindo(true);
@@ -105,6 +113,7 @@ export default function FioDaMarca() {
       {titulo && <span className={juntar(texto.auxiliar, "ml-3 min-w-0 max-w-[200px] truncate")}>{f.fontes.map((t) => t.familia).filter((x, i, l) => l.indexOf(x) === i).join(" + ")}</span>}
       {f.tagline && <span className={juntar(texto.auxiliar, "ml-3 hidden min-w-0 max-w-[260px] truncate italic md:inline")}>{f.tagline}</span>}
       <span className="min-w-0 flex-1" />
+      <NucleoDaMarca />
       <button
         type="button"
         className={juntar(toqueCompacto, "ml-2 inline-flex h-7 shrink-0 items-center rounded-md px-1.5 hover:bg-muted", foco)}

@@ -16,8 +16,8 @@ import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, duracaoCurta, subi
 /**
  * Foto que fala (frente VGN, 30/09/2026): uma foto e um áudio viram a pessoa
  * falando AQUELE áudio, com a boca no ritmo da fala. O áudio sai do acervo de
- * vídeo do cliente: a voz da ElevenLabs feita na Mesa Motion, uma locução
- * gravada ou um trecho de entrevista. Motores pelo fal (a mesma FAL_KEY):
+ * vídeo do cliente: uma voz da ElevenLabs já guardada, uma locução gravada
+ * ou um trecho de entrevista (a Mesa Motion saiu em 19/10/2026). Motores pelo fal (a mesma FAL_KEY):
  * H3 Max Lip Sync (o mais barato), HeyGen Avatar IV e sync-3.
  * O vídeo dura o que o áudio dura (até 60 s); o custo aparece antes e só é
  * cobrado o que ficar pronto. Pessoa real só com a confirmação de que ela
@@ -132,7 +132,7 @@ export default function FotoQueFala() {
               <input type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,.mp3,.wav,.m4a,.aac" className="hidden" disabled={subindo} onChange={(e) => void subir(e.target.files ? e.target.files[0] : undefined)} />
             </label>
           </div>
-          <p className={juntar(texto.auxiliar, "mt-1")}>{audio ? `O vídeo vai durar ${duracaoCurta(duracao) || "o que o áudio dura"}.` : "Voz da ElevenLabs (Mesa Motion), locução gravada ou trecho de entrevista."}</p>
+          <p className={juntar(texto.auxiliar, "mt-1")}>{audio ? `O vídeo vai durar ${duracaoCurta(duracao) || "o que o áudio dura"}.` : "Voz da ElevenLabs, locução gravada ou trecho de entrevista."}</p>
         </div>
       </GrupoDeCampos>
       <GrupoDeCampos>

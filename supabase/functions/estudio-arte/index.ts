@@ -97,7 +97,7 @@
  * confere saldo e cota e debita a carteira do cliente.
  */
 
-import { falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { clienteInternoDaAgencia, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
@@ -592,6 +592,19 @@ import {
   type RespostaDeEscolha,
   tituloDoPedido,
 } from "./modulos/arte-rapida.ts";
+// 19/10: Estúdio livre do Laboratório (origem 'laboratorio': fora da Mesa, guardado no Workspace global).
+import {
+  ACOES_SO_DA_MESA,
+  BUCKET_DO_LABORATORIO,
+  diaEmSaoPaulo,
+  ehDoLaboratorio,
+  guardarNoLaboratorio,
+  MENSAGEM_SO_DA_MESA,
+  type OrigemDoTrabalho,
+  origemDoPedido,
+  pastaDoCliente,
+  type PortaDoLaboratorio,
+} from "./modulos/estudio-livre.ts";
 // 02/10: post do Instagram no pedido (sem login) e a vitrine de logos dos parceiros (colada pelo código).
 import {
   caminhoDaImagemDoPost,
@@ -1258,6 +1271,8 @@ type Trabalho = {
   id: string;
   client_id: string;
   task_id: string | null;
+  /** 19/10: 'mesa' (padrão) ou 'laboratorio' (Estúdio livre: fora da Mesa, guardado no Workspace global). */
+  origem?: string | null;
   /** 'social' (padrão: post e carrossel da agenda) ou 'ads' (criativos da Mesa Ads). */
   tipo?: string | null;
   status: string;
@@ -3376,6 +3391,8 @@ type PreparoRapido = {
   imagens: ImagemEntrada[];
   avisos: string[];
   custoJev: number;
+  /** 19/10: 'laboratorio' grava estudio_trabalhos.origem (a Mesa do cliente não lista). */
+  origem?: OrigemDoTrabalho;
 };
 
 /** A direção do item (da Agenda ou, com `rapida`, da arte rápida). */
@@ -4040,6 +4057,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       id: trabalhoId,
       client_id: clientId,
       task_id: item.tarefa.id || null,
+      // 19/10: a arte do Estúdio livre nasce marcada; a da Mesa fica no padrão do banco ('mesa').
+      ...(rapida && rapida.origem === "laboratorio" ? { origem: "laboratorio" } : {}),
       status: "dirigido",
       direcao,
       modelo_imagem_id: modeloImagem.id,
@@ -4385,7 +4404,13 @@ async function lerCardsDaReferencia(clientId: string, trabalhoId: string, a: Art
  * pedido, o pedido novo da equipe (instrucao) e, se veio, a campanha nova.
  */
 async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, existente: Trabalho | null) {
-  const clientId = existente ? existente.client_id : texto(corpo.client_id, 64);
+  // 19/10: o Estúdio livre do Laboratório (origem 'laboratorio'); sem cliente, o cliente interno da agência (carteira dela).
+  const origem: OrigemDoTrabalho = existente ? (ehDoLaboratorio(existente) ? "laboratorio" : "mesa") : origemDoPedido(corpo.origem);
+  let clientId = existente ? existente.client_id : texto(corpo.client_id, 64);
+  if (!existente && origem === "laboratorio" && !clientId) {
+    clientId = (await clienteInternoDaAgencia(servico())) || "";
+    if (!clientId) throw new ErroEstudio(409, "sem_cliente_interno", "O cliente interno da agência não foi encontrado. Escolha um cliente para criar a arte.");
+  }
   await garantirAcesso(ch, clientId);
   if (existente && estaEntregue(existente)) throw erroTrabalhoEntregue();
   // Cliente com duas marcas (Acerbi e CME): a arte nova nunca nasce sem marca (pergunta antes, na tela).
@@ -4512,6 +4537,7 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
     imagens: vistas.imagens,
     avisos,
     custoJev,
+    origem,
   });
 }
 
@@ -7982,6 +8008,8 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  // 19/10: a arte do Laboratório vai para o Workspace global (nunca Arquivos do cliente, Agenda nem aprovação).
+  if (ehDoLaboratorio(t)) return await guardarArteDoLaboratorio(ch, t);
   // Criativo de anúncio: entrega própria, fora da agenda e da aprovação de post.
   if (ehAds(t)) return await entregarAnuncio(ch, t, corpo);
   // Frente EN: "Só Arquivos" (sem_agenda) entrega sem criar post na Agenda.
@@ -8131,6 +8159,108 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
       ? "Parte das artes não pôde ser recortada no formato final e foi entregue no tamanho em que foi gerada."
       : null,
   });
+}
+
+/** 19/10: o Workspace global de verdade (servidor, depois da conferência de acesso ao trabalho). */
+function portaDoLaboratorio(): PortaDoLaboratorio {
+  const db = servico();
+  return {
+    async pastasFilhas(parentId) {
+      let q = db.from("workspace_nodes").select("id, parent_id, name, kind").eq("scope", "global").is("client_id", null).eq("kind", "folder");
+      q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
+      const { data, error } = await q.limit(500);
+      if (error) throw new ErroEstudio(503, "workspace_indisponivel", "Não foi possível ler as pastas do Laboratório.");
+      return (data ?? []) as { id: string; parent_id: string | null; name: string; kind: string }[];
+    },
+    async criarPasta(parentId, nome, criadoPor) {
+      const { data, error } = await db
+        .from("workspace_nodes")
+        .insert({ scope: "global", client_id: null, kind: "folder", name: nome, parent_id: parentId, created_by: criadoPor })
+        .select("id")
+        .single();
+      if (error || !data) throw new ErroEstudio(503, "pasta_nao_criada", "Não foi possível criar a pasta no Laboratório.");
+      return String((data as { id: string }).id);
+    },
+    async noComPrefixo(prefixo) {
+      const { data } = await db.from("workspace_nodes").select("id").eq("scope", "global").eq("kind", "file").like("storage_path", `${prefixo}.%`).limit(1);
+      const achado = ((data ?? []) as { id: string }[])[0];
+      return achado ? { id: String(achado.id) } : null;
+    },
+    async subir(caminho, bytes, mime) {
+      const { error } = await db.storage.from(BUCKET_DO_LABORATORIO).upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: true });
+      if (error) throw new ErroEstudio(503, "envio_de_arquivo_falhou", "Não foi possível guardar a arte no Laboratório. Tente de novo.", { detalhe: error.message });
+    },
+    async criarNo(linha) {
+      const { data, error } = await db.from("workspace_nodes").insert(linha).select("id").single();
+      if (error || !data) throw new ErroEstudio(503, "registro_de_arquivo_falhou", "A arte subiu, mas o registro no Laboratório falhou. Tente guardar de novo.", { detalhe: error?.message ?? null });
+      return String((data as { id: string }).id);
+    },
+  };
+}
+
+/**
+ * 19/10: "Guardar" da arte do Estúdio livre (o entregar de um trabalho com origem 'laboratorio'). Cada lâmina,
+ * no formato final, vai para Laboratório / <Livres | Nome do cliente> / Estúdio livre / <dia> no Workspace
+ * global. Não cria arquivo do cliente, item da Agenda, post nem pedido de aprovação; o trabalho segue aberto
+ * para ajustes (guardar de novo só sobe a versão nova da lâmina). Sem custo de IA.
+ */
+async function guardarArteDoLaboratorio(ch: Chamador, t: Trabalho) {
+  const ultimas = t.direcao.cards.map((c) => ({ card: c, versao: versaoAtual(t, c.ordem) }));
+  const semArte = ultimas.filter((u) => !u.versao).map((u) => u.card.ordem);
+  if (!ultimas.length || semArte.length) {
+    throw new ErroEstudio(409, "cards_sem_arte", "Gere todas as lâminas antes de guardar.", { cards_sem_arte: semArte });
+  }
+  const formatoDoConjunto = formatoDoPost(t.direcao.formato);
+  const foraDoFormato = ultimas
+    .filter((u) => formatoDaVersao(u.versao as VersaoCard & { formato_post?: string | null; tamanho?: string | null }) !== formatoDoConjunto)
+    .map((u) => u.card.ordem);
+  if (foraDoFormato.length) {
+    throw new ErroEstudio(409, "laminas_em_outro_formato", `O formato é ${QUADRO_DO_POST[formatoDoConjunto].rotulo}, mas ${foraDoFormato.length === 1 ? `a lâmina ${foraDoFormato[0]} foi gerada` : `as lâminas ${foraDoFormato.join(", ")} foram geradas`} em outro formato. Gere de novo antes de guardar.`, {
+      laminas: foraDoFormato,
+    });
+  }
+  const quadroFinal = QUADRO_DO_POST[formatoDoConjunto].final;
+  const { data: perfil } = await servico().from("profiles").select("company_name, full_name, services_config").eq("id", t.client_id).maybeSingle();
+  const a = arteRapidaDa(t.direcao);
+  const titulo = (a && a.titulo) || texto(t.direcao.conceito, 80) || "Arte do estúdio livre";
+  // Anti-bug AB2: no máximo MAX_RECORTES_NA_ENTREGA lâminas abertas por chamada; guardar de novo continua (idempotente).
+  let aberturas = 0;
+  let guardadas = 0;
+  const total = ultimas.length;
+  const r = await guardarNoLaboratorio(portaDoLaboratorio(), {
+    trabalhoId: t.id,
+    titulo,
+    nomeDoCliente: pastaDoCliente(perfil as Record<string, unknown> | null),
+    dia: diaEmSaoPaulo(new Date()),
+    criadoPor: ch.userId,
+    laminas: ultimas.map((u) => ({
+      ordem: u.card.ordem,
+      versao: Number((u.versao as VersaoCard).versao) || 1,
+      carregar: async () => {
+        const versao = u.versao as VersaoCard;
+        if (aberturas >= MAX_RECORTES_NA_ENTREGA && !laminaJaNoFormato((versao as unknown as { tamanho?: unknown }).tamanho, quadroFinal)) {
+          throw new ErroEstudio(409, "entrega_em_partes", mensagemDaEntregaEmPartes(guardadas, total), { entregues: guardadas, total });
+        }
+        const lamina = await laminaFinal(versao.storage_path, quadroFinal);
+        if (lamina.abriu) aberturas++;
+        guardadas++;
+        const jpeg = mimeDe(lamina.bytes) === "image/jpeg";
+        return { bytes: lamina.bytes, mime: jpeg ? "image/jpeg" : "image/png", extensao: jpeg ? "jpg" : "png" };
+      },
+    })),
+  });
+  const guardado = { pasta_id: r.pasta_id, caminho: r.caminho, node_ids: r.node_ids, guardado_em: new Date().toISOString() };
+  const gravado = await mutarTrabalho(t.id, (x) => ({ direcao: { ...x.direcao, laboratorio: guardado } as unknown as Direcao }));
+  return json({ trabalho: gravado, trabalho_id: t.id, tipo: total > 1 ? "carrossel" : "post", laboratorio: { ...guardado, novos: r.novos }, agenda: null, custo_usd: 0 });
+}
+
+/** 19/10: as ações da Agenda, da publicação e da aprovação recusam o trabalho do Laboratório. */
+function soDaMesa(f: (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>) {
+  return async (ch: Chamador, corpo: Record<string, unknown>): Promise<Response> => {
+    const id = texto(corpo.trabalho_id, 64);
+    if (UUID.test(id) && ehDoLaboratorio(await lerTrabalho(id))) throw new ErroEstudio(409, "trabalho_do_laboratorio", MENSAGEM_SO_DA_MESA);
+    return await f(ch, corpo);
+  };
 }
 
 /**
@@ -10930,6 +11060,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
     comHistorico,
   }).acoes,
 };
+
+// 19/10: o trabalho do Laboratório nunca passa pela Agenda, pela publicação nem pela aprovação do cliente.
+for (const acao of ACOES_SO_DA_MESA) if (ACOES[acao]) ACOES[acao] = soDaMesa(ACOES[acao]);
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
 const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);

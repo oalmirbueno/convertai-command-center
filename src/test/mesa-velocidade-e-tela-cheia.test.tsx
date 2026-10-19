@@ -75,7 +75,7 @@ describe("a etapa baixa junto com a mesa", () => {
   });
 
   it("as chaves da pré-carga são as mesmas das páginas (mesmo download, mesmo módulo)", () => {
-    const paginas: Record<string, string> = { "/mesa": "src/pages/MesaDoCliente.tsx", "/mesa-ads": "src/pages/MesaAds.tsx", "/mesa-foto": "src/pages/MesaFoto.tsx", "/mesa-videos": "src/pages/MesaVideos.tsx", "/mesa-edicao": "src/pages/MesaEdicao.tsx", "/mesa-publicidade": "src/pages/MesaPublicidade.tsx", "/mesa-roteiros": "src/pages/MesaRoteiros.tsx", "/mesa-identidade": "src/pages/MesaIdentidade.tsx", "/mesa-proposta": "src/pages/MesaProposta.tsx", "/mesa-site": "src/pages/MesaSite.tsx", "/mesa-motion": "src/pages/MesaMotion.tsx" };
+    const paginas: Record<string, string> = { "/mesa": "src/pages/MesaDoCliente.tsx", "/mesa-ads": "src/pages/MesaAds.tsx", "/mesa-foto": "src/pages/MesaFoto.tsx", "/mesa-videos": "src/pages/MesaVideos.tsx", "/mesa-edicao": "src/pages/MesaEdicao.tsx", "/mesa-publicidade": "src/pages/MesaPublicidade.tsx", "/mesa-roteiros": "src/pages/MesaRoteiros.tsx", "/mesa-identidade": "src/pages/MesaIdentidade.tsx", "/mesa-proposta": "src/pages/MesaProposta.tsx", "/mesa-site": "src/pages/MesaSite.tsx" }; // 19/10/2026: Mesa Motion retirada a pedido do dono.
     for (const caminho of Object.keys(MESAS_DO_PAINEL) as Array<keyof typeof MESAS_DO_PAINEL>) {
       const fonte = ler(paginas[caminho]);
       const pre = ler("src/lib/mesa/preCarga.ts");

@@ -65,10 +65,12 @@ export function assinaturaDosDados(site: Pick<LinhaDoSite, "estilo" | "imagens" 
   return `${JSON.stringify(ajustes || {})}|${imagens}|${site.marca_id || ""}`;
 }
 
-export function usePreviaDados(site: LinhaDoSite) {
+/** `ativo` false: só lê quando precisar (a prévia de uma versão, por exemplo, só com a janela aberta). */
+export function usePreviaDados(site: LinhaDoSite, ativo = true) {
   const assinatura = assinaturaDosDados(site);
   return useQuery({
     queryKey: CHAVES_DA_PREVIA.dados(site.id, assinatura),
+    enabled: ativo,
     queryFn: () => chamarSite<DadosDaPrevia>("previa_dados", { site_id: site.id }),
     // As URLs das imagens valem 1 h: relê antes de vencer; entre um e outro, a mesma resposta.
     staleTime: 45 * 60_000,

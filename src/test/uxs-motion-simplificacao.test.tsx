@@ -2,7 +2,7 @@ import { createElement as h, type ReactNode } from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { MemoryRouter } from "react-router-dom";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,10 +34,7 @@ vi.mock("@/integrations/supabase/client", () => {
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
-import EditorDaCena from "@/components/mesa-motion/EditorDaCena";
-import ListaDeProvas from "@/components/mesa-motion/ListaDeProvas";
-import { deTexto, faltantesDoFilme, finaisQueFaltam, nomePadraoDoFilme, paraTexto, resumoDasFinais, textoDaTroca } from "@/components/mesa-motion/motionApi";
-import { alternarOpcao, assinaturaDaCena, cenaDaLinha, duracaoAlvo, entrevistaPadrao, INGREDIENTES, lerBrand, lerEntrevista, normalizarFilme, textoDaProva, type RenderDaCena } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
+import { alternarOpcao, duracaoAlvo, entrevistaPadrao, INGREDIENTES, lerBrand, lerEntrevista, normalizarFilme, textoDaProva } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import type { ProjetoDeEdicao } from "../../supabase/functions/_shared/projeto-de-edicao";
 import Renderizar from "@/components/mesa-edicao/editor/Renderizar";
 import { _limparVigias, marcarRenderAtivo, pedirRender, temRenderAtivo } from "@/lib/editor/render";
@@ -65,11 +62,6 @@ const valor = {
   marcas: [],
   marca: null,
 } as unknown as MesaValor;
-
-function montar(no: ReactNode) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, { initialEntries: [`/mesa-motion?client=${CLIENTE}&filme=${FILME}`] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor }, no))));
-}
 
 const filmeCom = (cenas: unknown[], extra: Record<string, unknown> = {}) =>
   normalizarFilme({ id: FILME, client_id: CLIENTE, marca_id: null, nome: "Filme", tipo: "apresentacao", etapa: "construcao", formatos: ["9:16", "16:9"], insumos: {}, entrevista: {}, brand: { provas: [{ texto: "Nota 4,8 no Google", fonte: "print de 12/09" }] }, storyboards: [], storyboard_escolhido: null, cenas, renders: [], critica: {}, som: {}, montagem: {}, entrega: {}, ...extra })!;
@@ -121,125 +113,11 @@ describe("regras puras da Mesa Motion", () => {
     expect(semProva.cenas[0].params.itens).toBeUndefined();
   });
 
-  it("número no campo de texto vai e volta igual (vírgula decimal)", () => {
-    for (const valor of [4.8, 1200, 12]) {
-      const t = paraTexto([{ valor, rotulo: "r", fonte: "f" }], "numeros");
-      expect((deTexto(t, "numeros") as Array<{ valor: number }>)[0].valor).toBe(valor);
-    }
-    expect(paraTexto([{ valor: 4.8, rotulo: "nota", fonte: "print" }], "numeros")).toBe("4,8;nota;print");
-    expect((deTexto("1.200;lojas;relatório", "numeros") as Array<{ valor: number }>)[0].valor).toBe(1200);
-  });
-
-  it("lote das finais: só o que falta ou ficou velho, sem o que está na fila; o resumo conta cenas e formatos", () => {
-    const a = cenaDaLinha({ ordem: 1, id: "a", titulo: "A", peca: "logo_sting", params: { tagline: "x" } }).cena;
-    const b = cenaDaLinha({ ordem: 2, id: "b", titulo: "B", peca: "logo_sting", params: { tagline: "y" } }).cena;
-    const r = (cena: typeof a, formato: "9:16" | "16:9", assinatura: string): RenderDaCena => ({ pedido_id: `${cena.id}-${formato}`, cena_id: cena.id, modo: "final", formato, assinatura, estado: "pronto", saida_path: `${CLIENTE}/x/${cena.id}.webm`, arquivo_id: null, folha_path: null, check: null, em: "2026-09-30T10:00:00Z" });
-    const f = { ...filmeCom([a, b]), renders: [r(a, "9:16", assinaturaDaCena(a)), r(a, "16:9", "velha"), r(b, "9:16", assinaturaDaCena(b))] };
-    const fila = { pedidos: [{ id: "p", tipo: "cena_hf", estado: "fila" as const, etapa: null, progresso: 0, entrada: { chave: "b:final:16:9" }, resultado: null, saida_path: null, erro_mensagem: null, criado_em: "" }], finais: [], links: {}, worker: { visto_em: null, situacao: "ligado" as const } };
-    expect(finaisQueFaltam(f, fila).map((x) => [x.cena.id, x.formatos])).toEqual([["a", ["16:9"]]]);
-    expect(finaisQueFaltam(f, fila, true).map((x) => x.cena.id)).toEqual(["a"]);
-    expect(resumoDasFinais(finaisQueFaltam(f, undefined))).toBe("2 cenas × 1 formato");
-    expect(resumoDasFinais([{ cena: a, numero: 1, formatos: ["9:16", "16:9"] }, { cena: b, numero: 2, formatos: ["9:16"] }])).toBe("3 renders em 2 cenas");
-    expect(faltantesDoFilme(f)).toEqual([
-      { numero: 1, motivo: "a cena mudou depois do render", formatos: ["16:9"] },
-      { numero: 2, motivo: "sem a cena final", formatos: ["16:9"] },
-    ]);
-  });
-
-  it("nome do filme novo: pelo tipo, cliente e marca, sem repetir", () => {
-    expect(nomePadraoDoFilme("apresentacao", "Forno", null, [])).toBe("Apresentação Forno");
-    expect(nomePadraoDoFilme("filme_marca", "Forno", "Forno Café", ["Filme da marca Forno Café"])).toBe("Filme da marca Forno Café 2");
-    expect(nomePadraoDoFilme("apresentacao", "", null, [])).toBe("Apresentação em motion");
-    expect(textoDaTroca({ cenas: 8, stills_aprovados: 5, sob_medida: 2 })).toBe("8 cenas, 5 stills aprovados, 2 sob medida");
-  });
 });
 
-describe("editor da cena: salva sozinho, um por vez", () => {
-  const cena = cenaDaLinha({ ordem: 1, id: "c1", titulo: "Marca entra", peca: "logo_sting", params: { tagline: "Método" }, duracao_s: 5, still_aprovado: true }).cena;
-
-  it("sair do campo grava sem still_aprovado; sem mudança não chama; o que chega durante a gravação sai depois, com o mais novo", async () => {
-    const filme = filmeCom([cena]);
-    const respostas: Array<() => void> = [];
-    mock.invoke.mockImplementation((_f: string, { body }: { body: Record<string, unknown> }) =>
-      new Promise((ok) =>
-        respostas.push(() => {
-          const c = { ...cena, ...(body.cena as Record<string, unknown>) };
-          ok({ data: { filme: { ...filme, cenas: [c] }, avisos: [] }, error: null });
-        }),
-      ),
-    );
-    montar(h(EditorDaCena, { filme, cena, prints: [] }));
-    const titulo = screen.getByDisplayValue("Marca entra");
-    fireEvent.blur(titulo);
-    expect(mock.invoke).not.toHaveBeenCalled();
-    fireEvent.change(titulo, { target: { value: "Marca chega" } });
-    fireEvent.blur(titulo);
-    expect(mock.invoke).toHaveBeenCalledTimes(1);
-    const corpo = mock.invoke.mock.calls[0][1].body as { acao: string; cena: Record<string, unknown> };
-    expect(corpo.acao).toBe("cena_salvar");
-    expect(corpo.cena).toMatchObject({ id: "c1", titulo: "Marca chega", peca: "logo_sting", modo: "kit", params: { tagline: "Método" } });
-    expect("still_aprovado" in corpo.cena).toBe(false);
-    // Durante a gravação: outra mudança fica pendente.
-    fireEvent.change(titulo, { target: { value: "Marca chega forte" } });
-    fireEvent.blur(titulo);
-    expect(mock.invoke).toHaveBeenCalledTimes(1);
-    await act(async () => respostas[0]());
-    await waitFor(() => expect(mock.invoke).toHaveBeenCalledTimes(2));
-    expect((mock.invoke.mock.calls[1][1].body as { cena: { titulo: string } }).cena.titulo).toBe("Marca chega forte");
-    await act(async () => respostas[1]());
-    await screen.findByText("Salvo");
-  });
-
-  it("trocar a peça é ação explícita; fundo e tema salvam ao escolher; imagens viram lista de marcar na ordem dos prints", async () => {
-    const carrossel = cenaDaLinha({ ordem: 1, id: "c2", titulo: "Provas", peca: "carrossel_provas", params: { imagens: [`${CLIENTE}/b.png`] } }, [], CLIENTE).cena;
-    const filme = filmeCom([carrossel]);
-    mock.invoke.mockImplementation(async (_f: string, { body }: { body: Record<string, unknown> }) => ({ data: { filme: { ...filme, cenas: [{ ...carrossel, ...(body.cena as Record<string, unknown>) }] }, avisos: [] }, error: null }));
-    const prints = [
-      { path: `${CLIENTE}/a.png`, nome: "a.png" },
-      { path: `${CLIENTE}/b.png`, nome: "b.png" },
-    ];
-    montar(h(EditorDaCena, { filme, cena: carrossel, prints }));
-    expect(screen.queryByRole("listbox")).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox", { name: "a.png" }));
-    await waitFor(() => expect(mock.invoke).toHaveBeenCalledTimes(1));
-    expect((mock.invoke.mock.calls[0][1].body as { cena: { params: { imagens: string[] } } }).cena.params.imagens).toEqual([`${CLIENTE}/a.png`, `${CLIENTE}/b.png`]);
-    fireEvent.change(screen.getByDisplayValue("Fundo da marca, escuro"), { target: { value: "marca:claro" } });
-    await waitFor(() => expect(mock.invoke).toHaveBeenCalledTimes(2));
-    expect((mock.invoke.mock.calls[1][1].body as { cena: { tema: string } }).cena.tema).toBe("claro");
-    fireEvent.change(screen.getByDisplayValue("Carrossel de provas (3D)"), { target: { value: "abertura" } });
-    expect(mock.invoke).toHaveBeenCalledTimes(2);
-    fireEvent.click(screen.getByRole("button", { name: "Trocar a peça" }));
-    await waitFor(() => expect(mock.invoke).toHaveBeenCalledTimes(3));
-    expect((mock.invoke.mock.calls[2][1].body as { cena: { peca: string; modo: string } }).cena).toMatchObject({ peca: "abertura", modo: "kit" });
-  });
-});
-
-describe("lista de provas", () => {
-  it("Enter põe a prova; os campos só limpam depois de salvar; repetida e teto cheio não entram", async () => {
-    let ok = false;
-    const onMudar = vi.fn(async () => ok);
-    const { rerender } = render(h(ListaDeProvas, { provas: [{ texto: "120 lojas atendidas", fonte: "relatório" }], maximo: 2, onMudar }));
-    const prova = screen.getByRole("textbox", { name: "Prova" }) as HTMLInputElement;
-    const fonte = screen.getByRole("textbox", { name: "Fonte da prova" }) as HTMLInputElement;
-    fireEvent.change(prova, { target: { value: "120  LOJAS atendidas " } });
-    fireEvent.change(fonte, { target: { value: "site" } });
-    expect(screen.getByText("Esta prova já está na lista.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Pôr a prova/ }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(prova, { target: { value: "Nota 4,8 no Google" } });
-    fireEvent.submit(prova.closest("form") as HTMLFormElement);
-    await waitFor(() => expect(onMudar).toHaveBeenCalledTimes(1));
-    // Falhou: o texto fica para tentar de novo.
-    expect(prova.value).toBe("Nota 4,8 no Google");
-    ok = true;
-    fireEvent.submit(prova.closest("form") as HTMLFormElement);
-    await waitFor(() => expect(prova.value).toBe(""));
-    expect(onMudar).toHaveBeenLastCalledWith([{ texto: "120 lojas atendidas", fonte: "relatório" }, { texto: "Nota 4,8 no Google", fonte: "site" }]);
-    rerender(h(ListaDeProvas, { provas: [{ texto: "a", fonte: "b" }, { texto: "c", fonte: "d" }], maximo: 2, onMudar }));
-    expect((screen.getByRole("textbox", { name: "Prova" }) as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /Pôr a prova/ }) as HTMLButtonElement).disabled).toBe(true);
-  });
-});
-
+// 19/10/2026: Mesa Motion retirada a pedido do dono; os testes da tela dela
+// (editor da cena, lista de provas e as regras do motionApi) saíram com ela.
+// Ficam as regras puras do servidor e os contratos da função mesa-motion.
 describe("servidor e casca: contratos da simplificação", () => {
   const servidor = ler("supabase/functions/mesa-motion/index.ts");
 
@@ -259,20 +137,6 @@ describe("servidor e casca: contratos da simplificação", () => {
 
   it("piso Safari 11 / Chrome 64 e sem travessão nos arquivos desta frente", () => {
     for (const p of [
-      "src/components/mesa-motion/FilmeAberto.tsx",
-      "src/components/mesa-motion/EditorDaCena.tsx",
-      "src/components/mesa-motion/ListaDeProvas.tsx",
-      "src/components/mesa-motion/EtapaStills.tsx",
-      "src/components/mesa-motion/EtapaConstrucao.tsx",
-      "src/components/mesa-motion/EtapaStoryboards.tsx",
-      "src/components/mesa-motion/EtapaBrand.tsx",
-      "src/components/mesa-motion/EtapaInsumos.tsx",
-      "src/components/mesa-motion/EtapaEntrevista.tsx",
-      "src/components/mesa-motion/EtapaSom.tsx",
-      "src/components/mesa-motion/EtapaCritica.tsx",
-      "src/components/mesa-motion/EtapaRender.tsx",
-      "src/components/mesa-motion/motionApi.ts",
-      "src/components/mesa-motion/useAcoesDaCena.ts",
       "src/components/mesa-edicao/editor/Renderizar.tsx",
       "src/components/mesa-edicao/AreaDoEditor.tsx",
       "src/lib/editor/render.ts",

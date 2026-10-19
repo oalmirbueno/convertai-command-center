@@ -157,6 +157,8 @@ export type CandidatoDeNome = {
   /** Teste de pronúncia e de significado em outros idiomas (IDV2): aviso, nunca trava. */
   idiomas?: LeituraEmIdioma[];
   risco_idioma?: RiscoDoIdioma;
+  /** 19/10/2026: a linha do Jev nas 1 ou 2 melhores ("Escolha do Jev: ..."); as outras ficam sem. */
+  destaque_jev?: string;
 };
 
 export function filtrosIniciais(nome: string): FiltrosDoNome {
@@ -516,7 +518,7 @@ export const TIPOS_DE_SLOGAN = [
 ] as const;
 
 export type TipoDeSlogan = (typeof TIPOS_DE_SLOGAN)[number]["valor"];
-export type SloganDaMarca = { id: string; texto: string; tipo: TipoDeSlogan; por_que: string; nota: number | null };
+export type SloganDaMarca = { id: string; texto: string; tipo: TipoDeSlogan; por_que: string; nota: number | null; /** 19/10/2026: "Escolha do Jev: ..." nas 1 ou 2 melhores. */ destaque_jev?: string };
 
 /** Slogans do modelo em forma segura: sem aspas, sem repetir, tipo conhecido, id s1..sN. */
 export function normalizarSlogans(bruto: unknown, limite = 12): SloganDaMarca[] {

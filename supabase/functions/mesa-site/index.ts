@@ -11,6 +11,7 @@
  * Sites:      sites_listar { client_id, marca_id? } · site_criar { client_id, nome, marca_id? }
  *             site_salvar { site_id, etapa?, briefing?, direcao?, dna?, conteudo_escolhida?, modelo?, publicacao? } · site_arquivar { site_id, arquivar }
  * Briefing:   briefing_ler { site_id } -> { encontrado, respostas, decupagem, perguntas }
+ *             link_ler { site_id, url } -> { leitura, motivo } (página do cliente pelo link; robots.txt, sem IA, não grava)
  * Referências: referencia_adicionar { site_id, tipo: url|print|acervo, url?, path?, imagem_id?, nome? } · referencia_arquivar { site_id, referencia_id, arquivar }
  *             referencias_ler { site_id, modelo_id? } -> { dna, observacoes, lidas, falhas } (visão descreve, Jev escolhe o DNA)
  * Conteúdo:   conteudo_gerar { site_id, modelo_id?, pedido? } -> { opcoes } (3 opções, fórmula de copy e SEO)
@@ -96,6 +97,7 @@ import { ehTipoDeSite, mapaDoSite, mapaPadrao, normalizarEstilo, secoesDoMapa, s
 import { custoJev } from "../_shared/ia-motor.ts";
 import { guardarVersao } from "./versoes.ts";
 import { type ContextoDaPrevia, rotasDaPrevia } from "./previa.ts";
+import { lerLinkDoCliente } from "./modulos/leitura-do-link.ts";
 import { ACOES_LONGAS_DA_BASE, baseInicialDoSite, estimarDaBase, rotasDaBase } from "./base-de-design.ts";
 import { itensDaBaseDeDesign, regrasDoMapa } from "../_shared/uiux/base-completa.ts";
 import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimentoDaBaseDeDesign, TETO_DO_BLOCO_DO_DIRETOR } from "../_shared/uiux/citar.ts";
@@ -374,6 +376,18 @@ async function briefingLer(ch: Chamador, c: Record<string, unknown>) {
     registrarFalha("mesa-site: decupagem não lida", e);
   }
   return json({ encontrado: true, briefing_id: b.id, titulo: b.titulo || null, respostas: obj(b.responses), decupagem, perguntas: PERGUNTAS_DO_BRIEFING, custo_usd: 0 });
+}
+
+/**
+ * Ler a página do cliente pelo link (19/10/2026, aprendido com o Gravyx): o
+ * site atual, o Instagram ou a página de vendas. Só lê e devolve (robots.txt,
+ * prazo, teto, só HTML); o dono confirma na tela o que vai para o briefing.
+ * Sem IA e sem custo. Nada de log com o endereço ou o conteúdo.
+ */
+async function linkLer(ch: Chamador, c: Record<string, unknown>) {
+  await lerSite(ch, c.site_id);
+  const r = await lerLinkDoCliente(c.url, fetch);
+  return json({ leitura: r.leitura, motivo: r.motivo, custo_usd: 0 });
 }
 
 // ------------------------------------------------------------------ referências e DNA
@@ -1180,6 +1194,7 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   site_salvar: siteSalvar,
   site_arquivar: siteArquivar,
   briefing_ler: briefingLer,
+  link_ler: linkLer,
   referencia_adicionar: referenciaAdicionar,
   referencia_arquivar: referenciaArquivar,
   referencias_ler: referenciasLer,
@@ -1203,7 +1218,7 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
 };
 
 /** IA ou rede: a resposta começa na hora (a plataforma corta em 150 s sem resposta). */
-const ACOES_LONGAS = new Set(["referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", "dominio_verificar", ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE]);
+const ACOES_LONGAS = new Set(["link_ler", "referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", "dominio_verificar", ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

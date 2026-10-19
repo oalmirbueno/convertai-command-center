@@ -12,9 +12,16 @@ import { ultimasVersoes, type ItemDoMes, type Trabalho } from "./useItensDoMes";
  * supabase/functions/_shared/arte-rapida.ts.
  */
 
+/**
+ * 19/10: de onde é a arte rápida. 'mesa' (a Mesa do cliente, padrão) ou 'laboratorio' (Estúdio livre:
+ * fora da Mesa, guardada no arquivo livre). A Mesa só lista 'mesa' (estudio_trabalhos.origem).
+ */
+export type OrigemDaArteRapida = "mesa" | "laboratorio";
+
 export const chavesDaArteRapida = {
   todas: (clientId: string) => ["mesa", "arte-rapida", clientId] as const,
-  lista: (clientId: string) => ["mesa", "arte-rapida", clientId, "lista"] as const,
+  lista: (clientId: string, origem: OrigemDaArteRapida = "mesa") =>
+    (origem === "mesa" ? ["mesa", "arte-rapida", clientId, "lista"] : ["mesa", "arte-rapida", clientId, "lista", origem]) as readonly string[],
   um: (clientId: string, id: string) => ["mesa", "arte-rapida", clientId, "um", id] as const,
   fotos: (clientId: string, ids: string[]) => ["mesa", "arte-rapida", clientId, "fotos", ids.join(",")] as const,
 };
@@ -27,12 +34,16 @@ function paraTrabalho(bruto: Record<string, unknown>): Trabalho {
   return { ...t, cards: Array.isArray(t.cards) ? t.cards : [], direcao: t.direcao && typeof t.direcao === "object" ? t.direcao : ({ cards: [] } as unknown as Trabalho["direcao"]) };
 }
 
-/** As artes rápidas do cliente, mais novas primeiro (as arquivadas saem na tela, por artesDoHistorico). */
-export async function lerArtesRapidas(clientId: string): Promise<Trabalho[]> {
+/**
+ * As artes rápidas do cliente, mais novas primeiro (as arquivadas saem na tela, por artesDoHistorico).
+ * 19/10: só as da origem pedida; a Mesa do cliente lê só as da Mesa (as do Laboratório nunca entram nela).
+ */
+export async function lerArtesRapidas(clientId: string, origem: OrigemDaArteRapida = "mesa"): Promise<Trabalho[]> {
   const { data, error } = await (supabase as any)
     .from("estudio_trabalhos")
     .select("*")
     .eq("client_id", clientId)
+    .eq("origem", origem)
     .not("direcao->arte_rapida", "is", null)
     .order("atualizado_em", { ascending: false })
     .limit(MAX_NO_HISTORICO);
@@ -40,8 +51,8 @@ export async function lerArtesRapidas(clientId: string): Promise<Trabalho[]> {
   return ((data || []) as Record<string, unknown>[]).map(paraTrabalho).filter((t) => ehArteRapida(t.direcao));
 }
 
-export async function lerArteRapida(clientId: string, id: string): Promise<Trabalho | null> {
-  const { data, error } = await (supabase as any).from("estudio_trabalhos").select("*").eq("client_id", clientId).eq("id", id).maybeSingle();
+export async function lerArteRapida(clientId: string, id: string, origem: OrigemDaArteRapida = "mesa"): Promise<Trabalho | null> {
+  const { data, error } = await (supabase as any).from("estudio_trabalhos").select("*").eq("client_id", clientId).eq("origem", origem).eq("id", id).maybeSingle();
   if (error) throw error;
   return data ? paraTrabalho(data as Record<string, unknown>) : null;
 }
@@ -108,10 +119,10 @@ export function miniaturaDaArteRapida(t: Trabalho): string | null {
 }
 
 /** Troca o trabalho nas listas em cache da arte rápida (lista e o aberto). */
-export function gravarArteRapidaNoCache(qc: QueryClient, clientId: string, t: Trabalho | null | undefined) {
+export function gravarArteRapidaNoCache(qc: QueryClient, clientId: string, t: Trabalho | null | undefined, origem: OrigemDaArteRapida = "mesa") {
   if (!t || !t.id) return;
   const novo = paraTrabalho(t as unknown as Record<string, unknown>);
-  qc.setQueryData<Trabalho[]>(chavesDaArteRapida.lista(clientId), (lista) => {
+  qc.setQueryData<Trabalho[]>(chavesDaArteRapida.lista(clientId, origem), (lista) => {
     const atual = lista || [];
     return atual.some((x) => x.id === novo.id) ? atual.map((x) => (x.id === novo.id ? novo : x)) : [novo].concat(atual);
   });
@@ -138,6 +149,18 @@ export const levarArteRapidaParaAgenda = (p: { trabalhoId: string; data: string;
     titulo: p.titulo || undefined,
     pedido_id: p.pedidoId,
   });
+
+/**
+ * 19/10: "Guardar" da arte do Estúdio livre: a função vê a origem 'laboratorio' e manda as lâminas para o
+ * Workspace global (Laboratório / Livres ou o cliente / Estúdio livre / dia), sem Arquivos do cliente,
+ * Agenda nem aprovação. Sem custo de IA.
+ */
+export interface RespostaDoGuardar {
+  trabalho?: Trabalho;
+  laboratorio: { pasta_id: string; caminho: string[]; node_ids: string[]; guardado_em: string; novos: number };
+}
+
+export const guardarNoLaboratorio = (trabalhoId: string) => chamarFuncao<RespostaDoGuardar>("estudio-arte", { acao: "entregar", trabalho_id: trabalhoId });
 
 export const arquivarArteRapida = (trabalhoId: string, desfazer = false) =>
   chamarFuncao<{ trabalho: Trabalho; arquivada: boolean }>("estudio-arte", { acao: "rapida_arquivar", trabalho_id: trabalhoId, desfazer });

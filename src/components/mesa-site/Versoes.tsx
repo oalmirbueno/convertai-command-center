@@ -1,21 +1,48 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Download, History, Loader2, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, History, Loader2, Undo2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
-import { EstadoVazio } from "@/components/sistema/Estados";
+import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { botao, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { dataEHora } from "@/lib/mesa/api";
 import { podeVoltarPara, ROTULO_DO_TIPO, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { dadosDaVersao, diferencasEntreVersoes } from "../../../supabase/functions/mesa-site/modulos/site-versoes";
 import { CHAVES, chamarMotor, chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
+import { type DadosDaPrevia, usePreviaDados } from "./previaApi";
+import { montarPreviaRapida } from "./previaEstatica";
 
 type VersaoDoPlano = { id: string; motivo: string; criado_em: string };
 type Arquivo = { arquivo: string; mais: number; menos: number };
 type Pedido = { tipo: "codigo"; trabalho: TrabalhoDoMotor } | { tipo: "plano"; versao: VersaoDoPlano };
+
+const obj = (v: unknown): Record<string, any> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, any>) : {});
+const COR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Os dados da prévia rápida como estavam numa versão do plano (19/10/2026):
+ * as imagens escolhidas e a seção de cada uma daquela versão (a URL é a de
+ * agora; imagem apagada depois não aparece) e as cores do ajuste daquela
+ * versão sobre as da marca.
+ */
+export function dadosDaPreviaNaVersao(dados: DadosDaPrevia, versao: Record<string, unknown>): DadosDaPrevia {
+  const lista = Array.isArray(versao.imagens) ? (versao.imagens as unknown[]).map(obj) : null;
+  const imagens = lista
+    ? dados.imagens.map((i) => {
+        const v = lista.find((x) => x.id === i.id);
+        return v ? { ...i, escolhida: v.escolhida !== false, secao: typeof v.secao === "string" ? v.secao : null, slot: typeof v.slot === "string" ? v.slot : i.slot } : { ...i, escolhida: false };
+      })
+    : dados.imagens;
+  const ajustes = obj(obj(versao.estilo).ajustes);
+  const marca = dados.cores_da_marca || dados.cores;
+  const cor = (v: unknown, padrao: string) => (COR.test(String(v || "")) ? String(v) : padrao);
+  const cores = versao.estilo !== undefined && marca ? { ...marca, destaque: cor(ajustes.destaque, marca.destaque), fundo: cor(ajustes.fundo, marca.fundo), texto: cor(ajustes.texto, marca.texto) } : dados.cores;
+  return { ...dados, imagens, cores };
+}
 
 /**
  * Versões (SIT2): comparar e voltar, nas duas camadas do site.
@@ -43,6 +70,19 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
     queryFn: () => chamarSite<{ versao: { dados: Record<string, unknown> } }>("versao_ler", { site_id: site.id, versao_id: String(aberta).slice(6) }),
   });
   const doCodigo = trabalhos.filter((t) => podeVoltarPara(t));
+  // 19/10/2026: a prévia de uma versão do plano (janela no centro), montada como a prévia rápida.
+  const [vendo, setVendo] = useState<VersaoDoPlano | null>(null);
+  const lida = useQuery({
+    queryKey: ["mesa-site", "versao", site.id, vendo ? `plano:${vendo.id}` : null],
+    enabled: !!vendo,
+    queryFn: () => chamarSite<{ versao: { dados: Record<string, unknown> } }>("versao_ler", { site_id: site.id, versao_id: vendo!.id }),
+  });
+  const dadosQ = usePreviaDados(site, !!vendo);
+  const documentoDaVersao = useMemo(() => {
+    if (!vendo || !lida.data || !dadosQ.data) return null;
+    const dados = (lida.data.versao && lida.data.versao.dados) || {};
+    return montarPreviaRapida({ ...site, ...dados, nome: site.nome } as LinhaDoSite, dadosDaPreviaNaVersao(dadosQ.data, dados), { marcarEstados: false }).documento;
+  }, [vendo, lida.data, dadosQ.data, site]);
 
   const rodar = async (rotulo: string, fn: () => Promise<void>) => {
     setOcupado(rotulo);
@@ -85,7 +125,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
     <Secao
       titulo="Versões"
       descricao={`${doCodigo.length} do código · ${plano.data ? plano.data.versoes.length : 0} do plano`}
-      ajuda="Código: cada trabalho do motor terminado é uma versão (commit), com o que mudou e o zip daquela versão; voltar cria um trabalho que desfaz o que veio depois, sem custo de modelo. Plano: o que o site decidiu antes de cada mudança (mapa, estilo, copy, imagens, integrações e SEO); comparar mostra o que muda e voltar guarda o atual como versão antes."
+      ajuda="Código: cada trabalho do motor terminado é uma versão (commit), com o que mudou e o zip daquela versão; voltar cria um trabalho que desfaz o que veio depois, sem custo de modelo. Plano: o que o site decidiu antes de cada mudança (mapa, estilo, copy, imagens, integrações e SEO), guardado no banco (site_versoes); o olho mostra a prévia daquela versão, comparar mostra o que muda e voltar guarda o atual como versão antes."
       recolher="mesa-site:construcao:versoes"
     >
       <span className={juntar(texto.rotulo, "block")}>Código</span>
@@ -159,6 +199,9 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
                     <span className={juntar(texto.auxiliar, "block truncate")}>{dataEHora(v.criado_em)}</span>
                   </span>
                 </button>
+                <button type="button" className={botao.icone} aria-label="Ver a prévia desta versão" title="Ver a prévia desta versão" onClick={() => setVendo(v)} data-ver-previa-da-versao={v.id}>
+                  <Eye className="h-4 w-4" />
+                </button>
                 <button type="button" className={botao.icone} aria-label="Voltar para esta versão do plano" title="Voltar para esta versão" disabled={!!ocupado} onClick={() => setPedido({ tipo: "plano", versao: v })}>
                   <Undo2 className="h-4 w-4" />
                 </button>
@@ -186,6 +229,39 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
           {ocupado.replace(/ não .*$/, "")}
         </p>
       )}
+
+      <JanelaCentral
+        aberta={!!vendo}
+        onMudar={(a) => !a && setVendo(null)}
+        titulo={vendo ? `Antes de: ${vendo.motivo}` : "Versão"}
+        icone={<Eye className="h-4 w-4" />}
+        descricao={vendo ? dataEHora(vendo.criado_em) : undefined}
+        ajuda="A prévia rápida do plano desta versão: mapa, copy, imagens escolhidas e cores daquele momento (as fotos usam o endereço de agora; imagem apagada depois não aparece). Voltar para esta guarda o atual como versão antes."
+        largura="xl"
+        rodape={
+          vendo ? (
+            <button
+              type="button"
+              className={botao.primario}
+              disabled={!!ocupado}
+              onClick={() => {
+                const v = vendo;
+                setVendo(null);
+                setPedido({ tipo: "plano", versao: v });
+              }}
+              data-voltar-pela-previa=""
+            >
+              <Undo2 className="mr-1 h-3.5 w-3.5" />
+              Voltar para esta
+            </button>
+          ) : null
+        }
+        data-previa-da-versao=""
+      >
+        {vendo && (lida.isError || dadosQ.isError) && <p className={juntar(texto.auxiliar, "text-destructive")}>A prévia desta versão não abriu agora.</p>}
+        {vendo && !documentoDaVersao && !lida.isError && !dadosQ.isError && <Carregando forma="aba" rotulo="Montando a prévia da versão" />}
+        {documentoDaVersao && <iframe title="Prévia desta versão do site" srcDoc={documentoDaVersao} sandbox="" className="block w-full rounded-md border border-border bg-white" style={{ height: 600, maxHeight: "70vh" }} data-iframe-da-versao="" />}
+      </JanelaCentral>
 
       <AlertDialog open={!!pedido} onOpenChange={(v) => !v && setPedido(null)}>
         <AlertDialogContent>

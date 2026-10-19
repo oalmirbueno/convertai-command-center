@@ -11,6 +11,8 @@ import { chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
 import CampoComIA, { textoDoValor } from "./CampoComIA";
 import { camposDoBriefing, camposDoSiteInteiro, destinosDosValores, mapaDoTipoAplicado, perguntasDaTela } from "./preencherDoSite";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
+import LerPaginaDoCliente from "./LerPaginaDoCliente";
+import { type AchadoDoLink, aplicarAchados, registroDaLeitura } from "./leituraDoLink";
 
 type Pergunta = { id: string; rotulo: string };
 type Leitura = { encontrado: boolean; briefing_id?: string; titulo?: string | null; respostas: Record<string, unknown>; decupagem: { itens?: Array<{ texto?: string; categoria?: string }>; tom_de_voz?: string | null } | null; perguntas: Pergunta[] };
@@ -83,6 +85,20 @@ export default function EtapaBriefing({ site }: { site: LinhaDoSite; onIrPara?: 
     if (d.whatsappMensagem !== null) await salvarSite("integracoes_salvar", { site_id: site.id, integracoes: { whatsapp: { ...((site.integracoes && site.integracoes.whatsapp) || {}), mensagem: d.whatsappMensagem } } });
   };
 
+  /**
+   * 19/10/2026: o que foi lido no link do cliente e o dono confirmou. Acrescenta
+   * às respostas (nunca apaga), guarda a leitura (briefing.pagina_lida) e as
+   * cores vão para a observação da direção.
+   */
+  const usarLeitura = async (escolhidos: AchadoDoLink[], registro: ReturnType<typeof registroDaLeitura>) => {
+    const observacaoAtual = String((site.direcao && site.direcao.observacao) || "");
+    const r = aplicarAchados(respostas, observacaoAtual, escolhidos);
+    const novas = { ...respostas, ...r.respostas };
+    setRespostas(novas);
+    await gravarRespostas(novas, { pagina_lida: registro });
+    if (r.observacao !== null) await salvarSite("site_salvar", { site_id: site.id, direcao: { observacao: r.observacao } });
+  };
+
   const d = leitura.data;
   const usandoBrf = !!(site.briefing && site.briefing.fonte === "brf" && d && d.briefing_id === site.briefing.briefing_id);
   // As perguntas da lista fixa na hora; as que o servidor mandar a mais entram no fim.
@@ -145,6 +161,8 @@ export default function EtapaBriefing({ site }: { site: LinhaDoSite; onIrPara?: 
           )}
         </Secao>
       ) : null}
+
+      <LerPaginaDoCliente siteId={site.id} lidaAntes={site.briefing && site.briefing.pagina_lida ? site.briefing.pagina_lida : null} onUsar={usarLeitura} />
 
       <Secao
         titulo={d && d.encontrado ? "Complementar" : "Briefing do site"}

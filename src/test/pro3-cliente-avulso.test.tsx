@@ -158,7 +158,8 @@ const PAUSADO: ClienteBruto = { id: "55555555-5555-4555-8555-555555555555", comp
 
 describe("quem aparece nas mesas de criação", () => {
   it("avulso, sem plano e lead convertido sempre entram nas 8 mesas de criação; a Mesa, a Ads e a Edição não mudam", () => {
-    expect(MESAS_DE_CRIACAO.slice().sort()).toEqual(["foto", "identidade", "motion", "proposta", "publicidade", "roteiros", "site", "videos"]);
+    // 19/10/2026: Mesa Motion retirada a pedido do dono.
+    expect(MESAS_DE_CRIACAO.slice().sort()).toEqual(["foto", "identidade", "proposta", "publicidade", "roteiros", "site", "videos"]);
     const convertidos = { [GANHO]: true as const };
     for (const mesa of MESAS_DE_CRIACAO) {
       expect(entraPeloPadrao(mesa, AVULSO).entra).toBe(true);
@@ -231,9 +232,8 @@ describe("quem aparece nas mesas de criação", () => {
       foto: "src/pages/MesaFoto.tsx",
     };
     for (const mesa of Object.keys(fontes)) expect(ler(fontes[mesa])).toContain(`<SeletorDeClientesDaMesa mesa="${mesa}"`);
-    // Vídeos e Motion pela casca de vídeo (a mesa vai no prop).
+    // Vídeos pela casca de vídeo (a mesa vai no prop). 19/10/2026: Mesa Motion retirada a pedido do dono.
     expect(ler("src/components/mesa-videos/MesaDeVideo.tsx")).toContain("<SeletorDeClientesDaMesa mesa={mesa}");
-    expect(ler("src/pages/MesaMotion.tsx")).toContain('mesa="motion"');
     expect(ler("src/pages/MesaVideos.tsx")).toContain('mesa="videos"');
   });
 });

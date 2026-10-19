@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, ExternalLink, Film, Loader2, Send } from "lucide-react";
+import { Clapperboard, Film, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
+import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
@@ -41,15 +40,16 @@ export function custoDoFilmeCinematografico(catalogo: ReturnType<typeof useMesa>
 }
 
 /**
- * Vídeo da marca (IDV3, adendo do dono): cria na Mesa Motion a apresentação
+ * Vídeo da marca (IDV3, adendo do dono): cria pela função mesa-motion a apresentação
  * em motion (os slides viram cenas do kit, sem IA) e, se pedir, o filme
  * cinematográfico (3 storyboards com IA, custo antes), já com logo, paleta,
  * tipografia, grafismos, estratégia, tom e tagline do projeto; mostra o
  * andamento (render da fila) e manda o vídeo pronto para aprovação.
+ * 19/10/2026: a tela da Mesa Motion saiu a pedido do dono; o link para ela
+ * saiu daqui e o filme segue só pela função (render, montagem e entrega).
  */
 export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: string }) {
   const mesa = useMesa();
-  const { marca } = useMarcaDaMesa();
   const { projeto, guardar } = useProjetoDaMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -63,15 +63,13 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
   });
   const temApresentacao = videos.some((v) => v.tipo === "apresentacao");
   const custoFilme = pedido.filme ? custoDoFilmeCinematografico(mesa.catalogo, modeloMotion) : 0;
-  const marcaId = projeto.marca_id || (marca && !marca.principal ? marca.id : null);
-  const enderecoDoFilme = (id: string) => `/mesa-motion?client=${mesa.clientId}${marcaId ? `&marca=${marcaId}` : ""}&filme=${id}`;
 
   const criar = async () => {
     setOcupado("criar");
     try {
       const r = new Rodada(projeto, { clientId: mesa.clientId, marcaId: projeto.marca_id, nomeDaMarca: String((projeto.dados.naming && projeto.dados.naming.nome) || mesa.clientName || "Marca"), modelos: { motion: modeloMotion || null }, opcoes: {}, kit: null, guardar: (p: ProjetoDeIdentidade) => guardar(p) });
       const v = await criarVideosDaMarca(r, pedido);
-      toast.success(v.filmes.length === 1 ? "Filme criado na Mesa Motion" : `${v.filmes.length} filmes criados na Mesa Motion`, v.custo ? { description: `Custo: ${usd(v.custo)}` } : undefined);
+      toast.success(v.filmes.length === 1 ? "Filme criado" : `${v.filmes.length} filmes criados`, v.custo ? { description: `Custo: ${usd(v.custo)}` } : undefined);
       mesa.atualizarCusto();
       setAberta(false);
     } catch (e) {
@@ -120,9 +118,9 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
     <Secao
       titulo={titulo}
       divisoria
-      descricao={videos.length ? `${videos.length} na Mesa Motion` : "Nenhum ainda"}
+      descricao={videos.length ? `${videos.length} ${videos.length === 1 ? "vídeo" : "vídeos"}` : "Nenhum ainda"}
       recolher={`mesa-identidade:${projeto.id}:video`}
-      ajuda="O filme nasce na Mesa Motion já com a logo, as versões, a paleta, a tipografia, os grafismos, a estratégia, o tom, a tagline e as peças do projeto. A entrevista é pulada (as respostas vêm da estratégia). A apresentação em motion não usa IA: os slides viram cenas do kit. O render é da fila; o vídeo pronto entra no pacote, no brandbook web e vai para aprovação."
+      ajuda="O filme nasce já com a logo, as versões, a paleta, a tipografia, os grafismos, a estratégia, o tom, a tagline e as peças do projeto. A entrevista é pulada (as respostas vêm da estratégia). A apresentação em motion não usa IA: os slides viram cenas do kit. O render é da fila; o vídeo pronto entra no pacote, no brandbook web e vai para aprovação."
       acao={
         <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} onClick={() => setAberta(true)} data-criar-video-da-marca="" data-campo="criar-video" aria-label="Criar vídeo" title="Criar vídeo">
           <Clapperboard className="h-4 w-4" aria-hidden="true" />
@@ -169,9 +167,6 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
                     {ocupado === `aprovar-${f.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </button>
                 )}
-                <Link className={juntar(botao.icone, "m-1 disabled:opacity-50")} to={enderecoDoFilme(v.filme_id)} aria-label="Mesa Motion" title="Mesa Motion">
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                </Link>
               </li>
             );
           })}
@@ -182,7 +177,7 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
         <DialogContent className="max-w-lg" data-janela-do-video="">
           <DialogHeader>
             <DialogTitle>Criar o vídeo da marca</DialogTitle>
-            <DialogDescription>O filme abre na Mesa Motion com os insumos do projeto. Nada é enviado ao cliente.</DialogDescription>
+            <DialogDescription>O filme sai com os insumos do projeto. Nada é enviado ao cliente.</DialogDescription>
           </DialogHeader>
           <div className="grid min-w-0">
             <label className={juntar(texto.corpo, "flex items-start py-2")}>
@@ -196,7 +191,7 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
               <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 accent-primary" checked={pedido.filme} onChange={(e) => setPedido({ ...pedido, filme: e.target.checked })} />
               <span className="min-w-0">
                 <span className="block">Filme cinematográfico</span>
-                <span className={juntar(texto.auxiliar, "block")}>3 storyboards com IA para escolher na Mesa Motion.</span>
+                <span className={juntar(texto.auxiliar, "block")}>3 storyboards com IA.</span>
               </span>
             </label>
             {pedido.filme && (

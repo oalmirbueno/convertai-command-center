@@ -362,8 +362,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         r = null;
       }
       if (!r) {
-        // Frente MOT: a Mesa Motion tem agente próprio; aqui só entram Vídeos e Edição.
-        await executarAnotando(intencaoPorPalavras(mesa === "motion" ? "videos" : mesa, t), t, t);
+        await executarAnotando(intencaoPorPalavras(mesa, t), t, t);
         return;
       }
       if (r.conversa_id && r.conversa_id !== conversaId) setConversaId(r.conversa_id);

@@ -146,7 +146,6 @@ const AREAS: Record<string, string> = {
   "/mesa-identidade": "mesa-identidade",
   "/mesa-proposta": "mesa-proposta",
   "/mesa-site": "mesa-site",
-  "/mesa-motion": "mesa-motion",
   "/central": "central",
   "/ciclo": "ciclo",
   "/ciclo/revisao": "ciclo",
@@ -180,6 +179,7 @@ export const ROTULOS_DAS_AREAS: Record<string, string> = {
   "mesa-identidade": "Mesa Identidade",
   "mesa-proposta": "Mesa Proposta",
   "mesa-site": "Mesa Site",
+  // 19/10/2026: Mesa Motion retirada; o rótulo fica para o tempo já registrado nela.
   "mesa-motion": "Mesa Motion",
   central: "Central",
   ciclo: "Ciclo",

@@ -8,7 +8,6 @@ import { ETAPAS_DA_PUBLICIDADE } from "@/components/mesa-publicidade/Comuns";
 import { ETAPAS_DA_PROPOSTA } from "@/components/mesa-proposta/caminhoDaProposta";
 import { ETAPAS_DE_APOIO, PASSOS_PRINCIPAIS } from "@/components/mesa-foto/Comuns";
 import { ETAPAS_DO_SITE } from "../../supabase/functions/_shared/site-metodo";
-import { ETAPAS_DO_MOTION } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { ETAPAS_DA_IDENTIDADE } from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 
 /**
@@ -25,7 +24,6 @@ const ETAPAS_POR_MESA: Record<string, string[]> = {
   ads: ["oferta", "referencias", "plano", "estudio", "conta", "auditoria", "resultados"],
   videos: ETAPAS_DA_MESA_VIDEOS.map((e) => e.valor),
   edicao: ETAPAS_DA_MESA_EDICAO.map((e) => e.valor),
-  motion: ETAPAS_DO_MOTION.map((e) => e.valor),
   publicidade: ETAPAS_DA_PUBLICIDADE.map((e) => e.valor),
   roteiros: ["agenda", "roteiro", "revisao", "pdf", "modelos"],
   identidade: ETAPAS_DA_IDENTIDADE.map((e) => e.valor),
@@ -44,6 +42,11 @@ describe("ícones das etapas das mesas", () => {
       const icones = ETAPAS_POR_MESA[mesa].map((v) => mapa[v]);
       expect(new Set(icones).size, mesa).toBe(icones.length);
     }
+  });
+
+  // 19/10/2026: Mesa Motion retirada a pedido do dono; o mapa não tem mais as etapas dela.
+  it("a Mesa Motion saiu do mapa de ícones", () => {
+    expect((ICONES_DAS_ETAPAS as Record<string, unknown>).motion).toBeUndefined();
   });
 
   it("as listas do teste batem com as das páginas (Ads e Roteiros moram na página)", () => {

@@ -487,7 +487,7 @@ async function passoVideo(r: Rodada): Promise<ResultadoDoPasso> {
   const falta = { apresentacao: pedido.apresentacao && !ja.some((v) => v.tipo === "apresentacao"), filme: pedido.filme && !ja.some((v) => v.tipo === "filme_marca") };
   if (!falta.apresentacao && !falta.filme) return { resumo: "Vídeo já criado", custo: 0, antes: null, perguntas: [], pulado: true };
   const v = await criarVideosDaMarca(r, falta);
-  return { resumo: `${v.filmes.length} ${v.filmes.length === 1 ? "filme criado" : "filmes criados"} na Mesa Motion`, custo: v.custo, antes: { ...antes, filmes: v.filmes.map((f) => f.id) }, perguntas: [] };
+  return { resumo: `${v.filmes.length} ${v.filmes.length === 1 ? "filme criado" : "filmes criados"}`, custo: v.custo, antes: { ...antes, filmes: v.filmes.map((f) => f.id) }, perguntas: [] };
 }
 
 const PASSOS: Record<PassoId, (r: Rodada) => Promise<ResultadoDoPasso>> = {

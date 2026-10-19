@@ -49,6 +49,7 @@ import {
   miniaturaDaArteRapida,
   prepararArteRapida,
   situacaoDaArteRapida,
+  type OrigemDaArteRapida,
   type PostLidoNaTela,
 } from "./arteRapidaApi";
 import {
@@ -236,10 +237,13 @@ function PedidoDaArteRapida({
   campanhaDaUrl,
   colunas,
   largo,
+  origem = "mesa",
 }: {
   onCriada: (t: Trabalho) => void;
   fotosDaUrl: string[];
   campanhaDaUrl: string | null;
+  /** 19/10: 'laboratorio' = Estúdio livre (o trabalho nasce fora da Mesa do cliente). */
+  origem?: OrigemDaArteRapida;
   /** Computador: formulário com rolagem própria e o botão fixo embaixo. */
   colunas: boolean;
   /** Tela larga: a prévia "Como vai sair" ao lado. */
@@ -393,23 +397,23 @@ function PedidoDaArteRapida({
   const pronto = pedidoProntoParaIr(pedido, arquivos.length, documentos.length, !!(postDoPedido && postDoPedido.legenda && usaConteudoDoPost(modoDoPost))) && !anexos.subindo && !lendo && !lendoPost;
 
   const criar = async () => {
-    const r = await prepararArteRapida(
-      corpoDaArteRapida({
-        clientId,
-        pedido,
-        peca,
-        campanha,
-        arquivos,
-        documentos,
-        formato,
-        laminas: peca === "carrossel" && laminas !== "auto" ? Number(laminas) : null,
-        marcaId: marca ? marca.id : null,
-        modeloImagemId: imagem ? imagem.id : null,
-        qualidade: "media",
-        post: postDoPedido,
-        fidelidade: comReferencia ? fidelidade : null,
-      }),
-    );
+    const corpoDoPedido = corpoDaArteRapida({
+      clientId,
+      pedido,
+      peca,
+      campanha,
+      arquivos,
+      documentos,
+      formato,
+      laminas: peca === "carrossel" && laminas !== "auto" ? Number(laminas) : null,
+      marcaId: marca ? marca.id : null,
+      modeloImagemId: imagem ? imagem.id : null,
+      qualidade: "media",
+      post: postDoPedido,
+      fidelidade: comReferencia ? fidelidade : null,
+    });
+    // 19/10: o Estúdio livre marca a origem; a Mesa segue com o corpo de sempre.
+    const r = await prepararArteRapida(origem === "laboratorio" ? { ...corpoDoPedido, origem } : corpoDoPedido);
     const t = r && r.trabalho ? (r.trabalho as Trabalho) : null;
     // A arte única já entra na fila de geração (o preço dela estava no botão); o carrossel espera o "Gerar".
     if (t && gerarLogo && Array.isArray(t.direcao && t.direcao.cards) && t.direcao.cards.length === 1) {
@@ -427,7 +431,7 @@ function PedidoDaArteRapida({
     const avisos: string[] = r && Array.isArray(r.avisos) ? r.avisos : [];
     if (avisos.length) toast.info(aviso("Sobre o pedido"), { description: avisos.join(" ").slice(0, 400), duration: 10000 });
     if (!t) return;
-    gravarArteRapidaNoCache(queryClient, clientId, t);
+    gravarArteRapidaNoCache(queryClient, clientId, t, origem);
     void queryClient.invalidateQueries({ queryKey: chavesDaArteRapida.todas(clientId) });
     anexos.limpar();
     setDocumentos([]);
@@ -712,8 +716,10 @@ function PedidoDaArteRapida({
 
   const cabecalho = (
     <div className="flex min-w-0 items-baseline">
-      <h2 className="mr-2 shrink-0 text-[15px] font-semibold leading-tight">Arte rápida</h2>
-      <p className="min-w-0 truncate text-[12px] text-muted-foreground">Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre.</p>
+      <h2 className="mr-2 shrink-0 text-[15px] font-semibold leading-tight">{origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"}</h2>
+      <p className="min-w-0 truncate text-[12px] text-muted-foreground">
+        {origem === "laboratorio" ? "Trabalho avulso, com o diretor de arte de sempre. Fica no arquivo livre, fora da Mesa do cliente." : "Fora do plano do mês, com a marca, a campanha e o diretor de arte de sempre."}
+      </p>
     </div>
   );
 
@@ -765,7 +771,7 @@ function PedidoDaArteRapida({
         <ol className="space-y-1.5 border-t border-border pt-3 text-[12px] leading-snug text-muted-foreground">
           <li>1. O diretor lê o pedido com a marca{escolhida ? " e a campanha" : ""}.</li>
           <li>2. {geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera."}</li>
-          <li>3. Depois: ajustar no Estúdio e levar para a Agenda com a data.</li>
+          <li>3. {origem === "laboratorio" ? "Depois: ajustar no Estúdio e guardar no arquivo livre (fora da Mesa do cliente)." : "Depois: ajustar no Estúdio e levar para a Agenda com a data."}</li>
         </ol>
       </RegiaoRolavel>
     </aside>
@@ -1179,6 +1185,8 @@ export default function EstudioArteRapida({
   topo,
   renderPeca,
   onAbrirItem,
+  origem = "mesa",
+  entregaDaPeca,
 }: {
   alvo: string;
   onAlvo: (alvo: string, limpar?: string[]) => void;
@@ -1191,20 +1199,27 @@ export default function EstudioArteRapida({
   topo: ReactNode;
   renderPeca: (p: { item: ItemDoMes; trabalho: Trabalho; rapida: ModoRapidoDoDetalhe }) => ReactNode;
   onAbrirItem: (taskId: string) => void;
+  /**
+   * 19/10: 'laboratorio' = Estúdio livre do Laboratório: lê e cria só os trabalhos dessa origem (a Mesa do
+   * cliente só lê os dela, 'mesa'). Padrão: 'mesa'.
+   */
+  origem?: OrigemDaArteRapida;
+  /** 19/10: a ferramenta Entrega da peça no lugar do "Levar para a Agenda" (o Estúdio livre guarda no arquivo livre). */
+  entregaDaPeca?: (trabalho: Trabalho) => ReactNode;
 }) {
   const { clientId } = useMesa();
   const { marca } = useMarcaDaMesa();
   const largo = useMidia("(min-width: 1440px)");
   const [params] = useSearchParams();
   const nova = alvo === NOVA_ARTE_RAPIDA;
-  const lista = useQuery({ queryKey: chavesDaArteRapida.lista(clientId), queryFn: () => lerArtesRapidas(clientId) });
+  const lista = useQuery({ queryKey: chavesDaArteRapida.lista(clientId, origem), queryFn: () => lerArtesRapidas(clientId, origem) });
   // Frente AE: com duas marcas, o histórico só mostra as artes da marca aberta.
   const historico = artesDoHistorico(lista.data || []).filter((t) => arteRapidaDaMarca(t, marca));
   const naLista = !nova ? (lista.data || []).filter((t) => t.id === alvo)[0] || null : null;
   const um = useQuery({
     queryKey: chavesDaArteRapida.um(clientId, alvo),
     enabled: !nova && !!lista.data && !naLista,
-    queryFn: () => lerArteRapida(clientId, alvo),
+    queryFn: () => lerArteRapida(clientId, alvo, origem),
   });
   const trabalho = naLista || (um.data && arteDoTrabalho(um.data) ? um.data : null);
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
@@ -1228,8 +1243,8 @@ export default function EstudioArteRapida({
         const a = arteDoTrabalho(trabalho);
         const campanha = nomeDaCampanha(trabalho.direcao && (trabalho.direcao as { campanha_id?: string | null }).campanha_id);
         return {
-          subtitulo: `Arte rápida · ${a ? ROTULO_DA_PECA[a.peca] : ""}${campanha ? ` · ${campanha}` : ""}${a && a.task_id ? " · na Agenda" : ""}`,
-          entrega: <LevarParaAgenda key={trabalho.id} trabalho={trabalho} onAbrirItem={onAbrirItem} />,
+          subtitulo: `${origem === "laboratorio" ? "Estúdio livre" : "Arte rápida"} · ${a ? ROTULO_DA_PECA[a.peca] : ""}${campanha ? ` · ${campanha}` : ""}${a && a.task_id ? " · na Agenda" : ""}`,
+          entrega: entregaDaPeca ? entregaDaPeca(trabalho) : <LevarParaAgenda key={trabalho.id} trabalho={trabalho} onAbrirItem={onAbrirItem} />,
         };
       })()
     : null;
@@ -1246,6 +1261,7 @@ export default function EstudioArteRapida({
       campanhaDaUrl={campanhaDaUrl}
       colunas={colunas}
       largo={largo}
+      origem={origem}
       onCriada={(t) => onAlvo(t.id, ["fotos", "campanha"])}
     />
   ) : peca ? (

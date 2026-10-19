@@ -257,6 +257,8 @@ export default function PreviaEditavel({
         rolagem.current = m.y;
         return;
       }
+      // O HTML da página é das checagens antes de publicar (outra tela): aqui não faz nada.
+      if (m.aq === "documento") return;
       if (m.aq === "desfazer") {
         focoNaPrevia.current = true;
         desfazerPeloAtalho();

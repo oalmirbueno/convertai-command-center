@@ -392,7 +392,8 @@ function BarraDeFerramentas({
   );
 }
 
-function DetalheDoItem({
+/** 19/10: exportado para o Estúdio livre do Laboratório (a mesma peça da arte rápida, fora da Mesa). */
+export function DetalheDoItem({
   item,
   trabalho,
   arte,

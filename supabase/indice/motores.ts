@@ -627,6 +627,7 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
   revisoes: "Segunda passada curta sobre uma saída que já levou o método (reparo de formato e encaixe na cadência do agente do Mês, correção de tutorial, revisão do texto das lâminas no Estúdio, reescrita da copy na Mesa Ads): conserta e completa o que a primeira chamada fez.",
   "nucleo.fatos": "Redação presa aos fatos do núcleo comum (Gestor da Central e Mesa Vídeos): responde só com o que as leituras devolveram e o código confere; o método da casa puxaria conteúdo novo.",
   "cfo.explicacao": "Explicação do CFO (frente CFO): a IA só reescreve a conta do motor em código, presa aos números (valor fora da conta faz valer o motor); método de trabalho puxaria conteúdo além da conta.",
+  "laboratorio.v1": "Laboratório v1 (19/10): o catálogo de superpoderes ainda não tem agente do Laboratório (agente do projeto e nós especialistas); sai desta lista quando o catálogo ganhar laboratorio.agente e laboratorio.geracao.",
 };
 
 /**
@@ -639,6 +640,9 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
  * chama e não entra aqui.
  */
 export const CHAMADAS_SEM_METODO: Record<string, string> = {
+  // 19/10: Laboratório v1 (agente do projeto e nós especialistas), até o catálogo ter o agente dele.
+  "laboratorio/acoes.ts#chamarPlanejar": "laboratorio.v1",
+  "laboratorio/executar.ts#texto": "laboratorio.v1",
   // 17/10: chamadas novas de outras frentes, cada uma com o porquê.
   "agente-calendario/index.ts#corrigirTutoriais": "revisoes",
   "agente-calendario/index.ts#planejarMes": "revisoes",

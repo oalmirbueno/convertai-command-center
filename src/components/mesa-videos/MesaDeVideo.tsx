@@ -2,7 +2,7 @@ import NavegacaoVideo from "./NavegacaoVideo";
 import { lazy, Suspense, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Film, Scissors } from "lucide-react";
+import { Clapperboard, Scissors } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -29,8 +29,8 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
  * sem o clique da equipe.
  */
 
-/** Frente MOT (30/09): a Mesa Motion usa a mesma casca. */
-export type QualMesaDeVideo = "videos" | "edicao" | "motion";
+/** 19/10/2026: a Mesa Motion (que usava esta casca) foi retirada a pedido do dono. */
+export type QualMesaDeVideo = "videos" | "edicao";
 
 export interface EtapaDaMesaDeVideo {
   valor: string;
@@ -95,6 +95,7 @@ export default function MesaDeVideo({
   Agente,
   rotuloDoAgente,
   antesDaEtapa,
+  acoesDaMesa,
   children,
 }: {
   mesa: QualMesaDeVideo;
@@ -111,6 +112,8 @@ export default function MesaDeVideo({
   rotuloDoAgente: string | ((etapa: string) => string);
   /** Endereço antigo que precisa ir para outro lugar (devolve true quando cuidou). */
   antesDaEtapa?: (etapaUrl: string | null, clientId: string) => boolean;
+  /** Ações próprias da mesa na barra de cima, em toda etapa (19/10/2026: o "Trocar vídeo" da Mesa Edição). */
+  acoesDaMesa?: (etapa: string, irPara: IrPara) => ReactNode;
   /** A etapa aberta. */
   children: (etapa: string, irPara: IrPara) => ReactNode;
 }) {
@@ -164,10 +167,9 @@ export default function MesaDeVideo({
   const irPara: IrPara = (e, extras = {}) => mudar({ ...extras, etapa: e });
 
   // Troca de cliente: limpa o que era do anterior (a etapa remonta pela chave).
-  // O filme aberto (?filme=, Mesa Motion) também sai: o filme de um cliente nunca abre com o cabeçalho de outro.
   const trocarCliente = (id: string) => {
     const o = lerOnde(chaveOnde(id), etapas);
-    mudar({ client: id, etapa: o.etapa || (mesa === "videos" ? "gerar" : etapas[0].valor), marca: null, origem: null, filme: null });
+    mudar({ client: id, etapa: o.etapa || (mesa === "videos" ? "gerar" : etapas[0].valor), marca: null, origem: null });
   };
 
   const [redirecionando, setRedirecionando] = useState(false);
@@ -258,7 +260,7 @@ export default function MesaDeVideo({
       }
     : null;
 
-  const icone = mesa === "edicao" ? <Scissors className="h-4 w-4" /> : mesa === "motion" ? <Film className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />;
+  const icone = mesa === "edicao" ? <Scissors className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />;
 
   return (
     // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx).
@@ -269,7 +271,7 @@ export default function MesaDeVideo({
       marcaId={marca ? marca.id : null}
       telaCheia={telaCheia}
       cliente={<SeletorDeClientesDaMesa mesa={mesa} clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
-      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, filme: null }, true)} /> : null}
+      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} /> : null}
       etapas={
         clientId ? (
           // 16/10/2026: etapas só em ícone (padrão das mesas, mesa-foto/IconesDasEtapas.tsx).
@@ -278,17 +280,20 @@ export default function MesaDeVideo({
       }
       acoes={
         clientId ? (
-          <CustoCompacto
-            saldoUsd={saldoUsd}
-            consumo={consumo.data || null}
-            previsao={previsao.data || null}
-            carregando={consumo.isLoading}
-            podeRecarregar={podeRecarregar}
-            isAdmin={isAdmin}
-            onRecarregar={() => setRecargaAberta(true)}
-            onChaves={abrirChaves}
-            onModelos={abrirModelos}
-          />
+          <>
+            {acoesDaMesa && valor ? <MesaProvider valor={valor}>{acoesDaMesa(etapa, irPara)}</MesaProvider> : null}
+            <CustoCompacto
+              saldoUsd={saldoUsd}
+              consumo={consumo.data || null}
+              previsao={previsao.data || null}
+              carregando={consumo.isLoading}
+              podeRecarregar={podeRecarregar}
+              isAdmin={isAdmin}
+              onRecarregar={() => setRecargaAberta(true)}
+              onChaves={abrirChaves}
+              onModelos={abrirModelos}
+            />
+          </>
         ) : null
       }
     >
@@ -299,7 +304,7 @@ export default function MesaDeVideo({
           <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className="min-w-0">
             <AreaDeTrabalho
               nasceRecolhida={mesa === "videos"}
-              memoria={`${mesa === "edicao" ? "mesa-edicao" : mesa === "motion" ? "mesa-motion" : "mesa-videos"}-agente`}
+              memoria={`${mesa === "edicao" ? "mesa-edicao" : "mesa-videos"}-agente`}
               rotuloDaLateral={typeof rotuloDoAgente === "function" ? rotuloDoAgente(etapa) : rotuloDoAgente}
               iconeDaLateral={icone}
               rotuloDoPrincipal={titulo}

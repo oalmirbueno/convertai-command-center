@@ -14,7 +14,9 @@ import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/siste
 import { dataEHora } from "@/lib/mesa/api";
 import { type CartaoDeDns, normalizarDominio, REGISTRADORES, ROTULO_DO_DOMINIO, type EstadoDoDominio } from "../../../supabase/functions/mesa-site/modulos/dns-do-site";
 import { ehAberto } from "../../../supabase/functions/_shared/motor-codigo";
-import { chamarSite, CHAVES, type LinhaDoSite, trabalhosDeCodigo, useGuardarSite, useTrabalhos } from "./siteApi";
+import { chamarSite, CHAVES, comAEdicaoDaPrevia, type LinhaDoSite, previaAtual, trabalhosDeCodigo, useGuardarSite, useTrabalhos } from "./siteApi";
+import ChecagensAntesDePublicar, { type ResultadoDasChecagens } from "./ChecagensAntesDePublicar";
+import { resumoDasChecagens } from "./checagensDoSite";
 import { useChecklistDoSite } from "./ChecklistDeLancamento";
 import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
@@ -44,8 +46,10 @@ export const faltaNaTela = (f: string) => (/VERCEL_TOKEN/.test(f) ? "a conta de 
  * para "Baixar agora" quando fica pronto); o domínio grava ao sair do campo e
  * no Enter, só quando muda; esqueleto na primeira leitura e erro com "Tentar
  * de novo". É a última etapa: a barra só tem o Voltar.
+ * 19/10/2026: as checagens automáticas (borda, links, alt, contraste, títulos
+ * e peso) ficam em cima, e o Confirmar do Publicar diz o que elas acharam.
  */
-export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
+export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: LinhaDoSite; onPedirAoDiretor?: (texto: string) => void }) {
   const { clientId } = useMesa();
   const { marca } = useMarcaDaMesa();
   const guardar = useGuardarSite(clientId, marca ? marca.id : null);
@@ -62,6 +66,9 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
   const trabalhos = trabalhosQ.data ? trabalhosDeCodigo(trabalhosQ.data.trabalhos) : [];
   const checklist = useChecklistDoSite(site, trabalhos);
   const pendentes = pendentesObrigatorios(checklist);
+  const previaDoMotor = previaAtual(comAEdicaoDaPrevia(trabalhosQ.data ? { trabalhos, conteudo: trabalhosQ.data.conteudo } : null));
+  const [checagens, setChecagens] = useState<ResultadoDasChecagens | null>(null);
+  const resumoDaChecagem = checagens ? resumoDasChecagens(checagens.problemas) : null;
   // Uma gravação da publicação por vez: o servidor troca o JSON inteiro, e duas juntas desfariam uma delas.
   const gravando = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -189,6 +196,8 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-publicacao="">
+      <ChecagensAntesDePublicar site={site} urlDoMotor={previaDoMotor ? previaDoMotor.preview_url : null} onPedirAoDiretor={onPedirAoDiretor} onResultado={setChecagens} />
+
       <Secao
         titulo="Publicação"
         descricao={motorDesligado ? "Motor desligado: o zip sai quando ele voltar" : e ? (e.vercel_ligada ? ROTULO_DO_DOMINIO[e.estado] : "Publicação desligada") : undefined}
@@ -292,6 +301,11 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
             <AlertDialogDescription>
               O motor faz o build e publica na Vercel{e && e.dominio ? `, ligando ${e.dominio}` : ""}. O site fica público. Dá para publicar de novo depois de cada ajuste.
               {pendentes.length ? ` Ainda falta no checklist: ${pendentes.map((p) => p.rotulo.toLowerCase()).join("; ")}.` : " O checklist obrigatório está completo."}
+              {resumoDaChecagem
+                ? resumoDaChecagem.total
+                  ? ` As checagens acharam ${resumoDaChecagem.total} ${resumoDaChecagem.total === 1 ? "problema" : "problemas"}${resumoDaChecagem.graves ? ` (${resumoDaChecagem.graves} ${resumoDaChecagem.graves === 1 ? "grave" : "graves"})` : ""}.`
+                  : " As checagens não acharam problema."
+                : " As checagens ainda não terminaram."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

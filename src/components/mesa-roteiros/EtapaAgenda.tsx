@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CalendarDays, FileText, Lightbulb, Plus, Sparkles } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, textoDoErro } from "@/lib/mesa/api";
@@ -9,6 +9,9 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { ROTULO_DO_FORMATO, ROTULO_DO_STATUS, modoDoTipo, type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { roteiroDaPeca, usePecasDeVideo, useRoteiros } from "./roteirosApi";
 import { AvisoDoBanco, BlocoRecolhivel, SeloDoStatus } from "./Comuns";
+// 19/10/2026: marcar vários, abrir na faixa de cima e gerar todos (SelecaoEmLote.tsx).
+import { useFaixa } from "./roteirosAbertos";
+import BarraDaSelecao, { type ItemDaSelecao } from "./SelecaoEmLote";
 
 /**
  * Etapa 1: a agenda. Lista as peças de vídeo da agenda do cliente (Reels,
@@ -16,17 +19,31 @@ import { AvisoDoBanco, BlocoRecolhivel, SeloDoStatus } from "./Comuns";
  * semanas à frente, com o estado do roteiro de cada uma, e os roteiros
  * avulsos. O roteiro já gravado no calendário, o contexto, o cérebro e a
  * campanha entram como base quando o roteiro é gerado.
+ *
+ * 19/10/2026: cada peça e cada roteiro tem a caixa de marcar. Marcados,
+ * "Abrir os selecionados" põe todos na faixa de roteiros abertos e "Gerar
+ * todos" gera os que ainda não têm roteiro, com o preço total antes.
  */
 export default function EtapaAgenda({
   onAbrirRoteiro,
   onNovoDaPeca,
   onAvulso,
 }: {
-  onAbrirRoteiro: (id: string) => void;
-  onNovoDaPeca: (taskId: string) => void;
+  onAbrirRoteiro: (id: string, titulo?: string) => void;
+  onNovoDaPeca: (taskId: string, titulo?: string) => void;
   onAvulso: () => void;
 }) {
   const { clientId } = useMesa();
+  const faixa = useFaixa();
+  // Seleção: "p:<peça>" e "r:<roteiro>".
+  const [marcados, setMarcados] = useState<Record<string, true>>({});
+  const marcar = (k: string) =>
+    setMarcados((m) => {
+      const n = { ...m };
+      if (n[k]) delete n[k];
+      else n[k] = true;
+      return n;
+    });
   const pecasQ = usePecasDeVideo(clientId);
   const roteirosQ = useRoteiros(clientId);
   // Filtro dos avulsos guardado por cliente (sair e voltar mantém).
@@ -41,6 +58,20 @@ export default function EtapaAgenda({
   }, [pecas]);
   const outros = lista.filter((r) => (!r.task_id || !idsDasPecas[r.task_id]) && (comArquivados || !r.arquivado_em));
   const arquivados = lista.filter((r) => !!r.arquivado_em).length;
+  const selecionados: ItemDaSelecao[] = [];
+  pecas.forEach((p) => {
+    if (!marcados[`p:${p.id}`]) return;
+    const r = roteiroDaPeca(lista, p.id);
+    if (r) selecionados.push({ pedido: { roteiro: r.id, tarefa: p.id, titulo: r.titulo }, corpo: null });
+    else selecionados.push({ pedido: { tarefa: p.id, titulo: p.titulo }, corpo: { task_id: p.id, tipo: "fala_camera", duracao_s: modoDoTipo("fala_camera").duracao_padrao_s } });
+  });
+  outros.forEach((r) => {
+    if (marcados[`r:${r.id}`]) selecionados.push({ pedido: { roteiro: r.id, titulo: r.titulo }, corpo: null });
+  });
+  const caixa = (k: string, nome: string) =>
+    faixa ? (
+      <input type="checkbox" className="mr-2.5 h-4 w-4 shrink-0 cursor-pointer accent-primary" checked={!!marcados[k]} onChange={() => marcar(k)} aria-label={`Marcar ${nome}`} title="Marcar para abrir ou gerar junto" />
+    ) : null;
   const estados = Object.keys(ROTULO_DO_STATUS)
     .map((k) => ROTULO_DO_STATUS[k as keyof typeof ROTULO_DO_STATUS])
     .join(", ");
@@ -48,6 +79,7 @@ export default function EtapaAgenda({
   return (
     <div className="min-w-0 space-y-6" data-etapa-agenda="">
       {roteirosQ.data && roteirosQ.data.indisponivel && <AvisoDoBanco />}
+      {selecionados.length > 0 && <BarraDaSelecao itens={selecionados} onLimpar={() => setMarcados({})} />}
 
       {/* 28/09 (dono: "tudo recolhe"): o cabeçalho das peças virou bloco recolhível, e as listas ficaram abertas (sem cartão). */}
       <BlocoRecolhivel
@@ -90,6 +122,7 @@ export default function EtapaAgenda({
               const r = roteiroDaPeca(lista, p.id);
               return (
                 <li key={p.id} className="flex min-w-0 flex-wrap items-center py-2.5" data-peca={p.id}>
+                  {caixa(`p:${p.id}`, p.titulo)}
                   <div className="mr-3 w-[64px] shrink-0 text-[12px] tabular-nums text-muted-foreground">{p.data ? dataCurta(p.data) : "sem data"}</div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-foreground">{p.titulo}</p>
@@ -102,11 +135,11 @@ export default function EtapaAgenda({
                   <div className="mt-1.5 flex w-full items-center justify-end sm:ml-2 sm:mt-0 sm:w-auto">
                     {r ? <SeloDoStatus status={r.status} /> : <span className="text-[12px] text-muted-foreground">Sem roteiro</span>}
                     {r ? (
-                      <button type="button" className={juntar(botao.icone, "ml-2 disabled:opacity-50")} onClick={() => onAbrirRoteiro(r.id)} aria-label="Abrir" title="Abrir">
+                      <button type="button" className={juntar(botao.icone, "ml-2 disabled:opacity-50")} onClick={() => onAbrirRoteiro(r.id, r.titulo)} aria-label="Abrir" title="Abrir">
                         <FileText className="h-4 w-4" aria-hidden="true" />
                       </button>
                     ) : (
-                      <button type="button" className={juntar(botao.icone, "ml-2 text-primary disabled:opacity-50")} onClick={() => onNovoDaPeca(p.id)} aria-label="Escrever roteiro" title="Escrever roteiro">
+                      <button type="button" className={juntar(botao.icone, "ml-2 text-primary disabled:opacity-50")} onClick={() => onNovoDaPeca(p.id, p.titulo)} aria-label="Escrever roteiro" title="Escrever roteiro">
                         <Sparkles className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
@@ -155,6 +188,7 @@ export default function EtapaAgenda({
           <ul className="divide-y divide-border">
             {outros.map((r: LinhaDoRoteiro) => (
               <li key={r.id} className="flex min-w-0 items-center py-2.5" data-roteiro={r.id}>
+                {caixa(`r:${r.id}`, r.titulo)}
                 <div className="mr-2 min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{r.titulo}</p>
                   <p className="truncate text-[12px] text-muted-foreground">
@@ -164,7 +198,7 @@ export default function EtapaAgenda({
                   </p>
                 </div>
                 <SeloDoStatus status={r.status} />
-                <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id)}>
+                <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id, r.titulo)}>
                   Abrir
                 </button>
               </li>

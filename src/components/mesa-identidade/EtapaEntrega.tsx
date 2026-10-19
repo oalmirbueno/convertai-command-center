@@ -58,9 +58,9 @@ export default function EtapaEntrega() {
   const roteiro = roteiroDaApresentacao(projeto.dados, { comNaming: projeto.modo === "zero" || projeto.com_naming, semCaminhos: projeto.modo === "completar" });
   const apresentacao = prontoParaApresentar(roteiro);
   itens.push({ feito: apresentacao.pronto, rotulo: "Apresentação ao cliente", detalhe: apresentacao.pronto ? `${roteiro.filter((x) => x.incluido).length} slides prontos` : `Falta: ${apresentacao.faltas[0]}`, destino: { etapa: "apresentacao" } });
-  // IDV3 (adendo do dono): o vídeo da marca feito na Mesa Motion também entra na entrega.
+  // IDV3 (adendo do dono): o vídeo da marca (função mesa-motion) também entra na entrega.
   const videos = Array.isArray(projeto.dados.videos) ? (projeto.dados.videos as unknown[]) : [];
-  itens.push({ feito: videos.length > 0, rotulo: "Vídeo da marca", detalhe: videos.length ? `${videos.length} na Mesa Motion` : "Opcional: crie abaixo", destino: { etapa: "entrega", bloco: "video", campo: "criar-video" } });
+  itens.push({ feito: videos.length > 0, rotulo: "Vídeo da marca", detalhe: videos.length ? `${videos.length} ${videos.length === 1 ? "vídeo" : "vídeos"}` : "Opcional: crie abaixo", destino: { etapa: "entrega", bloco: "video", campo: "criar-video" } });
 
   const irAoItem = (d: DestinoDoQueFalta) => {
     if (d.etapa !== "entrega") {

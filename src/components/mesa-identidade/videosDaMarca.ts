@@ -83,7 +83,7 @@ export async function videoParaAprovacao(p: { clientId: string; filmeId: string;
   if (existente && existente.client_id === p.clientId) fileId = existente.id;
   else {
     const resposta = await fetch(p.url);
-    if (!resposta.ok) throw new Error("O vídeo não baixou da Mesa Motion. Abra o filme e tente de novo.");
+    if (!resposta.ok) throw new Error("O vídeo não baixou. Tente de novo em instantes.");
     const blob = await resposta.blob();
     fileId = crypto.randomUUID();
     const arquivo = `${p.nome.replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 60) || "video-da-marca"}-${p.formato.replace(":", "x")}.mp4`;
@@ -114,7 +114,7 @@ export async function videoParaAprovacao(p: { clientId: string; filmeId: string;
       requires_approval: false,
       status: "ready",
       version: 1,
-      description: `Vídeo da marca (${p.formato}), feito na Mesa Motion a partir da Mesa Identidade.`,
+      description: `Vídeo da marca (${p.formato}), feito a partir da Mesa Identidade.`,
       idempotency_key: chave,
     } as never);
     fileId = registro.id;

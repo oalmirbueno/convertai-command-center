@@ -305,4 +305,6 @@ export const VARIANTES_DAS_FUNCOES: VariantesDeTeste = {
   "mesa-foto/index.ts": [{ criterios: CRITERIOS_DE_TESTE }],
   "mesa-motion/index.ts": [{ f: `({ tipo: "apresentacao" })` }, { f: `({ tipo: "filme_marca" })` }],
   "mesa-proposta/evolucao.ts": [{ campos: `[{ chave: "capa.headline", tipo: "texto" }, { chave: "solucao.frentes", tipo: "lista" }, { chave: "solucao.passos", tipo: "lista" }]` }],
+  // Laboratório (19/10): o ajudante texto() recebe o esquema de cada nó especialista.
+  "laboratorio/executar.ts": ["ESQUEMA_DA_COPY", "ESQUEMA_DO_CARROSSEL", "ESQUEMA_DO_ANUNCIO"].map((nome) => ({ o: `({ esquema: ${nome} })` })),
 };

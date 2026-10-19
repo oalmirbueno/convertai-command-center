@@ -329,7 +329,7 @@ export default function MesaSite() {
                     {etapa === "integracoes" && <EtapaIntegracoes site={site} onIrPara={irPara} />}
                     {etapa === "construcao" && <EtapaConstrucao site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
                     {etapa === "revisao" && <EtapaRevisao site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
-                    {etapa === "publicacao" && <EtapaPublicacao site={site} />}
+                    {etapa === "publicacao" && <EtapaPublicacao site={site} onPedirAoDiretor={pedirAoDiretor} />}
                   </Suspense>
                 </RegiaoRolavel>
               </EtapaComBarra>

@@ -35,7 +35,7 @@ interface MesaDoPainel {
   semCliente?: Record<string, Carregar>;
 }
 
-export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-edicao" | "/mesa-publicidade" | "/mesa-roteiros" | "/mesa-identidade" | "/mesa-proposta" | "/mesa-site" | "/mesa-motion", MesaDoPainel> = {
+export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-edicao" | "/mesa-publicidade" | "/mesa-roteiros" | "/mesa-identidade" | "/mesa-proposta" | "/mesa-site", MesaDoPainel> = {
   "/mesa": {
     prefixo: "mesa",
     pagina: () => import("@/pages/MesaDoCliente"),
@@ -249,29 +249,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       agente: () => import("@/components/mesa-site/AgenteDoSite"),
     },
   },
-  // Mesa Motion (frente MOT, 30/09): apresentação em motion e filme da marca (9 etapas) e o diretor de motion. Fora da pré-carga ociosa.
-  "/mesa-motion": {
-    prefixo: "mesa-motion",
-    pagina: () => import("@/pages/MesaMotion"),
-    parametro: "etapa",
-    padrao: "insumos",
-    onde: "mesa-motion:onde:",
-    campoOnde: "etapa",
-    etapas: {
-      insumos: () => import("@/components/mesa-motion/EtapaInsumos"),
-      entrevista: () => import("@/components/mesa-motion/EtapaEntrevista"),
-      brand: () => import("@/components/mesa-motion/EtapaBrand"),
-      storyboards: () => import("@/components/mesa-motion/EtapaStoryboards"),
-      stills: () => import("@/components/mesa-motion/EtapaStills"),
-      construcao: () => import("@/components/mesa-motion/EtapaConstrucao"),
-      critica: () => import("@/components/mesa-motion/EtapaCritica"),
-      som: () => import("@/components/mesa-motion/EtapaSom"),
-      render: () => import("@/components/mesa-motion/EtapaRender"),
-    },
-    sempre: {
-      agente: () => import("@/components/mesa-motion/AgenteDoMotion"),
-    },
-  },
+  // 19/10/2026: Mesa Motion retirada a pedido do dono (a rota /mesa-motion cai em /mesas).
 };
 
 type Caminho = keyof typeof MESAS_DO_PAINEL;
@@ -281,7 +259,7 @@ export const chaveDaEtapa = (caminho: Caminho, etapa: string) => `${MESAS_DO_PAI
 
 function mesaDoCaminho(caminho: string): Caminho | null {
   const limpo = (caminho || "").replace(/\/+$/, "") || "/";
-  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-edicao" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" || limpo === "/mesa-identidade" || limpo === "/mesa-proposta" || limpo === "/mesa-site" || limpo === "/mesa-motion" ? limpo : null;
+  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-edicao" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" || limpo === "/mesa-identidade" || limpo === "/mesa-proposta" || limpo === "/mesa-site" ? limpo : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -369,7 +347,14 @@ export const PaginaMesaRoteiros = paginaDaMesa("/mesa-roteiros");
 export const PaginaMesaIdentidade = paginaDaMesa("/mesa-identidade");
 export const PaginaMesaProposta = paginaDaMesa("/mesa-proposta");
 export const PaginaMesaSite = paginaDaMesa("/mesa-site");
-export const PaginaMesaMotion = paginaDaMesa("/mesa-motion");
+/**
+ * Laboratório (19/10/2026): fora de MESAS_DO_PAINEL (não tem cliente nem etapas
+ * por cliente), mas a página e a Início baixam juntas e entram na pré-carga da equipe.
+ */
+export const PaginaLaboratorio = lazyComPreCarga("pagina/laboratorio", () => {
+  preCarregarEmSilencio("laboratorio/inicio", () => import("@/components/laboratorio/AbaInicio"));
+  return import("@/pages/Laboratorio") as Promise<{ default: any }>;
+});
 
 /** Primeira etapa de cada mesa, baixada no tempo ocioso do painel. */
 const PRIMEIRAS: Array<[Caminho, string]> = [

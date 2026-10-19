@@ -7,7 +7,7 @@ import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { TIPOS_DE_SLOGAN, type SloganDaMarca } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { EscolhaDoJev, Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 
 const rotuloDoTipo = (t: string) => (TIPOS_DE_SLOGAN.filter((x) => x.valor === t)[0] || { rotulo: t }).rotulo;
 
@@ -91,6 +91,7 @@ export default function SlogansDaMarca() {
                       {s.nota === null ? "sem nota" : `nota ${Math.round(s.nota * 100)}`}
                     </span>
                   </span>
+                  <EscolhaDoJev linha={s.destaque_jev} />
                   {s.por_que && <span className={juntar(texto.auxiliar, "mt-0.5 block")}>{s.por_que}</span>}
                 </span>
                 {/* 16/10/2026: só ícone (nome no aria-label e no title); o escolhido fica verde. */}

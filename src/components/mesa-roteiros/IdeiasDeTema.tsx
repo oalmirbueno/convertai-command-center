@@ -26,6 +26,10 @@ import {
 } from "../../../supabase/functions/mesa-roteiros/modulos/ideias-de-tema";
 import { BlocoRecolhivel } from "./Comuns";
 import { useBiblioteca } from "./roteirosApi";
+// 19/10/2026: marcar várias ideias, abrir cada uma numa aba da faixa ou gerar todas (SelecaoEmLote.tsx).
+import { ROTULO_DO_OBJETIVO } from "../../../supabase/functions/mesa-roteiros/modulos/roteiros-validados";
+import { useFaixa } from "./roteirosAbertos";
+import BarraDaSelecao, { type CorpoDoLote, type ItemDaSelecao } from "./SelecaoEmLote";
 
 /**
  * "Ideias com o agente" no roteiro avulso (02/10). O dono: "quero conversar,
@@ -82,6 +86,22 @@ export function normalizarHistoricoDasIdeias(data: any): { conversaId: string | 
 }
 
 const numeroDa = (apelido: string) => apelido.replace(/^i/, "");
+
+/** O pedido de geração de uma ideia (o mesmo que o formulário mandaria preenchido com ela). */
+export function corpoDaIdeia(v: PreenchimentoDoRoteiro): CorpoDoLote {
+  const objetivo = v.objetivo === "auto" ? null : v.objetivo;
+  return {
+    task_id: null,
+    tipo: v.tipo,
+    duracao_s: v.duracao_s,
+    objetivo: objetivo ? ROTULO_DO_OBJETIVO[objetivo] : undefined,
+    objetivo_base: objetivo,
+    modelo_base_id: v.modeloBase === "auto" ? null : v.modeloBase,
+    pedido: v.pedido.trim() || undefined,
+    tema: v.tema.trim() || undefined,
+    modelo_roteiro_id: null,
+  };
+}
 const nota10 = (n: number) => (Math.round(n * 100) / 10).toFixed(1).replace(".", ",");
 
 /** O que muda no formulário, linha a linha (vai no cartão de confirmar). */
@@ -118,6 +138,9 @@ export default function IdeiasDeTema({
   const [rascunho, setRascunho] = useEstadoDaTela<string>(`mesa-roteiros:ideias:rascunho:${clientId}`, "");
   const [web, setWeb] = useEstadoDaTela<boolean>(`mesa-roteiros:ideias:web:${clientId}`, true);
   const [hashtags, setHashtags] = useEstadoDaTela<string>(`mesa-roteiros:ideias:hashtags:${clientId}`, "");
+  // 19/10/2026: ideias marcadas (apelido), para abrir ou gerar várias de uma vez. Só com a faixa da mesa.
+  const faixa = useFaixa();
+  const [marcadas, setMarcadas] = useState<Record<string, true>>({});
   /** Cartões do agente já resolvidos nesta tela (mensagem -> "feito" | "cancelado"). */
   const [cartoes, setCartoes] = useState<Record<string, "feito" | "cancelado">>({});
   const campoRef = useRef<HTMLTextAreaElement | null>(null);
@@ -227,6 +250,19 @@ export default function IdeiasDeTema({
     focarNoFim(campoRef, t);
   };
   const ultimaComFontes = mensagens.slice().reverse().filter((m) => m.fontes.length)[0] || null;
+  const selecionadas: ItemDaSelecao[] = todas
+    .filter((i) => marcadas[i.apelido])
+    .map((i) => {
+      const valores = preenchimentoDaIdeia(i, proprios);
+      return { pedido: { avulso: true, titulo: i.tema }, preencher: valores, corpo: corpoDaIdeia(valores) };
+    });
+  const marcar = (apelido: string) =>
+    setMarcadas((m) => {
+      const n = { ...m };
+      if (n[apelido]) delete n[apelido];
+      else n[apelido] = true;
+      return n;
+    });
 
   return (
     <BlocoRecolhivel
@@ -268,6 +304,8 @@ export default function IdeiasDeTema({
                         maisForte={k === 0 && m.ideias.length > 1}
                         ranking={m.ranking}
                         noFormulario={preenchidoCom === ideia.apelido}
+                        marcada={faixa ? !!marcadas[ideia.apelido] : null}
+                        onMarcar={() => marcar(ideia.apelido)}
                         onUsar={() => usar(ideia)}
                         onMaisAssim={() => void enviar(`Mais assim, na linha da ${numeroDa(ideia.apelido)}.`)}
                         onMisturar={() => pedirNoCampo(`Mistura a ${numeroDa(ideia.apelido)} com a `)}
@@ -305,6 +343,8 @@ export default function IdeiasDeTema({
             </p>
           )}
         </div>
+
+        {selecionadas.length > 0 && <BarraDaSelecao itens={selecionadas} onLimpar={() => setMarcadas({})} />}
 
         <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" aria-label="Atalhos de ideias">
           {ATALHOS_DAS_IDEIAS.map((a) => (
@@ -390,6 +430,8 @@ function LinhaDaIdeia({
   maisForte,
   ranking,
   noFormulario,
+  marcada = null,
+  onMarcar,
   onUsar,
   onMaisAssim,
   onMisturar,
@@ -399,6 +441,9 @@ function LinhaDaIdeia({
   maisForte: boolean;
   ranking: "jev" | "regra" | null;
   noFormulario: boolean;
+  /** null: sem a caixa de marcar (fora da mesa, sem a faixa). */
+  marcada?: boolean | null;
+  onMarcar?: () => void;
   onUsar: () => void;
   onMaisAssim: () => void;
   onMisturar: () => void;
@@ -409,6 +454,16 @@ function LinhaDaIdeia({
   return (
     <li className="min-w-0 rounded-lg px-2 py-3 transition-colors hover:bg-muted/40" data-ideia={ideia.apelido}>
       <div className="flex min-w-0 items-start">
+        {marcada !== null && (
+          <input
+            type="checkbox"
+            className="mr-2 mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
+            checked={marcada}
+            onChange={() => (onMarcar ? onMarcar() : undefined)}
+            aria-label={`Marcar a ideia ${numeroDa(ideia.apelido)}`}
+            title="Marcar para abrir ou gerar junto"
+          />
+        )}
         <span className="mr-2 mt-0.5 shrink-0 text-[13px] font-bold tabular-nums text-primary">{numeroDa(ideia.apelido)}</span>
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 flex-wrap items-center text-[14px] font-semibold leading-5 [overflow-wrap:anywhere]">

@@ -22,6 +22,7 @@
 
 import { type FichaDaCor, fichaDaCor, normalizarHex, type PapelDaCor } from "../../_shared/cores-da-marca.ts";
 import { estrategiaParaBrandbook } from "../../_shared/estrategia-de-marca.ts";
+import type { NucleoDaMarca } from "./nucleo-da-marca.ts";
 
 /** 2 (IDV2, 30/09): tema visual, posicionamento, promessa, justificativa do arquétipo e o SVG do grafismo. */
 export const VERSAO_DO_ESQUEMA = 2;
@@ -381,6 +382,8 @@ export function brandbookDoProjeto(e: {
   clientId?: string | null;
   kit?: { paleta?: unknown; tom?: unknown } | null;
   mockups?: Array<{ titulo: string; imagem: string }>;
+  /** 19/10/2026: o núcleo da marca completa o que o projeto ainda não tem (tagline, tom, paleta e fontes do conceito, logo gerada). */
+  nucleo?: NucleoDaMarca | null;
 }): DadosDoBrandbook {
   const d = obj(e.dados);
   const briefing = obj(d.briefing);
@@ -396,10 +399,15 @@ export function brandbookDoProjeto(e: {
   // A estratégia (etapa nova da IDV2) vale mais que o briefing: é a versão trabalhada pela equipe.
   const est = estrategiaParaBrandbook(d.estrategia, nomeDaMarca);
   const aplicacoes = arr(obj(d.aplicacoes).itens);
+  const nucleo = e.nucleo || null;
+  // A logo gerada (Laboratório) e escolhida entra como principal quando a equipe ainda não pôs outra.
+  const logosDoSistema = obj(sistema.logos);
+  const logoGerada = obj(obj(obj(sistema.logo_gerada).escolhida).logo);
+  const logos = !obj(logosDoSistema.principal).caminho && typeof logoGerada.caminho === "string" && logoGerada.caminho ? { ...logosDoSistema, principal: logoGerada } : logosDoSistema;
   const primeiro = (a: unknown, b: unknown) => (Array.isArray(a) ? (a.length ? a : b) : str(a, 2000) ? a : b);
   const bruto = {
     tema: obj(d.guideline).tema,
-    marca: { nome: nomeDaMarca, slogan: str(naming.slogan, 160) || str(briefing.slogan, 160), assinatura: "" },
+    marca: { nome: nomeDaMarca, slogan: str(naming.slogan, 160) || str(briefing.slogan, 160) || (nucleo ? nucleo.tagline : ""), assinatura: "" },
     conceito: {
       resumo: escolhido ? txt(escolhido.ideia, 1500) : "",
       significado_do_logo: txt(sistema.significado_do_logo, 1500),
@@ -418,15 +426,15 @@ export function brandbookDoProjeto(e: {
       promessa: est ? est.promessa : "",
     },
     tom: {
-      como_fala: primeiro(est && est.como_fala, escolhido ? arr(escolhido.tom) : []),
+      como_fala: primeiro(est && est.como_fala, escolhido ? arr(escolhido.tom) : nucleo ? nucleo.tom : []),
       como_nao_fala: primeiro(est && est.como_nao_fala, arr(briefing.evita)),
       exemplos: est ? est.exemplos : [],
     },
-    logos: obj(sistema.logos),
+    logos,
     regras: obj(sistema.regras),
-    cores: coresDoSistema.length ? coresDoSistema : coresDoKit,
+    cores: coresDoSistema.length ? coresDoSistema : coresDoKit.length ? coresDoKit : nucleo ? nucleo.paleta : [],
     perfil_cmyk: "revestido",
-    tipografia: arr(sistema.tipografia),
+    tipografia: arr(sistema.tipografia).length ? arr(sistema.tipografia) : nucleo ? nucleo.fontes : [],
     grafismos: arr(sistema.grafismos),
     fotografia: obj(sistema.fotografia),
     aplicacoes,
