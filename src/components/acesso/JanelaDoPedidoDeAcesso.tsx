@@ -14,6 +14,7 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import {
   cancelarPedido,
+  concluirPedido,
   marcarPedidoFeito,
   nomeDoAgente,
   pedidoEmAberto,
@@ -421,6 +422,20 @@ export default function JanelaDoPedidoDeAcesso({ id, aberta, onFechar }: { id: s
     }
   };
 
+  // 19/10 (dono: "opção de concluir para ele sair dali"): já resolvido por fora, sai da lista.
+  const concluir = async () => {
+    if (!pedido || ocupado) return;
+    setOcupado(true);
+    try {
+      await concluirPedido(pedido.id);
+      terminar("Pedido concluído: saiu da lista");
+    } catch (e) {
+      toast.error(mensagemDeErro(e));
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   const cancelar = async () => {
     if (!pedido || ocupado) return;
     setOcupado(true);
@@ -478,6 +493,11 @@ export default function JanelaDoPedidoDeAcesso({ id, aberta, onFechar }: { id: s
           <button type="button" className={botao.discreto} onClick={onFechar}>
             Não agora
           </button>
+          {emAberto ? (
+            <button type="button" className={juntar(botao.secundario, "text-success")} onClick={() => void concluir()} disabled={ocupado} title="Já resolvi: tira da lista e o agente para de esperar">
+              Concluir
+            </button>
+          ) : null}
           {principal}
         </>
       }

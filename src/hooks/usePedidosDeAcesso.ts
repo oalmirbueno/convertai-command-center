@@ -210,6 +210,40 @@ export function cancelarPedido(pedido: string): Promise<unknown> {
   return chamar("pedido_acesso_cancelar", { p_pedido: pedido });
 }
 
+/** 19/10: o dono tira o pedido da lista com um toque, de qualquer tipo (fica como usado, sem código). */
+export function concluirPedido(pedido: string): Promise<unknown> {
+  return chamar("pedido_acesso_concluir", { p_pedido: pedido });
+}
+
+/** Entradas que deram certo nos últimos 14 dias: dizem quando a sessão de um site caiu de novo. */
+export interface AcessoUsado {
+  id: string;
+  operador_slug: string | null;
+  site: string | null;
+  url: string | null;
+  conta: string | null;
+  usado_em: string | null;
+}
+
+export function useAcessosUsados(habilitado = true) {
+  return useQuery({
+    queryKey: ["pedidos-de-acesso", "usados"],
+    enabled: habilitado,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await db
+        .from("pedidos_de_acesso")
+        .select("id, operador_slug, site, url, conta, usado_em")
+        .eq("status", "usado")
+        .order("usado_em", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      const desde = Date.now() - 14 * 86_400_000;
+      return ((data || []) as AcessoUsado[]).filter((a) => a.usado_em && Date.parse(a.usado_em) >= desde);
+    },
+  });
+}
+
 export function agentesPodemUsar(item: string, pode: boolean): Promise<unknown> {
   return chamar("cofre_agentes_podem_usar", { p_item: item, p_pode: pode });
 }

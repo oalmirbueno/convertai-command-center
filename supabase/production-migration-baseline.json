@@ -2291,6 +2291,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261019214916",
+      "path": "supabase/migrations/20261019214916_acessos_persistentes.sql",
+      "local_sha256": "daac5b4e104b39b0ffc10942e437034368795cf6df7d9c9b8bedd6232d2befa9",
+      "remote_name": "acessos_persistentes",
+      "remote_statements_sha256": "cebc1e733203b10b3a7658bc416409ef7c0e875d3bfeda9c251b333c55142c17",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261019233000",
       "path": "supabase/migrations/20261019233000_laboratorio_v2.sql",
       "local_sha256": "d15c68155779bf65485b6302e663b862d25a0dd17595785371ecb3e03324957a",
