@@ -46,6 +46,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
     etapas: {
       contexto: () => import("@/components/mesa/AbaContexto"),
       instagram: () => import("@/components/mesa/AbaInstagram"),
+      stories: () => import("@/components/mesa/AbaStories"),
       mes: () => import("@/components/mesa/AbaMes"),
       campanhas: () => import("@/components/mesa/AbaCampanhas"),
       estudio: () => import("@/components/mesa/AbaEstudio"),

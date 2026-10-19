@@ -119,10 +119,12 @@ describe("ligação na aba Redes", () => {
   it("ação no servidor, coluna no plano, bloco na conversa e ferramenta na tela", () => {
     const fn = readFileSync(resolve(__dirname, "../../supabase/functions/mesa-instagram/index.ts"), "utf8");
     expect(fn).toContain("perfil_diagnosticar: diagnosticar");
-    expect(fn).toContain('select("ordem, bio_analise, diagnostico")');
+    // 20/10/2026: o plano também lê os ajustes do app (sem a coluna, relê só estes três).
+    expect(fn).toContain('ler("ordem, bio_analise, diagnostico, ajustes_do_app")');
+    expect(fn).toContain('ler("ordem, bio_analise, diagnostico")');
     expect(fn).toContain("blocoDoDiagnostico(plano.diagnostico)");
     const aba = readFileSync(resolve(__dirname, "../components/mesa/AbaInstagram.tsx"), "utf8");
-    expect(aba).toContain('{ valor: "diagnostico", rotulo: "Diagnóstico" }');
+    expect(aba).toContain('{ valor: "diagnostico", rotulo: "Diagnóstico", icone: <Stethoscope');
     expect(BLOCOS_DA_ABA).toContain("diagnostico");
     const mig = readFileSync(resolve(__dirname, "../../supabase/migrations/20261012040000_diagnostico_do_perfil.sql"), "utf8");
     expect(mig).toContain("ADD COLUMN IF NOT EXISTS diagnostico jsonb");

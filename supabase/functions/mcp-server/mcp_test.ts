@@ -39,7 +39,7 @@ import {
   RpcErrors,
   rpcResult,
   validateJsonRpcRequest,
-} from '../_shared/mcp-response.ts';
+} from './modulos/mcp-response.ts';
 import {
   assertWritableInbox,
   buildProposalMarkdown,
@@ -1074,7 +1074,7 @@ Deno.test('mesas: foto sem tabela vira aviso; kit não expõe dados da autoriza�
 });
 
 // ─── MCP 2.3: agir nas mesas e o cérebro do cliente ──────────
-import { folegoResponse } from '../_shared/mcp-response.ts';
+import { folegoResponse } from './modulos/mcp-response.ts';
 import { chamarMesa, esperarOuSeguir } from '../_shared/mcp-mesas-acoes.ts';
 
 const ACOES_2_3 = [

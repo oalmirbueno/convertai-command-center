@@ -10,7 +10,7 @@ import {
   resolveMcpAllowedOrigins,
   RpcErrors,
   validateJsonRpcRequest,
-} from '../../supabase/functions/_shared/mcp-response.ts';
+} from '../../supabase/functions/mcp-server/modulos/mcp-response.ts';
 
 const server = readFileSync(
   resolve(process.cwd(), 'supabase/functions/mcp-server/index.ts'),

@@ -80,7 +80,7 @@ export default function FaixaDeRoteiros({
                 aria-selected={atual}
                 onClick={() => onEscolher(a.id)}
                 title={dica}
-                className={juntar("toque-compacto flex min-w-0 items-center rounded-sm text-[12.5px] leading-none", atual && "font-medium", foco)}
+                className={juntar("toque-compacto flex min-w-0 items-center rounded-sm text-[12px] leading-none", atual && "font-medium", foco)}
               >
                 {noLote && <IconeDoEstado estado={noLote.estado} />}
                 <span className="min-w-0 truncate">{tituloCurto(a.titulo)}</span>

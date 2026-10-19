@@ -87,8 +87,10 @@ export default function DestravarAqui({ runId, motivo, revisao = false, aoResolv
       <p className="mt-0.5 text-[12px] text-muted-foreground">Responda ou decida aqui mesmo: o agente recebe na hora.</p>
 
       {meta && (
-        <div className="mt-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] leading-5 text-foreground/90">
-          <p>É acesso na Meta: libere a conta de anúncios ou a Página para a Aceleriq (Atribuir parceiro e Atribuir ativos ao Aceleriq Trafego). Depois toque em "Já liberei o acesso".</p>
+        <div className="mt-2 rounded-md bg-warning/10 px-3 py-2 text-[12px] leading-5 text-foreground/90">
+          <p>É acesso na Meta: libere a conta de anúncios ou a Página para a Aceleriq.</p>
+          <p>Use Atribuir parceiro e Atribuir ativos ao Aceleriq Trafego.</p>
+          <p>Depois toque em "Já liberei o acesso".</p>
           <a href="https://business.facebook.com/settings" target="_blank" rel="noopener noreferrer" className={juntar("mt-1.5 inline-flex items-center rounded font-medium text-primary underline-offset-2 hover:underline", foco)}>
             <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Abrir o Gerenciador de Negócios da Meta
           </a>

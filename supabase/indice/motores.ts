@@ -541,6 +541,9 @@ const LIGACOES_DOS_SUPERPODERES: Record<string, { ligacao: LigacaoDoMetodo; mais
   "estilo.agente": { ligacao: { arquivo: F("agente-estilo"), trechos: ['superpoderesPara(servico(), { agente: "estilo.agente"', "metodo: await spP,"] } },
   "instagram.agente": { ligacao: { arquivo: F("mesa-instagram"), trechos: ['superpoderesPara(servico(), { agente: "instagram.agente"', "metodo: await spP,"] } },
   "instagram.geracao": { ligacao: { arquivo: F("mesa-instagram"), trechos: ['superpoderesPara(servico(), { agente: "instagram.geracao", momento: "gerar" })', "sistema: SISTEMA_DAS_SUGESTOES,\n      metodo: spGeracao,", "sistema: SISTEMA_DOS_DESTAQUES,\n      metodo: spGeracao,"] } },
+  // 20/10: a aba Stories da Mesa.
+  "stories.agente": { ligacao: { arquivo: F("mesa-stories"), trechos: ['superpoderesPara(servico(), { agente: "stories.agente"', "metodo: await spP,", "fechado.anexo"] } },
+  "stories.roteiro": { ligacao: { arquivo: F("mesa-stories"), trechos: ['superpoderesPara(servico(), { agente: "stories.roteiro", momento: "gerar" })', "sistema: SISTEMA_DO_ROTEIRISTA,\n      metodo,"] } },
   "perfis.conversa": { ligacao: { arquivo: F("perfis-instagram"), trechos: ['superpoderesPara(servico(), { agente: "perfis.conversa"', "metodo: await spP,"] } },
   "perfis.plano": { ligacao: { arquivo: F("perfis-instagram"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "perfis.plano", momento: "gerar" }),'] } },
   "ads.plano": { ligacao: { arquivo: F("mesa-ads"), trechos: ['superpoderesPara(servico, { agente: "ads.plano"', "metodo: await spPlanoP,"] } },

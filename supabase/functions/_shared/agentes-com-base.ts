@@ -126,6 +126,14 @@ export const AGENTES_COM_BASE: AgenteComBase[] = [
     papel: "Escreve as propostas comerciais da agência: diagnóstico, solução, escopo, investimento e respostas às objeções.",
     tema: "propostas comerciais de agência de marketing que fecham: estrutura, diagnóstico, ancoragem de preço, prova, escopo, garantias e objeções",
   },
+  // 20/10: a aba Stories da Mesa.
+  {
+    chave: "stories.roteirista",
+    nome: "Roteirista de Stories",
+    mesa: "Mesa do cliente",
+    papel: "Escreve a sequência de stories do dia como capítulo de novela: gancho, interação com adesivo, prova, convite e gancho para amanhã.",
+    tema: "stories do Instagram que prendem e vendem: sequências em formato de novela, ganchos, adesivos de interação (enquete, caixinha, quiz, link, contagem), stories virais e destaques",
+  },
 ];
 
 export const CHAVES_COM_BASE = AGENTES_COM_BASE.map((a) => a.chave);

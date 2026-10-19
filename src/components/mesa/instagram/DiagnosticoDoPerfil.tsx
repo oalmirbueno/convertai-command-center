@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, SlidersHorizontal } from "lucide-react";
 import { etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { BotaoComCusto } from "../Custo";
@@ -8,6 +8,7 @@ import { useMesa } from "../MesaContexto";
 import type { DiagnosticoDoPerfil as Diagnostico, EstadoDaParte } from "../../../../supabase/functions/mesa-instagram/modulos/diagnostico-do-perfil";
 import { chamarInstagram, type PerfilDaAba } from "./instagramApi";
 import { modeloDaAba } from "./BioENome";
+import { progressoDoEstado, type EstadoDosAjustes } from "../../../../supabase/functions/mesa-instagram/modulos/ajustes-do-app";
 
 /**
  * Diagnóstico do perfil em 9 partes (12/10/2026, ig-profile-optimizer). Foto, nome, @, bio, link,
@@ -30,7 +31,36 @@ const quando = (iso: string) => {
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 };
 
-export default function DiagnosticoDoPerfil({ perfil, diagnostico, onDiagnostico }: { perfil: PerfilDaAba; diagnostico: Diagnostico | null; onDiagnostico: (d: Diagnostico) => void }) {
+/** 20/10/2026: "ajustes do app: x de y" ao lado da nota (o que a API não lê, marcado pela equipe); leva aos ajustes. */
+function LinhaDosAjustes({ ajustes, onAbrir }: { ajustes: EstadoDosAjustes; onAbrir?: () => void }) {
+  const p = progressoDoEstado(ajustes);
+  const conteudo = (
+    <>
+      <SlidersHorizontal className="mr-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="tabular-nums">Ajustes do app: {p.feitos} de {p.total}</span>
+    </>
+  );
+  if (!onAbrir) return <span className="inline-flex items-center text-muted-foreground" data-ajustes-no-diagnostico="">{conteudo}</span>;
+  return (
+    <button type="button" onClick={onAbrir} className="toque-compacto inline-flex items-center rounded text-muted-foreground hover:text-foreground" data-ajustes-no-diagnostico="" title="Abrir os ajustes do app">
+      {conteudo}
+    </button>
+  );
+}
+
+export default function DiagnosticoDoPerfil({
+  perfil,
+  diagnostico,
+  onDiagnostico,
+  ajustes,
+  onAbrirAjustes,
+}: {
+  perfil: PerfilDaAba;
+  diagnostico: Diagnostico | null;
+  onDiagnostico: (d: Diagnostico) => void;
+  ajustes?: EstadoDosAjustes;
+  onAbrirAjustes?: () => void;
+}) {
   const { clientId, catalogo } = useMesa();
   const padrao = useMemo(() => modeloDaAba(catalogo), [catalogo]);
   const [modeloId, setModeloId] = useState<string>("");
@@ -63,6 +93,11 @@ export default function DiagnosticoDoPerfil({ perfil, diagnostico, onDiagnostico
           <AjudaRecolhida className="ml-1" rotulo="O que o diagnóstico confere">
             As 9 partes que quem chega ao perfil vê: foto, nome, @, bio, link, categoria, destaques, posts fixados e grade. Cada uma sai com o estado, o porquê e como corrigir.
           </AjudaRecolhida>
+          {ajustes && (
+            <span className="ml-3">
+              <LinhaDosAjustes ajustes={ajustes} onAbrir={onAbrirAjustes} />
+            </span>
+          )}
         </p>
       )}
       {outroPerfil && <p className="text-[12px] leading-4 text-warning">Este diagnóstico é de @{diagnostico!.username}. Diagnostique de novo para valer @{perfil.username}.</p>}
@@ -76,6 +111,7 @@ export default function DiagnosticoDoPerfil({ perfil, diagnostico, onDiagnostico
             <span className="text-destructive">{diagnostico.resumo.falha} com falha</span>
             {diagnostico.resumo.nao_lido > 0 && <span className="text-muted-foreground">{diagnostico.resumo.nao_lido} para conferir no app</span>}
             <span className="text-muted-foreground">{quando(diagnostico.gerado_em)}</span>
+            {ajustes && <LinhaDosAjustes ajustes={ajustes} onAbrir={onAbrirAjustes} />}
           </div>
           <ul className="grid min-w-0 grid-cols-1 gap-1.5" aria-label="As 9 partes do perfil">
             {diagnostico.linhas.map((l) => (

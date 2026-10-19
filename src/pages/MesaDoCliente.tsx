@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Brain, Building2, Calculator, CalendarDays, Check, ChevronsUpDown, Instagram, ListOrdered, Loader2, Megaphone, PackageCheck, Palette, Search } from "lucide-react";
+import { Brain, Building2, Calculator, CalendarDays, Check, ChevronsUpDown, GalleryVerticalEnd, Instagram, ListOrdered, Loader2, Megaphone, PackageCheck, Palette, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -27,7 +27,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
  *
  * Traz para dentro do painel o calendário e a arte que eram feitos fora.
- * Seis abas em sequência (Contexto, Redes, Mês, Campanhas, Estúdio, Entrega) e uma
+ * Sete abas em sequência (Contexto, Redes, Stories, Mês, Campanhas, Estúdio, Entrega) e uma
  * barra fina fixa no topo (pedido do dono em 23/09, noite: sem o título
  * grande, tudo numa faixa só): seletor de cliente com busca, as etapas e o
  * saldo e o gasto pequenos, com recarga, modelos e chaves em botões curtos. Endereço completo:
@@ -49,6 +49,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 // esperar o código do Estúdio, que é o maior.
 const carregarContexto = () => import("@/components/mesa/AbaContexto");
 const carregarInstagram = () => import("@/components/mesa/AbaInstagram");
+const carregarStories = () => import("@/components/mesa/AbaStories");
 const carregarMes = () => import("@/components/mesa/AbaMes");
 const carregarCampanhas = () => import("@/components/mesa/AbaCampanhas");
 const carregarEstudio = () => import("@/components/mesa/AbaEstudio");
@@ -57,6 +58,7 @@ const carregarEntrega = () => import("@/components/mesa/AbaEntrega");
 // baixou antes do clique aparece direto, sem esqueleto.
 const AbaContexto = lazyComPreCarga("mesa/contexto", carregarContexto);
 const AbaInstagram = lazyComPreCarga("mesa/instagram", carregarInstagram);
+const AbaStories = lazyComPreCarga("mesa/stories", carregarStories);
 const AbaMes = lazyComPreCarga("mesa/mes", carregarMes);
 const AbaCampanhas = lazyComPreCarga("mesa/campanhas", carregarCampanhas);
 const AbaEstudio = lazyComPreCarga("mesa/estudio", carregarEstudio);
@@ -73,6 +75,8 @@ const ABAS = [
   // Frente IG (28/09): as redes do cliente (Instagram e páginas do Facebook), logo depois do
   // Contexto. O nome na tela é "Redes"; o endereço segue aba=instagram para os links já dados.
   { valor: "instagram", rotulo: "Redes" },
+  // Stories (20/10/2026, docs/mesa/STORIES.md): sequência, virais, destaques e agenda dos stories.
+  { valor: "stories", rotulo: "Stories" },
   { valor: "mes", rotulo: "Mês" },
   { valor: "campanhas", rotulo: "Campanhas" },
   { valor: "estudio", rotulo: "Estúdio" },
@@ -90,6 +94,7 @@ type Aba = (typeof ABAS)[number]["valor"];
 const ICONES_DAS_ABAS: Record<Aba, ReactNode> = {
   contexto: <Brain className="h-4 w-4" />,
   instagram: <Instagram className="h-4 w-4" />,
+  stories: <GalleryVerticalEnd className="h-4 w-4" />,
   mes: <CalendarDays className="h-4 w-4" />,
   campanhas: <Megaphone className="h-4 w-4" />,
   estudio: <Palette className="h-4 w-4" />,
@@ -439,7 +444,7 @@ export default function MesaDoCliente() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const aba of [AbaContexto, AbaInstagram, AbaMes, AbaCampanhas, AbaEstudio, AbaEntrega]) {
+        for (const aba of [AbaContexto, AbaInstagram, AbaStories, AbaMes, AbaCampanhas, AbaEstudio, AbaEntrega]) {
           aba.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a aba abrir */
           });
@@ -640,6 +645,7 @@ export default function MesaDoCliente() {
             <Suspense fallback={<EsqueletoDaAba />}>
               {aba === "contexto" && <AbaContexto />}
               {aba === "instagram" && <AbaInstagram />}
+              {aba === "stories" && <AbaStories />}
               {aba === "mes" && (
                 <AbaMes
                   onAbrirNoEstudio={(taskId, mesDoItem) => mudar({ aba: "estudio", task: taskId, mes: mesDoItem })}

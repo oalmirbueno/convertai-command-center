@@ -39,7 +39,7 @@ import {
   type JsonRpcId,
   type JsonRpcRequest,
   type JsonRpcResponse,
-} from "../_shared/mcp-response.ts";
+} from "./modulos/mcp-response.ts";
 import { getMcpRuntimeConfig } from "../_shared/mcp-runtime.ts";
 import { decidirGet, descobertaDoMcp } from "../_shared/mcp-descoberta.ts";
 import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";

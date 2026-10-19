@@ -46,6 +46,11 @@
  *   candidatos (típicos e, com IA, os propostos pelo modelo para o cliente)
  *   numa chamada só; o código escolhe de 4 a 6 na ordem da visita.
  *
+ * 20/10/2026 ("perfil perfeito"): o checklist dos ajustes do app (modulos/ajustes-do-app.ts), por conta:
+ * - ajustes_do_app { conta_id?, sem_jev? }: o catálogo adaptado ao tipo de negócio e o que já foi
+ *   marcado. Sem tipo guardado, o Jev (Choice, com "não sei") decide uma vez pelo contexto do cliente.
+ * - marcar_ajuste { conta_id?, chave, feito } / tipo_de_negocio { conta_id?, tipo } (troca da equipe).
+ *
  * Sem travessão.
  */
 
@@ -175,6 +180,19 @@ import {
   SISTEMA_DA_VISAO,
 } from "./modulos/diagnostico-do-perfil.ts";
 import { basesDoPerfil, multiploDoPost, textoDoMultiplo } from "../_shared/multiplo-do-post.ts";
+// 20/10/2026 ("perfil perfeito"): o checklist dos ajustes do app, adaptado ao tipo de negócio.
+import {
+  ajustesParaOTipo,
+  blocoDosAjustes,
+  type EstadoDosAjustes,
+  ehChaveDeAjuste,
+  ehTipo,
+  lerEstadoDosAjustes,
+  perguntaDoTipoDeNegocio,
+  progressoDosAjustes,
+  tipoDaResposta,
+  type TipoGuardado,
+} from "./modulos/ajustes-do-app.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -721,14 +739,28 @@ async function gradePlanejada(clientId: string, marca: MarcaLeve | null = null, 
 
 // ------------------------------------------------------------------ plano, capas, redes (SQL IG-01)
 
-async function lerPlano(clientId: string, chave: string): Promise<{ ordem: string[]; bio_analise: Record<string, unknown> | null; diagnostico: DiagnosticoDoPerfil | null; sql_pendente: boolean }> {
-  const { data, error } = await servico().from("cliente_instagram_planos").select("ordem, bio_analise, diagnostico").eq("client_id", clientId).eq("conta_chave", chave).maybeSingle();
-  if (error) return { ordem: [], bio_analise: null, diagnostico: null, sql_pendente: semTabela(error) };
-  const d = (data || {}) as { ordem?: unknown; bio_analise?: unknown; diagnostico?: unknown };
+/** Coluna que ainda não existe no banco (migration em arquivo que não foi aplicada). */
+const semColuna = (e: { code?: string; message?: string } | null | undefined) => !!e && (e.code === "42703" || /column .* does not exist/i.test(String(e.message || "")));
+
+type PlanoLido = { ordem: string[]; bio_analise: Record<string, unknown> | null; diagnostico: DiagnosticoDoPerfil | null; ajustes_do_app: EstadoDosAjustes; ajustes_pendente: boolean; sql_pendente: boolean };
+
+async function lerPlano(clientId: string, chave: string): Promise<PlanoLido> {
+  const ler = (campos: string) => servico().from("cliente_instagram_planos").select(campos).eq("client_id", clientId).eq("conta_chave", chave).maybeSingle();
+  let { data, error } = await ler("ordem, bio_analise, diagnostico, ajustes_do_app");
+  // 20/10: sem a coluna dos ajustes (migration 20261020121000 pendente), o resto do plano continua lido.
+  let ajustesPendente = false;
+  if (error && semColuna(error)) {
+    ajustesPendente = true;
+    ({ data, error } = await ler("ordem, bio_analise, diagnostico"));
+  }
+  if (error) return { ordem: [], bio_analise: null, diagnostico: null, ajustes_do_app: lerEstadoDosAjustes(null), ajustes_pendente: ajustesPendente, sql_pendente: semTabela(error) };
+  const d = (data || {}) as { ordem?: unknown; bio_analise?: unknown; diagnostico?: unknown; ajustes_do_app?: unknown };
   return {
     ordem: Array.isArray(d.ordem) ? (d.ordem as unknown[]).map(String).filter((x) => UUID.test(x)) : [],
     bio_analise: d.bio_analise && typeof d.bio_analise === "object" ? (d.bio_analise as Record<string, unknown>) : null,
     diagnostico: d.diagnostico && typeof d.diagnostico === "object" && Array.isArray((d.diagnostico as { linhas?: unknown }).linhas) ? (d.diagnostico as DiagnosticoDoPerfil) : null,
+    ajustes_do_app: lerEstadoDosAjustes(d.ajustes_do_app),
+    ajustes_pendente: ajustesPendente,
     sql_pendente: false,
   };
 }
@@ -919,6 +951,7 @@ async function painel(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
     grade: { itens: grade, ordem: plano.ordem },
     bio_analise: plano.bio_analise,
     diagnostico: plano.diagnostico,
+    ajustes_do_app: plano.ajustes_do_app,
     kit: { paleta: kit.paleta, estilo: kit.estilo, logo: kit.logo },
     resumo: { nome: negocio.nome, negocio: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, tom_de_voz: negocio.tom_de_voz, diferenciais: negocio.diferenciais },
     capas,
@@ -1069,7 +1102,7 @@ const ESQUEMA_DA_CONVERSA = {
           properties: { nome: { type: "string" }, icone: { type: "string" }, conceito: { type: "string" }, conteudo: { type: "string" } },
         },
       },
-      bloco: { type: "string", enum: ["perfil", "bio", "destaques", "grade", "metricas", "redes", "nenhum"] },
+      bloco: { type: "string", enum: ["perfil", "bio", "destaques", "grade", "metricas", "redes", "ajustes", "nenhum"] },
       ...PROPRIEDADES_DAS_ACOES_DAS_REDES,
     },
   } as { type: string; additionalProperties: boolean; required: string[]; properties: Record<string, unknown> }),
@@ -1144,6 +1177,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     `KIT: cores ${kit.paleta.map((x) => x.hex + (x.papel ? ` ${x.papel}` : "")).join(", ") || "sem paleta"}; estilo ${kit.estilo || "-"}; logo ${logo ? "anexada como imagem (use o que ela mostra: formas, símbolo, cores)" : kit.logo ? "existe, mas não abriu agora" : "não"}.`,
     `DESTAQUES COM CAPA JÁ GERADA: ${capas.map((x) => String(x.nome)).join(", ") || "nenhum"}.`,
     blocoDoDiagnostico(plano.diagnostico),
+    blocoDosAjustes(plano.ajustes_do_app),
     `OUTRAS CONTAS: Instagram ${c.contas.map((x) => `@${x.username}`).join(", ") || "nenhum"}; páginas do Facebook ${paginas.map((p) => p.nome).join(", ") || "nenhuma"}.`,
     await completoP,
   ].filter(Boolean).join("\n");
@@ -1151,7 +1185,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     "Você é o agente das redes do cliente, na aba Redes da Mesa da Aceleriq (Instagram e páginas do Facebook). Ajuda a equipe com bio, nome, destaques, grade, métricas e outras redes, e FAZ o que o painel permite (ações abaixo). Responda curto e específico, com os dados do cliente (nomes, números, cores); nada genérico.",
     "Destaques: quando pedirem (ou fizer sentido propor), devolva de 4 a 7 na ordem da pergunta de quem chega. nome: até 10 caracteres. icone: o objeto do ícone em até 6 palavras. conceito: a direção da capa, detalhada e própria desta marca (o que aparece, como, com quais cores do kit e elementos da logo), 1 a 3 frases. conteudo: o que entra DENTRO do destaque, os stories em ordem (ex.: 1. quem somos; 2. como se associar; 3. benefícios; 4. contato), 2 a 4 frases, sem prometer o que não está nos dados. Se a equipe disser para manter a lista, mantenha os mesmos nomes e só enriqueça conceito e conteudo. Sem pedido de destaques, lista vazia.",
     "Referência vaga (\"esse\", \"o anterior\", \"todos\") se resolve pela conversa; na dúvida real, pergunte em uma frase com as opções.",
-    "bloco: a parte da aba onde a equipe continua (perfil, bio, destaques, grade, metricas, redes) ou nenhum.",
+    "bloco: a parte da aba onde a equipe continua (perfil, bio, destaques, grade, metricas, redes, ajustes: os ajustes do app) ou nenhum.",
     hojeParaOAgente().texto,
     blocoDasRegras(regras),
     blocoDasAcoesDasRedes(gradeComRef),
@@ -1703,8 +1737,96 @@ async function diagnosticar(ch: Chamador, corpo: Record<string, unknown>): Promi
   return json({ diagnostico, custo_usd: arred(custo) });
 }
 
+// ------------------------------------------------------------------ ajustes do app (20/10/2026)
+
+const AVISO_AJUSTES_SQL = "Os ajustes do app ainda não estão no banco (migration 20261020121000 pendente): as marcas não ficam guardadas.";
+
+/** Grava um pedaço dos ajustes num comando só (RPC mesa_gravar_ajuste_do_app, só service_role). */
+async function gravarAjuste(clientId: string, chave: string, caminho: string[], valor: Record<string, unknown>, userId: string, soSeVazio = false): Promise<EstadoDosAjustes> {
+  const { data, error } = await servico().rpc("mesa_gravar_ajuste_do_app", { _client_id: clientId, _conta_chave: chave, _caminho: caminho, _valor: valor, _por: userId, _so_se_vazio: soSeVazio });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883" || semColuna(error) || semTabela(error)) throw new ErroHttp(503, "ajustes_sql_pendente", AVISO_AJUSTES_SQL);
+    console.error("[mesa-instagram] ajuste não gravado", { code: error.code });
+    throw new ErroHttp(503, "ajuste_nao_gravado", "Não foi possível guardar o ajuste agora. Tente de novo.");
+  }
+  return lerEstadoDosAjustes(data);
+}
+
+/** O que as três ações devolvem: o estado guardado, o catálogo adaptado ao tipo e o progresso. */
+function respostaDosAjustes(estado: EstadoDosAjustes, extra: Record<string, unknown> = {}) {
+  const tipo = estado.tipo_de_negocio ? estado.tipo_de_negocio.tipo : "nao_sei";
+  const adaptados = ajustesParaOTipo(tipo);
+  return json({
+    estado,
+    tipo,
+    ajustes: adaptados.map((a) => ({ ...a, feito: !!(estado.itens[a.chave] && estado.itens[a.chave].feito) })),
+    progresso: progressoDosAjustes(adaptados, estado.itens),
+    ...extra,
+  });
+}
+
+/**
+ * O Jev escolhe o tipo de negócio pelo contexto do cliente (negócio, dossiê, nome, bio e link), uma
+ * pergunta Choice com "não sei". Abaixo da probabilidade mínima, fica "não sei" e a equipe escolhe.
+ * Grava só se ainda não houver tipo (a escolha da equipe nunca é trocada pelo Jev).
+ */
+async function tipoPeloJev(ch: Chamador, c: Contexto): Promise<{ tipo: TipoGuardado | null; custo: number }> {
+  const [negocio, perfil] = await Promise.all([negocioDoCliente(c.clientId, true, c.marca), previaDoPerfil(c.clientId, c.conta, !!c.marcas.length)]);
+  const estado = {
+    negocio: { nome: negocio.nome, o_que_faz: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, diferenciais: negocio.diferenciais },
+    dossie: negocio.dossie.slice(0, 1200),
+    perfil: { username: perfil.username, nome: perfil.nome, bio: perfil.bio, link: perfil.site },
+  };
+  try {
+    const r = await jevPerguntar({ state: estado, questions: perguntaDoTipoDeNegocio() });
+    const cobranca = await cobrarJev(r, { clientId: c.clientId, tarefa: "contexto", referencia: { tipo: REF_CONVERSA, id: c.clientId }, criadoPor: ch.userId });
+    return { tipo: tipoDaResposta(r.answers.tipo_de_negocio), custo: cobranca ? cobranca.custoUsd : 0 };
+  } catch (e) {
+    if (!(e instanceof JevErro)) throw e;
+    console.error("[mesa-instagram] Jev do tipo de negócio", { codigo: e.codigo });
+    return { tipo: null, custo: 0 };
+  }
+}
+
+async function ajustesDoApp(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  const c = await abrir(ch, corpo);
+  const chave = chaveDaConta(c.conta);
+  const plano = await lerPlano(c.clientId, chave);
+  if (plano.ajustes_pendente || plano.sql_pendente) return respostaDosAjustes(plano.ajustes_do_app, { aviso: AVISO_AJUSTES_SQL, custo_usd: 0 });
+  let estado = plano.ajustes_do_app;
+  let custo = 0;
+  let aviso: string | null = null;
+  if (!estado.tipo_de_negocio && corpo.sem_jev !== true) {
+    const j = await tipoPeloJev(ch, c);
+    custo = j.custo;
+    if (j.tipo) estado = await gravarAjuste(c.clientId, chave, ["tipo_de_negocio"], j.tipo as unknown as Record<string, unknown>, ch.userId, true);
+    else aviso = "O Jev não respondeu agora: escolha o tipo de negócio para adaptar os ajustes.";
+  }
+  return respostaDosAjustes(estado, { aviso, custo_usd: arred(custo) });
+}
+
+async function marcarAjuste(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  if (!ehChaveDeAjuste(corpo.chave)) throw new ErroHttp(400, "ajuste_desconhecido", "Ajuste desconhecido.");
+  if (typeof corpo.feito !== "boolean") throw new ErroHttp(400, "feito_invalido", "feito precisa ser verdadeiro ou falso.");
+  const c = await abrir(ch, corpo);
+  const estado = await gravarAjuste(c.clientId, chaveDaConta(c.conta), ["itens", corpo.chave], { feito: corpo.feito, quando: new Date().toISOString(), por: ch.userId }, ch.userId);
+  return respostaDosAjustes(estado);
+}
+
+async function trocarTipoDeNegocio(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  if (!ehTipo(corpo.tipo)) throw new ErroHttp(400, "tipo_invalido", "Tipo de negócio desconhecido.");
+  const c = await abrir(ch, corpo);
+  const valor: TipoGuardado = { tipo: corpo.tipo, origem: "equipe", confianca: null, probabilidades: {}, quando: new Date().toISOString(), por: ch.userId };
+  const estado = await gravarAjuste(c.clientId, chaveDaConta(c.conta), ["tipo_de_negocio"], valor as unknown as Record<string, unknown>, ch.userId);
+  return respostaDosAjustes(estado);
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   painel,
+  // 20/10/2026: o checklist dos ajustes do app (perfil perfeito).
+  ajustes_do_app: ajustesDoApp,
+  marcar_ajuste: marcarAjuste,
+  tipo_de_negocio: trocarTipoDeNegocio,
   // 12/10/2026: diagnóstico do perfil em 9 partes.
   perfil_diagnosticar: diagnosticar,
   perfil: perfilAoVivo,

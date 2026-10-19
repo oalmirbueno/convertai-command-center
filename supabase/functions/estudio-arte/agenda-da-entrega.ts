@@ -63,6 +63,8 @@ export interface TrabalhoParaAgenda {
   hashtags?: string[] | null;
   entrega_rodada?: number | null;
   post_id?: string | null;
+  /** 20/10 (Stories): a direção da peça; o formato stories_9x16 entra na Agenda como story. */
+  direcao?: { formato?: unknown } | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -287,6 +289,7 @@ export async function sincronizarPecaNaAgenda(
       hashtags: raiz.caption ? [] : t.hashtags ?? [],
       objetivo: raiz.description,
       rodada: Math.max(1, Number(t.entrega_rodada) || 1),
+      formato: typeof t.direcao?.formato === "string" ? t.direcao.formato : null,
     },
     existente,
     { conta, arquivoAtualEditavel: arquivoEditavel(arquivoAtual), quando: opcoes.quando ?? null },
