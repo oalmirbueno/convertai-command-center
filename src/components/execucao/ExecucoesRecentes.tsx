@@ -30,12 +30,14 @@ export default function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, de
     const nomeCliente = cliente?.company_name || cliente?.full_name || d.client_name;
     const provas = Array.isArray(d.attachments) ? d.attachments : [];
     const ruim = ["failed", "timeout"].includes(r.status);
+    // 19/10: rodada fechada pelo agente (fim_da_rodada) não é tarefa concluída; a tarefa segue na fila.
+    const rodada = r.status === "done" && d.fim_da_rodada === true;
     return <details key={r.id} open={r.id === destaque || undefined} ref={r.id === destaque ? alvo : undefined} className={juntar(superficie.painel, "group overflow-hidden", r.id === destaque && "ring-1 ring-primary")}>
       <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 hover:bg-muted/30">
         {r.status === "done" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-success" /> : <Activity className={juntar("h-4 w-4 shrink-0", ruim ? "text-warning" : "text-muted-foreground")} />}
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold" title={agente?.display_name || "Agente"} aria-hidden="true">{(agente?.display_name || "A").slice(0, 1)}</span>
         <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-medium">{titulo}</p><p className="truncate text-[12px] text-muted-foreground">{agente?.display_name || "Agente"}{nomeCliente ? ` · ${nomeCliente}` : " · operação interna"} · {new Date(r.heartbeat_at || r.started_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p></div>
-        <span className={juntar("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", ruim ? "bg-warning/15 text-warning" : r.status === "done" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{estadoDaExecucao(r.status)}</span>
+        <span className={juntar("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", ruim ? "bg-warning/15 text-warning" : r.status === "done" && !rodada ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{rodada ? "Rodada concluída" : estadoDaExecucao(r.status)}</span>
       </summary>
       <div className="max-h-[50vh] space-y-3 overflow-y-auto border-t border-border/60 p-4">
         <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><Clock className="h-3 w-3" />Último registro: {new Date(r.heartbeat_at || r.started_at).toLocaleString("pt-BR")}</p>

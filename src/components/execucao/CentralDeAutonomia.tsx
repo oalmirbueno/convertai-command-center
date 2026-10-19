@@ -79,6 +79,7 @@ const COR_DO_RESULTADO: Record<ResultadoVerificado, string> = {
   falhou: "border-destructive/40 text-destructive",
   sem_sinal: "border-destructive/40 text-destructive",
   concluida_sem_prova: "border-warning/40 text-warning",
+  rodada_concluida: "border-border text-muted-foreground",
 };
 
 // ------------------------------------------------------------------ dados dos indicadores e do histórico

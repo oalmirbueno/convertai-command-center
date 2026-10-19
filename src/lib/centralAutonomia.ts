@@ -118,7 +118,8 @@ export type ResultadoVerificado =
   | "aguardando_insumo"
   | "falhou"
   | "sem_sinal"
-  | "concluida_sem_prova";
+  | "concluida_sem_prova"
+  | "rodada_concluida";
 
 export const ROTULO_DO_RESULTADO: Record<ResultadoVerificado, string> = {
   concluida_com_prova: "Concluída com prova",
@@ -130,6 +131,7 @@ export const ROTULO_DO_RESULTADO: Record<ResultadoVerificado, string> = {
   falhou: "Falhou",
   sem_sinal: "Expirou sem sinal",
   concluida_sem_prova: "Concluída sem prova anexada",
+  rodada_concluida: "Rodada concluída · segue na fila",
 };
 
 /**
@@ -148,6 +150,8 @@ export function resultadoVerificado(
   if (r.status === "awaiting_input") return "aguardando_insumo";
   if (r.status === "review") return statusDaTarefa === "done" && v && temTexto(v.last_evidence) ? "concluida_com_prova" : "em_revisao";
   if (r.status === "done") {
+    // 19/10: o agente fechou a rodada (fim_da_rodada) e a tarefa voltou para a fila; não é entrega.
+    if (v && (v.status === "queued" || v.status === "in_progress")) return "rodada_concluida";
     if (statusDaTarefa === "done") return v && temTexto(v.last_evidence) ? "concluida_com_prova" : "concluida_sem_prova";
     if (!statusDaTarefa) return v && temTexto(v.last_evidence) ? "execucao_concluida_entrega_em_revisao" : "em_revisao";
     return "execucao_concluida_entrega_em_revisao";

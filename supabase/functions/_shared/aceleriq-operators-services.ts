@@ -161,6 +161,51 @@ export interface OperatorReportInput {
   timeout_seconds?: number;
   detail?: OperatorProgressDetail;
   precisa_do_dono?: MotivoDoDono;
+  fim_da_rodada?: boolean;
+}
+
+/** Eventos que deixam a rodada aberta: só eles podem fechar com fim_da_rodada. */
+const RODADA_ABERTA = new Set(['started', 'progress', 'heartbeat']);
+
+/**
+ * 19/10/2026 (dono: "tem coisas ficando rodando, rodando"). O time do Paperclip trabalha em
+ * rodadas curtas e relatava `progress` no fim de cada uma, sempre com a mesma run_key por
+ * tarefa. Sem relato final, a rodada ficava "em andamento" até o timeout, contava como falha
+ * e, na terceira em 24 h, o banco travava a tarefa. Com fim_da_rodada a rodada fecha agora,
+ * como concluída, e a tarefa que estava em andamento volta para a fila, à espera da próxima
+ * rodada. Trava, revisão e feito não mudam (só sai o que estava in_progress).
+ */
+async function fecharRodada(
+  resultado: { link_id?: string | null; run_id?: string | null; operator?: string | null },
+  input: OperatorReportInput,
+  actor: string,
+): Promise<Record<string, unknown>> {
+  const agora = new Date().toISOString();
+  let operadorId: string | null = null;
+  if (resultado.run_id) {
+    const r = await comPrazo(db().from('operator_runs')
+      .update({ status: 'done', finished_at: agora })
+      .eq('id', resultado.run_id).in('status', ['started', 'progress'])
+      .select('operator_id'));
+    if (r.error) return { rodada_fechada: false, aviso_da_rodada: `A rodada não fechou: ${r.error.message}` };
+    operadorId = (Array.isArray(r.data) ? r.data[0]?.operator_id : null) ?? null;
+  }
+  let voltouParaFila = false;
+  if (resultado.link_id) {
+    const v = await comPrazo(db().from('operator_task_links')
+      .update({ status: 'queued', updated_at: agora })
+      .eq('id', resultado.link_id).eq('status', 'in_progress')
+      .select('id'));
+    voltouParaFila = !v.error && Array.isArray(v.data) && v.data.length > 0;
+    if (voltouParaFila) {
+      await comPrazo(db().from('operator_audit_log').insert({
+        actor, operator_id: operadorId, task_link_id: resultado.link_id, kanban_task_id: input.kanban_task_id ?? null,
+        action: 'fim da rodada: a tarefa volta para a fila e espera a próxima rodada',
+        old_status: 'in_progress', new_status: 'queued', run_key: input.run_key,
+      }));
+    }
+  }
+  return { rodada_fechada: true, run_status: 'done', ...(voltouParaFila ? { link_status: 'queued' } : {}) };
 }
 
 /** O Jev lê o motivo da trava. Falha do Jev devolve null: quem chama mantém a trava. */
@@ -215,6 +260,9 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     throw new Error('painel_task_id must be a UUID');
   }
   const detail = progressDetail(input.detail, input.action, input.evidence, input.next_step);
+  // Sempre gravado: o detalhe da run se junta ao anterior, e uma marca velha não pode sobrar.
+  const fechaRodada = input.fim_da_rodada === true && RODADA_ABERTA.has(input.event);
+  detail.fim_da_rodada = fechaRodada;
   const taskId = input.kanban_task_id || input.painel_task_id;
   if (taskId) {
     const context = await comPrazo(db().from('tasks')
@@ -264,7 +312,11 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     }
     throw new Error(`operator_report_event: ${error.message}`);
   }
-  return aviso && data && typeof data === 'object' ? { ...(data as Record<string, unknown>), ...aviso } : data;
+  let resultado = data;
+  if (fechaRodada && data && typeof data === 'object') {
+    resultado = { ...(data as Record<string, unknown>), ...await fecharRodada(data as Record<string, string | null>, input, actor) };
+  }
+  return aviso && resultado && typeof resultado === 'object' ? { ...(resultado as Record<string, unknown>), ...aviso } : resultado;
 }
 
 /**

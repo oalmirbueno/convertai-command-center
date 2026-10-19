@@ -3573,7 +3573,7 @@ const operatorReportTool: ToolDefinition = {
   name: 'aceleriq_operator_report',
   title: 'Relatar execucao de operador interno',
   description:
-    'Registra um evento de execucao de um operador interno Hermes (vertice, registro, prisma, augusto): started, progress, done, failed, blocked, review, awaiting_input ou heartbeat. O banco aplica tudo numa transacao: vinculo com a tarefa (SEM tocar no responsavel humano), historico de runs com idempotencia por (operador, run_key), trilha de auditoria IMUTAVEL e notificacao interna apenas para excecoes e marcos (progress e heartbeat nunca notificam). done sem evidencia vira review: feito de verdade tem evidencia verificavel. Duas execucoes simultaneas da mesma tarefa colidem com erro claro. Evidencia com credencial na URL perde a query string. NAO atribui tarefa a humano, NAO publica, NAO gasta, NAO altera financeiro. TRAVAR PARA O ALMIR (blocked, awaiting_input, failed) SO por dinheiro, acesso ou senha que so ele tem, aprovar algo que vai ao cliente, ou decisao de estrategia: diga qual em precisa_do_dono. O resto (conferencia, divergencia, prova faltando, erro tecnico, rodada que caiu) nao trava: vira progresso, voce segue com o melhor julgamento e o Revisor Independente desempata em ate 2 rodadas. Sem precisa_do_dono, o Jev le o motivo e so mantem a trava se for mesmo do Almir.',
+    'Registra um evento de execucao de um operador interno Hermes (vertice, registro, prisma, augusto): started, progress, done, failed, blocked, review, awaiting_input ou heartbeat. O banco aplica tudo numa transacao: vinculo com a tarefa (SEM tocar no responsavel humano), historico de runs com idempotencia por (operador, run_key), trilha de auditoria IMUTAVEL e notificacao interna apenas para excecoes e marcos (progress e heartbeat nunca notificam). done sem evidencia vira review: feito de verdade tem evidencia verificavel. Duas execucoes simultaneas da mesma tarefa colidem com erro claro. Evidencia com credencial na URL perde a query string. NAO atribui tarefa a humano, NAO publica, NAO gasta, NAO altera financeiro. TRAVAR PARA O ALMIR (blocked, awaiting_input, failed) SO por dinheiro, acesso ou senha que so ele tem, aprovar algo que vai ao cliente, ou decisao de estrategia: diga qual em precisa_do_dono. O resto (conferencia, divergencia, prova faltando, erro tecnico, rodada que caiu) nao trava: vira progresso, voce segue com o melhor julgamento e o Revisor Independente desempata em ate 2 rodadas. Sem precisa_do_dono, o Jev le o motivo e so mantem a trava se for mesmo do Almir. FIM DA RODADA: todo relato no fim da sua rodada fecha a rodada. Terminou (done ou review com prova) ou travou para o Almir: mande esse evento. Avancou e a tarefa espera a proxima rodada (sua ou de outro agente): mande progress com fim_da_rodada true; a rodada fecha na hora e a tarefa volta para a fila. progress sem fim_da_rodada so enquanto voce continua trabalhando agora; sem relato final a rodada vira timeout, conta como falha e, na terceira em 24 h, trava a tarefa.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3589,6 +3589,7 @@ const operatorReportTool: ToolDefinition = {
       next_step: { type: 'string', maxLength: 300 },
       block_reason: { type: 'string', maxLength: 500 },
       precisa_do_dono: { type: 'string', enum: ['dinheiro', 'acesso_ou_senha', 'aprovar_para_cliente', 'decisao_de_estrategia'], description: 'So em blocked/awaiting_input/failed: por que SO o Almir resolve. Sem isto, a trava so fica se o Jev concordar que e do Almir.' },
+      fim_da_rodada: { type: 'boolean', default: false, description: 'true no ultimo relato da sua rodada quando a tarefa ainda nao acabou (progress): a rodada fecha concluida e a tarefa volta para a fila, sem virar timeout. Ignorado em done, review, blocked, failed e awaiting_input, que ja fecham.' },
       error: { type: 'string', maxLength: 1000 },
       approval_required: { type: 'boolean', default: false },
       from_cron: { type: 'boolean', default: false },
@@ -3614,6 +3615,7 @@ const operatorReportTool: ToolDefinition = {
       next_step: z.string().max(300).optional(),
       block_reason: z.string().max(500).optional(),
       precisa_do_dono: z.enum(['dinheiro', 'acesso_ou_senha', 'aprovar_para_cliente', 'decisao_de_estrategia']).optional(),
+      fim_da_rodada: z.boolean().optional(),
       error: z.string().max(1000).optional(),
       approval_required: z.boolean().optional(),
       from_cron: z.boolean().optional(),
