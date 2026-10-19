@@ -207,7 +207,9 @@ Deno.test("v3: perguntas guiadas: o Jev decide (4 Noul juntas); sem Jev vale a p
 
 Deno.test("v3: os 3 templates novos (high ticket, lançamento, webinar) são canvas válidos, com ids únicos e Pôr no ar no fim", () => {
   assertEquals(TEMPLATES_OFICIAIS_V3.map((t) => t.nome), ["High ticket com aplicação", "Lançamento", "Webinar"]);
-  assertEquals(new Set(TODOS_OS_TEMPLATES_OFICIAIS.map((t) => t.id)).size, TEMPLATES_OFICIAIS.length + TEMPLATES_OFICIAIS_V2.length + 3);
+  // Ids únicos em todos os oficiais (a v4 soma os dela: modulos/v4_test.ts).
+  assertEquals(new Set(TODOS_OS_TEMPLATES_OFICIAIS.map((t) => t.id)).size, TODOS_OS_TEMPLATES_OFICIAIS.length);
+  assert(TODOS_OS_TEMPLATES_OFICIAIS.length >= TEMPLATES_OFICIAIS.length + TEMPLATES_OFICIAIS_V2.length + 3);
   const tem = (t: (typeof TEMPLATES_OFICIAIS_V3)[number], tipos: string[]) => tipos.every((x) => t.canvas.nos.some((n) => n.tipo === x));
   for (const t of TEMPLATES_OFICIAIS_V3) {
     assertEquals(errosDoCanvas(normalizarCanvas(t.canvas)), [], t.nome);

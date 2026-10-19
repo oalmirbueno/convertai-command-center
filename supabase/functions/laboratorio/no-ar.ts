@@ -94,7 +94,16 @@ export type Pacote = {
   copies: Array<{ titulo: string; texto: string }>;
   filmes: Array<{ titulo: string; formato: string; path: string; url: string | null }>;
   ofertas: Array<{ titulo: string; resumo: string }>;
+  /** v4: e-mails, WhatsApp, recuperação e automações (rascunho; o envio só depois do sim do dono). */
+  mensagens?: Array<{ titulo: string; tipo: string; resumo: string; pacote: Record<string, unknown> }>;
+  /** v4: domínio, teste A/B, CRM, fontes de tráfego e área de membros (configuração para o agente aplicar). */
+  configuracoes?: Array<{ titulo: string; tipo: string; resumo: string; pacote: Record<string, unknown> }>;
 };
+
+/** v4: as páginas novas (cada uma vira página do site; o webinar leva as 3). */
+const PAGINAS_V4 = ["pagina", "checkout", "quiz", "webinar", "teste_ab", "area_membros"];
+const MENSAGENS_V4 = ["email", "whatsapp", "recuperacao", "automacao"];
+const CONFIGURACOES_V4 = ["dominio", "teste_ab", "crm", "fontes_trafego", "area_membros", "checkout"];
 
 const rotulo = (n: NoDoCanvas) => (typeof n.dados.titulo === "string" && n.dados.titulo.trim() ? n.dados.titulo.trim() : ROTULO_DO_TIPO[n.tipo] || n.tipo);
 
@@ -105,6 +114,14 @@ export function montarPacote(entradas: EntradaDoPacote[]): Pacote {
     const s = obj(saida);
     const t = rotulo(no);
     if (no.tipo === "landing" && txt(s.html_path)) p.paginas.push({ titulo: t, path: txt(s.html_path), url: txt(s.html_url) || null, workspace_id: txt(s.no_workspace_id) || null });
+    // v4: páginas do funil (o webinar manda as 3), mensagens em rascunho e configurações.
+    if (PAGINAS_V4.indexOf(no.tipo) >= 0) {
+      const varias = Array.isArray(s.paginas) ? s.paginas.map(obj).filter((x) => txt(x.html_path)) : [];
+      if (varias.length) for (const x of varias) p.paginas.push({ titulo: `${t} (${txt(x.nome, 60)})`, path: txt(x.html_path), url: txt(x.html_url) || null, workspace_id: null });
+      else if (txt(s.html_path)) p.paginas.push({ titulo: t, path: txt(s.html_path), url: txt(s.html_url) || null, workspace_id: txt(s.no_workspace_id) || null });
+    }
+    if (MENSAGENS_V4.indexOf(no.tipo) >= 0 && (s.json || txt(s.texto))) (p.mensagens = p.mensagens || []).push({ titulo: t, tipo: no.tipo, resumo: txt(s.texto, 3000), pacote: { ...obj(s.json), rascunho: true, enviado: false } });
+    if (CONFIGURACOES_V4.indexOf(no.tipo) >= 0 && s.json) (p.configuracoes = p.configuracoes || []).push({ titulo: t, tipo: no.tipo, resumo: txt(s.texto, 2000), pacote: obj(s.json) });
     for (const i of Array.isArray(s.imagens) ? s.imagens : []) {
       const im = obj(i);
       if (txt(im.path)) p.criativos.push({ titulo: t, path: txt(im.path), url: txt(im.url) || null });
@@ -125,12 +142,13 @@ export function montarPacote(entradas: EntradaDoPacote[]): Pacote {
   return p;
 }
 
-export const pacoteVazio = (p: Pacote) => !p.paginas.length && !p.criativos.length && !p.anuncios.length && !p.copies.length && !p.filmes.length && !p.ofertas.length;
+export const pacoteVazio = (p: Pacote) => !p.paginas.length && !p.criativos.length && !p.anuncios.length && !p.copies.length && !p.filmes.length && !p.ofertas.length && !(p.mensagens || []).length && !(p.configuracoes || []).length;
 
 const DESTINO: Record<AlvoNoAr, string> = {
   publicar_site: "Publicar a página no ar (domínio ou hospedagem do cliente) e devolver o link público.",
   subir_anuncio_pausado: "Criar o anúncio na conta de anúncios do cliente (Meta Ads) PAUSADO, sem verba nova e sem ativar.",
   conectar_pagina: "Ligar a página do Facebook/Instagram do cliente à BM da Aceleriq pelo Conectar ou pelo pedido de acesso.",
+  ligar_mensagens: "Criar a automação no n8n e as sequências de e-mail e WhatsApp do pacote, só nos canais já conectados do cliente; o envio a leads começa só depois desta aprovação.",
   outro: "Executar o que a instrução pede, só o que está no pacote.",
 };
 
@@ -149,6 +167,8 @@ function pacoteEmTexto(p: Pacote): string {
   if (p.filmes.length) linhas.push("Filmes:", ...p.filmes.map((x) => `- ${x.titulo} ${x.formato}: ${x.url || x.path}`));
   if (p.copies.length) linhas.push("Textos:", ...p.copies.map((x) => `- ${x.titulo}: ${x.texto.slice(0, 1500)}`));
   if (p.ofertas.length) linhas.push("Oferta e funil:", ...p.ofertas.map((x) => `- ${x.titulo}: ${x.resumo.slice(0, 1000)}`));
+  if ((p.mensagens || []).length) linhas.push("Mensagens e automações (RASCUNHO, nada foi enviado):", ...(p.mensagens || []).map((x) => `- ${x.titulo} (${x.tipo}): ${x.resumo.slice(0, 1200)}`));
+  if ((p.configuracoes || []).length) linhas.push("Configurações do funil:", ...(p.configuracoes || []).map((x) => `- ${x.titulo} (${x.tipo}): ${x.resumo.slice(0, 1200)}`));
   return linhas.join("\n");
 }
 
@@ -186,6 +206,7 @@ export async function pedirNoAr(porta: PortaDoNoAr, o: {
   if (pacoteVazio(pacote) && !instrucao) throw new ErroHttp(400, "no_sem_entrada", "Ligue a página, o anúncio ou os criativos (ou escreva a instrução) no Pôr no ar antes de rodar.");
   if (alvo === "publicar_site" && !pacote.paginas.length) throw new ErroHttp(400, "sem_pagina", "Para publicar o site, ligue uma Landing page já rodada no Pôr no ar.");
   if (alvo === "subir_anuncio_pausado" && !pacote.anuncios.length) throw new ErroHttp(400, "sem_anuncio", "Para subir o anúncio, ligue um Anúncio já rodado no Pôr no ar.");
+  if (alvo === "ligar_mensagens" && !(pacote.mensagens || []).length) throw new ErroHttp(400, "sem_mensagens", "Para ligar as mensagens, ligue a Automação, o E-mail, o WhatsApp ou a Recuperação já rodados no Pôr no ar.");
 
   const aberto = await porta.pedidoAberto(o.projetoId, o.no.id);
   if (aberto) throw new ErroHttp(409, "ja_pedido", "Este Pôr no ar já tem um pedido aberto (aguardando o dono ou com o agente). Acompanhe por ele.", { aprovacao_id: aberto.id, status: aberto.status });
@@ -220,8 +241,8 @@ export async function pedirNoAr(porta: PortaDoNoAr, o: {
       por_que: `A equipe montou e rodou o fluxo no Laboratório e pede para pôr no ar. ${operador.display_name} executa só depois do seu sim, com prova.`,
       dados_usados: corpoDoPacote.slice(0, 4000) || null,
       destino: DESTINO[alvo],
-      impacto: alvo === "subir_anuncio_pausado" ? "O anúncio fica na conta PAUSADO: não gasta até você ativar." : "Fica visível para o público assim que for feito.",
-      risco: alvo === "subir_anuncio_pausado" ? "Baixo: sobe pausado e sem verba nova." : "Público: confira textos, links e imagens antes de aprovar.",
+      impacto: alvo === "subir_anuncio_pausado" ? "O anúncio fica na conta PAUSADO: não gasta até você ativar." : alvo === "ligar_mensagens" ? "Os leads do funil passam a receber as mensagens do pacote." : "Fica visível para o público assim que for feito.",
+      risco: alvo === "subir_anuncio_pausado" ? "Baixo: sobe pausado e sem verba nova." : alvo === "ligar_mensagens" ? "Mensagem chega em gente de verdade: confira textos, links e a frequência antes de aprovar." : "Público: confira textos, links e imagens antes de aprovar.",
       custo_previsto: 0,
       reversivel: alvo !== "outro",
       payload: {

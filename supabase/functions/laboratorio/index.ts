@@ -15,6 +15,7 @@
  * - projeto_ler { projeto_id } -> { projeto, cliente_nome, execucoes: { [no_id]: última execução } }
  * - projeto_salvar { projeto_id, versao_esperada, nome?, contexto?, canvas?, client_id? } -> { projeto } | 409 versao_mudou { projeto_atual }
  * - projeto_arquivar { projeto_id, arquivar? = true } -> { projeto }
+ * - projeto_excluir { projeto_id } -> { excluido: true, projeto_id } (apaga as execuções e o projeto; os arquivos ficam em Arquivos) | 409 projeto_em_uso (nó rodando ou Pôr no ar com pedido aberto)
  * Templates:
  * - templates_listar {} -> { templates } ; template_usar { template_id, nome?, client_id?, contexto? } -> { projeto }
  * - template_salvar { nome, projeto_id | canvas, descricao?, icone? } -> { template } (pessoal, oficial = false)
@@ -41,6 +42,12 @@
  * - planejar / pedido_inicio: projeto completo sem o essencial -> { perguntas, operacoes: [] }; mande respostas ou pular_perguntas
  * - bloco_resolver { projeto_id, no_id, bloco_id, modo: "fonte" | "editar", fonte? | texto? } -> { execucao_id, execucao }
  *   (bloco rascunho_sem_fonte; enquanto houver algum antes do Pôr no ar, ele responde 409 rascunho_sem_fonte)
+ * Créditos do Laboratório (20/10, migration 20261020050000; creditos.ts): carteira só do Laboratório.
+ * - creditos {} -> { saldo_usd, ativa, pode_carregar, movimentos (50), gasto_mes_usd, por_projeto, disponivel }
+ * - creditos_carregar { valor_usd (1 a 10.000), nota? } (só admin; registro manual) -> { saldo_usd, ativa }
+ * - creditos_limite { ativa } (só admin) -> { saldo_usd, ativa }
+ * - no_executar / rodar_tudo / filme_escolher com confirmado reservam o custo estimado; carteira ativa sem
+ *   saldo -> 402 sem_credito { saldo_usd, custo_usd }. Inativa (o começo) só registra. Falha devolve (estorno).
  * Filme: mesa-motion (filme_criar, filme_salvar, storyboards_gerar, storyboard_escolher, cena_pedir, filme_ler, montar,
  * render_status) com a sessão de quem pediu. Pôr no ar: só cria o pedido em operator_approvals; aprovado, o gatilho
  * da migration 20261019233000 entrega a tarefa ao operador (operator_assign_task). Nada vai ao ar sem o dono.

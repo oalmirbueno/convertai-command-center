@@ -6,7 +6,11 @@
  *
  * POST { chave, nome, email?, whatsapp?, empresa?, mensagem?, pagina?, iniciado_em, site_url,
  *        utm_source?, utm_medium?, utm_campaign?, utm_content?, utm_term?, ad_id?, adset_id?, campaign_id?, fbclid? }
+ *        quiz? { pontuacao, faixa, respostas }
  *   site_url é a armadilha (campo escondido que gente não vê e robô preenche).
+ *   quiz (19/10, nó `quiz` do Laboratório): pontuação, faixa (até 60) e até 30
+ *   respostas de até 200 caracteres; vai para commercial_leads.qualificacao.quiz
+ *   e a nota do lead diz a faixa. Sem o campo, nada muda.
  *   Os utm_* e ids da Meta são a origem do clique (19/10): o site repassa o
  *   que veio no link de entrada e o lead fica ligado ao anúncio
  *   (commercial_leads.origem_clique). Só o que veio no link; nada deduzido.
@@ -22,6 +26,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { CHAVE_DO_FORMULARIO, lerEnvio, origemPermitida } from "../_shared/site-lancamento.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerOrigemDoClique } from "../_shared/origem-clique.ts";
+import { lerQuiz } from "../_shared/quiz-do-site.ts";
 
 const cors = (origem: string | null) => ({
   "Access-Control-Allow-Origin": origem || "*",
@@ -42,6 +47,7 @@ const MENSAGENS: Record<string, string> = {
   formulario_desligado: "Este formulário não está ligado.",
   limite: "Recebemos muitos envios agora. Tente de novo em alguns minutos.",
   origem_nao_permitida: "Este formulário só funciona no site dele.",
+  quiz_invalido: "As respostas do quiz vieram num formato inválido. Recarregue a página e responda de novo.",
 };
 
 /** Motivos de robô: a resposta finge que deu certo (não ensina o robô a passar). */
@@ -92,7 +98,7 @@ Deno.serve(async (req) => {
   let corpo: unknown = null;
   try {
     const texto = await req.text();
-    if (texto.length > 12_000) return json({ ok: false, codigo: "grande_demais", mensagem: "Mensagem grande demais." }, 413);
+    if (texto.length > 24_000) return json({ ok: false, codigo: "grande_demais", mensagem: "Mensagem grande demais." }, 413);
     corpo = JSON.parse(texto);
   } catch {
     return json({ ok: false, codigo: "pedido_invalido", mensagem: "Envio inválido." }, 400);
@@ -106,6 +112,8 @@ Deno.serve(async (req) => {
     // Erro de gente (sem nome, sem contato): volta para o campo sem gravar nada.
     const ehSpam = !!motivo && (SILENCIOSOS.indexOf(motivo) >= 0 || SPAM.indexOf(motivo) >= 0);
     if (motivo && !ehSpam) return json({ ok: false, codigo: motivo, mensagem: MENSAGENS[motivo] || "Confira os campos e envie de novo." }, 400);
+    const { quiz, invalido: quizInvalido } = lerQuiz((corpo as Record<string, unknown>).quiz);
+    if (quizInvalido && !ehSpam) return json({ ok: false, codigo: "quiz_invalido", mensagem: MENSAGENS.quiz_invalido }, 400);
     const ipHash = await hashDoIp(req);
     const argumentos: Record<string, unknown> = {
       _chave: envio.chave,
@@ -121,7 +129,15 @@ Deno.serve(async (req) => {
     // A origem do clique só vai quando veio no link (spam não ganha origem).
     const origemDoClique = ehSpam ? null : lerOrigemDoClique(corpo);
     if (origemDoClique) argumentos._origem = origemDoClique;
+    // O quiz também só vai quando veio (e nunca com spam).
+    if (quiz && !ehSpam) argumentos._quiz = quiz;
     let { data, error } = await servico().rpc("site_registrar_lead", argumentos);
+    // Banco ainda sem a migration do quiz (20261020070000): grava sem o quiz, nunca perde o contato.
+    if (error && argumentos._quiz && error.code === "PGRST202") {
+      registrarFalha("site-formulario: RPC sem _quiz (migration de vendas, quiz e A/B pendente)", error);
+      delete argumentos._quiz;
+      ({ data, error } = await servico().rpc("site_registrar_lead", argumentos));
+    }
     // Banco ainda sem a migration da origem (20261020040000): grava o lead sem ela, nunca perde o contato.
     if (error && origemDoClique && error.code === "PGRST202") {
       registrarFalha("site-formulario: RPC sem _origem (migration da origem do clique pendente)", error);

@@ -33,7 +33,9 @@ import {
 } from "./executar.ts";
 import { acompanharFilme, chamadorDaMesaMotion, escolherStoryboard, type SaidaDoFilme } from "./filme.ts";
 import { acompanharNoAr, type SaidaDoNoAr } from "./no-ar.ts";
+import { carregarCreditos, cobrarConfirmacao, definirLimite, lerCreditos } from "./creditos.ts";
 import { perguntasGuiadas, type ResultadoDasPerguntas } from "./perguntas.ts";
+import { type ExecucaoParaExcluir, motivoDoProjetoEmUso } from "./modulos/exclusao.ts";
 import {
   aplicarOperacoes,
   arred,
@@ -109,6 +111,15 @@ async function contextoDe(ch: Chamador, p: ProjetoDoLab, rodadaId: string | null
 }
 
 const confirmado = (corpo: Corpo) => corpo.confirmado === true;
+
+/** Nome do nó na nota do extrato dos créditos. */
+const rotuloDaNota = (no: { tipo: string; dados: Record<string, unknown> }) => (typeof no.dados.titulo === "string" && no.dados.titulo.trim() ? no.dados.titulo.trim() : no.tipo).slice(0, 120);
+
+/**
+ * Custo estimado do render do Filme depois da escolha do storyboard: as cenas vão para a fila do worker,
+ * sem IA (0 hoje). Com custo, o filme_escolher com confirmado reserva nos créditos do Laboratório.
+ */
+const CUSTO_DO_RENDER_DO_FILME_USD = 0;
 
 // ------------------------------------------------------------------ projetos
 
@@ -214,10 +225,34 @@ export const projetoArquivar: Acao = async (ch, corpo) => {
   return json({ projeto: projetoDaLinha(data) });
 };
 
+/**
+ * projeto_excluir { projeto_id } -> { excluido: true, projeto_id } (21/10/2026, pedido do dono).
+ * Mesmas regras do projeto_arquivar: equipe do Laboratório (index) e acesso ao cliente do projeto
+ * (lerProjeto). Em uso (nó rodando ou Pôr no ar com pedido aberto) responde 409 projeto_em_uso
+ * com a frase do motivo. Senão apaga as execuções do projeto e o projeto; não volta. Os arquivos gerados
+ * (bucket workspace e workspace_nodes em Laboratório/...) ficam: continuam em Arquivos.
+ */
+export const projetoExcluir: Acao = async (ch, corpo) => {
+  const p = await lerProjeto(ch, corpo.projeto_id);
+  const db = servico();
+  // Em uso (nó rodando ou Pôr no ar com pedido aberto): 409 projeto_em_uso, nada sai (modulos/exclusao.ts).
+  const { data: execucoes, error: erroDaLeitura } = await db.from("lab_execucoes").select("no_id, tipo, status, saida, created_at").eq("projeto_id", p.id).order("created_at", { ascending: false }).limit(1000);
+  if (erroDaLeitura) throw erroDoBanco(erroDaLeitura, "projeto_nao_excluido", "Não consegui conferir o projeto agora. Nada foi apagado.");
+  const emUso = motivoDoProjetoEmUso((execucoes || []) as ExecucaoParaExcluir[]);
+  if (emUso) throw new ErroHttp(409, "projeto_em_uso", emUso);
+  const { error: erroDasExecucoes } = await db.from("lab_execucoes").delete().eq("projeto_id", p.id);
+  if (erroDasExecucoes) throw erroDoBanco(erroDasExecucoes, "projeto_nao_excluido", "Não consegui excluir o projeto agora. Nada foi apagado.");
+  const { data, error } = await db.from("lab_projetos").delete().eq("id", p.id).select("id");
+  if (error) throw erroDoBanco(error, "projeto_nao_excluido", "Não consegui excluir o projeto agora. O histórico de execuções já saiu; tente de novo.");
+  if (!data || !data.length) throw new ErroHttp(404, "projeto_inexistente", "Projeto do Laboratório não encontrado.");
+  return json({ excluido: true, projeto_id: p.id });
+};
+
 // ------------------------------------------------------------------ templates
 
 export const templatesListar: Acao = async () => {
-  const { data, error } = await servico().from("lab_templates").select("id, nome, descricao, icone, canvas, oficial, created_by, created_at").order("oficial", { ascending: false }).order("nome");
+  // v4: categoria (Funis, Lançamento, Criativos...) para a galeria agrupar; template salvo pela equipe vem sem.
+  const { data, error } = await servico().from("lab_templates").select("id, nome, descricao, icone, canvas, oficial, categoria, created_by, created_at").order("oficial", { ascending: false }).order("nome");
   if (error) throw erroDoBanco(error, "templates_indisponiveis", "Não consegui listar os templates agora.");
   return json({ templates: data || [] });
 };
@@ -317,8 +352,17 @@ export const noExecutar: Acao = async (ch, corpo) => {
   if (!ehExecutavel(no.tipo)) throw new ErroHttp(400, "no_nao_executavel", "Este nó só guarda dado; rode o nó que usa ele.");
   const est = await estimarCanvas(p.canvas, [no.id]);
   exigirConfirmacao(corpo, est.total_usd, est.por_no);
-  const ctx = await contextoDe(ch, p);
-  const execucaoId = await criarExecucao({ projetoId: p.id, no, status: "na_fila", entrada: { estimativa_usd: est.total_usd }, rodadaId: null, userId: ch.userId });
+  // Créditos do Laboratório: reserva o custo estimado (carteira ativa sem saldo: 402 sem_credito, nada roda).
+  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `Rodar ${rotuloDaNota(no)}`, userId: ch.userId });
+  let ctx: Contexto;
+  let execucaoId: string;
+  try {
+    ctx = { ...(await contextoDe(ch, p)), cobranca };
+    execucaoId = await criarExecucao({ projetoId: p.id, no, status: "na_fila", entrada: { estimativa_usd: est.total_usd }, rodadaId: null, userId: ch.userId });
+  } catch (err) {
+    await cobranca.devolverTudo("o nó não chegou a rodar");
+    throw err;
+  }
   if (NOS_LONGOS.indexOf(no.tipo) >= 0) {
     const trabalho = rodarNo(ctx, no, execucaoId);
     if (emSegundoPlano(trabalho)) return json({ execucao_id: execucaoId, status: "rodando", estimativa_usd: est.total_usd, acompanhar: "execucoes_ler" }, 202);
@@ -347,9 +391,19 @@ export const rodarTudoAcao: Acao = async (ch, corpo) => {
   const est = await estimarCanvas(p.canvas, ordemToda);
   if (!est.por_no.length) throw new ErroHttp(400, "nada_para_rodar", "O fluxo não tem nó que gere algo (Agente, Copy, Resultado, Carrossel, Logo, Landing, Anúncio ou Agente externo).");
   exigirConfirmacao(corpo, est.total_usd, est.por_no);
+  // Créditos do Laboratório: reserva o total; cada nó que falha ou não roda devolve a parte dele.
+  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `Rodar tudo (${est.por_no.length} nó${est.por_no.length === 1 ? "" : "s"})`, userId: ch.userId });
   const rodadaId = crypto.randomUUID();
-  const ctx = await contextoDe(ch, p, rodadaId);
-  const { ordem, execucoes } = await rodarTudo(ctx, alvos);
+  let ctx: Contexto;
+  let ordem: string[];
+  let execucoes: Record<string, string>;
+  try {
+    ctx = { ...(await contextoDe(ch, p, rodadaId)), cobranca };
+    ({ ordem, execucoes } = await rodarTudo(ctx, alvos));
+  } catch (err) {
+    await cobranca.devolverTudo("a rodada não chegou a começar");
+    throw err;
+  }
   const trabalho = seguirRodada(ctx, ordem, execucoes);
   if (!emSegundoPlano(trabalho)) await trabalho;
   return json({ rodada_id: rodadaId, ordem, execucoes, estimativa_usd: est.total_usd, status: "rodando", acompanhar: "execucoes_ler" }, 202);
@@ -515,7 +569,17 @@ export const filmeEscolher: Acao = async (ch, corpo) => {
   const ex = await ultimaDoNo(p, no.id);
   if (!ex || !ex.saida || !ex.saida.filme_id) throw new ErroHttp(409, "filme_sem_storyboards", "Rode o nó Filme antes de escolher o storyboard.");
   const indice = Math.floor(Number(corpo.indice));
-  const nova = await escolherStoryboard(chamadorDaMesaMotion(ch.token), ex.saida as SaidaDoFilme, indice, ex.id.slice(0, 8));
+  // Créditos do Laboratório: com confirmado, reserva o custo estimado do render (falha devolve).
+  const cobranca = confirmado(corpo)
+    ? await cobrarConfirmacao({ porNo: [{ no_id: no.id, custo_usd: CUSTO_DO_RENDER_DO_FILME_USD }], total: CUSTO_DO_RENDER_DO_FILME_USD, projetoId: p.id, nota: `Render do ${rotuloDaNota(no)}`, userId: ch.userId })
+    : null;
+  let nova: SaidaDoFilme;
+  try {
+    nova = await escolherStoryboard(chamadorDaMesaMotion(ch.token), ex.saida as SaidaDoFilme, indice, ex.id.slice(0, 8));
+  } catch (err) {
+    await cobranca?.devolverTudo("o storyboard não foi escolhido");
+    throw err;
+  }
   await atualizarExecucao(ex.id, { status: "aguardando", saida: nova });
   return await execucaoAtual(ex.id);
 };
@@ -655,6 +719,7 @@ export const ACOES: Record<string, Acao> = {
   projeto_ler: projetoLer,
   projeto_salvar: projetoSalvar,
   projeto_arquivar: projetoArquivar,
+  projeto_excluir: projetoExcluir,
   templates_listar: templatesListar,
   template_usar: templateUsar,
   template_salvar: templateSalvar,
@@ -669,6 +734,9 @@ export const ACOES: Record<string, Acao> = {
   no_acompanhar: noAcompanhar,
   perguntas_do_pedido: perguntasDoPedido,
   bloco_resolver: blocoResolver,
+  creditos: (ch) => lerCreditos(ch),
+  creditos_carregar: (ch, corpo) => carregarCreditos(ch, corpo),
+  creditos_limite: (ch, corpo) => definirLimite(ch, corpo),
 };
 
 /** Ações que podem passar de 150 s sem resposta: começam a responder na hora (respostaComFolego). */

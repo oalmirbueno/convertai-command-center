@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, ArrowLeft, BookmarkPlus, Check, Copy, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Play, RefreshCw, Workflow } from "lucide-react";
-import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, texto } from "@/components/sistema";
+import { Archive, ArrowLeft, BookmarkPlus, Check, Copy, Fullscreen, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, PanelTopOpen, Play, RefreshCw, Trash2, Workflow } from "lucide-react";
+import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { supabase } from "@/integrations/supabase/client";
 import { useModoFoco } from "@/lib/modoFoco";
+import { useSemRolagemDaPagina } from "@/lib/laboratorio/semRolagemDaPagina";
 import {
   acompanharNo,
   arquivarProjeto,
@@ -33,10 +34,12 @@ import {
 import {
   TIPOS_DE_NO,
   alvosDaBase,
+  ancestraisDe,
   aplicarOperacoes,
   atrasosDaConstrucao,
   canvasVazio,
   criarNo,
+  definirGatilho,
   desligar,
   ligar,
   mudarDados,
@@ -58,6 +61,8 @@ import JanelaDeCusto, { type LinhaDeCusto } from "./JanelaDeCusto";
 import { emAndamento } from "./ResultadoDoNo";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
 import { duplicarProjeto, nomeDaCopia as nomeDaCopiaNaTela } from "@/lib/laboratorio/duplicar";
+import JanelaDeExcluirProjeto from "./JanelaDeExcluirProjeto";
+import "./telaCheiaDoLab.css";
 
 /**
  * Editor de um projeto do Laboratório: o canvas de nós (paleta, quadro,
@@ -71,9 +76,30 @@ import { duplicarProjeto, nomeDaCopia as nomeDaCopiaNaTela } from "@/lib/laborat
  * no quadro com a animação de construção (coluna por coluna) e organizadas,
  * com Desfazer. O Filme escolhe o storyboard no próprio nó; a tela cheia
  * pode vir de fora (a página do Laboratório guarda o estado para todas as abas).
+ *
+ * v4 (21/10/2026, pedido do dono):
+ * - altura do canvas medida sempre (ResizeObserver + resize; recalcula quando
+ *   o Studio abre, fecha ou cresce), com piso de 70% da janela: nunca pequeno;
+ * - perguntas primeiro: com a etapa das perguntas (ou o "pesquisando") aberta
+ *   no Canvas Studio, o quadro sai e a etapa ocupa o lugar dele;
+ * - Canvas Studio recolhível (lembrado por useEstadoDaTela);
+ * - tela cheia de verdade: cobre a janela inteira, sem borda e acima da casca
+ *   do painel em qualquer largura (telaCheiaDoLab.css), com a área segura do
+ *   iPhone; e "canvas em tela cheia": só o quadro, de ponta a ponta, com uma
+ *   mini barra flutuante (sair, abrir o Studio, Rodar tudo). Esc sai (primeiro
+ *   do canvas em tela cheia; com janela aberta, o Esc é dela);
+ * - Excluir projeto no menu, com confirmação (JanelaDeExcluirProjeto).
  */
 
 type EstadoDoSalvar = "salvo" | "pendente" | "salvando" | "erro" | "conflito";
+
+/** Tela cheia: a área segura do iPhone (entalhe e barra de baixo) fica de fora do conteúdo. */
+const AREA_SEGURA = {
+  paddingTop: "env(safe-area-inset-top)",
+  paddingBottom: "env(safe-area-inset-bottom)",
+  paddingLeft: "env(safe-area-inset-left)",
+  paddingRight: "env(safe-area-inset-right)",
+};
 type Alvo = { tipo: "no"; id: string } | { tipo: "tudo" } | { tipo: "lista"; ids: string[]; titulo: string } | { tipo: "filme"; id: string; indice: number };
 
 const ATRASO_DO_SALVAR_MS = 1500;
@@ -83,27 +109,55 @@ const ACOMPANHAR_MS = 5000;
 /** Esperam algo de fora (escolha, render, aprovação): quem vigia é o no_acompanhar, não o execucoes_ler. */
 const ESPERAM_DE_FORA = ["filme", "por_no_ar"];
 
-function useAlturaDoEditor(ativo: boolean) {
+/** Piso da altura do canvas: 70% da janela (nunca menos de 420 px). */
+export function alturaMinimaDoCanvas(alturaDaJanela: number): number {
+  return Math.max(420, Math.round(alturaDaJanela * 0.7));
+}
+
+/**
+ * Altura do canvas fora da tela cheia: do topo dele até o pé da janela, com o
+ * piso de 70% da janela. O topo é medido como se a página estivesse no alto
+ * (soma a rolagem dos pais), então rolar não muda a altura. Mede de novo no
+ * resize, quando o que fica acima muda de tamanho (barra, Studio abrindo,
+ * fechando ou crescendo: ResizeObserver) e quando `gatilho` muda. Sem
+ * ResizeObserver (Safari antigo), fica o resize e o gatilho.
+ */
+function useAlturaDoEditor(ativo: boolean, acima: RefObject<HTMLElement>, gatilho: string) {
   const ref = useRef<HTMLDivElement>(null);
-  const [altura, setAltura] = useState<number>(600);
+  const [altura, setAltura] = useState<number>(() => alturaMinimaDoCanvas(typeof window === "undefined" ? 800 : window.innerHeight || 800));
   useLayoutEffect(() => {
     if (!ativo) return;
     const medir = () => {
       const el = ref.current;
       if (!el) return;
-      const largura = window.innerWidth || 1024;
-      if (largura < 1024) {
-        setAltura(600);
-        return;
-      }
-      const topo = el.getBoundingClientRect().top;
-      setAltura(Math.max(480, Math.round((window.innerHeight || 800) - topo - 16)));
+      const janela = window.innerHeight || 800;
+      let topo = el.getBoundingClientRect().top;
+      for (let p = el.parentElement; p; p = p.parentElement) topo += p.scrollTop || 0;
+      setAltura(Math.max(alturaMinimaDoCanvas(janela), Math.round(janela - topo - 16)));
     };
     medir();
     window.addEventListener("resize", medir);
-    return () => window.removeEventListener("resize", medir);
-  }, [ativo]);
+    let obs: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      obs = new ResizeObserver(() => medir());
+      if (acima.current) obs.observe(acima.current);
+      if (ref.current && ref.current.parentElement) obs.observe(ref.current.parentElement);
+    }
+    return () => {
+      window.removeEventListener("resize", medir);
+      if (obs) obs.disconnect();
+    };
+  }, [ativo, acima, gatilho]);
   return { ref, altura };
+}
+
+/** Há uma janela (dialog) aberta: o Esc é dela, não da tela cheia. */
+function temJanelaAberta(): boolean {
+  try {
+    return !!document.querySelector('[role="dialog"], [role="alertdialog"]');
+  } catch {
+    return false;
+  }
 }
 
 function nomeDoNo(canvas: CanvasDoLab, id: string) {
@@ -133,6 +187,8 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const [salvar, setSalvar] = useState<{ estado: EstadoDoSalvar; erro: string }>({ estado: "salvo", erro: "" });
   const [execucoes, setExecucoes] = useState<Record<string, ExecucaoDoLab>>({});
   const [selecionado, setSelecionado] = useState<string | null>(null);
+  /** Inspetor aberto no quadro: só pelo "Abrir detalhes" do nó (os campos já ficam no próprio nó). */
+  const [detalhes, setDetalhes] = useState(false);
   const [avisoDoQuadro, setAvisoDoQuadro] = useState<string | null>(null);
   const [custo, setCusto] = useState<{ alvo: Alvo; titulo: string; linhas: LinhaDeCusto[]; total: number } | null>(null);
   const [estimando, setEstimando] = useState<string | null>(null);
@@ -155,6 +211,13 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   /** Janela "Duplicar para outro cliente": null fechada; "" é Livre; senão o id do cliente. */
   const [duplicarPara, setDuplicarPara] = useState<string | null>(null);
   const [duplicando, setDuplicando] = useState(false);
+  const [excluir, setExcluir] = useState(false);
+  /** Canvas em tela cheia: só o quadro, de ponta a ponta (barra e Studio somem). */
+  const [soCanvas, setSoCanvas] = useState(false);
+  /** Etapa grande do Canvas Studio (pesquisando ou perguntas) no lugar do quadro. */
+  const [etapa, setEtapa] = useState(false);
+  const [studioRecolhido, setStudioRecolhido] = useEstadoDaTela<boolean>("laboratorio:studio-recolhido", false, { validar: (v) => typeof v === "boolean" });
+  const refDoTopo = useRef<HTMLDivElement>(null);
 
   const atual = useRef<CanvasDoLab>(canvas);
   const versao = useRef(1);
@@ -164,8 +227,16 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   /** Cliente trocado no Canvas Studio: vai no próximo projeto_salvar (undefined = sem troca). */
   const clienteMudou = useRef<string | null | undefined>(undefined);
 
-  useModoFoco("laboratorio-canvas", cheia);
-  const { ref: refDoCorpo, altura } = useAlturaDoEditor(!lista && !cheia);
+  // Cobre a janela inteira: tela cheia ou só o canvas. A altura mede de novo quando o projeto
+  // chega (antes era só o "Abrindo"; medir uma vez só deixava o canvas com a altura inicial).
+  const cobre = cheia || soCanvas;
+  useModoFoco("laboratorio-canvas", cobre);
+  useSemRolagemDaPagina(cobre);
+  const { ref: refDoCorpo, altura } = useAlturaDoEditor(!lista && !cobre && !etapa, refDoTopo, `${!!projeto}|${studioRecolhido}|${etapa}|${lista}`);
+  // A etapa das perguntas precisa aparecer: sai do "só o canvas".
+  useEffect(() => {
+    if (etapa) setSoCanvas(false);
+  }, [etapa]);
 
   useEffect(() => {
     const medir = () => setLargo((window.innerWidth || 1024) >= 1024);
@@ -352,15 +423,19 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     };
   }, [vigiar, algoRodando, projetoId, tipoDoNo]);
 
-  // Esc sai da tela cheia.
+  // Esc sai: primeiro do "só o canvas", depois da tela cheia. Com janela aberta, o Esc é dela.
+  // Na captura, antes da página (que também sai da tela cheia dela no Esc, se ninguém usou).
   useEffect(() => {
-    if (!cheia) return;
+    if (!cobre) return;
     const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCheia(false);
+      if ((e.key !== "Escape" && e.key !== "Esc") || e.defaultPrevented || temJanelaAberta()) return;
+      e.preventDefault();
+      if (soCanvas) setSoCanvas(false);
+      else setCheia(false);
     };
-    window.addEventListener("keydown", tecla);
-    return () => window.removeEventListener("keydown", tecla);
-  }, [cheia, setCheia]);
+    window.addEventListener("keydown", tecla, true);
+    return () => window.removeEventListener("keydown", tecla, true);
+  }, [cobre, soCanvas, setCheia]);
 
   const por = useCallback(
     (tipo: TipoDeNo, pos?: { x: number; y: number }) => {
@@ -539,6 +614,25 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const aoEscolherStoryboard = useCallback((noId: string, indice: number) => void escolherFilme(noId, indice).catch(() => undefined), [escolherFilme]);
 
   const rodarNo = useCallback((id: string) => void pedirCusto({ tipo: "no", id }), [pedirCusto]);
+  /** Sincronizar: roda de novo o nó e os executáveis antes dele (o rodar_tudo com alvo faz o mesmo), sempre pelo custo antes. */
+  const sincronizarNo = useCallback(
+    (id: string) => {
+      const c = atual.current;
+      const antes = ancestraisDe(c, id).filter((x) => {
+        const n = c.nos.find((y) => y.id === x);
+        return !!n && TIPOS_DE_NO[n.tipo].roda;
+      });
+      void pedirCusto({ tipo: "lista", ids: antes.concat(id), titulo: `Sincronizar ${nomeDoNo(c, id)}` });
+    },
+    [pedirCusto],
+  );
+  const abrirDetalhes = useCallback((id: string) => {
+    setSelecionado(id);
+    setDetalhes(true);
+  }, []);
+  useEffect(() => {
+    if (!selecionado) setDetalhes(false);
+  }, [selecionado]);
 
   if (q.isLoading && !projeto) return <Carregando forma="aba" rotulo="Abrindo o projeto" />;
   if (q.isError && !projeto) return <EstadoDeErro titulo="Não deu para abrir o projeto" descricao={textoDoErro(q.error)} acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
@@ -552,6 +646,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const inspetor = noSel ? (
     <Inspetor
       key={noSel.id}
+      clienteId={clienteDoProjeto}
       canvas={canvas}
       no={noSel}
       projetoId={projetoId}
@@ -560,6 +655,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
       onMudarDados={(d) => mudar((c) => mudarDados(c, noSel.id, d))}
       onLigar={(de, para) => tentarLigar(de, para, false)}
       onDesligar={(id) => mudar((c) => desligar(c, id))}
+      onMudarGatilho={(id, g) => mudar((c) => definirGatilho(c, id, g))}
       onRemover={() => {
         mudar((c) => removerNo(c, noSel.id));
         setSelecionado(null);
@@ -573,7 +669,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         }
         void pedirCusto({ tipo: "lista", ids, titulo: "Gerar tudo da Base comum" });
       }}
-      onFechar={lista ? undefined : () => setSelecionado(null)}
+      onFechar={lista ? undefined : () => setDetalhes(false)}
       avisoDeLigacao={null}
       onEscolherStoryboard={(i) => aoEscolherStoryboard(noSel.id, i)}
       escolhendo={escolhendo && escolhendo.no === noSel.id ? escolhendo.indice : null}
@@ -592,8 +688,24 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     />
   );
 
+  const sairDoSoCanvas = () => setSoCanvas(false);
+  const abrirStudio = () => {
+    setStudioRecolhido(false);
+    setSoCanvas(false);
+  };
+
   return (
-    <div className={juntar("min-w-0", cheia && "fixed inset-0 z-40 flex flex-col bg-background p-3")} data-editor-do-projeto={projetoId}>
+    // !m-0: a página põe espaço entre os blocos (space-y) e o margin-top empurrava a tela cheia
+    // 24 px para baixo, com o cabeçalho do Laboratório aparecendo por cima ("uma bordinha").
+    <div
+      className={juntar("min-w-0", cobre && "fixed inset-0 z-40 !m-0 flex flex-col bg-background")}
+      style={cobre ? AREA_SEGURA : undefined}
+      data-editor-do-projeto={projetoId}
+      data-tela-cheia-do-editor={cheia ? "" : undefined}
+      data-so-canvas={soCanvas ? "" : undefined}
+    >
+      {/* Topo: a barra e o Canvas Studio (a altura do canvas acompanha o tamanho daqui). Some no "só o canvas". */}
+      <div ref={refDoTopo} className={juntar("min-w-0", soCanvas && "hidden", cheia && "px-3 pt-2", cobre && etapa && "min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3")} data-topo-do-editor="">
       <div className="mb-2 flex min-w-0 flex-wrap items-center" data-barra-do-editor="">
         <button type="button" className={juntar(botao.icone, "mr-1")} onClick={onVoltar} aria-label="Voltar aos projetos" title="Voltar aos projetos">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -638,9 +750,14 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         <button type="button" className={botao.icone} onClick={() => setLista(!lista)} aria-label={lista ? "Ver o quadro" : "Modo lista"} title={lista ? "Ver o quadro" : "Modo lista"}>
           {lista ? <Workflow className="h-4 w-4" aria-hidden="true" /> : <LayoutList className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <button type="button" className={botao.icone} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"}>
+        <button type="button" className={botao.icone} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia}>
           {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
         </button>
+        {!lista && !etapa ? (
+          <button type="button" className={botao.icone} onClick={() => setSoCanvas(true)} aria-label="Canvas em tela cheia" title="Canvas em tela cheia: só o quadro, de ponta a ponta (Esc sai)" data-botao-so-canvas="">
+            <Fullscreen className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : null}
         <MenuMais
           rotulo="Mais ações do projeto"
           itens={[
@@ -661,6 +778,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
                   .catch((e) => toast.error("Não deu para arquivar", { description: textoDoErro(e) }));
               },
             },
+            { rotulo: "Excluir projeto", icone: <Trash2 className="h-4 w-4" />, perigo: true, aoEscolher: () => setExcluir(true) },
           ]}
         />
       </div>
@@ -675,22 +793,29 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         onConstruir={construirDoStudio}
         onDesfazer={antesDaConstrucao ? desfazerConstrucao : null}
         onConversa={(pedido, resposta) => setRegistro({ id: String(Date.now()), pedido, resposta })}
+        recolhido={studioRecolhido}
+        onRecolher={setStudioRecolhido}
+        onEtapa={setEtapa}
       />
+      </div>
 
-      {lista ? (
+      {/* Perguntas primeiro: com a etapa aberta no Studio, o quadro sai (nada de canvas espremido embaixo). */}
+      {etapa ? null : lista ? (
         <ModoListaDoLab canvas={canvas} execucoes={execucoes} selecionado={selecionado} onSelecionar={setSelecionado} onPor={(t) => por(t)} inspetor={inspetor} travas={motivosDasTravas} />
       ) : (
-        <div ref={refDoCorpo} className={juntar("relative flex min-w-0", cheia && "min-h-0 flex-1")} style={cheia ? undefined : { height: altura }}>
-          <div className="mr-2 shrink-0 border-r border-border pr-1">
-            <Paleta onPor={(t) => por(t)} />
-          </div>
-          <div className="relative min-w-0 flex-1 overflow-hidden rounded-md border border-border">
+        <div ref={refDoCorpo} className={juntar("relative flex min-w-0", cobre && "min-h-0 flex-1", cheia && !soCanvas && "px-3 pb-3")} style={cobre ? undefined : { height: altura }} data-corpo-do-editor="">
+          {soCanvas ? null : (
+            <div className="mr-2 flex shrink-0 flex-col border-r border-border pr-1">
+              <Paleta onPor={(t) => por(t)} />
+            </div>
+          )}
+          <div className={juntar("relative min-w-0 flex-1 overflow-hidden", !soCanvas && "rounded-md border border-border")} data-area-do-quadro="">
             <QuadroDoLab
               canvas={canvas}
               execucoes={execucoes}
               selecionado={selecionado}
               rodandoNo={estimando && estimando !== "tudo" ? estimando : null}
-              semTeclas={!!custo || salvarComo !== null || duplicarPara !== null}
+              semTeclas={!!custo || salvarComo !== null || duplicarPara !== null || excluir}
               onSelecionar={setSelecionado}
               onMudarCanvas={mudar}
               onTentarLigar={(de, para) => tentarLigar(de, para, true)}
@@ -704,6 +829,11 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               escolhendo={escolhendo}
               onEscolherStoryboard={aoEscolherStoryboard}
               travas={motivosDasTravas}
+              projetoId={projetoId}
+              clienteId={clienteDoProjeto}
+              onSincronizar={sincronizarNo}
+              onAbrirDetalhes={abrirDetalhes}
+              onMudarGatilho={(id, g) => mudar((c) => definirGatilho(c, id, g))}
             />
             {!canvas.nos.length && (
               <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>
@@ -713,17 +843,31 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
                 {avisoDoQuadro}
               </p>
             )}
-            {inspetor && (
+            {inspetor && detalhes && (
               <div className="nowheel nodrag nopan absolute bottom-2 right-2 top-2 z-10 w-[300px] max-w-[85%] overflow-y-auto overscroll-contain rounded-md border border-border bg-background p-3 shadow-sm" data-painel-do-inspetor="">
                 {inspetor}
               </div>
             )}
+            {soCanvas && (
+              // Mini barra flutuante do "só o canvas": sair, abrir o Studio e Rodar tudo.
+              <div className="nowheel nodrag nopan absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center rounded-lg border border-border bg-background p-1 shadow-sm" role="toolbar" aria-label="Barra do canvas em tela cheia" data-mini-barra-do-canvas="">
+                <button type="button" className={botao.icone} onClick={sairDoSoCanvas} aria-label="Sair do canvas em tela cheia" title="Sair do canvas em tela cheia (Esc)">
+                  <Minimize2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button type="button" className={botao.icone} onClick={abrirStudio} aria-label="Abrir o Canvas Studio" title="Abrir o Canvas Studio (sai do canvas em tela cheia)">
+                  <PanelTopOpen className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button type="button" className={juntar(botao.primario, "ml-1 h-8 w-8 px-0")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)">
+                  {estimando === "tudo" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Play className="h-3.5 w-3.5" aria-hidden="true" />}
+                </button>
+              </div>
+            )}
           </div>
-          {agente && largo && <div className="ml-3 w-[340px] shrink-0">{painelDoAgente}</div>}
+          {agente && largo && !soCanvas && <div className="ml-3 w-[340px] shrink-0">{painelDoAgente}</div>}
         </div>
       )}
 
-      {agente && !largo && (
+      {agente && !largo && !soCanvas && (
         <JanelaCentral aberta onFechar={() => setAgente(false)} titulo="Agente do projeto" corpo="fixo" semEspaco largura="md">
           {painelDoAgente}
         </JanelaCentral>
@@ -818,6 +962,15 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         </select>
         <p className={juntar(texto.auxiliar, "mt-2")}>Nome: {nomeDaCopiaNaTela(nome, nomeDoCliente(clientes, duplicarPara || null))}</p>
       </JanelaCentral>
+
+      <JanelaDeExcluirProjeto
+        projeto={excluir ? { id: projetoId, nome: nome || projeto.nome } : null}
+        onFechar={() => setExcluir(false)}
+        onExcluido={() => {
+          setCheia(false);
+          onVoltar();
+        }}
+      />
     </div>
   );
 }
