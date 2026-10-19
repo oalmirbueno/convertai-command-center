@@ -133,7 +133,7 @@ export function laminasDoTrabalho(trabalho: unknown): { ordens: number[]; com_ar
 
 /** Mensagem para quem conecta com chave de API e tenta agir. */
 export const AVISO_ACAO_SO_COM_PESSOA =
-  'Agir nas mesas pelo MCP exige conexão OAuth (ChatGPT ou Claude conectados com a conta da pessoa): a mesa confere equipe e acesso ao cliente com a sessão de quem age e grava quem fez. Chave de API (mcp_live_*) lê as mesas, mas não age nelas. Peça para a pessoa conectar pelo OAuth ou faça a ação no painel.';
+  'Agir nas mesas pelo MCP exige a sessão de uma pessoa: conexão OAuth (ChatGPT, Claude ou Paperclip com a conta da pessoa) ou chave de API cujo dono da chave é admin ou gestor da equipe (a ação sai em nome do dono). A mesa confere equipe e acesso ao cliente com essa sessão e grava quem fez. Chave sem dono só lê as mesas. Peça para a pessoa conectar pelo OAuth ou faça a ação no painel.';
 
 /** Prova de quem fez, devolvida em toda ação (o log de auditoria do MCP guarda o resto). */
 export function feitoPor(ctx: { keyId: string; origin: string | null; correlationId?: string; dataScope?: { principalUserId: string | null } }) {

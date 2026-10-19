@@ -1127,9 +1127,14 @@ Deno.test('2.3: custo de IA e efeito no cliente pedem confirmação explícita',
   assertEquals(TOOL_MAP.get('aceleriq_mesa_campanha_salvar')!.longRunning, false);
 });
 
-Deno.test('2.3: chave de API não age nas mesas e ação fora da lista nem sai (recusa antes de qualquer rede)', async () => {
-  const chaveAdmin: AuthContext = { ...adminCtx, dataScope: { ...adminCtx.dataScope, source: 'api_key' } };
-  await assertRejects(() => chamarMesa('mesa-ads', 'oferta_do_contexto', { client_id: 'x' }, chaveAdmin), Error, 'mesa:exige_oauth');
+Deno.test('2.15: chave sem dono não age nas mesas; chave com dono age com a sessão do dono; ação fora da lista nem sai', async () => {
+  // Chave sem dono (legada): só lê.
+  const chaveSemDono: AuthContext = { ...adminCtx, dataScope: { ...adminCtx.dataScope, source: 'api_key', principalUserId: null } };
+  await assertRejects(() => chamarMesa('mesa-ads', 'oferta_do_contexto', { client_id: 'x' }, chaveSemDono), Error, 'mesa:exige_oauth');
+  // Chave com dono (19/10, autorizado pelo dono): busca a sessão do dono. Aqui, sem banco, recusa com o motivo
+  // em vez de cair na chave de serviço.
+  const chaveComDono: AuthContext = { ...adminCtx, dataScope: { ...adminCtx.dataScope, source: 'api_key' } };
+  await assertRejects(() => chamarMesa('mesa-ads', 'oferta_do_contexto', { client_id: 'x' }, chaveComDono), Error, 'mesa:dono_da_chave');
   // OAuth sem o token da pessoa também não passa (nunca cai na chave de serviço).
   const oauthSemToken: AuthContext = { ...adminCtx, dataScope: { ...adminCtx.dataScope, source: 'oauth' } };
   await assertRejects(() => chamarMesa('mesa-ads', 'oferta_do_contexto', { client_id: 'x' }, oauthSemToken), Error, 'mesa:exige_oauth');

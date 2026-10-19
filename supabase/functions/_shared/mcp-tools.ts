@@ -2446,7 +2446,7 @@ const CHAVE_IDEMPOTENTE = z.string().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/,
 const CHAVE_IDEMPOTENTE_JSON = { type: 'string', minLength: 8, maxLength: 128, description: 'Chave única da ação. Repetir a mesma chave não refaz nada (24 h, por credencial).' };
 const DATA_REAL = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealToolDate, { message: 'must be a real calendar date (YYYY-MM-DD)' });
 const COMO_AGIR =
-  ' Exige conexão OAuth: a ação roda com a sessão da pessoa conectada e grava quem fez; chave de API recebe recusa explicada. Toda resposta traz feito_por (principal, pessoa e correlation_id), e a chamada fica no log de auditoria do MCP sem segredo.';
+  ' Exige conexão OAuth ou chave de API cujo dono é admin ou gestor: a ação roda com a sessão da pessoa (ou do dono da chave) e grava quem fez; chave sem dono recebe recusa explicada. Toda resposta traz feito_por (principal, pessoa e correlation_id), e a chamada fica no log de auditoria do MCP sem segredo.';
 
 function ferramentaDeMesa(
   name: string,

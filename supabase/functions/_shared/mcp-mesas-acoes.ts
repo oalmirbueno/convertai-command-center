@@ -43,7 +43,51 @@ function falha(codigo: string, mensagem: string): Error {
   return new Error(`mesa:${codigo} ${mensagem}`);
 }
 
-function tokenDaPessoa(ctx: AuthContext): string {
+/**
+ * 19/10/2026, autorizado pelo dono por escrito ("ligue para tudo funcionar e
+ * não ficar travado"). A conexão OAuth do Paperclip foi trocada por uma de chave
+ * em 17/10 e, desde então, toda ação nas mesas voltava "exige OAuth". Agora a
+ * chave age nas mesas com a sessão de quem a criou, desde que essa pessoa seja
+ * admin ou gestor da equipe: a mesa confere acesso e grava "criado por" como se
+ * ela clicasse. Chave sem dono, ou de dono fora da equipe, continua só lendo.
+ */
+const PAPEIS_QUE_EMPRESTAM_A_SESSAO = ['admin', 'manager'];
+const sessoesDosDonos = new Map<string, { token: string; validoAte: number }>();
+
+async function sessaoDoDonoDaChave(userId: string): Promise<string> {
+  const guardada = sessoesDosDonos.get(userId);
+  if (guardada && guardada.validoAte > Date.now() + 5 * 60_000) return guardada.token;
+  try {
+    const papeis = await db().from('user_roles').select('role').eq('user_id', userId);
+    if (papeis.error) throw falha('dono_da_chave', 'Não foi possível conferir o dono da chave agora. Tente de novo.');
+    const roles = ((papeis.data ?? []) as Array<{ role: string }>).map((r) => String(r.role));
+    if (!roles.some((r) => PAPEIS_QUE_EMPRESTAM_A_SESSAO.includes(r))) {
+      throw falha('dono_da_chave', 'O dono desta chave não é admin nem gestor da equipe: ela lê as mesas, mas não age nelas.');
+    }
+    const usuario = await db().auth.admin.getUserById(userId);
+    const email = usuario.data?.user?.email;
+    if (usuario.error || !email) throw falha('dono_da_chave', 'O dono desta chave não tem e-mail para abrir a sessão.');
+    const link = await db().auth.admin.generateLink({ type: 'magiclink', email });
+    const hash = link.data?.properties?.hashed_token;
+    if (link.error || !hash) throw falha('dono_da_chave', 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.');
+    const { url, anon } = enderecoDoProjeto();
+    const publico = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+    const sessao = await publico.auth.verifyOtp({ token_hash: hash, type: 'magiclink' });
+    const token = sessao.data?.session?.access_token;
+    if (sessao.error || !token) throw falha('dono_da_chave', 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.');
+    const expira = Number(sessao.data?.session?.expires_at ?? 0) * 1000;
+    sessoesDosDonos.set(userId, { token, validoAte: expira > Date.now() ? expira : Date.now() + 50 * 60_000 });
+    return token;
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('mesa:')) throw e;
+    throw falha('dono_da_chave', 'Não foi possível abrir a sessão do dono da chave agora. Tente de novo.');
+  }
+}
+
+async function tokenDaPessoa(ctx: AuthContext): Promise<string> {
+  if (ctx.dataScope?.source === 'api_key' && ctx.dataScope.principalUserId) {
+    return await sessaoDoDonoDaChave(ctx.dataScope.principalUserId);
+  }
   const token = ctx.userAccessToken;
   if (!token || ctx.dataScope?.source !== 'oauth') throw falha('exige_oauth', AVISO_ACAO_SO_COM_PESSOA);
   return token;
@@ -80,7 +124,7 @@ export async function chamarMesa(
   ctx: AuthContext,
 ): Promise<Record<string, unknown>> {
   if (!acaoPermitida(funcao, acao)) throw falha('acao_fora_da_ponte', `${funcao}/${acao} não está na lista de ações do MCP.`);
-  const token = tokenDaPessoa(ctx);
+  const token = await tokenDaPessoa(ctx);
   const { url, anon } = enderecoDoProjeto();
   const prazo = prazoDaAcao(funcao, acao);
   let resposta: Response;
@@ -121,7 +165,7 @@ export async function chamarMesa(
 
 /** Chama uma RPC do banco como a pessoa (auth.uid() = ela), para as regras da RPC valerem. */
 export async function rpcComoPessoa(nome: RpcDaPonte, args: Record<string, unknown>, ctx: AuthContext): Promise<unknown> {
-  const token = tokenDaPessoa(ctx);
+  const token = await tokenDaPessoa(ctx);
   const { url, anon } = enderecoDoProjeto();
   const cliente = createClient(url, anon, {
     global: { headers: { Authorization: `Bearer ${token}` } },
