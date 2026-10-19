@@ -23,7 +23,7 @@ vi.mock("@/hooks/useSupabaseData", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/components/laboratorio/estudio-livre/EstudioLivre", () => ({
-  default: ({ clientId }: { clientId?: string | null }) => <div data-testid="estudio-livre">{clientId === null ? "livre" : String(clientId)}</div>,
+  default: ({ clientId }: { clientId?: string | null }) => <div data-testid="estudio-livre">{clientId == null ? "livre" : String(clientId)}</div>,
 }));
 vi.mock("@/integrations/supabase/client", () => {
   const cadeia = (): any => {

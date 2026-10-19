@@ -133,7 +133,8 @@ export default function Laboratorio() {
       <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo" />}>
         {aba === "inicio" && <AbaInicio clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onAbrirProjeto={(id) => abrirProjeto(id)} />}
         {aba === "projetos" && <AbaProjetos projetoAberto={projeto} onAbrir={abrirProjeto} clienteId={clienteId} clientes={clientes} telaCheia={cheia} onTelaCheia={setCheia} />}
-        {aba === "estudio" && <EstudioLivre clientId={clienteId} />}
+        {/* 19/10 (dono): o Estúdio começa Livre, sem o cliente lembrado das outras abas; o cliente se escolhe nele. */}
+        {aba === "estudio" && <EstudioLivre />}
         {aba === "logos" && <AbaLogos clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onVerArquivos={() => ir("arquivos")} />}
         {aba === "arquivos" && <AbaArquivos />}
       </Suspense>

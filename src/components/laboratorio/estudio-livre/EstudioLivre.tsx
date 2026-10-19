@@ -75,7 +75,10 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
     setAlvo(NOVA_ARTE_RAPIDA);
   }, [clientId]);
 
-  const { marcas, marca } = useMarcaNaCasca(clientId, null);
+  // 19/10 (dono: "no Estúdio começa livre, sem logo nem identidade de cliente"): Livre não carrega marca nenhuma.
+  const daCasca = useMarcaNaCasca(livre ? "" : clientId, null);
+  const marcas = livre ? [] : daCasca.marcas;
+  const marca = livre ? null : daCasca.marca;
 
   const mesAtual = inicioDoMes();
   // Mesmas chaves da Mesa: o saldo da carteira é o mesmo nas telas.
@@ -183,6 +186,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         <EstudioArteRapida
           key={clientId}
           origem="laboratorio"
+          semMarca={livre}
           alvo={alvo}
           onAlvo={(novo) => setAlvo(novo)}
           colunas={colunas}

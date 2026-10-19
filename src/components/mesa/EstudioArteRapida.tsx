@@ -238,12 +238,15 @@ function PedidoDaArteRapida({
   colunas,
   largo,
   origem = "mesa",
+  semMarca = false,
 }: {
   onCriada: (t: Trabalho) => void;
   fotosDaUrl: string[];
   campanhaDaUrl: string | null;
   /** 19/10: 'laboratorio' = Estúdio livre (o trabalho nasce fora da Mesa do cliente). */
   origem?: OrigemDaArteRapida;
+  /** 19/10: Estúdio livre sem cliente: arte sem marca (sem logo, campanha nem identidade de cliente). */
+  semMarca?: boolean;
   /** Computador: formulário com rolagem própria e o botão fixo embaixo. */
   colunas: boolean;
   /** Tela larga: a prévia "Como vai sair" ao lado. */
@@ -413,7 +416,7 @@ function PedidoDaArteRapida({
       fidelidade: comReferencia ? fidelidade : null,
     });
     // 19/10: o Estúdio livre marca a origem; a Mesa segue com o corpo de sempre.
-    const r = await prepararArteRapida(origem === "laboratorio" ? { ...corpoDoPedido, origem } : corpoDoPedido);
+    const r = await prepararArteRapida(origem === "laboratorio" ? { ...corpoDoPedido, origem, ...(semMarca ? { sem_marca: true, campanha_id: null, marca_id: null } : {}) } : corpoDoPedido);
     const t = r && r.trabalho ? (r.trabalho as Trabalho) : null;
     // A arte única já entra na fila de geração (o preço dela estava no botão); o carrossel espera o "Gerar".
     if (t && gerarLogo && Array.isArray(t.direcao && t.direcao.cards) && t.direcao.cards.length === 1) {
@@ -457,7 +460,11 @@ function PedidoDaArteRapida({
   // controles do sistema com contraste, o segmentado com o ativo bem visível e o botão sempre à vista.
   const corpo = (
     <div className="min-w-0 space-y-5">
-      <EscolhaDaCampanha campanhas={lista} valor={campanha} onValor={escolherCampanha} carregando={campanhas.isLoading} emUso={emUso} />
+      {semMarca ? (
+        <p className="text-[12px] text-muted-foreground" data-arte-sem-marca="">Livre: sem marca de cliente (sem logo, campanha nem identidade). Para usar a marca de um cliente, escolha o cliente no topo.</p>
+      ) : (
+        <EscolhaDaCampanha campanhas={lista} valor={campanha} onValor={escolherCampanha} carregando={campanhas.isLoading} emUso={emUso} />
+      )}
 
       {/* O campo grande: texto, microfone, fotos e arquivos. */}
       <div className="min-w-0">
@@ -756,7 +763,7 @@ function PedidoDaArteRapida({
           </div>
           <div className="flex min-w-0 justify-between">
             <dt className="text-muted-foreground">Campanha</dt>
-            <dd className="ml-3 min-w-0 truncate text-right font-medium">{escolhida ? escolhida.nome : campanha === "auto" ? "se o pedido citar" : "só a marca"}</dd>
+            <dd className="ml-3 min-w-0 truncate text-right font-medium">{semMarca ? "sem marca" : escolhida ? escolhida.nome : campanha === "auto" ? "se o pedido citar" : "só a marca"}</dd>
           </div>
           {escolhida && resumoDaBaseDaCampanha(escolhida) && <p className="text-[12px] leading-snug text-muted-foreground">{resumoDaBaseDaCampanha(escolhida)}</p>}
           <div className="flex min-w-0 justify-between">
@@ -769,7 +776,7 @@ function PedidoDaArteRapida({
           </div>
         </dl>
         <ol className="space-y-1.5 border-t border-border pt-3 text-[12px] leading-snug text-muted-foreground">
-          <li>1. O diretor lê o pedido com a marca{escolhida ? " e a campanha" : ""}.</li>
+          <li>1. {semMarca ? "O diretor lê só o pedido e as imagens, sem marca de cliente." : `O diretor lê o pedido com a marca${escolhida ? " e a campanha" : ""}.`}</li>
           <li>2. {geraJunto ? "A arte única já entra na fila de geração." : "Você confere a direção e gera."}</li>
           <li>3. {origem === "laboratorio" ? "Depois: ajustar no Estúdio e guardar no arquivo livre (fora da Mesa do cliente)." : "Depois: ajustar no Estúdio e levar para a Agenda com a data."}</li>
         </ol>
@@ -1186,6 +1193,7 @@ export default function EstudioArteRapida({
   renderPeca,
   onAbrirItem,
   origem = "mesa",
+  semMarca = false,
   entregaDaPeca,
 }: {
   alvo: string;
@@ -1204,6 +1212,8 @@ export default function EstudioArteRapida({
    * cliente só lê os dela, 'mesa'). Padrão: 'mesa'.
    */
   origem?: OrigemDaArteRapida;
+  /** 19/10: Estúdio livre sem cliente: arte sem marca. */
+  semMarca?: boolean;
   /** 19/10: a ferramenta Entrega da peça no lugar do "Levar para a Agenda" (o Estúdio livre guarda no arquivo livre). */
   entregaDaPeca?: (trabalho: Trabalho) => ReactNode;
 }) {
@@ -1262,6 +1272,7 @@ export default function EstudioArteRapida({
       colunas={colunas}
       largo={largo}
       origem={origem}
+      semMarca={semMarca}
       onCriada={(t) => onAlvo(t.id, ["fotos", "campanha"])}
     />
   ) : peca ? (

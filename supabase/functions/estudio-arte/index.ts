@@ -1551,7 +1551,15 @@ function marcaDe(clientId: string, alvo?: AlvoDaMarca): Promise<MarcaDoCliente |
   return alvo === undefined ? Promise.resolve(null) : resolverMarca(servico(), clientId, alvo);
 }
 
+/** 19/10: trabalho do Estúdio livre sem cliente (arte_rapida.sem_marca): nenhuma marca entra, nem na geração. */
+function alvoSemMarca(alvo?: AlvoDaMarca): boolean {
+  const d = alvo && (alvo as { direcao?: unknown }).direcao;
+  const rapida = d && typeof d === "object" ? (d as { arte_rapida?: { sem_marca?: boolean } }).arte_rapida : null;
+  return !!(rapida && rapida.sem_marca === true);
+}
+
 async function lerKit(clientId: string, alvo?: AlvoDaMarca): Promise<Kit> {
+  if (alvoSemMarca(alvo)) return null;
   const [{ data }, marca] = await Promise.all([
     servico()
       .from("cliente_kit_marca")
@@ -1566,6 +1574,7 @@ async function lerKit(clientId: string, alvo?: AlvoDaMarca): Promise<Kit> {
 type Fonte = { id: string; nome: string; papel: string; amostra_path: string | null };
 
 async function lerFontes(clientId: string, alvo?: AlvoDaMarca): Promise<Fonte[]> {
+  if (alvoSemMarca(alvo)) return [];
   const marca = await marcaDe(clientId, alvo);
   const { data } = await servico()
     .from("cliente_fontes")
@@ -2903,7 +2912,11 @@ const CONHECIMENTO_DA_DIRECAO = conhecimentoEstudioPara("direcao").texto;
 const CONHECIMENTO_DA_LEGENDA = conhecimentoEstudioPara("legenda").texto;
 
 /** Marca pronta para o compositor: kit, fontes, contexto consolidado e nome. */
+/** A marca do Estúdio livre sem cliente: nenhuma (sem logo, paleta, fontes nem tom de cliente). */
+const MARCA_LIVRE: MarcaParaDirecao = { nomeCliente: "Arte livre (sem marca)", paleta: [], estilo: null, regras: null, fontes: [], tipografiaCitada: null, tomDeVoz: null, temLogo: false };
+
 async function marcaDoCliente(clientId: string, kit?: Kit, fontes?: Fonte[], alvo?: AlvoDaMarca): Promise<MarcaParaDirecao> {
+  if (alvoSemMarca(alvo)) return MARCA_LIVRE;
   const [k, f, contextoDoCliente, perfil, daMarca] = await Promise.all([
     kit === undefined ? lerKit(clientId, alvo) : Promise.resolve(kit),
     fontes === undefined ? lerFontes(clientId, alvo) : Promise.resolve(fontes),
@@ -3438,14 +3451,16 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   // Marca do item (ex.: Acerbi ou CME) pelo projeto da tarefa; cliente sem marca segue igual.
   // Arte rápida: sem item, a marca vem da tela ou da direção gravada (direcao.marca_id).
   const alvoDaMarca: AlvoDaMarca = rapida ? { marca_id: corpo.marca_id, direcao: existente?.direcao } : { task_id: item.tarefa.id, marca_id: corpo.marca_id };
-  const [, , kit, fontes, marcaDoItem] = await Promise.all([
+  // 19/10: arte livre do Laboratório (sem cliente): nada da marca, do acervo nem do contexto de cliente entra.
+  const semMarca = !!rapida?.gravada.sem_marca;
+  const [, , kit, fontes, marcaDoItem] = semMarca ? [null, null, null as Kit, [] as Fonte[], null] : await Promise.all([
     sincronizarReferencias(db, clientId).catch(nuloComLog("estudio-arte: referências não sincronizadas", { client_id: clientId })),
     sincronizarAcervo(db, clientId).catch(nuloComLog("estudio-arte: acervo não sincronizado", { client_id: clientId })),
     lerKit(clientId, alvoDaMarca),
     lerFontes(clientId, alvoDaMarca),
     marcaDe(clientId, alvoDaMarca),
   ]);
-  const marca = await marcaDoCliente(clientId, kit, fontes, alvoDaMarca);
+  const marca: MarcaParaDirecao = semMarca ? MARCA_LIVRE : await marcaDoCliente(clientId, kit, fontes, alvoDaMarca);
 
   const postUnico = FORMATOS_POST_UNICO.has(item.tarefa.delivery_type);
   // Contínuo decidido no começo: o pedido da tela vale; senão o que o trabalho já tinha; senão o do estrategista.
@@ -3456,7 +3471,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       : item.itemProposta && typeof item.itemProposta.carrossel_infinito === "boolean"
         ? item.itemProposta.carrossel_infinito as boolean
         : null;
-  const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
+  const levaLogoFn = (ordem: number, total: number) => !semMarca && (ordem === 1 || ordem === total);
   const campanha = await lerCampanha(clientId, item.itemProposta?.campanha_id);
   // Plano de imagens da campanha para este conteúdo (pelo tema_id do item) e as fotos dela no acervo.
   const plano = await planoDaCampanhaNoItem(clientId, campanha, item.itemProposta?.tema_id);
@@ -3503,8 +3518,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     const modeloDiretor = await modeloDoPapel("diretor_arte");
     const [prompt, memoria, acervo, refsRes, artesRes, preferencias] = await Promise.all([
       promptDoDiretor(clientId),
-      memoriaDoDiretor(clientId),
-      lerAcervo(clientId, 40, marcaDoItem).then((lista) => {
+      semMarca ? Promise.resolve([]) : memoriaDoDiretor(clientId),
+      (semMarca ? Promise.resolve([] as ImagemAcervo[]) : lerAcervo(clientId, 40, marcaDoItem)).then((lista) => {
         // As fotos da campanha entram no acervo que o diretor vê: senão a
         // checagem de fotos conhecidas recusava o id que o plano indicou.
         const junto = lista.slice();
@@ -3513,7 +3528,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         for (const f of rapida?.fotosDoAcervo ?? []) if (!junto.some((a) => a.id === f.id)) junto.push(f);
         return junto;
       }),
-      filtrarReferenciasDaMarca(
+      semMarca ? Promise.resolve({ data: [], error: null }) : filtrarReferenciasDaMarca(
         db.from("cliente_referencias")
           .select("id, origem, papel, leitura, tags")
           .eq("client_id", clientId)
@@ -3524,7 +3539,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         .order("criado_em", { ascending: false })
         // 17/10: até 40 candidatas; o Jev escolhe as que servem ao pedido (referencias-do-pedido.ts).
         .limit(CANDIDATAS_DO_PEDIDO),
-      db.from("files")
+      semMarca ? Promise.resolve({ data: [], error: null }) : db.from("files")
         .select("file_name, file_type, description, caption, created_at")
         .eq("client_id", clientId)
         .eq("folder", "materiais")
@@ -3533,18 +3548,18 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         .order("created_at", { ascending: false })
         .limit(15),
       // Frente H: regras aprendidas (cérebro) e dossiê atual do cliente, numa leitura só.
-      cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),
+      semMarca ? Promise.resolve({ texto: "", usouCerebro: false }) : cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),
     ]);
     // 17/10 (dono: "use a base de documentação que já foi enviada para a inteligência; está muito genérico"): o diretor
     // de arte recebe o mesmo contexto completo da marca que a conversa já recebia (negócio, público, oferta, diferenciais,
     // estratégia aprovada com tom e tagline, briefing, decisões e Instagram). Antes ia só tom e tipografia.
-    const negocioP = contextoCompletoParaPrompt(db as never, clientId, marcaDoItem, { area: "arte", partes: ["contexto", "estrategia", "briefing", "decisoes", "instagram"], teto: 4000 })
+    const negocioP = semMarca ? Promise.resolve(null) : contextoCompletoParaPrompt(db as never, clientId, marcaDoItem, { area: "arte", partes: ["contexto", "estrategia", "briefing", "decisoes", "instagram"], teto: 4000 })
       .then((c) => c.bloco || null, (e) => (registrarFalha("estudio-arte: contexto completo da marca não lido (direção)", e, { client_id: clientId }), null));
     // 17/10: os perfis de referência e concorrentes do Instagram (padrão visual e os posts que funcionaram, com a leitura da imagem).
-    const perfisP = lerPerfisParaOPrompt(db as never, clientId, marcaDoItem ? { id: marcaDoItem.id, principal: marcaDoItem.principal } : null);
+    const perfisP = semMarca ? Promise.resolve(null) : lerPerfisParaOPrompt(db as never, clientId, marcaDoItem ? { id: marcaDoItem.id, principal: marcaDoItem.principal } : null);
     // 17/10 (padrão de qualidade): os carrosséis que o cliente APROVOU viram a régua do que ele gosta (só o texto da
     // direção: conceito, identidade e o que cada lâmina mostrou). Repertório, nunca molde.
-    const aprovadosP = carrosseisAprovados(clientId, existente?.id ?? null).catch((e) => (registrarFalha("estudio-arte: aprovados do cliente não lidos", e, { client_id: clientId }), []));
+    const aprovadosP = semMarca ? Promise.resolve([]) : carrosseisAprovados(clientId, existente?.id ?? null).catch((e) => (registrarFalha("estudio-arte: aprovados do cliente não lidos", e, { client_id: clientId }), []));
     // 02/10: mundo real (produto, app, marca ou tela de outra empresa): a pesquisa liga e as logos vêm do Commons.
     const leituraDaRapida = rapida ? rapida.gravada.leitura_dos_cards ?? null : null;
     const fidelidadeDaRapida = rapida ? rapida.gravada.fidelidade ?? null : null;
@@ -3628,6 +3643,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         tem_logo_oficial: marca.temLogo,
         // 17/10: quem é o cliente (negócio, público, oferta, diferenciais, estratégia, briefing): a imagem nasce do nicho dele.
         contexto_do_negocio: (await negocioP) || null,
+        ...(semMarca ? { arte_livre: "Arte livre, sem marca de cliente: sem logo, sem paleta e sem identidade de nenhuma empresa. Siga só o pedido e as imagens anexadas." } : {}),
       },
       referencias: (await refsDoPedidoP)
         .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 600), tags: r.tags })),
@@ -4406,6 +4422,10 @@ async function lerCardsDaReferencia(clientId: string, trabalhoId: string, a: Art
 async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, existente: Trabalho | null) {
   // 19/10: o Estúdio livre do Laboratório (origem 'laboratorio'); sem cliente, o cliente interno da agência (carteira dela).
   const origem: OrigemDoTrabalho = existente ? (ehDoLaboratorio(existente) ? "laboratorio" : "mesa") : origemDoPedido(corpo.origem);
+  // 19/10 (dono: "no Estúdio livre começa livre, sem logo, identidade nem nada de cliente"): arte sem marca.
+  const semMarca = existente
+    ? !!arteRapidaDa(existente.direcao)?.sem_marca
+    : origem === "laboratorio" && (corpo.sem_marca === true || !texto(corpo.client_id, 64));
   let clientId = existente ? existente.client_id : texto(corpo.client_id, 64);
   if (!existente && origem === "laboratorio" && !clientId) {
     clientId = (await clienteInternoDaAgencia(servico())) || "";
@@ -4414,10 +4434,10 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
   await garantirAcesso(ch, clientId);
   if (existente && estaEntregue(existente)) throw erroTrabalhoEntregue();
   // Cliente com duas marcas (Acerbi e CME): a arte nova nunca nasce sem marca (pergunta antes, na tela).
-  if (!existente && !UUID.test(texto(corpo.marca_id, 64)) && (await marcasDoCliente(servico(), clientId)).length >= 2) {
+  if (!semMarca && !existente && !UUID.test(texto(corpo.marca_id, 64)) && (await marcasDoCliente(servico(), clientId)).length >= 2) {
     throw new ErroEstudio(400, "escolha_a_marca", "Este cliente tem mais de uma marca. Escolha a marca no topo da Mesa antes de criar a arte.");
   }
-  const marcaDoPedido = await marcaDe(clientId, existente ? { marca_id: corpo.marca_id, direcao: existente.direcao } : { marca_id: corpo.marca_id }).catch(nuloComLog("estudio-arte: marca do pedido não lida", { client_id: clientId }));
+  const marcaDoPedido = semMarca ? null : await marcaDe(clientId, existente ? { marca_id: corpo.marca_id, direcao: existente.direcao } : { marca_id: corpo.marca_id }).catch(nuloComLog("estudio-arte: marca do pedido não lida", { client_id: clientId }));
   const trabalhoId = existente?.id ?? crypto.randomUUID();
   const avisos: string[] = [];
   let custoJev = 0;
@@ -4523,6 +4543,10 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
     if (gravada.peca !== "carrossel" && gravada.peca_por !== "equipe") gravada = { ...gravada, peca: "carrossel", peca_por: "regra" };
     const pedidas = Number.isInteger(Number(corpo.laminas)) && Number(corpo.laminas) >= 2 ? Number(corpo.laminas) : null;
     if (gravada.peca === "carrossel" && !pedidas) corpo.laminas = laminasPelaFidelidade(gravada.fidelidade as Fidelidade, leituraAqui, null) ?? undefined;
+  }
+  if (semMarca) {
+    gravada = { ...gravada, sem_marca: true, campanha_id: null, campanha_por: null };
+    campanhaId = null;
   }
   const vistas = await imagensDoPedidoParaODiretor(gravada, fotosDoAcervo);
   avisos.push(...vistas.avisos);

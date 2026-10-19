@@ -210,7 +210,8 @@ describe("Estúdio livre: tela", () => {
 
   it("a Mesa do cliente não manda origem (fica no padrão 'mesa' do banco)", () => {
     const tela = fonte("src/components/mesa/EstudioArteRapida.tsx");
-    expect(tela).toContain('origem === "laboratorio" ? { ...corpoDoPedido, origem } : corpoDoPedido');
+    expect(tela).toContain('origem === "laboratorio" ? { ...corpoDoPedido, origem, ');
+    expect(tela).toContain(': corpoDoPedido);');
   });
 });
 

@@ -191,6 +191,8 @@ export interface VitrineDaArteRapida {
 
 /** O que fica gravado em direcao.arte_rapida. */
 export interface ArteRapida {
+  /** 19/10: Estúdio livre sem cliente: arte sem marca (sem logo, paleta, fontes nem contexto de cliente). */
+  sem_marca?: boolean;
   pedido: string;
   titulo: string;
   peca: PecaDaArteRapida;
