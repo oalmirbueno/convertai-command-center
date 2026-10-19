@@ -33,6 +33,7 @@ import {
   auditIntegrity,
   getCycleStatus,
   getAgendaStatus,
+  db,
 } from './aceleriq-read-services.ts';
 import {
   OPERATOR_EVENTS,
@@ -1400,7 +1401,7 @@ const createReportDraftTool: ToolDefinition = {
   name: 'aceleriq_create_report_draft',
   title: 'Criar rascunho de relatório',
   description:
-    'Cria um relatório em RASCUNHO (status=draft). client_id é derivado do projeto — não aceito no input. Sem publicação, sem envio ao cliente, sem aprovação automática, sem file_url, sem internal_notes.',
+    'Cria um relatório em RASCUNHO (status=draft). client_id é derivado do projeto — não aceito no input. Sem publicação, sem envio ao cliente, sem aprovação automática, sem file_url, sem internal_notes. Rascunho de RITUAL (título com abertura, meio ou fechamento da semana): o texto é escrito pelo escritor da Central (o mesmo do aceleriq_ritual_redigir: curto, sem repetir o que já foi dito, a partir do dossiê atual); o texto enviado fica guardado em metrics.rascunho_do_agente, só para a equipe.',
   scopes: WRITE,
   annotations: WRITE_ANNOTATIONS,
   inputSchema: {
@@ -1424,7 +1425,13 @@ const createReportDraftTool: ToolDefinition = {
   handler: async (input, ctx) => {
     const parsed = createReportDraftSchema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
-    try { return await createReportDraft(parsed.data, ensureWriteCtx(ctx)); }
+    // 19/10: rascunho de ritual de agente sai com o texto do escritor da Central (rascunho-de-ritual.ts).
+    let dados = parsed.data;
+    if (_ritualDoTitulo(dados.title)) {
+      const { data: projeto } = await db().from('projects').select('client_id').eq('id', dados.project_id).maybeSingle();
+      dados = await _rascunhoComEscritor(dados, (projeto as { client_id?: string } | null)?.client_id ?? null, ctx);
+    }
+    try { return await createReportDraft(dados, ensureWriteCtx(ctx)); }
     catch (e) { throw writeError(e); }
   },
 };
@@ -2350,6 +2357,8 @@ const acessoUsarTool: ToolDefinition = {
 
 // MCP 2.10 (14/10/2026): texto do ritual por automação, com o mesmo escritor da Central e sem efeito colateral.
 import { RITUAIS_DA_AUTOMACAO, ritualRedigirPorAutomacao as _ritualRedigir } from '../mcp-server/modulos/ritual-automatico.ts';
+// 19/10: rascunho de ritual de agente passa pelo escritor da Central.
+import { rascunhoComEscritor as _rascunhoComEscritor, ritualDoTitulo as _ritualDoTitulo } from '../mcp-server/modulos/rascunho-de-ritual.ts';
 
 const ritualRedigirTool: ToolDefinition = {
   name: 'aceleriq_ritual_redigir',
