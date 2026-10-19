@@ -1318,6 +1318,27 @@ export default function AdminExecucao() {
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
   };
 
+  /* 19/10 (dono: "responder e destravar está complexo demais, nem sei o que responder; não tem
+     aprovar ali"): o travado decide com um toque. Pode seguir devolve para o agente com a
+     autorização de usar o melhor julgamento (conferência ou divergência vão para o revisor);
+     Encerrar fecha sem continuar. */
+  const podeSeguir = async (v: Vinculo) => {
+    const quem = profile?.full_name || "a equipe";
+    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `${quem} liberou: pode seguir com o melhor julgamento.`, _resolve_approval: true });
+    if (error) { toast.error(error.message || "Não foi possível liberar."); return; }
+    if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Pode seguir", body: "Pode seguir. Use o seu melhor julgamento: se for conferência, divergência ou prova faltando, peça ao revisor e siga com o que ele decidir. Volte com o resultado pronto, com a prova.", attachments: [] });
+    toast.success("Liberado: o agente segue e volta com o resultado.");
+    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+  };
+  const encerrarVinculo = async (v: Vinculo) => {
+    const quem = profile?.full_name || "a equipe";
+    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "done", _note: `Encerrada por ${quem}: não continuar.`, _resolve_approval: true });
+    if (error) { toast.error(error.message || "Não foi possível encerrar."); return; }
+    if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "decisao", title: null, body: "Encerrada: não continuar.", attachments: [] });
+    toast.success("Encerrada: saiu da lista.");
+    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+  };
+
   const retomarVinculo = async (v: Vinculo) => {
     const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: "Retomar do ponto em que parou.", _resolve_approval: false });
     if (error) { toast.error(error.message || "Não foi possível retomar."); return; }
@@ -1387,9 +1408,13 @@ export default function AdminExecucao() {
       acaoPrincipal: decidir
         ? { rotulo: "Decidir", icone: <ShieldAlert className="h-4 w-4" />, aoClicar: () => void abrirDecisaoDoVinculo(v.id) }
         : emRevisao ? undefined
-          : { rotulo: travada ? "Responder e destravar" : "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
+          : travada ? { rotulo: "Pode seguir", icone: <Play className="h-4 w-4" />, aoClicar: () => void podeSeguir(v) }
+            : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
       extras: <>
         {emRevisao && <button type="button" onClick={() => void aprovarESeguir(v)} title="Aprova e devolve para o agente executar e trazer pronto" className={juntar(botao.secundario, "h-11 px-3 text-success")}><Play className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Aprovar e seguir</span></button>}
+        {travada && <button type="button" onClick={() => void decidirVinculo({ id: v.id } as ItemDaMesa, "aprovado", "Concluída por você.")} title="Fecha a tarefa: está resolvida" className={juntar(botao.secundario, "h-11 px-3 text-success")}><CheckCircle2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Concluir</span></button>}
+        {travada && <button type="button" onClick={() => void encerrarVinculo(v)} title="Encerra sem continuar" className={juntar(botao.discreto, "h-11 px-3")}><XCircle className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Encerrar</span></button>}
+        {travada && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Escrever uma resposta ao agente" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Responder</span></button>}
         {(emRevisao || travada) && !v.last_evidence && <button type="button" onClick={() => void pedirAoAgente(v, "prova")} title="Pede ao agente para anexar a entrega pronta" className={juntar(botao.discreto, "h-11 px-3")}><ImagePlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Pedir a prova</span></button>}
         {motivo?.retomavel && <button type="button" onClick={() => void retomarVinculo(v)} title="Volta para a fila e o agente retoma de onde parou" className={juntar(botao.secundario, "h-11 px-3")}><RotateCcw className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Retomar</span></button>}
         {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Abrir o diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
