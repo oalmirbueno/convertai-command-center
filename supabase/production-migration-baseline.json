@@ -2283,6 +2283,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261019185453",
+      "path": "supabase/migrations/20261019185453_destravar_execucao.sql",
+      "local_sha256": "985cb6d824a674ec196254e3603649e75c6977afd1a461b17d4f2c134f3dbe77",
+      "remote_name": "destravar_execucao",
+      "remote_statements_sha256": "96515f2dc28cdb2777dc20a9e6f4b4cfe43e81d43ada513882b95491f4d3e8fa",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261019233000",
       "path": "supabase/migrations/20261019233000_laboratorio_v2.sql",
       "local_sha256": "d15c68155779bf65485b6302e663b862d25a0dd17595785371ecb3e03324957a",
