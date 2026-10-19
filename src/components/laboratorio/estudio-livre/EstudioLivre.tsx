@@ -61,7 +61,9 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
     [clientesQuery.data],
   );
-  const interno = clientes.filter((c) => c.interno)[0] || null;
+  // 19/10 (dono: "carteira separada só para o Estúdio livre; não pode misturar"): o Livre usa só o cliente
+  // interno "Estúdio livre" (carteira própria, sem marca), nunca a Aceleriq.
+  const interno = clientes.filter((c) => c.interno && /est[uú]dio\s+livre/i.test(c.nome))[0] || null;
   // O pai decide o cliente quando passa a prop (null = Livre); senão, o seletor no topo.
   const comSeletor = clienteDoPai === undefined;
   const pedido = comSeletor ? escolhido : clienteDoPai || LIVRE;
@@ -135,7 +137,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
           void queryClient.invalidateQueries({ queryKey: ["mesa", "consumo", clientId] });
           void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
         },
-        abrirRecarga: () => toast.info("Recarregue a carteira pela Mesa do cliente.", { description: livre ? "O Estúdio livre usa a carteira da Aceleriq." : `O Estúdio livre usa a carteira de ${clientName}.` }),
+        abrirRecarga: () => toast.info("Recarregue a carteira pela Mesa do cliente.", { description: livre ? "O Estúdio livre usa a carteira própria do cliente Estúdio livre." : `O Estúdio livre usa a carteira de ${clientName}.` }),
         abrirChaves: () => toast.info("As chaves ficam na Mesa do cliente."),
         abrirModelos: () => toast.info("Os modelos ficam na Mesa do cliente."),
         versaoCarteira,
@@ -145,7 +147,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
     : null;
 
   const seletor = comSeletor ? (
-    <label className="flex min-w-0 items-center" title="Cliente do trabalho (Livre: sem cliente, na carteira da Aceleriq)">
+    <label className="flex min-w-0 items-center" title="Cliente do trabalho (Livre: sem marca, na carteira própria do Estúdio livre)">
       <span className="sr-only">Cliente do trabalho</span>
       <select
         value={livre ? LIVRE : pedido}
@@ -173,8 +175,8 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         {seletor}
         <EstadoVazio
           icone={<Palette className="h-5 w-5" />}
-          titulo={livre ? "Sem o cliente interno da Aceleriq" : "Cliente indisponível"}
-          descricao={livre ? "O trabalho livre usa a carteira do cliente interno (empresa do grupo). Marque a empresa da casa no cadastro ou escolha um cliente." : "Escolha outro cliente ou Livre."}
+          titulo={livre ? "Falta o cliente \"Estúdio livre\"" : "Cliente indisponível"}
+          descricao={livre ? "O Estúdio livre tem carteira própria, separada da Aceleriq e dos clientes. Crie em Clientes, Novo cliente, com o nome Estúdio livre, marque Empresa interna e recarregue a carteira dele." : "Escolha outro cliente ou Livre."}
         />
       </div>
     );

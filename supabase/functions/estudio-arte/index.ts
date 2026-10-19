@@ -97,7 +97,7 @@
  * confere saldo e cota e debita a carteira do cliente.
  */
 
-import { clienteInternoDaAgencia, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { clienteDoEstudioLivre, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
@@ -4427,9 +4427,14 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
     ? !!arteRapidaDa(existente.direcao)?.sem_marca
     : origem === "laboratorio" && (corpo.sem_marca === true || !texto(corpo.client_id, 64));
   let clientId = existente ? existente.client_id : texto(corpo.client_id, 64);
-  if (!existente && origem === "laboratorio" && !clientId) {
-    clientId = (await clienteInternoDaAgencia(servico())) || "";
-    if (!clientId) throw new ErroEstudio(409, "sem_cliente_interno", "O cliente interno da agência não foi encontrado. Escolha um cliente para criar a arte.");
+  // 19/10 (dono: "carteira separada só para o Estúdio livre; não pode misturar"): o livre usa só o cliente
+  // "Estúdio livre" (carteira própria, sem marca). Nunca a Aceleriq nem outro cliente interno.
+  if (!existente && semMarca) {
+    const doLivre = await clienteDoEstudioLivre(servico());
+    if (!doLivre) {
+      throw new ErroEstudio(409, "sem_cliente_do_estudio_livre", 'Falta o cliente "Estúdio livre", que tem a carteira só do Estúdio livre. Crie em Clientes, Novo cliente, com o nome Estúdio livre e marcado como empresa interna, e recarregue a carteira dele.');
+    }
+    clientId = doLivre;
   }
   await garantirAcesso(ch, clientId);
   if (existente && estaEntregue(existente)) throw erroTrabalhoEntregue();
