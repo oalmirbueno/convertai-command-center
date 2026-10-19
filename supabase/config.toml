@@ -193,3 +193,5 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.navegador-remoto]
     verify_jwt = true
+  [functions.laboratorio]
+    verify_jwt = true

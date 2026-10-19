@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
@@ -428,6 +428,21 @@ export function NotaDoJev({ nota }: { nota?: number | null }) {
   return (
     <span className="ml-2 shrink-0" title="Quanto a proposta expressa a estratégia, pelo Jev (0 a 100). É aviso: a escolha é da equipe." data-nota-do-jev={n}>
       <Pastilha tom={n >= 70 ? "bom" : n >= 45 ? "neutro" : "alerta"}>nota {n}</Pastilha>
+    </span>
+  );
+}
+
+/**
+ * Escolha com motivo (19/10/2026): nas 1 ou 2 melhores propostas da rodada
+ * (nomes, slogans, paletas, fontes e logo), a linha curta do Jev com o porquê
+ * ("Escolha do Jev: soa como a personalidade da marca"). Sem linha, nada.
+ */
+export function EscolhaDoJev({ linha, className = "" }: { linha?: string | null; className?: string }) {
+  if (!linha) return null;
+  return (
+    <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-start text-primary", className)} title="O Jev aponta as melhores e diz por quê. É aviso: a escolha é da equipe." data-escolha-do-jev="">
+      <Sparkles className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 whitespace-normal">{linha}</span>
     </span>
   );
 }

@@ -17,7 +17,7 @@ vi.mock("@/lib/mesa/preCarga", () => {
       </div>
     );
   };
-  const nomes = ["PaginaMesaAds", "PaginaMesaDoCliente", "PaginaMesaEdicao", "PaginaMesaFoto", "PaginaMesaIdentidade", "PaginaMesaMotion", "PaginaMesaProposta", "PaginaMesaPublicidade", "PaginaMesaRoteiros", "PaginaMesaSite", "PaginaMesaVideos"];
+  const nomes = ["PaginaMesaAds", "PaginaMesaDoCliente", "PaginaMesaEdicao", "PaginaMesaFoto", "PaginaMesaIdentidade", "PaginaMesaProposta", "PaginaMesaPublicidade", "PaginaMesaRoteiros", "PaginaMesaSite", "PaginaMesaVideos"];
   return { ...Object.fromEntries(nomes.map((n) => [n, Falsa])), preCarregarMesa: vi.fn() };
 });
 

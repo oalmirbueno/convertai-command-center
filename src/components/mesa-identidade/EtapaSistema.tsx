@@ -20,6 +20,8 @@ import ParesDaBase from "./ParesDaBase";
 
 // IDR (30/09): limpar o fundo da logo abre sob demanda (a conta pesada só carrega quando a equipe pede).
 const RecorteDaLogo = lazy(() => import("./RecorteDaLogo"));
+// 19/10/2026: logo de verdade pelo Laboratório (logo_gerar) com o núcleo da marca; abre sob demanda.
+const GeradorDeLogo = lazy(() => import("./GeradorDeLogo"));
 
 type Cor = { nome: string; papel: PapelDaCor; hex: string };
 type Tipo = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
@@ -198,6 +200,17 @@ export default function EtapaSistema() {
     await pLogos.trocarESalvar(novas);
     toast.success("Logo limpa no lugar", { duration: 10_000, action: { label: "Desfazer", onClick: () => void pLogos.trocarESalvar(antes).catch((e) => avisarErro(e, "Não foi possível desfazer")) } });
   };
+  /** A logo gerada e escolhida entra como principal (o arquivo já está na pasta do projeto); Desfazer volta a de antes. */
+  const usarGerada = async (nova: LogoDoBrandbook) => {
+    const antes = logos;
+    await pLogos.trocarESalvar({ ...logos, principal: nova });
+    setSugeridas([]);
+    toast.success("Logo gerada é a principal", {
+      description: "Fundo liso: dá para limpar o fundo aqui embaixo, e o vetor (SVG) a equipe faz no editor.",
+      duration: 10_000,
+      action: { label: "Desfazer", onClick: () => void pLogos.trocarESalvar(antes).catch((e) => avisarErro(e, "Não foi possível desfazer")) },
+    });
+  };
   const itemLimpando = limpando ? (limpando.slot === "alternativas" ? logos.alternativas[limpando.i] : limpando.slot === "icone" ? logos.icone[limpando.i] : logos[limpando.slot]) || null : null;
 
   const tirar = async (slot: SlotDeLogo, i = 0) => {
@@ -248,7 +261,7 @@ export default function EtapaSistema() {
     >
       <CabecalhoDaEtapa
         etapa="sistema"
-        ajuda="Logo pelo código: a logo final é o arquivo real da equipe (SVG de preferência; PNG serve). A imagem de IA do conceito é só inspiração. Vetorizar PNG dentro do painel ainda não existe (sem biblioteca leve): faça o vetor no editor e envie o SVG. Tudo aqui grava sozinho."
+        ajuda="A logo final é arquivo real: a enviada pela equipe (SVG de preferência; PNG serve) ou a gerada em Gerar logo (Laboratório, com o núcleo da marca; o Jev aponta a melhor e a equipe escolhe). A imagem de IA do conceito continua só inspiração. Vetorizar PNG dentro do painel ainda não existe: faça o vetor no editor e envie o SVG. Tudo aqui grava sozinho."
         acoes={<SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} className="max-w-[180px]" />}
       />
 
@@ -259,6 +272,20 @@ export default function EtapaSistema() {
             return <SlotDaLogo key={s.valor} slot={s.valor} rotulo={s.rotulo} varios={s.varios} itens={itens} ocupado={ocupado === `logo-${s.valor}`} onArquivo={(f) => void enviar(s.valor, f)} onTirar={(i) => void tirar(s.valor, i)} onLimpar={(i) => setLimpando({ slot: s.valor, i })} />;
           })}
         </div>
+        <Secao
+          titulo="Gerar logo"
+          nivel={3}
+          divisoria
+          className="mt-6"
+          recolher={`mesa-identidade:${projeto.id}:sistema:logos:gerador`}
+          recolhidaDeInicio={!!logos.principal}
+          resumo={sistema.logo_gerada && Array.isArray(sistema.logo_gerada.rodadas) && sistema.logo_gerada.rodadas.length ? `${sistema.logo_gerada.rodadas[0].imagens.length} variações na última rodada` : "Variações com o núcleo da marca"}
+          data-bloco-da-etapa="gerar-logo"
+        >
+          <Suspense fallback={<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}>
+            <GeradorDeLogo onUsar={usarGerada} />
+          </Suspense>
+        </Secao>
         {limpando && itemLimpando && (
           <Suspense fallback={null}>
             <RecorteDaLogo aberta onFechar={() => setLimpando(null)} clientId={mesa.clientId} projetoId={projeto.id} slot={limpando.slot} logo={itemLimpando} onUsar={(nova) => usarLimpa(limpando.slot, limpando.i, nova)} />

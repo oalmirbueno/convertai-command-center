@@ -16,6 +16,7 @@ import { cobrarJev } from "../_shared/ia-motor.ts";
 import { jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { type Chamador, dadosComParte, gravarProjeto, json, type LinhaDoProjeto, lerProjeto, TAREFA } from "./comum.ts";
+import { apontarMelhoresComJev } from "./escolha-acoes.ts";
 import { conferirPorCodigo, type Coerencia, estadoParaOJev, fioDaMarca, juntarCoerencia, notaDaResposta, perguntasDaCoerencia } from "./modulos/coerencia-da-marca.ts";
 
 export const AVISO_SEM_JEV = "O Jev não respondeu agora: a coerência saiu só pelas regras do código (sem a nota).";
@@ -55,7 +56,7 @@ export async function ranquearPropostas<T extends object>(
   propostas: T[],
   descrever: (x: T) => string,
   peca: "A paleta" | "O par de fontes",
-): Promise<{ propostas: Array<T & { nota_jev: number | null }>; aviso: string | null }> {
+): Promise<{ propostas: Array<T & { nota_jev: number | null; destaque_jev?: string }>; aviso: string | null }> {
   const f = fioDaMarca(p.dados);
   const semNota = propostas.map((x) => ({ ...x, nota_jev: null as number | null }));
   if (!f.arquetipo && !f.posicionamento) return { propostas: semNota, aviso: "Sem estratégia (arquétipo ou posicionamento): as propostas ficam sem a nota do Jev." };
@@ -81,7 +82,19 @@ export async function ranquearPropostas<T extends object>(
       return { ...x, nota_jev: n === null ? null : Math.round(n * 100) / 100 };
     });
     const ordem = comNota.map((x, i) => ({ x, i })).sort((a, b) => (b.x.nota_jev ?? -1) - (a.x.nota_jev ?? -1) || a.i - b.i).map((o) => o.x);
-    return { propostas: ordem, aviso: null };
+    // 19/10/2026: o Jev aponta as 1 ou 2 melhores e o porquê (linha curta na tela; é aviso).
+    const comDestaque = await apontarMelhoresComJev(ordem, {
+      clientId: p.client_id,
+      tarefa: TAREFA,
+      referencia: { tipo: "idv_projeto", id: p.id },
+      userId: ch.userId,
+      peca: peca === "A paleta" ? "paleta" : "fonte",
+      marca: { estrategia: estadoParaOJev(f).estrategia, ja_decidido: { nome: f.nome || null, logo: f.logo } },
+      id: (x) => String(ordem.indexOf(x)),
+      nota: (x) => x.nota_jev,
+      descrever: descrever,
+    });
+    return { propostas: comDestaque, aviso: null };
   } catch (e) {
     registrarFalha("mesa-identidade: ranking das propostas", e);
     return { propostas: semNota, aviso: "O Jev não respondeu: as propostas estão sem nota, na ordem em que vieram." };

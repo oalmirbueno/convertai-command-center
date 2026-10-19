@@ -673,7 +673,7 @@ describe("escritor de cenas: método, falha anterior e prova do worker", () => {
     expect(provaDoRender(null)).toBeNull();
   });
 
-  it("a conferência da escrita continua igual; a mesa-motion não muda; o cartão tem o botão sob pedido", () => {
+  it("a conferência da escrita continua igual; a mesa-motion não muda", () => {
     expect(conferirEscrita({ html: '<div id="c-a">Oi</div>', css: "", js: "tl.to('#c-a', { opacity: 1 }, 0);" }).ok).toBe(true);
     expect(conferirEscrita({ html: "<div>x</div>", css: "", js: "Math.random()" }).problemas.join(" ")).toMatch(/sorteio/);
     // A escreverCena da mesa-motion não muda: o método entra pelo SISTEMA_DA_CENA, nunca por `metodo` (a camada da SPP).
@@ -688,12 +688,7 @@ describe("escritor de cenas: método, falha anterior e prova do worker", () => {
     expect(escrever).toMatch(/escrita_anterior: escritaAnterior/);
     expect(escrever).toMatch(/escrita_recusada: recusadaEscrita/);
     expect(idx).toMatch(/escrita_recusada: r\.escrita_recusada \|\| null/);
-    const tela = ler("src/components/mesa-motion/EtapaConstrucao.tsx");
-    expect(tela).toMatch(/Reescrever com a causa/);
-    expect(tela).toMatch(/pedidoComACausa\(pedido, comCausa\)/);
-    expect(tela).toMatch(/causaDoRender\(ultimo\.erro_mensagem\)/);
-    expect(tela).not.toMatch(/setInterval|useEffect\([^)]*escrever/);
-    expect(ler("src/components/mesa-motion/CenaNaFila.tsx")).toMatch(/provaDoRender\(pronto\.check\)/);
+    // 19/10/2026: Mesa Motion retirada a pedido do dono; a tela (EtapaConstrucao e CenaNaFila) saiu com ela.
   });
 });
 

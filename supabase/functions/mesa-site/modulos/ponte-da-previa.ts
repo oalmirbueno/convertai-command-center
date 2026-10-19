@@ -18,15 +18,19 @@
  *
  * Mensagens que ENTRAM (só da janela de cima): modo { editar }, campos
  * { campos, rotulos }, html { html, css } (só na prévia rápida), fontes { url },
- * ir { secao }, recarregar. Mensagens que SAEM: pronta, editar, imagem, secao,
- * desfazer, rolagem. Quem recebe confere a origem (a janela do iframe).
+ * ir { secao }, recarregar, documento (19/10: as checagens antes de publicar
+ * pedem o HTML da página como está). Mensagens que SAEM: pronta, editar,
+ * imagem, secao, desfazer, rolagem, documento { html, url }. Quem recebe
+ * confere a origem (a janela do iframe).
  *
  * É texto (o worker grava em .aceleriq/ponte.js e o Vite serve só em
  * desenvolvimento; a prévia rápida põe inline). Escrito em JavaScript antigo
  * de propósito (Safari 11): sem crase, sem ${}, sem regex nova.
  */
 
-export const VERSAO_DA_PONTE = 1;
+export const VERSAO_DA_PONTE = 2;
+/** Teto do HTML que a ponte manda para as checagens (3 MB). */
+export const MAX_DO_DOCUMENTO = 3_000_000;
 
 const PONTE = String.raw`(function () {
   "use strict";
@@ -168,7 +172,7 @@ const PONTE = String.raw`(function () {
     var chave = secoes.join(",") + "|" + contas.n + "|" + contas.m;
     if (chave === ultimoAviso) return;
     ultimoAviso = chave;
-    enviar({ aq: "pronta", versao: 1, secoes: secoes, editaveis: contas.n, achados: contas.m, rapida: !!document.getElementById("aq-raiz") });
+    enviar({ aq: "pronta", versao: 2, secoes: secoes, editaveis: contas.n, achados: contas.m, rapida: !!document.getElementById("aq-raiz") });
   }
 
   var espera = null;
@@ -319,6 +323,11 @@ const PONTE = String.raw`(function () {
       }
     } else if (d.aq === "recarregar") {
       window.location.reload();
+    } else if (d.aq === "documento") {
+      var doc = "";
+      try { doc = "<!doctype html>" + document.documentElement.outerHTML; } catch (e3) { doc = ""; }
+      if (doc.length > 3000000) doc = doc.slice(0, 3000000);
+      enviar({ aq: "documento", html: doc, url: String(window.location.href) });
     }
   });
 
@@ -348,7 +357,8 @@ export type MensagemDaPonte =
   | { aq: "imagem"; secao: string | null; id: string | null; slot: string | null; src: string }
   | { aq: "secao"; acao: "subir" | "descer" | "esconder" | "ajuste"; secao: string }
   | { aq: "desfazer" }
-  | { aq: "rolagem"; y: number };
+  | { aq: "rolagem"; y: number }
+  | { aq: "documento"; html: string; url: string };
 
 const UID = /^[a-z0-9][a-z0-9_-]{0,47}$/;
 const texto = (v: unknown, max: number) => String(v == null ? "" : v).slice(0, max);
@@ -371,6 +381,8 @@ export function lerMensagemDaPonte(d: unknown): MensagemDaPonte | null {
       return { aq: "desfazer" };
     case "rolagem":
       return { aq: "rolagem", y: Math.max(0, Math.round(Number(o.y) || 0)) };
+    case "documento":
+      return typeof o.html === "string" ? { aq: "documento", html: o.html.slice(0, MAX_DO_DOCUMENTO), url: texto(o.url, 600) } : null;
     default:
       return null;
   }

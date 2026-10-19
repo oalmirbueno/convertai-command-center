@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -45,12 +45,11 @@ import { alvosDoMotion, normalizarAcoesDoMotion, regrasDoMotion, type ListasDoMo
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { MESAS } from "@/components/mesa-foto/TrocaDeMesas";
 import { MESAS_DO_PAINEL } from "@/lib/mesa/preCarga";
-import { entraPeloPadrao, NOME_DA_MESA } from "@/components/mesa/clientesDaMesa";
+import { NOME_DA_MESA } from "@/components/mesa/clientesDaMesa";
 import { ROTULOS_DAS_AREAS } from "@/lib/cronometro/motor";
 import { AREAS_DO_PAINEL, AGENTES_DO_PAINEL } from "../../supabase/functions/_shared/mapa-do-painel";
 import { MESAS_QUE_APRENDEM } from "../../supabase/functions/_shared/aprendizado-das-mesas";
 import { rotuloDoLugar } from "@/lib/navegacao/lugares";
-import { ETAPAS_DA_MESA_MOTION, etapaValidaDoMotion } from "@/components/mesa-motion/motionApi";
 
 /**
  * Frente MOT (30/09): Mesa Motion. Kit de cenas HyperFrames (documento,
@@ -367,24 +366,27 @@ describe("diretor de motion: ações com apelido, custo antes e o que é na hora
   });
 });
 
-describe("registro da Mesa Motion no painel", () => {
-  it("rota, troca de mesas, pré-carga, clientes, cronômetro, lugares e mapa do painel", () => {
-    expect(MESAS.find((m) => m.valor === "motion")!.caminho).toBe("/mesa-motion");
-    expect(Object.keys(MESAS_DO_PAINEL["/mesa-motion"].etapas)).toEqual(ETAPAS_DO_MOTION.map((e) => e.valor));
-    expect(NOME_DA_MESA.motion).toBe("Mesa Motion");
-    expect(entraPeloPadrao("motion", { id: "x", plan_status: "inactive", client_type: "one_off" } as never).entra).toBe(true);
+// 19/10/2026: Mesa Motion retirada a pedido do dono. A tela saiu do painel; a
+// função mesa-motion, as tabelas e o worker ficam (a Mesa Identidade ainda cria
+// o vídeo da marca por ela). Este bloco confere a retirada.
+describe("Mesa Motion retirada do painel (19/10/2026)", () => {
+  it("sem rota própria, troca de mesas, pré-carga, clientes, lugares nem mapa do painel", () => {
+    expect(MESAS.some((m) => (m.valor as string) === "motion")).toBe(false);
+    expect(Object.keys(MESAS_DO_PAINEL)).not.toContain("/mesa-motion");
+    expect(Object.keys(NOME_DA_MESA)).not.toContain("motion");
     expect(ROTULOS_DAS_AREAS["mesa-motion"]).toBe("Mesa Motion");
-    expect(rotuloDoLugar("/mesa-motion", "?client=x&etapa=construcao")).toBe("Mesa Motion · Construção");
-    expect(AREAS_DO_PAINEL.find((a) => a.chave === "mesa_motion")!.rota).toBe("/mesa-motion");
-    expect(AGENTES_DO_PAINEL.find((a) => a.chave === "motion")!.funcao).toBe("mesa-motion");
+    expect(rotuloDoLugar("/mesa-motion", "?client=x&etapa=construcao")).not.toContain("Construção");
+    expect(AREAS_DO_PAINEL.some((a) => (a.chave as string) === "mesa_motion" || a.rota === "/mesa-motion")).toBe(false);
+    expect(AGENTES_DO_PAINEL.some((a) => a.chave === "motion")).toBe(false);
     expect(MESAS_QUE_APRENDEM).toContain("motion");
     expect(ler("src/lib/mesa/marcas.ts")).toMatch(/FUNCOES_COM_MARCA = \[[\s\S]*"mesa-motion",[\s\S]*\];/);
-    expect(ETAPAS_DA_MESA_MOTION).toHaveLength(9);
-    expect(etapaValidaDoMotion("xyz")).toBe("insumos");
+    expect(ler("src/App.tsx")).toMatch(/path="\/mesa-motion" element=\{<Navigate to="\/mesas" replace \/>\}/);
+    expect(existsSync(resolve(raiz, "src/pages/MesaMotion.tsx"))).toBe(false);
+    expect(existsSync(resolve(raiz, "src/components/mesa-motion"))).toBe(false);
+    expect(ETAPAS_DO_MOTION).toHaveLength(9);
   });
 
-  it("rota com trava de papel, função com JWT e o gancho do documento de entrega", () => {
-    expect(ler("src/App.tsx")).toMatch(/path="\/mesa-motion" element=\{<>\{\["admin", "manager", "design"\]/);
+  it("função com JWT e o gancho do documento de entrega continuam", () => {
     expect(ler("supabase/config.toml")).toMatch(/\[functions\.mesa-motion\]\s*\n\s*verify_jwt = true/);
     expect(ler("supabase/functions/documentos/eventos.ts")).toContain("motion_filme_entregue");
     expect(ler("supabase/functions/mesa-motion/index.ts")).toContain('"motion_filme_entregue"');

@@ -37,19 +37,6 @@ const ETAPAS_DA_MESA_SITE: Record<string, string> = {
   publicacao: "Publicação",
 };
 
-/** Frente MOT (30/09): o nome das etapas da Mesa Motion, com acento. */
-const ETAPAS_DA_MESA_MOTION: Record<string, string> = {
-  insumos: "Insumos",
-  entrevista: "Entrevista",
-  brand: "BRAND.md",
-  storyboards: "Storyboards",
-  stills: "Stills",
-  construcao: "Construção",
-  critica: "Crítica",
-  som: "Voz e som",
-  render: "Render e entrega",
-};
-
 /** Frente PRS (30/09): o nome das etapas da Mesa Proposta (o valor do endereço ficou o de antes). */
 const ETAPAS_DA_MESA_PROPOSTA: Record<string, string> = {
   contexto: "Conversa",
@@ -75,7 +62,11 @@ const OUTRAS_AREAS: Record<string, string> = {
   "/documentos": "Documentos",
   "/onde-estamos": "Onde estamos",
   "/api-docs": "API e integrações",
+  "/laboratorio": "Laboratório",
 };
+
+/** Laboratório (19/10/2026): o nome das abas, com acento. */
+const ABAS_DO_LABORATORIO: Record<string, string> = { inicio: "Início", projetos: "Projetos", estudio: "Estúdio livre", logos: "Logos", arquivos: "Arquivos" };
 
 const ABAS_DA_MESA: Record<string, string> = {
   contexto: "Contexto",
@@ -126,6 +117,7 @@ export function clienteDaUrl(pathname: string, search: string): string | null {
 /** Aba ou etapa que muda o lugar (a Mesa por aba, a Mesa Ads e as outras mesas por etapa). */
 function subDoLugar(rota: string, q: URLSearchParams): string | null {
   if (rota === "/mesa") return q.get("aba");
+  if (rota === "/laboratorio") return q.get("aba");
   if (rota.indexOf("/mesa-") === 0) return q.get("etapa");
   if (rota === "/comercial") return null;
   return null;
@@ -149,7 +141,7 @@ export function rotuloDoLugar(pathname: string, search: string): string | null {
   const q = lerBusca(search);
   const sub = subDoLugar(rota, q);
   if (!sub) return base;
-  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : rota === "/mesa-motion" ? ETAPAS_DA_MESA_MOTION[sub] : rota === "/mesa-proposta" ? ETAPAS_DA_MESA_PROPOSTA[sub] : null;
+  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : rota === "/mesa-proposta" ? ETAPAS_DA_MESA_PROPOSTA[sub] : rota === "/laboratorio" ? ABAS_DO_LABORATORIO[sub] : null;
   return `${base} · ${nomeSub || capitalizar(sub)}`;
 }
 

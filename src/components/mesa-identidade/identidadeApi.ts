@@ -1,9 +1,10 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { chamarFuncao } from "@/lib/mesa/api";
+import { chamarFuncao, type FuncaoDaMesa } from "@/lib/mesa/api";
 import type { EtapaDaIdentidade, ModoDoProjeto } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import type { CandidatoDeNome, AlvoDoNaming } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { normalizarBrandbook, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
+import type { PedidoDaLogo } from "../../../supabase/functions/mesa-identidade/modulos/nucleo-da-marca";
 
 /**
  * Mesa Identidade: a ponte da tela com a função mesa-identidade e as tabelas
@@ -87,6 +88,44 @@ export function faltaATabela(erro: unknown): boolean {
 
 export function chamarIdentidade<T = any>(acao: string, corpo: Record<string, unknown>): Promise<T> {
   return chamarFuncao<T>("mesa-identidade", { acao, ...corpo });
+}
+
+/**
+ * A função `laboratorio` (frente do Laboratório, 19/10/2026): a Mesa Identidade
+ * usa só a ação logo_gerar. Enquanto ela não está no ar, o erro sai em frase.
+ * Sem `confirmado: true` a função responde 'confirmacao_necessaria' com o
+ * custo (custoAConfirmar em src/lib/laboratorio/api.ts): a tela mostra e
+ * reenvia com `confirmado: true`.
+ */
+export async function chamarLaboratorio<T = any>(acao: string, corpo: Record<string, unknown>): Promise<T> {
+  try {
+    return await chamarFuncao<T>("laboratorio" as FuncaoDaMesa, { acao, ...corpo });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (/undefined/.test(msg) || /not.?found|404/i.test(msg)) throw new Error("O gerador de logos do Laboratório ainda não está no ar. Tente de novo em instantes.");
+    throw e;
+  }
+}
+
+/**
+ * O corpo que logo_gerar lê de fato (supabase/functions/laboratorio/acoes.ts):
+ * client_id, nome, conceito (até 1500), paleta (texto, até 400), estilo (até
+ * 300), n e referencias (caminhos global/laboratorio/… de uma logo já gerada,
+ * ao variar). Fontes e núcleo não são campos da função: as fontes vão no
+ * conceito; o resto do núcleo a função lê da marca do cliente.
+ */
+export function corpoDoLogoGerar(p: PedidoDaLogo, referencia: string | null): Record<string, unknown> {
+  const fontes = p.fontes.length ? `Fontes da marca: ${p.fontes.join(", ")}` : "";
+  const corpo: Record<string, unknown> = {
+    client_id: p.client_id,
+    nome: p.nome,
+    conceito: [p.conceito, fontes].filter(Boolean).join("\n").slice(0, 1500),
+    paleta: p.paleta.join(", ").slice(0, 400),
+    estilo: p.estilo.slice(0, 300),
+    n: p.n,
+  };
+  if (referencia && referencia.indexOf("global/laboratorio/") === 0) corpo.referencias = [referencia];
+  return corpo;
 }
 
 const db = () => supabase as any;

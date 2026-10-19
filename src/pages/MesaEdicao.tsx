@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import MesaDeVideo from "@/components/mesa-videos/MesaDeVideo";
 import { ETAPAS_DA_MESA_EDICAO, etapaValidaDaEdicao } from "@/components/mesa-edicao/Comuns";
@@ -26,6 +27,8 @@ const EtapaOrganizar = lazyComPreCarga("mesa-edicao/organizar", carregarOrganiza
 const EtapaEditar = lazyComPreCarga("mesa-edicao/editar", carregarEditar);
 // Frente Q (26/09): na etapa Editar a lateral é o agente editor (modelo e custo em cima).
 const AgenteDeEdicao = lazyComPreCarga("mesa-edicao/agente", () => import("@/components/mesa-edicao/AgenteDaEdicao"));
+// 19/10/2026: "Trocar vídeo" na barra da mesa, em toda etapa (só ícone; a janela central escolhe o vídeo).
+const TrocarVideo = lazy(() => import("@/components/mesa-edicao/TrocarVideo"));
 
 export { ETAPAS_DA_MESA_EDICAO };
 
@@ -41,6 +44,11 @@ export default function MesaEdicao() {
       preCarregar={[EtapaEntrada, EtapaOrganizar, EtapaEditar, AgenteDeEdicao]}
       Agente={AgenteDeEdicao}
       rotuloDoAgente={(etapa) => (etapa === "editar" ? "Agente editor" : "Agente de edição")}
+      acoesDaMesa={(_etapa, irPara) => (
+        <Suspense fallback={<span className="mr-0.5 inline-block h-8 w-8" aria-hidden="true" />}>
+          <TrocarVideo irPara={irPara} />
+        </Suspense>
+      )}
     >
       {(etapa, irPara) => (
         <>

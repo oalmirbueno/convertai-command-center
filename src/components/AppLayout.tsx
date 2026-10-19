@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer,
+  HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
@@ -170,6 +170,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Mesas", url: "/mesas", icon: LayoutGrid, soCriacao: true },
       // 17/10: o que cada agente sabe (o dono ensina e a pesquisa semanal complementa).
       { title: "Base dos agentes", url: "/base-dos-agentes", icon: GraduationCap, soCriacao: true },
+      // Laboratório (19/10/2026): trabalhos avulsos com ou sem cliente (admin, gestor e design).
+      { title: "Laboratório", url: "/laboratorio", icon: FlaskConical, soCriacao: true },
       { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
       { title: "Execução da equipe", url: "/execucao", icon: Bot },

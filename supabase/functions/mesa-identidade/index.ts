@@ -54,7 +54,17 @@
  * - agente_historico { client_id } ; executar_acao_agente { mensagem_id, acao_id?, descartar?, parar? } ; desfazer_acao_agente { mensagem_id, acao_id? }
  * - aprendizado_esquecer / aprendizado_guardar
  *
- * Regras: logo pelo código (a final é arquivo real da equipe; IA só inspira);
+ * Núcleo da marca (19/10/2026; sem IA, custo zero):
+ * - marca_ler_links { projeto_id, site?, instagram? } -> { projeto, leitura, avisos } (página pública, sem login,
+ *   com tempo limite; guarda em dados.nucleo.web). O núcleo (modulos/nucleo-da-marca.ts: estratégia, nome,
+ *   conceito, paleta, fontes, tom, referências e o que a marca diz de si) vai em toda geração (naming, slogans,
+ *   conceito, paletas, fontes, brandbook) e no pedido da logo. Nomes, slogans, paletas e fontes voltam com
+ *   destaque_jev ("Escolha do Jev: ...") nas 1 ou 2 melhores (escolha-acoes.ts).
+ * Logo de verdade (19/10): a tela chama a função `laboratorio` › logo_gerar com o núcleo (variações com a
+ *   escolha do Jev); a escolhida entra em sistema.logos.principal (arquivo na pasta do projeto) e em
+ *   sistema.logo_gerada. conceito_imagem continua sendo só inspiração.
+ *
+ * Regras: logo pelo código ou gerada no Laboratório e escolhida pela equipe (nunca entra sozinha);
  * julgamento pelo Jev (ranking de nomes e recomendação de caminho, como
  * aviso); sem laço de correção; nada vai ao cliente nem é publicado sem a
  * equipe; apagar = arquivar. Sem travessão.
@@ -96,6 +106,7 @@ import { moodboardWeb, namingIdiomas, namingVotacaoAbrir, namingVotacaoFechar, n
 import { completarRegistrar, estimativaDaLeitura, logoLer, videoRegistrar } from "./completar-acoes.ts";
 import { ACOES_LONGAS_DA_BASE_DA_MARCA, ROTAS_DA_BASE_DA_MARCA } from "./base-acoes.ts";
 import { coerenciaConferir } from "./coerencia-acoes.ts";
+import { marcaLerLinks } from "./nucleo-acoes.ts";
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
@@ -146,6 +157,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   video_registrar: videoRegistrar,
   completar_registrar: completarRegistrar,
   coerencia_conferir: coerenciaConferir,
+  marca_ler_links: marcaLerLinks,
   brandbook_montar: brandbookMontar,
   brandbook_listar: brandbookListar,
   brandbook_salvar: brandbookSalvar,
@@ -165,7 +177,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s (IA, rede, PDF com imagens): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler", "coerencia_conferir", ...ACOES_LONGAS_DA_BASE_DA_MARCA]);
+const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler", "coerencia_conferir", "marca_ler_links", ...ACOES_LONGAS_DA_BASE_DA_MARCA]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

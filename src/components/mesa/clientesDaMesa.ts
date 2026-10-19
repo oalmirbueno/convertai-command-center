@@ -15,7 +15,8 @@
  *
  * Mesas de criação por projeto (frente PRO3, adendo do dono de 30/09: "às
  * vezes o cliente ainda não está no painel e só quer algo avulso"): Site,
- * Identidade, Motion, Proposta, Publicidade, Roteiros, Foto e Vídeos. Nelas o
+ * Identidade, Proposta, Publicidade, Roteiros, Foto e Vídeos (a Motion saiu
+ * em 19/10/2026 a pedido do dono). Nelas o
  * cliente avulso (client_type "one_off"), o cliente sem plano e o lead
  * convertido sempre entram, com a marca "Avulso" no seletor. A Mesa (orgânica,
  * mensal), a Mesa Ads e a Mesa Edição seguem a régua de antes.
@@ -25,11 +26,11 @@
  * confunde quem abre a mesa todo dia.
  */
 
-export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site" | "motion";
+export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site";
 export type ModoDaEscolha = "incluir" | "retirar";
 
 /** PRO3: as mesas de criação por projeto (avulso, sem plano e lead convertido entram; "+ Cliente avulso" no seletor). */
-export const MESAS_DE_CRIACAO: MesaDeClientes[] = ["site", "identidade", "motion", "proposta", "publicidade", "roteiros", "foto", "videos"];
+export const MESAS_DE_CRIACAO: MesaDeClientes[] = ["site", "identidade", "proposta", "publicidade", "roteiros", "foto", "videos"];
 export const ehMesaDeCriacao = (mesa: MesaDeClientes) => MESAS_DE_CRIACAO.indexOf(mesa) >= 0;
 
 export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
@@ -43,7 +44,6 @@ export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
   identidade: "Mesa Identidade",
   proposta: "Mesa Proposta",
   site: "Mesa Site",
-  motion: "Mesa Motion",
 };
 
 export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
@@ -57,7 +57,6 @@ export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
   identidade: "Padrão: clientes com plano ativo, mais avulso, sem plano e lead convertido (marca costuma ser projeto).",
   proposta: "Padrão: todos os clientes (proposta vale para quem ainda não fechou).",
   site: "Padrão: todos os clientes (site é projeto, não plano).",
-  motion: "Padrão: todo cliente (apresentação e filme da marca são projeto avulso tanto quanto de plano).",
 };
 
 export interface ClienteBruto {
@@ -134,8 +133,6 @@ export function entraPeloPadrao(mesa: MesaDeClientes, c: ClienteBruto, convertid
   if (mesa === "proposta") return { entra: true, motivo: "Todo cliente" };
   // Frente SIT: site é projeto avulso tanto quanto de plano; todo cliente vivo entra.
   if (mesa === "site") return { entra: true, motivo: "Todo cliente" };
-  // Frente MOT: filme da marca e apresentação são avulsos tanto quanto de plano; todo cliente vivo entra.
-  if (mesa === "motion") return { entra: true, motivo: "Todo cliente" };
   const status = String(c.plan_status || "");
   if (status !== "active") return { entra: false, motivo: status === "standby" ? "Plano em pausa" : "Sem plano ativo" };
   if (c.client_type === "one_off") return { entra: false, motivo: "Trabalho avulso" };

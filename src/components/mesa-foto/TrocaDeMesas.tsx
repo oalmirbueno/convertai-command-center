@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { BriefcaseBusiness, CalendarRange, Camera, Clapperboard, Film, Globe, Megaphone, Package, Palette, Scissors, ScrollText, type LucideIcon } from "lucide-react";
+import { BriefcaseBusiness, CalendarRange, Camera, Clapperboard, FlaskConical, Globe, Megaphone, Package, Palette, Scissors, ScrollText, type LucideIcon } from "lucide-react";
 import { propsDePreCarga } from "@/lib/mesa/preCarga";
 
 /**
@@ -14,7 +14,7 @@ import { propsDePreCarga } from "@/lib/mesa/preCarga";
  * Mouse em cima (ou foco) já baixa a outra mesa: o clique abre na hora.
  */
 
-export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site" | "motion";
+export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site" | "laboratorio";
 
 export interface MesaDoSeletor {
   valor: QualMesa;
@@ -48,7 +48,9 @@ export const MESAS: MesaDoSeletor[] = [
   { valor: "identidade", rotulo: "Identidade", titulo: "Abrir a Mesa Identidade (identidade visual, naming e brandbook)", caminho: "/mesa-identidade", descricao: "Identidade visual, naming e brandbook", icone: Palette },
   // Frente SIT (30/09): criador de sites com o motor de código.
   { valor: "site", rotulo: "Site", titulo: "Abrir a Mesa Site (site do cliente com prévia e domínio)", caminho: "/mesa-site", descricao: "Site do cliente com prévia ao vivo e domínio", icone: Globe },
-  { valor: "motion", rotulo: "Motion", titulo: "Abrir a Mesa Motion (apresentação em motion e filme da marca)", caminho: "/mesa-motion", descricao: "Apresentação em motion e filme cinematográfico da marca", icone: Film },
+  // 19/10/2026: Mesa Motion retirada a pedido do dono (sai do hub, do seletor e dos atalhos).
+  // 19/10/2026: Laboratório (trabalho avulso com ou sem cliente; o resultado não entra na Mesa do cliente).
+  { valor: "laboratorio", rotulo: "Laboratório", titulo: "Abrir o Laboratório (projetos em canvas, logos e artes livres)", caminho: "/laboratorio", descricao: "Projetos em canvas, logos e artes livres", icone: FlaskConical },
 ];
 
 /**

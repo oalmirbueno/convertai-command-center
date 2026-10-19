@@ -15,7 +15,7 @@ import { PaginaMesaRoteiros } from "@/lib/mesa/preCarga";
 import { PaginaMesaIdentidade } from "@/lib/mesa/preCarga";
 import { PaginaMesaProposta } from "@/lib/mesa/preCarga";
 import { PaginaMesaSite } from "@/lib/mesa/preCarga";
-import { PaginaMesaMotion } from "@/lib/mesa/preCarga";
+import { PaginaLaboratorio } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
@@ -117,11 +117,11 @@ const MesaRoteiros = PaginaMesaRoteiros;
 const MesaIdentidade = PaginaMesaIdentidade;
 const MesaProposta = PaginaMesaProposta;
 const MesaSite = PaginaMesaSite;
-const MesaMotion = PaginaMesaMotion;
+const Laboratorio = PaginaLaboratorio;
 
 const PAGINAS_DAS_MESAS = [
   PaginaMesaDoCliente, PaginaMesaAds, PaginaMesaFoto, PaginaMesaVideos, PaginaMesaEdicao, PaginaMesaPublicidade,
-  PaginaMesaRoteiros, PaginaMesaIdentidade, PaginaMesaProposta, PaginaMesaSite, PaginaMesaMotion,
+  PaginaMesaRoteiros, PaginaMesaIdentidade, PaginaMesaProposta, PaginaMesaSite, PaginaLaboratorio,
 ];
 
 /**
@@ -416,8 +416,10 @@ export function AppRoutes() {
         <Route path="/mesa-proposta" element={<>{["admin", "manager"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaProposta /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Site (frente SIT): criador de sites com o motor de código (supabase/functions/mesa-site e motor-codigo; worker em workers/motor-codigo). Mesmos papéis das mesas de criação. */}
         <Route path="/mesa-site" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaSite /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
-        {/* Mesa Motion (frente MOT): apresentação em motion e filme da marca; cenas HyperFrames pela fila (workers/render). Mesmos papéis das mesas de vídeo. */}
-        <Route path="/mesa-motion" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaMotion /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* 19/10/2026: Mesa Motion retirada a pedido do dono; o endereço antigo cai no hub das mesas. */}
+        <Route path="/mesa-motion" element={<Navigate to="/mesas" replace />} />
+        {/* Laboratório (19/10/2026): projetos em canvas, estúdio livre, logos e arquivos livres (supabase/functions/laboratorio). Mesmos papéis das mesas de criação. */}
+        <Route path="/laboratorio" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><Laboratorio /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/mesas" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Mesas /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />

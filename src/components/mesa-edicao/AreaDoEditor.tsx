@@ -12,6 +12,7 @@ import { chamarMesaVideos, chaveDasVersoes, useVersoes } from "@/components/mesa
 import { motivoParaNaoMudar, type VersaoDeVideo } from "../../../supabase/functions/mesa-videos/modulos/memoria-de-video";
 import { duracaoDoClipe, migrarProjeto, ROTULO_DA_TRILHA, type ClipeDoProjeto, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { navegadorDoEditor } from "./editor/apoio";
+import { nomeDaEdicao } from "./trocaDeVideo";
 import { projetoDoZero } from "@/lib/editor/doZero";
 import type { CenaDoRoteiro } from "@/lib/editor/skills";
 
@@ -153,14 +154,19 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
   const queryClient = useQueryClient();
   const versoesQ = useVersoes(clientId);
   const [escolhida, setEscolhida] = useEstadoDaTela<string>(`mesa-edicao:editor:versao:${clientId}`, "");
-  // ?versao=<id> (link da Mesa Motion): entra no estado e sai do endereço, como o ?parte= do useParte.
+  const [recarga, setRecarga] = useState(0);
+  // ?versao=<id> (o "Trocar vídeo" e as edições recentes): entra no estado e sai do endereço, como o ?parte= do useParte.
   // Só vale entre as editáveis (a linha de baixo cai na mais nova), então não precisa esperar a lista.
+  // 19/10/2026: também recarrega o editor aberto (trocar e descartar grava outro projeto na MESMA versão).
   const [params, setParams] = useSearchParams();
   const pedida = params.get("versao");
   const versaoPedida = pedida && UUID.test(pedida) ? pedida : null;
   useEffect(() => {
     if (!pedida) return;
-    if (versaoPedida) setEscolhida(versaoPedida);
+    if (versaoPedida) {
+      setEscolhida(versaoPedida);
+      setRecarga((n) => n + 1);
+    }
     const next = new URLSearchParams(params);
     next.delete("versao");
     setParams(next, { replace: true });
@@ -168,7 +174,6 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
   }, [pedida]);
   const [criando, setCriando] = useState(false);
   const [falhouCriar, setFalhouCriar] = useState<string | null>(null);
-  const [recarga, setRecarga] = useState(0);
   const tentouCriar = useRef(false);
   const navegador = navegadorDoEditor();
 
@@ -256,13 +261,13 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
           <select className={juntar(campo, "mr-2 h-8 w-auto min-w-0 max-w-[280px]")} value={versao.id} onChange={(e) => setEscolhida(e.target.value)} aria-label="Versão em edição">
             {versoes.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.titulo} · v{v.numero}
+                {nomeDaEdicao(v)} · v{v.numero}
               </option>
             ))}
           </select>
         ) : (
           <span className="mr-2 min-w-0 truncate text-[13px] font-medium">
-            {versao.titulo} · v{versao.numero}
+            {nomeDaEdicao(versao)} · v{versao.numero}
           </span>
         )}
         {migrado.de < 2 && <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>formato antigo, abriu convertido</span>}

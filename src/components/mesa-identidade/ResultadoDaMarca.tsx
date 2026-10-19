@@ -99,7 +99,7 @@ export default function ResultadoDaMarca() {
           grafismos: bb.dados.grafismos.length,
           pecas: bb.dados.aplicacoes.length,
           mockups: mockups.length,
-          videos: doVideo.arquivos.map((a) => a.titulo).concat(doVideo.fora.map((t) => `${t}: grande demais para o .zip, baixe na Mesa Motion`)),
+          videos: doVideo.arquivos.map((a) => a.titulo).concat(doVideo.fora.map((t) => `${t}: grande demais para o .zip, mande para aprovação e baixe em Arquivos`)),
           pdf: !!pdf,
           paginaWeb: !!web,
           designer: arr(obj(leitura.versoes).designer).map((d) => ({ versao: String(obj(d).versao || ""), motivo: String(obj(d).motivo || "") })),

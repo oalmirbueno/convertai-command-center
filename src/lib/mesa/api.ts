@@ -13,7 +13,7 @@ import { corpoComMarca } from "@/lib/mesa/marcas";
 import type { RecursosDoModelo } from "../../../supabase/functions/_shared/recursos-dos-modelos";
 import { capacidadesNaTela, lancadoHaPouco } from "@/lib/mesa/recursos-na-tela";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente" | "gestor-aceleriq" | "navegador-remoto" | "base-dos-agentes";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente" | "gestor-aceleriq" | "navegador-remoto" | "base-dos-agentes" | "laboratorio";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -64,6 +64,8 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "gestor-aceleriq": "Gestor Aceleriq",
   "navegador-remoto": "Navegador remoto",
   "base-dos-agentes": "base dos agentes",
+  // Laboratório (19/10/2026): canvas de projetos, logos e pedidos livres.
+  laboratorio: "Laboratório",
   // Frente MOD (30/09): o navegador do agente (computer use só de leitura, com o Confirmar do dono).
   "computador-do-agente": "navegador do agente",
 };

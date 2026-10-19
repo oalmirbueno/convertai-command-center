@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Carregando, botao, juntar } from "@/components/sistema";
 import { ContainerDaArea } from "@/components/sistema/ContainerDaArea";
 import {
-  PaginaMesaAds, PaginaMesaDoCliente, PaginaMesaEdicao, PaginaMesaFoto, PaginaMesaIdentidade, PaginaMesaMotion,
+  PaginaMesaAds, PaginaMesaDoCliente, PaginaMesaEdicao, PaginaMesaFoto, PaginaMesaIdentidade,
   PaginaMesaProposta, PaginaMesaPublicidade, PaginaMesaRoteiros, PaginaMesaSite, PaginaMesaVideos, preCarregarMesa,
 } from "@/lib/mesa/preCarga";
 
@@ -46,7 +46,6 @@ export const ROTAS_NATIVAS: Array<{ caminho: string; Pagina: Pagina }> = [
   { caminho: "/mesa-identidade", Pagina: PaginaMesaIdentidade as unknown as Pagina },
   { caminho: "/mesa-proposta", Pagina: PaginaMesaProposta as unknown as Pagina },
   { caminho: "/mesa-site", Pagina: PaginaMesaSite as unknown as Pagina },
-  { caminho: "/mesa-motion", Pagina: PaginaMesaMotion as unknown as Pagina },
   { caminho: "/workspace", Pagina: Workspace as unknown as Pagina },
   { caminho: "/kanban", Pagina: Kanban as unknown as Pagina },
   { caminho: "/calendario", Pagina: EditorialCalendar as unknown as Pagina },

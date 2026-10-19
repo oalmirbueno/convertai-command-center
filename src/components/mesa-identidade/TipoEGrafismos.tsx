@@ -10,7 +10,7 @@ import { normalizarEstrategia } from "../../../supabase/functions/_shared/estrat
 import { estilosDaPersonalidade, fonteDoCatalogo, hierarquiaDoPar, linkDaFamilia, paresParaEstilos, pilhaDaFonte } from "../../../supabase/functions/_shared/tipografia-da-marca";
 import { dataUrlDoSvg, descricaoDoPadrao, svgDoPadrao, TIPOS_DE_PADRAO, type TipoDePadrao } from "../../../supabase/functions/mesa-identidade/modulos/grafismos-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { NotaDoJev, Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { EscolhaDoJev, NotaDoJev, Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { enviarFeitoNaTela, pngDoSvg } from "./arquivosDaMarca";
 
 export type TipoDoSistema = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
@@ -68,7 +68,7 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
   const estilos = useMemo(() => estilosDaPersonalidade({ arquetipo: est.arquetipo.principal, eixos: est.personalidade.eixos }), [JSON.stringify(est.arquetipo), JSON.stringify(est.personalidade.eixos)]);
   const pares = useMemo(() => paresParaEstilos(estilos), [estilos.join(",")]);
   const marca = (projeto.dados.naming && projeto.dados.naming.nome) || "";
-  const propostas = (((projeto.dados.sistema || {}) as Record<string, any>).propostas_de_fonte || []) as Array<{ titulo: string; texto: string; porque: string; conferida: boolean; nota_jev?: number | null }>;
+  const propostas = (((projeto.dados.sistema || {}) as Record<string, any>).propostas_de_fonte || []) as Array<{ titulo: string; texto: string; porque: string; conferida: boolean; nota_jev?: number | null; destaque_jev?: string }>;
   const titulo = tipos.filter((t) => t.uso === "titulo")[0] || tipos[0];
   const corpo = tipos.filter((t) => t.uso === "texto")[0] || titulo;
   const hierarquia = titulo ? hierarquiaDoPar({ titulo: titulo.familia, texto: corpo ? corpo.familia : titulo.familia, pesoTitulo: 700 }) : [];
@@ -129,6 +129,7 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
                   </span>
                   <NotaDoJev nota={p.nota_jev} />
                 </span>
+                <EscolhaDoJev linha={p.destaque_jev} />
                 {!p.conferida && <Pastilha tom="alerta">fora do catálogo: confira no Google Fonts</Pastilha>}
               </span>
               <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => usar(p.titulo, p.texto, "sugestão do diretor")} aria-label="Usar" title="Usar">

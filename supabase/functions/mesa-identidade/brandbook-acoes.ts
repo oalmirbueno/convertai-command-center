@@ -19,6 +19,7 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerDadosDaAgencia, nomeDaAgencia } from "../_shared/dados-da-agencia.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { type AcaoDoAgente, TIPO_DA_ACAO } from "../_shared/acoes-do-agente.ts";
+import { nucleoDaMarca } from "./modulos/nucleo-da-marca.ts";
 import { brandbookDoProjeto, brandbookPublico, coresDoBrandbook, type DadosDoBrandbook, ehModelo, imagensDoBrandbook, lacunasDoBrandbook, type ModeloDoBrandbook, normalizarBrandbook, tokenPublico } from "./modulos/brandbook.ts";
 import { gerarPdfDoBrandbook, nomeDoArquivoDoBrandbook, prepararImagens } from "./modulos/pdf-identidade.ts";
 // Frente SYNC: a estratégia aprovada e a tagline também viram sugestão para o contexto da marca (Confirmar e Desfazer campo a campo).
@@ -122,7 +123,8 @@ export async function montarBrandbook(ch: Chamador, p: LinhaDoProjeto, modelo: M
     ? await lerMarcaCompleta(servico(), p.client_id, p.marca_id).then((m) => (m ? { paleta: m.paleta } : null))
     : await servico().from("cliente_kit_marca").select("paleta").eq("client_id", p.client_id).maybeSingle().then((r) => (r.data as { paleta: unknown } | null) || null);
   const mockups = Array.isArray(p.dados.mockups) ? (p.dados.mockups as Array<{ titulo: string; imagem: string }>) : [];
-  const dados = brandbookDoProjeto({ nomeDaMarca: nome, dados: p.dados, clientId: p.client_id, kit, mockups });
+  // 19/10/2026: o núcleo da marca vai junto (completa o que o projeto ainda não tem, nunca troca o decidido).
+  const dados = brandbookDoProjeto({ nomeDaMarca: nome, dados: p.dados, clientId: p.client_id, kit, mockups, nucleo: nucleoDaMarca(p.dados, nome) });
   // Créditos pelos Dados da agência (frente BASE); vazios, fica "Aceleriq" sem contato (nada inventado).
   const agencia = await lerDadosDaAgencia(servico()).catch((e) => (registrarFalha("mesa-identidade: dados da agência não lidos", e), null));
   if (agencia) {

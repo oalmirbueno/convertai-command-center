@@ -44,7 +44,8 @@ export type ChaveDaArea =
   | "mesa_roteiros"
   | "mesa_videos"
   | "mesa_edicao"
-  | "mesa_identidade" | "mesa_proposta" | "mesa_site" | "mesa_motion"
+  | "mesa_identidade" | "mesa_proposta" | "mesa_site"
+  | "laboratorio"
   | "financeiro"
   | "financeiro_cfo"
   | "cofre"
@@ -142,11 +143,12 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
     faz: "sites", agente: "site",
     palavras: ["site", "landing", "pagina do site", "dominio", "hero", "secao do site", "mapa do site", "seo do site", "formulario do site"],
   },
-  // Frente MOT (30/09): apresentação em motion e filme cinematográfico da marca (cenas HyperFrames pela fila).
+  // 19/10/2026: Mesa Motion retirada a pedido do dono; a rota /mesa-motion cai em /mesas e nenhum agente leva para lá.
+  // 19/10/2026: Laboratório, trabalho avulso com ou sem cliente (o resultado fica lá, não vai para a Mesa do cliente).
   {
-    chave: "mesa_motion", nome: "Mesa Motion", rota: "/mesa-motion", parametro: "etapa", etapas: ["insumos", "entrevista", "brand", "storyboards", "stills", "construcao", "critica", "som", "render"], comCliente: true,
-    faz: "apresentação em motion e filme da marca", agente: "motion",
-    palavras: ["motion", "apresentacao da empresa", "filme da marca", "video institucional", "logo animada", "vinheta", "portfolio", "narracao", "locucao", "voz da marca"],
+    chave: "laboratorio", nome: "Laboratório", rota: "/laboratorio", parametro: "aba", etapas: ["inicio", "projetos", "estudio", "logos", "arquivos"], comCliente: true,
+    faz: "trabalho avulso: projetos em canvas de nós, logos e artes livres", agente: "laboratorio",
+    palavras: ["laboratorio", "projeto livre", "trabalho avulso", "canvas de nos", "logo livre", "arte livre"],
   },
   { chave: "financeiro", nome: "Financeiro", rota: "/financeiro", comCliente: false, faz: "cobrança e caixa", soPessoa: true, palavras: ["financeiro", "cobranca", "mensalidade", "pagamento", "fatura", "boleto", "caixa"] },
   // Frente CFO (30/09): o agente financeiro (só admin). O Aceleriq não mexe no financeiro: leva até o CFO.
@@ -178,7 +180,7 @@ export const AGENTES_DO_PAINEL: AgenteDoPainel[] = [
   { chave: "edicao", nome: "agente de edição", area: "mesa_edicao", funcao: "editor-video", faz: "takes e edição" },
   { chave: "proposta", nome: "estrategista comercial", area: "mesa_proposta", funcao: "mesa-proposta", faz: "escreve a proposta, pesquisa o mercado, itens e validade" },
   { chave: "site", nome: "diretor de site", area: "mesa_site", funcao: "mesa-site", faz: "constrói e ajusta o site" },
-  { chave: "motion", nome: "diretor de motion", area: "mesa_motion", funcao: "mesa-motion", faz: "BRAND.md, storyboards, cenas em código, crítica, narração (ElevenLabs), trilha, som e render do filme" },
+  { chave: "laboratorio", nome: "agente do projeto do Laboratório", area: "laboratorio", funcao: "laboratorio", faz: "monta o fluxo no canvas; gera só com o custo à vista e o Confirmar" },
   { chave: "workspace", nome: "agente do workspace", area: "workspace", funcao: "workspace-agent", faz: "documentos" },
   { chave: "contratos", nome: "agente de contratos", area: "contratos", funcao: "contratos", faz: "monta contrato, aditivo e renovação, puxa o CNPJ; cláusula só com diferença e Confirmar" },
 ];

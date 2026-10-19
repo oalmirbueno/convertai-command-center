@@ -13,7 +13,7 @@ import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, etiqueta, foco, juntar, lista, texto, toqueCompacto } from "@/components/sistema/estilos";
 import { CRITERIOS_PADRAO, IDIOMAS_DO_TESTE, LIMITES_DO_NAMING, linksDoArroba, ROTULO_DO_RISCO, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, CHAVES, normalizarRodada, useRodadas, useSituacaoDoArquivo, textoDaAprovacao, type RodadaDeNomes } from "./identidadeApi";
-import { contextoParaPreencher, nomeCurtoDoModelo, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
+import { contextoParaPreencher, EscolhaDoJev, nomeCurtoDoModelo, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
 import VotacaoDosNomes from "./VotacaoDosNomes";
 import { salvarArquivo } from "./exportarNoNavegador";
 
@@ -492,6 +492,7 @@ function LinhaDoNome({ c, finalista, escolhido, travado = false, onFinalista, on
           </span>
           {escolhido && <Pastilha tom="bom">Escolhido</Pastilha>}
         </span>
+        <EscolhaDoJev linha={c.destaque_jev} />
         {c.justificativa && <span className={juntar(texto.auxiliar, "mt-0.5 block")}>{c.justificativa}</span>}
         <span className="-m-0.5 mt-1 flex min-w-0 flex-wrap items-center">
           <span className="m-0.5 inline-flex items-center"><Globe2 className="mr-1 h-3 w-3 text-muted-foreground" aria-hidden /><Pastilha tom={TOM_DO_DOMINIO[c.filtros.com_br]}>.com.br {textoDoDominio(c.filtros.com_br)}</Pastilha></span>

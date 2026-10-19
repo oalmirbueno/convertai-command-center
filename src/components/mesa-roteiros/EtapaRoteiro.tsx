@@ -43,6 +43,8 @@ import { baixarBytes, itemSolto, montarPdf } from "./pdfNoNavegador";
 // Ideias com o agente (02/10): o tema do roteiro avulso nasce de uma conversa com o mundo real.
 import IdeiasDeTema from "./IdeiasDeTema";
 import type { IdeiaDeTema, PreenchimentoDoRoteiro } from "../../../supabase/functions/mesa-roteiros/modulos/ideias-de-tema";
+// 19/10/2026: faixa de roteiros abertos (cada aba avulsa tem o próprio formulário guardado).
+import { chaveDoFormulario, useFaixa } from "./roteirosAbertos";
 
 /**
  * Etapa 2: o roteiro. Sem roteiro, o formulário (tipo, duração, objetivo,
@@ -56,7 +58,21 @@ import type { IdeiaDeTema, PreenchimentoDoRoteiro } from "../../../supabase/func
  * seção), campos com rótulo em cima (CampoDeFormulario + GrupoDeCampos), ações
  * na linha do título e rascunho guardado por roteiro e versão (sair e voltar
  * não perde a edição).
+ *
+ * 19/10/2026 (faixa de roteiros abertos): o formulário inteiro (tipo,
+ * duração, objetivo, modelo, tema e pedido) fica guardado pela `chave` da
+ * aba, então trocar de aba e voltar não perde nada. O título real (roteiro
+ * carregado ou peça lida) vai para a aba da faixa.
  */
+
+/** O título real chegou: a aba ativa da faixa passa a mostrá-lo. */
+function useNomeDaAba(titulo: string | null | undefined) {
+  const faixa = useFaixa();
+  useEffect(() => {
+    if (faixa && titulo && titulo.trim()) faixa.nomearAtiva(titulo.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titulo]);
+}
 
 type IrPara = "revisao" | "pdf";
 
@@ -66,6 +82,7 @@ export default function EtapaRoteiro({
   avulso,
   modeloId,
   baseId = null,
+  chave = null,
   onAberto,
   onIrPara,
   onVoltar,
@@ -76,6 +93,8 @@ export default function EtapaRoteiro({
   modeloId: string | null;
   /** Frente ROT: modelo da biblioteca escolhido na etapa Modelos. */
   baseId?: string | null;
+  /** Aba avulsa da faixa: o formulário dela fica guardado por esta chave (sem ela, por peça ou "avulso"). */
+  chave?: string | null;
   onAberto: (id: string) => void;
   onIrPara: (etapa: IrPara, roteiroId?: string | null) => void;
   onVoltar: () => void;
@@ -86,6 +105,7 @@ export default function EtapaRoteiro({
   const linha = roteiroId ? lista.filter((r) => r.id === roteiroId)[0] || null : tarefaId ? roteiroDaPeca(lista, tarefaId) : null;
   // Roteiro gerado sem banco (SQL pendente): fica só nesta tela.
   const [solto, setSolto] = useState<Roteiro | null>(null);
+  useNomeDaAba(linha ? linha.titulo : null);
 
   useEffect(() => {
     if (linha && !roteiroId) onAberto(linha.id);
@@ -121,7 +141,7 @@ export default function EtapaRoteiro({
       />
     );
   }
-  return <FormularioComIdeias tarefaId={tarefaId} modeloId={modeloId} baseId={baseId} indisponivel={!!(roteirosQ.data && roteirosQ.data.indisponivel)} onAberto={onAberto} onSolto={setSolto} />;
+  return <FormularioComIdeias tarefaId={tarefaId} modeloId={modeloId} baseId={baseId} chave={chave} indisponivel={!!(roteirosQ.data && roteirosQ.data.indisponivel)} onAberto={onAberto} onSolto={setSolto} />;
 }
 
 /**
@@ -134,6 +154,7 @@ function FormularioComIdeias({
   tarefaId,
   modeloId,
   baseId,
+  chave = null,
   indisponivel,
   onAberto,
   onSolto,
@@ -141,6 +162,7 @@ function FormularioComIdeias({
   tarefaId: string | null;
   modeloId: string | null;
   baseId: string | null;
+  chave?: string | null;
   indisponivel: boolean;
   onAberto: (id: string) => void;
   onSolto: (r: Roteiro) => void;
@@ -174,6 +196,7 @@ function FormularioComIdeias({
       {!tarefaId && <IdeiasDeTema preenchidoCom={preenchidoCom} onPreencher={aplicar} onDesfazer={desfazer} />}
       <FormularioDeGeracao
         tarefaId={tarefaId}
+        chave={chave}
         modeloInicial={modeloId}
         baseInicial={baseId}
         onGerado={(id) => onAberto(id)}
@@ -198,6 +221,7 @@ const AUTOMATICO = "auto";
 
 function FormularioDeGeracao({
   tarefaId,
+  chave = null,
   modeloInicial,
   baseInicial,
   onGerado,
@@ -207,6 +231,8 @@ function FormularioDeGeracao({
   onEditado,
 }: {
   tarefaId: string | null;
+  /** Aba avulsa da faixa (ver EtapaRoteiro). */
+  chave?: string | null;
   modeloInicial: string | null;
   baseInicial: string | null;
   onGerado: (id: string) => void;
@@ -224,17 +250,22 @@ function FormularioDeGeracao({
   const pecasQ = usePecasDeVideo(mesa.clientId);
   const modelosQ = useModelos(mesa.clientId);
   const peca = tarefaId ? (pecasQ.data || []).filter((p) => p.id === tarefaId)[0] || null : null;
+  useNomeDaAba(peca ? peca.titulo : null);
   const modelosDeRoteiro = modelosQ.data ? modelosQ.data.lista : [];
-  const [modeloDeRoteiro, setModeloDeRoteiro] = useState<string>(modeloInicial || "");
+  // Tudo do formulário guardado por cliente e peça (ou avulso, ou aba avulsa da faixa): sair e voltar mantém.
+  const base = chaveDoFormulario(mesa.clientId, chave || tarefaId || "avulso");
+  const [modeloDeRoteiro, setModeloDeRoteiro] = useEstadoDaTela<string>(`${base}:modelo-roteiro`, modeloInicial || "", { esperaMs: 0 });
   const escolhido = modelosDeRoteiro.filter((m) => m.id === modeloDeRoteiro)[0] || null;
-  const [tipo, setTipo] = useState<TipoDeRoteiro>("fala_camera");
-  const [duracao, setDuracao] = useState<number>(modoDoTipo("fala_camera").duracao_padrao_s);
+  const [tipo, setTipo] = useEstadoDaTela<TipoDeRoteiro>(`${base}:tipo`, "fala_camera", { validar: (v) => MODOS_DE_ROTEIRO.some((m) => m.valor === v) });
+  const [duracao, setDuracao] = useEstadoDaTela<number>(`${base}:duracao`, modoDoTipo("fala_camera").duracao_padrao_s, { validar: (v) => typeof v === "number" && v >= 10 && v <= 300 });
   // Frente ROT: "agora eu preciso de autoridade". Sem objetivo, o agente escolhe pelo contexto da marca.
   const bibliotecaQ = useBiblioteca(mesa.clientId);
   const proprios = bibliotecaQ.data ? bibliotecaQ.data.lista.map((p) => p.ficha) : [];
   const baseDaUrl = baseInicial ? modeloValidadoPorId(baseInicial, proprios) : null;
-  const [objetivo, setObjetivo] = useState<ObjetivoDaBase | typeof AUTOMATICO>(AUTOMATICO);
-  const [modeloBase, setModeloBase] = useState<string>(baseInicial || AUTOMATICO);
+  const [objetivo, setObjetivo] = useEstadoDaTela<ObjetivoDaBase | typeof AUTOMATICO>(`${base}:objetivo`, AUTOMATICO, {
+    validar: (v) => v === AUTOMATICO || (OBJETIVOS_DA_BASE as readonly unknown[]).indexOf(v) >= 0,
+  });
+  const [modeloBase, setModeloBase] = useEstadoDaTela<string>(`${base}:modelo-base`, baseInicial || AUTOMATICO, { esperaMs: 0, validar: (v) => typeof v === "string" && !!v });
   const objetivoDaBase = objetivo === AUTOMATICO ? null : objetivo;
   const candidatos = candidatosPorObjetivo(objetivoDaBase, proprios);
   const baseEscolhida = modeloBase === AUTOMATICO ? null : modeloValidadoPorId(modeloBase, proprios);
@@ -243,8 +274,6 @@ function FormularioDeGeracao({
     // Modelo que não serve ao objetivo novo volta para o automático.
     if (modeloBase !== AUTOMATICO && o !== AUTOMATICO && !candidatosPorObjetivo(o, proprios).some((m) => m.id === modeloBase)) setModeloBase(AUTOMATICO);
   };
-  // Textos guardados por cliente e peça (ou avulso): sair e voltar mantém.
-  const base = `mesa-roteiros:gerar:${mesa.clientId}:${tarefaId || "avulso"}`;
   const [tema, setTema] = useEstadoDaTela<string>(`${base}:tema`, "");
   const [pedido, setPedido] = useEstadoDaTela<string>(`${base}:pedido`, "");
   const textos = modelosAtivos(mesa.catalogo, "texto");
