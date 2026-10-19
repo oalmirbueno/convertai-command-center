@@ -80,8 +80,24 @@ def _is_human(entry: dict[str, Any]) -> bool:
     return False
 
 
-def _has_operator_response(raw_entries: Iterable[Any], entry_id: str) -> bool:
-    """Return true only for a non-human diary entry that cites the source entry_id."""
+def _entry_time(entry: dict[str, Any]) -> dt.datetime | None:
+    raw = entry.get("created_at") or entry.get("createdAt") or entry.get("quando")
+    if not raw:
+        return None
+    try:
+        return _as_utc(dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+    except ValueError:
+        return None
+
+
+def _has_operator_response(raw_entries: Iterable[Any], entry_id: str, after: dt.datetime | None = None) -> bool:
+    """Return true for a non-human diary entry that cites the source entry_id or comes after it.
+
+    19/10/2026: the diary tool tells operators to write without UUIDs, so replies never
+    cited the entry_id; the lease expired every 15 minutes and the same instruction woke
+    the agent again (50 to 80 near-identical replies a day on one link). An operator
+    entry written after the human entry now also counts as the reply.
+    """
     reference_keys = (
         "reply_to_entry_id", "parent_entry_id", "source_entry_id", "in_reply_to",
     )
@@ -93,6 +109,9 @@ def _has_operator_response(raw_entries: Iterable[Any], entry_id: str) -> bool:
         title = entry.get("title") or entry.get("titulo") or ""
         body = entry.get("body") or entry.get("texto") or ""
         if entry_id in f"{title}\n{body}":
+            return True
+        quando = _entry_time(entry)
+        if after is not None and quando is not None and quando > after:
             return True
     return False
 
@@ -139,7 +158,7 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             "title": _safe_text(entry.get("title") or entry.get("titulo") or ""),
             "body": _safe_text(entry.get("body") or entry.get("texto") or ""),
             "created_at": _safe_text(entry.get("created_at") or entry.get("createdAt") or entry.get("quando") or ""),
-            "response_confirmed": _has_operator_response(raw_entries, entry_id),
+            "response_confirmed": _has_operator_response(raw_entries, entry_id, _entry_time(entry)),
         })
     return candidates
 
@@ -184,6 +203,7 @@ def _init_db(con: sqlite3.Connection) -> None:
     }
     if "lease_token" not in columns:
         con.execute("ALTER TABLE processed_entries ADD COLUMN lease_token TEXT")
+    con.execute("CREATE TABLE IF NOT EXISTS link_seen (link_id TEXT PRIMARY KEY, human_at TEXT NOT NULL)")
     if con.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='processed_entries_legacy'"
     ).fetchone():
@@ -394,7 +414,31 @@ def consumer_run_lock(db_path: Path, blocking=False):
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
-async def collect_candidates(call, *, deadline, board_limit=500, diary_limit=DIARY_LIMIT, max_links=500):
+SEEN_FIELD = "ultima_entrada_humana_em"
+
+
+def should_read_diary(link: dict[str, Any], seen: dict[str, str] | None, pending: set[str] | None) -> bool:
+    """Read a link diary only when it can hold new human context.
+
+    19/10/2026: reading every diary on every cron fire cost ~2.000 MCP calls per
+    hour. The board now carries the time of the last human entry per link. A link
+    is read when the board lacks that field (older panel), when it still has an
+    unconfirmed lease here, or when the time differs from the one already read.
+    """
+    link_id = str(link.get("id") or link.get("link_id") or "")
+    if seen is None or SEEN_FIELD not in link:
+        return True
+    if pending and link_id in pending:
+        return True
+    human_at = link.get(SEEN_FIELD)
+    if not human_at:
+        return False
+    return seen.get(link_id) != str(human_at)
+
+
+async def collect_candidates(call, *, deadline, board_limit=500, diary_limit=DIARY_LIMIT, max_links=500,
+                             seen: dict[str, str] | None = None, pending: set[str] | None = None,
+                             read_marks: dict[str, str] | None = None):
     async def bounded(name, args):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -407,10 +451,16 @@ async def collect_candidates(call, *, deadline, board_limit=500, diary_limit=DIA
         async with semaphore:
             try:
                 diary = await bounded("aceleriq_operator_diary", {"link_id": str(link.get("id") or link.get("link_id")), "limit": diary_limit})
-                return human_candidates(link, diary) if isinstance(diary, dict) else []
+                if not isinstance(diary, dict):
+                    return []
+                if read_marks is not None and link.get(SEEN_FIELD):
+                    read_marks[str(link.get("id") or link.get("link_id"))] = str(link.get(SEEN_FIELD))
+                return human_candidates(link, diary)
             except Exception:
                 return []
-    rows = await asyncio.gather(*(read(link) for link in links[:max_links] if isinstance(link, dict) and (link.get("id") or link.get("link_id"))))
+    rows = await asyncio.gather(*(read(link) for link in links[:max_links]
+                                  if isinstance(link, dict) and (link.get("id") or link.get("link_id"))
+                                  and should_read_diary(link, seen, pending)))
     unique = {(r["link_id"], r["entry_id"]): r for group in rows for r in group}
     if any(r.get('target_client_id') for r in unique.values()):
         roster = await bounded('aceleriq_list_clients', {'limit': 500, 'offset': 0})
@@ -443,7 +493,43 @@ def verify_client_targets(messages, roster):
             message['target_scope'] = 'unresolved'
 
 
-async def _collect_candidates() -> list[dict[str, Any]]:
+def load_read_state(db_path: Path | str) -> tuple[dict[str, str], set[str]]:
+    """Last human-entry time already read per link, and links with unconfirmed leases."""
+    db_path = Path(db_path)
+    with _database_lock(db_path):
+        con = sqlite3.connect(db_path, timeout=5)
+        try:
+            _init_db(con)
+            seen = {str(r[0]): str(r[1]) for r in con.execute("SELECT link_id, human_at FROM link_seen")}
+            pending = {str(r[0]) for r in con.execute(
+                "SELECT DISTINCT link_id FROM processed_entries WHERE state != 'processed'")}
+            con.commit()
+        finally:
+            con.close()
+    return seen, pending
+
+
+def remember_read(db_path: Path | str, marks: dict[str, str]) -> None:
+    """Persist read marks only after the claims of that read were stored."""
+    if not marks:
+        return
+    db_path = Path(db_path)
+    with _database_lock(db_path):
+        con = sqlite3.connect(db_path, timeout=5)
+        try:
+            _init_db(con)
+            with con:
+                con.executemany(
+                    "INSERT INTO link_seen(link_id, human_at) VALUES (?, ?) "
+                    "ON CONFLICT(link_id) DO UPDATE SET human_at=excluded.human_at",
+                    list(marks.items()),
+                )
+        finally:
+            con.close()
+
+
+async def _collect_candidates(seen: dict[str, str] | None = None, pending: set[str] | None = None,
+                              read_marks: dict[str, str] | None = None) -> list[dict[str, Any]]:
     sys.path.insert(0, HERMES_ROOT)
     from tools.mcp_tool_config import _load_mcp_config
     from tools.mcp_tool_discovery import _connect_server
@@ -462,7 +548,8 @@ async def _collect_candidates() -> list[dict[str, Any]]:
                 raise ValueError("Tool outside allowlist")
             return _decode_tool_result(await asyncio.wait_for(server.session.call_tool(name, args), timeout=20))
 
-        return await collect_candidates(call, deadline=time.monotonic() + 40)
+        return await collect_candidates(call, deadline=time.monotonic() + 40,
+                                        seen=seen, pending=pending, read_marks=read_marks)
 
     finally:
         await server.shutdown()
@@ -472,8 +559,12 @@ async def run(db_path: Path) -> dict[str, Any]:
     with consumer_run_lock(db_path) as acquired:
         if not acquired:
             return {"wakeAgent": False}
-        candidates = await asyncio.wait_for(_collect_candidates(), timeout=50)
-        return gate_payload(claim_new_entries(db_path, candidates))
+        seen, pending = load_read_state(db_path)
+        marks: dict[str, str] = {}
+        candidates = await asyncio.wait_for(_collect_candidates(seen, pending, marks), timeout=50)
+        payload = gate_payload(claim_new_entries(db_path, candidates))
+        remember_read(db_path, marks)
+        return payload
 
 
 def main() -> int:
