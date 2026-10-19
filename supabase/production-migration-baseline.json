@@ -2267,6 +2267,22 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261019180129",
+      "path": "supabase/migrations/20261019180129_sem_laco_de_40001.sql",
+      "local_sha256": "b82e997c1d98ae5c209793fcf7c668c3c195ddbce553208af28ebcd23124b33a",
+      "remote_name": "sem_laco_de_40001",
+      "remote_statements_sha256": "233a8c17d625f8a56969bf98bb0b2f05caba4edf2cc7a3ba014f05502bd88531",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261019180336",
+      "path": "supabase/migrations/20261019180336_decisao_do_dono_com_fonte_antiga.sql",
+      "local_sha256": "599b739551598c6f896445c7ca77cfb90a9c56f4ae454ea19f26d8cfe4e459e5",
+      "remote_name": "decisao_do_dono_com_fonte_antiga",
+      "remote_statements_sha256": "ccd88b701d7bfffa287f1743f4b9f66e52d06dc2e0dd92d3fdc79282ef881620",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261019233000",
       "path": "supabase/migrations/20261019233000_laboratorio_v2.sql",
       "local_sha256": "d15c68155779bf65485b6302e663b862d25a0dd17595785371ecb3e03324957a",
