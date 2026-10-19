@@ -95,7 +95,8 @@ Deno.test("canvas: normaliza a forma do React Flow e valida limites e tipos", ()
   assertEquals(c.nos[0], { id: "n1", tipo: "contexto", x: 10, y: 20, dados: { texto: "oi" } });
   assertEquals(c.ligacoes[0], { id: "e1", de: "n1", para: "n2" });
   assertEquals(errosDoCanvas(c), []);
-  assertThrows(() => canvasValido({ nos: [{ id: "a", tipo: "video" }], ligacoes: [] }), ErroDoCanvas);
+  // "video" virou nó na v4: o tipo desconhecido aqui é outro.
+  assertThrows(() => canvasValido({ nos: [{ id: "a", tipo: "holograma" }], ligacoes: [] }), ErroDoCanvas);
   const muitos = { nos: Array.from({ length: 81 }, (_, i) => ({ id: `n${i}`, tipo: "contexto" })), ligacoes: [] };
   assertMatch(errosDoCanvas(normalizarCanvas(muitos))[0], /80 nós/);
   const invalida = { nos: [{ id: "i", tipo: "imagem" }, { id: "l", tipo: "logo" }], ligacoes: [{ id: "x", de: "i", para: "l" }] };
@@ -131,7 +132,7 @@ Deno.test("planejar: operações validadas com recibo; gerar e ligação proibid
       { op: "ligar", de: "ctx", para: "res" },
       { op: "ligar", de: "res", para: "logo" },
       { op: "gerar", no: "res" },
-      { op: "criar", tipo: "video" },
+      { op: "criar", tipo: "holograma" },
       { op: "definir", no: "res", dados_json: JSON.stringify({ prompt: "Arte do feed" }) },
       { op: "organizar" },
     ],
@@ -245,7 +246,8 @@ Deno.test("v2: campos dos nós novos (alvo e formato validados; o resto ignorado
   assertEquals(formatosDoFilme(undefined), ["16:9", "9:16"]);
   assertEquals(formatosDoFilme("1:1"), ["1:1"]);
   // action_kind do vocabulário fechado de operator_approvals (anúncio sobe pausado = publicar, nunca ativar).
-  assertEquals(ACAO_DO_ALVO, { publicar_site: "publicar", subir_anuncio_pausado: "publicar", conectar_pagina: "alterar_permissoes", outro: "publicar" });
+  // v4: ligar_mensagens = enviar_mensagem (o envio a leads só começa depois do sim do dono).
+  assertEquals(ACAO_DO_ALVO, { publicar_site: "publicar", subir_anuncio_pausado: "publicar", conectar_pagina: "alterar_permissoes", ligar_mensagens: "enviar_mensagem", outro: "publicar" });
 });
 
 Deno.test("v2: custo dos nós novos (pesquisa com busca na web, filme = storyboards, Pôr no ar de graça) e ordem", () => {

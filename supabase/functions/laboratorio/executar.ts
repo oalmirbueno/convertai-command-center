@@ -14,7 +14,11 @@ import { OPERADOR_HERMES } from "../_shared/pedido-ao-hermes.ts";
 import { type Carteira, ErroHttp, servico, TAREFA } from "./comum.ts";
 import { type ArquivoSalvo, garantirPastas, lerImagem, salvarArquivo } from "./workspace.ts";
 import { chamadorDaMesaMotion, type ChamarMotion, rodarFilme } from "./filme.ts";
+import type { CobrancaDoLab } from "./creditos.ts";
+import { textoDosDocumentos } from "./documentos.ts";
 import { type AprovacaoLida, type EntradaDoPacote, type Operador, pedirNoAr, type PortaDoNoAr } from "./no-ar.ts";
+import { executoresDaV4, saidaEstaticaDaV4 } from "./nos-v4.ts";
+import { faltasParaPorNoAr } from "./modulos/funil.ts";
 import {
   ancestraisDe,
   arred,
@@ -111,6 +115,8 @@ export type Contexto = {
   pastaId?: string;
   /** Teste: troca a chamada à mesa-motion. */
   motion?: ChamarMotion;
+  /** Créditos do Laboratório reservados na confirmação: o nó que falha ou não roda devolve a parte dele. */
+  cobranca?: CobrancaDoLab;
 };
 
 const rotuloDoNo = (no: NoDoCanvas) => (typeof no.dados.titulo === "string" && no.dados.titulo.trim() ? no.dados.titulo.trim() : ROTULO_DO_TIPO[no.tipo]);
@@ -167,7 +173,11 @@ export async function atualizarExecucao(id: string, campos: Record<string, unkno
  * Filme e Pôr no ar valem também 'aguardando' (o filme espera a escolha; o pedido espera o dono).
  */
 async function saidaDe(ctx: Contexto, no: NoDoCanvas): Promise<SaidaDoNo | null> {
-  if (no.tipo === "contexto") return { texto: txt(no.dados.texto) };
+  if (no.tipo === "contexto") {
+    // Os documentos anexados ao Contexto entram junto do texto (teto em modulos/documentos.ts).
+    const docs = await textoDosDocumentos(ctx, no.dados.arquivos);
+    return { texto: [txt(no.dados.texto), docs].filter(Boolean).join("\n\n") };
+  }
   if (no.tipo === "midia") {
     const imgs = Array.isArray(no.dados.imagens) ? no.dados.imagens : [];
     return {
@@ -178,6 +188,10 @@ async function saidaDe(ctx: Contexto, no: NoDoCanvas): Promise<SaidaDoNo | null>
     };
   }
   if (no.tipo === "config" || no.tipo === "gravity") return null;
+  // v4: Marca, Cliente, Vídeo, Documento e Produto só guardam dado (o Documento lê o texto dos anexos).
+  if (no.tipo === "marca" || no.tipo === "cliente" || no.tipo === "video" || no.tipo === "arquivo" || no.tipo === "produto") {
+    return saidaEstaticaDaV4(ctx, no, no.tipo === "arquivo" ? await textoDosDocumentos(ctx, no.dados.arquivos) : "");
+  }
   const daRodada = ctx.saidas.get(no.id);
   if (daRodada) return daRodada;
   const { data } = await servico()
@@ -200,6 +214,9 @@ export async function entradasMontadas(ctx: Contexto, no: NoDoCanvas): Promise<E
   const textos: string[] = [];
   const imagens: ImagemSaida[] = [];
   if (ctx.projeto.contexto && ctx.projeto.contexto.trim()) textos.push(`Contexto do projeto: ${ctx.projeto.contexto.trim()}`);
+  // Documentos anexados no próprio nó (Agente): valem como entrada.
+  const proprios = await textoDosDocumentos(ctx, no.dados.arquivos);
+  if (proprios) textos.push(`Documentos de ${rotuloDoNo(no)}:\n${proprios}`);
   for (const antes of entradasDo(ctx.canvas, no.id)) {
     const s = await saidaDe(ctx, antes);
     if (!s) continue;
@@ -243,6 +260,18 @@ async function salvarImagem(ctx: Contexto, execucaoId: string, rotulo: string, i
 }
 
 const imagemDoArquivo = (a: ArquivoSalvo, ordem?: number): ImagemSaida => ({ path: a.path, url: a.url, bucket: "workspace", no_workspace_id: a.no_id, ...(ordem != null ? { ordem } : {}) });
+
+/** Página HTML de um nó no Workspace (v4: página do funil, checkout, quiz, webinar, e-mails, template). */
+async function salvarHtml(ctx: Contexto, execucaoId: string, rotulo: string, html: string, indice = 0, total = 1): Promise<ArquivoSalvo> {
+  return await salvarArquivo({
+    conteudo: html,
+    mime: "text/html",
+    caminho: caminhoNoBucket(ctx.projeto.id, execucaoId, indice, "text/html"),
+    nome: nomeDoArquivo(rotulo, indice, total, "text/html"),
+    pastaId: await pasta(ctx),
+    criadoPor: ctx.userId,
+  });
+}
 
 // ------------------------------------------------------------------ nós
 
@@ -805,6 +834,9 @@ async function noPorNoAr(ctx: Contexto, no: NoDoCanvas, _e: Entradas, execucaoId
   // Regra contra invenção: bloco de prova ou número sem fonte antes do Pôr no ar trava o pedido.
   const trava = travaDoNoAr(ctx.canvas, no.id, await saidasDosAncestrais(ctx, no));
   if (trava.travado) throw new ErroHttp(409, "rascunho_sem_fonte", trava.motivo, { blocos: trava.blocos });
+  // v4: checkout antes do Pôr no ar sem o link https do gateway também trava (nada sobe com botão quebrado).
+  const faltas = faltasParaPorNoAr(ctx.canvas, no.id);
+  if (faltas.length) throw new ErroHttp(400, "falta_para_por_no_ar", `Antes de pedir para pôr no ar: ${faltas.join(" ")}`);
   const saida = await pedirNoAr(portaDoNoAr(ctx), {
     projetoId: ctx.projeto.id,
     projetoNome: ctx.projeto.nome,
@@ -832,6 +864,8 @@ const EXECUTORES: Record<string, (ctx: Contexto, no: NoDoCanvas, e: Entradas, ex
   filme: noFilme,
   por_no_ar: noPorNoAr,
   ...Object.fromEntries(NOS_ESPECIALISTAS.map((t) => [t, noEspecialista])),
+  // v4 (ESPEC-LABORATORIO-v4.md): nós do funil, mensagens e criativos (nos-v4.ts).
+  ...executoresDaV4({ texto, salvarHtml, gerarImagens, bytesDas, imagemDoArquivo, htmlDaResposta, saidasDasEntradas }),
 };
 
 /** Roda um nó numa execução já criada e grava o fim (pronto, aguardando ou erro). Devolve a saída ou lança. */
@@ -860,10 +894,13 @@ export async function rodarNo(ctx: Contexto, no: NoDoCanvas, execucaoId: string)
     // Pôr no ar travado por bloco sem fonte: idem (a tela mostra a trava com a lista dos blocos).
     if (err instanceof ErroHttp && (err.codigo === "ja_pedido" || err.codigo === "rascunho_sem_fonte")) {
       await servico().from("lab_execucoes").delete().eq("id", execucaoId).eq("status", "rodando");
+      await ctx.cobranca?.devolverNo(no.id, null, err.message);
       throw err;
     }
     const motivo = err instanceof ErroHttp ? err.message : motivoDaFalha(err);
     await atualizarExecucao(execucaoId, { status: "erro", erro: motivo, finished_at: new Date().toISOString() });
+    // Falha não cobra: a parte deste nó volta para os créditos do Laboratório.
+    await ctx.cobranca?.devolverNo(no.id, execucaoId, motivo);
     throw err;
   }
 }
@@ -893,18 +930,22 @@ export async function seguirRodada(ctx: Contexto, ordem: string[], execucoes: Re
     const no = ctx.canvas.nos.find((n) => n.id === id)!;
     if (parar) {
       await atualizarExecucao(execucoes[id], { status: "erro", erro: parar, finished_at: new Date().toISOString() });
+      await ctx.cobranca?.devolverNo(id, execucoes[id], parar);
       continue;
     }
     const antes = ctx.canvas.ligacoes.filter((l) => l.para === id).map((l) => l.de);
     if (antes.some((a) => falhos.has(a))) {
       falhos.add(id);
       await atualizarExecucao(execucoes[id], { status: "erro", erro: "Um nó antes deste falhou; nada foi gerado aqui.", finished_at: new Date().toISOString() });
+      await ctx.cobranca?.devolverNo(id, execucoes[id], "um nó antes deste falhou");
       continue;
     }
     // O Filme fica esperando a escolha do storyboard: quem depende dele espera também (roda depois).
     if (antes.some((a) => esperando.has(a))) {
       esperando.add(id);
       await atualizarExecucao(execucoes[id], { status: "aguardando", saida: { texto: "Espera o Filme ficar pronto (escolha o storyboard); rode este nó depois." }, finished_at: null });
+      // Não rodou agora (roda depois, com o custo de novo): a parte dele volta.
+      await ctx.cobranca?.devolverNo(id, execucoes[id], "esperando o Filme; roda depois");
       continue;
     }
     try {

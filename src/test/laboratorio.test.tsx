@@ -193,6 +193,8 @@ describe("Laboratório: canvas do projeto", () => {
     montarEditor();
     const paleta = await screen.findByRole("toolbar", { name: "Nós do projeto" });
     fireEvent.click(within(paleta).getByRole("button", { name: "Logo" }));
+    // O inspetor abre pelo "Abrir detalhes" da barra do nó (os campos já ficam no próprio nó).
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir detalhes" }));
     const inspetor = await waitFor(() => {
       const el = document.querySelector("[data-painel-do-inspetor]");
       if (!el) throw new Error("sem inspetor");

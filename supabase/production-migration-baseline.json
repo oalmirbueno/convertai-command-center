@@ -2331,6 +2331,30 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261020050000",
+      "path": "supabase/migrations/20261020050000_laboratorio_creditos.sql",
+      "local_sha256": "e3ae8f6e0151281327f9f591b03acf17fddeaf7ece613955d605f6e6ed6fb4b7",
+      "remote_name": "laboratorio_creditos",
+      "remote_statements_sha256": "59b109673ee24a98706b644cd96d150b009761de5a63174ad197b54406a80eb7",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261020060000",
+      "path": "supabase/migrations/20261020060000_laboratorio_v4.sql",
+      "local_sha256": "6033fcc81fb28ece85d11c63a30c9db547797dcbb88077f1014d8ad0152fa418",
+      "remote_name": "laboratorio_v4",
+      "remote_statements_sha256": "4c4e2b533b4aba397e7b83b41de95a2fae9f0deaa69bf215c84fc9c83e259c4c",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261020070000",
+      "path": "supabase/migrations/20261020070000_vendas_quiz_ab.sql",
+      "local_sha256": "6ae6a094d35d5b8468c19b36671e2abb31c42037a7d70665f46de9cdd23fbe8d",
+      "remote_name": "vendas_quiz_ab",
+      "remote_statements_sha256": "caa750adcf5abfb60af47e72d02a6a3e5d237293ba39f53e4e85dbf032e6c195",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261020120000",
       "path": "supabase/migrations/20261020120000_stories_da_mesa.sql",
       "local_sha256": "dabbce151007b8112fcdf3f767ee5720105e8383783c1ad1a183ee150ab0ddc0",

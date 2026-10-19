@@ -403,6 +403,14 @@ export async function arquivarProjeto(projetoId: string): Promise<void> {
   await chamar("projeto_arquivar", { projeto_id: projetoId });
 }
 
+/**
+ * projeto_excluir { projeto_id } -> { excluido, projeto_id }: apaga o projeto e as execuções dele
+ * (não volta). Os arquivos gerados continuam em Arquivos (workspace), sem o projeto.
+ */
+export async function excluirProjeto(projetoId: string): Promise<void> {
+  await chamar("projeto_excluir", { projeto_id: projetoId });
+}
+
 export async function listarTemplates(): Promise<TemplateDoLab[]> {
   const data = await chamar("templates_listar");
   return valores(data && data.templates).map(normalizarTemplate).filter(Boolean) as TemplateDoLab[];
@@ -681,4 +689,124 @@ export async function lerOperadoresExternos(): Promise<Array<{ valor: string; ro
   return (Array.isArray(data) ? data : [])
     .filter((o: any) => o && typeof o.slug === "string" && o.slug)
     .map((o: any) => ({ valor: String(o.slug), rotulo: String(o.display_name || o.slug) }));
+}
+
+// ------------------------------------------------------------------ galeria de fluxos (20/10)
+
+/** Template com a categoria da galeria (campo `categoria` quando a função manda; sem ele, "Outros"). */
+export interface FluxoDaGaleria extends TemplateDoLab {
+  categoria: string;
+}
+
+export const CATEGORIA_SEM_NOME = "Outros";
+
+/** templates_listar lido para a galeria: guarda a categoria que vier (categoria, ou grupo). */
+export async function listarFluxosDaGaleria(): Promise<FluxoDaGaleria[]> {
+  const data = await chamar("templates_listar");
+  return (Array.isArray(data && data.templates) ? data.templates : [])
+    .map((t: unknown) => {
+      const base = normalizarTemplate(t);
+      if (!base) return null;
+      const o = objeto(t);
+      const categoria = texto(o.categoria || o.grupo).trim();
+      return { ...base, categoria: categoria || CATEGORIA_SEM_NOME };
+    })
+    .filter(Boolean) as FluxoDaGaleria[];
+}
+
+// ------------------------------------------------------------------ créditos do Laboratório (20/10)
+
+export type TipoDeMovimento = "carga" | "uso" | "estorno" | "ajuste";
+
+export interface MovimentoDeCredito {
+  id: string;
+  tipo: TipoDeMovimento;
+  valor_usd: number;
+  saldo_depois: number;
+  projeto_id: string | null;
+  projeto_nome: string;
+  nota: string;
+  criado_em: string;
+}
+
+/** creditos → saldo, limite ligado, quem pode carregar, extrato (50) e o gasto do mês. */
+export interface CreditosDoLab {
+  /** false: o banco ainda não tem os créditos (migration pendente); nada trava. */
+  disponivel: boolean;
+  saldo_usd: number;
+  /** Limite ligado: rodar debita e bloqueia sem saldo. Desligado (o começo): só registra o uso. */
+  ativa: boolean;
+  pode_carregar: boolean;
+  movimentos: MovimentoDeCredito[];
+  gasto_mes_usd: number;
+  por_projeto: Array<{ projeto_id: string | null; projeto_nome: string; gasto_usd: number }>;
+}
+
+/** Chave do React Query dos créditos (chip do cabeçalho, janela e janela de custo). */
+export const chaveDosCreditos = ["laboratorio", "creditos"] as const;
+
+const TIPOS_DE_MOVIMENTO: TipoDeMovimento[] = ["carga", "uso", "estorno", "ajuste"];
+
+export function normalizarCreditos(data: unknown): CreditosDoLab {
+  const o = objeto(data);
+  const movimentos = (Array.isArray(o.movimentos) ? o.movimentos : [])
+    .map((m: unknown) => {
+      const x = objeto(m);
+      if (!x.id || TIPOS_DE_MOVIMENTO.indexOf(x.tipo) < 0) return null;
+      return {
+        id: texto(x.id),
+        tipo: x.tipo as TipoDeMovimento,
+        valor_usd: num(x.valor_usd) ?? 0,
+        saldo_depois: num(x.saldo_depois) ?? 0,
+        projeto_id: x.projeto_id ? texto(x.projeto_id) : null,
+        projeto_nome: texto(x.projeto_nome),
+        nota: texto(x.nota),
+        criado_em: texto(x.criado_em),
+      };
+    })
+    .filter(Boolean) as MovimentoDeCredito[];
+  const por_projeto = (Array.isArray(o.por_projeto) ? o.por_projeto : []).map((p: unknown) => {
+    const x = objeto(p);
+    return { projeto_id: x.projeto_id ? texto(x.projeto_id) : null, projeto_nome: texto(x.projeto_nome) || "Sem projeto", gasto_usd: num(x.gasto_usd) ?? 0 };
+  });
+  return {
+    disponivel: o.disponivel !== false,
+    saldo_usd: num(o.saldo_usd) ?? 0,
+    ativa: o.ativa === true,
+    pode_carregar: o.pode_carregar === true,
+    movimentos,
+    gasto_mes_usd: num(o.gasto_mes_usd) ?? 0,
+    por_projeto,
+  };
+}
+
+export async function lerCreditos(): Promise<CreditosDoLab> {
+  return normalizarCreditos(await chamar("creditos"));
+}
+
+/** creditos_carregar { valor_usd, nota } (só admin): registro manual, sem pagamento. */
+export async function carregarCreditos(valorUsd: number, nota: string): Promise<{ saldo_usd: number; ativa: boolean }> {
+  const data = await chamar("creditos_carregar", { valor_usd: valorUsd, nota });
+  const o = objeto(data);
+  return { saldo_usd: num(o.saldo_usd) ?? 0, ativa: o.ativa === true };
+}
+
+/** creditos_limite { ativa } (só admin): desligado, o uso só fica registrado. */
+export async function definirLimiteDosCreditos(ativa: boolean): Promise<{ saldo_usd: number; ativa: boolean }> {
+  const o = objeto(await chamar("creditos_limite", { ativa }));
+  return { saldo_usd: num(o.saldo_usd) ?? 0, ativa: o.ativa === true };
+}
+
+/** Rodar com a carteira do Laboratório ativa e sem saldo (402 sem_credito { saldo_usd, custo_usd }). */
+export function semCredito(e: unknown): { saldo_usd: number; custo_usd: number } | null {
+  if (!(e instanceof ErroDaMesa) || e.codigo !== "sem_credito") return null;
+  const d = objeto(e.detalhes);
+  return { saldo_usd: num(d.saldo_usd) ?? 0, custo_usd: num(d.custo_usd) ?? 0 };
+}
+
+/** O que a janela de custo mostra: saldo depois e se falta (só com o limite ligado). */
+export function saldoDepoisDoCusto(c: Pick<CreditosDoLab, "disponivel" | "ativa" | "saldo_usd"> | null | undefined, total: number): { depois: number; falta: number } | null {
+  if (!c || !c.disponivel || !c.ativa) return null;
+  const depois = Math.round((c.saldo_usd - total) * 1e6) / 1e6;
+  return { depois, falta: depois < 0 ? -depois : 0 };
 }

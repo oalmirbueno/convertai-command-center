@@ -207,8 +207,12 @@ describe("Especialistas de criação", () => {
       ["Sequência de mensagens", ["Canal", "Mensagens", "Objetivo da sequência"]],
       ["Refino de tom", ["Tom", "Instrução"]],
     ];
+    let primeiro = true;
     for (const [rotulo, campos] of casos) {
       fireEvent.click(within(paleta).getByRole("button", { name: rotulo }));
+      // O inspetor abre pelo "Abrir detalhes" da barra do nó e segue aberto ao trocar de nó.
+      if (primeiro) fireEvent.click(await screen.findByRole("button", { name: "Abrir detalhes" }));
+      primeiro = false;
       const el = await inspetor();
       await waitFor(() => expect(within(el).getByRole("heading").textContent).toContain(rotulo));
       for (const c of campos) expect(within(el).getByLabelText(c), `${rotulo}: ${c}`).toBeInTheDocument();
@@ -225,7 +229,7 @@ describe("Especialistas de criação", () => {
 // ------------------------------------------------------------------ perguntas guiadas
 
 describe("Perguntas guiadas antes de montar", () => {
-  it("Canvas Studio: a função pergunta em vez de montar; o exemplo só preenche; mandar leva as respostas; pular monta assim mesmo", async () => {
+  it("Canvas Studio: a função pergunta em vez de montar; a opção só preenche a resposta da pergunta; Seguir leva as respostas; pular monta assim mesmo", async () => {
     let vez = 0;
     funcao({
       planejar: (c) => {
@@ -245,24 +249,26 @@ describe("Perguntas guiadas antes de montar", () => {
     expect(grupo.querySelectorAll("[data-pergunta]").length).toBeLessThanOrEqual(4);
     expect(corpos("planejar")[0]).toMatchObject({ modo: "projeto_completo", mensagem: "Quero montar um produto low ticket do zero" });
     expect(corpos("projeto_salvar")).toHaveLength(0);
-    expect(caixa.value).toBe("");
+    // 21/10 (perguntas primeiro): a etapa grande toma o lugar do canvas e da caixa.
+    expect(screen.queryByLabelText("Pedido para o Canvas Studio")).toBeNull();
 
-    // O exemplo só preenche a caixa (não chama a função de novo).
+    // A opção só preenche a resposta DAQUELA pergunta (não chama a função de novo).
     const exemplo = grupo.querySelector('[data-exemplo="publico"]') as HTMLButtonElement;
     fireEvent.click(exemplo);
-    expect(caixa.value).toBe(`Público: ${exemplo.textContent}`);
+    expect((grupo.querySelector('[data-resposta="publico"]') as HTMLInputElement).value).toBe(exemplo.textContent);
     expect(corpos("planejar")).toHaveLength(1);
-    fireEvent.change(caixa, { target: { value: `${caixa.value}\nPreço: R$ 47` } });
-    fireEvent.click(within(barra).getByRole("button", { name: "Enviar o pedido" }));
+    // ("produto low ticket" já diz o produto e o preço: faltam público e objetivo.)
+    fireEvent.change(grupo.querySelector('[data-resposta="objetivo"]') as HTMLInputElement, { target: { value: "Vender direto" } });
+    fireEvent.click(within(grupo).getByRole("button", { name: "Seguir" }));
     await waitFor(() => expect(corpos("planejar")).toHaveLength(2));
-    expect(corpos("planejar")[1]).toMatchObject({ mensagem: "Quero montar um produto low ticket do zero", modo: "projeto_completo", respostas: `Público: ${exemplo.textContent}\nPreço: R$ 47` });
+    expect(corpos("planejar")[1]).toMatchObject({ mensagem: "Quero montar um produto low ticket do zero", modo: "projeto_completo", respostas: `Público: ${exemplo.textContent}\nObjetivo: Vender direto` });
     expect(corpos("planejar")[1]).not.toHaveProperty("pular_perguntas");
     await waitFor(() => expect(document.querySelector("[data-perguntas-guiadas]")).toBeNull());
     await waitFor(() => expect(corpos("projeto_salvar").length).toBeGreaterThan(0), { timeout: 6000 });
 
     // Outra rodada: pular e montar assim mesmo.
-    fireEvent.change(caixa, { target: { value: "Quero montar um produto low ticket do zero" } });
-    fireEvent.click(within(barra).getByRole("button", { name: "Enviar o pedido" }));
+    fireEvent.change(screen.getByLabelText("Pedido para o Canvas Studio"), { target: { value: "Quero montar um produto low ticket do zero" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar o pedido" }));
     await achar("[data-perguntas-guiadas]");
     fireEvent.click(screen.getByRole("button", { name: "Pular e montar assim mesmo" }));
     await waitFor(() => expect(corpos("planejar")).toHaveLength(4));
@@ -283,10 +289,12 @@ describe("Perguntas guiadas antes de montar", () => {
     expect(corpos("perguntas_do_pedido")[0]).toMatchObject({ pedido: "Quero montar uma empresa do zero", client_id: null });
     expect(corpos("projeto_criar")).toHaveLength(0);
 
+    // 21/10 (pedido do dono): a Início também abre a etapa grande; a opção preenche a resposta da pergunta e Seguir manda.
+    expect(screen.queryByLabelText("Pedido para o Laboratório")).toBeNull();
     fireEvent.click(grupo.querySelector('[data-exemplo="publico"]') as HTMLElement);
-    expect(caixa.value).toMatch(/^Público: /);
+    expect((grupo.querySelector('[data-resposta="publico"]') as HTMLInputElement).value).not.toBe("");
     expect(corpos("projeto_criar")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Enviar o pedido" }));
+    fireEvent.click(within(grupo).getByRole("button", { name: "Seguir" }));
     await waitFor(() => expect(corpos("projeto_criar")).toHaveLength(1));
     expect(corpos("projeto_criar")[0].contexto).toContain("Quero montar uma empresa do zero");
     await waitFor(() => expect(corpos("planejar")).toHaveLength(1));

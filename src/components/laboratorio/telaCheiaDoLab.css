@@ -1,0 +1,22 @@
+/* ── Tela cheia do Laboratório (21/10/2026) ──
+   Dono: "uma bordinha aqui em cima, meio recortado, meio por cima, e quebrado".
+   O modo foco (src/lib/modoFoco.ts) só tirava a barra de cima de 768 px para
+   cima: no celular o topo (z-40) e a barra de baixo ficavam por cima do editor,
+   porque o conteúdo do AppLayout é uma camada fixa (z-0) e o editor, dentro
+   dela, não passa do z-0. Com a tela cheia do Laboratório ligada
+   (data-modo-foco="laboratorio" ou "laboratorio-canvas"), em qualquer largura:
+   some toda a casca (topo, barra de baixo e o que flutua), a página não rola
+   por baixo e a rolagem por toque do conteúdo sai (no Safari antigo ela
+   recortava o que é fixo dentro dela). Janelas e menus (z-50, fora do
+   conteúdo) continuam abrindo por cima. */
+body[data-modo-foco^="laboratorio"] {
+  overflow: hidden;
+}
+body[data-modo-foco^="laboratorio"] [data-casca="topo"],
+body[data-modo-foco^="laboratorio"] [data-casca="rodape"],
+body[data-modo-foco^="laboratorio"] [data-casca="flutuante"] {
+  display: none !important;
+}
+body[data-modo-foco^="laboratorio"] [data-casca="conteudo"] {
+  -webkit-overflow-scrolling: auto !important;
+}

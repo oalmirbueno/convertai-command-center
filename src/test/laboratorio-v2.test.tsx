@@ -228,21 +228,18 @@ describe("Canvas Studio", () => {
     montarEditor();
     const barra = await studio();
     const atalhos = within(barra).getByRole("group", { name: "Atalhos do Canvas Studio" });
-    expect(Array.prototype.map.call(atalhos.querySelectorAll("[data-atalho]"), (b: Element) => b.getAttribute("aria-label"))).toEqual(["Produto low ticket", "Funil de vendas", "Montar empresa", "Carrossel", "Landing page", "Filme"]);
+    expect(Array.prototype.map.call(atalhos.querySelectorAll("[data-atalho]"), (b: Element) => b.getAttribute("aria-label"))).toEqual(["Produto low ticket", "Funil de vendas", "Montar empresa", "Webinar", "Quiz de qualificação", "Lançamento", "Checkout com upsell", "Carrossel", "Landing page", "Filme"]);
     // Modelo e cliente na mesma caixa da Início.
     expect(within(barra).getByLabelText("Modelo")).toBeInTheDocument();
     expect(within(barra).getByLabelText("Cliente")).toBeInTheDocument();
 
+    // 21/10 (o dono pediu a mudança: "quando ele escolhe [o projeto pronto], ele só abre essa parte aqui
+    // das perguntas"): o atalho de PROJETO COMPLETO já manda o planejar em projeto_completo, sem esperar o
+    // Enviar (antes ele só preenchia a caixa). Os outros atalhos continuam só preenchendo.
     fireEvent.click(within(atalhos).getByRole("button", { name: "Produto low ticket" }));
-    const caixa = within(barra).getByLabelText("Pedido para o Canvas Studio") as HTMLTextAreaElement;
-    expect(caixa.value).toContain("low ticket");
-    expect(corpos("planejar")).toHaveLength(0);
-    fireEvent.change(caixa, { target: { value: `${caixa.value}café em cápsula` } });
-    fireEvent.click(within(barra).getByRole("button", { name: "Enviar o pedido" }));
-
     await waitFor(() => expect(corpos("planejar")).toHaveLength(1));
     expect(corpos("planejar")[0]).toMatchObject({ projeto_id: PROJETO, modo: "projeto_completo", modelo_id: "openrouter:anthropic/claude-opus-5.5" });
-    expect(corpos("planejar")[0].mensagem).toContain("café em cápsula");
+    expect(corpos("planejar")[0].mensagem).toContain("low ticket");
 
     // A construção: os nós novos entram com atraso por coluna (a animação), sem clicar em Aplicar.
     const resposta = await waitFor(() => {
@@ -389,6 +386,8 @@ describe("Nós novos: pesquisa, oferta, funil, filme e pôr no ar", () => {
       });
 
     fireEvent.click(within(paleta).getByRole("button", { name: "Pesquisa" }));
+    // O inspetor abre pelo "Abrir detalhes" da barra do nó (os campos já ficam no próprio nó).
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir detalhes" }));
     expect(within(await inspetor()).getByLabelText("O que pesquisar")).toBeInTheDocument();
 
     fireEvent.click(within(paleta).getByRole("button", { name: "Oferta" }));
@@ -407,7 +406,7 @@ describe("Nós novos: pesquisa, oferta, funil, filme e pôr no ar", () => {
     fireEvent.click(within(paleta).getByRole("button", { name: "Pôr no ar" }));
     el = await inspetor();
     const alvo = (await waitFor(() => within(el).getByLabelText("O que pôr no ar"))) as HTMLSelectElement;
-    expect(Array.prototype.map.call(alvo.options, (o: HTMLOptionElement) => o.value)).toEqual(["publicar_site", "subir_anuncio_pausado", "conectar_pagina", "outro"]);
+    expect(Array.prototype.map.call(alvo.options, (o: HTMLOptionElement) => o.value)).toEqual(["publicar_site", "subir_anuncio_pausado", "conectar_pagina", "ligar_mensagens", "outro"]);
     const quem = within(el).getByLabelText("Quem põe no ar") as HTMLSelectElement;
     expect(quem.options[0].textContent).toMatch(/Automático/);
     expect(el.querySelector("[data-regra-no-ar]")!.textContent).toMatch(/sem a sua aprovação/);

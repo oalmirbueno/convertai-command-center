@@ -1,5 +1,5 @@
 import { forwardRef, type ReactNode } from "react";
-import { ArrowUp, Brush, Clapperboard, Globe, Images, Loader2, Megaphone, Route, ShoppingBag, Sparkles, SquarePen, Store, type LucideIcon } from "lucide-react";
+import { ArrowUp, Brush, Clapperboard, CreditCard, Globe, Images, ListChecks, Loader2, Megaphone, Presentation, Rocket, Route, ShoppingBag, Sparkles, SquarePen, Store, type LucideIcon } from "lucide-react";
 import { botao, campoTexto, juntar, superficie } from "@/components/sistema";
 import { SeletorDeCliente, SeletorDeModelo, type ClienteDoLab } from "./Seletores";
 
@@ -28,12 +28,17 @@ const A: Record<string, AtalhoDoPedido> = {
   post: { id: "post", rotulo: "Post", icone: SquarePen, pedido: "Quero um post com legenda sobre " },
   anuncio: { id: "anuncio", rotulo: "Anúncio", icone: Megaphone, pedido: "Quero um pacote de anúncio (títulos, texto e público) para " },
   filme: { id: "filme", rotulo: "Filme", icone: Clapperboard, pedido: "Quero o filme cinematográfico da marca " },
+  // v4 (ESPEC-LABORATORIO-v4.md): projetos completos de funil de verdade (planejar no modo projeto_completo).
+  webinar: { id: "webinar", rotulo: "Webinar", icone: Presentation, pedido: "Quero um webinar completo (produto, oferta, inscrição, sala com a oferta no minuto, lembretes por e-mail, checkout e pôr no ar) sobre " },
+  quiz: { id: "quiz", rotulo: "Quiz de qualificação", icone: ListChecks, pedido: "Quero um funil com quiz de qualificação (perguntas com pontuação, faixa alta para agendar, faixa baixa para a isca, CRM e e-mails) para " },
+  lancamento: { id: "lancamento", rotulo: "Lançamento", icone: Rocket, pedido: "Quero montar um lançamento (aquecimento, captura, CPLs por e-mail e WhatsApp, carrinho aberto, checkout e recuperação) de " },
+  checkout_upsell: { id: "checkout_upsell", rotulo: "Checkout com upsell", icone: CreditCard, pedido: "Quero um funil com checkout com upsell (página de vendas, checkout com order bump, upsell de 1 clique, downsell, obrigado e recuperação do carrinho) para " },
 };
 
 /** Início: os de projeto primeiro, depois as peças avulsas. */
-export const ATALHOS_DA_INICIO: AtalhoDoPedido[] = [A.low_ticket, A.funil, A.empresa, A.carrossel, A.criativos, A.logo, A.landing, A.post, A.anuncio, A.filme];
-/** Canvas Studio (pedido do dono): Produto low ticket, Funil de vendas, Montar empresa, Carrossel, Landing, Filme. */
-export const ATALHOS_DO_CANVAS: AtalhoDoPedido[] = [A.low_ticket, A.funil, A.empresa, A.carrossel, A.landing, A.filme];
+export const ATALHOS_DA_INICIO: AtalhoDoPedido[] = [A.low_ticket, A.funil, A.empresa, A.webinar, A.quiz, A.lancamento, A.checkout_upsell, A.carrossel, A.criativos, A.logo, A.landing, A.post, A.anuncio, A.filme];
+/** Canvas Studio (pedido do dono): Produto low ticket, Funil de vendas, Montar empresa, Carrossel, Landing, Filme; v4: Webinar, Quiz, Lançamento e Checkout com upsell. */
+export const ATALHOS_DO_CANVAS: AtalhoDoPedido[] = [A.low_ticket, A.funil, A.empresa, A.webinar, A.quiz, A.lancamento, A.checkout_upsell, A.carrossel, A.landing, A.filme];
 
 interface Props {
   valor: string;

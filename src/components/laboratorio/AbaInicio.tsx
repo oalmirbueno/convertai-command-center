@@ -1,16 +1,16 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { LayoutTemplate, Loader2 } from "lucide-react";
-import { Carregando, botao, espaco, juntar, superficie, texto } from "@/components/sistema";
+import { Workflow } from "lucide-react";
+import { espaco, juntar, lista as estiloDaLista, superficie, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
-import { chaveDosProjetos, criarProjeto, listarProjetos, listarTemplates, pedidoInicio, perguntasDoPedido, usarTemplate, type PerguntaGuiada } from "@/lib/laboratorio/api";
-import { MODELO_PADRAO_DO_LAB, ROTULOS_DAS_PERGUNTAS, ehProjetoCompleto, preencherComExemplo } from "@/lib/laboratorio/nos";
+import { chaveDosProjetos, criarProjeto, listarFluxosDaGaleria, listarProjetos, pedidoInicio, perguntasDoPedido, usarTemplate, type PerguntaGuiada, type ProjetoDoLab } from "@/lib/laboratorio/api";
+import { ATALHOS_DE_PROJETO_COMPLETO, MODELO_PADRAO_DO_LAB, ehProjetoCompleto } from "@/lib/laboratorio/nos";
 import { guardarPedidoPendente } from "@/lib/laboratorio/pedidoPendente";
-import { CartaoDeProjeto, PreviaDoCanvas } from "./CartaoDeProjeto";
 import CaixaDoPedido, { ATALHOS_DA_INICIO } from "./CaixaDoPedido";
+import GaleriaDeFluxos from "./GaleriaDeFluxos";
 import PerguntasGuiadas from "./PerguntasGuiadas";
-import type { ClienteDoLab } from "./Seletores";
+import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
 
 /**
  * Início do Laboratório: uma caixa de pedido ("peça um projeto, uma arte,
@@ -23,9 +23,54 @@ import type { ClienteDoLab } from "./Seletores";
  * "Usar fluxo") e os projetos recentes.
  *
  * v3: antes de criar o projeto completo, até 4 perguntas guiadas quando falta
- * o essencial (perguntas_do_pedido); os exemplos só preenchem a caixa e as
- * respostas (ou o "pular") seguem com o pedido para o Canvas Studio.
+ * o essencial (perguntas_do_pedido); as respostas (ou o "pular") seguem com
+ * o pedido para o Canvas Studio. 21/10 (pedido do dono): as perguntas abrem
+ * na etapa grande (só ela na tela, opção e campo por pergunta, conversa
+ * livre, Seguir/Pular), e tocar num atalho de projeto completo já pergunta.
+ *
+ * v4 (20/10, dono: "o fluxo do lado, os recentes do lado, para não ficar
+ * rodando muito scroll"): abaixo da caixa, Fluxos e Recentes lado a lado de
+ * 1024 px para cima (fluxos à esquerda, 2/3; recentes numa coluna à direita,
+ * em lista compacta); no celular, empilha. Os fluxos viram a GaleriaDeFluxos
+ * (abas de categoria, busca, miniatura, "Seus fluxos").
  */
+
+/** Quando o projeto mudou, curto: "hoje", "ontem" ou o dia. */
+function quandoMudou(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const hoje = new Date();
+  const dia = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dias = Math.round((dia(hoje) - dia(d)) / 86400000);
+  if (dias <= 0) return "hoje";
+  if (dias === 1) return "ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+/** Linha compacta de projeto recente (a coluna da direita da Início). */
+function LinhaDeRecente({ p, clientes, onAbrir }: { p: ProjetoDoLab; clientes: ClienteDoLab[]; onAbrir: () => void }) {
+  const quando = quandoMudou(p.updated_at);
+  return (
+    <li>
+      <button type="button" onClick={onAbrir} title={`Abrir ${p.nome} no canvas`} className={juntar(estiloDaLista.linha, "w-full text-left")} data-recente={p.id}>
+        {p.previa_url ? (
+          <img src={p.previa_url} alt="" className="mr-3 block h-9 w-9 shrink-0 rounded-md object-cover" loading="lazy" />
+        ) : (
+          <span className={juntar(superficie.poco, "mr-3 flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground")} aria-hidden="true">
+            <Workflow className="h-4 w-4" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.nome}</span>
+          <span className={juntar(texto.auxiliar, "block truncate")}>
+            {nomeDoCliente(clientes, p.client_id, p.cliente_nome || "Livre")} · {p.total_nos} {p.total_nos === 1 ? "nó" : "nós"}
+            {quando ? ` · ${quando}` : ""}
+          </span>
+        </span>
+      </button>
+    </li>
+  );
+}
 
 export { ATALHOS_DA_INICIO };
 
@@ -48,18 +93,22 @@ export default function AbaInicio({
   const [atalho, setAtalho] = useState<string | null>(null);
   const [perguntas, setPerguntas] = useState<{ pedido: string; completo: boolean; lista: PerguntaGuiada[] } | null>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
-  const templates = useQuery({ queryKey: ["laboratorio", "templates"], queryFn: listarTemplates });
+  // Mesma raiz de chave dos templates: salvar um fluxo pessoal (invalida ["laboratorio", "templates"]) relê a galeria.
+  const templates = useQuery({ queryKey: ["laboratorio", "templates", "galeria"], queryFn: listarFluxosDaGaleria });
   const projetos = useQuery({ queryKey: chaveDosProjetos, queryFn: listarProjetos });
 
-  const enviar = async (extra: { respostas?: string; pularPerguntas?: boolean } = {}) => {
-    // Com perguntas abertas, a caixa tem as respostas e o pedido é o de antes.
-    const p = perguntas ? perguntas.pedido : pedido.trim();
+  /**
+   * 21/10: com as perguntas abertas, as respostas vêm da etapa grande (Seguir) e o pedido é o de antes.
+   * `texto`/`atalhoUsado`: o atalho de projeto completo manda direto, sem esperar o estado da caixa.
+   */
+  const enviar = async (extra: { respostas?: string; pularPerguntas?: boolean; texto?: string; atalhoUsado?: string | null } = {}) => {
+    const p = perguntas ? perguntas.pedido : (extra.texto !== undefined ? extra.texto : pedido).trim();
     if (!p || enviando) return;
     const respondendo = !!perguntas;
-    const respostas = respondendo && !extra.pularPerguntas ? pedido.trim() : "";
+    const respostas = respondendo && !extra.pularPerguntas ? (extra.respostas || "").trim() : "";
     setEnviando(true);
     try {
-      const completo = respondendo ? perguntas!.completo : ehProjetoCompleto(p, atalho, 0);
+      const completo = respondendo ? perguntas!.completo : ehProjetoCompleto(p, extra.atalhoUsado !== undefined ? extra.atalhoUsado : atalho, 0);
       if (completo) {
         // Perguntas guiadas antes de criar (só na primeira vez): o que falta do essencial.
         if (!respondendo) {
@@ -116,33 +165,25 @@ export default function AbaInicio({
     }
   };
 
-  const lista = templates.data || [];
-  const oficiais = lista.filter((t) => t.oficial);
-  const pessoais = lista.filter((t) => !t.oficial);
-  const recentes = (projetos.data || []).filter((p) => p.status === "ativo").slice(0, 6);
-
-  const grade = (itens: typeof lista) => (
-    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {itens.map((t) => (
-        <div key={t.id} className={juntar(superficie.painel, "min-w-0 p-3")} data-template={t.id}>
-          <PreviaDoCanvas canvas={t.canvas} />
-          <div className="mt-2 flex min-w-0 items-center">
-            <div className="min-w-0 flex-1">
-              <p className={juntar(texto.corpo, "truncate font-medium")}>{t.nome}</p>
-              {t.descricao ? <p className={juntar(texto.auxiliar, "truncate")}>{t.descricao}</p> : null}
-            </div>
-            <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-2.5")} onClick={() => void usar(t.id)} disabled={!!usando}>
-              {usando === t.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
-              Usar fluxo
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  const recentes = (projetos.data || []).filter((p) => p.status === "ativo").slice(0, 8);
 
   return (
     <div className={espaco.pagina} data-aba-inicio="">
+      {perguntas ? (
+        // Perguntas primeiro (21/10, pedido do dono): só a etapa grande, sem a caixa nem os fluxos embaixo.
+        <PerguntasGuiadas
+          perguntas={perguntas.lista}
+          pedido={perguntas.pedido}
+          ocupado={enviando}
+          onSeguir={(respostas) => void enviar({ respostas })}
+          onPular={() => void enviar({ pularPerguntas: true })}
+          onFechar={() => {
+            setPedido(perguntas.pedido);
+            setPerguntas(null);
+          }}
+        />
+      ) : (
+      <>
       <div className="mx-auto w-full min-w-0 max-w-[760px]">
         <CaixaDoPedido
           ref={campoRef}
@@ -161,50 +202,40 @@ export default function AbaInicio({
           atalhos={ATALHOS_DA_INICIO}
           onAtalho={(a) => {
             setPedido(a.pedido);
+            // 21/10 (dono: "quando ele escolhe [o projeto pronto], ele só abre essa parte aqui das perguntas"):
+            // atalho de projeto completo já pergunta; os outros só preenchem a caixa.
+            if (ATALHOS_DE_PROJETO_COMPLETO.indexOf(a.id) >= 0) {
+              setAtalho(null);
+              void enviar({ texto: a.pedido, atalhoUsado: a.id });
+              return;
+            }
             setAtalho(a.id);
             if (campoRef.current) campoRef.current.focus();
           }}
           rotulo="Pedido para o Laboratório"
-          placeholder={perguntas ? "Responda aqui (ou toque num exemplo) e mande…" : "Peça um projeto completo, uma arte, um carrossel, uma logo…"}
+          placeholder="Peça um projeto completo, uma arte, um carrossel, uma logo…"
           tituloDoEnviar="Enviar o pedido (monta o projeto no canvas; nada é gerado ainda)"
         />
-        {perguntas ? (
-          <PerguntasGuiadas
-            perguntas={perguntas.lista}
-            ocupado={enviando}
-            onExemplo={(q, ex) => {
-              setPedido((v) => preencherComExemplo(v, ROTULOS_DAS_PERGUNTAS[q.id] || q.pergunta.replace(/[?].*$/, ""), ex));
-              if (campoRef.current) campoRef.current.focus();
-            }}
-            onPular={() => void enviar({ pularPerguntas: true })}
-            onFechar={() => setPerguntas(null)}
-          />
-        ) : null}
       </div>
 
-      <section className="min-w-0" aria-label="Fluxos">
-        <h2 className={juntar(texto.tituloSecao, "mb-3 flex items-center")}>
-          <LayoutTemplate className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          Fluxos
-        </h2>
-        {templates.isLoading ? <Carregando forma="grade" rotulo="Lendo os fluxos" /> : templates.isError ? <p className={texto.auxiliar}>{textoDoErro(templates.error)}</p> : oficiais.length ? grade(oficiais) : <p className={texto.auxiliar}>Nenhum fluxo oficial ainda.</p>}
-        {pessoais.length > 0 && (
-          <>
-            <h3 className={juntar(texto.rotulo, "mb-2 mt-5")}>Seus fluxos</h3>
-            {grade(pessoais)}
-          </>
-        )}
-      </section>
-
-      {recentes.length > 0 && (
-        <section className="min-w-0" aria-label="Projetos recentes">
-          <h2 className={juntar(texto.tituloSecao, "mb-3")}>Recentes</h2>
-          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {recentes.map((p) => (
-              <CartaoDeProjeto key={p.id} projeto={p} clientes={clientes} onAbrir={() => onAbrirProjeto(p.id)} />
-            ))}
-          </div>
+      <div className={juntar(espaco.colunas, "lg:grid-cols-3")} data-inicio-lado-a-lado="">
+        <div className="min-w-0 lg:col-span-2" data-coluna-fluxos="">
+          <GaleriaDeFluxos fluxos={templates.data || []} carregando={templates.isLoading} erro={templates.isError ? textoDoErro(templates.error) : null} usando={usando} onUsar={(id) => void usar(id)} />
+        </div>
+        <section className="min-w-0" aria-label="Projetos recentes" data-coluna-recentes="">
+          <h2 className={juntar(texto.tituloSecao, "mb-5 flex h-9 items-center")}>Recentes</h2>
+          {recentes.length ? (
+            <ul className={juntar(estiloDaLista.aberta, "space-y-0.5")}>
+              {recentes.map((p) => (
+                <LinhaDeRecente key={p.id} p={p} clientes={clientes} onAbrir={() => onAbrirProjeto(p.id)} />
+              ))}
+            </ul>
+          ) : (
+            <p className={texto.auxiliar}>{projetos.isLoading ? "Lendo os projetos…" : "Os projetos que você abrir aparecem aqui."}</p>
+          )}
         </section>
+      </div>
+      </>
       )}
     </div>
   );

@@ -154,6 +154,7 @@ export default function AbaLogos({
 
       <JanelaDeCusto
         aberta={estimativa !== null}
+        creditos={false}
         titulo="Gerar logos"
         linhas={estimativa !== null ? [{ id: "logo", nome: `${form.n} variações de logo + escolha do Jev`, custo_usd: estimativa }] : []}
         total={estimativa || 0}

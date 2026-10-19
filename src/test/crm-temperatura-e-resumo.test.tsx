@@ -147,6 +147,16 @@ describe("temperatura do lead (regra fixa)", () => {
     expect(doSite.valor).toBe(antes.valor);
   });
 
+  it("Laboratório v4: quiz refeito e venda pelo checkout também são notas automáticas", () => {
+    const base = [entrouEmProposta(5)];
+    const antes = temperaturaDoLead(lead({}), [], base, AGORA);
+    ["Refez o quiz do site Loja: faixa alta (pontuação 8).", "Venda pelo checkout Hotmart: compra aprovada de R$ 197,00."].forEach((note) => {
+      const t = temperaturaDoLead(lead({}), [], [...base, evento({ note, created_at: diasAtras(1) })], AGORA);
+      expect(t.motivos.some((m) => m.rotulo.indexOf("conversa") >= 0)).toBe(false);
+      expect(t.valor).toBe(antes.valor);
+    });
+  });
+
   it("compromisso atrasado esfria e a origem pesa", () => {
     const eventos = [entrouEmProposta(5)];
     const emDia = temperaturaDoLead(lead({}), [atividade({ due_at: diasAFrente(1) })], eventos, AGORA);

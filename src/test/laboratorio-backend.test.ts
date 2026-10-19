@@ -29,6 +29,10 @@ const ACOES_DO_CONTRATO = [
   "filme_escolher", "no_acompanhar",
   // v3 (clickmax-rea.md): perguntas guiadas e a regra contra invenção
   "perguntas_do_pedido", "bloco_resolver",
+  // 21/10: excluir projeto (execuções e projeto; os arquivos ficam)
+  "projeto_excluir",
+  // 20/10: créditos do Laboratório (carteira própria)
+  "creditos", "creditos_carregar", "creditos_limite",
 ];
 
 /** Os tipos de nó da v1 (o CHECK da 20261019180000); a v2 amplia na 20261019233000. */
@@ -266,7 +270,8 @@ describe("laboratorio v3: migration", () => {
   it("o CHECK de lab_execucoes.tipo passa a ter exatamente os tipos de nó da função (com os 8 especialistas)", () => {
     expect(v3).toContain("ALTER TABLE public.lab_execucoes DROP CONSTRAINT IF EXISTS lab_execucoes_tipo_check;");
     const tipos = /ADD CONSTRAINT lab_execucoes_tipo_check CHECK \(tipo IN \(([^)]*)\)\)/.exec(v3)![1].split(",").map((t) => t.trim().replace(/'/g, ""));
-    expect(tipos).toEqual([...TIPOS_DE_NO]);
+    // A v3 tinha os 25 primeiros (a v4 amplia na 20261020060000).
+    expect(tipos).toEqual([...TIPOS_DE_NO].slice(0, 25));
     for (const t of ["avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"]) expect(tipos).toContain(t);
   });
 

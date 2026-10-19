@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, ExternalLink, Loader2, Maximize2, PauseCircle, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, Loader2, Maximize2, PauseCircle, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import { JanelaCentral, botao, etiqueta, juntar, texto } from "@/components/sistema";
-import { enderecosAssinados, lerHtmlSalvo } from "@/lib/laboratorio/arquivos";
+import { enderecoParaBaixar, enderecosAssinados, lerHtmlSalvo } from "@/lib/laboratorio/arquivos";
 import { enderecoDaAprovacao, type EstadoNoAr, type ExecucaoDoLab, type FonteDaPesquisa, type ImagemDoLab, type SaidaDaExecucao, type StatusDaExecucao, type StoryboardDoFilme } from "@/lib/laboratorio/api";
 import type { TipoDeNo } from "@/lib/laboratorio/nos";
 
@@ -68,7 +69,7 @@ export function Miniaturas({ imagens, escolhida, max = 4 }: { imagens: ImagemDoL
 }
 
 /** Prévia da landing: o HTML salvo num iframe sem mesma origem (scripts só para o Tailwind por CDN). */
-export function PreviaDaLanding({ caminho, url, alta = false }: { caminho: string; url: string; alta?: boolean }) {
+export function PreviaDaLanding({ caminho, url, alta = false, cheia = false }: { caminho: string; url: string; alta?: boolean; cheia?: boolean }) {
   const [html, setHtml] = useState<string | null>(null);
   const [erro, setErro] = useState(false);
   useEffect(() => {
@@ -92,9 +93,103 @@ export function PreviaDaLanding({ caminho, url, alta = false }: { caminho: strin
       title="Prévia da landing"
       sandbox="allow-scripts"
       {...(html !== null ? { srcDoc: html } : caminho ? {} : { src: url })}
-      className={juntar("w-full rounded border border-border bg-white", alta ? "h-[70vh]" : "pointer-events-none h-32")}
+      className={juntar("w-full bg-white", cheia ? "pointer-events-none h-full" : "rounded border border-border", !cheia && (alta ? "h-[70vh]" : "pointer-events-none h-32"))}
       data-previa-da-landing=""
     />
+  );
+}
+
+/** Baixa a imagem: caminho no workspace vira link de download assinado; sem caminho, a url que veio. */
+async function baixarImagem(img: ImagemDoLab, url: string, nome: string) {
+  try {
+    const link = img.path && (!img.bucket || img.bucket === "workspace") ? await enderecoParaBaixar(img.path, nome) : url;
+    if (!link) throw new Error("sem link");
+    const a = document.createElement("a");
+    a.href = link;
+    a.download = nome;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    toast.error("Não deu para baixar a imagem", { description: "Tente de novo em instantes." });
+  }
+}
+
+/**
+ * As imagens geradas no próprio nó (Resultado, Carrossel, Logo): grade
+ * quadrada; tocar amplia numa janela central, com anterior, próxima e baixar.
+ */
+export function GradeDeImagens({ imagens, escolhida, colunas = 2 }: { imagens: ImagemDoLab[]; escolhida?: number | null; colunas?: 2 | 3 }) {
+  const urls = useImagens(imagens);
+  const [aberta, setAberta] = useState<number | null>(null);
+  if (!imagens.length) return null;
+  const total = imagens.length;
+  const nome = (i: number) => `imagem-${i + 1}.png`;
+  const ir = (passo: number) => setAberta((a) => (a === null ? a : (a + passo + total) % total));
+  return (
+    <div className="min-w-0" data-grade-de-imagens="">
+      <div className={juntar("grid min-w-0 gap-1.5", colunas === 3 ? "grid-cols-3" : "grid-cols-2")}>
+        {urls.map((u, i) => (
+          <button
+            key={i}
+            type="button"
+            className={juntar("nodrag relative block w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90", escolhida === i && "ring-2 ring-primary")}
+            style={{ paddingTop: "100%" }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setAberta(i);
+            }}
+            aria-label={`Ampliar a imagem ${i + 1}`}
+            title={`Ampliar a imagem ${i + 1}`}
+            data-escolhida={escolhida === i ? "" : undefined}
+          >
+            {u ? <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : null}
+          </button>
+        ))}
+      </div>
+      <JanelaCentral
+        aberta={aberta !== null}
+        onFechar={() => setAberta(null)}
+        titulo={aberta !== null ? `Imagem ${aberta + 1} de ${total}` : "Imagem"}
+        largura="xl"
+        acoes={
+          aberta !== null ? (
+            <>
+              {total > 1 ? (
+                <>
+                  <button type="button" className={botao.icone} onClick={() => ir(-1)} aria-label="Imagem anterior" title="Imagem anterior">
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button type="button" className={botao.icone} onClick={() => ir(1)} aria-label="Próxima imagem" title="Próxima imagem">
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </>
+              ) : null}
+              <button type="button" className={botao.icone} onClick={() => void baixarImagem(imagens[aberta], urls[aberta], nome(aberta))} aria-label="Baixar a imagem" title="Baixar a imagem" data-baixar-imagem="">
+                <Download className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          ) : null
+        }
+        data-imagem-ampliada=""
+      >
+        {aberta !== null && urls[aberta] ? <img src={urls[aberta]} alt={`Imagem ${aberta + 1}`} className="mx-auto block h-auto max-h-[70vh] w-auto max-w-full rounded-md object-contain" /> : null}
+      </JanelaCentral>
+    </div>
+  );
+}
+
+/** A página gerada em miniatura: o HTML salvo desenhado em 1280 px e reduzido para caber no nó. */
+export function MiniaturaDaLanding({ caminho, url, largura }: { caminho: string; url: string; largura: number }) {
+  const escala = largura / 1280;
+  return (
+    <div className="relative w-full overflow-hidden rounded-md bg-white" style={{ height: Math.round(900 * escala) }} data-miniatura-da-landing="">
+      <div className="pointer-events-none absolute left-0 top-0 origin-top-left" style={{ width: 1280, height: 900, transform: `scale(${escala})` }}>
+        <PreviaDaLanding caminho={caminho} url={url} cheia />
+      </div>
+    </div>
   );
 }
 
@@ -328,9 +423,12 @@ export default function ResultadoDoNo({
   tipo,
   onEscolherStoryboard,
   escolhendo = null,
+  largura,
 }: {
   execucao: ExecucaoDoLab | null | undefined;
   compacto?: boolean;
+  /** No nó do quadro: a largura útil (px), para a miniatura da landing e a grade de imagens. */
+  largura?: number;
   /** O tipo do nó (a execução recém-criada ainda não traz). */
   tipo?: TipoDeNo;
   /** Filme: escolher um dos storyboards no próprio nó (filme_escolher). */
@@ -351,7 +449,7 @@ export default function ResultadoDoNo({
       {t === "por_no_ar" ? <PorNoArDoNo execucao={execucao} /> : null}
       {s.texto && !(jsonProprio && s.json && compacto) ? <p className={juntar(texto.auxiliar, "whitespace-pre-wrap text-foreground", compacto && "line-clamp-3")}>{s.texto}</p> : null}
       <FontesDaPesquisa fontes={s.fontes} compacto={compacto} />
-      {s.imagens.length ? <Miniaturas imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} /> : null}
+      {s.imagens.length ? (largura || !compacto ? <GradeDeImagens imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} colunas={!largura || largura > 300 ? 3 : 2} /> : <Miniaturas imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} />) : null}
       {s.escolha ? (
         <p className={juntar(texto.auxiliar, compacto && "line-clamp-2")} data-escolha-do-jev="">
           <span className="font-medium text-foreground">Jev escolheu a {s.escolha.indice + 1}ª:</span> {s.escolha.motivo}
@@ -360,7 +458,7 @@ export default function ResultadoDoNo({
       {s.aviso_jev ? <p className={juntar(texto.auxiliar, "text-warning", compacto && "line-clamp-2")}>{s.aviso_jev}</p> : null}
       {s.html_path || s.html_url ? (
         <div className="relative min-w-0">
-          <PreviaDaLanding caminho={s.html_path} url={s.html_url} />
+          {largura ? <MiniaturaDaLanding caminho={s.html_path} url={s.html_url} largura={largura} /> : <PreviaDaLanding caminho={s.html_path} url={s.html_url} />}
           <button type="button" className={juntar(botao.icone, "nodrag absolute right-1 top-1 h-7 w-7 bg-background/90")} onClick={() => setGrande(true)} aria-label="Abrir a prévia grande" title="Abrir a prévia grande">
             <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>

@@ -38,20 +38,45 @@ export const TIPOS_DE_NO = [
   "secoes_pagina",
   "sequencia_mensagens",
   "refino_tom",
+  // v4 (ESPEC-LABORATORIO-v4.md): entradas, funil de verdade, mensagens e criativos.
+  "marca",
+  "cliente",
+  "referencias",
+  "video",
+  "arquivo",
+  "produto",
+  "pagina",
+  "checkout",
+  "quiz",
+  "webinar",
+  "dominio",
+  "teste_ab",
+  "automacao",
+  "email",
+  "whatsapp",
+  "area_membros",
+  "ugc",
+  "influenciador",
+  "template_designer",
+  "crm",
+  "recuperacao",
+  "fontes_trafego",
 ] as const;
 export type TipoDeNo = typeof TIPOS_DE_NO[number];
 
 export const ehTipoDeNo = (v: unknown): v is TipoDeNo => (TIPOS_DE_NO as readonly string[]).indexOf(String(v)) >= 0;
 
 /** Nós que só guardam dado (sem custo): a saída sai dos próprios dados. */
-export const NOS_ESTATICOS: readonly TipoDeNo[] = ["contexto", "midia", "config", "gravity"];
+export const NOS_ESTATICOS: readonly TipoDeNo[] = ["contexto", "midia", "config", "gravity", "marca", "cliente", "video", "arquivo", "produto"];
+/** Nós da v4 que rodam (alguns sem custo: domínio, teste A/B, CRM e fontes de tráfego montam por regra fixa). */
+export const NOS_DA_V4: readonly TipoDeNo[] = ["referencias", "pagina", "checkout", "quiz", "webinar", "dominio", "teste_ab", "automacao", "email", "whatsapp", "area_membros", "ugc", "influenciador", "template_designer", "crm", "recuperacao", "fontes_trafego"];
 /** Nós que rodam (custo, execução em lab_execucoes). */
-export const NOS_EXECUTAVEIS: readonly TipoDeNo[] = ["agente", "copy", "imagem", "carrossel", "logo", "landing", "anuncio", "agente_externo", "pesquisa", "oferta", "funil", "filme", "por_no_ar", "avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"];
+export const NOS_EXECUTAVEIS: readonly TipoDeNo[] = ["agente", "copy", "imagem", "carrossel", "logo", "landing", "anuncio", "agente_externo", "pesquisa", "oferta", "funil", "filme", "por_no_ar", "avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom", ...NOS_DA_V4];
 /** Os especialistas de criação (v3): avatar, ofertas do carrinho, seções da página, mensagens e refino de tom. */
 export const NOS_ESPECIALISTAS: readonly TipoDeNo[] = ["avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"];
 export const ehExecutavel = (t: TipoDeNo) => NOS_EXECUTAVEIS.indexOf(t) >= 0;
 /** Nós que podem passar de 150 s: respondem na hora e seguem com EdgeRuntime.waitUntil. */
-export const NOS_LONGOS: readonly TipoDeNo[] = ["carrossel", "landing", "pesquisa", "filme"];
+export const NOS_LONGOS: readonly TipoDeNo[] = ["carrossel", "landing", "pesquisa", "filme", "referencias", "pagina", "checkout", "quiz", "webinar", "email", "area_membros", "ugc", "influenciador", "template_designer"];
 
 export const MAX_NOS = 80;
 export const MAX_LIGACOES = 160;
@@ -85,6 +110,28 @@ export const SAIDA_DO_TIPO: Record<TipoDeNo, TipoDeSaida> = {
   secoes_pagina: "json",
   sequencia_mensagens: "json",
   refino_tom: "texto",
+  marca: "texto",
+  cliente: "texto",
+  referencias: "texto",
+  video: "video",
+  arquivo: "texto",
+  produto: "json",
+  pagina: "html",
+  checkout: "html",
+  quiz: "html",
+  webinar: "html",
+  dominio: "estado",
+  teste_ab: "estado",
+  automacao: "json",
+  email: "json",
+  whatsapp: "json",
+  area_membros: "json",
+  ugc: "imagens",
+  influenciador: "imagens",
+  template_designer: "imagens",
+  crm: "estado",
+  recuperacao: "json",
+  fontes_trafego: "json",
 };
 
 const TEXTOS: TipoDeNo[] = ["contexto", "agente", "copy"];
@@ -96,6 +143,10 @@ const CARRINHO: TipoDeNo[] = ["order_bump", "upsell", "downsell", "sequencia_ofe
 const CRIACAO: TipoDeNo[] = ["avatar", ...CARRINHO, "secoes_pagina", "sequencia_mensagens", "refino_tom"];
 /** Base dos especialistas: textos, pesquisa, avatar, oferta e funil. */
 const BASE_ESPECIALISTA: TipoDeNo[] = [...TEXTOS, "pesquisa", "avatar", "oferta", "funil"];
+/** v4: entradas de dado (marca, cliente, referências, documento e produto); viram texto para quem recebe. */
+const FONTES_V4: TipoDeNo[] = ["marca", "cliente", "referencias", "arquivo", "produto"];
+/** v4: as peças novas que o Pôr no ar (e o agente externo) recebem. */
+const PECAS_V4: TipoDeNo[] = ["pagina", "checkout", "quiz", "webinar", "dominio", "teste_ab", "automacao", "email", "whatsapp", "area_membros", "crm", "recuperacao", "ugc", "influenciador", "template_designer", "fontes_trafego"];
 
 /**
  * Quem pode entrar em quem (origem → destino). O que não está aqui é recusado com motivo.
@@ -130,7 +181,117 @@ export const ENTRADAS_ACEITAS: Record<TipoDeNo, readonly TipoDeNo[]> = {
   secoes_pagina: [...BASE_ESPECIALISTA, ...CARRINHO],
   sequencia_mensagens: [...BASE_ESPECIALISTA, ...CARRINHO, "secoes_pagina", "landing"],
   refino_tom: [...BASE_ESPECIALISTA, ...CARRINHO, "secoes_pagina", "sequencia_mensagens", "anuncio"],
+  // v4 (ESPEC-LABORATORIO-v4.md). Entradas: ponto de partida (não recebem nada).
+  marca: [],
+  cliente: [],
+  referencias: [],
+  video: [],
+  arquivo: [],
+  produto: [],
+  fontes_trafego: [],
+  // Funil: páginas ligadas entre si; a ligação pode levar o gatilho (GATILHOS_DA_ORIGEM).
+  pagina: [...GUIAS, ...CRIACAO, ...FONTES_V4, "midia", "gravity", "imagem", "carrossel", "logo", "video", "fontes_trafego", "pagina", "checkout", "quiz", "webinar"],
+  checkout: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "quiz", "webinar", "fontes_trafego"],
+  quiz: [...GUIAS, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "fontes_trafego"],
+  webinar: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "video", "pagina", "fontes_trafego"],
+  teste_ab: ["pagina", "quiz", "fontes_trafego"],
+  crm: ["pagina", "checkout", "quiz", "webinar", "automacao", "area_membros"],
+  area_membros: [...GUIAS, "avatar", ...FONTES_V4, "checkout", "video"],
+  // Mensagens: tudo sai como rascunho; o envio só depois da aprovação do dono (Pôr no ar).
+  automacao: [...TEXTOS, "oferta", "produto", "pagina", "checkout", "quiz", "webinar", "crm", "sequencia_mensagens", "recuperacao", "area_membros"],
+  email: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "sequencia_mensagens", ...FONTES_V4, "automacao", "recuperacao", "pagina", "checkout", "quiz", "webinar", "area_membros"],
+  whatsapp: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "sequencia_mensagens", ...FONTES_V4, "automacao", "recuperacao", "pagina", "checkout", "quiz", "webinar", "area_membros"],
+  recuperacao: [...TEXTOS, "oferta", "produto", "marca", "avatar", ...CARRINHO, "checkout", "webinar"],
+  // Criação.
+  ugc: [...GUIAS, "avatar", "refino_tom", ...FONTES_V4, "influenciador", "midia", "imagem", "video", "config", "gravity", "logo"],
+  influenciador: [...TEXTOS, "pesquisa", "avatar", ...FONTES_V4, "midia", "config", "gravity"],
+  template_designer: [...TEXTOS, ...FONTES_V4, "midia", "imagem", "logo", "config", "gravity", "influenciador"],
+  // Publicação.
+  dominio: ["pagina", "checkout", "quiz", "webinar", "teste_ab", "area_membros", "landing", "fontes_trafego"],
 };
+
+/**
+ * v4: o que os tipos antigos passam a receber dos nós novos (marca, cliente, referências, documento,
+ * produto e as peças novas). A tela tem a mesma lista (ENTRADAS_EXTRAS_V4 em nos.ts).
+ */
+export const ENTRADAS_EXTRAS_V4: Partial<Record<TipoDeNo, readonly TipoDeNo[]>> = {
+  gravity: ["marca", "referencias", "influenciador"],
+  agente: [...FONTES_V4, "video"],
+  copy: [...FONTES_V4, "video", "influenciador"],
+  imagem: [...FONTES_V4, "influenciador"],
+  carrossel: [...FONTES_V4, "influenciador"],
+  logo: ["marca", "cliente", "referencias"],
+  landing: [...FONTES_V4],
+  anuncio: [...FONTES_V4, "ugc", "template_designer", "pagina", "checkout", "quiz", "webinar"],
+  agente_externo: [...FONTES_V4, ...PECAS_V4],
+  pesquisa: ["cliente", "referencias", "arquivo", "produto"],
+  oferta: [...FONTES_V4],
+  funil: [...FONTES_V4],
+  filme: ["marca", "cliente", "produto", "video", "arquivo"],
+  por_no_ar: [...PECAS_V4],
+  avatar: ["cliente", "referencias", "arquivo", "produto"],
+  order_bump: [...FONTES_V4],
+  upsell: [...FONTES_V4],
+  downsell: [...FONTES_V4],
+  sequencia_ofertas: [...FONTES_V4],
+  secoes_pagina: [...FONTES_V4],
+  sequencia_mensagens: [...FONTES_V4, "pagina", "checkout", "quiz", "webinar"],
+  refino_tom: [...FONTES_V4, "email", "whatsapp"],
+};
+for (const t of Object.keys(ENTRADAS_EXTRAS_V4) as TipoDeNo[]) {
+  const extras = ENTRADAS_EXTRAS_V4[t] || [];
+  ENTRADAS_ACEITAS[t] = ENTRADAS_ACEITAS[t].concat(extras.filter((x, i) => extras.indexOf(x) === i && ENTRADAS_ACEITAS[t].indexOf(x) < 0));
+}
+
+// ------------------------------------------------------------------ v4: gatilho na ligação do funil
+
+/**
+ * O gatilho que a ligação carrega (ligacoes[].gatilho), como no ClickMax: "a conexão é o gatilho".
+ * Só as ligações que saem de um nó do funil (ORIGENS_COM_GATILHO) levam gatilho; é opcional.
+ */
+export const GATILHOS = [
+  "visitou",
+  "clicou_botao",
+  "enviou_formulario",
+  "quiz_concluido",
+  "faixa_alta",
+  "faixa_media",
+  "faixa_baixa",
+  "compra_aprovada",
+  "compra_recusada",
+  "carrinho_abandonado",
+  "pix_gerado",
+  "upsell_aceito",
+  "upsell_recusado",
+] as const;
+export type Gatilho = typeof GATILHOS[number];
+export const ROTULO_DO_GATILHO: Record<Gatilho, string> = {
+  visitou: "Visitou",
+  clicou_botao: "Clicou no botão",
+  enviou_formulario: "Enviou o formulário",
+  quiz_concluido: "Concluiu o quiz",
+  faixa_alta: "Resultado alto",
+  faixa_media: "Resultado médio",
+  faixa_baixa: "Resultado baixo",
+  compra_aprovada: "Compra aprovada",
+  compra_recusada: "Compra recusada",
+  carrinho_abandonado: "Carrinho abandonado",
+  pix_gerado: "Pix gerado",
+  upsell_aceito: "Aceitou o upsell",
+  upsell_recusado: "Recusou o upsell",
+};
+/** Os gatilhos que cada origem tem (checkout tem os de venda; captura tem formulário; quiz tem as faixas). */
+export const GATILHOS_DA_ORIGEM: Partial<Record<TipoDeNo, readonly Gatilho[]>> = {
+  pagina: ["visitou", "clicou_botao", "enviou_formulario", "upsell_aceito", "upsell_recusado"],
+  checkout: ["visitou", "clicou_botao", "compra_aprovada", "compra_recusada", "carrinho_abandonado", "pix_gerado"],
+  quiz: ["visitou", "enviou_formulario", "quiz_concluido", "faixa_alta", "faixa_media", "faixa_baixa"],
+  webinar: ["visitou", "enviou_formulario", "clicou_botao"],
+  teste_ab: ["visitou"],
+};
+export const ORIGENS_COM_GATILHO = Object.keys(GATILHOS_DA_ORIGEM) as TipoDeNo[];
+export const gatilhosDe = (tipo: TipoDeNo): readonly Gatilho[] => GATILHOS_DA_ORIGEM[tipo] || [];
+/** O gatilho vale para esta origem? (vazio também vale: o gatilho é opcional). */
+export const gatilhoValido = (tipoDaOrigem: TipoDeNo, g: unknown): g is Gatilho => typeof g === "string" && gatilhosDe(tipoDaOrigem).indexOf(g as Gatilho) >= 0;
 
 /** Só um por destino: duas configurações ou duas bases comuns se contradiriam. */
 const UM_POR_DESTINO: TipoDeNo[] = ["config", "gravity"];
@@ -161,10 +322,32 @@ export const ROTULO_DO_TIPO: Record<TipoDeNo, string> = {
   secoes_pagina: "Seções da página",
   sequencia_mensagens: "Sequência de mensagens",
   refino_tom: "Refino de tom",
+  marca: "Marca",
+  cliente: "Cliente",
+  referencias: "Referências",
+  video: "Vídeo",
+  arquivo: "Documento",
+  produto: "Produto",
+  pagina: "Página do funil",
+  checkout: "Checkout",
+  quiz: "Quiz",
+  webinar: "Webinar",
+  dominio: "Domínio e endereços",
+  teste_ab: "Teste A/B",
+  automacao: "Automação",
+  email: "E-mail",
+  whatsapp: "WhatsApp",
+  area_membros: "Área de membros",
+  ugc: "Criativo UGC",
+  influenciador: "Influenciador digital",
+  template_designer: "Template editável",
+  crm: "Etapa do CRM",
+  recuperacao: "Recuperação",
+  fontes_trafego: "Fontes de tráfego",
 };
 
 export type NoDoCanvas = { id: string; tipo: TipoDeNo; x: number; y: number; dados: Record<string, unknown>; [extra: string]: unknown };
-export type Ligacao = { id: string; de: string; para: string; [extra: string]: unknown };
+export type Ligacao = { id: string; de: string; para: string; /** v4: gatilho do funil (GATILHOS), opcional. */ gatilho?: string; [extra: string]: unknown };
 export type Canvas = { nos: NoDoCanvas[]; ligacoes: Ligacao[]; viewport: { x: number; y: number; zoom: number } };
 
 export class ErroDoCanvas extends Error {
@@ -278,6 +461,11 @@ export function errosDoCanvas(c: Canvas): string[] {
     const motivo = motivoParaNaoLigar({ nos: c.nos, ligacoes: aceitas }, l.de, l.para);
     if (motivo) erros.push(`Ligação ${l.de} → ${l.para}: ${motivo}`);
     else aceitas.push(l);
+    // v4: o gatilho, quando existe, tem de ser um dos que a origem tem.
+    const origem = c.nos.find((n) => n.id === l.de);
+    if (!motivo && origem && l.gatilho !== undefined && l.gatilho !== null && l.gatilho !== "" && !gatilhoValido(origem.tipo, l.gatilho)) {
+      erros.push(`Ligação ${l.de} → ${l.para}: o gatilho "${String(l.gatilho)}" não vale para ${ROTULO_DO_TIPO[origem.tipo]}.`);
+    }
   }
   return erros;
 }
@@ -452,7 +640,35 @@ export const SAIDA_ESPERADA: Record<string, number> = {
   secoes_pagina: 3500,
   sequencia_mensagens: 4500,
   refino_tom: 4000,
+  // v4
+  referencias: 3000,
+  pagina: 14000,
+  checkout: 3000,
+  quiz: 4500,
+  webinar: 7000,
+  automacao: 3500,
+  email: 6000,
+  whatsapp: 4000,
+  area_membros: 7000,
+  recuperacao: 3000,
+  ugc: 4000,
+  influenciador: 2000,
+  template_designer: 2500,
 };
+
+/** Referências: texto lido das páginas públicas (até 8 links, ~2.500 tokens cada). */
+export const TOKENS_POR_REFERENCIA = 2_500;
+export const MAX_REFERENCIAS = 8;
+
+/** Os links do nó Referências (um por linha ou separados por espaço), só http(s), sem repetir, até 8. */
+export function linksDasReferencias(v: unknown): string[] {
+  const saida: string[] = [];
+  for (const m of String(typeof v === "string" ? v : "").match(/https?:\/\/[^\s<>"']+/gi) || []) {
+    const url = m.replace(/[.,;:)\]]+$/, "");
+    if (saida.indexOf(url) < 0 && saida.length < MAX_REFERENCIAS) saida.push(url);
+  }
+  return saida;
+}
 
 /** Busca na web do nó Pesquisa: as buscas e o texto das páginas que o motor estima (ia-motor.ts). */
 export const BUSCAS_DA_PESQUISA = 3;
@@ -510,6 +726,29 @@ export function chamadasDoNo(c: Pick<Canvas, "nos" | "ligacoes">, no: NoDoCanvas
       return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base + TOKENS_DAS_PAGINAS, tokens_saida: SAIDA_ESPERADA.pesquisa, imagens: 0, qualidade: null, buscas_web: BUSCAS_DA_PESQUISA }];
     case "filme":
       return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: TOKENS_DOS_STORYBOARDS.entrada + tokensDe(textosDosDados(c, no)), tokens_saida: TOKENS_DOS_STORYBOARDS.saida, imagens: 0, qualidade: null }];
+    // v4: uma chamada de texto (a página sai de modelo fixo com o texto dela).
+    case "pagina":
+    case "checkout":
+    case "quiz":
+    case "webinar":
+    case "automacao":
+    case "email":
+    case "whatsapp":
+    case "area_membros":
+    case "recuperacao":
+      return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA[no.tipo], imagens: 0, qualidade: null }];
+    case "referencias": {
+      const links = linksDasReferencias(d.links).length;
+      return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base + links * TOKENS_POR_REFERENCIA, tokens_saida: SAIDA_ESPERADA.referencias, imagens: 0, qualidade: null }];
+    }
+    case "ugc":
+      // Roteiro de cada variação + um quadro-chave (o gancho) por variação.
+      return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA.ugc, imagens: 0, qualidade: null }, img(limitar(d.variacoes, 1, 5, 3))];
+    case "influenciador":
+      return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA.influenciador, imagens: 0, qualidade: null }, img(limitar(d.poses, 1, 8, 4))];
+    case "template_designer":
+      // As camadas saem do texto; a imagem é só o fundo (o texto da arte fica editável, sem gastar).
+      return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA.template_designer, imagens: 0, qualidade: null }, img(1)];
     default:
       // contexto, mídia, config, gravity, agente externo e Pôr no ar: sem chamada paga.
       return [];
@@ -591,17 +830,19 @@ export type Operacao = {
   /** ligar, desligar. */
   de?: string;
   para?: string;
+  /** ligar (v4): o gatilho do funil no fio (GATILHOS_DA_ORIGEM da origem). */
+  gatilho?: string;
 };
 /** Recibo de cada operação; `operacao` é a operação já com os ids reais (aceita) ou como veio (recusada). */
 export type Recibo = { indice: number; op: string; aceita: boolean; recibo: string; no_id?: string; ligacao_id?: string; operacao?: unknown };
 
 /** Campos que cada tipo aceita em `dados` (o resto é ignorado com aviso). */
 export const CAMPOS_DO_TIPO: Record<TipoDeNo, readonly string[]> = {
-  contexto: ["titulo", "texto"],
+  contexto: ["titulo", "texto", "arquivos"],
   midia: ["titulo", "imagens"],
   config: ["titulo", "proporcao", "quantidade", "qualidade", "motor"],
   gravity: ["titulo", "prompt_base", "referencias"],
-  agente: ["titulo", "instrucao", "modelo_id"],
+  agente: ["titulo", "instrucao", "modelo_id", "arquivos"],
   copy: ["titulo", "formato", "instrucao", "modelo_id"],
   imagem: ["titulo", "prompt", "quantidade", "qualidade", "proporcao", "motor"],
   carrossel: ["titulo", "tema", "laminas", "modelo_id", "motor", "qualidade", "proporcao"],
@@ -622,6 +863,74 @@ export const CAMPOS_DO_TIPO: Record<TipoDeNo, readonly string[]> = {
   secoes_pagina: ["titulo", "tipo_pagina", "objetivo", "instrucao", "modelo_id"],
   sequencia_mensagens: ["titulo", "canal", "mensagens", "objetivo", "instrucao", "modelo_id"],
   refino_tom: ["titulo", "tom", "instrucao", "modelo_id"],
+  // v4 (ESPEC-LABORATORIO-v4.md, seção 2).
+  marca: ["titulo", "paleta", "tom", "fontes", "logo", "regras"],
+  cliente: ["titulo", "foco"],
+  referencias: ["titulo", "links", "imagens", "o_que_aproveitar", "modelo_id"],
+  video: ["titulo", "arquivos", "link", "transcricao"],
+  arquivo: ["titulo", "arquivos", "uso"],
+  produto: ["titulo", "nome", "entregavel", "formato_produto", "preco", "link_externo"],
+  pagina: ["titulo", "tipo_pagina", "caminho", "objetivo", "instrucao", "modelo_id"],
+  checkout: ["titulo", "gateway", "link_pagamento", "produto_externo_id", "order_bump", "upsell", "caminho", "garantia", "modelo_id"],
+  quiz: ["titulo", "objetivo", "perguntas", "faixas", "captura", "caminho", "modelo_id"],
+  webinar: ["titulo", "tema", "modo", "data", "link_video", "minuto_oferta", "encerramento", "caminho", "modelo_id"],
+  dominio: ["titulo", "dominio", "subdominio", "estrutura", "registrador", "redirecionamentos"],
+  teste_ab: ["titulo", "pesos", "variavel", "metrica", "limite", "caminho"],
+  automacao: ["titulo", "quando", "condicoes", "espera", "objetivo_saida", "horario", "modelo_id"],
+  email: ["titulo", "tipo_email", "mensagens", "remetente", "objetivo", "modelo_id"],
+  whatsapp: ["titulo", "via", "tipo_mensagem", "mensagens", "categoria", "objetivo", "modelo_id"],
+  area_membros: ["titulo", "plataforma", "modulos", "aulas_por_modulo", "liberacao", "modelo_id"],
+  ugc: ["titulo", "estilo_ugc", "duracao", "variacoes", "instrucao", "modelo_id", "motor", "qualidade", "proporcao"],
+  influenciador: ["titulo", "nome", "aparencia", "estilo", "poses", "motor", "qualidade", "modelo_id"],
+  template_designer: ["titulo", "formato_arte", "estilo", "campos_variaveis", "lote", "motor", "qualidade", "modelo_id"],
+  crm: ["titulo", "pipeline", "etapa", "temperatura", "responsavel"],
+  recuperacao: ["titulo", "situacao", "via", "toques", "modelo_id"],
+  fontes_trafego: ["titulo", "canais", "url_base", "campanha"],
+};
+
+/**
+ * v4: valores aceitos nos campos de escolha dos nós novos (a tela tem os rótulos em nos.ts; o teste de
+ * contrato confere que os valores batem). Valor fora da lista é ignorado com aviso.
+ */
+export const OPCOES_V4: Record<string, readonly string[]> = {
+  formato_produto: ["curso", "mentoria", "servico", "fisico", "assinatura", "ebook"],
+  uso: ["contexto", "dados_produto", "depoimentos", "planilha"],
+  gateway: ["hotmart", "kiwify", "stripe", "mercadopago", "asaas", "outro"],
+  captura: ["inicio", "antes_resultado", "fim"],
+  modo: ["gravado", "ao_vivo", "just_in_time"],
+  encerramento: ["classico", "replay", "ultima_chamada", "proximos_passos"],
+  estrutura: ["dominio_por_oferta", "subdominio", "caminho"],
+  registrador: ["registro_br", "godaddy", "hostinger", "cloudflare", "outro"],
+  variavel: ["titulo", "oferta", "imagem", "pagina_inteira"],
+  metrica: ["lead", "compra", "clique"],
+  limite: ["data", "visitas", "sem_limite"],
+  quando: ["formulario", "quiz", "compra_aprovada", "carrinho_abandonado", "pix_gerado", "lead_parado", "inscrito_webinar"],
+  objetivo_saida: ["comprou", "respondeu", "atendente"],
+  horario: ["sim", "nao"],
+  tipo_email: ["unico", "sequencia", "lembrete_webinar", "recuperacao"],
+  via: ["email", "whatsapp", "ambos", "cloud_api", "evolution"],
+  tipo_mensagem: ["dentro_janela", "modelo"],
+  categoria: ["utilidade", "marketing", "autenticacao"],
+  plataforma: ["hotmart_club", "kiwify", "memberkit", "cademi", "outra", "pagina_simples"],
+  liberacao: ["tudo", "por_dia"],
+  estilo_ugc: ["depoimento", "unboxing", "antes_depois", "problema_solucao", "reacao"],
+  formato_arte: ["post_1_1", "feed_4_5", "story_9_16", "carrossel", "capa_reel", "banner"],
+  lote: ["nao", "planilha"],
+  situacao: ["carrinho_abandonado", "pix_pendente", "boleto_vencido", "cartao_recusado"],
+};
+/** Tipo da Página do funil (v4); o das Seções da página continua em TIPOS_DE_PAGINA. */
+export const TIPOS_DA_PAGINA_DO_FUNIL = ["captura", "vendas", "obrigado", "presell", "vsl", "inscricao", "agendar", "upsell", "downsell", "termos", "institucional"] as const;
+/** Objetivo da Página do funil (v4). */
+export const OBJETIVOS_DA_PAGINA = ["vender", "capturar", "agendar", "inscrever", "whatsapp"] as const;
+/** Limites dos números dos nós novos: [mín, máx, padrão]. */
+export const NUMEROS_V4: Record<string, [number, number, number]> = {
+  perguntas: [3, 12, 6],
+  modulos: [1, 12, 4],
+  aulas_por_modulo: [1, 15, 4],
+  duracao: [8, 45, 20],
+  variacoes: [1, 5, 3],
+  poses: [1, 8, 4],
+  toques: [1, 3, 3],
 };
 
 export const FORMATOS_DE_COPY = ["anuncio", "legenda", "landing", "email", "roteiro_curto"] as const;
@@ -638,7 +947,7 @@ export const formatosDoFilme = (v: unknown): string[] => {
 };
 
 /** Para onde o Pôr no ar leva o pacote. O anúncio sempre sobe PAUSADO; verba e ativação são do dono. */
-export const ALVOS_NO_AR = ["publicar_site", "subir_anuncio_pausado", "conectar_pagina", "outro"] as const;
+export const ALVOS_NO_AR = ["publicar_site", "subir_anuncio_pausado", "conectar_pagina", "ligar_mensagens", "outro"] as const;
 export type AlvoNoAr = typeof ALVOS_NO_AR[number];
 export const alvoValido = (v: unknown): AlvoNoAr | null => ((ALVOS_NO_AR as readonly string[]).indexOf(String(v)) >= 0 ? v as AlvoNoAr : null);
 
@@ -652,6 +961,8 @@ export const ACAO_DO_ALVO: Record<AlvoNoAr, string> = {
   publicar_site: "publicar",
   subir_anuncio_pausado: "publicar",
   conectar_pagina: "alterar_permissoes",
+  // v4: ligar a automação e as sequências de e-mail/WhatsApp (o envio a leads só começa depois do sim do dono).
+  ligar_mensagens: "enviar_mensagem",
   outro: "publicar",
 };
 
@@ -669,8 +980,13 @@ export function dadosDoTipo(tipo: TipoDeNo, bruto: unknown): { dados: Record<str
     if (k === "quantidade") dados[k] = limitar(v, 1, MAX_IMAGENS_POR_NO, 1);
     else if (k === "laminas") dados[k] = limitar(v, 2, MAX_LAMINAS, 5);
     else if (k === "n") dados[k] = limitar(v, 1, MAX_LOGOS, 4);
-    else if (k === "mensagens") dados[k] = limitar(v, 2, MAX_MENSAGENS, 5);
-    else if (k === "tipo_pagina") { if ((TIPOS_DE_PAGINA as readonly string[]).indexOf(String(v)) >= 0) dados[k] = v; else ignorados.push(k); }
+    else if (k === "mensagens") dados[k] = tipo === "email" || tipo === "whatsapp" ? limitar(v, 1, 10, 3) : limitar(v, 2, MAX_MENSAGENS, 5);
+    else if (k === "tipo_pagina") { if (((tipo === "pagina" ? TIPOS_DA_PAGINA_DO_FUNIL : TIPOS_DE_PAGINA) as readonly string[]).indexOf(String(v)) >= 0) dados[k] = v; else ignorados.push(k); }
+    // v4: escolhas, números e listas dos nós novos.
+    else if (k === "objetivo" && tipo === "pagina") { if ((OBJETIVOS_DA_PAGINA as readonly string[]).indexOf(String(v)) >= 0) dados[k] = v; else ignorados.push(k); }
+    else if (OPCOES_V4[k]) { if (OPCOES_V4[k].indexOf(String(v)) >= 0) dados[k] = v; else ignorados.push(k); }
+    else if (NUMEROS_V4[k]) dados[k] = limitar(v, NUMEROS_V4[k][0], NUMEROS_V4[k][1], NUMEROS_V4[k][2]);
+    else if (k === "logo") { if (Array.isArray(v)) dados[k] = v.slice(0, 4); else ignorados.push(k); }
     else if (k === "canal") { if ((CANAIS_DE_MENSAGEM as readonly string[]).indexOf(String(v)) >= 0) dados[k] = v; else ignorados.push(k); }
     else if (k === "proporcao") { const p = proporcaoValida(v); if (p) dados[k] = p; else ignorados.push(k); }
     else if (k === "qualidade") { const q = qualidadeValida(v); if (q) dados[k] = q; else ignorados.push(k); }
@@ -681,6 +997,8 @@ export function dadosDoTipo(tipo: TipoDeNo, bruto: unknown): { dados: Record<str
     }
     else if (k === "alvo") { if (alvoValido(v)) dados[k] = v; else ignorados.push(k); }
     else if (k === "imagens" || k === "referencias") { if (Array.isArray(v)) dados[k] = v.slice(0, 12); else ignorados.push(k); }
+    // Documentos do nó (Contexto, Agente): a leitura e o teto ficam em laboratorio/documentos.ts.
+    else if (k === "arquivos") { if (Array.isArray(v)) dados[k] = v.slice(0, 8); else ignorados.push(k); }
     else if (typeof v === "string") dados[k] = v.slice(0, MAX_TEXTO);
     else if (typeof v === "number" && Number.isFinite(v)) dados[k] = v;
     else ignorados.push(k);
@@ -754,6 +1072,29 @@ export const ETAPA_DO_TIPO: Record<TipoDeNo, number | null> = {
   sequencia_mensagens: 2,
   refino_tom: 2,
   secoes_pagina: 3,
+  // v4: entradas na primeira coluna; páginas do funil na de Página; mensagens e CRM na de Anúncios.
+  marca: 0,
+  cliente: 0,
+  referencias: 0,
+  video: 0,
+  arquivo: 0,
+  produto: 1,
+  influenciador: 2,
+  fontes_trafego: 2,
+  pagina: 3,
+  checkout: 3,
+  quiz: 3,
+  webinar: 3,
+  teste_ab: 3,
+  area_membros: 3,
+  ugc: 4,
+  template_designer: 4,
+  crm: 5,
+  automacao: 5,
+  email: 5,
+  whatsapp: 5,
+  recuperacao: 5,
+  dominio: 6,
 };
 
 /** Teto de nós que o planejar cria num projeto completo (o canvas inteiro continua em MAX_NOS). */
@@ -816,7 +1157,7 @@ const semAcento = (t: string) => String(t || "").normalize("NFD").replace(/[̀-�
  */
 export function ehPedidoDeProjetoCompleto(pedido: unknown): boolean {
   const t = semAcento(String(pedido ?? "")).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ");
-  if (/\b(low ticket|lowticket|high ticket|funil de vendas?|funil completo|infoproduto|produto digital|webinar|webinario)\b/.test(t)) return true;
+  if (/\b(low ticket|lowticket|high ticket|funil de vendas?|funil completo|infoproduto|produto digital|webinar|webinario|quiz de qualificacao|funil de quiz|checkout com upsell)\b/.test(t)) return true;
   if (/\b(montar|monta|abrir|comecar|construir|criar|cria|lancar|estruturar)( (um|uma|o|a|meu|minha|nosso|nossa|novo|nova))? (empresa|negocio|marca|produto|loja|funil|ecommerce|e commerce)\b/.test(t)) return true;
   if (/\b(montar|fazer|planejar|criar|estruturar)( (um|o|meu|nosso))? lancamento\b/.test(t)) return true;
   return false;
@@ -881,12 +1222,20 @@ export function aplicarOperacoes(canvas: Canvas, ops: unknown[], opcoes: OpcoesD
       const motivo = motivoParaNaoLigar(c, de, para);
       if (motivo) return recusar(`Não liguei: ${motivo}`);
       const ligacao: Ligacao = { id: `lig_${de}_${para}`, de, para };
+      // v4: gatilho do funil (opcional); o que não vale para a origem fica de fora, com aviso no recibo.
+      const origemDoFio = c.nos.find((n) => n.id === de);
+      const pediuGatilho = typeof op.gatilho === "string" && op.gatilho ? op.gatilho : "";
+      const gatilhoOk = !!pediuGatilho && !!origemDoFio && gatilhoValido(origemDoFio.tipo, pediuGatilho);
+      if (gatilhoOk) ligacao.gatilho = pediuGatilho;
       c = { ...c, ligacoes: c.ligacoes.concat([ligacao]) };
       if (c.ligacoes.length > MAX_LIGACOES) {
         c = { ...c, ligacoes: c.ligacoes.slice(0, -1) };
         return recusar(`O canvas já tem ${MAX_LIGACOES} ligações.`);
       }
-      aceitar({ op: nome, de, para }, { ligacao_id: ligacao.id, recibo: `Liguei ${rotulo(c, de)} → ${rotulo(c, para)}.` });
+      aceitar(gatilhoOk ? { op: nome, de, para, gatilho: pediuGatilho } : { op: nome, de, para }, {
+        ligacao_id: ligacao.id,
+        recibo: `Liguei ${rotulo(c, de)} → ${rotulo(c, para)}${gatilhoOk ? ` (quando: ${ROTULO_DO_GATILHO[pediuGatilho as Gatilho]})` : ""}.${pediuGatilho && !gatilhoOk ? ` Ignorei o gatilho "${pediuGatilho}": não vale para essa origem.` : ""}`,
+      });
       return;
     }
     if (nome === "desligar") {
@@ -981,6 +1330,8 @@ export const ESQUEMA_DO_PLANEJAR = {
             no: { type: "string" },
             de: { type: "string" },
             para: { type: "string" },
+            /** ligar (v4): o gatilho do funil no fio. */
+            gatilho: { type: "string", enum: [...GATILHOS] },
             /** Os campos do nó em JSON (texto): objeto livre não passa no esquema estrito da Anthropic. */
             dados_json: { type: "string" },
           },
@@ -1013,12 +1364,21 @@ export function lerPlano(json: unknown, textoBruto: string): { resposta: string;
 export function resumoDoCanvas(c: Canvas): string {
   if (!c.nos.length) return "Canvas vazio.";
   const nos = c.nos.map((n) => `- ${n.id} (${n.tipo})${n.dados.titulo ? ` "${String(n.dados.titulo).slice(0, 60)}"` : ""}: ${JSON.stringify(n.dados).slice(0, 300)}`);
-  const ligs = c.ligacoes.map((l) => `- ${l.de} → ${l.para}`);
+  const ligs = c.ligacoes.map((l) => `- ${l.de} → ${l.para}${l.gatilho ? ` [${l.gatilho}]` : ""}`);
   return `NÓS:\n${nos.join("\n")}\nLIGAÇÕES:\n${ligs.join("\n") || "(nenhuma)"}`;
 }
 
 /** As regras de ligação em texto, para o prompt do planejar. */
 export function regrasEmTexto(): string {
+  const gatilhos = ORIGENS_COM_GATILHO.map((t) => `- saindo de ${t}: ${gatilhosDe(t).join(", ")}`);
+  return [
+    regrasDosTipos(),
+    'GATILHOS NO FIO (campo "gatilho" do ligar; opcional; só nas ligações que saem destes nós):',
+    ...gatilhos,
+  ].join("\n");
+}
+
+function regrasDosTipos(): string {
   return TIPOS_DE_NO.map((t) => `- ${t} (${ROTULO_DO_TIPO[t]}): recebe ${ENTRADAS_ACEITAS[t].length ? ENTRADAS_ACEITAS[t].join(", ") : "nada"}; campos: ${CAMPOS_DO_TIPO[t].join(", ")}`).join("\n");
 }
 
@@ -1050,7 +1410,7 @@ export type BlocoSemFonte = {
 };
 
 /** Nós que podem escrever prova social ou número: os prompts deles dizem para não inventar e marcar. */
-export const NOS_COM_PROVA: readonly TipoDeNo[] = ["agente", "copy", "landing", "anuncio", "oferta", "funil", "avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"];
+export const NOS_COM_PROVA: readonly TipoDeNo[] = ["agente", "copy", "landing", "anuncio", "oferta", "funil", "avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom", "pagina", "checkout", "quiz", "webinar", "automacao", "email", "whatsapp", "area_membros", "recuperacao", "ugc", "template_designer"];
 
 /** O marcador que os prompts pedem para pôr na peça no lugar da prova que falta. */
 export const MARCADOR_SEM_FONTE = "RASCUNHO SEM FONTE";

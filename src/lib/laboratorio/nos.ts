@@ -36,7 +36,34 @@ export type TipoDeNo =
   | "sequencia_ofertas"
   | "secoes_pagina"
   | "sequencia_mensagens"
-  | "refino_tom";
+  | "refino_tom"
+  // v4 (ESPEC-LABORATORIO-v4.md): entradas, funil de verdade, mensagens e criativos.
+  | TipoDaV4;
+
+/** Os 22 tipos da v4 (TIPOS_DE_NO da função, depois dos da v3). */
+export type TipoDaV4 =
+  | "marca"
+  | "cliente"
+  | "referencias"
+  | "video"
+  | "arquivo"
+  | "produto"
+  | "pagina"
+  | "checkout"
+  | "quiz"
+  | "webinar"
+  | "dominio"
+  | "teste_ab"
+  | "automacao"
+  | "email"
+  | "whatsapp"
+  | "area_membros"
+  | "ugc"
+  | "influenciador"
+  | "template_designer"
+  | "crm"
+  | "recuperacao"
+  | "fontes_trafego";
 
 /** O que sai de um nó (o que o nó seguinte recebe). */
 export type Saida = "texto" | "imagens" | "config" | "gravity" | "html" | "json" | "tarefa" | "video" | "estado";
@@ -46,7 +73,24 @@ export type Saida = "texto" | "imagens" | "config" | "gravity" | "html" | "json"
  * imagem (os dois vêm do catálogo ia_modelos); "operador" vem de
  * internal_operators (os ativos, como a Execução lê).
  */
-export type TipoDeCampo = "texto" | "textoLongo" | "numero" | "escolha" | "modelo" | "motor" | "operador" | "imagens";
+export type TipoDeCampo = "texto" | "textoLongo" | "numero" | "escolha" | "modelo" | "motor" | "operador" | "imagens" | "arquivos";
+
+/**
+ * Documento anexado a um nó (campo "arquivos"): escolhido no Workspace (id do
+ * workspace_nodes) ou enviado na hora (caminho em global/laboratorio/<projeto>/entradas).
+ * A função lê o texto dos que dá para ler e cita os outros pelo nome.
+ */
+export interface ArquivoDoNo {
+  id: string;
+  nome: string;
+  url: string;
+  tipo: string;
+  /** Caminho no bucket workspace (a url assinada vence; a função assina de novo). */
+  path?: string;
+}
+
+/** Grupos da paleta, na ordem em que aparecem. Tipo sem grupo cai em "Outros". */
+export type GrupoDaPaleta = "entradas" | "criacao" | "funil" | "mensagens" | "agentes" | "publicacao" | "outros";
 
 export interface CampoDoNo {
   chave: string;
@@ -79,6 +123,8 @@ export interface DefinicaoDoNo {
   padrao: Record<string, unknown>;
   /** Cor da borda e da linha que sai dele. */
   cor: string;
+  /** Grupo da paleta (sem grupo: o de GRUPO_DOS_TIPOS, ou "Outros"). */
+  grupo?: GrupoDaPaleta;
 }
 
 export const LIMITE_DE_NOS = 80;
@@ -124,6 +170,7 @@ export const ALVOS_NO_AR = [
   { valor: "publicar_site", rotulo: "Publicar o site" },
   { valor: "subir_anuncio_pausado", rotulo: "Subir anúncio pausado" },
   { valor: "conectar_pagina", rotulo: "Conectar página (Facebook/BM)" },
+  { valor: "ligar_mensagens", rotulo: "Ligar automação e mensagens" },
   { valor: "outro", rotulo: "Outro" },
 ] as const;
 
@@ -178,6 +225,356 @@ const INSTRUCAO: CampoDoNo = { chave: "instrucao", rotulo: "Instrução", tipo: 
 const PRODUTO: CampoDoNo = { chave: "produto", rotulo: "Produto", tipo: "texto" };
 const PRECO: CampoDoNo = { chave: "preco", rotulo: "Preço", tipo: "texto" };
 
+// ------------------------------------------------------------ v4 (ESPEC-LABORATORIO-v4.md)
+
+/** Opções dos campos de escolha da v4 (os valores são os de OPCOES_V4 da função). */
+const op = (pares: Array<[string, string]>) => pares.map(([valor, rotulo]) => ({ valor, rotulo }));
+export const OPCOES_DA_V4 = {
+  formato_produto: op([["curso", "Curso"], ["mentoria", "Mentoria"], ["servico", "Serviço"], ["fisico", "Produto físico"], ["assinatura", "Assinatura"], ["ebook", "E-book"]]),
+  uso: op([["contexto", "Contexto"], ["dados_produto", "Dados do produto"], ["depoimentos", "Depoimentos com fonte"], ["planilha", "Planilha de lote"]]),
+  gateway: op([["hotmart", "Hotmart"], ["kiwify", "Kiwify"], ["stripe", "Stripe"], ["mercadopago", "Mercado Pago"], ["asaas", "Asaas"], ["outro", "Outro link"]]),
+  captura: op([["inicio", "No início"], ["antes_resultado", "Antes do resultado"], ["fim", "No fim"]]),
+  modo: op([["gravado", "Gravado como ao vivo"], ["ao_vivo", "Ao vivo (YouTube/Meet)"], ["just_in_time", "Just in time"]]),
+  encerramento: op([["classico", "Clássico"], ["replay", "Replay em destaque"], ["ultima_chamada", "Última chamada"], ["proximos_passos", "Próximos passos"]]),
+  estrutura: op([["dominio_por_oferta", "Um domínio por oferta"], ["subdominio", "Subdomínio"], ["caminho", "Caminho"]]),
+  registrador: op([["registro_br", "Registro.br"], ["godaddy", "GoDaddy"], ["hostinger", "Hostinger"], ["cloudflare", "Cloudflare"], ["outro", "Outro"]]),
+  variavel: op([["titulo", "Título"], ["oferta", "Oferta"], ["imagem", "Imagem"], ["pagina_inteira", "Página inteira"]]),
+  metrica: op([["lead", "Lead"], ["compra", "Compra"], ["clique", "Clique"]]),
+  limite: op([["data", "Data"], ["visitas", "Visitas"], ["sem_limite", "Sem limite"]]),
+  quando: op([["formulario", "Formulário enviado"], ["quiz", "Quiz concluído"], ["compra_aprovada", "Compra aprovada"], ["carrinho_abandonado", "Carrinho abandonado"], ["pix_gerado", "Pix gerado"], ["lead_parado", "Lead parado N dias"], ["inscrito_webinar", "Inscrito no webinar"]]),
+  objetivo_saida: op([["comprou", "Comprou"], ["respondeu", "Respondeu"], ["atendente", "Atendente assumiu"]]),
+  horario: op([["sim", "Sim"], ["nao", "Não"]]),
+  tipo_email: op([["unico", "Único"], ["sequencia", "Sequência"], ["lembrete_webinar", "Lembretes do webinar"], ["recuperacao", "Recuperação"]]),
+  via_whatsapp: op([["cloud_api", "Oficial (Cloud API)"], ["evolution", "Evolution"]]),
+  via_recuperacao: op([["email", "E-mail"], ["whatsapp", "WhatsApp"], ["ambos", "E-mail e WhatsApp"]]),
+  tipo_mensagem: op([["dentro_janela", "Dentro da janela de 24 h"], ["modelo", "Modelo aprovado"]]),
+  categoria: op([["utilidade", "Utilidade"], ["marketing", "Marketing"], ["autenticacao", "Autenticação"]]),
+  plataforma: op([["hotmart_club", "Hotmart Club"], ["kiwify", "Kiwify"], ["memberkit", "Memberkit"], ["cademi", "Cademí"], ["outra", "Outra"], ["pagina_simples", "Página simples do site"]]),
+  liberacao: op([["tudo", "Tudo de uma vez"], ["por_dia", "Por dia"]]),
+  estilo_ugc: op([["depoimento", "Depoimento"], ["unboxing", "Unboxing"], ["antes_depois", "Antes e depois"], ["problema_solucao", "Problema → solução"], ["reacao", "Reação"]]),
+  formato_arte: op([["post_1_1", "Post 1:1"], ["feed_4_5", "Feed 4:5"], ["story_9_16", "Story 9:16"], ["carrossel", "Carrossel"], ["capa_reel", "Capa de Reel"], ["banner", "Banner"]]),
+  lote: op([["nao", "Não"], ["planilha", "Da planilha do nó Documento"]]),
+  situacao: op([["carrinho_abandonado", "Carrinho abandonado"], ["pix_pendente", "Pix gerado e não pago"], ["boleto_vencido", "Boleto vencido"], ["cartao_recusado", "Cartão recusado"]]),
+  tipo_pagina: op([["captura", "Captura"], ["vendas", "Vendas"], ["obrigado", "Obrigado"], ["presell", "Presell / advertorial"], ["vsl", "VSL"], ["inscricao", "Inscrição"], ["agendar", "Agendar"], ["upsell", "Upsell"], ["downsell", "Downsell"], ["termos", "Termos"], ["institucional", "Institucional"]]),
+  objetivo_pagina: op([["vender", "Vender"], ["capturar", "Capturar contato"], ["agendar", "Agendar"], ["inscrever", "Inscrever"], ["whatsapp", "Levar ao WhatsApp"]]),
+};
+
+const esc = (chave: string, rotulo: string, opcoes: ReadonlyArray<{ valor: string; rotulo: string }>, vazio?: string): CampoDoNo => ({ chave, rotulo, tipo: "escolha", opcoes, ...(vazio ? { vazio } : {}) });
+const tx = (chave: string, rotulo: string, dica?: string): CampoDoNo => ({ chave, rotulo, tipo: "texto", ...(dica ? { dica } : {}) });
+const tl = (chave: string, rotulo: string, dica?: string): CampoDoNo => ({ chave, rotulo, tipo: "textoLongo", ...(dica ? { dica } : {}) });
+const num = (chave: string, rotulo: string, min: number, max: number): CampoDoNo => ({ chave, rotulo, tipo: "numero", min, max });
+const CAMINHO: CampoDoNo = tx("caminho", "Caminho", "Ex.: /oferta (o endereço da página no site)");
+
+/** v4: entradas de dado que viram texto para quem recebe (FONTES_V4 da função). */
+const FONTES_V4: TipoDeNo[] = ["marca", "cliente", "referencias", "arquivo", "produto"];
+/** v4: as peças novas que o Pôr no ar e o agente externo recebem (PECAS_V4 da função). */
+const PECAS_V4: TipoDeNo[] = ["pagina", "checkout", "quiz", "webinar", "dominio", "teste_ab", "automacao", "email", "whatsapp", "area_membros", "crm", "recuperacao", "ugc", "influenciador", "template_designer", "fontes_trafego"];
+const ENTRADA_DE_MENSAGEM: TipoDeNo[] = [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "sequencia_mensagens", ...FONTES_V4, "automacao", "recuperacao", "pagina", "checkout", "quiz", "webinar", "area_membros"];
+
+const DEFINICOES_DA_V4: Record<TipoDaV4, DefinicaoDoNo> = {
+  marca: {
+    tipo: "marca",
+    rotulo: "Marca",
+    dica: "Paleta, tom, fontes e logo; sem nada preenchido vale a marca do cliente do projeto",
+    saida: "texto",
+    entradas: [],
+    roda: false,
+    campos: [tx("paleta", "Paleta"), tl("tom", "Tom de voz"), tx("fontes", "Fontes"), { chave: "logo", rotulo: "Logo", tipo: "imagens" }, tl("regras", "O que a marca nunca faz")],
+    padrao: { paleta: "", tom: "" },
+    cor: "#9333ea",
+    grupo: "entradas",
+  },
+  cliente: {
+    tipo: "cliente",
+    rotulo: "Cliente",
+    dica: "Dossiê curto do cliente do projeto (contexto e marca); nunca traz nota interna",
+    saida: "texto",
+    entradas: [],
+    roda: false,
+    campos: [tl("foco", "O que importa agora", "Ex.: lançamento de março, serviço novo")],
+    padrao: { foco: "" },
+    cor: "#475569",
+    grupo: "entradas",
+  },
+  referencias: {
+    tipo: "referencias",
+    rotulo: "Referências",
+    dica: "Lê sites e anúncios públicos (até 8 links) e descreve seções, tom e cores; nunca copia o código",
+    saida: "texto",
+    entradas: [],
+    roda: true,
+    campos: [tl("links", "Links (sites, Reels, anúncios)", "Um por linha"), { chave: "imagens", rotulo: "Prints", tipo: "imagens" }, tl("o_que_aproveitar", "O que aproveitar"), MODELO],
+    padrao: { links: "", o_que_aproveitar: "" },
+    cor: "#7c3aed",
+    grupo: "entradas",
+  },
+  video: {
+    tipo: "video",
+    rotulo: "Vídeo",
+    dica: "Vídeo de entrada (arquivo ou link) e a transcrição, para UGC, webinar e copy",
+    saida: "video",
+    entradas: [],
+    roda: false,
+    campos: [{ chave: "arquivos", rotulo: "Vídeo", tipo: "arquivos" }, tx("link", "Link (YouTube, Vimeo ou Drive)"), tl("transcricao", "Transcrição", "Cole aqui o texto do vídeo")],
+    padrao: { link: "", transcricao: "" },
+    cor: "#be123c",
+    grupo: "entradas",
+  },
+  arquivo: {
+    tipo: "arquivo",
+    rotulo: "Documento",
+    dica: "PDF, DOCX ou planilha: o texto entra no fluxo; depoimento com fonte daqui vale como prova",
+    saida: "texto",
+    entradas: [],
+    roda: false,
+    campos: [{ chave: "arquivos", rotulo: "Documentos", tipo: "arquivos" }, esc("uso", "Para que serve", OPCOES_DA_V4.uso)],
+    padrao: { uso: "contexto" },
+    cor: "#57534e",
+    grupo: "entradas",
+  },
+  produto: {
+    tipo: "produto",
+    rotulo: "Produto",
+    dica: "O produto (nome, entrega, formato, preço e link que já existe); alimenta oferta, checkout e membros",
+    saida: "json",
+    entradas: [],
+    roda: false,
+    campos: [tx("nome", "Nome"), tl("entregavel", "O que a pessoa recebe"), esc("formato_produto", "Formato", OPCOES_DA_V4.formato_produto, "Escolha"), tx("preco", "Preço"), tx("link_externo", "Página ou checkout que já existe")],
+    padrao: { nome: "", entregavel: "", preco: "" },
+    cor: "#15803d",
+    grupo: "funil",
+  },
+  pagina: {
+    tipo: "pagina",
+    rotulo: "Página do funil",
+    dica: "Uma página do site do funil (captura, vendas, obrigado, VSL...), com formulário que cai no CRM",
+    saida: "html",
+    entradas: [...GUIAS, ...CRIACAO, ...FONTES_V4, "midia", "gravity", "imagem", "carrossel", "logo", "video", "fontes_trafego", "pagina", "checkout", "quiz", "webinar"],
+    roda: true,
+    campos: [esc("tipo_pagina", "Tipo", OPCOES_DA_V4.tipo_pagina), CAMINHO, esc("objetivo", "Objetivo", OPCOES_DA_V4.objetivo_pagina), INSTRUCAO, MODELO],
+    padrao: { tipo_pagina: "captura", caminho: "", objetivo: "capturar", instrucao: "" },
+    cor: "#0284c7",
+    grupo: "funil",
+  },
+  checkout: {
+    tipo: "checkout",
+    rotulo: "Checkout",
+    dica: "Página de checkout com resumo, garantia e order bump; o botão leva ao link do gateway do cliente",
+    saida: "html",
+    entradas: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "quiz", "webinar", "fontes_trafego"],
+    roda: true,
+    campos: [
+      esc("gateway", "Gateway", OPCOES_DA_V4.gateway),
+      tx("link_pagamento", "Link de pagamento (https)", "Obrigatório para pôr no ar"),
+      tx("order_bump", "Link com order bump", "Opcional: o mesmo checkout com o bump marcado"),
+      tx("upsell", "Link do upsell de 1 clique", "Opcional"),
+      tx("produto_externo_id", "Id do produto no gateway"),
+      CAMINHO,
+      tx("garantia", "Garantia"),
+      MODELO,
+    ],
+    padrao: { gateway: "hotmart", link_pagamento: "", caminho: "/checkout" },
+    cor: "#059669",
+    grupo: "funil",
+  },
+  quiz: {
+    tipo: "quiz",
+    rotulo: "Quiz",
+    dica: "Perguntas com pontuação e faixas de resultado; o envio cai no CRM com a pontuação",
+    saida: "html",
+    entradas: [...GUIAS, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "fontes_trafego"],
+    roda: true,
+    campos: [tl("objetivo", "O que descobrir"), num("perguntas", "Perguntas", 3, 12), tl("faixas", "Faixas de pontuação", "Ex.: alta = agenda com o closer; baixa = isca"), esc("captura", "Onde pedir o contato", OPCOES_DA_V4.captura), CAMINHO, MODELO],
+    padrao: { objetivo: "", perguntas: 6, captura: "antes_resultado", caminho: "/quiz" },
+    cor: "#0d9488",
+    grupo: "funil",
+  },
+  webinar: {
+    tipo: "webinar",
+    rotulo: "Webinar",
+    dica: "Inscrição, sala com a oferta no minuto marcado e encerramento; roteiro e lembretes em rascunho",
+    saida: "html",
+    entradas: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "video", "pagina", "fontes_trafego"],
+    roda: true,
+    campos: [
+      tx("tema", "Tema"),
+      esc("modo", "Modo", OPCOES_DA_V4.modo),
+      tx("data", "Data e hora"),
+      tx("link_video", "Link do vídeo da aula (YouTube ou Vimeo)"),
+      tx("minuto_oferta", "Oferta aparece em (min:seg)"),
+      esc("encerramento", "Página de encerramento", OPCOES_DA_V4.encerramento),
+      CAMINHO,
+      MODELO,
+    ],
+    padrao: { tema: "", modo: "gravado", minuto_oferta: "45:00", encerramento: "ultima_chamada", caminho: "/webinar" },
+    cor: "#4f46e5",
+    grupo: "funil",
+  },
+  dominio: {
+    tipo: "dominio",
+    rotulo: "Domínio e endereços",
+    dica: "Domínio, cartão de DNS e links curtos; publicar continua no Pôr no ar",
+    saida: "estado",
+    entradas: ["pagina", "checkout", "quiz", "webinar", "teste_ab", "area_membros", "landing", "fontes_trafego"],
+    roda: true,
+    campos: [
+      tx("dominio", "Domínio", "Sem https e sem barra: cliente.com.br"),
+      tx("subdominio", "Subdomínio", "Ex.: oferta"),
+      esc("estrutura", "Estrutura", OPCOES_DA_V4.estrutura),
+      esc("registrador", "Onde o domínio está", OPCOES_DA_V4.registrador),
+      tl("redirecionamentos", "Links curtos", "Um por linha: /curto -> https://destino"),
+    ],
+    padrao: { dominio: "", estrutura: "caminho", registrador: "registro_br" },
+    cor: "#ea580c",
+    grupo: "publicacao",
+  },
+  teste_ab: {
+    tipo: "teste_ab",
+    rotulo: "Teste A/B",
+    dica: "Liga 2 a 5 páginas ou quizzes: divide o tráfego pelos pesos e conta quem ganha",
+    saida: "estado",
+    entradas: ["pagina", "quiz", "fontes_trafego"],
+    roda: true,
+    campos: [
+      tx("pesos", "Divisão em %", "Ex.: 50/50 (soma 100)"),
+      esc("variavel", "O que muda", OPCOES_DA_V4.variavel),
+      esc("metrica", "Quem ganha", OPCOES_DA_V4.metrica),
+      esc("limite", "Termina por", OPCOES_DA_V4.limite),
+      CAMINHO,
+    ],
+    padrao: { pesos: "50/50", variavel: "titulo", metrica: "lead", limite: "sem_limite" },
+    cor: "#c026d3",
+    grupo: "funil",
+  },
+  automacao: {
+    tipo: "automacao",
+    rotulo: "Automação",
+    dica: "O fluxo (gatilho, esperas, caminhos, saída) e a explicação; vai ao n8n INATIVO, ligar é seu",
+    saida: "json",
+    entradas: [...TEXTOS, "oferta", "produto", "pagina", "checkout", "quiz", "webinar", "crm", "sequencia_mensagens", "recuperacao", "area_membros"],
+    roda: true,
+    campos: [
+      esc("quando", "Quando começa", OPCOES_DA_V4.quando),
+      tl("condicoes", "Caminhos"),
+      tx("espera", "Esperas"),
+      esc("objetivo_saida", "Sai do fluxo quando", OPCOES_DA_V4.objetivo_saida),
+      esc("horario", "Só em horário comercial", OPCOES_DA_V4.horario),
+      MODELO,
+    ],
+    padrao: { quando: "formulario", objetivo_saida: "comprou", horario: "sim" },
+    cor: "#7e22ce",
+    grupo: "mensagens",
+  },
+  email: {
+    tipo: "email",
+    rotulo: "E-mail",
+    dica: "E-mails prontos em HTML (rascunho); o envio só depois da sua aprovação",
+    saida: "json",
+    entradas: ENTRADA_DE_MENSAGEM,
+    roda: true,
+    campos: [esc("tipo_email", "Tipo", OPCOES_DA_V4.tipo_email), num("mensagens", "Quantos", 1, 10), tx("remetente", "Remetente"), tl("objetivo", "Objetivo"), MODELO],
+    padrao: { tipo_email: "sequencia", mensagens: 3, remetente: "", objetivo: "" },
+    cor: "#1d4ed8",
+    grupo: "mensagens",
+  },
+  whatsapp: {
+    tipo: "whatsapp",
+    rotulo: "WhatsApp",
+    dica: "Mensagens e modelos no formato da Meta, conferidos pelas regras; não envia nada",
+    saida: "json",
+    entradas: ENTRADA_DE_MENSAGEM,
+    roda: true,
+    campos: [esc("via", "Canal", OPCOES_DA_V4.via_whatsapp), esc("tipo_mensagem", "Tipo", OPCOES_DA_V4.tipo_mensagem), num("mensagens", "Quantas", 1, 10), esc("categoria", "Categoria do modelo", OPCOES_DA_V4.categoria), tl("objetivo", "Objetivo"), MODELO],
+    padrao: { via: "cloud_api", tipo_mensagem: "modelo", mensagens: 3, categoria: "utilidade", objetivo: "" },
+    cor: "#16a34a",
+    grupo: "mensagens",
+  },
+  area_membros: {
+    tipo: "area_membros",
+    rotulo: "Área de membros",
+    dica: "Estrutura do curso (módulos, aulas, roteiros) e a página de boas-vindas; a entrega é na plataforma do cliente",
+    saida: "json",
+    entradas: [...GUIAS, "avatar", ...FONTES_V4, "checkout", "video"],
+    roda: true,
+    campos: [esc("plataforma", "Onde entrega", OPCOES_DA_V4.plataforma), num("modulos", "Módulos", 1, 12), num("aulas_por_modulo", "Aulas por módulo", 1, 15), esc("liberacao", "Liberação", OPCOES_DA_V4.liberacao), MODELO],
+    padrao: { plataforma: "hotmart_club", modulos: 4, aulas_por_modulo: 4, liberacao: "tudo" },
+    cor: "#b45309",
+    grupo: "funil",
+  },
+  ugc: {
+    tipo: "ugc",
+    rotulo: "Criativo UGC",
+    dica: "Roteiro com gancho nos 3 primeiros segundos e o quadro-chave de cada variação",
+    saida: "imagens",
+    entradas: [...GUIAS, "avatar", "refino_tom", ...FONTES_V4, "influenciador", "midia", "imagem", "video", "config", "gravity", "logo"],
+    roda: true,
+    campos: [esc("estilo_ugc", "Formato", OPCOES_DA_V4.estilo_ugc), num("duracao", "Duração (s)", 8, 45), num("variacoes", "Variações", 1, 5), INSTRUCAO, MODELO, MOTOR],
+    padrao: { estilo_ugc: "depoimento", duracao: 20, variacoes: 3, instrucao: "" },
+    cor: "#e11d48",
+    grupo: "criacao",
+  },
+  influenciador: {
+    tipo: "influenciador",
+    rotulo: "Influenciador digital",
+    dica: "Personagem fixo: ficha e fotos consistentes (o mesmo rosto) para UGC, posts e carrosséis",
+    saida: "imagens",
+    entradas: [...TEXTOS, "pesquisa", "avatar", ...FONTES_V4, "midia", "config", "gravity"],
+    roda: true,
+    campos: [tx("nome", "Nome"), tl("aparencia", "Aparência"), tx("estilo", "Estilo e nicho"), num("poses", "Fotos de referência", 1, 8), MOTOR],
+    padrao: { nome: "", aparencia: "", estilo: "", poses: 4 },
+    cor: "#db2777",
+    grupo: "criacao",
+  },
+  template_designer: {
+    tipo: "template_designer",
+    rotulo: "Template editável",
+    dica: "Arte com camadas editáveis (texto clicável, sem gastar) e lote a partir de planilha",
+    saida: "imagens",
+    entradas: [...TEXTOS, ...FONTES_V4, "midia", "imagem", "logo", "config", "gravity", "influenciador"],
+    roda: true,
+    campos: [esc("formato_arte", "Formato", OPCOES_DA_V4.formato_arte), tl("estilo", "Estilo"), tl("campos_variaveis", "Campos que mudam", "Ex.: título, preço, foto"), esc("lote", "Gerar em lote", OPCOES_DA_V4.lote), MOTOR],
+    padrao: { formato_arte: "feed_4_5", estilo: "", campos_variaveis: "titulo, preco", lote: "nao" },
+    cor: "#a21caf",
+    grupo: "criacao",
+  },
+  crm: {
+    tipo: "crm",
+    rotulo: "Etapa do CRM",
+    dica: "Põe o lead na etapa quando o gatilho acontece, sem automação; o lead nunca volta etapa",
+    saida: "estado",
+    entradas: ["pagina", "checkout", "quiz", "webinar", "automacao", "area_membros"],
+    roda: true,
+    campos: [tx("pipeline", "Pipeline"), tx("etapa", "Etapa"), tx("temperatura", "Somar à temperatura", "De -100 a 100, ex.: 40"), tx("responsavel", "Responsável")],
+    padrao: { pipeline: "Funil", etapa: "", temperatura: "" },
+    cor: "#0f766e",
+    grupo: "funil",
+  },
+  recuperacao: {
+    tipo: "recuperacao",
+    rotulo: "Recuperação",
+    dica: "Carrinho abandonado, Pix ou boleto não pago: toques diferentes e saída na compra (rascunho)",
+    saida: "json",
+    entradas: [...TEXTOS, "oferta", "produto", "marca", "avatar", ...CARRINHO, "checkout", "webinar"],
+    roda: true,
+    campos: [esc("situacao", "Situação", OPCOES_DA_V4.situacao), esc("via", "Canal", OPCOES_DA_V4.via_recuperacao), num("toques", "Quantos toques", 1, 3), MODELO],
+    padrao: { situacao: "carrinho_abandonado", via: "email", toques: 3 },
+    cor: "#dc2626",
+    grupo: "mensagens",
+  },
+  fontes_trafego: {
+    tipo: "fontes_trafego",
+    rotulo: "Fontes de tráfego",
+    dica: "Um link com UTM por canal (o do anúncio liga o lead ao anúncio); ligue no destino",
+    saida: "json",
+    entradas: [],
+    roda: true,
+    campos: [tl("canais", "Canais", "Um por linha: instagram, anuncio meta, email..."), tx("url_base", "Endereço do site", "https://cliente.com.br"), tx("campanha", "Campanha")],
+    padrao: { canais: "instagram\nanuncio meta", url_base: "", campanha: "" },
+    cor: "#0369a1",
+    grupo: "funil",
+  },
+};
+
 export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
   contexto: {
     tipo: "contexto",
@@ -186,7 +583,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     saida: "texto",
     entradas: [],
     roda: false,
-    campos: [{ chave: "texto", rotulo: "Texto", tipo: "textoLongo" }],
+    campos: [{ chave: "texto", rotulo: "Texto", tipo: "textoLongo" }, { chave: "arquivos", rotulo: "Documentos", tipo: "arquivos" }],
     padrao: { texto: "" },
     cor: "#64748b",
   },
@@ -233,7 +630,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     saida: "texto",
     entradas: [...GUIAS, ...CRIACAO, "midia", "imagem", "carrossel", "logo", "landing", "anuncio"],
     roda: true,
-    campos: [MODELO, { chave: "instrucao", rotulo: "Instrução", tipo: "textoLongo" }],
+    campos: [MODELO, { chave: "instrucao", rotulo: "Instrução", tipo: "textoLongo" }, { chave: "arquivos", rotulo: "Documentos", tipo: "arquivos" }],
     padrao: { modelo_id: MODELO_PADRAO_DO_LAB, instrucao: "" },
     cor: "#10b981",
   },
@@ -498,7 +895,45 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     padrao: { tom: "", instrucao: "" },
     cor: "#db2777",
   },
+  ...DEFINICOES_DA_V4,
 };
+
+/**
+ * v4: o que os tipos antigos passam a receber dos nós novos (ENTRADAS_EXTRAS_V4 da função; o teste
+ * laboratorio-contrato confere par a par).
+ */
+export const ENTRADAS_EXTRAS_V4: Partial<Record<TipoDeNo, TipoDeNo[]>> = {
+  gravity: ["marca", "referencias", "influenciador"],
+  agente: [...FONTES_V4, "video"],
+  copy: [...FONTES_V4, "video", "influenciador"],
+  imagem: [...FONTES_V4, "influenciador"],
+  carrossel: [...FONTES_V4, "influenciador"],
+  logo: ["marca", "cliente", "referencias"],
+  landing: [...FONTES_V4],
+  anuncio: [...FONTES_V4, "ugc", "template_designer", "pagina", "checkout", "quiz", "webinar"],
+  agente_externo: [...FONTES_V4, ...PECAS_V4],
+  pesquisa: ["cliente", "referencias", "arquivo", "produto"],
+  oferta: [...FONTES_V4],
+  funil: [...FONTES_V4],
+  filme: ["marca", "cliente", "produto", "video", "arquivo"],
+  por_no_ar: [...PECAS_V4],
+  avatar: ["cliente", "referencias", "arquivo", "produto"],
+  order_bump: [...FONTES_V4],
+  upsell: [...FONTES_V4],
+  downsell: [...FONTES_V4],
+  sequencia_ofertas: [...FONTES_V4],
+  secoes_pagina: [...FONTES_V4],
+  sequencia_mensagens: [...FONTES_V4, "pagina", "checkout", "quiz", "webinar"],
+  refino_tom: [...FONTES_V4, "email", "whatsapp"],
+};
+(Object.keys(ENTRADAS_EXTRAS_V4) as TipoDeNo[]).forEach((t) => {
+  const extras = ENTRADAS_EXTRAS_V4[t] || [];
+  const atuais = TIPOS_DE_NO[t].entradas;
+  TIPOS_DE_NO[t].entradas = atuais.concat(extras.filter((x, i) => extras.indexOf(x) === i && atuais.indexOf(x) < 0));
+});
+
+/** Tipos da v4 (ESPEC-LABORATORIO-v4.md), na ordem da função. */
+export const TIPOS_DA_V4: TipoDaV4[] = Object.keys(DEFINICOES_DA_V4) as TipoDaV4[];
 
 /** Só um por destino: duas configurações ou duas bases comuns se contradiriam (UM_POR_DESTINO da função). */
 const UM_POR_DESTINO: TipoDeNo[] = ["config", "gravity"];
@@ -510,31 +945,118 @@ export const TIPOS_DA_V3: TipoDeNo[] = ["avatar", "order_bump", "upsell", "downs
 
 export const ORDEM_DA_PALETA: TipoDeNo[] = [
   "contexto",
+  "cliente",
+  "marca",
+  "arquivo",
+  "referencias",
+  "video",
   "midia",
   "config",
   "gravity",
   "pesquisa",
   "avatar",
+  "produto",
   "oferta",
   "order_bump",
   "upsell",
   "downsell",
   "sequencia_ofertas",
   "funil",
+  "fontes_trafego",
+  "pagina",
+  "quiz",
+  "webinar",
+  "checkout",
+  "teste_ab",
+  "crm",
+  "area_membros",
   "agente",
   "copy",
   "refino_tom",
   "sequencia_mensagens",
+  "automacao",
+  "email",
+  "whatsapp",
+  "recuperacao",
   "secoes_pagina",
   "imagem",
   "carrossel",
   "logo",
   "landing",
+  "influenciador",
+  "ugc",
+  "template_designer",
   "anuncio",
   "filme",
   "agente_externo",
+  "dominio",
   "por_no_ar",
 ];
+
+/** Rótulo de cada grupo da paleta, na ordem da tela. */
+export const GRUPOS_DA_PALETA: ReadonlyArray<{ id: GrupoDaPaleta; rotulo: string }> = [
+  { id: "entradas", rotulo: "Entradas" },
+  { id: "criacao", rotulo: "Criação" },
+  { id: "funil", rotulo: "Funil" },
+  { id: "mensagens", rotulo: "Mensagens" },
+  { id: "agentes", rotulo: "Agentes" },
+  { id: "publicacao", rotulo: "Publicação" },
+  { id: "outros", rotulo: "Outros" },
+];
+
+/** Grupo dos tipos de hoje. Tipo novo: ponha `grupo` na definição; sem nada, cai em "Outros". */
+const GRUPO_DOS_TIPOS: Partial<Record<TipoDeNo, GrupoDaPaleta>> = {
+  contexto: "entradas",
+  midia: "entradas",
+  config: "entradas",
+  gravity: "entradas",
+  pesquisa: "entradas",
+  imagem: "criacao",
+  carrossel: "criacao",
+  logo: "criacao",
+  landing: "criacao",
+  secoes_pagina: "criacao",
+  filme: "criacao",
+  avatar: "funil",
+  oferta: "funil",
+  order_bump: "funil",
+  upsell: "funil",
+  downsell: "funil",
+  sequencia_ofertas: "funil",
+  funil: "funil",
+  copy: "mensagens",
+  refino_tom: "mensagens",
+  sequencia_mensagens: "mensagens",
+  agente: "agentes",
+  agente_externo: "agentes",
+  anuncio: "publicacao",
+  por_no_ar: "publicacao",
+};
+
+export function grupoDoTipo(t: TipoDeNo): GrupoDaPaleta {
+  const def = TIPOS_DE_NO[t];
+  return (def && def.grupo) || GRUPO_DOS_TIPOS[t] || "outros";
+}
+
+/**
+ * A paleta em grupos: a ordem de ORDEM_DA_PALETA dentro de cada grupo, e os
+ * tipos que ainda não estão nela no fim do grupo deles. Grupo vazio some.
+ */
+export function gruposDaPaleta(): Array<{ id: GrupoDaPaleta; rotulo: string; tipos: TipoDeNo[] }> {
+  const todos = ORDEM_DA_PALETA.filter(ehTipoDeNo).concat((Object.keys(TIPOS_DE_NO) as TipoDeNo[]).filter((t) => ORDEM_DA_PALETA.indexOf(t) < 0));
+  return GRUPOS_DA_PALETA.map((g) => ({ id: g.id, rotulo: g.rotulo, tipos: todos.filter((t) => grupoDoTipo(t) === g.id) })).filter((g) => g.tipos.length > 0);
+}
+
+/** Tipos que podem receber uma ligação de `origem` (menu rápido do quadro). */
+export function tiposQueRecebem(origem: TipoDeNo): TipoDeNo[] {
+  return gruposDaPaleta().reduce((acc, g) => acc.concat(g.tipos.filter((t) => TIPOS_DE_NO[t].entradas.indexOf(origem) >= 0)), [] as TipoDeNo[]);
+}
+
+/** Tipos que podem entrar em `destino` (menu rápido puxado de uma entrada). */
+export function tiposQueEntram(destino: TipoDeNo): TipoDeNo[] {
+  const aceitos = TIPOS_DE_NO[destino].entradas;
+  return gruposDaPaleta().reduce((acc, g) => acc.concat(g.tipos.filter((t) => aceitos.indexOf(t) >= 0)), [] as TipoDeNo[]);
+}
 
 const NOMES_DAS_SAIDAS: Record<Saida, string> = {
   texto: "texto",
@@ -560,6 +1082,60 @@ export interface LigacaoDoLab {
   id: string;
   de: string;
   para: string;
+  /** v4: o gatilho do funil no fio (só nas ligações que saem de página, checkout, quiz, webinar e teste A/B). */
+  gatilho?: Gatilho;
+}
+
+// ------------------------------------------------------------ v4: gatilho na ligação do funil
+
+/** Gatilhos do fio (GATILHOS da função): "a conexão é o gatilho", como no ClickMax. */
+export const GATILHOS = [
+  { valor: "visitou", rotulo: "Visitou" },
+  { valor: "clicou_botao", rotulo: "Clicou no botão" },
+  { valor: "enviou_formulario", rotulo: "Enviou o formulário" },
+  { valor: "quiz_concluido", rotulo: "Concluiu o quiz" },
+  { valor: "faixa_alta", rotulo: "Resultado alto" },
+  { valor: "faixa_media", rotulo: "Resultado médio" },
+  { valor: "faixa_baixa", rotulo: "Resultado baixo" },
+  { valor: "compra_aprovada", rotulo: "Compra aprovada" },
+  { valor: "compra_recusada", rotulo: "Compra recusada" },
+  { valor: "carrinho_abandonado", rotulo: "Carrinho abandonado" },
+  { valor: "pix_gerado", rotulo: "Pix gerado" },
+  { valor: "upsell_aceito", rotulo: "Aceitou o upsell" },
+  { valor: "upsell_recusado", rotulo: "Recusou o upsell" },
+] as const;
+export type Gatilho = (typeof GATILHOS)[number]["valor"];
+
+/** Os gatilhos que cada origem tem (GATILHOS_DA_ORIGEM da função). */
+export const GATILHOS_DA_ORIGEM: Partial<Record<TipoDeNo, Gatilho[]>> = {
+  pagina: ["visitou", "clicou_botao", "enviou_formulario", "upsell_aceito", "upsell_recusado"],
+  checkout: ["visitou", "clicou_botao", "compra_aprovada", "compra_recusada", "carrinho_abandonado", "pix_gerado"],
+  quiz: ["visitou", "enviou_formulario", "quiz_concluido", "faixa_alta", "faixa_media", "faixa_baixa"],
+  webinar: ["visitou", "enviou_formulario", "clicou_botao"],
+  teste_ab: ["visitou"],
+};
+
+export const gatilhosDe = (tipo: TipoDeNo): Gatilho[] => GATILHOS_DA_ORIGEM[tipo] || [];
+export const rotuloDoGatilho = (g: string): string => {
+  const achado = GATILHOS.find((x) => x.valor === g);
+  return achado ? achado.rotulo : "";
+};
+const gatilhoDaOrigem = (canvas: Pick<CanvasDoLab, "nos">, de: string, g: unknown): Gatilho | undefined => {
+  const origem = canvas.nos.find((n) => n.id === de);
+  return origem && typeof g === "string" && gatilhosDe(origem.tipo).indexOf(g as Gatilho) >= 0 ? (g as Gatilho) : undefined;
+};
+
+/** Põe (ou tira, com vazio) o gatilho de uma ligação. Gatilho que a origem não tem não entra. */
+export function definirGatilho(canvas: CanvasDoLab, ligacaoId: string, gatilho: string | null | undefined): CanvasDoLab {
+  return {
+    ...canvas,
+    ligacoes: canvas.ligacoes.map((l) => {
+      if (l.id !== ligacaoId) return l;
+      const g = gatilhoDaOrigem(canvas, l.de, gatilho);
+      const sem: LigacaoDoLab = { id: l.id, de: l.de, para: l.para };
+      return g ? { ...sem, gatilho: g } : sem;
+    }),
+  };
 }
 
 export interface CanvasDoLab {
@@ -606,7 +1182,11 @@ export function normalizarCanvas(bruto: unknown): CanvasDoLab {
     const para = String(l.para || l.target || "");
     if (!nos.some((n) => n.id === de) || !nos.some((n) => n.id === para) || de === para) return;
     if (ligacoes.some((x) => x.de === de && x.para === para)) return;
-    ligacoes.push({ id: typeof l.id === "string" && l.id ? l.id : `l_${i}`, de, para });
+    const nova: LigacaoDoLab = { id: typeof l.id === "string" && l.id ? l.id : `l_${i}`, de, para };
+    // v4: o gatilho só fica quando a origem tem esse gatilho.
+    const g = gatilhoDaOrigem({ nos }, de, l.gatilho);
+    if (g) nova.gatilho = g;
+    ligacoes.push(nova);
   });
   const v = c.viewport && typeof c.viewport === "object" ? c.viewport : {};
   return { nos, ligacoes, viewport: { x: numero(v.x, 0), y: numero(v.y, 0), zoom: numero(v.zoom, 1) || 1 } };
@@ -669,9 +1249,12 @@ export function podeLigar(canvas: CanvasDoLab, de: string, para: string): { ok: 
   return { ok: true, motivo: "" };
 }
 
-export function ligar(canvas: CanvasDoLab, de: string, para: string): CanvasDoLab {
+export function ligar(canvas: CanvasDoLab, de: string, para: string, gatilho?: string | null): CanvasDoLab {
   if (!podeLigar(canvas, de, para).ok) return canvas;
-  return { ...canvas, ligacoes: canvas.ligacoes.concat({ id: novoId("l"), de, para }) };
+  const nova: LigacaoDoLab = { id: novoId("l"), de, para };
+  const g = gatilhoDaOrigem(canvas, de, gatilho);
+  if (g) nova.gatilho = g;
+  return { ...canvas, ligacoes: canvas.ligacoes.concat(nova) };
 }
 
 export function desligar(canvas: CanvasDoLab, de: string, para?: string): CanvasDoLab {
@@ -750,6 +1333,8 @@ export interface OperacaoDoAgente {
   tipo?: TipoDeNo;
   de?: string;
   para?: string;
+  /** ligar (v4): o gatilho do funil no fio. */
+  gatilho?: string;
   dados?: Record<string, unknown>;
   x?: number;
   y?: number;
@@ -781,6 +1366,7 @@ export function normalizarOperacao(bruta: unknown): OperacaoDoAgente | null {
   if (ehTipoDeNo(o.tipo)) saida.tipo = o.tipo;
   if (typeof (o.de || o.origem) === "string") saida.de = o.de || o.origem;
   if (typeof (o.para || o.destino) === "string") saida.para = o.para || o.destino;
+  if (op === "ligar" && typeof o.gatilho === "string" && o.gatilho) saida.gatilho = o.gatilho;
   if (Object.keys(dados).length) saida.dados = dados;
   if (typeof o.x === "number" && isFinite(o.x)) saida.x = o.x;
   if (typeof o.y === "number" && isFinite(o.y)) saida.y = o.y;
@@ -849,7 +1435,7 @@ export function aplicarOperacoes(canvas: CanvasDoLab, ops: OperacaoDoAgente[]): 
         falhas.push({ recibo, motivo: v.motivo });
         return;
       }
-      atual = ligar(atual, real(op.de), real(op.para));
+      atual = ligar(atual, real(op.de), real(op.para), op.gatilho);
       feitas += 1;
     } else if (op.op === "desligar") {
       atual = desligar(atual, real(op.de), real(op.para));
@@ -893,9 +1479,9 @@ export function resumoDoNo(no: NoDoLab): string {
 // ------------------------------------------------------------ Canvas Studio
 
 /** Atalhos que pedem o projeto inteiro (pesquisa até pôr no ar). */
-export const ATALHOS_DE_PROJETO_COMPLETO = ["low_ticket", "funil", "empresa"];
+export const ATALHOS_DE_PROJETO_COMPLETO = ["low_ticket", "funil", "empresa", "webinar", "quiz", "lancamento", "checkout_upsell"];
 
-const PALAVRAS_DE_PROJETO = ["empresa", "negocio", "low ticket", "lowticket", "infoproduto", "funil", "lancamento", "do zero", "projeto completo", "produto digital", "ecommerce", "loja virtual", "pagina de vendas", "por no ar"];
+const PALAVRAS_DE_PROJETO = ["empresa", "negocio", "low ticket", "lowticket", "infoproduto", "funil", "lancamento", "do zero", "projeto completo", "produto digital", "ecommerce", "loja virtual", "pagina de vendas", "por no ar", "webinar", "quiz de qualificacao", "checkout com upsell"];
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 

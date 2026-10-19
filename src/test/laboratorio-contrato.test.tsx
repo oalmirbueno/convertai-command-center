@@ -256,7 +256,8 @@ describe("contrato: regras do canvas iguais na tela e na função", () => {
     expect(caminhoDeEntrada(P, "m_1", "Foto do produto (1).PNG")).toBe(`global/laboratorio/${P}/entradas/m_1-Foto-do-produto-1-.PNG`);
     const politica = ler("supabase/migrations/20260727132145_secure_file_approval_double_gate.sql");
     expect(politica).toContain("IF _folders[1] = 'global' THEN");
-    expect(ler("src/components/laboratorio/Inspetor.tsx")).toContain("caminhoDeEntrada(projetoId");
+    // O envio (imagens e documentos) mora no renderizador de campos que o Inspetor e o nó usam.
+    expect(ler("src/components/laboratorio/CamposDoNo.tsx")).toContain("caminhoDeEntrada(projetoId");
   });
 });
 
