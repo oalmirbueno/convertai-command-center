@@ -93,24 +93,39 @@ export interface Reescrito {
   aprendizado?: unknown[];
 }
 
+/**
+ * 19/10: o motivo técnico da IA (ia_erro) vai junto da frase do servidor
+ * quando ela ainda não o cita, para o "Não deu certo" dizer o porquê.
+ */
+export function mensagemComMotivo(mensagem: string, iaErro: unknown): string {
+  const motivo = typeof iaErro === "string" ? iaErro.trim() : "";
+  if (!motivo || mensagem.includes(motivo)) return mensagem;
+  return mensagem ? `${mensagem} Motivo: ${motivo}` : `Motivo: ${motivo}`;
+}
+
 async function chamar<T>(body: Record<string, unknown>): Promise<T> {
   // O modelo escolhido na Central (GPT-6 Luna, raciocínio máximo, por padrão) vale também para o agente.
   const { data, error } = await supabase.functions.invoke("agente-central", { body: { ...body, ...corpoDoModelo(escolhaGuardada()) } });
   if (error) {
     // Frente AG3: o motivo do servidor (403, 400 com mensagem) aparece em vez da frase genérica.
     let mensagem = "";
+    let status = 0;
     try {
-      const ctx = (error as { context?: { clone?: () => Response } }).context;
+      const ctx = (error as { context?: { clone?: () => Response; status?: number } }).context;
+      status = typeof ctx?.status === "number" ? ctx.status : 0;
       const j = ctx && typeof ctx.clone === "function" ? await ctx.clone().json() : null;
       mensagem = j && typeof j.mensagem === "string" ? j.mensagem : j && typeof j.error === "string" ? j.error : "";
+      mensagem = mensagemComMotivo(mensagem, j?.ia_erro);
     } catch {
       mensagem = "";
     }
+    // 504/546: a função passou do tempo antes de responder (sem corpo em JSON).
+    if (!mensagem && (status === 504 || status === 546)) mensagem = "O servidor passou do tempo para responder este cliente. Tente de novo.";
     throw new Error(mensagem || "O agente não respondeu agora. Tente de novo.");
   }
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== "object") throw new Error("Resposta vazia do agente.");
-  if (typeof d.error === "string") throw new Error(String(d.mensagem || d.error));
+  if (typeof d.error === "string") throw new Error(mensagemComMotivo(String(d.mensagem || d.error), d.ia_erro));
   return d as unknown as T;
 }
 

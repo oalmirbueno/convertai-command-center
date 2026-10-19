@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { emLotes, assinaturaDasRespostas } from "./filaDaCentral";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { assinaturaDasRespostas, criarVagas, type Vagas } from "./filaDaCentral";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Bot, CheckCircle2, ChevronDown, ClipboardCopy, ExternalLink, ListPlus, Loader2, MessageCircle, PenLine, RefreshCw, Send, X } from "lucide-react";
@@ -20,7 +20,7 @@ import {
 } from "./agenteCentralApi";
 import { avisoDeRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
 import {
-  etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, seloDaRodada,
+  etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, rodadaRetomada, seloDaRodada,
   type EtapaDoAgente, type ItemDaRodada, type Rodada, type Rodando, type Situacao,
 } from "./rodadaDoAgente";
 
@@ -38,13 +38,40 @@ import {
  * diário e no cérebro, escreve o ritual com memória, publica no portal e
  * deixa pronto para copiar.
  *
- * A fila anda aqui, dois clientes por vez: cada chamada ao servidor trata um
- * cliente só (limite das Edge Functions). A rodada fica guardada neste
+ * A fila anda aqui, quatro clientes por vez: cada chamada ao servidor trata
+ * um cliente só (limite das Edge Functions). A rodada fica guardada neste
  * navegador enquanto não termina; fechar o pop-up não perde nada e a leitura
  * continua enquanto a Central estiver aberta.
+ *
+ * 19/10 (dono: "trava pra responder quando está carregando"): a fila não
+ * prende mais a tela. Cada cliente fica livre para responder assim que fica
+ * pronto, o primeiro pronto já leva ao passo Responder, aplicar um cliente
+ * não espera os outros (passa na frente de quem ainda espera a vez na
+ * leitura) e só o cliente em andamento fica travado. As consultas da Central
+ * são atualizadas uma vez, quando nada mais está a caminho.
  */
 
-const LOTE = 2;
+/**
+ * Chamadas ao mesmo tempo, somando leitura e aplicação. Eram 2 por causa do
+ * 429 de tokens por minuto da OpenAI (AB2, 26/09). Desde então o contexto
+ * encolheu (dossiê e fatos com teto), o modelo da Central cai na reserva
+ * pelo OpenRouter quando o direto recusa e o servidor passa a responder em
+ * cerca de 10 s por chamada, então 4 cabem no limite. Se alguma chamada
+ * falhar, o resto da sessão volta para LOTE_SEGURO (o ritmo antigo).
+ */
+const LOTE = 4;
+const LOTE_SEGURO = 2;
+
+/** O que a leitura e a aplicação mudam nas outras telas (atualizado no fim da fila). */
+const CHAVES_DA_LEITURA: QueryKey[] = [["dossie-cliente"], ["exp-dossies"], ["exp-dossie-versoes"], ["mesa", "contexto"]];
+const CHAVES_DA_APLICACAO: QueryKey[] = [
+  ["exp-reports"], ["reports"], ["exp-memory"], ["cycle-rituals-central"], ["dossie-cliente"], ["agente-central-tarefas-sugeridas"],
+  ["exp-dossies"], ["exp-dossie-versoes"], ["dossie-historico"], ["client-memory-timeline"],
+  ["mesa", "contexto"], ["mesa", "memoria"], ["mesa", "cerebro-organizado"], ["mesa", "saude-conhecimento"],
+];
+const CHAVES_DO_ENVIO: QueryKey[] = [["exp-reports"], ["reports"], ["exp-memory"], ["cycle-rituals-central"], ["dossie-cliente"]];
+
+type Ocupacao = "lendo" | "aplicando";
 
 const RITUAIS = [
   { value: "rota_semana", label: "Rota da semana (segunda)" },
@@ -300,10 +327,16 @@ export default function AgenteDaCentral() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [aberto, setAberto] = useState(false);
-  const [rodada, setRodada] = useState<Rodada | null>(() => (typeof window === "undefined" ? null : lerLocal()));
+  const [rodada, setRodada] = useState<Rodada | null>(() => (typeof window === "undefined" ? null : rodadaRetomada(lerLocal())));
   const [carregandoLista, setCarregandoLista] = useState(false);
   const [erroLista, setErroLista] = useState<string | null>(null);
-  const [rodando, setRodando] = useState<Rodando>(null);
+  // Quem está a caminho do servidor agora (por cliente). Só ele fica travado; o resto da tela segue livre.
+  const [ocupados, setOcupados] = useState<Record<string, Ocupacao>>({});
+  const ocupadosRef = useRef<Record<string, Ocupacao>>({});
+  const vagasRef = useRef<Vagas | null>(null);
+  if (!vagasRef.current) vagasRef.current = criarVagas(LOTE);
+  const vagas = vagasRef.current;
+  const invalidarRef = useRef(new Map<string, QueryKey>());
   const [ritualEscolhido, setRitualEscolhido] = useState(ritualDeHoje());
   const [etapa, setEtapa] = useState<EtapaDoAgente>("ler");
   const [clienteAberto, setClienteAberto] = useState<string | null>(null);
@@ -316,6 +349,29 @@ export default function AgenteDaCentral() {
 
   const atualizarItem = (clientId: string, mudar: (item: ItemDaRodada) => ItemDaRodada) => {
     setRodada((r) => (r ? { ...r, itens: r.itens.map((i) => (i.cliente.id === clientId ? mudar(i) : i)) } : r));
+  };
+
+  const marcarOcupados = (ids: string[], qual: Ocupacao | null) => {
+    const prox = { ...ocupadosRef.current };
+    for (const id of ids) {
+      if (qual) prox[id] = qual;
+      else delete prox[id];
+    }
+    ocupadosRef.current = prox;
+    setOcupados(prox);
+  };
+  const lendoAlgum = Object.values(ocupados).includes("lendo");
+  const aplicandoAlgum = Object.values(ocupados).includes("aplicando");
+  const rodando: Rodando = lendoAlgum ? "lendo" : aplicandoAlgum ? "aplicando" : null;
+
+  // Invalidar dezenas de consultas a cada cliente fazia a Central recarregar no meio da fila.
+  // Agora as chaves se juntam e saem uma vez, quando nada mais está a caminho.
+  const invalidarNoFim = (chaves: QueryKey[]) => {
+    for (const k of chaves) invalidarRef.current.set(JSON.stringify(k), k);
+    if (Object.keys(ocupadosRef.current).length) return;
+    const juntas = [...invalidarRef.current.values()];
+    invalidarRef.current.clear();
+    for (const queryKey of juntas) void queryClient.invalidateQueries({ queryKey });
   };
 
   const contagem = useMemo(() => {
@@ -359,7 +415,7 @@ export default function AgenteDaCentral() {
   };
 
   const recomecar = () => {
-    if (rodando) return;
+    if (Object.keys(ocupadosRef.current).length) return;
     setRodada(null);
     rodadaRef.current = null;
     gravarLocal(null);
@@ -367,40 +423,61 @@ export default function AgenteDaCentral() {
     void abrir(true);
   };
 
-  // Passo 1: consultar memória e trazer apenas decisões ainda abertas.
-  const lerTodos = async () => {
-    const atual = rodadaRef.current;
-    if (!atual || rodando) return;
-    const ritual = ritualEscolhido;
-    setRodada({ ...atual, ritual });
-    const alvos = atual.itens.filter((i) => i.incluir && !i.preparo).map((i) => i.cliente);
-    if (!alvos.length) { toast.info("Todos os clientes marcados já foram lidos."); return; }
-    setRodando("lendo");
-    await emLotes(alvos, LOTE, async (c) => {
+  /**
+   * Lê os clientes pelas vagas. Cada um fica livre para responder assim que
+   * a leitura dele chega; o primeiro pronto já leva ao passo Responder.
+   * Devolve quantos não deram certo.
+   */
+  const lerClientes = async (alvos: ClienteDoAgente[], ritual: string, prioridade: boolean): Promise<number> => {
+    marcarOcupados(alvos.map((c) => c.id), "lendo");
+    let levouAResponder = false;
+    const resultados = await Promise.all(alvos.map((c) => vagas.rodar(async () => {
       atualizarItem(c.id, (i) => ({ ...i, situacao: "lendo", erro: null }));
       try {
         const p = await prepararCliente(c.id, ritual);
         atualizarItem(c.id, (i) => ({ ...i, situacao: "perguntas", preparo: p, respostas: p.perguntas.map((_, k) => i.respostas[k] ?? ""), aprendizado: p.aprendizado ?? [] }));
+        if (!levouAResponder) {
+          levouAResponder = true;
+          setEtapa((e) => (e === "ler" ? "responder" : e));
+        }
+        return true;
       } catch (e) {
+        vagas.reduzir(LOTE_SEGURO);
         atualizarItem(c.id, (i) => ({ ...i, situacao: "erro", erro: e instanceof Error ? e.message : "Falha ao ler." }));
+        return false;
+      } finally {
+        marcarOcupados([c.id], null);
       }
-    });
-    setRodando(null);
-    setEtapa((e) => (e === "ler" && rodadaRef.current?.itens.some((i) => i.incluir && i.preparo) ? "responder" : e));
-    for (const queryKey of [["dossie-cliente"], ["exp-dossies"], ["exp-dossie-versoes"], ["mesa", "contexto"]]) {
-      void queryClient.invalidateQueries({ queryKey });
-    }
-    toast.success("Leitura concluída. Só as decisões que faltam aparecem como perguntas.");
+    }, prioridade)));
+    invalidarNoFim(CHAVES_DA_LEITURA);
+    return resultados.filter((ok) => !ok).length;
+  };
+
+  // Passo 1: consultar memória e trazer apenas decisões ainda abertas.
+  const lerTodos = async () => {
+    const atual = rodadaRef.current;
+    if (!atual || Object.values(ocupadosRef.current).includes("lendo")) return;
+    const ritual = ritualEscolhido;
+    setRodada({ ...atual, ritual });
+    const alvos = atual.itens.filter((i) => i.incluir && !i.preparo && !ocupadosRef.current[i.cliente.id]).map((i) => i.cliente);
+    if (!alvos.length) { toast.info("Todos os clientes marcados já foram lidos."); return; }
+    const falhas = await lerClientes(alvos, ritual, false);
+    if (falhas) toast.warning(`Leitura concluída. ${falhas} cliente(s) não deram certo: o motivo está na lista, com Tentar de novo.`);
+    else toast.success("Leitura concluída. Só as decisões que faltam aparecem como perguntas.");
   };
 
   // Passo 3: aplicar as respostas, escrever o ritual e publicar.
   const aplicarTodos = async (clientId?: string) => {
     const atual = rodadaRef.current;
-    if (!atual || rodando || !user) return;
-    const alvos = atual.itens.filter((i) => i.incluir && i.preparo && i.situacao !== "pronto" && (!clientId || i.cliente.id === clientId));
-    if (!alvos.length) { toast.info("Nada para aplicar: leia os clientes primeiro."); return; }
-    setRodando("aplicando");
-    await emLotes(alvos, LOTE, async (item) => {
+    if (!atual || !user) return;
+    const alvos = atual.itens.filter((i) => i.incluir && i.preparo && i.situacao !== "pronto" && !ocupadosRef.current[i.cliente.id] && (!clientId || i.cliente.id === clientId));
+    if (!alvos.length) {
+      if (!clientId) toast.info("Nada para aplicar: leia os clientes primeiro.");
+      return;
+    }
+    marcarOcupados(alvos.map((i) => i.cliente.id), "aplicando");
+    // O dono está esperando estes: passam na frente de quem ainda espera a vez na leitura.
+    const resultados = await Promise.all(alvos.map((item) => vagas.rodar(async () => {
       const c = item.cliente;
       const preparo = item.preparo!;
       const assinatura = assinaturaDasRespostas(item.respostas, item.contexto, atual.contextoGeral, atual.pesquisar);
@@ -434,35 +511,43 @@ export default function AgenteDaCentral() {
           const pub = await salvarEPublicarRitual({ clientId: c.id, ritual: ap.ritual, publicar: atual.publicar, userId: user.id, reportId: reutilizar ? item.reportId : null });
           atualizarItem(c.id, (i) => ({ ...i, reportId: pub.reportId, publicado: pub.publicado, canal: pub.publicado ? "portal" : null, situacao: "pronto" }));
           if (pub.avisos.length) toast.warning(`${c.nome}: ${pub.avisos.join(" ")}`);
-        } else {
-          // Antes ficava "Pronto" sem ritual, sem jeito de tentar de novo. Agora é erro: "Aplicar" tenta só o ritual.
-          atualizarItem(c.id, (i) => ({ ...i, erro: `Dossiê atualizado, mas a IA não escreveu o ritual agora.${ap.ritual_erro ? ` Motivo: ${ap.ritual_erro}` : ""} Toque em Aplicar de novo para tentar só o ritual.` }));
+          return true;
         }
+        // Antes ficava "Pronto" sem ritual, sem jeito de tentar de novo. Agora é erro: "Aplicar" tenta só o ritual.
+        atualizarItem(c.id, (i) => ({ ...i, erro: `Dossiê atualizado, mas a IA não escreveu o ritual agora.${ap.ritual_erro ? ` Motivo: ${ap.ritual_erro}` : ""} Toque em Aplicar de novo para tentar só o ritual.` }));
+        return false;
       } catch (e) {
+        vagas.reduzir(LOTE_SEGURO);
         atualizarItem(c.id, (i) => ({ ...i, situacao: "erro", erro: e instanceof Error ? e.message : "Falha ao aplicar." }));
+        return false;
+      } finally {
+        marcarOcupados([c.id], null);
       }
-    });
-    setRodando(null);
+    }, true)));
     // Frente AG3: só vai para Copiar quando há ritual pronto; com erro, fica em Aplicar mostrando o motivo.
-    const depois = rodadaRef.current?.itens.filter((i) => i.incluir) ?? [];
-    const comErro = depois.filter((i) => i.situacao === "erro").length;
-    const comRitual = depois.some((i) => i.situacao === "pronto" && i.aplicado?.ritual);
+    // Conta só os clientes desta chamada (a leitura de outros pode estar andando ao lado).
+    const comErro = resultados.filter((ok) => !ok).length;
+    const comRitual = resultados.some(Boolean);
     setEtapa((e) => (e === "aplicar" && comRitual && !comErro ? "copiar" : e));
-    for (const k of ["exp-reports", "reports", "exp-memory", "cycle-rituals-central", "dossie-cliente", "agente-central-tarefas-sugeridas"]) {
-      void queryClient.invalidateQueries({ queryKey: [k] });
-    }
-    for (const queryKey of [["exp-dossies"], ["exp-dossie-versoes"], ["dossie-historico"], ["client-memory-timeline"],
-      ["mesa", "contexto"], ["mesa", "memoria"], ["mesa", "cerebro-organizado"], ["mesa", "saude-conhecimento"]]) {
-      void queryClient.invalidateQueries({ queryKey });
-    }
-    if (comErro) toast.warning(`${comErro} cliente(s) não deram certo. O motivo está na lista; toque em Aplicar de novo para tentar só o que faltou.`);
+    invalidarNoFim(CHAVES_DA_APLICACAO);
+    if (comErro) toast.warning(`${comErro} cliente(s) não deram certo. O motivo está na lista; toque em Tentar de novo para refazer só o que faltou.`);
     else toast.success(clientId ? "Cliente atualizado. Respostas incorporadas ao dossiê e à memória." : "Rodada aplicada. Os rituais estão prontos para copiar.");
+  };
+
+  /** "Tentar de novo" de um cliente só: sem leitura, lê de novo; já lido, aplica de novo. */
+  const tentarDeNovo = async (item: ItemDaRodada) => {
+    const atual = rodadaRef.current;
+    if (!atual || ocupadosRef.current[item.cliente.id]) return;
+    if (item.preparo) return aplicarTodos(item.cliente.id);
+    const falhas = await lerClientes([item.cliente], atual.ritual, true);
+    if (!falhas) toast.success(`${item.cliente.nome} lido. As perguntas estão em Responder.`);
   };
 
   const itens = rodada?.itens ?? [];
   const lidos = itens.filter((i) => i.incluir && i.preparo);
   const prontos = itens.filter((i) => i.situacao === "pronto" && i.aplicado?.ritual);
   const paraAplicar = lidos.filter((i) => i.situacao !== "pronto");
+  const paraAplicarLivres = paraAplicar.filter((i) => !ocupados[i.cliente.id]);
   const semResposta = lidos.filter((i) => i.situacao !== "pronto").reduce((s, i) => s + perguntasSemResposta(i), 0);
   const totalDePerguntas = paraAplicar.reduce((s, i) => s + (i.preparo?.perguntas.length ?? 0), 0);
   const progresso = rodando === "lendo"
@@ -508,7 +593,7 @@ export default function AgenteDaCentral() {
     if (!pub.publicado) throw new Error(pub.avisos.join(" ") || "Não foi possível agora.");
     if (pub.avisos.length) toast.warning(`${item.cliente.nome}: ${pub.avisos.join(" ")}`);
     toast.success(canal === "grupo" ? `Envio de ${item.cliente.nome} registrado: histórico, dossiê e Ciclo atualizados.` : `Ritual de ${item.cliente.nome} publicado no portal.`);
-    for (const k of ["exp-reports", "reports", "exp-memory", "cycle-rituals-central", "dossie-cliente"]) void queryClient.invalidateQueries({ queryKey: [k] });
+    invalidarNoFim(CHAVES_DO_ENVIO);
   };
 
   const copiarTodos = async () => {
@@ -563,7 +648,7 @@ export default function AgenteDaCentral() {
                   type="checkbox"
                   className="mr-2.5 h-4 w-4 shrink-0 accent-primary"
                   checked={i.incluir}
-                  disabled={!!rodando}
+                  disabled={lendoAlgum || !!ocupados[i.cliente.id]}
                   onChange={(e) => atualizarItem(i.cliente.id, (x) => ({ ...x, incluir: e.target.checked, situacao: e.target.checked ? (x.preparo ? x.situacao : "fila") : "pulado" }))}
                 />
                 <span className="mr-2 min-w-0 flex-1 truncate">{i.cliente.nome}</span>
@@ -572,6 +657,14 @@ export default function AgenteDaCentral() {
                   {ROTULO[i.situacao]}
                 </span>
               </label>
+              {i.situacao === "erro" && i.erro && (
+                <div className="flex min-w-0 items-start px-3 pb-2">
+                  <p className="mr-2 min-w-0 flex-1 text-[12px] text-destructive">{i.erro}</p>
+                  <button type="button" onClick={() => void tentarDeNovo(i)} disabled={!!ocupados[i.cliente.id]} className={juntar(botao.secundario, "h-8 shrink-0 px-2.5 text-[12px]")}>
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> Tentar de novo
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -589,7 +682,7 @@ export default function AgenteDaCentral() {
       </p>
       <textarea
         value={rodada?.contextoGeral ?? ""}
-        disabled={!!rodando}
+        disabled={aplicandoAlgum}
         onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value } : r))}
         placeholder="Contexto que vale para todos (opcional)"
         aria-label="Contexto que vale para todos"
@@ -597,12 +690,12 @@ export default function AgenteDaCentral() {
         className={juntar(campoTexto, conversa.campo, "min-h-[64px]")}
       />
       <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
-        <input type="checkbox" checked={rodada?.publicar ?? false} disabled={!!rodando}
+        <input type="checkbox" checked={rodada?.publicar ?? false} disabled={aplicandoAlgum}
           onChange={(e) => setRodada((r) => r ? { ...r, publicar: e.target.checked } : r)} />
         Publicar a atualização no portal ao salvar
       </label>
       <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
-        <input type="checkbox" checked={rodada?.pesquisar ?? false} disabled={!!rodando}
+        <input type="checkbox" checked={rodada?.pesquisar ?? false} disabled={aplicandoAlgum}
           onChange={(e) => setRodada((r) => r ? { ...r, pesquisar: e.target.checked } : r)} />
         Complementar respostas com pesquisa na internet quando útil
       </label>
@@ -611,7 +704,8 @@ export default function AgenteDaCentral() {
           const abertoAqui = clienteAberto === i.cliente.id;
           const qtd = i.preparo?.perguntas.length ?? 0;
           const faltam = perguntasSemResposta(i);
-          const travado = i.situacao === "pronto" || !!rodando;
+          // Só o cliente a caminho do servidor trava; os outros seguem respondíveis durante a fila.
+          const travado = i.situacao === "pronto" || !!ocupados[i.cliente.id];
           return (
             <li key={i.cliente.id} className="overflow-hidden rounded-md border border-border" data-cliente-do-agente={i.cliente.id}>
               <button
@@ -721,7 +815,16 @@ export default function AgenteDaCentral() {
                   {i.situacao === "perguntas" ? `${qtd - perguntasSemResposta(i)} de ${qtd} respondidas` : ROTULO[i.situacao]}
                 </span>
               </div>
-              {i.erro && <p className="mt-0.5 text-[12px] text-destructive">{i.erro}</p>}
+              {i.erro && (
+                <div className="mt-0.5 flex min-w-0 items-start">
+                  <p className="mr-2 min-w-0 flex-1 text-[12px] text-destructive">{i.erro}</p>
+                  {i.situacao === "erro" && (
+                    <button type="button" onClick={() => void tentarDeNovo(i)} disabled={!!ocupados[i.cliente.id]} className={juntar(botao.secundario, "h-8 shrink-0 px-2.5 text-[12px]")}>
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" /> Tentar de novo
+                    </button>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
@@ -761,7 +864,7 @@ export default function AgenteDaCentral() {
                 <AcoesDoRitual
                   item={i}
                   ritual={rodada?.ritual ?? ""}
-                  ocupado={!!rodando}
+                  ocupado={!!ocupados[i.cliente.id]}
                   onReescrever={(instrucao) => reescreverDoItem(i, instrucao)}
                   onEnviar={(canal) => enviarDoItem(i, canal)}
                 />
@@ -798,7 +901,7 @@ export default function AgenteDaCentral() {
           <button type="button" onClick={recomecar} disabled={!!rodando} className={juntar(botao.discreto, "mr-auto")}>
             <X className="mr-1 h-3.5 w-3.5" /> Recomeçar
           </button>
-          {tudoLido && !rodando ? (
+          {tudoLido && !lendoAlgum ? (
             <button type="button" onClick={() => setEtapa("responder")} className={botao.primario}>
               Responder as perguntas
             </button>
@@ -806,10 +909,10 @@ export default function AgenteDaCentral() {
             <button
               type="button"
               onClick={() => void lerTodos()}
-              disabled={!!rodando || contagem.total === 0 || tudoLido}
+              disabled={lendoAlgum || contagem.total === 0 || tudoLido}
               className={botao.primario}
             >
-              {rodando === "lendo" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+              {lendoAlgum ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
               {lidos.length ? "Ler os que faltam" : `Ler e atualizar ${contagem.total} dossiê(s)`}
             </button>
           )}
@@ -832,7 +935,7 @@ export default function AgenteDaCentral() {
               type="checkbox"
               className="mr-2 h-4 w-4 accent-primary"
               checked={rodada.publicar}
-              disabled={!!rodando}
+              disabled={aplicandoAlgum}
               onChange={(e) => setRodada((r) => (r ? { ...r, publicar: e.target.checked } : r))}
             />
             Publicar no portal ao aplicar
@@ -840,10 +943,10 @@ export default function AgenteDaCentral() {
           <button
             type="button"
             onClick={() => void aplicarTodos()}
-            disabled={!!rodando || paraAplicar.length === 0}
+            disabled={paraAplicarLivres.length === 0}
             className={botao.primario}
           >
-            {rodando === "aplicando" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+            {aplicandoAlgum ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
             {rodada.publicar ? "Aplicar respostas e publicar" : "Aplicar respostas"}
           </button>
         </>
@@ -868,7 +971,7 @@ export default function AgenteDaCentral() {
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progresso.total ? Math.round((progresso.feito / progresso.total) * 100) : 0}%` }} />
           </div>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            {rodando === "lendo" ? "Lendo" : "Aplicando"} {progresso.feito} de {progresso.total}. Dois por vez. Pode fechar: a rodada continua.
+            {rodando === "lendo" ? "Lendo" : "Aplicando"} {progresso.feito} de {progresso.total}, {vagas.limite} por vez.{rodando === "lendo" ? " Quem fica pronto já pode ser respondido." : ""} Pode fechar: a rodada continua.
           </p>
         </div>
       )}

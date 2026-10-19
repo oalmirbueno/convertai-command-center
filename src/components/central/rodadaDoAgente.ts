@@ -62,6 +62,26 @@ export function gravarLocal(r: Rodada | null) {
   }
 }
 
+/**
+ * Rodada lida do navegador ao montar a Central (19/10). O que estava a
+ * caminho do servidor não volta para esta tela: "Lendo" volta para a fila e
+ * "Aplicando"/"Publicando" vira erro com Tentar de novo, em vez de girar
+ * para sempre.
+ */
+export function rodadaRetomada(r: Rodada | null): Rodada | null {
+  if (!r) return r;
+  return {
+    ...r,
+    itens: r.itens.map((i) => {
+      if (i.situacao === "lendo") return { ...i, situacao: i.preparo ? "perguntas" : "fila" };
+      if (i.situacao === "aplicando" || i.situacao === "publicando") {
+        return { ...i, situacao: "erro", erro: "A atualização deste cliente parou no meio (a página foi fechada ou recarregada). Toque em Tentar de novo." };
+      }
+      return i;
+    }),
+  };
+}
+
 /** Perguntas de um cliente ainda sem resposta. */
 export function perguntasSemResposta(item: ItemDaRodada): number {
   const perguntas = item.preparo?.perguntas ?? [];

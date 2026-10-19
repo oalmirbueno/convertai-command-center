@@ -270,12 +270,16 @@ describe("reforço da promessa sem prova", () => {
   });
 });
 
-describe("modelo: GPT-6 Luna com raciocínio máximo, reserva uma vez", () => {
-  it("a lista da tela é a mesma do servidor e o padrão é Luna max", () => {
+// 19/10: o padrão passou de "max" para "low" (o máximo passou de 170 s sem responder no pedido real do
+// ritual; no ritual curto o médio levou 40 s e o baixo 17 s). "max" e "xhigh" saíram da lista: escolha antiga cai no padrão.
+describe("modelo: GPT-6 Luna com raciocínio baixo, reserva uma vez", () => {
+  it("a lista da tela é a mesma do servidor e o padrão é Luna low", () => {
     expect(MODELOS_DA_TELA.map((m) => m.id)).toEqual(MODELOS_DO_SERVIDOR.map((m) => m.id));
-    expect(escolhaDoModelo()).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "max" });
-    expect(escolhaDoModelo("qualquer", "absurdo")).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "max" });
-    expect(corpoDoModelo(null)).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "max" });
+    expect(escolhaDoModelo()).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "low" });
+    expect(escolhaDoModelo("qualquer", "absurdo")).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "low" });
+    expect(escolhaDoModelo("openrouter:openai/gpt-6-luna", "max")).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "low" });
+    expect(corpoDoModelo(null)).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "low" });
+    expect(corpoDoModelo({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "max" })).toEqual({ modelo: "openrouter:openai/gpt-6-luna", raciocinio: "low" });
     expect(rotuloDoModelo("openrouter:openai/gpt-6-luna")).toBe("GPT-6 Luna");
     expect(rotuloDoModelo("gpt-4.1")).toBe("GPT-4.1 (antigo)");
   });
@@ -285,7 +289,7 @@ describe("modelo: GPT-6 Luna com raciocínio máximo, reserva uma vez", () => {
     const legado = vi.fn(async () => ({ texto: "{\"body\":\"oi\"}", modelo: "gpt-4.1", usage: null }));
     const r = await escreverComModeloDaCentral({ clientId: "c1", sistema: "s", usuario: "u" }, { motor, legado });
     expect(motor).toHaveBeenCalledTimes(1);
-    expect(motor.mock.calls[0][0]).toMatchObject({ modeloId: "openrouter:openai/gpt-6-luna", raciocinio: "max" });
+    expect(motor.mock.calls[0][0]).toMatchObject({ modeloId: "openrouter:openai/gpt-6-luna", raciocinio: "low" });
     expect(legado).toHaveBeenCalledTimes(1);
     expect(r?.reserva).toContain("sem saldo na carteira de IA do cliente");
     const motor2 = vi.fn();

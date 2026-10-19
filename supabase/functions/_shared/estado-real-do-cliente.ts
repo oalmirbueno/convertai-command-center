@@ -31,6 +31,7 @@
  */
 
 import { type MetaDeSeguidores, metasComoTexto, type PontoDeSeguidores, situacaoDasMetas, type SituacaoDasMetas } from "./metas-de-seguidores.ts";
+import { type LinhaDiariaAds, metricasCompletas } from "./evolucao.ts";
 
 // deno-lint-ignore no-explicit-any
 export type BancoDoEstado = { from: (tabela: string) => any; rpc?: (fn: string, args: Record<string, unknown>) => any };
@@ -53,6 +54,12 @@ export interface Somas {
   contatos: number;
   vendas: number;
   receita: number;
+  /** Do mesmo cálculo da Mesa Ads (metricasCompletas): o resultado pelo objetivo da campanha. */
+  impressoes?: number;
+  cliques?: number;
+  resultados?: number;
+  rotuloDoResultado?: string;
+  custoPorResultado?: number | null;
 }
 
 export interface EstadoReal {
@@ -61,7 +68,13 @@ export interface EstadoReal {
   periodos: { semana: Periodo; semanaAnterior: Periodo; mes: Periodo; mesAnterior: Periodo; desde: string | null };
   organico: {
     conta: string | null;
-    semanas: Array<{ de: string; ate: string; seguidores: number | null; alcance: number | null; interacoes: number | null }>;
+    /** Só semanas MEDIDAS (com alcance ou interações), da mais nova para a mais velha. */
+    semanas: Array<{
+      de: string; ate: string; seguidores: number | null; alcance: number | null; interacoes: number | null;
+      visitasAoPerfil?: number | null; contasQueInteragiram?: number | null; postsNoPerfil?: number | null;
+    }>;
+    /** Foto da semana em andamento (a coleta do meio da semana só traz seguidores e posts). */
+    agora?: { de: string; seguidores: number | null; lidoEm: string } | null;
     publicados: Array<{ titulo: string; quando: string; plataforma: string }>;
     publicadosNaSemana: number;
     publicadosNaSemanaAnterior: number;
@@ -213,8 +226,9 @@ export async function lerEstadoReal(db: BancoDoEstado, clientId: string, opcoes:
   const [perfil, metricas, publicados, agendados, pautas, campMesa, campAds, diario, vendas, rotina, analises, carteira, projetos, metas, relatorios, postsIg] = await Promise.all([
     seguro("perfil", () => db.from("profiles").select("id, full_name, company_name, created_at, services_config").eq("id", clientId).maybeSingle()
       .then((r: Resposta) => ({ data: r.data ? [r.data] : [], error: r.error }))),
-    seguro("métricas do Instagram", () => db.from("social_metrics_weekly").select("external_account_id, week_start, week_end, followers, reach, total_interactions")
-      .eq("client_id", clientId).gte("week_start", desde70).order("week_start", { ascending: false })),
+    seguro("métricas do Instagram", () => db.from("social_metrics_weekly")
+      .select("external_account_id, week_start, week_end, captured_at, followers, media_count, reach, profile_views, accounts_engaged, total_interactions")
+      .eq("client_id", clientId).gte("week_start", desde70).order("week_start", { ascending: false }).limit(60)),
     seguro("publicados", () => todas(() => db.from("editorial_publications").select("id, platform, published_at, scheduled_at, status, editorial_posts(title)")
       .eq("client_id", clientId).eq("status", "published").gte("published_at", desde60ts).order("published_at", { ascending: false }))),
     seguro("agendados", () => db.from("editorial_publications").select("id, platform, scheduled_at, status, editorial_posts(title)")
@@ -224,7 +238,7 @@ export async function lerEstadoReal(db: BancoDoEstado, clientId: string, opcoes:
     seguro("campanhas da Mesa", () => db.from("mesa_campanhas").select("id, nome, status, objetivo, pedido, periodo_inicio, periodo_fim, briefing, atualizado_em")
       .eq("client_id", clientId).gte("atualizado_em", desde90).order("atualizado_em", { ascending: false })),
     seguro("campanhas de anúncio", () => db.from("ads_campaigns").select("name, status, effective_status, objective, daily_budget").eq("client_id", clientId)),
-    seguro("anúncios por dia", () => todas(() => db.from("ads_campaign_daily").select("campaign_name, day, spend, actions, action_values")
+    seguro("anúncios por dia", () => todas(() => db.from("ads_campaign_daily").select("campaign_id, campaign_name, objective, day, spend, impressions, clicks, link_clicks, frequency, actions, action_values")
       .eq("client_id", clientId).gte("day", desde60).order("day", { ascending: false }))),
     seguro("vendas", () => db.from("ads_sales").select("sold_at, quantity, value, campaign_name").eq("client_id", clientId).gte("sold_at", desde60)),
     seguro("rotina do tráfego", () => db.from("ads_rotina_acoes").select("criado_em, tipo, estado, resumo, porque, desfeita_em")
@@ -260,10 +274,25 @@ export async function lerEstadoReal(db: BancoDoEstado, clientId: string, opcoes:
     if (!principal.length || maior > Math.max(...principal.map((x) => num(x.followers)))) { principal = lista; conta = k; }
   }
   principal.sort((a, b) => txt(b.week_start).localeCompare(txt(a.week_start)));
-  const semanas = principal.slice(0, 8).map((m) => ({
-    de: txt(m.week_start), ate: txt(m.week_end) || somarDias(txt(m.week_start), 6),
-    seguidores: m.followers == null ? null : num(m.followers), alcance: m.reach == null ? null : num(m.reach), interacoes: m.total_interactions == null ? null : num(m.total_interactions),
-  }));
+  // A coleta do meio da semana grava a semana em andamento só com seguidores e
+  // posts (alcance e interações vazios). Ela vinha primeiro e o texto dizia
+  // "alcance sem dado" com o número da semana fechada no banco: aqui a semana
+  // medida é a mais nova COM alcance ou interações, e a em andamento vira "agora".
+  const medida = (m: Linha) => [m.reach, m.profile_views, m.accounts_engaged, m.total_interactions].some((v) => v != null);
+  const ouNulo = (v: unknown) => (v == null ? null : num(v));
+  const medidas = principal.filter(medida);
+  const semanas = medidas.slice(0, 8).map((m, i) => {
+    const antes = medidas[i + 1];
+    const posts = m.media_count != null && antes?.media_count != null ? num(m.media_count) - num(antes.media_count) : null;
+    return {
+      de: txt(m.week_start), ate: txt(m.week_end) || somarDias(txt(m.week_start), 6),
+      seguidores: ouNulo(m.followers), alcance: ouNulo(m.reach), interacoes: ouNulo(m.total_interactions),
+      visitasAoPerfil: ouNulo(m.profile_views), contasQueInteragiram: ouNulo(m.accounts_engaged),
+      postsNoPerfil: posts !== null && posts >= 0 ? posts : null,
+    };
+  });
+  const emAndamento = principal[0] && !medida(principal[0]) && (!medidas[0] || txt(principal[0].week_start) > txt(medidas[0].week_start)) ? principal[0] : null;
+  const agoraIg = emAndamento ? { de: txt(emAndamento.week_start), seguidores: ouNulo(emAndamento.followers), lidoEm: txt(emAndamento.captured_at) || txt(emAndamento.week_start) } : null;
 
   const tituloDoPost = (r: Linha) => {
     const post = r.editorial_posts as Linha | Linha[] | null;
@@ -282,11 +311,15 @@ export async function lerEstadoReal(db: BancoDoEstado, clientId: string, opcoes:
   // Anúncios: somas por período e por campanha na semana.
   const somas = { semana: somaVazia(), semanaAnterior: somaVazia(), mes: somaVazia(), mesAnterior: somaVazia() };
   const porCampanha = new Map<string, { gasto: number; contatos: number }>();
+  const linhasDoPeriodo = { semana: [] as LinhaDiariaAds[], semanaAnterior: [] as LinhaDiariaAds[], mes: [] as LinhaDiariaAds[], mesAnterior: [] as LinhaDiariaAds[] };
   for (const d of diario) {
     const dia = txt(d.day).slice(0, 10);
     const g = num(d.spend); const c = contarContatos(d.actions); const v = compras(d.actions); const rv = compras(d.action_values);
     for (const k of ["semana", "semanaAnterior", "mes", "mesAnterior"] as const) {
-      if (dentro(dia, periodos[k])) { somas[k].gasto += g; somas[k].contatos += c; somas[k].vendas += v; somas[k].receita += rv; }
+      if (dentro(dia, periodos[k])) {
+        somas[k].gasto += g; somas[k].contatos += c; somas[k].vendas += v; somas[k].receita += rv;
+        linhasDoPeriodo[k].push({ ...(d as Partial<LinhaDiariaAds>), ad_id: txt(d.campaign_id) || txt(d.campaign_name), day: dia, spend: num(d.spend), impressions: num(d.impressions) });
+      }
     }
     if (dentro(dia, periodos.semana)) {
       const nome = txt(d.campaign_name) || "campanha";
@@ -294,6 +327,12 @@ export async function lerEstadoReal(db: BancoDoEstado, clientId: string, opcoes:
       x.gasto += g; x.contatos += c;
       porCampanha.set(nome, x);
     }
+  }
+  // Impressões, cliques e resultado pelo objetivo: o mesmo cálculo da Mesa Ads.
+  for (const k of ["semana", "semanaAnterior", "mes", "mesAnterior"] as const) {
+    if (!linhasDoPeriodo[k].length) continue;
+    const m = metricasCompletas(linhasDoPeriodo[k]);
+    Object.assign(somas[k], { impressoes: m.impressoes, cliques: m.cliques, resultados: m.resultados, rotuloDoResultado: m.resultado_rotulo, custoPorResultado: m.custo_por_resultado });
   }
   for (const v of vendas) {
     const dia = txt(v.sold_at).slice(0, 10);
@@ -352,6 +391,7 @@ export async function lerEstadoReal(db: BancoDoEstado, clientId: string, opcoes:
     organico: {
       conta,
       semanas,
+      agora: agoraIg,
       publicados: pubs.filter((x) => x.quando >= (periodos.desde ?? new Date(agora.getTime() - 7 * DIA).toISOString())).slice(0, 15),
       publicadosNaSemana: contaPubs(periodos.semana),
       publicadosNaSemanaAnterior: contaPubs(periodos.semanaAnterior),
@@ -453,10 +493,23 @@ export function estadoRealComoTexto(e: EstadoReal, opcoes: { ritual?: string; ca
   if (o.semanas.length) {
     const [s0, s1] = o.semanas;
     const s4 = o.semanas[Math.min(4, o.semanas.length - 1)];
-    org.push(`- Semana medida ${dm(s0.de)} a ${dm(s0.ate)}: ${s0.seguidores !== null ? `${milhar(s0.seguidores)} seguidores` : "seguidores sem dado"}${s1?.seguidores != null && s0.seguidores != null ? ` (${s0.seguidores - s1.seguidores >= 0 ? "+" : ""}${s0.seguidores - s1.seguidores} na semana)` : ""}; ${s0.alcance !== null ? `${milhar(s0.alcance)} pessoas alcançadas` : "alcance sem dado"}${s1?.alcance != null && s0.alcance != null ? ` (${variacao(s0.alcance, s1.alcance)} contra ${dm(s1.de)} a ${dm(s1.ate)})` : ""}; ${s0.interacoes !== null ? `${milhar(s0.interacoes)} interações` : ""}${s1?.interacoes != null && s0.interacoes != null ? ` (${variacao(s0.interacoes, s1.interacoes)})` : ""}.`);
+    const comparado = (atual: number | null | undefined, anterior: number | null | undefined, rotulo: string) =>
+      atual == null ? "" : `${milhar(atual)} ${rotulo}${anterior != null ? ` (${variacao(atual, anterior)})` : ""}`;
+    const numeros = [
+      s0.seguidores !== null ? `${milhar(s0.seguidores)} seguidores${s1?.seguidores != null ? ` (${s0.seguidores - s1.seguidores >= 0 ? "+" : ""}${s0.seguidores - s1.seguidores} na semana)` : ""}` : "seguidores sem dado",
+      s0.alcance !== null ? `${milhar(s0.alcance)} pessoas alcançadas${s1?.alcance != null ? ` (${variacao(s0.alcance, s1.alcance)})` : ""}` : "alcance sem dado",
+      comparado(s0.visitasAoPerfil, s1?.visitasAoPerfil, "visitas ao perfil"),
+      comparado(s0.contasQueInteragiram, s1?.contasQueInteragiram, "contas que interagiram"),
+      comparado(s0.interacoes, s1?.interacoes, "interações"),
+      s0.postsNoPerfil != null ? `${s0.postsNoPerfil} post(s) novos no perfil${s1?.postsNoPerfil != null ? ` (anterior ${s1.postsNoPerfil})` : ""}` : "",
+    ].filter(Boolean);
+    org.push(`- Instagram, última semana fechada ${dm(s0.de)} a ${dm(s0.ate)}${s1 ? `, comparada com ${dm(s1.de)} a ${dm(s1.ate)}` : ""}: ${numeros.join("; ")}.`);
+    if (o.agora?.seguidores != null) org.push(`- Agora (semana em andamento desde ${dm(o.agora.de)}, lido em ${dm(o.agora.lidoEm)}): ${milhar(o.agora.seguidores)} seguidores; alcance e interações desta semana só fecham no domingo.`);
     if (mensal && s4 && s4 !== s0 && s4.seguidores != null && s0.seguidores != null) {
       org.push(`- Em ${o.semanas.indexOf(s4)} semanas (desde ${dm(s4.de)}): seguidores de ${milhar(s4.seguidores)} para ${milhar(s0.seguidores)} (${s0.seguidores - s4.seguidores >= 0 ? "+" : ""}${s0.seguidores - s4.seguidores}).`);
     }
+  } else if (o.agora?.seguidores != null) {
+    org.push(`- Instagram agora (lido em ${dm(o.agora.lidoEm)}): ${milhar(o.agora.seguidores)} seguidores; nenhuma semana fechada com alcance medido nos últimos 70 dias.`);
   } else if (e.cliente.servicos.social) {
     org.push("- Sem medição do Instagram registrada no período.");
   }
@@ -479,7 +532,11 @@ export function estadoRealComoTexto(e: EstadoReal, opcoes: { ritual?: string; ca
   const pg = e.pago;
   if (e.cliente.servicos.trafego || pg.campanhasCadastradas > 0 || pg.mes.gasto > 0) {
     const cpl = (s: Somas) => (s.contatos > 0 ? ` (custo por contato ${brl(s.gasto / s.contatos)})` : "");
-    const linha = (rot: string, s: Somas, per: Periodo) => `- ${rot} ${periodoTxt(per)}: ${brl(s.gasto)} investidos, ${s.contatos} contatos${cpl(s)}${s.vendas ? `, ${s.vendas} venda(s)${s.receita ? ` (${brl(s.receita)})` : ""}` : ""}.`;
+    // Resultado pelo objetivo só quando diz algo além dos contatos (ex.: campanha de engajamento ou de visitas).
+    const resultado = (s: Somas) => (s.resultados && s.rotuloDoResultado && s.resultados !== s.contatos
+      ? `; resultado pelo objetivo: ${milhar(s.resultados)} ${s.rotuloDoResultado.toLowerCase()}${s.custoPorResultado ? ` (custo por resultado R$ ${s.custoPorResultado.toFixed(2).replace(".", ",")})` : ""}` : "");
+    const entrega = (s: Somas) => (s.impressoes ? `; ${milhar(s.impressoes)} impressões e ${milhar(s.cliques ?? 0)} cliques` : "");
+    const linha = (rot: string, s: Somas, per: Periodo) => `- ${rot} ${periodoTxt(per)}: ${brl(s.gasto)} investidos, ${s.contatos} contatos${cpl(s)}${s.vendas ? `, ${s.vendas} venda(s)${s.receita ? ` (${brl(s.receita)})` : ""}` : ""}${resultado(s)}${entrega(s)}.`;
     const pag: string[] = ["ANÚNCIOS PAGOS (Mesa Ads e conta de anúncios; só isto é tráfego pago):"];
     pag.push(pg.campanhasNoAr.length ? `- No ar agora: ${pg.campanhasNoAr.slice(0, 6).map((c) => `${c.nome}${c.orcamentoDia ? ` (${brl(c.orcamentoDia)} por dia)` : ""}`).join("; ")}.` : `- Nenhuma campanha ativa registrada agora (${pg.campanhasCadastradas} cadastrada(s)); não afirme que parou sem confirmar.`);
     pag.push(linha("Semana", pg.semana, P.semana));

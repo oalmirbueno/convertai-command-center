@@ -216,6 +216,8 @@ Deno.serve(async (req) => {
           criadoPor: usuarioId,
           escolha,
           metodo: metodoDoRitual,
+          // 19/10: o que as últimas mensagens já disseram, para não repetir e para escolher a versão.
+          jaDito: (contexto?.anteriores ?? []).map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })),
         });
         // Escrito pela reserva (sem linha em ia_usos): o método ainda conta no "Uso em 30 dias".
         if (escrito && !escrito.uso_id) void registrarMetodoSemUso(admin, { metodo: metodoDoRitual, clientId: clientId || null });
@@ -260,6 +262,8 @@ Deno.serve(async (req) => {
           custo_usd: escrito.custo_usd,
           usage: escrito.usage,
           improved: !!textoAtual,
+          sem_novidade: !!escrito.sem_novidade,
+          escolha_da_versao: escrito.escolha_da_versao ?? null,
         });
       } catch (error) {
         // Falha aqui nunca pode travar o ritual: o painel usa o texto de reserva.

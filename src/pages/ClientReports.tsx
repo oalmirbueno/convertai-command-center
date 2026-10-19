@@ -11,6 +11,7 @@ import { CabecalhoDePagina, CabecalhoDeSecao, Carregando, EstadoDeErro, EstadoVa
 import ClientLiveCampaigns from "@/components/reports/ClientLiveCampaigns";
 import { useNavigate } from "react-router-dom";
 import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
+import { semTextoInterno } from "@/lib/textoInterno";
 import {
   AreaChart, Area, ResponsiveContainer,
 } from "recharts";
@@ -51,7 +52,8 @@ export default function ClientReports() {
       if (error) throw error;
       // Rituais de acompanhamento (Rota, Prova, Radar, Marco) moram em
       // "Onde Estamos"; aqui ficam só os relatórios de mídia e resultados.
-      return (data || []).filter((r: any) => !(r.metrics as any)?.ritual_type);
+      // 19/10: nota interna publicada por engano (preparação do Hermes em 09/10) não aparece para o cliente.
+      return semTextoInterno(data || []).filter((r: any) => !(r.metrics as any)?.ritual_type);
     },
     enabled: !!user,
   });

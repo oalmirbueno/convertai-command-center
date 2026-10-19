@@ -146,7 +146,9 @@ function numerosCompactos(ig: Linha[], ads: Linha[], vendas: Linha[], agora: Dat
   const partes: string[] = [];
   // Conta principal = a de mais seguidores (mesma regra do painel).
   const porConta = new Map<string, Linha[]>();
-  for (const m of ig) porConta.set(txt(m.external_account_id) || "conta", [...(porConta.get(txt(m.external_account_id) || "conta") ?? []), m]);
+  // Só semana medida: a coleta do meio da semana grava a semana em andamento
+  // sem alcance nem interações, e ela virava "0 pessoas alcançadas (-100%)".
+  for (const m of ig.filter((x) => x.reach != null || x.total_interactions != null)) porConta.set(txt(m.external_account_id) || "conta", [...(porConta.get(txt(m.external_account_id) || "conta") ?? []), m]);
   let principal: Linha[] = [];
   for (const lista of porConta.values()) {
     if (!principal.length || Number(lista[0]?.followers ?? 0) > Number(principal[0]?.followers ?? 0)) principal = lista;

@@ -215,6 +215,7 @@ function ClientHistory({ clientId, recolhida = false }: { clientId: string; reco
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
+import { semTextoInterno } from "@/lib/textoInterno";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
@@ -441,7 +442,8 @@ export default function ClientJourneyUpdates() {
         approvals: approvals.data || [],
         allFiles: allFiles.data || [],
         publications: publications.data || [],
-        reports: reports.data || [],
+        // 19/10: nota interna publicada por engano (preparação do Hermes em 09/10) não aparece para o cliente.
+        reports: semTextoInterno(reports.data || []),
       };
     },
     enabled: !!clientId && !deveRedirecionar,

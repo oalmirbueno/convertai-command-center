@@ -471,6 +471,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto,
       estado: estadoAplicar ? estadoRealComoTexto(estadoAplicar, { ritual }) : "",
       clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
+      jaDito: contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })),
     }).catch((e) => {
       ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
       console.error("agente-central: ritual não escrito", { clientId, ritual, erro: ritualErro });
@@ -542,6 +543,7 @@ async function acaoReescrever(db: SupabaseClient, uid: string, clientId: string,
   const escrito = await escreverRitual({
     ritual, clientName: n.nome, contactName: n.contato, facts: recortarDossie(fatos, LIMITE_FATOS), continuidade: contexto.texto,
     estado: estado ? estadoRealComoTexto(estado, { ritual }) : "", clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
+    jaDito: contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })),
   }).catch((e) => {
     ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
     return null;

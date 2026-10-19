@@ -4,14 +4,17 @@
  * Espelho da lista do servidor (supabase/functions/_shared/modelo-da-central.ts;
  * o teste confere que as duas batem). O navegador só escolhe; o servidor
  * confere a escolha contra a lista dele e usa o padrão quando não reconhece.
- * Padrão: GPT-6 Luna com raciocínio máximo.
+ * Padrão: GPT-6 Luna com raciocínio baixo. 19/10: o máximo passou de 170 s
+ * sem responder no pedido real do ritual e saiu da lista, com o muito alto; no
+ * ritual curto, o médio levou 40 s e o baixo 17 s, com o mesmo texto. Escolha
+ * antiga guardada com "max" cai no padrão.
  */
 
 export const MODELO_PADRAO_DA_CENTRAL = "openrouter:openai/gpt-6-luna";
-export const RACIOCINIO_PADRAO_DA_CENTRAL = "max";
+export const RACIOCINIO_PADRAO_DA_CENTRAL = "low";
 
 export const MODELOS_DA_CENTRAL: ReadonlyArray<{ id: string; rotulo: string; ajuda: string }> = [
-  { id: MODELO_PADRAO_DA_CENTRAL, rotulo: "GPT-6 Luna", ajuda: "Padrão. Rápido e barato, pensa bem com raciocínio máximo." },
+  { id: MODELO_PADRAO_DA_CENTRAL, rotulo: "GPT-6 Luna", ajuda: "Padrão. Rápido e barato: com raciocínio baixo cada mensagem sai em cerca de 20 segundos." },
   { id: "openrouter:openai/gpt-6-sol", rotulo: "GPT-6 Sol", ajuda: "Mais forte e cerca de 20 vezes mais caro." },
   { id: "openrouter:openai/gpt-6.1-sol", rotulo: "GPT-6.1 Sol", ajuda: "Lançado em 29/09: mais forte que o GPT-6 Sol pelo mesmo preço (US$ 2 / 10 por 1M)." },
   { id: "openrouter:anthropic/claude-sonnet-5.5", rotulo: "Claude Sonnet 5.5", ajuda: "Lançado em 28/09: escreve muito bem em português, pela metade do preço do Opus (US$ 2 / 10 por 1M)." },
@@ -20,11 +23,9 @@ export const MODELOS_DA_CENTRAL: ReadonlyArray<{ id: string; rotulo: string; aju
 ];
 
 export const RACIOCINIOS_DA_CENTRAL: ReadonlyArray<{ id: string; rotulo: string }> = [
-  { id: "max", rotulo: "Máximo" },
-  { id: "xhigh", rotulo: "Muito alto" },
   { id: "high", rotulo: "Alto" },
   { id: "medium", rotulo: "Médio" },
-  { id: "low", rotulo: "Baixo (mais rápido)" },
+  { id: "low", rotulo: "Baixo (padrão, mais rápido)" },
 ];
 
 export interface EscolhaDoModelo {

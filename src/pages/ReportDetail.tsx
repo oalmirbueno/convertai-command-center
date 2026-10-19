@@ -41,6 +41,7 @@ import {
 } from "@/components/sistema";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
 import { supportWhatsAppUrl } from "@/lib/supportContact";
+import { ehTextoInterno } from "@/lib/textoInterno";
 
 const fmtInt   = (v: number) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : String(Math.round(v));
 const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -505,7 +506,8 @@ export default function ReportDetail() {
     );
   }
 
-  if (!report || !analysis) {
+  // 19/10: nota interna publicada por engano (preparação do Hermes em 09/10) não abre para o cliente.
+  if (!report || !analysis || (isClientView && ehTextoInterno(report))) {
     return (
       <div className={raiz}>
         {botaoVoltar}

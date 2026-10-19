@@ -7,6 +7,7 @@ import { explicacaoDoMovimento, iconeDoMovimento, lerMovimentos, type Movimento 
 import { kindLabel, resolveKind } from "@/lib/fileTaxonomy";
 import { toast } from "sonner";
 import { Carregando, EstadoVazio, Secao, botao, campoTexto, juntar, texto } from "@/components/sistema";
+import { semTextoInterno } from "@/lib/textoInterno";
 import {
   BookOpen, CheckCircle2, FileCheck2, Megaphone, PenLine, Send, Loader2,
 } from "lucide-react";
@@ -179,7 +180,8 @@ export default function ProjectJournal({
         notes: (notes.data as any[]) || [],
         files: files.data || [],
         publications: publications.data || [],
-        reports: reports.data || [],
+        // 19/10: nota interna publicada por engano (preparação do Hermes em 09/10) não entra na linha do tempo.
+        reports: semTextoInterno(reports.data || []),
         doneTasks: (doneTasks.data as any[]) || [],
         doneMilestones: (doneMilestones.data as any[]) || [],
         movimentos,

@@ -17,6 +17,14 @@
  * Tempo: raciocínio máximo leva de 30 s a 2 min. Quem chama responde com
  * fôlego (resposta-com-folego.ts) para a plataforma não cortar em 150 s; aqui
  * o motor tem até 125 s e a reserva, o que sobrar.
+ *
+ * 19/10: medido com o pedido real do ritual (11,7 mil tokens de entrada): Luna
+ * com "max" passou de 170 s sem responder (em 30 dias, 0 de 89 rituais saíram
+ * por ele; todos esperaram 125 s e caíram no GPT-4.1), "medium" respondeu em
+ * 9,4 s e "low" em 9,8 s. No roteiro curto novo com o JÁ DITO do Mirante,
+ * "medium" levou de 40 a 46 s (3 mil tokens pensando) e "low" 17 s, com texto do
+ * mesmo tamanho e qualidade. O padrão vira "low", "max" e "xhigh" saem da lista
+ * (escolha antiga cai no padrão) e o motor espera até 60 s.
  */
 
 import {
@@ -28,7 +36,7 @@ import {
 import { juntarMetodoAoSistema, type MetodoInjetado } from "./superpoderes-catalogo.ts";
 
 export const MODELO_PADRAO_DA_CENTRAL = "openrouter:openai/gpt-6-luna";
-export const RACIOCINIO_PADRAO_DA_CENTRAL = "max";
+export const RACIOCINIO_PADRAO_DA_CENTRAL = "low";
 /** A cadeia antiga (o que os rituais usavam até 28/09). */
 export const MODELO_LEGADO = "legado:gpt-4.1";
 export const CADEIA_LEGADA = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"];
@@ -42,9 +50,9 @@ export const MODELOS_DA_CENTRAL: ReadonlyArray<{ id: string; rotulo: string }> =
   { id: "openrouter:anthropic/claude-opus-5.5", rotulo: "Claude Opus 5.5" },
   { id: MODELO_LEGADO, rotulo: "GPT-4.1 (antigo)" },
 ];
-export const RACIOCINIOS_DA_CENTRAL = ["max", "xhigh", "high", "medium", "low"] as const;
+export const RACIOCINIOS_DA_CENTRAL = ["high", "medium", "low"] as const;
 
-export const TEMPO_DO_MOTOR_MS = 125_000;
+export const TEMPO_DO_MOTOR_MS = 60_000;
 
 export interface EscolhaDoModelo {
   modelo: string;

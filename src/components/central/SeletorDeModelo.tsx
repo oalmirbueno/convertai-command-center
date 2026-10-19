@@ -48,7 +48,7 @@ export default function SeletorDeModelo({ escolha, onMudar, compacto = false }: 
           </select>
         </label>
       </div>
-      {!compacto && <p className={juntar(texto.auxiliar, "mt-1")}>{atual.ajuda}{escolha.raciocinio === "max" && !legado ? " Com raciocínio máximo cada mensagem leva de 30 segundos a 2 minutos." : ""}</p>}
+      {!compacto && <p className={juntar(texto.auxiliar, "mt-1")}>{atual.ajuda}{escolha.raciocinio !== "low" && !legado ? " Com raciocínio médio ou alto cada mensagem leva de 40 segundos a mais de 1 minuto." : ""}</p>}
     </div>
   );
 }

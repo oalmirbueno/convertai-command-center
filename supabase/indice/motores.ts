@@ -594,7 +594,7 @@ const LIGACOES_DOS_SUPERPODERES: Record<string, { ligacao: LigacaoDoMetodo; mais
   "rituais.escritor": {
     ligacao: { arquivo: F("ritual-writer"), trechos: ['superpoderesPara(admin, { agente: "rituais.escritor" })', "metodo: metodoDoRitual,", "registrarMetodoSemUso(admin, { metodo: metodoDoRitual"] },
     mais: [
-      { arquivo: F("ritual-writer", "escritor.ts"), trechos: ["metodo: p.metodo ?? null,", "metodo: p.metodo ?? null });"] },
+      { arquivo: F("ritual-writer", "escritor.ts"), trechos: ["criadoPor: p.criadoPor ?? null, metodo: p.metodo ?? null });", "temperatura, metodo: p.metodo ?? null });"] },
       { arquivo: F("agente-central"), trechos: ['superpoderesPara(db, { agente: "rituais.escritor" })', "escolha, metodo: metodoDoRitual,", "registrarMetodoDoRitual(metodoDoRitual, escrito, clientId);"] },
     ],
   },

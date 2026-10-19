@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useArquivosAoVivo } from "@/hooks/useArquivosAoVivo";
 import { useMemo } from "react";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
+import { semTextoInterno } from "@/lib/textoInterno";
 
 /* ───────── Types & helpers shared across sub-components ───────── */
 
@@ -200,10 +201,10 @@ export function useClientDashboardData(clientId: string) {
         .eq("client_id", clientId)
         .eq("status", "published")
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(6);
       if (error) return null;
-      return data || null;
+      // 19/10: o último relatório PARA O CLIENTE; nota interna publicada por engano fica de fora.
+      return semTextoInterno(data || [])[0] ?? null;
     },
     enabled: !!user && !!clientId,
   });

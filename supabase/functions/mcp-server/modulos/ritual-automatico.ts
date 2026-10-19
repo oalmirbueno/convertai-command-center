@@ -94,6 +94,7 @@ export async function ritualRedigirPorAutomacao(
     criadoPor: ctx.dataScope?.principalUserId ?? null,
     escolha: escolhaDoModelo(undefined, undefined),
     metodo,
+    jaDito: (contexto?.anteriores ?? []).map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })),
   });
   if (escrito && !escrito.uso_id) void registrarMetodoSemUso(banco, { metodo, clientId: input.client_id });
   if (!escrito) {
