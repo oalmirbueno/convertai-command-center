@@ -2251,6 +2251,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261019144507",
+      "path": "supabase/migrations/20261019144507_menos_travas.sql",
+      "local_sha256": "05d2eecd8ec4ceb3d3ef24fb23674896258b2bf66c3e44cd9a4e9598cacef895",
+      "remote_name": "menos_travas",
+      "remote_statements_sha256": "12b26805e049bd867a15ca680129e34ab31b783522e8ca884fc7b044629611bb",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261019180000",
       "path": "supabase/migrations/20261019180000_laboratorio.sql",
       "local_sha256": "eca0dadfdca3e62213caea5e8376d51063f0b433f47b807c6fb51d4dbaa34940",
