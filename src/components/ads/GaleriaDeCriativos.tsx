@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { X, ImageOff, Video, Megaphone } from "lucide-react";
 import { CampoDeBusca } from "@/components/sistema";
 import { AjudaRecolhida, EstadoVazio, Secao, SeletorCompacto, botao, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import type { Temperatura } from "@/components/comercial/temperatura";
+import LeadsDoAnuncio, { ContagemDeLeads } from "./LeadsDoAnuncio";
+import type { LeadComOrigem } from "./leadsDosAnuncios";
 
 /**
  * Os criativos de um cliente, com a peça à vista e o número ao lado.
@@ -118,6 +121,8 @@ export default function GaleriaDeCriativos({
   periodoDias,
   chave = "geral",
   embutido = false,
+  leadsPorAnuncio,
+  temperaturas,
 }: {
   criativos: CriativoDeAnuncio[];
   periodoDias: number;
@@ -128,8 +133,12 @@ export default function GaleriaDeCriativos({
    * diz o nome e a explicação mora no "?" dela. Fica a linha de estado.
    */
   embutido?: boolean;
+  /** Leads do CRM por anúncio (origem do clique, 19/10): contagem no cartão e lista curta na peça aberta. */
+  leadsPorAnuncio?: Map<string, LeadComOrigem[]>;
+  temperaturas?: Map<string, Temperatura>;
 }) {
   const [aberto, setAberto] = useState<CriativoDeAnuncio | null>(null);
+  const leadsDa = (adId: string) => (leadsPorAnuncio && leadsPorAnuncio.get(adId)) || [];
   const [ordem, setOrdem] = useEstadoDaTela<Ordem>(`criativos:${chave}:ordem`, "gasto", {
     validar: (v) => v === "gasto" || v === "custo" || v === "ctr",
   });
@@ -330,8 +339,9 @@ export default function GaleriaDeCriativos({
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 truncate text-[13px] font-medium text-foreground group-hover:text-primary">
-                  {c.ad_name || "Peça sem nome"}
+                <p className="mt-1.5 flex min-w-0 items-center text-[13px] font-medium text-foreground group-hover:text-primary">
+                  <span className="min-w-0 truncate">{c.ad_name || "Peça sem nome"}</span>
+                  <ContagemDeLeads total={leadsDa(c.ad_id).length} className="ml-1.5" />
                 </p>
                 {c.campanha && (
                   <p className={juntar(texto.auxiliar, "truncate")}>{c.campanha}</p>
@@ -418,6 +428,8 @@ export default function GaleriaDeCriativos({
                   </div>
                 ))}
               </dl>
+
+              <LeadsDoAnuncio leads={leadsDa(aberto.ad_id)} temperaturas={temperaturas || new Map()} className="mt-3" />
 
               {(aberto.titulo || aberto.corpo) && (
                 <div className={juntar(superficie.poco, "mt-3 p-3")}>

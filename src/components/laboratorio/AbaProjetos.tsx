@@ -33,7 +33,7 @@ export default function AbaProjetos({
   const q = useQuery({ queryKey: chaveDosProjetos, queryFn: listarProjetos, enabled: !projetoAberto });
   const [criando, setCriando] = useState(false);
 
-  if (projetoAberto) return <EditorDoProjeto projetoId={projetoAberto} clientes={clientes} onVoltar={() => onAbrir(null)} telaCheia={telaCheia} onTelaCheia={onTelaCheia} />;
+  if (projetoAberto) return <EditorDoProjeto projetoId={projetoAberto} clientes={clientes} onVoltar={() => onAbrir(null)} onAbrirOutro={(id) => onAbrir(id)} telaCheia={telaCheia} onTelaCheia={onTelaCheia} />;
 
   const novo = async () => {
     setCriando(true);

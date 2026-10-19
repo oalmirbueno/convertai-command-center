@@ -33,6 +33,12 @@ import { resumirCriativos } from "@/lib/adsCreativeReport";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import CampanhasAtivas from "@/components/ads/CampanhasAtivas";
+import FrescorDaMeta from "@/components/ads/FrescorDaMeta";
+import LeadsDoAnuncio, { ContagemDeLeads } from "@/components/ads/LeadsDoAnuncio";
+import { ligarLeadsAosAnuncios, ultimaLeituraDasContas, type LeadComOrigem } from "@/components/ads/leadsDosAnuncios";
+import { useLeadsDosAnuncios, type LeadsDosAnuncios } from "@/components/ads/useLeadsDosAnuncios";
+import type { Temperatura } from "@/components/comercial/temperatura";
+import { PARAMETROS_DE_URL_DA_META } from "../../supabase/functions/_shared/origem-clique";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import { useAuth } from "@/contexts/AuthContext";
 import AtivarGestao from "@/components/mesa-ads/AtivarGestao";
@@ -201,6 +207,12 @@ type AbaDoCliente = "campanhas" | "agora" | "criativos" | "contas";
 const ABAS_DA_LISTA: AbaDaLista[] = ["clientes", "agora", "contas"];
 const ABAS_DO_CLIENTE: AbaDoCliente[] = ["campanhas", "agora", "criativos", "contas"];
 
+/**
+ * Dica para o dono (19/10): como montar o link do anúncio para cada lead
+ * chegar dizendo de qual anúncio veio. Mora no "?" (cabeçalhos e aba Campanhas).
+ */
+export const DICA_DO_LINK_DO_ANUNCIO = `Para ligar cada lead ao anúncio: no Gerenciador da Meta, no anúncio, em Destino > Parâmetros de URL, cole ${PARAMETROS_DE_URL_DA_META}. No clique a Meta troca {{ad.id}} pelo número do anúncio; o formulário do site guarda e o lead aparece na campanha e na peça, com a temperatura do CRM.`;
+
 /** O que cada aba faz: mora no "?" ao lado da aba aberta. */
 const AJUDA_DAS_ABAS = {
   clientes:
@@ -210,7 +222,7 @@ const AJUDA_DAS_ABAS = {
   contas:
     "Conecte com a Meta, escolha as contas e o cliente de cada uma. Daí em diante o painel lê campanhas, saldo e criativos sozinho, de hora em hora. Em Mais opções: ligar pelo número e o token da agência.",
   campanhas:
-    "Toque numa campanha para ver as duas leituras: como o cliente lê no relatório e os números que a equipe usa para decidir.",
+    `Toque numa campanha para ver as duas leituras: como o cliente lê no relatório e os números que a equipe usa para decidir, e os leads que ela trouxe ao CRM. ${DICA_DO_LINK_DO_ANUNCIO}`,
   criativos:
     "Qual arte fez o trabalho: gasto, cliques no link e custo de cada peça. O padrão mostra as que rodaram; as paradas ficam a um clique. Toque numa peça para ver grande.",
 } as const;
@@ -451,7 +463,18 @@ function DetalheDasContas({
 /* ─────────────────────────────── dossiê do cliente ─────────────────────────────── */
 
 /** Uma campanha: a linha curta e, ao tocar, as duas leituras (cliente e equipe). */
-function LinhaDaCampanha({ resumo, ficha }: { resumo: CampaignSummary; ficha?: AdsCampaign }) {
+function LinhaDaCampanha({
+  resumo,
+  ficha,
+  leads = [],
+  temperaturas,
+}: {
+  resumo: CampaignSummary;
+  ficha?: AdsCampaign;
+  /** Leads do CRM que vieram desta campanha (origem do clique). */
+  leads?: LeadComOrigem[];
+  temperaturas?: Map<string, Temperatura>;
+}) {
   const [aberta, setAberta] = useState(false);
   const alerta = teamAlert(resumo);
   const resultado =
@@ -477,6 +500,7 @@ function LinhaDaCampanha({ resumo, ficha }: { resumo: CampaignSummary; ficha?: A
           </span>
           <span className={juntar(texto.auxiliar, "block truncate tabular-nums")}>{resultado}</span>
         </span>
+        <ContagemDeLeads total={leads.length} className="ml-2" />
         {alerta && (
           <span role="img" aria-label="Pede atenção" title={alerta} className="ml-2 inline-flex shrink-0 text-destructive">
             <AlertTriangle className="h-4 w-4" aria-hidden="true" />
@@ -506,6 +530,7 @@ function LinhaDaCampanha({ resumo, ficha }: { resumo: CampaignSummary; ficha?: A
               )}
             </div>
           </div>
+          {leads.length > 0 && <LeadsDoAnuncio leads={leads} temperaturas={temperaturas || new Map()} className="mt-3" />}
         </div>
       )}
     </li>
@@ -530,6 +555,8 @@ function ClientAdsDetail({
   podeAbrirMesaAds,
   aba,
   aoEscolherAba,
+  leadsDoCrm,
+  frescor,
 }: {
   clientId: string;
   clientName: string;
@@ -552,6 +579,10 @@ function ClientAdsDetail({
   podeAbrirMesaAds: boolean;
   aba: AbaDoCliente;
   aoEscolherAba: (aba: AbaDoCliente) => void;
+  /** Leads do CRM com origem de clique (só admin e manager leem o CRM). */
+  leadsDoCrm?: LeadsDosAnuncios;
+  /** "Dados da Meta de há X" das contas deste cliente. */
+  frescor?: ReactNode;
 }) {
   const navigate = useNavigate();
   const porCampanha = useMemo(() => {
@@ -573,6 +604,19 @@ function ClientAdsDetail({
   const carteira = useMemo(() => summarizeAccount(rows), [rows]);
   const dados = useMemo(() => numerosDoCliente(rows, contas), [rows, contas]);
   const { data: criativos } = useAdsCreatives(clientId, 30);
+
+  // Leads no CRM por campanha e por peça: pelo id do link (utm_content={{ad.id}}).
+  const leadsLigados = useMemo(
+    () =>
+      ligarLeadsAosAnuncios(
+        (leadsDoCrm && leadsDoCrm.leads) || [],
+        criativos || [],
+        campaigns.map((c) => ({ campaign_id: c.campaign_id, name: c.name })),
+        clientId,
+      ),
+    [leadsDoCrm, criativos, campaigns, clientId],
+  );
+  const temperaturas = (leadsDoCrm && leadsDoCrm.temperaturas) || undefined;
 
   /**
    * Abre o relatório já preenchido com o que a Meta devolveu. O resumo sai
@@ -638,11 +682,13 @@ function ClientAdsDetail({
         ajuda={
           <>
             Investido: {EXPLICACOES.investido} Resultado: {EXPLICACOES.resultados} A seta compara os últimos 15 dias com os
-            15 anteriores. O relatório já sai preenchido com estes números e os criativos.
+            15 anteriores. O relatório já sai preenchido com estes números e os criativos. O relógio diz quando a Meta foi
+            lida por último (passou de 24 h, fica âmbar). {DICA_DO_LINK_DO_ANUNCIO}
           </>
         }
         acoes={
           <>
+            {frescor}
             {seletorDeCliente}
             {verContas}
             {podeAbrirMesaAds && (
@@ -697,7 +743,13 @@ function ClientAdsDetail({
               ) : (
                 <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Campanhas">
                   {porCampanha.map(({ resumo, ficha }) => (
-                    <LinhaDaCampanha key={resumo.campaignId} resumo={resumo} ficha={ficha} />
+                    <LinhaDaCampanha
+                      key={resumo.campaignId}
+                      resumo={resumo}
+                      ficha={ficha}
+                      leads={leadsLigados.porCampanha.get(resumo.campaignId)}
+                      temperaturas={temperaturas}
+                    />
                   ))}
                 </ul>
               )}
@@ -714,7 +766,14 @@ function ClientAdsDetail({
           {/* As peças: "qual anúncio funcionou" é a pergunta seguinte. */}
           {aba === "criativos" && (
             <div className="min-w-0 border-t border-border pt-4">
-              <GaleriaDeCriativos criativos={criativos || []} periodoDias={30} chave={clientId} embutido />
+              <GaleriaDeCriativos
+                criativos={criativos || []}
+                periodoDias={30}
+                chave={clientId}
+                embutido
+                leadsPorAnuncio={leadsLigados.porAnuncio}
+                temperaturas={temperaturas}
+              />
             </div>
           )}
 
@@ -1273,6 +1332,8 @@ export default function AdminAds() {
   const { data: campaigns } = useAdsCampaigns();
   const { data: clients } = useClients();
   const { data: conexao } = useAdsConnection();
+  // Leads no CRM por anúncio (19/10): só admin e manager leem o CRM (RLS).
+  const { data: leadsDoCrm } = useLeadsDosAnuncios(papel === "admin" || papel === "manager");
   const contasDoCliente = (clientId: string) =>
     (conexao?.contas || []).filter((c) => c.client_id === clientId && c.status === "active");
 
@@ -1433,19 +1494,18 @@ export default function AdminAds() {
         podeAbrirMesaAds={["admin", "manager", "design"].includes(papel)}
         aba={abaDoCliente}
         aoEscolherAba={setAbaDoCliente}
+        leadsDoCrm={leadsDoCrm}
+        frescor={<FrescorDaMeta ultima={ultimaLeituraDasContas(contasDoCliente(clienteAberto))} />}
       />
     );
   }
 
-  const ultimaLeitura = (conexao?.contas || []).reduce<string | null>(
-    (m, c) => (c.status === "active" && c.ultima_coleta && (!m || c.ultima_coleta > m) ? c.ultima_coleta : m),
-    null,
-  );
+  // A leitura mais nova das contas ativas: vira o relógio discreto ao lado de "Atualizar".
+  const ultimaLeitura = ultimaLeituraDasContas(conexao?.contas || []);
   const investidoTotal = porCliente.reduce((t, [, lista]) => t + summarizeAccount(lista).investido, 0);
   const descricao = [
     porCliente.length ? plural(porCliente.length, "cliente", "clientes") : "",
     investidoTotal > 0 ? `${dinheiro(investidoTotal)} em 30 dias` : "30 dias",
-    ultimaLeitura ? `lido ${haQuanto(ultimaLeitura)}` : "",
   ].filter(Boolean).join(" · ");
 
   const todas = verContasDe(conexao?.contas || [], nomes);
@@ -1477,7 +1537,7 @@ export default function AdminAds() {
       <CabecalhoDePagina
         titulo="Anúncios"
         descricao={descricao.charAt(0).toUpperCase() + descricao.slice(1)}
-        ajuda="Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. As abas ao lado do título trocam entre os clientes, o que está no ar e as contas."
+        ajuda={`Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. As abas ao lado do título trocam entre os clientes, o que está no ar e as contas. O relógio diz quando a Meta foi lida por último (passou de 24 h, fica âmbar). ${DICA_DO_LINK_DO_ANUNCIO}`}
         aoLado={
           <Etapas
             soIcone
@@ -1490,6 +1550,7 @@ export default function AdminAds() {
         }
         acoes={
           <>
+            <FrescorDaMeta ultima={ultimaLeitura} />
             {todas.botao}
             {botaoAtualizar}
           </>

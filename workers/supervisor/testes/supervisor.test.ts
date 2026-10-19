@@ -32,6 +32,25 @@ describe("supervisor", () => {
     assert.ok(tudo.indexOf(CHAVE_DE_SERVICO) < 0 && tudo.indexOf("sk-or-do-painel") < 0 && tudo.indexOf("sk-or-local") < 0);
   });
 
+  it("VERCEL_TEAM_ID do cofre desta máquina desce para o worker; sem ela, nada muda", async () => {
+    const TIME = "team_agenciaFalsa0123456789";
+    const com = montar({ motores: [], cofre: { SUPABASE_SERVICE_ROLE_KEY: CHAVE_DE_SERVICO, VERCEL_TOKEN: "vcp_tokenlocal_0123456789abcdef", VERCEL_TEAM_ID: TIME } });
+    com.s.segredosLocais = await com.cofre.ler();
+    const a = com.s.ambienteDoWorker();
+    assert.equal(a.VERCEL_TEAM_ID, TIME);
+    assert.equal(a.VERCEL_TOKEN, "vcp_tokenlocal_0123456789abcdef");
+    // o do cofre do painel vence o local, como as outras chaves
+    com.s.chavesDoPainel = { VERCEL_TEAM_ID: "team_doPainel" };
+    assert.equal(com.s.ambienteDoWorker().VERCEL_TEAM_ID, "team_doPainel");
+
+    const sem = montar({ motores: [] });
+    sem.s.segredosLocais = await sem.cofre.ler();
+    const b = sem.s.ambienteDoWorker();
+    assert.equal("VERCEL_TEAM_ID" in b, false, "ausente: o worker não recebe a variável");
+    assert.equal(b.SUPABASE_SERVICE_ROLE_KEY, CHAVE_DE_SERVICO, "o resto continua igual");
+    assert.equal(b.OPENROUTER_API_KEY, "sk-or-local-0000000000000000");
+  });
+
   it("sem o cofre do painel, cai na chave local", async () => {
     const banco = bancoFalso(() => ({}));
     banco.chaves = async () => {

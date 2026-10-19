@@ -4,8 +4,12 @@
  * o envio para cá; o contato cai no CRM do painel (commercial_leads, origem
  * "site") pela RPC site_registrar_lead, que só aceita a service_role.
  *
- * POST { chave, nome, email?, whatsapp?, empresa?, mensagem?, pagina?, iniciado_em, site_url }
+ * POST { chave, nome, email?, whatsapp?, empresa?, mensagem?, pagina?, iniciado_em, site_url,
+ *        utm_source?, utm_medium?, utm_campaign?, utm_content?, utm_term?, ad_id?, adset_id?, campaign_id?, fbclid? }
  *   site_url é a armadilha (campo escondido que gente não vê e robô preenche).
+ *   Os utm_* e ids da Meta são a origem do clique (19/10): o site repassa o
+ *   que veio no link de entrada e o lead fica ligado ao anúncio
+ *   (commercial_leads.origem_clique). Só o que veio no link; nada deduzido.
  * -> 200 { ok: true, mensagem } · 400 { ok: false, codigo, mensagem } · 429 limite
  *
  * Anti-spam em camadas: armadilha, tempo mínimo entre abrir e enviar, links
@@ -17,6 +21,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { CHAVE_DO_FORMULARIO, lerEnvio, origemPermitida } from "../_shared/site-lancamento.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { lerOrigemDoClique } from "../_shared/origem-clique.ts";
 
 const cors = (origem: string | null) => ({
   "Access-Control-Allow-Origin": origem || "*",
@@ -102,7 +107,7 @@ Deno.serve(async (req) => {
     const ehSpam = !!motivo && (SILENCIOSOS.indexOf(motivo) >= 0 || SPAM.indexOf(motivo) >= 0);
     if (motivo && !ehSpam) return json({ ok: false, codigo: motivo, mensagem: MENSAGENS[motivo] || "Confira os campos e envie de novo." }, 400);
     const ipHash = await hashDoIp(req);
-    const { data, error } = await servico().rpc("site_registrar_lead", {
+    const argumentos: Record<string, unknown> = {
       _chave: envio.chave,
       _ip_hash: ipHash,
       _nome: envio.nome,
@@ -112,7 +117,17 @@ Deno.serve(async (req) => {
       _mensagem: envio.mensagem,
       _pagina: envio.pagina,
       _spam_motivo: ehSpam ? motivo : null,
-    });
+    };
+    // A origem do clique só vai quando veio no link (spam não ganha origem).
+    const origemDoClique = ehSpam ? null : lerOrigemDoClique(corpo);
+    if (origemDoClique) argumentos._origem = origemDoClique;
+    let { data, error } = await servico().rpc("site_registrar_lead", argumentos);
+    // Banco ainda sem a migration da origem (20261020040000): grava o lead sem ela, nunca perde o contato.
+    if (error && origemDoClique && error.code === "PGRST202") {
+      registrarFalha("site-formulario: RPC sem _origem (migration da origem do clique pendente)", error);
+      delete argumentos._origem;
+      ({ data, error } = await servico().rpc("site_registrar_lead", argumentos));
+    }
     if (error) {
       registrarFalha("site-formulario: RPC recusou", error);
       return json({ ok: false, codigo: "indisponivel", mensagem: "Não foi possível enviar agora. Tente de novo em instantes." }, 503);

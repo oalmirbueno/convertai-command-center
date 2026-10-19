@@ -234,7 +234,7 @@ describe("LEIA-ME e estratégia", () => {
     d.briefing!.destino.tipo = "pagina";
     d.briefing!.destino.url = "https://exemplo.com.br";
     const itens = montarItens(d);
-    expect(itens[0].utm).toBe("utm_source=meta&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_content=01-dor-da-conta-alta-4x5");
+    expect(itens[0].utm).toBe("utm_source=meta&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_content=01-dor-da-conta-alta-4x5&ad_id={{ad.id}}&campaign_id={{campaign.id}}");
   });
 
   it("estratégia traz briefing, oferta, porquê de cada ângulo, notas do Jev, descartados e lacunas", () => {

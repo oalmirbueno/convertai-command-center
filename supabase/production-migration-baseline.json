@@ -2305,6 +2305,14 @@
       "remote_name": "laboratorio_v3",
       "remote_statements_sha256": "3765c9fcc3c94d1e5ea012fca64897697673fba28ae9a1885329d1ed3b2bee53",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261020040000",
+      "path": "supabase/migrations/20261020040000_origem_do_clique.sql",
+      "local_sha256": "18aa120a39c1b83199c20c9957f8dc50a18351ee72c6ec45cd1eee490e01af5f",
+      "remote_name": "origem_do_clique",
+      "remote_statements_sha256": "8a55eb281ade47aabacd2e5c24d536ecda81cda15331fd75bb0c0c3516229421",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

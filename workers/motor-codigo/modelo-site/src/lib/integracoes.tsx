@@ -10,6 +10,12 @@ import { pacote } from "./pacote";
  *
  * Nada roda no servidor: o estado de consentimento é lido depois de montar
  * (a página pré-renderizada hidrata igual).
+ *
+ * Origem do clique (19/10/2026): os parâmetros do link de entrada (utm_* e os
+ * ids da Meta, como utm_content={{ad.id}}) ficam guardados na visita e vão
+ * no formulário em campos ocultos. Assim o lead chega ao CRM dizendo de qual
+ * anúncio veio, mesmo que a pessoa navegue até a página de contato. Só o que
+ * veio no link; sem link, nada vai.
  */
 
 const integracoes = pacote.integracoes || null;
@@ -32,6 +38,44 @@ function gravarConsentimento(v: "aceito" | "recusado") {
     window.localStorage.setItem(CHAVE_DO_CONSENTIMENTO, v);
   } catch {
     /* navegador sem armazenamento: vale só nesta visita */
+  }
+}
+
+/** Os parâmetros do link que o formulário repassa (a função confere de novo). */
+const CAMPOS_DA_ORIGEM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ad_id", "adset_id", "campaign_id", "fbclid"];
+const CHAVE_DA_ORIGEM = "aceleriq-origem";
+
+type Origem = Record<string, string>;
+
+/**
+ * A origem desta visita: o link atual, quando trouxe parâmetro (o último
+ * clique vale), ou a guardada quando a pessoa entrou por um link e navegou.
+ */
+function origemDaVisita(): Origem {
+  let doLink: Origem = {};
+  try {
+    const busca = new URLSearchParams(window.location.search);
+    CAMPOS_DA_ORIGEM.forEach((c) => {
+      const v = (busca.get(c) || "").trim().slice(0, 500);
+      if (v) doLink[c] = v;
+    });
+  } catch {
+    doLink = {};
+  }
+  try {
+    if (Object.keys(doLink).length) {
+      window.sessionStorage.setItem(CHAVE_DA_ORIGEM, JSON.stringify(doLink));
+      return doLink;
+    }
+    const guardada = JSON.parse(window.sessionStorage.getItem(CHAVE_DA_ORIGEM) || "{}") as Origem;
+    const limpa: Origem = {};
+    CAMPOS_DA_ORIGEM.forEach((c) => {
+      if (typeof guardada[c] === "string" && guardada[c]) limpa[c] = guardada[c].slice(0, 500);
+    });
+    return limpa;
+  } catch {
+    /* navegador sem armazenamento: vale o que está no link */
+    return doLink;
   }
 }
 
@@ -176,6 +220,10 @@ function WhatsappFlutuante() {
 
 /** A camada que o App põe no fim da página: WhatsApp flutuante e aviso de cookies. */
 export function CamadaDeIntegracoes() {
+  // Guarda a origem logo na entrada: o formulário pode estar em outra página.
+  useEffect(() => {
+    origemDaVisita();
+  }, []);
   return (
     <>
       <WhatsappFlutuante />
@@ -196,8 +244,10 @@ export function Formulario({ className, rotuloDoBotao = "Enviar" }: { className?
   const inicio = useRef(0);
   const [estado, setEstado] = useState<"livre" | "enviando" | "enviado" | "erro">("livre");
   const [erro, setErro] = useState("");
+  const [origem, setOrigem] = useState<Origem>({});
   useEffect(() => {
     inicio.current = Date.now();
+    setOrigem(origemDaVisita());
   }, []);
   if (!f) return null;
   const enviar = async (e: FormEvent<HTMLFormElement>) => {
@@ -205,6 +255,11 @@ export function Formulario({ className, rotuloDoBotao = "Enviar" }: { className?
     const dados = new FormData(e.currentTarget);
     const corpo: Record<string, unknown> = { chave: f.chave, pagina: window.location.pathname, iniciado_em: inicio.current, site_url: String(dados.get("site_url") || "") };
     f.campos.forEach((c) => (corpo[c] = String(dados.get(c) || "")));
+    // A origem do clique (campos ocultos): só o que veio no link.
+    CAMPOS_DA_ORIGEM.forEach((c) => {
+      const v = String(dados.get(c) || "");
+      if (v) corpo[c] = v;
+    });
     setEstado("enviando");
     setErro("");
     try {
@@ -243,6 +298,10 @@ export function Formulario({ className, rotuloDoBotao = "Enviar" }: { className?
             />
           )}
         </label>
+      ))}
+      {/* Origem do clique (utm_* e ids do anúncio), vinda do link de entrada. */}
+      {Object.keys(origem).map((c) => (
+        <input key={c} type="hidden" name={c} value={origem[c]} />
       ))}
       {/* Armadilha para robô: invisível e fora do teclado; gente não preenche. */}
       <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}>

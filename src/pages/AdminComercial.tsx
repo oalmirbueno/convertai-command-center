@@ -39,6 +39,7 @@ import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/tem
 import { FaixaDeNumeros } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
+import OrigemDoLead from "@/components/ads/OrigemDoLead";
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
@@ -1306,6 +1307,8 @@ function EditorDeLead({
           <DialogTitle className="truncate pr-6 text-[15px]">{lead ? lead.name : "Novo lead"}</DialogTitle>
           {lead && <p className={texto.auxiliar}>{rotuloDoEstagio(lead.stage)}{lead.company ? ` · ${lead.company}` : ""}</p>}
           {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
+          {/* De qual anúncio veio (origem do clique gravada pelo formulário do site). */}
+          {lead && <OrigemDoLead lead={lead} />}
         </DialogHeader>
         <Etapas
           soIcone

@@ -152,10 +152,10 @@ export const OPERADOR_PADRAO = "default";
 /** Modelos de texto da caixa da Início e do agente do projeto (padrão: o MODELO_TEXTO_PADRAO da função). */
 export const MODELO_PADRAO_DO_LAB = "openrouter:anthropic/claude-opus-5.5";
 export const MODELOS_DO_LAB = [
-  { valor: MODELO_PADRAO_DO_LAB, rotulo: "Claude Opus 5.5" },
-  { valor: "openrouter:anthropic/claude-sonnet-5.5", rotulo: "Claude Sonnet 5.5" },
-  { valor: "openrouter:openai/gpt-6.1-sol", rotulo: "GPT-6.1 Sol" },
-  { valor: "openrouter:openai/gpt-6-luna", rotulo: "GPT-6 Luna" },
+  { valor: MODELO_PADRAO_DO_LAB, rotulo: "Claude Opus 5.5", curto: "Opus 5.5" },
+  { valor: "openrouter:anthropic/claude-sonnet-5.5", rotulo: "Claude Sonnet 5.5", curto: "Sonnet 5.5" },
+  { valor: "openrouter:openai/gpt-6.1-sol", rotulo: "GPT-6.1 Sol", curto: "GPT-6.1 Sol" },
+  { valor: "openrouter:openai/gpt-6-luna", rotulo: "GPT-6 Luna", curto: "GPT-6 Luna" },
 ] as const;
 
 const PROMPT: CampoDoNo = { chave: "prompt", rotulo: "Pedido", tipo: "textoLongo" };

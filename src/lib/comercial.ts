@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { lerOrigemDoClique, type OrigemDoClique } from "../../supabase/functions/_shared/origem-clique";
 
 /**
  * O Departamento Comercial da Aceleriq.
@@ -207,6 +208,11 @@ export interface Lead {
   classe: string | null;
   /** Campos de qualificação preenchidos. Ausente = não confirmado. */
   qualificacao: Record<string, string>;
+  /**
+   * De qual anúncio o lead veio (utm_* e ids da Meta do link de entrada),
+   * gravado pelo formulário do site. Ausente ou null = sem link de anúncio.
+   */
+  origem_clique?: OrigemDoClique | null;
 }
 
 export interface Campanha {
@@ -266,6 +272,7 @@ export async function listarLeads(): Promise<Lead[]> {
     one_off_value: numero(linha.one_off_value),
     classe: typeof linha.classe === "string" ? linha.classe : null,
     qualificacao: qualificacaoLimpa(linha.qualificacao),
+    origem_clique: lerOrigemDoClique(linha.origem_clique),
   }));
 }
 

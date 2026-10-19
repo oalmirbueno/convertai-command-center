@@ -472,7 +472,8 @@ describe("contrato: projeto_ler", () => {
     expect(lido.execucoes.map((e) => [e.no_id, e.status])).toEqual([["l1", "pronto"], ["i1", "erro"]]);
 
     montarEditor();
-    expect(await screen.findByText("Acerbi")).toBeInTheDocument();
+    // O seletor compacto do Canvas Studio mostra o nome à vista (19/10) e a opção do select também tem o nome.
+    expect((await screen.findAllByText("Acerbi")).some((e) => e.hasAttribute("data-nome-curto"))).toBe(true);
     const lista = await abrirModoLista();
     await waitFor(() => expect(lista.querySelector('[data-linha-do-no="l1"] [data-estado-do-no="pronto"]')).not.toBeNull());
     expect(lista.querySelector('[data-linha-do-no="i1"] [data-estado-do-no="erro"]')).not.toBeNull();
