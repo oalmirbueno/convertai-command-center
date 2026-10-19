@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
+  Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock, ExternalLink,
   FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
@@ -33,6 +33,7 @@ import { oQueFoiFeito, tipoDaEntrega } from "@/lib/execucaoHumana";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
+import { falaDaMeta } from "@/components/execucao/DestravarAqui";
 import {
   ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
 } from "@/lib/execucaoBadges";
@@ -1280,6 +1281,9 @@ export default function AdminExecucao() {
      agente que parou de dar sinal, o botão Retomar. */
   const decidirVinculo = async (item: ItemDaMesa, decisao: DecisaoDaMesa, nota: string): Promise<boolean> => {
     if (decisao === "adiado") return false;
+    // 19/10: no travado, o "ajuste" da mesa é a resposta ao agente, escrita no próprio cartão.
+    const doVinculo = vinculos.find((x) => x.id === item.id);
+    if (decisao === "ajuste" && doVinculo && (doVinculo.status === "blocked" || doVinculo.status === "awaiting_input")) return responderVinculo(doVinculo, nota);
     const quem = profile?.full_name || "a equipe";
     const plano = decisao === "aprovado"
       ? { status: "done", nota: `Aprovado por ${quem}.`, entrada: "aprovacao", corpo: nota || "Aprovado. Pode concluir.", resolver: true }
@@ -1333,6 +1337,20 @@ export default function AdminExecucao() {
     if (error) { toast.error(error.message || "Não foi possível liberar."); return false; }
     if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Pode seguir", body: "Pode seguir. Use o seu melhor julgamento: se for conferência, divergência ou prova faltando, peça ao revisor e siga com o que ele decidir. Volte com o resultado pronto, com a prova.", attachments: [] });
     toast.success("Liberado: o agente segue e volta com o resultado.");
+    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    return true;
+  };
+  /* 19/10 (dono: "eu respondo e já resolvo ali mesmo, sem precisar ir para outro lugar"): a
+     resposta escrita no cartão volta a tarefa para a fila do agente e entra no diário. */
+  const responderVinculo = async (v: Vinculo, texto: string): Promise<boolean> => {
+    const quem = profile?.full_name || "a equipe";
+    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `Resposta de ${quem}: ${texto}`.slice(0, 900), _resolve_approval: true });
+    if (error) { toast.error(error.message || "Não foi possível responder."); return false; }
+    if (profile?.id) {
+      const r = await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "resposta_insumo", title: "Resposta do dono", body: texto, attachments: [] });
+      if (r.error) toast.error(`A resposta valeu, mas não ficou no diário: ${r.error.message}`);
+    }
+    toast.success("Resposta enviada: o agente recebe na fila dele e segue.");
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
     return true;
   };
@@ -1414,9 +1432,14 @@ export default function AdminExecucao() {
           {idTarefa ? <button type="button" className="inline-flex items-center text-primary underline-offset-2 hover:underline" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })}><SquareArrowOutUpRight className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Abrir a tarefa</button> : null}
         </p>
       </div>,
-      podeAjuste: emRevisao,
+      podeAjuste: emRevisao || travada,
       podeRejeitar: emRevisao,
       rejeitarPedeMotivo: true,
+      ...(travada ? {
+        rotuloAjuste: "Enviar resposta",
+        textosDoAjuste: { botao: "Responder", campo: "Sua resposta ao agente (ele recebe na hora)" },
+        sugestoesAjuste: ["Já liberei o acesso, pode tentar de novo", "Siga com o seu melhor julgamento", "Faça só a parte que não depende de mim", "Não fazer isso agora"],
+      } : {}),
       /* 19/10 (dono: "fica rodando e não aprova"; "só o que realmente importa"): o que resolve roda
          pela mesa (mostra que salva e o cartão sai na hora); no rodapé ficam no máximo quatro botões. */
       acaoPrincipal: decidir
@@ -1434,7 +1457,9 @@ export default function AdminExecucao() {
       ],
       extras: <>
         {emRevisao && !v.last_evidence && <button type="button" onClick={() => void pedirAoAgente(v, "prova")} title="Pede ao agente para anexar a entrega pronta" aria-label="Pedir a prova" className={juntar(botao.discreto, "h-11 px-3")}><ImagePlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Pedir a prova</span></button>}
-        {(emRevisao || travada) && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Escrever ao agente ou ler o diário" aria-label="Responder" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Responder</span></button>}
+        {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Escrever ao agente ou ler o diário" aria-label="Diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
+        {/* Acesso na Meta é clique do dono: o atalho abre o Gerenciador de Negócios. */}
+        {travada && falaDaMeta(`${v.block_reason || ""} ${v.next_step || ""}`) && <a href="https://business.facebook.com/settings" target="_blank" rel="noopener noreferrer" title="Liberar a conta ou a Página para a Aceleriq (Atribuir parceiro)" aria-label="Abrir a Meta" className={juntar(botao.discreto, "h-11 px-3")}><ExternalLink className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Abrir a Meta</span></a>}
       </>,
     };
   });

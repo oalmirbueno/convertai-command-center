@@ -5,6 +5,16 @@ import { leituraSimples } from "@/lib/cadernoExecucao";
 import { botao, juntar, superficie } from "@/components/sistema";
 import EvidenciaVisual from "./EvidenciaVisual";
 import LeituraEmBlocos from "./LeituraEmBlocos";
+import DestravarAqui from "./DestravarAqui";
+
+/** Execuções que pedem a mão do dono: travada, esperando resposta, falhou ou entrega para conferir. */
+const PRECISA_DE_DESTRAVE = ["blocked", "awaiting_input", "failed", "review"];
+const ROTULO_DESTRAVADA: Record<string, string> = {
+  responder: "Respondida por você",
+  pode_seguir: "Liberada por você",
+  concluir: "Concluída por você",
+  encerrar: "Encerrada por você",
+};
 
 export default function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, destaque, aoConversar }: {
   runs: Record<string, any>[]; agentes: { id: string; display_name: string; area?: string | null }[];
@@ -34,25 +44,31 @@ export default function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, de
     const ruim = ["failed", "timeout"].includes(r.status);
     // 19/10: rodada fechada pelo agente (fim_da_rodada) não é tarefa concluída; a tarefa segue na fila.
     const rodada = r.status === "done" && d.fim_da_rodada === true;
+    // 19/10 (dono: "uma área que destrava tudo por ali"): resolvida pelo dono no próprio cartão.
+    const destravada = d.destravado && typeof d.destravado === "object" ? d.destravado as { acao?: string; texto?: string | null } : null;
+    const precisaDestravar = PRECISA_DE_DESTRAVE.includes(r.status) && !destravada;
+    const emBlocos = !!d.summary && leituraSimples(String(d.summary)).secoes.length > 0;
     return <details key={r.id} open={r.id === destaque || undefined} ref={r.id === destaque ? alvo : undefined} className={juntar(superficie.painel, "group overflow-hidden", r.id === destaque && "ring-1 ring-primary")}>
       <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 hover:bg-muted/30">
         {r.status === "done" ? <CheckCircle2 className="h-4 w-4 shrink-0 text-success" /> : <Activity className={juntar("h-4 w-4 shrink-0", ruim ? "text-warning" : "text-muted-foreground")} />}
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold" title={agente?.display_name || "Agente"} aria-hidden="true">{(agente?.display_name || "A").slice(0, 1)}</span>
         <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-medium">{titulo}</p><p className="truncate text-[12px] text-muted-foreground">{agente?.display_name || "Agente"}{nomeCliente ? ` · ${nomeCliente}` : " · operação interna"} · {new Date(r.heartbeat_at || r.started_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p></div>
-        <span className={juntar("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", ruim ? "bg-warning/15 text-warning" : r.status === "done" && !rodada ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{rodada ? "Rodada concluída" : estadoDaExecucao(r.status)}</span>
+        <span className={juntar("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", ruim ? "bg-warning/15 text-warning" : r.status === "done" && !rodada ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>{destravada ? ROTULO_DESTRAVADA[destravada.acao || ""] || "Resolvida por você" : rodada ? "Rodada concluída" : estadoDaExecucao(r.status)}</span>
       </summary>
       <div className="max-h-[50vh] space-y-3 overflow-y-auto border-t border-border/60 p-4">
         <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><Clock className="h-3 w-3" />Último registro: {new Date(r.heartbeat_at || r.started_at).toLocaleString("pt-BR")}</p>
         {d.action && <p className="whitespace-pre-wrap text-[13px] font-medium">{d.action}</p>}
         {/* 19/10 (dono: "quando vem assim fica muito confuso"): FEITO / TRAVADO / PRÓXIMO PASSO em blocos, o travado primeiro. */}
         {d.summary && <LeituraEmBlocos texto={d.summary} />}
-        {d.summary && leituraSimples(String(d.summary)).secoes.length > 0 && <details className="text-[12px] text-muted-foreground"><summary className="cursor-pointer">Ver o texto original do agente</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{d.summary}</pre></details>}
+        {precisaDestravar && <DestravarAqui runId={r.id} motivo={[d.summary, r.error, d.action].filter(Boolean).join(" ")} revisao={r.status === "review"} />}
+        {destravada && <p className="flex items-start rounded-lg bg-success/5 px-3 py-2 text-[13px] text-foreground/90"><CheckCircle2 className="mr-1.5 mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{ROTULO_DESTRAVADA[destravada.acao || ""] || "Resolvida por você"}{destravada.texto ? `: ${destravada.texto}` : "."}</span></p>}
+        {emBlocos && <details className="text-[12px] text-muted-foreground"><summary className="cursor-pointer">Ver o texto original do agente</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{d.summary}</pre></details>}
         {d.page_url && <EvidenciaVisual url={d.page_url} nome="Página consultada" />}
         {r.error && <p className="text-[13px] text-warning">{falhaDaExecucao(r.error)}</p>}
         {(d.evidence || v?.last_evidence) && <EvidenciaVisual url={d.evidence || v.last_evidence} />}
         {provas.length > 0 && <div className="grid gap-3 sm:grid-cols-2">{provas.map((a: any, i: number) => typeof a.url === "string" && <EvidenciaVisual key={i} url={a.url} nome={a.name || "Comprovação"} />)}</div>}
-        {(d.next_step || v?.next_step) && <p className="text-[13px]"><strong>Próximo passo:</strong> {d.next_step || v.next_step}</p>}
-        {r.task_link_id ? <button type="button" className={botao.secundario} onClick={() => aoConversar(r.task_link_id, titulo)}><MessageSquare className="mr-1.5 h-3.5 w-3.5" />Conversar ou pedir revisão</button> : <p className="text-[12px] text-muted-foreground">O agente ainda não vinculou esta execução a uma tarefa. O registro permanece disponível aqui.</p>}
+        {!emBlocos && (d.next_step || v?.next_step) && <p className="text-[13px]"><strong>Próximo passo:</strong> {d.next_step || v.next_step}</p>}
+        {r.task_link_id ? <button type="button" className={botao.discreto} onClick={() => aoConversar(r.task_link_id, titulo)}><MessageSquare className="mr-1.5 h-3.5 w-3.5" />Abrir o diário</button> : <p className="text-[12px] text-muted-foreground">O agente ainda não vinculou esta execução a uma tarefa.{precisaDestravar ? " Responda acima: a tarefa nasce na hora, na fila dele." : " O registro permanece disponível aqui."}</p>}
         <details><summary className="cursor-pointer text-[11px] text-muted-foreground">Identificador técnico</summary><code className="break-all text-[11px]">{r.run_key}</code></details>
       </div>
     </details>;

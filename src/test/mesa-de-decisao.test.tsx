@@ -134,6 +134,24 @@ describe("mesa de decisão", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  /* 19/10/2026 (dono: "eu respondo e já resolvo ali mesmo, sem precisar ir para outro lugar"): o
+     cartão travado responde no próprio cartão, com o campo e as sugestões, ao lado do Pode seguir. */
+  it("travado: Responder abre o campo no próprio cartão e envia a resposta", async () => {
+    const onDecidir = vi.fn().mockResolvedValue(true);
+    render(<MesaDeDecisao rotulo="Mesa" onDecidir={onDecidir} itens={[item("a", {
+      podeAjuste: true, podeRejeitar: false, rotuloAjuste: "Enviar resposta",
+      textosDoAjuste: { botao: "Responder", campo: "Sua resposta ao agente" },
+      sugestoesAjuste: ["Já liberei o acesso, pode tentar de novo"],
+      acaoPrincipal: { rotulo: "Pode seguir", aoClicar: vi.fn() },
+    })]} />);
+    expect(screen.queryByRole("button", { name: /Rejeitar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Responder/ }));
+    expect(screen.getByText("Sua resposta ao agente")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Já liberei o acesso, pode tentar de novo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar resposta" }));
+    await waitFor(() => expect(onDecidir).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }), "ajuste", "Já liberei o acesso, pode tentar de novo"));
+  });
+
   /* 19/10/2026 (dono: "ficar em tela cheia ali na área de Precisa de você, para focar em aprovar"). */
   it("tela cheia: só a mesa na tela; Esc volta", () => {
     render(<MesaDeDecisao rotulo="Mesa" itens={[item("a"), item("b")]} onDecidir={vi.fn()} />);
