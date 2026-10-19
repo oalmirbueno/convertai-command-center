@@ -26,6 +26,8 @@ import { progressDetail, type OperatorProgressDetail } from './operator-progress
 import { operatorRunIsStale } from './operator-freshness.ts';
 import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
 import { mensagemVinculoInexistente, type VinculoCandidato } from './vinculo-guard.ts';
+import { jevPerguntar } from './jev.ts';
+import { decidirTrava, perguntaDaTrava, ROTULO_DO_MOTIVO, type MotivoDoDono, type RespostaDaTrava } from './trava-do-dono.ts';
 
 const texto = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;
@@ -158,9 +160,54 @@ export interface OperatorReportInput {
   attempt?: number;
   timeout_seconds?: number;
   detail?: OperatorProgressDetail;
+  precisa_do_dono?: MotivoDoDono;
+}
+
+/** O Jev lê o motivo da trava. Falha do Jev devolve null: quem chama mantém a trava. */
+export async function classificarTrava(motivo: string, oQueDestrava: string | null): Promise<RespostaDaTrava | null> {
+  try {
+    const r = await jevPerguntar(
+      { state: { trava: { motivo, o_que_destrava: oQueDestrava } }, questions: { trava: perguntaDaTrava() } },
+      { timeoutMs: 8_000 },
+    );
+    return (r.answers.trava ?? null) as RespostaDaTrava | null;
+  } catch {
+    return null;
+  }
 }
 
 export async function operatorReport(input: OperatorReportInput, actor: string) {
+  // 19/10/2026: só trava para o dono o que só o dono resolve (trava-do-dono.ts).
+  // O resto não vira "Travada" no painel: segue como progresso, e o revisor desempata.
+  let aviso: Record<string, unknown> | null = null;
+  if (input.event === 'blocked' || input.event === 'awaiting_input' || input.event === 'failed') {
+    const motivo = (input.block_reason || input.error || input.action || '').trim();
+    const decisao = decidirTrava({
+      precisaDoDono: input.precisa_do_dono ?? null,
+      jev: input.precisa_do_dono ? null : await classificarTrava(motivo, input.next_step?.trim() || null),
+    });
+    if (!decisao.trava) {
+      aviso = {
+        nao_travou: true,
+        por_que: 'O motivo não depende do Almir (dinheiro, acesso ou senha, aprovar para o cliente ou decisão de estratégia).',
+        o_que_fazer: 'Siga com o melhor julgamento. Divergência, conferência ou prova faltando: peça ao Revisor Independente, que decide em até 2 rodadas. Erro técnico ou rodada que caiu: tente de novo.',
+      };
+      input = {
+        ...input,
+        event: 'progress',
+        action: `Seguiu sem travar: ${motivo}`.slice(0, 300),
+        next_step: 'O time resolve: o Revisor confere e decide (até 2 rodadas); depois segue.',
+        block_reason: undefined,
+        error: undefined,
+      };
+    } else if (decisao.motivo) {
+      const rotulo = `Precisa de você (${ROTULO_DO_MOTIVO[decisao.motivo]}): `;
+      if (input.block_reason && !input.block_reason.startsWith('Precisa de você')) {
+        input = { ...input, block_reason: `${rotulo}${input.block_reason}`.slice(0, 500) };
+      }
+    }
+  }
+
   if (input.kanban_task_id && !isUuid(input.kanban_task_id)) {
     throw new Error('kanban_task_id must be a UUID');
   }
@@ -217,7 +264,7 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     }
     throw new Error(`operator_report_event: ${error.message}`);
   }
-  return data;
+  return aviso && data && typeof data === 'object' ? { ...(data as Record<string, unknown>), ...aviso } : data;
 }
 
 /**

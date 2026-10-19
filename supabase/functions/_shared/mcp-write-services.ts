@@ -1207,12 +1207,13 @@ export async function deleteTask(input: DeleteTaskInput, ctx: WriteCtx) {
   const { error: delErr } = await db().from('tasks').delete().eq('id', tarefa.id);
   if (delErr) throw new WriteError('validation', delErr.message);
 
-  // Vínculo de operador: bloqueado com motivo, nunca apontando para o nada.
+  // Vínculo de operador: encerrado com o motivo, nunca apontando para o nada.
+  // 19/10/2026: era "bloqueado" e ficava travado na mesa do dono para sempre.
   // Falha aqui não desfaz a exclusão (já aconteceu); fica registrada na resposta.
   const avisos: string[] = [];
   const { error: linkErr } = await db()
     .from('operator_task_links')
-    .update({ status: 'blocked', block_reason: `Tarefa excluída via MCP${motivo ? `: ${motivo}` : ''}` })
+    .update({ status: 'done', block_reason: null, next_step: null, last_evidence: `Tarefa excluída via MCP${motivo ? `: ${motivo}` : ''}` })
     .eq('kanban_task_id', tarefa.id);
   if (linkErr) avisos.push(`operator_task_links: ${linkErr.message}`);
 

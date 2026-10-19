@@ -131,11 +131,13 @@ describe("delete_task repete a regra do painel", () => {
     expect(fn).toContain("Desvincule e reabra o pedido em vez de excluir.");
   });
 
-  it("depois de excluir, bloqueia o vínculo de operador e registra no diário", () => {
+  it("depois de excluir, encerra o vínculo de operador (não trava a mesa do dono) e registra no diário", () => {
     const fn = escrita.slice(escrita.indexOf("export async function deleteTask("));
     expect(fn).toContain(".from('tasks').delete()");
     expect(fn).toContain(".from('operator_task_links')");
-    expect(fn).toContain("status: 'blocked'");
+    // 19/10/2026: "bloqueado" ficava travado na mesa do dono para sempre.
+    expect(fn).toContain("status: 'done'");
+    expect(fn).not.toContain("status: 'blocked'");
     expect(fn).toContain("Tarefa excluída via MCP");
     expect(fn).toContain("kind: 'ciclo'");
     expect(fn).toContain("registro: 'descartada'");
