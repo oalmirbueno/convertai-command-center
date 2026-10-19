@@ -97,11 +97,28 @@ describe("fim da rodada: o relato fecha a rodada, a tarefa volta para a fila", (
   });
 
   it("sem fim_da_rodada nada muda: a rodada segue viva e o relato marca que não terminou", async () => {
-    const { rpc, chamadas, report } = relatoCom(RESPOSTA);
-    const r = await report({ operator: "paperclip", event: "progress", run_key: "link:3c11f390-a2be" }, "chave");
+    const { rpc, chamadas, report } = relatoCom({ ...RESPOSTA, operator: "augusto" });
+    const r = await report({ operator: "augusto", event: "progress", run_key: "augusto-verzelo-0001" }, "chave");
     expect(chamadas.filter((c) => c.patch || c.linha)).toEqual([]);
     expect((rpc.mock.calls.find((c) => c[0] === "operator_report_event")![1]!._detail as Record<string, unknown>).fim_da_rodada).toBe(false);
     expect(r.rodada_fechada).toBeUndefined();
+  });
+
+  /* O time do Paperclip relata uma vez por rodada, com uma run por tarefa (link:<vínculo>): o
+     progress dele é sempre fim de rodada. Fecha sozinho, sem depender do agente lembrar do campo;
+     fim_da_rodada false mantém aberta. O Hermes também usa link:, mas trabalha com sinal: fica fora. */
+  it("Paperclip com run por tarefa (link:): o progress fecha a rodada sozinho", async () => {
+    const sozinho = relatoCom(RESPOSTA);
+    const r = await sozinho.report({ operator: "paperclip", event: "progress", run_key: "link:e83938b4-43a3" }, "chave");
+    expect(r).toMatchObject({ rodada_fechada: true, link_status: "queued" });
+
+    const aberta = relatoCom(RESPOSTA);
+    await aberta.report({ operator: "paperclip", event: "progress", run_key: "link:e83938b4-43a3", fim_da_rodada: false }, "chave");
+    expect(aberta.chamadas.filter((c) => c.patch || c.linha)).toEqual([]);
+
+    const hermes = relatoCom({ ...RESPOSTA, operator: "default" });
+    await hermes.report({ operator: "default", event: "progress", run_key: "link:e83938b4-43a3" }, "chave");
+    expect(hermes.chamadas.filter((c) => c.patch || c.linha)).toEqual([]);
   });
 
   it("evento que já é final (review, done, blocked) não passa pelo fechamento", async () => {

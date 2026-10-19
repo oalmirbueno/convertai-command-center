@@ -260,8 +260,11 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     throw new Error('painel_task_id must be a UUID');
   }
   const detail = progressDetail(input.detail, input.action, input.evidence, input.next_step);
+  // O time do Paperclip relata uma vez por rodada, com uma run por tarefa (link:<vínculo>): o
+  // progress dele é sempre fim de rodada, a menos que diga fim_da_rodada false.
+  const rodadaDoPaperclip = input.operator === 'paperclip' && input.run_key.startsWith('link:');
   // Sempre gravado: o detalhe da run se junta ao anterior, e uma marca velha não pode sobrar.
-  const fechaRodada = input.fim_da_rodada === true && RODADA_ABERTA.has(input.event);
+  const fechaRodada = (input.fim_da_rodada ?? rodadaDoPaperclip) === true && RODADA_ABERTA.has(input.event);
   detail.fim_da_rodada = fechaRodada;
   const taskId = input.kanban_task_id || input.painel_task_id;
   if (taskId) {
