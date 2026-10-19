@@ -17,6 +17,8 @@ import PreviaEditavel from "./PreviaEditavel";
 import EstadoDoMotor, { useEstadoDoMotor } from "./EstadoDoMotor";
 import { mapaDoSite, secoesDoMapa } from "../../../supabase/functions/_shared/site-biblioteca";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
+import FasesDoTrabalho from "./FasesDoTrabalho";
+import RascunhoDoSite from "./RascunhoDoSite";
 
 const TOM: Record<string, string> = {
   na_fila: "bg-muted text-muted-foreground",
@@ -106,6 +108,9 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
   // Fechado, os eventos não são buscados.
   const vivo = trabalhosQ.data ? trabalhosQ.data.vivo : false;
   const eventos = useEventos(passoAberto ? selecionado : null, vivo);
+  // Gravyx: as fases do trabalho em curso ficam à vista no Construir (mesma leitura dos eventos, sem chamada a mais).
+  const emCurso = trabalhos.find((t) => ehAberto(t.estado)) || null;
+  const eventosDoEmCurso = useEventos(emCurso, vivo);
   const eventosEmCache = selecionado ? qc.getQueryData<EventoDoMotor[]>(CHAVES.eventos(selecionado.id)) : undefined;
   const rodando = trabalhos.some((t) => ehAberto(t.estado));
   const executor = trabalhosQ.data ? trabalhosQ.data.executor : null;
@@ -204,6 +209,12 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
           </button>
         }
       >
+        {emCurso && (
+          <div className="mb-2 min-w-0" data-fases-do-em-curso={emCurso.id}>
+            <span className={juntar(texto.auxiliar, "block truncate")}>{ROTULO_DO_TIPO[emCurso.tipo]}{emCurso.instrucao ? `: ${emCurso.instrucao}` : ""}</span>
+            <FasesDoTrabalho trabalho={emCurso} eventos={eventosDoEmCurso.data || []} />
+          </div>
+        )}
         <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")} data-custo-do-construir="">
           <span className="min-w-0 truncate">{linhaDoCusto}</span>
           {estimativa.isError && escolhidas.length > 0 && (
@@ -236,6 +247,9 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
           )}
         </div>
       </Secao>
+
+      {/* Gravyx: rascunho com as trocas do motor, ainda não salvo (Salvar versão e Descartar). */}
+      <RascunhoDoSite site={site} trabalhos={trabalhos} />
 
       {/* SPV: a prévia editável ocupa a largura toda; os trabalhos e as versões vêm depois. */}
       <PreviaEditavel site={site} trabalhos={todos} executor={executor} onIrPara={onIrPara} />
@@ -283,6 +297,12 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
             <div className="border-t border-border pt-3" data-eventos-do-trabalho="">
               {/* O erro fica sempre à vista, fora do recolhido. */}
               {selecionado.erro && <p className={juntar(texto.auxiliar, "mb-2 whitespace-normal text-destructive")}>{selecionado.erro}</p>}
+              {/* Parado no meio sem os eventos lidos: a fase em que parou não é chutada. */}
+              {(selecionado.estado === "feito" || ehAberto(selecionado.estado) || !!(eventos.data && eventos.data.length)) && (
+                <div className="mb-2 min-w-0">
+                  <FasesDoTrabalho trabalho={selecionado} eventos={emCurso && selecionado.id === emCurso.id ? eventosDoEmCurso.data || [] : eventos.data || []} />
+                </div>
+              )}
               <TituloRecolhivel
                 titulo={passoAberto ? "Passo a passo" : `Ver passo a passo${eventosEmCache && eventosEmCache.length ? ` (${eventosEmCache.length})` : ""}`}
                 recolhido={!passoAberto}

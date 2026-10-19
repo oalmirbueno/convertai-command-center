@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Download, Eye, History, Loader2, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Cloud, CloudUpload, Download, Eye, History, Loader2, Undo2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -12,8 +12,10 @@ import { botao, etiqueta, juntar, lista, texto } from "@/components/sistema/esti
 import { dataEHora } from "@/lib/mesa/api";
 import { podeVoltarPara, ROTULO_DO_TIPO, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { dadosDaVersao, diferencasEntreVersoes } from "../../../supabase/functions/mesa-site/modulos/site-versoes";
+import { estadoDoRascunho, ROTULO_DA_ORIGEM, versoesSalvas } from "../../../supabase/functions/mesa-site/modulos/obra-do-site";
 import { CHAVES, chamarMotor, chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
-import { type DadosDaPrevia, usePreviaDados } from "./previaApi";
+import { type DadosDaPrevia, pedirPreviaNaNuvem, usePreviaDados } from "./previaApi";
+import { previaDoCommit, previaNaNuvemPedida } from "../../../supabase/functions/mesa-site/modulos/publicacao-nuvem";
 import { montarPreviaRapida } from "./previaEstatica";
 
 type VersaoDoPlano = { id: string; motivo: string; criado_em: string };
@@ -70,6 +72,12 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
     queryFn: () => chamarSite<{ versao: { dados: Record<string, unknown> } }>("versao_ler", { site_id: site.id, versao_id: String(aberta).slice(6) }),
   });
   const doCodigo = trabalhos.filter((t) => podeVoltarPara(t));
+  // Gravyx: a versão salva diz a origem (edição, importação, restauração), os modelos e de qual veio;
+  // o que ainda está no rascunho fica marcado (só vira versão no Salvar).
+  const salvas = versoesSalvas(trabalhos);
+  const noRascunho = estadoDoRascunho(trabalhos).trabalhos.map((t) => t.id);
+  // 20/10/2026: a prévia na nuvem (Vercel da agência) de cada versão; a do estado atual sai quando pedida.
+  const previaFazendo = previaNaNuvemPedida(trabalhos);
   // 19/10/2026: a prévia de uma versão do plano (janela no centro), montada como a prévia rápida.
   const [vendo, setVendo] = useState<VersaoDoPlano | null>(null);
   const lida = useQuery({
@@ -103,6 +111,13 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
       window.location.assign(data.signedUrl);
     });
 
+  const subirPrevia = () =>
+    rodar("A prévia na nuvem não entrou na fila", async () => {
+      await pedirPreviaNaNuvem(site.id);
+      void qc.invalidateQueries({ queryKey: CHAVES.trabalhos(site.id) });
+      void qc.invalidateQueries({ queryKey: CHAVES.publicacao(site.id) });
+    });
+
   const confirmar = () => {
     const p = pedido;
     setPedido(null);
@@ -125,8 +140,13 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
     <Secao
       titulo="Versões"
       descricao={`${doCodigo.length} do código · ${plano.data ? plano.data.versoes.length : 0} do plano`}
-      ajuda="Código: cada trabalho do motor terminado é uma versão (commit), com o que mudou e o zip daquela versão; voltar cria um trabalho que desfaz o que veio depois, sem custo de modelo. Plano: o que o site decidiu antes de cada mudança (mapa, estilo, copy, imagens, integrações e SEO), guardado no banco (site_versoes); o olho mostra a prévia daquela versão, comparar mostra o que muda e voltar guarda o atual como versão antes."
+      ajuda="Código: o motor escreve num rascunho; Salvar versão o transforma em versão salva e sobe a prévia dela na nuvem (Vercel da agência: a nuvem ao lado da versão abre um link que não depende desta máquina nem do túnel; o botão de cima sobe a prévia do estado atual, rascunho incluído, sem custo de modelo), com a origem (edição, importação ou restauração), os modelos usados e de qual versão veio. Cada trabalho terminado continua com o seu commit, com o que mudou e o zip daquela versão; voltar cria um trabalho que desfaz o que veio depois, sem custo de modelo. Plano: o que o site decidiu antes de cada mudança (mapa, estilo, copy, imagens, integrações e SEO), guardado no banco (site_versoes); o olho mostra a prévia daquela versão, comparar mostra o que muda e voltar guarda o atual como versão antes."
       recolher="mesa-site:construcao:versoes"
+      acao={
+        <button type="button" className={botao.icone} aria-label={previaFazendo ? "Subindo a prévia na nuvem" : "Subir a prévia na nuvem do estado atual"} title={previaFazendo ? "Subindo a prévia na nuvem" : "Prévia na nuvem do estado atual (rascunho ou versão salva)"} disabled={!!ocupado || !!previaFazendo} onClick={() => void subirPrevia()} data-pedir-previa-nuvem="">
+          {previaFazendo || ocupado === "A prévia na nuvem não entrou na fila" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+        </button>
+      }
     >
       <span className={juntar(texto.rotulo, "block")}>Código</span>
       {!doCodigo.length && <EstadoVazio compacto titulo="Nenhuma versão de código ainda." />}
@@ -134,21 +154,35 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
         {doCodigo.slice(0, 15).map((t, n) => {
           const arquivos = (Array.isArray(t.resultado.arquivos) ? t.resultado.arquivos : []) as Arquivo[];
           const chave = `codigo:${t.id}`;
+          const salva = salvas.find((v) => v.trabalho_id === t.id) || null;
+          const doRascunho = noRascunho.indexOf(t.id) >= 0;
           const aqui = aberta === chave;
+          const naNuvem = previaDoCommit(trabalhos, t.commit);
           return (
             <li key={t.id} className="min-w-0">
               <div className={lista.linha}>
                 <button type="button" className="mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberta(aqui ? null : chave)} aria-expanded={aqui} title={t.commit ? `Commit ${String(t.commit).slice(0, 12)}` : undefined}>
                   {aqui ? <ChevronDown className="mr-1.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mr-1.5 h-4 w-4 shrink-0" />}
                   <span className="min-w-0 flex-1">
-                    <span className={juntar(texto.corpo, "block truncate")}>{t.instrucao || ROTULO_DO_TIPO[t.tipo]}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>
+                    <span className={juntar(texto.corpo, "block truncate")}>{salva ? `Versão salva · ${ROTULO_DA_ORIGEM[salva.origem]}` : t.instrucao || ROTULO_DO_TIPO[t.tipo]}</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")} data-versao-salva={salva ? salva.origem : undefined}>
                       {dataEHora(t.terminado_em || t.criado_em)}
+                      {salva && salva.modelos.length ? ` · ${salva.modelos.join(", ")}` : ""}
+                      {salva && salva.de ? ` · de ${salva.de.slice(0, 8)}` : ""}
                       {arquivos.length ? ` · ${arquivos.length} arquivo(s)` : ""}
                     </span>
                   </span>
                 </button>
-                {n === 0 && <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")}>atual</span>}
+                {doRascunho ? (
+                  <span className={juntar(etiqueta, "mr-1 bg-amber-500/15 text-amber-700 dark:text-amber-400")}>rascunho</span>
+                ) : n === 0 || (salva && salvas[0] && salvas[0].trabalho_id === t.id) ? (
+                  <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")}>{salva ? "salva" : "atual"}</span>
+                ) : null}
+                {naNuvem && (
+                  <a className={botao.icone} href={naNuvem.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir a prévia na nuvem desta versão" title={`Abrir prévia (${naNuvem.ramo === "rascunho" ? "rascunho, " : ""}${dataEHora(naNuvem.em)})`} data-abrir-previa-nuvem={naNuvem.commit.slice(0, 8)}>
+                    <Cloud className="h-4 w-4" />
+                  </a>
+                )}
                 {t.zip_path && (
                   <button type="button" className={botao.icone} aria-label="Baixar o zip desta versão" title="Baixar o zip" onClick={() => void baixar(t)}>
                     <Download className="h-4 w-4" />
@@ -269,7 +303,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
             <AlertDialogTitle>Voltar para esta versão?</AlertDialogTitle>
             <AlertDialogDescription>
               {pedido && pedido.tipo === "codigo"
-                ? "O motor desfaz o código que veio depois desta versão, num commit novo (nada se perde: dá para voltar de novo). Sem custo de modelo."
+                ? "O motor desfaz o código que veio depois desta versão, num commit novo no rascunho (nada se perde: dá para voltar de novo). Confira na prévia e salve a versão (fica com a origem restauração). Sem custo de modelo."
                 : "O plano do site volta a esta versão (mapa, estilo, copy, imagens, integrações e SEO). O atual fica guardado como versão."}
             </AlertDialogDescription>
           </AlertDialogHeader>

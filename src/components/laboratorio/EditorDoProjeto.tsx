@@ -3,18 +3,26 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Archive, ArrowLeft, BookmarkPlus, Check, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Play, RefreshCw, Workflow } from "lucide-react";
-import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, etiqueta, juntar, texto } from "@/components/sistema";
+import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
+import { supabase } from "@/integrations/supabase/client";
 import { useModoFoco } from "@/lib/modoFoco";
 import {
+  acompanharNo,
   arquivarProjeto,
+  blocosPorNo,
   chaveDosProjetos,
   custoAConfirmar,
   ehConflitoDeVersao,
+  ehJaPedido,
+  normalizarExecucao,
+  escolherStoryboard,
   estimar,
   executarNo,
   lerExecucoes,
   lerProjeto,
+  precisaAcompanhar,
+  resolverBloco,
   rodarTudo,
   salvarProjeto,
   salvarTemplate,
@@ -26,6 +34,7 @@ import {
   TIPOS_DE_NO,
   alvosDaBase,
   aplicarOperacoes,
+  atrasosDaConstrucao,
   canvasVazio,
   criarNo,
   desligar,
@@ -34,6 +43,7 @@ import {
   organizar,
   podeLigar,
   removerNo,
+  travaDoNoAr,
   type CanvasDoLab,
   type OperacaoDoAgente,
   type TipoDeNo,
@@ -43,9 +53,10 @@ import Paleta from "./Paleta";
 import Inspetor from "./Inspetor";
 import ModoListaDoLab from "./ModoListaDoLab";
 import AgenteDoProjeto from "./AgenteDoProjeto";
+import CanvasStudio, { type ResultadoDaConstrucao } from "./CanvasStudio";
 import JanelaDeCusto, { type LinhaDeCusto } from "./JanelaDeCusto";
 import { emAndamento } from "./ResultadoDoNo";
-import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
+import type { ClienteDoLab } from "./Seletores";
 
 /**
  * Editor de um projeto do Laboratório: o canvas de nós (paleta, quadro,
@@ -53,13 +64,23 @@ import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
  * custo numa janela; só roda depois do confirmar), salvar automático com
  * trava otimista (conflito avisa e oferece recarregar), tela cheia (modo
  * foco), modo lista no celular e o agente do projeto ao lado.
+ *
+ * v2 (20/10/2026): o Canvas Studio fica fixo no topo do canvas (a caixa da
+ * Início, com modelo, cliente e atalhos): o pedido vira operações que entram
+ * no quadro com a animação de construção (coluna por coluna) e organizadas,
+ * com Desfazer. O Filme escolhe o storyboard no próprio nó; a tela cheia
+ * pode vir de fora (a página do Laboratório guarda o estado para todas as abas).
  */
 
 type EstadoDoSalvar = "salvo" | "pendente" | "salvando" | "erro" | "conflito";
-type Alvo = { tipo: "no"; id: string } | { tipo: "tudo" } | { tipo: "lista"; ids: string[]; titulo: string };
+type Alvo = { tipo: "no"; id: string } | { tipo: "tudo" } | { tipo: "lista"; ids: string[]; titulo: string } | { tipo: "filme"; id: string; indice: number };
 
 const ATRASO_DO_SALVAR_MS = 1500;
 const VIGIA_MS = 3000;
+/** Filme renderizando ou montando: no_acompanhar de tempo em tempo (um passo por chamada). */
+const ACOMPANHAR_MS = 5000;
+/** Esperam algo de fora (escolha, render, aprovação): quem vigia é o no_acompanhar, não o execucoes_ler. */
+const ESPERAM_DE_FORA = ["filme", "por_no_ar"];
 
 function useAlturaDoEditor(ativo: boolean) {
   const ref = useRef<HTMLDivElement>(null);
@@ -90,7 +111,16 @@ function nomeDoNo(canvas: CanvasDoLab, id: string) {
   return `${TIPOS_DE_NO[n.tipo].rotulo} ${canvas.nos.filter((x) => x.tipo === n.tipo).indexOf(n) + 1}`;
 }
 
-function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes: ClienteDoLab[]; onVoltar: () => void }) {
+interface PropsDoEditor {
+  projetoId: string;
+  clientes: ClienteDoLab[];
+  onVoltar: () => void;
+  /** Tela cheia vinda da página (todas as abas); sem isso, o editor guarda a sua. */
+  telaCheia?: boolean;
+  onTelaCheia?: (v: boolean) => void;
+}
+
+function Editor({ projetoId, clientes, onVoltar, telaCheia, onTelaCheia }: PropsDoEditor) {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: ["laboratorio", "projeto", projetoId], queryFn: () => lerProjeto(projetoId), staleTime: 0, gcTime: 0 });
 
@@ -105,7 +135,16 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
   const [estimando, setEstimando] = useState<string | null>(null);
   const [rodando, setRodando] = useState(false);
   const [vigiar, setVigiar] = useState(false);
-  const [cheia, setCheia] = useState(false);
+  const [cheiaPropria, setCheiaPropria] = useState(false);
+  const cheia = telaCheia !== undefined ? telaCheia : cheiaPropria;
+  const setCheia = useCallback((v: boolean) => (onTelaCheia ? onTelaCheia(v) : setCheiaPropria(v)), [onTelaCheia]);
+  const [clienteDoProjeto, setClienteDoProjeto] = useState<string | null>(null);
+  // Construção (Canvas Studio): atraso de entrada dos nós novos, ajuste da vista e o quadro de antes (Desfazer).
+  const [revelar, setRevelar] = useState<Record<string, number> | null>(null);
+  const [ajustarVista, setAjustarVista] = useState(0);
+  const [antesDaConstrucao, setAntesDaConstrucao] = useState<CanvasDoLab | null>(null);
+  const [registro, setRegistro] = useState<{ id: string; pedido: string; resposta: string } | null>(null);
+  const [escolhendo, setEscolhendo] = useState<{ no: string; indice: number } | null>(null);
   const [lista, setLista] = useState<boolean>(() => typeof window !== "undefined" && (window.innerWidth || 1024) < 768);
   const [largo, setLargo] = useState<boolean>(() => typeof window === "undefined" || (window.innerWidth || 1024) >= 1024);
   const [agente, setAgente] = useState<boolean>(() => typeof window === "undefined" || (window.innerWidth || 1024) >= 1280);
@@ -116,8 +155,10 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
   const nomeAtual = useRef("");
   const salvando = useRef<Promise<boolean> | null>(null);
   const carregado = useRef(false);
+  /** Cliente trocado no Canvas Studio: vai no próximo projeto_salvar (undefined = sem troca). */
+  const clienteMudou = useRef<string | null | undefined>(undefined);
 
-  useModoFoco("laboratorio", cheia);
+  useModoFoco("laboratorio-canvas", cheia);
   const { ref: refDoCorpo, altura } = useAlturaDoEditor(!lista && !cheia);
 
   useEffect(() => {
@@ -133,6 +174,8 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
     versao.current = p.versao;
     setNome(p.nome);
     nomeAtual.current = p.nome;
+    setClienteDoProjeto(p.client_id);
+    clienteMudou.current = undefined;
     setExecucoes(ultimaPorNo(execs));
     setSalvar({ estado: "salvo", erro: "" });
     if (execs.some((e) => emAndamento(e.status))) setVigiar(true);
@@ -156,11 +199,13 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
   const salvarAgora = useCallback(async (): Promise<boolean> => {
     if (salvando.current) return salvando.current;
     const enviar = atual.current;
+    const cliente = clienteMudou.current;
     setSalvar({ estado: "salvando", erro: "" });
     const p = (async () => {
       try {
-        const salvo = await salvarProjeto({ id: projetoId, nome: nomeAtual.current, canvas: enviar, versao: versao.current });
+        const salvo = await salvarProjeto({ id: projetoId, nome: nomeAtual.current, canvas: enviar, versao: versao.current, ...(cliente !== undefined ? { client_id: cliente } : {}) });
         versao.current = salvo.versao;
+        if (clienteMudou.current === cliente) clienteMudou.current = undefined;
         setSalvar({ estado: atual.current !== enviar ? "pendente" : "salvo", erro: "" });
         void queryClient.invalidateQueries({ queryKey: chaveDosProjetos });
         return true;
@@ -202,7 +247,86 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
   };
 
   // Vigia das execuções: enquanto algo roda, lê o progresso a cada 3 s.
-  const algoRodando = useMemo(() => Object.keys(execucoes).some((k) => emAndamento(execucoes[k].status)), [execucoes]);
+  const tipoDoNo = useCallback((id: string, e?: ExecucaoDoLab) => (e && e.tipo) || ((atual.current.nos.find((n) => n.id === id) || { tipo: "" }).tipo as string), []);
+  const algoRodando = useMemo(
+    () => Object.keys(execucoes).some((k) => {
+      const e = execucoes[k];
+      if (e.status === "aguardando" && ESPERAM_DE_FORA.indexOf(tipoDoNo(k, e)) >= 0) return false;
+      return emAndamento(e.status);
+    }),
+    [execucoes, tipoDoNo],
+  );
+  // Regra contra invenção (v3): cada Pôr no ar travado por bloco sem fonte antes dele (motivo por id).
+  const travasDoNoAr = useMemo(() => {
+    const blocos = blocosPorNo(execucoes);
+    const saida: Record<string, ReturnType<typeof travaDoNoAr>> = {};
+    canvas.nos.filter((n) => n.tipo === "por_no_ar").forEach((n) => {
+      const t = travaDoNoAr(canvas, n.id, blocos);
+      if (t.travado) saida[n.id] = t;
+    });
+    return saida;
+  }, [canvas, execucoes]);
+  const motivosDasTravas = useMemo(() => {
+    const m: Record<string, string> = {};
+    Object.keys(travasDoNoAr).forEach((k) => (m[k] = travasDoNoAr[k].motivo));
+    return m;
+  }, [travasDoNoAr]);
+  const resolverOBloco = useCallback(
+    async (noId: string, blocoId: string, modo: "fonte" | "editar", valor: string) => {
+      const ex = await resolverBloco({ projetoId, noId, blocoId, modo, valor });
+      if (ex) setExecucoes((a) => ({ ...a, [noId]: ex }));
+      toast.success(modo === "fonte" ? "Fonte confirmada" : "Trecho editado", { description: "Sem bloco sem fonte antes dele, o Pôr no ar destrava." });
+    },
+    [projetoId],
+  );
+  const aAcompanhar = useMemo(() => Object.keys(execucoes).filter((k) => precisaAcompanhar(tipoDoNo(k, execucoes[k]), execucoes[k])).sort().join("|"), [execucoes, tipoDoNo]);
+  useEffect(() => {
+    if (!aAcompanhar) return;
+    let vivo = true;
+    const id = window.setInterval(() => {
+      aAcompanhar.split("|").forEach((noId) => {
+        acompanharNo(projetoId, noId)
+          .then((ex) => {
+            if (vivo && ex) setExecucoes((a) => ({ ...a, [noId]: ex }));
+          })
+          .catch(() => undefined);
+      });
+    }, ACOMPANHAR_MS);
+    return () => {
+      vivo = false;
+      window.clearInterval(id);
+    };
+  }, [aAcompanhar, projetoId]);
+
+  // Realtime de lab_execucoes: o estado do Pôr no ar (aprovado, com o agente, feito) chega sozinho.
+  useEffect(() => {
+    const sb = supabase as any;
+    if (!sb || typeof sb.channel !== "function") return;
+    let canal: any = null;
+    try {
+      canal = sb
+        .channel(`lab-execucoes:${projetoId}:${Date.now().toString(36)}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "lab_execucoes", filter: `projeto_id=eq.${projetoId}` }, (msg: any) => {
+          const ex = normalizarExecucao(msg && msg.new);
+          if (!ex) return;
+          setExecucoes((a) => {
+            const velha = a[ex.no_id];
+            if (velha && velha.id !== ex.id && (velha.created_at || "") > (ex.created_at || "")) return a;
+            return { ...a, [ex.no_id]: ex };
+          });
+        })
+        .subscribe();
+    } catch {
+      canal = null;
+    }
+    return () => {
+      try {
+        if (canal) sb.removeChannel(canal);
+      } catch {
+        /* canal já fechado */
+      }
+    };
+  }, [projetoId]);
   useEffect(() => {
     if (!vigiar && !algoRodando) return;
     let vivo = true;
@@ -212,7 +336,7 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
           if (!vivo) return;
           const ultimas = ultimaPorNo(l);
           setExecucoes((antes) => ({ ...antes, ...ultimas }));
-          if (!l.some((e) => emAndamento(e.status))) setVigiar(false);
+          if (!l.some((e) => emAndamento(e.status) && !(e.status === "aguardando" && ESPERAM_DE_FORA.indexOf(tipoDoNo(e.no_id, e)) >= 0))) setVigiar(false);
         })
         .catch(() => undefined);
     }, VIGIA_MS);
@@ -220,7 +344,7 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
       vivo = false;
       window.clearInterval(id);
     };
-  }, [vigiar, algoRodando, projetoId]);
+  }, [vigiar, algoRodando, projetoId, tipoDoNo]);
 
   // Esc sai da tela cheia.
   useEffect(() => {
@@ -230,7 +354,7 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
     };
     window.addEventListener("keydown", tecla);
     return () => window.removeEventListener("keydown", tecla);
-  }, [cheia]);
+  }, [cheia, setCheia]);
 
   const por = useCallback(
     (tipo: TipoDeNo, pos?: { x: number; y: number }) => {
@@ -291,6 +415,11 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
     setRodando(true);
     try {
       const alvo = custo.alvo;
+      if (alvo.tipo === "filme") {
+        await escolherFilme(alvo.id, alvo.indice, true);
+        setCusto(null);
+        return;
+      }
       if (alvo.tipo === "no") {
         const ex = await executarNo(projetoId, alvo.id);
         setExecucoes((a) => ({ ...a, [alvo.id]: ex }));
@@ -307,20 +436,101 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
       if (pedido) {
         const c = atual.current;
         setCusto((x) => (x ? { ...x, linhas: pedido.por_no.map((n) => ({ id: n.no_id, nome: nomeDoNo(c, n.no_id), custo_usd: n.custo_usd })), total: pedido.total_usd } : x));
+      } else if (e instanceof Error && (e as { codigo?: string }).codigo === "rascunho_sem_fonte") {
+        setCusto(null);
+        toast.warning("Pôr no ar travado", { description: e.message });
+      } else if (ehJaPedido(e)) {
+        setCusto(null);
+        toast.info("Já pedido", { description: "Este Pôr no ar já tem um pedido aberto. Veja em Precisa de você (Execução)." });
       } else toast.error("Não deu para rodar", { description: textoDoErro(e) });
     } finally {
       setRodando(false);
     }
   };
 
-  const aplicarDoAgente = useCallback(
-    (ops: OperacaoDoAgente[]) => {
-      const r = aplicarOperacoes(atual.current, ops);
-      mudar(() => r.canvas);
-      return r;
+  /**
+   * Aplica as operações com a animação de construção: os nós novos entram
+   * coluna por coluna; com `arrumar`, o quadro se organiza em colunas antes.
+   * Guarda o quadro de antes para o Desfazer.
+   */
+  const construir = useCallback(
+    (ops: OperacaoDoAgente[], arrumar: boolean, previsto?: CanvasDoLab | null) => {
+      const antes = atual.current;
+      const r = aplicarOperacoes(antes, ops);
+      if (!r.feitas) return { ...r, novos: [] as string[] };
+      // As posições do canvas_previsto da função (colunas por etapa) valem; sem ele, organiza aqui.
+      const posicoes: Record<string, { x: number; y: number }> = {};
+      if (previsto) previsto.nos.forEach((n) => (posicoes[n.id] = { x: n.x, y: n.y }));
+      const casou = previsto ? r.canvas.nos.filter((n) => posicoes[n.id]).length : 0;
+      const final = casou ? { ...r.canvas, nos: r.canvas.nos.map((n) => (posicoes[n.id] ? { ...n, x: posicoes[n.id].x, y: posicoes[n.id].y } : n)) } : arrumar ? organizar(r.canvas) : r.canvas;
+      const novos = final.nos.filter((n) => !antes.nos.some((x) => x.id === n.id)).map((n) => n.id);
+      mudar(() => final);
+      setAntesDaConstrucao(antes);
+      if (novos.length) {
+        const atrasos = atrasosDaConstrucao(final, novos);
+        setRevelar(atrasos);
+        const fim = Math.max.apply(null, Object.keys(atrasos).map((k) => atrasos[k])) + 700;
+        window.setTimeout(() => setRevelar((x) => (x === atrasos ? null : x)), fim);
+      }
+      setAjustarVista((v) => v + 1);
+      return { ...r, canvas: final, novos };
     },
     [mudar],
   );
+
+  const aplicarDoAgente = useCallback((ops: OperacaoDoAgente[]) => construir(ops, false), [construir]);
+
+  const construirDoStudio = useCallback(
+    (ops: OperacaoDoAgente[], completo: boolean, previsto: CanvasDoLab | null): ResultadoDaConstrucao => {
+      // Projeto completo ou quadro que estava vazio: em colunas (as da função, por etapa, de Pesquisa a Pôr no ar).
+      const r = construir(ops, completo || atual.current.nos.length === 0 || ops.filter((o) => o.op === "criar").length >= 3, previsto);
+      return { feitas: r.feitas, falhas: r.falhas, novos: r.novos.length };
+    },
+    [construir],
+  );
+
+  const desfazerConstrucao = useCallback(() => {
+    if (!antesDaConstrucao) return;
+    const antes = antesDaConstrucao;
+    mudar(() => antes);
+    setAntesDaConstrucao(null);
+    setRevelar(null);
+    setAjustarVista((v) => v + 1);
+    toast.success("Construção desfeita", { description: "O quadro voltou ao que era antes do pedido." });
+  }, [antesDaConstrucao, mudar]);
+
+  const mudarCliente = useCallback((id: string | null) => {
+    setClienteDoProjeto(id);
+    clienteMudou.current = id;
+    setSalvar((s) => (s.estado === "conflito" ? s : { estado: "pendente", erro: "" }));
+  }, []);
+
+  /** Filme: escolhe o storyboard no nó; se a função pedir o custo do render, mostra antes. */
+  const escolherFilme = useCallback(
+    async (noId: string, indice: number, confirmado = false) => {
+      setEscolhendo({ no: noId, indice });
+      try {
+        const ex = await escolherStoryboard(projetoId, noId, indice, confirmado);
+        setExecucoes((a) => {
+          if (ex) return { ...a, [noId]: ex };
+          const velha = a[noId];
+          return velha ? { ...a, [noId]: { ...velha, status: "rodando", saida: { ...velha.saida, storyboard_escolhido: indice } } } : a;
+        });
+        setVigiar(true);
+        toast.success("Storyboard escolhido", { description: "O filme está renderizando; o vídeo aparece no nó." });
+      } catch (e) {
+        const pedido = custoAConfirmar(e);
+        if (pedido && !confirmado) {
+          setCusto({ alvo: { tipo: "filme", id: noId, indice }, titulo: "Renderizar o filme", linhas: [{ id: noId, nome: nomeDoNo(atual.current, noId), custo_usd: pedido.total_usd }], total: pedido.total_usd });
+        } else toast.error("Não deu para escolher o storyboard", { description: textoDoErro(e) });
+        if (confirmado) throw e;
+      } finally {
+        setEscolhendo(null);
+      }
+    },
+    [projetoId],
+  );
+  const aoEscolherStoryboard = useCallback((noId: string, indice: number) => void escolherFilme(noId, indice).catch(() => undefined), [escolherFilme]);
 
   const rodarNo = useCallback((id: string) => void pedirCusto({ tipo: "no", id }), [pedirCusto]);
 
@@ -329,6 +539,8 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
   if (!projeto) return null;
 
   const noSel = selecionado ? canvas.nos.find((n) => n.id === selecionado) || null : null;
+  // Cliente do projeto fora da lista (sem acesso à carteira, ou lista ainda lendo): continua visível pelo nome.
+  const clientesDoSeletor = clienteDoProjeto && !clientes.some((c) => c.id === clienteDoProjeto) ? [{ id: clienteDoProjeto, nome: projeto.cliente_nome || "Cliente" }].concat(clientes) : clientes;
   const rotuloDoSalvar = { salvo: "Salvo", salvando: "Salvando", pendente: "Alterações não salvas", erro: "Não salvou", conflito: "Mudou em outra aba" }[salvar.estado];
 
   const inspetor = noSel ? (
@@ -357,6 +569,10 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
       }}
       onFechar={lista ? undefined : () => setSelecionado(null)}
       avisoDeLigacao={null}
+      onEscolherStoryboard={(i) => aoEscolherStoryboard(noSel.id, i)}
+      escolhendo={escolhendo && escolhendo.no === noSel.id ? escolhendo.indice : null}
+      trava={travasDoNoAr[noSel.id] || null}
+      onResolverBloco={resolverOBloco}
     />
   ) : null;
 
@@ -366,6 +582,7 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
       antesDePlanejar={garantirSalvo}
       onAplicar={aplicarDoAgente}
       semMoldura={!largo}
+      registro={registro}
     />
   );
 
@@ -385,7 +602,6 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
             setSalvar((s) => (s.estado === "conflito" ? s : { estado: "pendente", erro: "" }));
           }}
         />
-        <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>{nomeDoCliente(clientes, projeto.client_id, projeto.cliente_nome || "Livre")}</span>
         <span role="status" className={juntar(texto.auxiliar, "mr-2 inline-flex items-center", (salvar.estado === "erro" || salvar.estado === "conflito") && "text-warning")} data-estado-do-salvar={salvar.estado} title={salvar.erro || undefined}>
           {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" aria-hidden="true" /> : null}
           {rotuloDoSalvar}
@@ -438,8 +654,20 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
         />
       </div>
 
+      <CanvasStudio
+        projetoId={projetoId}
+        nosNoQuadro={canvas.nos.length}
+        clienteId={clienteDoProjeto}
+        clientes={clientesDoSeletor}
+        onCliente={mudarCliente}
+        antesDePlanejar={garantirSalvo}
+        onConstruir={construirDoStudio}
+        onDesfazer={antesDaConstrucao ? desfazerConstrucao : null}
+        onConversa={(pedido, resposta) => setRegistro({ id: String(Date.now()), pedido, resposta })}
+      />
+
       {lista ? (
-        <ModoListaDoLab canvas={canvas} execucoes={execucoes} selecionado={selecionado} onSelecionar={setSelecionado} onPor={(t) => por(t)} inspetor={inspetor} />
+        <ModoListaDoLab canvas={canvas} execucoes={execucoes} selecionado={selecionado} onSelecionar={setSelecionado} onPor={(t) => por(t)} inspetor={inspetor} travas={motivosDasTravas} />
       ) : (
         <div ref={refDoCorpo} className={juntar("relative flex min-w-0", cheia && "min-h-0 flex-1")} style={cheia ? undefined : { height: altura }}>
           <div className="mr-2 shrink-0 border-r border-border pr-1">
@@ -460,9 +688,14 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
               onViewport={(v) => {
                 atual.current = { ...atual.current, viewport: { x: v.x, y: v.y, zoom: v.zoom } };
               }}
+              revelar={revelar}
+              ajustarVista={ajustarVista}
+              escolhendo={escolhendo}
+              onEscolherStoryboard={aoEscolherStoryboard}
+              travas={motivosDasTravas}
             />
             {!canvas.nos.length && (
-              <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Toque num ícone da paleta ou peça ao agente do projeto.</p>
+              <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>
             )}
             {avisoDoQuadro && (
               <p role="alert" className={juntar(texto.corpo, "absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-md border border-warning/40 bg-background px-3 py-2 text-warning")} data-aviso-do-quadro="">
@@ -532,7 +765,7 @@ function Editor({ projetoId, clientes, onVoltar }: { projetoId: string; clientes
   );
 }
 
-export default function EditorDoProjeto(props: { projetoId: string; clientes: ClienteDoLab[]; onVoltar: () => void }) {
+export default function EditorDoProjeto(props: PropsDoEditor) {
   return (
     <ReactFlowProvider>
       <Editor key={props.projetoId} {...props} />

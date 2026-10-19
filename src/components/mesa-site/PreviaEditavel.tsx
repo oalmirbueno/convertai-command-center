@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink, Loader2, Monitor, MousePointerClick, PanelRightClose, PanelRightOpen, RotateCcw, Smartphone } from "lucide-react";
+import { Cloud, ExternalLink, Loader2, Monitor, MousePointerClick, PanelRightClose, PanelRightOpen, RotateCcw, Smartphone } from "lucide-react";
 import Secao from "@/components/sistema/Secao";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
@@ -20,6 +20,7 @@ import TrocarImagemDaPrevia, { type PedidoDeImagem } from "./TrocarImagemDaPrevi
 import { montarPreviaRapida } from "./previaEstatica";
 import { type RespostaDaEdicao, useEdicoesDaPrevia, useEditorDaPrevia, usePreviaDados } from "./previaApi";
 import { type LinhaDoSite, previaAtual } from "./siteApi";
+import { previasNaNuvem } from "../../../supabase/functions/mesa-site/modulos/publicacao-nuvem";
 
 export const APARELHOS_DA_PREVIA = [
   { id: "computador", rotulo: "Computador", largura: 1280 },
@@ -81,6 +82,8 @@ export default function PreviaEditavel({
   const doMotor = previaAtual(trabalhos);
   const urlDoMotor = doMotor ? doMotor.preview_url : null;
   const motorPublico = !!urlDoMotor && /^https:\/\//.test(urlDoMotor);
+  // 20/10/2026: a prévia na nuvem mais nova (Vercel da agência) abre mesmo com o túnel fora; o túnel segue ao vivo.
+  const naNuvem = previasNaNuvem(trabalhos)[0] || null;
 
   const [fonte, setFonte] = useEstadoDaTela<Fonte>(`mesa-site:previa:fonte:${site.id}`, "rapida", { validar: (v): v is Fonte => v === "rapida" || v === "motor" });
   const fonteEfetiva: Fonte = fonte === "motor" && urlDoMotor ? "motor" : "rapida";
@@ -202,8 +205,11 @@ export default function PreviaEditavel({
     [desfazer, avisarErro],
   );
 
+  // Gravyx: a troca de texto no código sem IA roda no worker; quando ele termina, a tela diz se trocou
+  // ou por que recusou, com "Pedir ao motor" (com IA, custo antes) no aviso.
+  const trocasNoCodigo = useRef<Map<string, Record<string, unknown>>>(new Map());
   const executar = useCallback(
-    async (edicao: Record<string, unknown>, extra: { confirmar?: boolean; instrucao?: string; teto_usd?: number; modelo_id?: string } = {}): Promise<RespostaDaEdicao | null> => {
+    async (edicao: Record<string, unknown>, extra: { confirmar?: boolean; instrucao?: string; teto_usd?: number; modelo_id?: string; com_ia?: boolean } = {}): Promise<RespostaDaEdicao | null> => {
       try {
         const r = await editar(edicao, extra);
         if (r.modo === "nada") {
@@ -216,6 +222,9 @@ export default function PreviaEditavel({
             avisouMotorDesligado.current = true;
             toast.info("Salvo. O site do motor recebe a edição quando o motor ligar; a prévia rápida já mostra.", { duration: 7000 });
           }
+        } else if (r.modo === "codigo_direto") {
+          trocasNoCodigo.current.set(r.trabalho.id, edicao);
+          toast.info(`${r.resumo} · trocando no código, sem IA (leva um ou dois minutos)`, { duration: 4000 });
         } else if (r.precisa_confirmar) {
           setAjuste({ secao: r.secao, instrucao: r.instrucao, origem: edicao.tipo === "pedido" ? "pedido" : "texto", edicao });
         } else {
@@ -230,6 +239,23 @@ export default function PreviaEditavel({
     },
     [editar, refazerPrevia, desfazerEdicao, fonteEfetiva, estado.codigo, avisarErro],
   );
+
+  useEffect(() => {
+    if (!trocasNoCodigo.current.size) return;
+    for (const t of trabalhos) {
+      const edicao = trocasNoCodigo.current.get(t.id);
+      if (!edicao || (t.estado !== "feito" && t.estado !== "falhou" && t.estado !== "parado" && t.estado !== "cancelado")) continue;
+      trocasNoCodigo.current.delete(t.id);
+      const r = t.resultado && typeof t.resultado.textos === "object" && t.resultado.textos ? (t.resultado.textos as { aplicado?: boolean; recusa?: { motivo?: string } | null }) : null;
+      if (t.estado === "feito" && r && r.aplicado) {
+        toast.success("Texto trocado no código, sem IA. Fica no rascunho até Salvar versão.", { duration: 4500 });
+        continue;
+      }
+      const motivo = r && r.recusa && r.recusa.motivo ? r.recusa.motivo : t.erro || "O motor não trocou este texto sem IA.";
+      toast.warning(motivo, { duration: 12_000, action: { label: "Pedir ao motor", onClick: () => void executar(edicao, { com_ia: true }) } });
+      refazerPrevia();
+    }
+  }, [trabalhos, executar, refazerPrevia]);
 
   const pedirAjuste = useCallback((uid: string) => setAjuste({ secao: uid, instrucao: "", origem: "pedido", edicao: { tipo: "pedido", secao: uid } }), []);
 
@@ -427,6 +453,11 @@ export default function PreviaEditavel({
           <button type="button" className={juntar(botao.icone, "ml-1")} aria-label="Abrir a prévia em outra aba" title="Abrir em outra aba" disabled={fonteEfetiva === "rapida" && !montada} onClick={abrirEmOutraAba}>
             <ExternalLink className="h-4 w-4" />
           </button>
+          {naNuvem && (
+            <a className={juntar(botao.icone, "ml-1")} href={naNuvem.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir a prévia na nuvem" title={`Abrir prévia na nuvem (${naNuvem.ramo === "rascunho" ? "rascunho" : "versão salva"} ${naNuvem.commit.slice(0, 8)})`} data-previa-nuvem-da-previa="">
+              <Cloud className="h-4 w-4" />
+            </a>
+          )}
           <button type="button" className={juntar(botao.icone, "ml-1 hidden lg:inline-flex")} aria-label={lateralRecolhida ? "Mostrar a lateral da prévia" : "Recolher a lateral da prévia"} title={lateralRecolhida ? "Mostrar seções, marca e edições" : "Recolher a lateral"} onClick={() => setLateralRecolhida(!lateralRecolhida)}>
             {lateralRecolhida ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
           </button>

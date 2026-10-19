@@ -21,10 +21,25 @@ export type TipoDeNo =
   | "logo"
   | "landing"
   | "anuncio"
-  | "agente_externo";
+  | "agente_externo"
+  // v2 (20/10/2026, ESPEC-LABORATORIO-v2.md): projeto completo e "pôr no ar".
+  | "pesquisa"
+  | "oferta"
+  | "funil"
+  | "filme"
+  | "por_no_ar"
+  // v3 (clickmax-rea.md): especialistas de criação.
+  | "avatar"
+  | "order_bump"
+  | "upsell"
+  | "downsell"
+  | "sequencia_ofertas"
+  | "secoes_pagina"
+  | "sequencia_mensagens"
+  | "refino_tom";
 
 /** O que sai de um nó (o que o nó seguinte recebe). */
-export type Saida = "texto" | "imagens" | "config" | "gravity" | "html" | "json" | "tarefa";
+export type Saida = "texto" | "imagens" | "config" | "gravity" | "html" | "json" | "tarefa" | "video" | "estado";
 
 /**
  * Tipos de campo do inspetor. "modelo" é modelo de texto e "motor" é motor de
@@ -41,6 +56,8 @@ export interface CampoDoNo {
   min?: number;
   max?: number;
   dica?: string;
+  /** Rótulo da opção vazia (escolha/operador): vazio deixa a função decidir. */
+  vazio?: string;
 }
 
 export interface DefinicaoDoNo {
@@ -93,6 +110,42 @@ export const FORMATOS_DE_COPY = [
   { valor: "roteiro_curto", rotulo: "Roteiro curto" },
 ] as const;
 
+/** Formatos do filme (FORMATOS_DO_FILME da função); "ambos" = 16:9 e 9:16. */
+export const FORMATOS_DO_FILME = [
+  { valor: "ambos", rotulo: "16:9 e 9:16" },
+  { valor: "16:9", rotulo: "16:9 paisagem" },
+  { valor: "9:16", rotulo: "9:16 vertical" },
+  { valor: "1:1", rotulo: "1:1 quadrado" },
+  { valor: "4:5", rotulo: "4:5 feed" },
+] as const;
+
+/** Para onde o nó Pôr no ar leva o pacote (alvo; anúncio sempre sobe pausado). */
+export const ALVOS_NO_AR = [
+  { valor: "publicar_site", rotulo: "Publicar o site" },
+  { valor: "subir_anuncio_pausado", rotulo: "Subir anúncio pausado" },
+  { valor: "conectar_pagina", rotulo: "Conectar página (Facebook/BM)" },
+  { valor: "outro", rotulo: "Outro" },
+] as const;
+
+/** Tipo de página das Seções da página (TIPOS_DE_PAGINA da função). */
+export const TIPOS_DE_PAGINA = [
+  { valor: "captura", rotulo: "Captura" },
+  { valor: "vendas", rotulo: "Vendas" },
+  { valor: "aplicacao", rotulo: "Aplicação (quiz de qualificação)" },
+  { valor: "inscricao", rotulo: "Inscrição (webinar)" },
+  { valor: "webinar", rotulo: "Sala do webinar" },
+  { valor: "obrigado", rotulo: "Obrigado" },
+  { valor: "checkout", rotulo: "Checkout" },
+  { valor: "upsell", rotulo: "Upsell" },
+] as const;
+
+/** Canal da Sequência de mensagens (CANAIS_DE_MENSAGEM da função). */
+export const CANAIS_DE_MENSAGEM = [
+  { valor: "whatsapp", rotulo: "WhatsApp" },
+  { valor: "email", rotulo: "E-mail" },
+  { valor: "ambos", rotulo: "E-mail e WhatsApp" },
+] as const;
+
 /** Slug do Hermes em internal_operators (OPERADOR_HERMES da função). */
 export const OPERADOR_PADRAO = "default";
 
@@ -113,6 +166,17 @@ const QUALIDADE: CampoDoNo = { chave: "qualidade", rotulo: "Qualidade", tipo: "e
 const QUANTIDADE: CampoDoNo = { chave: "quantidade", rotulo: "Quantidade", tipo: "numero", min: 1, max: MAX_IMAGENS_POR_NO };
 
 const TEXTOS: TipoDeNo[] = ["contexto", "agente", "copy"];
+/** Textos e os guias do projeto completo (pesquisa com fontes, oferta e funil). */
+const GUIAS: TipoDeNo[] = [...TEXTOS, "pesquisa", "oferta", "funil"];
+/** Ofertas do carrinho (v3). */
+const CARRINHO: TipoDeNo[] = ["order_bump", "upsell", "downsell", "sequencia_ofertas"];
+/** O que os especialistas entregam (CRIACAO da função). */
+const CRIACAO: TipoDeNo[] = ["avatar", ...CARRINHO, "secoes_pagina", "sequencia_mensagens", "refino_tom"];
+/** Base dos especialistas (BASE_ESPECIALISTA da função). */
+const BASE_ESPECIALISTA: TipoDeNo[] = [...TEXTOS, "pesquisa", "avatar", "oferta", "funil"];
+const INSTRUCAO: CampoDoNo = { chave: "instrucao", rotulo: "Instrução", tipo: "textoLongo" };
+const PRODUTO: CampoDoNo = { chave: "produto", rotulo: "Produto", tipo: "texto" };
+const PRECO: CampoDoNo = { chave: "preco", rotulo: "Preço", tipo: "texto" };
 
 export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
   contexto: {
@@ -167,7 +231,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Agente",
     dica: "Um modelo de texto com instrução própria",
     saida: "texto",
-    entradas: [...TEXTOS, "midia", "imagem", "carrossel", "logo", "landing", "anuncio"],
+    entradas: [...GUIAS, ...CRIACAO, "midia", "imagem", "carrossel", "logo", "landing", "anuncio"],
     roda: true,
     campos: [MODELO, { chave: "instrucao", rotulo: "Instrução", tipo: "textoLongo" }],
     padrao: { modelo_id: MODELO_PADRAO_DO_LAB, instrucao: "" },
@@ -178,7 +242,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Copy",
     dica: "Especialista em texto: anúncio, legenda, landing, e-mail, roteiro curto",
     saida: "texto",
-    entradas: [...TEXTOS, "midia", "imagem", "carrossel", "logo", "anuncio"],
+    entradas: [...GUIAS, ...CRIACAO, "midia", "imagem", "carrossel", "logo", "anuncio"],
     roda: true,
     campos: [
       { chave: "formato", rotulo: "Formato", tipo: "escolha", opcoes: FORMATOS_DE_COPY },
@@ -192,7 +256,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Resultado",
     dica: "Gera imagens com os textos, a base comum e a configuração ligados",
     saida: "imagens",
-    entradas: [...TEXTOS, "midia", "config", "gravity", "imagem", "logo"],
+    entradas: [...GUIAS, "avatar", "refino_tom", "midia", "config", "gravity", "imagem", "logo"],
     roda: true,
     // Proporção, quantidade, qualidade e motor vazios: valem os da Configuração ligada (o do nó vence).
     campos: [PROMPT, PROPORCAO, QUANTIDADE, QUALIDADE, MOTOR],
@@ -204,7 +268,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Carrossel",
     dica: "Planeja as lâminas e gera as artes em ordem",
     saida: "imagens",
-    entradas: [...TEXTOS, "midia", "config", "gravity", "imagem", "logo"],
+    entradas: [...GUIAS, "avatar", "refino_tom", "midia", "config", "gravity", "imagem", "logo"],
     roda: true,
     campos: [{ chave: "tema", rotulo: "Tema", tipo: "textoLongo" }, { chave: "laminas", rotulo: "Lâminas", tipo: "numero", min: 2, max: 10 }, PROPORCAO],
     padrao: { tema: "", laminas: 5 },
@@ -232,7 +296,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Landing page",
     dica: "Uma página única em HTML, com prévia",
     saida: "html",
-    entradas: [...TEXTOS, "midia", "gravity", "imagem", "carrossel", "logo"],
+    entradas: [...GUIAS, ...CRIACAO, "midia", "gravity", "imagem", "carrossel", "logo"],
     roda: true,
     campos: [
       { chave: "objetivo", rotulo: "Objetivo da página", tipo: "textoLongo" },
@@ -246,7 +310,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Anúncio",
     dica: "Títulos, texto, CTA e público; nasce pausado",
     saida: "json",
-    entradas: [...TEXTOS, "midia", "imagem", "carrossel", "logo"],
+    entradas: [...GUIAS, ...CRIACAO, "midia", "imagem", "carrossel", "logo"],
     roda: true,
     campos: [
       { chave: "objetivo", rotulo: "Objetivo", tipo: "texto" },
@@ -261,7 +325,7 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     rotulo: "Agente externo",
     dica: "Manda a etapa para o Hermes ou um agente do Paperclip",
     saida: "tarefa",
-    entradas: [...TEXTOS, "midia", "imagem", "carrossel", "logo", "landing", "anuncio"],
+    entradas: [...GUIAS, ...CRIACAO, "midia", "imagem", "carrossel", "logo", "landing", "anuncio", "filme"],
     roda: true,
     campos: [
       { chave: "operador", rotulo: "Operador", tipo: "operador" },
@@ -270,12 +334,207 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
     padrao: { operador: OPERADOR_PADRAO, instrucao: "" },
     cor: "#71717a",
   },
+  pesquisa: {
+    tipo: "pesquisa",
+    rotulo: "Pesquisa",
+    dica: "Pesquisa na internet (mercado, concorrentes, público, preços, ângulos) e traz as fontes",
+    saida: "texto",
+    entradas: [...TEXTOS, "midia", "pesquisa"],
+    roda: true,
+    campos: [{ chave: "tema", rotulo: "O que pesquisar", tipo: "textoLongo" }, MODELO],
+    padrao: { tema: "" },
+    cor: "#14b8a6",
+  },
+  oferta: {
+    tipo: "oferta",
+    rotulo: "Oferta",
+    dica: "Produto, promessa, preço e ancoragem, bônus, garantia e objeções",
+    saida: "json",
+    entradas: [...TEXTOS, "pesquisa", "avatar", "midia", "imagem"],
+    roda: true,
+    campos: [
+      { chave: "produto", rotulo: "Produto", tipo: "texto" },
+      { chave: "preco", rotulo: "Preço", tipo: "texto" },
+      { chave: "instrucao", rotulo: "Instrução", tipo: "textoLongo" },
+      MODELO,
+    ],
+    padrao: { produto: "", preco: "", instrucao: "" },
+    cor: "#22c55e",
+  },
+  funil: {
+    tipo: "funil",
+    rotulo: "Funil",
+    dica: "Desenho do funil: etapas, páginas, mensagens, upsell e metas; guia os nós seguintes",
+    saida: "json",
+    entradas: [...TEXTOS, "pesquisa", "oferta", "avatar", ...CARRINHO],
+    roda: true,
+    campos: [{ chave: "objetivo", rotulo: "Objetivo do funil", tipo: "textoLongo" }, MODELO],
+    padrao: { objetivo: "" },
+    cor: "#a855f7",
+  },
+  filme: {
+    tipo: "filme",
+    rotulo: "Filme",
+    dica: "Filme cinematográfico da marca: 3 storyboards, você escolhe um no nó e ele renderiza",
+    saida: "video",
+    entradas: [...TEXTOS, "pesquisa", "oferta", "avatar", "midia", "imagem", "logo"],
+    roda: true,
+    campos: [{ chave: "ideia", rotulo: "Ideia do filme", tipo: "textoLongo" }, { chave: "formato", rotulo: "Formato", tipo: "escolha", opcoes: FORMATOS_DO_FILME }, MODELO],
+    padrao: { ideia: "", formato: "ambos" },
+    cor: "#e11d48",
+  },
+  por_no_ar: {
+    tipo: "por_no_ar",
+    rotulo: "Pôr no ar",
+    dica: "Pede a sua aprovação; aprovado, o Hermes ou o Paperclip põe no ar com prova e link",
+    saida: "estado",
+    entradas: [...TEXTOS, ...CRIACAO, "oferta", "funil", "midia", "imagem", "carrossel", "logo", "landing", "anuncio", "filme"],
+    roda: true,
+    campos: [
+      { chave: "alvo", rotulo: "O que pôr no ar", tipo: "escolha", opcoes: ALVOS_NO_AR },
+      { chave: "operador", rotulo: "Quem põe no ar", tipo: "operador", vazio: "Automático (Hermes; anúncio: gestor de tráfego)" },
+      { chave: "instrucao", rotulo: "Instrução", tipo: "textoLongo" },
+    ],
+    padrao: { alvo: "publicar_site", instrucao: "" },
+    cor: "#f97316",
+  },
+  // v3: especialistas de criação (cada um marca o que ficou sem fonte; ver travaDoNoAr).
+  avatar: {
+    tipo: "avatar",
+    rotulo: "Avatar",
+    dica: "Público e persona: dores, desejos, objeções e a linguagem de quem compra",
+    saida: "json",
+    entradas: [...TEXTOS, "pesquisa", "midia"],
+    roda: true,
+    campos: [{ chave: "publico", rotulo: "Público pensado", tipo: "textoLongo" }, INSTRUCAO, MODELO],
+    padrao: { publico: "", instrucao: "" },
+    cor: "#0d9488",
+  },
+  order_bump: {
+    tipo: "order_bump",
+    rotulo: "Order bump",
+    dica: "Item barato e complementar marcado no próprio checkout",
+    saida: "json",
+    entradas: [...BASE_ESPECIALISTA],
+    roda: true,
+    campos: [PRODUTO, PRECO, INSTRUCAO, MODELO],
+    padrao: { produto: "", preco: "", instrucao: "" },
+    cor: "#65a30d",
+  },
+  upsell: {
+    tipo: "upsell",
+    rotulo: "Upsell",
+    dica: "Oferta de 1 clique logo depois da compra, que aprofunda o resultado",
+    saida: "json",
+    entradas: [...BASE_ESPECIALISTA, "order_bump"],
+    roda: true,
+    campos: [PRODUTO, PRECO, INSTRUCAO, MODELO],
+    padrao: { produto: "", preco: "", instrucao: "" },
+    cor: "#16a34a",
+  },
+  downsell: {
+    tipo: "downsell",
+    rotulo: "Downsell",
+    dica: "Alternativa mais barata para quem recusou o upsell",
+    saida: "json",
+    entradas: [...BASE_ESPECIALISTA, "upsell"],
+    roda: true,
+    campos: [PRODUTO, PRECO, INSTRUCAO, MODELO],
+    padrao: { produto: "", preco: "", instrucao: "" },
+    cor: "#ca8a04",
+  },
+  sequencia_ofertas: {
+    tipo: "sequencia_ofertas",
+    rotulo: "Sequência de ofertas",
+    dica: "A ordem das ofertas do funil: principal, order bump, upsell, downsell e depois",
+    saida: "json",
+    entradas: [...BASE_ESPECIALISTA, "order_bump", "upsell", "downsell"],
+    roda: true,
+    campos: [INSTRUCAO, MODELO],
+    padrao: { instrucao: "" },
+    cor: "#84cc16",
+  },
+  secoes_pagina: {
+    tipo: "secoes_pagina",
+    rotulo: "Seções da página",
+    dica: "A estrutura da página, com o papel de cada seção (e o quiz na página de aplicação)",
+    saida: "json",
+    entradas: [...BASE_ESPECIALISTA, ...CARRINHO],
+    roda: true,
+    campos: [
+      { chave: "tipo_pagina", rotulo: "Tipo de página", tipo: "escolha", opcoes: TIPOS_DE_PAGINA },
+      { chave: "objetivo", rotulo: "Objetivo da página", tipo: "textoLongo" },
+      INSTRUCAO,
+      MODELO,
+    ],
+    padrao: { tipo_pagina: "vendas", objetivo: "", instrucao: "" },
+    cor: "#0891b2",
+  },
+  sequencia_mensagens: {
+    tipo: "sequencia_mensagens",
+    rotulo: "Sequência de mensagens",
+    dica: "E-mail ou WhatsApp: N mensagens com dia, objetivo e texto; para quando a pessoa responde",
+    saida: "json",
+    entradas: [...BASE_ESPECIALISTA, ...CARRINHO, "secoes_pagina", "landing"],
+    roda: true,
+    campos: [
+      { chave: "canal", rotulo: "Canal", tipo: "escolha", opcoes: CANAIS_DE_MENSAGEM },
+      { chave: "mensagens", rotulo: "Mensagens", tipo: "numero", min: 2, max: 15 },
+      { chave: "objetivo", rotulo: "Objetivo da sequência", tipo: "textoLongo" },
+      INSTRUCAO,
+      MODELO,
+    ],
+    padrao: { canal: "whatsapp", mensagens: 5, objetivo: "", instrucao: "" },
+    cor: "#2563eb",
+  },
+  refino_tom: {
+    tipo: "refino_tom",
+    rotulo: "Refino de tom",
+    dica: "Reescreve os textos ligados no tom da marca, sem mudar fatos nem preços",
+    saida: "texto",
+    entradas: [...BASE_ESPECIALISTA, ...CARRINHO, "secoes_pagina", "sequencia_mensagens", "anuncio"],
+    roda: true,
+    campos: [{ chave: "tom", rotulo: "Tom", tipo: "texto" }, INSTRUCAO, MODELO],
+    padrao: { tom: "", instrucao: "" },
+    cor: "#db2777",
+  },
 };
 
 /** Só um por destino: duas configurações ou duas bases comuns se contradiriam (UM_POR_DESTINO da função). */
 const UM_POR_DESTINO: TipoDeNo[] = ["config", "gravity"];
 
-export const ORDEM_DA_PALETA: TipoDeNo[] = ["contexto", "midia", "config", "gravity", "agente", "copy", "imagem", "carrossel", "logo", "landing", "anuncio", "agente_externo"];
+/** Tipos da v2 (projeto completo): o teste de contrato marca quando a função ainda não os tem. */
+export const TIPOS_DA_V2: TipoDeNo[] = ["pesquisa", "oferta", "funil", "filme", "por_no_ar"];
+/** Especialistas de criação da v3 (NOS_ESPECIALISTAS da função). */
+export const TIPOS_DA_V3: TipoDeNo[] = ["avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"];
+
+export const ORDEM_DA_PALETA: TipoDeNo[] = [
+  "contexto",
+  "midia",
+  "config",
+  "gravity",
+  "pesquisa",
+  "avatar",
+  "oferta",
+  "order_bump",
+  "upsell",
+  "downsell",
+  "sequencia_ofertas",
+  "funil",
+  "agente",
+  "copy",
+  "refino_tom",
+  "sequencia_mensagens",
+  "secoes_pagina",
+  "imagem",
+  "carrossel",
+  "logo",
+  "landing",
+  "anuncio",
+  "filme",
+  "agente_externo",
+  "por_no_ar",
+];
 
 const NOMES_DAS_SAIDAS: Record<Saida, string> = {
   texto: "texto",
@@ -285,6 +544,8 @@ const NOMES_DAS_SAIDAS: Record<Saida, string> = {
   html: "página",
   json: "pacote",
   tarefa: "tarefa",
+  video: "vídeo",
+  estado: "estado",
 };
 
 export interface NoDoLab {
@@ -437,13 +698,19 @@ export function ordemTopologica(canvas: CanvasDoLab): string[] {
   return saida;
 }
 
-/** Organiza em colunas pela profundidade (esquerda para a direita). */
-export function organizar(canvas: CanvasDoLab): CanvasDoLab {
+/** A coluna de cada nó: o maior caminho até ele (0 = ponto de partida). */
+export function colunasDoCanvas(canvas: CanvasDoLab): Record<string, number> {
   const nivel: Record<string, number> = {};
   ordemTopologica(canvas).forEach((id) => {
     const antes = canvas.ligacoes.filter((l) => l.para === id).map((l) => (nivel[l.de] || 0) + 1);
     nivel[id] = antes.length ? Math.max.apply(null, antes) : 0;
   });
+  return nivel;
+}
+
+/** Organiza em colunas pela profundidade (esquerda para a direita). */
+export function organizar(canvas: CanvasDoLab): CanvasDoLab {
+  const nivel = colunasDoCanvas(canvas);
   const porColuna: Record<number, number> = {};
   return {
     ...canvas,
@@ -486,6 +753,8 @@ export interface OperacaoDoAgente {
   dados?: Record<string, unknown>;
   x?: number;
   y?: number;
+  /** organizar da função no projeto completo ({ modo: "etapas", posicoes }): a posição final de cada nó, por id. */
+  posicoes?: Record<string, { x: number; y: number }>;
   /** O que a operação faz, em português (vem do agente). */
   recibo: string;
 }
@@ -515,6 +784,14 @@ export function normalizarOperacao(bruta: unknown): OperacaoDoAgente | null {
   if (Object.keys(dados).length) saida.dados = dados;
   if (typeof o.x === "number" && isFinite(o.x)) saida.x = o.x;
   if (typeof o.y === "number" && isFinite(o.y)) saida.y = o.y;
+  if (op === "organizar" && o.posicoes && typeof o.posicoes === "object") {
+    const posicoes: Record<string, { x: number; y: number }> = {};
+    Object.keys(o.posicoes).forEach((k) => {
+      const p = o.posicoes[k];
+      if (p && isFinite(Number(p.x)) && isFinite(Number(p.y))) posicoes[k] = { x: Math.round(Number(p.x)), y: Math.round(Number(p.y)) };
+    });
+    if (Object.keys(posicoes).length) saida.posicoes = posicoes;
+  }
   if (op === "criar" && !saida.tipo) return null;
   return saida;
 }
@@ -588,7 +865,9 @@ export function aplicarOperacoes(canvas: CanvasDoLab, ops: OperacaoDoAgente[]): 
       atual = removerNo(atual, real(op.id));
       feitas += 1;
     } else if (op.op === "organizar") {
-      atual = organizar(atual);
+      // Com as posições da função (colunas por etapa), vale o arranjo dela; sem, organiza aqui.
+      const pos = op.posicoes;
+      atual = pos && atual.nos.some((n) => !!pos[n.id]) ? { ...atual, nos: atual.nos.map((n) => (pos[n.id] ? { ...n, x: pos[n.id].x, y: pos[n.id].y } : n)) } : organizar(atual);
       feitas += 1;
     }
   });
@@ -598,11 +877,145 @@ export function aplicarOperacoes(canvas: CanvasDoLab, ops: OperacaoDoAgente[]): 
 /** Uma linha que resume o nó (cartão, lista, prévia). */
 export function resumoDoNo(no: NoDoLab): string {
   const d = no.dados || {};
-  const primeiro = ["texto", "prompt", "instrucao", "tema", "conceito", "prompt_base", "objetivo", "nome"]
+  const primeiro = ["texto", "prompt", "instrucao", "tema", "ideia", "conceito", "prompt_base", "objetivo", "produto", "publico", "tom", "nome"]
     .map((k) => (typeof d[k] === "string" ? String(d[k]).trim() : ""))
     .find(Boolean);
   if (primeiro) return primeiro.length > 90 ? `${primeiro.slice(0, 88)}…` : primeiro;
   if (no.tipo === "config") return [d.proporcao || "1:1", d.quantidade || 1, d.qualidade || "media"].join(" · ");
   if (no.tipo === "midia") return `${Array.isArray(d.imagens) ? d.imagens.length : 0} imagem(ns)`;
+  if (no.tipo === "por_no_ar") {
+    const alvo = ALVOS_NO_AR.find((a) => a.valor === d.alvo);
+    return alvo ? alvo.rotulo : "";
+  }
   return "";
+}
+
+// ------------------------------------------------------------ Canvas Studio
+
+/** Atalhos que pedem o projeto inteiro (pesquisa até pôr no ar). */
+export const ATALHOS_DE_PROJETO_COMPLETO = ["low_ticket", "funil", "empresa"];
+
+const PALAVRAS_DE_PROJETO = ["empresa", "negocio", "low ticket", "lowticket", "infoproduto", "funil", "lancamento", "do zero", "projeto completo", "produto digital", "ecommerce", "loja virtual", "pagina de vendas", "por no ar"];
+
+const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * O pedido é de projeto completo? (planejar com `modo: "projeto_completo"`:
+ * muitos nós em colunas, de Pesquisa a Pôr no ar.) Regra fixa: atalho de
+ * projeto, ou quadro quase vazio com pedido de negócio. Pedido de ajuste num
+ * quadro já montado segue no modo normal (o agente decide o resto).
+ */
+export function ehProjetoCompleto(pedido: string, atalho: string | null, nosNoQuadro: number): boolean {
+  if (atalho && ATALHOS_DE_PROJETO_COMPLETO.indexOf(atalho) >= 0) return true;
+  if (atalho || nosNoQuadro > 3) return false;
+  const t = semAcento(pedido || "");
+  return PALAVRAS_DE_PROJETO.some((p) => t.indexOf(p) >= 0);
+}
+
+/**
+ * Atraso de entrada de cada nó novo na animação de "construção": coluna por
+ * coluna (esquerda para a direita), e dentro da coluna de cima para baixo.
+ * Curta de propósito: o quadro inteiro aparece em menos de 2 s.
+ */
+export function atrasosDaConstrucao(canvas: CanvasDoLab, novos: string[]): Record<string, number> {
+  const nos = novos.map((id) => canvas.nos.find((n) => n.id === id)).filter(Boolean) as NoDoLab[];
+  if (!nos.length) return {};
+  // A coluna é a posição na tela (vale para as colunas por etapa da função e para o organizar daqui).
+  const faixa = (x: number) => Math.round(x / 80);
+  const xs = nos.map((n) => faixa(n.x)).filter((x, i, a) => a.indexOf(x) === i).sort((a, b) => a - b);
+  const passo = Math.max(60, Math.min(220, Math.floor(1400 / xs.length)));
+  const porColuna: Record<number, number> = {};
+  const saida: Record<string, number> = {};
+  nos
+    .slice()
+    .sort((a, b) => a.x - b.x || a.y - b.y)
+    .forEach((n) => {
+      const c = xs.indexOf(faixa(n.x));
+      const linha = porColuna[c] || 0;
+      porColuna[c] = linha + 1;
+      saida[n.id] = c * passo + Math.min(linha, 6) * 35;
+    });
+  return saida;
+}
+
+// ------------------------------------------------------------ v3: regra contra invenção
+
+/**
+ * Bloco de prova ou número que um nó escreveu sem fonte (saida.rascunho_sem_fonte da função:
+ * BlocoSemFonte em modulos/regras.ts). Pendente enquanto `confirmado` não é true.
+ */
+export interface BlocoSemFonte {
+  id: string;
+  tipo: string;
+  texto: string;
+  onde: string;
+  confirmado: boolean;
+  como: string;
+  fonte: string;
+}
+
+export interface BlocoDoNo extends BlocoSemFonte {
+  no_id: string;
+  no_rotulo: string;
+}
+
+export interface TravaDoNoAr {
+  travado: boolean;
+  motivo: string;
+  blocos: BlocoDoNo[];
+}
+
+/** Todos os nós antes de `noId` (ancestraisDe da função), na ordem do quadro. */
+export function ancestraisDe(canvas: CanvasDoLab, noId: string): string[] {
+  const achados: Record<string, true> = {};
+  const fila = [noId];
+  while (fila.length) {
+    const atual = fila.shift() as string;
+    canvas.ligacoes.forEach((l) => {
+      if (l.para === atual && !achados[l.de]) {
+        achados[l.de] = true;
+        fila.push(l.de);
+      }
+    });
+  }
+  delete achados[noId];
+  return canvas.nos.map((n) => n.id).filter((id) => !!achados[id]);
+}
+
+/**
+ * O Pôr no ar está travado (travaDoNoAr da função)? `blocosPorNo` é a lista de
+ * blocos da última execução de cada nó. Mesmo motivo que a função devolve.
+ */
+export function travaDoNoAr(canvas: CanvasDoLab, noId: string, blocosPorNo: Record<string, BlocoSemFonte[]>): TravaDoNoAr {
+  const blocos: BlocoDoNo[] = [];
+  ancestraisDe(canvas, noId).forEach((id) => {
+    const n = canvas.nos.find((x) => x.id === id) as NoDoLab;
+    const r = typeof n.dados.titulo === "string" && String(n.dados.titulo).trim() ? String(n.dados.titulo).trim() : TIPOS_DE_NO[n.tipo].rotulo;
+    (blocosPorNo[id] || []).filter((b) => !b.confirmado).forEach((b) => blocos.push({ ...b, no_id: id, no_rotulo: r }));
+  });
+  if (!blocos.length) return { travado: false, motivo: "", blocos };
+  const nos = blocos.map((b) => b.no_rotulo).filter((x, i, a) => a.indexOf(x) === i);
+  return {
+    travado: true,
+    motivo: `Travado: ${blocos.length} bloco(s) de prova ou número sem fonte em ${nos.join(", ")}. Marque a fonte confirmada ou edite antes de pedir para pôr no ar.`,
+    blocos,
+  };
+}
+
+// ------------------------------------------------------------ v3: perguntas guiadas
+
+/** Nome curto de cada pergunta (o começo da linha da resposta na caixa). */
+export const ROTULOS_DAS_PERGUNTAS: Record<string, string> = { produto: "Produto", publico: "Público", preco: "Preço", objetivo: "Objetivo" };
+
+/**
+ * O exemplo só preenche a caixa (não envia): vira a linha "Rótulo: exemplo";
+ * se a linha daquela pergunta já existe, troca por ela.
+ */
+export function preencherComExemplo(caixa: string, rotulo: string, exemplo: string): string {
+  const linha = `${rotulo}: ${exemplo}`;
+  const linhas = (caixa || "").split("\n").filter((l, i, a) => l.trim() || i < a.length - 1);
+  const i = linhas.findIndex((l) => l.indexOf(`${rotulo}:`) === 0);
+  if (i >= 0) linhas[i] = linha;
+  else linhas.push(linha);
+  return linhas.filter((l) => l.trim()).join("\n");
 }

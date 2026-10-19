@@ -86,14 +86,14 @@ export default function GuardarNoLaboratorio({ trabalho }: { trabalho: Trabalho 
     <div className="space-y-4" data-guardar-no-laboratorio={trabalho.id}>
       {a && (
         <div className="rounded-lg bg-muted px-3 py-2.5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">O pedido</p>
-          <p className="mt-0.5 text-[12.5px] leading-snug [overflow-wrap:anywhere]">{a.pedido || a.titulo}</p>
+          <p className="text-[11px] font-medium text-muted-foreground">O pedido</p>
+          <p className="mt-0.5 text-[13px] leading-snug [overflow-wrap:anywhere]">{a.pedido || a.titulo}</p>
         </div>
       )}
       <div className="space-y-3">
         <p className="text-[13px] font-semibold">Guardar no arquivo livre</p>
-        <p className="text-[12px] leading-snug text-muted-foreground">
-          As lâminas vão para o Laboratório, organizadas por cliente e dia. Não entram na Mesa do cliente, na Agenda nem na aprovação.
+        <p className="text-[12px] leading-snug text-muted-foreground" title="Não entram na Mesa do cliente, na Agenda nem na aprovação.">
+          Vão para o Laboratório, por cliente e dia. Fora da Mesa e da Agenda.
         </p>
         {caminho && (
           <p className="rounded-md bg-success/10 px-2.5 py-2 text-[12px] leading-snug [overflow-wrap:anywhere]" role="status" data-caminho-do-laboratorio="">

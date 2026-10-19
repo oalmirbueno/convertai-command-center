@@ -60,6 +60,12 @@ describe("nada vaza para o lado nem prende o toque", () => {
     // (RegiaoRolavel modo "lg", dentro da AreaDeTrabalho); abaixo disso a página rola.
     expect(central).not.toMatch(/max-h-\[\d+px\] sm:overflow-y-auto/);
     expect(central.match(/<RegiaoRolavel modo="lg"/g)?.length).toBe(6);
+    // 20/10/2026: a faixa de achados no topo da Carteira não cria região nova; ela rola
+    // para o lado por dentro (overflow-x-auto) e a página não ganha rolagem lateral.
+    const faixa = ler("src/components/achados/FaixaDeAchados.tsx");
+    expect(central).toContain("<FaixaDeAchados");
+    expect(faixa).toContain("flex min-w-0 snap-x snap-mandatory overflow-x-auto");
+    expect(faixa).not.toMatch(/max-h-\[\d+px\]/);
     expect(central).toContain("<AreaDeTrabalho principalRolavel={false}>");
     // O diário não tem caixa com rolagem própria: ele mora dentro de regiões
     // que já rolam; o tamanho fica nos 12 mais recentes e "Ver tudo".

@@ -5,10 +5,16 @@
  * diz isso. Uma prévia por projeto, desligada depois de um tempo parada.
  */
 import type { ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { ambienteSemSegredos } from "./config-opencode.ts";
 import { esperarNaSaida, matar, portaLivre, rodar, subir } from "./processos.ts";
 
-type Previa = { porta: number; url: string; local: string; publica: boolean; vite: ChildProcess; tunel: ChildProcess | null; usadaEm: number };
+type Previa = { porta: number; url: string; local: string; publica: boolean; vite: ChildProcess; tunel: ChildProcess | null; usadaEm: number; importado: boolean };
+
+/** Gravyx (19/10): site importado (Next, Astro, HTML puro...) não tem o Vite da casa: a prévia é o dist/ servido estático. */
+const SERVIR_IMPORTADO = resolve(import.meta.dirname, "importado", "servir.mjs");
+const ehImportado = (pasta: string) => existsSync(join(pasta, ".aceleriq", "importado.json"));
 const previas = new Map<string, Previa>();
 
 let cloudflaredOk: boolean | null = null;
@@ -40,7 +46,8 @@ async function responde(url: string, prazoMs: number, vivo: () => boolean): Prom
 /** Sobe (ou reaproveita) a prévia do projeto. */
 export async function garantirPrevia(projeto: string, pasta: string): Promise<{ url: string; publica: boolean; nova: boolean; aviso: string | null }> {
   const atual = previas.get(projeto);
-  if (atual && viva(atual.vite) && (!atual.publica || viva(atual.tunel))) {
+  const importado = ehImportado(pasta);
+  if (atual && atual.importado === importado && viva(atual.vite) && (!atual.publica || viva(atual.tunel))) {
     atual.usadaEm = Date.now();
     return { url: atual.url, publica: atual.publica, nova: false, aviso: null };
   }
@@ -48,11 +55,13 @@ export async function garantirPrevia(projeto: string, pasta: string): Promise<{ 
   const tunel = await temCloudflared();
   const porta = await portaLivre();
   // O Vite roda o código do site: sem os segredos do worker (lista de permissão), só o que ele precisa.
-  const vite = subir("npx", ["vite", "--port", String(porta), "--strictPort"], { cwd: pasta, env: ambienteSemSegredos(process.env, { MOTOR_TUNEL: tunel ? "1" : "0", NO_COLOR: "1" }) });
+  const vite = importado
+    ? subir(process.execPath, [SERVIR_IMPORTADO, join(pasta, "dist"), String(porta)], { cwd: pasta, env: ambienteSemSegredos(process.env, { NO_COLOR: "1" }) })
+    : subir("npx", ["vite", "--port", String(porta), "--strictPort"], { cwd: pasta, env: ambienteSemSegredos(process.env, { MOTOR_TUNEL: tunel ? "1" : "0", NO_COLOR: "1" }) });
   const local = `http://127.0.0.1:${porta}`;
   if (!(await responde(local, 60_000, () => viva(vite.processo)))) {
     matar(vite.processo);
-    throw new Error(`o Vite não subiu: ${vite.saida().slice(-300)}`);
+    throw new Error(`${importado ? "o servidor da prévia" : "o Vite"} não subiu: ${vite.saida().slice(-300)}`);
   }
   let url = local;
   let tunelP: ChildProcess | null = null;
@@ -70,7 +79,7 @@ export async function garantirPrevia(projeto: string, pasta: string): Promise<{ 
   } else {
     aviso = "cloudflared não instalado: a prévia ficou só nesta máquina.";
   }
-  previas.set(projeto, { porta, url, local, publica: !!tunelP, vite: vite.processo, tunel: tunelP, usadaEm: Date.now() });
+  previas.set(projeto, { porta, url, local, publica: !!tunelP, vite: vite.processo, tunel: tunelP, usadaEm: Date.now(), importado });
   return { url, publica: !!tunelP, nova: true, aviso };
 }
 

@@ -240,9 +240,18 @@ describe("a outra marca nunca herda", () => {
 });
 
 describe("previa_editar (código)", () => {
-  it("sem Confirmar devolve o custo e não grava nada; com Confirmar vira 'ajustar' com o teto e fica no histórico", async () => {
+  it("Gravyx: o texto escrito no código vira trabalho 'textos' sem IA e sem custo, com as trocas no pacote do pedido", async () => {
     const t = montar();
-    const orcado = await t.chamar("previa_editar", { edicao: { tipo: "texto_livre", secao: "bento", antes: "Veja", valor: "Conheça" } });
+    const r = await t.chamar("previa_editar", { edicao: { tipo: "texto_livre", secao: "bento", antes: "Veja", valor: "Conheça" } });
+    expect(r).toMatchObject({ modo: "codigo_direto", trabalho: { id: "t-1", tipo: "textos" }, custo_usd: 0 });
+    expect(t.pedidos[0]).toMatchObject({ tipo: "textos", secao: "bento" });
+    expect(t.pacotesDosPedidos[0]).toEqual({ trocas: [{ antes: "Veja", depois: "Conheça", secao: "bento" }] });
+    expect(t.banco.tabelas.site_edicoes[0]).toMatchObject({ modo: "ajuste", trabalho_id: "t-1", tipo: "texto_livre" });
+  });
+
+  it("com IA (o worker recusou a troca direta): sem Confirmar devolve o custo e não grava nada; com Confirmar vira 'ajustar' com o teto e fica no histórico", async () => {
+    const t = montar();
+    const orcado = await t.chamar("previa_editar", { edicao: { tipo: "texto_livre", secao: "bento", antes: "Veja", valor: "Conheça" }, com_ia: true });
     expect(orcado).toMatchObject({ modo: "ajuste", precisa_confirmar: true, secao: "bento" });
     expect(orcado.estimativa_usd).toBeGreaterThan(0);
     expect(orcado.teto_sugerido_usd).toBeGreaterThanOrEqual(orcado.estimativa_usd);

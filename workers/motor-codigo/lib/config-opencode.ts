@@ -130,6 +130,12 @@ export const SKILLS_POR_TRABALHO: Record<string, SkillDoSuperpowers[]> = {
   zip: [],
   // SPV: levar a edição da prévia ao projeto é máquina (sem agente).
   conteudo: [],
+  // Gravyx (19/10): a correção é UMA passada sobre o que a conferência achou (como um ajuste);
+  // salvar, descartar e a troca de texto no código são máquina.
+  corrigir: ["using-superpowers", "receiving-code-review", "systematic-debugging", "verification-before-completion"],
+  salvar: [],
+  descartar: [],
+  textos: [],
 };
 
 /** Sempre negadas no motor, com o porquê (a tela das Configurações e o AGENTS.md repetem). */

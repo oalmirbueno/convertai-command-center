@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, Loader2, RefreshCw, Rocket } from "lucide-react";
+import { Cloud, CloudOff, Copy, Download, Link2, Loader2, RefreshCw, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -20,6 +20,8 @@ import { resumoDasChecagens } from "./checagensDoSite";
 import { useChecklistDoSite } from "./ChecklistDeLancamento";
 import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
+import { conferenciaAtual, travaDaPublicacao } from "../../../supabase/functions/mesa-site/modulos/obra-do-site";
+import { type Comparacao, linhasDaComparacao } from "../../../supabase/functions/mesa-site/modulos/publicacao-nuvem";
 // Frente CUS (01/10): o navegador do agente confere o site publicado (prints, velocidade e links quebrados).
 import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
 
@@ -32,10 +34,17 @@ type Estado = {
   estado: EstadoDoDominio;
   deploy_url: string | null;
   zip: { path: string; em: string | null } | null;
+  // 20/10/2026 (Vercel da agência): a chave nos dois lados, a versão salva que sobe, o que está no ar e a comparação.
+  vercel_no_servidor?: boolean;
+  vercel_no_motor?: boolean | null;
+  dominio_ligado?: boolean;
+  versao?: { commit: string; em: string; previa_url: string | null } | null;
+  publicado?: { deploy_url: string | null; commit: string | null; paginas: string[]; publicado_em: string | null; no_ar: boolean; tirado_em: string | null } | null;
+  comparacao?: Comparacao | null;
 };
 
 /** "Falta:" em palavras da equipe: o item da chave da Vercel vira "a conta de publicação da agência" (o técnico fica no "?"). */
-export const faltaNaTela = (f: string) => (/VERCEL_TOKEN/.test(f) ? "a conta de publicação da agência" : f);
+export const faltaNaTela = (f: string) => (/VERCEL_TOKEN/.test(f) ? (/worker/.test(f) && !/servidor/.test(f) ? "a chave de publicação no motor desta máquina" : "a conta de publicação da agência") : f);
 
 /**
  * Etapa 8: publicação. Pelo painel, só vinculando o domínio: Vercel (deploy
@@ -61,6 +70,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
   const [registrador, setRegistrador] = useState("registro_br");
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [tirando, setTirando] = useState(false);
   const trabalhosQ = useTrabalhos(clientId, site.id);
   // SPV: só os trabalhos de código (a edição da prévia esperando não é montagem na fila).
   const trabalhos = trabalhosQ.data ? trabalhosDeCodigo(trabalhosQ.data.trabalhos) : [];
@@ -68,6 +78,12 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
   const pendentes = pendentesObrigatorios(checklist);
   const previaDoMotor = previaAtual(comAEdicaoDaPrevia(trabalhosQ.data ? { trabalhos, conteudo: trabalhosQ.data.conteudo } : null));
   const [checagens, setChecagens] = useState<ResultadoDasChecagens | null>(null);
+  // Gravyx: a conferência no navegador do motor e as travas do Publicar (nada gerando, rascunho salvo,
+  // nenhum problema grave a não ser com "publicar mesmo assim"). O servidor confere de novo.
+  const conferenciaDoMotor = conferenciaAtual(trabalhos);
+  const trava = travaDaPublicacao(trabalhos);
+  const travaFixa = !trava.ok && trava.codigo !== "conferencia_com_problemas";
+  const [mesmoAssim, setMesmoAssim] = useState(false);
   const resumoDaChecagem = checagens ? resumoDasChecagens(checagens.problemas) : null;
   // Uma gravação da publicação por vez: o servidor troca o JSON inteiro, e duas juntas desfariam uma delas.
   const gravando = useRef<Promise<unknown>>(Promise.resolve());
@@ -160,10 +176,24 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
     });
 
   const verificar = () => rodar("A verificação falhou", async () => void (await chamarSite("dominio_verificar", { site_id: site.id })));
+  // O domínio no projeto do site na Vercel: devolve os registros de DNS de verdade e o estado da verificação.
+  const ligarDominio = () =>
+    rodar("O domínio não foi ligado", async () => {
+      const d = await chamarSite<{ site: LinhaDoSite }>("dominio_ligar", { site_id: site.id });
+      if (d && d.site) guardar(d.site);
+    });
+  // Só a versão salva que a comparação mostrou (o servidor recusa se outra foi salva no meio).
   const publicar = () =>
     rodar("A publicação não entrou na fila", async () => {
-      await chamarSite("publicar", { site_id: site.id, confirmar: true });
+      await chamarSite("publicar", { site_id: site.id, confirmar: true, versao: e && e.versao ? e.versao.commit : undefined, mesmo_assim: trava.codigo === "conferencia_com_problemas" ? mesmoAssim : undefined });
       toast.success("Publicação na fila do motor.");
+      setMesmoAssim(false);
+    });
+  const tirarDoAr = () =>
+    rodar("O site não saiu do ar", async () => {
+      const d = await chamarSite<{ site: LinhaDoSite; removidos: string[] }>("publicacao_tirar_do_ar", { site_id: site.id, confirmar: true });
+      if (d && d.site) guardar(d.site);
+      toast.success(d && d.removidos && d.removidos.length ? `Fora do ar: ${d.removidos.join(", ")}` : "Fora do ar.");
     });
 
   const copiar = (v: string) => {
@@ -177,6 +207,10 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
 
   const podePublicar = !!e && e.vercel_ligada && !e.faltas.length;
   const faltas = e ? e.faltas.map(faltaNaTela) : [];
+  // Domínio, DNS e tirar do ar falam com a Vercel pelo servidor (resposta antiga sem o campo: segue vercel_ligada).
+  const servidorLigado = !!e && (e.vercel_no_servidor === undefined ? e.vercel_ligada : e.vercel_no_servidor);
+  const noAr = !!e && !!e.publicado && e.publicado.no_ar;
+  const comparacao = e && e.comparacao ? linhasDaComparacao(e.comparacao) : [];
 
   useBarraDaEtapa({ estado: e ? (e.vercel_ligada ? ROTULO_DO_DOMINIO[e.estado] : "Publicação desligada") : null });
 
@@ -196,19 +230,24 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-publicacao="">
-      <ChecagensAntesDePublicar site={site} urlDoMotor={previaDoMotor ? previaDoMotor.preview_url : null} onPedirAoDiretor={onPedirAoDiretor} onResultado={setChecagens} />
+      <ChecagensAntesDePublicar site={site} urlDoMotor={previaDoMotor ? previaDoMotor.preview_url : null} onPedirAoDiretor={onPedirAoDiretor} onResultado={setChecagens} conferenciaDoMotor={conferenciaDoMotor} trabalhos={trabalhos} />
 
       <Secao
         titulo="Publicação"
         descricao={motorDesligado ? "Motor desligado: o zip sai quando ele voltar" : e ? (e.vercel_ligada ? ROTULO_DO_DOMINIO[e.estado] : "Publicação desligada") : undefined}
-        ajuda="Publicar leva o site para a Vercel (a conta da agência) e liga o domínio do cliente. Só funciona com a chave VERCEL_TOKEN no cofre do servidor e no worker. Enquanto isso, baixe o site em zip: é um projeto Vite completo, pronto para qualquer hospedagem."
+        ajuda="Publicar leva a versão salva do site para a Vercel da agência (um projeto por site; as páginas ficam em caminhos, como / e /obrigado/) e liga o domínio do cliente. Antes, o Confirmar mostra o que entra, o que muda e o que sai do ar. O deploy roda no motor (chave VERCEL_TOKEN no worker); domínio, DNS e tirar do ar passam pelo servidor (VERCEL_TOKEN nos segredos do Supabase ou em Chaves e custos). Tirar do ar remove os endereços do site publicado; as prévias por versão continuam. O zip é um projeto Vite completo, pronto para qualquer hospedagem."
         acao={
           <>
             {/* 16/10/2026: só ícone (nome no aria-label e no title). O Publicar ao lado mantém o texto: é a ação principal única da etapa. */}
             <button type="button" className={juntar(botao.icone, "mr-2")} aria-label={zipAberto ? "Guardando o código" : pediuZip && zipPronto ? "Baixar agora" : "Baixar o site (zip)"} title={zipAberto ? "Guardando o código" : pediuZip && zipPronto ? "Baixar agora" : "Baixar o site (zip)"} disabled={!!ocupado || !!zipAberto} onClick={() => void baixar()} data-baixar-zip="">
               {ocupado === "O zip não saiu" || zipAberto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             </button>
-            <button type="button" className={botao.primario} disabled={!podePublicar || !!ocupado} onClick={() => setConfirmando(true)} title={faltas.length ? `Falta: ${faltas.join("; ")}` : undefined} data-publicar="">
+            {noAr && (
+              <button type="button" className={juntar(botao.icone, "mr-2")} aria-label="Tirar do ar" title={servidorLigado ? "Tirar do ar" : "Tirar do ar pede a chave da Vercel no servidor"} disabled={!!ocupado || !servidorLigado} onClick={() => setTirando(true)} data-tirar-do-ar="">
+                {ocupado === "O site não saiu do ar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudOff className="h-4 w-4" />}
+              </button>
+            )}
+            <button type="button" className={botao.primario} disabled={!podePublicar || !!ocupado || travaFixa} onClick={() => setConfirmando(true)} title={faltas.length ? `Falta: ${faltas.join("; ")}` : travaFixa ? trava.motivo || undefined : undefined} data-publicar="" data-trava-da-publicacao={trava.codigo || "livre"}>
               <Rocket className="mr-1 h-3.5 w-3.5" />
               Publicar
             </button>
@@ -219,16 +258,38 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
           <div className="flex min-w-0 items-start" data-faltas-da-publicacao="">
             <span className={juntar(texto.auxiliar, "mr-1 min-w-0 flex-1 whitespace-normal")}>Falta: {faltas.join("; ")}.</span>
             <AjudaRecolhida rotulo="O que falta para publicar">
-              A conta Vercel Pro da agência ainda não existe. Quando existir, a chave vai para o cofre do servidor (VERCEL_TOKEN e, se a conta for de time, VERCEL_TEAM_ID) e para o arquivo .env do worker. Até lá, o botão Publicar fica desligado e o zip resolve.
+              A publicação usa a Vercel da agência. O deploy roda no motor desta máquina (VERCEL_TOKEN no cofre do supervisor); domínio, DNS e tirar do ar usam a mesma chave no servidor (segredo VERCEL_TOKEN do Supabase ou Configurações › Chaves e custos; com conta de time, também VERCEL_TEAM_ID). Enquanto faltar, o zip resolve.
             </AjudaRecolhida>
           </div>
+        )}
+        {!trava.ok && (
+          <p className={juntar(texto.auxiliar, "whitespace-normal", trava.codigo === "conferencia_com_problemas" ? "text-amber-700 dark:text-amber-400" : "text-destructive")} data-motivo-da-trava={trava.codigo || ""}>
+            {trava.motivo}
+          </p>
         )}
         {pediuZip && zipFalhou && ultimoZip && <p className={juntar(texto.auxiliar, "text-destructive")}>O último pedido do zip ficou {ultimoZip.estado === "falhou" ? "com falha" : ultimoZip.estado}: peça de novo.</p>}
         {e && e.zip && <p className={texto.auxiliar}>Último código guardado: {dataEHora(e.zip.em)}</p>}
         {e && e.deploy_url && (
-          <a className={juntar(texto.corpo, "text-primary underline")} href={e.deploy_url} target="_blank" rel="noopener noreferrer">
+          <a className={juntar(texto.corpo, "block min-w-0 truncate text-primary underline")} href={e.deploy_url} target="_blank" rel="noopener noreferrer" data-no-ar="">
             {e.deploy_url}
           </a>
+        )}
+        {e && e.publicado && (
+          <p className={juntar(texto.auxiliar, "whitespace-normal")} data-publicado={e.publicado.no_ar ? "no_ar" : "fora_do_ar"}>
+            {e.publicado.no_ar
+              ? `No ar desde ${dataEHora(e.publicado.publicado_em)}${e.publicado.commit ? ` · versão ${e.publicado.commit.slice(0, 8)}` : ""}${e.publicado.paginas.length ? ` · ${e.publicado.paginas.join(", ")}` : ""}`
+              : `Fora do ar desde ${dataEHora(e.publicado.tirado_em)}. Publicar põe de volta.`}
+          </p>
+        )}
+        {e && e.versao && (
+          <div className="flex min-w-0 items-center" data-versao-a-publicar={e.versao.commit.slice(0, 8)}>
+            <span className={juntar(texto.auxiliar, "mr-1 min-w-0 flex-1 truncate")}>Sobe a versão salva de {dataEHora(e.versao.em)} ({e.versao.commit.slice(0, 8)})</span>
+            {e.versao.previa_url && (
+              <a className={botao.icone} href={e.versao.previa_url} target="_blank" rel="noopener noreferrer" aria-label="Abrir a prévia na nuvem da versão que sobe" title="Abrir prévia desta versão">
+                <Cloud className="h-4 w-4" />
+              </a>
+            )}
+          </div>
         )}
       </Secao>
 
@@ -241,8 +302,13 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
             salvarDominio();
           }}
         >
-          <input value={dominio} onChange={(ev) => setDominio(ev.target.value)} onBlur={salvarDominio} placeholder="cliente.com.br" className={juntar(campo, "mr-2 flex-1")} aria-label="Domínio do cliente" disabled={ocupado === "O domínio não foi salvo"} />
+          <input value={dominio} onChange={(ev) => setDominio(ev.target.value)} onBlur={salvarDominio} placeholder="cliente.com.br" className={juntar(campo, "mr-2 min-w-0 flex-1")} aria-label="Domínio do cliente" disabled={ocupado === "O domínio não foi salvo"} />
           {ocupado === "O domínio não foi salvo" || ocupado === "O registrador não foi salvo" ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Salvando" /> : null}
+          {e && e.dominio && servidorLigado && (
+            <button type="button" className={juntar(botao.icone, "shrink-0")} aria-label={e.dominio_ligado ? "Ligar o domínio de novo na Vercel" : "Ligar o domínio na Vercel"} title={e.dominio_ligado ? "Domínio ligado na Vercel (ligar de novo)" : "Ligar o domínio na Vercel e ver o DNS"} disabled={!!ocupado} onClick={() => void ligarDominio()} data-ligar-dominio={e.dominio_ligado ? "ligado" : "nao"}>
+              {ocupado === "O domínio não foi ligado" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+            </button>
+          )}
         </form>
         <SeletorCompacto rotulo="Registrador do domínio" opcoes={REGISTRADORES.map((r) => ({ valor: r.id, rotulo: r.rotulo }))} valor={registrador} onEscolher={salvarRegistrador} listaQuandoNaoCabe />
         {e && (e.dominio || e.deploy_url) && (
@@ -259,7 +325,7 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
           descricao={ROTULO_DO_DOMINIO[e.estado]}
           ajuda="Crie estes registros no painel do registrador. Os valores vêm da Vercel quando o site é publicado; a propagação leva de minutos a algumas horas. Verificar consulta a Vercel de novo."
           acao={
-            e.vercel_ligada ? (
+            servidorLigado ? (
               // 16/10/2026: só ícone (nome no aria-label e no title).
               <button type="button" className={botao.icone} aria-label="Verificar" title="Verificar o DNS" disabled={!!ocupado} onClick={() => void verificar()}>
                 <RefreshCw className="h-4 w-4" />
@@ -294,12 +360,18 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
         </Secao>
       )}
 
-      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
+      <AlertDialog
+        open={confirmando}
+        onOpenChange={(v) => {
+          setConfirmando(v);
+          if (!v) setMesmoAssim(false);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Publicar o site?</AlertDialogTitle>
             <AlertDialogDescription>
-              O motor faz o build e publica na Vercel{e && e.dominio ? `, ligando ${e.dominio}` : ""}. O site fica público. Dá para publicar de novo depois de cada ajuste.
+              O motor faz o build da versão salva{e && e.versao ? ` de ${dataEHora(e.versao.em)}` : ""} e publica na Vercel{e && e.dominio ? `, ligando ${e.dominio}` : ""}. O site fica público. Dá para publicar de novo depois de cada ajuste.
               {pendentes.length ? ` Ainda falta no checklist: ${pendentes.map((p) => p.rotulo.toLowerCase()).join("; ")}.` : " O checklist obrigatório está completo."}
               {resumoDaChecagem
                 ? resumoDaChecagem.total
@@ -308,9 +380,43 @@ export default function EtapaPublicacao({ site, onPedirAoDiretor }: { site: Linh
                 : " As checagens ainda não terminaram."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {comparacao.length > 0 && (
+            <ul className="min-w-0 space-y-0.5" data-comparacao-com-o-ar="">
+              {comparacao.map((l) => (
+                <li key={l} className={juntar(texto.corpo, "whitespace-normal", l.indexOf("Sai do ar") === 0 && "text-amber-700 dark:text-amber-400")}>
+                  {l}
+                </li>
+              ))}
+              {e && e.comparacao && e.comparacao.estimada && <li className={juntar(texto.auxiliar, "whitespace-normal")}>Sem a prévia na nuvem desta versão: "pode mudar" é toda página que já está no ar.</li>}
+            </ul>
+          )}
+          {trava.codigo === "conferencia_com_problemas" && (
+            <label className={juntar(texto.corpo, "flex min-w-0 cursor-pointer items-start")} data-publicar-mesmo-assim="">
+              <input type="checkbox" className="mr-2 mt-1 shrink-0" checked={mesmoAssim} onChange={(ev) => setMesmoAssim(ev.target.checked)} />
+              <span className="min-w-0 whitespace-normal">{`Publicar mesmo assim: a conferência no navegador achou ${trava.graves} ${trava.graves === 1 ? "problema grave" : "problemas graves"} e a decisão é minha.`}</span>
+            </label>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void publicar()}>{pendentes.length ? "Publicar mesmo assim" : "Confirmar e publicar"}</AlertDialogAction>
+            <AlertDialogAction disabled={trava.codigo === "conferencia_com_problemas" && !mesmoAssim} onClick={() => void publicar()} data-confirmar-publicar="">
+              {pendentes.length || trava.codigo === "conferencia_com_problemas" ? "Publicar mesmo assim" : "Confirmar e publicar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={tirando} onOpenChange={setTirando}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tirar o site do ar?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Os endereços do site publicado${e && e.dominio ? ` (${e.dominio} e o endereço da Vercel)` : ""} deixam de abrir. O código, as versões e as prévias na nuvem continuam; Publicar põe de volta.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void tirarDoAr()} data-confirmar-tirar-do-ar="">
+              Confirmar e tirar do ar
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

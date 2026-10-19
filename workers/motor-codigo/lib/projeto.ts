@@ -14,6 +14,7 @@ import type { Fila } from "./fila.ts";
 import { codigoDaPonte } from "../../../supabase/functions/mesa-site/modulos/ponte-da-previa.ts";
 import { ambienteSemSegredos } from "./config-opencode.ts";
 import type { ConferenciaDaSecao } from "./marcas-da-resposta.ts";
+import type { RegistroDoRascunho } from "../../../supabase/functions/mesa-site/modulos/obra-do-site.ts";
 import { rodar } from "./processos.ts";
 // A conferência da seção roda com o conferir.mjs do MODELO (nunca a cópia do projeto, que o agente alcança).
 import { conferirSecao, paginasProntas } from "../modelo-site/scripts/conferir.mjs";
@@ -295,6 +296,8 @@ export async function escreverPacote(pasta: string, pacote: Record<string, unkno
   const { arquivos, ...resto } = pacote as Record<string, unknown> & { arquivos?: ArquivoDoPacote[] };
   mkdirSync(join(pasta, ".aceleriq"), { recursive: true });
   writeFileSync(join(pasta, ".aceleriq", "pacote.json"), JSON.stringify(resto, null, 2));
+  // Site importado de HTML puro não tem src/ (Gravyx 19/10): a pasta nasce aqui.
+  mkdirSync(join(pasta, "src"), { recursive: true });
   writeFileSync(join(pasta, "src", "marca.css"), cssDaMarca(resto));
   // SPV: a ponte da prévia editável (o vite.config da casca serve só no desenvolvimento; o build não leva).
   writeFileSync(join(pasta, ".aceleriq", "ponte.js"), codigoDaPonte());
@@ -356,4 +359,91 @@ export async function construirSite(pasta: string): Promise<{ ok: boolean; log: 
   // O build roda as seções que o agente escreveu (pré-render): sem os segredos do worker.
   const r = await rodar("npm", ["run", "build"], { cwd: pasta, prazoMs: 5 * 60_000, env: ambienteSemSegredos() });
   return { ok: r.codigo === 0, log: `${r.saida}\n${r.erro}`.trim().slice(-2000) };
+}
+
+// ------------------------------------------------------------------ rascunho x versão salva (Gravyx, 19/10/2026)
+
+/**
+ * O motor escreve num rascunho (ramo "rascunho") e a versão salva fica no
+ * "main". A prévia do Vite serve a pasta, então mostra o rascunho enquanto ele
+ * existe. Salvar leva o rascunho ao main (avanço rápido); Descartar volta ao
+ * main e apaga o ramo. O registro do rascunho (de onde saiu, quais trabalhos,
+ * modelos e origem) fica em .git/aceleriq-rascunho.json: fora do código do
+ * site e fora do alcance do zip.
+ */
+export const RAMO_SALVO = "main";
+export const RAMO_RASCUNHO = "rascunho";
+
+export const ramoAtual = (pasta: string) => git(pasta, ["rev-parse", "--abbrev-ref", "HEAD"]);
+
+const arquivoDoRascunho = (pasta: string) => join(pasta, ".git", "aceleriq-rascunho.json");
+
+export function lerRegistroDoRascunho(pasta: string): RegistroDoRascunho | null {
+  try {
+    const r = JSON.parse(readFileSync(arquivoDoRascunho(pasta), "utf8")) as RegistroDoRascunho;
+    return r && Array.isArray(r.trabalhos) ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+function gravarRegistroDoRascunho(pasta: string, r: RegistroDoRascunho | null) {
+  if (r) writeFileSync(arquivoDoRascunho(pasta), JSON.stringify(r, null, 2));
+  else rmSync(arquivoDoRascunho(pasta), { force: true });
+}
+
+/** Abre o rascunho (ou continua o que já existe) e anota o trabalho nele. */
+export async function abrirRascunho(pasta: string, t: RegistroDoRascunho["trabalhos"][number]): Promise<{ abriu: boolean; base: string | null }> {
+  const ramo = await ramoAtual(pasta);
+  let registro = lerRegistroDoRascunho(pasta);
+  let abriu = false;
+  if (ramo !== RAMO_RASCUNHO) {
+    const base = await commitAtual(pasta);
+    await git(pasta, ["checkout", "-q", "-B", RAMO_RASCUNHO]);
+    registro = { base, aberto_em: new Date().toISOString(), trabalhos: [] };
+    abriu = true;
+  } else if (!registro) {
+    let base: string | null = null;
+    try {
+      base = await git(pasta, ["merge-base", RAMO_SALVO, RAMO_RASCUNHO]);
+    } catch {
+      base = null;
+    }
+    registro = { base, aberto_em: new Date().toISOString(), trabalhos: [] };
+  }
+  if (!registro.trabalhos.some((x) => x.id === t.id)) registro.trabalhos.push(t);
+  gravarRegistroDoRascunho(pasta, registro);
+  return { abriu, base: registro.base };
+}
+
+/** Salvar a versão: o rascunho vira a versão salva (main) e o ramo some. */
+export async function salvarRascunho(pasta: string): Promise<{ commit: string; registro: RegistroDoRascunho | null }> {
+  if ((await ramoAtual(pasta)) !== RAMO_RASCUNHO) throw new Error("não há rascunho para salvar: as trocas já estão na versão salva");
+  await commitar(pasta, "Rascunho antes de salvar");
+  const registro = lerRegistroDoRascunho(pasta);
+  await git(pasta, ["checkout", "-q", RAMO_SALVO]);
+  try {
+    await git(pasta, ["merge", "-q", "--ff-only", RAMO_RASCUNHO]);
+  } catch {
+    // A versão salva andou (casca da casa, publicar): junta, com o rascunho vencendo no conflito.
+    await git(pasta, ["merge", "-q", "--no-edit", "-X", "theirs", RAMO_RASCUNHO]);
+  }
+  await git(pasta, ["branch", "-D", RAMO_RASCUNHO]);
+  gravarRegistroDoRascunho(pasta, null);
+  return { commit: await commitAtual(pasta), registro };
+}
+
+/** Descartar o rascunho: volta à versão salva, sem sobra de arquivo do rascunho. */
+export async function descartarRascunho(pasta: string): Promise<{ commit: string; registro: RegistroDoRascunho | null; havia: boolean }> {
+  const registro = lerRegistroDoRascunho(pasta);
+  if ((await ramoAtual(pasta)) !== RAMO_RASCUNHO) {
+    gravarRegistroDoRascunho(pasta, null);
+    return { commit: await commitAtual(pasta), registro, havia: false };
+  }
+  await git(pasta, ["checkout", "-q", "-f", RAMO_SALVO]);
+  // Só o que o git não ignora (node_modules, dist e referências ficam).
+  await git(pasta, ["clean", "-fdq"]);
+  await git(pasta, ["branch", "-D", RAMO_RASCUNHO]);
+  gravarRegistroDoRascunho(pasta, null);
+  return { commit: await commitAtual(pasta), registro, havia: true };
 }

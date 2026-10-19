@@ -13,7 +13,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, ErroDaMesa } from "@/lib/mesa/api";
-import { normalizarCanvas, normalizarOperacao, type CanvasDoLab, type OperacaoDoAgente } from "./nos";
+import { normalizarCanvas, normalizarOperacao, type BlocoSemFonte, type CanvasDoLab, type OperacaoDoAgente } from "./nos";
 
 export type StatusDaExecucao = "na_fila" | "rodando" | "pronto" | "erro" | "aguardando";
 
@@ -43,7 +43,56 @@ export interface SaidaDaExecucao {
   aviso_jev: string;
   avisos: string[];
   json: Record<string, unknown> | null;
+  // ---- v2 (ESPEC-LABORATORIO-v2.md)
+  /** Pesquisa: as fontes com link. */
+  fontes: FonteDaPesquisa[];
+  /** Filme: os 3 storyboards para escolher no nó. */
+  storyboards: StoryboardDoFilme[];
+  /** Filme: o storyboard escolhido (índice em `storyboards`); null = ainda não escolheu. */
+  storyboard_escolhido: number | null;
+  /** Filme: etapa (escolher, renderizando, montando, pronto, parado), andamento do render (0 a 100) e o vídeo pronto. */
+  etapa_filme: string;
+  render_progresso: number | null;
+  video_url: string;
+  video_path: string;
+  /** Pôr no ar: estado do pedido (aguardando sua aprovação → com o agente → feito). */
+  estado_no_ar: EstadoNoAr | null;
+  aprovacao_id: string;
+  /** Link do pedido em "Precisa de você" (a função manda; sem ele, monta pelo id). */
+  link_aprovacao: string;
+  /** Nome de quem põe no ar (Hermes, gestor de tráfego do Paperclip...). */
+  operador: string;
+  /** Pôr no ar: a prova (texto) e o link do que foi ao ar. */
+  prova: string;
+  link_no_ar: string;
+  // ---- v3 (clickmax-rea.md)
+  /** Prova ou número que o nó escreveu sem fonte: trava o Pôr no ar até o dono resolver. */
+  rascunho_sem_fonte: BlocoSemFonte[];
 }
+
+/** Pergunta guiada antes de montar (até 4): os exemplos só preenchem a caixa. */
+export interface PerguntaGuiada {
+  id: string;
+  pergunta: string;
+  exemplos: string[];
+}
+
+export interface FonteDaPesquisa {
+  titulo: string;
+  url: string;
+}
+
+export interface StoryboardDoFilme {
+  indice: number;
+  titulo: string;
+  resumo: string;
+  /** Cenas e duração (os storyboards da Mesa Motion são roteiros: podem vir sem imagem). */
+  cenas: number | null;
+  duracao_s: number | null;
+  imagens: ImagemDoLab[];
+}
+
+export type EstadoNoAr = "aguardando_aprovacao" | "com_agente" | "feito" | "recusado";
 
 /** Linha de lab_execucoes. */
 export interface ExecucaoDoLab {
@@ -105,6 +154,10 @@ export interface RespostaDoPlanejar {
   canvas_previsto: CanvasDoLab | null;
   versao: number | null;
   custo_usd: number | null;
+  /** O modo que a função usou (ela também reconhece o pedido de projeto completo sozinha). */
+  modo: "projeto_completo" | "simples";
+  /** v3: faltou o essencial; a função perguntou em vez de montar (operacoes vem vazia). */
+  perguntas: PerguntaGuiada[];
 }
 
 export interface VariacaoDeLogo extends ImagemDoLab {
@@ -148,8 +201,68 @@ function escolha(v: unknown): EscolhaDoJev | null {
   return i === null ? null : { indice: i, motivo: texto(o.motivo), confianca: num(o.confianca) };
 }
 
+/** Só http(s): link de fonte ou de prova vira <a href>. */
+const linkSeguro = (v: unknown) => {
+  const t = texto(v).trim();
+  return /^https?:\/\//i.test(t) ? t : "";
+};
+
+function fontes(v: unknown): FonteDaPesquisa[] {
+  return (Array.isArray(v) ? v : [])
+    .map((x: any): FonteDaPesquisa | null => {
+      if (typeof x === "string") return linkSeguro(x) ? { titulo: "", url: linkSeguro(x) } : null;
+      const o = objeto(x);
+      const url = linkSeguro(o.url || o.link || o.href);
+      return url ? { titulo: texto(o.titulo || o.title || o.nome), url } : null;
+    })
+    .filter((x): x is FonteDaPesquisa => !!x)
+    .slice(0, 30);
+}
+
+function storyboards(v: unknown): StoryboardDoFilme[] {
+  return (Array.isArray(v) ? v : []).map((x: any, i: number) => {
+    const o = objeto(x);
+    const lista = Array.isArray(o.imagens) ? o.imagens : Array.isArray(o.quadros) ? o.quadros : o.imagem ? [o.imagem] : o.url || o.path ? [o] : [];
+    return { indice: num(o.indice) ?? i, titulo: texto(o.titulo || o.nome), resumo: texto(o.resumo || o.descricao || o.logline), cenas: num(o.cenas), duracao_s: num(o.duracao_s), imagens: imagens(lista) };
+  });
+}
+
+const ESTADOS_NO_AR: EstadoNoAr[] = ["aguardando_aprovacao", "com_agente", "feito", "recusado"];
+
+/** rascunho_sem_fonte da saída (BlocoSemFonte da função). */
+export function blocosSemFonte(v: unknown): BlocoSemFonte[] {
+  return (Array.isArray(v) ? v : [])
+    .map((x: any): BlocoSemFonte | null => {
+      const o = objeto(x);
+      if (!texto(o.id) || !texto(o.texto)) return null;
+      return { id: texto(o.id), tipo: texto(o.tipo) || "outro", texto: texto(o.texto), onde: texto(o.onde), confirmado: o.confirmado === true, como: texto(o.como), fonte: texto(o.fonte) };
+    })
+    .filter((x): x is BlocoSemFonte => !!x)
+    .slice(0, 40);
+}
+
+/** perguntas: [{ id, pergunta, exemplos }] (até 4). */
+export function normalizarPerguntas(v: unknown): PerguntaGuiada[] {
+  return (Array.isArray(v) ? v : [])
+    .map((x: any): PerguntaGuiada | null => {
+      const o = objeto(x);
+      const pergunta = texto(o.pergunta).trim();
+      if (!pergunta) return null;
+      return { id: texto(o.id) || pergunta.slice(0, 20), pergunta, exemplos: (Array.isArray(o.exemplos) ? o.exemplos : []).map(texto).filter(Boolean).slice(0, 4) };
+    })
+    .filter((x): x is PerguntaGuiada => !!x)
+    .slice(0, 4);
+}
+
 export function normalizarSaida(s: unknown): SaidaDaExecucao {
   const o = objeto(s);
+  const filme = objeto(o.filme);
+  const render = objeto(o.render || filme.render);
+  const estado = texto(o.estado || o.estado_no_ar) as EstadoNoAr;
+  const escolhido = num(o.storyboard_escolhido ?? o.escolhido ?? filme.escolhido);
+  // Filme pronto: video_url, ou o primeiro dos `videos` (um por formato) que já tem link.
+  const videos = (Array.isArray(o.videos) ? o.videos : []).map(objeto);
+  const primeiroVideo = videos.find((v) => texto(v.url)) || videos.find((v) => texto(v.path)) || {};
   return {
     texto: texto(o.texto),
     imagens: imagens(o.imagens),
@@ -161,6 +274,20 @@ export function normalizarSaida(s: unknown): SaidaDaExecucao {
     aviso_jev: texto(o.aviso_jev),
     avisos: Array.isArray(o.avisos) ? o.avisos.map(texto).filter(Boolean) : [],
     json: o.json && typeof o.json === "object" ? o.json : null,
+    fontes: fontes(o.fontes),
+    storyboards: storyboards(o.storyboards || filme.storyboards),
+    storyboard_escolhido: escolhido,
+    etapa_filme: texto(o.etapa),
+    render_progresso: num(o.render_progresso ?? render.progresso),
+    video_url: texto(o.video_url || filme.video_url || primeiroVideo.url),
+    video_path: texto(o.video_path || filme.video_path || primeiroVideo.path),
+    estado_no_ar: ESTADOS_NO_AR.indexOf(estado) >= 0 ? estado : null,
+    aprovacao_id: texto(o.aprovacao_id),
+    link_aprovacao: texto(o.link_aprovacao).indexOf("/") === 0 ? texto(o.link_aprovacao) : "",
+    operador: texto(o.operador_nome || o.operador || o.operador_slug),
+    prova: texto(o.prova),
+    link_no_ar: linkSeguro(o.url_no_ar || o.link_no_ar || o.url_publicada || o.prova_url),
+    rascunho_sem_fonte: blocosSemFonte(o.rascunho_sem_fonte),
   };
 }
 
@@ -256,9 +383,12 @@ export async function lerProjeto(projetoId: string): Promise<{ projeto: ProjetoD
   return { projeto: projetoDa(data), execucoes };
 }
 
-export async function salvarProjeto(p: { id: string; nome: string; canvas: CanvasDoLab; versao: number }): Promise<ProjetoDoLab> {
+/** `client_id` só vai quando muda (null = Livre); a função confere o acesso ao cliente. */
+export async function salvarProjeto(p: { id: string; nome: string; canvas: CanvasDoLab; versao: number; client_id?: string | null }): Promise<ProjetoDoLab> {
   try {
-    return projetoDa(await chamar("projeto_salvar", { projeto_id: p.id, nome: p.nome, canvas: p.canvas, versao_esperada: p.versao }));
+    const corpo: Record<string, unknown> = { projeto_id: p.id, nome: p.nome, canvas: p.canvas, versao_esperada: p.versao };
+    if (p.client_id !== undefined) corpo.client_id = p.client_id;
+    return projetoDa(await chamar("projeto_salvar", corpo));
   } catch (e) {
     // canvas_invalido traz a lista do que não vale (ErroDoCanvas.erros): vai junto na frase.
     if (e instanceof ErroDaMesa && e.codigo === "canvas_invalido") {
@@ -281,6 +411,79 @@ export async function listarTemplates(): Promise<TemplateDoLab[]> {
 export async function usarTemplate(templateId: string, clientId: string | null): Promise<ProjetoDoLab> {
   return projetoDa(await chamar("template_usar", { template_id: templateId, client_id: clientId }));
 }
+
+const nomeNormal = (t: string) =>
+  String(t || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/** O template oficial com esse nome (sem acento e sem caixa); pessoal só se não houver oficial. */
+export function templatePorNome(lista: TemplateDoLab[], nome: string): TemplateDoLab | null {
+  const alvo = nomeNormal(nome);
+  const iguais = lista.filter((t) => nomeNormal(t.nome) === alvo);
+  const parecidos = iguais.length ? iguais : lista.filter((t) => nomeNormal(t.nome).indexOf(alvo) >= 0);
+  return parecidos.find((t) => t.oficial) || parecidos[0] || null;
+}
+
+/** Template oficial "Filme da marca" (ESPEC v2): a Mesa Identidade abre o Laboratório com ele. */
+export const TEMPLATE_FILME_DA_MARCA = "Filme da marca";
+
+/** Cria um projeto a partir do template com esse nome (template_usar com client_id). */
+export async function usarTemplatePorNome(nome: string, clientId: string | null): Promise<ProjetoDoLab> {
+  const t = templatePorNome(await listarTemplates(), nome);
+  if (!t) throw new ErroDaMesa("template_inexistente", `O fluxo "${nome}" ainda não está no Laboratório.`);
+  return usarTemplate(t.id, clientId);
+}
+
+/** Endereço do projeto no canvas do Laboratório (com o cliente, para a casca abrir com ele). */
+export function enderecoDoProjeto(projetoId: string, clientId?: string | null): string {
+  const p = new URLSearchParams({ aba: "projetos", projeto: projetoId });
+  if (clientId) p.set("client", clientId);
+  return `/laboratorio?${p.toString()}`;
+}
+
+/** "Precisa de você" da Execução, aberto no pedido de aprovação do nó Pôr no ar. */
+export function enderecoDaAprovacao(aprovacaoId: string): string {
+  return aprovacaoId ? `/execucao?aprovacao=${encodeURIComponent(aprovacaoId)}` : "/execucao?aba=decisoes";
+}
+
+/**
+ * Filme: escolhe um dos 3 storyboards no próprio nó (filme_escolher
+ * { projeto_id, no_id, indice }); a função segue para o render e o
+ * progresso chega pelo execucoes_ler. Se a função pedir confirmação do
+ * custo do render, volta como ErroDaMesa confirmacao_necessaria (custoAConfirmar).
+ */
+export async function escolherStoryboard(projetoId: string, noId: string, indice: number, confirmado?: boolean): Promise<ExecucaoDoLab | null> {
+  const corpo: Record<string, unknown> = { projeto_id: projetoId, no_id: noId, indice };
+  if (confirmado) corpo.confirmado = true;
+  const data = await chamar("filme_escolher", corpo);
+  return normalizarExecucao(data && data.execucao);
+}
+
+/**
+ * no_acompanhar { projeto_id, no_id } → { execucao_id, execucao }: um passo do Filme (render,
+ * montagem, vídeo pronto) ou do Pôr no ar (aprovação → com o agente → feito). A tela chama de
+ * tempo em tempo enquanto o nó espera; nunca executa nada sozinho.
+ */
+export async function acompanharNo(projetoId: string, noId: string): Promise<ExecucaoDoLab | null> {
+  const data = await chamar("no_acompanhar", { projeto_id: projetoId, no_id: noId });
+  return normalizarExecucao(data && data.execucao);
+}
+
+/**
+ * Filme com o storyboard escolhido, renderizando ou montando: a tela chama o no_acompanhar
+ * de tempo em tempo (5 s). O Pôr no ar não: o estado dele chega pelo realtime de lab_execucoes.
+ */
+export function precisaAcompanhar(tipo: string, e: ExecucaoDoLab | undefined): boolean {
+  if (!e || tipo !== "filme" || e.status === "erro" || e.status === "pronto") return false;
+  return e.saida.storyboard_escolhido !== null && (e.saida.etapa_filme === "renderizando" || e.saida.etapa_filme === "montando");
+}
+
+/** Pôr no ar já tem um pedido aberto para o nó (409 ja_pedido): acompanhe por ele. */
+export const ehJaPedido = (e: unknown) => e instanceof ErroDaMesa && e.codigo === "ja_pedido";
 
 export async function salvarTemplate(projetoId: string, nome: string, descricao = ""): Promise<void> {
   await chamar("template_salvar", { projeto_id: projetoId, nome, descricao });
@@ -349,13 +552,19 @@ export interface MensagemDoPlanejar {
  * operacoes: [{ indice, op, aceita, recibo, operacao }], canvas_previsto,
  * versao, custo_usd }. A função lê o canvas SALVO: a tela salva antes.
  */
-export async function planejar(a: { projetoId: string; mensagem: string; historico: MensagemDoPlanejar[]; modelo: string }): Promise<RespostaDoPlanejar> {
-  const data = await chamar("planejar", {
+export async function planejar(a: { projetoId: string; mensagem: string; historico: MensagemDoPlanejar[]; modelo: string; modo?: "projeto_completo"; respostas?: string; pularPerguntas?: boolean }): Promise<RespostaDoPlanejar> {
+  const corpo: Record<string, unknown> = {
     projeto_id: a.projetoId,
     mensagem: a.mensagem,
     historico: a.historico.slice(-12),
     modelo_id: a.modelo,
-  });
+  };
+  // v2: pedido grande (empresa, low ticket, funil) monta o projeto inteiro em colunas, já ligado.
+  if (a.modo) corpo.modo = a.modo;
+  // v3: respostas às perguntas guiadas (ou "pular e montar assim mesmo").
+  if (a.respostas && a.respostas.trim()) corpo.respostas = a.respostas.trim();
+  if (a.pularPerguntas) corpo.pular_perguntas = true;
+  const data = await chamar("planejar", corpo);
   const brutas = valores(data && data.operacoes);
   const operacoes = brutas.map(normalizarOperacao).filter(Boolean) as OperacaoDoAgente[];
   const recusadas = brutas.filter((r) => objeto(r).aceita === false).map((r) => texto(objeto(r).recibo)).filter(Boolean);
@@ -366,12 +575,51 @@ export async function planejar(a: { projetoId: string; mensagem: string; histori
     canvas_previsto: data && data.canvas_previsto ? normalizarCanvas(data.canvas_previsto) : null,
     versao: num(data && data.versao),
     custo_usd: num(data && data.custo_usd),
+    modo: data && data.modo === "projeto_completo" ? "projeto_completo" : a.modo === "projeto_completo" && !(data && data.modo) ? "projeto_completo" : "simples",
+    perguntas: normalizarPerguntas(data && data.perguntas),
   };
 }
 
-/** pedido_inicio → 201 { projeto, resposta, operacoes }: o projeto já nasce com o canvas montado. */
-export async function pedidoInicio(a: { pedido: string; clientId: string | null; modelo: string }): Promise<ProjetoDoLab> {
-  return projetoDa(await chamar("pedido_inicio", { pedido: a.pedido, client_id: a.clientId, modelo_id: a.modelo }));
+/**
+ * pedido_inicio → 201 { projeto, resposta, operacoes }: o projeto já nasce com o canvas montado.
+ * v3: pedido de projeto completo sem o essencial → { projeto: null, perguntas } (nada é criado).
+ */
+export async function pedidoInicio(a: { pedido: string; clientId: string | null; modelo: string; respostas?: string; pularPerguntas?: boolean }): Promise<{ projeto: ProjetoDoLab | null; perguntas: PerguntaGuiada[] }> {
+  const corpo: Record<string, unknown> = { pedido: a.pedido, client_id: a.clientId, modelo_id: a.modelo };
+  if (a.respostas && a.respostas.trim()) corpo.respostas = a.respostas.trim();
+  if (a.pularPerguntas) corpo.pular_perguntas = true;
+  const data = await chamar("pedido_inicio", corpo);
+  const perguntas = normalizarPerguntas(data && data.perguntas);
+  if (perguntas.length && !(data && data.projeto)) return { projeto: null, perguntas };
+  return { projeto: projetoDa(data), perguntas: [] };
+}
+
+/** perguntas_do_pedido { pedido, client_id } → { perguntas } (a Início pergunta antes de criar o projeto completo). */
+export async function perguntasDoPedido(pedido: string, clientId: string | null): Promise<PerguntaGuiada[]> {
+  const data = await chamar("perguntas_do_pedido", { pedido, client_id: clientId });
+  return normalizarPerguntas(data && data.perguntas);
+}
+
+/**
+ * bloco_resolver { projeto_id, no_id, bloco_id, modo, fonte | texto } → { execucao }: o dono marca a fonte
+ * confirmada (modo "fonte") ou troca o trecho (modo "editar"). Destrava o Pôr no ar quando não sobra bloco.
+ */
+export async function resolverBloco(a: { projetoId: string; noId: string; blocoId: string; modo: "fonte" | "editar"; valor: string }): Promise<ExecucaoDoLab | null> {
+  const corpo: Record<string, unknown> = { projeto_id: a.projetoId, no_id: a.noId, bloco_id: a.blocoId, modo: a.modo };
+  if (a.modo === "fonte") corpo.fonte = a.valor;
+  else corpo.texto = a.valor;
+  const data = await chamar("bloco_resolver", corpo);
+  return normalizarExecucao(data && data.execucao);
+}
+
+/** Os blocos sem fonte de cada nó, pela última execução de cada um (para a trava do Pôr no ar). */
+export function blocosPorNo(execucoes: Record<string, ExecucaoDoLab | undefined>): Record<string, BlocoSemFonte[]> {
+  const saida: Record<string, BlocoSemFonte[]> = {};
+  Object.keys(execucoes).forEach((id) => {
+    const e = execucoes[id];
+    if (e && e.status === "pronto" && e.saida.rascunho_sem_fonte.length) saida[id] = e.saida.rascunho_sem_fonte;
+  });
+  return saida;
 }
 
 /** Campos que logo_gerar lê (acoes.ts): todos texto, menos n. */

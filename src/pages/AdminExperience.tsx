@@ -22,6 +22,8 @@ import { listInWords, readableFileName, readableProjectName } from "@/lib/client
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
+import FaixaDeAchados from "@/components/achados/FaixaDeAchados";
+import { useAchados } from "@/hooks/useAchados";
 import RadarDeIdeias from "@/components/central/RadarDeIdeias";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AvisosDePublicacao from "@/components/central/AvisosDePublicacao";
@@ -261,6 +263,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const [historicoClientId, setHistoricoClientId] = useEstadoDaTela<string>(guardar("historico-cliente"), "__all__", ehTexto);
   // 16/10/2026 (dono): Dia Prioritário e Saúde da carteira viram abas lado a lado, sem rolagem longa.
   const [abaCarteira, setAbaCarteira] = useEstadoDaTela<string>(guardar("carteira-aba"), "dia", ehTexto);
+  // 20/10/2026: achados "achado → ação" no topo da Carteira (detectores em src/components/achados).
+  // Com um cliente aberto na Saúde da carteira, a faixa fala só dele.
+  const { achados } = useAchados({ clienteEmFoco: expandedHealth, ativo: !cycleReview && activeTab === "carteira" });
   // 16/10/2026 (dono: "clico no cliente e ele atualiza o painel; tem que abrir ali mesmo"): o cadastro
   // abre por cima da Central, sem trocar de tela.
   const [cadastroAbertoId, setCadastroAbertoId] = useState<string | null>(null);
@@ -2519,6 +2524,15 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
             {/* 16/10/2026 (dono): "colocar abas onde a gente muda do Dia Prioritário para a Saúde da
                 carteira, do lado, para não ficar muito extenso". */}
+            {/* 20/10/2026: achados com número, frase curta e uma ação, acima das partes da carteira. */}
+            <FaixaDeAchados
+              className="mb-4"
+              achados={achados}
+              rotuloDoFoco={expandedHealth ? nomeDoCliente((clients || []).find((c: any) => String(c.id) === expandedHealth)) : null}
+              acoesLocais={{
+                "ritual-pendente": (a) => { setGenClientId(expandedHealth || "__all__"); setGenRitual(a.extra?.ritual || ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); },
+              }}
+            />
             <div className="mb-4 flex min-w-0 items-center" data-abas-da-carteira="">
               <Etapas
                 soIcone

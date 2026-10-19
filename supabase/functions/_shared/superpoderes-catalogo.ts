@@ -447,7 +447,9 @@ export const SKILLS_DO_SUPERPOWERS: Record<string, SkillDoSuperpowers> = {
  * SKILLS_POR_TRABALHO do worker (workers/motor-codigo/lib/config-opencode.ts);
  * o teste de integração amarra os dois.
  */
-export const SKILLS_LIBERADAS_NO_MOTOR: Record<"construir" | "ajustar", string[]> = {
+export const SKILLS_LIBERADAS_NO_MOTOR: Record<"construir" | "ajustar" | "corrigir", string[]> = {
   construir: ["using-superpowers", "writing-plans", "test-driven-development", "systematic-debugging", "verification-before-completion"],
   ajustar: ["using-superpowers", "receiving-code-review", "systematic-debugging", "test-driven-development", "verification-before-completion"],
+  // Gravyx (19/10): a correção é UMA passada sobre o que a conferência no navegador achou.
+  corrigir: ["using-superpowers", "receiving-code-review", "systematic-debugging", "verification-before-completion"],
 };

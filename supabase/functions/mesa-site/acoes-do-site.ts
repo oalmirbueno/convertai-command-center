@@ -19,6 +19,9 @@
  * - "põe uma galeria na página Sobre"  -> adicionar_secao (p..; para = tipo da biblioteca)
  * - "tira a seção de números"          -> remover_secao (s..)
  * - "gera as imagens que faltam"       -> gerar_imagens_dos_slots (x1; para = qualidade ou vazio) — custo por imagem
+ * Gravyx (19/10/2026):
+ * - "publica o site"                   -> publicar_site (x1) — só num pedido à parte: junto de uma geração
+ *                                         na mesma resposta, o publicar é recusado (subiria a versão anterior)
  *
  * Sem import de Deno: o vitest lê este arquivo.
  */
@@ -35,10 +38,12 @@ import {
 import { ehAberto, podeDesfazer, ROTULO_DO_ESTADO, ROTULO_DO_TIPO, type TrabalhoDoMotor } from "../_shared/motor-codigo.ts";
 import { rotuloDaSecao, SLOTS_DE_IMAGEM } from "../_shared/site-metodo.ts";
 import { BIBLIOTECA_DE_SECOES, PRESETS_DE_ESTILO, TIPOS_DE_SITE, tipoPedido } from "../_shared/site-biblioteca.ts";
+import { MOTIVO_GERAR_E_PUBLICAR, separarPublicarDaGeracao } from "./modulos/obra-do-site.ts";
 
 export const OPERACOES_DO_SITE = [
   "ajustar_secao", "construir_secao", "parar_trabalho", "desfazer_trabalho", "escolher_copy", "revisar_site", "gerar_conteudo", "gerar_imagem",
   "montar_mapa", "escolher_preset", "trocar_secao", "adicionar_secao", "remover_secao", "gerar_imagens_dos_slots",
+  "publicar_site",
 ];
 /** As que gastam modelo (o cartão mostra o custo antes; o do motor é o teto reservado). */
 export const OPERACOES_COM_CUSTO = ["ajustar_secao", "construir_secao", "gerar_conteudo", "gerar_imagem", "montar_mapa", "trocar_secao", "gerar_imagens_dos_slots"];
@@ -167,6 +172,8 @@ export function regrasDoSite(): Record<string, RegraDaOperacao<AlvoDoSite>> {
       alvos: ["s"],
       trava: (alvo) => (alvo.id === "topo" || alvo.id === "rodape" ? "Topo e rodapé ficam: são do layout." : null),
     },
+    // Sem `direta`: publicar sempre passa pelo cartão (o Confirmar), e nunca junto de uma geração.
+    publicar_site: { rotulo: "publicar", alvos: ["x"] },
     gerar_imagens_dos_slots: {
       rotulo: "gerar as imagens que faltam em",
       alvos: ["x"],
@@ -194,6 +201,7 @@ export const DESCRICOES_DAS_ACOES = {
   adicionar_secao: "acrescenta uma seção da biblioteca na página (p..; para = id da biblioteca), na ordem canônica. Sem custo (construir é outro pedido).",
   remover_secao: "tira a seção do mapa (o código fica guardado). Topo e rodapé não saem.",
   gerar_imagens_dos_slots: "gera com o GPT Image as imagens que faltam nos slots do mapa (até 4 por vez; para = baixa, media ou alta). Slot de foto real fica de fora.",
+  publicar_site: "publica a versão SALVA do site (build e Vercel). Só sozinho, num pedido à parte: nunca na mesma resposta de uma geração ou mudança. Trava com rascunho sem salvar, trabalho rodando ou problema grave na conferência.",
 };
 
 export function blocoDasAcoesDoSite(l: ListasDoAgente): string {
@@ -231,6 +239,12 @@ export function normalizarAcoesDoSite(
     rotuloDoPara: (operacao, para) => (operacao === "gerar_conteudo" && para === "sem pedido extra" ? null : null),
   });
   if (!acao) return null;
+  // Gravyx: gerar e publicar nunca no mesmo turno (o publicar subiria a versão anterior).
+  const separado = separarPublicarDaGeracao(acao.itens);
+  if (separado.recusados.length) {
+    acao.itens = separado.itens;
+    acao.recusados = (acao.recusados || []).concat(separado.recusados.map((i) => ({ ref: i.ref, titulo: i.titulo, operacao: i.operacao, motivo: MOTIVO_GERAR_E_PUBLICAR })));
+  }
   let custo = 0;
   for (const i of acao.itens) {
     if (i.operacao === "ajustar_secao") custo += custos.ajustar;
@@ -245,14 +259,15 @@ export function normalizarAcoesDoSite(
     }
   }
   acao.custo_estimado_usd = Math.round(custo * 1e6) / 1e6;
-  // Parar e revisar não têm volta pelo cartão.
-  if (acao.itens.length && acao.itens.every((i) => i.operacao === "parar_trabalho" || i.operacao === "revisar_site")) acao.sem_desfazer = true;
+  // Parar, revisar e publicar não têm volta pelo cartão.
+  if (acao.itens.length && acao.itens.every((i) => i.operacao === "parar_trabalho" || i.operacao === "revisar_site" || i.operacao === "publicar_site")) acao.sem_desfazer = true;
   return acao;
 }
 
 /** "Ir para" depois de feito: a etapa que mostra o resultado. */
 export function caminhoDoSite(clientId: string, siteId: string, acao: Pick<AcaoDoAgente, "itens">): { rotulo: string; destino: string } {
   const ops = acao.itens.map((i) => i.operacao);
+  if (ops.length && ops.every((o) => o === "publicar_site")) return { rotulo: "Abrir a publicação", destino: `/mesa-site?client=${clientId}&site=${siteId}&etapa=publicacao` };
   const etapa = ops.some((o) => o === "montar_mapa" || o === "escolher_preset" || o === "adicionar_secao" || o === "remover_secao" || o === "trocar_secao")
     ? "direcao"
     : ops.some((o) => o === "escolher_copy" || o === "gerar_conteudo")

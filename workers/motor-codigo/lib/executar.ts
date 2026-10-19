@@ -4,19 +4,31 @@
  * resumido (no máximo 1 por segundo) e como campos do trabalho (estado,
  * custo, prévia, commit, zip, resultado).
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join, relative, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { criarLimitador, type EventoResumido, type ModeloDoMotor, TIPOS_QUE_GASTAM } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import { type PacoteDoSite, promptDaSecao, revisarHtml, rotuloDaSecao } from "../../../supabase/functions/_shared/site-metodo.ts";
-import { criarApiDaVercel, garantirProjeto as garantirProjetoVercel, ligarDominio, publicarArquivos, vercelLigada } from "../../../supabase/functions/mesa-site/modulos/publicacao-vercel.ts";
+// 20/10/2026: a Vercel da agência (prévia na nuvem por versão e publicação só da versão salva).
+import { apiDoAmbiente, arquivosDoDist, erroDaVercelEmTexto, previaNaVercel, producaoNaVercel, SEM_CHAVE_NO_WORKER } from "./vercel.ts";
+import { mesmoCommit } from "../../../supabase/functions/mesa-site/modulos/publicacao-nuvem.ts";
 // UIM: a base de design (skill ui-ux-pro-max): design system gerado pelo motor e prova de consulta por seção.
 import { type ConsultaDaSecao, consultaDaSecao, eventoDaConsulta, lerLogDaBase, lerProvaDeUx, resumoDaBaseNaEntrega, totalDaBase } from "./prova-da-base.ts";
 import { ajustarPromptDaBase, prepararDesignSystem } from "./design-system.ts";
 import { BUSCADOR_DA_UIUX } from "./config-opencode.ts";
 import { buscar as buscarNaBase } from "../modelo-site/scripts/uiux.mjs";
 import type { Fila, LinhaDaFila } from "./fila.ts";
-import { arquivosMudados, atualizarCasca, commitar, commitAtual, type ConferenciaDaSecao, conferirSecaoDoProjeto, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, reporCasca, voltarCommits } from "./projeto.ts";
+import { abrirRascunho, arquivosMudados, atualizarCasca, commitar, commitAtual, type ConferenciaDaSecao, conferirSecaoDoProjeto, construirSite, descartarRascunho, escreverPacote, garantirProjeto, git, instalarSePrecisar, lerCasca, lerRegistroDoRascunho, MODELO_DO_SITE, pastaDoProjeto, RAMO_RASCUNHO, ramoAtual, reporCasca, salvarRascunho, voltarCommits } from "./projeto.ts";
+// Gravyx (19/10/2026): fases à vista, rascunho x versão salva, tipos, conferência no navegador e texto no código sem IA.
+import { type Fase, juntarProblemas, type ProblemaDaConferencia, promptDaCorrecao, TIPOS_DO_RASCUNHO, versaoDoRascunho } from "../../../supabase/functions/mesa-site/modulos/obra-do-site.ts";
+import { conferirTipos, resumoDosTipos } from "./tipos.ts";
+import { conferirNoNavegador, problemasDoPedido, resumoDaConferencia } from "./conferencia-no-navegador.ts";
+import { aplicarTrocasNoProjeto, trocasDoPedido } from "./textos-no-codigo.ts";
+// Gravyx (19/10): importar site existente e editor de código, os dois como "textos" (máquina, sem IA, no rascunho).
+import { aplicarImportacao, importacaoDoPedido, type ImportacaoPronta, instalarImportado, prepararImportacao, projetoImportado } from "./importacao.ts";
+import { conferirEdicaoNoProjeto, escreverEdicaoNoProjeto } from "./edicao-de-codigo.ts";
+import type { EdicaoDeCodigo } from "../../../supabase/functions/mesa-site/modulos/editor-de-codigo.ts";
+
+export { problemasDoPedido, trocasDoPedido };
 import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { SKILLS_POR_TRABALHO, temChave, VERSAO_DO_SUPERPOWERS } from "./config-opencode.ts";
@@ -38,6 +50,7 @@ export function resumoDoBuild(log: string): string {
 
 export type ConfigDoWorker = { pastaProjetos: string; prazoPorPassadaMs: number; comPrevia: boolean };
 
+
 type Estado = { custo: number; tabela: number; tokensEntrada: number; tokensSaida: number; tokensCache: number };
 
 export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDoWorker): Promise<{ estado: string; custo: number }> {
@@ -54,7 +67,20 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
   const gasto: Estado = { custo: 0, tabela: 0, tokensEntrada: 0, tokensSaida: 0, tokensCache: 0 };
   let medidor: Medidor | null = null;
   const pedido = t.pedido || {};
-  const pacote = (pedido.pacote || {}) as Record<string, unknown>;
+  // A correção e as trocas de texto viajam no pacote do pedido; o pacote.json do site não as leva.
+  // A prévia na nuvem pedida e a versão que o Publicar mostrou também viajam no pacote do pedido (fora do pacote.json).
+  const { correcao: correcaoDoPedido, trocas: trocasBrutas, previa_nuvem: pediuPreviaNaNuvem, versao: versaoPedida, importacao: importacaoBruta, edicao_de_codigo: edicaoBruta, ...pacote } = (pedido.pacote || {}) as Record<string, unknown>;
+  const pedidoDeImportacao = t.tipo === "textos" ? importacaoDoPedido(importacaoBruta) : null;
+  const ehEdicaoDeCodigo = t.tipo === "textos" && !pedidoDeImportacao && !!edicaoBruta;
+  const problemasDaCorrecao = t.tipo === "corrigir" ? problemasDoPedido(correcaoDoPedido) : [];
+  let textosAplicados = false;
+  /** A fase do trabalho vai direto (fora do limitador, para a marca não se perder na junção dos eventos). */
+  const fase = async (f: Fase, resumo: string) => {
+    const pendente = limitador.soltar(Date.now() + 1000);
+    if (pendente) await fila.evento(t, pendente);
+    await fila.evento(t, { tipo: "passo", resumo, dados: { fase: f } });
+  };
+  const rotulo = (secao: string) => (secao === "correcao" ? "a correção" : rotuloDaSecao(secao));
   let modelo = (pedido.modelo || null) as ModeloDoMotor | null;
   const pasta = pastaDoProjeto(cfg.pastaProjetos, t.projeto);
   const resultado: Record<string, unknown> = {};
@@ -65,6 +91,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
 
   try {
     await avisar({ tipo: "estado", resumo: "O motor pegou o trabalho" });
+    await fase("entendendo", "Entendendo o pedido");
     // Frente MTR: a chave do provedor é conferida ANTES de montar projeto, dependências e prévia.
     // Sem a chave direta e com a do OpenRouter, segue pelo mesmo modelo no OpenRouter (com aviso).
     if (modelo && TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) {
@@ -77,8 +104,24 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     }
     const novo = await garantirProjeto(pasta);
     if (novo) await avisar({ tipo: "passo", resumo: "Projeto criado do modelo da casa" });
+    // Gravyx: importação e edição de código são conferidas ANTES do rascunho abrir (recusou = o projeto não muda).
+    let importacaoPronta: ImportacaoPronta | null = null;
+    let edicaoConferida: EdicaoDeCodigo | null = null;
+    if (pedidoDeImportacao) {
+      importacaoPronta = await prepararImportacao(fila, pedidoDeImportacao);
+      const f = importacaoPronta.analise.framework;
+      await avisar({ tipo: "passo", resumo: `Importação conferida: ${f ? f.rotulo : "site"}, ${importacaoPronta.analise.arquivos.length} arquivos, sem segredo` });
+      for (const a of importacaoPronta.analise.avisos) await avisar({ tipo: "aviso", resumo: a });
+    }
+    if (ehEdicaoDeCodigo) {
+      const casca = projetoImportado(pasta) ? [] : (lerCasca(MODELO_DO_SITE) || { arquivos: [] as string[] }).arquivos;
+      const c = conferirEdicaoNoProjeto(pasta, edicaoBruta, casca);
+      if (!c.ok) throw new Error(`Edição recusada: ${c.motivo}`);
+      edicaoConferida = c.edicao;
+    }
     // SIT2: casca da casa mais nova (multipágina, integrações, SEO) entra antes do trabalho, num commit próprio.
-    if (t.tipo !== "zip" && t.tipo !== "desfazer") {
+    // Gravyx: site importado não é do modelo da casa (a casca não entra nele).
+    if (t.tipo !== "zip" && t.tipo !== "desfazer" && t.tipo !== "salvar" && t.tipo !== "descartar" && !importacaoPronta && !projetoImportado(pasta)) {
       const casca = await atualizarCasca(pasta);
       if (casca) await avisar({ tipo: "passo", resumo: `Casca da casa atualizada (v${casca})` });
       // SPM: a casca na mesma versão volta ao original (o agente não edita; o build do motor roda o que está aqui).
@@ -87,6 +130,18 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         await commitar(pasta, "Casca da casa reposta");
         await avisar({ tipo: "passo", resumo: `Casca da casa reposta: ${repostos.slice(0, 4).join(", ")}` });
       }
+    }
+    // Gravyx: o que muda o código entra no rascunho (a versão salva só muda no Salvar).
+    if (TIPOS_DO_RASCUNHO.indexOf(t.tipo) >= 0) {
+      const alvoDoPedido = (pedido.alvo || {}) as { voltar_para?: boolean };
+      const r = await abrirRascunho(pasta, { id: t.id, tipo: t.tipo, modelo: modelo ? modelo.modelo_api : t.modelo, origem: importacaoPronta ? "importacao" : t.tipo === "desfazer" && alvoDoPedido.voltar_para ? "restauracao" : "edicao" });
+      if (r.abriu) await avisar({ tipo: "passo", resumo: "Rascunho aberto a partir da versão salva" });
+    }
+    if (t.tipo === "publicar" && (await ramoAtual(pasta)) === RAMO_RASCUNHO) throw new Error("há um rascunho não salvo: salve a versão ou descarte o rascunho antes de publicar (o que sobe é a versão salva)");
+    // Só a versão salva que a tela mostrou na comparação: ela tem de estar na versão salva de agora (main).
+    if (t.tipo === "publicar" && typeof versaoPedida === "string" && versaoPedida) {
+      const naMain = await git(pasta, ["merge-base", "--is-ancestor", versaoPedida, "HEAD"]).then(() => true, () => false);
+      if (!naMain) throw new Error(`a versão ${versaoPedida.slice(0, 8)} não é a versão salva deste site; confira de novo antes de publicar`);
     }
     const anterior = await commitAtual(pasta);
     commitInicial = anterior;
@@ -112,7 +167,60 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       }
     }
 
-    // Só construir e ajustar passam pelo modelo (TIPOS_QUE_GASTAM); o teste amarra SKILLS_POR_TRABALHO a eles.
+    if (t.tipo === "salvar") {
+      await fase("escrevendo", "Salvando o rascunho como versão");
+      const sv = await salvarRascunho(pasta);
+      resultado.versao = versaoDoRascunho(sv.registro, sv.commit, new Date().toISOString());
+      await fila.atualizar(t.id, { commit: sv.commit });
+      await avisar({ tipo: "commit", resumo: `Versão salva (commit ${sv.commit.slice(0, 8)})`, dados: { commit: sv.commit } });
+    }
+    if (t.tipo === "descartar") {
+      await fase("escrevendo", "Descartando o rascunho");
+      const d = await descartarRascunho(pasta);
+      resultado.descartado = { havia: d.havia, trabalhos: d.registro ? d.registro.trabalhos.map((x) => x.id) : [] };
+      await fila.atualizar(t.id, { commit: d.commit });
+      await avisar({ tipo: "commit", resumo: d.havia ? "Rascunho descartado: a prévia volta para a versão salva" : "Não havia rascunho para descartar", dados: { commit: d.commit } });
+    }
+    // Gravyx: o site importado vira o projeto, no rascunho (o Salvar grava a versão com origem "importação").
+    if (t.tipo === "textos" && importacaoPronta) {
+      await fase("escrevendo", "Montando o site importado no rascunho");
+      const reg = aplicarImportacao(pasta, importacaoPronta, t.projeto);
+      if ((await instalarImportado(pasta)) === "instalado") await avisar({ tipo: "passo", resumo: "Dependências do site importado instaladas (sem os scripts de instalação)" });
+      const c = await commitar(pasta, `Importação: ${reg.rotulo}`);
+      textosAplicados = c.novo;
+      resultado.importacao = { ...reg, avisos: importacaoPronta.analise.avisos, ignorados: importacaoPronta.analise.ignorados.total };
+      await fila.atualizar(t.id, { commit: c.commit });
+      await avisar({ tipo: "commit", resumo: `Site importado no rascunho (${reg.rotulo}, ${reg.arquivos} arquivos)`, dados: { commit: c.commit } });
+    } else if (t.tipo === "textos" && edicaoConferida) {
+      // Gravyx: o Salvar do editor de código, no rascunho, sem IA.
+      await fase("escrevendo", "Gravando a edição do código no rascunho (sem IA)");
+      const feitas = escreverEdicaoNoProjeto(pasta, edicaoConferida);
+      resultado.edicao_de_codigo = { arquivos: feitas, de: edicaoConferida.de };
+      if (feitas.length) {
+        const c = await commitar(pasta, `Código: ${feitas.join(", ")}`);
+        textosAplicados = c.novo;
+        await fila.atualizar(t.id, { commit: c.commit });
+        await avisar({ tipo: "commit", resumo: `Código salvo no rascunho: ${feitas.slice(0, 4).join(", ")}`, dados: { commit: c.commit } });
+      } else {
+        await avisar({ tipo: "aviso", resumo: "Nada mudou: os arquivos já estavam assim" });
+      }
+    } else if (t.tipo === "textos") {
+      // Texto escrito no código, trocado sem IA (busca literal; recusa com motivo).
+      await fase("escrevendo", "Trocando o texto no código (sem IA)");
+      const casca = (lerCasca(MODELO_DO_SITE) || { arquivos: [] as string[] }).arquivos;
+      const r = aplicarTrocasNoProjeto(pasta, trocasDoPedido(trocasBrutas), casca);
+      resultado.textos = { aplicado: r.ok, feitas: r.feitas, recusa: r.recusa };
+      if (r.ok && r.feitas.length) {
+        const c = await commitar(pasta, `Texto no código: ${r.feitas.map((f) => f.depois).join(" / ")}`);
+        textosAplicados = c.novo;
+        await fila.atualizar(t.id, { commit: c.commit });
+        await avisar({ tipo: "commit", resumo: `Texto trocado em ${r.feitas.map((f) => `${f.arquivo}:${f.linha}`).join(", ")}`, dados: { commit: c.commit } });
+      } else {
+        await avisar({ tipo: "aviso", resumo: `Não troquei sem IA: ${r.recusa ? r.recusa.motivo : "nada a trocar"}` });
+      }
+    }
+
+    // Só construir, ajustar e corrigir passam pelo modelo (TIPOS_QUE_GASTAM); o teste amarra SKILLS_POR_TRABALHO a eles.
     if (TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) {
       if (!modelo) throw new Error("trabalho sem modelo");
       const avisos = await escreverPacote(pasta, pacote, fila);
@@ -135,7 +243,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       if (servidor.limpos.length) await avisar({ tipo: "aviso", resumo: `Configuração do opencode achada no site e apagada antes de subir: ${servidor.limpos.slice(0, 4).join(", ")}` });
       const custoReal = medidor ? medidor.total : undefined;
       try {
-        const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : [String(pedido.secao || "")];
+        const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : t.tipo === "corrigir" ? ["correcao"] : [String(pedido.secao || "")];
+        if (t.tipo === "corrigir" && correcaoDoPedido && typeof correcaoDoPedido === "object") resultado.conferencia_de = (correcaoDoPedido as Record<string, unknown>).conferencia_de || null;
         const feitas: string[] = [];
         // SPV: a prévia editável marca seção a seção (pronta, construindo, na fila) pelo resultado parcial.
         if (t.tipo === "construir") resultado.secoes_pedidas = passos.slice();
@@ -155,12 +264,14 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             estadoFinal = "parado";
             break;
           }
-          await avisar({ tipo: "passo", resumo: `${t.tipo === "construir" ? "Construindo" : "Ajustando"} ${rotuloDaSecao(secao)}` });
+          await fase("escrevendo", t.tipo === "corrigir" ? "Corrigindo o que a conferência achou" : `${t.tipo === "construir" ? "Construindo" : "Ajustando"} ${rotuloDaSecao(secao)}`);
           await andamento(secao);
           const antesDaSecao = await commitAtual(pasta);
           const linhasDoLog = lerLogDaBase(pasta).length;
           const inicioDaPassada = Date.now();
-          const texto = ajustarPromptDaBase(promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null), pacote, designSystem.master);
+          const texto = t.tipo === "corrigir"
+            ? promptDaCorrecao(problemasDaCorrecao, String(pacote.cliente || ""))
+            : ajustarPromptDaBase(promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null), pacote, designSystem.master);
           const r = await rodarPassada(servidor, {
             titulo: `${t.tipo} ${secao}`,
             pedido: texto,
@@ -179,7 +290,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           gasto.tokensSaida += r.custo.tokens_saida;
           gasto.tokensCache += r.custo.tokens_cache;
           await fila.atualizar(t.id, { custo_usd: Math.round(gasto.custo * 1e6) / 1e6 });
-          if (r.motivo !== "parado") {
+          if (r.motivo !== "parado" && t.tipo !== "corrigir") {
             // Lido antes do commit: se a seção quebrar o build e voltar, a prova da passada já foi contada.
             const consulta = consultaDaSecao(secao, lerLogDaBase(pasta).slice(linhasDoLog), lerProvaDeUx(pasta, secao, inicioDaPassada));
             consultas.push(consulta);
@@ -187,30 +298,31 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           }
           // SPM: se a passada mexeu na casca, ela volta antes do commit e do build do motor.
           const mexidos = reporCasca(pasta);
-          if (mexidos.length) await avisar({ tipo: "aviso", resumo: `A passada de ${rotuloDaSecao(secao)} mexeu na casca da casa (${mexidos.slice(0, 3).join(", ")}); o motor repôs o original` });
-          let c = await commitar(pasta, `${t.tipo === "construir" ? "Seção" : "Ajuste"}: ${rotuloDaSecao(secao)}`);
+          if (mexidos.length) await avisar({ tipo: "aviso", resumo: `A passada de ${rotulo(secao)} mexeu na casca da casa (${mexidos.slice(0, 3).join(", ")}); o motor repôs o original` });
+          let c = await commitar(pasta, `${t.tipo === "construir" ? "Seção" : t.tipo === "corrigir" ? "Correção" : "Ajuste"}: ${rotulo(secao)}`);
           let conferencia: ConferenciaDaSecao = { rodou: false, ok: false, problemas: [], onde: null, motivo: "nada mudou no código nesta passada" };
           if (c.novo) {
             // O site tem de continuar construindo. Seção que quebra o build volta (Desfazer do passo),
             // com o motivo à vista; não há laço de correção: a equipe pede de novo.
+            await fase("compilando", `Compilando ${rotulo(secao)}`);
             const b = await construirSite(pasta);
             if (!b.ok) {
               const motivoDoBuild = resumoDoBuild(b.log);
               c = await voltarCommits(pasta, antesDaSecao, c.commit);
-              await avisar({ tipo: "aviso", resumo: `A seção ${rotuloDaSecao(secao)} quebrou o build e foi desfeita: ${motivoDoBuild}` });
+              await avisar({ tipo: "aviso", resumo: `${t.tipo === "corrigir" ? "A correção" : `A seção ${rotuloDaSecao(secao)}`} quebrou o build e foi desfeita: ${motivoDoBuild}` });
               falhas.push({ secao, motivo: motivoDoBuild });
               conferencia = { ...conferencia, motivo: "o build falhou e a seção foi desfeita" };
             } else {
-              await avisar({ tipo: "commit", resumo: `Commit da seção ${rotuloDaSecao(secao)}`, dados: { commit: c.commit, custo_usd: gasto.custo } });
+              await avisar({ tipo: "commit", resumo: `Commit de ${rotulo(secao)}`, dados: { commit: c.commit, custo_usd: gasto.custo } });
               feitas.push(secao);
               await andamento(null);
               // SPM: a prova de verdade é a conferência que o MOTOR roda no build dele, com o conferir.mjs do modelo.
-              conferencia = conferirSecaoDoProjeto(pasta, secao);
+              if (t.tipo !== "corrigir") conferencia = conferirSecaoDoProjeto(pasta, secao);
             }
           }
           // SPM: PROVA declarada, a conferência do motor, DECIDI e PRECISA DE RESPOSTA viram eventos
           // (direto, fora do limitador, para não se juntarem). Prova que não bate vira aviso; nada é refeito.
-          const marcas = eventosDasMarcas(r.marcas, { secao, rotulo: rotuloDaSecao(secao), motivo: r.motivo, conferencia });
+          const marcas = eventosDasMarcas(r.marcas, { secao, rotulo: rotulo(secao), motivo: r.motivo, conferencia });
           if (marcas.length) {
             const pendente = limitador.soltar(Date.now() + 1000);
             if (pendente) await fila.evento(t, pendente);
@@ -226,8 +338,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             estadoFinal = "parado";
             break;
           }
-          if (r.motivo === "prazo") await avisar({ tipo: "aviso", resumo: `A seção ${rotuloDaSecao(secao)} passou do prazo e foi encerrada` });
-          if (r.motivo === "erro") await avisar({ tipo: "erro", resumo: `A seção ${rotuloDaSecao(secao)} falhou: ${r.erro || "sem detalhe"}` });
+          if (r.motivo === "prazo") await avisar({ tipo: "aviso", resumo: `${t.tipo === "corrigir" ? "A correção" : `A seção ${rotuloDaSecao(secao)}`} passou do prazo e foi encerrada` });
+          if (r.motivo === "erro") await avisar({ tipo: "erro", resumo: `${t.tipo === "corrigir" ? "A correção" : `A seção ${rotuloDaSecao(secao)}`} falhou: ${r.erro || "sem detalhe"}` });
         }
         resultado.secoes = feitas;
         if (falhas.length) resultado.secoes_desfeitas = falhas;
@@ -264,6 +376,18 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       }
     }
 
+    // A prévia do Vite serve a pasta: depois de salvar, descartar ou trocar texto, ela mostra o que ficou.
+    if (cfg.comPrevia && (t.tipo === "salvar" || t.tipo === "descartar" || (t.tipo === "textos" && textosAplicados))) {
+      try {
+        if (await instalarSePrecisar(pasta)) await avisar({ tipo: "passo", resumo: "Dependências instaladas" });
+        const pv = await garantirPrevia(t.projeto, pasta);
+        await fila.atualizar(t.id, { preview_url: pv.url, preview_expira_em: new Date(Date.now() + 60 * 60_000).toISOString() });
+        if (pv.nova) await avisar({ tipo: "previa", resumo: pv.publica ? "Prévia ao vivo aberta" : "Prévia só nesta máquina", dados: { url: pv.url, publica: pv.publica, aviso: pv.aviso } });
+      } catch (e) {
+        await avisar({ tipo: "aviso", resumo: `A prévia do motor não abriu: ${e instanceof Error ? e.message.slice(0, 200) : "erro"}` });
+      }
+    }
+
     // SIT2: revisar e publicar também levam o pacote novo (SEO e integrações mudam sem passar pelo agente).
     if ((t.tipo === "revisar" || t.tipo === "publicar") && Object.keys(pacote).length) {
       const avisos = await escreverPacote(pasta, pacote, fila);
@@ -273,13 +397,20 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       await fila.atualizar(t.id, { commit: base.commit });
     }
 
-    if (t.tipo === "revisar" || t.tipo === "construir" || t.tipo === "ajustar" || t.tipo === "desfazer" || t.tipo === "publicar") {
+    const compila = ["revisar", "construir", "ajustar", "corrigir", "desfazer", "publicar", "salvar", "descartar"].indexOf(t.tipo) >= 0 || (t.tipo === "textos" && textosAplicados);
+    if (compila) {
+      await fase("compilando", "Compilando o site");
       await instalarSePrecisar(pasta);
       const b = await construirSite(pasta);
       if (!b.ok) {
         resultado.build = { ok: false, log: b.log.slice(-1200) };
-        await avisar({ tipo: "aviso", resumo: "O build falhou; a revisão não rodou" });
+        await avisar({ tipo: "aviso", resumo: `O build falhou; a conferência não rodou: ${resumoDoBuild(b.log)}` });
       } else {
+        // Gravyx: a conferência de tipos (tsc) quando o projeto é TypeScript, com o erro em palavras simples.
+        const tipos = await conferirTipos(pasta);
+        resultado.tipos = { rodou: tipos.rodou, ok: tipos.ok, total: tipos.total, erros: tipos.erros.slice(0, 8), motivo: tipos.motivo };
+        await avisar({ tipo: tipos.rodou && !tipos.ok ? "aviso" : "passo", resumo: resumoDosTipos(tipos) });
+        await fase("conferindo", t.tipo === "publicar" ? "Conferindo antes de publicar" : "Conferindo no computador e no celular");
         const html = readFileSync(join(pasta, "dist", "index.html"), "utf8");
         const qa = revisarHtml(html);
         resultado.qa = qa;
@@ -298,19 +429,73 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           resultado.ux_erro = e instanceof Error ? e.message.slice(0, 200) : "revisão de UX indisponível";
           await avisar({ tipo: "aviso", resumo: `A revisão de UX não rodou: ${resultado.ux_erro}` });
         }
+        // Gravyx: a conferência num navegador de verdade (computador e celular) e a capa do site.
+        // Nunca corrige sozinha: a correção é um botão na tela (uma passada, com custo antes).
+        if (t.tipo !== "publicar") {
+          const conf = await conferirNoNavegador(pasta, {
+            subirCapa: async (bytes) => {
+              const path = `${t.client_id}/site/${t.referencia_id || t.projeto}/conferencia/${t.id}-computador.jpg`;
+              await fila.subir("mesa", path, bytes, "image/jpeg");
+              return { bucket: "mesa", path };
+            },
+          });
+          if (tipos.rodou && !tipos.ok) {
+            const deTipos: ProblemaDaConferencia[] = tipos.erros.slice(0, 3).map((e) => ({ tipo: "tipos", grave: false, texto: `Em ${e.arquivo} linha ${e.linha}: ${e.simples}.`, aparelho: null, pagina: null, caminho: null, secao: null }));
+            conf.problemas = juntarProblemas([conf.problemas, deTipos]);
+            conf.graves = conf.problemas.filter((p) => p.grave).length;
+          }
+          resultado.conferencia = conf;
+          await avisar({ tipo: conf.graves ? "aviso" : "passo", resumo: resumoDaConferencia(conf) });
+        }
+      }
+      // Prévia na nuvem: toda versão salva e o pedido avulso (rascunho ou versão), depois do build bom.
+      // Falhar aqui nunca derruba o trabalho (a prévia pelo túnel continua valendo).
+      if (b.ok && t.tipo !== "publicar" && (t.tipo === "salvar" || pediuPreviaNaNuvem === true)) {
+        const api = apiDoAmbiente();
+        if (!api) {
+          resultado.previa_nuvem_erro = SEM_CHAVE_NO_WORKER;
+          if (pediuPreviaNaNuvem === true) await avisar({ tipo: "aviso", resumo: `Prévia na nuvem desligada: ${SEM_CHAVE_NO_WORKER}` });
+        } else {
+          try {
+            await fase("conferindo", "Subindo a prévia na nuvem");
+            const ramo = (await ramoAtual(pasta)) === RAMO_RASCUNHO ? "rascunho" : "main";
+            const previa = await previaNaVercel(api, { projeto: t.projeto, commit: await commitAtual(pasta), ramo, arquivos: arquivosDoDist(pasta) });
+            const { aviso: avisoDaPrevia, ...guardada } = previa;
+            resultado.previa_nuvem = guardada;
+            await avisar({ tipo: avisoDaPrevia ? "aviso" : "passo", resumo: `Prévia na nuvem: ${previa.url}${avisoDaPrevia ? ` (${avisoDaPrevia})` : ""}`, dados: { previa_nuvem: previa.url } });
+          } catch (e) {
+            resultado.previa_nuvem_erro = erroDaVercelEmTexto(e);
+            await avisar({ tipo: "aviso", resumo: `A prévia na nuvem não subiu: ${resultado.previa_nuvem_erro}` });
+          }
+        }
       }
       if (t.tipo === "publicar") {
         if (!b.ok) throw new Error("o build falhou; nada foi publicado");
-        const publicado = await publicarNaVercel(pasta, t, pacote);
-        Object.assign(resultado, publicado);
-        if (t.referencia_id) await fila.mesclarPublicacao(t.referencia_id, { projeto_vercel: publicado.projeto_vercel, deploy_url: publicado.deploy_url, publicado_em: new Date().toISOString(), config: null });
-        await avisar({ tipo: "passo", resumo: `Publicado: ${publicado.deploy_url}` });
+        const api = apiDoAmbiente();
+        if (!api) throw new Error(`publicação desligada: ${SEM_CHAVE_NO_WORKER}`);
+        const commit = await commitAtual(pasta);
+        if (typeof versaoPedida === "string" && versaoPedida && !mesmoCommit(versaoPedida, commit)) await avisar({ tipo: "passo", resumo: `Versão ${versaoPedida.slice(0, 8)} com o pacote do cliente (commit ${commit.slice(0, 8)})` });
+        const dominio = typeof pacote.dominio === "string" ? pacote.dominio : null;
+        const publicado = await producaoNaVercel(api, { projeto: t.projeto, commit, arquivos: arquivosDoDist(pasta), dominio }).catch((e) => {
+          throw new Error(`a Vercel não publicou: ${erroDaVercelEmTexto(e)}`);
+        });
+        const { arquivos: arquivosPublicados, ...resumoPublicado } = publicado;
+        Object.assign(resultado, resumoPublicado, { versao_publicada: typeof versaoPedida === "string" ? versaoPedida : null });
+        if (t.referencia_id) {
+          await fila.mesclarPublicacao(t.referencia_id, {
+            projeto_vercel: publicado.projeto_vercel, deploy_url: publicado.deploy_url, deploy_id: publicado.deploy_id, commit,
+            versao: typeof versaoPedida === "string" ? versaoPedida : null, paginas: publicado.paginas, arquivos: arquivosPublicados,
+            publicado_em: new Date().toISOString(), no_ar: true, tirado_em: null, verificacao: publicado.verificacao || null,
+          });
+        }
+        await avisar({ tipo: "passo", resumo: `Publicado: ${publicado.deploy_url} (${publicado.paginas.join(", ")})` });
       }
     }
 
     // Zip do código (cópia de segurança e "Baixar o site") depois de toda mudança de código
     // (a edição de conteúdo da prévia vive no banco; o próximo trabalho de código guarda o zip).
-    if (t.tipo !== "revisar" && t.tipo !== "publicar" && t.tipo !== "conteudo") {
+    // Gravyx: o descartar também guarda (o editor de código abre o zip mais novo, que tem de ser o código de agora).
+    if (t.tipo !== "revisar" && t.tipo !== "publicar" && t.tipo !== "conteudo" && !(t.tipo === "textos" && !textosAplicados)) {
       const commit = await commitAtual(pasta);
       const bytes = ziparProjeto(pasta, t.projeto);
       const caminho = `${t.client_id}/site/${t.referencia_id || t.projeto}/codigo/${t.projeto}-${commit.slice(0, 8)}.zip`;
@@ -336,6 +521,15 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     }
   }
   resultado.tokens = { entrada: gasto.tokensEntrada, saida: gasto.tokensSaida, cache: gasto.tokensCache };
+  // Gravyx: em que ramo o trabalho deixou o projeto (a tela sabe se há rascunho sem salvar).
+  try {
+    const ramo = await ramoAtual(pasta);
+    resultado.ramo = ramo === RAMO_RASCUNHO ? "rascunho" : "main";
+    const reg = ramo === RAMO_RASCUNHO ? lerRegistroDoRascunho(pasta) : null;
+    resultado.rascunho = reg ? { aberto: true, base: reg.base, trabalhos: reg.trabalhos.length } : { aberto: false };
+  } catch {
+    /* projeto sem git (falhou antes de nascer): a tela segue pelo resto */
+  }
   // SIT2: o que este trabalho mudou no código (comparar versões na tela).
   try {
     const inicio = commitInicial;
@@ -377,39 +571,11 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     tipo: "fim",
     resumo: estadoFinal === "feito" ? `Pronto. Custo US$ ${gasto.custo.toFixed(4)}` : estadoFinal === "parado" ? `Parado. Custo até aqui US$ ${gasto.custo.toFixed(4)}` : `Não deu certo. Custo US$ ${gasto.custo.toFixed(4)}`,
     dados: {
+      ...(estadoFinal === "feito" ? { fase: "pronto" } : {}),
       custo_usd: gasto.custo,
       estado: estadoFinal,
       entrega: { tipo: t.tipo, projeto: t.projeto, commit: commitFinal, secoes: resultado.secoes || [], avisos_de_revisao: Array.isArray(resultado.qa) ? (resultado.qa as unknown[]).length : null, build_ok: resultado.build ? (resultado.build as { ok?: boolean }).ok !== false : null, publicado: resultado.deploy_url || null, base_de_design: resumoDaBaseNaEntrega(resultado.base_de_design) },
     },
   });
   return { estado: estadoFinal, custo: gasto.custo };
-}
-
-/** Deploy estático do dist/ na Vercel e o domínio do cliente (só com a chave no ambiente). */
-async function publicarNaVercel(pasta: string, t: LinhaDaFila, pacote: Record<string, unknown>) {
-  const token = process.env.VERCEL_TOKEN || "";
-  if (!vercelLigada(token)) throw new Error("publicação desligada: falta VERCEL_TOKEN no worker");
-  const api = criarApiDaVercel({ token, teamId: process.env.VERCEL_TEAM_ID || null, fetch });
-  const dist = join(pasta, "dist");
-  const arquivos: Array<{ caminho: string; bytes: Uint8Array; sha: string }> = [];
-  (function andar(d: string) {
-    for (const n of readdirSync(d)) {
-      const c = join(d, n);
-      if (statSync(c).isDirectory()) andar(c);
-      else {
-        const bytes = new Uint8Array(readFileSync(c));
-        arquivos.push({ caminho: relative(dist, c).split(sep).join("/"), bytes, sha: createHash("sha1").update(bytes).digest("hex") });
-      }
-    }
-  })(dist);
-  const projeto = await garantirProjetoVercel(api, t.projeto);
-  const deploy = await publicarArquivos(api, projeto, arquivos);
-  const dominio = typeof pacote.dominio === "string" ? pacote.dominio : null;
-  let verificacao: unknown = null;
-  if (dominio) {
-    const www = dominio.startsWith("www.") ? null : `www.${dominio}`;
-    const d = await ligarDominio(api, projeto.id, dominio, www);
-    verificacao = d.verification;
-  }
-  return { projeto_vercel: projeto.id, deploy_url: deploy.url, deploy_id: deploy.id, dominio, verificacao };
 }

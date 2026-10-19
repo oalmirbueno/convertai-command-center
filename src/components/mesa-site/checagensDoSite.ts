@@ -16,7 +16,9 @@
  * de exemplo (sem layout, as medidas ficam de fora).
  */
 
-export type TipoDeChecagem = "borda" | "link" | "alt" | "contraste" | "titulo" | "peso";
+import { type ProblemaDaConferencia, ROTULO_DA_CONFERENCIA, type TipoDaConferencia } from "../../../supabase/functions/mesa-site/modulos/obra-do-site";
+
+export type TipoDeChecagem = "borda" | "link" | "alt" | "contraste" | "titulo" | "peso" | TipoDaConferencia;
 
 export type ProblemaDaChecagem = {
   id: string;
@@ -37,7 +39,22 @@ export const ROTULO_DA_CHECAGEM: Record<TipoDeChecagem, string> = {
   contraste: "Contraste baixo",
   titulo: "Título repetido",
   peso: "Página pesada",
+  // Gravyx: o que a conferência no navegador do motor mede (obra-do-site.ts).
+  ...ROTULO_DA_CONFERENCIA,
 };
+
+/** Os problemas da conferência no navegador do motor na mesma lista das checagens da tela. */
+export function problemasDaConferenciaNaLista(lista: ProblemaDaConferencia[], trabalhoId: string): ProblemaDaChecagem[] {
+  return lista.map((p, i) => ({
+    id: `motor-${trabalhoId.slice(0, 8)}-${i}`,
+    tipo: p.tipo,
+    grave: p.grave,
+    texto: p.pagina && p.pagina !== "/" ? `${p.texto} (página ${p.pagina})` : p.texto,
+    caminho: p.caminho && CAMINHO_VALIDO.test(p.caminho) ? p.caminho : null,
+    secao: p.secao,
+    aparelho: p.aparelho || undefined,
+  }));
+}
 
 export const LIMITES_DA_CHECAGEM = { htmlKb: 600, imagens: 30, larguraDaImagem: 2600, palavraLonga: 26, semLazy: 6 };
 

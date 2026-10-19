@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Crosshair, Info, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Crosshair, Info, Loader2, MessageSquarePlus, RefreshCw, Wand2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useMesa } from "@/components/mesa/MesaContexto";
+import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
+import { dataEHora, usd } from "@/lib/mesa/api";
+import type { TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { rotuloDaSecao } from "../../../supabase/functions/_shared/site-metodo";
 import { lerMensagemDaPonte } from "../../../supabase/functions/mesa-site/modulos/ponte-da-previa";
-import { checarDocumento, irAteOProblema, juntarChecagens, pedidoDasChecagens, type ProblemaDaChecagem, resumoDasChecagens, ROTULO_DA_CHECAGEM } from "./checagensDoSite";
+import { APARELHOS_DA_CONFERENCIA, type ConferenciaDoSite, NAO_VERIFICADO, podeCorrigir, ROTULO_DA_CONFERENCIA } from "../../../supabase/functions/mesa-site/modulos/obra-do-site";
+import { checarDocumento, irAteOProblema, juntarChecagens, pedidoDasChecagens, type ProblemaDaChecagem, problemasDaConferenciaNaLista, resumoDasChecagens, ROTULO_DA_CHECAGEM } from "./checagensDoSite";
 import { montarPreviaRapida } from "./previaEstatica";
 import { usePreviaDados } from "./previaApi";
-import type { LinhaDoSite } from "./siteApi";
+import { CHAVES, chamarMotor, type LinhaDoSite } from "./siteApi";
+
+export type ConferenciaDoMotor = { trabalho: Pick<TrabalhoDoMotor, "id" | "tipo" | "terminado_em" | "criado_em">; conferencia: ConferenciaDoSite };
 
 export type ResultadoDasChecagens = { problemas: ProblemaDaChecagem[]; fonte: "motor" | "rapida"; documento: string; em: string };
 
@@ -122,12 +131,21 @@ export default function ChecagensAntesDePublicar({
   urlDoMotor,
   onPedirAoDiretor,
   onResultado,
+  conferenciaDoMotor = null,
+  trabalhos = [],
 }: {
   site: LinhaDoSite;
   urlDoMotor: string | null;
   onPedirAoDiretor?: (texto: string) => void;
   onResultado?: (r: ResultadoDasChecagens | null) => void;
+  /** Gravyx: a conferência no navegador que o motor rodou depois do build (computador e celular). */
+  conferenciaDoMotor?: ConferenciaDoMotor | null;
+  /** Os trabalhos do site (a trava do "corrigir uma vez só" lê a lista). */
+  trabalhos?: TrabalhoDoMotor[];
 }) {
+  const { clientId } = useMesa();
+  const qc = useQueryClient();
+  const avisarErro = useAvisarErro();
   const dadosQ = usePreviaDados(site);
   const montada = useMemo(() => (dadosQ.data ? montarPreviaRapida(site, dadosQ.data, { marcarEstados: false }) : null), [site, dadosQ.data]);
   const motorPublico = !!urlDoMotor && /^https:\/\//.test(urlDoMotor) ? urlDoMotor : null;
@@ -174,12 +192,47 @@ export default function ChecagensAntesDePublicar({
     void checar();
   }, [montada, motorPublico, semDados, checar]);
 
-  const problemas = resultado ? resultado.problemas : [];
+  // Gravyx: o que a conferência no navegador do motor achou entra na mesma lista, antes do resto.
+  const doMotor = useMemo(() => (conferenciaDoMotor ? problemasDaConferenciaNaLista(conferenciaDoMotor.conferencia.problemas, conferenciaDoMotor.trabalho.id) : []), [conferenciaDoMotor]);
+  const problemas = useMemo(() => juntarChecagens([doMotor, resultado ? resultado.problemas : []]), [doMotor, resultado]);
   const resumo = resumoDasChecagens(problemas);
+  const correcao = conferenciaDoMotor ? podeCorrigir(trabalhos, conferenciaDoMotor.trabalho.id) : null;
+  const [corrigindo, setCorrigindo] = useState(false);
+  const [enviandoCorrecao, setEnviandoCorrecao] = useState(false);
+  const estimativaDaCorrecao = useQuery({
+    queryKey: ["mesa-site", "estimativa-corrigir", clientId, site.modelo || ""],
+    enabled: corrigindo,
+    queryFn: () => chamarMotor<{ estimativa_usd: number; teto_sugerido_usd: number; livre_usd: number }>("estimar", { client_id: clientId, tipo: "corrigir", modelo_id: site.modelo || undefined }),
+  });
+  const tetoDaCorrecao = estimativaDaCorrecao.data ? estimativaDaCorrecao.data.teto_sugerido_usd : 0;
+  const pedirCorrecao = async () => {
+    if (!conferenciaDoMotor) return;
+    setEnviandoCorrecao(true);
+    try {
+      await chamarMotor("pedir", { client_id: clientId, site_id: site.id, tipo: "corrigir", conferencia_de: conferenciaDoMotor.trabalho.id, teto_usd: tetoDaCorrecao, modelo_id: site.modelo || undefined });
+      setCorrigindo(false);
+      void qc.invalidateQueries({ queryKey: CHAVES.trabalhos(site.id) });
+    } catch (e) {
+      avisarErro(e, "A correção não entrou na fila");
+    } finally {
+      setEnviandoCorrecao(false);
+    }
+  };
+  const capa = conferenciaDoMotor ? conferenciaDoMotor.conferencia.capa : null;
+  const capaQ = useQuery({
+    queryKey: ["mesa-site", "capa", capa ? capa.path : "nenhuma"],
+    enabled: !!capa,
+    staleTime: 45 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from(capa!.bucket).createSignedUrl(capa!.path, 3600);
+      if (error || !data) throw error || new Error("capa indisponível");
+      return data.signedUrl;
+    },
+  });
   const visiveis = todos ? problemas : problemas.slice(0, 6);
   const descricao = checando
     ? "Checando"
-    : !resultado
+    : !resultado && !doMotor.length
       ? dadosQ.isError
         ? "A página não abriu para checar"
         : "Sem custo de IA"
@@ -200,7 +253,7 @@ export default function ChecagensAntesDePublicar({
     <Secao
       titulo="Checagens antes de publicar"
       descricao={descricao}
-      ajuda="Antes de publicar, a mesa confere a página no celular e no computador, sem IA e sem custo: texto passando da borda ou cortado, link quebrado ou vazio, imagem sem alt (descrição), contraste baixo entre texto e fundo, títulos repetidos e página pesada. Usa o site do motor quando ele responde; senão, a prévia rápida (lá os botões ainda não têm destino de propósito, então o # não conta). Ir até o problema abre a página marcada no ponto. Não trava a publicação: é aviso. Pedir correção ao diretor só preenche o pedido; enviar e o custo continuam com você."
+      ajuda="Antes de publicar, a mesa confere a página no celular e no computador, sem IA e sem custo: texto passando da borda ou cortado, link quebrado ou vazio, imagem sem alt (descrição), contraste baixo entre texto e fundo, títulos repetidos e página pesada. Usa o site do motor quando ele responde; senão, a prévia rápida (lá os botões ainda não têm destino de propósito, então o # não conta). Depois de cada build, o motor também abre o site num navegador de verdade (computador 1440x900 e celular 390x844) e mede erro de execução, imagem quebrada, conteúdo vazando para o lado e texto cortado; problema grave dessa conferência trava o Publicar até a equipe marcar publicar mesmo assim. Corrigir o que a conferência achou manda UMA passada ao motor, com o custo antes; depois dela a conferência roda de novo e o que sobrar é decisão da equipe. Ir até o problema abre a página marcada no ponto. Pedir correção ao diretor só preenche o pedido; enviar e o custo continuam com você."
       recolher="mesa-site:publicacao:checagens"
       acao={
         <button type="button" className={botao.icone} aria-label="Checar de novo" title="Checar de novo (sem custo)" disabled={checando || (!montada && !motorPublico)} onClick={() => void checar()} data-checar-de-novo="">
@@ -209,6 +262,19 @@ export default function ChecagensAntesDePublicar({
       }
     >
       <div className="min-w-0" data-checagens={resultado ? resumo.total : "pendente"}>
+        {conferenciaDoMotor && (
+          <div className="mb-2 flex min-w-0 items-start" data-conferencia-do-motor={conferenciaDoMotor.conferencia.estado} data-graves-do-motor={conferenciaDoMotor.conferencia.graves}>
+            {capaQ.data && <img src={capaQ.data} alt="Capa do site (print do computador)" className="mr-3 h-auto w-24 shrink-0 rounded border border-border sm:w-32" loading="lazy" data-capa-do-site="" />}
+            <span className="min-w-0 flex-1">
+              <span className={juntar(texto.auxiliar, "block whitespace-normal")}>
+                {conferenciaDoMotor.conferencia.estado === "pronto"
+                  ? `Conferido num navegador de verdade em ${dataEHora(conferenciaDoMotor.conferencia.em || conferenciaDoMotor.trabalho.terminado_em || conferenciaDoMotor.trabalho.criado_em)} · ${APARELHOS_DA_CONFERENCIA.map((a) => `${a.id} ${a.largura}x${a.altura}`).join(" e ")}`
+                  : `A conferência no navegador não rodou: ${conferenciaDoMotor.conferencia.motivo || "sem navegador no worker"}`}
+              </span>
+              {conferenciaDoMotor.conferencia.estado === "pronto" && <span className={juntar(texto.auxiliar, "block whitespace-normal")}>{NAO_VERIFICADO}</span>}
+            </span>
+          </div>
+        )}
         {resultado && (
           <p className={texto.auxiliar}>
             {resultado.fonte === "motor" ? "Checado no site do motor" : motorPublico ? "Checado na prévia rápida (o site do motor não respondeu)" : "Checado na prévia rápida"}
@@ -241,6 +307,19 @@ export default function ChecagensAntesDePublicar({
               {todos ? "Mostrar só os primeiros" : `Mostrar todos (${problemas.length})`}
             </button>
           )}
+          {conferenciaDoMotor && conferenciaDoMotor.conferencia.problemas.length > 0 && (
+            <button
+              type="button"
+              className={juntar(botao.icone, "mr-1")}
+              aria-label="Corrigir o que a conferência achou"
+              title={correcao && correcao.ok ? "Corrigir o que a conferência achou (uma passada do motor, custo antes)" : (correcao && correcao.motivo) || "Corrigir o que a conferência achou"}
+              disabled={!correcao || !correcao.ok}
+              onClick={() => setCorrigindo(true)}
+              data-corrigir-conferencia=""
+            >
+              <Wand2 className="h-4 w-4" />
+            </button>
+          )}
           {problemas.length > 0 && onPedirAoDiretor && (
             <button type="button" className={botao.icone} aria-label="Pedir correção ao diretor" title="Pedir correção ao diretor de site (você revisa e confirma o custo)" onClick={() => onPedirAoDiretor(pedidoDasChecagens(problemas))} data-pedir-correcao-checagens="">
               <MessageSquarePlus className="h-4 w-4" />
@@ -248,6 +327,49 @@ export default function ChecagensAntesDePublicar({
           )}
         </div>
       </div>
+
+      <JanelaCentral
+        aberta={corrigindo}
+        onMudar={(a) => !a && setCorrigindo(false)}
+        titulo="Corrigir o que a conferência achou"
+        icone={<Wand2 className="h-4 w-4" />}
+        descricao={estimativaDaCorrecao.isLoading ? "Estimando" : estimativaDaCorrecao.data ? `estimativa ${usd(estimativaDaCorrecao.data.estimativa_usd)} · teto ${usd(tetoDaCorrecao)} · livre ${usd(estimativaDaCorrecao.data.livre_usd)}` : estimativaDaCorrecao.isError ? "Sem estimativa agora" : undefined}
+        ajuda="Uma passada só do motor sobre a lista abaixo, no rascunho. Depois dela o motor compila e confere de novo; o que sobrar não volta para o motor sozinho (sem laço de correção): a equipe decide, pede o ajuste ao diretor ou publica mesmo assim."
+        largura="md"
+        rodape={
+          <>
+            <button type="button" className={botao.discreto} onClick={() => setCorrigindo(false)} disabled={enviandoCorrecao}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className={juntar(botao.primario, "ml-2")}
+              disabled={enviandoCorrecao || !(tetoDaCorrecao > 0) || !correcao || !correcao.ok || (!!estimativaDaCorrecao.data && tetoDaCorrecao > estimativaDaCorrecao.data.livre_usd)}
+              onClick={() => void pedirCorrecao()}
+              data-confirmar-correcao=""
+            >
+              {enviandoCorrecao ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+              Confirmar · teto {usd(tetoDaCorrecao)}
+            </button>
+          </>
+        }
+        data-janela-da-correcao=""
+      >
+        <ul className="min-w-0 space-y-1">
+          {(correcao ? correcao.problemas : []).map((p, i) => (
+            <li key={i} className={juntar(texto.corpo, "flex min-w-0 whitespace-normal break-words")}>
+              {p.grave ? <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-label="Grave" /> : <Info className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-label="Aviso" />}
+              <span className="min-w-0">
+                {p.texto}
+                <span className={juntar(texto.auxiliar, "block")}>
+                  {ROTULO_DA_CONFERENCIA[p.tipo]}
+                  {p.secao ? ` · ${rotuloDaSecao(p.secao)}` : ""}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </JanelaCentral>
 
       <JanelaCentral
         aberta={!!aberto}

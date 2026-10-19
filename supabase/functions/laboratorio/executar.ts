@@ -13,8 +13,17 @@ import { erroQueSobe, motivoDaFalha, registrarFalha } from "../_shared/falha-reg
 import { OPERADOR_HERMES } from "../_shared/pedido-ao-hermes.ts";
 import { type Carteira, ErroHttp, servico, TAREFA } from "./comum.ts";
 import { type ArquivoSalvo, garantirPastas, lerImagem, salvarArquivo } from "./workspace.ts";
+import { chamadorDaMesaMotion, type ChamarMotion, rodarFilme } from "./filme.ts";
+import { type AprovacaoLida, type EntradaDoPacote, type Operador, pedirNoAr, type PortaDoNoAr } from "./no-ar.ts";
 import {
+  ancestraisDe,
   arred,
+  blocosSemFonte,
+  BUSCAS_DA_PESQUISA,
+  NOS_COM_PROVA,
+  NOS_ESPECIALISTAS,
+  travaDoNoAr,
+  formatosDoFilme,
   type Canvas,
   type Chamada,
   caminhoNoBucket,
@@ -41,15 +50,21 @@ import {
 import {
   CAMINHOS_DE_LOGO,
   ESQUEMA_DA_COPY,
+  ESQUEMA_DA_OFERTA,
   ESQUEMA_DO_ANUNCIO,
   ESQUEMA_DO_CARROSSEL,
+  ESQUEMA_DO_FUNIL,
+  ESPECIALISTAS,
   type PedidoDeLogo,
   perguntaDaMelhorLogo,
   promptDaLogo,
   SISTEMA_DA_LANDING,
+  SISTEMA_DA_OFERTA,
+  SISTEMA_DA_PESQUISA,
   SISTEMA_DO_AGENTE,
   SISTEMA_DO_ANUNCIO,
   SISTEMA_DO_CARROSSEL,
+  SISTEMA_DO_FUNIL,
   sistemaDaCopy,
 } from "./modulos/prompts.ts";
 
@@ -89,9 +104,13 @@ export type Contexto = {
   marca: string;
   nomeDoCliente: string | null;
   userId: string;
+  /** JWT de quem pediu: o nó Filme chama a mesa-motion como a pessoa (mesmas travas e acesso). */
+  token: string;
   rodadaId: string | null;
   saidas: Map<string, SaidaDoNo>;
   pastaId?: string;
+  /** Teste: troca a chamada à mesa-motion. */
+  motion?: ChamarMotion;
 };
 
 const rotuloDoNo = (no: NoDoCanvas) => (typeof no.dados.titulo === "string" && no.dados.titulo.trim() ? no.dados.titulo.trim() : ROTULO_DO_TIPO[no.tipo]);
@@ -109,7 +128,7 @@ export async function precificador(chamadas: Chamada[]): Promise<(ch: Chamada) =
     const m = modelos.get(ch.modelo_id)!;
     return ch.tipo === "imagem"
       ? estimarComModelo(m, { imagens: ch.imagens, qualidade: ch.qualidade ?? "media", tokensEntrada: ch.tokens_entrada, imagensEntrada: ch.imagens_entrada ?? 0 })
-      : estimarComModelo(m, { tokensEntrada: ch.tokens_entrada, tokensSaida: ch.tokens_saida });
+      : estimarComModelo(m, { tokensEntrada: ch.tokens_entrada, tokensSaida: ch.tokens_saida, buscasWeb: ch.buscas_web ?? 0 });
   };
 }
 
@@ -136,14 +155,17 @@ export async function criarExecucao(o: { projetoId: string; no: NoDoCanvas; stat
   return (data as { id: string }).id;
 }
 
-async function atualizarExecucao(id: string, campos: Record<string, unknown>) {
+export async function atualizarExecucao(id: string, campos: Record<string, unknown>) {
   const { error } = await servico().from("lab_execucoes").update(campos).eq("id", id);
   if (error) registrarFalha("laboratorio: execução não atualizada", error, { execucao_id: id });
 }
 
 // ------------------------------------------------------------------ entradas
 
-/** Saída de um nó a montante: estático pelos dados; executável pela rodada atual ou pela última pronta. */
+/**
+ * Saída de um nó a montante: estático pelos dados; executável pela rodada atual ou pela última pronta.
+ * Filme e Pôr no ar valem também 'aguardando' (o filme espera a escolha; o pedido espera o dono).
+ */
 async function saidaDe(ctx: Contexto, no: NoDoCanvas): Promise<SaidaDoNo | null> {
   if (no.tipo === "contexto") return { texto: txt(no.dados.texto) };
   if (no.tipo === "midia") {
@@ -163,7 +185,7 @@ async function saidaDe(ctx: Contexto, no: NoDoCanvas): Promise<SaidaDoNo | null>
     .select("saida")
     .eq("projeto_id", ctx.projeto.id)
     .eq("no_id", no.id)
-    .eq("status", "pronto")
+    .in("status", no.tipo === "filme" ? ["pronto", "aguardando"] : ["pronto"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -183,6 +205,10 @@ export async function entradasMontadas(ctx: Contexto, no: NoDoCanvas): Promise<E
     if (!s) continue;
     const rotulo = rotuloDoNo(antes);
     if (s.texto) textos.push(`${rotulo}: ${s.texto}`);
+    if (antes.tipo === "pesquisa" && Array.isArray(s.fontes) && s.fontes.length) {
+      textos.push(`${rotulo} (fontes): ${(s.fontes as Array<{ titulo?: string; url?: string }>).slice(0, 12).map((f) => `${f.titulo || ""} ${f.url || ""}`.trim()).join("; ")}`);
+    }
+    if ((antes.tipo === "oferta" || antes.tipo === "funil") && s.json && !s.texto) textos.push(`${rotulo}: ${JSON.stringify(s.json).slice(0, 4000)}`);
     if (antes.tipo === "anuncio" && s.json) textos.push(`${rotulo}: ${JSON.stringify(s.json).slice(0, 3000)}`);
     if (antes.tipo === "landing" && s.html_path) textos.push(`${rotulo}: página salva em ${s.html_path}`);
     if (s.imagens?.length) imagens.push(...s.imagens);
@@ -222,7 +248,7 @@ const imagemDoArquivo = (a: ArquivoSalvo, ordem?: number): ImagemSaida => ({ pat
 
 type Resultado = { saida: SaidaDoNo; custo: number; usoId: string | null; status?: "pronto" | "aguardando" };
 
-async function texto(ctx: Contexto, o: { modelo?: unknown; sistema: string; mensagem: string; imagens?: ImagemEntrada[]; esquema?: unknown; maxSaida: number; execucaoId: string; timeoutMs?: number }) {
+async function texto(ctx: Contexto, o: { modelo?: unknown; sistema: string; mensagem: string; imagens?: ImagemEntrada[]; esquema?: unknown; maxSaida: number; execucaoId: string; timeoutMs?: number; pesquisaWeb?: boolean }) {
   return await chamarTexto({
     clientId: ctx.carteira.clientId,
     tarefa: TAREFA,
@@ -233,6 +259,7 @@ async function texto(ctx: Contexto, o: { modelo?: unknown; sistema: string; mens
     esquemaJson: o.esquema as never,
     maxTokensSaida: o.maxSaida,
     timeoutMs: o.timeoutMs,
+    pesquisaWeb: o.pesquisaWeb === true ? true : undefined,
     referencia: { tipo: "lab_execucao", id: o.execucaoId },
     criadoPor: ctx.userId,
   });
@@ -476,6 +503,8 @@ async function noLanding(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId:
     execucaoId,
   });
   const html = htmlDaResposta(r.texto);
+  // Prova sem fonte na página: o construtor deixa o marcador visível; vira bloco (trava o Pôr no ar).
+  const rascunho_sem_fonte = blocosSemFonte({ textos: [html] });
   const arquivo = await salvarArquivo({
     conteudo: html,
     mime: "text/html",
@@ -484,7 +513,7 @@ async function noLanding(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId:
     pastaId: await pasta(ctx),
     criadoPor: ctx.userId,
   });
-  return { saida: { html_path: arquivo.path, html_url: arquivo.url, no_workspace_id: arquivo.no_id, texto: `Página pronta (${Math.round(html.length / 1024)} KB).` }, custo: r.custoUsd, usoId: r.usoId };
+  return { saida: { html_path: arquivo.path, html_url: arquivo.url, no_workspace_id: arquivo.no_id, texto: `Página pronta (${Math.round(html.length / 1024)} KB).`, rascunho_sem_fonte }, custo: r.custoUsd, usoId: r.usoId };
 }
 
 async function noAnuncio(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
@@ -578,6 +607,216 @@ async function noAgenteExterno(ctx: Contexto, no: NoDoCanvas, e: Entradas, execu
   };
 }
 
+// ------------------------------------------------------------------ v2: pesquisa, oferta, funil, filme, pôr no ar
+
+/** Links no texto (reserva quando o provedor não devolve as citações). */
+export function linksDoTexto(t: string): Array<{ titulo: string; url: string }> {
+  const vistos = new Set<string>();
+  const saida: Array<{ titulo: string; url: string }> = [];
+  for (const m of String(t || "").match(/https?:\/\/[^\s)\]"'<>]+/gi) || []) {
+    const url = m.replace(/[.,;:]+$/, "");
+    if (vistos.has(url) || saida.length >= 30) continue;
+    vistos.add(url);
+    saida.push({ titulo: "", url });
+  }
+  return saida;
+}
+
+async function noPesquisa(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  const tema = txt(no.dados.tema);
+  const r = await texto(ctx, {
+    modelo: no.dados.modelo_id,
+    sistema: SISTEMA_DA_PESQUISA,
+    mensagem: [tema ? `O que pesquisar: ${tema}` : "", ...e.textos].filter(Boolean).join("\n\n"),
+    maxSaida: SAIDA_ESPERADA.pesquisa,
+    pesquisaWeb: true,
+    timeoutMs: 300_000,
+    execucaoId,
+  });
+  const fontes = (r.fontes && r.fontes.length ? r.fontes : linksDoTexto(r.texto)).slice(0, 30);
+  const avisos = fontes.length ? [] : ["A pesquisa voltou sem fontes com link: trate os dados como hipótese."];
+  return { saida: { texto: r.texto, fontes, modelo_id: r.modeloId, buscas_estimadas: BUSCAS_DA_PESQUISA, avisos }, custo: r.custoUsd, usoId: r.usoId };
+}
+
+async function noOferta(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  const r = await texto(ctx, {
+    modelo: no.dados.modelo_id,
+    sistema: SISTEMA_DA_OFERTA + (txt(no.dados.instrucao) ? `\n\nPEDIDO EXTRA: ${txt(no.dados.instrucao)}` : ""),
+    mensagem: [
+      txt(no.dados.produto) ? `Produto: ${txt(no.dados.produto)}` : "",
+      txt(no.dados.preco) ? `Preço pensado: ${txt(no.dados.preco)}` : "",
+      ...e.textos,
+    ].filter(Boolean).join("\n\n"),
+    esquema: ESQUEMA_DA_OFERTA,
+    maxSaida: SAIDA_ESPERADA.oferta,
+    execucaoId,
+  });
+  const j = (r.json ?? {}) as { texto_completo?: string };
+  return { saida: { texto: txt(j.texto_completo, 20000) || r.texto, json: r.json ?? null }, custo: r.custoUsd, usoId: r.usoId };
+}
+
+async function noFunil(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  const r = await texto(ctx, {
+    modelo: no.dados.modelo_id,
+    sistema: SISTEMA_DO_FUNIL,
+    mensagem: [txt(no.dados.objetivo) ? `Objetivo do funil: ${txt(no.dados.objetivo)}` : "", ...e.textos].filter(Boolean).join("\n\n"),
+    esquema: ESQUEMA_DO_FUNIL,
+    maxSaida: SAIDA_ESPERADA.funil,
+    execucaoId,
+  });
+  const j = (r.json ?? {}) as { resumo?: string; etapas?: Array<{ nome?: string; mensagem?: string }> };
+  const etapas = Array.isArray(j.etapas) ? j.etapas.map((x, i) => `${i + 1}. ${x.nome || ""}: ${x.mensagem || ""}`).join("\n") : "";
+  return { saida: { texto: [txt(j.resumo, 4000), etapas].filter(Boolean).join("\n") || r.texto, json: r.json ?? null }, custo: r.custoUsd, usoId: r.usoId };
+}
+
+/** As saídas dos nós ligados antes (para o pacote do Pôr no ar e a oferta do Filme). */
+export async function saidasDasEntradas(ctx: Contexto, no: NoDoCanvas): Promise<EntradaDoPacote[]> {
+  const lista: EntradaDoPacote[] = [];
+  for (const antes of entradasDo(ctx.canvas, no.id)) lista.push({ no: antes, saida: await saidaDe(ctx, antes) });
+  return lista;
+}
+
+async function noFilme(ctx: Contexto, no: NoDoCanvas, e: Entradas, _execucaoId: string): Promise<Resultado> {
+  // O filme usa a marca do cliente (logo, paleta, fontes): no Livre ele sairia com a marca da Aceleriq.
+  if (ctx.carteira.livre || !ctx.projeto.client_id) throw new ErroHttp(400, "filme_sem_cliente", "O Filme da marca precisa de um cliente (usa a marca dele). Escolha o cliente do projeto.");
+  const oferta = (await saidasDasEntradas(ctx, no)).find((x) => x.no.tipo === "oferta")?.saida?.json;
+  const r = await rodarFilme(ctx.motion || chamadorDaMesaMotion(ctx.token), {
+    clientId: ctx.projeto.client_id,
+    nome: rotuloDoNo(no) === ROTULO_DO_TIPO.filme ? `Filme da marca (${ctx.projeto.nome})` : rotuloDoNo(no),
+    ideia: txt(no.dados.ideia, 1500),
+    textos: e.textos,
+    oferta: oferta && typeof oferta === "object" ? oferta as Record<string, unknown> : null,
+    formatos: formatosDoFilme(no.dados.formato),
+    modeloId: txt(no.dados.modelo_id, 200) || MODELO_TEXTO_PADRAO,
+  });
+  return { saida: r.saida, custo: r.custo, usoId: null, status: "aguardando" };
+}
+
+/** A porta do Pôr no ar no banco (chave de serviço). Nada aqui sai do Supabase. */
+export function portaDoNoAr(ctx: Pick<Contexto, "carteira" | "userId">): PortaDoNoAr {
+  const db = servico();
+  return {
+    async operadoresAtivos() {
+      const { data, error } = await db.from("internal_operators").select("id, slug, display_name, role, scope").eq("status", "active");
+      if (error) throw new ErroHttp(503, "operadores_indisponiveis", "Não consegui ler os operadores agora.");
+      return (data || []) as Operador[];
+    },
+    async pedidoAberto(projetoId, noId) {
+      const { data } = await db
+        .from("operator_approvals")
+        .select("id, status, executed_at")
+        .eq("payload->>origem", "laboratorio")
+        .eq("payload->>projeto_id", projetoId)
+        .eq("payload->>no_id", noId)
+        .in("status", ["pendente", "adiado", "aprovado"])
+        .order("created_at", { ascending: false })
+        .limit(5);
+      const aberto = ((data || []) as Array<{ id: string; status: string; executed_at: string | null }>).find((a) => a.status !== "aprovado" || !a.executed_at);
+      return aberto ? { id: aberto.id, status: aberto.status } : null;
+    },
+    projetoDoKanban: () => projetoDoKanban(ctx.carteira.clientId, ctx.userId),
+    async criarTarefa(t) {
+      const { data, error } = await db.from("tasks").insert({ ...t, status: "todo", priority: "high", source: "laboratorio" }).select("id").single();
+      if (error || !data) throw new ErroHttp(503, "tarefa_nao_criada", "Não consegui criar a tarefa no Kanban.");
+      return (data as { id: string }).id;
+    },
+    async apagarTarefa(id) {
+      await db.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    },
+    async criarAprovacao(a) {
+      const { data, error } = await db.from("operator_approvals").insert(a).select("id").single();
+      if (error || !data) {
+        registrarFalha("laboratorio: pedido de aprovação não criado", error);
+        throw new ErroHttp(503, "aprovacao_nao_criada", "Não consegui criar o pedido de aprovação agora. Nada foi ao ar.");
+      }
+      return (data as { id: string }).id;
+    },
+    async registrar(acao, o) {
+      await db.from("operator_audit_log").insert({ actor: `laboratorio:${ctx.userId}`, operator_id: o.operatorId, kanban_task_id: o.taskId, action: acao, approval_required: true });
+    },
+    async avisarAdmins(mensagem, link) {
+      const { data } = await db.from("user_roles").select("user_id").eq("role", "admin");
+      const linhas = ((data || []) as Array<{ user_id: string }>).map((u) => ({ user_id: u.user_id, message: mensagem, notification_type: "aprovacao_necessaria", link }));
+      if (linhas.length) await db.from("notifications").insert(linhas);
+    },
+    async lerAprovacao(id) {
+      const { data } = await db
+        .from("operator_approvals")
+        .select("id, status, executed_at, execution_evidence, decision_note, task_link_id, kanban_task_id, payload, operator:internal_operators!operator_approvals_operator_id_fkey(slug)")
+        .eq("id", id)
+        .maybeSingle();
+      if (!data) return null;
+      const d = data as Record<string, unknown>;
+      const op = d.operator as { slug?: string } | null;
+      return { ...(d as unknown as AprovacaoLida), operator_slug: op?.slug ?? null, payload: (d.payload || {}) as Record<string, unknown> };
+    },
+    async entregarAoOperador(slug, taskId, nota) {
+      const { data, error } = await db.rpc("operator_assign_task", { _operator_slug: slug, _kanban_task_id: taskId, _actor: `laboratorio:${ctx.userId}`, _note: nota.slice(0, 500) });
+      if (error) throw new Error(error.message);
+      const link = (data as { link_id?: string } | null)?.link_id;
+      return link ? String(link) : null;
+    },
+    async ligarAprovacao(aprovacaoId, linkId) {
+      await db.from("operator_approvals").update({ task_link_id: linkId }).eq("id", aprovacaoId).is("task_link_id", null);
+    },
+    async instruir(linkId, taskId, corpo) {
+      const { error } = await db.from("operator_participations").insert({ task_link_id: linkId, kanban_task_id: taskId, author_kind: "humano", author_id: ctx.userId, entry_type: "instrucao", title: "Pôr no ar (aprovado pelo dono)", body: corpo, attachments: [] });
+      if (error) registrarFalha("laboratorio: instrução do Pôr no ar não entrou no diário", error, { link_id: linkId });
+    },
+    async statusDoVinculo(linkId) {
+      const { data } = await db.from("operator_task_links").select("status").eq("id", linkId).maybeSingle();
+      return (data as { status?: string } | null)?.status ?? null;
+    },
+  };
+}
+
+/**
+ * v3 (clickmax-rea.md): os especialistas de criação (avatar, order bump, upsell, downsell, sequência de
+ * ofertas, seções da página, sequência de mensagens, refino de tom). Uma chamada de texto com esquema;
+ * o texto legível vai para os nós seguintes e o json fica no nó.
+ */
+async function noEspecialista(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  const esp = ESPECIALISTAS[no.tipo as keyof typeof ESPECIALISTAS];
+  if (!esp) throw new ErroHttp(400, "no_nao_executavel", `${ROTULO_DO_TIPO[no.tipo]} não tem especialista.`);
+  const r = await texto(ctx, {
+    modelo: no.dados.modelo_id,
+    sistema: esp.sistema,
+    mensagem: [...esp.pedido(no.dados), ...e.textos].filter(Boolean).join("\n\n"),
+    esquema: esp.esquema,
+    maxSaida: SAIDA_ESPERADA[no.tipo] || 2500,
+    timeoutMs: no.tipo === "sequencia_mensagens" || no.tipo === "refino_tom" ? 240_000 : undefined,
+    execucaoId,
+  });
+  const j = (r.json && typeof r.json === "object" ? r.json : {}) as Record<string, unknown>;
+  return { saida: { texto: esp.texto(j).slice(0, 20000) || r.texto, json: r.json ?? null }, custo: r.custoUsd, usoId: r.usoId };
+}
+
+/** As saídas atuais de todos os nós antes deste (para a trava do Pôr no ar). */
+export async function saidasDosAncestrais(ctx: Contexto, no: NoDoCanvas): Promise<Record<string, unknown>> {
+  const saidas: Record<string, unknown> = {};
+  for (const id of ancestraisDe(ctx.canvas, no.id)) {
+    const n = ctx.canvas.nos.find((x) => x.id === id);
+    if (n) saidas[id] = await saidaDe(ctx, n);
+  }
+  return saidas;
+}
+
+async function noPorNoAr(ctx: Contexto, no: NoDoCanvas, _e: Entradas, execucaoId: string): Promise<Resultado> {
+  // Regra contra invenção: bloco de prova ou número sem fonte antes do Pôr no ar trava o pedido.
+  const trava = travaDoNoAr(ctx.canvas, no.id, await saidasDosAncestrais(ctx, no));
+  if (trava.travado) throw new ErroHttp(409, "rascunho_sem_fonte", trava.motivo, { blocos: trava.blocos });
+  const saida = await pedirNoAr(portaDoNoAr(ctx), {
+    projetoId: ctx.projeto.id,
+    projetoNome: ctx.projeto.nome,
+    nomeDoCliente: ctx.nomeDoCliente,
+    execucaoId,
+    no,
+    entradas: await saidasDasEntradas(ctx, no),
+    userId: ctx.userId,
+  });
+  return { saida, custo: 0, usoId: null, status: "aguardando" };
+}
+
 const EXECUTORES: Record<string, (ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string) => Promise<Resultado>> = {
   agente: noAgente,
   copy: noCopy,
@@ -587,6 +826,12 @@ const EXECUTORES: Record<string, (ctx: Contexto, no: NoDoCanvas, e: Entradas, ex
   landing: noLanding,
   anuncio: noAnuncio,
   agente_externo: noAgenteExterno,
+  pesquisa: noPesquisa,
+  oferta: noOferta,
+  funil: noFunil,
+  filme: noFilme,
+  por_no_ar: noPorNoAr,
+  ...Object.fromEntries(NOS_ESPECIALISTAS.map((t) => [t, noEspecialista])),
 };
 
 /** Roda um nó numa execução já criada e grava o fim (pronto, aguardando ou erro). Devolve a saída ou lança. */
@@ -597,15 +842,26 @@ export async function rodarNo(ctx: Contexto, no: NoDoCanvas, execucaoId: string)
   try {
     const e = await entradasMontadas(ctx, no);
     // Landing e anúncio também valem com o próprio objetivo (e a landing com as seções), sem Contexto ligado.
-    const pedidoNoNo = ["prompt", "tema", "instrucao", "objetivo", "secoes", "oferta"].some((k) => !!txt(no.dados[k]));
-    if (["imagem", "carrossel", "copy", "agente", "landing", "anuncio"].indexOf(no.tipo) >= 0 && !e.textos.length && !e.imagens.length && !pedidoNoNo) {
+    const pedidoNoNo = ["prompt", "tema", "instrucao", "objetivo", "secoes", "oferta", "produto", "ideia", "publico", "tom"].some((k) => !!txt(no.dados[k]));
+    if ((["imagem", "carrossel", "copy", "agente", "landing", "anuncio", "pesquisa", "oferta", "funil", "filme"].indexOf(no.tipo) >= 0 || NOS_ESPECIALISTAS.indexOf(no.tipo) >= 0) && !e.textos.length && !e.imagens.length && !pedidoNoNo) {
       throw new ErroHttp(400, "no_sem_entrada", `Ligue um Contexto (ou escreva o pedido) em ${rotuloDoNo(no)} antes de rodar.`);
     }
     const r = await fn(ctx, no, e, execucaoId);
+    // Regra contra invenção: o que o nó escreveu sem fonte vira bloco rascunho_sem_fonte na saída.
+    if (NOS_COM_PROVA.indexOf(no.tipo) >= 0 && !Array.isArray(r.saida.rascunho_sem_fonte)) {
+      const j = r.saida.json && typeof r.saida.json === "object" ? r.saida.json as Record<string, unknown> : {};
+      r.saida.rascunho_sem_fonte = blocosSemFonte({ declarados: j.blocos_sem_fonte, textos: [r.saida.texto, r.saida.json] });
+    }
     ctx.saidas.set(no.id, r.saida);
     await atualizarExecucao(execucaoId, { status: r.status || "pronto", saida: r.saida, custo_usd: arred(r.custo), uso_id: r.usoId, finished_at: r.status === "aguardando" ? null : new Date().toISOString() });
     return r.saida;
   } catch (err) {
+    // Pôr no ar com pedido já aberto: a execução nova não vale (a tela segue mostrando o pedido aberto).
+    // Pôr no ar travado por bloco sem fonte: idem (a tela mostra a trava com a lista dos blocos).
+    if (err instanceof ErroHttp && (err.codigo === "ja_pedido" || err.codigo === "rascunho_sem_fonte")) {
+      await servico().from("lab_execucoes").delete().eq("id", execucaoId).eq("status", "rodando");
+      throw err;
+    }
     const motivo = err instanceof ErroHttp ? err.message : motivoDaFalha(err);
     await atualizarExecucao(execucaoId, { status: "erro", erro: motivo, finished_at: new Date().toISOString() });
     throw err;
@@ -631,6 +887,7 @@ export async function rodarTudo(ctx: Contexto, alvos: string[] | null): Promise<
 
 export async function seguirRodada(ctx: Contexto, ordem: string[], execucoes: Record<string, string>): Promise<void> {
   const falhos = new Set<string>();
+  const esperando = new Set<string>();
   let parar: string | null = null;
   for (const id of ordem) {
     const no = ctx.canvas.nos.find((n) => n.id === id)!;
@@ -644,8 +901,15 @@ export async function seguirRodada(ctx: Contexto, ordem: string[], execucoes: Re
       await atualizarExecucao(execucoes[id], { status: "erro", erro: "Um nó antes deste falhou; nada foi gerado aqui.", finished_at: new Date().toISOString() });
       continue;
     }
+    // O Filme fica esperando a escolha do storyboard: quem depende dele espera também (roda depois).
+    if (antes.some((a) => esperando.has(a))) {
+      esperando.add(id);
+      await atualizarExecucao(execucoes[id], { status: "aguardando", saida: { texto: "Espera o Filme ficar pronto (escolha o storyboard); rode este nó depois." }, finished_at: null });
+      continue;
+    }
     try {
       await rodarNo(ctx, no, execucoes[id]);
+      if (no.tipo === "filme") esperando.add(id);
     } catch (err) {
       falhos.add(id);
       if (erroQueSobe(err)) parar = `Rodada parada: ${err instanceof Error ? err.message : motivoDaFalha(err)}`;

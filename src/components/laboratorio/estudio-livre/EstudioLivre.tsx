@@ -148,7 +148,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         value={livre ? LIVRE : pedido}
         onChange={(e) => setEscolhido(e.target.value)}
         aria-label="Cliente do trabalho"
-        className="h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[12.5px]"
+        className="h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[13px]"
         data-cliente-do-estudio-livre={livre ? "livre" : pedido}
       >
         <option value={LIVRE}>Livre</option>

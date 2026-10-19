@@ -306,5 +306,8 @@ export const VARIANTES_DAS_FUNCOES: VariantesDeTeste = {
   "mesa-motion/index.ts": [{ f: `({ tipo: "apresentacao" })` }, { f: `({ tipo: "filme_marca" })` }],
   "mesa-proposta/evolucao.ts": [{ campos: `[{ chave: "capa.headline", tipo: "texto" }, { chave: "solucao.frentes", tipo: "lista" }, { chave: "solucao.passos", tipo: "lista" }]` }],
   // Laboratório (19/10): o ajudante texto() recebe o esquema de cada nó especialista.
-  "laboratorio/executar.ts": ["ESQUEMA_DA_COPY", "ESQUEMA_DO_CARROSSEL", "ESQUEMA_DO_ANUNCIO"].map((nome) => ({ o: `({ esquema: ${nome} })` })),
+  // v3 (20/10): os especialistas de criação (ESPECIALISTAS[tipo].esquema) passam pelo mesmo ajudante.
+  "laboratorio/executar.ts": ["ESQUEMA_DA_COPY", "ESQUEMA_DO_CARROSSEL", "ESQUEMA_DO_ANUNCIO", "ESQUEMA_DA_OFERTA", "ESQUEMA_DO_FUNIL"]
+    .concat(["avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"].map((t) => `ESPECIALISTAS.${t}.esquema`))
+    .map((nome) => ({ o: `({ esquema: ${nome} })` })),
 };

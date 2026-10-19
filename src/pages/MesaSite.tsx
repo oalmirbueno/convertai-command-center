@@ -28,6 +28,9 @@ import ListaDeSites from "@/components/mesa-site/ListaDeSites";
 import { usePreviaEmCache, useSiteAberto } from "@/components/mesa-site/siteApi";
 import EtapaComBarra from "@/components/mesa-site/BarraDaEtapa";
 import { pendenciasDasEtapas } from "@/components/mesa-site/estadoDoSite";
+// Gravyx (19/10): galeria de modelos e importar site (embaixo da lista) e o editor de código (ícone ao lado do nome).
+import GaleriaDeModelos from "@/components/mesa-site/GaleriaDeModelos";
+import BotaoDoCodigo from "@/components/mesa-site/BotaoDoCodigo";
 
 /**
  * Mesa Site (/mesa-site, só equipe: admin, gestor e design), frente SIT
@@ -256,6 +259,7 @@ export default function MesaSite() {
                   <span className="truncate">{site.nome}</span>
                 </button>
                 <AtalhoDaPrevia siteId={site.id} />
+                <BotaoDoCodigo site={site} />
               </>
             }
           />
@@ -301,6 +305,7 @@ export default function MesaSite() {
           {!site && (
             <RegiaoRolavel modo="lg" memoria={`mesa-site:${clientId}:sites`} className="pb-6">
               {sitesCarregando ? <Carregando forma="lista" rotulo="Lendo os sites" /> : <ListaDeSites marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} icone={<Plus className="h-4 w-4" />} />}
+              {!sitesCarregando && <GaleriaDeModelos marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} />}
             </RegiaoRolavel>
           )}
           {site && (

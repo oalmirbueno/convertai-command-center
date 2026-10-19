@@ -26,8 +26,19 @@ import {
   TIPOS_DE_NO,
   gravityDe,
   configDe,
+  ACAO_DO_ALVO,
+  dadosDoTipo,
+  ehExecutavel,
+  ehPedidoDeProjetoCompleto,
+  ENTRADAS_ACEITAS,
+  ETAPA_DO_TIPO,
+  ETAPAS_DO_PROJETO,
+  formatosDoFilme,
+  MAX_NOS_DO_PROJETO_COMPLETO,
+  organizarPorEtapas,
 } from "./regras.ts";
-import { TEMPLATES_OFICIAIS } from "./templates.ts";
+import { TEMPLATES_OFICIAIS, TEMPLATES_OFICIAIS_V2 } from "./templates.ts";
+import { BLOCO_DO_PROJETO_COMPLETO, ESQUEMA_DA_OFERTA, ESQUEMA_DO_FUNIL } from "./prompts.ts";
 import { perguntaDaMelhorLogo, promptDaLogo, CAMINHOS_DE_LOGO } from "./prompts.ts";
 
 const no = (id: string, tipo: NoDoCanvas["tipo"], dados: Record<string, unknown> = {}): NoDoCanvas => ({ id, tipo, x: 0, y: 0, dados });
@@ -198,4 +209,169 @@ Deno.test("logo: prompt de especialista (símbolo + logotipo, fundo liso, sem mo
   const q = perguntaDaMelhorLogo([{ apelido: "v1", titulo: "A", descricao: "a" }, { apelido: "v2", titulo: "B", descricao: "b" }]);
   assertEquals(q.melhor.type, "choice");
   assertEquals(Object.keys(q.melhor.criteria), ["v1", "v2"]);
+});
+
+// ------------------------------------------------------------------ v2 (ESPEC-LABORATORIO-v2.md)
+
+Deno.test("v2: nós novos, ligações do contrato e Pôr no ar só recebe (ninguém recebe dele)", () => {
+  for (const t of ["pesquisa", "oferta", "funil", "filme", "por_no_ar"] as const) {
+    assert((TIPOS_DE_NO as readonly string[]).indexOf(t) >= 0, t);
+    assert(ehExecutavel(t), t);
+  }
+  const c = canvas([
+    no("c", "contexto"), no("p", "pesquisa"), no("p2", "pesquisa"), no("o", "oferta"), no("f", "funil"), no("cp", "copy"), no("l", "landing"),
+    no("i", "imagem"), no("a", "anuncio"), no("fi", "filme"), no("n", "por_no_ar"), no("lg", "logo"), no("g", "gravity"),
+  ]);
+  // A cadeia do projeto completo vale.
+  for (const [de, para] of [["c", "p"], ["p", "p2"], ["p", "o"], ["p", "f"], ["o", "f"], ["o", "cp"], ["f", "cp"], ["f", "l"], ["o", "i"], ["o", "a"], ["i", "a"], ["l", "n"], ["a", "n"], ["fi", "n"], ["o", "fi"], ["lg", "fi"]]) {
+    assertEquals(motivoParaNaoLigar(c, de, para), null, `${de} → ${para}`);
+  }
+  // Ninguém recebe o Pôr no ar; o funil não recebe imagem; logo não recebe pesquisa; base comum não recebe oferta.
+  for (const t of TIPOS_DE_NO) assertEquals(ENTRADAS_ACEITAS[t].indexOf("por_no_ar"), -1, t);
+  assertMatch(motivoParaNaoLigar(c, "n", "a")!, /não entra em Anúncio/);
+  assertMatch(motivoParaNaoLigar(c, "i", "f")!, /não entra em Funil/);
+  assertMatch(motivoParaNaoLigar(c, "p", "lg")!, /não entra em Logo/);
+  assertMatch(motivoParaNaoLigar(c, "o", "g")!, /não entra em Base comum/);
+});
+
+Deno.test("v2: campos dos nós novos (alvo e formato validados; o resto ignorado com aviso)", () => {
+  assertEquals(dadosDoTipo("por_no_ar", { alvo: "subir_anuncio_pausado", operador: "default", instrucao: "x", verba: 100 }), { dados: { alvo: "subir_anuncio_pausado", operador: "default", instrucao: "x" }, ignorados: ["verba"] });
+  assertEquals(dadosDoTipo("por_no_ar", { alvo: "ativar_campanha" }).ignorados, ["alvo"]);
+  assertEquals(dadosDoTipo("filme", { ideia: "a", formato: "9:16" }).dados, { ideia: "a", formato: "9:16" });
+  assertEquals(dadosDoTipo("filme", { formato: "anuncio" }).ignorados, ["formato"]);
+  assertEquals(dadosDoTipo("copy", { formato: "9:16" }).ignorados, ["formato"]);
+  assertEquals(dadosDoTipo("pesquisa", { tema: "t", modelo_id: "m" }).dados, { tema: "t", modelo_id: "m" });
+  assertEquals(dadosDoTipo("oferta", { produto: "p", preco: "47 reais" }).dados, { produto: "p", preco: "47 reais" });
+  assertEquals(formatosDoFilme(undefined), ["16:9", "9:16"]);
+  assertEquals(formatosDoFilme("1:1"), ["1:1"]);
+  // action_kind do vocabulário fechado de operator_approvals (anúncio sobe pausado = publicar, nunca ativar).
+  assertEquals(ACAO_DO_ALVO, { publicar_site: "publicar", subir_anuncio_pausado: "publicar", conectar_pagina: "alterar_permissoes", outro: "publicar" });
+});
+
+Deno.test("v2: custo dos nós novos (pesquisa com busca na web, filme = storyboards, Pôr no ar de graça) e ordem", () => {
+  const c = canvas([no("c", "contexto", { texto: "x" }), no("p", "pesquisa", { modelo_id: "txt:teste" }), no("o", "oferta", { modelo_id: "txt:teste" }), no("f", "funil", { modelo_id: "txt:teste" }), no("fi", "filme", { modelo_id: "txt:teste" }), no("n", "por_no_ar")], [["c", "p"], ["p", "o"], ["o", "f"], ["c", "fi"], ["o", "n"]]);
+  const pesquisa = chamadasDoNo(c, c.nos[1]);
+  assertEquals(pesquisa.length, 1);
+  assertEquals(pesquisa[0].buscas_web, 3);
+  assert(pesquisa[0].tokens_entrada > 10_000);
+  assertEquals(chamadasDoNo(c, c.nos[4])[0].tokens_saida, 7_000);
+  assertEquals(chamadasDoNo(c, c.nos[5]), []);
+  const preco = (ch: Chamada) => 0.01 + (ch.buscas_web || 0) * 0.01;
+  const r = somarEstimativa(c, ["c", "p", "o", "f", "fi", "n"], preco);
+  assertEquals(r.por_no.map((x) => [x.no_id, x.custo_usd]), [["p", 0.04], ["o", 0.01], ["f", 0.01], ["fi", 0.01], ["n", 0]]);
+  // Ordem: pesquisa antes da oferta, oferta antes do funil e do Pôr no ar.
+  const ordem = ordemTopologica(c);
+  assert(ordem.indexOf("p") < ordem.indexOf("o") && ordem.indexOf("o") < ordem.indexOf("f") && ordem.indexOf("o") < ordem.indexOf("n"));
+});
+
+Deno.test("v2: o pedido de montar empresa/produto/funil liga o projeto completo; post para a marca não", () => {
+  for (const p of ["Quero montar uma empresa de marmitas", "monta um produto low ticket de receitas", "Funil de vendas completo para a clínica", "criar uma marca do zero", "Quero lançar um infoproduto", "planejar o lançamento do curso", "abrir minha loja online"]) {
+    assert(ehPedidoDeProjetoCompleto(p), p);
+  }
+  for (const p of ["criar um post para a marca", "Montar um carrossel sobre a marca", "logo para a padaria", "3 criativos de anúncio", "post de lançamento do produto"]) {
+    assertEquals(ehPedidoDeProjetoCompleto(p), false, p);
+  }
+  assertMatch(BLOCO_DO_PROJETO_COMPLETO, /até 40 nós/);
+  assertMatch(BLOCO_DO_PROJETO_COMPLETO, /Pesquisa: contexto, midia, pesquisa/);
+});
+
+/** Um projeto completo como o agente devolve: 45 nós pedidos, ligados em cadeia por etapa. */
+function planoGrande(): unknown[] {
+  const ops: Array<Record<string, unknown>> = [
+    { op: "criar", ref: "ctx", tipo: "contexto", dados_json: JSON.stringify({ titulo: "Pedido", texto: "Marmitas fit" }) },
+    { op: "criar", ref: "pes", tipo: "pesquisa", dados_json: JSON.stringify({ tema: "mercado de marmitas" }) },
+    { op: "criar", ref: "ofe", tipo: "oferta", dados_json: "{}" },
+    { op: "criar", ref: "fun", tipo: "funil", dados_json: "{}" },
+    { op: "criar", ref: "cpl", tipo: "copy", dados_json: JSON.stringify({ formato: "landing" }) },
+    { op: "criar", ref: "lan", tipo: "landing", dados_json: "{}" },
+    { op: "criar", ref: "cpa", tipo: "copy", dados_json: JSON.stringify({ formato: "anuncio" }) },
+    { op: "criar", ref: "gra", tipo: "gravity", dados_json: JSON.stringify({ prompt_base: "mesma cara" }) },
+    { op: "criar", ref: "anu", tipo: "anuncio", dados_json: "{}" },
+    { op: "criar", ref: "ar1", tipo: "por_no_ar", dados_json: JSON.stringify({ alvo: "publicar_site" }) },
+    { op: "criar", ref: "ar2", tipo: "por_no_ar", dados_json: JSON.stringify({ alvo: "subir_anuncio_pausado" }) },
+    { op: "ligar", de: "ctx", para: "pes" }, { op: "ligar", de: "pes", para: "ofe" }, { op: "ligar", de: "ofe", para: "fun" },
+    { op: "ligar", de: "ofe", para: "cpl" }, { op: "ligar", de: "fun", para: "cpl" }, { op: "ligar", de: "cpl", para: "lan" },
+    { op: "ligar", de: "ofe", para: "cpa" }, { op: "ligar", de: "cpa", para: "anu" },
+    { op: "ligar", de: "lan", para: "ar1" }, { op: "ligar", de: "anu", para: "ar2" }, { op: "ligar", de: "lan", para: "ar2" },
+  ];
+  // 34 criativos a mais (passa de 40 nós no total): os 5 últimos são recusados com recibo.
+  for (let i = 0; i < 34; i++) {
+    ops.push({ op: "criar", ref: `img${i}`, tipo: "imagem", dados_json: JSON.stringify({ titulo: `Criativo ${i + 1}`, proporcao: "4:5" }) });
+    ops.push({ op: "ligar", de: "ofe", para: `img${i}` });
+    ops.push({ op: "ligar", de: "gra", para: `img${i}` });
+  }
+  ops.push({ op: "organizar" });
+  return ops;
+}
+
+Deno.test("v2: projeto completo monta até 40 nós já ligados, válido e em colunas por etapa", () => {
+  const { operacoes } = lerPlano({ resposta: "Montei.", operacoes: planoGrande() }, "");
+  const r = aplicarOperacoes(canvasVazio(), operacoes, { projetoCompleto: true });
+  assertEquals(r.canvas.nos.length, MAX_NOS_DO_PROJETO_COMPLETO);
+  const recusas = r.recibos.filter((x) => !x.aceita);
+  // 11 + 34 = 45 pedidos: 5 criativos além do teto e as 10 ligações deles (o nó não existe).
+  assertEquals(recusas.filter((x) => x.op === "criar").length, 5);
+  assert(recusas.filter((x) => x.op === "criar").every((x) => /para em 40 nós/.test(x.recibo)));
+  assertEquals(recusas.filter((x) => x.op === "ligar").length, 10);
+  assertEquals(errosDoCanvas(r.canvas), []);
+  ordemTopologica(r.canvas);
+  // Colunas na ordem das etapas, sem buraco, e nenhuma ligação volta para a esquerda.
+  assertEquals(r.colunas.map((x) => x.titulo), ["Pesquisa", "Oferta", "Conteúdo", "Página", "Criativos", "Anúncios", "Pôr no ar"]);
+  const xDe = new Map(r.canvas.nos.map((n) => [n.id, n.x]));
+  for (const l of r.canvas.ligacoes) assert(xDe.get(l.de)! <= xDe.get(l.para)!, `${l.de} → ${l.para}`);
+  const xDoTipo = (t: string) => r.canvas.nos.find((n) => n.tipo === t)!.x;
+  assert(xDoTipo("pesquisa") < xDoTipo("oferta") && xDoTipo("oferta") < xDoTipo("copy") && xDoTipo("copy") < xDoTipo("landing"));
+  assert(xDoTipo("landing") < xDoTipo("imagem") && xDoTipo("imagem") < xDoTipo("anuncio") && xDoTipo("anuncio") < xDoTipo("por_no_ar"));
+  // Base comum fica na coluna dos criativos que ela alimenta.
+  assertEquals(xDoTipo("gravity"), xDoTipo("imagem"));
+  // Cada "criar" aceito já leva a posição final; "organizar" leva as posições e as colunas.
+  const criarPes = r.recibos.find((x) => x.aceita && x.op === "criar" && (x.operacao as { tipo?: string }).tipo === "pesquisa")!.operacao as { ref: string; x: number; y: number };
+  const pes = r.canvas.nos.find((n) => n.id === criarPes.ref)!;
+  assertEquals([criarPes.x, criarPes.y], [pes.x, pes.y]);
+  const org = r.recibos.find((x) => x.op === "organizar")!.operacao as { modo: string; colunas: unknown[]; posicoes: Record<string, unknown> };
+  assertEquals(org.modo, "etapas");
+  assertEquals(Object.keys(org.posicoes).length, 40);
+  // Sem o modo, o mesmo plano organiza por profundidade (v1) e não devolve colunas.
+  const simples = aplicarOperacoes(canvasVazio(), operacoes);
+  assertEquals(simples.colunas, []);
+});
+
+Deno.test("v2: organizar por etapas põe cada tipo na coluna da etapa dele", () => {
+  assertEquals(ETAPAS_DO_PROJETO.map((e) => e.titulo), ["Pesquisa", "Oferta", "Conteúdo", "Página", "Criativos", "Anúncios", "Pôr no ar"]);
+  for (const t of TIPOS_DE_NO) assert(t in ETAPA_DO_TIPO, t);
+  const c = canvas([no("n", "por_no_ar"), no("l", "landing"), no("c", "contexto"), no("cfg", "config"), no("i", "imagem")], [["c", "l"], ["l", "n"], ["cfg", "i"], ["c", "i"], ["i", "n"]]);
+  const r = organizarPorEtapas(c);
+  const x = (id: string) => r.canvas.nos.find((n) => n.id === id)!.x;
+  assert(x("c") < x("l") && x("l") < x("i") && x("i") < x("n"));
+  assertEquals(x("cfg"), x("i"));
+  assertEquals(r.colunas.map((k) => k.etapa), ["pesquisa", "pagina", "criativos", "no_ar"]);
+});
+
+Deno.test("v2: templates oficiais novos são canvas válidos, sem ciclo e organizados por etapa", () => {
+  assertEquals(TEMPLATES_OFICIAIS_V2.map((t) => t.nome), ["Produto low ticket do zero", "Funil de vendas completo", "Montar empresa / marca do zero", "Filme da marca"]);
+  for (const t of TEMPLATES_OFICIAIS_V2) {
+    assertEquals(errosDoCanvas(normalizarCanvas(t.canvas)), [], t.nome);
+    ordemTopologica(t.canvas);
+    assertEquals(t.canvas, organizarPorEtapas(t.canvas).canvas, t.nome);
+    assert(t.canvas.nos.length <= MAX_NOS_DO_PROJETO_COMPLETO, t.nome);
+  }
+  const low = TEMPLATES_OFICIAIS_V2[0].canvas;
+  for (const tipo of ["pesquisa", "oferta", "funil", "copy", "landing", "imagem", "anuncio", "por_no_ar"]) assert(low.nos.some((n) => n.tipo === tipo), tipo);
+  assertEquals(low.nos.filter((n) => n.tipo === "imagem").length, 3);
+  assert(low.nos.some((n) => n.tipo === "por_no_ar" && n.dados.alvo === "subir_anuncio_pausado"));
+  const funil = TEMPLATES_OFICIAIS_V2[1].canvas;
+  assertEquals(funil.nos.filter((n) => n.tipo === "landing").length, 2);
+  const empresa = TEMPLATES_OFICIAIS_V2[2].canvas;
+  for (const tipo of ["pesquisa", "agente", "logo", "landing", "imagem", "por_no_ar"]) assert(empresa.nos.some((n) => n.tipo === tipo), tipo);
+  const filme = TEMPLATES_OFICIAIS_V2[3].canvas;
+  assertEquals(filme.nos.map((n) => n.tipo), ["contexto", "filme"]);
+  // Os ids não colidem com os 6 da v1.
+  const ids = new Set([...TEMPLATES_OFICIAIS, ...TEMPLATES_OFICIAIS_V2].map((t) => t.id));
+  assertEquals(ids.size, 10);
+});
+
+Deno.test("v2: esquemas da oferta e do funil (tudo obrigatório, sem campo livre)", () => {
+  assertEquals(ESQUEMA_DA_OFERTA.schema.additionalProperties, false);
+  assertEquals([...ESQUEMA_DA_OFERTA.schema.required].sort(), Object.keys(ESQUEMA_DA_OFERTA.schema.properties).sort());
+  assertEquals([...ESQUEMA_DO_FUNIL.schema.required].sort(), Object.keys(ESQUEMA_DO_FUNIL.schema.properties).sort());
 });

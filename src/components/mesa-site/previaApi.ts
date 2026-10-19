@@ -49,7 +49,9 @@ export type RespostaDaEdicao =
   | { modo: "direto"; site: LinhaDoSite; edicao: EdicaoRegistrada | null; resumo: string; avisos?: string[] }
   | { modo: "nada"; resumo: string; site: LinhaDoSite }
   | OrcamentoDoAjuste
-  | { modo: "ajuste"; precisa_confirmar?: false; trabalho: TrabalhoDoMotor; edicao: EdicaoRegistrada | null; resumo: string; avisos?: string[] };
+  | { modo: "ajuste"; precisa_confirmar?: false; trabalho: TrabalhoDoMotor; edicao: EdicaoRegistrada | null; resumo: string; avisos?: string[] }
+  /** Gravyx: texto escrito no código, trocado pelo worker sem IA (trabalho "textos", sem custo). */
+  | { modo: "codigo_direto"; precisa_confirmar?: false; trabalho: TrabalhoDoMotor; edicao: EdicaoRegistrada | null; resumo: string; avisos?: string[] };
 
 export const CHAVES_DA_PREVIA = {
   dados: (siteId: string, assinatura: string) => ["mesa-site", "previa-dados", siteId, assinatura],
@@ -78,6 +80,14 @@ export function usePreviaDados(site: LinhaDoSite, ativo = true) {
     placeholderData: (anterior) => anterior,
   });
 }
+
+/**
+ * Prévia na nuvem (20/10/2026): o estado atual (rascunho, se houver; senão a
+ * versão salva) vira um deploy de prévia na Vercel da agência, com link que
+ * não depende da máquina nem do túnel. Sem custo de modelo; salvar a versão
+ * já sobe a prévia sozinho.
+ */
+export const pedirPreviaNaNuvem = (siteId: string) => chamarSite<{ trabalho: TrabalhoDoMotor; ja_na_fila?: boolean }>("previa_nuvem_pedir", { site_id: siteId });
 
 export function useEdicoesDaPrevia(siteId: string) {
   return useQuery({
@@ -111,11 +121,11 @@ export function useEditorDaPrevia(site: LinhaDoSite) {
     void qc.invalidateQueries({ queryKey: CHAVES.trabalhos(site.id) });
   };
 
-  const editar = (edicao: EdicaoDaPrevia | Record<string, unknown>, extra: { confirmar?: boolean; instrucao?: string; teto_usd?: number; modelo_id?: string } = {}) =>
+  const editar = (edicao: EdicaoDaPrevia | Record<string, unknown>, extra: { confirmar?: boolean; instrucao?: string; teto_usd?: number; modelo_id?: string; com_ia?: boolean } = {}) =>
     naFila(async () => {
       const r = await chamarSite<RespostaDaEdicao>("previa_editar", { site_id: site.id, edicao, ...extra });
       if (r && "site" in r && r.site) guardar(r.site);
-      if (r && (r.modo === "direto" || (r.modo === "ajuste" && !r.precisa_confirmar))) {
+      if (r && (r.modo === "direto" || r.modo === "codigo_direto" || (r.modo === "ajuste" && !r.precisa_confirmar))) {
         const avisos = (r as { avisos?: string[] }).avisos || [];
         if (avisos.length) toast.warning(avisos.join(" "));
         reler();

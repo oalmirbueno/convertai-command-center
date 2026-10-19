@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import { lerCatalogo, modelosAtivos, nomeDoModelo } from "@/lib/mesa/api";
-import { MODELOS_DO_LAB, OPERADOR_PADRAO, TIPOS_DE_NO, novoId, type CampoDoNo, type CanvasDoLab, type NoDoLab } from "@/lib/laboratorio/nos";
+import { MODELOS_DO_LAB, OPERADOR_PADRAO, TIPOS_DE_NO, novoId, type CampoDoNo, type CanvasDoLab, type NoDoLab, type TravaDoNoAr } from "@/lib/laboratorio/nos";
 import { caminhoDeEntrada, lerOperadoresExternos, type ExecucaoDoLab } from "@/lib/laboratorio/api";
 
 /** Campos que, vazios, seguem a Configuração ligada (ou o padrão da função). */
@@ -31,6 +31,7 @@ function useOpcoes(tipo: CampoDoNo["tipo"]): Opcao[] {
 }
 import ResultadoDoNo, { EstadoDoNo, Miniaturas, emAndamento } from "./ResultadoDoNo";
 import { IconeDoNo } from "./icones";
+import BlocosSemFonte, { type ResolverBloco } from "./BlocosSemFonte";
 
 /**
  * Inspetor do nó selecionado: os campos do tipo (texto, modelo, motor,
@@ -74,7 +75,7 @@ function Campo({ def, valor, onMudar, projetoId, opcional }: { def: CampoDoNo; v
     const base: Opcao[] = def.tipo === "escolha" ? (def.opcoes || []).map((o) => ({ valor: o.valor, rotulo: o.rotulo })) : doBanco;
     const atual = String(valor ?? "");
     // Valor salvo que não está mais na lista (modelo desligado, operador inativo): continua visível.
-    const opcoes: Opcao[] = (opcional || def.tipo === "motor" ? [{ valor: "", rotulo: def.tipo === "motor" ? "Padrão do Laboratório" : "Da configuração" }] : [])
+    const opcoes: Opcao[] = (def.vazio ? [{ valor: "", rotulo: def.vazio }] : opcional || def.tipo === "motor" ? [{ valor: "", rotulo: def.tipo === "motor" ? "Padrão do Laboratório" : "Da configuração" }] : [])
       .concat(base)
       .concat(atual && !base.some((o) => o.valor === atual) ? [{ valor: atual, rotulo: atual }] : []);
     return (
@@ -154,12 +155,19 @@ export default function Inspetor({
   onGerarTudoDaBase,
   onFechar,
   avisoDeLigacao,
+  onEscolherStoryboard,
+  escolhendo = null,
+  trava = null,
+  onResolverBloco,
 }: {
   canvas: CanvasDoLab;
   no: NoDoLab;
   projetoId: string;
   execucao: ExecucaoDoLab | undefined;
   rodando: boolean;
+  /** Filme: escolher o storyboard (filme_escolher). */
+  onEscolherStoryboard?: (indice: number) => void;
+  escolhendo?: number | null;
   onMudarDados: (dados: Record<string, unknown>) => void;
   /** Tenta ligar; devolve o motivo quando não pode. */
   onLigar: (de: string, para: string) => string | null;
@@ -169,6 +177,10 @@ export default function Inspetor({
   onGerarTudoDaBase: () => void;
   onFechar?: () => void;
   avisoDeLigacao: string | null;
+  /** Pôr no ar: travado por bloco de prova ou número sem fonte antes dele (travaDoNoAr). */
+  trava?: TravaDoNoAr | null;
+  /** Fonte confirmada ou edição de um bloco sem fonte (bloco_resolver). */
+  onResolverBloco?: ResolverBloco;
 }) {
   const def = TIPOS_DE_NO[no.tipo];
   const [motivo, setMotivo] = useState<string | null>(null);
@@ -199,6 +211,11 @@ export default function Inspetor({
       {def.campos.map((c) => (
         <Campo key={c.chave} def={c} valor={no.dados[c.chave]} onMudar={(v) => onMudarDados({ [c.chave]: v })} projetoId={projetoId} opcional={no.tipo !== "config" && SEGUEM_A_CONFIGURACAO.indexOf(c.chave) >= 0} />
       ))}
+      {no.tipo === "por_no_ar" ? (
+        <p className={texto.auxiliar} data-regra-no-ar="" title="Aprove em Precisa de você. Verba e ativação ficam com você. Acesso a Facebook, Instagram e Google só pelo Conectar, nunca por senha.">
+          Nada vai ao ar sem a sua aprovação. Anúncio sobe pausado.
+        </p>
+      ) : null}
 
       <div className="min-w-0">
         <label htmlFor="ligar-a" className={juntar(texto.rotulo, "mb-1 flex items-center")}>
@@ -251,13 +268,18 @@ export default function Inspetor({
         </ul>
       )}
 
-      <ResultadoDoNo execucao={execucao} compacto={false} />
+      {trava && trava.travado && onResolverBloco ? <BlocosSemFonte blocos={trava.blocos} motivo={trava.motivo} onResolver={onResolverBloco} /> : null}
+
+      <ResultadoDoNo execucao={execucao} compacto={false} tipo={no.tipo} onEscolherStoryboard={onEscolherStoryboard} escolhendo={escolhendo} />
+      {execucao && execucao.status === "pronto" && onResolverBloco ? (
+        <BlocosSemFonte blocos={execucao.saida.rascunho_sem_fonte.map((b) => ({ ...b, no_id: no.id }))} onResolver={onResolverBloco} />
+      ) : null}
 
       <div className="flex min-w-0 items-center border-t border-border pt-3">
         {def.roda && (
-          <button type="button" className={juntar(botao.primario, "h-8 px-3")} onClick={onRodar} disabled={rodando || emAndamento(execucao && execucao.status)} data-rodar-no={no.id}>
+          <button type="button" className={juntar(botao.primario, "h-8 px-3")} onClick={onRodar} disabled={rodando || emAndamento(execucao && execucao.status) || !!(trava && trava.travado)} data-rodar-no={no.id} title={trava && trava.travado ? trava.motivo : no.tipo === "por_no_ar" ? "Cria o pedido de aprovação (mostra o custo antes)" : "Mostra o custo antes de rodar"}>
             {rodando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-            Rodar
+            {no.tipo === "por_no_ar" ? "Pedir aprovação" : "Rodar"}
           </button>
         )}
         {no.tipo === "gravity" && (

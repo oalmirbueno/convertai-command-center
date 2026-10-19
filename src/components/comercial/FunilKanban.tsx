@@ -14,7 +14,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, ThumbsDown, Trophy } from "lucide-react";
+import { ArrowDownWideNarrow, ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, Thermometer, ThumbsDown, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -49,6 +49,17 @@ import {
 } from "@/lib/comercial";
 import { CampoDeBusca } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
+import Termometro from "./Termometro";
+import { resumoDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
+import {
+  FAIXAS_DO_FILTRO,
+  LIMITES_DA_TEMPERATURA,
+  ROTULO_DA_FAIXA,
+  passaNoFiltroDeTemperatura,
+  temperaturaDoLead,
+  type EventoDoLead,
+  type Temperatura,
+} from "./temperatura";
 
 /**
  * O funil, arrastável de ponta a ponta.
@@ -75,6 +86,11 @@ import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
 interface Props {
   leads: Lead[];
   atividades: Atividade[];
+  /**
+   * A história recente dos leads (commercial_lead_events): dá o tempo na
+   * etapa e os sinais da temperatura. Sem ela, o tempo cai na criação.
+   */
+  eventos?: EventoDoLead[];
   carregando: boolean;
   clientes: Array<{ id: string; nome: string }>;
   onAbrir: (lead: Lead) => void;
@@ -102,9 +118,13 @@ const estaAtrasado = (agenda: AgendaDoLead) => agenda.atrasadas > 0;
 
 const CLASSES_DO_FILTRO = ["todas", ...CLASSES_DO_LEAD.map((c) => c.id as string), "sem"];
 
+/** Lista vazia estável: um `[]` novo a cada render refaria as temperaturas. */
+const SEM_EVENTOS: EventoDoLead[] = [];
+
 export default function FunilKanban({
   leads,
   atividades,
+  eventos = SEM_EVENTOS,
   carregando,
   clientes,
   onAbrir,
@@ -122,6 +142,11 @@ export default function FunilKanban({
   // A visão separada por classe: cliente atual, upsell e novo prospect não
   // podem se misturar na leitura, mesmo dividindo os mesmos estágios.
   const [classe, setClasse] = useEstadoDoComercial<string>("funil:classe", "todas", { validar: umaDe(CLASSES_DO_FILTRO) });
+  // Temperatura: filtrar por faixa e, se pedido, pôr o mais quente no topo.
+  const [faixa, setFaixa] = useEstadoDoComercial<string>("funil:temperatura", "todas", { validar: umaDe(FAIXAS_DO_FILTRO) });
+  const [porTemperatura, setPorTemperatura] = useEstadoDoComercial<boolean>("funil:ordem-temperatura", false, {
+    validar: (v) => typeof v === "boolean",
+  });
   // No celular o quadro mostra UMA etapa por vez, escolhida nas Etapas: seis
   // colunas estreitas rolando de lado nao se leem em 380px de tela.
   const [etapaNoCelular, setEtapaNoCelular] = useEstadoDoComercial<EstagioId>("funil:etapa-no-celular", ESTAGIOS_ABERTOS[0], {
@@ -143,6 +168,17 @@ export default function FunilKanban({
   const agoraIso = new Date().toISOString();
   const termo = busca.trim().toLowerCase();
   const agendaDe = (lead: Lead) => agendaDoLead(atividades, lead.id, agoraIso);
+  // O minuto basta para a temperatura: recalcular a cada render por causa do
+  // segundo só gastaria. A régua mora em temperatura.ts (código puro).
+  const minuto = agoraIso.slice(0, 16);
+  const temperaturas = useMemo(() => {
+    const mapa = new Map<string, Temperatura>();
+    const agora = `${minuto}:00.000Z`;
+    for (const lead of leads) mapa.set(lead.id, temperaturaDoLead(lead, atividades, eventos, agora));
+    return mapa;
+  }, [leads, atividades, eventos, minuto]);
+  const temperaturaDe = (lead: Lead) => temperaturas.get(lead.id) as Temperatura;
+  const resumoDe = (lead: Lead) => resumoDaOportunidade(lead, atividades, eventos, agoraIso);
 
   const porEstagio = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
@@ -158,12 +194,20 @@ export default function FunilKanban({
       ) {
         continue;
       }
+      const temperatura = temperaturas.get(lead.id);
+      if (temperatura && !passaNoFiltroDeTemperatura(temperatura, faixa)) continue;
       mapa.get(lead.stage)!.push(lead);
     }
     // Atrasado primeiro: o quadro tem que empurrar para a mão o que está
     // parado, não escondê-lo no fim da coluna.
     for (const lista of mapa.values()) {
       lista.sort((a, b) => {
+        // Pedido "mais quente primeiro": a temperatura manda e a agenda
+        // desempata.
+        if (porTemperatura) {
+          const diferenca = (temperaturas.get(b.id)?.valor ?? 0) - (temperaturas.get(a.id)?.valor ?? 0);
+          if (diferenca !== 0) return diferenca;
+        }
         const agendaA = agendaDoLead(atividades, a.id, agoraIso);
         const agendaB = agendaDoLead(atividades, b.id, agoraIso);
         const atrasoA = estaAtrasado(agendaA) ? 0 : 1;
@@ -177,7 +221,7 @@ export default function FunilKanban({
       });
     }
     return mapa;
-  }, [leads, termo, classe, atividades, agoraIso]);
+  }, [leads, termo, classe, atividades, agoraIso, temperaturas, faixa, porTemperatura]);
 
   /**
    * Move na tela primeiro, grava depois.
@@ -249,6 +293,22 @@ export default function FunilKanban({
     { valor: "sem", rotulo: "Sem classe", contador: leads.filter((lead) => !lead.classe).length },
   ];
 
+  // Só os abertos contam: a temperatura é do que ainda está em jogo.
+  const abertos = leads.filter((lead) => (ESTAGIOS_ABERTOS as string[]).indexOf(lead.stage) >= 0);
+  const opcoesDeTemperatura = FAIXAS_DO_FILTRO.map((f) => ({
+    valor: f as string,
+    rotulo: f === "todas" ? "Todas" : ROTULO_DA_FAIXA[f],
+    descricao:
+      f === "todas"
+        ? "Todas as temperaturas"
+        : f === "quente"
+          ? `${LIMITES_DA_TEMPERATURA.quente} ou mais`
+          : f === "morno"
+            ? `de ${LIMITES_DA_TEMPERATURA.morno} a ${LIMITES_DA_TEMPERATURA.quente - 1}`
+            : `abaixo de ${LIMITES_DA_TEMPERATURA.morno}`,
+    contador: f === "todas" ? abertos.length : abertos.filter((lead) => temperaturas.get(lead.id)?.faixa === f).length,
+  }));
+
   const emLinha = Boolean(destinoDosFiltros);
   const filtros = (
     <div
@@ -264,6 +324,25 @@ export default function FunilKanban({
           valor={classe}
           onEscolher={setClasse}
         />
+        <SeletorCompacto
+          rotulo="Temperatura"
+          modo="lista"
+          icone={<Thermometer className="h-3.5 w-3.5" />}
+          opcoes={opcoesDeTemperatura}
+          valor={faixa}
+          onEscolher={setFaixa}
+        />
+        {/* Só o ícone; o nome mora no title (padrão do painel). */}
+        <button
+          type="button"
+          onClick={() => setPorTemperatura(!porTemperatura)}
+          aria-pressed={porTemperatura}
+          aria-label="Mais quente primeiro"
+          title={porTemperatura ? "Mais quente primeiro (ligado; toque para voltar à ordem da agenda)" : "Mais quente primeiro"}
+          className={juntar(botao.icone, "shrink-0", porTemperatura && "text-primary hover:text-primary")}
+        >
+          <ArrowDownWideNarrow className="h-4 w-4" aria-hidden="true" />
+        </button>
         <CampoDeBusca
           valor={busca}
           onMudar={setBusca}
@@ -345,6 +424,8 @@ export default function FunilKanban({
                     estagio={estagio}
                     leads={porEstagio.get(estagio) || []}
                     agendaDe={agendaDe}
+                    temperaturaDe={temperaturaDe}
+                    resumoDe={resumoDe}
                     arrastandoAlgo={Boolean(arrastando)}
                     onAbrir={(lead) => {
                       if (acabouDeArrastar.current) return;
@@ -402,6 +483,8 @@ function Coluna({
   estagio,
   leads,
   agendaDe,
+  temperaturaDe,
+  resumoDe,
   arrastandoAlgo,
   onAbrir,
 }: {
@@ -409,6 +492,8 @@ function Coluna({
   estagio: EstagioId;
   leads: Lead[];
   agendaDe: (lead: Lead) => AgendaDoLead;
+  temperaturaDe: (lead: Lead) => Temperatura;
+  resumoDe: (lead: Lead) => ResumoDaOportunidade;
   arrastandoAlgo: boolean;
   onAbrir: (lead: Lead) => void;
 }) {
@@ -467,6 +552,8 @@ function Coluna({
             key={lead.id}
             lead={lead}
             agenda={agendaDe(lead)}
+            temperatura={temperaturaDe(lead)}
+            resumo={resumoDe(lead)}
             onAbrir={onAbrir}
           />
         ))}
@@ -493,10 +580,14 @@ function Coluna({
 function Cartao({
   lead,
   agenda,
+  temperatura,
+  resumo,
   onAbrir,
 }: {
   lead: Lead;
   agenda: AgendaDoLead;
+  temperatura: Temperatura;
+  resumo: ResumoDaOportunidade;
   onAbrir: (lead: Lead) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -539,9 +630,14 @@ function Cartao({
           {(lead.name.trim().charAt(0) || "?").toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium leading-5 text-foreground max-sm:text-[14px]">
-            {lead.name}
-          </p>
+          {/* Nome e termômetro na mesma linha: a temperatura (com o porquê
+              no title) é a primeira leitura depois de quem é. */}
+          <div className="flex min-w-0 items-center">
+            <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground max-sm:text-[14px]">
+              {lead.name}
+            </p>
+            <Termometro temperatura={temperatura} className="ml-1.5" />
+          </div>
           {lead.company && (
             <p className={juntar(texto.auxiliar, "truncate")}>{lead.company}</p>
           )}
@@ -554,17 +650,24 @@ function Cartao({
             {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} entrada`}
             {lead.monthly_value === 0 && lead.one_off_value === 0 && "sem valor definido"}
           </p>
+          {/* Resumo rápido: chance da etapa e há quanto tempo está nela. */}
+          <p className="mt-0.5 truncate text-[11px] tabular-nums leading-4 text-muted-foreground max-sm:hidden" title={`Chance de fechar nesta etapa: ${resumo.chance}%`}>
+            {resumo.chance}% · {resumo.tempoNaEtapa}
+          </p>
           {/* O compromisso marcado, não uma anotação: é o que diz se este
-              lead tem alguém cuidando dele. */}
+              lead tem alguém cuidando dele. Com o quando, para não precisar
+              abrir o lead para saber se é hoje. */}
           {agenda.proxima ? (
             <p
               className={juntar(
                 "mt-1 truncate text-[11px] leading-4 max-sm:hidden",
                 atrasado ? "font-medium text-warning" : "text-muted-foreground",
               )}
+              title={`${rotuloDaAtividade(agenda.proxima.kind)}: ${agenda.proxima.title}${resumo.quando ? ` · ${resumo.quando}` : ""}`}
             >
               {atrasado ? "Atrasado: " : `${rotuloDaAtividade(agenda.proxima.kind)}: `}
               {agenda.proxima.title}
+              {resumo.quando && !atrasado ? ` · ${resumo.quando}` : ""}
             </p>
           ) : (
             <p className="mt-1 text-[11px] italic leading-4 text-muted-foreground/70 max-sm:hidden">

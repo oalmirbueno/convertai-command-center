@@ -18,6 +18,8 @@
   "dependencies": {
     "@opencode-ai/sdk": "1.18.33",
     "@supabase/supabase-js": "2.97.0",
-    "opencode-ai": "1.18.33"
+    "opencode-ai": "1.18.33",
+    "playwright-core": "1.63.0",
+    "typescript": "5.8.3"
   }
 }

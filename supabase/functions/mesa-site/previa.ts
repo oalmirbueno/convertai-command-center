@@ -3,10 +3,11 @@
  * mesa-site. As regras puras moram em modulos/site-previa.ts (o vitest e a tela leem).
  *
  * previa_dados    { site_id } -> cores, fontes, logo e imagens (URL assinada, 1 h) para a prévia rápida
- * previa_editar   { site_id, edicao, confirmar?, instrucao?, teto_usd?, modelo_id? }
+ * previa_editar   { site_id, edicao, confirmar?, instrucao?, teto_usd?, modelo_id?, com_ia? }
  *                 conteúdo: aplica na hora, registra (Desfazer) e leva ao site do motor (o pedido que espera na
  *                 fila ganha o pacote novo; senão, trabalho "conteudo", sem custo);
- *                 código: sem confirmar devolve o custo; com confirmar vira trabalho "ajustar" (teto reservado)
+ *                 texto do código (Gravyx): trabalho "textos", sem IA e sem custo (modo "codigo_direto");
+ *                 com_ia, ou o pedido livre: sem confirmar devolve o custo; com confirmar vira "ajustar" (teto reservado)
  * previa_desfazer { site_id, edicao_id } -> volta o ponto (conteúdo) ou para/desfaz o trabalho (código)
  * previa_edicoes  { site_id } -> as últimas edições, com o que já foi desfeito
  *
@@ -249,6 +250,15 @@ async function previaEditar(ctx: ContextoDaPrevia, ch: ChamadorDaEstrutura, c: R
     const r = await registrar(ctx, ch, s, { tipo: edicao.tipo, modo: "direto", resumo: plano.resumo, secao: plano.secao, alvos: plano.alvos, edicao });
     levarDepois(ctx, ch, s.id);
     return ctx.json({ modo: "direto", site, edicao: r.edicao, resumo: plano.resumo, avisos: r.aviso ? [r.aviso] : [], custo_usd: 0 });
+  }
+
+  // Gravyx (19/10): o texto escrito no código troca SEM IA. O worker acha o texto exato no código (busca
+  // literal), troca e recompila; se recusar (repetido, componente usado em vários lugares, lógica), a tela
+  // oferece pedir ao motor com IA (com_ia), com o custo antes e o Confirmar de sempre.
+  if (edicao.tipo === "texto_livre" && edicao.antes && edicao.valor && c.com_ia !== true && c.confirmar !== true) {
+    const trabalho = await ctx.pedirTrabalho(ch, s, { tipo: "textos", secao: edicao.secao, instrucao: textoLimpo(`Trocar no código "${edicao.antes}" por "${edicao.valor}"`, 300) }, { trocas: [{ antes: edicao.antes, depois: edicao.valor, secao: edicao.secao }] });
+    const r = await registrar(ctx, ch, s, { tipo: edicao.tipo, modo: "ajuste", resumo: plano.resumo, secao: plano.secao, alvos: [], edicao: { ...edicao, sem_ia: true }, trabalhoId: trabalho.id });
+    return ctx.json({ modo: "codigo_direto", trabalho, edicao: r.edicao, resumo: plano.resumo, avisos: r.aviso ? [r.aviso] : [], custo_usd: 0 });
   }
 
   // Código: o custo antes; o trabalho só entra com Confirmar.

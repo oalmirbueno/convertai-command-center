@@ -1,11 +1,12 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Brush, FolderOpen, Home, Palette, Workflow } from "lucide-react";
+import { Brush, FolderOpen, Home, Maximize2, Minimize2, Palette, Workflow } from "lucide-react";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import Etapas, { type ItemDeEtapa } from "@/components/sistema/Etapas";
 import { Carregando } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { espaco, juntar, larguraDaMesa } from "@/components/sistema/estilos";
+import { botao, espaco, juntar, larguraDaMesa } from "@/components/sistema/estilos";
+import { useModoFoco } from "@/lib/modoFoco";
 import { useClientesDoLab } from "@/components/laboratorio/Seletores";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 
@@ -23,6 +24,10 @@ import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
  * Cliente é opcional: "Livre" usa a carteira da agência. Com cliente, usa a
  * marca e a carteira dele, mas o resultado fica aqui e não vai para a Mesa.
  * Endereço: /laboratorio?aba=projetos&projeto=<id>
+ *
+ * Tela cheia (v2, 20/10/2026): em TODAS as abas, um botão só ícone liga o
+ * modo foco (src/lib/modoFoco.ts: some a casca do painel) e a área ocupa a
+ * janela inteira; no canvas, o próprio editor cobre a janela. Esc sai.
  */
 
 // Mesma chave da pré-carga (src/lib/mesa/preCarga.ts, PaginaLaboratorio): a Início abre sem esqueleto.
@@ -71,6 +76,18 @@ export default function Laboratorio() {
   // Vindo do seletor de mesas (?client=<id>), abre com o cliente da outra mesa; senão, o último escolhido aqui.
   const clienteDaUrl = params.get("client");
   const clienteId = clienteDaUrl && UUID.test(clienteDaUrl) ? clienteDaUrl : clienteGuardado && UUID.test(clienteGuardado) ? clienteGuardado : null;
+  const [cheia, setCheia] = useState(false);
+  useModoFoco("laboratorio", cheia);
+  useEffect(() => {
+    if (!cheia) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCheia(false);
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [cheia]);
+  // Com um projeto aberto, o botão fica na barra do editor (o canvas cobre a janela).
+  const noCanvas = aba === "projetos" && !!projeto;
 
   const ir = (nova: Aba, extra: Record<string, string | null> = {}) => {
     const p = new URLSearchParams(params);
@@ -96,15 +113,26 @@ export default function Laboratorio() {
   const itens: ItemDeEtapa[] = ABAS_DO_LABORATORIO.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: ICONES[a.valor], ajuda: AJUDAS[a.valor], dados: { "data-aba-do-lab": a.valor } }));
 
   return (
-    <div className={juntar(larguraDaMesa, espaco.pagina)} data-pagina-laboratorio="">
+    <div
+      className={juntar(cheia && !noCanvas ? "fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background px-4 py-3" : larguraDaMesa, espaco.pagina)}
+      data-pagina-laboratorio=""
+      data-tela-cheia={cheia ? "" : undefined}
+    >
       <CabecalhoDePagina
         titulo="Laboratório"
         ajuda="Trabalhos avulsos com ou sem cliente, com a inteligência das mesas. Nada gera sem o custo à vista e o seu confirmar; o que sai fica em Arquivos e não entra na Mesa do cliente."
         aoLado={<Etapas itens={itens} valor={aba} onEscolher={(v) => ir(v as Aba)} rotulo="Abas do Laboratório" soIcone />}
+        acoes={
+          noCanvas ? undefined : (
+            <button type="button" className={botao.icone} onClick={() => setCheia(!cheia)} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"} title={cheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} aria-pressed={cheia} data-tela-cheia-do-lab="">
+              {cheia ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          )
+        }
       />
       <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo" />}>
         {aba === "inicio" && <AbaInicio clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onAbrirProjeto={(id) => abrirProjeto(id)} />}
-        {aba === "projetos" && <AbaProjetos projetoAberto={projeto} onAbrir={abrirProjeto} clienteId={clienteId} clientes={clientes} />}
+        {aba === "projetos" && <AbaProjetos projetoAberto={projeto} onAbrir={abrirProjeto} clienteId={clienteId} clientes={clientes} telaCheia={cheia} onTelaCheia={setCheia} />}
         {aba === "estudio" && <EstudioLivre clientId={clienteId} />}
         {aba === "logos" && <AbaLogos clienteId={clienteId} onCliente={mudarCliente} clientes={clientes} onVerArquivos={() => ir("arquivos")} />}
         {aba === "arquivos" && <AbaArquivos />}

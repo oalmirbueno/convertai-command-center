@@ -32,6 +32,7 @@ export default function AgenteDoProjeto({
   onAplicar,
   semMoldura = false,
   acoes,
+  registro = null,
 }: {
   projetoId: string;
   /** A função planeja sobre o canvas salvo: salva o que está pendente antes. */
@@ -39,12 +40,22 @@ export default function AgenteDoProjeto({
   onAplicar: (ops: OperacaoDoAgente[]) => ResultadoDaAplicacao;
   semMoldura?: boolean;
   acoes?: ReactNode;
+  /** O que o Canvas Studio pediu e ouviu (já aplicado no quadro): entra na conversa, para ajustar em cima. */
+  registro?: { id: string; pedido: string; resposta: string } | null;
 }) {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [rascunho, setRascunho] = useState("");
   const [modelo, setModelo] = useState(MODELO_PADRAO_DO_LAB);
   const [pensando, setPensando] = useState(false);
   const rolagem = useRef<HTMLDivElement>(null);
+
+  const registrado = useRef<string | null>(null);
+  useEffect(() => {
+    if (!registro || registrado.current === registro.id) return;
+    registrado.current = registro.id;
+    setMensagens((ms) => ms.concat({ id: `su${registro.id}`, papel: "usuario", texto: registro.pedido }, { id: `sa${registro.id}`, papel: "agente", texto: `${registro.resposta}
+(Montado pelo Canvas Studio.)` }));
+  }, [registro]);
 
   useEffect(() => {
     const el = rolagem.current;

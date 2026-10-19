@@ -15,6 +15,8 @@ import EsteiraItemRow from "@/components/esteira/EsteiraItemRow";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
+import { useAchados } from "@/hooks/useAchados";
+import FaixaDeAchados from "@/components/achados/FaixaDeAchados";
 import {
   AjudaRecolhida,
   AreaDeTrabalho,
@@ -93,6 +95,9 @@ export default function AdminEsteira() {
   const [detalheId, setDetalheId] = useState<string | null>(null);
   // Cronômetro por cliente (frente CR): a ficha do cliente aberta no Ciclo conta no tempo dele.
   useClienteEmFoco(detalheId);
+  // 20/10/2026: achados "achado → ação" no topo do Ciclo. Falam do agora, então só na semana atual;
+  // com a janela de um cliente aberta, a faixa fala só dele.
+  const { achados } = useAchados({ clienteEmFoco: detalheId, ativo: semanaOffset === 0, agora });
   const [quemEntraAberto, setQuemEntraAberto] = useState(false);
   const [comecarAberto, setComecarAberto] = useState(false);
 
@@ -284,6 +289,7 @@ export default function AdminEsteira() {
               acao={<button type="button" disabled={atualizando} onClick={() => void atualizar()} className={juntar(botao.secundario, "h-8 text-[12px]")}>Tentar novamente</button>}
             />
           )}
+          {semanaOffset === 0 && <FaixaDeAchados className="mb-3" achados={achados} />}
           {carregando && clientes.length === 0 && !erro && <Carregando linhas={6} rotulo="Lendo a operação de cada cliente" />}
           {!erro && !carregando && visiveis.length === 0 && (
             <EstadoVazio

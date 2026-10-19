@@ -1,30 +1,33 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowUp, Brush, Globe, Images, LayoutTemplate, Loader2, Megaphone, Sparkles, SquarePen } from "lucide-react";
-import { Carregando, botao, campoTexto, espaco, juntar, superficie, texto } from "@/components/sistema";
+import { LayoutTemplate, Loader2 } from "lucide-react";
+import { Carregando, botao, espaco, juntar, superficie, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
-import { chaveDosProjetos, listarProjetos, listarTemplates, pedidoInicio, usarTemplate } from "@/lib/laboratorio/api";
-import { MODELO_PADRAO_DO_LAB } from "@/lib/laboratorio/nos";
+import { chaveDosProjetos, criarProjeto, listarProjetos, listarTemplates, pedidoInicio, perguntasDoPedido, usarTemplate, type PerguntaGuiada } from "@/lib/laboratorio/api";
+import { MODELO_PADRAO_DO_LAB, ROTULOS_DAS_PERGUNTAS, ehProjetoCompleto, preencherComExemplo } from "@/lib/laboratorio/nos";
+import { guardarPedidoPendente } from "@/lib/laboratorio/pedidoPendente";
 import { CartaoDeProjeto, PreviaDoCanvas } from "./CartaoDeProjeto";
-import { SeletorDeCliente, SeletorDeModelo, type ClienteDoLab } from "./Seletores";
+import CaixaDoPedido, { ATALHOS_DA_INICIO } from "./CaixaDoPedido";
+import PerguntasGuiadas from "./PerguntasGuiadas";
+import type { ClienteDoLab } from "./Seletores";
 
 /**
  * Início do Laboratório: uma caixa de pedido ("peça um projeto, uma arte,
  * um carrossel, uma logo..."), com modelo e cliente opcional. Os atalhos só
- * preenchem o pedido. Enviar chama `pedido_inicio`, que monta o projeto pelo
- * agente (sem gerar nada) e abre o canvas. Abaixo, os fluxos (oficiais e
- * pessoais, "Usar fluxo") e os projetos recentes.
+ * preenchem o pedido. Pedido de peça chama `pedido_inicio`, que monta o
+ * projeto pelo agente (sem gerar nada) e abre o canvas. Pedido de projeto
+ * completo (empresa, low ticket, funil; v2) cria o projeto e abre o canvas
+ * na hora: o Canvas Studio manda o `planejar` em modo projeto_completo e o
+ * dono vê o quadro sendo construído. Abaixo, os fluxos (oficiais e pessoais,
+ * "Usar fluxo") e os projetos recentes.
+ *
+ * v3: antes de criar o projeto completo, até 4 perguntas guiadas quando falta
+ * o essencial (perguntas_do_pedido); os exemplos só preenchem a caixa e as
+ * respostas (ou o "pular") seguem com o pedido para o Canvas Studio.
  */
 
-export const ATALHOS_DA_INICIO = [
-  { id: "carrossel", rotulo: "Carrossel", icone: Images, pedido: "Quero criar um carrossel de 5 lâminas sobre " },
-  { id: "criativos", rotulo: "Criativos", icone: Sparkles, pedido: "Quero 4 criativos de anúncio para " },
-  { id: "logo", rotulo: "Logo", icone: Brush, pedido: "Quero uma logo para a marca " },
-  { id: "landing", rotulo: "Landing page", icone: Globe, pedido: "Quero uma landing page para " },
-  { id: "post", rotulo: "Post", icone: SquarePen, pedido: "Quero um post com legenda sobre " },
-  { id: "anuncio", rotulo: "Anúncio", icone: Megaphone, pedido: "Quero um pacote de anúncio (títulos, texto e público) para " },
-] as const;
+export { ATALHOS_DA_INICIO };
 
 export default function AbaInicio({
   clienteId,
@@ -42,18 +45,55 @@ export default function AbaInicio({
   const [modelo, setModelo] = useState(MODELO_PADRAO_DO_LAB);
   const [enviando, setEnviando] = useState(false);
   const [usando, setUsando] = useState<string | null>(null);
+  const [atalho, setAtalho] = useState<string | null>(null);
+  const [perguntas, setPerguntas] = useState<{ pedido: string; completo: boolean; lista: PerguntaGuiada[] } | null>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
   const templates = useQuery({ queryKey: ["laboratorio", "templates"], queryFn: listarTemplates });
   const projetos = useQuery({ queryKey: chaveDosProjetos, queryFn: listarProjetos });
 
-  const enviar = async () => {
-    const p = pedido.trim();
+  const enviar = async (extra: { respostas?: string; pularPerguntas?: boolean } = {}) => {
+    // Com perguntas abertas, a caixa tem as respostas e o pedido é o de antes.
+    const p = perguntas ? perguntas.pedido : pedido.trim();
     if (!p || enviando) return;
+    const respondendo = !!perguntas;
+    const respostas = respondendo && !extra.pularPerguntas ? pedido.trim() : "";
     setEnviando(true);
     try {
-      const projeto = await pedidoInicio({ pedido: p, clientId: clienteId, modelo });
+      const completo = respondendo ? perguntas!.completo : ehProjetoCompleto(p, atalho, 0);
+      if (completo) {
+        // Perguntas guiadas antes de criar (só na primeira vez): o que falta do essencial.
+        if (!respondendo) {
+          const lista = await perguntasDoPedido(p, clienteId).catch(() => [] as PerguntaGuiada[]);
+          if (lista.length) {
+            setPerguntas({ pedido: p, completo: true, lista });
+            setPedido("");
+            setAtalho(null);
+            return;
+          }
+        }
+        // Projeto completo: abre o canvas já e constrói lá (Canvas Studio), à vista do dono.
+        const novo = await criarProjeto({ nome: p.replace(/\s+/g, " ").slice(0, 60), client_id: clienteId, contexto: respostas ? `${p}\n\n${respostas}` : p });
+        guardarPedidoPendente(novo.id, { pedido: p, modelo, modo: "projeto_completo", ...(respostas ? { respostas } : {}), ...(extra.pularPerguntas ? { pularPerguntas: true } : {}) });
+        void queryClient.invalidateQueries({ queryKey: chaveDosProjetos });
+        setPedido("");
+        setAtalho(null);
+        setPerguntas(null);
+        onAbrirProjeto(novo.id);
+        return;
+      }
+      const r = await pedidoInicio({ pedido: p, clientId: clienteId, modelo, ...(respostas ? { respostas } : {}), ...(extra.pularPerguntas ? { pularPerguntas: true } : {}) });
+      if (!r.projeto) {
+        // A função achou que é projeto completo e faltou o essencial: pergunta aqui mesmo.
+        setPerguntas({ pedido: p, completo: false, lista: r.perguntas });
+        setPedido("");
+        setAtalho(null);
+        return;
+      }
+      const projeto = r.projeto;
+      setPerguntas(null);
       void queryClient.invalidateQueries({ queryKey: chaveDosProjetos });
       setPedido("");
+      setAtalho(null);
       toast.success("Projeto montado", { description: "Confira o fluxo no canvas e rode com o custo à vista." });
       onAbrirProjeto(projeto.id);
     } catch (e) {
@@ -103,60 +143,44 @@ export default function AbaInicio({
 
   return (
     <div className={espaco.pagina} data-aba-inicio="">
-      <form
-        className="mx-auto w-full min-w-0 max-w-[760px]"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void enviar();
-        }}
-      >
-        <div className={juntar(superficie.painel, "min-w-0 p-3")}>
-          <textarea
-            ref={campoRef}
-            aria-label="Pedido para o Laboratório"
-            className={juntar(campoTexto, "min-h-[96px] resize-none border-0 bg-transparent px-1 text-[15px] focus-visible:ring-0 focus-visible:ring-offset-0")}
-            placeholder="Peça um projeto, uma arte, um carrossel, uma logo…"
-            value={pedido}
-            onChange={(e) => setPedido(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void enviar();
-              }
+      <div className="mx-auto w-full min-w-0 max-w-[760px]">
+        <CaixaDoPedido
+          ref={campoRef}
+          valor={pedido}
+          onMudar={(v) => {
+            setPedido(v);
+            if (!v.trim()) setAtalho(null);
+          }}
+          onEnviar={() => void enviar()}
+          enviando={enviando}
+          modelo={modelo}
+          onModelo={setModelo}
+          clienteId={clienteId}
+          onCliente={onCliente}
+          clientes={clientes}
+          atalhos={ATALHOS_DA_INICIO}
+          onAtalho={(a) => {
+            setPedido(a.pedido);
+            setAtalho(a.id);
+            if (campoRef.current) campoRef.current.focus();
+          }}
+          rotulo="Pedido para o Laboratório"
+          placeholder={perguntas ? "Responda aqui (ou toque num exemplo) e mande…" : "Peça um projeto completo, uma arte, um carrossel, uma logo…"}
+          tituloDoEnviar="Enviar o pedido (monta o projeto no canvas; nada é gerado ainda)"
+        />
+        {perguntas ? (
+          <PerguntasGuiadas
+            perguntas={perguntas.lista}
+            ocupado={enviando}
+            onExemplo={(q, ex) => {
+              setPedido((v) => preencherComExemplo(v, ROTULOS_DAS_PERGUNTAS[q.id] || q.pergunta.replace(/[?].*$/, ""), ex));
+              if (campoRef.current) campoRef.current.focus();
             }}
+            onPular={() => void enviar({ pularPerguntas: true })}
+            onFechar={() => setPerguntas(null)}
           />
-          <div className="mt-2 flex min-w-0 flex-wrap items-center">
-            <SeletorDeModelo valor={modelo} onMudar={setModelo} />
-            <span className="mx-1" />
-            <SeletorDeCliente valor={clienteId} onMudar={onCliente} clientes={clientes} />
-            <span className="flex-1" />
-            <button type="submit" className={juntar(botao.primario, "h-9 w-9 px-0")} disabled={enviando || !pedido.trim()} aria-label="Enviar o pedido" title="Enviar o pedido (monta o projeto; nada é gerado ainda)">
-              {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
-            </button>
-          </div>
-        </div>
-        <div className="mt-2 flex min-w-0 flex-wrap justify-center" role="group" aria-label="Atalhos do pedido">
-          {ATALHOS_DA_INICIO.map((a) => {
-            const I = a.icone;
-            return (
-              <button
-                key={a.id}
-                type="button"
-                className={juntar(botao.icone, "m-0.5")}
-                aria-label={a.rotulo}
-                title={a.rotulo}
-                data-atalho={a.id}
-                onClick={() => {
-                  setPedido(a.pedido);
-                  if (campoRef.current) campoRef.current.focus();
-                }}
-              >
-                <I className="h-4 w-4" aria-hidden="true" />
-              </button>
-            );
-          })}
-        </div>
-      </form>
+        ) : null}
+      </div>
 
       <section className="min-w-0" aria-label="Fluxos">
         <h2 className={juntar(texto.tituloSecao, "mb-3 flex items-center")}>

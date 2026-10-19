@@ -30,6 +30,20 @@
  * Logo (também da Mesa Identidade):
  * - logo_gerar { nome, client_id?, conceito?, paleta?, estilo?, n? = 4, motor?, qualidade?, projeto_id?, referencias? (global/laboratorio/…), confirmado }
  *   -> { execucao_id, projeto_id, imagens, escolha: { indice, caminho, motivo, confianca }, aviso_jev, custo_usd }
+ *
+ * v2 (Aceleriq-Laboratorio/ESPEC-LABORATORIO-v2.md): nós pesquisa, oferta, funil, filme e por_no_ar.
+ * - planejar / pedido_inicio aceitam modo: "projeto_completo" (ou detectam pelo pedido): até 40 nós já ligados, em
+ *   colunas por etapa (Pesquisa → Oferta → Conteúdo → Página → Criativos → Anúncios → Pôr no ar); devolvem modo e colunas.
+ * - filme_escolher { projeto_id, no_id, indice } -> { execucao_id, execucao } (storyboard escolhido, cenas na fila de render)
+ * - no_acompanhar { projeto_id, no_id } -> { execucao_id, execucao } (Filme: render e montagem; Pôr no ar: estado do pedido)
+ * v3 (clickmax-rea.md):
+ * - perguntas_do_pedido { pedido, client_id? } -> { perguntas: [{ id, pergunta, exemplos }], fonte, custo_usd } (Jev, até 4)
+ * - planejar / pedido_inicio: projeto completo sem o essencial -> { perguntas, operacoes: [] }; mande respostas ou pular_perguntas
+ * - bloco_resolver { projeto_id, no_id, bloco_id, modo: "fonte" | "editar", fonte? | texto? } -> { execucao_id, execucao }
+ *   (bloco rascunho_sem_fonte; enquanto houver algum antes do Pôr no ar, ele responde 409 rascunho_sem_fonte)
+ * Filme: mesa-motion (filme_criar, filme_salvar, storyboards_gerar, storyboard_escolher, cena_pedir, filme_ler, montar,
+ * render_status) com a sessão de quem pediu. Pôr no ar: só cria o pedido em operator_approvals; aprovado, o gatilho
+ * da migration 20261019233000 entrega a tarefa ao operador (operator_assign_task). Nada vai ao ar sem o dono.
  */
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { corsHeaders, identificar, json, respostaDeErro } from "./comum.ts";

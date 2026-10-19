@@ -260,7 +260,9 @@ describe("configuração do opencode com os superpoderes", () => {
     expect(oc).toMatch(/PRAZO_DA_SUBIDA_MS = 45_000/);
     const ex = ler("workers/motor-codigo/lib/executar.ts");
     expect(ex).toMatch(/subirOpencode\(pasta, modelo, medidor \? medidor\.url : null, \{ tipo: t\.tipo/);
-    expect(ex).toMatch(/eventosDasMarcas\(r\.marcas, \{ secao, rotulo: rotuloDaSecao\(secao\), motivo: r\.motivo, conferencia \}\)/);
+    // Gravyx (19/10): o rótulo da passada de correção é "a correção"; o das seções continua rotuloDaSecao.
+    expect(ex).toMatch(/eventosDasMarcas\(r\.marcas, \{ secao, rotulo: rotulo\(secao\), motivo: r\.motivo, conferencia \}\)/);
+    expect(ex).toContain('const rotulo = (secao: string) => (secao === "correcao" ? "a correção" : rotuloDaSecao(secao));');
     // A conferência de verdade roda depois do build do motor, e as marcas saem depois dela.
     expect(ex.indexOf("conferencia = conferirSecaoDoProjeto(pasta, secao)")).toBeGreaterThan(ex.indexOf("const b = await construirSite(pasta);"));
     expect(ex.indexOf("eventosDasMarcas(r.marcas")).toBeGreaterThan(ex.indexOf("conferencia = conferirSecaoDoProjeto(pasta, secao)"));

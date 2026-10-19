@@ -35,7 +35,7 @@ export const ROTULO_DO_ESTADO: Record<EstadoDoTrabalho, string> = {
  * de conteúdo feita na prévia (texto, imagem, cor, fonte, seções): sem modelo,
  * sem build, só o pacote e o commit, e o Vite da prévia recarrega sozinho.
  */
-export const TIPOS_DE_TRABALHO = ["construir", "ajustar", "desfazer", "revisar", "publicar", "zip", "conteudo"] as const;
+export const TIPOS_DE_TRABALHO = ["construir", "ajustar", "desfazer", "revisar", "publicar", "zip", "conteudo", "salvar", "descartar", "corrigir", "textos"] as const;
 export type TipoDeTrabalho = (typeof TIPOS_DE_TRABALHO)[number];
 
 export const ROTULO_DO_TIPO: Record<TipoDeTrabalho, string> = {
@@ -46,9 +46,19 @@ export const ROTULO_DO_TIPO: Record<TipoDeTrabalho, string> = {
   publicar: "Publicar",
   zip: "Guardar o código (zip)",
   conteudo: "Levar a edição da prévia ao site",
+  salvar: "Salvar a versão",
+  descartar: "Descartar o rascunho",
+  corrigir: "Corrigir o que a conferência achou",
+  textos: "Trocar texto no código (sem IA)",
 };
 
-export const TIPOS_QUE_GASTAM: TipoDeTrabalho[] = ["construir", "ajustar"];
+/**
+ * Gravyx (19/10/2026): "corrigir" é UMA passada do agente sobre o que a
+ * conferência no navegador achou (pedida no botão, nunca em laço). "salvar",
+ * "descartar" (rascunho x versão salva) e "textos" (troca literal de texto no
+ * código, sem IA) são máquina.
+ */
+export const TIPOS_QUE_GASTAM: TipoDeTrabalho[] = ["construir", "ajustar", "corrigir"];
 
 export const MESAS_DO_MOTOR = ["site", "motion", "apresentacao"] as const;
 export type MesaDoMotor = (typeof MESAS_DO_MOTOR)[number];
@@ -256,6 +266,7 @@ export function normalizarPedido(bruto: unknown): PedidoDoMotor {
 export function motivoParaRecusar(p: PedidoDoMotor, c: { estimativaUsd: number; saldoLivreUsd: number; temModelo: boolean }): { codigo: string; mensagem: string } | null {
   if (p.tipo === "ajustar" && !p.instrucao) return { codigo: "instrucao_vazia", mensagem: "Diga o que mudar na seção." };
   if (p.tipo === "ajustar" && !p.secao) return { codigo: "secao_vazia", mensagem: "Escolha a seção que vai mudar." };
+  if (p.tipo === "corrigir" && !p.instrucao) return { codigo: "instrucao_vazia", mensagem: "Diga o que a conferência achou para corrigir." };
   if (p.tipo === "construir" && !p.secoes.length) return { codigo: "secoes_vazias", mensagem: "Escolha ao menos uma seção para construir." };
   if (p.tipo === "desfazer" && !p.alvo_trabalho_id) return { codigo: "alvo_vazio", mensagem: "Diga qual trabalho desfazer." };
   if (pareceCredencialNoPedido(p.instrucao)) return { codigo: "credencial_no_pedido", mensagem: "O pedido tem senha, token ou chave. Credencial nunca passa pelo painel." };
@@ -473,7 +484,8 @@ export function normalizarTrabalho(b: unknown): TrabalhoDoMotor | null {
 
 /** Pode desfazer? Só trabalho de código terminado (feito ou parado no meio) com commit. */
 export function podeDesfazer(t: Pick<TrabalhoDoMotor, "estado" | "tipo" | "commit" | "commit_anterior">): boolean {
-  return (t.estado === "feito" || t.estado === "parado") && (t.tipo === "construir" || t.tipo === "ajustar") && !!t.commit && !!t.commit_anterior && t.commit !== t.commit_anterior;
+  const mexeNoCodigo = t.tipo === "construir" || t.tipo === "ajustar" || t.tipo === "corrigir" || t.tipo === "textos";
+  return (t.estado === "feito" || t.estado === "parado") && mexeNoCodigo && !!t.commit && !!t.commit_anterior && t.commit !== t.commit_anterior;
 }
 
 /** Pode voltar para a versão deste trabalho? Qualquer trabalho terminado que deixou commit. */

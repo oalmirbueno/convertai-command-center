@@ -32,6 +32,10 @@ import EmpresasCRM from "@/components/comercial/EmpresasCRM";
 import MarketingDaCasa from "@/components/comercial/MarketingDaCasa";
 import AgendaComercial from "@/components/comercial/AgendaComercial";
 import AtividadesDoLead from "@/components/comercial/AtividadesDoLead";
+import Termometro from "@/components/comercial/Termometro";
+import { listarEventosDoFunil } from "@/components/comercial/eventosDoFunil";
+import { resumoDaOportunidade } from "@/components/comercial/resumoDaOportunidade";
+import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/temperatura";
 import { FaixaDeNumeros } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
@@ -188,6 +192,9 @@ function useLarguraMinima(px: number): boolean {
   return cabe;
 }
 
+/** Lista vazia estável (um `[]` novo a cada render refaria as contas do funil). */
+const SEM_EVENTOS: EventoDoLead[] = [];
+
 const ABAS_VALIDAS: Aba[] = ["visao", "crm", "agenda", "metas", "campanhas", "marketing"];
 
 /**
@@ -285,6 +292,11 @@ export default function AdminComercial() {
     queryKey: ["comercial-atividades"],
     queryFn: listarAtividades,
   });
+  // A história recente de todos os leads: tempo na etapa e temperatura.
+  const { data: eventos = SEM_EVENTOS, isError: erroNosEventos } = useQuery({
+    queryKey: ["comercial-eventos"],
+    queryFn: listarEventosDoFunil,
+  });
   // Quem pode ser dono de um lead: funil de time sem dono é funil de
   // ninguém; dois ligam para o mesmo lead, ou nenhum liga.
   const { data: equipeBruta } = useTeamMembers();
@@ -332,7 +344,7 @@ export default function AdminComercial() {
   });
 
   // Leitura que falhou não vira "lista vazia": a tela avisa e oferece tentar de novo.
-  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas;
+  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas;
 
   const recarregar = () =>
     Promise.all([
@@ -340,6 +352,7 @@ export default function AdminComercial() {
       queryClient.invalidateQueries({ queryKey: ["comercial-campanhas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-metas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-atividades"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-eventos"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-empresas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-contatos"] }),
     ]);
@@ -567,6 +580,7 @@ export default function AdminComercial() {
           <FunilKanban
             leads={leads}
             atividades={atividades}
+            eventos={eventos}
             carregando={carregandoLeads}
             clientes={clientes}
             onAbrir={setLeadAberto}
@@ -627,6 +641,8 @@ export default function AdminComercial() {
           campanhas={campanhas}
           equipe={equipe}
           empresas={empresas}
+          atividades={atividades}
+          eventos={eventos}
           onFechar={() => {
             setLeadAberto(null);
             setNovoLead(false);
@@ -1135,6 +1151,8 @@ function EditorDeLead({
   campanhas,
   equipe,
   empresas,
+  atividades,
+  eventos,
   onFechar,
   onSalvo,
 }: {
@@ -1142,6 +1160,8 @@ function EditorDeLead({
   campanhas: Campanha[];
   equipe: Array<{ id: string; nome: string }>;
   empresas: Empresa[];
+  atividades: Atividade[];
+  eventos: EventoDoLead[];
   onFechar: () => void;
   onSalvo: () => Promise<unknown>;
 }) {
@@ -1285,6 +1305,7 @@ function EditorDeLead({
         <DialogHeader>
           <DialogTitle className="truncate pr-6 text-[15px]">{lead ? lead.name : "Novo lead"}</DialogTitle>
           {lead && <p className={texto.auxiliar}>{rotuloDoEstagio(lead.stage)}{lead.company ? ` · ${lead.company}` : ""}</p>}
+          {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
         </DialogHeader>
         <Etapas
           soIcone
@@ -1620,6 +1641,36 @@ function EditorDeLead({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * O resumo rápido no topo da janela do lead: temperatura (com o porquê no
+ * title), valor, chance, tempo na etapa e o próximo passo com o quando. O
+ * mesmo cálculo do cartão do funil (resumoDaOportunidade e temperatura.ts).
+ */
+function ResumoNoTopoDoLead({ lead, atividades, eventos }: { lead: Lead; atividades: Atividade[]; eventos: EventoDoLead[] }) {
+  const agoraIso = new Date().toISOString();
+  const resumo = resumoDaOportunidade(lead, atividades, eventos, agoraIso);
+  const temperatura = temperaturaDoLead(lead, atividades, eventos, agoraIso);
+  return (
+    <div className="-m-0.5 flex min-w-0 flex-wrap items-center text-[12px] tabular-nums text-muted-foreground [&>*]:m-0.5" aria-label="Resumo da oportunidade">
+      <Termometro temperatura={temperatura} className="mr-1" />
+      <span className="min-w-0 font-medium text-primary">{resumo.valor}</span>
+      <span aria-hidden="true">·</span>
+      <span className="min-w-0" title="Chance de fechar nesta etapa">{resumo.chance}% de chance</span>
+      <span aria-hidden="true">·</span>
+      <span className="min-w-0">{resumo.tempoNaEtapa}</span>
+      <span aria-hidden="true">·</span>
+      {resumo.proximoPasso ? (
+        <span className={juntar("min-w-0 truncate", resumo.atrasado && "font-medium text-warning")} title={resumo.proximoPasso}>
+          Próximo: {resumo.proximoPasso}
+          {resumo.quando ? ` · ${resumo.quando}` : ""}
+        </span>
+      ) : (
+        <span className="min-w-0 italic text-muted-foreground/70">sem próximo passo</span>
+      )}
+    </div>
   );
 }
 

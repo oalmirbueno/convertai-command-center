@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Film, Loader2, Send } from "lucide-react";
+import { Clapperboard, Film, FlaskConical, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -14,6 +15,7 @@ import { CHAVES, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, useProjetoDaMesa } from "./Comuns";
 import { criarVideosDaMarca, Rodada } from "./rodadaDoCompletar";
 import { andamentoDoFilme, lerFilme, montarFilme, pedirRenderDasCenas, registrarEntregaDoFilme, videoParaAprovacao, videosProntos, type FilmeResumo } from "./videosDaMarca";
+import { TEMPLATE_FILME_DA_MARCA, enderecoDoProjeto, usarTemplatePorNome } from "@/lib/laboratorio/api";
 
 const ROTULO_DO_TIPO: Record<string, string> = { apresentacao: "Apresentação em motion", filme_marca: "Filme cinematográfico" };
 
@@ -47,11 +49,16 @@ export function custoDoFilmeCinematografico(catalogo: ReturnType<typeof useMesa>
  * andamento (render da fila) e manda o vídeo pronto para aprovação.
  * 19/10/2026: a tela da Mesa Motion saiu a pedido do dono; o link para ela
  * saiu daqui e o filme segue só pela função (render, montagem e entrega).
+ * 20/10/2026 (Laboratório v2): o "Filme cinematográfico" abre o Laboratório
+ * com o fluxo oficial "Filme da marca" para o cliente (template_usar com
+ * client_id) e o projeto já aberto no canvas: lá saem os 3 storyboards, a
+ * escolha no próprio nó, o render e o vídeo. A apresentação em motion segue aqui.
  */
 export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: string }) {
   const mesa = useMesa();
   const { projeto, guardar } = useProjetoDaMesa();
   const qc = useQueryClient();
+  const navegar = useNavigate();
   const avisarErro = useAvisarErro();
   const [aberta, setAberta] = useState(false);
   const [pedido, setPedido] = useState({ apresentacao: true, filme: false });
@@ -74,6 +81,20 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
       setAberta(false);
     } catch (e) {
       avisarErro(e, "O vídeo da marca não foi criado");
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  /** Filme cinematográfico: projeto novo do fluxo "Filme da marca" no Laboratório, para este cliente. */
+  const abrirFilmeNoLaboratorio = async () => {
+    setOcupado("filme-lab");
+    try {
+      const p = await usarTemplatePorNome(TEMPLATE_FILME_DA_MARCA, mesa.clientId || null);
+      setAberta(false);
+      navegar(enderecoDoProjeto(p.id, mesa.clientId || null));
+    } catch (e) {
+      avisarErro(e, "O Laboratório não abriu o Filme da marca");
     } finally {
       setOcupado(null);
     }
@@ -187,25 +208,26 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
                 <span className={juntar(texto.auxiliar, "block")}>Logo sting, abertura, paleta, tipografia, aplicações e cartão final. Sem IA.</span>
               </span>
             </label>
-            <label className={juntar(texto.corpo, "flex items-start py-2")}>
-              <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 accent-primary" checked={pedido.filme} onChange={(e) => setPedido({ ...pedido, filme: e.target.checked })} />
+            <button
+              type="button"
+              className={juntar(texto.corpo, "flex w-full items-start rounded-md py-2 text-left hover:bg-muted/60 disabled:opacity-50")}
+              onClick={() => void abrirFilmeNoLaboratorio()}
+              disabled={!!ocupado}
+              title="Abre o Laboratório com o fluxo Filme da marca para este cliente"
+              data-filme-no-laboratorio=""
+            >
+              {ocupado === "filme-lab" ? <Loader2 className="mr-2 mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" /> : <FlaskConical className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
               <span className="min-w-0">
                 <span className="block">Filme cinematográfico</span>
-                <span className={juntar(texto.auxiliar, "block")}>3 storyboards com IA.</span>
+                <span className={juntar(texto.auxiliar, "block")}>Abre no Laboratório: 3 storyboards com IA, você escolhe no nó e ele renderiza. Custo antes de rodar.</span>
               </span>
-            </label>
-            {pedido.filme && (
-              <div className="flex min-w-0 flex-wrap items-center">
-                <span className={juntar(texto.rotulo, "m-1")}>Modelo</span>
-                <SeletorDoMotion valor={modeloMotion} onEscolher={setModeloMotion} />
-              </div>
-            )}
+            </button>
           </div>
           <DialogFooter>
             <button type="button" className={botao.discreto} onClick={() => setAberta(false)} disabled={!!ocupado}>
               Cancelar
             </button>
-            <button type="button" className={botao.primario} disabled={!!ocupado || (!pedido.apresentacao && !pedido.filme)} onClick={() => void criar()} data-confirmar-video="">
+            <button type="button" className={botao.primario} disabled={!!ocupado || !pedido.apresentacao} onClick={() => void criar()} data-confirmar-video="">
               {ocupado === "criar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               Confirmar{custoFilme == null ? " (preço a conferir)" : custoFilme > 0 ? ` (${usd(custoFilme)})` : " (sem custo de IA)"}
             </button>

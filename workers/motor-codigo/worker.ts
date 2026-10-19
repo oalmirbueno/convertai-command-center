@@ -22,6 +22,8 @@
  *   MOTOR_PREVIA_MINUTOS prévia parada desliga depois disso (padrão 60)
  *   MOTOR_PRAZO_MIN      prazo de cada passada do agente (padrão 15)
  *   VERCEL_TOKEN, VERCEL_TEAM_ID   publicação (desligada sem elas)
+ *   MOTOR_CHROMIUM       caminho de um Chromium para a conferência no navegador (opcional: sem ele,
+ *                        o motor usa o Chromium do Playwright, o Edge ou o Chrome da máquina)
  *   SUPERPOWERS_MODO     nativo (padrão) ou plugin: como as skills do Superpowers
  *                        (vendor/superpowers, v6.4.2) entram no opencode; o plugin
  *                        que não sobe em 45 s cai sozinho para o nativo. O modo plugin
@@ -45,9 +47,10 @@ import { executarTrabalho } from "./lib/executar.ts";
 import { acharPython } from "./modelo-site/scripts/uiux.mjs";
 import { desligarTodas, limparPrevias, temCloudflared } from "./lib/previa.ts";
 import { temChave } from "./lib/opencode.ts";
+import { caminhoDoTsc } from "./lib/tipos.ts";
 import { aoPedirParada, avisarSupervisor, encerrarCanal, esperaQueAcorda } from "../supervisor/canal.ts";
 
-const VERSAO = "motor-codigo 0.2.0 (opencode 1.18.33, superpowers v6.4.2)";
+const VERSAO = "motor-codigo 0.3.0 (opencode 1.18.33, superpowers v6.4.2, rascunho e conferência no navegador)";
 
 export function configDoAmbiente() {
   return {
@@ -82,6 +85,9 @@ async function capacidades(python: string | null = null) {
     anthropic: temChave("anthropic"),
     openai: temChave("openai"),
     vercel: !!(process.env.VERCEL_TOKEN || "").trim(),
+    // Gravyx (19/10): conferência de tipos e conferência no navegador (o Chromium só é aberto no trabalho).
+    tipos: !!caminhoDoTsc(),
+    navegador: await import("playwright-core").then(() => true, () => false),
   };
 }
 

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, type CSSProperties, type DragEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, type CSSProperties, type DragEvent } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -16,7 +16,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Loader2, Play } from "lucide-react";
+import { Loader2, Lock, Play } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema";
 import { TIPOS_DE_NO, resumoDoNo, type CanvasDoLab, type NoDoLab, type TipoDeNo } from "@/lib/laboratorio/nos";
 import type { ExecucaoDoLab } from "@/lib/laboratorio/api";
@@ -38,6 +38,12 @@ interface DadosDoCartao extends Record<string, unknown> {
   execucao: ExecucaoDoLab | undefined;
   rodando: boolean;
   onRodar: (id: string) => void;
+  /** Animação de construção: atraso de entrada (ms); undefined = já estava no quadro. */
+  atraso: number | undefined;
+  escolhendo: number | null;
+  onEscolherStoryboard: (noId: string, indice: number) => void;
+  /** Pôr no ar travado por bloco sem fonte: o motivo (null = livre). */
+  trava: string | null;
 }
 
 const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<DadosDoCartao>>) {
@@ -45,12 +51,19 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
   const def = TIPOS_DE_NO[no.tipo];
   const borda = execucao ? ESTADOS[execucao.status].borda : def.cor;
   const resumo = resumoDoNo(no);
+  const construindo = typeof data.atraso === "number";
   return (
     <div
-      className={juntar("w-[248px] min-w-0 rounded-md border-2 bg-background p-2.5 text-left", selected && "ring-2 ring-primary/50", execucao && execucao.status === "rodando" && "animate-pulse")}
-      style={{ borderColor: borda }}
+      className={juntar(
+        "w-[248px] min-w-0 rounded-md border-2 bg-background p-2.5 text-left",
+        selected && "ring-2 ring-primary/50",
+        execucao && execucao.status === "rodando" && "animate-pulse",
+        construindo && "duration-300 animate-in fade-in-0 zoom-in-90 slide-in-from-left-3 fill-mode-both motion-reduce:animate-none",
+      )}
+      style={{ borderColor: borda, ...(construindo ? { animationDelay: `${data.atraso}ms` } : null) }}
       data-no-do-quadro={no.id}
       data-tipo-do-no={no.tipo}
+      data-construindo={construindo ? String(data.atraso) : undefined}
     >
       {def.entradas.length > 0 ? <Handle type="target" position={Position.Left} id="entrada" style={{ width: 12, height: 12, background: "#fff", border: `2px solid ${def.cor}` }} /> : null}
       <div className="flex min-w-0 items-center">
@@ -59,6 +72,11 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
         </span>
         <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{def.rotulo}</span>
         {execucao ? <EstadoDoNo status={execucao.status} /> : null}
+        {data.trava ? (
+          <span className="ml-1 inline-flex shrink-0 text-warning" title={data.trava} aria-label={data.trava} role="img" data-trava-no-quadro="">
+            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        ) : null}
         {def.roda && (
           <button
             type="button"
@@ -67,7 +85,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
               e.stopPropagation();
               data.onRodar(no.id);
             }}
-            disabled={data.rodando || emAndamento(execucao && execucao.status)}
+            disabled={data.rodando || emAndamento(execucao && execucao.status) || !!data.trava}
             aria-label={`Rodar ${def.rotulo}`}
             title={`Rodar ${def.rotulo} (mostra o custo antes)`}
           >
@@ -76,7 +94,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
         )}
       </div>
       {resumo ? <p className={juntar(texto.auxiliar, "mt-1 line-clamp-2")}>{resumo}</p> : <p className={juntar(texto.auxiliar, "mt-1 italic")}>Toque para ajustar</p>}
-      <ResultadoDoNo execucao={execucao} />
+      <ResultadoDoNo execucao={execucao} tipo={no.tipo} escolhendo={data.escolhendo} onEscolherStoryboard={(i) => data.onEscolherStoryboard(no.id, i)} />
       <Handle type="source" position={Position.Right} id="saida" style={{ width: 12, height: 12, background: def.cor, border: "2px solid #fff" }} />
     </div>
   );
@@ -99,6 +117,11 @@ export default function QuadroDoLab({
   onRodar,
   onSoltar,
   onViewport,
+  revelar,
+  ajustarVista = 0,
+  escolhendo = null,
+  onEscolherStoryboard = () => undefined,
+  travas = {},
 }: {
   canvas: CanvasDoLab;
   execucoes: Record<string, ExecucaoDoLab>;
@@ -111,8 +134,28 @@ export default function QuadroDoLab({
   onRodar: (id: string) => void;
   onSoltar: (tipo: TipoDeNo, pos: { x: number; y: number }) => void;
   onViewport: (v: Viewport) => void;
+  /** Construção (Canvas Studio): atraso de entrada de cada nó novo, coluna por coluna. */
+  revelar?: Record<string, number> | null;
+  /** Muda o número: o quadro se ajusta para caber tudo (depois de construir ou organizar). */
+  ajustarVista?: number;
+  escolhendo?: { no: string; indice: number } | null;
+  onEscolherStoryboard?: (noId: string, indice: number) => void;
+  /** Motivo da trava de cada Pôr no ar travado (por id). */
+  travas?: Record<string, string>;
 }) {
   const rf = useReactFlow();
+
+  useEffect(() => {
+    if (!ajustarVista) return;
+    const id = window.setTimeout(() => {
+      try {
+        void rf.fitView({ padding: 0.15, maxZoom: 1, duration: 400 });
+      } catch {
+        /* quadro ainda sem medida */
+      }
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [ajustarVista, rf]);
 
   const nodes = useMemo(
     (): Node<DadosDoCartao>[] =>
@@ -121,9 +164,18 @@ export default function QuadroDoLab({
         type: n.tipo,
         position: { x: n.x, y: n.y },
         selected: selecionado === n.id,
-        data: { no: n, execucao: execucoes[n.id], rodando: rodandoNo === n.id, onRodar },
+        data: {
+          no: n,
+          execucao: execucoes[n.id],
+          rodando: rodandoNo === n.id,
+          onRodar,
+          atraso: revelar ? revelar[n.id] : undefined,
+          escolhendo: escolhendo && escolhendo.no === n.id ? escolhendo.indice : null,
+          onEscolherStoryboard,
+          trava: travas[n.id] || null,
+        },
       })),
-    [canvas.nos, execucoes, selecionado, rodandoNo, onRodar],
+    [canvas.nos, execucoes, selecionado, rodandoNo, onRodar, revelar, escolhendo, onEscolherStoryboard, travas],
   );
 
   const edges = useMemo(

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock, ExternalLink, Loader2, Maximize2, PauseCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, ExternalLink, Loader2, Maximize2, PauseCircle, ShieldCheck } from "lucide-react";
 import { JanelaCentral, botao, etiqueta, juntar, texto } from "@/components/sistema";
 import { enderecosAssinados, lerHtmlSalvo } from "@/lib/laboratorio/arquivos";
-import type { ExecucaoDoLab, ImagemDoLab, StatusDaExecucao } from "@/lib/laboratorio/api";
+import { enderecoDaAprovacao, type EstadoNoAr, type ExecucaoDoLab, type FonteDaPesquisa, type ImagemDoLab, type SaidaDaExecucao, type StatusDaExecucao, type StoryboardDoFilme } from "@/lib/laboratorio/api";
+import type { TipoDeNo } from "@/lib/laboratorio/nos";
 
 /**
  * O resultado no próprio nó: estado com cor, texto resumido, miniaturas,
@@ -97,14 +98,259 @@ export function PreviaDaLanding({ caminho, url, alta = false }: { caminho: strin
   );
 }
 
-export default function ResultadoDoNo({ execucao, compacto = true }: { execucao: ExecucaoDoLab | null | undefined; compacto?: boolean }) {
+// ------------------------------------------------------------ v2: pesquisa, oferta, funil, filme, pôr no ar
+
+const textoDe = (v: unknown) => (typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "");
+
+/** Pesquisa: as fontes, cada uma com o link (abre em outra aba). */
+function FontesDaPesquisa({ fontes, compacto }: { fontes: FonteDaPesquisa[]; compacto: boolean }) {
+  if (!fontes.length) return null;
+  const lista = compacto ? fontes.slice(0, 3) : fontes;
+  return (
+    <div className="min-w-0" data-fontes-da-pesquisa="">
+      <p className={juntar(texto.auxiliar, "font-medium text-foreground")}>{fontes.length} fonte(s)</p>
+      <ul className="min-w-0 space-y-0.5">
+        {lista.map((f, i) => {
+          let dominio = f.url;
+          try {
+            dominio = new URL(f.url).hostname.replace(/^www\./, "");
+          } catch {
+            /* fica o endereço inteiro */
+          }
+          return (
+            <li key={i} className="min-w-0">
+              <a className={juntar(texto.auxiliar, "nodrag inline-flex max-w-full items-center text-primary hover:underline")} href={f.url} target="_blank" rel="noreferrer noopener" title={f.url} data-fonte="">
+                <ExternalLink className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{f.titulo || dominio}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+      {compacto && fontes.length > lista.length ? <p className={texto.auxiliar}>+{fontes.length - lista.length} no inspetor</p> : null}
+    </div>
+  );
+}
+
+/** Oferta: produto, preço e a promessa, em poucas linhas. */
+function ResumoDaOferta({ json, compacto }: { json: Record<string, unknown>; compacto: boolean }) {
+  const produto = textoDe(json.produto) || textoDe(json.nome);
+  const preco = textoDe(json.preco);
+  const promessa = textoDe(json.promessa);
+  const extras: Array<[string, string]> = [
+    ["Ancoragem", textoDe(json.ancoragem)],
+    ["Garantia", textoDe(json.garantia)],
+    ["Bônus", Array.isArray(json.bonus) ? json.bonus.map(textoDe).filter(Boolean).join(" · ") : textoDe(json.bonus)],
+  ];
+  return (
+    <div className="min-w-0" data-resumo-da-oferta="">
+      <p className={juntar(texto.auxiliar, "truncate font-medium text-foreground")}>{[produto || "Oferta", preco].filter(Boolean).join(" · ")}</p>
+      {promessa ? <p className={juntar(texto.auxiliar, compacto && "line-clamp-2")}>{promessa}</p> : null}
+      {!compacto &&
+        extras
+          .filter((x) => x[1])
+          .map((x) => (
+            <p key={x[0]} className={texto.auxiliar}>
+              <span className="text-foreground">{x[0]}:</span> {x[1]}
+            </p>
+          ))}
+    </div>
+  );
+}
+
+/** Funil: o desenho das etapas, em sequência. */
+function DesenhoDoFunil({ json, compacto }: { json: Record<string, unknown>; compacto: boolean }) {
+  const etapas = (Array.isArray(json.etapas) ? json.etapas : []).map((e: any) => (typeof e === "string" ? { nome: e } : e && typeof e === "object" ? e : null)).filter(Boolean) as Array<Record<string, unknown>>;
+  if (!etapas.length) return null;
+  return (
+    <div className="min-w-0" data-desenho-do-funil="">
+      <ol className="flex min-w-0 flex-wrap items-center">
+        {etapas.map((e, i) => (
+          <li key={i} className="flex min-w-0 items-center" data-etapa-do-funil="">
+            {i > 0 ? <ChevronRight className="mx-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+            <span className={juntar(etiqueta, "max-w-[140px] truncate bg-muted text-foreground")} title={textoDe(e.mensagem) || textoDe(e.pagina) || undefined}>
+              {textoDe(e.nome) || textoDe(e.titulo) || textoDe(e.etapa) || `Etapa ${i + 1}`}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {!compacto && (
+        <ul className="mt-1 min-w-0 space-y-0.5">
+          {etapas.map((e, i) => {
+            const detalhe = [textoDe(e.pagina), textoDe(e.mensagem), textoDe(e.meta) ? `meta: ${textoDe(e.meta)}` : ""].filter(Boolean).join(" · ");
+            return detalhe ? (
+              <li key={i} className={texto.auxiliar}>
+                <span className="text-foreground">{textoDe(e.nome) || textoDe(e.titulo) || `Etapa ${i + 1}`}:</span> {detalhe}
+              </li>
+            ) : null;
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Capa do storyboard: a primeira imagem; sem imagem (roteiro da Mesa Motion), o número e as cenas. */
+function CapaDoStoryboard({ sb, numero }: { sb: StoryboardDoFilme; numero: number }) {
+  const urls = useImagens(sb.imagens.slice(0, 1));
+  if (urls[0]) return <span className="block h-16 overflow-hidden rounded bg-muted"><img src={urls[0]} alt={sb.titulo || `Storyboard ${numero}`} className="h-full w-full object-cover" loading="lazy" /></span>;
+  const info = [sb.cenas ? `${sb.cenas} cenas` : "", sb.duracao_s ? `${Math.round(sb.duracao_s)} s` : ""].filter(Boolean).join(" · ");
+  return (
+    <span className="flex h-16 flex-col items-center justify-center rounded bg-muted text-center">
+      <span className="text-[15px] font-semibold tabular-nums text-foreground">{numero}</span>
+      {info ? <span className="text-[11px] text-muted-foreground">{info}</span> : null}
+    </span>
+  );
+}
+
+/** Filme: 3 storyboards para escolher no nó; depois o render e o vídeo. */
+function FilmeDoNo({ saida, status, onEscolher, escolhendo, compacto }: { saida: SaidaDaExecucao; status: StatusDaExecucao; onEscolher?: (indice: number) => void; escolhendo: number | null; compacto: boolean }) {
+  const video = useImagens(saida.video_path && !saida.video_url ? [{ path: saida.video_path, url: "" }] : []);
+  const urlDoVideo = saida.video_url || video[0] || "";
+  if (urlDoVideo)
+    return (
+      <video src={urlDoVideo} controls playsInline preload="metadata" className={juntar("nodrag w-full rounded bg-black", compacto ? "h-32" : "max-h-[60vh]")} data-video-do-filme="">
+        <track kind="captions" />
+      </video>
+    );
+  if (!saida.storyboards.length) return null;
+  const escolhido = saida.storyboard_escolhido;
+  if (escolhido !== null) {
+    const sb = saida.storyboards.find((x) => x.indice === escolhido) || saida.storyboards[escolhido];
+    const p = saida.render_progresso;
+    const parado = status === "erro" || saida.etapa_filme === "parado";
+    return (
+      <div className="min-w-0" data-filme-renderizando="">
+        <p className={juntar(texto.auxiliar, "flex items-center")}>
+          {parado ? null : <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" />}
+          {parado ? "O render parou (veja o aviso no nó)." : `${saida.etapa_filme === "montando" ? "Montando" : "Renderizando"} ${sb && sb.titulo ? `"${sb.titulo}"` : `o storyboard ${escolhido + 1}`}`}
+          {typeof p === "number" ? ` · ${Math.round(p)}%` : ""}
+        </p>
+        {typeof p === "number" ? (
+          <div className="mt-1 h-1 w-full overflow-hidden rounded bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p)} aria-label="Andamento do render">
+            <div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, p))}%` }} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div className="min-w-0" data-storyboards-do-filme="">
+      <p className={juntar(texto.auxiliar, "mb-1 font-medium text-foreground")}>Escolha o storyboard</p>
+      <div className="grid min-w-0 grid-cols-3 gap-1">
+        {saida.storyboards.map((sb, i) => (
+          <div key={i} className="min-w-0" data-storyboard={sb.indice}>
+            <CapaDoStoryboard sb={sb} numero={i + 1} />
+            <div className="mt-0.5 flex min-w-0 items-center">
+              <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate")} title={sb.resumo || sb.titulo}>
+                {sb.titulo || `Opção ${i + 1}`}
+              </span>
+              {onEscolher ? (
+                <button
+                  type="button"
+                  className={juntar(botao.icone, "nodrag h-6 w-6 shrink-0 text-primary")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEscolher(sb.indice);
+                  }}
+                  disabled={escolhendo !== null}
+                  aria-label={`Escolher o storyboard ${i + 1}`}
+                  title="Escolher este storyboard e renderizar o filme"
+                >
+                  {escolhendo === sb.indice ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                </button>
+              ) : null}
+            </div>
+            {!compacto && sb.resumo ? <p className={juntar(texto.auxiliar, "line-clamp-3")}>{sb.resumo}</p> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PASSOS_NO_AR: Array<{ valor: EstadoNoAr; rotulo: string }> = [
+  { valor: "aguardando_aprovacao", rotulo: "Aguardando sua aprovação" },
+  { valor: "com_agente", rotulo: "Com o agente" },
+  { valor: "feito", rotulo: "Feito" },
+];
+
+/** O estado do Pôr no ar: o que veio na saída, ou o que o status da execução diz. */
+export function estadoNoAr(execucao: ExecucaoDoLab): EstadoNoAr {
+  const s = execucao.saida;
+  if (s.estado_no_ar) return s.estado_no_ar;
+  if (execucao.status === "pronto") return s.link_no_ar || s.prova ? "feito" : "com_agente";
+  if (execucao.status === "rodando" || execucao.status === "na_fila") return s.aprovacao_id ? "com_agente" : "aguardando_aprovacao";
+  return "aguardando_aprovacao";
+}
+
+function PorNoArDoNo({ execucao }: { execucao: ExecucaoDoLab }) {
+  const s = execucao.saida;
+  // Erro sem estado é falha ao pedir (a frase já aparece no nó); recusado vem como erro com o motivo.
+  if (execucao.status === "erro" && !s.estado_no_ar) return null;
+  const estado = estadoNoAr(execucao);
+  const atual = PASSOS_NO_AR.findIndex((p) => p.valor === estado);
+  return (
+    <div className="min-w-0" data-estado-no-ar={estado}>
+      {estado === "recusado" ? (
+        <p className={juntar(texto.auxiliar, "text-warning")}>Não aprovado. Nada foi ao ar.</p>
+      ) : (
+        <ol className="min-w-0 space-y-0.5">
+          {PASSOS_NO_AR.map((p, i) => (
+            <li key={p.valor} className={juntar(texto.auxiliar, "flex items-center", i === atual ? "font-medium text-foreground" : i < atual ? "text-muted-foreground" : "text-muted-foreground/60")} data-passo-no-ar={p.valor} aria-current={i === atual ? "step" : undefined}>
+              {i < atual || estado === "feito" ? <CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" aria-hidden="true" /> : i === atual ? <Clock className="mr-1 h-3 w-3 text-amber-600" aria-hidden="true" /> : <span className="mr-1 inline-block h-3 w-3 rounded-full border border-border" aria-hidden="true" />}
+              {p.rotulo}
+              {p.valor === "com_agente" && s.operador ? ` (${s.operador === "default" ? "Hermes" : s.operador})` : ""}
+            </li>
+          ))}
+        </ol>
+      )}
+      {estado === "aguardando_aprovacao" ? (
+        <a className={juntar(botao.secundario, "nodrag mt-1.5 h-7 px-2 text-[12px]")} href={s.link_aprovacao || enderecoDaAprovacao(s.aprovacao_id)} target="_blank" rel="noreferrer" data-abrir-aprovacao="">
+          <ShieldCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          Abrir a aprovação
+        </a>
+      ) : null}
+      {estado === "feito" && s.link_no_ar ? (
+        <a className={juntar(texto.auxiliar, "nodrag mt-1 inline-flex items-center text-primary hover:underline")} href={s.link_no_ar} target="_blank" rel="noreferrer noopener" data-link-no-ar="">
+          <ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" />
+          Ver no ar
+        </a>
+      ) : null}
+      {estado === "feito" && s.prova ? <p className={juntar(texto.auxiliar, "line-clamp-3")} data-prova-no-ar="">Prova: {s.prova}</p> : null}
+    </div>
+  );
+}
+
+export default function ResultadoDoNo({
+  execucao,
+  compacto = true,
+  tipo,
+  onEscolherStoryboard,
+  escolhendo = null,
+}: {
+  execucao: ExecucaoDoLab | null | undefined;
+  compacto?: boolean;
+  /** O tipo do nó (a execução recém-criada ainda não traz). */
+  tipo?: TipoDeNo;
+  /** Filme: escolher um dos storyboards no próprio nó (filme_escolher). */
+  onEscolherStoryboard?: (indice: number) => void;
+  escolhendo?: number | null;
+}) {
   const [grande, setGrande] = useState(false);
   if (!execucao) return null;
   const s = execucao.saida;
+  const t = tipo || execucao.tipo;
+  const jsonProprio = t === "oferta" || t === "funil";
   return (
     <div className="mt-2 min-w-0 space-y-1.5" data-resultado-do-no={execucao.no_id}>
       {execucao.status === "erro" && execucao.erro ? <p className={juntar(texto.auxiliar, "text-destructive")}>{execucao.erro}</p> : null}
-      {s.texto ? <p className={juntar(texto.auxiliar, "whitespace-pre-wrap text-foreground", compacto && "line-clamp-3")}>{s.texto}</p> : null}
+      {t === "oferta" && s.json ? <ResumoDaOferta json={s.json} compacto={compacto} /> : null}
+      {t === "funil" && s.json ? <DesenhoDoFunil json={s.json} compacto={compacto} /> : null}
+      {t === "filme" ? <FilmeDoNo saida={s} status={execucao.status} onEscolher={onEscolherStoryboard} escolhendo={escolhendo} compacto={compacto} /> : null}
+      {t === "por_no_ar" ? <PorNoArDoNo execucao={execucao} /> : null}
+      {s.texto && !(jsonProprio && s.json && compacto) ? <p className={juntar(texto.auxiliar, "whitespace-pre-wrap text-foreground", compacto && "line-clamp-3")}>{s.texto}</p> : null}
+      <FontesDaPesquisa fontes={s.fontes} compacto={compacto} />
       {s.imagens.length ? <Miniaturas imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} /> : null}
       {s.escolha ? (
         <p className={juntar(texto.auxiliar, compacto && "line-clamp-2")} data-escolha-do-jev="">
@@ -123,7 +369,13 @@ export default function ResultadoDoNo({ execucao, compacto = true }: { execucao:
           </JanelaCentral>
         </div>
       ) : null}
-      {s.json ? (
+      {s.rascunho_sem_fonte.some((b) => !b.confirmado) ? (
+        <p className={juntar(texto.auxiliar, "flex items-center text-warning")} data-sem-fonte-no-no="">
+          <AlertTriangle className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+          {s.rascunho_sem_fonte.filter((b) => !b.confirmado).length} bloco(s) sem fonte: trava o Pôr no ar
+        </p>
+      ) : null}
+      {s.json && t === "anuncio" ? (
         <p className={juntar(texto.auxiliar, "line-clamp-2")}>
           {String((s.json as any).titulo || (Array.isArray((s.json as any).titulos) ? (s.json as any).titulos[0] : "") || "Pacote pronto")} · nasce pausado
         </p>

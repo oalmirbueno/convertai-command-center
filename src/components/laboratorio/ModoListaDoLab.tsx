@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { juntar, lista, texto } from "@/components/sistema";
 import { TIPOS_DE_NO, ordemTopologica, resumoDoNo, type CanvasDoLab, type TipoDeNo } from "@/lib/laboratorio/nos";
 import type { ExecucaoDoLab } from "@/lib/laboratorio/api";
@@ -18,6 +18,7 @@ export default function ModoListaDoLab({
   onSelecionar,
   onPor,
   inspetor,
+  travas = {},
 }: {
   canvas: CanvasDoLab;
   execucoes: Record<string, ExecucaoDoLab>;
@@ -25,6 +26,8 @@ export default function ModoListaDoLab({
   onSelecionar: (id: string | null) => void;
   onPor: (t: TipoDeNo) => void;
   inspetor: ReactNode;
+  /** Motivo da trava de cada Pôr no ar travado (por id). */
+  travas?: Record<string, string>;
 }) {
   const ordem = ordemTopologica(canvas);
   const nos = ordem.map((id) => canvas.nos.find((n) => n.id === id)).filter(Boolean).concat(canvas.nos.filter((n) => ordem.indexOf(n.id) < 0)) as CanvasDoLab["nos"];
@@ -48,6 +51,11 @@ export default function ModoListaDoLab({
                   <span className={juntar(texto.auxiliar, "block truncate")}>{resumoDoNo(n) || def.dica}</span>
                 </span>
                 {e ? <EstadoDoNo status={e.status} /> : null}
+                {travas[n.id] ? (
+                  <span className="ml-1 inline-flex shrink-0 text-warning" title={travas[n.id]} aria-label={travas[n.id]} role="img" data-trava-na-lista="">
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                ) : null}
                 {aberto ? <ChevronDown className="ml-1 h-4 w-4 shrink-0" aria-hidden="true" /> : <ChevronRight className="ml-1 h-4 w-4 shrink-0" aria-hidden="true" />}
               </button>
               {aberto ? <div className="min-w-0 px-2 pb-3 pt-1">{inspetor}</div> : null}

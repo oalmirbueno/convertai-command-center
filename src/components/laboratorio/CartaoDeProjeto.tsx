@@ -33,7 +33,7 @@ export function PreviaDoCanvas({ canvas, total }: { canvas: CanvasDoLab; total?:
 
 export function CartaoDeProjeto({ projeto, clientes, onAbrir }: { projeto: ProjetoDoLab; clientes: ClienteDoLab[]; onAbrir: () => void }) {
   return (
-    <button type="button" onClick={onAbrir} className={juntar(superficie.painel, "block min-w-0 p-3 text-left transition-colors hover:border-primary/50")} data-cartao-de-projeto={projeto.id}>
+    <button type="button" onClick={onAbrir} title="Abrir no canvas" className={juntar(superficie.painel, "block min-w-0 p-3 text-left transition-colors hover:border-primary/50")} data-cartao-de-projeto={projeto.id}>
       {projeto.previa_url ? <img src={projeto.previa_url} alt="" className="block h-20 w-full rounded object-cover" loading="lazy" /> : <PreviaDoCanvas canvas={projeto.canvas} total={projeto.total_nos} />}
       <span className={juntar(texto.corpo, "mt-2 block truncate font-medium")}>{projeto.nome}</span>
       <span className={juntar(texto.auxiliar, "block truncate")}>

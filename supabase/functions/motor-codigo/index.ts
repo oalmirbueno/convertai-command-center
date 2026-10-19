@@ -7,7 +7,9 @@
  *
  * POST { acao, ... }, só equipe com acesso ao cliente.
  * - estimar { client_id, tipo, secoes?, modelo_id? } -> { estimativa_usd, teto_sugerido_usd, passos, saldo_usd, reservado_usd, livre_usd, modelo }
- * - pedir { client_id, site_id, tipo, secoes?, secao?, instrucao?, teto_usd, modelo_id?, alvo_trabalho_id? } -> { trabalho, estimativa_usd }
+ * - pedir { client_id, site_id, tipo, secoes?, secao?, instrucao?, teto_usd, modelo_id?, alvo_trabalho_id?, conferencia_de? } -> { trabalho, estimativa_usd }
+ *   Gravyx (19/10): salvar e descartar (rascunho x versão salva, sem custo) e corrigir (UMA passada sobre a
+ *   conferência no navegador, com custo; conferencia_de = o trabalho da conferência; nunca duas vezes).
  * - parar { trabalho_id } -> { trabalho }
  * - listar { client_id, site_id } -> { trabalhos, executor }
  * - eventos { trabalho_id, desde? } -> { eventos, trabalho }
@@ -24,6 +26,7 @@ import { resolverMarca } from "../_shared/marca.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+import { estadoDoRascunho, instrucaoDaCorrecao, podeCorrigir, podeMexerNoRascunho } from "../mesa-site/modulos/obra-do-site.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
@@ -98,12 +101,35 @@ async function estimar(ch: Chamador, c: Record<string, unknown>) {
   });
 }
 
-async function pedir(ch: Chamador, c: Record<string, unknown>) {
+async function pedir(ch: Chamador, corpo: Record<string, unknown>) {
+  let c = corpo;
   const clientId = idDe(c.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   // Publicar sai só pela Mesa Site (publicar, com Confirmar e a conferência do que falta).
   if (c.tipo === "publicar") throw new ErroDoMotor(400, "publicar_pela_mesa", "Publicar é pela etapa Publicação da Mesa Site, com Confirmar.");
+  if (c.tipo === "textos") throw new ErroDoMotor(400, "textos_pela_previa", "A troca de texto no código sai pela prévia (clique no texto, com Editar ligado).");
   const site = await lerSite(clientId, idDe(c.site_id, "site_id"));
+  // Gravyx: salvar e descartar o rascunho são máquina (sem pacote, sem custo) e só valem com rascunho parado.
+  if (c.tipo === "salvar" || c.tipo === "descartar") {
+    const trabalhos = await trabalhosDoProjeto(servico(), clientId, site.id);
+    const pode = podeMexerNoRascunho(estadoDoRascunho(trabalhos));
+    if (!pode.ok) throw new ErroDoMotor(409, "rascunho_indisponivel", pode.motivo || "O rascunho não está pronto.");
+    const { trabalho } = await criarTrabalho(servico(), {
+      clientId, marcaId: site.marca_id, mesa: "site", projeto: site.projeto, referencia: { tipo: "site", id: site.id },
+      pedidoBruto: { tipo: c.tipo, instrucao: c.tipo === "salvar" ? "Salvar a versão" : "Descartar o rascunho" }, modeloId: null, pacote: {}, userId: ch.userId,
+    });
+    return json({ trabalho, estimativa_usd: 0, custo_usd: 0 });
+  }
+  // Gravyx: a correção é UMA passada sobre a conferência escolhida (nunca de novo, nunca em laço).
+  let correcao: { conferencia_de: string; problemas: unknown[] } | null = null;
+  if (c.tipo === "corrigir") {
+    const conferenciaDe = idDe(c.conferencia_de, "conferencia_de");
+    const trabalhos = await trabalhosDoProjeto(servico(), clientId, site.id);
+    const pode = podeCorrigir(trabalhos, conferenciaDe);
+    if (!pode.ok) throw new ErroDoMotor(409, "correcao_recusada", pode.motivo || "A correção não pode ser pedida agora.");
+    correcao = { conferencia_de: conferenciaDe, problemas: pode.problemas };
+    c = { ...c, instrucao: instrucaoDaCorrecao(pode.problemas) };
+  }
   const marca = await resolverMarca(servico(), clientId, { marca_id: site.marca_id });
   const secoes = Array.isArray(c.secoes) ? (c.secoes as string[]) : undefined;
   // Frente SYNC: o agente do worker também lê as regras ensinadas na Mesa Site e o contexto completo da marca
@@ -127,10 +153,17 @@ async function pedir(ch: Chamador, c: Record<string, unknown>) {
       arquivos,
       regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`),
       contexto_da_marca: contextoDaMarca || null,
+      ...(correcao ? { correcao } : {}),
     } as unknown as Record<string, unknown>,
     pacoteDe: site.pacote_mudou_em || null,
     userId: ch.userId,
   });
+  // A trava do "uma vez só" lê o vínculo no resultado desde a fila (o worker repete ao terminar).
+  if (correcao) {
+    const { error } = await servico().from("motor_trabalhos").update({ resultado: { ...trabalho.resultado, conferencia_de: correcao.conferencia_de } }).eq("id", trabalho.id);
+    if (error) registrarFalha("motor-codigo: vínculo da correção não gravado", error, { trabalho_id: trabalho.id });
+    else trabalho.resultado = { ...trabalho.resultado, conferencia_de: correcao.conferencia_de };
+  }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "motor_codigo_pedir", origin: "mesa:motor-codigo", keyId: `mesa:motor-codigo:${ch.userId}`, scopes: ["mesa:write"],
     input: { client_id: clientId, site_id: site.id, tipo: trabalho.tipo, teto_usd: trabalho.teto_usd }, success: true, statusCode: 200, durationMs: 0, resultRef: trabalho.id,

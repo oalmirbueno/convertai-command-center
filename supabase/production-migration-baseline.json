@@ -2265,6 +2265,30 @@
       "remote_name": "laboratorio",
       "remote_statements_sha256": "d721223b5b3ead57e8e3e9741a4121e86c026cd5b39d62ed544c415450903dd8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261019233000",
+      "path": "supabase/migrations/20261019233000_laboratorio_v2.sql",
+      "local_sha256": "d15c68155779bf65485b6302e663b862d25a0dd17595785371ecb3e03324957a",
+      "remote_name": "laboratorio_v2",
+      "remote_statements_sha256": "eb805ea1d36046f7a3355025da2bba22b81a4154263df9918572254a2f289eca",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261019234500",
+      "path": "supabase/migrations/20261019234500_obra_do_site.sql",
+      "local_sha256": "7027be1c6b3f77f0840e10448fd627f2d906bdc414a15bedeeaee668f62d36ef",
+      "remote_name": "obra_do_site",
+      "remote_statements_sha256": "d78b3cd7467a2aa6253043b84393819765c204e9287d11de1b7871ce4660afd2",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261020010000",
+      "path": "supabase/migrations/20261020010000_laboratorio_v3.sql",
+      "local_sha256": "5420a4bc29c86dcef40ea3308c3e3a7da131b2dc9c00585a3acd4be262d991a7",
+      "remote_name": "laboratorio_v3",
+      "remote_statements_sha256": "3765c9fcc3c94d1e5ea012fca64897697673fba28ae9a1885329d1ed3b2bee53",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
