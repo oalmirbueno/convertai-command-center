@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Workflow } from "lucide-react";
@@ -8,7 +8,7 @@ import { chaveDosProjetos, criarProjeto, listarFluxosDaGaleria, listarProjetos, 
 import { ATALHOS_DE_PROJETO_COMPLETO, MODELO_PADRAO_DO_LAB, ehProjetoCompleto } from "@/lib/laboratorio/nos";
 import { guardarPedidoPendente } from "@/lib/laboratorio/pedidoPendente";
 import CaixaDoPedido, { ATALHOS_DA_INICIO } from "./CaixaDoPedido";
-import GaleriaDeFluxos from "./GaleriaDeFluxos";
+import GaleriaDeFluxos, { ROLAGEM_DA_COLUNA } from "./GaleriaDeFluxos";
 import PerguntasGuiadas from "./PerguntasGuiadas";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
 
@@ -74,6 +74,37 @@ function LinhaDeRecente({ p, clientes, onAbrir }: { p: ProjetoDoLab; clientes: C
 
 export { ATALHOS_DA_INICIO };
 
+/**
+ * De 1024 para cima, Fluxos e Recentes ocupam a altura que sobra até o fim da
+ * janela e cada um rola sozinho (a página não rola). Abaixo disso, ou com a
+ * janela baixa demais, fica a altura natural e as colunas empilham.
+ */
+function useAlturaAteOFim() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [altura, setAltura] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const medir = () => {
+      const el = ref.current;
+      if (!el || (window.innerWidth || 0) < 1024) {
+        setAltura((a) => (a === null ? a : null));
+        return;
+      }
+      const caixa = el.getBoundingClientRect();
+      const topo = caixa.top + (window.scrollY || window.pageYOffset || 0);
+      // O que a página tem abaixo das colunas (o espaço do fim da página) também precisa caber na janela.
+      const doc = document.scrollingElement || document.documentElement;
+      const abaixo = Math.max(0, Math.round(doc.scrollHeight - (topo + caixa.height)));
+      const sobra = Math.round((window.innerHeight || 800) - topo - abaixo);
+      const nova = Math.max(420, sobra);
+      setAltura((a) => (a === nova ? a : nova));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  });
+  return { ref, altura };
+}
+
 export default function AbaInicio({
   clienteId,
   onCliente,
@@ -86,6 +117,7 @@ export default function AbaInicio({
   onAbrirProjeto: (id: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const { ref: refDasColunas, altura: alturaDasColunas } = useAlturaAteOFim();
   const [pedido, setPedido] = useState("");
   const [modelo, setModelo] = useState(MODELO_PADRAO_DO_LAB);
   const [enviando, setEnviando] = useState(false);
@@ -218,14 +250,14 @@ export default function AbaInicio({
         />
       </div>
 
-      <div className={juntar(espaco.colunas, "lg:grid-cols-3")} data-inicio-lado-a-lado="">
-        <div className="min-w-0 lg:col-span-2" data-coluna-fluxos="">
+      <div ref={refDasColunas} className={juntar(espaco.colunas, "lg:grid-cols-3", alturaDasColunas ? "lg:grid-rows-[minmax(0,1fr)] lg:items-stretch" : null)} style={alturaDasColunas ? { height: alturaDasColunas } : undefined} data-inicio-lado-a-lado="">
+        <div className="min-w-0 lg:col-span-2 lg:min-h-0" data-coluna-fluxos="">
           <GaleriaDeFluxos fluxos={templates.data || []} carregando={templates.isLoading} erro={templates.isError ? textoDoErro(templates.error) : null} usando={usando} onUsar={(id) => void usar(id)} />
         </div>
-        <section className="min-w-0" aria-label="Projetos recentes" data-coluna-recentes="">
+        <section className="flex min-w-0 flex-col lg:min-h-0" aria-label="Projetos recentes" data-coluna-recentes="">
           <h2 className={juntar(texto.tituloSecao, "mb-5 flex h-9 items-center")}>Recentes</h2>
           {recentes.length ? (
-            <ul className={juntar(estiloDaLista.aberta, "space-y-0.5")}>
+            <ul className={juntar(estiloDaLista.aberta, "space-y-0.5", ROLAGEM_DA_COLUNA)} data-rolagem-dos-recentes="">
               {recentes.map((p) => (
                 <LinhaDeRecente key={p.id} p={p} clientes={clientes} onAbrir={() => onAbrirProjeto(p.id)} />
               ))}

@@ -98,6 +98,13 @@ export function categoriasDos(fluxos: FluxoDaGaleria[]): string[] {
 
 export type AbaDaGaleria = "todos" | "pessoais" | { categoria: string };
 
+/**
+ * Rolagem própria de cada coluna da Início (fluxos e recentes) de 1024 para
+ * cima: a coluna ocupa a altura que sobra e só a lista dentro dela rola. No
+ * celular as colunas empilham e rolam com a página.
+ */
+export const ROLAGEM_DA_COLUNA = "lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pb-2 lg:pr-1";
+
 /** O que a aba e a busca mostram. Com busca, "Todos" procura também nos pessoais. */
 export function filtrarFluxos(fluxos: FluxoDaGaleria[], aba: AbaDaGaleria, busca: string): FluxoDaGaleria[] {
   const termo = semAcento(busca.trim());
@@ -217,7 +224,7 @@ export default function GaleriaDeFluxos({
   const ehCategoria = (c: string) => typeof abaValida === "object" && abaValida.categoria === c;
 
   return (
-    <section className="min-w-0" aria-label="Fluxos" data-galeria-de-fluxos="">
+    <section className="flex min-h-0 min-w-0 flex-col lg:h-full" aria-label="Fluxos" data-galeria-de-fluxos="">
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between">
         <h2 className={juntar(texto.tituloSecao, "mb-2 mr-3 flex items-center")}>
           <LayoutTemplate className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -234,7 +241,8 @@ export default function GaleriaDeFluxos({
           : null}
         <Chip ativo={abaValida === "pessoais"} icone={User} rotulo="Seus fluxos" total={pessoais} onClick={() => setAba("pessoais")} dados={{ "data-chip-categoria": "pessoais" }} />
       </div>
-      <div className="mt-2 min-w-0">
+      {/* 20/10 (dono: "fluxos e recentes com scroll individual, para não rolar a tela inteira"): de 1024 para cima a grade rola sozinha. */}
+      <div className={juntar("mt-2 min-w-0", ROLAGEM_DA_COLUNA)} data-rolagem-dos-fluxos="">
         {carregando ? (
           <Carregando forma="grade" rotulo="Lendo os fluxos" />
         ) : erro ? (

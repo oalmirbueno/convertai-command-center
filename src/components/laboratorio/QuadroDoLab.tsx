@@ -296,13 +296,23 @@ export default function QuadroDoLab({
   const aoTerminarLigacao = useCallback(
     (e: MouseEvent | TouchEvent, estado: FinalConnectionState) => {
       if (travado || !estado || estado.isValid || estado.toNode || !estado.fromNode || !estado.fromHandle) return;
-      const alvo = e.target as Element | null;
-      if (alvo && typeof alvo.closest === "function" && alvo.closest(".react-flow__node")) return;
       const toque = "changedTouches" in e && e.changedTouches && e.changedTouches.length ? e.changedTouches[0] : null;
       const ponto = toque ? { x: toque.clientX, y: toque.clientY } : { x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY };
+      // 20/10 (dono: "os nós não estão se conectando"): soltar em qualquer parte do cartão de outro nó liga
+      // (antes só valia em cima da bolinha; no cartão a ligação morria calada). No toque, o alvo é o ponto final.
+      const sob = toque && typeof document.elementFromPoint === "function" ? document.elementFromPoint(ponto.x, ponto.y) : (e.target as Element | null);
+      const cartao = sob && typeof sob.closest === "function" ? (sob.closest(".react-flow__node") as HTMLElement | null) : null;
+      if (cartao) {
+        const destino = cartao.getAttribute("data-id");
+        if (destino && destino !== estado.fromNode.id) {
+          if (estado.fromHandle.type === "target") onTentarLigar(destino, estado.fromNode.id);
+          else onTentarLigar(estado.fromNode.id, destino);
+        }
+        return;
+      }
       abrirMenu({ no: estado.fromNode.id, lado: estado.fromHandle.type === "target" ? "entrada" : "saida" }, ponto);
     },
-    [travado, abrirMenu],
+    [travado, abrirMenu, onTentarLigar],
   );
 
   const acoes = useMemo<AcoesDoQuadro>(
