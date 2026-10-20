@@ -50,3 +50,9 @@ Worker Cloudflare existente, com as mesmas rotas e domínio; não cria outra hos
 Testes deste complemento: 28 testes Vitest, 7 Deno e 43 verificações SQL (incluindo persistência
 após reinício). O ensaio usa dados sintéticos isolados e não valida pagamentos reais. As capturas
 anteriores da biblioteca continuam identificadas como testes locais.
+
+O CI amplo não deve ser descrito como verde: seu empacotamento do banco vazio encontra um hash
+histórico divergente em `20260223193634_53550802-f9c7-4caf-8aca-9dbd9741eb24.sql`. A falha foi
+reproduzida com os arquivos canônicos de `origin/main` (`00d55d38`), extraídos diretamente do Git,
+sem as alterações desta entrega. O empacotador de produção do projeto atual passou com 386/386
+registros, zero drift e zero pendências. O histórico antigo não foi reescrito para ocultar a falha.
