@@ -56,3 +56,8 @@ histórico divergente em `20260223193634_53550802-f9c7-4caf-8aca-9dbd9741eb24.sq
 reproduzida com os arquivos canônicos de `origin/main` (`00d55d38`), extraídos diretamente do Git,
 sem as alterações desta entrega. O empacotador de produção do projeto atual passou com 386/386
 registros, zero drift e zero pendências. O histórico antigo não foi reescrito para ocultar a falha.
+
+Tipagem da aplicação e Node: aprovada. A tipagem global dos testes terminou com 158 erros em
+arquivos não alterados por esta entrega, incluindo fixtures antigas e imports Deno avaliados pelo
+TypeScript Node. Nenhum erro foi apontado nos arquivos alterados da biblioteca. Os 28 testes da
+biblioteca passaram; esse resultado não significa que toda a suíte histórica esteja aprovada.
