@@ -1,4 +1,5 @@
 import { AjudaRecolhida } from "@/components/sistema";
+import TituloMembros from "./TituloMembros";
 import { useDeferredValue, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -46,15 +47,10 @@ export default function PessoasEFunil({ dados, agir }: Props) {
   });
   return (
     <section className="space-y-5">
-      <div>
-        <h2 className="text-[15px] font-semibold">
-          Pessoas, compras e acessos
-        </h2>
-        <AjudaRecolhida rotulo="Mais informações">
-          Compra confirmada e acesso manual aparecem separados. Prazo encerrado
-          indica o fim do acesso registrado.
-        </AjudaRecolhida>
-      </div>
+      <TituloMembros titulo="Pessoas, compras e acessos">
+        Compra confirmada e acesso manual aparecem separados. Prazo encerrado
+        indica o fim do acesso registrado.
+      </TituloMembros>
       {lista.data && (
         <div className="membros-resumo-pessoas">
           {(
@@ -507,49 +503,59 @@ export function EditorFunil({
   editarProduto,
 }: Props & { editarProduto?: (id: string) => void }) {
   const [selecionado, setSelecionado] = useState("");
+  const [novaEtapa, setNovaEtapa] = useState(0);
   return (
     <section className="space-y-5">
-      <div className="flex justify-between gap-3">
-        <div>
-          <h2 className="text-[15px] font-semibold">Esteira de produtos</h2>
-          <AjudaRecolhida rotulo="Mais informações">
-            Escolha o próximo produto que aparece para quem já tem acesso ao
-            anterior.
-          </AjudaRecolhida>
-        </div>
-        <button
-          className="membros-acao border border-border"
-          onClick={() => setSelecionado("")}
-        >
-          <Plus size={16} />
-          Nova etapa
-        </button>
-      </div>
-      <div className="membros-editor-curso">
-        <nav className="membros-editor-lista">
-          {(dados.funil || []).map((f) => (
-            <button
-              key={f.id}
-              className="membros-acao w-full text-left justify-start"
-              aria-current={selecionado === f.id ? "page" : undefined}
-              onClick={() => setSelecionado(f.id)}
-            >
-              <span>
-                {dados.produtos.find((p) => p.id === f.produto_origem)?.titulo}
-                <small className="block text-muted-foreground">
-                  →{" "}
+      <TituloMembros
+        titulo="Esteira de produtos"
+        acoes={
+          <button
+            className="membros-acao"
+            onClick={() => {
+              setSelecionado("");
+              setNovaEtapa((n) => n + 1);
+            }}
+          >
+            <Plus size={16} />
+            Nova etapa
+          </button>
+        }
+      >
+        Escolha o próximo produto que aparece para quem já tem acesso ao
+        anterior. Cada etapa liga dois produtos diferentes.
+      </TituloMembros>
+      <div
+        className={`membros-editor-curso membros-editor-funil${dados.funil?.length ? "" : " sem-etapas"}`}
+      >
+        {!!dados.funil?.length && (
+          <nav className="membros-editor-lista" aria-label="Etapas da esteira">
+            {(dados.funil || []).map((f) => (
+              <button
+                key={f.id}
+                className="membros-acao w-full text-left justify-start"
+                aria-current={selecionado === f.id ? "page" : undefined}
+                onClick={() => setSelecionado(f.id)}
+              >
+                <span>
                   {
-                    dados.produtos.find((p) => p.id === f.produto_destino)
+                    dados.produtos.find((p) => p.id === f.produto_origem)
                       ?.titulo
-                  }{" "}
-                  · {f.ativo ? "Ativa" : "Pausada"}
-                </small>
-              </span>
-            </button>
-          ))}
-        </nav>
+                  }
+                  <small className="block text-muted-foreground">
+                    →{" "}
+                    {
+                      dados.produtos.find((p) => p.id === f.produto_destino)
+                        ?.titulo
+                    }{" "}
+                    · {f.ativo ? "Ativa" : "Pausada"}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </nav>
+        )}
         <FormFunil
-          key={selecionado}
+          key={selecionado || `nova-${novaEtapa}`}
           linha={dados.funil?.find((f) => f.id === selecionado)}
           dados={dados}
           agir={agir}
@@ -577,7 +583,7 @@ function FormFunil({
   const destino = dados.produtos.find((p) => p.id === v.produto_destino);
   return (
     <form
-      className="space-y-4"
+      className="membros-funil-formulario"
       onSubmit={(e) => {
         e.preventDefault();
         void agir(() => salvarLinha("membros_funil", v));
@@ -627,8 +633,22 @@ function FormFunil({
           </span>
           <select
             className={campo}
+            aria-label={
+              k === "produto_origem"
+                ? "Quem tem acesso a"
+                : "Conhecerá este próximo produto"
+            }
             value={v[k]}
-            onChange={(e) => setV({ ...v, [k]: e.target.value })}
+            onChange={(e) =>
+              setV({
+                ...v,
+                [k]: e.target.value,
+                ...(k === "produto_origem" &&
+                e.target.value === v.produto_destino
+                  ? { produto_destino: "" }
+                  : {}),
+              })
+            }
             required
           >
             <option value="">Escolha um produto</option>
@@ -645,7 +665,7 @@ function FormFunil({
         </label>
       ))}
       <label className="block space-y-2 text-[12px]">
-        Quando aparecer
+        <span>Quando aparecer</span>
         <select
           className={campo}
           value={v.momento}
@@ -660,7 +680,7 @@ function FormFunil({
         </select>
       </label>
       <label className="block space-y-2 text-[12px]">
-        Título da indicação
+        <span>Título da indicação</span>
         <input
           className={campo}
           value={v.titulo}
@@ -670,7 +690,7 @@ function FormFunil({
         />
       </label>
       <label className="block space-y-2 text-[12px]">
-        Ordem
+        <span>Ordem</span>
         <input
           className={campo}
           type="number"
@@ -680,17 +700,26 @@ function FormFunil({
           onChange={(e) => setV({ ...v, ordem: Number(e.target.value) })}
         />
       </label>
-      <label className="flex gap-2 text-[13px] min-h-11 items-center">
-        <input
-          type="checkbox"
-          checked={v.ativo}
-          onChange={(e) => setV({ ...v, ativo: e.target.checked })}
-        />
-        Exibir esta etapa
-      </label>
-      <button className="membros-acao bg-primary text-primary-foreground">
-        Salvar etapa da esteira
-      </button>
+      <div className="membros-formulario-acoes">
+        <label className="flex gap-2 text-[13px] min-h-11 items-center">
+          <input
+            type="checkbox"
+            checked={v.ativo}
+            onChange={(e) => setV({ ...v, ativo: e.target.checked })}
+          />
+          Exibir esta etapa
+        </label>
+        <button
+          className="membros-acao bg-primary text-primary-foreground"
+          disabled={
+            !v.produto_origem ||
+            !v.produto_destino ||
+            v.produto_origem === v.produto_destino
+          }
+        >
+          Salvar etapa da esteira
+        </button>
+      </div>
     </form>
   );
 }

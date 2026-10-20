@@ -47,15 +47,20 @@ export default function OfertaDoProduto({
               <ArrowLeft size={15} />
               Sobre o produto
             </button>
-            <a
-              className="membros-acao text-muted-foreground"
-              href={endereco}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink size={15} />
-              Abrir em nova guia
-            </a>
+            <div className="inline-flex items-center gap-1">
+              <a
+                className="membros-acao text-muted-foreground"
+                href={endereco}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink size={15} />
+                Abrir em nova guia
+              </a>
+              <AjudaRecolhida rotulo="Sobre a página do produto">
+                Se a página não abrir aqui, continue pela opção de nova guia.
+              </AjudaRecolhida>
+            </div>
           </div>
           <iframe
             key={endereco}
@@ -70,9 +75,6 @@ export default function OfertaDoProduto({
             allow="payment"
             className="membros-oferta-pagina"
           />
-          <AjudaRecolhida rotulo="Mais informações">
-            Se a página não abrir aqui, continue pela opção de nova guia.
-          </AjudaRecolhida>
         </>
       ) : (
         <div className="membros-oferta-apresentacao">

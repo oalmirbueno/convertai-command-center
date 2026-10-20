@@ -12,10 +12,23 @@ import { versionarConteudo } from "@/lib/membros/editorial";
 import VersoesDoConteudo from "./VersoesDoConteudo";
 const campo =
   "w-full min-h-11 rounded-lg bg-muted px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
-function Campo({ nome, children }: { nome: string; children: ReactNode }) {
+function Campo({
+  nome,
+  children,
+  ajuda,
+}: {
+  nome: string;
+  children: ReactNode;
+  ajuda?: ReactNode;
+}) {
   return (
     <label className="block space-y-2 text-[12px] min-w-0">
-      <span>{nome}</span>
+      <span className="inline-flex items-center gap-2">
+        {nome}
+        {ajuda && (
+          <AjudaRecolhida rotulo={`Sobre ${nome}`}>{ajuda}</AjudaRecolhida>
+        )}
+      </span>
       {children}
     </label>
   );
@@ -254,7 +267,15 @@ function FormModulo({
           onChange={(e) => setV({ ...v, descricao: e.target.value })}
         />
       </Campo>
-      <Campo nome="Visibilidade">
+      <Campo
+        nome="Visibilidade"
+        ajuda={
+          <>
+            As aulas e os complementos de um módulo em rascunho ou arquivado
+            ficam ocultos para membros.
+          </>
+        }
+      >
         <select
           className={campo}
           value={v.estado}
@@ -267,10 +288,6 @@ function FormModulo({
           <option value="arquivado">Arquivado</option>
         </select>
       </Campo>
-      <AjudaRecolhida rotulo="Mais informações">
-        As aulas e os complementos de um módulo em rascunho ou arquivado ficam
-        ocultos para membros.
-      </AjudaRecolhida>
       <button className="membros-acao bg-primary text-primary-foreground">
         Salvar módulo
       </button>

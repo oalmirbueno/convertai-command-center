@@ -1,5 +1,11 @@
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
-import { useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -33,6 +39,7 @@ import ConfiguracaoKiwify from "@/components/membros/ConfiguracaoKiwify";
 import ChecklistLancamento from "@/components/membros/ChecklistLancamento";
 import CanaisDoProduto from "@/components/membros/CanaisDoProduto";
 import AdminFerramentas from "@/components/membros/AdminFerramentas";
+import TituloMembros from "@/components/membros/TituloMembros";
 import { enviarCapa } from "@/lib/membros/capas";
 import { urlHttps } from "@/lib/membros/modelo";
 import { texto, AjudaRecolhida } from "@/components/sistema";
@@ -40,10 +47,23 @@ import "@/components/membros/membros.css";
 
 const campo =
   "w-full min-h-11 rounded-lg bg-muted px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
-function Campo({ titulo, children }: { titulo: string; children: ReactNode }) {
+function Campo({
+  titulo,
+  children,
+  ajuda,
+}: {
+  titulo: string;
+  children: ReactNode;
+  ajuda?: ReactNode;
+}) {
   return (
     <label className="block min-w-0 space-y-2 text-[12px]">
-      <span>{titulo}</span>
+      <span className="inline-flex items-center gap-2">
+        {titulo}
+        {ajuda && (
+          <AjudaRecolhida rotulo={`Sobre ${titulo}`}>{ajuda}</AjudaRecolhida>
+        )}
+      </span>
       {children}
     </label>
   );
@@ -52,10 +72,12 @@ function Bloco({
   titulo,
   children,
   aberto = true,
+  ajuda,
 }: {
   titulo: string;
   children: ReactNode;
   aberto?: boolean;
+  ajuda?: ReactNode;
 }) {
   return (
     <details
@@ -63,7 +85,16 @@ function Bloco({
       className="membros-bloco border-t border-border py-4"
     >
       <summary className="cursor-pointer min-h-11 flex items-center justify-between gap-3 text-[15px] font-semibold">
-        {titulo}
+        <span className="inline-flex min-w-0 items-center gap-2">
+          {titulo}
+          {ajuda && (
+            <span onClick={(e) => e.stopPropagation()}>
+              <AjudaRecolhida rotulo={`Sobre ${titulo}`}>
+                {ajuda}
+              </AjudaRecolhida>
+            </span>
+          )}
+        </span>
         <ChevronDown
           size={17}
           className="membros-chevron text-muted-foreground shrink-0"
@@ -82,6 +113,10 @@ export default function AdminMembros() {
   const [pessoa, setPessoa] = useState("");
   const [recolhida, setRecolhida] = useState(false);
   const [secao, setSecao] = useState("produtos");
+  const principal = useRef<HTMLFieldSetElement>(null);
+  useEffect(() => {
+    if (principal.current) principal.current.scrollTop = 0;
+  }, [secao]);
   const [produtoIndicado, setProdutoIndicado] = useState("");
   const dados = useQuery({
     queryKey: ["membros", "admin"],
@@ -112,23 +147,33 @@ export default function AdminMembros() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/membros" className="membros-acao">
-            Ver biblioteca
+          <Link
+            to="/membros"
+            className="membros-acao"
+            aria-label="Ver biblioteca"
+            title="Ver biblioteca"
+          >
+            <Eye size={16} />
+            <span>Ver biblioteca</span>
           </Link>
           <Link
             to="/membros?modo=cliente"
             className="membros-acao border border-border"
+            aria-label="Testar como cliente"
+            title="Testar como cliente"
           >
             <FlaskConical size={16} />
-            Testar como cliente
+            <span>Testar como cliente</span>
           </Link>
           <button
             className="membros-acao bg-primary text-primary-foreground"
             disabled={!dados.data}
             onClick={() => setCheck(true)}
+            aria-label="Preparar lançamento"
+            title="Preparar lançamento"
           >
             <CheckSquare size={17} />
-            Preparar lançamento
+            <span>Preparar lançamento</span>
           </button>
         </div>
       </header>
@@ -220,30 +265,36 @@ export default function AdminMembros() {
               </p>
             </div>
           </nav>
-          <fieldset disabled={ocupado} className="membros-admin-principal">
+          <fieldset
+            ref={principal}
+            disabled={ocupado}
+            className="membros-admin-principal"
+          >
             {secao === "ferramentas" && <AdminFerramentas dados={dados.data} />}
-            <section hidden={secao !== "cliente"}>
-              <div className="rounded-xl bg-muted p-5 mb-5 space-y-3">
-                <h2 className={texto.tituloSecao}>
-                  Experimente a biblioteca inteira
-                </h2>
-                <AjudaRecolhida rotulo="Sobre o teste como cliente">
-                  Entre com seus acessos de membro, teste o bloqueio, assista à
-                  aula e baixe o material. O progresso do teste fica separado.
-                </AjudaRecolhida>
-                <Link
-                  to="/membros?modo=cliente"
-                  className="membros-acao bg-primary text-primary-foreground"
-                >
-                  <FlaskConical size={16} />
-                  Testar como cliente
-                </Link>
-              </div>
+            <section hidden={secao !== "cliente"} className="space-y-6">
+              <TituloMembros
+                titulo="Experimente a biblioteca inteira"
+                acoes={
+                  <Link
+                    to="/membros?modo=cliente"
+                    className="membros-acao bg-primary text-primary-foreground"
+                  >
+                    <FlaskConical size={16} />
+                    Testar como cliente
+                  </Link>
+                }
+              >
+                Entre com seus acessos de membro, teste o bloqueio, assista à
+                aula e baixe o material. O progresso do teste fica separado.
+              </TituloMembros>
               <section
-                className="rounded-xl border border-border p-4 mb-6 space-y-3"
+                className="border-t border-border py-5 space-y-4"
                 aria-label="Ver como cliente"
               >
-                <h2 className={texto.tituloSecao}>Ver como cliente</h2>
+                <TituloMembros titulo="Ver como cliente">
+                  Veja a mesma tela, com os produtos liberados e bloqueados para
+                  essa pessoa, sem alterar seu progresso.
+                </TituloMembros>
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="min-w-0 flex-1 max-w-md">
                     <Campo titulo="Cliente ou membro">
@@ -270,10 +321,6 @@ export default function AdminMembros() {
                     </Link>
                   )}
                 </div>
-                <AjudaRecolhida rotulo="Sobre a visão do cliente">
-                  Veja a mesma tela, com os produtos liberados e bloqueados para
-                  essa pessoa, sem alterar seu progresso.
-                </AjudaRecolhida>
               </section>
             </section>
             <section hidden={secao !== "produtos"} aria-label="Editar produtos">
@@ -319,14 +366,16 @@ export default function AdminMembros() {
               hidden={secao !== "pagamentos"}
               aria-label="Configuração dos pagamentos"
             >
-              <p className="text-[13px] mb-3" role="status">
+              <TituloMembros titulo="Pagamentos">
+                Configure os vínculos de venda para usar após a validação.
+                Salvar credenciais ou vínculos não ativa a liberação automática.
+              </TituloMembros>
+              <p
+                className="text-[12px] text-muted-foreground my-3"
+                role="status"
+              >
                 Liberação automática por Kiwify e Asaas desligada.
               </p>
-              <AjudaRecolhida rotulo="Sobre os pagamentos">
-                Liberação automática por Kiwify e Asaas desativada até a
-                validação dos pagamentos. Para testar, conceda um acesso manual
-                abaixo.
-              </AjudaRecolhida>
               {secao === "pagamentos" && <ConfiguracaoKiwify />}
               <Pagamentos dados={dados.data} agir={agir} />
             </section>
@@ -594,7 +643,16 @@ function FormProduto({
             <option value="comunidade">Comunidade</option>
           </select>
         </Campo>
-        <Campo titulo="Página de vendas (HTTPS)">
+        <Campo
+          titulo="Página de vendas (HTTPS)"
+          ajuda={
+            <>
+              Páginas externas precisam permitir a abertura dentro de outro
+              site. A opção de nova guia continua disponível. A liberação
+              automática por pagamento permanece desligada.
+            </>
+          }
+        >
           <input
             className={campo}
             type="url"
@@ -647,11 +705,6 @@ function FormProduto({
             {i.nome}
           </label>
         ))}
-        <AjudaRecolhida rotulo="Sobre a página de vendas e o checkout">
-          Páginas externas precisam permitir a abertura dentro de outro site. A
-          opção de nova guia continua disponível. A liberação automática por
-          pagamento permanece desligada.
-        </AjudaRecolhida>
         <button
           className="membros-acao bg-primary text-primary-foreground justify-self-start"
           type="submit"
@@ -693,7 +746,15 @@ function Direitos({ dados, agir }: Props) {
   const [plano, setPlano] = useState("");
   const [beneficio, setBeneficio] = useState("");
   return (
-    <Bloco titulo="Acessos e benefícios">
+    <Bloco
+      titulo="Acessos e benefícios"
+      ajuda={
+        <>
+          Exibindo até 200 direitos recentes. Benefícios de plano são calculados
+          pela vigência do contrato.
+        </>
+      }
+    >
       <div className="max-w-xl">
         <section>
           <h2 className={`${texto.tituloSecao} mb-4`}>
@@ -801,10 +862,6 @@ function Direitos({ dados, agir }: Props) {
           </li>
         ))}
       </ul>
-      <AjudaRecolhida rotulo="Saiba mais">
-        Exibindo até 200 direitos recentes. Benefícios de plano são calculados
-        pela vigência do contrato.
-      </AjudaRecolhida>
     </Bloco>
   );
 }
@@ -816,12 +873,16 @@ function Pagamentos({ dados, agir }: Props) {
   const [regra, setRegra] = useState("dias");
   const [revogarReembolso, setRevogarReembolso] = useState(false);
   return (
-    <Bloco titulo="Pagamentos e diagnóstico">
-      <AjudaRecolhida rotulo="Saiba mais">
-        Kiwify: ativação pendente de validação oficial e teste seguro. Asaas:
-        conferência por leitura no servidor, sem emissão de cobrança. Só
-        integramos produtos da própria Aceleriq.
-      </AjudaRecolhida>
+    <Bloco
+      titulo="Pagamentos e diagnóstico"
+      ajuda={
+        <>
+          Kiwify: ativação pendente de validação oficial e teste seguro. Asaas:
+          conferência por leitura no servidor, sem emissão de cobrança. Só
+          integramos produtos da própria Aceleriq.
+        </>
+      }
+    >
       <form
         className="grid sm:grid-cols-2 gap-4 max-w-4xl"
         onSubmit={(e) => {

@@ -170,14 +170,16 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
                 );
               }}
             >
-              <AjudaRecolhida rotulo="Preparar o plano mensal">
-                Rascunho por produto, separado da licença anual e do contrato de
-                marketing. Preço, escopo e pagamentos precisam ser validados
-                antes da ativação. Salvar não cobra, não renova e não muda a
-                licença anual.
-              </AjudaRecolhida>
               <label className="block text-[12px] space-y-2">
-                Nome do plano
+                <span className="inline-flex items-center gap-2">
+                  Nome do plano
+                  <AjudaRecolhida rotulo="Preparar o plano mensal">
+                    Rascunho por produto, separado da licença anual e do
+                    contrato de marketing. Preço, escopo e pagamentos precisam
+                    ser validados antes da ativação. Salvar não cobra, não
+                    renova e não muda a licença anual.
+                  </AjudaRecolhida>
+                </span>
                 <input
                   className="membros-campo"
                   required
