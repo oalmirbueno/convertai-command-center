@@ -19,15 +19,19 @@ container_id="$(docker run --detach --rm --network none --cpus 1 --memory 512m \
   --env POSTGRES_DB=membros_test --env POSTGRES_HOST_AUTH_METHOD=trust \
   postgres:17.6)"
 [[ "$container_id" =~ ^[a-f0-9]{64}$ ]]
-ready=false
-for attempt in {1..30}; do
-  if docker exec "$container_id" pg_isready --username postgres --dbname membros_test >/dev/null 2>&1; then
-    ready=true
-    break
-  fi
-  sleep 1
-done
-[[ "$ready" == true ]] || { echo 'Members SQL database did not start.' >&2; exit 1; }
+wait_ready() {
+  # The image's temporary init server only accepts Unix sockets. TCP confirms
+  # that initialization has finished, including after the persistence restart.
+  for attempt in {1..30}; do
+    if docker exec "$container_id" pg_isready --host 127.0.0.1 --username postgres --dbname membros_test >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo 'Members SQL database did not start.' >&2
+  return 1
+}
+wait_ready
 run_sql() {
   echo "Members SQL: $1"
   docker exec --interactive "$container_id" psql --no-psqlrc --quiet \
@@ -50,5 +54,6 @@ for source in \
 done
 # A real server restart verifies that progress and access were persisted.
 docker restart --time 10 "$container_id" >/dev/null
+wait_ready
 run_sql supabase/tests/membros/persistencia.sql
 echo 'Members SQL permissions, previews, tools and restart persistence passed.'
