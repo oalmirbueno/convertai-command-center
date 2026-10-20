@@ -8,7 +8,7 @@ export const root=fileURLToPath(new URL('../',import.meta.url));
 export const historicalBrand='supabase/migrations/20260925174500_cliente_marcas_acerbi_cme.sql';
 export const prerequisiteBodies=[
   ['20260720163307_ba44c9c5-a2a8-43ce-9493-c36a4a9c769d.sql','6758addc170dc6da4c1f152e1d4e07d95dd9a50f9396a9050d3124e791a7141f','__HANDLE_MD5__'],
-  ['20260808173948_a9f5e1ac-bc1b-4c3d-9c86-371abc7983cf.sql','cf7c6b49d77c5d80e3869985809ab84c477f1d9d4d1de474a370b2d1fc60d6a4','__OPS_MD5__'],
+  ['20260807211000_harden_notify_ops_sync_vault.sql','3d8230382a168e14536ccfb0b23ac0a397575347bb8bd6a5811813a12796ace8','__OPS_MD5__'],
 ];
 const expected='a2eb92e1f3b614b3e0b9606a21c88168eb264e7d8f7538fda1212d7a2e2c67f8';
 const digest=s=>createHash('sha256').update(s).digest('hex');

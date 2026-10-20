@@ -8,7 +8,7 @@ import {spawnSync} from 'node:child_process';
 const temporary:string[]=[];
 const historical='supabase/migrations/20260925174500_cliente_marcas_acerbi_cme.sql';
 const staged=['20260925174459_ci_brand_prerequisites.sql','20260925174501_ci_brand_cleanup.sql'];
-const triggerSources=['20260720163307_ba44c9c5-a2a8-43ce-9493-c36a4a9c769d.sql','20260808173948_a9f5e1ac-bc1b-4c3d-9c86-371abc7983cf.sql'];
+const triggerSources=['20260720163307_ba44c9c5-a2a8-43ce-9493-c36a4a9c769d.sql','20260807211000_harden_notify_ops_sync_vault.sql'];
 function fixture(){
   const root=mkdtempSync(join(tmpdir(),'aceleriq-ci-brand-'));temporary.push(root);
   for(const p of ['scripts/prepare-ci-brand-replay.mjs',historical,...triggerSources.map(n=>'supabase/migrations/'+n),'supabase/bootstrap/ci-brand-before.sql','supabase/bootstrap/ci-brand-after.sql']){
