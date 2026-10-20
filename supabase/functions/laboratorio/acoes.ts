@@ -61,6 +61,14 @@ import {
 } from "./modulos/regras.ts";
 import { BLOCO_DO_PROJETO_COMPLETO, SISTEMA_DO_PLANEJAR } from "./modulos/prompts.ts";
 import { BUCKET, lerImagem } from "./workspace.ts";
+import { fontesDoCliente, lerDocumento, noPreencher, portaDaInteligencia, type PortaDaInteligencia } from "./inteligencia.ts";
+import { configDoProjeto, decidirAutomatico, tetoPedido } from "./modulos/inteligencia.ts";
+import { acompanharNoEstudio, ajustarNoEstudio, type SaidaDoMotor } from "./motor-da-casa.ts";
+import { type ImagemDaSaida, noAjustar, noVariar, type PortaDosAjustes, type Salvo, salvarNosArquivos } from "./ajustes.ts";
+import { ajustarImagemDireta, portaDoMotorDe } from "./executar.ts";
+import { nomeLimpo } from "./modulos/regras.ts";
+import { marcaIdDoCanvas, nosSoltos } from "./modulos/motor.ts";
+import { marcaEmTextoDaMarca } from "./comum.ts";
 
 type Corpo = Record<string, unknown>;
 export type Acao = (ch: Chamador, corpo: Corpo) => Promise<Response>;
@@ -101,7 +109,8 @@ async function contextoDe(ch: Chamador, p: ProjetoDoLab, rodadaId: string | null
     projeto: p,
     canvas: p.canvas,
     carteira,
-    marca: await marcaEmTexto(p.client_id),
+    // 20/10: com a marca escolhida no nó Marca (cliente com duas marcas), só a dela; senão, a do cliente.
+    marca: p.client_id && marcaIdDoCanvas(p.canvas) ? await marcaEmTextoDaMarca(p.client_id, marcaIdDoCanvas(p.canvas)!) : await marcaEmTexto(p.client_id),
     nomeDoCliente: p.client_id ? await nomeDoCliente(p.client_id) : null,
     userId: ch.userId,
     token: ch.token,
@@ -191,8 +200,45 @@ export const projetoLer: Acao = async (ch, corpo) => {
   const { data } = await servico().from("lab_execucoes").select("*").eq("projeto_id", projeto.id).order("created_at", { ascending: false }).limit(300);
   const ultimas: Record<string, unknown> = {};
   for (const e of (data || []) as Array<Record<string, unknown>>) if (!ultimas[String(e.no_id)]) ultimas[String(e.no_id)] = e;
-  return json({ projeto, cliente_nome: projeto.client_id ? await nomeDoCliente(projeto.client_id) : null, execucoes: ultimas });
+  return json({ projeto: { ...projeto, config: await lerConfigDoProjeto(projeto.id) }, cliente_nome: projeto.client_id ? await nomeDoCliente(projeto.client_id) : null, execucoes: ultimas });
 };
+
+/**
+ * 20/10: config do projeto (coluna lab_projetos.config, migration 20261020080000). Hoje só
+ * auto_ate_usd (0 a 5): o teto que o dono autoriza para os nós com auto rodarem sem confirmar.
+ * Sem a coluna (migration pendente) vale { auto_ate_usd: 0 }: nada roda sozinho.
+ */
+async function lerConfigDoProjeto(projetoId: string): Promise<{ auto_ate_usd: number }> {
+  const { data, error } = await servico().from("lab_projetos").select("config").eq("id", projetoId).maybeSingle();
+  if (error) return { auto_ate_usd: 0 };
+  return configDoProjeto((data as { config?: unknown } | null)?.config);
+}
+
+/**
+ * projeto_config { projeto_id, config? } -> { config: { auto_ate_usd } }. Sem config, só lê. Com config, grava o teto
+ * (0 a 5; acima de 0 só admin ou gestor) sem mexer no canvas nem na versão do projeto.
+ */
+export const projetoConfig: Acao = async (ch, corpo) => {
+  const p = await lerProjeto(ch, corpo.projeto_id);
+  if (corpo.config === undefined) return json({ config: await lerConfigDoProjeto(p.id) });
+  const gravado = await salvarConfigDoProjeto(ch, p.id, corpo.config);
+  if (!gravado) throw new ErroHttp(400, "auto_ate_usd_invalido", "O teto do automático é um número de 0 a 5 (US$).");
+  return json({ config: gravado });
+};
+
+/** Muda o teto do automático: só admin ou gestor (é gasto sem confirmar). Valor fora de 0 a 5: 400. */
+async function salvarConfigDoProjeto(ch: Chamador, projetoId: string, bruto: unknown): Promise<{ auto_ate_usd: number } | null> {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto) || !("auto_ate_usd" in (bruto as Record<string, unknown>))) return null;
+  const teto = tetoPedido((bruto as Record<string, unknown>).auto_ate_usd);
+  if (teto === null) throw new ErroHttp(400, "auto_ate_usd_invalido", "O teto do automático é um número de 0 a 5 (US$).");
+  if (teto > 0 && !ch.papeis.some((p) => p === "admin" || p === "manager")) throw new ErroHttp(403, "so_admin_ou_gestor", "Só admin ou gestor liga o automático com teto de gasto.");
+  const atual = await servico().from("lab_projetos").select("config").eq("id", projetoId).maybeSingle();
+  if (atual.error) throw erroDoBanco(atual.error, "config_indisponivel", "O banco ainda não tem a configuração do projeto (migration 20261020080000 pendente).");
+  const antes = ((atual.data as { config?: unknown } | null)?.config || {}) as Record<string, unknown>;
+  const { error } = await servico().from("lab_projetos").update({ config: { ...antes, auto_ate_usd: teto } }).eq("id", projetoId);
+  if (error) throw erroDoBanco(error, "config_nao_salva", "Não consegui salvar o teto do automático agora.");
+  return { auto_ate_usd: teto };
+}
 
 export const projetoSalvar: Acao = async (ch, corpo) => {
   const atual = await lerProjeto(ch, corpo.projeto_id);
@@ -207,6 +253,13 @@ export const projetoSalvar: Acao = async (ch, corpo) => {
     if (novo) await garantirAcesso(ch, novo);
     patch.client_id = novo;
   }
+  // 20/10: config { auto_ate_usd } validada antes de gravar o resto (teto inválido não salva nada).
+  if (corpo.config !== undefined && (!corpo.config || typeof corpo.config !== "object" || tetoPedido((corpo.config as Record<string, unknown>).auto_ate_usd) === null)) {
+    throw new ErroHttp(400, "auto_ate_usd_invalido", "O teto do automático é um número de 0 a 5 (US$).");
+  }
+  if (corpo.config !== undefined && Number((corpo.config as Record<string, unknown>).auto_ate_usd) > 0 && !ch.papeis.some((p) => p === "admin" || p === "manager")) {
+    throw new ErroHttp(403, "so_admin_ou_gestor", "Só admin ou gestor liga o automático com teto de gasto.");
+  }
   const { data, error } = await servico().from("lab_projetos").update(patch).eq("id", atual.id).eq("versao", esperada).select(CAMPOS);
   if (error) throw erroDoBanco(error, "projeto_nao_salvo", "Não consegui salvar o projeto agora.");
   const linha = (data || [])[0];
@@ -214,7 +267,8 @@ export const projetoSalvar: Acao = async (ch, corpo) => {
     const agora = await lerProjeto(ch, atual.id);
     throw new ErroHttp(409, "versao_mudou", "Outra pessoa salvou este projeto antes. Recarregue para não perder nada.", { projeto_atual: agora });
   }
-  return json({ projeto: projetoDaLinha(linha) });
+  const config = (await salvarConfigDoProjeto(ch, atual.id, corpo.config)) || (await lerConfigDoProjeto(atual.id));
+  return json({ projeto: { ...projetoDaLinha(linha), config } });
 };
 
 export const projetoArquivar: Acao = async (ch, corpo) => {
@@ -351,9 +405,18 @@ export const noExecutar: Acao = async (ch, corpo) => {
   if (!no) throw new ErroHttp(404, "no_inexistente", "Este nó não está no canvas salvo. Salve o projeto e tente de novo.");
   if (!ehExecutavel(no.tipo)) throw new ErroHttp(400, "no_nao_executavel", "Este nó só guarda dado; rode o nó que usa ele.");
   const est = await estimarCanvas(p.canvas, [no.id]);
-  exigirConfirmacao(corpo, est.total_usd, est.por_no);
+  // 20/10: automatico (nó com auto e custo dentro do teto do projeto) roda sem o 409: o dono autorizou o teto
+  // antes. Tudo conferido aqui (o auto vem do canvas salvo, o teto do banco). Fora disso, o 409 de sempre.
+  const automatico = corpo.automatico === true
+    ? decidirAutomatico({ automatico: true, auto: no.dados.auto, custo: est.total_usd, teto: (await lerConfigDoProjeto(p.id)).auto_ate_usd })
+    : { ok: false, motivo: "" };
+  if (!automatico.ok) {
+    if (!confirmado(corpo)) {
+      throw new ErroHttp(409, "confirmacao_necessaria", `Isto custa cerca de US$ ${est.total_usd.toFixed(4)}. Confirme para rodar.`, { total_usd: est.total_usd, por_no: est.por_no, ...(automatico.motivo ? { motivo_do_automatico: automatico.motivo } : {}) });
+    }
+  }
   // Créditos do Laboratório: reserva o custo estimado (carteira ativa sem saldo: 402 sem_credito, nada roda).
-  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `Rodar ${rotuloDaNota(no)}`, userId: ch.userId });
+  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `${automatico.ok ? "Automático: " : ""}Rodar ${rotuloDaNota(no)}`, userId: ch.userId });
   let ctx: Contexto;
   let execucaoId: string;
   try {
@@ -517,7 +580,9 @@ export const planejar: Acao = async (ch, corpo) => {
   const mensagem = comRespostas(corpo, pedido);
   const { r, plano } = await chamarPlanejar(ch, { clientId: p.client_id, canvasTexto: resumoDoCanvas(p.canvas), contexto: p.contexto, mensagem, historico: corpo.historico, modeloId: limpo(corpo.modelo_id, 200) || MODELO_TEXTO_PADRAO, projetoId: p.id, completo });
   const aplicado = aplicarOperacoes(p.canvas, plano.operacoes, { projetoCompleto: completo });
-  return json({ resposta: plano.resposta, operacoes: aplicado.recibos, canvas_previsto: aplicado.canvas, versao: p.versao, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, modelo_id: r.modeloId, modo: completo ? "projeto_completo" : "simples", colunas: aplicado.colunas });
+  // 20/10: cadeias que fecham: o que ficou solto vai como aviso (a tela mostra; o agente corrige no próximo pedido).
+  const soltos = nosSoltos(aplicado.canvas);
+  return json({ resposta: plano.resposta, operacoes: aplicado.recibos, canvas_previsto: aplicado.canvas, versao: p.versao, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, modelo_id: r.modeloId, modo: completo ? "projeto_completo" : "simples", colunas: aplicado.colunas, nos_soltos: soltos });
 };
 
 /**
@@ -595,6 +660,14 @@ export const noAcompanhar: Acao = async (ch, corpo) => {
   const no = noDoProjeto(p, corpo);
   const ex = await ultimaDoNo(p, no.id);
   if (!ex) throw new ErroHttp(404, "sem_execucao", "Este nó ainda não rodou.");
+  // 20/10: Resultado e Carrossel no motor da casa (lâminas na fila da estudio-arte).
+  if (ex.saida && ex.saida.motor === "estudio_arte" && ex.saida.etapa === "gerando") {
+    const ctx = await contextoDe(ch, p);
+    const r = await acompanharNoEstudio(portaDoMotorDe(ctx), ex.saida as SaidaDoMotor, ex.id, typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo === "carrossel" ? "Carrossel" : "Resultado");
+    const fim = r.status === "aguardando" ? null : new Date().toISOString();
+    await atualizarExecucao(ex.id, { status: r.status, saida: r.saida, erro: r.erro ?? null, finished_at: fim });
+    return await execucaoAtual(ex.id);
+  }
   if (!ex.saida || (no.tipo !== "filme" && no.tipo !== "por_no_ar")) return await execucaoAtual(ex.id);
   const r = no.tipo === "filme"
     ? (ex.saida.filme_id ? await acompanharFilme(chamadorDaMesaMotion(ch.token), ex.saida as SaidaDoFilme, ex.id.slice(0, 8)) : null)
@@ -737,7 +810,106 @@ export const ACOES: Record<string, Acao> = {
   creditos: (ch) => lerCreditos(ch),
   creditos_carregar: (ch, corpo) => carregarCreditos(ch, corpo),
   creditos_limite: (ch, corpo) => definirLimite(ch, corpo),
+  fontes_do_cliente: (ch, corpo) => fontesDoCliente(portaDosNos(), ch, corpo),
+  no_preencher: (ch, corpo) => noPreencher(portaDosNos(), ch, corpo),
+  ler_documento: (ch, corpo) => lerDocumento(portaDosNos(), ch, corpo),
+  projeto_config: projetoConfig,
+  salvar_nos_arquivos: (ch, corpo) => salvarNosArquivos(portaDosAjustes(), ch, corpo),
+  no_ajustar: (ch, corpo) => noAjustar(portaDosAjustes(), ch, corpo),
+  no_variar: (ch, corpo) => noVariar(portaDosAjustes(), ch, corpo),
 };
 
+const nomeComparavel = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+/** Acha ou cria a cadeia de pastas no Workspace do cliente (escopo 'client'), pelo nome sem acento e sem caixa. */
+async function pastasDoCliente(clientId: string, pastas: string[], userId: string): Promise<string> {
+  const db = servico();
+  let pai: string | null = null;
+  for (const nome of pastas) {
+    let q = db.from("workspace_nodes").select("id, name").eq("scope", "client").eq("client_id", clientId).eq("kind", "folder");
+    q = pai ? q.eq("parent_id", pai) : q.is("parent_id", null);
+    const { data, error } = await q.limit(500);
+    if (error) throw new ErroHttp(503, "workspace_indisponivel", "Não consegui ler as pastas do cliente agora.");
+    const achada = ((data || []) as Array<{ id: string; name: string }>).find((x) => nomeComparavel(x.name) === nomeComparavel(nome));
+    if (achada) {
+      pai = achada.id;
+      continue;
+    }
+    const { data: nova, error: e2 }: { data: unknown; error: unknown } = await db.from("workspace_nodes").insert({ scope: "client", client_id: clientId, kind: "folder", name: nome, parent_id: pai, created_by: userId }).select("id").single();
+    if (e2 || !nova) throw new ErroHttp(503, "workspace_indisponivel", "Não consegui criar a pasta nos arquivos do cliente.");
+    pai = (nova as { id: string }).id;
+  }
+  return pai!;
+}
+
+let portaDosAjustesCache: PortaDosAjustes | null = null;
+/** A porta das ações da imagem do nó (salvar nos arquivos, ajustar, variar). */
+function portaDosAjustes(): PortaDosAjustes {
+  if (portaDosAjustesCache) return portaDosAjustesCache;
+  portaDosAjustesCache = {
+    lerProjeto,
+    garantirAcesso,
+    async ultimaPronta(p, noId) {
+      const { data, error } = await servico().from("lab_execucoes").select("id, status, saida").eq("projeto_id", p.id).eq("no_id", noId).eq("status", "pronto").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) throw erroDoBanco(error, "execucoes_indisponiveis", "Não consegui ler a execução do nó agora.");
+      return (data as { id: string; status: string; saida: Record<string, unknown> | null } | null) ?? null;
+    },
+    nomeDoCliente,
+    async copiarParaOCliente(o) {
+      const pastas = ["Laboratório", nomeLimpo(o.projeto.nome, "Projeto")];
+      const pasta = await pastasDoCliente(o.clientId, pastas, o.userId);
+      const db = servico();
+      const salvos: Salvo[] = [];
+      for (const i of o.imagens as ImagemDaSaida[]) {
+        const nome = i.path.split("/").pop() || "imagem.png";
+        const destino = `client/${o.clientId}/laboratorio/${o.projeto.id}/${nome}`;
+        const ja = await db.from("workspace_nodes").select("id").eq("client_id", o.clientId).eq("scope", "client").eq("storage_path", destino).limit(1);
+        if (!ja.error && ja.data && ja.data.length) {
+          salvos.push({ nome, path: destino, pasta: pastas.join(" / ") });
+          continue;
+        }
+        const { data: arq, error } = await db.storage.from(i.bucket || BUCKET).download(i.path);
+        if (error || !arq) throw new ErroHttp(404, "arquivo_inexistente", `Não achei ${nome} na pasta do Laboratório.`);
+        const up = await db.storage.from(BUCKET).upload(destino, arq, { contentType: arq.type || "image/png", upsert: true });
+        if (up.error) throw new ErroHttp(503, "arquivo_nao_salvo", "Não consegui copiar para os arquivos do cliente.");
+        const r = await db.from("workspace_nodes").insert({ scope: "client", client_id: o.clientId, kind: "file", parent_id: pasta, name: nome, mime: arq.type || "image/png", size_bytes: arq.size, storage_path: destino, created_by: o.userId }).select("id").single();
+        if (r.error) throw new ErroHttp(503, "arquivo_nao_salvo", "Copiei a imagem, mas não consegui registrar nos arquivos do cliente.");
+        salvos.push({ nome, path: destino, pasta: pastas.join(" / ") });
+      }
+      return salvos;
+    },
+    async preco(chamadas) {
+      const preco = await precificador(chamadas);
+      return chamadas.reduce((s, c) => s + preco(c), 0);
+    },
+    async cobrar(c) {
+      return await cobrarConfirmacao({ porNo: [{ no_id: c.noId, custo_usd: c.total }], total: c.total, projetoId: c.projetoId, nota: c.nota, userId: c.userId });
+    },
+    criarExecucao: (o) => criarExecucao({ projetoId: o.p.id, no: o.no, status: "na_fila", entrada: o.entrada, rodadaId: null, userId: o.userId }),
+    atualizarExecucao,
+    async ajustar(ch, p, no, saida, o) {
+      const ctx = await contextoDe(ch, p);
+      const rotulo = typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo;
+      if (saida.motor === "estudio_arte") {
+        const nova = await ajustarNoEstudio(portaDoMotorDe(ctx), saida as Partial<SaidaDoMotor>, { indice: o.indice, pedido: o.pedido, variacoes: o.quantidade, execucaoId: o.execucaoId, rotulo });
+        return { saida: nova, custo: 0 };
+      }
+      const imagem = (Array.isArray(saida.imagens) ? saida.imagens : [])[o.indice] as { path: string; bucket?: string } | undefined;
+      if (!imagem || !imagem.path) throw new ErroHttp(400, "indice_invalido", "Escolha uma das imagens geradas por este nó.");
+      return await ajustarImagemDireta(ctx, no, imagem, { pedido: o.pedido, quantidade: o.quantidade, execucaoId: o.execucaoId });
+    },
+    segundoPlano: emSegundoPlano,
+    execucao: (id) => execucaoAtual(id),
+  };
+  return portaDosAjustesCache;
+}
+
+let portaCache: PortaDaInteligencia | null = null;
+/** A porta das ações dos nós inteligentes (lerProjeto e contexto daqui: mesmo acesso de sempre). */
+function portaDosNos(): PortaDaInteligencia {
+  if (!portaCache) portaCache = portaDaInteligencia({ lerProjeto, contexto: (ch, p) => contextoDe(ch, p) });
+  return portaCache;
+}
+
 /** Ações que podem passar de 150 s sem resposta: começam a responder na hora (respostaComFolego). */
-export const ACOES_LONGAS = new Set(["planejar", "pedido_inicio", "logo_gerar", "no_executar", "filme_escolher", "no_acompanhar"]);
+export const ACOES_LONGAS = new Set(["planejar", "pedido_inicio", "logo_gerar", "no_executar", "filme_escolher", "no_acompanhar", "no_preencher", "ler_documento", "salvar_nos_arquivos", "no_ajustar", "no_variar"]);

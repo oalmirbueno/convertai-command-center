@@ -31,7 +31,12 @@ import {
   type CanvasDoLab,
   type TipoDeNo,
 } from "@/lib/laboratorio/nos";
-import type { ExecucaoDoLab } from "@/lib/laboratorio/api";
+import type { ExecucaoDoLab, ImagemDoLab } from "@/lib/laboratorio/api";
+import { estadoDoAuto, nosParaDisparar } from "@/lib/laboratorio/auto";
+import { pacoteDoNo, sugestoesDoNo, usandoDoNo } from "@/lib/laboratorio/complemento";
+import { ouvirNosSoltos } from "@/lib/laboratorio/api";
+import { TIPOS_CRIATIVOS } from "./no/ImagensDoResultado";
+import { dadosDasMidias } from "./no/MidiaDoNo";
 import CartaoDoNo, { type DadosDoCartao } from "./no/CartaoDoNo";
 import { LigacaoDoLab, LinhaDeConexao, type DadosDaLigacao } from "./no/LigacaoDoLab";
 import ControlesDoQuadro from "./no/ControlesDoQuadro";
@@ -89,6 +94,12 @@ export default function QuadroDoLab({
   onSincronizar,
   onAbrirDetalhes,
   onMudarGatilho,
+  antesDeChamar,
+  clientes,
+  soCanvas = false,
+  onSoCanvas,
+  onRodarAutomatico,
+  onNovaExecucao,
 }: {
   canvas: CanvasDoLab;
   execucoes: Record<string, ExecucaoDoLab>;
@@ -118,6 +129,17 @@ export default function QuadroDoLab({
   onAbrirDetalhes?: (id: string) => void;
   /** Gatilho do funil no fio (o mesmo do Inspetor); sem ele, o quadro muda o canvas direto. */
   onMudarGatilho?: (ligacaoId: string, gatilho: string | null) => void;
+  /** Salva o quadro antes de chamar a função (Gerar com IA, ler documento, estimar do nó). */
+  antesDeChamar?: () => Promise<void>;
+  /** Clientes da carteira (nó Cliente). */
+  clientes?: Array<{ id: string; nome: string }>;
+  /** Canvas em tela cheia ("só o canvas" do editor): o botão fica na pílula de controles. */
+  soCanvas?: boolean;
+  onSoCanvas?: () => void;
+  /** Automático: o nó com dados.auto e as entradas prontas pede no_executar { automatico: true }. */
+  onRodarAutomatico?: (id: string) => void;
+  /** Ajustar ou variar uma imagem gerou uma execução nova: o editor guarda e o vigia acompanha. */
+  onNovaExecucao?: (noId: string, ex: ExecucaoDoLab) => void;
 }) {
   const rf = useReactFlow();
   // O xyflow põe a classe do modo de cor na raiz do quadro; ".light" e ".dark" são os
@@ -131,6 +153,16 @@ export default function QuadroDoLab({
   const [mapa, setMapa] = useState(false);
   const [menu, setMenu] = useState<MenuAberto | null>(null);
   const [ligacaoSelecionada, setLigacaoSelecionada] = useState<string | null>(null);
+  // Nós que o planejar deixou soltos (no_id → motivo): aviso discreto até o nó ganhar uma ligação.
+  const [soltos, setSoltos] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!projetoId) return;
+    return ouvirNosSoltos(projetoId, (lista) => {
+      const m: Record<string, string> = {};
+      lista.forEach((x) => (m[x.no_id] = x.motivo || "Este nó ficou solto no fluxo."));
+      setSoltos(m);
+    });
+  }, [projetoId]);
 
   useEffect(() => {
     if (!ajustarVista) return;
@@ -167,6 +199,14 @@ export default function QuadroDoLab({
     }
   }, [canvas.nos, selecionado, revelar, rf]);
 
+  /** Os nós que recebem de `id` (nome curto), para o resumo da Configuração e da Base comum. */
+  const destinosDe = (id: string) =>
+    canvas.ligacoes
+      .filter((l) => l.de === id)
+      .map((l) => canvas.nos.find((n) => n.id === l.para))
+      .filter((n): n is NonNullable<typeof n> => !!n)
+      .map((n) => (typeof n.dados.titulo === "string" && n.dados.titulo.trim() ? n.dados.titulo.trim() : TIPOS_DE_NO[n.tipo].rotulo));
+
   const nodes = useMemo(
     (): Node<DadosDoCartao>[] =>
       canvas.nos.map((n) =>
@@ -182,13 +222,30 @@ export default function QuadroDoLab({
             escolhendo: escolhendo && escolhendo.no === n.id ? escolhendo.indice : null,
             trava: travas[n.id] || null,
             expandido: !!expandidos[n.id],
+            auto: estadoDoAuto(canvas, execucoes, n.id),
+            destinos: n.tipo === "config" || n.tipo === "gravity" ? destinosDe(n.id) : [],
+            // Complemento: o que o nó criativo usa das entradas, o que falta ligar e o pacote do fim do fluxo.
+            usando: TIPOS_CRIATIVOS.indexOf(n.tipo) >= 0 || n.tipo === "landing" ? usandoDoNo(canvas, execucoes, n.id) : [],
+            sugestoes: travado ? [] : sugestoesDoNo(canvas, n.id),
+            pacote: n.tipo === "por_no_ar" ? pacoteDoNo(canvas, execucoes, n.id) : [],
+            solto: soltos[n.id] && !canvas.ligacoes.some((l) => l.de === n.id || l.para === n.id) ? soltos[n.id] : null,
           },
         }),
       ),
     // versaoDasMedidas: a memória mudou (medida nova ou arrasto) e os nós precisam levar isso.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvas.nos, execucoes, selecionado, rodandoNo, revelar, escolhendo, travas, expandidos, versaoDasMedidas],
+    [canvas, execucoes, selecionado, rodandoNo, revelar, escolhendo, travas, expandidos, versaoDasMedidas, travado, soltos],
   );
+
+  // Automático: uma vez por mudança de entrada (assinatura), nunca ao abrir o projeto (a primeira leitura só registra).
+  const disparados = useRef<Record<string, string> | null>(null);
+  useEffect(() => {
+    if (!onRodarAutomatico) return;
+    const base = disparados.current === null;
+    if (base) disparados.current = {};
+    const ids = nosParaDisparar(canvas, execucoes, disparados.current as Record<string, string>, base);
+    ids.forEach((id) => onRodarAutomatico(id));
+  }, [canvas, execucoes, onRodarAutomatico]);
 
   const edges = useMemo(
     (): Edge<DadosDaLigacao>[] =>
@@ -315,10 +372,38 @@ export default function QuadroDoLab({
     [travado, abrirMenu, onTentarLigar],
   );
 
+  /** Cria um nó à esquerda de `destinoId` (abaixo dos que já entram) e liga nele pela regra de sempre. */
+  const criarLigado = useCallback(
+    (tipo: TipoDeNo, destinoId: string, dados?: Record<string, unknown>) => {
+      const feito = { novo: "", erro: "" };
+      onMudarCanvas((c) => {
+        const destino = c.nos.find((n) => n.id === destinoId);
+        if (!destino) return c;
+        const jaEntram = c.ligacoes.filter((l) => l.para === destinoId).length;
+        const r = criarNo(c, tipo, { x: destino.x - LARGURA_DO_NO - 80, y: destino.y + jaEntram * 60 }, dados);
+        if (!r.no) {
+          feito.erro = r.erro || "";
+          return c;
+        }
+        feito.novo = r.no.id;
+        return r.canvas;
+      });
+      if (!feito.novo) {
+        if (feito.erro) toast.warning("O quadro está cheio", { description: feito.erro });
+        return;
+      }
+      onTentarLigar(feito.novo, destinoId);
+      onSelecionar(feito.novo);
+    },
+    [onMudarCanvas, onTentarLigar, onSelecionar],
+  );
+
   const acoes = useMemo<AcoesDoQuadro>(
     () => ({
       projetoId,
       clienteId: clienteId || null,
+      clientes: clientes || [],
+      antesDeChamar: antesDeChamar || (() => Promise.resolve()),
       travado,
       mudarDados: (id, dados) => onMudarCanvas((c) => mudarDados(c, id, dados)),
       rodar: onRodar,
@@ -354,8 +439,14 @@ export default function QuadroDoLab({
         onMudarCanvas((c) => desligar(c, ligacaoId));
         setLigacaoSelecionada(null);
       },
+      novaExecucao: (noId, ex) => {
+        if (onNovaExecucao) onNovaExecucao(noId, ex);
+      },
+      ligarNovo: (destinoId, tipo) => criarLigado(tipo, destinoId),
+      usarComoReferencia: (noId, imagem: ImagemDoLab) =>
+        criarLigado("midia", noId, dadosDasMidias([{ id: imagem.path || imagem.url, tipo: "imagem", url: imagem.url, path: imagem.path, nome: "Referência" }])),
     }),
-    [projetoId, clienteId, travado, onMudarCanvas, onRodar, onSelecionar, onSincronizar, onAbrirDetalhes, onMudarGatilho, abrirMenu, onEscolherStoryboard],
+    [projetoId, clienteId, clientes, antesDeChamar, travado, onMudarCanvas, onRodar, onSelecionar, onSincronizar, onAbrirDetalhes, onMudarGatilho, abrirMenu, onEscolherStoryboard, onNovaExecucao, criarLigado],
   );
 
   const soltar = (e: DragEvent<HTMLDivElement>) => {
@@ -367,7 +458,8 @@ export default function QuadroDoLab({
   };
 
   const estilo = {
-    "--xy-background-color": "hsl(var(--muted) / 0.35)",
+    // Fundo um pouco cinza (tokens do tema) para os cartões se destacarem.
+    "--xy-background-color": theme === "light" ? "hsl(var(--muted))" : "hsl(var(--muted) / 0.45)",
     "--xy-edge-stroke-default": "hsl(var(--muted-foreground))",
     "--xy-connectionline-stroke-default": "hsl(var(--primary))",
     "--xy-connectionline-stroke-width-default": 2.5,
@@ -432,7 +524,7 @@ export default function QuadroDoLab({
           style={estilo}
         >
           <Background id="lab" variant={BackgroundVariant.Dots} gap={22} size={1.4} color="hsl(var(--muted-foreground) / 0.35)" />
-          <ControlesDoQuadro travado={travado} onTravar={setTravado} mapa={mapa} onMapa={setMapa} />
+          <ControlesDoQuadro travado={travado} onTravar={setTravado} mapa={mapa} onMapa={setMapa} soCanvas={soCanvas} onSoCanvas={onSoCanvas} projetoId={projetoId} />
           {mapa ? (
             <MiniMap
               position="bottom-right"

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, ExternalLink, Loader2, Maximize2, PauseCircle, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, Download, ExternalLink, Loader2, Maximize2, PauseCircle, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { JanelaCentral, botao, etiqueta, juntar, texto } from "@/components/sistema";
 import { enderecoParaBaixar, enderecosAssinados, lerHtmlSalvo } from "@/lib/laboratorio/arquivos";
@@ -100,7 +100,7 @@ export function PreviaDaLanding({ caminho, url, alta = false, cheia = false }: {
 }
 
 /** Baixa a imagem: caminho no workspace vira link de download assinado; sem caminho, a url que veio. */
-async function baixarImagem(img: ImagemDoLab, url: string, nome: string) {
+export async function baixarImagem(img: ImagemDoLab, url: string, nome: string) {
   try {
     const link = img.path && (!img.bucket || img.bucket === "workspace") ? await enderecoParaBaixar(img.path, nome) : url;
     if (!link) throw new Error("sem link");
@@ -130,13 +130,14 @@ export function GradeDeImagens({ imagens, escolhida, colunas = 2 }: { imagens: I
   const ir = (passo: number) => setAberta((a) => (a === null ? a : (a + passo + total) % total));
   return (
     <div className="min-w-0" data-grade-de-imagens="">
-      <div className={juntar("grid min-w-0 gap-1.5", colunas === 3 ? "grid-cols-3" : "grid-cols-2")}>
+      <div className={juntar("grid min-w-0 gap-1.5", total === 1 ? "grid-cols-1" : colunas === 3 ? "grid-cols-3" : "grid-cols-2")}>
         {urls.map((u, i) => (
           <button
             key={i}
             type="button"
             className={juntar("nodrag relative block w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90", escolhida === i && "ring-2 ring-primary")}
-            style={{ paddingTop: "100%" }}
+            // Uma imagem só fica cheia, na proporção dela; várias, em grade quadrada.
+            style={total === 1 ? undefined : { paddingTop: "100%" }}
             onClick={(e) => {
               e.stopPropagation();
               setAberta(i);
@@ -145,7 +146,7 @@ export function GradeDeImagens({ imagens, escolhida, colunas = 2 }: { imagens: I
             title={`Ampliar a imagem ${i + 1}`}
             data-escolhida={escolhida === i ? "" : undefined}
           >
-            {u ? <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : null}
+            {u ? <img src={u} alt="" className={total === 1 ? "block h-auto max-h-[420px] w-full object-cover" : "absolute inset-0 h-full w-full object-cover"} loading="lazy" /> : total === 1 ? <span className="block h-40" /> : null}
           </button>
         ))}
       </div>
@@ -417,6 +418,33 @@ function PorNoArDoNo({ execucao }: { execucao: ExecucaoDoLab }) {
   );
 }
 
+/** Copiar o texto do resultado (fica no canto do texto). */
+function BotaoDeCopiar({ texto: conteudo }: { texto: string }) {
+  const [copiado, setCopiado] = useState(false);
+  const copiar = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(conteudo);
+      else {
+        const area = document.createElement("textarea");
+        area.value = conteudo;
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+      }
+      setCopiado(true);
+      window.setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      toast.error("Não deu para copiar");
+    }
+  };
+  return (
+    <button type="button" className={juntar(botao.icone, "nodrag absolute right-0 top-0 h-6 w-6")} onClick={(e) => { e.stopPropagation(); void copiar(); }} aria-label={copiado ? "Copiado" : "Copiar o texto"} title={copiado ? "Copiado" : "Copiar o texto"} data-copiar-texto="">
+      {copiado ? <Check className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+    </button>
+  );
+}
+
 export default function ResultadoDoNo({
   execucao,
   compacto = true,
@@ -424,11 +452,14 @@ export default function ResultadoDoNo({
   onEscolherStoryboard,
   escolhendo = null,
   largura,
+  semImagens = false,
 }: {
   execucao: ExecucaoDoLab | null | undefined;
   compacto?: boolean;
   /** No nó do quadro: a largura útil (px), para a miniatura da landing e a grade de imagens. */
   largura?: number;
+  /** As imagens já aparecem em outro bloco do nó (nós criativos: ImagensDoResultado). */
+  semImagens?: boolean;
   /** O tipo do nó (a execução recém-criada ainda não traz). */
   tipo?: TipoDeNo;
   /** Filme: escolher um dos storyboards no próprio nó (filme_escolher). */
@@ -447,9 +478,14 @@ export default function ResultadoDoNo({
       {t === "funil" && s.json ? <DesenhoDoFunil json={s.json} compacto={compacto} /> : null}
       {t === "filme" ? <FilmeDoNo saida={s} status={execucao.status} onEscolher={onEscolherStoryboard} escolhendo={escolhendo} compacto={compacto} /> : null}
       {t === "por_no_ar" ? <PorNoArDoNo execucao={execucao} /> : null}
-      {s.texto && !(jsonProprio && s.json && compacto) ? <p className={juntar(texto.auxiliar, "whitespace-pre-wrap text-foreground", compacto && "line-clamp-3")}>{s.texto}</p> : null}
+      {s.texto && !(jsonProprio && s.json && compacto) ? (
+        <div className="group/texto relative min-w-0" data-texto-do-resultado="">
+          <p className={juntar(texto.auxiliar, "whitespace-pre-wrap pr-7 text-foreground", compacto && "line-clamp-3")}>{s.texto}</p>
+          <BotaoDeCopiar texto={s.texto} />
+        </div>
+      ) : null}
       <FontesDaPesquisa fontes={s.fontes} compacto={compacto} />
-      {s.imagens.length ? (largura || !compacto ? <GradeDeImagens imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} colunas={!largura || largura > 300 ? 3 : 2} /> : <Miniaturas imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} />) : null}
+      {s.imagens.length && !semImagens ? (largura || !compacto ? <GradeDeImagens imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} colunas={!largura || largura > 300 ? 3 : 2} /> : <Miniaturas imagens={s.imagens} escolhida={s.escolha ? s.escolha.indice : null} />) : null}
       {s.escolha ? (
         <p className={juntar(texto.auxiliar, compacto && "line-clamp-2")} data-escolha-do-jev="">
           <span className="font-medium text-foreground">Jev escolheu a {s.escolha.indice + 1}ª:</span> {s.escolha.motivo}

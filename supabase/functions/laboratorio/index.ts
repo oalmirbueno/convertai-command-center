@@ -48,6 +48,34 @@
  * - creditos_limite { ativa } (só admin) -> { saldo_usd, ativa }
  * - no_executar / rodar_tudo / filme_escolher com confirmado reservam o custo estimado; carteira ativa sem
  *   saldo -> 402 sem_credito { saldo_usd, custo_usd }. Inativa (o começo) só registra. Falha devolve (estorno).
+ * Nós inteligentes (20/10; inteligencia.ts e modulos/inteligencia.ts; migration 20261020080000):
+ * - fontes_do_cliente { client_id: uuid | null } -> { cliente: { id, nome, nicho } | null, dossie: { resumo (≤1500), pontos } | null,
+ *   marca: { cores, fontes, tom, logo_url, nunca } | null, midias: [{ id, tipo: imagem|video, url, miniatura_url, nome, origem }] (≤60),
+ *   documentos: [{ id, nome, tipo, url }] (≤40) }. Equipe com can_access_client; nulo = marca da Aceleriq (cliente interno)
+ *   e mídias do Workspace global do Laboratório. Não gasta IA. (miniatura_url pode vir null em vídeo sem miniatura.)
+ * - no_preencher { projeto_id, no_id, pedido? (≤1000), campos?, confirmado? } -> { dados (só CAMPOS_DO_TIPO, por dadosDoTipo),
+ *   explicacao (≤300), custo_usd, campos, modelo_id }. Sem confirmado: 409 confirmacao_necessaria { total_usd, por_no }.
+ *   Usa as entradas ligadas, o dossiê e a marca, os documentos do nó e o pedido; número sem fonte vira [PREENCHER: número].
+ *   Não preenche anexo, link, gateway, domínio, data nem o que multiplica o custo. Não salva o canvas. Reserva nos créditos.
+ * - ler_documento { projeto_id, arquivo: { id, path?, url?, nome? }, resumir?, confirmado? } -> { texto (≤16000), resumo (≤600), lido }
+ *   (PDF com texto embutido e .docx pelo leitor sem biblioteca; ler não gasta; resumir pede confirmação do custo).
+ * - projeto_config { projeto_id, config? } -> { config: { auto_ate_usd } } (sem config só lê). projeto_ler devolve projeto.config;
+ *   projeto_salvar também aceita config { auto_ate_usd: 0 a 5 } (acima de 0: só admin
+ *   ou gestor). no_executar { automatico: true }: nó com dados.auto e custo ≤ auto_ate_usd roda sem o 409 (crédito conferido na
+ *   reserva: 402 sem_credito); fora disso, 409 com motivo_do_automatico.
+ * - Nó Mídia aceita dados.midias: [{ id, tipo: imagem|video (mp4, mov, webm), url, path, nome }] (até 8); vídeo segue como entrada.
+ * Motor da casa (20/10; motor-da-casa.ts, ajustes.ts, modulos/motor.ts):
+ * - Resultado e Carrossel geram pela Arte rápida da estudio-arte (origem 'laboratorio', com o JWT de quem rodou):
+ *   rapida_preparar + enfileirar; o nó fica 'aguardando' (saida.motor 'estudio_arte', etapa 'gerando') e o
+ *   no_acompanhar termina: com as lâminas prontas, copia para Laboratório/<Livres | cliente>/<projeto> e fica 'pronto'.
+ *   Logo segue pelo logo_gerar (Mesa Identidade). Template, personagem e quadros do UGC: motor de imagem direto.
+ *   saida.usou: [{ tipo, rotulo, no_id, como? }] = o que entrou de fato (copy = texto exato, marca, mídia = foto real...).
+ * - salvar_nos_arquivos { projeto_id, no_id, indices?, destino: 'cliente' | 'laboratorio' } -> { salvos: [{ nome, path, pasta }] }
+ *   ('cliente': Workspace do cliente, pasta Laboratório / <projeto>, can_access_client; sem cliente: 400 sem_cliente).
+ * - no_ajustar { projeto_id, no_id, indice, pedido (≤500), confirmado? } e no_variar { projeto_id, no_id, indice,
+ *   quantidade 1..4, confirmado? } -> 202 { execucao_id, status: 'rodando' } (nova execução do nó; sem confirmado: 409
+ *   confirmacao_necessaria com o custo; reserva nos créditos, falha devolve).
+ * - planejar devolve nos_soltos: [{ no_id, tipo, motivo }] (regra das cadeias que fecham).
  * Filme: mesa-motion (filme_criar, filme_salvar, storyboards_gerar, storyboard_escolher, cena_pedir, filme_ler, montar,
  * render_status) com a sessão de quem pediu. Pôr no ar: só cria o pedido em operator_approvals; aprovado, o gatilho
  * da migration 20261019233000 entrega a tarefa ao operador (operator_assign_task). Nada vai ao ar sem o dono.

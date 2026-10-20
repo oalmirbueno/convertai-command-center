@@ -16,7 +16,7 @@
  * só pelo Conectar (Composio/OAuth) ou pelo pedido de acesso (aceleriq_acesso_pedir), nunca senha.
  */
 import { ErroHttp } from "./comum.ts";
-import { ACAO_DO_ALVO, type AlvoNoAr, alvoValido, type NoDoCanvas, ROTULO_DO_TIPO } from "./modulos/regras.ts";
+import { ACAO_DO_ALVO, type AlvoNoAr, alvoValido, imagensComPrincipal, type NoDoCanvas, ROTULO_DO_TIPO } from "./modulos/regras.ts";
 
 export const OPERADOR_PADRAO = "default";
 /** Pedido de aprovação vale 14 dias (ordem vencida não aparece para o agente). */
@@ -122,7 +122,7 @@ export function montarPacote(entradas: EntradaDoPacote[]): Pacote {
     }
     if (MENSAGENS_V4.indexOf(no.tipo) >= 0 && (s.json || txt(s.texto))) (p.mensagens = p.mensagens || []).push({ titulo: t, tipo: no.tipo, resumo: txt(s.texto, 3000), pacote: { ...obj(s.json), rascunho: true, enviado: false } });
     if (CONFIGURACOES_V4.indexOf(no.tipo) >= 0 && s.json) (p.configuracoes = p.configuracoes || []).push({ titulo: t, tipo: no.tipo, resumo: txt(s.texto, 2000), pacote: obj(s.json) });
-    for (const i of Array.isArray(s.imagens) ? s.imagens : []) {
+    for (const i of imagensComPrincipal(no, Array.isArray(s.imagens) ? s.imagens : [], s.escolha)) {
       const im = obj(i);
       if (txt(im.path)) p.criativos.push({ titulo: t, path: txt(im.path), url: txt(im.url) || null });
     }

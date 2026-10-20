@@ -68,6 +68,10 @@ export interface SaidaDaExecucao {
   // ---- v3 (clickmax-rea.md)
   /** Prova ou número que o nó escreveu sem fonte: trava o Pôr no ar até o dono resolver. */
   rascunho_sem_fonte: BlocoSemFonte[];
+  /** Nós criativos (21/10): o que de cada entrada o motor usou ([{ tipo, rotulo, no_id }]). */
+  usou?: UsoDaEntrada[];
+  /** Motor que gera a peça ("estudio_arte": o motor da casa, acompanhado pelo no_acompanhar). */
+  motor?: string;
 }
 
 /** Pergunta guiada antes de montar (até 4): os exemplos só preenchem a caixa. */
@@ -158,6 +162,8 @@ export interface RespostaDoPlanejar {
   modo: "projeto_completo" | "simples";
   /** v3: faltou o essencial; a função perguntou em vez de montar (operacoes vem vazia). */
   perguntas: PerguntaGuiada[];
+  /** 21/10: nós que ficaram soltos no plano, com o motivo (o quadro avisa no nó). */
+  nos_soltos?: NoSolto[];
 }
 
 export interface VariacaoDeLogo extends ImagemDoLab {
@@ -288,6 +294,8 @@ export function normalizarSaida(s: unknown): SaidaDaExecucao {
     prova: texto(o.prova),
     link_no_ar: linkSeguro(o.url_no_ar || o.link_no_ar || o.url_publicada || o.prova_url),
     rascunho_sem_fonte: blocosSemFonte(o.rascunho_sem_fonte),
+    usou: usouDe(o.usou),
+    motor: texto(o.motor),
   };
 }
 
@@ -486,7 +494,10 @@ export async function acompanharNo(projetoId: string, noId: string): Promise<Exe
  * de tempo em tempo (5 s). O Pôr no ar não: o estado dele chega pelo realtime de lab_execucoes.
  */
 export function precisaAcompanhar(tipo: string, e: ExecucaoDoLab | undefined): boolean {
-  if (!e || tipo !== "filme" || e.status === "erro" || e.status === "pronto") return false;
+  if (!e || e.status === "erro" || e.status === "pronto") return false;
+  // 21/10: Resultado e Carrossel no motor da casa (estudio_arte) ficam "aguardando"; só o no_acompanhar avança.
+  if (noMotorDaCasa(tipo, e)) return true;
+  if (tipo !== "filme") return false;
   return e.saida.storyboard_escolhido !== null && (e.saida.etapa_filme === "renderizando" || e.saida.etapa_filme === "montando");
 }
 
@@ -585,6 +596,7 @@ export async function planejar(a: { projetoId: string; mensagem: string; histori
     custo_usd: num(data && data.custo_usd),
     modo: data && data.modo === "projeto_completo" ? "projeto_completo" : a.modo === "projeto_completo" && !(data && data.modo) ? "projeto_completo" : "simples",
     perguntas: normalizarPerguntas(data && data.perguntas),
+    nos_soltos: avisarNosSoltos(a.projetoId, nosSoltosDe(data && data.nos_soltos)),
   };
 }
 
@@ -809,4 +821,193 @@ export function saldoDepoisDoCusto(c: Pick<CreditosDoLab, "disponivel" | "ativa"
   if (!c || !c.disponivel || !c.ativa) return null;
   const depois = Math.round((c.saldo_usd - total) * 1e6) / 1e6;
   return { depois, falta: depois < 0 ? -depois : 0 };
+}
+
+// ------------------------------------------------------------ nós completos (21/10): fontes do cliente, preencher com IA, ler documento, automático
+
+/** Mídia da biblioteca do cliente (fontes_do_cliente.midias). */
+export interface MidiaDoCliente {
+  id: string;
+  tipo: "imagem" | "video";
+  url: string;
+  miniatura_url: string;
+  nome: string;
+  origem: string;
+}
+
+/** fontes_do_cliente → o que o cliente já tem: dossiê, marca, mídias e documentos. */
+export interface FontesDoCliente {
+  cliente: { id: string; nome: string } | null;
+  dossie: { resumo: string; pontos: string[] };
+  marca: { cores: string[]; fontes: string[]; tom: string; logo_url: string; nunca: string[] };
+  midias: MidiaDoCliente[];
+  documentos: Array<{ id: string; nome: string; tipo: string; url: string }>;
+}
+
+const textos = (v: unknown): string[] => valores(v).map((x) => (x && typeof x === "object" ? texto((x as any).nome || (x as any).valor || (x as any).hex || "") : texto(x)).trim()).filter(Boolean);
+
+export function normalizarFontes(v: unknown): FontesDoCliente {
+  const o = objeto(v);
+  const c = objeto(o.cliente);
+  const d = objeto(o.dossie);
+  const m = objeto(o.marca);
+  return {
+    cliente: c.id || c.nome ? { id: texto(c.id), nome: texto(c.nome || c.company_name) } : typeof o.cliente === "string" ? { id: "", nome: o.cliente } : null,
+    dossie: { resumo: texto(d.resumo).trim(), pontos: textos(d.pontos) },
+    marca: { cores: textos(m.cores), fontes: textos(m.fontes), tom: texto(m.tom).trim(), logo_url: texto(m.logo_url), nunca: textos(m.nunca) },
+    midias: valores(o.midias)
+      .map((x) => objeto(x))
+      .filter((x) => !!texto(x.url))
+      .map((x) => ({ id: texto(x.id) || texto(x.url), tipo: x.tipo === "video" ? ("video" as const) : ("imagem" as const), url: texto(x.url), miniatura_url: texto(x.miniatura_url), nome: texto(x.nome), origem: texto(x.origem) })),
+    documentos: valores(o.documentos)
+      .map((x) => objeto(x))
+      .filter((x) => !!texto(x.id) || !!texto(x.url))
+      .map((x) => ({ id: texto(x.id), nome: texto(x.nome) || "Documento", tipo: texto(x.tipo), url: texto(x.url) })),
+  };
+}
+
+/** fontes_do_cliente { client_id | null }. */
+export async function fontesDoCliente(clientId: string | null): Promise<FontesDoCliente> {
+  return normalizarFontes(await chamar("fontes_do_cliente", { client_id: clientId || null }));
+}
+
+/** no_preencher → { dados, explicacao, custo_usd }. Sem confirmado, a função responde 409 confirmacao_necessaria com o custo. */
+export async function preencherNo(a: { projetoId: string; noId: string; pedido?: string; campos?: string[]; confirmado?: boolean }): Promise<{ dados: Record<string, unknown>; explicacao: string; custo_usd: number }> {
+  const corpo: Record<string, unknown> = { projeto_id: a.projetoId, no_id: a.noId };
+  if (a.pedido && a.pedido.trim()) corpo.pedido = a.pedido.trim();
+  if (a.campos && a.campos.length) corpo.campos = a.campos;
+  if (a.confirmado) corpo.confirmado = true;
+  const data = objeto(await chamar("no_preencher", corpo));
+  return { dados: objeto(data.dados), explicacao: texto(data.explicacao), custo_usd: num(data.custo_usd) ?? 0 };
+}
+
+/** O custo que a função pediu para confirmar (409 confirmacao_necessaria de no_preencher). */
+export function custoDoPreencher(e: unknown): number | null {
+  if (!(e instanceof ErroDaMesa) || e.codigo !== "confirmacao_necessaria") return null;
+  const d = objeto(e.detalhes);
+  return num(d.custo_usd) ?? num(d.total_usd) ?? 0;
+}
+
+/** ler_documento { projeto_id, arquivo: { id, path?, url? }, resumir? } → { texto, resumo, lido }. */
+export async function lerDocumento(a: { projetoId: string; arquivo: { id: string; path?: string; url?: string }; resumir?: boolean }): Promise<{ texto: string; resumo: string; lido: boolean }> {
+  const arquivo: Record<string, unknown> = { id: a.arquivo.id };
+  if (a.arquivo.path) arquivo.path = a.arquivo.path;
+  if (a.arquivo.url) arquivo.url = a.arquivo.url;
+  const data = objeto(await chamar("ler_documento", { projeto_id: a.projetoId, arquivo, ...(a.resumir ? { resumir: true } : {}) }));
+  return { texto: texto(data.texto), resumo: texto(data.resumo), lido: data.lido === true };
+}
+
+/** no_executar { automatico: true }: a função decide se cabe no teto do projeto; não cabendo, 409 com o custo. */
+export async function executarNoAutomatico(projetoId: string, noId: string): Promise<ExecucaoDoLab> {
+  const data = await chamar("no_executar", { projeto_id: projetoId, no_id: noId, automatico: true });
+  const ex = normalizarExecucao(data && data.execucao);
+  if (ex) return ex;
+  const status = data && STATUS.indexOf(data.status) >= 0 ? (data.status as StatusDaExecucao) : "rodando";
+  return execucaoNova(noId, texto(data && data.execucao_id), status);
+}
+
+/** Teto do automático por nó (config.auto_ate_usd): de 0 a 5; 0 = sempre pergunta. */
+export const autoAteUsdValido = (v: unknown): number => {
+  const n = num(v);
+  return n === null || n < 0 ? 0 : Math.min(5, Math.round(n * 100) / 100);
+};
+
+/** config do projeto ({ auto_ate_usd }): lê e grava pela ação projeto_config (contrato a fechar com a função). */
+export async function lerConfigDoProjeto(projetoId: string): Promise<{ auto_ate_usd: number }> {
+  const data = objeto(await chamar("projeto_config", { projeto_id: projetoId }));
+  return { auto_ate_usd: autoAteUsdValido(objeto(data.config).auto_ate_usd) };
+}
+
+export async function salvarConfigDoProjeto(projetoId: string, config: { auto_ate_usd: number }): Promise<{ auto_ate_usd: number }> {
+  const data = objeto(await chamar("projeto_config", { projeto_id: projetoId, config: { auto_ate_usd: autoAteUsdValido(config.auto_ate_usd) } }));
+  return { auto_ate_usd: autoAteUsdValido(objeto(data.config).auto_ate_usd ?? config.auto_ate_usd) };
+}
+
+// ------------------------------------------------------------ nós criativos (21/10): motor treinado, salvar, ajustar, variar
+
+/** O que de uma entrada o motor usou (saida.usou). */
+export interface UsoDaEntrada {
+  tipo: string;
+  rotulo: string;
+  no_id: string;
+  /** Como a entrada foi usada (vai no title do chip). */
+  como: string;
+}
+
+export function usouDe(v: unknown): UsoDaEntrada[] {
+  return valores(v)
+    .map((x) => objeto(x))
+    .filter((x) => !!texto(x.rotulo) || !!texto(x.tipo))
+    .map((x) => ({ tipo: texto(x.tipo), rotulo: texto(x.rotulo) || texto(x.tipo), no_id: texto(x.no_id), como: texto(x.como) }));
+}
+
+/** salvar_nos_arquivos { projeto_id, no_id, indices?, destino } → { salvos: [{ nome, path, pasta }] }. */
+export async function salvarNosArquivos(a: { projetoId: string; noId: string; indices?: number[]; destino: "cliente" | "laboratorio" }): Promise<Array<{ nome: string; path: string; pasta: string }>> {
+  const corpo: Record<string, unknown> = { projeto_id: a.projetoId, no_id: a.noId, destino: a.destino };
+  if (a.indices && a.indices.length) corpo.indices = a.indices;
+  const data = objeto(await chamar("salvar_nos_arquivos", corpo));
+  return valores(data.salvos)
+    .map((x) => objeto(x))
+    .map((x) => ({ nome: texto(x.nome), path: texto(x.path), pasta: texto(x.pasta) }));
+}
+
+const execucaoDa = (data: any, noId: string): ExecucaoDoLab => {
+  const ex = normalizarExecucao(data && data.execucao);
+  if (ex) return ex;
+  const status = data && STATUS.indexOf(data.status) >= 0 ? (data.status as StatusDaExecucao) : "na_fila";
+  return execucaoNova(noId, texto(data && data.execucao_id), status);
+};
+
+/** no_ajustar { projeto_id, no_id, indice, pedido, confirmado? }: sem confirmado, 409 com o custo; depois, uma execução nova. */
+export async function ajustarImagem(a: { projetoId: string; noId: string; indice: number; pedido: string; confirmado?: boolean }): Promise<ExecucaoDoLab> {
+  const data = await chamar("no_ajustar", { projeto_id: a.projetoId, no_id: a.noId, indice: a.indice, pedido: a.pedido.trim(), ...(a.confirmado ? { confirmado: true } : {}) });
+  return execucaoDa(data, a.noId);
+}
+
+/** no_variar { projeto_id, no_id, indice, quantidade 1..4, confirmado? }: sem confirmado, 409 com o custo; depois, uma execução nova. */
+export async function variarImagem(a: { projetoId: string; noId: string; indice: number; quantidade: number; confirmado?: boolean }): Promise<ExecucaoDoLab> {
+  const quantidade = Math.max(1, Math.min(4, Math.round(a.quantidade) || 1));
+  const data = await chamar("no_variar", { projeto_id: a.projetoId, no_id: a.noId, indice: a.indice, quantidade, ...(a.confirmado ? { confirmado: true } : {}) });
+  return execucaoDa(data, a.noId);
+}
+
+/** Resultado ou Carrossel no motor da casa (estudio_arte), ainda gerando: "No motor" na tela e no_acompanhar de tempo em tempo. */
+export function noMotorDaCasa(tipo: string, e: ExecucaoDoLab | undefined): boolean {
+  if (!e || e.status === "erro" || e.status === "pronto") return false;
+  if (e.saida.motor === "estudio_arte") return true;
+  return (tipo === "imagem" || tipo === "carrossel") && e.status === "aguardando" && e.saida.etapa_filme === "gerando";
+}
+
+/** O motor recusou porque o cliente tem mais de uma marca (400 escolha_a_marca). */
+export const ehEscolhaDaMarca = (e: unknown) => e instanceof ErroDaMesa && e.codigo === "escolha_a_marca";
+
+/** Nó que o planejar deixou solto ({ no_id, tipo, motivo }). */
+export interface NoSolto {
+  no_id: string;
+  tipo: string;
+  motivo: string;
+}
+
+export function nosSoltosDe(v: unknown): NoSolto[] {
+  return valores(v)
+    .map((x) => objeto(x))
+    .filter((x) => !!texto(x.no_id))
+    .map((x) => ({ no_id: texto(x.no_id), tipo: texto(x.tipo), motivo: texto(x.motivo) }));
+}
+
+/** Quem mostra os nós soltos (o quadro do projeto) ouve aqui; o planejar avisa sem mudar quem o chama. */
+const ouvintesDosSoltos: Array<{ projetoId: string; cb: (l: NoSolto[]) => void }> = [];
+
+export function ouvirNosSoltos(projetoId: string, cb: (l: NoSolto[]) => void): () => void {
+  const item = { projetoId, cb };
+  ouvintesDosSoltos.push(item);
+  return () => {
+    const i = ouvintesDosSoltos.indexOf(item);
+    if (i >= 0) ouvintesDosSoltos.splice(i, 1);
+  };
+}
+
+export function avisarNosSoltos(projetoId: string, lista: NoSolto[]): NoSolto[] {
+  ouvintesDosSoltos.filter((o) => o.projetoId === projetoId).forEach((o) => o.cb(lista));
+  return lista;
 }

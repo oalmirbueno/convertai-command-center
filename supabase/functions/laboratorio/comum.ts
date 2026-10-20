@@ -7,6 +7,7 @@ import { IaMotorErro, type Tarefa } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { clienteInternoDaAgencia } from "../_shared/nucleo-das-mesas.ts";
 import { lerContextoConsolidado, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { blocoDaMarca, lerMarcaCompleta, marcasDoCliente } from "../_shared/marca.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { ErroDoCanvas } from "./modulos/regras.ts";
 
@@ -141,6 +142,34 @@ export async function carteiraDe(clientId: string | null): Promise<Carteira> {
   const interno = await clienteInternoDaAgencia(servico());
   if (!interno) throw new ErroHttp(503, "sem_cliente_interno", "Não achei o cliente interno da Aceleriq para pagar os trabalhos livres.");
   return { clientId: interno, livre: true };
+}
+
+/**
+ * 20/10: a marca escolhida no nó Marca (cliente_marcas, cliente com duas marcas, como Acerbi e CME) em texto.
+ * Só os dados DESTA marca (paleta, tom, estilo, regras, contexto dela): outra marca nunca herda cor, logo
+ * nem contexto. Marca de outro cliente ou inexistente: vazio.
+ */
+export async function marcaEmTextoDaMarca(clientId: string, marcaId: string): Promise<string> {
+  try {
+    const [m, todas] = await Promise.all([lerMarcaCompleta(servico(), clientId, marcaId), marcasDoCliente(servico(), clientId)]);
+    if (!m) return "";
+    const paleta = (Array.isArray(m.paleta) ? m.paleta as Array<{ nome?: string; hex?: string; papel?: string }> : []).map((p) => [p.nome, p.hex, p.papel].filter(Boolean).join(" ")).filter(Boolean).join("; ");
+    const c = (m.contexto || {}) as Record<string, unknown>;
+    const t = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    return [
+      blocoDaMarca(m, todas),
+      t(c.negocio) ? `Negócio: ${t(c.negocio)}` : "",
+      t(c.publico) ? `Público: ${t(c.publico)}` : "",
+      t(c.oferta) ? `Oferta: ${t(c.oferta)}` : "",
+      t(m.tom) || t(c.tom_de_voz) ? `Tom de voz: ${t(m.tom) || t(c.tom_de_voz)}` : "",
+      paleta ? `Paleta: ${paleta}` : "",
+      t(m.estilo) ? `Estilo: ${t(m.estilo)}` : "",
+      t(m.regras) ? `Regras da marca: ${t(m.regras)}` : "",
+    ].filter(Boolean).join("\n").slice(0, 4000);
+  } catch (e) {
+    registrarFalha("laboratorio: marca escolhida sem leitura", e, { client_id: clientId, marca_id: marcaId });
+    return "";
+  }
 }
 
 /** Marca e contexto do cliente em texto (vazio para o Livre). */

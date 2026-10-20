@@ -320,15 +320,16 @@ describe("Altura do canvas e Canvas Studio recolhível", () => {
     Element.prototype.getBoundingClientRect = rectOriginal;
   });
 
-  it("o piso é 70% da janela (nunca menos de 420 px)", () => {
-    expect(alturaMinimaDoCanvas(1000)).toBe(700);
-    expect(alturaMinimaDoCanvas(844)).toBe(591);
-    expect(alturaMinimaDoCanvas(500)).toBe(420);
+  it("o piso é a janela inteira menos 16 px (21/10: canvas de verdade 100%; nunca menos de 420 px)", () => {
+    expect(alturaMinimaDoCanvas(1000)).toBe(984);
+    expect(alturaMinimaDoCanvas(844)).toBe(828);
+    expect(alturaMinimaDoCanvas(400)).toBe(420);
   });
 
   it("recolher o Studio vira uma linha fina, o canvas ganha a altura (medida de novo) e a escolha é lembrada", async () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 1000 });
     // O topo do canvas desce com o Studio aberto (240 px) e sobe com ele recolhido (100 px).
+    // 21/10: o piso é a janela inteira (1000 - 16), então a altura fica 984 px nos dois casos.
     Element.prototype.getBoundingClientRect = function (this: Element) {
       const r = rectOriginal.call(this);
       if (this.hasAttribute && this.hasAttribute("data-corpo-do-editor")) {
@@ -340,12 +341,12 @@ describe("Altura do canvas e Canvas Studio recolhível", () => {
 
     const r = montarEditor();
     const corpo = await achar("[data-corpo-do-editor]");
-    await waitFor(() => expect(corpo.style.height).toBe("744px"));
+    await waitFor(() => expect(corpo.style.height).toBe("984px"));
 
     fireEvent.click(screen.getByRole("button", { name: "Recolher o Canvas Studio" }));
     await achar("[data-studio-recolhido]");
     expect(screen.queryByLabelText("Pedido para o Canvas Studio")).toBeNull();
-    await waitFor(() => expect((document.querySelector("[data-corpo-do-editor]") as HTMLElement).style.height).toBe("884px"));
+    await waitFor(() => expect((document.querySelector("[data-corpo-do-editor]") as HTMLElement).style.height).toBe("984px"));
 
     // Lembrado: abre de novo recolhido.
     await new Promise((ok) => setTimeout(ok, 400));
@@ -354,7 +355,7 @@ describe("Altura do canvas e Canvas Studio recolhível", () => {
     await achar("[data-studio-recolhido]");
     fireEvent.click(screen.getByRole("button", { name: "Abrir o Canvas Studio" }));
     expect(await screen.findByLabelText("Pedido para o Canvas Studio")).toBeInTheDocument();
-    await waitFor(() => expect((document.querySelector("[data-corpo-do-editor]") as HTMLElement).style.height).toBe("744px"));
+    await waitFor(() => expect((document.querySelector("[data-corpo-do-editor]") as HTMLElement).style.height).toBe("984px"));
   }, 30000);
 });
 

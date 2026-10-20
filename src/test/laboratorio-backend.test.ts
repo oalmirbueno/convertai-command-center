@@ -33,6 +33,10 @@ const ACOES_DO_CONTRATO = [
   "projeto_excluir",
   // 20/10: créditos do Laboratório (carteira própria)
   "creditos", "creditos_carregar", "creditos_limite",
+  // 20/10: nós inteligentes (inteligencia.ts)
+  "fontes_do_cliente", "no_preencher", "ler_documento", "projeto_config",
+  // 20/10: motor da casa (salvar, ajustar e variar a imagem do nó)
+  "salvar_nos_arquivos", "no_ajustar", "no_variar",
 ];
 
 /** Os tipos de nó da v1 (o CHECK da 20261019180000); a v2 amplia na 20261019233000. */

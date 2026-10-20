@@ -12,13 +12,14 @@ import { jevPerguntar, type ResultadoJev } from "../_shared/jev.ts";
 import { erroQueSobe, motivoDaFalha, registrarFalha } from "../_shared/falha-registrada.ts";
 import { OPERADOR_HERMES } from "../_shared/pedido-ao-hermes.ts";
 import { type Carteira, ErroHttp, servico, TAREFA } from "./comum.ts";
-import { type ArquivoSalvo, garantirPastas, lerImagem, salvarArquivo } from "./workspace.ts";
+import { type ArquivoSalvo, garantirPastas, lerImagem, linkAssinado, salvarArquivo } from "./workspace.ts";
 import { chamadorDaMesaMotion, type ChamarMotion, rodarFilme } from "./filme.ts";
 import type { CobrancaDoLab } from "./creditos.ts";
 import { textoDosDocumentos } from "./documentos.ts";
 import { type AprovacaoLida, type EntradaDoPacote, type Operador, pedirNoAr, type PortaDoNoAr } from "./no-ar.ts";
-import { executoresDaV4, saidaEstaticaDaV4 } from "./nos-v4.ts";
+import { executoresDaV4, saidaDoNoCliente, saidaEstaticaDaV4 } from "./nos-v4.ts";
 import { faltasParaPorNoAr } from "./modulos/funil.ts";
+import { baixarDoEstudio, type PortaDoMotor, portaDoMotor, rodarNoEstudio } from "./motor-da-casa.ts";
 import {
   ancestraisDe,
   arred,
@@ -37,6 +38,9 @@ import {
   ehExecutavel,
   gravityDe,
   limitar,
+  imagensComPrincipal,
+  midiasDe,
+  ROTULO_DO_PAPEL,
   MAX_LAMINAS,
   MAX_LOGOS,
   MODELO_IMAGEM_PADRAO,
@@ -115,6 +119,8 @@ export type Contexto = {
   pastaId?: string;
   /** Teste: troca a chamada à mesa-motion. */
   motion?: ChamarMotion;
+  /** Teste: troca o caminho até a estudio-arte (motor da casa dos nós Resultado e Carrossel). */
+  motorDoEstudio?: PortaDoMotor;
   /** Créditos do Laboratório reservados na confirmação: o nó que falha ou não roda devolve a parte dele. */
   cobranca?: CobrancaDoLab;
 };
@@ -180,16 +186,27 @@ async function saidaDe(ctx: Contexto, no: NoDoCanvas): Promise<SaidaDoNo | null>
   }
   if (no.tipo === "midia") {
     const imgs = Array.isArray(no.dados.imagens) ? no.dados.imagens : [];
-    return {
-      imagens: imgs
-        .map((i) => (i && typeof i === "object" ? i as Record<string, unknown> : {}))
-        .filter((i) => typeof i.path === "string" && i.path)
-        .map((i) => ({ path: String(i.path), url: typeof i.url === "string" ? i.url : null, bucket: typeof i.bucket === "string" ? i.bucket : "workspace" })),
-    };
+    const imagens: ImagemSaida[] = imgs
+      .map((i) => (i && typeof i === "object" ? i as Record<string, unknown> : {}))
+      .filter((i) => typeof i.path === "string" && i.path)
+      .map((i) => ({ path: String(i.path), url: typeof i.url === "string" ? i.url : null, bucket: typeof i.bucket === "string" ? i.bucket : "workspace" }));
+    // 20/10: dados.midias (imagem ou vídeo enviado no nó). Imagem entra como as outras; vídeo vai em
+    // `videos` (link assinado de novo) e em texto para os nós seguintes (vídeo, UGC, influenciador).
+    const midias = midiasDe(no.dados.midias);
+    // Imagem da biblioteca (só link, sem caminho) entra pelo link; a de caminho, pelo storage.
+    for (const m of midias) if (m.tipo === "imagem" && !imagens.some((i) => (m.path ? i.path === m.path : i.url === m.url))) imagens.push({ path: m.path, url: m.url || null, bucket: m.bucket || "workspace" });
+    const videos: Array<{ path: string; url: string | null; nome: string; bucket: string }> = [];
+    for (const m of midias.filter((x) => x.tipo === "video")) {
+      const bucket = m.bucket || "workspace";
+      videos.push({ path: m.path, nome: m.nome, bucket, url: (m.path ? await linkAssinado(m.path, bucket).catch(() => null) : null) || m.url || null });
+    }
+    return videos.length ? { imagens, videos, texto: videos.map((v) => `Vídeo de entrada: ${v.nome}${v.url ? ` (${v.url})` : ""}`).join("\n") } : { imagens };
   }
   if (no.tipo === "config" || no.tipo === "gravity") return null;
   // v4: Marca, Cliente, Vídeo, Documento e Produto só guardam dado (o Documento lê o texto dos anexos).
-  if (no.tipo === "marca" || no.tipo === "cliente" || no.tipo === "video" || no.tipo === "arquivo" || no.tipo === "produto") {
+  // 20/10: Cliente com client_id próprio: só com can_access_client de quem roda (nos-v4.ts).
+  if (no.tipo === "cliente") return await saidaDoNoCliente(ctx, no);
+  if (no.tipo === "marca" || no.tipo === "video" || no.tipo === "arquivo" || no.tipo === "produto") {
     return saidaEstaticaDaV4(ctx, no, no.tipo === "arquivo" ? await textoDosDocumentos(ctx, no.dados.arquivos) : "");
   }
   const daRodada = ctx.saidas.get(no.id);
@@ -208,11 +225,12 @@ async function saidaDe(ctx: Contexto, no: NoDoCanvas): Promise<SaidaDoNo | null>
   return s;
 }
 
-export type Entradas = { textos: string[]; imagens: ImagemSaida[] };
+export type Entradas = { textos: string[]; imagens: ImagemSaida[]; videos?: Array<{ path: string; url: string | null; nome: string; bucket: string }> };
 
 export async function entradasMontadas(ctx: Contexto, no: NoDoCanvas): Promise<Entradas> {
   const textos: string[] = [];
   const imagens: ImagemSaida[] = [];
+  const videos: NonNullable<Entradas["videos"]> = [];
   if (ctx.projeto.contexto && ctx.projeto.contexto.trim()) textos.push(`Contexto do projeto: ${ctx.projeto.contexto.trim()}`);
   // Documentos anexados no próprio nó (Agente): valem como entrada.
   const proprios = await textoDosDocumentos(ctx, no.dados.arquivos);
@@ -228,9 +246,11 @@ export async function entradasMontadas(ctx: Contexto, no: NoDoCanvas): Promise<E
     if ((antes.tipo === "oferta" || antes.tipo === "funil") && s.json && !s.texto) textos.push(`${rotulo}: ${JSON.stringify(s.json).slice(0, 4000)}`);
     if (antes.tipo === "anuncio" && s.json) textos.push(`${rotulo}: ${JSON.stringify(s.json).slice(0, 3000)}`);
     if (antes.tipo === "landing" && s.html_path) textos.push(`${rotulo}: página salva em ${s.html_path}`);
-    if (s.imagens?.length) imagens.push(...s.imagens);
+    // 20/10: a imagem principal escolhida na tela (dados.principal) vai à frente; sem ela, a escolha do Jev.
+    if (s.imagens?.length) imagens.push(...imagensComPrincipal(antes, s.imagens, s.escolha));
+    if (Array.isArray(s.videos) && s.videos.length) videos.push(...(s.videos as NonNullable<Entradas["videos"]>));
   }
-  return { textos, imagens };
+  return videos.length ? { textos, imagens, videos } : { textos, imagens };
 }
 
 /** Bytes das imagens de entrada (até `max`), para referência no gerador ou visão no agente. */
@@ -246,6 +266,36 @@ async function bytesDas(imagens: Array<{ path: string; bucket?: string }>, max =
 async function pasta(ctx: Contexto): Promise<string> {
   if (!ctx.pastaId) ctx.pastaId = await garantirPastas(pastasDoLaboratorio(ctx.nomeDoCliente, ctx.projeto.nome), ctx.userId);
   return ctx.pastaId;
+}
+
+/**
+ * 20/10: a porta do motor da casa (estudio-arte) com o guardar daqui: a lâmina pronta (bucket mesa) vai para
+ * a mesma pasta do projeto no Laboratório que os outros nós usam.
+ */
+export function portaDoMotorDe(ctx: Contexto): PortaDoMotor {
+  return ctx.motorDoEstudio || portaDoMotor({
+    token: ctx.token,
+    async guardar(o) {
+      const b = await baixarDoEstudio(o.path);
+      if (!b) return null;
+      return imagemDoArquivo(await salvarImagem(ctx, o.execucaoId, o.rotulo, o.indice, o.total, b.bytes, b.mime));
+    },
+  });
+}
+
+/**
+ * Resultado e Carrossel no motor da casa (Arte rápida do Estúdio, origem 'laboratorio'). Sem o cliente "Estúdio
+ * livre" num projeto sem cliente, cai no motor de imagem direto, com o aviso.
+ */
+async function noNoEstudio(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  try {
+    return await rodarNoEstudio(portaDoMotorDe(ctx), ctx, no, await saidasDasEntradas(ctx, no), execucaoId);
+  } catch (err) {
+    if (!(err instanceof ErroHttp) || err.codigo !== "sem_cliente_do_estudio_livre") throw err;
+    const r = no.tipo === "carrossel" ? await noCarrossel(ctx, no, e, execucaoId) : await noImagem(ctx, no, e, execucaoId);
+    r.saida.avisos = [...(r.saida.avisos || []), 'Gerado no motor de imagem direto: falta o cliente "Estúdio livre" para o motor da casa num projeto sem cliente.'];
+    return r;
+  }
 }
 
 async function salvarImagem(ctx: Contexto, execucaoId: string, rotulo: string, indice: number, total: number, png: Uint8Array, mime: string): Promise<ArquivoSalvo> {
@@ -344,9 +394,12 @@ async function gerarImagens(
 
 async function noAgente(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
   const instrucao = txt(no.dados.instrucao);
+  // 20/10: papel escolhido no nó (estrategista, copywriter...) numa linha curta antes da instrução.
+  const papel = ROTULO_DO_PAPEL[no.dados.papel as keyof typeof ROTULO_DO_PAPEL];
+  const base = papel ? `${SISTEMA_DO_AGENTE}\n\nSEU PAPEL: ${papel}.` : SISTEMA_DO_AGENTE;
   const r = await texto(ctx, {
     modelo: no.dados.modelo_id,
-    sistema: instrucao ? `${SISTEMA_DO_AGENTE}\n\nSUA INSTRUÇÃO NESTE FLUXO:\n${instrucao}` : SISTEMA_DO_AGENTE,
+    sistema: instrucao ? `${base}\n\nSUA INSTRUÇÃO NESTE FLUXO:\n${instrucao}` : base,
     mensagem: e.textos.join("\n\n"),
     imagens: await bytesDas(e.imagens, 4),
     maxSaida: SAIDA_ESPERADA.agente,
@@ -368,6 +421,24 @@ async function noCopy(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: st
   });
   const j = (r.json ?? {}) as { texto_completo?: string };
   return { saida: { texto: txt(j.texto_completo, 20000) || r.texto, json: r.json ?? null, formato }, custo: r.custoUsd, usoId: r.usoId };
+}
+
+/**
+ * 20/10: ajuste ou variações de uma imagem de nó que não passa pelo Estúdio (template, personagem, quadros do
+ * UGC, logo): o motor de imagem edita a partir da imagem escolhida (ela vai como referência), com o pedido.
+ */
+export async function ajustarImagemDireta(ctx: Contexto, no: NoDoCanvas, imagem: { path: string; bucket?: string }, o: { pedido: string | null; quantidade: number; execucaoId: string }): Promise<{ saida: SaidaDoNo; custo: number }> {
+  const cfg = configDe(ctx.canvas, no);
+  const referencias = await bytesDas([imagem], 1);
+  if (!referencias.length) throw new ErroHttp(404, "imagem_inexistente", "Não achei a imagem escolhida para ajustar.");
+  const base = "Use a imagem enviada como base: mesma peça, mesma marca, mesmo texto e o mesmo produto.";
+  const pedidos = Array.from({ length: o.pedido ? 1 : Math.max(1, Math.min(4, o.quantidade)) }, (_, i) => ({
+    rotulo: `${rotuloDoNo(no)} ${o.pedido ? "ajuste" : "variação"}`,
+    prompt: o.pedido ? `${base}\nAJUSTE PEDIDO: ${o.pedido}\nMude só o que o pedido diz.` : `${base}\nVARIAÇÃO ${i + 1}: mude a composição e o enquadramento, mantendo tudo o que identifica a peça.`,
+  }));
+  const g = await gerarImagens(ctx, o.execucaoId, pedidos, { modeloId: cfg.motor || MODELO_IMAGEM_PADRAO, qualidade: cfg.qualidade, tamanho: TAMANHO_DA_PROPORCAO[cfg.proporcao], referencias });
+  const imagens = g.arquivos.map((a, i) => (a ? imagemDoArquivo(a, i + 1) : null)).filter((a): a is ImagemSaida => !!a);
+  return { saida: { imagens, avisos: g.avisos, usos: g.usos, texto: o.pedido ? `Ajuste: ${o.pedido.slice(0, 200)}` : `${imagens.length} variação(ões).` }, custo: g.custo };
 }
 
 async function noImagem(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
@@ -852,8 +923,9 @@ async function noPorNoAr(ctx: Contexto, no: NoDoCanvas, _e: Entradas, execucaoId
 const EXECUTORES: Record<string, (ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string) => Promise<Resultado>> = {
   agente: noAgente,
   copy: noCopy,
-  imagem: noImagem,
-  carrossel: noCarrossel,
+  // 20/10: o motor da casa (estudio-arte); noImagem e noCarrossel ficam só como reserva sem o cliente do Estúdio livre.
+  imagem: noNoEstudio,
+  carrossel: noNoEstudio,
   logo: noLogo,
   landing: noLanding,
   anuncio: noAnuncio,
@@ -885,6 +957,16 @@ export async function rodarNo(ctx: Contexto, no: NoDoCanvas, execucaoId: string)
     if (NOS_COM_PROVA.indexOf(no.tipo) >= 0 && !Array.isArray(r.saida.rascunho_sem_fonte)) {
       const j = r.saida.json && typeof r.saida.json === "object" ? r.saida.json as Record<string, unknown> : {};
       r.saida.rascunho_sem_fonte = blocosSemFonte({ declarados: j.blocos_sem_fonte, textos: [r.saida.texto, r.saida.json] });
+    }
+    // 20/10: o que entrou de fato (a tela mostra "usou"); o motor da casa já grava o dele, com o papel de cada entrada.
+    if (!Array.isArray(r.saida.usou) || !r.saida.usou.length || typeof r.saida.usou[0] === "string") {
+      const usados = entradasDo(ctx.canvas, no.id).filter((n) => {
+        const s = ctx.saidas.get(n.id);
+        // Os que só guardam dado (Contexto, Mídia, Marca, Configuração...) entram pelos dados; os que rodam, pela saída.
+        if (!ehExecutavel(n.tipo)) return true;
+        return !!s && (!!s.texto || (Array.isArray(s.imagens) && s.imagens.length > 0) || !!s.json);
+      });
+      r.saida.usou = usados.map((n) => ({ tipo: n.tipo, rotulo: rotuloDoNo(n), no_id: n.id }));
     }
     ctx.saidas.set(no.id, r.saida);
     await atualizarExecucao(execucaoId, { status: r.status || "pronto", saida: r.saida, custo_usd: arred(r.custo), uso_id: r.usoId, finished_at: r.status === "aguardando" ? null : new Date().toISOString() });
@@ -949,8 +1031,9 @@ export async function seguirRodada(ctx: Contexto, ordem: string[], execucoes: Re
       continue;
     }
     try {
-      await rodarNo(ctx, no, execucoes[id]);
-      if (no.tipo === "filme") esperando.add(id);
+      const saida = await rodarNo(ctx, no, execucoes[id]);
+      // Filme e motor da casa ficam esperando (storyboard; lâminas na fila do Estúdio): quem depende roda depois.
+      if (no.tipo === "filme" || (saida && saida.motor === "estudio_arte" && saida.etapa === "gerando")) esperando.add(id);
     } catch (err) {
       falhos.add(id);
       if (erroQueSobe(err)) parar = `Rodada parada: ${err instanceof Error ? err.message : motivoDaFalha(err)}`;

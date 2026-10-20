@@ -16,10 +16,12 @@ import {
   custoAConfirmar,
   ehConflitoDeVersao,
   ehJaPedido,
+  ehEscolhaDaMarca,
   normalizarExecucao,
   escolherStoryboard,
   estimar,
   executarNo,
+  executarNoAutomatico,
   lerExecucoes,
   lerProjeto,
   precisaAcompanhar,
@@ -107,11 +109,12 @@ const VIGIA_MS = 3000;
 /** Filme renderizando ou montando: no_acompanhar de tempo em tempo (um passo por chamada). */
 const ACOMPANHAR_MS = 5000;
 /** Esperam algo de fora (escolha, render, aprovação): quem vigia é o no_acompanhar, não o execucoes_ler. */
-const ESPERAM_DE_FORA = ["filme", "por_no_ar"];
+// 21/10: Resultado e Carrossel no motor da casa (estudio_arte) também esperam: quem avança é o no_acompanhar.
+const ESPERAM_DE_FORA = ["filme", "por_no_ar", "imagem", "carrossel"];
 
-/** Piso da altura do canvas: 70% da janela (nunca menos de 420 px). */
+/** Piso da altura do canvas: a janela inteira, menos o respiro de baixo (21/10, dono: "de verdade 100%"; nunca menos de 420 px). */
 export function alturaMinimaDoCanvas(alturaDaJanela: number): number {
-  return Math.max(420, Math.round(alturaDaJanela * 0.7));
+  return Math.max(420, Math.round(alturaDaJanela - 16));
 }
 
 /**
@@ -520,6 +523,10 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
       } else if (e instanceof Error && (e as { codigo?: string }).codigo === "rascunho_sem_fonte") {
         setCusto(null);
         toast.warning("Pôr no ar travado", { description: e.message });
+      } else if (ehEscolhaDaMarca(e)) {
+        // Cliente com duas marcas: o motor pede qual vale (o nó Marca grava marca_id).
+        setCusto(null);
+        toast.warning("Escolha a marca no nó Marca", { description: "Este cliente tem mais de uma marca: ligue um nó Marca e escolha qual vale." });
       } else if (ehJaPedido(e)) {
         setCusto(null);
         toast.info("Já pedido", { description: "Este Pôr no ar já tem um pedido aberto. Veja em Precisa de você (Execução)." });
@@ -614,6 +621,23 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const aoEscolherStoryboard = useCallback((noId: string, indice: number) => void escolherFilme(noId, indice).catch(() => undefined), [escolherFilme]);
 
   const rodarNo = useCallback((id: string) => void pedirCusto({ tipo: "no", id }), [pedirCusto]);
+  /** Automático: no_executar { automatico: true }; a função decide pelo teto do projeto e, acima dele (409), vem a janela de custo de sempre. */
+  const rodarAutomatico = useCallback(
+    async (id: string) => {
+      try {
+        await garantirSalvo();
+        const ex = await executarNoAutomatico(projetoId, id);
+        setExecucoes((a) => ({ ...a, [id]: ex }));
+        setVigiar(true);
+      } catch (e) {
+        const pedido = custoAConfirmar(e);
+        const c = atual.current;
+        if (pedido) setCusto({ alvo: { tipo: "no", id }, titulo: `Rodar ${nomeDoNo(c, id)} (automático)`, linhas: pedido.por_no.length ? pedido.por_no.map((n) => ({ id: n.no_id, nome: nomeDoNo(c, n.no_id), custo_usd: n.custo_usd })) : [{ id, nome: nomeDoNo(c, id), custo_usd: pedido.total_usd }], total: pedido.total_usd });
+        else toast.error(`Não deu para rodar ${nomeDoNo(c, id)} sozinho`, { description: textoDoErro(e) });
+      }
+    },
+    [garantirSalvo, projetoId],
+  );
   /** Sincronizar: roda de novo o nó e os executáveis antes dele (o rodar_tudo com alvo faz o mesmo), sempre pelo custo antes. */
   const sincronizarNo = useCallback(
     (id: string) => {
@@ -834,6 +858,15 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               onSincronizar={sincronizarNo}
               onAbrirDetalhes={abrirDetalhes}
               onMudarGatilho={(id, g) => mudar((c) => definirGatilho(c, id, g))}
+              antesDeChamar={garantirSalvo}
+              clientes={clientesDoSeletor}
+              soCanvas={soCanvas}
+              onSoCanvas={() => setSoCanvas(!soCanvas)}
+              onRodarAutomatico={rodarAutomatico}
+              onNovaExecucao={(id, ex) => {
+                setExecucoes((x) => ({ ...x, [id]: ex }));
+                setVigiar(true);
+              }}
             />
             {!canvas.nos.length && (
               <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>

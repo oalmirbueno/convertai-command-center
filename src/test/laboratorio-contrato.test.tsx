@@ -278,12 +278,13 @@ describe("contrato: custo antes de rodar", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Rodar" }));
 
     const janela = await janelaDeCusto();
+    // 20/10: o Resultado no motor da casa soma a direção e a conferência (texto) às 2 imagens: 0,12 + 0,02.
     expect(corpos("estimar")[0]).toEqual({ acao: "estimar", projeto_id: P, nos: ["i1"] });
     expect(janela.textContent).toContain("Resultado 1");
-    expect(janela.textContent).toMatch(/US\$ 0,12/);
+    expect(janela.textContent).toMatch(/US\$ 0,14/);
     expect(corpos("no_executar")).toHaveLength(0);
 
-    fireEvent.click(within(janela).getByRole("button", { name: /Rodar · US\$ 0,12/ }));
+    fireEvent.click(within(janela).getByRole("button", { name: /Rodar · US\$ 0,14/ }));
     await waitFor(() => expect(corpos("no_executar")).toHaveLength(1));
     expect(corpos("no_executar")[0]).toMatchObject({ projeto_id: P, no_id: "i1", confirmado: true });
     await waitFor(() => expect(document.querySelector('[data-linha-do-no="i1"] [data-estado-do-no="pronto"]')).not.toBeNull());
@@ -294,7 +295,7 @@ describe("contrato: custo antes de rodar", () => {
     montarEditor();
     fireEvent.click(await screen.findByRole("button", { name: "Rodar tudo" }));
     const janela = await janelaDeCusto();
-    expect(janela.textContent).toMatch(/US\$ 0,12/);
+    expect(janela.textContent).toMatch(/US\$ 0,14/);
     fireEvent.click(within(janela).getByRole("button", { name: /Rodar · / }));
     await waitFor(() => expect(corpos("rodar_tudo")).toHaveLength(1));
     expect(corpos("rodar_tudo")[0]).toMatchObject({ projeto_id: P, confirmado: true });

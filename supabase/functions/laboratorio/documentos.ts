@@ -3,17 +3,19 @@
  *
  * Acesso: o que foi enviado no próprio projeto (global/laboratorio/<projeto>/entradas/) lê direto;
  * o que veio do Workspace só lê se quem pediu enxerga o nó (consulta com o JWT dele, pela RLS de
- * workspace_nodes). Não há leitor de PDF/Word em _shared: esses entram só com nome e endereço.
+ * workspace_nodes). PDF simples (texto embutido) e Word (.docx) são lidos por modulos/leitor.ts (20/10,
+ * sem biblioteca); PDF escaneado, imagem e o que não deu para ler entram só com nome e endereço.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { servico, UUID } from "./comum.ts";
 import { BUCKET, linkAssinado } from "./workspace.ts";
 import { blocoDosDocumentos, type DocumentoDoNo, type DocumentoLido, documentosDe, ehTextoPuro, MAX_BYTES_LIDOS, textoDoHtml } from "./modulos/documentos.ts";
+import { ehDocx, ehPdf, MAX_BYTES_DO_LEITOR, textoDoDocx, textoDoPdf } from "./modulos/leitor.ts";
 
-type Quem = { projeto: { id: string }; token: string };
+export type Quem = { projeto: { id: string }; token: string };
 
-const SEM_LEITOR = "Não lido como texto aqui (PDF, Word e imagem ainda sem leitor no servidor).";
+const SEM_LEITOR = "Não lido como texto aqui (imagem, PDF escaneado ou formato sem leitor no servidor).";
 
 /** Caminho do documento que quem pediu pode ler (null = sem acesso ou não achado). */
 async function caminhoPermitido(quem: Quem, d: DocumentoDoNo): Promise<{ path: string; mime: string; tamanho: number | null } | null> {
@@ -35,6 +37,15 @@ async function lerUm(quem: Quem, d: DocumentoDoNo): Promise<DocumentoLido> {
   try {
     const onde = await caminhoPermitido(quem, d);
     if (!onde) return { nome: d.nome, tipo: d.tipo, url: urlDada, motivo: "Sem acesso a este arquivo aqui: vale só o nome." };
+    // PDF simples e Word: o leitor sem biblioteca (modulos/leitor.ts); sem texto, segue sem leitor.
+    if (!ehTextoPuro(onde.mime, d.nome) && (ehPdf(onde.mime, d.nome) || ehDocx(onde.mime, d.nome)) && !(onde.tamanho && onde.tamanho > MAX_BYTES_DO_LEITOR)) {
+      const { data: arq } = await servico().storage.from(BUCKET).download(onde.path);
+      if (arq && arq.size <= MAX_BYTES_DO_LEITOR) {
+        const bytes = new Uint8Array(await arq.arrayBuffer());
+        const t = ehPdf(onde.mime, d.nome) ? await textoDoPdf(bytes) : await textoDoDocx(bytes);
+        if (t) return { nome: d.nome, tipo: onde.mime || d.tipo, texto: t };
+      }
+    }
     if (!ehTextoPuro(onde.mime, d.nome)) return { nome: d.nome, tipo: onde.mime || d.tipo, url: await linkAssinado(onde.path, BUCKET), motivo: SEM_LEITOR };
     if (onde.tamanho && onde.tamanho > MAX_BYTES_LIDOS) return { nome: d.nome, tipo: onde.mime, url: await linkAssinado(onde.path, BUCKET), motivo: "Grande demais para ler inteiro aqui." };
     const { data, error } = await servico().storage.from(BUCKET).download(onde.path);
@@ -47,6 +58,12 @@ async function lerUm(quem: Quem, d: DocumentoDoNo): Promise<DocumentoLido> {
     registrarFalha("laboratorio: documento do nó não lido", e, { nome: d.nome });
     return { nome: d.nome, tipo: d.tipo, url: urlDada, motivo: "Não deu para ler agora." };
   }
+}
+
+/** Um documento lido (texto inteiro, sem o teto do bloco do nó), para a ação ler_documento. */
+export async function lerUmDocumento(quem: Quem, bruto: unknown): Promise<DocumentoLido | null> {
+  const d = documentosDe([bruto])[0];
+  return d ? await lerUm(quem, d) : null;
 }
 
 /** O bloco de texto dos documentos de `dados.arquivos` (vazio quando não há documento). */

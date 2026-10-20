@@ -252,7 +252,8 @@ describe("paleta em grupos, com rolagem própria", () => {
 
 describe("campos no próprio nó (o mesmo esquema do inspetor)", () => {
   it("recolhido mostra os principais; expandir mostra todos, com o texto longo grande", async () => {
-    expect(camposPrincipais("agente").map((c) => c.chave)).toEqual(["instrucao", "arquivos"]);
+    // 21/10: o Agente mostra o modelo junto do papel no nó recolhido.
+    expect(camposPrincipais("agente").map((c) => c.chave)).toEqual(["modelo_id", "instrucao", "arquivos"]);
     expect(camposPrincipais("contexto").map((c) => c.chave)).toEqual(["texto", "arquivos"]);
     const fora = montar();
     const contexto = noNaTela("c1");
@@ -270,7 +271,7 @@ describe("campos no próprio nó (o mesmo esquema do inspetor)", () => {
     // jsdom não mede: o nó fica "visibility: hidden" e as buscas por papel não o enxergam (rótulo sim).
     const agente = noNaTela("a1");
     expect(within(agente).getByLabelText("Instrução")).toBeInTheDocument();
-    expect(within(agente).queryByLabelText("Modelo")).toBeNull();
+    expect(within(agente).getByLabelText("Modelo")).toBeInTheDocument();
     expect(within(agente).getByLabelText("Escolher do Workspace")).toBeInTheDocument();
     expect(within(agente).getByLabelText("Enviar documento")).toBeInTheDocument();
     fireEvent.click(within(agente).getByLabelText("Expandir o nó"));

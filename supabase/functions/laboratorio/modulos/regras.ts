@@ -656,6 +656,12 @@ export const SAIDA_ESPERADA: Record<string, number> = {
   template_designer: 2500,
 };
 
+/**
+ * 20/10: o motor da casa por arte e por lâmina (a direção da Arte rápida e a conferência da estudio-arte), do
+ * lado seguro. Estimativa: a estudio-arte cobra o uso real dela na carteira de IA do cliente.
+ */
+export const TOKENS_DO_ESTUDIO = { direcao_entrada: 9_000, direcao_saida: 3_000, por_lamina_entrada: 1_200, por_lamina_saida: 600, conferencia_entrada: 2_500, conferencia_saida: 400 } as const;
+
 /** Referências: texto lido das páginas públicas (até 8 links, ~2.500 tokens cada). */
 export const TOKENS_POR_REFERENCIA = 2_500;
 export const MAX_REFERENCIAS = 8;
@@ -703,11 +709,17 @@ export function chamadasDoNo(c: Pick<Canvas, "nos" | "ligacoes">, no: NoDoCanvas
     case "anuncio":
     case "landing":
       return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA[no.tipo], imagens: 0, qualidade: null }];
+    // 20/10: o motor da casa (Arte rápida do Estúdio): a direção do diretor de arte, a imagem de cada lâmina e
+    // a conferência (leitura do texto e identidade) de cada uma. Resultado com quantidade N = N artes.
     case "imagem":
-      return [img(cfg.quantidade)];
     case "carrossel": {
-      const laminas = limitar(d.laminas, 2, MAX_LAMINAS, 5);
-      return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA.carrossel, imagens: 0, qualidade: null }, img(laminas)];
+      const n = no.tipo === "carrossel" ? limitar(d.laminas, 2, MAX_LAMINAS, 5) : Math.min(4, cfg.quantidade);
+      const artes = no.tipo === "carrossel" ? 1 : n;
+      return [
+        { tipo: "texto", modelo_id: modeloTexto, tokens_entrada: artes * (TOKENS_DO_ESTUDIO.direcao_entrada + base) + n * TOKENS_DO_ESTUDIO.por_lamina_entrada, tokens_saida: artes * TOKENS_DO_ESTUDIO.direcao_saida + n * TOKENS_DO_ESTUDIO.por_lamina_saida, imagens: 0, qualidade: null },
+        img(n),
+        { tipo: "texto", modelo_id: modeloTexto, tokens_entrada: n * TOKENS_DO_ESTUDIO.conferencia_entrada, tokens_saida: n * TOKENS_DO_ESTUDIO.conferencia_saida, imagens: 0, qualidade: null, imagens_entrada: n } as Chamada,
+      ];
     }
     case "logo":
       return [img(limitar(d.n, 1, MAX_LOGOS, 4))];
@@ -839,10 +851,10 @@ export type Recibo = { indice: number; op: string; aceita: boolean; recibo: stri
 /** Campos que cada tipo aceita em `dados` (o resto é ignorado com aviso). */
 export const CAMPOS_DO_TIPO: Record<TipoDeNo, readonly string[]> = {
   contexto: ["titulo", "texto", "arquivos"],
-  midia: ["titulo", "imagens"],
+  midia: ["titulo", "imagens", "midias"],
   config: ["titulo", "proporcao", "quantidade", "qualidade", "motor"],
   gravity: ["titulo", "prompt_base", "referencias"],
-  agente: ["titulo", "instrucao", "modelo_id", "arquivos"],
+  agente: ["titulo", "instrucao", "modelo_id", "arquivos", "papel"],
   copy: ["titulo", "formato", "instrucao", "modelo_id"],
   imagem: ["titulo", "prompt", "quantidade", "qualidade", "proporcao", "motor"],
   carrossel: ["titulo", "tema", "laminas", "modelo_id", "motor", "qualidade", "proporcao"],
@@ -864,8 +876,8 @@ export const CAMPOS_DO_TIPO: Record<TipoDeNo, readonly string[]> = {
   sequencia_mensagens: ["titulo", "canal", "mensagens", "objetivo", "instrucao", "modelo_id"],
   refino_tom: ["titulo", "tom", "instrucao", "modelo_id"],
   // v4 (ESPEC-LABORATORIO-v4.md, seção 2).
-  marca: ["titulo", "paleta", "tom", "fontes", "logo", "regras"],
-  cliente: ["titulo", "foco"],
+  marca: ["titulo", "paleta", "tom", "fontes", "logo", "regras", "marca_id"],
+  cliente: ["titulo", "foco", "client_id"],
   referencias: ["titulo", "links", "imagens", "o_que_aproveitar", "modelo_id"],
   video: ["titulo", "arquivos", "link", "transcricao"],
   arquivo: ["titulo", "arquivos", "uso"],
@@ -887,6 +899,74 @@ export const CAMPOS_DO_TIPO: Record<TipoDeNo, readonly string[]> = {
   recuperacao: ["titulo", "situacao", "via", "toques", "modelo_id"],
   fontes_trafego: ["titulo", "canais", "url_base", "campanha"],
 };
+
+/**
+ * 20/10 (nós inteligentes): todo nó aceita `auto` (roda sozinho no no_executar automatico quando o custo
+ * cabe no teto do projeto, config.auto_ate_usd). O valor é booleano; o resto é ignorado.
+ */
+for (const t of Object.keys(CAMPOS_DO_TIPO) as TipoDeNo[]) {
+  if (CAMPOS_DO_TIPO[t].indexOf("auto") < 0) CAMPOS_DO_TIPO[t] = CAMPOS_DO_TIPO[t].concat(["auto"]);
+}
+
+/**
+ * 20/10: a imagem principal escolhida na tela (dados.principal, índice na saída do nó) nos nós que geram imagem.
+ * Nos nós seguintes ela vai à frente (ou sozinha onde o nó usa uma imagem só).
+ */
+export const TIPOS_COM_PRINCIPAL: readonly TipoDeNo[] = ["imagem", "carrossel", "anuncio", "template_designer", "influenciador", "ugc", "logo"];
+export const MAX_PRINCIPAL = 39;
+for (const t of TIPOS_COM_PRINCIPAL) {
+  if (CAMPOS_DO_TIPO[t].indexOf("principal") < 0) CAMPOS_DO_TIPO[t] = CAMPOS_DO_TIPO[t].concat(["principal"]);
+}
+
+/**
+ * As imagens de um nó na ordem de uso: a principal (dados.principal) primeiro; sem ela, a escolha do Jev
+ * (saida.escolha.indice, na logo); sem nada, como vieram. Índice fora da lista não muda nada.
+ */
+export function imagensComPrincipal<T>(no: { tipo: string; dados: Record<string, unknown> }, imagens: T[], escolha?: unknown): T[] {
+  const lista = Array.isArray(imagens) ? imagens.slice() : [];
+  const pedido = (TIPOS_COM_PRINCIPAL as readonly string[]).indexOf(no.tipo) >= 0 ? no.dados.principal : undefined;
+  const doJev = escolha && typeof escolha === "object" ? Number((escolha as Record<string, unknown>).indice) : NaN;
+  const i = Number.isInteger(pedido) ? Number(pedido) : Number.isInteger(doJev) ? doJev : -1;
+  if (i <= 0 || i >= lista.length) return lista;
+  return [lista[i]].concat(lista.slice(0, i), lista.slice(i + 1));
+}
+
+/** Mídia enviada no nó Mídia (imagem ou vídeo mp4, mov, webm; até 8). */
+export const MAX_MIDIAS = 8;
+export type MidiaDoNo = { id: string; tipo: "imagem" | "video"; url: string; path: string; nome: string; bucket?: string; capa?: string };
+
+/** Papel do nó Agente (a tela: CorpoEspecial.tsx, PAPEIS). Vai numa linha curta do texto de sistema. */
+export const PAPEIS_DO_AGENTE = ["estrategista", "copywriter", "pesquisador", "diretor_arte", "revisor"] as const;
+export const ROTULO_DO_PAPEL: Record<typeof PAPEIS_DO_AGENTE[number], string> = {
+  estrategista: "estrategista do projeto (posicionamento, público, promessa e próximos passos)",
+  copywriter: "copywriter (textos claros, gancho forte e chamada para ação, no tom da marca)",
+  pesquisador: "pesquisador (mercado, público e concorrentes; aponta o que falta confirmar)",
+  diretor_arte: "diretor de arte (cores, luz, composição e tipografia das peças)",
+  revisor: "revisor (corrige e simplifica, marca o que precisa de fonte, sem mudar fatos nem preços)",
+};
+const UUID_DO_CLIENTE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EXTENSOES_DE_VIDEO = /\.(mp4|mov|webm)$/i;
+
+/** Lê `dados.midias` (forma do contrato), descartando o que não é imagem nem vídeo mp4/mov/webm. */
+export function midiasDe(bruto: unknown): MidiaDoNo[] {
+  if (!Array.isArray(bruto)) return [];
+  const saida: MidiaDoNo[] = [];
+  for (const item of bruto) {
+    const o = objeto(item);
+    const tipo = o.tipo === "video" ? "video" : o.tipo === "imagem" ? "imagem" : null;
+    const path = texto(o.path, 500);
+    const nome = texto(o.nome, 200) || path.split("/").pop() || "";
+    // Da biblioteca do cliente (fontes_do_cliente) vem só o link https, sem caminho no storage.
+    const url = texto(o.url, 2000);
+    const urlOk = /^https:\/\//i.test(url);
+    if (!tipo || (!path && !urlOk) || path.indexOf("..") >= 0) continue;
+    if (tipo === "video" && !EXTENSOES_DE_VIDEO.test(path) && !EXTENSOES_DE_VIDEO.test(nome) && !EXTENSOES_DE_VIDEO.test(url.split("?")[0])) continue;
+    const capa = texto(o.capa, 2000);
+    saida.push({ id: texto(o.id, 80) || path || url, tipo, url, path, nome, ...(typeof o.bucket === "string" && o.bucket ? { bucket: texto(o.bucket, 60) } : {}), ...(capa ? { capa } : {}) });
+    if (saida.length >= MAX_MIDIAS) break;
+  }
+  return saida;
+}
 
 /**
  * v4: valores aceitos nos campos de escolha dos nós novos (a tela tem os rótulos em nos.ts; o teste de
@@ -996,6 +1076,12 @@ export function dadosDoTipo(tipo: TipoDeNo, bruto: unknown): { dados: Record<str
       else ignorados.push(k);
     }
     else if (k === "alvo") { if (alvoValido(v)) dados[k] = v; else ignorados.push(k); }
+    else if (k === "auto") { if (typeof v === "boolean") dados[k] = v; else ignorados.push(k); }
+    else if (k === "midias") { if (Array.isArray(v)) dados[k] = midiasDe(v); else ignorados.push(k); }
+    else if (k === "client_id") { if (typeof v === "string" && UUID_DO_CLIENTE.test(v.trim())) dados[k] = v.trim().toLowerCase(); else ignorados.push(k); }
+    else if (k === "marca_id") { if (typeof v === "string" && UUID_DO_CLIENTE.test(v.trim())) dados[k] = v.trim().toLowerCase(); else ignorados.push(k); }
+    else if (k === "principal") { const n = Number(v); if (typeof v === "number" && Number.isInteger(n) && n >= 0 && n <= MAX_PRINCIPAL) dados[k] = n; else ignorados.push(k); }
+    else if (k === "papel") { if ((PAPEIS_DO_AGENTE as readonly string[]).indexOf(String(v)) >= 0) dados[k] = v; else ignorados.push(k); }
     else if (k === "imagens" || k === "referencias") { if (Array.isArray(v)) dados[k] = v.slice(0, 12); else ignorados.push(k); }
     // Documentos do nó (Contexto, Agente): a leitura e o teto ficam em laboratorio/documentos.ts.
     else if (k === "arquivos") { if (Array.isArray(v)) dados[k] = v.slice(0, 8); else ignorados.push(k); }

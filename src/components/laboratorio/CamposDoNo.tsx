@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, FolderOpen, ImagePlus, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { caminhoDeEntrada, lerOperadoresExternos } from "@/lib/laboratorio/api";
 import { enderecosAssinados } from "@/lib/laboratorio/arquivos";
 import { Miniaturas } from "./ResultadoDoNo";
 import EscolherDocumentos from "./no/EscolherDocumentos";
+import { Chips, SeletorDeProporcao, Segmentos, Stepper } from "./no/SeletoresVisuais";
 
 /**
  * Os campos de um nó, pelo esquema `campos` de TIPOS_DE_NO: o mesmo
@@ -26,10 +27,24 @@ const SO_NO_EXPANDIDO = ["modelo", "motor", "operador"];
 
 /** Os campos que o nó mostra recolhido: os dois primeiros que não são modelo, motor nem operador. */
 export function camposPrincipais(tipo: TipoDeNo): CampoDoNo[] {
-  const campos = TIPOS_DE_NO[tipo].campos;
+  const tratados = CAMPOS_TRATADOS[tipo] || [];
+  const campos = TIPOS_DE_NO[tipo].campos.filter((c) => tratados.indexOf(c.chave) < 0);
+  // Configuração mostra os três seletores visuais; o Agente mostra o modelo junto do papel.
+  if (tipo === "config") return campos.filter((c) => c.chave !== "motor");
+  if (tipo === "agente") return campos;
   const principais = campos.filter((c) => SO_NO_EXPANDIDO.indexOf(c.tipo) < 0).slice(0, 2);
   return principais.length ? principais : campos.slice(0, 1);
 }
+
+/** Campos que o corpo próprio do nó já mostra (no/CorpoEspecial e no/MidiaDoNo): os genéricos pulam. */
+export const CAMPOS_TRATADOS: Partial<Record<TipoDeNo, string[]>> = {
+  midia: ["imagens"],
+  marca: ["paleta", "fontes", "logo"],
+  referencias: ["links"],
+};
+
+/** Escolha curta vira segmentos no nó; com mais de 4 opções fica a lista. */
+const MAX_SEGMENTOS = 4;
 
 /** Até 20 MB por documento enviado (o resto vai pelo Workspace). */
 const MAX_BYTES_DO_DOCUMENTO = 20 * 1024 * 1024;
@@ -64,20 +79,54 @@ interface PropsDoCampo {
   id: string;
   /** Texto longo alto (nó expandido). */
   grande?: boolean;
+  /** No nó: seletores visuais (segmentos, stepper, formas, chips); no inspetor, os campos clássicos. */
+  visual?: boolean;
 }
 
-export function Campo({ def, valor, onMudar, projetoId, clienteId, opcional, id, grande }: PropsDoCampo) {
+export function Campo({ def, valor, onMudar, projetoId, clienteId, opcional, id, grande, visual = false }: PropsDoCampo) {
   const doBanco = useOpcoes(def.tipo);
+  const rotuloId = `${id}-rotulo`;
   const rotulo = (
-    <label htmlFor={id} className={juntar(texto.rotulo, "mb-1 block")}>
+    <label id={rotuloId} htmlFor={id} className={juntar(texto.rotulo, "mb-1 block")}>
       {def.rotulo}
     </label>
   );
+  if (visual) {
+    // Proporção como formas; escolha curta em segmentos; número em stepper; lista "um por linha" em chips.
+    if (def.chave === "proporcao" && def.tipo === "escolha")
+      return (
+        <div className="min-w-0">
+          {rotulo}
+          <SeletorDeProporcao id={id} rotuloId={rotuloId} opcoes={def.opcoes || []} valor={String(valor ?? "")} onMudar={onMudar} vazio={opcional ? "Da configuração" : undefined} />
+        </div>
+      );
+    if (def.tipo === "escolha" && (def.opcoes || []).length <= MAX_SEGMENTOS && !def.vazio && !opcional)
+      return (
+        <div className="min-w-0">
+          {rotulo}
+          <Segmentos id={id} rotuloId={rotuloId} opcoes={def.opcoes || []} valor={String(valor ?? "")} onMudar={onMudar} />
+        </div>
+      );
+    if (def.tipo === "numero")
+      return (
+        <div className="min-w-0">
+          {rotulo}
+          <Stepper id={id} valor={valor === undefined || valor === null || valor === "" ? (opcional ? null : def.min || 1) : Number(valor) || def.min || 1} min={def.min || 1} max={def.max || 99} onMudar={onMudar} vazio={opcional ? "Da configuração" : undefined} />
+        </div>
+      );
+    if (def.tipo === "textoLongo" && def.dica && /um por linha/i.test(def.dica))
+      return (
+        <div className="min-w-0">
+          {rotulo}
+          <Chips id={id} valor={typeof valor === "string" ? valor : ""} onMudar={onMudar} sep={"\n"} placeholder="Digite e Enter" />
+        </div>
+      );
+  }
   if (def.tipo === "textoLongo")
     return (
       <div className="min-w-0">
         {rotulo}
-        <textarea id={id} className={juntar(campoTexto, grande ? "min-h-[160px]" : "min-h-[72px]")} value={typeof valor === "string" ? valor : ""} onChange={(e) => onMudar(e.target.value)} />
+        <textarea id={id} className={juntar(campoTexto, grande ? "min-h-[160px]" : "min-h-[72px]")} placeholder={def.dica} value={typeof valor === "string" ? valor : ""} onChange={(e) => onMudar(e.target.value)} />
       </div>
     );
   if (def.tipo === "numero")
@@ -119,7 +168,7 @@ export function Campo({ def, valor, onMudar, projetoId, clienteId, opcional, id,
   return (
     <div className="min-w-0">
       {rotulo}
-      <input id={id} className={campo} value={typeof valor === "string" ? valor : ""} onChange={(e) => onMudar(e.target.value)} />
+      <input id={id} className={campo} placeholder={def.dica} value={typeof valor === "string" ? valor : ""} onChange={(e) => onMudar(e.target.value)} />
     </div>
   );
 }
@@ -172,6 +221,31 @@ export function arquivosDe(valor: unknown): ArquivoDoNo[] {
   return (Array.isArray(valor) ? valor : [])
     .filter((x) => !!x && typeof x === "object")
     .map((x: any) => ({ id: String(x.id || ""), nome: String(x.nome || x.name || "Documento"), url: typeof x.url === "string" ? x.url : "", tipo: typeof x.tipo === "string" ? x.tipo : "", ...(typeof x.path === "string" && x.path ? { path: x.path } : {}) }));
+}
+
+const ehVideo = (a: ArquivoDoNo) => a.tipo.indexOf("video/") === 0 || /\.(mp4|mov|webm|m4v)$/i.test(a.nome);
+
+/** Vídeo anexado (nó Vídeo): toca no próprio nó. */
+function VideoAnexado({ arquivo }: { arquivo: ArquivoDoNo }) {
+  const [url, setUrl] = useState(arquivo.url);
+  useEffect(() => {
+    if (arquivo.url || !arquivo.path) return;
+    let vivo = true;
+    enderecosAssinados([arquivo.path])
+      .then((r) => {
+        if (vivo && r[arquivo.path as string]) setUrl(r[arquivo.path as string]);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [arquivo.url, arquivo.path]);
+  if (!url) return null;
+  return (
+    <video src={`${url}#t=0.1`} controls playsInline preload="metadata" className="nodrag mb-1 block max-h-[240px] w-full rounded-md bg-black" data-video-anexado="">
+      <track kind="captions" />
+    </video>
+  );
 }
 
 /**
@@ -238,7 +312,9 @@ export function CampoDeArquivos({ rotulo, valor, onMudar, projetoId, clienteId }
       {lista.length > 0 ? (
         <ul className="min-w-0 space-y-0.5" aria-label={rotulo}>
           {lista.map((a, i) => (
-            <li key={`${a.id}-${i}`} className="flex min-w-0 items-center" data-documento-do-no="">
+            <li key={`${a.id}-${i}`} className="min-w-0" data-documento-do-no="">
+              {ehVideo(a) ? <VideoAnexado arquivo={a} /> : null}
+              <div className="flex min-w-0 items-center">
               <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               <button type="button" className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate text-left text-foreground hover:underline")} onClick={() => void abrir(a)} title={`Abrir ${a.nome}`}>
                 {a.nome}
@@ -246,6 +322,7 @@ export function CampoDeArquivos({ rotulo, valor, onMudar, projetoId, clienteId }
               <button type="button" className={juntar(botao.icone, "h-6 w-6")} onClick={() => onMudar(lista.filter((_, j) => j !== i))} aria-label={`Tirar ${a.nome}`} title={`Tirar ${a.nome}`}>
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -279,6 +356,7 @@ export default function CamposDoNo({
   todos = true,
   grande = false,
   className,
+  pular,
 }: {
   no: NoDoLab;
   projetoId: string;
@@ -288,8 +366,12 @@ export default function CamposDoNo({
   todos?: boolean;
   grande?: boolean;
   className?: string;
+  /** Campos que outro bloco do nó já mostra. */
+  pular?: string[];
 }) {
-  const campos = todos ? TIPOS_DE_NO[no.tipo].campos : camposPrincipais(no.tipo);
+  const fora = pular || [];
+  const campos = (todos ? TIPOS_DE_NO[no.tipo].campos : camposPrincipais(no.tipo)).filter((c) => fora.indexOf(c.chave) < 0);
+  if (!campos.length) return null;
   return (
     <div className={juntar("min-w-0", lugar === "no" ? "space-y-2" : "space-y-3", className)} data-campos-do-no={lugar}>
       {campos.map((c) => (
@@ -303,6 +385,7 @@ export default function CamposDoNo({
           clienteId={clienteId}
           opcional={no.tipo !== "config" && SEGUEM_A_CONFIGURACAO.indexOf(c.chave) >= 0}
           grande={grande}
+          visual={lugar === "no"}
         />
       ))}
     </div>

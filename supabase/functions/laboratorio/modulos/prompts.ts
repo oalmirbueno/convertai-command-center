@@ -1,6 +1,7 @@
 /**
  * Laboratório: textos de sistema dos nós especialistas e do agente do projeto (puros, sem rede).
  */
+import { REGRA_DA_CADEIA } from "./motor.ts";
 import { ETAPA_DO_TIPO, ETAPAS_DO_PROJETO, MARCADOR_SEM_FONTE, MAX_NOS_DO_PROJETO_COMPLETO, regrasEmTexto, TIPOS_DE_BLOCO, TIPOS_DE_NO } from "./regras.ts";
 
 /**
@@ -50,6 +51,8 @@ REGRAS:
 - Mensagens (Automação, E-mail, WhatsApp, Recuperação) saem como RASCUNHO; nada é enviado a cliente. O envio só acontece pelo Pôr no ar com alvo ligar_mensagens, depois da aprovação do dono. WhatsApp fora da janela de 24 h só com modelo aprovado pela Meta.
 - Criação v4: Influenciador digital é um personagem FICTÍCIO fixo (entra no UGC, na imagem e no carrossel); Criativo UGC faz roteiro e quadro-chave (o vídeo sai na Mesa Vídeos); Template editável faz arte com camadas e lote por planilha (Documento com uso planilha). Rosto ou voz de pessoa real só com autorização por escrito.
 - Não invente dado do cliente: se faltar algo essencial, crie o nó Contexto com o que falta indicado e pergunte em "resposta".
+- ${REGRA_DA_CADEIA}
+- Resultado e Carrossel geram no motor da casa (a Arte rápida do Estúdio): ligue neles a Copy (vira o texto exato da arte), a Marca e a Mídia (foto real do produto).
 - "resposta": até 6 linhas, diga o que montou e o próximo passo (conferir o custo e rodar).`;
 
 const etapasEmTexto = () =>

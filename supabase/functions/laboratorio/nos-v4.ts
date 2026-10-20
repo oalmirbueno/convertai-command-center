@@ -19,6 +19,7 @@ import {
   configDe,
   entradasDo,
   gravityDe,
+  imagensComPrincipal,
   limitar,
   linksDasReferencias,
   MODELO_IMAGEM_PADRAO,
@@ -763,7 +764,7 @@ async function personagemLigado(kit: KitV4, ctx: Contexto, no: NoDoCanvas): Prom
   const s = (await kit.saidasDasEntradas(ctx, no)).find((x) => x.no.tipo === "influenciador");
   if (!s || !s.saida) return null;
   const j = obj(s.saida.json);
-  const imagens = arr(s.saida.imagens).map(obj).filter((i) => typeof i.path === "string").map((i) => ({ path: String(i.path), url: typeof i.url === "string" ? i.url : null, bucket: "workspace" }));
+  const imagens = imagensComPrincipal(s.no, arr(s.saida.imagens).map(obj), s.saida.escolha).filter((i) => typeof i.path === "string").map((i) => ({ path: String(i.path), url: typeof i.url === "string" ? i.url : null, bucket: "workspace" }));
   return { ficha: [txt(j.nome, 80), txt(j.aparencia_fixa, 2000)].filter(Boolean).join(": "), imagens };
 }
 
@@ -877,9 +878,9 @@ async function noTemplateDesigner(kit: KitV4, ctx: Contexto, no: NoDoCanvas, e: 
   const fundo = g.arquivos[0] ? kit.imagemDoArquivo(g.arquivos[0], 1) : null;
   // A logo vem da imagem ligada (Logo escolhida pelo Jev ou a logo da Marca), nunca redesenhada.
   const daLogo = entradas.find((x) => x.no.tipo === "logo" || x.no.tipo === "marca");
-  const imgsDaLogo = daLogo && daLogo.saida ? arr(daLogo.saida.imagens).map(obj) : [];
-  const indice = daLogo && daLogo.saida ? Number(obj(daLogo.saida.escolha).indice) || 0 : 0;
-  const logo = imgsDaLogo.length ? txt((imgsDaLogo[indice] || imgsDaLogo[0]).url, 2000) || null : null;
+  // A logo principal escolhida na tela (dados.principal); sem ela, a escolha do Jev; sem nada, a primeira.
+  const imgsDaLogo = daLogo && daLogo.saida ? imagensComPrincipal(daLogo.no, arr(daLogo.saida.imagens).map(obj), daLogo.saida.escolha) : [];
+  const logo = imgsDaLogo.length ? txt(imgsDaLogo[0].url, 2000) || null : null;
   const html = htmlDoTemplate({ formato, fundo: fundo ? fundo.url : null, logo, camadas, linhas, cores: coresDaPagina(marcaDasEntradas(ctx, e)) });
   const arquivo = await kit.salvarHtml(ctx, execucaoId, rotuloDoNo(no), html);
   const avisos = [...g.avisos];
@@ -962,4 +963,45 @@ export function saidaEstaticaDaV4(ctx: Pick<Contexto, "marca" | "nomeDoCliente" 
     return { texto: linhas.join("\n"), json: { nome: txt(d.nome), formato: txt(d.formato_produto), preco: txt(d.preco), entregavel: txt(d.entregavel), link_externo: txt(d.link_externo, 500) } };
   }
   return null;
+}
+
+/** O que o nó Cliente com cliente próprio usa de fora (o teste troca por uma falsa). */
+export type PortaDoNoCliente = {
+  podeAcessar(clientId: string, token: string): Promise<boolean>;
+  marca(clientId: string): Promise<string>;
+  nome(clientId: string): Promise<string>;
+};
+
+const UUID_DO_NO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Saída do nó Cliente (20/10). Com `dados.client_id` (o cliente escolhido no próprio nó, diferente do do projeto),
+ * confere can_access_client de quem roda: sem acesso, erro claro e nada é lido. Sem o campo, o do projeto.
+ */
+export async function saidaDoNoCliente(ctx: Pick<Contexto, "marca" | "nomeDoCliente" | "projeto" | "token">, no: NoDoCanvas, porta?: PortaDoNoCliente): Promise<SaidaDoNo | null> {
+  const escolhido = typeof no.dados.client_id === "string" && UUID_DO_NO.test(no.dados.client_id) ? no.dados.client_id.toLowerCase() : null;
+  if (!escolhido || escolhido === String(ctx.projeto.client_id || "").toLowerCase()) return saidaEstaticaDaV4(ctx, no, "");
+  const p = porta || (await portaDoNoClienteReal());
+  if (!(await p.podeAcessar(escolhido, ctx.token))) throw new ErroHttp(403, "sem_acesso_ao_cliente", "Você não tem acesso ao cliente escolhido no nó Cliente. Escolha outro ou peça o acesso.");
+  const [marca, nome] = await Promise.all([p.marca(escolhido), p.nome(escolhido)]);
+  return saidaEstaticaDaV4({ marca, nomeDoCliente: nome, projeto: { ...ctx.projeto, client_id: escolhido } }, no, "");
+}
+
+async function portaDoNoClienteReal(): Promise<PortaDoNoCliente> {
+  const { createClient } = await import("npm:@supabase/supabase-js@2");
+  const { marcaEmTexto, nomeDoCliente } = await import("./comum.ts");
+  return {
+    async podeAcessar(clientId, token) {
+      if (!token) return false;
+      const doChamador = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await doChamador.rpc("can_access_client", { _client_id: clientId });
+      if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir o acesso ao cliente do nó Cliente agora.");
+      return data === true;
+    },
+    marca: (id) => marcaEmTexto(id),
+    nome: (id) => nomeDoCliente(id),
+  };
 }
