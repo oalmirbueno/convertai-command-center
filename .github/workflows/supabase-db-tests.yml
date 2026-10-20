@@ -48,7 +48,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
-          version: 2.109.1
+          # Includes the upstream fix for stale Auth routing after db reset.
+          version: 2.117.0
 
       - name: Install NPM dependencies
         id: npm_dependencies
@@ -122,12 +123,14 @@ jobs:
           node scripts/prepare-ci-brand-replay.mjs --stage
           supabase start
 
-      - name: Contain outbound traffic from the disposable Supabase stack
-        run: node scripts/guard-ci-e2e-network.mjs --guard
-
       - name: Apply migrations
         id: db_reset
         run: supabase db reset --local --no-seed
+
+      - name: Contain outbound traffic before synthetic database and browser tests
+        # db reset recreates the DB container. Attest the final topology once
+        # the reset has finished, before any test creates synthetic users.
+        run: node scripts/guard-ci-e2e-network.mjs --guard
 
       - name: Install local PostgreSQL client
         run: |
