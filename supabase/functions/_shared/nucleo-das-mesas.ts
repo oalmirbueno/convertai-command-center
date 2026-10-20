@@ -353,23 +353,4 @@ export async function clienteInternoDaAgencia(db: SupabaseClient): Promise<strin
   }
 }
 
-/**
- * 19/10/2026 (dono: "coloque uma carteira separada só para o Estúdio livre; não pode misturar"): o
- * Estúdio livre usa só o cliente interno chamado "Estúdio livre" (empresa da casa, sem marca), com a
- * carteira dele. Nunca cai na Aceleriq: sem esse cliente, devolve null e quem chama pede para criar.
- */
-export const NOME_DO_CLIENTE_DO_ESTUDIO_LIVRE = /est[uú]dio\s+livre/i;
-
-export async function clienteDoEstudioLivre(db: SupabaseClient): Promise<string | null> {
-  try {
-    const { data } = await db.from("profiles").select("id, company_name, full_name").eq("services_config->>internal_company", "true").is("deleted_at", null).limit(20);
-    const achado = ((data || []) as { id: string; company_name: string | null; full_name: string | null }[])
-      .find((p) => NOME_DO_CLIENTE_DO_ESTUDIO_LIVRE.test(`${p.company_name || ""} ${p.full_name || ""}`));
-    return achado ? achado.id : null;
-  } catch (e) {
-    registrarFalha("nucleo-das-mesas: cliente do Estúdio livre sem leitura", e);
-    return null;
-  }
-}
-
 export { encaminharAoHermes, pedeAoHermes, pedidosAoHermes, quadroDosPedidos };

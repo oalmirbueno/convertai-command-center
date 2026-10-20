@@ -97,7 +97,7 @@
  * confere saldo e cota e debita a carteira do cliente.
  */
 
-import { clienteDoEstudioLivre, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { clienteInternoDaAgencia, falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
@@ -4427,14 +4427,12 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
     ? !!arteRapidaDa(existente.direcao)?.sem_marca
     : origem === "laboratorio" && (corpo.sem_marca === true || !texto(corpo.client_id, 64));
   let clientId = existente ? existente.client_id : texto(corpo.client_id, 64);
-  // 19/10 (dono: "carteira separada só para o Estúdio livre; não pode misturar"): o livre usa só o cliente
-  // "Estúdio livre" (carteira própria, sem marca). Nunca a Aceleriq nem outro cliente interno.
+  // 19/10 (dono: "carteira separada só para o Estúdio livre, sem precisar criar cliente"): a arte livre
+  // fica guardada sob o cliente interno da agência (só arquivos e acesso), sem marca, e é cobrada da
+  // carteira própria do Estúdio livre (estudio_livre_trabalhos, registrado antes da primeira cobrança).
   if (!existente && semMarca) {
-    const doLivre = await clienteDoEstudioLivre(servico());
-    if (!doLivre) {
-      throw new ErroEstudio(409, "sem_cliente_do_estudio_livre", 'Falta o cliente "Estúdio livre", que tem a carteira só do Estúdio livre. Crie em Clientes, Novo cliente, com o nome Estúdio livre e marcado como empresa interna, e recarregue a carteira dele.');
-    }
-    clientId = doLivre;
+    clientId = (await clienteInternoDaAgencia(servico())) || "";
+    if (!clientId) throw new ErroEstudio(409, "sem_cliente_interno", "O cliente interno da agência não foi encontrado.");
   }
   await garantirAcesso(ch, clientId);
   if (existente && estaEntregue(existente)) throw erroTrabalhoEntregue();
@@ -4444,6 +4442,10 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
   }
   const marcaDoPedido = semMarca ? null : await marcaDe(clientId, existente ? { marca_id: corpo.marca_id, direcao: existente.direcao } : { marca_id: corpo.marca_id }).catch(nuloComLog("estudio-arte: marca do pedido não lida", { client_id: clientId }));
   const trabalhoId = existente?.id ?? crypto.randomUUID();
+  if (semMarca) {
+    const { error: erroDoLivre } = await servico().from("estudio_livre_trabalhos").upsert({ trabalho_id: trabalhoId }, { onConflict: "trabalho_id", ignoreDuplicates: true });
+    if (erroDoLivre) throw new ErroEstudio(503, "carteira_do_estudio_livre", "A carteira do Estúdio livre não respondeu. Tente de novo em instantes.");
+  }
   const avisos: string[] = [];
   let custoJev = 0;
   let gravada: ArteRapida;

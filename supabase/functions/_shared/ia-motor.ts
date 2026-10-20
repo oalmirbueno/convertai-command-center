@@ -915,12 +915,29 @@ export async function lerSaldo(clientId: string): Promise<number> {
   return num((data as { saldo_usd?: unknown } | null)?.saldo_usd);
 }
 
+/**
+ * 19/10/2026: arte do Estúdio livre (registrada em estudio_livre_trabalhos) usa a carteira própria dele,
+ * não a do cliente; a cobrança (ia_registrar_uso) já debita lá.
+ */
+async function saldoDoEstudioLivre(referencia?: { tipo?: string | null; id?: string | null } | null): Promise<number | null> {
+  if (!referencia || referencia.tipo !== "estudio_trabalho" || !referencia.id) return null;
+  const db = clienteServico();
+  const { data: livre } = await db.from("estudio_livre_trabalhos").select("trabalho_id").eq("trabalho_id", referencia.id).maybeSingle();
+  if (!livre) return null;
+  const { data, error } = await db.from("estudio_livre_carteira").select("saldo_usd").eq("id", true).maybeSingle();
+  if (error) throw new IaMotorErro("entrada_invalida", `Carteira do Estúdio livre indisponível: ${error.message}`);
+  return num((data as { saldo_usd?: unknown } | null)?.saldo_usd);
+}
+
 /** Saldo precisa cobrir a estimativa antes de qualquer chamada paga. */
-export async function garantirSaldo(clientId: string, estimativaUsd: number): Promise<number> {
-  const saldo = await lerSaldo(clientId);
+export async function garantirSaldo(clientId: string, estimativaUsd: number, referencia?: { tipo?: string | null; id?: string | null } | null): Promise<number> {
+  const doLivre = await saldoDoEstudioLivre(referencia);
+  const saldo = doLivre ?? await lerSaldo(clientId);
   if (saldo < estimativaUsd) {
     const falta = arred(estimativaUsd - saldo);
-    throw new IaMotorErro("saldo_insuficiente", `Saldo insuficiente na carteira de IA do cliente: faltam US$ ${falta.toFixed(4)}.`, {
+    throw new IaMotorErro("saldo_insuficiente", doLivre !== null
+      ? `Saldo insuficiente na carteira do Estúdio livre: faltam US$ ${falta.toFixed(4)}. Recarregue a carteira do Estúdio livre.`
+      : `Saldo insuficiente na carteira de IA do cliente: faltam US$ ${falta.toFixed(4)}.`, {
       saldo_usd: arred(saldo),
       estimativa_usd: arred(estimativaUsd),
       falta_usd: falta,
@@ -1305,7 +1322,7 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
   });
   const estimativa = estimativaPara(rota.m);
   garantirCota(rota.chave, estimativa);
-  await garantirSaldo(e.clientId, estimativa);
+  await garantirSaldo(e.clientId, estimativa, e.referencia);
 
   // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto; com a conta
   // direta sem crédito ou chave recusada, o mesmo modelo pelo OpenRouter.
@@ -1650,7 +1667,7 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
   };
   const estimativa = estimativaPara(rota.m);
   garantirCota(rota.chave, estimativa);
-  await garantirSaldo(e.clientId, estimativa);
+  await garantirSaldo(e.clientId, estimativa, e.referencia);
 
   // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto; com a conta
   // direta sem crédito ou chave recusada, o gerador equivalente no OpenRouter.

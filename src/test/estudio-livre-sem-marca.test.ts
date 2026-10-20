@@ -40,3 +40,29 @@ describe("Estúdio livre começa livre e sem marca", () => {
     expect(ler("supabase/functions/estudio-arte/modulos/arte-rapida.ts")).toContain("sem_marca?: boolean;");
   });
 });
+
+describe("carteira própria do Estúdio livre, sem criar cliente", () => {
+  it("o banco: carteira e registro do livre; a cobrança da arte livre sai da carteira dele, nunca da do cliente", () => {
+    const sql = ler("supabase/migrations/20261019235958_estudio_livre_carteira.sql");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.estudio_livre_carteira");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.estudio_livre_trabalhos");
+    expect(sql).toMatch(/_livre := _referencia_tipo = 'estudio_trabalho'[\s\S]*estudio_livre_trabalhos/);
+    expect(sql).toMatch(/IF _livre THEN[\s\S]*UPDATE public\.estudio_livre_carteira SET saldo_usd = saldo_usd - _custo/);
+    expect(sql).toContain("AND uso.carteira = ''cliente''");
+    expect(sql).toContain("public.has_role(auth.uid(), 'admin'::public.app_role)");
+    expect(sql).not.toMatch(/40001/);
+  });
+
+  it("o saldo conferido antes de gastar é o da carteira do Estúdio livre", () => {
+    const motor = ler("supabase/functions/_shared/ia-motor.ts");
+    expect(motor).toContain("async function saldoDoEstudioLivre(");
+    expect(motor).toContain("await garantirSaldo(e.clientId, estimativa, e.referencia);");
+  });
+
+  it("a tela mostra e recarrega a carteira do Estúdio livre no Livre", () => {
+    const tela = ler("src/components/laboratorio/estudio-livre/EstudioLivre.tsx");
+    expect(tela).toContain('rpc("estudio_livre_saldo")');
+    expect(tela).toContain('rpc("estudio_livre_recarregar"');
+    expect(tela).toContain("enabled: !!clientId && !livre,");
+  });
+});

@@ -61,9 +61,11 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
     [clientesQuery.data],
   );
-  // 19/10 (dono: "carteira separada só para o Estúdio livre; não pode misturar"): o Livre usa só o cliente
-  // interno "Estúdio livre" (carteira própria, sem marca), nunca a Aceleriq.
-  const interno = clientes.filter((c) => c.interno && /est[uú]dio\s+livre/i.test(c.nome))[0] || null;
+  // 19/10 (dono: "carteira separada só para o Estúdio livre, sem precisar criar cliente"): a arte livre fica
+  // guardada sob o cliente interno da agência (só os arquivos), sem marca, e é cobrada da carteira própria
+  // do Estúdio livre (estudio_livre_saldo / estudio_livre_recarregar), nunca da carteira da Aceleriq.
+  const internos = clientes.filter((c) => c.interno);
+  const interno = internos.filter((c) => /aceleriq/i.test(c.nome))[0] || internos[0] || null;
   // O pai decide o cliente quando passa a prop (null = Livre); senão, o seletor no topo.
   const comSeletor = clienteDoPai === undefined;
   const pedido = comSeletor ? escolhido : clienteDoPai || LIVRE;
@@ -84,18 +86,41 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
 
   const mesAtual = inicioDoMes();
   // Mesmas chaves da Mesa: o saldo da carteira é o mesmo nas telas.
+  const carteiraDoLivre = useQuery({
+    queryKey: ["estudio-livre", "carteira"],
+    enabled: livre,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("estudio_livre_saldo");
+      if (error) throw error;
+      return (data || {}) as { saldo_usd?: number | string | null; gasto_mes_usd?: number | string | null };
+    },
+  });
   const consumo = useQuery({
     queryKey: ["mesa", "consumo", clientId, mesAtual],
-    enabled: !!clientId,
+    enabled: !!clientId && !livre,
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc("ia_consumo_cliente", { _client_id: clientId, _mes: mesAtual });
       if (error) throw error;
       return (data || {}) as { saldo_usd?: number | string | null };
     },
   });
-  const previsao = useQuery({ queryKey: ["mesa", "previsao", clientId], enabled: !!clientId, queryFn: () => lerPrevisao(clientId) });
+  const previsao = useQuery({ queryKey: ["mesa", "previsao", clientId], enabled: !!clientId && !livre, queryFn: () => lerPrevisao(clientId) });
   const numero = (v: unknown) => (v === undefined || v === null || v === "" || !isFinite(Number(v)) ? null : Number(v));
-  const saldoUsd = numero(consumo.data ? consumo.data.saldo_usd : null) ?? numero(previsao.data ? (previsao.data as { saldo_usd?: unknown }).saldo_usd : null);
+  const saldoUsd = livre
+    ? numero(carteiraDoLivre.data ? carteiraDoLivre.data.saldo_usd : null)
+    : numero(consumo.data ? consumo.data.saldo_usd : null) ?? numero(previsao.data ? (previsao.data as { saldo_usd?: unknown }).saldo_usd : null);
+
+  // Recarga da carteira do Estúdio livre, aqui mesmo (só admin; é crédito interno, como na Mesa).
+  const recarregarLivre = async () => {
+    const resposta = typeof window !== "undefined" ? window.prompt("Quanto colocar na carteira do Estúdio livre? (em dólar, ex.: 5)", "5") : null;
+    if (!resposta) return;
+    const valor = Number(String(resposta).replace(",", "."));
+    if (!isFinite(valor) || valor <= 0) { toast.error("Valor inválido."); return; }
+    const { error } = await (supabase as any).rpc("estudio_livre_recarregar", { _valor_usd: valor, _observacao: "Recarga pelo Estúdio livre" });
+    if (error) { toast.error(error.message || "Não foi possível recarregar."); return; }
+    toast.success(`Carteira do Estúdio livre recarregada com US$ ${valor.toFixed(2)}.`);
+    void queryClient.invalidateQueries({ queryKey: ["estudio-livre", "carteira"] });
+  };
 
   const faixa = useFaixa();
   const colunas = emColunas(faixa);
@@ -136,8 +161,11 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         atualizarCusto: () => {
           void queryClient.invalidateQueries({ queryKey: ["mesa", "consumo", clientId] });
           void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
+          void queryClient.invalidateQueries({ queryKey: ["estudio-livre", "carteira"] });
         },
-        abrirRecarga: () => toast.info("Recarregue a carteira pela Mesa do cliente.", { description: livre ? "O Estúdio livre usa a carteira própria do cliente Estúdio livre." : `O Estúdio livre usa a carteira de ${clientName}.` }),
+        abrirRecarga: livre
+          ? () => void recarregarLivre()
+          : () => toast.info("Recarregue a carteira pela Mesa do cliente.", { description: `O Estúdio livre usa a carteira de ${clientName}.` }),
         abrirChaves: () => toast.info("As chaves ficam na Mesa do cliente."),
         abrirModelos: () => toast.info("Os modelos ficam na Mesa do cliente."),
         versaoCarteira,
@@ -147,7 +175,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
     : null;
 
   const seletor = comSeletor ? (
-    <label className="flex min-w-0 items-center" title="Cliente do trabalho (Livre: sem marca, na carteira própria do Estúdio livre)">
+    <label className="flex min-w-0 items-center" title="Cliente do trabalho (Livre: sem marca, na carteira própria do Estúdio livre, sem cliente)">
       <span className="sr-only">Cliente do trabalho</span>
       <select
         value={livre ? LIVRE : pedido}
@@ -175,8 +203,8 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         {seletor}
         <EstadoVazio
           icone={<Palette className="h-5 w-5" />}
-          titulo={livre ? "Falta o cliente \"Estúdio livre\"" : "Cliente indisponível"}
-          descricao={livre ? "O Estúdio livre tem carteira própria, separada da Aceleriq e dos clientes. Crie em Clientes, Novo cliente, com o nome Estúdio livre, marque Empresa interna e recarregue a carteira dele." : "Escolha outro cliente ou Livre."}
+          titulo={livre ? "Estúdio livre indisponível" : "Cliente indisponível"}
+          descricao={livre ? "O Estúdio livre não abriu agora. Atualize a página ou escolha um cliente." : "Escolha outro cliente ou Livre."}
         />
       </div>
     );

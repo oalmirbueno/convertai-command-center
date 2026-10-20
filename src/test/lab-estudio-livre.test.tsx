@@ -10,8 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * Laboratório, Estúdio livre (19/10/2026). Pedido do dono: "um estúdio com a mesma funcionalidade do
  * estúdio de artes ... mas livre: às vezes não é cliente nem projeto; posso escolher o cliente, mas não
  * quero que entre na mesa do cliente; vai para o arquivo livre organizado".
- * - sem cliente, o Estúdio livre usa o cliente interno "Estúdio livre" (carteira própria, sem marca; nunca a
- *   Aceleriq, 19/10) e manda origem 'laboratorio' e sem_marca;
+ * - sem cliente, o Estúdio livre guarda sob o cliente interno da agência (só arquivos), manda origem
+ *   'laboratorio' e sem_marca, e cobra da carteira própria do Estúdio livre (19/10, sem criar cliente);
  * - a Mesa do cliente só lista as artes rápidas de origem 'mesa';
  * - na função, a arte do Laboratório vai para o Workspace global (nunca Arquivos do cliente, Agenda nem aprovação).
  */
@@ -125,8 +125,8 @@ function bancoFalso(tabelas: Record<string, any[]>) {
 beforeEach(() => {
   vi.clearAllMocks();
   mock.clientes = [
-    { id: "aaaaaaaa-0000-4000-8000-0000000000a1", company_name: "Aceleriq", services_config: { internal_company: true } },
-    { id: INTERNO, company_name: "Estúdio livre", services_config: { internal_company: true } },
+    { id: "aaaaaaaa-0000-4000-8000-0000000000a1", company_name: "Doces em Ordem", services_config: { internal_company: true } },
+    { id: INTERNO, company_name: "Aceleriq", services_config: { internal_company: true } },
     { id: CLIENTE, company_name: "Padaria Sol", services_config: {} },
   ];
   try {
@@ -184,27 +184,14 @@ describe("Estúdio livre: tela", () => {
     expect(await screen.findByRole("heading", { name: "Estúdio livre" })).toBeTruthy();
     const seletor = screen.getByLabelText("Cliente do trabalho") as HTMLSelectElement;
     expect(seletor.value).toBe("");
-    // Os clientes internos não aparecem como cliente: o "Estúdio livre" é o "Livre".
+    // Os clientes internos não aparecem como cliente: o Livre não é cliente nenhum.
     expect(within(seletor).queryByText("Aceleriq")).toBeNull();
-    expect(within(seletor).queryByText("Estúdio livre")).toBeNull();
     expect(within(seletor).getByText("Padaria Sol")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("O que você precisa?"), { target: { value: "Arte do evento de sábado" } });
     fireEvent.click(screen.getByRole("button", { name: /Criar arte/ }));
     await waitFor(() => expect(mock.invoke.mock.calls.some((c) => (c[1] as any).body.acao === "rapida_preparar")).toBe(true));
     const corpo = (mock.invoke.mock.calls.filter((c) => (c[1] as any).body.acao === "rapida_preparar")[0][1] as any).body;
     expect(corpo).toMatchObject({ client_id: INTERNO, origem: "laboratorio", sem_marca: true, pedido: "Arte do evento de sábado" });
-  });
-
-  it("sem o cliente Estúdio livre, não cai na Aceleriq: pede para criar o cliente com a carteira própria", async () => {
-    mock.clientes = [
-      { id: "aaaaaaaa-0000-4000-8000-0000000000a1", company_name: "Aceleriq", services_config: { internal_company: true } },
-      { id: CLIENTE, company_name: "Padaria Sol", services_config: {} },
-    ];
-    mock.from.mockImplementation(bancoFalso({ estudio_trabalhos: [], mesa_campanhas: [], cliente_marcas: [] }));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(h(MemoryRouter, { initialEntries: ["/laboratorio"] }, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(EstudioLivre, {})))));
-    expect(await screen.findByText('Falta o cliente "Estúdio livre"')).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Criar arte/ })).toBeNull();
   });
 
   it("com cliente escolhido usa o cliente dele, ainda com origem 'laboratorio'", async () => {
@@ -300,8 +287,9 @@ describe("estudio-arte: origem 'laboratorio' vai para o Workspace global", () =>
     const s = fonte("supabase/functions/estudio-arte/index.ts");
     // rapida_preparar: a origem pedida, o cliente interno quando não veio cliente, e a coluna no insert.
     expect(s).toContain("origemDoPedido(corpo.origem)");
-    expect(s).toMatch(/if \(!existente && semMarca\) \{\s*const doLivre = await clienteDoEstudioLivre\(servico\(\)\);/);
-    expect(s).not.toContain("clienteInternoDaAgencia");
+    expect(s).toMatch(/if \(!existente && semMarca\) \{\s*clientId = \(await clienteInternoDaAgencia\(servico\(\)\)\) \|\| "";/);
+    // A arte livre é registrada antes da primeira cobrança: o banco debita a carteira do Estúdio livre.
+    expect(s).toContain('from("estudio_livre_trabalhos").upsert({ trabalho_id: trabalhoId }');
     expect(s).toContain('...(rapida && rapida.origem === "laboratorio" ? { origem: "laboratorio" } : {})');
     // entregar: o desvio vem antes de qualquer caminho de Arquivos ou Agenda.
     const entregar = s.slice(s.indexOf("async function entregar("), s.indexOf("async function entregar(") + 600);
