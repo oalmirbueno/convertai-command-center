@@ -24,7 +24,9 @@ BEGIN
   REVOKE ALL ON aceleriq_ci_replay.background_job_attestation FROM PUBLIC,anon,authenticated,service_role;
   INSERT INTO aceleriq_ci_replay.background_job_attestation(metadata_hash,job_count)
     VALUES(before_hash,job_count);
-  UPDATE cron.job SET active=false WHERE active;
+  -- postgres cannot UPDATE the extension's table directly in Supabase. Use
+  -- its owner-scoped API without elevating the CI connection's permissions.
+  PERFORM cron.alter_job(jobid,active:=false) FROM cron.job WHERE active;
   SELECT md5(COALESCE(jsonb_agg(to_jsonb(j)-'active' ORDER BY j.jobid),'[]'::jsonb)::text)
     INTO after_hash FROM cron.job AS j;
   IF before_hash IS DISTINCT FROM after_hash OR EXISTS(SELECT 1 FROM cron.job WHERE active) THEN
