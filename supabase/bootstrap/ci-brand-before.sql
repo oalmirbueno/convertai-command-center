@@ -15,15 +15,22 @@ BEGIN
      OR EXISTS(SELECT 1 FROM public.cliente_marcas) THEN
     RAISE EXCEPTION 'CI_BRAND_REQUIRES_EMPTY_DATABASE';
   END IF;
-  -- Do not execute an unreviewed INSERT/DELETE trigger or dispatch a network call.
+  -- Preserve the legacy trigger unchanged. Its pinned body returns without an
+  -- HTTP call when the two named Vault entries are absent. No hook is disabled.
   IF EXISTS(SELECT 1 FROM pg_trigger WHERE NOT tgisinternal
       AND tgrelid IN ('public.profiles'::regclass,'public.projects'::regclass)
-      AND (tgtype & 12) <> 0)
+      AND (tgtype & 12) <> 0
+      AND NOT (tgrelid='public.profiles'::regclass AND tgname='trg_ops_sync'
+        AND tgtype=29 AND tgfoid='public.notify_ops_sync()'::regprocedure))
      OR EXISTS(SELECT 1 FROM pg_trigger WHERE NOT tgisinternal
        AND tgrelid='auth.users'::regclass AND (tgtype & 4) <> 0
        AND tgfoid <> 'public.handle_new_user()'::regprocedure)
-     OR (SELECT prosrc ~* '\m(http|dblink|net|pg_notify|cron|execute|perform)\M'
-         FROM pg_proc WHERE oid='public.handle_new_user()'::regprocedure) THEN
+     OR (SELECT md5(prosrc) IS DISTINCT FROM '__HANDLE_MD5__'
+         FROM pg_proc WHERE oid='public.handle_new_user()'::regprocedure)
+     OR (SELECT md5(prosrc) IS DISTINCT FROM '__OPS_MD5__'
+         FROM pg_proc WHERE oid='public.notify_ops_sync()'::regprocedure)
+     OR EXISTS(SELECT 1 FROM vault.secrets
+       WHERE name IN ('ops_receive_portal_sync_url','ops_webhook_secret')) THEN
     RAISE EXCEPTION 'CI_BRAND_UNREVIEWED_TRIGGER';
   END IF;
   CREATE TABLE aceleriq_ci_replay.brand_fixture (

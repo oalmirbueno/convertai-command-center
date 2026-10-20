@@ -6,17 +6,30 @@ import {fileURLToPath} from 'node:url';
 
 export const root=fileURLToPath(new URL('../',import.meta.url));
 export const historicalBrand='supabase/migrations/20260925174500_cliente_marcas_acerbi_cme.sql';
+export const prerequisiteBodies=[
+  ['20260720163307_ba44c9c5-a2a8-43ce-9493-c36a4a9c769d.sql','6758addc170dc6da4c1f152e1d4e07d95dd9a50f9396a9050d3124e791a7141f','__HANDLE_MD5__'],
+  ['20260808173948_a9f5e1ac-bc1b-4c3d-9c86-371abc7983cf.sql','cf7c6b49d77c5d80e3869985809ab84c477f1d9d4d1de474a370b2d1fc60d6a4','__OPS_MD5__'],
+];
 const expected='a2eb92e1f3b614b3e0b9606a21c88168eb264e7d8f7538fda1212d7a2e2c67f8';
 const digest=s=>createHash('sha256').update(s).digest('hex');
 export async function buildBrandPlan(){
   const source=await readFile(path.join(root,historicalBrand),'utf8');
   assert.equal(digest(source.replaceAll('\r\n','\n')),expected,'Immutable brand migration changed');
+  const bodies=new Map();
+  for(const [name,sha256,placeholder] of prerequisiteBodies){
+    const pinned=(await readFile(path.join(root,'supabase/migrations',name),'utf8')).replaceAll('\r\n','\n');
+    assert.equal(digest(pinned),sha256,'Historical prerequisite changed: '+name);
+    const match=pinned.match(/\bAS (\$(?:[a-zA-Z_][a-zA-Z_0-9]*)?\$)([\s\S]*?)\1;/);
+    assert(match,'Historical trigger body missing');
+    bodies.set(placeholder,createHash('md5').update(match[2]).digest('hex'));
+  }
   const files=[];
   for(const [name,template] of [
     ['20260925174459_ci_brand_prerequisites.sql','ci-brand-before.sql'],
     ['20260925174501_ci_brand_cleanup.sql','ci-brand-after.sql'],
   ]){
-    const sql=(await readFile(path.join(root,'supabase/bootstrap',template),'utf8')).replaceAll('__SOURCE_SHA256__',expected);
+    let sql=(await readFile(path.join(root,'supabase/bootstrap',template),'utf8')).replaceAll('__SOURCE_SHA256__',expected);
+    for(const [placeholder,bodyMd5] of bodies)sql=sql.replaceAll(placeholder,bodyMd5);
     files.push({name,sql,sha256:digest(sql)});
   }
   return {source,files};
@@ -36,7 +49,7 @@ async function main(){
     assert.throws(()=>requireCI({CI:'true'}));
     assert.throws(()=>target('../production.sql'));
     assert.equal(files.length,2);
-    assert(files.every(f=>!f.sql.includes('__SOURCE_SHA256__')));
+    assert(files.every(f=>!/__\w+__/.test(f.sql)));
     console.log('Brand replay self-test passed: immutable SQL, CI guard and two bounded staging paths.');return;
   }
   requireCI();
