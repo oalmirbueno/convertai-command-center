@@ -122,6 +122,9 @@ jobs:
           node scripts/prepare-ci-brand-replay.mjs --stage
           supabase start
 
+      - name: Contain outbound traffic from the disposable Supabase stack
+        run: node scripts/guard-ci-e2e-network.mjs --guard
+
       - name: Apply migrations
         id: db_reset
         run: supabase db reset --local --no-seed
@@ -140,6 +143,15 @@ jobs:
           psql -X -w -v ON_ERROR_STOP=1
           -h 127.0.0.1 -p 54322 -U postgres -d postgres
           -f supabase/bootstrap/ci-operator-parents-postcheck.sql
+
+      - name: Pause background jobs only in the empty disposable CI database
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -w -v ON_ERROR_STOP=1
+          -h 127.0.0.1 -p 54322 -U postgres -d postgres
+          -c "SET aceleriq.ci_pause_background='on'"
+          -f supabase/bootstrap/ci-background-jobs.sql
 
       - name: Restore reviewed legacy milestone read access in the empty CI stack
         env:

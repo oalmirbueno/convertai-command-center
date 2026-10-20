@@ -21,10 +21,16 @@ const businessStateSql=`jsonb_build_object(
   'assignments',(SELECT jsonb_agg(jsonb_build_object('user_id',user_id,'client_id',client_id) ORDER BY user_id,client_id) FROM public.team_client_assignments))`;
 const verifySql=`DO $ci$ DECLARE g record; actual jsonb; BEGIN
   IF session_user<>'postgres' OR current_database()<>'postgres'
-    OR to_regclass('aceleriq_ci_replay.e2e_seed_guard') IS NULL THEN
+    OR to_regclass('aceleriq_ci_replay.e2e_seed_guard') IS NULL
+    OR to_regclass('aceleriq_ci_replay.background_job_attestation') IS NULL THEN
     RAISE EXCEPTION 'E2E_VERIFY_REQUIRES_SYNTHETIC_SEED';
   END IF;
   SELECT * INTO STRICT g FROM aceleriq_ci_replay.e2e_seed_guard;
+  IF EXISTS(SELECT 1 FROM cron.job WHERE active)
+    OR (SELECT metadata_hash FROM aceleriq_ci_replay.background_job_attestation) IS DISTINCT FROM (
+      SELECT md5(COALESCE(jsonb_agg(to_jsonb(j)-'active' ORDER BY j.jobid),'[]'::jsonb)::text) FROM cron.job AS j) THEN
+    RAISE EXCEPTION 'E2E_BACKGROUND_JOB_STATE_CHANGED';
+  END IF;
   EXECUTE format('SELECT jsonb_build_object(''last_value'',last_value,''is_called'',is_called) FROM %s',g.http_sequence::regclass) INTO actual;
   IF NOT g.restored OR NOT g.seeded OR actual IS DISTINCT FROM g.http_state
     OR EXISTS(SELECT 1 FROM net.http_request_queue)

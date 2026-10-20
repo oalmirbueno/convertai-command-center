@@ -19,4 +19,6 @@ Commands:
 
 Use the stack's egress firewall throughout setup and tests as well as the browser's exact-origin guard. Missing integration credentials and disabled seed hooks complement that network boundary; they do not replace it. A failed or partial seed leaves its synthetic records for diagnosis. It refuses to overwrite credentials or silently reuse a populated database; a new ephemeral CI run provides the next clean attempt.
 
+After the full replay, CI pauses scheduled jobs only in the attested empty disposable database. It preserves a hash of every definition and verifies that the jobs stay paused and otherwise unchanged through browser testing. This prevents background routines from changing the synthetic fixture or scheduling unrelated HTTP requests. The temporary database is removed with the stack; production schedules and source migrations are unchanged. The reviewed task completion/deletion triggers remain enabled and their UPDATE-only bindings are checked before seeding.
+
 Local validation covers the script's CI/endpoint/identity guardrails and lint. The notebook has no Docker/GoTrue stack, so creation through Auth and the full browser flow are validated by GitHub CI, not by fabricated local Auth responses.
