@@ -2331,6 +2331,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261020005142",
+      "path": "supabase/migrations/20261020005142_estudio_livre_fontes.sql",
+      "local_sha256": "3a111be50d71a9c4e2e068802b9c42f7a15e061a14f0b27a420539e6c410b61e",
+      "remote_name": "estudio_livre_fontes",
+      "remote_statements_sha256": "d389cfaa0256c76ff84a4be9001b0fa7e45dc464ac6cc1f39e871c227aaccb98",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261020010000",
       "path": "supabase/migrations/20261020010000_laboratorio_v3.sql",
       "local_sha256": "5420a4bc29c86dcef40ea3308c3e3a7da131b2dc9c00585a3acd4be262d991a7",
