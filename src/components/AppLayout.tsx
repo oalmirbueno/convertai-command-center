@@ -16,7 +16,7 @@ import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, Re
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  LayoutGrid, GraduationCap, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
+  LayoutGrid, GraduationCap, BookOpen, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
   HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
@@ -218,6 +218,7 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Sistema",
     items: [
+      { title: "Área de membros", url: "/membros", icon: BookOpen },
       { title: "Novidades", url: "/novidades", icon: Sparkles },
       { title: "Config", url: "/config", icon: Settings },
       { title: "API", url: "/api-docs", icon: Zap },
@@ -259,6 +260,7 @@ const clientMainNav: NavItem[] = [
 ];
 
 const clientMoreNav: NavItem[] = [
+  { title: "Área de membros", url: "/membros", icon: BookOpen },
   { title: "Novidades", url: "/novidades", icon: Sparkles },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
