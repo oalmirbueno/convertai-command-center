@@ -17,6 +17,8 @@ export interface MesaValor {
   isAdmin: boolean;
   podeRecarregar: boolean;
   saldoUsd: number | null;
+  /** 20/10: "laboratorio" quando quem paga são os Créditos do Laboratório (Estúdio livre). */
+  carteira?: "cliente" | "laboratorio";
   catalogo: ModeloIa[];
   catalogoCarregando: boolean;
   atualizarCusto: () => void;

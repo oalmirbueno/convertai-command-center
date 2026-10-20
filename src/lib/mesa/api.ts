@@ -109,6 +109,9 @@ export function mensagemDoCodigo(codigo: string, detalhes: Record<string, unknow
     case "saldo_insuficiente": {
       const falta = num(detalhes.falta_usd);
       const saldo = num(detalhes.saldo_usd);
+      if (detalhes.carteira === "laboratorio") {
+        return `Os Créditos do Laboratório não cobrem esta arte${falta !== null ? `: faltam ${usd(falta)}` : ""}${saldo !== null ? ` (saldo ${usd(saldo)})` : ""}. Carregue créditos na carteira do topo do Laboratório.`;
+      }
       return `A carteira de IA deste cliente não cobre esta ação${falta !== null ? `: faltam ${usd(falta)}` : ""}${saldo !== null ? ` (saldo ${usd(saldo)})` : ""}. Recarregue a carteira para seguir.`;
     }
     case "cota_da_chave_esgotada": {

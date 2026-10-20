@@ -53,16 +53,26 @@ describe("carteira própria do Estúdio livre, sem criar cliente", () => {
     expect(sql).not.toMatch(/40001/);
   });
 
-  it("o saldo conferido antes de gastar é o da carteira do Estúdio livre", () => {
+  it("o saldo conferido antes de gastar é o dos Créditos do Laboratório (limite desligado não trava)", () => {
     const motor = ler("supabase/functions/_shared/ia-motor.ts");
     expect(motor).toContain("async function saldoDoEstudioLivre(");
+    expect(motor).toContain('from("lab_carteira").select("saldo_usd, ativa")');
+    expect(motor).toContain("if (!carteira || carteira.ativa !== true) return Number.POSITIVE_INFINITY;");
     expect(motor).toContain("await garantirSaldo(e.clientId, estimativa, e.referencia);");
   });
 
-  it("a tela mostra e recarrega a carteira do Estúdio livre no Livre", () => {
+  it("20/10: uma carteira só, a do topo do Laboratório; a arte livre debita os Créditos do Laboratório", () => {
+    const sql = ler("supabase/migrations/20261020002646_estudio_livre_usa_creditos_do_lab.sql");
+    expect(sql).toMatch(/IF _livre THEN[\s\S]*FROM public\.lab_carteira AS c WHERE c\.id = true FOR UPDATE/);
+    expect(sql).toContain("INSERT INTO public.lab_creditos_movimentos (tipo, valor_usd, saldo_depois, debitado, nota, criado_por)");
+    expect(sql).not.toMatch(/40001/);
     const tela = ler("src/components/laboratorio/estudio-livre/EstudioLivre.tsx");
-    expect(tela).toContain('rpc("estudio_livre_saldo")');
-    expect(tela).toContain('rpc("estudio_livre_recarregar"');
+    expect(tela).toContain("const creditosDoLab = useCreditosDoLab(livre);");
+    expect(tela).toContain("? doLab && doLab.ativa ? numero(doLab.saldo_usd) : null");
+    expect(tela).toContain('carteira: livre ? "laboratorio" : "cliente",');
+    expect(tela).toContain("? () => setCreditosAbertos(true)");
+    expect(tela).not.toContain('rpc("estudio_livre_saldo")');
     expect(tela).toContain("enabled: !!clientId && !livre,");
+    expect(ler("src/lib/mesa/api.ts")).toContain('if (detalhes.carteira === "laboratorio") {');
   });
 });

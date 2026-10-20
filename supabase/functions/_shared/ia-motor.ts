@@ -916,17 +916,20 @@ export async function lerSaldo(clientId: string): Promise<number> {
 }
 
 /**
- * 19/10/2026: arte do Estúdio livre (registrada em estudio_livre_trabalhos) usa a carteira própria dele,
- * não a do cliente; a cobrança (ia_registrar_uso) já debita lá.
+ * 19/10/2026: arte do Estúdio livre (registrada em estudio_livre_trabalhos) não usa a carteira do cliente.
+ * 20/10 (dono: "ainda tá com essa patifaria de créditos"): ela é cobrada dos Créditos do Laboratório
+ * (lab_carteira, o saldo do topo do Laboratório). Limite desligado: não trava (só registra).
  */
 async function saldoDoEstudioLivre(referencia?: { tipo?: string | null; id?: string | null } | null): Promise<number | null> {
   if (!referencia || referencia.tipo !== "estudio_trabalho" || !referencia.id) return null;
   const db = clienteServico();
   const { data: livre } = await db.from("estudio_livre_trabalhos").select("trabalho_id").eq("trabalho_id", referencia.id).maybeSingle();
   if (!livre) return null;
-  const { data, error } = await db.from("estudio_livre_carteira").select("saldo_usd").eq("id", true).maybeSingle();
-  if (error) throw new IaMotorErro("entrada_invalida", `Carteira do Estúdio livre indisponível: ${error.message}`);
-  return num((data as { saldo_usd?: unknown } | null)?.saldo_usd);
+  const { data, error } = await db.from("lab_carteira").select("saldo_usd, ativa").eq("id", true).maybeSingle();
+  if (error) throw new IaMotorErro("entrada_invalida", `Créditos do Laboratório indisponíveis: ${error.message}`);
+  const carteira = data as { saldo_usd?: unknown; ativa?: boolean } | null;
+  if (!carteira || carteira.ativa !== true) return Number.POSITIVE_INFINITY;
+  return num(carteira.saldo_usd);
 }
 
 /** Saldo precisa cobrir a estimativa antes de qualquer chamada paga. */
@@ -936,11 +939,12 @@ export async function garantirSaldo(clientId: string, estimativaUsd: number, ref
   if (saldo < estimativaUsd) {
     const falta = arred(estimativaUsd - saldo);
     throw new IaMotorErro("saldo_insuficiente", doLivre !== null
-      ? `Saldo insuficiente na carteira do Estúdio livre: faltam US$ ${falta.toFixed(4)}. Recarregue a carteira do Estúdio livre.`
+      ? `Os Créditos do Laboratório não cobrem esta arte: faltam US$ ${falta.toFixed(4)}. Carregue créditos no Laboratório.`
       : `Saldo insuficiente na carteira de IA do cliente: faltam US$ ${falta.toFixed(4)}.`, {
       saldo_usd: arred(saldo),
       estimativa_usd: arred(estimativaUsd),
       falta_usd: falta,
+      ...(doLivre !== null ? { carteira: "laboratorio" } : {}),
     });
   }
   return saldo;

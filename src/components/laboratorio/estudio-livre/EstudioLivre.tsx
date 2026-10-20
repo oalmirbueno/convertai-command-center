@@ -17,6 +17,8 @@ import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { NOVA_ARTE_RAPIDA } from "../../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import GuardarNoLaboratorio from "./GuardarNoLaboratorio";
+import { JanelaDeCreditos, useCreditosDoLab } from "../CreditosDoLab";
+import { chaveDosCreditos } from "@/lib/laboratorio/api";
 
 /**
  * Estúdio livre do Laboratório (19/10/2026). Pedido do dono: "um estúdio com a mesma funcionalidade do
@@ -62,8 +64,8 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
     [clientesQuery.data],
   );
   // 19/10 (dono: "carteira separada só para o Estúdio livre, sem precisar criar cliente"): a arte livre fica
-  // guardada sob o cliente interno da agência (só os arquivos), sem marca, e é cobrada da carteira própria
-  // do Estúdio livre (estudio_livre_saldo / estudio_livre_recarregar), nunca da carteira da Aceleriq.
+  // guardada sob o cliente interno da agência (só os arquivos), sem marca, e é cobrada dos Créditos do
+  // Laboratório (20/10: o mesmo saldo do topo da página), nunca da carteira da Aceleriq.
   const internos = clientes.filter((c) => c.interno);
   const interno = internos.filter((c) => /aceleriq/i.test(c.nome))[0] || internos[0] || null;
   // O pai decide o cliente quando passa a prop (null = Livre); senão, o seletor no topo.
@@ -86,15 +88,10 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
 
   const mesAtual = inicioDoMes();
   // Mesmas chaves da Mesa: o saldo da carteira é o mesmo nas telas.
-  const carteiraDoLivre = useQuery({
-    queryKey: ["estudio-livre", "carteira"],
-    enabled: livre,
-    queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("estudio_livre_saldo");
-      if (error) throw error;
-      return (data || {}) as { saldo_usd?: number | string | null; gasto_mes_usd?: number | string | null };
-    },
-  });
+  // 20/10 (dono: "ainda tá com essa patifaria de créditos"): o Livre paga com os Créditos do Laboratório,
+  // o mesmo saldo do topo da página (uma carteira só). Limite desligado: não trava.
+  const creditosDoLab = useCreditosDoLab(livre);
+  const [creditosAbertos, setCreditosAbertos] = useState(false);
   const consumo = useQuery({
     queryKey: ["mesa", "consumo", clientId, mesAtual],
     enabled: !!clientId && !livre,
@@ -106,21 +103,10 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
   });
   const previsao = useQuery({ queryKey: ["mesa", "previsao", clientId], enabled: !!clientId && !livre, queryFn: () => lerPrevisao(clientId) });
   const numero = (v: unknown) => (v === undefined || v === null || v === "" || !isFinite(Number(v)) ? null : Number(v));
+  const doLab = creditosDoLab.data;
   const saldoUsd = livre
-    ? numero(carteiraDoLivre.data ? carteiraDoLivre.data.saldo_usd : null)
+    ? doLab && doLab.ativa ? numero(doLab.saldo_usd) : null
     : numero(consumo.data ? consumo.data.saldo_usd : null) ?? numero(previsao.data ? (previsao.data as { saldo_usd?: unknown }).saldo_usd : null);
-
-  // Recarga da carteira do Estúdio livre, aqui mesmo (só admin; é crédito interno, como na Mesa).
-  const recarregarLivre = async () => {
-    const resposta = typeof window !== "undefined" ? window.prompt("Quanto colocar na carteira do Estúdio livre? (em dólar, ex.: 5)", "5") : null;
-    if (!resposta) return;
-    const valor = Number(String(resposta).replace(",", "."));
-    if (!isFinite(valor) || valor <= 0) { toast.error("Valor inválido."); return; }
-    const { error } = await (supabase as any).rpc("estudio_livre_recarregar", { _valor_usd: valor, _observacao: "Recarga pelo Estúdio livre" });
-    if (error) { toast.error(error.message || "Não foi possível recarregar."); return; }
-    toast.success(`Carteira do Estúdio livre recarregada com US$ ${valor.toFixed(2)}.`);
-    void queryClient.invalidateQueries({ queryKey: ["estudio-livre", "carteira"] });
-  };
 
   const faixa = useFaixa();
   const colunas = emColunas(faixa);
@@ -156,15 +142,16 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
         isAdmin,
         podeRecarregar,
         saldoUsd,
+        carteira: livre ? "laboratorio" : "cliente",
         catalogo: catalogo.data || [],
         catalogoCarregando: catalogo.isLoading,
         atualizarCusto: () => {
           void queryClient.invalidateQueries({ queryKey: ["mesa", "consumo", clientId] });
           void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
-          void queryClient.invalidateQueries({ queryKey: ["estudio-livre", "carteira"] });
+          void queryClient.invalidateQueries({ queryKey: chaveDosCreditos });
         },
         abrirRecarga: livre
-          ? () => void recarregarLivre()
+          ? () => setCreditosAbertos(true)
           : () => toast.info("Recarregue a carteira pela Mesa do cliente.", { description: `O Estúdio livre usa a carteira de ${clientName}.` }),
         abrirChaves: () => toast.info("As chaves ficam na Mesa do cliente."),
         abrirModelos: () => toast.info("Os modelos ficam na Mesa do cliente."),
@@ -244,6 +231,7 @@ export default function EstudioLivre({ clientId: clienteDoPai }: { clientId?: st
           )}
         />
       </MesaProvider>
+      <JanelaDeCreditos aberta={creditosAbertos} onFechar={() => setCreditosAbertos(false)} />
     </div>
   );
 }

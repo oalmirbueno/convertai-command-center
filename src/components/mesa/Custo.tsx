@@ -50,8 +50,8 @@ export function useEstimativa(partes: ParteDaEstimativa[] | null, ativo = true) 
   return remota;
 }
 
-function erroDeSaldo(falta: number, saldo: number | null) {
-  const detalhes = { falta_usd: falta, saldo_usd: saldo };
+function erroDeSaldo(falta: number, saldo: number | null, carteira?: string) {
+  const detalhes = { falta_usd: falta, saldo_usd: saldo, carteira };
   return new ErroDaMesa("saldo_insuficiente", mensagemDoCodigo("saldo_insuficiente", detalhes), detalhes);
 }
 
@@ -270,7 +270,7 @@ export function BotaoComCusto({
   const clicar = async () => {
     if (rodando) return;
     if (valor !== undefined && mesa.saldoUsd !== null && mesa.saldoUsd < valor) {
-      avisarErro(erroDeSaldo(valor - mesa.saldoUsd, mesa.saldoUsd), titulo);
+      avisarErro(erroDeSaldo(valor - mesa.saldoUsd, mesa.saldoUsd, mesa.carteira), titulo);
       return;
     }
     // Caro, sem estimativa (não dá para saber quanto vai gastar) ou pedido pela tela: segundo clique.
