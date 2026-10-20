@@ -626,6 +626,15 @@ import {
 } from "./modulos/vitrine-de-logos.ts";
 import { colarLogosNaGrade } from "./modulos/vitrine-na-arte.ts";
 import { criarItemDaArteRapida, dataDaAgendaValida, ErroDoItemDaArte, hojeEmSaoPaulo } from "./arte-rapida-na-agenda.ts";
+import {
+  criteriosDosPares,
+  type FonteDaBiblioteca,
+  fontesDoPar,
+  fontesGravadasDoLivre,
+  paresDaBiblioteca,
+  paresParaOPedido,
+  PERGUNTA_DAS_FONTES_DO_LIVRE,
+} from "./modulos/fontes-do-livre.ts";
 import { TONS, tomValido } from "../_shared/conhecimento-ads.ts";
 import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPublicaSegura } from "./links.ts";
 import { ANTI_GENERICO, CTA_PRINCIPIOS, FORMULAS_DE_TITULO, REVISAO_DE_MARCA, VOZ_DE_MARCA } from "../_shared/conhecimento-marketing.ts";
@@ -1574,7 +1583,13 @@ async function lerKit(clientId: string, alvo?: AlvoDaMarca): Promise<Kit> {
 type Fonte = { id: string; nome: string; papel: string; amostra_path: string | null };
 
 async function lerFontes(clientId: string, alvo?: AlvoDaMarca): Promise<Fonte[]> {
-  if (alvoSemMarca(alvo)) return [];
+  // 20/10: a arte livre usa o par escolhido da biblioteca da agência (gravado no trabalho), nunca o kit do cliente.
+  if (alvoSemMarca(alvo)) {
+    const id = alvo && (alvo as { id?: unknown }).id;
+    if (typeof id !== "string" || !UUID.test(id)) return [];
+    const { data } = await servico().from("estudio_livre_trabalhos").select("fontes").eq("trabalho_id", id).maybeSingle();
+    return fontesGravadasDoLivre((data as { fontes?: unknown } | null)?.fontes);
+  }
   const marca = await marcaDe(clientId, alvo);
   const { data } = await servico()
     .from("cliente_fontes")
@@ -1582,6 +1597,43 @@ async function lerFontes(clientId: string, alvo?: AlvoDaMarca): Promise<Fonte[]>
     .eq("client_id", clientId)
     .order("criado_em", { ascending: true });
   return fontesDaMarca(((data as unknown) as (Fonte & { marca_id?: string | null })[] | null) ?? [], marca);
+}
+
+/**
+ * 20/10 (dono: "ele é avulso, tem que ser mais inteligente e não dar esse erro"): arte livre sem fonte gravada
+ * ganha um par da biblioteca da agência, escolhido pelo pedido (modulos/fontes-do-livre.ts), e o par fica
+ * gravado no trabalho para a série inteira. Biblioteca vazia: vazio (a geração avisa como antes).
+ */
+async function escolherFontesDoLivre(t: Trabalho, criadoPor: string): Promise<Fonte[]> {
+  const db = servico();
+  const { data } = await db
+    .from("fontes_biblioteca")
+    .select("id, familia, categoria, personalidade, usos, nichos, pareamentos, amostra_path")
+    .eq("ativa", true)
+    .eq("suporta_portugues", true)
+    .limit(400);
+  const rapida = arteRapidaDa(t.direcao);
+  const pedido = [rapida ? rapida.pedido : "", t.direcao.conceito, t.direcao.fio_visual].filter(Boolean).join(" / ");
+  const candidatos = paresParaOPedido(paresDaBiblioteca((data as FonteDaBiblioteca[] | null) ?? []), pedido);
+  if (!candidatos.length) return [];
+  let par = candidatos[0];
+  if (candidatos.length > 1) {
+    try {
+      const res = await jevPerguntar({
+        state: { arte: { pedido: texto(pedido, 3000) } },
+        questions: { par: { type: "choice", instructions: PERGUNTA_DAS_FONTES_DO_LIVRE, criteria: criteriosDosPares(candidatos) } as unknown as PerguntaJev },
+      });
+      await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor }).catch(() => null);
+      const i = Number(String(res.answers.par?.choice ?? "").replace("par_", ""));
+      if (Number.isInteger(i) && candidatos[i]) par = candidatos[i];
+    } catch (e) {
+      registrarFalha("estudio-arte: jev das fontes do livre falhou (segue o par mais ligado ao pedido)", e, { trabalho_id: t.id });
+    }
+  }
+  const fontes = fontesDoPar(par);
+  const { error } = await db.from("estudio_livre_trabalhos").update({ fontes }).eq("trabalho_id", t.id);
+  if (error) registrarFalha("estudio-arte: fontes do livre não gravadas", error, { trabalho_id: t.id });
+  return fontes;
 }
 
 // Frente T2: as amostras da tipografia (título e texto, com papel nomeado) saem de
@@ -3643,7 +3695,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         tem_logo_oficial: marca.temLogo,
         // 17/10: quem é o cliente (negócio, público, oferta, diferenciais, estratégia, briefing): a imagem nasce do nicho dele.
         contexto_do_negocio: (await negocioP) || null,
-        ...(semMarca ? { arte_livre: "Arte livre, sem marca de cliente: sem logo, sem paleta e sem identidade de nenhuma empresa. Siga só o pedido e as imagens anexadas." } : {}),
+        ...(semMarca ? { arte_livre: "Arte livre, sem marca de cliente: sem logo e sem identidade de nenhuma empresa. Antes de dirigir, pesquise na web (a pesquisa está ligada) como peças deste tema são feitas hoje por bons designers: estilo, paleta, clima, composição e tipografia. Escolha você a paleta e o clima que servem ao tema e ao público do pedido (não deixe sem cor nem genérico) e siga o pedido e as imagens anexadas. Cite as páginas que usou em fontes_da_pesquisa." } : {}),
       },
       referencias: (await refsDoPedidoP)
         .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 600), tags: r.tags })),
@@ -3687,7 +3739,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       maxTokensSaida: 12_000,
       metodo: await superpoderesPara(servico(), { agente: "estudio.direcao", momento: existente ? "ajustar" : "gerar" }),
       // 02/10: tutorial, configuração ou marca real: o diretor pesquisa na web (as fontes voltam na resposta).
-      pesquisaWeb: mundoReal || undefined,
+      // 20/10 (dono: "ele já tem que entender, pesquisar e buscar referências online"): na arte livre sempre.
+      pesquisaWeb: mundoReal || semMarca || undefined,
       // Chamada longa (diretor com a base de conhecimento inteira): 5 min antes de desistir.
       timeoutMs: 300_000,
       referencia: { tipo: "estudio_trabalho", id: trabalhoId },
@@ -4859,10 +4912,13 @@ async function escolherReferencias(
   // Escolha da equipe na tela (da lâmina ou do conjunto) vale sem passar pelo Jev.
   const daEquipe = await referenciasDaEquipe(t, card);
   if (daEquipe.length) return { refs: daEquipe, jev: "escolha_da_equipe" };
+  // 20/10: a arte livre não tem marca: nada das referências nem das artes publicadas do cliente interno, só as
+  // de técnica do banco da agência que servem a esta lâmina.
+  const livre = alvoSemMarca(t);
   // Só as referências da marca do item (Acerbi ou CME); cliente sem marca vê todas.
   const marcaDoTrabalho = await marcaDe(t.client_id, t);
   // Em destaque (marcadas pela equipe): entram sempre, antes das outras.
-  const { data: emDestaque } = await filtrarReferenciasDaMarca(
+  const { data: emDestaque } = livre ? { data: [] as Referencia[] } : await filtrarReferenciasDaMarca(
     servico()
       .from("cliente_referencias")
       .select(CAMPOS_REF_CLIENTE)
@@ -4881,7 +4937,7 @@ async function escolherReferencias(
     return { refs: [...destaques, ...resto].slice(0, MAX_REFERENCIAS), jev: r.jev === "ok" ? "destaque_e_jev" : r.jev };
   };
   const [doCliente, globais] = await Promise.all([
-    filtrarReferenciasDaMarca(
+    livre ? Promise.resolve({ data: [] as Referencia[] }) : filtrarReferenciasDaMarca(
       servico()
         .from("cliente_referencias")
         .select(CAMPOS_REF_CLIENTE)
@@ -4899,7 +4955,7 @@ async function escolherReferencias(
     ...globais.map((g) => globalComoReferencia(g, t.client_id)),
   ];
   if (!candidatas.length) {
-    const identidade = await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
+    const identidade = livre ? null : await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
     return comDestaque({ refs: identidade ? [identidade] : [], jev: "sem_referencias_lidas" });
   }
 
@@ -4943,14 +4999,14 @@ async function escolherReferencias(
       .filter((x) => x.nota != null && x.nota >= NOTA_MINIMA_REFERENCIA)
       .sort((a, b) => (b.nota as number) - (a.nota as number));
     // Uma da identidade da marca e uma de técnica (do cliente ou do banco da agência).
-    const identidade = notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
+    const identidade = notas.find((x) => x.r.papel === "identidade")?.r ?? (livre ? null : await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho));
     const tecnica = notas.find((x) => x.r.papel !== "identidade")?.r;
     const escolhidas = [identidade, tecnica].filter(Boolean).slice(0, MAX_REFERENCIAS) as Referencia[];
     return comDestaque({ refs: escolhidas, jev: "ok" });
   } catch (e) {
     // Sem Jev, ao menos a arte publicada mais recente da marca vai junto.
     registrarFalha("estudio-arte: escolha das referências pelo jev falhou", e, { trabalho_id: t.id });
-    const identidade = await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
+    const identidade = livre ? null : await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
     return comDestaque({ refs: identidade ? [identidade] : [], jev: codigoMotor(e) });
   }
 }
@@ -5945,17 +6001,21 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     registrarFalha("estudio-arte: padrões das entregas não lidos", e, { trabalho_id: t.id });
     return { bloco: "", variedade: "" };
   });
-  const [kit, fontes, modeloImagem, preferencias] = await Promise.all([
+  const livre = alvoSemMarca(t);
+  const [kit, fontesLidas, modeloImagem, preferencias] = await Promise.all([
     lerKit(t.client_id, t),
     lerFontes(t.client_id, t),
     carregarModelo(t.modelo_imagem_id!, "imagem"),
-    preferenciasDaArte(t.client_id).catch((e) => {
+    // A arte livre não leva as regras aprendidas com o cliente interno (nada da marca da Aceleriq).
+    livre ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch((e) => {
       const motivo = registrarFalha("estudio-arte: regras do cliente não lidas", e, { trabalho_id: t.id });
       avisosDaGeracao.push(`As regras aprendidas com o cliente não foram lidas (${motivo}): a arte saiu sem elas.`);
       return "";
     }),
   ]);
-  const dasEntregas = await dasEntregasP;
+  const dasEntregas = livre ? { bloco: "", variedade: "" } : await dasEntregasP;
+  // 20/10: arte livre sem fonte escolhe o par da biblioteca pelo pedido (não recusa com "defina a tipografia").
+  const fontes = !fontesLidas.length && livre ? await escolherFontesDoLivre(t, ch.userId) : fontesLidas;
   // Frente RO, fase 2: as regras que a equipe ensinou ao Estúdio (EVITAR primeiro). As EVITAR entram no prompt
   // com prioridade e a versão guarda quais seguiu (a tela mostra "Segui: ...", com o Esquecer da regra).
   const regrasDaGeracaoLidas = ads ? [] : await regrasDoEstudio(t);

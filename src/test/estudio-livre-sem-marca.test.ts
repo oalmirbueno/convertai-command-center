@@ -33,7 +33,8 @@ describe("Estúdio livre começa livre e sem marca", () => {
     expect(srv).toContain('origem === "laboratorio" && (corpo.sem_marca === true || !texto(corpo.client_id, 64))');
     expect(srv).toContain("gravada = { ...gravada, sem_marca: true, campanha_id: null, campanha_por: null };");
     expect(srv).toMatch(/async function lerKit\([^)]*\): Promise<Kit> \{\n  if \(alvoSemMarca\(alvo\)\) return null;/);
-    expect(srv).toMatch(/async function lerFontes\([^)]*\): Promise<Fonte\[\]> \{\n  if \(alvoSemMarca\(alvo\)\) return \[\];/);
+    // 20/10: a fonte da arte livre é o par da biblioteca gravado no trabalho, nunca o kit do cliente.
+    expect(srv).toMatch(/async function lerFontes\([^)]*\): Promise<Fonte\[\]> \{\n[^\n]*\n  if \(alvoSemMarca\(alvo\)\) \{[\s\S]{0,300}fontesGravadasDoLivre/);
     expect(srv).toContain("if (alvoSemMarca(alvo)) return MARCA_LIVRE;");
     expect(srv).toContain("!semMarca && (ordem === 1 || ordem === total)");
     expect(srv).toContain("semMarca ? Promise.resolve(null) : contextoCompletoParaPrompt(");
