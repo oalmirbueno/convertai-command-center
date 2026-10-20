@@ -2323,6 +2323,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261020002646",
+      "path": "supabase/migrations/20261020002646_estudio_livre_usa_creditos_do_lab.sql",
+      "local_sha256": "c73218f7f4a72cfbfc992603d78bca55f44716c66ea71b31d2c8b9bda92df432",
+      "remote_name": "estudio_livre_usa_creditos_do_lab",
+      "remote_statements_sha256": "eab023d1a8bcf13e156facd7d1c745f829b93a2b548b4a1846d2edaf79851f8e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261020010000",
       "path": "supabase/migrations/20261020010000_laboratorio_v3.sql",
       "local_sha256": "5420a4bc29c86dcef40ea3308c3e3a7da131b2dc9c00585a3acd4be262d991a7",
