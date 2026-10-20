@@ -239,6 +239,33 @@ jobs:
           git diff --quiet -- supabase/migrations
 
 
+      # Run the real profile matrix as soon as its database is ready. The
+      # slower unit/type/build checks below still run even if a browser case
+      # fails, preserving every existing gate while surfacing UI drift sooner.
+      - name: Validate isolated browser E2E guardrails
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
+        run: |
+          node scripts/run-ci-e2e.mjs --self-test
+          node scripts/seed-ci-e2e.mjs --self-test
+          node scripts/guard-ci-e2e-network.mjs --self-test
+          npx tsc -p e2e/tsconfig.json
+
+      - name: Run real Auth browser profile matrix against ephemeral Supabase
+        id: profile_e2e
+        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.e2e_browser.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: node scripts/run-ci-e2e.mjs
+
+      - name: Keep only synthetic browser failure screenshots
+        if: ${{ !cancelled() && steps.profile_e2e.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-profile-screenshots
+          path: test-results/e2e/**/*.png
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Run unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm test -- --run
@@ -287,21 +314,6 @@ jobs:
           git diff --exit-code -- \
             .lovable/mcp/manifest.json \
             supabase/functions/mcp/index.ts
-
-      - name: Validate isolated browser E2E guardrails
-        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
-        run: |
-          node scripts/run-ci-e2e.mjs --self-test
-          node scripts/seed-ci-e2e.mjs --self-test
-          node scripts/guard-ci-e2e-network.mjs --self-test
-          npx tsc -p e2e/tsconfig.json
-
-      - name: Run real Auth browser profile matrix against ephemeral Supabase
-        id: profile_e2e
-        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.e2e_browser.outcome == 'success' }}
-        env:
-          PGPASSWORD: postgres
-        run: node scripts/run-ci-e2e.mjs
 
       - name: Restore synthetic seed hooks before stopping Supabase
         if: ${{ always() && steps.db_reset.outcome == 'success' }}

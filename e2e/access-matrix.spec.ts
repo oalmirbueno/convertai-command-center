@@ -19,7 +19,7 @@ async function login(page: Page, role: UserRole) {
   // Do not read or attach the response: it contains disposable session tokens.
   expect((await authentication).status(), "Real password login must succeed").toBe(200);
   await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/projetos");
-  await expect(page.locator(".heading-page", { hasText: /^Projetos$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Projetos", exact: true, level: 1 })).toBeVisible();
 }
 
 async function logout(page: Page) {
