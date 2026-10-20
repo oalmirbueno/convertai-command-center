@@ -1,0 +1,65 @@
+name: Membros e contratos de migração
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/components/membros/**'
+      - 'src/pages/*Membros*'
+      - 'src/lib/membros/**'
+      - 'src/test/membros*'
+      - 'src/test/*migration*'
+      - 'scripts/*migration*'
+      - 'scripts/verificar-tipos-membros.mjs'
+      - 'supabase/deployment-baselines/**'
+      - 'supabase/production-migration-baseline.json'
+      - '.github/workflows/membros-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: membros-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contratos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: ci-public-placeholder
+      VITE_APP_PUBLIC_URL: https://app.example.com
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --global npm@11.9.0 && npm ci
+      - name: Integridade de todas as fontes SQL
+        run: npm run migrations:verify
+      - name: Leitor, ferramentas, identidade e contratos de implantação
+        run: >-
+          npx vitest run
+          src/test/membros-biblioteca.test.tsx
+          src/test/membros-identidade.test.tsx
+          src/test/membros-foco.test.tsx
+          src/test/membros-ferramentas.test.tsx
+          src/test/membros-arquivos.test.ts
+          src/test/membros-pdf-tela-cheia.test.tsx
+          src/lib/membros/modelo.test.ts
+          src/test/project-migration-ledger.test.ts
+          src/test/project-migration-view.test.ts
+          src/test/production-migration-view.test.ts
+          --maxWorkers=1 --no-file-parallelism
+      - name: Tipos dos testes de membros e CRM afetados
+        run: node scripts/verificar-tipos-membros.mjs
+      - name: Fontes e manifesto permanecem intactos após os testes
+        run: |
+          test -z "$(git status --porcelain --untracked-files=all -- supabase/migrations)"
+          npm run migrations:verify
