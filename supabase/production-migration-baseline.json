@@ -2379,6 +2379,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261020080000",
+      "path": "supabase/migrations/20261020080000_laboratorio_config_do_projeto.sql",
+      "local_sha256": "eab89960a98cb94e57a368ad365ad19f9cbdfa390bfd68c7ccc21b378a5c8b9e",
+      "remote_name": "laboratorio_config_do_projeto",
+      "remote_statements_sha256": "410f79ba938f9438b554efa9605151f7bcfae72591ef1247470a6323638ad27b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261020120000",
       "path": "supabase/migrations/20261020120000_stories_da_mesa.sql",
       "local_sha256": "dabbce151007b8112fcdf3f767ee5720105e8383783c1ad1a183ee150ab0ddc0",

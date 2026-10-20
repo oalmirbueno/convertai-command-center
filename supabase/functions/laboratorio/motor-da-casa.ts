@@ -15,11 +15,12 @@
  *   ajustar    → ajustar_card { trabalho_id, ordem, instrucao, confirmado } (o ajuste da Mesa: anexos e identidade).
  *   variar     → N ajustes "variação" sobre a lâmina escolhida (mesmo texto e marca, outra composição).
  *
- * Sem cliente: a estudio-arte usa o cliente "Estúdio livre" (carteira própria, sem marca). Sem esse cliente
- * cadastrado (409 sem_cliente_do_estudio_livre), o nó cai no motor de imagem direto, com aviso.
+ * Sem cliente: a estudio-arte guarda a arte sob o cliente interno da agência, sem marca, e cobra a carteira do
+ * Estúdio livre, que debita os créditos do Laboratório pelo custo real (migration 20261020002646). Por isso o
+ * Laboratório não reserva nem estorna esses nós (creditos.ts, foraDaReserva): só confere o saldo antes.
  */
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { clienteDoEstudioLivre } from "../_shared/nucleo-das-mesas.ts";
+import { clienteInternoDaAgencia } from "../_shared/nucleo-das-mesas.ts";
 import { ErroHttp, servico } from "./comum.ts";
 import type { Contexto, Entradas, ImagemSaida, SaidaDoNo } from "./executar.ts";
 import type { EntradaDoPacote } from "./no-ar.ts";
@@ -97,7 +98,7 @@ export async function rodarNoEstudio(porta: PortaDoMotor, ctx: Pick<Contexto, "p
   const m = materiaisDoMotor(no, entradas as EntradaDoMotor[], { proporcao: cfg.proporcao, prompt_base: gravity?.prompt_base || null, laminas: limitar(no.dados.laminas, 2, 10, 5) });
   const clienteDoProjeto = ctx.projeto.client_id;
   const clienteDoTrabalho = clienteDoProjeto || (await porta.clienteDoLivre());
-  if (!clienteDoTrabalho) throw new ErroHttp(409, "sem_cliente_do_estudio_livre", 'Falta o cliente "Estúdio livre" para gerar sem cliente.');
+  if (!clienteDoTrabalho) throw new ErroHttp(409, "sem_cliente_interno", "O cliente interno da agência não foi encontrado: sem ele não dá para gerar sem cliente no Estúdio.");
   const arquivos: Array<{ caminho: string; nome: string; papel: string }> = [];
   for (const f of m.fotos) {
     const caminho = await porta.copiarParaOEstudio(f, clienteDoTrabalho).catch((e) => (registrarFalha("laboratorio: foto não foi para o Estúdio", e), null));
@@ -248,7 +249,9 @@ export function portaDoMotor(o: { token: string; guardar: PortaDoMotor["guardar"
   const db = servico();
   return {
     estudio: chamadorDoEstudio(o.token),
-    clienteDoLivre: () => clienteDoEstudioLivre(db),
+    // A arte livre (sem cliente) fica sob o cliente interno da agência, sem marca, e a estudio-arte cobra a carteira
+    // do Estúdio livre (estudio_livre_trabalhos → créditos do Laboratório, migration 20261020002646).
+    clienteDoLivre: () => clienteInternoDaAgencia(db),
     async copiarParaOEstudio(foto, clientId) {
       const { data, error } = await db.storage.from(foto.bucket || "workspace").download(foto.path);
       if (error || !data) return null;

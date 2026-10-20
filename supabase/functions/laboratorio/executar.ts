@@ -291,9 +291,9 @@ async function noNoEstudio(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoI
   try {
     return await rodarNoEstudio(portaDoMotorDe(ctx), ctx, no, await saidasDasEntradas(ctx, no), execucaoId);
   } catch (err) {
-    if (!(err instanceof ErroHttp) || err.codigo !== "sem_cliente_do_estudio_livre") throw err;
+    if (!(err instanceof ErroHttp) || (err.codigo !== "sem_cliente_interno" && err.codigo !== "sem_cliente_do_estudio_livre")) throw err;
     const r = no.tipo === "carrossel" ? await noCarrossel(ctx, no, e, execucaoId) : await noImagem(ctx, no, e, execucaoId);
-    r.saida.avisos = [...(r.saida.avisos || []), 'Gerado no motor de imagem direto: falta o cliente "Estúdio livre" para o motor da casa num projeto sem cliente.'];
+    r.saida.avisos = [...(r.saida.avisos || []), "Gerado no motor de imagem direto: o cliente interno da agência não foi achado para o motor da casa num projeto sem cliente."];
     return r;
   }
 }

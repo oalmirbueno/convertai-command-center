@@ -125,7 +125,7 @@ Deno.test("motor: projeto sem cliente vai sem marca no cliente do Estúdio livre
   assertEquals(f.chamadas.find((x) => x.nome === "copiar")!.args[1], LIVRE);
   const sem = motorFalso({ livre: null });
   const e = await assertRejects(() => rodarNoEstudio(sem.porta, { projeto: projeto(c, null), canvas: c, carteira: { clientId: "x", livre: true } }, res, entradas, "e1"), ErroHttp);
-  assertEquals((e as ErroHttp).codigo, "sem_cliente_do_estudio_livre");
+  assertEquals((e as ErroHttp).codigo, "sem_cliente_interno");
 });
 
 Deno.test("acompanhar: na fila segue aguardando; pronto guarda na pasta do projeto; tudo com erro vira erro", async () => {
@@ -298,4 +298,57 @@ Deno.test("marca escolhida: marca_id só uuid; vai no preparo e na fila do Estú
   const e = await assertRejects(() => rodarNoEstudio(duas.porta, { projeto: projeto(fluxo().c), canvas: fluxo().c, carteira: { clientId: CLIENTE, livre: false } }, res, entradas, "e1"), ErroHttp);
   assertEquals((e as ErroHttp).codigo, "escolha_a_marca");
   assert((e as ErroHttp).message.indexOf("nó Marca") >= 0);
+});
+
+// ------------------------------------------------------------------ cobrança dupla (motor da casa sem cliente)
+
+Deno.test("créditos: sem cliente, Resultado e Carrossel não reservam (a estudio-arte cobra o custo real); só confere o saldo", async () => {
+  const { cobrarConfirmacao } = await import("./creditos.ts");
+  const { cobradosPeloEstudio } = await import("./modulos/motor.ts");
+  const nos = [no("r", "imagem"), no("k", "carrossel"), no("c", "copy")];
+  assertEquals(cobradosPeloEstudio(null, nos), ["r", "k"]);
+  assertEquals(cobradosPeloEstudio(CLIENTE, nos), []);
+  const rpcs: Array<{ nome: string; args: Record<string, unknown> }> = [];
+  const porta = { rpc: async (nome: string, args: Record<string, unknown>) => (rpcs.push({ nome, args }), { data: { ok: true, movimento_id: "m1", ativa: true, saldo_usd: 10 }, error: null }) };
+  // Só nós do motor da casa sem cliente: nada é reservado (nem estornado depois), o saldo é conferido.
+  const so = await cobrarConfirmacao({ porNo: [{ no_id: "r", custo_usd: 0.4 }], total: 0.4, projetoId: "p", nota: "Rodar", userId: "u", foraDaReserva: ["r"] }, porta, async () => ({ saldo: 1, ativa: true }));
+  assertEquals(rpcs.length, 0);
+  await so.devolverNo("r", "e1", "falhou");
+  await so.devolverTudo("falhou");
+  assertEquals(rpcs.length, 0);
+  // Saldo menor que a estimativa: 402 antes de rodar, sem debitar.
+  const e = await assertRejects(() => cobrarConfirmacao({ porNo: [{ no_id: "r", custo_usd: 0.4 }], total: 0.4, projetoId: "p", nota: "Rodar", userId: "u", foraDaReserva: ["r"] }, porta, async () => ({ saldo: 0.1, ativa: true })), ErroHttp);
+  assertEquals([(e as ErroHttp).status, (e as ErroHttp).codigo], [402, "sem_credito"]);
+  assertEquals(rpcs.length, 0);
+  // Carteira inativa: passa, sem reservar.
+  await cobrarConfirmacao({ porNo: [{ no_id: "r", custo_usd: 0.4 }], total: 0.4, projetoId: "p", nota: "Rodar", userId: "u", foraDaReserva: ["r"] }, porta, async () => ({ saldo: 0, ativa: false }));
+  assertEquals(rpcs.length, 0);
+  // Rodar tudo sem cliente: a copy reserva a parte dela; o Resultado fica fora.
+  await cobrarConfirmacao({ porNo: [{ no_id: "r", custo_usd: 0.4 }, { no_id: "c", custo_usd: 0.05 }], total: 0.45, projetoId: "p", nota: "Rodar tudo", userId: "u", foraDaReserva: ["r"] }, porta, async () => ({ saldo: 1, ativa: true }));
+  assertEquals(rpcs.map((r) => [r.nome, r.args.p_valor]), [["lab_creditos_reservar", 0.05]]);
+});
+
+Deno.test("créditos: com cliente, o motor da casa reserva a estimativa como todos os nós", async () => {
+  const { cobrarConfirmacao } = await import("./creditos.ts");
+  const rpcs: Array<{ nome: string; args: Record<string, unknown> }> = [];
+  const porta = { rpc: async (nome: string, args: Record<string, unknown>) => (rpcs.push({ nome, args }), { data: { ok: true, movimento_id: "m1", ativa: true, saldo_usd: 10 }, error: null }) };
+  let leu = false;
+  const c = await cobrarConfirmacao({ porNo: [{ no_id: "r", custo_usd: 0.4 }], total: 0.4, projetoId: "p", nota: "Rodar", userId: "u", foraDaReserva: [] }, porta, async () => ((leu = true), { saldo: 0, ativa: true }));
+  assertEquals(rpcs.map((r) => [r.nome, r.args.p_valor]), [["lab_creditos_reservar", 0.4]]);
+  assertEquals(leu, false);
+  await c.devolverNo("r", "e1", "falhou");
+  assertEquals(rpcs.map((r) => r.nome), ["lab_creditos_reservar", "lab_creditos_estornar"]);
+});
+
+Deno.test("créditos: ajustar e variar do motor da casa sem cliente vão fora da reserva; com cliente, reservam", async () => {
+  const semCliente = ajustesFalsos({ clientId: null });
+  const cobrou: unknown[] = [];
+  const original = semCliente.porta.cobrar;
+  semCliente.porta.cobrar = async (c) => (cobrou.push(c.foraDaReserva), await original(c));
+  await noAjustar(semCliente.porta, ch, { projeto_id: "p", no_id: "res", indice: 0, pedido: "logo maior", confirmado: true });
+  const comCliente = ajustesFalsos();
+  const original2 = comCliente.porta.cobrar;
+  comCliente.porta.cobrar = async (c) => (cobrou.push(c.foraDaReserva), await original2(c));
+  await noVariar(comCliente.porta, ch, { projeto_id: "p", no_id: "res", indice: 0, quantidade: 2, confirmado: true });
+  assertEquals(cobrou, [true, false]);
 });

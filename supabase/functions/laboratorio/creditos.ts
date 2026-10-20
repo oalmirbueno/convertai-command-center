@@ -127,14 +127,57 @@ export class CobrancaDoLab {
   }
 }
 
-/** Reserva o total da confirmação e guarda a parte de cada nó. */
+/** O saldo e o estado da carteira do Laboratório (sem debitar). Banco sem a carteira: null. */
+export type LerCarteira = () => Promise<{ saldo: number; ativa: boolean } | null>;
+const lerCarteiraPadrao: LerCarteira = async () => {
+  try {
+    const { data, error } = await servico().from("lab_carteira").select("saldo_usd, ativa").eq("id", true).maybeSingle();
+    if (error || !data) return null;
+    const c = data as { saldo_usd: unknown; ativa: unknown };
+    return { saldo: arred(num(c.saldo_usd)), ativa: c.ativa === true };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Confere o saldo SEM debitar (20/10): carteira ativa com saldo menor que o valor lança 402 sem_credito. Inativa ou
+ * sem a carteira no banco: passa (como a reserva).
+ */
+export async function conferirSaldo(valor: number, ler: LerCarteira = lerCarteiraPadrao): Promise<void> {
+  const v = arred(num(valor));
+  if (!(v > 0)) return;
+  const c = await ler();
+  if (c && c.ativa && c.saldo < v) {
+    throw new ErroHttp(402, "sem_credito", `Sem crédito no Laboratório: o saldo é ${usd(c.saldo)} e isto custa ${usd(v)}. Carregue créditos para rodar.`, { saldo_usd: c.saldo, custo_usd: v });
+  }
+}
+
+/**
+ * Reserva o total da confirmação e guarda a parte de cada nó.
+ * 20/10 (cobrança dupla): `foraDaReserva` são os nós que a própria estudio-arte cobra da carteira do Laboratório pelo
+ * custo real (Resultado e Carrossel no motor da casa num projeto SEM cliente: migration 20261020002646). Eles não
+ * entram na reserva nem no estorno; o saldo é conferido sem debitar (402 sem_credito antes de rodar).
+ */
 export async function cobrarConfirmacao(
-  o: { porNo: Array<{ no_id: string | null; custo_usd: number }>; total: number; projetoId: string; nota: string; userId: string },
+  o: { porNo: Array<{ no_id: string | null; custo_usd: number }>; total: number; projetoId: string; nota: string; userId: string; foraDaReserva?: string[] },
   porta?: PortaDosCreditos,
+  lerCarteira?: LerCarteira,
 ): Promise<CobrancaDoLab> {
+  const fora = o.foraDaReserva || [];
   const partes: Record<string, number> = {};
-  for (const p of o.porNo) if (p.no_id) partes[p.no_id] = arred(num(partes[p.no_id]) + num(p.custo_usd));
-  const reserva = await reservarCreditos({ valor: o.total, projetoId: o.projetoId, nota: o.nota, userId: o.userId }, porta);
+  let deFora = 0;
+  for (const p of o.porNo) {
+    if (!p.no_id) continue;
+    if (fora.indexOf(p.no_id) >= 0) {
+      deFora = arred(deFora + num(p.custo_usd));
+      continue;
+    }
+    partes[p.no_id] = arred(num(partes[p.no_id]) + num(p.custo_usd));
+  }
+  if (deFora > 0) await conferirSaldo(num(o.total), lerCarteira);
+  const valor = arred(Math.max(0, num(o.total) - deFora));
+  const reserva = await reservarCreditos({ valor, projetoId: o.projetoId, nota: o.nota, userId: o.userId }, porta);
   return new CobrancaDoLab({ reserva, porNo: partes, userId: o.userId, porta });
 }
 

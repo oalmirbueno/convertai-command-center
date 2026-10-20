@@ -67,7 +67,7 @@ import { acompanharNoEstudio, ajustarNoEstudio, type SaidaDoMotor } from "./moto
 import { type ImagemDaSaida, noAjustar, noVariar, type PortaDosAjustes, type Salvo, salvarNosArquivos } from "./ajustes.ts";
 import { ajustarImagemDireta, portaDoMotorDe } from "./executar.ts";
 import { nomeLimpo } from "./modulos/regras.ts";
-import { marcaIdDoCanvas, nosSoltos } from "./modulos/motor.ts";
+import { cobradosPeloEstudio, marcaIdDoCanvas, nosSoltos } from "./modulos/motor.ts";
 import { marcaEmTextoDaMarca } from "./comum.ts";
 
 type Corpo = Record<string, unknown>;
@@ -416,7 +416,8 @@ export const noExecutar: Acao = async (ch, corpo) => {
     }
   }
   // Créditos do Laboratório: reserva o custo estimado (carteira ativa sem saldo: 402 sem_credito, nada roda).
-  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `${automatico.ok ? "Automático: " : ""}Rodar ${rotuloDaNota(no)}`, userId: ch.userId });
+  // 20/10: sem cliente, Resultado e Carrossel são cobrados pela estudio-arte direto nos créditos (só confere o saldo aqui).
+  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `${automatico.ok ? "Automático: " : ""}Rodar ${rotuloDaNota(no)}`, userId: ch.userId, foraDaReserva: cobradosPeloEstudio(p.client_id, [no]) });
   let ctx: Contexto;
   let execucaoId: string;
   try {
@@ -455,7 +456,7 @@ export const rodarTudoAcao: Acao = async (ch, corpo) => {
   if (!est.por_no.length) throw new ErroHttp(400, "nada_para_rodar", "O fluxo não tem nó que gere algo (Agente, Copy, Resultado, Carrossel, Logo, Landing, Anúncio ou Agente externo).");
   exigirConfirmacao(corpo, est.total_usd, est.por_no);
   // Créditos do Laboratório: reserva o total; cada nó que falha ou não roda devolve a parte dele.
-  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `Rodar tudo (${est.por_no.length} nó${est.por_no.length === 1 ? "" : "s"})`, userId: ch.userId });
+  const cobranca = await cobrarConfirmacao({ porNo: est.por_no, total: est.total_usd, projetoId: p.id, nota: `Rodar tudo (${est.por_no.length} nó${est.por_no.length === 1 ? "" : "s"})`, userId: ch.userId, foraDaReserva: cobradosPeloEstudio(p.client_id, p.canvas.nos) });
   const rodadaId = crypto.randomUUID();
   let ctx: Contexto;
   let ordem: string[];
@@ -883,7 +884,7 @@ function portaDosAjustes(): PortaDosAjustes {
       return chamadas.reduce((s, c) => s + preco(c), 0);
     },
     async cobrar(c) {
-      return await cobrarConfirmacao({ porNo: [{ no_id: c.noId, custo_usd: c.total }], total: c.total, projetoId: c.projetoId, nota: c.nota, userId: c.userId });
+      return await cobrarConfirmacao({ porNo: [{ no_id: c.noId, custo_usd: c.total }], total: c.total, projetoId: c.projetoId, nota: c.nota, userId: c.userId, foraDaReserva: c.foraDaReserva ? [c.noId] : [] });
     },
     criarExecucao: (o) => criarExecucao({ projetoId: o.p.id, no: o.no, status: "na_fila", entrada: o.entrada, rodadaId: null, userId: o.userId }),
     atualizarExecucao,

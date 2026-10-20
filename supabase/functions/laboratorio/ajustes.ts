@@ -30,7 +30,8 @@ export interface PortaDosAjustes {
   nomeDoCliente(clientId: string): Promise<string>;
   copiarParaOCliente(o: { clientId: string; projeto: ProjetoDoLab; imagens: ImagemDaSaida[]; userId: string }): Promise<Salvo[]>;
   preco(chamadas: Chamada[]): Promise<number>;
-  cobrar(o: { total: number; noId: string; projetoId: string; nota: string; userId: string }): Promise<{ devolverTudo(motivo: string): Promise<void> }>;
+  /** foraDaReserva: a estudio-arte cobra os créditos do Laboratório direto (motor da casa sem cliente): só confere o saldo. */
+  cobrar(o: { total: number; noId: string; projetoId: string; nota: string; userId: string; foraDaReserva?: boolean }): Promise<{ devolverTudo(motivo: string): Promise<void> }>;
   criarExecucao(o: { p: ProjetoDoLab; no: NoDoCanvas; entrada: Record<string, unknown>; userId: string }): Promise<string>;
   atualizarExecucao(id: string, campos: Record<string, unknown>): Promise<void>;
   /** Ajusta (pedido) ou varia (quantidade) a imagem do índice; a saída nova e o custo real. */
@@ -99,7 +100,8 @@ async function ajustarOuVariar(porta: PortaDosAjustes, ch: Chamador, corpo: Corp
   if (corpo.confirmado !== true) {
     throw new ErroHttp(409, "confirmacao_necessaria", `Isto custa cerca de US$ ${custo.toFixed(4)}. Confirme para ${modo === "ajustar" ? "ajustar" : "gerar as variações"}.`, { total_usd: custo, por_no: [{ no_id: no.id, tipo: no.tipo, custo_usd: custo, chamadas }] });
   }
-  const cobranca = await porta.cobrar({ total: custo, noId: no.id, projetoId: p.id, nota: `${modo === "ajustar" ? "Ajustar" : "Variar"} ${typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo}`.slice(0, 120), userId: ch.userId });
+  // 20/10 (cobrança dupla): sem cliente, o ajuste no motor da casa é cobrado pela estudio-arte direto nos créditos do Lab.
+  const cobranca = await porta.cobrar({ foraDaReserva: doEstudio && !p.client_id, total: custo, noId: no.id, projetoId: p.id, nota: `${modo === "ajustar" ? "Ajustar" : "Variar"} ${typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo}`.slice(0, 120), userId: ch.userId });
   let execucaoId: string;
   try {
     execucaoId = await porta.criarExecucao({ p, no, entrada: { [modo]: { indice, ...(pedido ? { pedido } : { quantidade }) }, origem_execucao_id: ex.id, estimativa_usd: custo }, userId: ch.userId });
