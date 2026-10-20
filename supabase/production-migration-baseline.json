@@ -2315,6 +2315,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261019235958",
+      "path": "supabase/migrations/20261019235958_estudio_livre_carteira.sql",
+      "local_sha256": "640f56b9b4fec3ca684fc1fe47f1d0eefca851058cb98465944071a4fd9f58c4",
+      "remote_name": "estudio_livre_carteira",
+      "remote_statements_sha256": "6e796305b81929cbd39efd92ac7529be3dd73e6b1f69531ccb26e4cdddac4c4a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261020010000",
       "path": "supabase/migrations/20261020010000_laboratorio_v3.sql",
       "local_sha256": "5420a4bc29c86dcef40ea3308c3e3a7da131b2dc9c00585a3acd4be262d991a7",
