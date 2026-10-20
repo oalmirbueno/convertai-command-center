@@ -413,7 +413,9 @@ WHERE user_id IN (
 INSERT INTO public.user_roles (user_id, role)
 VALUES
   ('a1000000-0000-4000-8000-000000000001', 'admin'),
-  ('a1000000-0000-4000-8000-000000000002', 'manager');
+  ('a1000000-0000-4000-8000-000000000002', 'manager'),
+  ('a1000000-0000-4000-8000-00000000000a', 'client'),
+  ('a1000000-0000-4000-8000-00000000000b', 'client');
 
 INSERT INTO public.team_client_assignments (
   user_id,

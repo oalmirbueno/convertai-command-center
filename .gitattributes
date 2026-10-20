@@ -5,3 +5,4 @@ supabase/migrations/20261020190625_membros_estudo_ferramentas.sql text eol=lf
 # O tamanho enviado das fontes compartilhadas deve ser igual no Windows e no CI.
 supabase/functions/_shared/**/*.ts text eol=lf
 supabase/functions/_shared/**/*.tsx text eol=lf
+scripts/testar-membros-ci.sh text eol=lf

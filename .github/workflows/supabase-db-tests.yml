@@ -152,7 +152,13 @@ jobs:
 
       - name: Run pgTAP database tests
         id: pgtap
-        run: supabase test db
+        # Members SQL scripts bootstrap a separate empty database and are not
+        # TAP files. They run in their own isolated container in the next step.
+        run: supabase test db supabase/tests/database
+
+      - name: Run members SQL contracts in a separate disposable database
+        if: ${{ !cancelled() && (success() || steps.pgtap.outcome == 'failure') }}
+        run: bash scripts/testar-membros-ci.sh
 
       - name: Run isolated synthetic SQL contracts
         # A failing full-schema assertion must not hide independent synthetic

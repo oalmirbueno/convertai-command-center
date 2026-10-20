@@ -18,7 +18,7 @@ import {
 } from '../../supabase/functions/api-gateway/modulos/api-gateway-auth.ts';
 
 const root = process.cwd();
-const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
+const read = (path: string) => readFileSync(resolve(root, path), 'utf8').replace(/\r\n/g, '\n');
 
 const principal = (
   scopes: readonly string[],

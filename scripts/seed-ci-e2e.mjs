@@ -27,7 +27,11 @@ const verifySql=`DO $ci$ DECLARE g record; actual jsonb; BEGIN
   SELECT * INTO STRICT g FROM aceleriq_ci_replay.e2e_seed_guard;
   EXECUTE format('SELECT jsonb_build_object(''last_value'',last_value,''is_called'',is_called) FROM %s',g.http_sequence::regclass) INTO actual;
   IF NOT g.restored OR NOT g.seeded OR actual IS DISTINCT FROM g.http_state
-    OR EXISTS(SELECT 1 FROM net.http_request_queue) OR EXISTS(SELECT 1 FROM vault.secrets)
+    OR EXISTS(SELECT 1 FROM net.http_request_queue)
+    OR g.vault_state IS DISTINCT FROM (
+      SELECT jsonb_agg(jsonb_build_object('id',s.id,'name',s.name,'description',s.description,
+        'created_at',s.created_at,'updated_at',s.updated_at) ORDER BY s.id) FROM vault.secrets AS s)
+    OR EXISTS(SELECT 1 FROM public.render_nuvem WHERE ligada OR url_acordar IS NOT NULL)
     OR EXISTS(SELECT 1 FROM jsonb_to_recordset(g.hook_state) h(trigger_oid oid,enabled text)
       LEFT JOIN pg_trigger t ON t.oid=h.trigger_oid WHERE t.oid IS NULL OR t.tgenabled::text<>h.enabled) THEN
     RAISE EXCEPTION 'E2E_HTTP_OR_HOOK_POSTCONDITION_FAILED';
@@ -102,13 +106,15 @@ function seedDataSql(fixture) {
   parts.push(`DO $ci$ BEGIN
     IF NOT EXISTS(SELECT 1 FROM aceleriq_ci_replay.e2e_seed_guard WHERE run_id=${literal(fixture.runId)}::uuid AND NOT restored AND NOT seeded)
       OR (SELECT count(*) FROM auth.users)<>5 OR (SELECT count(*) FROM public.profiles WHERE id IN (${ids}))<>5
-      OR (SELECT count(*) FROM public.user_roles WHERE user_id IN (${ids}) AND role='client')<>5 THEN
+      OR EXISTS(SELECT 1 FROM public.user_roles) THEN
       RAISE EXCEPTION 'E2E_REAL_AUTH_PROFILE_CREATION_MISMATCH';
     END IF;
   END $ci$;`);
   for(const key of keys) {
     const user=fixture.users[key];
-    if(user.role!=='client')parts.push(`UPDATE public.user_roles SET role=${literal(user.role)}::public.app_role WHERE user_id=${literal(user.id)}::uuid AND role='client';`);
+    // Signup only creates a member profile. Enroll the five synthetic actors
+    // explicitly, without changing the real Auth trigger or pre-existing roles.
+    parts.push(`INSERT INTO public.user_roles(user_id,role) VALUES(${literal(user.id)}::uuid,${literal(user.role)}::public.app_role);`);
     parts.push(`UPDATE public.profiles SET onboarding_done=true,plan_status='active',plan_renewal_date='2099-01-01',services_config='{}'::jsonb WHERE id=${literal(user.id)}::uuid;`);
   }
   for(const key of ['clientA','clientB']) {
@@ -176,7 +182,9 @@ async function selfTest() {
   const sql=seedDataSql(fixture);
   assert(!/\bDELETE\b|\bTRUNCATE\b|DISABLE TRIGGER|request.jwt/i.test(sql));
   assert(!sql.includes(fixture.users.admin.password));
-  assert.equal((sql.match(/UPDATE public.user_roles/g)||[]).length,3);
+  assert.equal((sql.match(/INSERT INTO public.user_roles/g)||[]).length,5);
+  assert(!sql.includes('UPDATE public.user_roles'));
+  assert(sql.includes('OR EXISTS(SELECT 1 FROM public.user_roles)'));
   assert.throws(()=>validateFixture({...fixture,supabaseUrl:'https://remote.supabase.co'}));
   console.log('CI E2E seed self-test passed: CI, loopback, redirect, synthetic identity, no credential SQL and data-preserving role guards.');
 }

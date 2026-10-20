@@ -240,10 +240,10 @@ DELETE FROM public.user_roles
 WHERE user_id = 'a9000000-0000-4000-8000-000000000001';
 
 INSERT INTO public.user_roles (user_id, role)
-VALUES (
-  'a9000000-0000-4000-8000-000000000001',
-  'admin'::public.app_role
-);
+VALUES
+  ('a9000000-0000-4000-8000-000000000001', 'admin'::public.app_role),
+  ('a9000000-0000-4000-8000-00000000000a', 'client'::public.app_role),
+  ('a9000000-0000-4000-8000-00000000000b', 'client'::public.app_role);
 
 INSERT INTO public.api_keys (
   id,

@@ -253,6 +253,13 @@ VALUES
     '{"full_name":"Editorial Sync Client","role":"client"}'::jsonb
   );
 
+-- Metadata cannot grant operational roles. These synthetic actors are enrolled
+-- explicitly by the database owner, independently of the signup trigger.
+INSERT INTO public.user_roles (user_id, role)
+VALUES
+  ('9a100000-0000-0000-0000-000000000001', 'admin'),
+  ('9a100000-0000-0000-0000-00000000000a', 'client');
+
 SELECT set_config(
   'request.jwt.claim.sub',
   '9a100000-0000-0000-0000-000000000001',

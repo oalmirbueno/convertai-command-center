@@ -189,7 +189,7 @@ FROM (
 ) AS fixture(id, full_name)
 WHERE p.id = fixture.id;
 
--- handle_new_user creates exactly one client role. Replace it only for staff.
+-- Provision operational roles explicitly; new signups are members without one.
 DELETE FROM public.user_roles
 WHERE user_id IN (
   'a0000000-0000-0000-0000-000000000001',
@@ -204,7 +204,9 @@ INSERT INTO public.user_roles (user_id, role) VALUES
   ('a0000000-0000-0000-0000-000000000002','manager'),
   ('a0000000-0000-0000-0000-000000000003','design'),
   ('a0000000-0000-0000-0000-000000000004','traffic'),
-  ('a0000000-0000-0000-0000-00000000000e','manager');
+  ('a0000000-0000-0000-0000-00000000000e','manager'),
+  ('a0000000-0000-0000-0000-00000000000a','client'),
+  ('a0000000-0000-0000-0000-00000000000b','client');
 
 -- Assign staff only to Client A.
 INSERT INTO public.team_client_assignments (user_id, client_id) VALUES

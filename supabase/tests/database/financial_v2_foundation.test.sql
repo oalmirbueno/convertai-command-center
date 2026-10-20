@@ -151,9 +151,10 @@ SELECT is(
         'financial_period_closures'
       )
       AND cmd <> 'SELECT'
+      AND permissive = 'PERMISSIVE'
   ),
   0,
-  'no direct-write RLS policy exists on the eight Financeiro V2 tables'
+  'no permissive direct-write RLS policy exists on the eight Financeiro V2 tables'
 );
 
 SELECT ok(
@@ -469,7 +470,10 @@ VALUES
   ('f1000000-0000-0000-0000-000000000001', 'admin'),
   ('f1000000-0000-0000-0000-00000000000c', 'manager'),
   ('f1000000-0000-0000-0000-00000000000d', 'design'),
-  ('f1000000-0000-0000-0000-00000000000e', 'traffic');
+  ('f1000000-0000-0000-0000-00000000000e', 'traffic'),
+  ('f1000000-0000-0000-0000-00000000000a', 'client'),
+  ('f1000000-0000-0000-0000-00000000000b', 'client'),
+  ('f1000000-0000-0000-0000-00000000000f', 'client');
 
 CREATE TEMP TABLE financial_test_state (
   key text PRIMARY KEY,

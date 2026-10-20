@@ -487,17 +487,22 @@ SELECT ok(
 );
 SELECT ok(
   pg_get_viewdef('public.staff_files_secure'::regclass, true)
-    LIKE '%app_private.staff_files_secure_rows()%',
-  'the staff-only file view reads through the privileged row source'
+    LIKE '%app_private.staff_files_rows%',
+  'the staff-only file view reads through the indexed privileged row view'
 );
 SELECT ok(
-  pg_get_viewdef('public.staff_files_secure'::regclass, true) LIKE '%is_staff(auth.uid())%',
-  'the staff-only file view keeps its staff filter as defence in depth'
+  pg_get_viewdef('public.staff_files_secure'::regclass, true) LIKE '%is_staff(%'
+    AND pg_get_viewdef('app_private.staff_files_rows'::regclass, true) LIKE '%is_staff(%',
+  'both file views keep the staff filter as defence in depth'
 );
 SELECT ok(
   pg_get_viewdef('public.staff_files_secure'::regclass, true)
-    LIKE '%can_access_client(file_row.client_id)%',
-  'the staff-only file view keeps its client-scope filter as defence in depth'
+    LIKE '%app_private.staff_clientes_acessiveis%'
+    AND pg_get_viewdef('app_private.staff_files_rows'::regclass, true)
+      LIKE '%app_private.staff_clientes_acessiveis%'
+    AND pg_get_viewdef('app_private.staff_clientes_acessiveis'::regclass, true)
+      LIKE '%can_access_client(p.id)%',
+  'both file views use the indexed client list guarded by can_access_client'
 );
 SELECT is(
   has_table_privilege('authenticated', 'public.staff_files_secure', 'SELECT'),
@@ -763,7 +768,9 @@ VALUES
   ('a0000000-0000-0000-0000-000000000002', 'manager'),
   ('a0000000-0000-0000-0000-000000000003', 'design'),
   ('a0000000-0000-0000-0000-000000000004', 'traffic'),
-  ('a0000000-0000-0000-0000-00000000000e', 'manager');
+  ('a0000000-0000-0000-0000-00000000000e', 'manager'),
+  ('a0000000-0000-0000-0000-00000000000a', 'client'),
+  ('a0000000-0000-0000-0000-00000000000b', 'client');
 
 INSERT INTO public.team_client_assignments (user_id, client_id)
 VALUES
