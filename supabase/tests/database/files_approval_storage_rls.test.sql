@@ -501,7 +501,7 @@ SELECT ok(
     AND pg_get_viewdef('app_private.staff_files_rows'::regclass, true)
       LIKE '%app_private.staff_clientes_acessiveis%'
     AND pg_get_viewdef('app_private.staff_clientes_acessiveis'::regclass, true)
-      LIKE '%can_access_client(p.id)%',
+      ~ 'can_access_client\((p\.)?id\)',
   'both file views use the indexed client list guarded by can_access_client'
 );
 SELECT is(
