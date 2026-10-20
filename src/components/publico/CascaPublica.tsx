@@ -1,3 +1,4 @@
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { forwardRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { AjudaRecolhida, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
@@ -143,12 +144,7 @@ export default function CascaPublica({
         {titulo ? (
           <div className="mb-6 min-w-0">
             <div className="flex min-w-0 items-start">
-              <h1
-                className={juntar(texto.tituloPagina, "min-w-0", tituloQuebra ? "[overflow-wrap:anywhere]" : "truncate")}
-                title={!tituloQuebra && typeof titulo === "string" ? titulo : undefined}
-              >
-                {titulo}
-              </h1>
+              <CabecalhoDePagina titulo={titulo} className={tituloQuebra ? "[&_h1]:whitespace-normal [&_h1]:overflow-visible [&_h1]:[overflow-wrap:anywhere]" : ""} />
               {ajuda ? <AjudaRecolhida className="ml-1.5 mt-1">{ajuda}</AjudaRecolhida> : null}
             </div>
             {descricao ? <p className={juntar(texto.corpo, "mt-1 text-muted-foreground [overflow-wrap:anywhere]")}>{descricao}</p> : null}

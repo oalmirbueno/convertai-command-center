@@ -47,7 +47,7 @@ export default function PessoasEFunil({ dados, agir }: Props) {
   return (
     <section className="space-y-5">
       <div>
-        <h2 className="text-[18px] font-semibold">
+        <h2 className="text-[15px] font-semibold">
           Pessoas, compras e acessos
         </h2>
         <AjudaRecolhida rotulo="Mais informações">
@@ -337,7 +337,7 @@ function DetalhesPessoa({
     >
       <div className="flex flex-wrap justify-between gap-3">
         <div>
-          <h3 className="text-[17px] font-semibold">{dados.pessoa.nome}</h3>
+          <h3 className="text-[15px] font-semibold">{dados.pessoa.nome}</h3>
           <p className="text-[12px] text-muted-foreground">
             {dados.pessoa.email}
           </p>
@@ -511,7 +511,7 @@ export function EditorFunil({
     <section className="space-y-5">
       <div className="flex justify-between gap-3">
         <div>
-          <h2 className="text-[18px] font-semibold">Esteira de produtos</h2>
+          <h2 className="text-[15px] font-semibold">Esteira de produtos</h2>
           <AjudaRecolhida rotulo="Mais informações">
             Escolha o próximo produto que aparece para quem já tem acesso ao
             anterior.

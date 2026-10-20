@@ -1,3 +1,4 @@
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -107,7 +108,7 @@ export default function AdminMembros() {
         <div className="flex items-center gap-3">
           <BookOpen size={22} className="text-primary" />
           <div>
-            <h1 className={texto.tituloPagina}>Biblioteca de membros</h1>
+            <CabecalhoDePagina titulo={<> Biblioteca de membros </>} />
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -318,14 +319,14 @@ export default function AdminMembros() {
               hidden={secao !== "pagamentos"}
               aria-label="Configuração dos pagamentos"
             >
-              <p
-                className="rounded-lg bg-muted p-3 text-[13px] mb-4"
-                role="status"
-              >
+              <p className="text-[13px] mb-3" role="status">
+                Liberação automática por Kiwify e Asaas desligada.
+              </p>
+              <AjudaRecolhida rotulo="Sobre os pagamentos">
                 Liberação automática por Kiwify e Asaas desativada até a
                 validação dos pagamentos. Para testar, conceda um acesso manual
                 abaixo.
-              </p>
+              </AjudaRecolhida>
               {secao === "pagamentos" && <ConfiguracaoKiwify />}
               <Pagamentos dados={dados.data} agir={agir} />
             </section>
@@ -800,10 +801,10 @@ function Direitos({ dados, agir }: Props) {
           </li>
         ))}
       </ul>
-      <p className={`${texto.auxiliar} mt-3`}>
+      <AjudaRecolhida rotulo="Saiba mais">
         Exibindo até 200 direitos recentes. Benefícios de plano são calculados
         pela vigência do contrato.
-      </p>
+      </AjudaRecolhida>
     </Bloco>
   );
 }
@@ -816,11 +817,11 @@ function Pagamentos({ dados, agir }: Props) {
   const [revogarReembolso, setRevogarReembolso] = useState(false);
   return (
     <Bloco titulo="Pagamentos e diagnóstico">
-      <p className={`${texto.corpo} mb-4`}>
+      <AjudaRecolhida rotulo="Saiba mais">
         Kiwify: ativação pendente de validação oficial e teste seguro. Asaas:
         conferência por leitura no servidor, sem emissão de cobrança. Só
         integramos produtos da própria Aceleriq.
-      </p>
+      </AjudaRecolhida>
       <form
         className="grid sm:grid-cols-2 gap-4 max-w-4xl"
         onSubmit={(e) => {

@@ -1,3 +1,4 @@
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -43,10 +44,12 @@ export default function FerramentasDoMembro({
   });
   if (somenteLeitura)
     return (
-      <p className="text-[13px]">
-        As ferramentas operam apenas na conta do próprio titular. Para testar
-        uma licença, entre com essa conta.
-      </p>
+      <div className="flex items-center gap-2 text-[13px]">
+        <p>Ferramentas disponíveis na conta do próprio titular.</p>
+        <AjudaRecolhida rotulo="Como testar uma ferramenta">
+          Para testar uma licença, entre com a conta do titular.
+        </AjudaRecolhida>
+      </div>
     );
   if (selecionada && user)
     return (
@@ -61,7 +64,7 @@ export default function FerramentasDoMembro({
     <section className="space-y-5">
       <div className="flex items-center gap-2">
         <Wrench size={19} className="text-primary" />
-        <h1 className="text-[20px] font-semibold">Ferramentas</h1>
+        <CabecalhoDePagina titulo={<> Ferramentas </>} />
         <AjudaRecolhida rotulo="Sobre as ferramentas">
           A licença de cada ferramenta é individual e tem validade própria.
           Compras e aulas continuam independentes. Ao vencer, o CRM fica
@@ -225,9 +228,7 @@ function SessaoDaFerramenta({
         >
           <ArrowLeft size={17} />
         </button>
-        <h1 className="text-[20px] font-semibold truncate">
-          {ferramenta.titulo}
-        </h1>
+        <CabecalhoDePagina titulo={<> {ferramenta.titulo} </>} />
         <AjudaRecolhida rotulo="Sobre a licença e o dispositivo">
           Uma sessão da ferramenta por titular e produto. Abas deste navegador
           compartilham a sessão. Trocar o dispositivo não encerra aulas nem sua

@@ -1,3 +1,4 @@
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -296,10 +297,10 @@ function ControlesTeste({
             Reiniciar teste
           </summary>
           <div className="membros-teste-confirmacao">
-            <p className="text-[12px]">
+            <AjudaRecolhida rotulo="Saiba mais">
               Apaga apenas o seu progresso de teste. O acesso manual e o
               progresso dos membros são preservados.
-            </p>
+            </AjudaRecolhida>
             <button
               className="membros-acao border border-border mt-2"
               disabled={reiniciando}
@@ -569,7 +570,7 @@ export default function AreaDeMembros() {
             )}
             {secao === "lista" && (
               <section className="space-y-5">
-                <h1 className="text-[24px] font-semibold">Minha lista</h1>
+                <CabecalhoDePagina titulo={<> Minha lista </>} />
                 {previa ? (
                   <p className="text-[13px]">
                     A lista pessoal fica disponível na própria conta do membro.
@@ -597,7 +598,7 @@ export default function AreaDeMembros() {
             )}
             {secao === "comunidade" && (
               <section className="space-y-5">
-                <h1 className="text-[24px] font-semibold">Comunidade</h1>
+                <CabecalhoDePagina titulo={<> Comunidade </>} />
                 {comunidades.length ? (
                   <>
                     <label className="block text-[12px] space-y-2 max-w-md">
@@ -623,16 +624,19 @@ export default function AreaDeMembros() {
                     />
                   </>
                 ) : (
-                  <p className="text-[13px] text-muted-foreground">
+                  <AjudaRecolhida rotulo="Saiba mais">
                     As comunidades dos produtos liberados para você aparecerão
                     aqui quando estiverem disponíveis.
-                  </p>
+                  </AjudaRecolhida>
                 )}
               </section>
             )}
             <div hidden={secao !== "inicio"} className="space-y-8">
               {produtos.length > 0 && (
-                <h1 className="sr-only">Biblioteca Aceleriq</h1>
+                <CabecalhoDePagina
+                  className="sr-only"
+                  titulo={<> Biblioteca Aceleriq </>}
+                />
               )}
               {catalogo.isPending ? (
                 <div
@@ -646,9 +650,9 @@ export default function AreaDeMembros() {
                 </div>
               ) : catalogo.isError ? (
                 <section role="alert" className="py-16 max-w-xl space-y-4">
-                  <h1 className={texto.tituloPagina}>
-                    Não conseguimos abrir sua biblioteca
-                  </h1>
+                  <CabecalhoDePagina
+                    titulo={<> Não conseguimos abrir sua biblioteca </>}
+                  />
                   <p className={texto.corpo}>
                     {mensagemDoErro(catalogo.error)}
                   </p>
@@ -665,13 +669,13 @@ export default function AreaDeMembros() {
               ) : !produtos.length ? (
                 <section className="py-16 max-w-xl space-y-4">
                   <BookOpen size={36} className="text-primary" />
-                  <h1 className={texto.tituloPagina}>
-                    Sua biblioteca começa aqui
-                  </h1>
-                  <p className={texto.corpo}>
+                  <CabecalhoDePagina
+                    titulo={<> Sua biblioteca começa aqui </>}
+                  />
+                  <AjudaRecolhida rotulo="Saiba mais">
                     Ainda não há produtos disponíveis. Quando um material for
                     publicado ou seu acesso for concedido, ele aparecerá aqui.
-                  </p>
+                  </AjudaRecolhida>
                   {profile?.role === "admin" && !previa && !teste && (
                     <Link
                       className="membros-acao bg-primary text-primary-foreground"

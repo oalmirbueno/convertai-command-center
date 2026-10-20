@@ -691,7 +691,7 @@ export default function LeitorDeProduto({
                     className="space-y-4"
                     aria-label="Materiais complementares"
                   >
-                    <h2 className="text-[17px] font-semibold">
+                    <h2 className="text-[15px] font-semibold">
                       Materiais complementares
                     </h2>
                     <AjudaRecolhida rotulo="Sobre os complementos">

@@ -234,7 +234,7 @@ function FormModulo({
         );
       }}
     >
-      <h2 className="text-[17px] font-semibold">
+      <h2 className="text-[15px] font-semibold">
         {modulo ? "Editar módulo" : "Novo módulo"}
       </h2>
       <Campo nome="Nome do módulo">
@@ -337,7 +337,7 @@ function FormMaterial({
   return (
     <>
       <form onSubmit={(e) => void salvar(e)} className="space-y-4">
-        <h2 className="text-[17px] font-semibold">
+        <h2 className="text-[15px] font-semibold">
           {material ? "Editar aula ou material" : "Nova aula ou material"}
         </h2>
         <Campo nome="Título">
