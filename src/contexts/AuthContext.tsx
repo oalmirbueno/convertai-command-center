@@ -1,13 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsProfile } from "@/lib/opsSync";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { safeSessionStorage, safeStorage } from "@/lib/safeStorage";
 import { definirAutoMiniaturas, definirDonoDasUrls } from "@/lib/miniaturas";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import type { AuthError, User } from "@supabase/supabase-js";
 
-export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
+export type AppRole = "admin" | "client" | "design" | "traffic" | "manager" | "member";
 
 export interface UserProfile {
   id: string;
@@ -110,12 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ]);
 
         // Erro em qualquer uma das duas é motivo para tentar de novo. Papel
-        // ausente SEM erro (nenhuma linha em user_roles) é cliente de verdade.
+        // ausente SEM erro: identidade de membros, sem acesso operacional.
         if (profileQueryError || roleQueryError) {
           throw profileQueryError || roleQueryError;
         }
 
-        const role = (roleData?.role as AppRole) || "client";
+        const role = (roleData?.role as AppRole) || "member";
 
         if (profileData) {
           return { ...profileData, role };
@@ -163,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // de novo): mantém o objeto, senão toda tela que depende do perfil
       // recomeçava como se o painel tivesse reiniciado (24/09/2026).
       // Equipe grava as miniaturas que faltam das imagens que abre (cota de transformação, 26/09).
-      definirAutoMiniaturas(next.role !== "client", next.role === "admin");
+      definirAutoMiniaturas(["admin","design","traffic","manager"].includes(next.role), next.role === "admin");
       // Dica do papel para o próximo boot baixar a tela certa junto com o login
       // (src/lib/preCargaDoBoot.ts). Só escolhe o download; a tela continua
       // decidida por este perfil, vindo do servidor.
@@ -303,7 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const p = await getOrCreateProfile(session.user);
           if (mounted) deliverProfile(p);
           // Notify admin on real sign-in (not token refresh / tab focus)
-          if (isFreshSignIn && p && p.role !== "admin") {
+          if (isFreshSignIn && p && p.role !== "admin" && p.role !== "member") {
             // Trava por aba. O sessionStorage pode LANÇAR (Safari privado,
             // painel dentro de outro app); o helper cai numa memória da aba
             // e o aviso continua saindo uma vez só.
@@ -347,7 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
-        data: { full_name: fullName, role: "client", company_name: companyName || null },
+        data: { full_name: fullName, company_name: companyName || null },
         emailRedirectTo: redirectTo,
       },
     });
@@ -356,14 +355,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Save phone if provided
     if (data?.user && phone) {
       await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
-    }
-
-    // Notifica o Ops via proxy server-to-server (evita CORS/CSP do browser)
-    if (data?.user) {
-      notifyOpsProfile(
-        { id: data.user.id, email, full_name: fullName, company_name: companyName ?? null, phone: phone ?? null },
-        { client_email: email, client_full_name: fullName, client_company: companyName ?? null, client_phone: phone ?? null }
-      );
     }
 
     // Try immediate login (works if auto-confirm is on)

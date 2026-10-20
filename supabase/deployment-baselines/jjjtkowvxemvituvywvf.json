@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project_ref": "jjjtkowvxemvituvywvf",
-  "reviewed_at": "2026-09-12",
+  "reviewed_at": "2026-10-20",
   "origin": "read_only_catalog",
   "scope": "ledger_stability_only",
   "ledger_hash_mode": "sha256_joined_statements_chr30",
@@ -1035,32 +1035,907 @@
       "version": "20260911225926",
       "name": "execucao_destravada",
       "statements_sha256": "8ca2bbc614c8b46da46053b6b8cf7fcde075923b51958ad57cb9e216089caed7"
-    }
-  ],
-  "pending_migrations": [
+    },
     {
       "version": "20260912213530",
       "name": "rpc_caller_boundaries_preserve_data",
-      "path": "supabase/migrations/20260912213530_rpc_caller_boundaries_preserve_data.sql",
-      "local_sha256": "71e1e5b95de2001511d63bde39201b4d891d333cd2a86b2104c8e103093ee27f",
-      "statements_sha256": "dae83e5b5bb3a8b58e5feb5f1e9b4772c4b4074e493d3d68553781fdb5c15af2",
-      "hash_mode": "supabase_cli_split"
+      "statements_sha256": "dae83e5b5bb3a8b58e5feb5f1e9b4772c4b4074e493d3d68553781fdb5c15af2"
     },
     {
       "version": "20260912213638",
       "name": "secure_publication_cancellation_dispatch",
-      "path": "supabase/migrations/20260912213638_secure_publication_cancellation_dispatch.sql",
-      "local_sha256": "cdd57555faa5d8545059603baf065333e2deb19f45d5ee1bd61138d5a7415fa9",
-      "statements_sha256": "40dd111922e09cea6a861cfd7cb4dd8fdbc8e69dd51260eb0d7c9189e612170b",
-      "hash_mode": "supabase_cli_split"
+      "statements_sha256": "40dd111922e09cea6a861cfd7cb4dd8fdbc8e69dd51260eb0d7c9189e612170b"
     },
     {
       "version": "20260914174905",
       "name": "central_review_versioned_approval",
-      "path": "supabase/migrations/20260914174905_central_review_versioned_approval.sql",
-      "local_sha256": "40494705428f4c8048e4517ac47add93d23f1b01bd42bafb772bd3788aa14b55",
-      "statements_sha256": "4c41ae9a95765b07beb21834c8f030cb3a5f60abacb80a2517992c0f7aa931c3",
-      "hash_mode": "supabase_cli_split"
+      "statements_sha256": "4c41ae9a95765b07beb21834c8f030cb3a5f60abacb80a2517992c0f7aa931c3"
+    },
+    {
+      "version": "20260916201259",
+      "name": "revisao_do_ciclo_avisa",
+      "statements_sha256": "416309473d600f0087ab0d21b8f811106f12c0c9e34fc8d0c681a232b2923a8d"
+    },
+    {
+      "version": "20260923171454",
+      "name": "mesa_campanhas_e_hypes",
+      "statements_sha256": "626b2d9ee95f87fd3a9aaa4e4c1d825e1211047a0fdf0b607db5609cbd08b58e"
+    },
+    {
+      "version": "20260923195925",
+      "name": "mesa_referencias_destaque",
+      "statements_sha256": "e91749cef56451344510cfcd74fcc5fda4b527466cb575a2e96c720a1dccf07a"
+    },
+    {
+      "version": "20260923203526",
+      "name": "mesa_storage_leitura_compartilhada",
+      "statements_sha256": "f348ad0dba808e3992e61dd1c9ab72d000d7e49397e29d74480afc2f62560e43"
+    },
+    {
+      "version": "20260924012047",
+      "name": "mesa_gpt_image_pelo_openrouter",
+      "statements_sha256": "a2121951cc353ac45ce24892527445ba09bcf69d723d4456f1d9ba0d078f6119"
+    },
+    {
+      "version": "20260924015930",
+      "name": "mesa_ads",
+      "statements_sha256": "4bbe92669d6dbdb80c2ac3781ace9af825bf754ddd2d62afefe31e9d746ee1e0"
+    },
+    {
+      "version": "20260924021731",
+      "name": "mesa_ads_memoria_do_agente",
+      "statements_sha256": "462dffb62f4df99a70a493acba840cff9b0e03329059d143091cccd8d6bef40e"
+    },
+    {
+      "version": "20260924021905",
+      "name": "mesa_ads_biblioteca",
+      "statements_sha256": "5f2c9bf40d2466634b020d99ca862c7364362546f225b48fd0a64c68f348d60a"
+    },
+    {
+      "version": "20260924133108",
+      "name": "mesa_ads_v2",
+      "statements_sha256": "993c3e1fa4f489501512055589b607bddb77b95ae26e47ccae154b48e533b157"
+    },
+    {
+      "version": "20260924133627",
+      "name": "mesa_ads_biblioteca_padroes_1",
+      "statements_sha256": "47f806ab4a898ada6a2eeeb283ac0b50486b37c986c50c991e9b478697f46890"
+    },
+    {
+      "version": "20260924133829",
+      "name": "mesa_ads_biblioteca_padroes_2",
+      "statements_sha256": "8f260842a33f021e9ba2cfe6d6f18d660284cbf2ff85fa8f95a3e61008cd1a1c"
+    },
+    {
+      "version": "20260924134019",
+      "name": "mesa_ads_biblioteca_padroes_3",
+      "statements_sha256": "5b891cb0111c9abae657eac030397aaeee0ffb01659e72303563dd4bb152e86c"
+    },
+    {
+      "version": "20260924141858",
+      "name": "aprovacao_pendente_por_email",
+      "statements_sha256": "9a552c5a6c0f21a603ecae7796915df3645ff98e07c3b29af057a98a09a66d15"
+    },
+    {
+      "version": "20260924144000",
+      "name": "mesa_custos_e_fila",
+      "statements_sha256": "7cec01d26b24cfb4d8733b32129349c3f81506aa4f8f71076bd1274eb919d39c"
+    },
+    {
+      "version": "20260924165938",
+      "name": "mesa_foto",
+      "statements_sha256": "7fc42f3ad5dc98c5d07c31883086e2dcd898f04a39a6f3779a8a34c65e3fd3e0"
+    },
+    {
+      "version": "20260924181211",
+      "name": "mesa_foto_v2",
+      "statements_sha256": "f55b8599b3aadd4625d3c7e0f4fc4f82f435bb1c4e23f793809f838383ac6c62"
+    },
+    {
+      "version": "20260924193310",
+      "name": "mesa_foto_modelos_canvas",
+      "statements_sha256": "7698bcc482137044af8fe0d34d13f88c2a06df657eaa434347cb5fa6aeb46e5c"
+    },
+    {
+      "version": "20260925135033",
+      "name": "mesa_campanhas_completas",
+      "statements_sha256": "9f9396fa57b9a937e12e66bc5c0d953eb2ef9a518e9fc73cb1e9bae4c611e805"
+    },
+    {
+      "version": "20260925162027",
+      "name": "mesa_ads_contas_metricas_evolucao",
+      "statements_sha256": "4d09c28604248a3006046c167d3345b55332a556264e8db3273e0a90624425a7"
+    },
+    {
+      "version": "20260925162115",
+      "name": "cerebro_do_cliente_memoria",
+      "statements_sha256": "2f845c5091162812d538421497f8f398080cee132a2e4a84ddb8270e5c6b00ed"
+    },
+    {
+      "version": "20260925162220",
+      "name": "dossie_eventos_das_mesas",
+      "statements_sha256": "3f6c371fcf0b92566aeedcdbd20818c97b1ab9717831cd1c10657f5c7f45cfca"
+    },
+    {
+      "version": "20260925162246",
+      "name": "mesa_modelo_rapido",
+      "statements_sha256": "6917592d0cb123221c99de90e5afc1df47bd4dfbb851622c6c7acfdcc9dacfeb"
+    },
+    {
+      "version": "20260925162259",
+      "name": "mesa_foto_clones",
+      "statements_sha256": "43a0912cfe2ea21c607c506d528ca11df84bb31557e251133767029aaf224ed9"
+    },
+    {
+      "version": "20260925174450",
+      "name": "cliente_marcas_por_projeto",
+      "statements_sha256": "bc1a1394d76519ae46d235fd3b6aa89870972d20e4a342c4bdeb3837ec2429d6"
+    },
+    {
+      "version": "20260925174500",
+      "name": "cliente_marcas_acerbi_cme",
+      "statements_sha256": "a2eb92e1f3b614b3e0b9606a21c88168eb264e7d8f7538fda1212d7a2e2c67f8"
+    },
+    {
+      "version": "20260925183539",
+      "name": "ia_modelos_4k_so_nos_preview",
+      "statements_sha256": "bb0cbd0a26aded078953d33e8af808ae5a443b9551943b1855943ac70999b8b7"
+    },
+    {
+      "version": "20260925195654",
+      "name": "mesa_foto_book",
+      "statements_sha256": "d6ea7e2b7e8d74da55cdab2f76f221ecae8ef27d5c7069fe1d2a7e46098c4269"
+    },
+    {
+      "version": "20260925202310",
+      "name": "mesa_ads_vinculos_e_biblioteca",
+      "statements_sha256": "89dc0540317feefa29ef6df174a3c06abcd70b2512bd2c327a47330ee0bf7415"
+    },
+    {
+      "version": "20260925235814",
+      "name": "movimentos_do_cliente_bruto_restaurado",
+      "statements_sha256": "9f2f2c0d5e453d93dad9f5a4f9e1c2ec0817a606a9d2eb05fc854ba6d636264c"
+    },
+    {
+      "version": "20260925235901",
+      "name": "central_rapida_e_dossie_limpo",
+      "statements_sha256": "e5c4cd4b59f2e752b24f576847079741a143b71be84f959bd0083ea01cea7bab"
+    },
+    {
+      "version": "20260925235943",
+      "name": "contexto_estudio_e_agenda_removida",
+      "statements_sha256": "9bc912bd5062b8c240c9f050effa3fd8eb70c70c0d805a3951dd6000d3707e4d"
+    },
+    {
+      "version": "20260926000009",
+      "name": "mesa_clientes_por_mesa",
+      "statements_sha256": "f73f4584d12eeb63b8a34f804161252069c7998e31f6d0b9da83dce41a644b35"
+    },
+    {
+      "version": "20260926000018",
+      "name": "kit_logo_tom",
+      "statements_sha256": "41f56667f38c7011168c2d30003dc7d1aba6388036195cb5b046e310bd85a3e0"
+    },
+    {
+      "version": "20260926000032",
+      "name": "foto_canvas_cenas_historia_personagem",
+      "statements_sha256": "360b36685276568ccc12244c6ce598c1e35b715338074414495062201d6fe5fb"
+    },
+    {
+      "version": "20260926031000",
+      "name": "mesa_publicidade",
+      "statements_sha256": "f92ab83d4ecf44473b6bc2a9a9a187f470374495e5b65e0e5941bacf898942ef"
+    },
+    {
+      "version": "20260926031100",
+      "name": "mesa_videos",
+      "statements_sha256": "6de7b81824da399fd1040844fc2c1025bac5d6008073c27bc07995b700343f15"
+    },
+    {
+      "version": "20260926031200",
+      "name": "mesa_roteiros",
+      "statements_sha256": "51e5f5e2b034c00bc478ed9a743f645085ad5c3f954e75c2cc2ba8ae9c4f99c3"
+    },
+    {
+      "version": "20260926031300",
+      "name": "roteiros_para_video",
+      "statements_sha256": "b197018f1fca0bc4bf837152dc90597f88a2bb4d74bec70849511ebfa5c22cf1"
+    },
+    {
+      "version": "20260926031400",
+      "name": "lista_de_mesas_final",
+      "statements_sha256": "59331b4757c88645b343392dd754ae41a4bf4d7c5e78a510740922ffeb944324"
+    },
+    {
+      "version": "20260926031500",
+      "name": "mesa_ads_gestao_escopos",
+      "statements_sha256": "276567afd4b454a85f49148aab3f46779a0e750425b2c3cb725fb4affa5867ad"
+    },
+    {
+      "version": "20260926031600",
+      "name": "mesa_foto_clones_edicao",
+      "statements_sha256": "476a2eeb3ac1110ebdc1b3c14c5bd0d2cd78a7b2ddefc6c6527b2fc62db26870"
+    },
+    {
+      "version": "20260926031633",
+      "name": "hermes_decidir_sem_laco",
+      "statements_sha256": "8d106bcfa23c0460494c89efdc2837711bfe3917f301a1bcd8fabbc129335d2c"
+    },
+    {
+      "version": "20260926034000",
+      "name": "hermes_preparar_sem_laco",
+      "statements_sha256": "d818c5a006fbc1e8ca0f2b354012b52fb8284d03b071db0a0a8ec8ae1606a5c3"
+    },
+    {
+      "version": "20260926040000",
+      "name": "limpeza_do_hermes_e_notificacoes",
+      "statements_sha256": "7631d27c41f720e454516db18283e2c994b89b118a32c4541aa2c4779c2da02c"
+    },
+    {
+      "version": "20260926041000",
+      "name": "miniaturas_leitura_das_copias",
+      "statements_sha256": "1d227b3b4dad17b2044a94665656221201c7b192d29aeb931e26f4b0c766722d"
+    },
+    {
+      "version": "20260926050000",
+      "name": "fila_de_geracao",
+      "statements_sha256": "ff57a5f587d675c4089e1e9b720aa873ff9c002d61e137353e1f75621eb78cf6"
+    },
+    {
+      "version": "20260926050100",
+      "name": "estilo_do_cliente",
+      "statements_sha256": "736df2d62d8ca85411a9b43aa288b41fb552bceece8d59c7043acacbccbb3087"
+    },
+    {
+      "version": "20260926050200",
+      "name": "mesa_edicao",
+      "statements_sha256": "cc3e9e4594df46322578a829b373cf04144f303739149b8b95874d179db2929c"
+    },
+    {
+      "version": "20260926050300",
+      "name": "motores_de_video",
+      "statements_sha256": "0170681d3b95c62c0939436d1ec28c842b7c603dc6dcef972f0b195cece9eed2"
+    },
+    {
+      "version": "20260926050400",
+      "name": "perfis_instagram",
+      "statements_sha256": "1b7962128243fb036865266f67676d2eac54992f0ac4a342d2082c50cbedfe85"
+    },
+    {
+      "version": "20260926050500",
+      "name": "templates_de_design",
+      "statements_sha256": "84ef0e6b47a969523afcae81bec1f56d75104589cba455b4b08d60e3e67d657f"
+    },
+    {
+      "version": "20260926050600",
+      "name": "receitas_de_edicao",
+      "statements_sha256": "c3c36de5e9e601de15f99b42da07e28b2806748829b97453180d05baa6e47f03"
+    },
+    {
+      "version": "20260926060000",
+      "name": "mesa_mcp_itens",
+      "statements_sha256": "446faf32a007e2d4861e349c87df75a6d036faf960543260e8d4b84ef4e82d60"
+    },
+    {
+      "version": "20260926070000",
+      "name": "guarda_de_arquivos_service_role",
+      "statements_sha256": "e3951607fd12462c0fafc5c30bbb0a6976f58435318ba73d6e4c1c6d05f6a93e"
+    },
+    {
+      "version": "20260927010000",
+      "name": "memoria_categoria_entrega",
+      "statements_sha256": "d6c7e19124add99d3aca422949ceaaaeb1aa395e58c613a8cf84a6ff3dfb52e2"
+    },
+    {
+      "version": "20260927020000",
+      "name": "entrega_na_agenda",
+      "statements_sha256": "b9a9f1ed94a7715148def1dda67eb9c179425dd953e336ae88a9380b1378820d"
+    },
+    {
+      "version": "20260927020100",
+      "name": "notificacoes_um_fato_um_aviso",
+      "statements_sha256": "87b14dc73b54414f084e6ba10c3af578591e9e5206729ce43fde7528c9020760"
+    },
+    {
+      "version": "20260927030000",
+      "name": "entrega_na_agenda_congela_laminas",
+      "statements_sha256": "665c2dd890ed6ce5d139493455b9dc0c4e805d04a904487babce80d7e457973b"
+    },
+    {
+      "version": "20260927040000",
+      "name": "rotina_trafego",
+      "statements_sha256": "51b5dab45fba1d8ce27203b7d6e6146bfafc4a5aa329fbafb42260746b2197db"
+    },
+    {
+      "version": "20260927050000",
+      "name": "formato_do_perfil",
+      "statements_sha256": "78706a3d65110d4de5393cd6ee06825855f1430eadcdf66214000bde6bb8bfbf"
+    },
+    {
+      "version": "20260928010000",
+      "name": "instagram_do_cliente",
+      "statements_sha256": "4437721c67f1091a5db8d60974d59354b5bc66fde56ffb9e27f073984bcc6f9d"
+    },
+    {
+      "version": "20260928020000",
+      "name": "gerenciador_ao_vivo",
+      "statements_sha256": "5e6b4f248b444b8e9011c4588a85b5aa4ff2a7ddcaf7f39e1232a9bf4a704d07"
+    },
+    {
+      "version": "20260928030000",
+      "name": "metas_de_seguidores",
+      "statements_sha256": "31897dfac41ece196ab470b816671218f2bd36e8ed96630e3f9f653ca7b996b3"
+    },
+    {
+      "version": "20260928040000",
+      "name": "token_da_pagina",
+      "statements_sha256": "2c7b47b2f49911c686b047d46a6898440dff462ae0d686fc9ad0ee18e93f5e0c"
+    },
+    {
+      "version": "20260928050000",
+      "name": "fila_da_mesa",
+      "statements_sha256": "a52b1ca03ea20f90ff3e4e6af552ba1a1e94529c2af3432f814851e6e45067a3"
+    },
+    {
+      "version": "20260928060000",
+      "name": "aprovacao_e_agenda_automaticas",
+      "statements_sha256": "16d10dcd71ac9b9f1d552d39a4dab4bfbb4ea030bb4d387b01c7048b09c0f818"
+    },
+    {
+      "version": "20260928060100",
+      "name": "estudio_data_do_conteudo",
+      "statements_sha256": "903a51d66fc81258e2ca677c74b17e3665c77ddfb6521f7c952489c8626f2f61"
+    },
+    {
+      "version": "20260928070000",
+      "name": "aprovacao_pelo_admin",
+      "statements_sha256": "1b7501769267e759d3e918bf357315e9f020670f91b91333f269473c8d075dd0"
+    },
+    {
+      "version": "20260928080000",
+      "name": "aprovar_pelo_cliente",
+      "statements_sha256": "db478e1ada74d1dc8e64ad4f45381477426a57b69dd8e9f780d54a78274b4042"
+    },
+    {
+      "version": "20260928090000",
+      "name": "tempo_de_trabalho",
+      "statements_sha256": "83c9513394abff2c2e55cc07cb3e6d53e4fa2dee82882daff181fadc54ff3678"
+    },
+    {
+      "version": "20260928100000",
+      "name": "reagendar_sem_travar",
+      "statements_sha256": "4b9f1feffd4c93a825061cbcf60ecc9b78b92ff94ffc0422115dd016bff56645"
+    },
+    {
+      "version": "20260929010000",
+      "name": "aviso_abre_o_conteudo",
+      "statements_sha256": "6128cb72c446258e0a6d12040c0d0ece39307f18b84ce5de48699aa8baf33fd2"
+    },
+    {
+      "version": "20260929020000",
+      "name": "marcas_completas",
+      "statements_sha256": "98fc66055d122b379299d027c265f8d927cff61177a33c51d68351077950dffc"
+    },
+    {
+      "version": "20260930000000",
+      "name": "papeis_de_modelo_das_mesas_novas",
+      "statements_sha256": "d632a49efd7eac1699d184d78aff365183d249750ff7d5ba8b37d8b2ca1fbf3f"
+    },
+    {
+      "version": "20260930000100",
+      "name": "dados_da_agencia",
+      "statements_sha256": "77027f8434d77fd1467ad6ea92bd20ae731b78a9bc555e3c85057b38c5ba1206"
+    },
+    {
+      "version": "20260930000200",
+      "name": "agentes_das_mesas_novas",
+      "statements_sha256": "4a4aa773157e6d47171878dc0fe6f35c98e9f57f7b7e02bcf7889fc3132ca79d"
+    },
+    {
+      "version": "20260930010000",
+      "name": "briefing_modelos_e_link",
+      "statements_sha256": "2843e68ac19b2220d0f1f2d92cf25d7577675d7b49e6c53d0b3380afecde8307"
+    },
+    {
+      "version": "20260930010100",
+      "name": "briefing_link_publico",
+      "statements_sha256": "a8a5762562c0f3edddb5fe62e9db9a77a137980892c0229690075091f44abc6d"
+    },
+    {
+      "version": "20260930020000",
+      "name": "propostas",
+      "statements_sha256": "5704b47018543c45b5cc3b2f4e94026b1961f33402720f51f9a5c9cb4963e13a"
+    },
+    {
+      "version": "20260930030000",
+      "name": "contratos_modelos",
+      "statements_sha256": "ce071be8987bdbbb7db7418d600a531900fc99f751eedf89e419be7c6857d2b8"
+    },
+    {
+      "version": "20260930030100",
+      "name": "contratos_congelados",
+      "statements_sha256": "f65b4deb19dc2caba61b414a65eec6b2c5bfc430f4a3bc9096fd5320078002a9"
+    },
+    {
+      "version": "20260930030200",
+      "name": "contratos_modelo_v1",
+      "statements_sha256": "cd39182e491fa85a51dc1cb8ecf186a4424ded02981931d7501d1c38713f9cc0"
+    },
+    {
+      "version": "20260930040000",
+      "name": "documentos_entrega",
+      "statements_sha256": "c75af00e2e30e17f839bf4e2e98ed3935eb820fe15d3009750bc507471e79ebe"
+    },
+    {
+      "version": "20260930050000",
+      "name": "conselho_de_agentes",
+      "statements_sha256": "632c5799e539c5a1738b87510c64765b3e0cabbf8b334e348d1affeb8b853c17"
+    },
+    {
+      "version": "20260930060000",
+      "name": "mesa_identidade",
+      "statements_sha256": "f5d05ab29f2f6465d331d3b78432c65d863eaebb32be332a6e36f34cb40e0fcd"
+    },
+    {
+      "version": "20260930080000",
+      "name": "render_pedidos",
+      "statements_sha256": "502adc5ff4d04b6a4fe5e5bbd5e9056383a430a5f935e1abb844e790d59d2f3d"
+    },
+    {
+      "version": "20260930090000",
+      "name": "motor_de_codigo",
+      "statements_sha256": "21fc47187ff6963c2ad6f19720b624a21c1caecdfcb479fd8ef43c33327ec303"
+    },
+    {
+      "version": "20260930090100",
+      "name": "mesa_site",
+      "statements_sha256": "f6be79f15adc35e819cc344957d7ecc3fe60ef254cc79ea1d04f49d86fb4e290"
+    },
+    {
+      "version": "20260930110000",
+      "name": "estudio_de_mockups",
+      "statements_sha256": "b04c203309f35b162a25036e8ec15d0256bec963431752b26d668ee0bd8c3633"
+    },
+    {
+      "version": "20260930110100",
+      "name": "selo_da_campanha",
+      "statements_sha256": "fd2c1c2b452bcae8514ab74800b3cae52b940006721be57b2d01f170642870b5"
+    },
+    {
+      "version": "20260930130000",
+      "name": "proposta_comercial_evolucao",
+      "statements_sha256": "99105afd202164479e4baf8582299534403ba797f1f874c2bdbb69e56bd80b36"
+    },
+    {
+      "version": "20260930160000",
+      "name": "mesa_site_evolucao",
+      "statements_sha256": "148bef29faff204951b928639e116221ac9d2a29c0c1e44b0da4d7e3de2c4d99"
+    },
+    {
+      "version": "20260930180000",
+      "name": "mesa_motion",
+      "statements_sha256": "10817d404c61c4bd1d6fd0609f09c20a4892b560de86107603671cb992de2ce4"
+    },
+    {
+      "version": "20260930190000",
+      "name": "mesa_identidade_v2",
+      "statements_sha256": "b53db0148d677b985d277d5beb2264bcca9e00d751931e4889c6981a1d0d1b10"
+    },
+    {
+      "version": "20260930195000",
+      "name": "contratos_ficha_fiscal",
+      "statements_sha256": "d4b3a5f9aedbb88dd95d0f29e1b75196a351152c572d4a9283bf19c0c7ef2152"
+    },
+    {
+      "version": "20260930195100",
+      "name": "contratos_ciclo_e_signatarios",
+      "statements_sha256": "8e88a7d68fe7dc209bb6d1bf5b8537e2dc8f5014a060b6ff2bce6a770a622bd1"
+    },
+    {
+      "version": "20260930195200",
+      "name": "contratos_extras_e_aditivo_v1",
+      "statements_sha256": "629a45d6cc8ae18d9263948b8d16bb16a7006f38ac9218b4bc8a990e23bc4755"
+    },
+    {
+      "version": "20260930195300",
+      "name": "contratos_rotina_vencimentos",
+      "statements_sha256": "033993f659744e3854d81243da04f24c37807ef6918cf0ee81c4d403e8f7a224"
+    },
+    {
+      "version": "20260930196000",
+      "name": "briefing_evolucao",
+      "statements_sha256": "5e0040c76cca54c96fa4125b524a6f44aaed2165968e49593a665b85c49bf324"
+    },
+    {
+      "version": "20260930196100",
+      "name": "documentos_evolucao",
+      "statements_sha256": "2227e3140c63dbfe6d68eedf0cda8471eda82569f08026a28a3f3403def3f79e"
+    },
+    {
+      "version": "20260930196200",
+      "name": "conselho_evolucao",
+      "statements_sha256": "4f2c443fab232ce02366267e6c5a5b1b8fda7f5225e86c3a9db90ae943ce73ff"
+    },
+    {
+      "version": "20260930200000",
+      "name": "mesa_identidade_completar",
+      "statements_sha256": "d7c8919a5a9fab144416169e72f27197bc0a7347ff6ff7f6800b42a004a52e4f"
+    },
+    {
+      "version": "20260930210000",
+      "name": "propostas_em_clientes",
+      "statements_sha256": "73beaaedb4bfb243302665f641818a0595f6706a7ca0d252d36d2080e41f23a0"
+    },
+    {
+      "version": "20260930292000",
+      "name": "mcp_files_worker_so_com_trabalho",
+      "statements_sha256": "30ddf267c244b219a1582273bdf88f078cc13f828e395ce2e4341f7225895d93"
+    },
+    {
+      "version": "20260930293300",
+      "name": "promotor_pula_publicacao_ocupada",
+      "statements_sha256": "e4ec0fbcbb44f8e10edbbbff85bd80c1ceb617bc9cb888e33022b29b00d6d393"
+    },
+    {
+      "version": "20260930293400",
+      "name": "autopublicacao_vista_so_leitura",
+      "statements_sha256": "b4fc4a7074974f0a22d17fe2e5e50ace6dda622bbb50253b08fb16b5db3a80b1"
+    },
+    {
+      "version": "20260930293600",
+      "name": "cron_limpa_historico",
+      "statements_sha256": "19d12f9610c8c4a3aa9f4240c9c97ceffbcee452a5d6b8a61ee35c72aa9e8305"
+    },
+    {
+      "version": "20260930293700",
+      "name": "funcoes_gatilho_fechadas",
+      "statements_sha256": "c6e1a3c82acd66900f3b83c0f13a0b9d685d3d0a81bebe5593aa60b486611d76"
+    },
+    {
+      "version": "20260930294000",
+      "name": "avisos_acento_corrigido",
+      "statements_sha256": "165343d30e29594a9e425e0e15a4c1ac9e784c483588255c8e23cc1562fd27dc"
+    },
+    {
+      "version": "20260930295000",
+      "name": "superpoderes_das_mesas",
+      "statements_sha256": "912d47b8feedbf20638dadb5e97e5fe4d5656937771494f4eb233abe10f0d9cd"
+    },
+    {
+      "version": "20260930296000",
+      "name": "staff_files_secure_por_indice",
+      "statements_sha256": "43189427b14ca0016ba597ab25ad24fd0301a6cb0ae56eaf06c786b36be2fd41"
+    },
+    {
+      "version": "20260930296100",
+      "name": "rls_tarefas_em_conjunto",
+      "statements_sha256": "c55a9b1508db1b30148db49c08465ad94f095089d73360245ef064765fdfef47"
+    },
+    {
+      "version": "20260930296200",
+      "name": "rls_mesas_em_conjunto",
+      "statements_sha256": "ff13cf2761365b1eade0f73df2c9e20ed2e5481e28718c9d7f3bd2056fe8b1b1"
+    },
+    {
+      "version": "20260930296300",
+      "name": "rls_arquivos_sem_reler",
+      "statements_sha256": "8097e95a15723c65fecc6bdbf2701097f1878889b8e7dd97807400642c2aaf02"
+    },
+    {
+      "version": "20260930313000",
+      "name": "roteiro_biblioteca",
+      "statements_sha256": "64f93ec6919611904f073e956826ee785ff63df0e6e9e71a56d60b4e6b345f27"
+    },
+    {
+      "version": "20260930314000",
+      "name": "cfo_agente",
+      "statements_sha256": "ced90774a6b4b5425edd65dcf91097dd57f583d791df913979dfac0f5c6c121c"
+    },
+    {
+      "version": "20260930315000",
+      "name": "motion_vozes",
+      "statements_sha256": "3a81edeab71033bf86563a2eb516d75b4a45064aac3e123346aaf0d5e7df037a"
+    },
+    {
+      "version": "20260930316000",
+      "name": "estado_dos_motores",
+      "statements_sha256": "ee6cc7d85f32a4c85e93e7fe2927e7d59166d32b479c278623eb0a924e5fceee"
+    },
+    {
+      "version": "20260930317000",
+      "name": "previa_editavel_do_site",
+      "statements_sha256": "34b83d610ea92ad3a7c2c6f5de195d500e9f35c936242f7a9dd1eaff84c14822"
+    },
+    {
+      "version": "20260930319000",
+      "name": "editor_render_por_formato",
+      "statements_sha256": "9b7048a9c35e7d806b5ab65bea88d6dee3cb1b64b0e782235a12fbd3edc5b637"
+    },
+    {
+      "version": "20260930320000",
+      "name": "modelos_e_recursos",
+      "statements_sha256": "78f0e9254bc3fca0ad8b485f0209d5fc3cdb22e938837ad71e8d3245f01c18dc"
+    },
+    {
+      "version": "20260930320100",
+      "name": "modelo_por_papel",
+      "statements_sha256": "a1876eb92c3f973558289bd5e726fb23b54eeff480ecfeca931acb65bf32e13b"
+    },
+    {
+      "version": "20260930320200",
+      "name": "navegador_do_agente",
+      "statements_sha256": "8018693c296135864c93f5232f414458af7693b38df5b1a9d526e08c16ddc02a"
+    },
+    {
+      "version": "20260930321000",
+      "name": "video_coleta_dos_pedidos",
+      "statements_sha256": "2ddaa32f1c2613a9a5a462a37765b93e2cda43b7c2cf921f229c232a06243065"
+    },
+    {
+      "version": "20260930322000",
+      "name": "mockups_mais_modelos",
+      "statements_sha256": "c5dc6ea04e343fc45e00a2a468b8231dc8ddc8288a2f822719035c06ff0607ea"
+    },
+    {
+      "version": "20260930323000",
+      "name": "chaves_e_custos",
+      "statements_sha256": "817b67f7f5afd8f7e620619ade49712db400ea893a776a247cbb2643dd40816d"
+    },
+    {
+      "version": "20260930325000",
+      "name": "navegador_qualquer_modelo_e_acoes",
+      "statements_sha256": "e10160c4ff25af819b906888830a255a8dc24608e2007457f42054e2e38f2935"
+    },
+    {
+      "version": "20260930326000",
+      "name": "aceleriq_motores",
+      "statements_sha256": "5d191e6c9cd7abce82bb434241d492205b74894c28342acf8b82fac0dd6459ec"
+    },
+    {
+      "version": "20260930327000",
+      "name": "troca_de_cenario",
+      "statements_sha256": "e709c3e8f4f7c9580f4f485895baa230bfa80aab04fae0d7237a4ad1125488de"
+    },
+    {
+      "version": "20260930328000",
+      "name": "chaves_aws_render",
+      "statements_sha256": "2425110fa9a4844ed727dd4deea1897a8baa6f84eb694497878f08f019474da4"
+    },
+    {
+      "version": "20261002100000",
+      "name": "render_na_nuvem",
+      "statements_sha256": "64428776c05a2712dd137f55b298d1b5bf79c841e4683c8409790f953737706c"
+    },
+    {
+      "version": "20261002110000",
+      "name": "avisos_com_cliente",
+      "statements_sha256": "540a5c16d41ac9f3068790b5320b67c7a1dd922d7b9e8919e7d844aab44fe616"
+    },
+    {
+      "version": "20261002160000",
+      "name": "edicao_organizar",
+      "statements_sha256": "e7feeaab4554808089a98034bc91f327b2fa7cadb98a06f70369281cf16a6479"
+    },
+    {
+      "version": "20261007230627",
+      "name": "operator_documental_review",
+      "statements_sha256": "8550990a19efe731b541603c2e7875990f2975a99a9c409a527d7240f1918544"
+    },
+    {
+      "version": "20261007230657",
+      "name": "operator_documental_preserve_run",
+      "statements_sha256": "6b552de5a83df565ceb0211cf5062c3ce88ad234838b28ba1b55b805e40b67dd"
+    },
+    {
+      "version": "20261008010000",
+      "name": "gestor_aceleriq_conversa",
+      "statements_sha256": "ae2adbebb10ab15e0dc5872b847dc60782eac3857b9b42614b61eefd23cb906d"
+    },
+    {
+      "version": "20261008020000",
+      "name": "gestor_conversas",
+      "statements_sha256": "448567aa4486252fc012deaffb369412ae90e8c8c089cd11457f4249a112af77"
+    },
+    {
+      "version": "20261008232003",
+      "name": "historico_dos_agentes",
+      "statements_sha256": "de5a2facaebdf91c797dfe47ff39825e7ac67cc6b5bfe9faeb140db7be78b630"
+    },
+    {
+      "version": "20261008232905",
+      "name": "retorno_do_hermes_nas_mesas",
+      "statements_sha256": "49d258e6db4f3d77852fef6fbc5b3f5dc1e11913f1beb1f68ac444468d3eb93d"
+    },
+    {
+      "version": "20261009021533",
+      "name": "uma_conversa_ativa_por_agente",
+      "statements_sha256": "fae540f6dd8b4befb50bd9664ab529a37a8485ad1857bac82d6e2bd56a1caebe"
+    },
+    {
+      "version": "20261009022124",
+      "name": "retorno_do_hermes_cfo_workspace",
+      "statements_sha256": "ae55cfe1eb994ea2d285693348ad05d05ce59905a4af372693cbb89fee5a4150"
+    },
+    {
+      "version": "20261009151036",
+      "name": "navegador_remoto",
+      "statements_sha256": "4ac5011ab53c69f2c7d5e33e32c4cb1d50074c9e550d39a9cc6239861edb3039"
+    },
+    {
+      "version": "20261009180928",
+      "name": "navegador_operacional",
+      "statements_sha256": "92e61aaf3739c2eab8578404784d6a0ac6e35f46345fe6842bcd2cb221dcad04"
+    },
+    {
+      "version": "20261009203806",
+      "name": "gestor_regras_do_dono",
+      "statements_sha256": "5996ab30d605ebffe9c32ddb67a6c03abc8088680a9133b302294ccfc9b968f0"
+    },
+    {
+      "version": "20261012170326",
+      "name": "ads_memoria_da_conta",
+      "statements_sha256": "2ffe9564d59dd311b1869c99c7dc64c53e8e90b36116ad31808a9171a4cff6ad"
+    },
+    {
+      "version": "20261012172208",
+      "name": "ads_auditorias",
+      "statements_sha256": "16d0bbd2a07df6c3fb01c010e7a198a9a8333278d7e963577a1f71eaf83e708b"
+    },
+    {
+      "version": "20261012175208",
+      "name": "views_dos_posts",
+      "statements_sha256": "c2ef5399d72daf8678dc8e2996d53db765b77cc9720b5d5b0107d728ceeb5bd2"
+    },
+    {
+      "version": "20261012181143",
+      "name": "diagnostico_do_perfil",
+      "statements_sha256": "ef5da050cc5d996e36e3ebeadf17e860fad384c1d6200b0079f22601e0c76dec"
+    },
+    {
+      "version": "20261012183304",
+      "name": "auditoria_semanal_ads",
+      "statements_sha256": "6067d83a28d915ae886dfb233ba5ab8b92613161fabec56d57ec6555e5ce4f11"
+    },
+    {
+      "version": "20261013010427",
+      "name": "dia_prioritario",
+      "statements_sha256": "f4dd0e2d81ffeca60a6a4d221053e94d2eed9d399b919161959ce80b5cf73518"
+    },
+    {
+      "version": "20261014184938",
+      "name": "acq_n8n_estado",
+      "statements_sha256": "5467e2b05e96095b5b1549cd0dbcb671ad287542cb0a5d64261ead692920d7b1"
+    },
+    {
+      "version": "20261015125632",
+      "name": "dossie_secao_automatica_com_teto",
+      "statements_sha256": "5723092a81ab0e70fa581fb6427012c0b1ebeb995ca6dbff9ff7bf0714311f57"
+    },
+    {
+      "version": "20261015130224",
+      "name": "aviso_de_post_no_ar_na_revisao",
+      "statements_sha256": "9bde4e42f80f5168ba752bbab36f1a44170338bd870288e9720c8e19effd364a"
+    },
+    {
+      "version": "20261015150000",
+      "name": "tirar_decisao_da_lista",
+      "statements_sha256": "aed79a3141cb2d74e0415b53ef72ffd61bf355a57c5ed20c75e0bcbd2aa0bc0f"
+    },
+    {
+      "version": "20261016233955",
+      "name": "decisao_humana_final",
+      "statements_sha256": "2507ecff3b4c7f3629cb05dd203f8c0d3ed6a919993cb4f730474776bc7406c3"
+    },
+    {
+      "version": "20261017153132",
+      "name": "rodadas_semanais_hype_e_perfis",
+      "statements_sha256": "44390da1f52b64d2734255246df0e077a4bfe27a1494e0dcc802cac6f441e10f"
+    },
+    {
+      "version": "20261017173319",
+      "name": "agenda_inteligente_por_cliente",
+      "statements_sha256": "bbdfa6767a149573cbdc7702eac89abd30a9b8e6287a9bba195024be540559d4"
+    },
+    {
+      "version": "20261017180224",
+      "name": "pedidos_de_acesso",
+      "statements_sha256": "3bde47c4aa78ee452374bfc1518fb49164b2d953f889ca14fb7bfdad38edccda"
+    },
+    {
+      "version": "20261019141834",
+      "name": "laboratorio",
+      "statements_sha256": "d2f0c41d707debdcf6979d39cee3034b4e0112a5deae964cc019c418d6c7b89f"
+    },
+    {
+      "version": "20261019144507",
+      "name": "menos_travas",
+      "statements_sha256": "05d2eecd8ec4ceb3d3ef24fb23674896258b2bf66c3e44cd9a4e9598cacef895"
+    },
+    {
+      "version": "20261019171529",
+      "name": "obra_do_site",
+      "statements_sha256": "96b4cab70a93740556c400d5f297b9208e440ce38b80420876016fc3c32fec99"
+    },
+    {
+      "version": "20261019171630",
+      "name": "laboratorio_v2",
+      "statements_sha256": "275da3b8723122406b5488f2dcae5b11701ed63005fb72bcf9fa3f312a79511d"
+    },
+    {
+      "version": "20261019171731",
+      "name": "laboratorio_v3",
+      "statements_sha256": "8c64ebcdea347f3632ae4abf75f1e8faddc81dd68f9e7e355357d09d5b12149e"
+    },
+    {
+      "version": "20261019180129",
+      "name": "sem_laco_de_40001",
+      "statements_sha256": "3975d6a72615acfccde36ca1e81b38d4e792e5acc87d66c62066311ac1f384d8"
+    },
+    {
+      "version": "20261019180336",
+      "name": "decisao_do_dono_com_fonte_antiga",
+      "statements_sha256": "19ca067c985b04af137c1b00f02ce2a6c70d1539977dedd22fe4f48f76e65624"
+    },
+    {
+      "version": "20261019182924",
+      "name": "origem_do_clique",
+      "statements_sha256": "5503e4ec35617fa570ea9e49dc102f65e135fd20f40c13f603770e55d34a2e51"
+    },
+    {
+      "version": "20261019185453",
+      "name": "destravar_execucao",
+      "statements_sha256": "14088b896bf313d54ab946f314f1adcf840d1258a5adaf7cfdfc648c4b671af8"
+    },
+    {
+      "version": "20261019214916",
+      "name": "acessos_persistentes",
+      "statements_sha256": "307943d96aedd6acb71d69d9a6d86762aabfdfcda751a4263af4aedee945999c"
+    },
+    {
+      "version": "20261019231935",
+      "name": "laboratorio_creditos",
+      "statements_sha256": "e3ae8f6e0151281327f9f591b03acf17fddeaf7ece613955d605f6e6ed6fb4b7"
+    },
+    {
+      "version": "20261019232040",
+      "name": "laboratorio_v4",
+      "statements_sha256": "6033fcc81fb28ece85d11c63a30c9db547797dcbb88077f1014d8ad0152fa418"
+    },
+    {
+      "version": "20261019232050",
+      "name": "vendas_quiz_ab",
+      "statements_sha256": "6ae6a094d35d5b8468c19b36671e2abb31c42037a7d70665f46de9cdd23fbe8d"
+    },
+    {
+      "version": "20261019235958",
+      "name": "estudio_livre_carteira",
+      "statements_sha256": "08eaff38c3473b15a2b4facc1572729e73037eff18f08be72b257bd174e9bea4"
+    },
+    {
+      "version": "20261020002646",
+      "name": "estudio_livre_usa_creditos_do_lab",
+      "statements_sha256": "c73218f7f4a72cfbfc992603d78bca55f44716c66ea71b31d2c8b9bda92df432"
+    },
+    {
+      "version": "20261020005142",
+      "name": "estudio_livre_fontes",
+      "statements_sha256": "3a111be50d71a9c4e2e068802b9c42f7a15e061a14f0b27a420539e6c410b61e"
+    },
+    {
+      "version": "20261020011912",
+      "name": "laboratorio_config_do_projeto",
+      "statements_sha256": "eab89960a98cb94e57a368ad365ad19f9cbdfa390bfd68c7ccc21b378a5c8b9e"
+    },
+    {
+      "version": "20261020162025",
+      "name": "area_membros_biblioteca",
+      "statements_sha256": "cfd2c028bcd57d2fc97304e9a42693e6ba65132c6aa0339b94ab723ff9295dd2"
+    },
+    {
+      "version": "20261020162028",
+      "name": "membros_previa_admin_pagamentos_pausados",
+      "statements_sha256": "2eb4ce6dd49361bb5e414f3ded1bfdd766ff2d5f1c7ac7af546944c93a858230"
     }
-  ]
+  ],
+  "pending_migrations": []
 }

@@ -1,0 +1,18 @@
+DO $$ BEGIN IF current_database()<>'membros_test' THEN RAISE EXCEPTION 'Banco de teste obrigatório'; END IF; END $$;
+SELECT public.testar(NOT public.membros_pagamentos_habilitados(),'pagamentos começam desativados');
+SELECT public.testar(NOT has_function_privilege('service_role','public.membros_conciliar_pagamento_validacao(uuid,text,text,text,text)','execute'),'servidor não contorna trava pela função interna');
+SELECT public.testar(NOT has_function_privilege('authenticated','public.membros_origens_usuario(uuid,uuid)','execute'),'membro não consulta direitos de terceiros');
+SET ROLE service_role;
+SELECT set_config('request.jwt.claim.role','service_role',false);
+SELECT public.testar((public.membros_conciliar_pagamento(NULL,'novo','produto','comprador@example.invalid','pago')->>'motivo')='pagamentos_desativados','conciliação não libera nem precisa consultar provedor');
+RESET ROLE;
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role','authenticated',false);
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',false);
+SELECT public.testar(public.recusa('select public.membros_previa(''00000000-0000-0000-0000-000000000003'')'),'cliente não abre prévia de outra pessoa');
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+SELECT public.testar(jsonb_array_length(public.membros_previa('00000000-0000-0000-0000-000000000004')->'produtos')=2,'prévia esconde rascunhos que admin poderia ver');
+SELECT public.testar((SELECT jsonb_array_length(p->'origens')=0 FROM jsonb_array_elements(public.membros_previa('00000000-0000-0000-0000-000000000004')->'produtos') p WHERE p->>'id'='30000000-0000-0000-0000-000000000001'),'prévia mantém produto pago bloqueado para cliente sem direito');
+SELECT public.testar(public.recusa('select public.membros_previa(''00000000-0000-0000-0000-000000000004'',''30000000-0000-0000-0000-000000000001'')'),'prévia não entrega materiais de produto bloqueado');
+SELECT public.testar(jsonb_array_length(public.membros_previa('00000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000001')->'materiais')=2,'prévia entrega materiais conforme compra independente');
+RESET ROLE;

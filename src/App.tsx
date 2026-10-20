@@ -44,6 +44,9 @@ const rotas = {
 };
 
 const Login = rotas.lazy(() => import("@/pages/Login"));
+const AreaDeMembros = rotas.lazy(() => import("@/pages/AreaDeMembros"));
+const AdminMembros = rotas.lazy(() => import("@/pages/AdminMembros"));
+const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
 const ClientDashboard = rotas.lazy(() => import("@/pages/ClientDashboard"));
@@ -241,6 +244,13 @@ function StaffRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** A biblioteca não concede entrada no painel. A barreira de dados também existe no banco. */
+export function OperationalRoute({children}:{children:ReactNode}) {
+  const {profile}=useAuth();
+  if (!profile || !["admin","client","design","traffic","manager"].includes(profile.role)) return <Navigate to="/membros" replace/>;
+  return <>{children}</>;
+}
+
 /**
  * Rota do Departamento Comercial.
  *
@@ -338,6 +348,9 @@ export function AppRoutes() {
       <Route path="/unsubscribe" element={<UnsubscribePage />} />
       <Route path="/conectar-mcp" element={<MCPConnect />} />
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
+      <Route path="/membros" element={<ProtectedRoute><AreaDeMembros /></ProtectedRoute>} />
+      <Route path="/membros/administrar" element={<ProtectedRoute>{profile?.role==="admin"?<AdminMembros/>:<Navigate to="/membros" replace/>}</ProtectedRoute>} />
+      <Route path="/solucoes" element={<SolucoesAceleriq />} />
       <Route path="/oauth/meta/callback" element={<ProtectedRoute><MetaOAuthCallback /></ProtectedRoute>} />
 
       {/* Ciclo roda fora do AppLayout: é um aplicativo à parte, abre em tela
@@ -355,7 +368,7 @@ export function AppRoutes() {
           próprio AppLayout e a troca de página desmontava menu e topo, parecendo
           que o painel reiniciava. As páginas trocam dentro do Outlet, e o
           carregamento de página nova fica só na área do conteúdo. */}
-      <Route element={<ProtectedRoute><AppLayout><Suspense fallback={<EsqueletoDaPagina />}><Outlet /></Suspense></AppLayout></ProtectedRoute>}>
+      <Route element={<ProtectedRoute><OperationalRoute><AppLayout><Suspense fallback={<EsqueletoDaPagina />}><Outlet /></Suspense></AppLayout></OperationalRoute></ProtectedRoute>}>
         <Route path="/dashboard" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</>} />
         <Route path="/projetos" element={<Projects />} />
         <Route path="/briefings" element={<StaffRoute><AdminBriefings /></StaffRoute>} />
