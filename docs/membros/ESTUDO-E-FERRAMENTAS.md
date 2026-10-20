@@ -1,6 +1,12 @@
 # Evolução da biblioteca e das ferramentas
 
-Estado: desenvolvimento para revisão. Nenhuma publicação, migração remota, cobrança ou ativação de pagamento autorizada neste lote.
+Estado em 20/10/2026: Almir autorizou aplicar a migração e publicar para teste. Banco e funções de membros atualizados; interface em preparação para publicação. Kiwify e Asaas continuam desligados.
+
+A migração `membros_estudo_ferramentas` foi aplicada uma única vez no projeto canônico, com versão remota `20261020201456`. O provedor registrou o SQL inteiro, com SHA-256 `d22cd2cd6339e893560a56ad7f52dd8d18d103d2fada402033d442cfe204d96f`. A fonte aprovada permanece intacta. As 388 entradas anteriores foram conferidas e preservadas; não houve replay nem reparo da ledger. Backup físico concluído em 20/10, às 03:58 UTC, disponível no Supabase; não foi executada restauração em produção.
+
+O pós-teste confirmou nove tabelas com RLS, sem acesso direto de `anon` ou `authenticated`, nenhuma licença emitida e o gate de pagamentos em `false`. Os avisos informativos de tabelas sem políticas são esperados neste contrato: as operações passam pelas funções autorizadas, que verificam titular e licença. O histórico de segurança preexistente foi preservado. As funções `area-membros` e `area-membros-kiwify` mantêm verificação de JWT e autenticação interna; a atualização da segunda acrescenta somente o cache do preflight, sem ativar pagamentos.
+
+Correções do PR87: incluídas as quatro fontes de membros ausentes do manifesto legado, sem modificar seus bytes; testes do cenário histórico 206 + 3 isolados em uma fixture, e contrato atual conferido separadamente. Títulos e ajudas usam os componentes do painel. Verificação local após os ajustes: 104 testes, 156 verificações SQL, 53 estados visuais, tipos da aplicação/Node e Deno aprovados. A checagem global permanece distinta dos testes deste lote; não considerar seu resultado aprovado sem a confirmação do CI.
 
 ## Base e decisões
 

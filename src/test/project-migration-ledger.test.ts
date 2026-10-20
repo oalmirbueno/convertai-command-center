@@ -26,7 +26,7 @@ describe("project-specific read-only deployment ledger", () => {
     expect(live).toHaveLength(389);
     expect(live.at(-1)).toMatchObject({
       name: "membros_estudo_ferramentas",
-      statements_sha256: "77b33dcb9359423a904bd9e20fc17ba05bbc049e19a7a9f283e3f839ec200896",
+      statements_sha256: "d22cd2cd6339e893560a56ad7f52dd8d18d103d2fada402033d442cfe204d96f",
     });
   });
   it("keeps the 206 reviewed rows and explicitly requires all three reviewed migrations", () => {

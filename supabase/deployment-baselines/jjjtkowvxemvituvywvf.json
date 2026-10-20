@@ -1945,16 +1945,12 @@
       "version": "20261020183251",
       "name": "membros_cursos_comunidade_funil",
       "statements_sha256": "c380771f154c045aa85620a4da9b5072c1fc0aef6622ee672c191c70f63b13fa"
+    },
+    {
+      "version": "20261020201456",
+      "name": "membros_estudo_ferramentas",
+      "statements_sha256": "d22cd2cd6339e893560a56ad7f52dd8d18d103d2fada402033d442cfe204d96f"
     }
   ],
-  "pending_migrations": [
-    {
-      "version": "20261020190625",
-      "name": "membros_estudo_ferramentas",
-      "path": "supabase/migrations/20261020190625_membros_estudo_ferramentas.sql",
-      "local_sha256": "d22cd2cd6339e893560a56ad7f52dd8d18d103d2fada402033d442cfe204d96f",
-      "statements_sha256": "77b33dcb9359423a904bd9e20fc17ba05bbc049e19a7a9f283e3f839ec200896",
-      "hash_mode": "supabase_cli_split"
-    }
-  ]
+  "pending_migrations": []
 }
