@@ -48,8 +48,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
-          # Includes the upstream fix for stale Auth routing after db reset.
-          version: 2.117.0
+          # Keep the replay's validated parser and service schema versions.
+          version: 2.109.1
 
       - name: Install NPM dependencies
         id: npm_dependencies
@@ -131,6 +131,14 @@ jobs:
         # db reset recreates the DB container. Attest the final topology once
         # the reset has finished, before any test creates synthetic users.
         run: node scripts/guard-ci-e2e-network.mjs --guard
+
+      - name: Refresh local Auth routing after container recreation
+        # Backport only the official Kong reload, preserving its email template:
+        # https://github.com/supabase/cli/pull/6017 and /pull/6065.
+        # The preceding guard attests this exact local project and container.
+        run: |
+          docker exec supabase_kong_aceleriq-os kong reload --nginx-conf /home/kong/custom_nginx.template
+          curl --fail --silent --show-error --noproxy '*' --retry 3 --retry-connrefused --max-time 10 http://127.0.0.1:54321/auth/v1/health > /dev/null
 
       - name: Install local PostgreSQL client
         run: |
