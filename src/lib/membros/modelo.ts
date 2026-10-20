@@ -16,6 +16,8 @@ export type Produto = {
   origens: OrigemDoAcesso[];
   progresso: number;
   ultimo_material: string | null;
+  materiais_total?: number;
+  materiais_concluidos?: number;
 };
 export type Material = {
   id: string;
@@ -46,7 +48,14 @@ export type ItemChecklist = {
 export type Catalogo = {
   produtos: Produto[];
   pendentes: { produto_id: string; estado: string }[];
+  jornada?: {
+    materiais: number;
+    concluidos: number;
+    produtos_concluidos: number;
+    em_andamento: number;
+  };
 };
+export type TesteCliente = { teste: true; bloqueado: boolean };
 
 export function podeAbrir(p: Produto): boolean {
   return p.origens.length > 0;

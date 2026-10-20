@@ -1,7 +1,18 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, CheckSquare, Plus } from "lucide-react";
+import {
+  BookOpen,
+  CheckSquare,
+  Plus,
+  ChevronDown,
+  Film,
+  KeyRound,
+  CreditCard,
+  Eye,
+  FlaskConical,
+  ShieldCheck,
+} from "lucide-react";
 import {
   carregarAdmin,
   enviarMaterial,
@@ -12,6 +23,7 @@ import {
   type ProdutoEditavel,
 } from "@/lib/membros/api";
 import ChecklistLancamento from "@/components/membros/ChecklistLancamento";
+import { urlHttps } from "@/lib/membros/modelo";
 import { texto } from "@/components/sistema";
 import "@/components/membros/membros.css";
 
@@ -28,16 +40,23 @@ function Campo({ titulo, children }: { titulo: string; children: ReactNode }) {
 function Bloco({
   titulo,
   children,
-  aberto = false,
+  aberto = true,
 }: {
   titulo: string;
   children: ReactNode;
   aberto?: boolean;
 }) {
   return (
-    <details open={aberto} className="border-t border-border py-4">
-      <summary className="cursor-pointer min-h-11 flex items-center text-[15px] font-semibold">
+    <details
+      open={aberto}
+      className="membros-bloco border-t border-border py-4"
+    >
+      <summary className="cursor-pointer min-h-11 flex items-center justify-between gap-3 text-[15px] font-semibold">
         {titulo}
+        <ChevronDown
+          size={17}
+          className="membros-chevron text-muted-foreground shrink-0"
+        />
       </summary>
       <div className="pt-4">{children}</div>
     </details>
@@ -50,6 +69,7 @@ export default function AdminMembros() {
   const [sucesso, setSucesso] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [pessoa, setPessoa] = useState("");
+  const [secao, setSecao] = useState("produtos");
   const dados = useQuery({
     queryKey: ["membros", "admin"],
     queryFn: carregarAdmin,
@@ -70,15 +90,27 @@ export default function AdminMembros() {
     }
   };
   return (
-    <main className="membros-conteudo space-y-6">
+    <main className="membros membros-admin">
       <header className="flex flex-wrap justify-between gap-4 items-center">
         <div className="flex items-center gap-3">
           <BookOpen size={22} className="text-primary" />
-          <h1 className={texto.tituloPagina}>Biblioteca de membros</h1>
+          <div>
+            <p className="text-[10px] uppercase tracking-[.15em] text-muted-foreground mb-1">
+              ACELERIQ · ADMINISTRAÇÃO
+            </p>
+            <h1 className={texto.tituloPagina}>Biblioteca de membros</h1>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link to="/membros" className="membros-acao">
             Ver biblioteca
+          </Link>
+          <Link
+            to="/membros?modo=cliente"
+            className="membros-acao border border-border"
+          >
+            <FlaskConical size={16} />
+            Testar como cliente
           </Link>
           <button
             className="membros-acao bg-primary text-primary-foreground"
@@ -113,52 +145,139 @@ export default function AdminMembros() {
           </button>
         </section>
       ) : dados.data ? (
-        <fieldset disabled={ocupado} className="min-w-0">
-          <section
-            className="rounded-xl border border-border p-4 mb-6 space-y-3"
-            aria-label="Ver como cliente"
+        <div className="membros-admin-corpo">
+          <nav
+            className="membros-admin-nav"
+            aria-label="Administração da biblioteca"
           >
-            <h2 className={texto.tituloSecao}>Ver como cliente</h2>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-0 flex-1 max-w-md">
-                <Campo titulo="Cliente ou membro">
-                  <select
-                    className={campo}
-                    value={pessoa}
-                    onChange={(e) => setPessoa(e.target.value)}
-                  >
-                    <option value="">Escolher pessoa</option>
-                    {dados.data.pessoas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name || p.email}
-                      </option>
-                    ))}
-                  </select>
-                </Campo>
-              </div>
-              {pessoa && (
-                <Link
-                  className="membros-acao bg-primary text-primary-foreground"
-                  to={`/membros?visao=${encodeURIComponent(pessoa)}`}
-                >
-                  Abrir visão do cliente
-                </Link>
-              )}
+            {[
+              {
+                id: "produtos",
+                nome: "Produtos e capas",
+                icone: BookOpen,
+                total: dados.data.produtos.length,
+              },
+              {
+                id: "materiais",
+                nome: "Aulas e materiais",
+                icone: Film,
+                total: dados.data.materiais.length,
+              },
+              {
+                id: "acessos",
+                nome: "Pessoas e acessos",
+                icone: KeyRound,
+                total: dados.data.acessos.filter((a) => !a.revogado_em).length,
+              },
+              { id: "cliente", nome: "Visão do cliente", icone: Eye },
+              { id: "pagamentos", nome: "Pagamentos", icone: CreditCard },
+            ].map((s) => (
+              <button
+                key={s.id}
+                className="membros-acao"
+                aria-current={secao === s.id ? "page" : undefined}
+                onClick={() => setSecao(s.id)}
+              >
+                <s.icone size={17} />
+                <span>{s.nome}</span>
+                {s.total !== undefined && <small>{s.total}</small>}
+              </button>
+            ))}
+            <div className="membros-admin-trava">
+              <ShieldCheck size={17} className="text-primary" />
+              <p>
+                Liberação por pagamento desligada.
+                <br />
+                <span className="text-muted-foreground">Kiwify e Asaas</span>
+              </p>
             </div>
-            <p className="text-[12px] text-muted-foreground">
-              Veja a mesma tela, com os produtos liberados e bloqueados para
-              essa pessoa, sem alterar seu progresso.
-            </p>
-          </section>
-          <p className="rounded-lg bg-muted p-3 text-[13px] mb-4" role="status">
-            Liberação automática por Kiwify e Asaas desativada até a validação
-            dos pagamentos. Para testar, conceda um acesso manual abaixo.
-          </p>
-          <Produtos dados={dados.data} agir={agir} />
-          <Materiais dados={dados.data} agir={agir} />
-          <Direitos dados={dados.data} agir={agir} />
-          <Pagamentos dados={dados.data} agir={agir} />
-        </fieldset>
+          </nav>
+          <fieldset disabled={ocupado} className="membros-admin-principal">
+            <section hidden={secao !== "cliente"}>
+              <div className="rounded-xl bg-muted p-5 mb-5 space-y-3">
+                <h2 className={texto.tituloSecao}>
+                  Experimente a biblioteca inteira
+                </h2>
+                <p className="text-[13px] text-muted-foreground max-w-xl">
+                  Entre com seus acessos de membro, teste o bloqueio, assista à
+                  aula e baixe o material. O progresso do teste fica separado.
+                </p>
+                <Link
+                  to="/membros?modo=cliente"
+                  className="membros-acao bg-primary text-primary-foreground"
+                >
+                  <FlaskConical size={16} />
+                  Testar como cliente
+                </Link>
+              </div>
+              <section
+                className="rounded-xl border border-border p-4 mb-6 space-y-3"
+                aria-label="Ver como cliente"
+              >
+                <h2 className={texto.tituloSecao}>Ver como cliente</h2>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-0 flex-1 max-w-md">
+                    <Campo titulo="Cliente ou membro">
+                      <select
+                        className={campo}
+                        value={pessoa}
+                        onChange={(e) => setPessoa(e.target.value)}
+                      >
+                        <option value="">Escolher pessoa</option>
+                        {dados.data.pessoas.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.full_name || p.email}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                  </div>
+                  {pessoa && (
+                    <Link
+                      className="membros-acao bg-primary text-primary-foreground"
+                      to={`/membros?visao=${encodeURIComponent(pessoa)}`}
+                    >
+                      Abrir visão do cliente
+                    </Link>
+                  )}
+                </div>
+                <p className="text-[12px] text-muted-foreground">
+                  Veja a mesma tela, com os produtos liberados e bloqueados para
+                  essa pessoa, sem alterar seu progresso.
+                </p>
+              </section>
+            </section>
+            <section hidden={secao !== "produtos"} aria-label="Editar produtos">
+              <Produtos dados={dados.data} agir={agir} />
+            </section>
+            <section
+              hidden={secao !== "materiais"}
+              aria-label="Editar materiais"
+            >
+              <Materiais dados={dados.data} agir={agir} />
+            </section>
+            <section
+              hidden={secao !== "acessos"}
+              aria-label="Gerenciar acessos"
+            >
+              <Direitos dados={dados.data} agir={agir} />
+            </section>
+            <section
+              hidden={secao !== "pagamentos"}
+              aria-label="Configuração dos pagamentos"
+            >
+              <p
+                className="rounded-lg bg-muted p-3 text-[13px] mb-4"
+                role="status"
+              >
+                Liberação automática por Kiwify e Asaas desativada até a
+                validação dos pagamentos. Para testar, conceda um acesso manual
+                abaixo.
+              </p>
+              <Pagamentos dados={dados.data} agir={agir} />
+            </section>
+          </fieldset>
+        </div>
       ) : null}
       {check && dados.data && (
         <ChecklistLancamento
@@ -176,11 +295,11 @@ type Props = {
   agir: (acao: () => Promise<void>) => Promise<void>;
 };
 function Produtos({ dados, agir }: Props) {
-  const [selecionado, setSelecionado] = useState("");
+  const [selecionado, setSelecionado] = useState(dados.produtos[0]?.id || "");
   const produto = dados.produtos.find((p) => p.id === selecionado);
   return (
     <Bloco titulo={`Produtos · ${dados.produtos.length}`} aberto>
-      <div className="grid md:grid-cols-[260px_minmax(0,1fr)] gap-6">
+      <div className="membros-admin-produtos">
         <nav
           aria-label="Produtos cadastrados"
           className="max-h-96 overflow-auto space-y-1"
@@ -195,10 +314,11 @@ function Produtos({ dados, agir }: Props) {
           {dados.produtos.map((p) => (
             <button
               key={p.id}
+              aria-current={p.id === selecionado ? "page" : undefined}
               className={`membros-acao w-full text-left justify-between gap-2 ${p.id === selecionado ? "bg-muted" : ""}`}
               onClick={() => setSelecionado(p.id)}
             >
-              <span className="min-w-0 break-words">{p.titulo}</span>
+              <span className="min-w-0 break-words flex-1">{p.titulo}</span>
               <span className="text-[11px] text-muted-foreground">
                 {p.estado}
               </span>
@@ -245,6 +365,19 @@ function FormProduto({
   };
   return (
     <form onSubmit={enviar} className="grid sm:grid-cols-2 gap-4 min-w-0">
+      {urlHttps(v.capa_url) && (
+        <img
+          key={v.capa_url}
+          src={urlHttps(v.capa_url)!}
+          alt="Prévia da capa do produto"
+          className="sm:col-span-2 w-full max-h-44 object-cover rounded-xl"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      )}
       <Campo titulo="Título">
         <input
           className={campo}
@@ -373,7 +506,7 @@ function SeletorProduto({
   );
 }
 function Materiais({ dados, agir }: Props) {
-  const [produto, setProduto] = useState("");
+  const [produto, setProduto] = useState(dados.produtos[0]?.id || "");
   const [titulo, setTitulo] = useState("");
   const [tipo, setTipo] = useState("texto");
   const [conteudo, setConteudo] = useState("");

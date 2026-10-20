@@ -6,6 +6,7 @@ import type {
   Material,
   Progresso,
   ItemChecklist,
+  TesteCliente,
 } from "./modelo";
 
 // Contrato local explícito da biblioteca; mantém os tipos operacionais existentes.
@@ -100,11 +101,15 @@ function conferir<T>(r: { data: T; error: unknown }): T {
 }
 export async function carregarCatalogo(
   previa?: string,
+  teste?: TesteCliente,
 ): Promise<Catalogo & { pessoa?: { id: string; nome: string } }> {
   const dado: unknown = conferir(
     await (previa
       ? banco.rpc("membros_previa", { _usuario: previa })
-      : banco.rpc("membros_catalogo")),
+      : banco.rpc("membros_biblioteca", {
+          _teste: !!teste,
+          _bloqueado: !!teste?.bloqueado,
+        })),
   );
   if (
     !dado ||
@@ -118,7 +123,15 @@ export async function carregarCatalogo(
 export async function carregarMateriais(
   produto: string,
   previa?: string,
+  teste?: TesteCliente,
 ): Promise<{ materiais: Material[]; progresso: Progresso[] }> {
+  if (teste)
+    return conferir(
+      await banco.rpc("membros_teste_materiais", {
+        _produto: produto,
+        _bloqueado: teste.bloqueado,
+      }),
+    );
   if (previa)
     return conferir(
       await banco.rpc("membros_previa", {
@@ -151,7 +164,20 @@ export async function gravarProgresso(
   posicao: number,
   duracao: number,
   concluido: boolean,
+  teste?: TesteCliente,
 ): Promise<void> {
+  if (teste) {
+    conferir(
+      await banco.rpc("membros_teste_salvar_progresso", {
+        _material: material,
+        _posicao: posicao,
+        _duracao: duracao,
+        _concluido: concluido,
+        _bloqueado: teste.bloqueado,
+      }),
+    );
+    return;
+  }
   const sessao = conferir(await supabase.auth.getUser());
   if (!sessao.user) throw { status: 401 };
   const resultado = await banco
@@ -174,6 +200,7 @@ export async function abrirArquivo(
   material: string,
   download = false,
   previa?: string,
+  teste?: TesteCliente,
 ): Promise<{ url: string; expira_em: string }> {
   const dado = conferir(
     await supabase.functions.invoke("area-membros", {
@@ -182,11 +209,16 @@ export async function abrirArquivo(
         material_id: material,
         download,
         previa_usuario: previa,
+        teste_cliente: !!teste,
+        bloqueado: !!teste?.bloqueado,
       },
     }),
   );
   if (!dado?.url) throw new Error("Arquivo não disponível");
   return dado as { url: string; expira_em: string };
+}
+export async function reiniciarTeste(): Promise<void> {
+  conferir(await banco.rpc("membros_teste_reiniciar"));
 }
 export async function carregarAdmin(): Promise<DadosAdmin> {
   const respostas = await Promise.all([
