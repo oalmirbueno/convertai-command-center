@@ -237,13 +237,30 @@ try {
       .click();
     await page.getByRole("button", { name: /Proposta de teste/ }).waitFor();
     await checar("crm");
-    if(largura>=768){
-      const coluna=page.locator('.membros-crm-coluna').filter({has:page.getByRole('heading',{name:'Proposta',exact:true})}).locator('.membros-crm-coluna-rolagem');
-      const antes=await page.evaluate(()=>window.scrollY);
-      const scroll=await coluna.evaluate(el=>{el.scrollTop=el.scrollHeight;return {top:el.scrollTop,altura:el.clientHeight,conteudo:el.scrollHeight};});
-      if(scroll.top<=0||scroll.conteudo<=scroll.altura)throw Error('A coluna do CRM não tem rolagem própria');
-      if(await page.evaluate(()=>window.scrollY)!==antes)throw Error('Rolar a coluna moveu a página');
-      await coluna.evaluate(el=>{el.scrollTop=0;});await checar('crm-rolagem-propria');
+    if (largura >= 768) {
+      const coluna = page
+        .locator(".membros-crm-coluna")
+        .filter({
+          has: page.getByRole("heading", { name: "Proposta", exact: true }),
+        })
+        .locator(".membros-crm-coluna-rolagem");
+      const antes = await page.evaluate(() => window.scrollY);
+      const scroll = await coluna.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+        return {
+          top: el.scrollTop,
+          altura: el.clientHeight,
+          conteudo: el.scrollHeight,
+        };
+      });
+      if (scroll.top <= 0 || scroll.conteudo <= scroll.altura)
+        throw Error("A coluna do CRM não tem rolagem própria");
+      if ((await page.evaluate(() => window.scrollY)) !== antes)
+        throw Error("Rolar a coluna moveu a página");
+      await coluna.evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await checar("crm-rolagem-propria");
     }
     await page.screenshot({ path: resolve(output, `crm-${largura}.png`) });
     await page.getByRole("button", { name: "Início", exact: true }).click();
@@ -308,6 +325,20 @@ try {
       await page
         .getByRole("button", { name: "Sair da tela cheia do PDF" })
         .waitFor();
+      await page.waitForFunction(() => {
+        const c = document.querySelector(".membros-pdf-tela-cheia canvas");
+        if (
+          !(c instanceof HTMLCanvasElement) ||
+          (c.width === 300 && c.height === 150)
+        )
+          return false;
+        return c.getContext("2d").getImageData(0, 0, 1, 1).data[3] === 255;
+      });
+      // Observe the final geometry after the dialog's opening animation.
+      await page.waitForFunction((largura) => {
+        const r = document.querySelector(".membros-pdf-tela-cheia")?.getBoundingClientRect();
+        return r && r.width >= largura - 2 && r.height >= 898;
+      }, largura);
       await checar("pdf-tela-cheia");
       const pdfTela = await page
         .locator(".membros-pdf-tela-cheia")

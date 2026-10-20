@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import {
@@ -62,20 +62,22 @@ export default function PdfSeguro({
   const [texto, setTexto] = useState("");
   const [renderizando, setRenderizando] = useState(false);
   const [ampliado, setAmpliado] = useState(false);
-  const folha = useRef<HTMLCanvasElement>(null);
-  const caixa = useRef<HTMLDivElement>(null);
+  // The portal attaches later than the mode change. Track actual DOM nodes so
+  // every newly mounted canvas is measured and painted, including on return.
+  const [folha, setFolha] = useState<HTMLCanvasElement | null>(null);
+  const [caixa, setCaixa] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    const el = caixa.current;
+    const el = caixa;
     if (!el) return;
     const medir = () => setLargura(Math.max(200, el.clientWidth - 16));
     medir();
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ampliado]);
+  }, [caixa]);
   useEffect(() => {
-    caixa.current?.scrollTo({ top: 0, left: 0 });
-  }, [pagina]);
+    caixa?.scrollTo({ top: 0, left: 0 });
+  }, [pagina, caixa]);
   useEffect(() => {
     let ativo = true;
     const cancelador = new AbortController();
@@ -116,7 +118,7 @@ export default function PdfSeguro({
     };
   }, [url]);
   useEffect(() => {
-    if (!doc || !folha.current) return;
+    if (!doc || !folha) return;
     let ativo = true;
     let tarefa: RenderTask | undefined;
     setRenderizando(true);
@@ -124,11 +126,11 @@ export default function PdfSeguro({
     void (async () => {
       try {
         const p = await doc.getPage(pagina);
-        if (!ativo || !folha.current) return;
+        if (!ativo) return;
         const base = p.getViewport({ scale: 1 });
         const escala = Math.min(1.5, largura / base.width) * zoom;
         const viewport = p.getViewport({ scale: escala });
-        const tela = folha.current;
+        const tela = folha;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         tela.width = Math.ceil(viewport.width * dpr);
         tela.height = Math.ceil(viewport.height * dpr);
@@ -160,7 +162,7 @@ export default function PdfSeguro({
       ativo = false;
       tarefa?.cancel();
     };
-  }, [doc, pagina, zoom, largura, ampliado]);
+  }, [doc, pagina, zoom, largura, folha]);
   const leitor = (
     <section className="membros-pdf" aria-label={`Leitor de PDF: ${titulo}`}>
       <div className="membros-pdf-barra">
@@ -250,9 +252,13 @@ export default function PdfSeguro({
           Abrindo PDF…
         </p>
       )}
-      <div ref={caixa} className="membros-pdf-pagina" aria-busy={renderizando}>
+      <div
+        ref={setCaixa}
+        className="membros-pdf-pagina"
+        aria-busy={renderizando}
+      >
         <canvas
-          ref={folha}
+          ref={setFolha}
           aria-label={`Página ${pagina} de ${doc?.numPages || 1} de ${titulo}`}
         />
       </div>
