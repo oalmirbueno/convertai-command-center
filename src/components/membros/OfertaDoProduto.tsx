@@ -1,3 +1,4 @@
+import { AjudaRecolhida } from "@/components/sistema";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -69,9 +70,9 @@ export default function OfertaDoProduto({
             allow="payment"
             className="membros-oferta-pagina"
           />
-          <p className="text-[11px] text-muted-foreground">
+          <AjudaRecolhida rotulo="Mais informações">
             Se a página não abrir aqui, continue pela opção de nova guia.
-          </p>
+          </AjudaRecolhida>
         </>
       ) : (
         <div className="membros-oferta-apresentacao">

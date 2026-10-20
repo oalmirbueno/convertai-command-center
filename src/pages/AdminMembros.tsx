@@ -15,6 +15,8 @@ import {
   Waypoints,
   PanelLeftClose,
   PanelLeftOpen,
+  Upload,
+  Wrench,
 } from "lucide-react";
 import {
   carregarAdmin,
@@ -28,8 +30,11 @@ import EditorDoCurso from "@/components/membros/EditorDoCurso";
 import PessoasEFunil, { EditorFunil } from "@/components/membros/PessoasEFunil";
 import ConfiguracaoKiwify from "@/components/membros/ConfiguracaoKiwify";
 import ChecklistLancamento from "@/components/membros/ChecklistLancamento";
+import CanaisDoProduto from "@/components/membros/CanaisDoProduto";
+import AdminFerramentas from "@/components/membros/AdminFerramentas";
+import { enviarCapa } from "@/lib/membros/capas";
 import { urlHttps } from "@/lib/membros/modelo";
-import { texto } from "@/components/sistema";
+import { texto, AjudaRecolhida } from "@/components/sistema";
 import "@/components/membros/membros.css";
 
 const campo =
@@ -76,6 +81,7 @@ export default function AdminMembros() {
   const [pessoa, setPessoa] = useState("");
   const [recolhida, setRecolhida] = useState(false);
   const [secao, setSecao] = useState("produtos");
+  const [produtoIndicado, setProdutoIndicado] = useState("");
   const dados = useQuery({
     queryKey: ["membros", "admin"],
     queryFn: carregarAdmin,
@@ -101,9 +107,6 @@ export default function AdminMembros() {
         <div className="flex items-center gap-3">
           <BookOpen size={22} className="text-primary" />
           <div>
-            <p className="text-[10px] uppercase tracking-[.15em] text-muted-foreground mb-1">
-              ACELERIQ · ADMINISTRAÇÃO
-            </p>
             <h1 className={texto.tituloPagina}>Biblioteca de membros</h1>
           </div>
         </div>
@@ -170,7 +173,6 @@ export default function AdminMembros() {
               ) : (
                 <PanelLeftClose size={17} />
               )}
-              <span>Administração</span>
             </button>
             {[
               {
@@ -192,6 +194,7 @@ export default function AdminMembros() {
                 total: dados.data.acessos.filter((a) => !a.revogado_em).length,
               },
               { id: "funil", nome: "Esteira de produtos", icone: Waypoints },
+              { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
               { id: "cliente", nome: "Visão do cliente", icone: Eye },
               { id: "pagamentos", nome: "Pagamentos", icone: CreditCard },
             ].map((s) => (
@@ -217,15 +220,16 @@ export default function AdminMembros() {
             </div>
           </nav>
           <fieldset disabled={ocupado} className="membros-admin-principal">
+            {secao === "ferramentas" && <AdminFerramentas dados={dados.data} />}
             <section hidden={secao !== "cliente"}>
               <div className="rounded-xl bg-muted p-5 mb-5 space-y-3">
                 <h2 className={texto.tituloSecao}>
                   Experimente a biblioteca inteira
                 </h2>
-                <p className="text-[13px] text-muted-foreground max-w-xl">
+                <AjudaRecolhida rotulo="Sobre o teste como cliente">
                   Entre com seus acessos de membro, teste o bloqueio, assista à
                   aula e baixe o material. O progresso do teste fica separado.
-                </p>
+                </AjudaRecolhida>
                 <Link
                   to="/membros?modo=cliente"
                   className="membros-acao bg-primary text-primary-foreground"
@@ -265,14 +269,19 @@ export default function AdminMembros() {
                     </Link>
                   )}
                 </div>
-                <p className="text-[12px] text-muted-foreground">
+                <AjudaRecolhida rotulo="Sobre a visão do cliente">
                   Veja a mesma tela, com os produtos liberados e bloqueados para
                   essa pessoa, sem alterar seu progresso.
-                </p>
+                </AjudaRecolhida>
               </section>
             </section>
             <section hidden={secao !== "produtos"} aria-label="Editar produtos">
-              <Produtos dados={dados.data} agir={agir} />
+              <Produtos
+                key={produtoIndicado}
+                inicial={produtoIndicado}
+                dados={dados.data}
+                agir={agir}
+              />
             </section>
             <section
               hidden={secao !== "materiais"}
@@ -296,7 +305,14 @@ export default function AdminMembros() {
               hidden={secao !== "funil"}
               aria-label="Esteira de produtos"
             >
-              <EditorFunil dados={dados.data} agir={agir} />
+              <EditorFunil
+                dados={dados.data}
+                agir={agir}
+                editarProduto={(id) => {
+                  setProdutoIndicado(id);
+                  setSecao("produtos");
+                }}
+              />
             </section>
             <section
               hidden={secao !== "pagamentos"}
@@ -331,8 +347,10 @@ type Props = {
   dados: DadosAdmin;
   agir: (acao: () => Promise<void>) => Promise<void>;
 };
-function Produtos({ dados, agir }: Props) {
-  const [selecionado, setSelecionado] = useState(dados.produtos[0]?.id || "");
+function Produtos({ dados, agir, inicial }: Props & { inicial?: string }) {
+  const [selecionado, setSelecionado] = useState(
+    inicial || dados.produtos[0]?.id || "",
+  );
   const produto = dados.produtos.find((p) => p.id === selecionado);
   return (
     <Bloco titulo={`Produtos · ${dados.produtos.length}`} aberto>
@@ -365,7 +383,12 @@ function Produtos({ dados, agir }: Props) {
         <FormProduto
           key={produto?.id || "novo"}
           produto={produto}
-          salvar={(p) => agir(() => salvarLinha("membros_produtos", p))}
+          salvar={(p) =>
+            agir(async () => {
+              await salvarLinha("membros_produtos", p);
+              setSelecionado(String(p.id));
+            })
+          }
         />
       </div>
     </Bloco>
@@ -378,6 +401,8 @@ function FormProduto({
   produto?: ProdutoEditavel;
   salvar: (p: Record<string, unknown>) => Promise<void>;
 }) {
+  const [enviandoCapa, setEnviandoCapa] = useState(false);
+  const [erroCapa, setErroCapa] = useState("");
   const [v, setV] = useState({
     id: produto?.id || crypto.randomUUID(),
     titulo: produto?.titulo || "",
@@ -409,194 +434,233 @@ function FormProduto({
     });
   };
   return (
-    <form onSubmit={enviar} className="grid sm:grid-cols-2 gap-4 min-w-0">
-      {urlHttps(v.capa_url) && (
-        <img
-          key={v.capa_url}
-          src={urlHttps(v.capa_url)!}
-          alt="Prévia da capa do produto"
-          className="sm:col-span-2 w-full max-h-44 object-cover rounded-xl"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
-      )}
-      <Campo titulo="Título">
-        <input
-          className={campo}
-          required
-          maxLength={180}
-          value={v.titulo}
-          onChange={(e) => setV({ ...v, titulo: e.target.value })}
-        />
-      </Campo>
-      <Campo titulo="Formato">
-        <input
-          className={campo}
-          required
-          maxLength={80}
-          value={v.formato}
-          onChange={(e) => setV({ ...v, formato: e.target.value })}
-        />
-      </Campo>
-      <Campo titulo="Categoria">
-        <input
-          className={campo}
-          maxLength={80}
-          value={v.categoria}
-          onChange={(e) => setV({ ...v, categoria: e.target.value })}
-        />
-      </Campo>
-      <Campo titulo="Estado">
-        <select
-          className={campo}
-          value={v.estado}
-          onChange={(e) =>
-            setV({ ...v, estado: e.target.value as typeof v.estado })
-          }
-        >
-          <option value="rascunho">Rascunho</option>
-          <option value="publicado">Publicado no catálogo</option>
-          <option value="arquivado">Indisponível</option>
-        </select>
-      </Campo>
-      <div className="sm:col-span-2">
-        <Campo titulo="Descrição">
-          <textarea
-            className={`${campo} min-h-24`}
-            maxLength={12000}
-            value={v.descricao}
-            onChange={(e) => setV({ ...v, descricao: e.target.value })}
+    <div className="min-w-0">
+      <form onSubmit={enviar} className="grid sm:grid-cols-2 gap-4 min-w-0">
+        {urlHttps(v.capa_url) && (
+          <img
+            key={v.capa_url}
+            src={urlHttps(v.capa_url)!}
+            alt="Prévia da capa do produto"
+            className="sm:col-span-2 w-full max-h-44 object-cover rounded-xl"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        )}
+        <Campo titulo="Título">
+          <input
+            className={campo}
+            required
+            maxLength={180}
+            value={v.titulo}
+            onChange={(e) => setV({ ...v, titulo: e.target.value })}
           />
         </Campo>
-      </div>
-      <Campo titulo="Endereço HTTPS da capa real">
-        <input
-          className={campo}
-          type="url"
-          pattern="https://.*"
-          value={v.capa_url}
-          onChange={(e) => setV({ ...v, capa_url: e.target.value })}
-        />
-      </Campo>
-      <Campo titulo="Checkout confirmado (opcional)">
-        <input
-          className={campo}
-          type="url"
-          pattern="https://.*"
-          value={v.checkout_url}
-          onChange={(e) => setV({ ...v, checkout_url: e.target.value })}
-        />
-      </Campo>
-      <div className="sm:col-span-2">
-        <Campo titulo="Condições de acesso">
-          <textarea
-            className={`${campo} min-h-20`}
-            maxLength={4000}
-            value={v.condicoes}
-            onChange={(e) => setV({ ...v, condicoes: e.target.value })}
+        <Campo titulo="Formato">
+          <input
+            className={campo}
+            required
+            maxLength={80}
+            value={v.formato}
+            onChange={(e) => setV({ ...v, formato: e.target.value })}
           />
         </Campo>
-      </div>
-      <label className="text-[13px] min-h-11 flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={v.gratuito}
-          onChange={(e) => setV({ ...v, gratuito: e.target.checked })}
-        />
-        Produto gratuito
-      </label>
-      <label className="text-[13px] min-h-11 flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={v.destaque}
-          onChange={(e) => setV({ ...v, destaque: e.target.checked })}
-        />
-        Destacar na biblioteca
-      </label>
-      <Campo titulo="Tipo de produto">
-        <select
-          className={campo}
-          value={v.tipo_produto}
-          onChange={(e) =>
-            setV({
-              ...v,
-              tipo_produto: e.target.value as typeof v.tipo_produto,
-            })
-          }
-        >
-          <option value="curso">Curso</option>
-          <option value="material">Material ou kit</option>
-          <option value="comunidade">Comunidade</option>
-        </select>
-      </Campo>
-      <Campo titulo="Página de vendas (HTTPS)">
-        <input
-          className={campo}
-          type="url"
-          pattern="https://.*"
-          value={v.landing_url}
-          onChange={(e) => setV({ ...v, landing_url: e.target.value })}
-        />
-      </Campo>
-      <Campo titulo="Texto do botão de compra">
-        <input
-          className={campo}
-          maxLength={60}
-          value={v.cta}
-          onChange={(e) => setV({ ...v, cta: e.target.value })}
-        />
-      </Campo>
-      <Campo titulo="Ordem no catálogo">
-        <input
-          className={campo}
-          type="number"
-          min={0}
-          max={10000}
-          value={v.ordem}
-          onChange={(e) => setV({ ...v, ordem: Number(e.target.value) })}
-        />
-      </Campo>
-      {(
-        [
-          { k: "em_venda", nome: "Disponível para compra" },
-          { k: "comunidade_ativa", nome: "Comunidade deste produto" },
-          {
-            k: "landing_embutida",
-            nome: "Abrir página de vendas dentro da biblioteca",
-          },
-          {
-            k: "checkout_embutido",
-            nome: "Abrir checkout dentro da biblioteca",
-          },
-        ] as const
-      ).map((i) => (
-        <label
-          key={i.k}
-          className="flex gap-2 items-center min-h-11 text-[13px]"
-        >
+        <Campo titulo="Categoria">
+          <input
+            className={campo}
+            maxLength={80}
+            value={v.categoria}
+            onChange={(e) => setV({ ...v, categoria: e.target.value })}
+          />
+        </Campo>
+        <Campo titulo="Estado">
+          <select
+            className={campo}
+            value={v.estado}
+            onChange={(e) =>
+              setV({ ...v, estado: e.target.value as typeof v.estado })
+            }
+          >
+            <option value="rascunho">Rascunho</option>
+            <option value="publicado">Publicado no catálogo</option>
+            <option value="arquivado">Indisponível</option>
+          </select>
+        </Campo>
+        <div className="sm:col-span-2">
+          <Campo titulo="Descrição">
+            <textarea
+              className={`${campo} min-h-24`}
+              maxLength={12000}
+              value={v.descricao}
+              onChange={(e) => setV({ ...v, descricao: e.target.value })}
+            />
+          </Campo>
+        </div>
+        <Campo titulo="Capa por link">
+          <input
+            className={campo}
+            type="url"
+            pattern="https://.*"
+            value={v.capa_url}
+            onChange={(e) => setV({ ...v, capa_url: e.target.value })}
+          />
+        </Campo>
+        <div className="space-y-2 text-[12px]">
+          <div className="flex gap-2 items-center">
+            Capa por arquivo
+            <AjudaRecolhida rotulo="Enviar uma capa">
+              JPG, PNG ou WebP de até 5 MB. A imagem é preparada para a
+              biblioteca. Salve o produto para vincular a nova capa.
+            </AjudaRecolhida>
+          </div>
+          <label className="membros-acao cursor-pointer bg-muted">
+            <Upload size={15} />
+            {enviandoCapa ? "Enviando…" : "Enviar imagem"}
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={enviandoCapa}
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                setEnviandoCapa(true);
+                setErroCapa("");
+                try {
+                  const url = await enviarCapa(f, v.id);
+                  setV((atual) => ({ ...atual, capa_url: url }));
+                } catch (erro) {
+                  setErroCapa(mensagemDoErro(erro));
+                } finally {
+                  setEnviandoCapa(false);
+                }
+              }}
+            />
+          </label>
+          {erroCapa && <p role="alert">{erroCapa}</p>}
+        </div>
+        <Campo titulo="Checkout confirmado (opcional)">
+          <input
+            className={campo}
+            type="url"
+            pattern="https://.*"
+            value={v.checkout_url}
+            onChange={(e) => setV({ ...v, checkout_url: e.target.value })}
+          />
+        </Campo>
+        <div className="sm:col-span-2">
+          <Campo titulo="Condições de acesso">
+            <textarea
+              className={`${campo} min-h-20`}
+              maxLength={4000}
+              value={v.condicoes}
+              onChange={(e) => setV({ ...v, condicoes: e.target.value })}
+            />
+          </Campo>
+        </div>
+        <label className="text-[13px] min-h-11 flex items-center gap-2">
           <input
             type="checkbox"
-            checked={v[i.k]}
-            onChange={(e) => setV({ ...v, [i.k]: e.target.checked })}
+            checked={v.gratuito}
+            onChange={(e) => setV({ ...v, gratuito: e.target.checked })}
           />
-          {i.nome}
+          Produto gratuito
         </label>
-      ))}
-      <p className="sm:col-span-2 text-[12px] text-muted-foreground">
-        Páginas externas precisam permitir a abertura dentro de outro site. A
-        opção de nova guia continua disponível. A liberação automática por
-        pagamento permanece desligada.
-      </p>
-      <button
-        className="membros-acao bg-primary text-primary-foreground justify-self-start"
-        type="submit"
-      >
-        Salvar produto
-      </button>
-    </form>
+        <label className="text-[13px] min-h-11 flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={v.destaque}
+            onChange={(e) => setV({ ...v, destaque: e.target.checked })}
+          />
+          Destacar na biblioteca
+        </label>
+        <Campo titulo="Tipo de produto">
+          <select
+            className={campo}
+            value={v.tipo_produto}
+            onChange={(e) =>
+              setV({
+                ...v,
+                tipo_produto: e.target.value as typeof v.tipo_produto,
+              })
+            }
+          >
+            <option value="curso">Curso</option>
+            <option value="material">Material ou kit</option>
+            <option value="comunidade">Comunidade</option>
+          </select>
+        </Campo>
+        <Campo titulo="Página de vendas (HTTPS)">
+          <input
+            className={campo}
+            type="url"
+            pattern="https://.*"
+            value={v.landing_url}
+            onChange={(e) => setV({ ...v, landing_url: e.target.value })}
+          />
+        </Campo>
+        <Campo titulo="Texto do botão de compra">
+          <input
+            className={campo}
+            maxLength={60}
+            value={v.cta}
+            onChange={(e) => setV({ ...v, cta: e.target.value })}
+          />
+        </Campo>
+        <Campo titulo="Ordem no catálogo">
+          <input
+            className={campo}
+            type="number"
+            min={0}
+            max={10000}
+            value={v.ordem}
+            onChange={(e) => setV({ ...v, ordem: Number(e.target.value) })}
+          />
+        </Campo>
+        {(
+          [
+            { k: "em_venda", nome: "Disponível para compra" },
+            { k: "comunidade_ativa", nome: "Comunidade deste produto" },
+            {
+              k: "landing_embutida",
+              nome: "Abrir página de vendas dentro da biblioteca",
+            },
+            {
+              k: "checkout_embutido",
+              nome: "Abrir checkout dentro da biblioteca",
+            },
+          ] as const
+        ).map((i) => (
+          <label
+            key={i.k}
+            className="flex gap-2 items-center min-h-11 text-[13px]"
+          >
+            <input
+              type="checkbox"
+              checked={v[i.k]}
+              onChange={(e) => setV({ ...v, [i.k]: e.target.checked })}
+            />
+            {i.nome}
+          </label>
+        ))}
+        <AjudaRecolhida rotulo="Sobre a página de vendas e o checkout">
+          Páginas externas precisam permitir a abertura dentro de outro site. A
+          opção de nova guia continua disponível. A liberação automática por
+          pagamento permanece desligada.
+        </AjudaRecolhida>
+        <button
+          className="membros-acao bg-primary text-primary-foreground justify-self-start"
+          type="submit"
+          disabled={enviandoCapa}
+        >
+          Salvar produto
+        </button>
+      </form>
+      {produto && <CanaisDoProduto produto={produto.id} />}
+    </div>
   );
 }
 function SeletorProduto({

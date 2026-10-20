@@ -21,6 +21,7 @@ import {
   MessageCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  Wrench,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -47,7 +48,8 @@ import {
 import { FocoDeEstudo, BotaoPomodoro } from "@/components/membros/FocoDeEstudo";
 import ComunidadeDoCurso from "@/components/membros/ComunidadeDoCurso";
 import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
-import { texto } from "@/components/sistema";
+import FerramentasDoMembro from "@/components/membros/FerramentasDoMembro";
+import { texto, AjudaRecolhida } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import "@/components/membros/membros.css";
 
@@ -426,6 +428,7 @@ export default function AreaDeMembros() {
     <FocoDeEstudo
       key={user?.id || "visitante"}
       usuario={user?.id || "visitante"}
+      leitorAberto={!!produtoAberto}
     >
       <div className="membros bg-background text-foreground">
         <a
@@ -499,17 +502,18 @@ export default function AreaDeMembros() {
               ) : (
                 <PanelLeftClose size={18} />
               )}
-              <span>Biblioteca</span>
             </button>
             {[
               { id: "inicio", nome: "Início", icone: Home },
               { id: "lista", nome: "Minha lista", icone: Bookmark },
               { id: "comunidade", nome: "Comunidade", icone: MessageCircle },
+              { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
             ].map((i) => (
               <button
                 key={i.id}
                 className="membros-acao"
                 title={i.nome}
+                aria-label={i.nome}
                 aria-current={secao === i.id ? "page" : undefined}
                 onClick={() => setSecao(i.id)}
               >
@@ -520,6 +524,12 @@ export default function AreaDeMembros() {
             <BotaoPomodoro compacto={recolhida} />
           </aside>
           <main id="biblioteca" className="membros-conteudo space-y-8">
+            {secao === "ferramentas" && (
+              <FerramentasDoMembro
+                somenteLeitura={!!previa || !!teste}
+                conhecer={setAberto}
+              />
+            )}
             {teste && profile?.role === "admin" && (
               <ControlesTeste
                 teste={teste}
@@ -539,10 +549,10 @@ export default function AreaDeMembros() {
                   <strong>
                     Visão de {catalogo.data?.pessoa?.nome || "cliente"}
                   </strong>
-                  <p className="text-muted-foreground">
+                  <AjudaRecolhida rotulo="Mais informações">
                     Mesma biblioteca e acessos. Esta visualização não altera o
                     progresso.
-                  </p>
+                  </AjudaRecolhida>
                 </div>
                 <Link
                   className="membros-acao border border-border"
@@ -578,10 +588,10 @@ export default function AreaDeMembros() {
                     {...propsLista}
                   />
                 ) : (
-                  <p className="text-[13px] text-muted-foreground">
+                  <AjudaRecolhida rotulo="Mais informações">
                     Use o marcador na capa para guardar o que quer assistir
                     depois.
-                  </p>
+                  </AjudaRecolhida>
                 )}
               </section>
             )}
@@ -591,7 +601,7 @@ export default function AreaDeMembros() {
                 {comunidades.length ? (
                   <>
                     <label className="block text-[12px] space-y-2 max-w-md">
-                      <span>Comunidade do produto</span>
+                      <span className="sr-only">Comunidade do produto</span>
                       <select
                         className="w-full bg-muted p-3 rounded-lg"
                         value={comunidade || comunidades[0]?.id}
@@ -609,6 +619,7 @@ export default function AreaDeMembros() {
                       produto={comunidade || comunidades[0].id}
                       previa={previa}
                       teste={teste}
+                      tituloOculto
                     />
                   </>
                 ) : (
@@ -685,16 +696,15 @@ export default function AreaDeMembros() {
                         />
                       </div>
                       <div className="membros-destaque-texto space-y-4">
-                        <p className="text-[11px] uppercase tracking-[.16em] text-white/75 font-medium">
-                          ACELERIQ · SEU PRÓXIMO PASSO
-                        </p>
                         <p className="text-[12px] text-emerald-300 font-medium">
                           {rotuloDoAcesso(destaque)} · {destaque.formato}
                         </p>
-                        <h2>{destaque.titulo}</h2>
-                        <p className="text-[14px] leading-6 text-white/75 max-w-lg line-clamp-3">
-                          {destaque.descricao}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <h2>{destaque.titulo}</h2>
+                          <AjudaRecolhida rotulo={`Sobre ${destaque.titulo}`}>
+                            {destaque.descricao}
+                          </AjudaRecolhida>
+                        </div>
                         <button
                           className="membros-acao bg-primary text-primary-foreground"
                           onClick={() => setAberto(destaque.id)}

@@ -24,6 +24,23 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("estudo com Pomodoro", () => {
+  it("minimiza sem bloquear o estudo e permite pausar no controle compacto", () => {
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Pomodoro" }));
+    fireEvent.click(screen.getByRole("button", { name: "Começar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", { name: "Pomodoro compacto" }),
+    ).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(30000));
+    expect(screen.getByRole("timer")).toHaveTextContent("24:30");
+    fireEvent.click(screen.getByRole("button", { name: "Pausar Pomodoro" }));
+    act(() => vi.advanceTimersByTime(30000));
+    expect(screen.getByRole("timer")).toHaveTextContent("24:30");
+    fireEvent.click(screen.getByRole("button", { name: "Expandir Pomodoro" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
   it("mantém o prazo ao fechar o relógio e volta sem perder segundos", () => {
     montar();
     fireEvent.click(screen.getByRole("button", { name: "Abrir Pomodoro" }));
@@ -43,9 +60,7 @@ describe("estudo com Pomodoro", () => {
     montar();
     fireEvent.click(screen.getByRole("button", { name: "Abrir Pomodoro" }));
     expect(screen.getByRole("timer")).toHaveTextContent("23:30");
-    expect(
-      screen.getByText("0 sessões de foco concluídas neste navegador"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("0 sessões concluídas")).toBeInTheDocument();
   });
   it("contabiliza uma sessão concluída uma vez e sugere pausa", () => {
     montar();
@@ -53,13 +68,9 @@ describe("estudo com Pomodoro", () => {
     fireEvent.click(screen.getByRole("button", { name: "Começar" }));
     act(() => vi.advanceTimersByTime(1500000));
     expect(screen.getByRole("timer")).toHaveTextContent("05:00");
-    expect(
-      screen.getByText("1 sessões de foco concluídas neste navegador"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("1 sessões concluídas")).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(15000));
-    expect(
-      screen.getByText("1 sessões de foco concluídas neste navegador"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("1 sessões concluídas")).toBeInTheDocument();
   });
   it("isola o relógio por conta e ignora dados locais inválidos", () => {
     localStorage.setItem(

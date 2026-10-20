@@ -1,3 +1,4 @@
+import { AjudaRecolhida } from "@/components/sistema";
 import { useDeferredValue, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -49,10 +50,10 @@ export default function PessoasEFunil({ dados, agir }: Props) {
         <h2 className="text-[18px] font-semibold">
           Pessoas, compras e acessos
         </h2>
-        <p className="text-[12px] text-muted-foreground mt-1">
+        <AjudaRecolhida rotulo="Mais informações">
           Compra confirmada e acesso manual aparecem separados. Prazo encerrado
           indica o fim do acesso registrado.
-        </p>
+        </AjudaRecolhida>
       </div>
       {lista.data && (
         <div className="membros-resumo-pessoas">
@@ -500,17 +501,21 @@ function DetalhesPessoa({
     </section>
   );
 }
-export function EditorFunil({ dados, agir }: Props) {
+export function EditorFunil({
+  dados,
+  agir,
+  editarProduto,
+}: Props & { editarProduto?: (id: string) => void }) {
   const [selecionado, setSelecionado] = useState("");
   return (
     <section className="space-y-5">
       <div className="flex justify-between gap-3">
         <div>
           <h2 className="text-[18px] font-semibold">Esteira de produtos</h2>
-          <p className="text-[12px] text-muted-foreground mt-1">
+          <AjudaRecolhida rotulo="Mais informações">
             Escolha o próximo produto que aparece para quem já tem acesso ao
             anterior.
-          </p>
+          </AjudaRecolhida>
         </div>
         <button
           className="membros-acao border border-border"
@@ -548,12 +553,18 @@ export function EditorFunil({ dados, agir }: Props) {
           linha={dados.funil?.find((f) => f.id === selecionado)}
           dados={dados}
           agir={agir}
+          editarProduto={editarProduto}
         />
       </div>
     </section>
   );
 }
-function FormFunil({ linha, dados, agir }: Props & { linha?: PassoFunil }) {
+function FormFunil({
+  linha,
+  dados,
+  agir,
+  editarProduto,
+}: Props & { linha?: PassoFunil; editarProduto?: (id: string) => void }) {
   const [v, setV] = useState({
     id: linha?.id || crypto.randomUUID(),
     produto_origem: linha?.produto_origem || "",
@@ -563,6 +574,7 @@ function FormFunil({ linha, dados, agir }: Props & { linha?: PassoFunil }) {
     ordem: linha?.ordem || 0,
     ativo: linha?.ativo ?? true,
   });
+  const destino = dados.produtos.find((p) => p.id === v.produto_destino);
   return (
     <form
       className="space-y-4"
@@ -571,6 +583,41 @@ function FormFunil({ linha, dados, agir }: Props & { linha?: PassoFunil }) {
         void agir(() => salvarLinha("membros_funil", v));
       }}
     >
+      {destino && (
+        <section
+          className="flex items-center gap-4 min-w-0"
+          aria-label="Prévia da oferta"
+        >
+          <img
+            alt={`Capa de ${destino.titulo}`}
+            src={destino.capa_url || "/membros/capas/boas-vindas-v2.webp"}
+            className="w-24 h-16 object-cover rounded-lg"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[15px] font-semibold truncate">
+              {destino.titulo}
+            </h3>
+            <span className="text-[12px] text-muted-foreground">
+              {destino.landing_url
+                ? "Página de vendas pronta"
+                : "Sem página de vendas"}{" "}
+              · {destino.checkout_url ? "Checkout configurado" : "Sem checkout"}
+            </span>
+          </div>
+          {editarProduto && (
+            <button
+              type="button"
+              className="membros-acao"
+              onClick={() => editarProduto(destino.id)}
+            >
+              Editar oferta
+            </button>
+          )}
+        </section>
+      )}
       {(["produto_origem", "produto_destino"] as const).map((k) => (
         <label key={k} className="block space-y-2 text-[12px]">
           <span>

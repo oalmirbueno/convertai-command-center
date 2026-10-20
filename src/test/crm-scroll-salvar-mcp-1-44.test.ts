@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
  */
 
 const raiz = resolve(__dirname, "../..");
-const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
+const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8").replace(/\r\n/g, "\n");
 
 const kanban = ler("src/components/comercial/FunilKanban.tsx");
 const pagina = ler("src/pages/AdminComercial.tsx");

@@ -1,3 +1,4 @@
+import { AjudaRecolhida } from "@/components/sistema";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -89,11 +90,11 @@ export default function ConfiguracaoKiwify() {
           : "Preparada para configurar"}
       </summary>
       <div className="space-y-4 pt-4">
-        <p className="text-[13px] text-muted-foreground">
+        <AjudaRecolhida rotulo="Mais informações">
           Quando quiser configurar, crie uma credencial na Kiwify com leitura de
           vendas e estatísticas. Os dados ficam no cofre do servidor. Salvar a
           conexão não ativa pagamentos.
-        </p>
+        </AjudaRecolhida>
         <a
           href="https://ajuda.kiwify.com.br/pt-br/article/como-funciona-a-api-da-kiwify-1iosjhu/"
           target="_blank"

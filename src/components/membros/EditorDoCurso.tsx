@@ -1,3 +1,4 @@
+import { AjudaRecolhida } from "@/components/sistema";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Plus, ArrowUp, ArrowDown, Layers, FileText } from "lucide-react";
 import {
@@ -7,6 +8,8 @@ import {
 } from "@/lib/membros/api";
 import { ordenar } from "@/lib/membros/aprendizado";
 import type { Material, Modulo } from "@/lib/membros/modelo";
+import { versionarConteudo } from "@/lib/membros/editorial";
+import VersoesDoConteudo from "./VersoesDoConteudo";
 const campo =
   "w-full min-h-11 rounded-lg bg-muted px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
 function Campo({ nome, children }: { nome: string; children: ReactNode }) {
@@ -264,10 +267,10 @@ function FormModulo({
           <option value="arquivado">Arquivado</option>
         </select>
       </Campo>
-      <p className="text-[12px] text-muted-foreground">
+      <AjudaRecolhida rotulo="Mais informações">
         As aulas e os complementos de um módulo em rascunho ou arquivado ficam
         ocultos para membros.
-      </p>
+      </AjudaRecolhida>
       <button className="membros-acao bg-primary text-primary-foreground">
         Salvar módulo
       </button>
@@ -315,147 +318,158 @@ function FormMaterial({
           : arquivo
             ? await enviarMaterial(produto, v.id, arquivo)
             : material?.arquivo;
-      await salvarLinha("membros_materiais", {
+      const revisao = {
         ...v,
         produto_id: produto,
         modulo_id: v.modulo_id || null,
         aula_id: v.aula_id || null,
         arquivo: caminho,
         ordem: material?.ordem ?? materiais.length,
-      });
+      };
+      if (!material)
+        await salvarLinha("membros_materiais", {
+          ...revisao,
+          estado: "rascunho",
+        });
+      await versionarConteudo(v.id, "rascunhar", revisao);
     });
   }
   return (
-    <form onSubmit={(e) => void salvar(e)} className="space-y-4">
-      <h2 className="text-[17px] font-semibold">
-        {material ? "Editar aula ou material" : "Nova aula ou material"}
-      </h2>
-      <Campo nome="Título">
-        <input
-          required
-          maxLength={180}
-          className={campo}
-          value={v.titulo}
-          onChange={(e) => setV({ ...v, titulo: e.target.value })}
-        />
-      </Campo>
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Campo nome="Tipo de conteúdo">
-          <select
-            className={campo}
-            value={v.tipo}
-            onChange={(e) =>
-              setV({ ...v, tipo: e.target.value as typeof v.tipo })
-            }
-          >
-            <option value="video">Vídeo</option>
-            <option value="audio">Áudio</option>
-            <option value="texto">Texto ou guia</option>
-            <option value="pdf">PDF</option>
-            <option value="arquivo">Arquivo ou kit</option>
-          </select>
-        </Campo>
-        <Campo nome="Visibilidade">
-          <select
-            className={campo}
-            value={v.estado}
-            onChange={(e) =>
-              setV({ ...v, estado: e.target.value as typeof v.estado })
-            }
-          >
-            <option value="rascunho">Rascunho</option>
-            <option value="publicado">Publicado</option>
-            <option value="arquivado">Arquivado</option>
-          </select>
-        </Campo>
-        <Campo nome="Módulo">
-          <select
-            className={campo}
-            value={v.modulo_id}
-            onChange={(e) => setV({ ...v, modulo_id: e.target.value })}
-          >
-            <option value="">Sem módulo</option>
-            {modulos.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.titulo}
-              </option>
-            ))}
-          </select>
-        </Campo>
-        <Campo nome="Complemento de uma aula">
-          <select
-            className={campo}
-            value={v.aula_id}
-            onChange={(e) => {
-              const pai = pais.find((m) => m.id === e.target.value);
-              setV({
-                ...v,
-                aula_id: e.target.value,
-                modulo_id: pai?.modulo_id || v.modulo_id,
-              });
-            }}
-          >
-            <option value="">Conteúdo independente</option>
-            {pais.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.titulo}
-              </option>
-            ))}
-          </select>
-        </Campo>
-      </div>
-      <Campo
-        nome={
-          v.tipo === "texto"
-            ? "Conteúdo do guia"
-            : "Descrição e orientações da aula"
-        }
-      >
-        <textarea
-          className={`${campo} min-h-40`}
-          maxLength={50000}
-          required={v.tipo === "texto"}
-          value={v.texto}
-          onChange={(e) => setV({ ...v, texto: e.target.value })}
-        />
-      </Campo>
-      {v.tipo !== "texto" && (
-        <Campo
-          nome={material?.arquivo ? "Substituir arquivo (opcional)" : "Arquivo"}
-        >
+    <>
+      <form onSubmit={(e) => void salvar(e)} className="space-y-4">
+        <h2 className="text-[17px] font-semibold">
+          {material ? "Editar aula ou material" : "Nova aula ou material"}
+        </h2>
+        <Campo nome="Título">
           <input
+            required
+            maxLength={180}
             className={campo}
-            type="file"
-            required={!material?.arquivo}
-            accept={
-              v.tipo === "video"
-                ? "video/mp4,video/webm"
-                : v.tipo === "audio"
-                  ? "audio/*"
-                  : v.tipo === "pdf"
-                    ? "application/pdf"
-                    : undefined
-            }
-            onChange={(e) => setArquivo(e.target.files?.[0] || null)}
+            value={v.titulo}
+            onChange={(e) => setV({ ...v, titulo: e.target.value })}
           />
-          {material?.arquivo && (
-            <small className="block text-muted-foreground break-all">
-              Atual: {material.arquivo.split("/").at(-1)}
-            </small>
-          )}
         </Campo>
-      )}
-      <label className="flex gap-2 items-center min-h-11 text-[13px]">
-        <input
-          type="checkbox"
-          checked={v.permite_download}
-          onChange={(e) => setV({ ...v, permite_download: e.target.checked })}
-        />
-        Permitir baixar este arquivo
-      </label>
-      <button className="membros-acao bg-primary text-primary-foreground">
-        Salvar aula ou material
-      </button>
-    </form>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Campo nome="Tipo de conteúdo">
+            <select
+              className={campo}
+              value={v.tipo}
+              onChange={(e) =>
+                setV({ ...v, tipo: e.target.value as typeof v.tipo })
+              }
+            >
+              <option value="video">Vídeo</option>
+              <option value="audio">Áudio</option>
+              <option value="texto">Texto ou guia</option>
+              <option value="pdf">PDF</option>
+              <option value="arquivo">Arquivo ou kit</option>
+            </select>
+          </Campo>
+          <Campo nome="Visibilidade">
+            <select
+              className={campo}
+              value={v.estado}
+              onChange={(e) =>
+                setV({ ...v, estado: e.target.value as typeof v.estado })
+              }
+            >
+              <option value="rascunho">Rascunho</option>
+              <option value="publicado">Publicado</option>
+              <option value="arquivado">Arquivado</option>
+            </select>
+          </Campo>
+          <Campo nome="Módulo">
+            <select
+              className={campo}
+              value={v.modulo_id}
+              onChange={(e) => setV({ ...v, modulo_id: e.target.value })}
+            >
+              <option value="">Sem módulo</option>
+              {modulos.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.titulo}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo nome="Complemento de uma aula">
+            <select
+              className={campo}
+              value={v.aula_id}
+              onChange={(e) => {
+                const pai = pais.find((m) => m.id === e.target.value);
+                setV({
+                  ...v,
+                  aula_id: e.target.value,
+                  modulo_id: pai?.modulo_id || v.modulo_id,
+                });
+              }}
+            >
+              <option value="">Conteúdo independente</option>
+              {pais.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.titulo}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        </div>
+        <Campo
+          nome={
+            v.tipo === "texto"
+              ? "Conteúdo do guia"
+              : "Descrição e orientações da aula"
+          }
+        >
+          <textarea
+            className={`${campo} min-h-40`}
+            maxLength={50000}
+            required={v.tipo === "texto"}
+            value={v.texto}
+            onChange={(e) => setV({ ...v, texto: e.target.value })}
+          />
+        </Campo>
+        {v.tipo !== "texto" && (
+          <Campo
+            nome={
+              material?.arquivo ? "Substituir arquivo (opcional)" : "Arquivo"
+            }
+          >
+            <input
+              className={campo}
+              type="file"
+              required={!material?.arquivo}
+              accept={
+                v.tipo === "video"
+                  ? "video/mp4,video/webm"
+                  : v.tipo === "audio"
+                    ? "audio/*"
+                    : v.tipo === "pdf"
+                      ? "application/pdf"
+                      : undefined
+              }
+              onChange={(e) => setArquivo(e.target.files?.[0] || null)}
+            />
+            {material?.arquivo && (
+              <small className="block text-muted-foreground break-all">
+                Atual: {material.arquivo.split("/").at(-1)}
+              </small>
+            )}
+          </Campo>
+        )}
+        <label className="flex gap-2 items-center min-h-11 text-[13px]">
+          <input
+            type="checkbox"
+            checked={v.permite_download}
+            onChange={(e) => setV({ ...v, permite_download: e.target.checked })}
+          />
+          Permitir baixar este arquivo
+        </label>
+        <button className="membros-acao bg-primary text-primary-foreground">
+          Salvar nova versão
+        </button>
+      </form>
+      <VersoesDoConteudo material={v.id} agir={agir} />
+    </>
   );
 }

@@ -7,7 +7,15 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 const LIMITE = 64 * 1024 * 1024;
 async function lerPdf(url: string, signal: AbortSignal) {
@@ -53,6 +61,7 @@ export default function PdfSeguro({
   const [erro, setErro] = useState("");
   const [texto, setTexto] = useState("");
   const [renderizando, setRenderizando] = useState(false);
+  const [ampliado, setAmpliado] = useState(false);
   const folha = useRef<HTMLCanvasElement>(null);
   const caixa = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -63,7 +72,10 @@ export default function PdfSeguro({
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [ampliado]);
+  useEffect(() => {
+    caixa.current?.scrollTo({ top: 0, left: 0 });
+  }, [pagina]);
   useEffect(() => {
     let ativo = true;
     const cancelador = new AbortController();
@@ -148,8 +160,8 @@ export default function PdfSeguro({
       ativo = false;
       tarefa?.cancel();
     };
-  }, [doc, pagina, zoom, largura]);
-  return (
+  }, [doc, pagina, zoom, largura, ampliado]);
+  const leitor = (
     <section className="membros-pdf" aria-label={`Leitor de PDF: ${titulo}`}>
       <div className="membros-pdf-barra">
         <div className="flex items-center gap-1">
@@ -162,7 +174,7 @@ export default function PdfSeguro({
             <ChevronLeft size={16} />
           </button>
           <label className="flex items-center text-[12px] gap-2">
-            Página{" "}
+            <span className="hidden sm:inline">Página</span>{" "}
             <input
               aria-label="Número da página"
               type="number"
@@ -217,6 +229,15 @@ export default function PdfSeguro({
           >
             <RotateCcw size={15} />
           </button>
+          <button
+            className="membros-acao"
+            aria-label={
+              ampliado ? "Sair da tela cheia do PDF" : "Abrir PDF em tela cheia"
+            }
+            onClick={() => setAmpliado((v) => !v)}
+          >
+            {ampliado ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
         </div>
       </div>
       {erro && (
@@ -242,5 +263,21 @@ export default function PdfSeguro({
         </details>
       )}
     </section>
+  );
+  return ampliado ? (
+    <Dialog open onOpenChange={setAmpliado}>
+      <DialogContent
+        className="membros-pdf-tela-cheia"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        <DialogTitle className="sr-only">{titulo}</DialogTitle>
+        <DialogDescription className="sr-only">
+          Leitor de PDF em tela cheia. Escape volta à aula.
+        </DialogDescription>
+        {leitor}
+      </DialogContent>
+    </Dialog>
+  ) : (
+    leitor
   );
 }
