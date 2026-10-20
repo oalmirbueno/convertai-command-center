@@ -32,6 +32,13 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=%2Fprojetos");
 }
 
+async function selectProjectStatus(page: Page, label: "Planejamento" | "Todos") {
+  await page.getByRole("button", { name: /^Status: / }).click();
+  await page.getByRole("listbox", { name: "Status", exact: true })
+    .getByRole("option", { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) }).click();
+  await expect(page.getByRole("button", { name: `Status: ${label}`, exact: true })).toBeVisible();
+}
+
 interface ReadResult {
   status: number;
   ids: string[];
@@ -211,14 +218,14 @@ for (const role of USER_ROLES) {
 
     // A real filter and reset change the displayed results without creating
     // a project, task, attachment, approval, queue item or publication.
-    await page.getByRole("button", { name: "Planejamento", exact: true }).click();
+    await selectProjectStatus(page, "Planejamento");
     await expect(page.getByText("Nenhum projeto encontrado.", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Todos", exact: true }).click();
+    await selectProjectStatus(page, "Todos");
     for (const key of allowed) {
       await expect(list.getByText(fixture.projects[key].name, { exact: true })).toBeVisible();
     }
 
-    const create = page.getByRole("button", { name: "Novo Projeto", exact: true });
+    const create = page.getByRole("button", { name: "Novo projeto", exact: true });
     if (role === "admin") {
       await create.click();
       await expect(page.getByRole("heading", { name: "Novo Projeto", exact: true })).toBeVisible();
@@ -228,7 +235,7 @@ for (const role of USER_ROLES) {
       await expect(list.getByText("CI draft cancelled before save", { exact: true })).toHaveCount(0);
     } else {
       await expect(create).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Gerar via Ata", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Gerar projeto pela ata", exact: true })).toHaveCount(0);
     }
 
     if (role === "clientA" || role === "clientB") {
@@ -246,9 +253,11 @@ for (const role of USER_ROLES) {
         );
         return target !== null && button.contains(target);
       }), { message: "The project back button must receive pointer input below the navbar" }).toBe(true);
-      await page.getByRole("tab", { name: "Entregas", exact: true }).click();
-      await expect(page.getByRole("tab", { name: "Entregas", exact: true })).toHaveAttribute("aria-selected", "true");
-      await page.getByRole("tab", { name: "Visão geral", exact: true }).click();
+      const sections = page.getByRole("navigation", { name: "Seções do projeto", exact: true });
+      await sections.getByRole("button", { name: "Entregas", exact: true }).click();
+      await expect(sections.getByRole("button", { name: "Entregas", exact: true })).toHaveAttribute("aria-current", "page");
+      await sections.getByRole("button", { name: "Visão geral", exact: true }).click();
+      await expect(sections.getByRole("button", { name: "Visão geral", exact: true })).toHaveAttribute("aria-current", "page");
       await backToProjects.click();
       await expect(list.getByText(fixture.projects[role].name, { exact: true })).toBeVisible();
     }
@@ -284,7 +293,7 @@ for (const role of USER_ROLES) {
         }
       }
       if (role === "unassignedStaff") {
-        await expect(page.getByText("Nenhuma tarefa encontrada.", { exact: true })).toBeVisible();
+        await expect(page.getByText("Nenhuma tarefa ainda.", { exact: true })).toBeVisible();
       }
       if (role !== "admin") {
         await page.goto("/comercial");
