@@ -39,6 +39,21 @@ async function selectProjectStatus(page: Page, label: "Planejamento" | "Todos") 
   await expect(page.getByRole("button", { name: `Status: ${label}`, exact: true })).toBeVisible();
 }
 
+async function readPublicClientHistory(page: Page, clientId: string) {
+  return page.evaluate(async (target) => {
+    const modulePath = "/src/integrations/supabase/client.ts";
+    const { supabase } = await import(modulePath) as { supabase: SupabaseClient };
+    const { data, error, status } = await supabase.rpc("movimentos_do_cliente", {
+      _client_id: target,
+      _desde: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+      _ate: new Date().toISOString(),
+      _somente_visiveis: true,
+    });
+    return { status, errorCode: error?.code ?? null,
+      publicRowsOnly: Array.isArray(data) && data.every((row) => row.visivel_ao_cliente === true) };
+  }, clientId);
+}
+
 interface ReadResult {
   status: number;
   ids: string[];
@@ -239,6 +254,13 @@ for (const role of USER_ROLES) {
     }
 
     if (role === "clientA" || role === "clientB") {
+      const ownHistory = await readPublicClientHistory(page, fixture.users[role].id);
+      expect(ownHistory).toEqual({ status: 200, errorCode: null, publicRowsOnly: true });
+      const otherClient = role === "clientA" ? "clientB" : "clientA";
+      const deniedHistory = await readPublicClientHistory(page, fixture.users[otherClient].id);
+      expect(deniedHistory.status, "The real RPC must reject another client's history").toBe(403);
+      expect(deniedHistory.errorCode).toBe("42501");
+      expect(deniedHistory.publicRowsOnly).toBe(false);
       await list.getByText(fixture.projects[role].name, { exact: true }).click();
       await expect(page.getByRole("heading", { name: fixture.projects[role].name, exact: true })).toBeVisible();
       const backToProjects = page.getByRole("button", { name: "Voltar aos projetos", exact: true });
