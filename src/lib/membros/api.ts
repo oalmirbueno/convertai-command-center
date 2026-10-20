@@ -8,7 +8,7 @@ import type {
   ItemChecklist,
 } from "./modelo";
 
-// Migração ainda em desenvolvimento: contrato local explícito, sem editar types.ts gerado do banco remoto.
+// Contrato local explícito da biblioteca; mantém os tipos operacionais existentes.
 const banco = supabase as unknown as SupabaseClient;
 export type ProdutoEditavel = Omit<
   Produto,
@@ -62,7 +62,14 @@ export type DadosAdmin = {
 };
 
 export function mensagemDoErro(e: unknown): string {
-  const obj = e as { code?: string; status?: number; message?: string; context?:{status?:number} };
+  const obj = e as {
+    code?: string;
+    status?: number;
+    message?: string;
+    context?: { status?: number };
+  };
+  if (obj?.code === "MEMBROS_PAGAMENTOS_PAUSADOS")
+    return "A liberação por Kiwify e Asaas está desativada até validarmos os pagamentos. Use um acesso manual para testar.";
   if (obj?.code === "MEMBROS_PENDENTE")
     return "A conferência continua pendente. Veja o motivo em Conferências de pagamento; nenhum novo acesso foi liberado.";
   if (obj?.code === "ARQUIVO_GRANDE")
@@ -73,9 +80,17 @@ export function mensagemDoErro(e: unknown): string {
     /membros_.*(not find|does not exist)/i.test(obj?.message || "")
   )
     return "A biblioteca ainda precisa ser preparada no servidor. Peça à administração para concluir a ativação.";
-  if (obj?.code === "42501" || obj?.status === 403 || obj?.context?.status===403)
+  if (
+    obj?.code === "42501" ||
+    obj?.status === 403 ||
+    obj?.context?.status === 403
+  )
     return "Você não tem acesso a este conteúdo.";
-  if (obj?.status === 401 || obj?.code === "PGRST301" || obj?.context?.status===401)
+  if (
+    obj?.status === 401 ||
+    obj?.code === "PGRST301" ||
+    obj?.context?.status === 401
+  )
     return "Sua sessão expirou. Entre novamente.";
   return "Não foi possível carregar agora. Confira a conexão e tente novamente.";
 }
@@ -83,8 +98,14 @@ function conferir<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw r.error;
   return r.data;
 }
-export async function carregarCatalogo(): Promise<Catalogo> {
-  const dado: unknown = conferir(await banco.rpc("membros_catalogo"));
+export async function carregarCatalogo(
+  previa?: string,
+): Promise<Catalogo & { pessoa?: { id: string; nome: string } }> {
+  const dado: unknown = conferir(
+    await (previa
+      ? banco.rpc("membros_previa", { _usuario: previa })
+      : banco.rpc("membros_catalogo")),
+  );
   if (
     !dado ||
     typeof dado !== "object" ||
@@ -96,7 +117,15 @@ export async function carregarCatalogo(): Promise<Catalogo> {
 }
 export async function carregarMateriais(
   produto: string,
+  previa?: string,
 ): Promise<{ materiais: Material[]; progresso: Progresso[] }> {
+  if (previa)
+    return conferir(
+      await banco.rpc("membros_previa", {
+        _usuario: previa,
+        _produto: produto,
+      }),
+    );
   const materiais = conferir(
     await banco
       .from("membros_materiais")
@@ -144,10 +173,16 @@ export async function gravarProgresso(
 export async function abrirArquivo(
   material: string,
   download = false,
+  previa?: string,
 ): Promise<{ url: string; expira_em: string }> {
   const dado = conferir(
     await supabase.functions.invoke("area-membros", {
-      body: { acao: "arquivo", material_id: material, download },
+      body: {
+        acao: "arquivo",
+        material_id: material,
+        download,
+        previa_usuario: previa,
+      },
     }),
   );
   if (!dado?.url) throw new Error("Arquivo não disponível");
@@ -226,6 +261,8 @@ export async function reprocessarEvento(evento_id: string): Promise<void> {
     }),
   );
   if (!dado?.ok) throw new Error("Conciliação não confirmada");
+  if (dado.motivo === "pagamentos_desativados")
+    throw { code: "MEMBROS_PAGAMENTOS_PAUSADOS" };
   if (dado.pendente) throw { code: "MEMBROS_PENDENTE" };
 }
 export async function enviarMaterial(

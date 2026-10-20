@@ -73,6 +73,38 @@ beforeEach(() => {
   mocks.materiais.mockResolvedValue({ materiais: [], progresso: [] });
 });
 describe("biblioteca integrada", () => {
+  it("abre mesma biblioteca na visão do cliente sem salvar progresso", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({
+      pessoa: { id: "cliente", nome: "Cliente de teste" },
+      produtos: [produto({ origens: ["manual"] })],
+      pendentes: [],
+    });
+    mocks.materiais.mockResolvedValue({
+      materiais: [
+        {
+          id: "m",
+          produto_id: "p",
+          titulo: "Guia",
+          tipo: "texto",
+          texto: "Conteúdo autorizado",
+          arquivo: null,
+          permite_download: false,
+          ordem: 0,
+        },
+      ],
+      progresso: [],
+    });
+    montar("/membros?visao=cliente&produto=p");
+    expect(await screen.findByText("Conteúdo autorizado")).toBeInTheDocument();
+    expect(mocks.catalogo).toHaveBeenCalledWith("cliente");
+    expect(mocks.materiais).toHaveBeenCalledWith("p", "cliente");
+    expect(
+      screen.getByRole("button", { name: "Marcar como concluído" }),
+    ).toBeDisabled();
+    expect(mocks.progresso).not.toHaveBeenCalled();
+    expect(screen.getByText("Visão de Cliente de teste")).toBeInTheDocument();
+  });
   it("mostra estado vazio sem inventar produtos", async () => {
     mocks.catalogo.mockResolvedValue({ produtos: [], pendentes: [] });
     montar();
@@ -103,7 +135,7 @@ describe("biblioteca integrada", () => {
         "Os materiais deste produto ainda não estão disponíveis.",
       ),
     ).toBeInTheDocument();
-    expect(mocks.materiais).toHaveBeenCalledWith("p");
+    expect(mocks.materiais).toHaveBeenCalledWith("p", undefined);
     expect(
       screen.queryByRole("link", { name: "Ver oferta no checkout" }),
     ).not.toBeInTheDocument();

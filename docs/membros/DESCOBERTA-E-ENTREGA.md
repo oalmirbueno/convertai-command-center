@@ -35,6 +35,12 @@ e um teste de identidade. Trabalho desta entrega em branch separada `codex/area-
 
 ## Produção
 
+Atualização de 20/10/2026: Almir autorizou a aplicação e publicação para testes. As migrações foram
+aplicadas e a função `area-membros` publicada com JWT. Ambos os provedores de pagamento permanecem
+desativados, inclusive conciliação e reivindicação automática. Veja o registro atual e o caminho de
+teste em [`TESTE-NO-PAINEL.md`](TESTE-NO-PAINEL.md). O parágrafo abaixo é a fotografia da descoberta,
+anterior à autorização, e não descreve o estado atual.
+
 Nenhuma migration, Edge Function, cobrança, credencial ou publicação desta entrega está autorizada
 em produção. Migração e rollback serão revisáveis. O Supabase MCP pediu reautenticação na descoberta;
 o acesso foi reconectado por Almir e as dependências de schema/políticas foram conferidas somente em leitura.

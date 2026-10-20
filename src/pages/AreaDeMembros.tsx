@@ -156,12 +156,17 @@ export default function AreaDeMembros() {
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
   const [parametros, setParametros] = useSearchParams();
+  const previa = parametros.get("visao") || undefined;
   const aberto = parametros.get("produto");
-  const setAberto = (id: string | null) =>
-    setParametros(id ? { produto: id } : {});
+  const setAberto = (id: string | null) => {
+    const proximos = new URLSearchParams(parametros);
+    if (id) proximos.set("produto", id);
+    else proximos.delete("produto");
+    setParametros(proximos);
+  };
   const catalogo = useQuery({
-    queryKey: ["membros", "catalogo", user?.id],
-    queryFn: carregarCatalogo,
+    queryKey: ["membros", "catalogo", user?.id, previa],
+    queryFn: () => carregarCatalogo(previa),
     retry: false,
   });
   const produtos = catalogo.data?.produtos || [];
@@ -192,7 +197,7 @@ export default function AreaDeMembros() {
             aria-label="Navegação da biblioteca"
             className="flex items-center min-w-0 gap-1"
           >
-            {profile?.role === "admin" && (
+            {profile?.role === "admin" && !previa && (
               <Link
                 className="membros-acao text-muted-foreground"
                 to="/membros/administrar"
@@ -220,7 +225,31 @@ export default function AreaDeMembros() {
         </div>
       </header>
       <main id="biblioteca" className="membros-conteudo space-y-8">
-      {produtos.length>0 && <h1 className="sr-only">Biblioteca Aceleriq</h1>}
+        {previa && (
+          <aside
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-[13px]"
+            aria-label="Visão do cliente"
+          >
+            <div>
+              <strong>
+                Visão de {catalogo.data?.pessoa?.nome || "cliente"}
+              </strong>
+              <p className="text-muted-foreground">
+                Mesma biblioteca e acessos. Esta visualização não altera o
+                progresso.
+              </p>
+            </div>
+            <Link
+              className="membros-acao border border-border"
+              to="/membros/administrar"
+            >
+              Sair da visão do cliente
+            </Link>
+          </aside>
+        )}
+        {produtos.length > 0 && (
+          <h1 className="sr-only">Biblioteca Aceleriq</h1>
+        )}
         {catalogo.isPending ? (
           <div
             aria-label="Carregando biblioteca"
@@ -255,7 +284,7 @@ export default function AreaDeMembros() {
               Ainda não há produtos disponíveis. Quando um material for
               publicado ou seu acesso for concedido, ele aparecerá aqui.
             </p>
-            {profile?.role === "admin" && (
+            {profile?.role === "admin" && !previa && (
               <Link
                 className="membros-acao bg-primary text-primary-foreground"
                 to="/membros/administrar"
@@ -275,7 +304,7 @@ export default function AreaDeMembros() {
                   <p className="text-[12px] text-primary font-medium">
                     {rotuloDoAcesso(destaque)} · {destaque.formato}
                   </p>
-                <h2>{destaque.titulo}</h2>
+                  <h2>{destaque.titulo}</h2>
                   <p className="text-[13px] leading-6 text-muted-foreground max-w-lg line-clamp-4">
                     {destaque.descricao}
                   </p>
@@ -380,7 +409,8 @@ export default function AreaDeMembros() {
       )}
       {produtoAberto && (
         <LeitorDeProduto
-          key={produtoAberto.id}
+          key={`${previa || "proprio"}-${produtoAberto.id}`}
+          previa={previa}
           produto={produtoAberto}
           pendente={
             !!catalogo.data?.pendentes.some(

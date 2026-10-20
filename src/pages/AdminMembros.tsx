@@ -49,6 +49,7 @@ export default function AdminMembros() {
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [pessoa, setPessoa] = useState("");
   const dados = useQuery({
     queryKey: ["membros", "admin"],
     queryFn: carregarAdmin,
@@ -113,6 +114,46 @@ export default function AdminMembros() {
         </section>
       ) : dados.data ? (
         <fieldset disabled={ocupado} className="min-w-0">
+          <section
+            className="rounded-xl border border-border p-4 mb-6 space-y-3"
+            aria-label="Ver como cliente"
+          >
+            <h2 className={texto.tituloSecao}>Ver como cliente</h2>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1 max-w-md">
+                <Campo titulo="Cliente ou membro">
+                  <select
+                    className={campo}
+                    value={pessoa}
+                    onChange={(e) => setPessoa(e.target.value)}
+                  >
+                    <option value="">Escolher pessoa</option>
+                    {dados.data.pessoas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name || p.email}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+              </div>
+              {pessoa && (
+                <Link
+                  className="membros-acao bg-primary text-primary-foreground"
+                  to={`/membros?visao=${encodeURIComponent(pessoa)}`}
+                >
+                  Abrir visão do cliente
+                </Link>
+              )}
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Veja a mesma tela, com os produtos liberados e bloqueados para
+              essa pessoa, sem alterar seu progresso.
+            </p>
+          </section>
+          <p className="rounded-lg bg-muted p-3 text-[13px] mb-4" role="status">
+            Liberação automática por Kiwify e Asaas desativada até a validação
+            dos pagamentos. Para testar, conceda um acesso manual abaixo.
+          </p>
           <Produtos dados={dados.data} agir={agir} />
           <Materiais dados={dados.data} agir={agir} />
           <Direitos dados={dados.data} agir={agir} />

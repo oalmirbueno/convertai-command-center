@@ -2,6 +2,12 @@
 
 ## Estado
 
+**Atualização autorizada em 20/10/2026:** migrações aplicadas no backend atual e `area-membros`
+publicada, com Kiwify e Asaas bloqueados no servidor. Acrescentada a prévia administrativa da mesma
+biblioteca, calculada com direitos reais e sem gravar progresso. Instruções e registro da aplicação:
+[`TESTE-NO-PAINEL.md`](TESTE-NO-PAINEL.md). O relato abaixo preserva a fotografia do desenvolvimento
+anterior à autorização; suas referências a “não publicado” foram superadas por essa atualização.
+
 Implementação de desenvolvimento na branch `codex/area-membros`, partindo do main `00d55d38`.
 Nenhuma aplicação de schema, publicação de função, cobrança ou publicação do frontend foi realizada
 em produção. O ambiente de teste usa PostgreSQL 17.11 já instalado no notebook; os processos foram

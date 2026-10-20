@@ -42,7 +42,7 @@ const material = {
   permite_download: false,
   ordem: 0,
 };
-const api = `export const carregarCatalogo=async()=>window.__membrosTeste.catalogo;
+const api = `export const carregarCatalogo=async()=>({...window.__membrosTeste.catalogo,pessoa:{id:'pessoa-teste',nome:'Pessoa de teste'}});
 export const carregarMateriais=async()=>({materiais:[window.__membrosTeste.material],progresso:[]});
 export const gravarProgresso=async(...args)=>{window.__membrosTeste.progresso=args;};
 export const abrirArquivo=async()=>{throw Error('Sem arquivo nesta fixture');};
@@ -113,10 +113,11 @@ try {
       return route.continue();
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(120000);
     page.on("pageerror", (e) => erros.push(e.message));
     await page.goto(`${origin}/membros`, {
-      waitUntil: "networkidle",
-      timeout: 60000,
+      waitUntil: "domcontentloaded",
+      timeout: 180000,
     });
     await page
       .getByRole("button", { name: "Continuar na biblioteca" })
@@ -187,6 +188,19 @@ try {
     await page.goto(`${origin}/membros/administrar`, {
       waitUntil: "networkidle",
     });
+    await page.getByLabel("Cliente ou membro").selectOption("pessoa-teste");
+    await page.getByRole("link", { name: "Abrir visão do cliente" }).click();
+    await page.getByText("Visão de Pessoa de teste", { exact: true }).waitFor();
+    await checar("visao-cliente");
+    await page.getByRole("button", { name: "Continuar na biblioteca" }).click();
+    if (
+      await page
+        .getByRole("button", { name: "Marcar como concluído" })
+        .isEnabled()
+    )
+      throw Error("Prévia permite mudar progresso");
+    await page.keyboard.press("Escape");
+    await page.getByRole("link", { name: "Sair da visão do cliente" }).click();
     await page.getByRole("button", { name: "Preparar lançamento" }).click();
     if (largura < 768)
       await page

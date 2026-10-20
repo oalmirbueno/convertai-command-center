@@ -51,15 +51,26 @@ Deno.serve(async (req) => {
         !UUID.test(corpo.material_id)
       )
         return resposta({ erro: "material_invalido" }, 400);
-      // Consulta com o JWT real: RLS recusa material protegido sem direito vigente.
-      const { data: m, error } = await usuario
+      const previa = corpo.previa_usuario;
+      if (previa !== undefined && (typeof previa !== "string" || !UUID.test(previa)))
+        return resposta({ erro: "pessoa_invalida" }, 400);
+      // Consulta com o JWT real. A prévia exige admin no servidor e os direitos do cliente.
+      const { data: material, error } = await usuario
         .from("membros_materiais")
-        .select("id,arquivo,titulo,permite_download")
+        .select("id,produto_id,arquivo,titulo,permite_download")
         .eq("id", corpo.material_id)
         .maybeSingle();
       if (error) return resposta({ erro: "leitura_indisponivel" }, 503);
-      if (!m || !m.arquivo)
+      if (!material || !material.arquivo)
         return resposta({ erro: "material_indisponivel" }, 404);
+      let m = material;
+      if (previa) {
+        const { data: vista, error: erroPrevia } = await usuario.rpc("membros_previa", { _usuario: previa, _produto: material.produto_id });
+        if (erroPrevia) return resposta({ erro: "sem_permissao" }, 403);
+        const autorizado = vista?.materiais?.find((item: { id: string }) => item.id === material.id);
+        if (!autorizado) return resposta({ erro: "sem_permissao" }, 403);
+        m = autorizado;
+      }
       if (!autorizaDownload(m.permite_download, corpo.download === true))
         return resposta({ erro: "download_nao_autorizado" }, 403);
       const { data: arquivo, error: erroArquivo } = await usuario.storage
@@ -82,6 +93,9 @@ Deno.serve(async (req) => {
       await usuario.rpc("membros_admin");
     if (erroPapel || admin !== true)
       return resposta({ erro: "sem_permissao" }, 403);
+    const { data: habilitado, error: erroTrava } = await usuario.rpc("membros_pagamentos_habilitados");
+    if (erroTrava) return resposta({ erro: "configuracao_indisponivel" }, 503);
+    if (habilitado !== true) return resposta({ ok: true, pendente: true, motivo: "pagamentos_desativados" });
     if (typeof corpo.evento_id !== "string" || !UUID.test(corpo.evento_id))
       return resposta({ erro: "evento_invalido" }, 400);
     const servico = createClient(

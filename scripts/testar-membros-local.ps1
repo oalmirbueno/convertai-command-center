@@ -30,6 +30,9 @@ try {
   foreach($sqlMembros in @('supabase/tests/membros/bootstrap.sql','supabase/migrations/20261020150633_area_membros_biblioteca.sql','supabase/tests/membros/permissoes.sql')){
     Run-PgMembros 'psql.exe' @('-X','-h','127.0.0.1','-p',"$portMembros",'-U','postgres','-d','membros_test','-v','ON_ERROR_STOP=1','-f',(Join-Path $repoMembros $sqlMembros))
   }
+  foreach($sqlMembros in @('supabase/migrations/20261020180000_membros_previa_admin_pagamentos_pausados.sql','supabase/tests/membros/previa.sql')) {
+    Run-PgMembros 'psql.exe' @('-X','-h','127.0.0.1','-p',"$portMembros",'-U','postgres','-d','membros_test','-v','ON_ERROR_STOP=1','-f',(Join-Path $repoMembros $sqlMembros))
+  }
   Run-PgMembros 'pg_ctl.exe' @('-D',$dataMembros,'-m','fast','-w','stop')
   $startedMembros=$false
   Run-PgMembros 'pg_ctl.exe' @('-D',$dataMembros,'-l',(Join-Path $runMembros 'postgres.log'),'-o',"-h 127.0.0.1 -p $portMembros",'-w','start')

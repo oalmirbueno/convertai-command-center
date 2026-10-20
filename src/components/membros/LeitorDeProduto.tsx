@@ -36,9 +36,11 @@ import { texto } from "@/components/sistema";
 export function ConsumoMaterial({
   material,
   progresso,
+  previa,
 }: {
   material: Material;
   progresso?: Progresso;
+  previa?: string;
 }) {
   const cliente = useQueryClient();
   const { user } = useAuth();
@@ -52,8 +54,8 @@ export function ConsumoMaterial({
     duracao: progresso?.duracao || 0,
   });
   const fonte = useQuery({
-    queryKey: ["membros", "arquivo", user?.id, material.id],
-    queryFn: () => abrirArquivo(material.id),
+    queryKey: ["membros", "arquivo", user?.id, previa, material.id],
+    queryFn: () => abrirArquivo(material.id, false, previa),
     enabled: !!material.arquivo,
     staleTime: 0,
     gcTime: 0,
@@ -61,6 +63,7 @@ export function ConsumoMaterial({
     refetchOnWindowFocus: false,
   });
   const salvar = async (posicao = 0, duracao = 0, concluido = feito) => {
+    if (previa) return;
     setSalvando(true);
     setFalha("");
     try {
@@ -85,7 +88,7 @@ export function ConsumoMaterial({
     setBaixando(true);
     setFalha("");
     try {
-      const { url } = await abrirArquivo(material.id, true);
+      const { url } = await abrirArquivo(material.id, true, previa);
       const a = document.createElement("a");
       a.href = url;
       a.rel = "noopener";
@@ -220,7 +223,7 @@ export function ConsumoMaterial({
         )}
         <button
           className="membros-acao border border-border"
-          disabled={salvando}
+          disabled={salvando || !!previa}
           onClick={() =>
             void salvar(
               posicaoAtual.current.posicao,
@@ -245,17 +248,19 @@ export default function LeitorDeProduto({
   produto,
   fechar,
   pendente,
+  previa,
 }: {
   produto: Produto;
   fechar: () => void;
   pendente: boolean;
+  previa?: string;
 }) {
   const { user } = useAuth();
   const permitido = podeAbrir(produto);
   const [selecionado, setSelecionado] = useState(produto.ultimo_material || "");
   const materiais = useQuery({
-    queryKey: ["membros", "materiais", user?.id, produto.id],
-    queryFn: () => carregarMateriais(produto.id),
+    queryKey: ["membros", "materiais", user?.id, previa, produto.id],
+    queryFn: () => carregarMateriais(produto.id, previa),
     enabled: permitido,
     retry: false,
     staleTime: 0,
@@ -337,6 +342,7 @@ export default function LeitorDeProduto({
           <div className="membros-leitor">
             {atual && (
               <ConsumoMaterial
+                previa={previa}
                 key={atual.id}
                 material={atual}
                 progresso={materiais.data.progresso.find(
