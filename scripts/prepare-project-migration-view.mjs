@@ -12,6 +12,7 @@ import {
 const scriptPath = fileURLToPath(import.meta.url);
 const fail = (message) => { throw new Error(`project migration view: ${message}`); };
 
+/** @param {{projectRef?: string, ledgerCsv?: string, repoRoot?: string, sourceDir?: string}} options */
 export function planProjectMigrationView({
   projectRef, ledgerCsv, repoRoot = defaultRepoRoot, sourceDir = resolve(repoRoot, 'supabase/migrations'),
 } = {}) {
@@ -45,6 +46,7 @@ export function planProjectMigrationView({
   return { ...comparison, reviewed_count: document.entries.length, sentinel_count: files.length - pending.size, files };
 }
 
+/** @param {{projectRef?: string, ledgerCsvPath?: string, outputDir?: string, repoRoot?: string, sourceDir?: string}} options */
 export function buildProjectMigrationView({ ledgerCsvPath, outputDir, ...options } = {}) {
   if (!ledgerCsvPath || !outputDir) fail('--ledger-csv and --output-dir are required');
   const target = resolve(outputDir);
