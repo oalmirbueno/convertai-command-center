@@ -342,7 +342,7 @@ describe("reviewed project forward-only migration view", () => {
       buildProjectMigrationView({
         ...options,
         ledgerCsvPath,
-        outputDir: join(repoRoot, "supabase/migrations/unsafe"),
+        outputDir: join(fixtureRoot, "supabase/migrations/unsafe"),
       }),
     ).toThrow(/outside the migration source/);
   }, 30000);

@@ -708,9 +708,12 @@ export default function AgenteSenior({
       {conversa.isLoading && <Esqueleto />}
       {conversa.isError && <AvisoDeErro erro={conversa.error} />}
       {conversa.data && mensagens.length === 0 && !envio && (
-        <AjudaRecolhida rotulo="Saiba mais">
-          Peça o que fazer com a conta. Ele mostra o que leu, faz o que é seguro quando você pede e deixa o resto pronto para confirmar.
-        </AjudaRecolhida>
+        <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+          <p>Peça o que fazer com a conta.</p>
+          <AjudaRecolhida rotulo="Como o agente trabalha">
+            Ele mostra o que leu, faz o que é seguro quando você pede e deixa o resto pronto para confirmar.
+          </AjudaRecolhida>
+        </div>
       )}
       {antigas.length > 0 && (
         <div className="min-w-0">
