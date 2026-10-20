@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
@@ -10,6 +10,16 @@ import {
   LockKeyhole,
   Play,
   RefreshCw,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronLeft,
+  ChevronRight,
+  Paperclip,
+  MessageCircle,
+  SkipBack,
+  SkipForward,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,17 +43,27 @@ import {
   type TesteCliente,
 } from "@/lib/membros/modelo";
 import { texto } from "@/components/sistema";
+import { BotaoPomodoro } from "./FocoDeEstudo";
+import OfertaDoProduto from "./OfertaDoProduto";
+import ComunidadeDoCurso from "./ComunidadeDoCurso";
+const PdfSeguro = lazy(() => import("./PdfSeguro"));
 
 export function ConsumoMaterial({
   material,
   progresso,
   previa,
   teste,
+  poster,
+  onFim,
+  autoplay = false,
 }: {
   material: Material;
   progresso?: Progresso;
   previa?: string;
   teste?: TesteCliente;
+  poster?: string;
+  onFim?: () => void;
+  autoplay?: boolean;
 }) {
   const cliente = useQueryClient();
   const { user } = useAuth();
@@ -51,6 +71,8 @@ export function ConsumoMaterial({
   const [salvando, setSalvando] = useState(false);
   const [feito, setFeito] = useState(progresso?.concluido || false);
   const [baixando, setBaixando] = useState(false);
+  const midia = useRef<HTMLMediaElement | null>(null);
+  const [velocidade, setVelocidade] = useState(1);
   const fila = useRef(Promise.resolve());
   const contexto = useRef({ previa, teste, feito });
   contexto.current.previa = previa;
@@ -186,6 +208,11 @@ export function ConsumoMaterial({
             <>
               {material.tipo === "video" ? (
                 <video
+                  ref={(el) => {
+                    midia.current = el;
+                  }}
+                  poster={poster}
+                  autoPlay={autoplay}
                   key={fonte.data.url}
                   src={fonte.data.url}
                   controls
@@ -201,7 +228,10 @@ export function ConsumoMaterial({
                   }}
                   onTimeUpdate={(e) => atualizar(e.currentTarget)}
                   onPause={(e) => atualizar(e.currentTarget, false, true)}
-                  onEnded={(e) => atualizar(e.currentTarget, true)}
+                  onEnded={(e) => {
+                    atualizar(e.currentTarget, true);
+                    onFim?.();
+                  }}
                   onError={() =>
                     setFalha(
                       "O vídeo não abriu ou o acesso temporário expirou. Use Renovar acesso ao arquivo.",
@@ -210,6 +240,9 @@ export function ConsumoMaterial({
                 />
               ) : (
                 <audio
+                  ref={(el) => {
+                    midia.current = el;
+                  }}
                   src={fonte.data.url}
                   controls
                   preload="metadata"
@@ -228,12 +261,11 @@ export function ConsumoMaterial({
                 />
               )}
             </>
-          ) : material.tipo === "pdf" ? (
-            <iframe
-              title={material.titulo}
-              src={`${fonte.data.url}#toolbar=${material.permite_download ? 1 : 0}`}
-              referrerPolicy="no-referrer"
-            />
+          ) : material.tipo === "pdf" ||
+            material.arquivo?.toLowerCase().endsWith(".pdf") ? (
+            <Suspense fallback={<p role="status">Preparando leitor de PDF…</p>}>
+              <PdfSeguro url={fonte.data.url} titulo={material.titulo} />
+            </Suspense>
           ) : (
             <p className={texto.corpo}>
               Arquivo disponível
@@ -256,6 +288,82 @@ export function ConsumoMaterial({
           </details>
         </>
       ) : null}
+      {(material.tipo === "video" || material.tipo === "audio") && (
+        <div className="flex flex-wrap gap-1 items-center">
+          <button
+            className="membros-acao text-muted-foreground"
+            aria-label="Voltar 10 segundos"
+            onClick={() => {
+              const el = midia.current;
+              if (el) {
+                el.currentTime = Math.max(0, el.currentTime - 10);
+                atualizar(el, false, true);
+              }
+            }}
+          >
+            <SkipBack size={15} />
+            10 s
+          </button>
+          <button
+            className="membros-acao text-muted-foreground"
+            aria-label="Avançar 10 segundos"
+            onClick={() => {
+              const el = midia.current;
+              if (el && Number.isFinite(el.duration)) {
+                el.currentTime = Math.min(el.duration, el.currentTime + 10);
+                atualizar(el, false, true);
+              }
+            }}
+          >
+            10 s<SkipForward size={15} />
+          </button>
+          <label className="ml-auto text-[12px] flex items-center gap-2">
+            Velocidade{" "}
+            <select
+              aria-label="Velocidade da aula"
+              className="bg-muted rounded px-2 py-2"
+              value={velocidade}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setVelocidade(v);
+                if (midia.current) midia.current.playbackRate = v;
+              }}
+            >
+              {[0.75, 1, 1.25, 1.5, 1.75, 2].map((v) => (
+                <option key={v} value={v}>
+                  {v}×
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {material.tipo !== "texto" && material.texto && (
+        <section className="membros-descricao-aula">
+          <h3 className="text-[14px] font-semibold mb-2">
+            {material.tipo === "video" || material.tipo === "audio"
+              ? "Sobre esta aula"
+              : "Sobre este material"}
+          </h3>
+          <article className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown
+              components={{
+                img: () => null,
+                a: ({ href, children }) =>
+                  urlHttps(href) ? (
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      {children}
+                    </a>
+                  ) : (
+                    <span>{children}</span>
+                  ),
+              }}
+            >
+              {material.texto}
+            </ReactMarkdown>
+          </article>
+        </section>
+      )}
       {falha && (
         <p role="alert" className="text-[13px] text-destructive">
           {falha}
@@ -311,7 +419,12 @@ export default function LeitorDeProduto({
   const { user } = useAuth();
   const permitido = podeAbrir(produto);
   const [selecionado, setSelecionado] = useState(produto.ultimo_material || "");
-  const materiais = useQuery({
+  const [foco, setFoco] = useState(false);
+  const [sumario, setSumario] = useState(true);
+  const [aba, setAba] = useState<"aula" | "materiais" | "comunidade">("aula");
+  const [autoProxima, setAutoProxima] = useState(false);
+  const [autoplay, setAutoplay] = useState(false);
+  const dados = useQuery({
     queryKey: [
       "membros",
       "materiais",
@@ -327,15 +440,47 @@ export default function LeitorDeProduto({
     staleTime: 0,
     gcTime: 0,
   });
+  const materiais = dados.data?.materiais || [];
+  const modulos = dados.data?.modulos || [];
+  const progresso = dados.data?.progresso || [];
   useEffect(() => {
-    if (
-      materiais.data &&
-      !materiais.data.materiais.some((m) => m.id === selecionado)
-    )
-      setSelecionado(materiais.data.materiais[0]?.id || "");
-  }, [materiais.data, selecionado]);
-  const atual = materiais.data?.materiais.find((m) => m.id === selecionado);
-  const checkout = urlHttps(produto.checkout_url);
+    if (dados.data && !dados.data.materiais.some((m) => m.id === selecionado))
+      setSelecionado(
+        dados.data.materiais.find((m) => !m.aula_id)?.id ||
+          dados.data.materiais[0]?.id ||
+          "",
+      );
+  }, [dados.data, selecionado]);
+  const atual = materiais.find((m) => m.id === selecionado);
+  const base = atual?.aula_id
+    ? materiais.find((m) => m.id === atual.aula_id)
+    : atual;
+  const grupos = [
+    ...modulos.map((m) => ({ id: m.id, titulo: m.titulo })),
+    {
+      id: "",
+      titulo: modulos.length ? "Outros materiais" : "Conteúdo do produto",
+    },
+  ]
+    .map((g) => ({
+      ...g,
+      itens: materiais.filter(
+        (m) => !m.aula_id && (m.modulo_id || "") === g.id,
+      ),
+    }))
+    .filter((g) => g.itens.length);
+  const aulas = grupos.flatMap((g) => g.itens);
+  const indice = aulas.findIndex((m) => m.id === base?.id);
+  const anterior = aulas[indice - 1];
+  const proxima = aulas[indice + 1];
+  const complementos = base
+    ? materiais.filter((m) => m.aula_id === base.id)
+    : [];
+  function abrir(id: string, automatico = false) {
+    setSelecionado(id);
+    setAba("aula");
+    setAutoplay(automatico);
+  }
   return (
     <Dialog
       open
@@ -343,119 +488,275 @@ export default function LeitorDeProduto({
         if (!aberto) fechar();
       }}
     >
-      <DialogContent className="membros-modal">
-        <header className="pr-8 space-y-2">
-          <DialogTitle className={texto.tituloPagina}>
-            {produto.titulo}
-          </DialogTitle>
-          <DialogDescription className="text-[13px] text-muted-foreground">
-            {rotuloDoAcesso(produto)} · {produto.formato}
-          </DialogDescription>
+      <DialogContent
+        className={`membros-modal membros-modal-curso ${foco ? "membros-modal-foco" : ""}`}
+        onEscapeKeyDown={(e) => {
+          if (foco) {
+            e.preventDefault();
+            setFoco(false);
+          }
+        }}
+      >
+        <header className="membros-leitor-cabecalho">
+          <div className="min-w-0">
+            <DialogTitle className={texto.tituloPagina}>
+              {produto.titulo}
+            </DialogTitle>
+            <DialogDescription className="text-[12px] text-muted-foreground mt-1">
+              {rotuloDoAcesso(produto)} · {produto.formato}
+            </DialogDescription>
+          </div>
+          {permitido && (
+            <div className="flex items-center gap-1 mr-6">
+              <BotaoPomodoro compacto />
+              <button
+                className="membros-acao"
+                aria-label={foco ? "Sair do modo foco" : "Entrar no modo foco"}
+                title="Modo foco"
+                onClick={() => {
+                  if (!foco) setSumario(false);
+                  setFoco((f) => !f);
+                }}
+              >
+                {foco ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+              </button>
+              <button
+                className="membros-acao"
+                aria-label={
+                  sumario
+                    ? "Recolher conteúdo do curso"
+                    : "Mostrar conteúdo do curso"
+                }
+                onClick={() => setSumario((s) => !s)}
+              >
+                {sumario ? (
+                  <PanelLeftClose size={17} />
+                ) : (
+                  <PanelLeftOpen size={17} />
+                )}
+              </button>
+            </div>
+          )}
         </header>
         {!permitido ? (
-          <div className="overflow-auto space-y-4">
-            <p className="text-[13px] whitespace-pre-wrap">
-              {produto.descricao}
-            </p>
-            {produto.condicoes && (
-              <p className="text-[13px] text-muted-foreground whitespace-pre-wrap">
-                {produto.condicoes}
-              </p>
-            )}
-            {pendente ? (
-              <p role="status">
-                Pagamento pendente. O conteúdo será liberado após confirmação
-                segura.
-              </p>
-            ) : checkout ? (
-              <a
-                className="membros-acao bg-primary text-primary-foreground"
-                href={checkout}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Ver oferta no checkout
-              </a>
-            ) : (
-              <p className="text-[13px] text-muted-foreground">
-                <LockKeyhole className="inline mr-2" size={16} />
-                Conteúdo bloqueado. A compra ainda não está disponível.
-              </p>
-            )}
-          </div>
-        ) : materiais.isPending ? (
+          <OfertaDoProduto produto={produto} pendente={pendente} />
+        ) : dados.isPending ? (
           <p role="status">Carregando materiais…</p>
-        ) : materiais.isError ? (
+        ) : dados.isError ? (
           <div role="alert">
-            <p>{mensagemDoErro(materiais.error)}</p>
+            <p>{mensagemDoErro(dados.error)}</p>
             <button
               className="membros-acao"
-              onClick={() => void materiais.refetch()}
+              onClick={() => void dados.refetch()}
             >
               Tentar novamente
             </button>
           </div>
-        ) : !materiais.data?.materiais.length ? (
+        ) : !materiais.length ? (
           <p className="text-[13px] text-muted-foreground">
             Os materiais deste produto ainda não estão disponíveis.
           </p>
         ) : (
-          <div className="membros-leitor">
-            {atual && (
-              <ConsumoMaterial
-                previa={previa}
-                teste={teste}
-                key={atual.id}
-                material={atual}
-                progresso={materiais.data.progresso.find(
-                  (p) => p.material_id === atual.id,
-                )}
-              />
+          <div
+            className={`membros-leitor membros-leitor-curso ${!sumario ? "sem-sumario" : ""}`}
+          >
+            {sumario && (
+              <nav
+                aria-label="Materiais do produto"
+                className="membros-sumario"
+              >
+                <div className="membros-sumario-topo">
+                  <p className="text-[13px] font-semibold">Conteúdo do curso</p>
+                  <p className="text-[12px] text-muted-foreground mt-1">
+                    {progresso.filter((p) => p.concluido).length} de{" "}
+                    {materiais.length} concluídos
+                  </p>
+                  <div className="membros-progresso mt-3">
+                    <span
+                      style={{
+                        width: `${Math.round((100 * progresso.filter((p) => p.concluido).length) / materiais.length)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+                {grupos.map((g) => (
+                  <details key={g.id} open className="membros-modulo">
+                    <summary>
+                      {g.titulo}
+                      <span>{g.itens.length}</span>
+                    </summary>
+                    <div>
+                      {g.itens.map((m) => (
+                        <div key={m.id}>
+                          <button
+                            aria-current={
+                              m.id === base?.id ? "page" : undefined
+                            }
+                            className="membros-acao w-full text-left"
+                            onClick={() => abrir(m.id)}
+                          >
+                            {m.tipo === "video" || m.tipo === "audio" ? (
+                              <Play size={15} className="shrink-0" />
+                            ) : (
+                              <FileText size={15} className="shrink-0" />
+                            )}
+                            <span className="flex-1 min-w-0 break-words">
+                              {m.titulo}
+                            </span>
+                            {progresso.find((p) => p.material_id === m.id)
+                              ?.concluido && (
+                              <Check
+                                size={14}
+                                className="text-primary shrink-0"
+                              />
+                            )}
+                          </button>
+                          {materiais
+                            .filter((c) => c.aula_id === m.id)
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                aria-current={
+                                  c.id === selecionado ? "page" : undefined
+                                }
+                                className="membros-complemento-link"
+                                onClick={() => abrir(c.id)}
+                              >
+                                <Paperclip size={12} />
+                                <span>{c.titulo}</span>
+                                {progresso.find((p) => p.material_id === c.id)
+                                  ?.concluido && <Check size={12} />}
+                              </button>
+                            ))}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </nav>
             )}
-            <nav
-              aria-label="Materiais do produto"
-              className="membros-sumario space-y-1"
-            >
-              <div className="pb-3 mb-2 border-b border-border">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Dentro deste produto
-                </p>
-                <p className="text-[13px] mt-2">
-                  {materiais.data.progresso.filter((p) => p.concluido).length}{" "}
-                  de {materiais.data.materiais.length} concluídos
-                </p>
-              </div>
-              {materiais.data.materiais.map((m) => (
+            <div className="membros-aula-principal">
+              <div className="membros-abas">
                 <button
-                  key={m.id}
-                  aria-current={m.id === selecionado ? "page" : undefined}
-                  className={`membros-acao w-full justify-start text-left ${m.id === selecionado ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                  onClick={() => setSelecionado(m.id)}
+                  className="membros-acao"
+                  aria-current={aba === "aula" ? "page" : undefined}
+                  onClick={() => setAba("aula")}
                 >
-                  {m.tipo === "video" || m.tipo === "audio" ? (
-                    <Play size={16} className="shrink-0" />
-                  ) : (
-                    <FileText size={16} className="shrink-0" />
-                  )}
-                  <span className="min-w-0 break-words flex-1">
-                    <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {m.tipo === "video"
-                        ? "Aula em vídeo"
-                        : m.permite_download
-                          ? "Material para baixar"
-                          : m.tipo === "audio"
-                            ? "Áudio"
-                            : "Material de leitura"}
-                    </span>
-                    {m.titulo}
-                  </span>
-                  {materiais.data.progresso.find((p) => p.material_id === m.id)
-                    ?.concluido && (
-                    <Check size={14} className="shrink-0 text-primary" />
-                  )}
+                  {atual?.tipo === "video" ? "Aula" : "Conteúdo"}
                 </button>
-              ))}
-            </nav>
+                <button
+                  className="membros-acao"
+                  aria-current={aba === "materiais" ? "page" : undefined}
+                  onClick={() => setAba("materiais")}
+                >
+                  <Paperclip size={15} />
+                  Complementos{" "}
+                  {complementos.length ? `(${complementos.length})` : ""}
+                </button>
+                {produto.comunidade_ativa && (
+                  <button
+                    className="membros-acao"
+                    aria-current={aba === "comunidade" ? "page" : undefined}
+                    onClick={() => setAba("comunidade")}
+                  >
+                    <MessageCircle size={15} />
+                    Comunidade
+                  </button>
+                )}
+              </div>
+              <div className="membros-aula-rolagem">
+                {aba === "aula" && atual && (
+                  <ConsumoMaterial
+                    key={atual.id}
+                    material={atual}
+                    progresso={progresso.find(
+                      (p) => p.material_id === atual.id,
+                    )}
+                    previa={previa}
+                    teste={teste}
+                    poster={urlHttps(produto.capa_url) || undefined}
+                    autoplay={autoplay}
+                    onFim={() => {
+                      if (autoProxima && proxima) abrir(proxima.id, true);
+                    }}
+                  />
+                )}
+                {aba === "materiais" && (
+                  <section
+                    className="space-y-4"
+                    aria-label="Materiais complementares"
+                  >
+                    <h2 className="text-[17px] font-semibold">
+                      Materiais complementares
+                    </h2>
+                    <p className="text-[12px] text-muted-foreground">
+                      {base?.titulo}
+                    </p>
+                    {complementos.length ? (
+                      complementos.map((m) => (
+                        <button
+                          key={m.id}
+                          className="membros-material-cartao"
+                          onClick={() => abrir(m.id)}
+                        >
+                          <FileText size={22} className="text-primary" />
+                          <span className="flex-1 text-left">
+                            <strong className="block text-[13px]">
+                              {m.titulo}
+                            </strong>
+                            <small className="text-muted-foreground">
+                              {m.tipo === "pdf" || m.arquivo?.endsWith(".pdf")
+                                ? "PDF para ler aqui"
+                                : m.permite_download
+                                  ? "Arquivo para baixar"
+                                  : "Material de apoio"}
+                            </small>
+                          </span>
+                          <ChevronRight size={17} />
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-[13px] text-muted-foreground py-6">
+                        Esta aula ainda não tem materiais complementares.
+                      </p>
+                    )}
+                  </section>
+                )}
+                {aba === "comunidade" && produto.comunidade_ativa && (
+                  <ComunidadeDoCurso
+                    produto={produto.id}
+                    teste={teste}
+                    previa={previa}
+                  />
+                )}
+              </div>
+              <footer className="membros-aula-rodape">
+                <button
+                  className="membros-acao"
+                  disabled={!anterior}
+                  onClick={() => anterior && abrir(anterior.id)}
+                >
+                  <ChevronLeft size={16} />
+                  Anterior
+                </button>
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={autoProxima}
+                    onChange={(e) => setAutoProxima(e.target.checked)}
+                  />
+                  Próxima aula automaticamente
+                </label>
+                <button
+                  className="membros-acao border border-border"
+                  disabled={!proxima}
+                  onClick={() => proxima && abrir(proxima.id)}
+                >
+                  Próxima aula
+                  <ChevronRight size={16} />
+                </button>
+              </footer>
+            </div>
           </div>
         )}
       </DialogContent>

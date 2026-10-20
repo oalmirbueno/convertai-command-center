@@ -1,0 +1,169 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  ExternalLink,
+  LockKeyhole,
+  RefreshCw,
+  ShoppingBag,
+} from "lucide-react";
+import { urlHttps, type Produto } from "@/lib/membros/modelo";
+export default function OfertaDoProduto({
+  produto,
+  pendente,
+}: {
+  produto: Produto;
+  pendente: boolean;
+}) {
+  const landing = urlHttps(produto.landing_url);
+  const checkout = urlHttps(produto.checkout_url);
+  const [modo, setModo] = useState<"produto" | "pagina" | "checkout">(
+    landing && produto.landing_embutida ? "pagina" : "produto",
+  );
+  const [conferindo, setConferindo] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const qc = useQueryClient();
+  const endereco =
+    modo === "pagina" ? landing : modo === "checkout" ? checkout : null;
+  async function conferir() {
+    setConferindo(true);
+    try {
+      await qc.invalidateQueries({ queryKey: ["membros", "catalogo"] });
+      setAviso(
+        "Conferência solicitada. O conteúdo aparece aqui assim que o pagamento e o acesso forem confirmados.",
+      );
+    } finally {
+      setConferindo(false);
+    }
+  }
+  const comprar = checkout && produto.em_venda !== false;
+  return (
+    <section className="membros-oferta" aria-label="Oferta do produto">
+      {endereco ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+            <button className="membros-acao" onClick={() => setModo("produto")}>
+              <ArrowLeft size={15} />
+              Sobre o produto
+            </button>
+            <a
+              className="membros-acao text-muted-foreground"
+              href={endereco}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink size={15} />
+              Abrir em nova guia
+            </a>
+          </div>
+          <iframe
+            key={endereco}
+            title={
+              modo === "checkout"
+                ? `Checkout de ${produto.titulo}`
+                : `Página de ${produto.titulo}`
+            }
+            src={endereco}
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+            allow="payment"
+            className="membros-oferta-pagina"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Se a página não abrir aqui, continue pela opção de nova guia.
+          </p>
+        </>
+      ) : (
+        <div className="membros-oferta-apresentacao">
+          {urlHttps(produto.capa_url) && (
+            <img
+              src={urlHttps(produto.capa_url)!}
+              alt={`Capa de ${produto.titulo}`}
+              className="w-full rounded-xl"
+            />
+          )}
+          <div>
+            <span className="text-[11px] text-primary inline-flex items-center gap-2">
+              <LockKeyhole size={14} />
+              Conheça seu próximo passo
+            </span>
+            <p className="text-[14px] leading-7 whitespace-pre-wrap mt-3">
+              {produto.descricao}
+            </p>
+            {produto.condicoes && (
+              <p className="text-[12px] leading-6 text-muted-foreground whitespace-pre-wrap mt-3">
+                {produto.condicoes}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 items-center pt-3">
+        {landing &&
+          modo !== "pagina" &&
+          (produto.landing_embutida ? (
+            <button
+              className="membros-acao border border-border"
+              onClick={() => setModo("pagina")}
+            >
+              Ver página do produto
+            </button>
+          ) : (
+            <a
+              className="membros-acao border border-border"
+              href={landing}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ver página do produto <ExternalLink size={14} />
+            </a>
+          ))}
+        {pendente ? (
+          <p role="status" className="text-[13px]">
+            Pagamento pendente. O conteúdo será liberado após confirmação
+            segura.
+          </p>
+        ) : comprar ? (
+          produto.checkout_embutido ? (
+            <button
+              className="membros-acao bg-primary text-primary-foreground"
+              onClick={() => setModo("checkout")}
+            >
+              <ShoppingBag size={16} />
+              {produto.cta || "Ver oferta no checkout"}
+            </button>
+          ) : (
+            <a
+              className="membros-acao bg-primary text-primary-foreground"
+              href={checkout!}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {produto.cta || "Ver oferta no checkout"}{" "}
+              <ExternalLink size={15} />
+            </a>
+          )
+        ) : (
+          <p className="text-[13px] text-muted-foreground">
+            Conteúdo bloqueado. A compra ainda não está disponível.
+          </p>
+        )}
+        {checkout && (
+          <button
+            className="membros-acao text-muted-foreground"
+            disabled={conferindo}
+            onClick={() => void conferir()}
+          >
+            <RefreshCw size={14} />
+            {conferindo ? "Conferindo…" : "Já paguei, conferir acesso"}
+          </button>
+        )}
+      </div>
+      {aviso && (
+        <p role="status" className="text-[12px] text-muted-foreground">
+          {aviso}
+        </p>
+      )}
+    </section>
+  );
+}

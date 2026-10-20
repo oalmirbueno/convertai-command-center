@@ -1940,6 +1940,11 @@
       "version": "20261020173752",
       "name": "membros_experiencia_cliente",
       "statements_sha256": "71c37b7eba4f70d0c0a9b064aa3923eb0534c592b9bfedbf3e949dd8c76938eb"
+    },
+    {
+      "version": "20261020183251",
+      "name": "membros_cursos_comunidade_funil",
+      "statements_sha256": "c380771f154c045aa85620a4da9b5072c1fc0aef6622ee672c191c70f63b13fa"
     }
   ],
   "pending_migrations": []

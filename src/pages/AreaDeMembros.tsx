@@ -16,6 +16,11 @@ import {
   Trophy,
   Check,
   BookCheck,
+  Home,
+  Bookmark,
+  MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -34,6 +39,13 @@ import {
   type TesteCliente,
   type Catalogo,
 } from "@/lib/membros/modelo";
+import {
+  carregarLista,
+  favoritar,
+  carregarFunil,
+} from "@/lib/membros/aprendizado";
+import { FocoDeEstudo, BotaoPomodoro } from "@/components/membros/FocoDeEstudo";
+import ComunidadeDoCurso from "@/components/membros/ComunidadeDoCurso";
 import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
 import { texto } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
@@ -78,10 +90,14 @@ export function TrilhoProdutos({
   titulo,
   produtos,
   abrir,
+  lista,
+  alternarLista,
 }: {
   titulo: string;
   produtos: Produto[];
   abrir: (p: Produto) => void;
+  lista?: string[];
+  alternarLista?: (p: Produto) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const id = `trilho-${titulo.normalize("NFD").replace(/[^a-zA-Z]/g, "")}`;
@@ -128,42 +144,56 @@ export function TrilhoProdutos({
       </div>
       <div id={id} className="membros-trilho" ref={ref}>
         {produtos.map((p) => (
-          <button
-            className="membros-cartao"
-            key={p.id}
-            onClick={() => abrir(p)}
-            aria-label={`${p.titulo} · ${rotuloDoAcesso(p)}`}
-          >
-            <CapaProduto produto={p} />
-            <div className="pt-3 px-1">
-              <h3 className="text-[13px] leading-5 font-medium line-clamp-2">
-                {p.titulo}
-              </h3>
-              <p className="text-[12px] leading-5 text-muted-foreground mt-1">
-                {p.progresso === 100 ? "Concluído" : rotuloDoAcesso(p)}
-                {podeAbrir(p) &&
-                  p.materiais_total !== undefined &&
-                  ` · ${p.materiais_total} materiais`}
-              </p>
-              {p.progresso > 0 && podeAbrir(p) && (
-                <div
-                  role="progressbar"
-                  aria-label={`Progresso de ${p.titulo}`}
-                  aria-valuenow={p.progresso}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  className="h-1 mt-2 rounded-full bg-muted"
-                >
+          <div className="membros-cartao-grupo" key={p.id}>
+            <button
+              className="membros-cartao"
+              onClick={() => abrir(p)}
+              aria-label={`${p.titulo} · ${rotuloDoAcesso(p)}`}
+            >
+              <CapaProduto produto={p} />
+              <div className="pt-3 px-1">
+                <h3 className="text-[13px] leading-5 font-medium line-clamp-2">
+                  {p.titulo}
+                </h3>
+                <p className="text-[12px] leading-5 text-muted-foreground mt-1">
+                  {p.progresso === 100 ? "Concluído" : rotuloDoAcesso(p)}
+                  {podeAbrir(p) &&
+                    p.materiais_total !== undefined &&
+                    ` · ${p.materiais_total} materiais`}
+                </p>
+                {p.progresso > 0 && podeAbrir(p) && (
                   <div
-                    className="h-1 rounded-full bg-primary"
-                    style={{
-                      width: `${Math.min(100, Math.max(0, p.progresso))}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </button>
+                    role="progressbar"
+                    aria-label={`Progresso de ${p.titulo}`}
+                    aria-valuenow={p.progresso}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    className="h-1 mt-2 rounded-full bg-muted"
+                  >
+                    <div
+                      className="h-1 rounded-full bg-primary"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, p.progresso))}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </button>
+            {alternarLista && (
+              <button
+                className="membros-favoritar"
+                aria-label={`${lista?.includes(p.id) ? "Retirar" : "Adicionar"} ${p.titulo} ${lista?.includes(p.id) ? "da" : "à"} minha lista`}
+                aria-pressed={!!lista?.includes(p.id)}
+                onClick={() => alternarLista(p)}
+              >
+                <Bookmark
+                  size={17}
+                  fill={lista?.includes(p.id) ? "currentColor" : "none"}
+                />
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </section>
@@ -305,6 +335,11 @@ function ControlesTeste({
 }
 export default function AreaDeMembros() {
   const { profile, user, logout } = useAuth();
+  const qc = useQueryClient();
+  const [secao, setSecao] = useState("inicio");
+  const [recolhida, setRecolhida] = useState(false);
+  const [comunidade, setComunidade] = useState("");
+  const [avisoLista, setAvisoLista] = useState("");
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
   const [parametros, setParametros] = useSearchParams();
@@ -332,7 +367,51 @@ export default function AreaDeMembros() {
     queryFn: () => carregarCatalogo(previa, teste),
     retry: false,
   });
+  const lista = useQuery({
+    queryKey: ["membros", "lista", user?.id, !!teste],
+    queryFn: () => carregarLista(!!teste),
+    enabled: !!user && !previa,
+    retry: false,
+  });
+  const funil = useQuery({
+    queryKey: ["membros", "funil", user?.id],
+    queryFn: carregarFunil,
+    enabled: !!user && !previa && !teste,
+    retry: false,
+  });
+  const [salvandoLista, setSalvandoLista] = useState(false);
+  async function alternarLista(p: Produto) {
+    if (salvandoLista) return;
+    setSalvandoLista(true);
+    setAvisoLista("");
+    try {
+      await favoritar(p.id, !lista.data?.includes(p.id), !!teste);
+      await qc.invalidateQueries({ queryKey: ["membros", "lista"] });
+    } catch (e) {
+      setAvisoLista(mensagemDoErro(e));
+    } finally {
+      setSalvandoLista(false);
+    }
+  }
+  const propsLista = {
+    lista: lista.data,
+    alternarLista: previa ? undefined : (p: Produto) => void alternarLista(p),
+  };
   const produtos = catalogo.data?.produtos || [];
+  const comunidades = produtos.filter(
+    (p) => p.comunidade_ativa && podeAbrir(p),
+  );
+  const indicados = (funil.data || [])
+    .filter((f) => {
+      const origem = produtos.find((p) => p.id === f.produto_origem);
+      return (
+        origem &&
+        podeAbrir(origem) &&
+        (f.momento === "sempre" || origem.progresso === 100)
+      );
+    })
+    .map((f) => produtos.find((p) => p.id === f.produto_destino))
+    .filter((p): p is Produto => !!p && !podeAbrir(p));
   const encontrados = buscarProdutos(produtos, busca, categoria);
   const destaque =
     produtos.find((p) => p.destaque && podeAbrir(p)) ||
@@ -344,276 +423,412 @@ export default function AreaDeMembros() {
   );
   const produtoAberto = produtos.find((p) => p.id === aberto);
   return (
-    <div className="membros bg-background text-foreground">
-      <a
-        href="#biblioteca"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4"
-      >
-        Ir para a biblioteca
-      </a>
-      <header className="membros-topo">
-        <div>
-          <Link
-            to={
-              teste
-                ? `/membros?modo=cliente${teste.bloqueado ? "&bloqueado=1" : ""}`
-                : previa
-                  ? `/membros?visao=${encodeURIComponent(previa)}`
-                  : "/membros"
-            }
-            aria-label="Biblioteca Aceleriq"
-          >
-            <MarcaAceleriq altura={24} />
-          </Link>
-          <nav
-            aria-label="Navegação da biblioteca"
-            className="flex items-center min-w-0 gap-1"
-          >
-            {profile?.role === "admin" && !previa && !teste && (
-              <Link
-                className="membros-acao text-muted-foreground"
-                to="/membros/administrar"
-                aria-label="Administrar biblioteca"
-              >
-                <Settings2 size={18} />
-                <span className="hidden sm:inline">Administrar</span>
-              </Link>
-            )}
-            {!teste && (
-              <Link
-                to={destinoOperacional(profile?.role)}
-                className="membros-acao text-muted-foreground"
-              >
-                Painel Aceleriq
-                <ArrowRight size={16} className="hidden sm:block" />
-              </Link>
-            )}
-            <button
-              className="membros-acao text-muted-foreground"
-              onClick={() => void logout()}
-              aria-label="Sair da conta"
-            >
-              <LogOut size={18} />
-            </button>
-          </nav>
-        </div>
-      </header>
-      <main id="biblioteca" className="membros-conteudo space-y-8">
-        {teste && profile?.role === "admin" && (
-          <ControlesTeste
-            teste={teste}
-            mudar={(bloqueado) => {
-              const proximos = new URLSearchParams({ modo: "cliente" });
-              if (bloqueado) proximos.set("bloqueado", "1");
-              setParametros(proximos);
-            }}
-          />
-        )}
-        {previa && (
-          <aside
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-[13px]"
-            aria-label="Visão do cliente"
-          >
-            <div>
-              <strong>
-                Visão de {catalogo.data?.pessoa?.nome || "cliente"}
-              </strong>
-              <p className="text-muted-foreground">
-                Mesma biblioteca e acessos. Esta visualização não altera o
-                progresso.
-              </p>
-            </div>
+    <FocoDeEstudo
+      key={user?.id || "visitante"}
+      usuario={user?.id || "visitante"}
+    >
+      <div className="membros bg-background text-foreground">
+        <a
+          href="#biblioteca"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4"
+        >
+          Ir para a biblioteca
+        </a>
+        <header className="membros-topo">
+          <div>
             <Link
-              className="membros-acao border border-border"
-              to="/membros/administrar"
+              to={
+                teste
+                  ? `/membros?modo=cliente${teste.bloqueado ? "&bloqueado=1" : ""}`
+                  : previa
+                    ? `/membros?visao=${encodeURIComponent(previa)}`
+                    : "/membros"
+              }
+              aria-label="Biblioteca Aceleriq"
             >
-              Sair da visão do cliente
+              <MarcaAceleriq altura={24} />
             </Link>
-          </aside>
-        )}
-        {produtos.length > 0 && (
-          <h1 className="sr-only">Biblioteca Aceleriq</h1>
-        )}
-        {catalogo.isPending ? (
-          <div
-            aria-label="Carregando biblioteca"
-            role="status"
-            className="grid md:grid-cols-2 gap-8 motion-safe:animate-pulse"
-          >
-            <div className="h-48 rounded-xl bg-muted" />
-            <div className="h-64 rounded-xl bg-muted" />
-            <span className="sr-only">Carregando biblioteca…</span>
+            <nav
+              aria-label="Navegação da biblioteca"
+              className="flex items-center min-w-0 gap-1"
+            >
+              {profile?.role === "admin" && !previa && !teste && (
+                <Link
+                  className="membros-acao text-muted-foreground"
+                  to="/membros/administrar"
+                  aria-label="Administrar biblioteca"
+                >
+                  <Settings2 size={18} />
+                  <span className="hidden sm:inline">Administrar</span>
+                </Link>
+              )}
+              {!teste && (
+                <Link
+                  to={destinoOperacional(profile?.role)}
+                  className="membros-acao text-muted-foreground"
+                >
+                  Painel Aceleriq
+                  <ArrowRight size={16} className="hidden sm:block" />
+                </Link>
+              )}
+              <button
+                className="membros-acao text-muted-foreground"
+                onClick={() => void logout()}
+                aria-label="Sair da conta"
+              >
+                <LogOut size={18} />
+              </button>
+            </nav>
           </div>
-        ) : catalogo.isError ? (
-          <section role="alert" className="py-16 max-w-xl space-y-4">
-            <h1 className={texto.tituloPagina}>
-              Não conseguimos abrir sua biblioteca
-            </h1>
-            <p className={texto.corpo}>{mensagemDoErro(catalogo.error)}</p>
+        </header>
+        <div
+          className={`membros-biblioteca-corpo ${recolhida ? "recolhida" : ""}`}
+        >
+          <aside className="membros-menu" aria-label="Menu de membros">
             <button
-              className="membros-acao bg-primary text-primary-foreground"
-              onClick={() => void catalogo.refetch()}
+              className="membros-acao"
+              aria-label={
+                recolhida
+                  ? "Expandir menu de membros"
+                  : "Recolher menu de membros"
+              }
+              onClick={() => setRecolhida((r) => !r)}
             >
-              Tentar novamente
+              {recolhida ? (
+                <PanelLeftOpen size={18} />
+              ) : (
+                <PanelLeftClose size={18} />
+              )}
+              <span>Biblioteca</span>
             </button>
-            <Link className="membros-acao" to="/login?next=%2Fmembros">
-              Entrar novamente
-            </Link>
-          </section>
-        ) : !produtos.length ? (
-          <section className="py-16 max-w-xl space-y-4">
-            <BookOpen size={36} className="text-primary" />
-            <h1 className={texto.tituloPagina}>Sua biblioteca começa aqui</h1>
-            <p className={texto.corpo}>
-              Ainda não há produtos disponíveis. Quando um material for
-              publicado ou seu acesso for concedido, ele aparecerá aqui.
-            </p>
-            {profile?.role === "admin" && !previa && !teste && (
-              <Link
-                className="membros-acao bg-primary text-primary-foreground"
-                to="/membros/administrar"
+            {[
+              { id: "inicio", nome: "Início", icone: Home },
+              { id: "lista", nome: "Minha lista", icone: Bookmark },
+              { id: "comunidade", nome: "Comunidade", icone: MessageCircle },
+            ].map((i) => (
+              <button
+                key={i.id}
+                className="membros-acao"
+                title={i.nome}
+                aria-current={secao === i.id ? "page" : undefined}
+                onClick={() => setSecao(i.id)}
               >
-                Cadastrar produto
-              </Link>
+                <i.icone size={18} />
+                <span>{i.nome}</span>
+              </button>
+            ))}
+            <BotaoPomodoro compacto={recolhida} />
+          </aside>
+          <main id="biblioteca" className="membros-conteudo space-y-8">
+            {teste && profile?.role === "admin" && (
+              <ControlesTeste
+                teste={teste}
+                mudar={(bloqueado) => {
+                  const proximos = new URLSearchParams({ modo: "cliente" });
+                  if (bloqueado) proximos.set("bloqueado", "1");
+                  setParametros(proximos);
+                }}
+              />
             )}
-          </section>
-        ) : (
-          <>
-            {destaque && !busca && !categoria && (
-              <section
-                className="membros-destaque"
-                aria-label="Produto em destaque"
+            {previa && (
+              <aside
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-[13px]"
+                aria-label="Visão do cliente"
               >
-                <div className="membros-destaque-capa" aria-hidden="true">
-                  <CapaProduto key={destaque.id} produto={destaque} destaque />
+                <div>
+                  <strong>
+                    Visão de {catalogo.data?.pessoa?.nome || "cliente"}
+                  </strong>
+                  <p className="text-muted-foreground">
+                    Mesma biblioteca e acessos. Esta visualização não altera o
+                    progresso.
+                  </p>
                 </div>
-                <div className="membros-destaque-texto space-y-4">
-                  <p className="text-[11px] uppercase tracking-[.16em] text-white/75 font-medium">
-                    ACELERIQ · SEU PRÓXIMO PASSO
+                <Link
+                  className="membros-acao border border-border"
+                  to="/membros/administrar"
+                >
+                  Sair da visão do cliente
+                </Link>
+              </aside>
+            )}
+            {avisoLista && (
+              <p role="alert" className="text-[13px]">
+                {avisoLista}
+              </p>
+            )}
+            {secao === "lista" && (
+              <section className="space-y-5">
+                <h1 className="text-[24px] font-semibold">Minha lista</h1>
+                {previa ? (
+                  <p className="text-[13px]">
+                    A lista pessoal fica disponível na própria conta do membro.
                   </p>
-                  <p className="text-[12px] text-emerald-300 font-medium">
-                    {rotuloDoAcesso(destaque)} · {destaque.formato}
+                ) : lista.isPending ? (
+                  <p role="status">Carregando sua lista…</p>
+                ) : lista.isError ? (
+                  <p role="alert">{mensagemDoErro(lista.error)}</p>
+                ) : produtos.some((p) => lista.data?.includes(p.id)) ? (
+                  <TrilhoProdutos
+                    titulo="Salvos para você"
+                    produtos={produtos.filter((p) =>
+                      lista.data?.includes(p.id),
+                    )}
+                    abrir={(p) => setAberto(p.id)}
+                    {...propsLista}
+                  />
+                ) : (
+                  <p className="text-[13px] text-muted-foreground">
+                    Use o marcador na capa para guardar o que quer assistir
+                    depois.
                   </p>
-                  <h2>{destaque.titulo}</h2>
-                  <p className="text-[14px] leading-6 text-white/75 max-w-lg line-clamp-3">
-                    {destaque.descricao}
+                )}
+              </section>
+            )}
+            {secao === "comunidade" && (
+              <section className="space-y-5">
+                <h1 className="text-[24px] font-semibold">Comunidade</h1>
+                {comunidades.length ? (
+                  <>
+                    <label className="block text-[12px] space-y-2 max-w-md">
+                      <span>Comunidade do produto</span>
+                      <select
+                        className="w-full bg-muted p-3 rounded-lg"
+                        value={comunidade || comunidades[0]?.id}
+                        onChange={(e) => setComunidade(e.target.value)}
+                      >
+                        {comunidades.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.titulo}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <ComunidadeDoCurso
+                      key={comunidade || comunidades[0].id}
+                      produto={comunidade || comunidades[0].id}
+                      previa={previa}
+                      teste={teste}
+                    />
+                  </>
+                ) : (
+                  <p className="text-[13px] text-muted-foreground">
+                    As comunidades dos produtos liberados para você aparecerão
+                    aqui quando estiverem disponíveis.
+                  </p>
+                )}
+              </section>
+            )}
+            <div hidden={secao !== "inicio"} className="space-y-8">
+              {produtos.length > 0 && (
+                <h1 className="sr-only">Biblioteca Aceleriq</h1>
+              )}
+              {catalogo.isPending ? (
+                <div
+                  aria-label="Carregando biblioteca"
+                  role="status"
+                  className="grid md:grid-cols-2 gap-8 motion-safe:animate-pulse"
+                >
+                  <div className="h-48 rounded-xl bg-muted" />
+                  <div className="h-64 rounded-xl bg-muted" />
+                  <span className="sr-only">Carregando biblioteca…</span>
+                </div>
+              ) : catalogo.isError ? (
+                <section role="alert" className="py-16 max-w-xl space-y-4">
+                  <h1 className={texto.tituloPagina}>
+                    Não conseguimos abrir sua biblioteca
+                  </h1>
+                  <p className={texto.corpo}>
+                    {mensagemDoErro(catalogo.error)}
                   </p>
                   <button
                     className="membros-acao bg-primary text-primary-foreground"
-                    onClick={() => setAberto(destaque.id)}
+                    onClick={() => void catalogo.refetch()}
                   >
-                    {podeAbrir(destaque)
-                      ? "Continuar na biblioteca"
-                      : "Conhecer produto"}
-                    {podeAbrir(destaque) ? (
-                      <Play size={16} fill="currentColor" />
-                    ) : (
-                      <LockKeyhole size={16} />
-                    )}
+                    Tentar novamente
                   </button>
-                </div>
-              </section>
-            )}
-            {catalogo.data?.jornada && (
-              <Jornada jornada={catalogo.data.jornada} />
-            )}
-            <div className="flex flex-wrap gap-3 items-center">
-              <label className="relative block w-full sm:max-w-sm">
-                <Search
-                  size={17}
-                  className="absolute left-3 top-3.5 text-muted-foreground"
-                />
-                <span className="sr-only">Buscar produtos</span>
-                <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar na biblioteca"
-                  className="w-full h-11 pl-10 pr-3 bg-muted rounded-lg text-[13px] focus-visible:ring-2 focus-visible:ring-ring outline-none"
-                />
-              </label>
-              {categorias.length > 1 && (
-                <label>
-                  <span className="sr-only">Categoria</span>
-                  <select
-                    className="h-11 max-w-full bg-muted rounded-lg px-3 text-[13px] focus-visible:ring-2 focus-visible:ring-ring"
-                    value={categoria}
-                    onChange={(e) => setCategoria(e.target.value)}
-                  >
-                    <option value="">Todas as categorias</option>
-                    {categorias.map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
-                </label>
+                  <Link className="membros-acao" to="/login?next=%2Fmembros">
+                    Entrar novamente
+                  </Link>
+                </section>
+              ) : !produtos.length ? (
+                <section className="py-16 max-w-xl space-y-4">
+                  <BookOpen size={36} className="text-primary" />
+                  <h1 className={texto.tituloPagina}>
+                    Sua biblioteca começa aqui
+                  </h1>
+                  <p className={texto.corpo}>
+                    Ainda não há produtos disponíveis. Quando um material for
+                    publicado ou seu acesso for concedido, ele aparecerá aqui.
+                  </p>
+                  {profile?.role === "admin" && !previa && !teste && (
+                    <Link
+                      className="membros-acao bg-primary text-primary-foreground"
+                      to="/membros/administrar"
+                    >
+                      Cadastrar produto
+                    </Link>
+                  )}
+                </section>
+              ) : (
+                <>
+                  {destaque && !busca && !categoria && (
+                    <section
+                      className="membros-destaque"
+                      aria-label="Produto em destaque"
+                    >
+                      <div className="membros-destaque-capa" aria-hidden="true">
+                        <CapaProduto
+                          key={destaque.id}
+                          produto={destaque}
+                          destaque
+                        />
+                      </div>
+                      <div className="membros-destaque-texto space-y-4">
+                        <p className="text-[11px] uppercase tracking-[.16em] text-white/75 font-medium">
+                          ACELERIQ · SEU PRÓXIMO PASSO
+                        </p>
+                        <p className="text-[12px] text-emerald-300 font-medium">
+                          {rotuloDoAcesso(destaque)} · {destaque.formato}
+                        </p>
+                        <h2>{destaque.titulo}</h2>
+                        <p className="text-[14px] leading-6 text-white/75 max-w-lg line-clamp-3">
+                          {destaque.descricao}
+                        </p>
+                        <button
+                          className="membros-acao bg-primary text-primary-foreground"
+                          onClick={() => setAberto(destaque.id)}
+                        >
+                          {podeAbrir(destaque)
+                            ? "Continuar na biblioteca"
+                            : "Conhecer produto"}
+                          {podeAbrir(destaque) ? (
+                            <Play size={16} fill="currentColor" />
+                          ) : (
+                            <LockKeyhole size={16} />
+                          )}
+                        </button>
+                      </div>
+                    </section>
+                  )}
+                  {catalogo.data?.jornada && (
+                    <Jornada jornada={catalogo.data.jornada} />
+                  )}
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <label className="relative block w-full sm:max-w-sm">
+                      <Search
+                        size={17}
+                        className="absolute left-3 top-3.5 text-muted-foreground"
+                      />
+                      <span className="sr-only">Buscar produtos</span>
+                      <input
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        placeholder="Buscar na biblioteca"
+                        className="w-full h-11 pl-10 pr-3 bg-muted rounded-lg text-[13px] focus-visible:ring-2 focus-visible:ring-ring outline-none"
+                      />
+                    </label>
+                    {categorias.length > 1 && (
+                      <label>
+                        <span className="sr-only">Categoria</span>
+                        <select
+                          className="h-11 max-w-full bg-muted rounded-lg px-3 text-[13px] focus-visible:ring-2 focus-visible:ring-ring"
+                          value={categoria}
+                          onChange={(e) => setCategoria(e.target.value)}
+                        >
+                          <option value="">Todas as categorias</option>
+                          {categorias.map((c) => (
+                            <option key={c}>{c}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                  {catalogo.data?.pendentes.length ? (
+                    <p
+                      role="status"
+                      className="text-[13px] text-muted-foreground"
+                    >
+                      Há pagamento aguardando confirmação. O acesso aparecerá
+                      aqui após a conferência.
+                    </p>
+                  ) : null}
+                  {indicados.length > 0 && (
+                    <TrilhoProdutos
+                      titulo="Seu próximo passo"
+                      produtos={Array.from(
+                        new Map(indicados.map((p) => [p.id, p])).values(),
+                      )}
+                      abrir={(p) => setAberto(p.id)}
+                      {...propsLista}
+                    />
+                  )}
+                  {busca || categoria ? (
+                    encontrados.length ? (
+                      <TrilhoProdutos
+                        {...propsLista}
+                        titulo="Resultados da busca"
+                        produtos={encontrados}
+                        abrir={(p) => setAberto(p.id)}
+                      />
+                    ) : (
+                      <section className="py-8">
+                        <h2 className={texto.tituloSecao}>
+                          Nenhum produto encontrado
+                        </h2>
+                        <button
+                          className="membros-acao"
+                          onClick={() => {
+                            setBusca("");
+                            setCategoria("");
+                          }}
+                        >
+                          Limpar busca
+                        </button>
+                      </section>
+                    )
+                  ) : (
+                    trilhos(produtos).map((t) => (
+                      <TrilhoProdutos
+                        key={t.titulo}
+                        {...propsLista}
+                        titulo={t.titulo}
+                        produtos={t.produtos}
+                        abrir={(p) => setAberto(p.id)}
+                      />
+                    ))
+                  )}
+                </>
               )}
             </div>
-            {catalogo.data?.pendentes.length ? (
-              <p role="status" className="text-[13px] text-muted-foreground">
-                Há pagamento aguardando confirmação. O acesso aparecerá aqui
-                após a conferência.
-              </p>
-            ) : null}
-            {busca || categoria ? (
-              encontrados.length ? (
-                <TrilhoProdutos
-                  titulo="Resultados da busca"
-                  produtos={encontrados}
-                  abrir={(p) => setAberto(p.id)}
-                />
-              ) : (
-                <section className="py-8">
-                  <h2 className={texto.tituloSecao}>
-                    Nenhum produto encontrado
-                  </h2>
-                  <button
-                    className="membros-acao"
-                    onClick={() => {
-                      setBusca("");
-                      setCategoria("");
-                    }}
-                  >
-                    Limpar busca
-                  </button>
-                </section>
-              )
-            ) : (
-              trilhos(produtos).map((t) => (
-                <TrilhoProdutos
-                  key={t.titulo}
-                  titulo={t.titulo}
-                  produtos={t.produtos}
-                  abrir={(p) => setAberto(p.id)}
-                />
-              ))
-            )}
-          </>
+          </main>
+        </div>
+        {aberto && catalogo.isSuccess && !produtoAberto && (
+          <section role="alert" className="membros-conteudo">
+            <p>Este produto está indisponível.</p>
+            <button className="membros-acao" onClick={() => setAberto(null)}>
+              Voltar à biblioteca
+            </button>
+          </section>
         )}
-      </main>
-      {aberto && catalogo.isSuccess && !produtoAberto && (
-        <section role="alert" className="membros-conteudo">
-          <p>Este produto está indisponível.</p>
-          <button className="membros-acao" onClick={() => setAberto(null)}>
-            Voltar à biblioteca
-          </button>
-        </section>
-      )}
-      {produtoAberto && (
-        <LeitorDeProduto
-          key={`${previa || "proprio"}-${teste?.teste}-${teste?.bloqueado}-${produtoAberto.id}`}
-          previa={previa}
-          teste={teste}
-          produto={produtoAberto}
-          pendente={
-            !!catalogo.data?.pendentes.some(
-              (p) => p.produto_id === produtoAberto.id,
-            )
-          }
-          fechar={() => {
-            setAberto(null);
-            void catalogo.refetch();
-          }}
-        />
-      )}
-    </div>
+        {produtoAberto && (
+          <LeitorDeProduto
+            key={`${previa || "proprio"}-${teste?.teste}-${teste?.bloqueado}-${produtoAberto.id}`}
+            previa={previa}
+            teste={teste}
+            produto={produtoAberto}
+            pendente={
+              !!catalogo.data?.pendentes.some(
+                (p) => p.produto_id === produtoAberto.id,
+              )
+            }
+            fechar={() => {
+              setAberto(null);
+              void catalogo.refetch();
+            }}
+          />
+        )}
+      </div>
+    </FocoDeEstudo>
   );
 }

@@ -33,6 +33,20 @@ vi.mock("@/lib/membros/api", () => ({
   reiniciarTeste: vi.fn(),
   mensagemDoErro: () => "Falha de conexão. Tente novamente.",
 }));
+vi.mock("@/lib/membros/aprendizado", () => ({
+  carregarLista: vi.fn(async () => []),
+  carregarFunil: vi.fn(async () => []),
+  favoritar: vi.fn(async () => {}),
+  carregarComunidade: vi.fn(async () => []),
+  salvarConversa: vi.fn(async () => {}),
+}));
+vi.mock("@/components/membros/PdfSeguro", () => ({
+  default: ({ titulo }: { titulo: string }) => (
+    <section aria-label={`Leitor de PDF: ${titulo}`}>
+      PDF lido dentro da biblioteca
+    </section>
+  ),
+}));
 const produto = (v: Partial<Produto> = {}): Produto => ({
   id: "p",
   titulo: "Kit de marca",
@@ -362,6 +376,12 @@ describe("biblioteca integrada", () => {
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
     montar("/membros?modo=cliente&produto=p");
+    expect(
+      await screen.findByRole("region", {
+        name: "Leitor de PDF: Guia para baixar",
+      }),
+    ).toBeInTheDocument();
+    expect(document.querySelector("iframe")).toBeNull();
     fireEvent.click(
       await screen.findByRole("button", { name: "Baixar arquivo" }),
     );

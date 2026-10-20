@@ -43,9 +43,9 @@ const material = {
   ordem: 0,
 };
 const api = `export const carregarCatalogo=async(_previa,teste)=>({...window.__membrosTeste.catalogo,produtos:window.__membrosTeste.catalogo.produtos.map(p=>({...p,origens:teste?.bloqueado?[]:p.origens})),pessoa:{id:'pessoa-teste',nome:'Pessoa de teste'},jornada:{materiais:6,concluidos:2,produtos_concluidos:1,em_andamento:1}});
-export const carregarMateriais=async()=>({materiais:[window.__membrosTeste.material],progresso:[]});
+export const carregarMateriais=async()=>({materiais:window.__membrosTeste.materiais||[window.__membrosTeste.material],modulos:[],progresso:[]});
 export const gravarProgresso=async(...args)=>{window.__membrosTeste.progresso=args;};
-export const abrirArquivo=async()=>{throw Error('Sem arquivo nesta fixture');};
+export const abrirArquivo=async()=>({url:location.origin+'/teste-guia.pdf',expira_em:'2026-10-20'});
 export const mensagemDoErro=()=> 'Falha controlada no ambiente de teste';
 export const carregarAdmin=async()=>structuredClone(window.__membrosTeste.admin);
 export const salvarLinha=async(tabela,dados)=>{window.__membrosTeste.gravacao={tabela,dados};if(tabela==='membros_checklist'){window.__membrosTeste.admin.checklist=[{...dados,atualizado_em:new Date().toISOString(),atualizado_por:'pessoa-teste'}];}};
@@ -73,6 +73,8 @@ try {
           admin: {
             produtos,
             materiais: [material],
+            modulos: [],
+            funil: [],
             acessos: [],
             beneficios: [],
             vinculos: [],
@@ -108,10 +110,20 @@ try {
             contentType: "application/json",
             body: "[]",
           });
+      if (url.pathname === "/teste-guia.pdf")
+        return route.fulfill({
+          contentType: "application/pdf",
+          path: resolve("outputs/membros-demo/guia-de-teste-aceleriq.pdf"),
+        });
       if (url.pathname === "/src/contexts/AuthContext.tsx")
         return route.fulfill({
           contentType: "application/javascript",
           body: auth,
+        });
+      if (url.pathname === "/src/lib/membros/aprendizado.ts")
+        return route.fulfill({
+          contentType: "application/javascript",
+          body: `export const carregarLista=async()=>[];export const favoritar=async()=>{};export const carregarFunil=async()=>[];export const carregarComunidade=async()=>[];export const salvarConversa=async()=>{};export const carregarPessoas=async()=>({pessoas:[],total:0,resumo:{pessoas:0,compradores:0,liberados:0,encerrados:0,pendentes:0}});export const carregarPessoa=async()=>({});export const liberarPessoas=async()=>{};export const revogarManual=async()=>{};export const salvarNome=async()=>{};export const ordenar=async()=>{};`,
         });
       if (url.pathname === "/src/lib/membros/api.ts")
         return route.fulfill({
@@ -169,6 +181,68 @@ try {
     if (gravou !== true) throw Error("Conclusão não enviada pela interface");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog").waitFor({ state: "hidden" });
+    if ([390, 1440].includes(largura)) {
+      await page.evaluate(() => {
+        window.__membrosTeste.materiais = [
+          {
+            ...window.__membrosTeste.material,
+            id: "pdf-teste",
+            titulo: "PDF local para leitura",
+            tipo: "arquivo",
+            texto: "Guia complementar",
+            arquivo: "privado/guia.pdf",
+            permite_download: true,
+          },
+        ];
+      });
+      await page
+        .getByRole("button", { name: "Continuar na biblioteca" })
+        .click();
+      const canvas = page.locator(".membros-pdf canvas");
+      await canvas.waitFor();
+      await page.waitForFunction(
+        () => {
+          const c = document.querySelector(".membros-pdf canvas");
+          return c?.width > 200 && c?.height > 200;
+        },
+        {},
+        { timeout: 120000 },
+      );
+      await page
+        .getByText("Ler o texto desta página", { exact: true })
+        .waitFor();
+      if (await page.locator(".membros-pdf iframe").count())
+        throw Error("PDF depende de iframe");
+      await page
+        .getByRole("button", { name: "Ampliar PDF", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Ajustar PDF à largura" }).click();
+      await page.getByRole("button", { name: "Entrar no modo foco" }).click();
+      const foco = await page
+        .getByRole("dialog")
+        .evaluate((el) => ({
+          width: el.getBoundingClientRect().width,
+          height: el.getBoundingClientRect().height,
+        }));
+      if (foco.width < largura - 2 || foco.height < 898)
+        throw Error("Modo foco não ocupa a tela: " + JSON.stringify(foco));
+      await checar("pdf-e-foco");
+      await page.screenshot({
+        path: resolve(output, `pdf-foco-${largura}.png`),
+      });
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Entrar no modo foco" }).waitFor();
+      await page.getByRole("button", { name: "Abrir Pomodoro" }).last().click();
+      await page.getByRole("button", { name: "Começar", exact: true }).click();
+      await page.getByRole("timer").waitFor();
+      await checar("pomodoro");
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      await page.evaluate(() => {
+        delete window.__membrosTeste.materiais;
+      });
+    }
     await page.getByPlaceholder("Buscar na biblioteca").fill("sem resultado");
     await page
       .getByRole("heading", { name: "Nenhum produto encontrado" })

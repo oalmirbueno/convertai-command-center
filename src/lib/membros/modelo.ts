@@ -18,6 +18,13 @@ export type Produto = {
   ultimo_material: string | null;
   materiais_total?: number;
   materiais_concluidos?: number;
+  tipo_produto?: "curso" | "material" | "comunidade";
+  landing_url?: string | null;
+  landing_embutida?: boolean;
+  checkout_embutido?: boolean;
+  em_venda?: boolean;
+  cta?: string;
+  comunidade_ativa?: boolean;
 };
 export type Material = {
   id: string;
@@ -28,7 +35,48 @@ export type Material = {
   arquivo: string | null;
   permite_download: boolean;
   ordem: number;
+  modulo_id?: string | null;
+  aula_id?: string | null;
+  estado?: "rascunho" | "publicado" | "arquivado";
 };
+export type Modulo = {
+  id: string;
+  produto_id: string;
+  titulo: string;
+  descricao: string;
+  ordem: number;
+  estado: "rascunho" | "publicado" | "arquivado";
+};
+export type PassoFunil = {
+  id: string;
+  produto_origem: string;
+  produto_destino: string;
+  momento: "sempre" | "concluiu";
+  titulo: string;
+  ordem: number;
+  ativo: boolean;
+};
+export function semTravessoes(s: string): string {
+  return s.replace(/\s*[\u2013\u2014]\s*/g, ": ");
+}
+export function limparProduto(p: Produto): Produto {
+  return {
+    ...p,
+    cta: p.cta ? semTravessoes(p.cta) : p.cta,
+    titulo: semTravessoes(p.titulo),
+    descricao: semTravessoes(p.descricao),
+    condicoes: semTravessoes(p.condicoes),
+    formato: semTravessoes(p.formato),
+    categoria: semTravessoes(p.categoria),
+  };
+}
+export function limparMaterial(m: Material): Material {
+  return {
+    ...m,
+    titulo: semTravessoes(m.titulo),
+    texto: semTravessoes(m.texto),
+  };
+}
 export type Progresso = {
   material_id: string;
   posicao: number;
@@ -66,7 +114,9 @@ export function rotuloDoAcesso(p: Produto): string {
   if (p.origens.includes("manual")) return "Acesso concedido";
   if (p.origens.includes("gratuito")) return "Gratuito";
   if (p.origens.includes("administracao")) return "Administração";
-  return "Disponível para compra";
+  return p.em_venda === false
+    ? "Aguardando liberação"
+    : "Disponível para compra";
 }
 export function urlHttps(v: string | null | undefined): string | null {
   if (!v) return null;
