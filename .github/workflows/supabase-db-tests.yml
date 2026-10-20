@@ -48,6 +48,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
+          # Keep the replay's validated parser and service schema versions.
           version: 2.109.1
 
       - name: Install NPM dependencies
@@ -56,6 +57,9 @@ jobs:
           npm install --global npm@11.9.0
           test "$(npm --version)" = "11.9.0"
           npm ci
+
+      - name: Install pinned code worker types without running installers
+        run: npm ci --prefix workers/motor-codigo --ignore-scripts
 
       - name: Install versioned Lovable MCP compatibility dependencies
         id: compat_dependencies
@@ -112,11 +116,29 @@ jobs:
           node scripts/prepare-ci-editorial-replay.mjs --stage
 
       - name: Start Supabase local stack
-        run: supabase start
+        # Client-specific data SQL runs with synthetic, immediately removed
+        # parents. No source migration is rewritten or skipped.
+        run: |
+          node scripts/prepare-ci-brand-replay.mjs --self-test
+          node scripts/prepare-ci-brand-replay.mjs --stage
+          supabase start
 
       - name: Apply migrations
         id: db_reset
         run: supabase db reset --local --no-seed
+
+      - name: Contain outbound traffic before synthetic database and browser tests
+        # db reset recreates the DB container. Attest the final topology once
+        # the reset has finished, before any test creates synthetic users.
+        run: node scripts/guard-ci-e2e-network.mjs --guard
+
+      - name: Refresh local Auth routing after container recreation
+        # Backport only the official Kong reload, preserving its email template:
+        # https://github.com/supabase/cli/pull/6017 and /pull/6065.
+        # The preceding guard attests this exact local project and container.
+        run: |
+          docker exec supabase_kong_aceleriq-os kong reload --nginx-conf /home/kong/custom_nginx.template
+          curl --fail --silent --show-error --noproxy '*' --retry 3 --retry-connrefused --max-time 10 http://127.0.0.1:54321/auth/v1/health > /dev/null
 
       - name: Install local PostgreSQL client
         run: |
@@ -133,6 +155,15 @@ jobs:
           -h 127.0.0.1 -p 54322 -U postgres -d postgres
           -f supabase/bootstrap/ci-operator-parents-postcheck.sql
 
+      - name: Pause background jobs only in the empty disposable CI database
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -w -v ON_ERROR_STOP=1
+          -h 127.0.0.1 -p 54322 -U postgres -d postgres
+          -c "SET aceleriq.ci_pause_background='on'"
+          -f supabase/bootstrap/ci-background-jobs.sql
+
       - name: Restore reviewed legacy milestone read access in the empty CI stack
         env:
           PGPASSWORD: postgres
@@ -144,7 +175,13 @@ jobs:
 
       - name: Run pgTAP database tests
         id: pgtap
-        run: supabase test db
+        # Members SQL scripts bootstrap a separate empty database and are not
+        # TAP files. They run in their own isolated container in the next step.
+        run: supabase test db supabase/tests/database
+
+      - name: Run members SQL contracts in a separate disposable database
+        if: ${{ !cancelled() && (success() || steps.pgtap.outcome == 'failure') }}
+        run: bash scripts/testar-membros-ci.sh
 
       - name: Run isolated synthetic SQL contracts
         # A failing full-schema assertion must not hide independent synthetic
@@ -174,7 +211,9 @@ jobs:
 
       - name: Restore editorial CI compatibility staging
         if: always()
-        run: node scripts/prepare-ci-editorial-replay.mjs --restore
+        run: |
+          node scripts/prepare-ci-brand-replay.mjs --restore
+          node scripts/prepare-ci-editorial-replay.mjs --restore
 
       - name: Remove CI-only legacy prerequisites migration
         if: always()
@@ -200,18 +239,51 @@ jobs:
           git diff --quiet -- supabase/migrations
 
 
+      # Run the real profile matrix as soon as its database is ready. The
+      # slower unit/type/build checks below still run even if a browser case
+      # fails, preserving every existing gate while surfacing UI drift sooner.
+      - name: Validate isolated browser E2E guardrails
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
+        run: |
+          node scripts/run-ci-e2e.mjs --self-test
+          node scripts/seed-ci-e2e.mjs --self-test
+          node scripts/guard-ci-e2e-network.mjs --self-test
+          npx tsc -p e2e/tsconfig.json
+
+      - name: Run real Auth browser profile matrix against ephemeral Supabase
+        id: profile_e2e
+        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.e2e_browser.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: node scripts/run-ci-e2e.mjs
+
+      - name: Keep only synthetic browser failure screenshots
+        if: ${{ !cancelled() && steps.profile_e2e.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-profile-screenshots
+          path: test-results/e2e/**/*.png
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Run unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm test -- --run
 
       - name: Run MCP Deno unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
-        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/brain-client-context/modulos/brain-client-context-handler_test.ts supabase/testes-deno/notification-write-response_test.ts
+        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/brain-client-context/modulos/brain-client-context-handler_test.ts supabase/testes-deno/notification-write-response_test.ts supabase/functions/vendas-webhook/nucleo_test.ts
 
       - name: Type-check portable and public Edge Functions
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: |
+          # Auth templates have their own pinned React Email packages. Resolve
+          # them in Deno's cache without changing the application's node_modules.
+          deno check --node-modules-dir=none --no-lock supabase/functions/auth-email-hook/index.ts
           deno check \
+            supabase/functions/vendas-webhook/index.ts \
+            supabase/functions/agente-contexto/index.ts \
+            supabase/functions/estudio-arte/index.ts \
             supabase/functions/brain-client-context/index.ts \
             supabase/functions/admin-reset-client-access/index.ts \
             supabase/functions/api-gateway/index.ts \
@@ -242,21 +314,6 @@ jobs:
           git diff --exit-code -- \
             .lovable/mcp/manifest.json \
             supabase/functions/mcp/index.ts
-
-      - name: Validate isolated browser E2E guardrails
-        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
-        run: |
-          node scripts/run-ci-e2e.mjs --self-test
-          node scripts/seed-ci-e2e.mjs --self-test
-          node scripts/guard-ci-e2e-network.mjs --self-test
-          npx tsc -p e2e/tsconfig.json
-
-      - name: Run real Auth browser profile matrix against ephemeral Supabase
-        id: profile_e2e
-        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.e2e_browser.outcome == 'success' }}
-        env:
-          PGPASSWORD: postgres
-        run: node scripts/run-ci-e2e.mjs
 
       - name: Restore synthetic seed hooks before stopping Supabase
         if: ${{ always() && steps.db_reset.outcome == 'success' }}

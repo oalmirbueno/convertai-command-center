@@ -2,7 +2,7 @@
 
 import * as React from 'npm:react@18.3.1'
 import { Heading, Text } from 'npm:@react-email/components@0.0.22'
-import { EmailLayout, styles } from './_layout.tsx'
+import { EmailLayout, styles } from '../../_shared/email-templates/_layout.tsx'
 
 interface ReauthenticationEmailProps {
   token: string

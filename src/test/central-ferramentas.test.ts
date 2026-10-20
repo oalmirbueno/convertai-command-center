@@ -3,7 +3,6 @@ import { comApelido, normalizarAcaoDoAgente, podeExecutarDireto } from "../../su
 import { dataValida, PARA, regrasDoGestor } from "../../supabase/functions/gestor-aceleriq/modulos/ferramentas";
 import { linhaDeContexto } from "../../supabase/functions/gestor-aceleriq/modulos/hermes";
 import { atalhosDaCentral, caminhoEmbutido, enderecoExterno } from "@/lib/centralAtalhos";
-// @ts-expect-error módulo .mjs da ponte do servidor do Hermes (sem tipos)
 import { ORIGENS_QUE_RECEBEM, ORIGENS_VISIVEIS, mensagemParaOPainel, sessaoParaOPainel } from "../../integrations/hermes-operational/painel_ponte.mjs";
 
 describe("ferramentas do Gestor: argumentos validados", () => {

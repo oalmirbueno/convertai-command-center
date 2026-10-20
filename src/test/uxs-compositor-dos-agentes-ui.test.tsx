@@ -106,7 +106,7 @@ const corpos = (funcao: string, acao: string) =>
   mock.invoke.mock.calls.filter((c) => c[0] === funcao && c[1] && c[1].body && c[1].body.acao === acao).map((c) => c[1].body);
 
 const naQuery = (filho: any) => h(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }, filho);
-const naMesa = (filho: any) => naQuery(h(MesaProvider, { valor: valorDaMesa() }, filho));
+const naMesa = (filho: any) => naQuery(h(MesaProvider, { valor: valorDaMesa(), children: filho }));
 
 let respostaDaConversa = 0;
 beforeAll(() => {

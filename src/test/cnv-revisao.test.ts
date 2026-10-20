@@ -146,8 +146,7 @@ describe("durações do motor", () => {
   it("faixa longa mostra 10, 12 e 15 s; trocar de motor ajusta a duração", () => {
     const wan = motorPorId("wan-3.0")!;
     const l = duracoesNaTela(wan, 5);
-    const lista = Array.isArray(wan.duracoes) ? wan.duracoes : null;
-    if (!lista) {
+    if (!Array.isArray(wan.duracoes)) {
       expect(l).toContain(wan.duracoes.max);
       expect(l.length).toBeLessThanOrEqual(9);
     }

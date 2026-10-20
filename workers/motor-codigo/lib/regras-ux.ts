@@ -13,15 +13,15 @@
  * grupo nomeado, sem travessão.
  */
 
-import type { AvisoDeQa } from "../site-metodo.ts";
-import { contraste } from "../cores-da-marca.ts";
-import { REGRAS_DE_UX_DA_BASE } from "./dados/ux.ts";
-import { REGRAS_POR_CODIGO } from "./mapeamentos.ts";
-import { REGRA_DE_UX_EM_PORTUGUES, severidadeDaRegra } from "./pt.ts";
-import { type AvisoDeUx, type EntradaDoChecklist, type ItemDoChecklistDeUx, itensDoChecklist, REGRAS_DE_PAGINA, type RegraParaChecklist } from "./checklist-de-ux.ts";
+import type { AvisoDeQa } from "../../../supabase/functions/_shared/site-metodo.ts";
+import { contraste } from "../../../supabase/functions/_shared/cores-da-marca.ts";
+import { REGRAS_DE_UX_DA_BASE } from "../../../supabase/functions/_shared/uiux/dados/ux.ts";
+import { REGRAS_POR_CODIGO } from "../../../supabase/functions/_shared/uiux/mapeamentos.ts";
+import { REGRA_DE_UX_EM_PORTUGUES, severidadeDaRegra } from "../../../supabase/functions/_shared/uiux/pt.ts";
+import { type AvisoDeUx, type EntradaDoChecklist, type ItemDoChecklistDeUx, itensDoChecklist, REGRAS_DE_PAGINA, type RegraParaChecklist } from "../../../supabase/functions/_shared/uiux/checklist-de-ux.ts";
 
-export type { AvisoDeUx, EntradaDoChecklist, EstadoDoItem, ItemDoChecklistDeUx, ProvaDoAgente, RegraParaChecklist } from "./checklist-de-ux.ts";
-export { pendenciasGraves, REGRAS_DE_PAGINA } from "./checklist-de-ux.ts";
+export type { AvisoDeUx, EntradaDoChecklist, EstadoDoItem, ItemDoChecklistDeUx, ProvaDoAgente, RegraParaChecklist } from "../../../supabase/functions/_shared/uiux/checklist-de-ux.ts";
+export { pendenciasGraves, REGRAS_DE_PAGINA } from "../../../supabase/functions/_shared/uiux/checklist-de-ux.ts";
 
 const AREA_DA_REGRA: Record<string, AvisoDeQa["area"]> = { "68": "celular", "47": "seo", "50": "seo", "51": "seo", "75": "seo" };
 

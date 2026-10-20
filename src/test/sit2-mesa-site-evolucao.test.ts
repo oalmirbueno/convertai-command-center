@@ -54,7 +54,6 @@ import { alvosDoSite, caminhoDoSite, normalizarAcoesDoSite, OPERACOES_DO_SITE, r
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { normalizarPedido, podeVoltarPara } from "../../supabase/functions/_shared/motor-codigo";
 import { arquivoDaCascaValido, cssDaMarca } from "../../workers/motor-codigo/lib/projeto";
-// @ts-expect-error módulo .mjs do modelo de site (sem tipos)
 import { montarPagina, paginasDoPacote, sitemapDoPacote } from "../../workers/motor-codigo/modelo-site/scripts/seo.mjs";
 
 /**

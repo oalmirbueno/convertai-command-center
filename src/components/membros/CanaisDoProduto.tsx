@@ -39,13 +39,15 @@ export default function CanaisDoProduto({ produto }: { produto: string }) {
       <summary className="membros-acao">
         <MessageCircle size={16} />
         Grupos da comunidade
+        <span onClick={(e) => e.stopPropagation()}>
+          <AjudaRecolhida rotulo="Configurar grupos do produto">
+            Cadastre WhatsApp, Telegram e outros grupos. Apenas membros com
+            acesso a este produto recebem os links. Uma comunidade de produto
+            desativada não libera os grupos.
+          </AjudaRecolhida>
+        </span>
       </summary>
       <div className="space-y-3 pt-3">
-        <AjudaRecolhida rotulo="Configurar grupos do produto">
-          Cadastre WhatsApp, Telegram e outros grupos. Apenas membros com acesso
-          a este produto recebem os links. Uma comunidade de produto desativada
-          não libera os grupos.
-        </AjudaRecolhida>
         {dados.isError && (
           <p role="alert">
             Não foi possível carregar os grupos.{" "}

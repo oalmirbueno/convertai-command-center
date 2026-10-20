@@ -19,7 +19,7 @@ async function login(page: Page, role: UserRole) {
   // Do not read or attach the response: it contains disposable session tokens.
   expect((await authentication).status(), "Real password login must succeed").toBe(200);
   await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/projetos");
-  await expect(page.locator(".heading-page", { hasText: /^Projetos$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Projetos", exact: true, level: 1 })).toBeVisible();
 }
 
 async function logout(page: Page) {
@@ -30,6 +30,28 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=" + encodeURIComponent(returnPath));
   await page.goto("/projetos");
   await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=%2Fprojetos");
+}
+
+async function selectProjectStatus(page: Page, label: "Planejamento" | "Todos") {
+  await page.getByRole("button", { name: /^Status: / }).click();
+  await page.getByRole("listbox", { name: "Status", exact: true })
+    .getByRole("option", { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) }).click();
+  await expect(page.getByRole("button", { name: `Status: ${label}`, exact: true })).toBeVisible();
+}
+
+async function readPublicClientHistory(page: Page, clientId: string) {
+  return page.evaluate(async (target) => {
+    const modulePath = "/src/integrations/supabase/client.ts";
+    const { supabase } = await import(modulePath) as { supabase: SupabaseClient };
+    const { data, error, status } = await supabase.rpc("movimentos_do_cliente", {
+      _client_id: target,
+      _desde: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+      _ate: new Date().toISOString(),
+      _somente_visiveis: true,
+    });
+    return { status, errorCode: error?.code ?? null,
+      publicRowsOnly: Array.isArray(data) && data.every((row) => row.visivel_ao_cliente === true) };
+  }, clientId);
 }
 
 interface ReadResult {
@@ -211,14 +233,14 @@ for (const role of USER_ROLES) {
 
     // A real filter and reset change the displayed results without creating
     // a project, task, attachment, approval, queue item or publication.
-    await page.getByRole("button", { name: "Planejamento", exact: true }).click();
+    await selectProjectStatus(page, "Planejamento");
     await expect(page.getByText("Nenhum projeto encontrado.", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Todos", exact: true }).click();
+    await selectProjectStatus(page, "Todos");
     for (const key of allowed) {
       await expect(list.getByText(fixture.projects[key].name, { exact: true })).toBeVisible();
     }
 
-    const create = page.getByRole("button", { name: "Novo Projeto", exact: true });
+    const create = page.getByRole("button", { name: "Novo projeto", exact: true });
     if (role === "admin") {
       await create.click();
       await expect(page.getByRole("heading", { name: "Novo Projeto", exact: true })).toBeVisible();
@@ -228,10 +250,17 @@ for (const role of USER_ROLES) {
       await expect(list.getByText("CI draft cancelled before save", { exact: true })).toHaveCount(0);
     } else {
       await expect(create).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Gerar via Ata", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Gerar projeto pela ata", exact: true })).toHaveCount(0);
     }
 
     if (role === "clientA" || role === "clientB") {
+      const ownHistory = await readPublicClientHistory(page, fixture.users[role].id);
+      expect(ownHistory).toEqual({ status: 200, errorCode: null, publicRowsOnly: true });
+      const otherClient = role === "clientA" ? "clientB" : "clientA";
+      const deniedHistory = await readPublicClientHistory(page, fixture.users[otherClient].id);
+      expect(deniedHistory.status, "The real RPC must reject another client's history").toBe(403);
+      expect(deniedHistory.errorCode).toBe("42501");
+      expect(deniedHistory.publicRowsOnly).toBe(false);
       await list.getByText(fixture.projects[role].name, { exact: true }).click();
       await expect(page.getByRole("heading", { name: fixture.projects[role].name, exact: true })).toBeVisible();
       const backToProjects = page.getByRole("button", { name: "Voltar aos projetos", exact: true });
@@ -246,9 +275,11 @@ for (const role of USER_ROLES) {
         );
         return target !== null && button.contains(target);
       }), { message: "The project back button must receive pointer input below the navbar" }).toBe(true);
-      await page.getByRole("tab", { name: "Entregas", exact: true }).click();
-      await expect(page.getByRole("tab", { name: "Entregas", exact: true })).toHaveAttribute("aria-selected", "true");
-      await page.getByRole("tab", { name: "Visão geral", exact: true }).click();
+      const sections = page.getByRole("navigation", { name: "Seções do projeto", exact: true });
+      await sections.getByRole("button", { name: "Entregas", exact: true }).click();
+      await expect(sections.getByRole("button", { name: "Entregas", exact: true })).toHaveAttribute("aria-current", "page");
+      await sections.getByRole("button", { name: "Visão geral", exact: true }).click();
+      await expect(sections.getByRole("button", { name: "Visão geral", exact: true })).toHaveAttribute("aria-current", "page");
       await backToProjects.click();
       await expect(list.getByText(fixture.projects[role].name, { exact: true })).toBeVisible();
     }
@@ -284,7 +315,7 @@ for (const role of USER_ROLES) {
         }
       }
       if (role === "unassignedStaff") {
-        await expect(page.getByText("Nenhuma tarefa encontrada.", { exact: true })).toBeVisible();
+        await expect(page.getByText("Nenhuma tarefa ainda.", { exact: true })).toBeVisible();
       }
       if (role !== "admin") {
         await page.goto("/comercial");

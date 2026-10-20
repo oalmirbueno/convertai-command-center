@@ -3,7 +3,7 @@
 // MESMA cópia que o motor de código usa (workers/motor-codigo/vendor/ui-ux-pro-max,
 // instalada e conferida pelo instalar-ui-ux-pro-max.mjs): uma cópia só no
 // repositório. Node puro, sem dependência, com o seu próprio leitor de CSV (o
-// teste usa OUTRO leitor, _shared/uiux/csv.ts, e os dois precisam dar o mesmo
+// teste usa OUTRO leitor, scripts/uiux/csv.ts, e os dois precisam dar o mesmo
 // resultado).
 //
 // Peso (30/09): tudo o que fica em supabase/functions fora das pastas de função

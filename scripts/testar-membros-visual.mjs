@@ -192,6 +192,37 @@ try {
       resultados.push({ largura, etapa, sem_transbordamento: true });
       console.log(JSON.stringify({ largura, etapa }));
     };
+    const tituloAlinhado = async (nome) => {
+      const titulo = page
+        .locator(".membros-titulo")
+        .getByRole("heading", { name: nome, exact: true });
+      await titulo.waitFor();
+      const medidas = await titulo.evaluate((h) => {
+        const bloco = h.closest(".membros-titulo") || h.parentElement;
+        const ajuda = bloco.querySelector("[data-ajuda-recolhida]");
+        const t = h.getBoundingClientRect(),
+          a = ajuda?.getBoundingClientRect();
+        const principal = h.closest(".membros-conteudo");
+        return {
+          ajuda: !!a,
+          diferenca: a
+            ? Math.abs(t.top + t.height / 2 - a.top - a.height / 2)
+            : Infinity,
+          deslocamento: principal
+            ? principal.getBoundingClientRect().top -
+              principal.parentElement.getBoundingClientRect().top
+            : 0,
+        };
+      });
+      if (
+        !medidas.ajuda ||
+        medidas.diferenca > 4 ||
+        (largura >= 768 && medidas.deslocamento > 2)
+      )
+        throw Error(
+          `Título desalinhado: ${nome}, ${largura}px, ${JSON.stringify(medidas)}`,
+        );
+    };
     await checar("biblioteca");
     await page.screenshot({
       path: resolve(output, `biblioteca-${largura}.png`),
@@ -213,6 +244,16 @@ try {
     if (gravou !== true) throw Error("Conclusão não enviada pela interface");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page
+      .getByRole("button", { name: "Minha lista", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Explorar biblioteca" }).waitFor();
+    await tituloAlinhado("Minha lista");
+    await checar("minha-lista-alinhada");
+    if ([390, 1440].includes(largura))
+      await page.screenshot({
+        path: resolve(output, `minha-lista-${largura}.png`),
+      });
     await page.getByRole("button", { name: "Comunidade", exact: true }).click();
     await page
       .getByRole("link", { name: "WhatsApp · grupo de teste" })
@@ -226,12 +267,14 @@ try {
     if (comunidadeLargura.largura < comunidadeLargura.pai - 4)
       throw Error("Comunidade não ocupa a largura disponível");
     await checar("comunidade");
+    await tituloAlinhado("Comunidade");
     await page.screenshot({
       path: resolve(output, `comunidade-${largura}.png`),
     });
     await page
       .getByRole("button", { name: "Ferramentas", exact: true })
       .click();
+    await tituloAlinhado("Ferramentas");
     await page
       .getByRole("button", { name: "Abrir ferramenta", exact: true })
       .click();
@@ -336,7 +379,9 @@ try {
       });
       // Observe the final geometry after the dialog's opening animation.
       await page.waitForFunction((largura) => {
-        const r = document.querySelector(".membros-pdf-tela-cheia")?.getBoundingClientRect();
+        const r = document
+          .querySelector(".membros-pdf-tela-cheia")
+          ?.getBoundingClientRect();
         return r && r.width >= largura - 2 && r.height >= 898;
       }, largura);
       await checar("pdf-tela-cheia");
@@ -421,8 +466,59 @@ try {
         fullPage: false,
       });
     await page
+      .getByRole("button", { name: "Esteira de produtos", exact: true })
+      .click();
+    await tituloAlinhado("Esteira de produtos");
+    const funil = await page
+      .locator(".membros-editor-funil")
+      .evaluate((el) => ({
+        vazio: !el.querySelector("nav"),
+        recuo:
+          el.querySelector("form").getBoundingClientRect().left -
+          el.getBoundingClientRect().left,
+      }));
+    if (!funil.vazio || funil.recuo > 2)
+      throw Error(`Coluna vazia na esteira: ${JSON.stringify(funil)}`);
+    const origem = page.getByLabel("Quem tem acesso a", { exact: true });
+    const destino = page.getByLabel("Conhecerá este próximo produto", {
+      exact: true,
+    });
+    await origem.selectOption(produtos[0].id);
+    await destino.selectOption(produtos[1].id);
+    if (
+      !(await page
+        .getByRole("button", { name: "Salvar etapa da esteira" })
+        .isEnabled())
+    )
+      throw Error("Etapa válida não pode ser salva");
+    await origem.selectOption(produtos[1].id);
+    if (await destino.inputValue())
+      throw Error(
+        "Destino não foi limpo após escolher o mesmo produto de origem",
+      );
+    await page.getByRole("button", { name: "Nova etapa", exact: true }).click();
+    if ((await origem.inputValue()) || (await destino.inputValue()))
+      throw Error("Nova etapa não limpa o formulário");
+    await checar("esteira-sem-coluna-vazia");
+    if ([390, 1440].includes(largura))
+      await page.screenshot({
+        path: resolve(output, `esteira-${largura}.png`),
+      });
+    await page.getByRole("button", { name: /Pessoas e acessos/ }).click();
+    await tituloAlinhado("Pessoas, compras e acessos");
+    await checar("pessoas-alinhadas");
+    await page.getByRole("button", { name: "Pagamentos", exact: true }).click();
+    await tituloAlinhado("Pagamentos");
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Liberação automática por Kiwify e Asaas desligada." })
+      .waitFor();
+    await checar("pagamentos-alinhados");
+    await page
       .getByRole("button", { name: "Visão do cliente", exact: true })
       .click();
+    await tituloAlinhado("Experimente a biblioteca inteira");
+    await tituloAlinhado("Ver como cliente");
     await page.getByLabel("Cliente ou membro").selectOption("pessoa-teste");
     await page.getByRole("link", { name: "Abrir visão do cliente" }).click();
     await page.getByText("Visão de Pessoa de teste", { exact: true }).waitFor();

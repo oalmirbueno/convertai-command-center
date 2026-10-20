@@ -374,7 +374,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 describe("6. Tela", () => {

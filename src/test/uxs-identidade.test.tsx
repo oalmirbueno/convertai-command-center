@@ -76,18 +76,14 @@ function projetoCom(dados: Record<string, unknown>, extra: Record<string, unknow
 
 function arvore(filho: ReactNode, valor: ProjetoDaMesa, opcoes: { gravacoes?: GravacoesDaMesa | null; qc?: QueryClient; catalogo?: unknown[] } = {}) {
   const qc = opcoes.qc || new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const corpo = h(ProjetoProvider, { valor }, opcoes.gravacoes ? h(ContextoDasGravacoes.Provider, { value: opcoes.gravacoes }, filho) : filho);
+  const corpo = h(ProjetoProvider, { valor, children: opcoes.gravacoes ? h(ContextoDasGravacoes.Provider, { value: opcoes.gravacoes }, filho) : filho });
   return h(
     MemoryRouter,
     null,
     h(
       QueryClientProvider,
       { client: qc },
-      h(
-        MesaProvider,
-        { valor: { clientId: C, clientName: "Forno", userId: "u1", isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: (opcoes.catalogo || []) as any, catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } },
-        h(ConfirmDialogProvider, null, corpo),
-      ),
+      h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: "u1", isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: (opcoes.catalogo || []) as any, catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined }, children: h(ConfirmDialogProvider, null, corpo) }),
     ),
   );
 }

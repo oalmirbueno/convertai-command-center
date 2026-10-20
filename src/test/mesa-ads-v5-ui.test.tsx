@@ -244,7 +244,7 @@ describe("pacote do agente externo", () => {
       estrategia_em: "2026-09-26T09:00:00Z",
       regras: { politicas_meta: "POLÍTICAS DE ANÚNCIO DA META", ctas_meta: ["Enviar mensagem"], estilos_visuais: [{ id: "tipografico", nome: "Tipográfico" }], objetivos: [] },
     },
-    criativos: [{ id: "cr-1", client_id: CLIENTE, plano_id: null, angulo_id: null, trabalho_id: "t-1", nome: "Espera | V1", formato: "feed_4x5", copy: { texto_principal: "Chega de fila", headline_arte: "Sem espera" }, status: "pronto", ad_id: "3", evidencia: "E0", criado_em: "", atualizado_em: "" }],
+    criativos: [{ id: "cr-1", client_id: CLIENTE, plano_id: null, angulo_id: null, trabalho_id: "t-1", nome: "Espera | V1", formato: "feed_4x5", copy: { texto_principal: "Chega de fila", titulo: "Sem espera" }, status: "pronto", ad_id: "3", evidencia: "E0", criado_em: "", atualizado_em: "" }],
     planos: [],
     trabalhos: [{ id: "t-1", status: "pronto", cards: [{ ordem: 1, versao: 2, storage_path: `${CLIENTE}/estudio/t-1/1-v2.png` }] as any, direcao: { cards: [{ ordem: 1 }] } as any }],
   });

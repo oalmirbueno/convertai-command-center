@@ -148,9 +148,10 @@ SELECT is(
         'editorial_events'
       )
       AND cmd <> 'SELECT'
+      AND permissive = 'PERMISSIVE'
   ),
   0,
-  'authenticated editorial tables expose no direct write policy'
+  'editorial tables expose no permissive direct write policy'
 );
 
 SELECT ok(
@@ -711,7 +712,8 @@ FROM (
 ) AS fixture(id, full_name)
 WHERE profile.id = fixture.id;
 
--- handle_new_user creates a client role; replace it only for staff.
+-- New signups are members without operational roles. Provision every fixture
+-- role explicitly, as an administrator does when enrolling a real client.
 DELETE FROM public.user_roles
 WHERE user_id IN (
   '91000000-0000-0000-0000-000000000001',
@@ -727,7 +729,9 @@ VALUES
   ('91000000-0000-0000-0000-000000000002', 'manager'),
   ('91000000-0000-0000-0000-000000000003', 'design'),
   ('91000000-0000-0000-0000-000000000004', 'traffic'),
-  ('91000000-0000-0000-0000-00000000000e', 'manager');
+  ('91000000-0000-0000-0000-00000000000e', 'manager'),
+  ('91000000-0000-0000-0000-00000000000a', 'client'),
+  ('91000000-0000-0000-0000-00000000000b', 'client');
 
 INSERT INTO public.team_client_assignments (user_id, client_id)
 VALUES
@@ -2300,8 +2304,8 @@ SELECT throws_ok(
     FROM pg_temp.editorial_test_state AS state
     WHERE state.label = 'client_a'
   $sql$,
-  '40001',
-  NULL,
+  'P0001',
+  'publication changed; refresh before transitioning',
   'stale CAS cannot reschedule a changed publication'
 );
 

@@ -45,7 +45,7 @@ import {
 } from "../../supabase/functions/_shared/uiux/jev-da-base";
 import { apoioDaPaleta, corDoPapel, variaveisDoApoio } from "../../supabase/functions/_shared/uiux/apoio-da-paleta";
 import { contraste } from "../../supabase/functions/_shared/cores-da-marca";
-import { itensDoChecklistDeUx, lerTokensDoCss, pendenciasGraves, revisarUx } from "../../supabase/functions/_shared/uiux/revisao-ux";
+import { itensDoChecklistDeUx, lerTokensDoCss, pendenciasGraves, revisarUx } from "../../workers/motor-codigo/lib/regras-ux";
 import { anexoDaBaseCitada, blocoDaBaseDeDesign, numerarItens, regrasParaCampos, rotuloDaCitacao } from "../../supabase/functions/_shared/uiux/citar";
 import { graficoParaDados, lerBaseDeDesign, lerSerieReal, paletaDoSetor, validarBaseDeDesign } from "../../supabase/functions/_shared/uiux/consultas";
 import { limparVariantes, mapaDoPadrao, origensDaBase, variantesDoMapa, VARIANTES_DAS_SECOES } from "../../supabase/functions/_shared/site-variantes";
@@ -442,7 +442,7 @@ describe("telas da base", () => {
 
   it("checklist de UX por severidade: crítica e alta abertas, média e baixa recolhidas; Como corrigir abre; Ok grava", async () => {
     mock.invoke.mockImplementation((_f: string, { body }: any) => Promise.resolve({ data: body.acao === "ux_marcar" ? { site: site(), custo_usd: 0 } : {}, error: null }));
-    const mod = await import("../../supabase/functions/_shared/uiux/revisao-ux");
+    const mod = await import("../../workers/motor-codigo/lib/regras-ux");
     const itens = mod.itensDoChecklistDeUx(REGRAS_DE_UX_DA_BASE, { avisos: [], revisado: false, agente: [], marcas: {} });
     montar(h(ChecklistDeUx, { site: site(), itens, onIrPara: vi.fn() }));
     expect(document.querySelectorAll("[data-grupo-de-severidade]").length).toBe(4);

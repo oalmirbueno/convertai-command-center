@@ -635,7 +635,7 @@ describe("Identidade: Filme cinematográfico abre o Laboratório", () => {
       h(QueryClientProvider, { client: qc },
         h(MemoryRouter, { initialEntries: ["/mesa/identidade"] },
           h(Routes, null,
-            h(Route, { path: "/mesa/identidade", element: h(MesaProvider, { valor: { clientId: CLIENTE, clientName: "Acerbi", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } as any }, h(ProjetoProvider, { valor }, h(VideoDaMarca))) }),
+            h(Route, { path: "/mesa/identidade", element: h(MesaProvider, { valor: { clientId: CLIENTE, clientName: "Acerbi", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } as any, children: h(ProjetoProvider, { valor, children: h(VideoDaMarca) }) }) }),
             h(Route, { path: "/laboratorio", element: h(Endereco) }),
           ))),
     );

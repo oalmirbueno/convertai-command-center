@@ -448,7 +448,7 @@ const valorDaMesa = (): MesaValor => ({
 });
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 /** Botão com custo sem estimativa pede o segundo clique. */
 async function clicar(nome: RegExp) {
@@ -485,7 +485,7 @@ describe("9. Tela", () => {
     expect(passos).toEqual([["confirmar", ""], ["p1", "executando"], ["p1", "feito"], ["p2", "executando"], ["p2", "feito"]]);
     // Prova: com as versões novas, antes e depois de cada lâmina e o Desfazer da versão.
     const qc = new QueryClient();
-    rerender(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(PlanoDoDiretor, { plano, mensagemId: MENSAGEM, trabalho: trabalhoDaTela([{ ordem: 1, versao: 1 }, { ordem: 1, versao: 2 }, { ordem: 2, versao: 1 }, { ordem: 2, versao: 2 }]), executar, partes: () => [], onAtualizar: vi.fn() })))));
+    rerender(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: h(PlanoDoDiretor, { plano, mensagemId: MENSAGEM, trabalho: trabalhoDaTela([{ ordem: 1, versao: 1 }, { ordem: 1, versao: 2 }, { ordem: 2, versao: 1 }, { ordem: 2, versao: 2 }]), executar, partes: () => [], onAtualizar: vi.fn() }) }))));
     await waitFor(() => expect(container.querySelectorAll("[data-prova]").length).toBe(2));
     fireEvent.click(container.querySelector("[data-desfazer-versao='2']")!);
     await waitFor(() => expect(mock.invoke.mock.calls.some((c) => c[1].body.acao === "desfazer_versao" && c[1].body.ordem === 1 && c[1].body.versao === 2)).toBe(true));

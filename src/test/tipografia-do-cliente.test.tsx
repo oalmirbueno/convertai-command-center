@@ -293,7 +293,7 @@ describe("3. Cliente sem fonte: não gera, com Sugerir da biblioteca e Definir n
     // Kit com título e texto: a lista vai igual (o prompt de hoje não muda).
     expect(tipografiaDoKit(MARCA_CASO.fontes)!.fontes).toEqual(MARCA_CASO.fontes);
     const prompt = promptDaLamina(
-      { ordem: 1, funcao: "capa", texto_exato: "Oi", composicao: "", ilustracao: "", prompt_imagem: "", blocos: [{ papel: "headline", texto: "Oi" }] },
+      { ordem: 1, funcao: "capa", texto_exato: "Oi", ilustracao: "", blocos: [{ papel: "headline", texto: "Oi" }] },
       { ...MARCA_CASO, fontes: tip.fontes, tipografiaCitada: { titulo: "Fonte Citada" } },
       { total: 1, carrosselInfinito: false, levaLogo: false },
     );

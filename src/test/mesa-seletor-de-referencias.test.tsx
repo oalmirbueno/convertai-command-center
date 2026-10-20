@@ -96,7 +96,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 const no = (id: string, name: string, kind: "folder" | "file", parent_id: string | null, storage_path: string | null = null): NoDoWorkspace => ({

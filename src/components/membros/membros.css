@@ -580,9 +580,65 @@
 }
 .membros-conteudo {
   width: 100%;
+  min-width: 0;
   max-width: 1440px;
-  margin: auto;
+  margin: 0 auto;
+  align-self: start;
   padding: 24px 16px 48px;
+}
+.membros-titulo {
+  align-items: center;
+  gap: 12px;
+}
+.membros-titulo h2 {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.membros-estado-vazio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-block: 16px;
+  font-size: 13px;
+  color: hsl(var(--secondary-foreground));
+}
+.membros-estado-vazio .membros-acao {
+  color: hsl(var(--primary));
+}
+.membros-editor-funil {
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  align-items: start;
+}
+.membros-editor-funil.sem-etapas {
+  grid-template-columns: minmax(0, 1fr);
+}
+.membros-funil-formulario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  max-width: 860px;
+  min-width: 0;
+}
+.membros-funil-formulario > label {
+  min-width: 0;
+}
+.membros-funil-formulario > section,
+.membros-formulario-acoes {
+  grid-column: 1 / -1;
+}
+.membros-formulario-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .membros-editor-funil,
+  .membros-funil-formulario {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .membros-topo {
   position: sticky;
@@ -1051,11 +1107,32 @@
     gap: 12px;
   }
   .membros-admin h1 {
-    font-size: 20px;
+    font-size: 18px;
+  }
+  .membros-admin > header {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .membros-admin > header > div:first-child {
+    min-width: 0;
+    flex: 1;
+    gap: 8px;
+  }
+  .membros-admin > header > div:first-child > div {
+    min-width: 0;
+  }
+  .membros-admin > header > div:last-child {
+    flex-wrap: nowrap;
+    gap: 2px;
   }
   .membros-admin > header .membros-acao {
     font-size: 12px;
-    padding-inline: 10px;
+    min-width: 32px;
+    min-height: 36px;
+    padding-inline: 8px;
+  }
+  .membros-admin > header .membros-acao > span {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

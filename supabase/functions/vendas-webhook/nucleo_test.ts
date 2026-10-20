@@ -19,7 +19,7 @@ import {
   normalizarStripe,
   type PedidoDoGateway,
   sha256Hex,
-} from "../_shared/vendas-gateways.ts";
+} from "./modulos/gateways.ts";
 import { type IntegracaoParaWebhook, type PortaDeVendas, receberWebhook, rotaDoWebhook } from "./nucleo.ts";
 
 const CHAVE = "0123456789abcdef0123456789abcdef";

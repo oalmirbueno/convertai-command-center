@@ -112,7 +112,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, { initialEntries: ["/mesa?aba=estudio"] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(MemoryRouter, { initialEntries: ["/mesa?aba=estudio"] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 const marca = (): MarcaParaDirecao => ({

@@ -873,8 +873,8 @@ export function aplicarArquivosNasLaminas<C extends LaminaComFotos>(
   arquivos: ArquivoDaArteRapida[],
   peca: PecaDaArteRapida,
   vitrine: VitrineDaArteRapida | null = null,
-): C[] {
-  const saida = cards.map((c) => ({ ...c, imagens_ids: (c.imagens_ids || []).slice(), fotos_livres: (c.fotos_livres || []).slice() })) as C[];
+): Array<C & LaminaComFotos> {
+  const saida: Array<C & LaminaComFotos> = cards.map((c) => ({ ...c, imagens_ids: (c.imagens_ids || []).slice(), fotos_livres: (c.fotos_livres || []).slice() }));
   if (!saida.length) return saida;
   // Frente RO: o rosto (identidade) ocupa a lâmina como a foto, mas o mesmo P pode repetir em várias lâminas.
   const fotos = arquivos.filter((a) => a.papel === "foto" || a.papel === "rosto");

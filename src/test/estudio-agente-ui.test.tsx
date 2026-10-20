@@ -118,10 +118,7 @@ function montar(props: Partial<Parameters<typeof DiretorDoEstudio>[0]> = {}) {
       h(
         TooltipProvider,
         null,
-        h(
-          MesaProvider,
-          { valor: valorDaMesa() },
-          h(DiretorDoEstudio, {
+        h(MesaProvider, { valor: valorDaMesa(), children: h(DiretorDoEstudio, {
             trabalho,
             ordemEmFoco: 2,
             ocupado: false,
@@ -129,8 +126,7 @@ function montar(props: Partial<Parameters<typeof DiretorDoEstudio>[0]> = {}) {
             onRefazer,
             onAtualizar,
             ...props,
-          }),
-        ),
+          }) }),
       ),
     ),
   );

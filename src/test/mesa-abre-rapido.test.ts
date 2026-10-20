@@ -143,7 +143,7 @@ describe("estimativa: nada de ia-gateway enquanto o catálogo chega", () => {
   const montar = (v: MesaValor) => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
-      h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: v }, h(EstimativaInline, { partes: [{ modeloId: "x", tipo: "texto", tokensEntrada: 1000 }] }))),
+      h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: v, children: h(EstimativaInline, { partes: [{ modeloId: "x", tipo: "texto", tokensEntrada: 1000 }] }) })),
     );
   };
 

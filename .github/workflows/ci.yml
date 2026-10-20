@@ -50,6 +50,9 @@ jobs:
           test "$(npm --version)" = "11.9.0"
           npm ci
 
+      - name: Install pinned code worker types without running installers
+        run: npm ci --prefix workers/motor-codigo --ignore-scripts
+
       - name: Verify append-only migration ledger
         shell: bash
         env:

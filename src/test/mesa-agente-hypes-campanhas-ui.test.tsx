@@ -99,7 +99,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho)));
+  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho })));
 }
 
 const chamadasDe = (acao: string) =>

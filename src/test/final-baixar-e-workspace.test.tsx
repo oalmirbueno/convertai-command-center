@@ -236,7 +236,7 @@ describe("barra do editor: vídeo inteiro pronto com o editor aberto", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     marcarRenderAtivo(VERSAO);
     montar(
-      h(Renderizar, { clientId: CLIENTE, versaoId: VERSAO, projeto, salvamento: "salvo", salvarAgora: async () => undefined, estadoDoSalvamento: () => "salvo", revisao: () => 1, cursor: () => 0, onOps: vi.fn() }),
+      h(Renderizar, { clientId: CLIENTE, versaoId: VERSAO, projeto, salvamento: "salvo", salvarAgora: async () => undefined, estadoDoSalvamento: () => "salvo" as const, revisao: () => 1, cursor: () => 0, onOps: vi.fn() }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);

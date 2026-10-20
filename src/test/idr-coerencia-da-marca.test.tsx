@@ -244,8 +244,7 @@ function montar(projeto: any, filho: ReactNode, guardar = vi.fn(), irPara = vi.f
   return render(
     h(MemoryRouter, null,
       h(QueryClientProvider, { client: qc },
-        h(MesaProvider, { valor: { clientId: C, clientName: "Clara", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } as any },
-          h(ProjetoProvider, { valor }, filho)))),
+        h(MesaProvider, { valor: { clientId: C, clientName: "Clara", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } as any, children: h(ProjetoProvider, { valor, children: filho }) }))),
   );
 }
 

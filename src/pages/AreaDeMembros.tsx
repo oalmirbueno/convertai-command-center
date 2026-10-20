@@ -1,4 +1,5 @@
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import TituloMembros from "@/components/membros/TituloMembros";
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -570,7 +571,10 @@ export default function AreaDeMembros() {
             )}
             {secao === "lista" && (
               <section className="space-y-5">
-                <CabecalhoDePagina titulo={<> Minha lista </>} />
+                <TituloMembros titulo="Minha lista" principal>
+                  Use o marcador na capa para guardar o que quer assistir
+                  depois. Retire da lista pelo mesmo marcador.
+                </TituloMembros>
                 {previa ? (
                   <p className="text-[13px]">
                     A lista pessoal fica disponível na própria conta do membro.
@@ -589,16 +593,25 @@ export default function AreaDeMembros() {
                     {...propsLista}
                   />
                 ) : (
-                  <AjudaRecolhida rotulo="Mais informações">
-                    Use o marcador na capa para guardar o que quer assistir
-                    depois.
-                  </AjudaRecolhida>
+                  <div className="membros-estado-vazio">
+                    <Bookmark size={19} className="text-muted-foreground" />
+                    <p>Sua lista ainda está vazia.</p>
+                    <button
+                      className="membros-acao"
+                      onClick={() => setSecao("inicio")}
+                    >
+                      Explorar biblioteca
+                    </button>
+                  </div>
                 )}
               </section>
             )}
             {secao === "comunidade" && (
               <section className="space-y-5">
-                <CabecalhoDePagina titulo={<> Comunidade </>} />
+                <TituloMembros titulo="Comunidade" principal>
+                  Escolha um produto para acompanhar as conversas e entrar nos
+                  grupos disponíveis.
+                </TituloMembros>
                 {comunidades.length ? (
                   <>
                     <label className="block text-[12px] space-y-2 max-w-md">
@@ -624,10 +637,19 @@ export default function AreaDeMembros() {
                     />
                   </>
                 ) : (
-                  <AjudaRecolhida rotulo="Saiba mais">
-                    As comunidades dos produtos liberados para você aparecerão
-                    aqui quando estiverem disponíveis.
-                  </AjudaRecolhida>
+                  <div className="membros-estado-vazio">
+                    <MessageCircle
+                      size={19}
+                      className="text-muted-foreground"
+                    />
+                    <p>Você ainda não tem uma comunidade liberada.</p>
+                    <button
+                      className="membros-acao"
+                      onClick={() => setSecao("inicio")}
+                    >
+                      Explorar produtos
+                    </button>
+                  </div>
                 )}
               </section>
             )}

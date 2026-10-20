@@ -80,6 +80,7 @@ export function loadReviewedProjectBaseline(options = {}) {
   return parseReviewedProjectBaseline(readFileSync(resolve(options.repoRoot ?? defaultRepoRoot, baselinePath), 'utf8'), options);
 }
 
+/** @param {{projectRef?: string, repoRoot?: string, sourceDir?: string}} options */
 export function listProjectLedgerEntries({ projectRef, repoRoot = defaultRepoRoot, sourceDir } = {}) {
   if (projectRef === legacyProjectRef) {
     // Explicit legacy rollback target: preserve its existing reviewed contract.

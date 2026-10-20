@@ -83,18 +83,22 @@ export default function ConfiguracaoKiwify() {
   }
   return (
     <details className="membros-caixa mb-5">
-      <summary>
-        Conexão Kiwify ·{" "}
-        {estado.data?.configurada
-          ? "Configurada, liberação desligada"
-          : "Preparada para configurar"}
+      <summary className="inline-flex items-center gap-2">
+        <span>
+          Conexão Kiwify ·{" "}
+          {estado.data?.configurada
+            ? "Configurada, liberação desligada"
+            : "Preparada para configurar"}
+        </span>
+        <span onClick={(e) => e.stopPropagation()}>
+          <AjudaRecolhida rotulo="Mais informações">
+            Quando quiser configurar, crie uma credencial na Kiwify com leitura
+            de vendas e estatísticas. Os dados ficam no cofre do servidor.
+            Salvar a conexão não ativa pagamentos.
+          </AjudaRecolhida>
+        </span>
       </summary>
       <div className="space-y-4 pt-4">
-        <AjudaRecolhida rotulo="Mais informações">
-          Quando quiser configurar, crie uma credencial na Kiwify com leitura de
-          vendas e estatísticas. Os dados ficam no cofre do servidor. Salvar a
-          conexão não ativa pagamentos.
-        </AjudaRecolhida>
         <a
           href="https://ajuda.kiwify.com.br/pt-br/article/como-funciona-a-api-da-kiwify-1iosjhu/"
           target="_blank"

@@ -90,7 +90,7 @@ describe("RegiaoRolavel", () => {
 
 describe("AreaDeTrabalho: abrir a lateral de fora e nascer recolhida", () => {
   it("nasce recolhida sem escolha guardada e abrirLateralDaArea tira do recolhido", () => {
-    render(h(AreaDeTrabalho, { memoria: "teste-area", nasceRecolhida: true, rotuloDaLateral: "Diretor", lateral: h("p", null, "conversa") }, h("p", null, "principal")));
+    render(h(AreaDeTrabalho, { memoria: "teste-area", nasceRecolhida: true, rotuloDaLateral: "Diretor", lateral: h("p", null, "conversa"), children: h("p", null, "principal") }));
     expect(screen.getByRole("button", { name: "Abrir diretor" })).toBeTruthy();
     expect(screen.queryByText("conversa")).toBeNull();
     act(() => {

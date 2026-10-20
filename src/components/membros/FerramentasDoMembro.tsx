@@ -1,4 +1,5 @@
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import TituloMembros from "./TituloMembros";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -44,12 +45,16 @@ export default function FerramentasDoMembro({
   });
   if (somenteLeitura)
     return (
-      <div className="flex items-center gap-2 text-[13px]">
-        <p>Ferramentas disponíveis na conta do próprio titular.</p>
-        <AjudaRecolhida rotulo="Como testar uma ferramenta">
+      <section className="space-y-5">
+        <TituloMembros
+          titulo="Ferramentas"
+          principal
+          icone={<Wrench size={19} className="text-primary" />}
+        >
           Para testar uma licença, entre com a conta do titular.
-        </AjudaRecolhida>
-      </div>
+        </TituloMembros>
+        <p>Ferramentas disponíveis na conta do próprio titular.</p>
+      </section>
     );
   if (selecionada && user)
     return (
@@ -62,15 +67,15 @@ export default function FerramentasDoMembro({
     );
   return (
     <section className="space-y-5">
-      <div className="flex items-center gap-2">
-        <Wrench size={19} className="text-primary" />
-        <CabecalhoDePagina titulo={<> Ferramentas </>} />
-        <AjudaRecolhida rotulo="Sobre as ferramentas">
-          A licença de cada ferramenta é individual e tem validade própria.
-          Compras e aulas continuam independentes. Ao vencer, o CRM fica
-          guardado até você solicitar exclusão.
-        </AjudaRecolhida>
-      </div>
+      <TituloMembros
+        titulo="Ferramentas"
+        principal
+        icone={<Wrench size={19} className="text-primary" />}
+      >
+        A licença de cada ferramenta é individual e tem validade própria.
+        Compras e aulas continuam independentes. Ao vencer, o CRM fica guardado
+        até você solicitar exclusão.
+      </TituloMembros>
       {dados.isPending ? (
         <p role="status">Carregando ferramentas…</p>
       ) : dados.isError ? (

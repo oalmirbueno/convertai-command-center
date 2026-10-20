@@ -533,7 +533,7 @@ describe("área MCP do cliente", () => {
     });
     const valor = { clientId: "11111111-1111-1111-1111-111111111111", clientName: "C", userId: "u", isAdmin: true, podeRecarregar: true, saldoUsd: 1, catalogo: CATALOGO, catalogoCarregando: false, atualizarCusto: vi.fn(), abrirRecarga: vi.fn(), abrirChaves: vi.fn(), abrirModelos: vi.fn() } as unknown as MesaValor;
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor }, h(ContextoMcp)))));
+    render(h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor, children: h(ContextoMcp) }))));
     await waitFor(() => expect(screen.getByText("Reunião")).toBeTruthy());
     expect(screen.getByText("1 item · 0 valem para o planejamento")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Reunião: vale para o planejamento" }));

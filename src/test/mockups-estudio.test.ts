@@ -5,7 +5,6 @@ import { aplicar, detectarAreaLisa, homografia, inverter, ordenarCantos, projeta
 import { candidatosDaSugestao, normalizarMockup, normalizarTextura, ordenarNaSequencia } from "@/lib/mockups/catalogo";
 import { caixaDaLogo, superficieDoSlot, tamanhoDoDesign } from "@/lib/mockups/designDoSlot";
 import { montarAtlas } from "@/lib/mockups/webgl";
-// @ts-expect-error módulo .mjs sem tipos (script da máquina da agência)
 import { caminhosDoMockup, enviosDoMockup, linhaDaTextura, linhaDoCatalogo } from "../../tools/mockups/catalogo-linhas.mjs";
 import { limparCandidatos, NIVEIS_DE_ADEQUACAO, notasDoLote, perguntasDeAdequacao, promptDaCena, ranquear } from "../../supabase/functions/mesa-mockups/sugestao";
 

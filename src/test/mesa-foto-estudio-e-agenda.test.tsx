@@ -561,7 +561,7 @@ const valorDaFoto = (extra: Partial<MesaFotoValor> = {}): MesaFotoValor => ({
 function montar(filho: any, foto: MesaFotoValor, rota = `/mesa-foto?client=${CLIENTE}`) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(MesaFotoProvider, { valor: foto }, filho)))),
+    h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: h(MesaFotoProvider, { valor: foto, children: filho }) }))),
   );
 }
 
@@ -738,7 +738,7 @@ describe("geração barata começa sozinha (resposta nova) e só com a liberaç�
   });
   const montarCartao = (acao: any, iniciarSozinha: boolean, executar: any) => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(CartaoDaGeracao, { acao, mensagemId: "m-1", executar, iniciarSozinha }))));
+    return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: h(CartaoDaGeracao, { acao, mensagemId: "m-1", executar, iniciarSozinha }) })));
   };
   const executarFeito = (acao: any) =>
     vi.fn(async (_m: string, _a: string, ref: string) => {

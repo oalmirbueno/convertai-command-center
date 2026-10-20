@@ -338,7 +338,7 @@ describe("ações de publicação da peça", () => {
   const N1 = "c1111111-1111-4111-8111-111111111111";
   const N2 = "c2222222-2222-4222-8222-222222222222";
   const VELHO = "d1111111-1111-4111-8111-111111111111";
-  const tabelasBase = (pub: Linha, arquivo: Linha) => ({
+  const tabelasBase = (pub: Linha, arquivo: Linha): Record<string, Linha[]> => ({
     editorial_post_internal: [{ post_id: P1, task_id: "t1", revision_of_post_id: null, idempotency_key: "77777777-7777-4777-8777-777777777777", responsible_id: null, internal_notes: null }],
     editorial_posts: [{ id: P1, version: 4, client_id: "c1", project_id: "pr1", primary_file_id: F1, title: "Dia", content_type: "carousel", objective: "o", default_caption: "leg", production_status: "ready", archived_at: null }],
     editorial_publications: [{ id: "pub1", version: 2, post_id: P1, platform: "instagram", external_account_id: "acc", file_id: null, caption: "leg", first_comment: null, alt_text: null, scheduled_timezone: "America/Sao_Paulo", ...pub }],

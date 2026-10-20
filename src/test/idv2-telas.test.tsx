@@ -92,9 +92,7 @@ function montar(filho: ReactNode) {
   return render(
     h(MemoryRouter, null,
       h(QueryClientProvider, { client: qc },
-        h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } },
-          // IDV3: a Entrega ganhou o documento da entrega (frente DOC), que pede o Confirmar do topo do painel.
-          h(ConfirmDialogProvider, null, h(ProjetoProvider, { valor }, filho))))),
+        h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined }, children: h(ConfirmDialogProvider, null, h(ProjetoProvider, { valor, children: filho })) }))),
   );
 }
 

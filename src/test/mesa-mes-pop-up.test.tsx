@@ -64,7 +64,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(rota = "/mesa?client=c&mes=2026-10-01") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(AbaMes, {})))));
+  return render(h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: h(AbaMes, {}) }))));
 }
 
 beforeEach(() => {
