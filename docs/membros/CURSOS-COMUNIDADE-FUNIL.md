@@ -65,3 +65,14 @@ Teste isolado PostgreSQL cobre direitos, rascunhos, prévia, favoritos, comunida
 Testes React cobrem leitor, download no mesmo contexto e relógio persistido. Testes visuais usam dados sintéticos
 somente no navegador local, com APIs substituídas e sem conexão de produção, incluindo renderização real do PDF.
 O adaptador Kiwify tem testes de contrato com respostas sintéticas, sem afirmar validação comercial real.
+
+## Registro da aplicação em 20/10/2026
+
+- Banco: versão remota `20261020183251`, atribuída pelo conector ao fonte `20261020180352`.
+  Ledger passou de 387 para 388 entradas; as 387 anteriores permaneceram idênticas, sem replay ou repair.
+- Função `area-membros-kiwify` versão 1 publicada com JWT obrigatório. Configurações reais: zero.
+- Produto demonstrativo existente organizado em um módulo, uma aula e um PDF complementar, com comunidade habilitada.
+  Nenhum novo comprador, direito ou pagamento criado. Um acesso manual existente preservado; compras: zero.
+- Verificações: 36 testes React/modelo, 14 Deno, 101 checagens SQL, 34 estados visuais em cinco larguras,
+  tipos app/node, lint do lote, build e compatibilidade Lovable. PDF renderizado em canvas no teste de interface real.
+- Backup físico disponível: 20/10/2026 às 03:58:41 UTC, com restauração disponível, conferido antes da aplicação.
