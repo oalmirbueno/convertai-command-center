@@ -2,6 +2,11 @@
 
 ## Estado
 
+**Complemento de experiência do cliente:** modo `/membros?modo=cliente`, bloqueio conferido no
+servidor e progresso de teste separado. Administração organizada em seções recolhíveis, biblioteca
+com capa e jornada baseada em conclusões reais. Ver [`EXPERIENCIA-CLIENTE.md`](EXPERIENCIA-CLIENTE.md)
+para escopo, testes, registro de publicação e retorno lógico. Pagamentos continuam desligados.
+
 **Atualização autorizada em 20/10/2026:** migrações aplicadas no backend atual e `area-membros`
 publicada, com Kiwify e Asaas bloqueados no servidor. Acrescentada a prévia administrativa da mesma
 biblioteca, calculada com direitos reais e sem gravar progresso. Instruções e registro da aplicação:

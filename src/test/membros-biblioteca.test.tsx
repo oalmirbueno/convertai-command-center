@@ -30,6 +30,7 @@ vi.mock("@/lib/membros/api", () => ({
   carregarMateriais: mocks.materiais,
   abrirArquivo: mocks.arquivo,
   gravarProgresso: mocks.progresso,
+  reiniciarTeste: vi.fn(),
   mensagemDoErro: () => "Falha de conexão. Tente novamente.",
 }));
 const produto = (v: Partial<Produto> = {}): Produto => ({
@@ -97,8 +98,8 @@ describe("biblioteca integrada", () => {
     });
     montar("/membros?visao=cliente&produto=p");
     expect(await screen.findByText("Conteúdo autorizado")).toBeInTheDocument();
-    expect(mocks.catalogo).toHaveBeenCalledWith("cliente");
-    expect(mocks.materiais).toHaveBeenCalledWith("p", "cliente");
+    expect(mocks.catalogo).toHaveBeenCalledWith("cliente", undefined);
+    expect(mocks.materiais).toHaveBeenCalledWith("p", "cliente", undefined);
     expect(
       screen.getByRole("button", { name: "Marcar como concluído" }),
     ).toBeDisabled();
@@ -135,7 +136,7 @@ describe("biblioteca integrada", () => {
         "Os materiais deste produto ainda não estão disponíveis.",
       ),
     ).toBeInTheDocument();
-    expect(mocks.materiais).toHaveBeenCalledWith("p", undefined);
+    expect(mocks.materiais).toHaveBeenCalledWith("p", undefined, undefined);
     expect(
       screen.queryByRole("link", { name: "Ver oferta no checkout" }),
     ).not.toBeInTheDocument();
@@ -210,10 +211,167 @@ describe("biblioteca integrada", () => {
       screen.getByRole("button", { name: "Marcar como concluído" }),
     );
     await waitFor(() =>
-      expect(mocks.progresso).toHaveBeenCalledWith("m", 0, 0, true),
+      expect(mocks.progresso).toHaveBeenCalledWith("m", 0, 0, true, undefined),
     );
     expect(
       screen.queryByRole("button", { name: "Baixar arquivo" }),
     ).not.toBeInTheDocument();
+  });
+  it("testa como membro sem links de administração e salva no progresso separado", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({
+      produtos: [produto({ origens: ["manual"] })],
+      pendentes: [],
+    });
+    mocks.materiais.mockResolvedValue({
+      materiais: [
+        {
+          id: "m",
+          produto_id: "p",
+          titulo: "Aula de teste",
+          tipo: "texto",
+          texto: "Leitura liberada",
+          arquivo: null,
+          permite_download: false,
+          ordem: 0,
+        },
+      ],
+      progresso: [],
+    });
+    montar("/membros?modo=cliente&produto=p");
+    expect(await screen.findByText("Leitura liberada")).toBeInTheDocument();
+    expect(mocks.catalogo).toHaveBeenCalledWith(undefined, {
+      teste: true,
+      bloqueado: false,
+    });
+    expect(mocks.materiais).toHaveBeenCalledWith("p", undefined, {
+      teste: true,
+      bloqueado: false,
+    });
+    expect(screen.queryByText("Painel Aceleriq")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Administrar biblioteca" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Marcar como concluído" }),
+    );
+    await waitFor(() =>
+      expect(mocks.progresso).toHaveBeenCalledWith("m", 0, 0, true, {
+        teste: true,
+        bloqueado: false,
+      }),
+    );
+  });
+  it("troca para bloqueio sem reutilizar materiais do teste liberado", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockImplementation((_previa, teste) =>
+      Promise.resolve({
+        produtos: [produto({ origens: teste?.bloqueado ? [] : ["manual"] })],
+        pendentes: [],
+      }),
+    );
+    montar("/membros?modo=cliente");
+    await screen.findByText("Continuar na biblioteca");
+    fireEvent.click(screen.getByRole("button", { name: "Simular bloqueio" }));
+    await screen.findByText("Conhecer produto");
+    expect(mocks.catalogo).toHaveBeenLastCalledWith(undefined, {
+      teste: true,
+      bloqueado: true,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Conhecer produto" }));
+    await screen.findByRole("link", { name: "Ver oferta no checkout" });
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.arquivo).not.toHaveBeenCalled();
+  });
+  it("retoma o vídeo e preserva os segundos ao pausar no teste de cliente", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({
+      produtos: [produto({ origens: ["manual"] })],
+      pendentes: [],
+    });
+    mocks.materiais.mockResolvedValue({
+      materiais: [
+        {
+          id: "v",
+          produto_id: "p",
+          titulo: "Vídeo",
+          tipo: "video",
+          texto: "",
+          arquivo: "privado/video.mp4",
+          permite_download: false,
+          ordem: 0,
+        },
+      ],
+      progresso: [
+        { material_id: "v", posicao: 20, duracao: 75, concluido: false },
+      ],
+    });
+    mocks.arquivo.mockResolvedValue({
+      url: "https://example.invalid/video.mp4",
+      expira_em: "2026-10-20",
+    });
+    montar("/membros?modo=cliente&produto=p");
+    await screen.findByText("Vídeo", { selector: "h2" });
+    await waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    const video = document.querySelector("video")!;
+    Object.defineProperty(video, "duration", { value: 75, configurable: true });
+    fireEvent.loadedMetadata(video);
+    expect(video.currentTime).toBe(20);
+    video.currentTime = 31;
+    fireEvent.pause(video);
+    await waitFor(() =>
+      expect(mocks.progresso).toHaveBeenCalledWith("v", 31, 75, false, {
+        teste: true,
+        bloqueado: false,
+      }),
+    );
+    expect(mocks.arquivo).toHaveBeenCalledWith("v", false, undefined, {
+      teste: true,
+      bloqueado: false,
+    });
+    expect(
+      screen.queryByRole("button", { name: "Baixar arquivo" }),
+    ).not.toBeInTheDocument();
+  });
+  it("solicita o download permitido no mesmo modo de cliente", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({
+      produtos: [produto({ origens: ["manual"] })],
+      pendentes: [],
+    });
+    mocks.materiais.mockResolvedValue({
+      materiais: [
+        {
+          id: "d",
+          produto_id: "p",
+          titulo: "Guia para baixar",
+          tipo: "arquivo",
+          texto: "",
+          arquivo: "privado/guia.pdf",
+          permite_download: true,
+          ordem: 0,
+        },
+      ],
+      progresso: [],
+    });
+    mocks.arquivo.mockResolvedValue({
+      url: "https://example.invalid/guia.pdf",
+      expira_em: "2026-10-20",
+    });
+    const clique = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    montar("/membros?modo=cliente&produto=p");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Baixar arquivo" }),
+    );
+    await waitFor(() =>
+      expect(mocks.arquivo).toHaveBeenCalledWith("d", true, undefined, {
+        teste: true,
+        bloqueado: false,
+      }),
+    );
+    expect(clique).toHaveBeenCalled();
+    clique.mockRestore();
   });
 });

@@ -30,7 +30,8 @@ try {
   foreach($sqlMembros in @('supabase/tests/membros/bootstrap.sql','supabase/migrations/20261020150633_area_membros_biblioteca.sql','supabase/tests/membros/permissoes.sql')){
     Run-PgMembros 'psql.exe' @('-X','-h','127.0.0.1','-p',"$portMembros",'-U','postgres','-d','membros_test','-v','ON_ERROR_STOP=1','-f',(Join-Path $repoMembros $sqlMembros))
   }
-  foreach($sqlMembros in @('supabase/migrations/20261020180000_membros_previa_admin_pagamentos_pausados.sql','supabase/tests/membros/previa.sql')) {
+  # Ordem monotônica real dos fontes, após a prévia já publicada.
+  foreach($sqlMembros in @('supabase/migrations/20261020180000_membros_previa_admin_pagamentos_pausados.sql','supabase/migrations/20261020180001_membros_experiencia_cliente.sql','supabase/tests/membros/previa.sql','supabase/tests/membros/teste_cliente.sql')) {
     Run-PgMembros 'psql.exe' @('-X','-h','127.0.0.1','-p',"$portMembros",'-U','postgres','-d','membros_test','-v','ON_ERROR_STOP=1','-f',(Join-Path $repoMembros $sqlMembros))
   }
   Run-PgMembros 'pg_ctl.exe' @('-D',$dataMembros,'-m','fast','-w','stop')

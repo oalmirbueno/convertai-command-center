@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { autorizaDownload, confirmarAsaas } from "./confirmacao.ts";
+import { modoArquivoValido } from "./modo.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -52,8 +53,13 @@ Deno.serve(async (req) => {
       )
         return resposta({ erro: "material_invalido" }, 400);
       const previa = corpo.previa_usuario;
-      if (previa !== undefined && (typeof previa !== "string" || !UUID.test(previa)))
+      if (
+        previa !== undefined &&
+        (typeof previa !== "string" || !UUID.test(previa))
+      )
         return resposta({ erro: "pessoa_invalida" }, 400);
+      if (!modoArquivoValido(corpo))
+        return resposta({ erro: "modo_invalido" }, 400);
       // Consulta com o JWT real. A prévia exige admin no servidor e os direitos do cliente.
       const { data: material, error } = await usuario
         .from("membros_materiais")
@@ -64,10 +70,31 @@ Deno.serve(async (req) => {
       if (!material || !material.arquivo)
         return resposta({ erro: "material_indisponivel" }, 404);
       let m = material;
+      if (corpo.teste_cliente === true) {
+        // Não basta o RLS de admin: o teste exige o direito real de membro.
+        const { data: vista, error: erroTeste } = await usuario.rpc(
+          "membros_teste_materiais",
+          {
+            _produto: material.produto_id,
+            _bloqueado: corpo.bloqueado === true,
+          },
+        );
+        const autorizado = vista?.materiais?.find(
+          (item: { id: string }) => item.id === material.id,
+        );
+        if (erroTeste || !autorizado)
+          return resposta({ erro: "sem_permissao" }, 403);
+        m = autorizado;
+      }
       if (previa) {
-        const { data: vista, error: erroPrevia } = await usuario.rpc("membros_previa", { _usuario: previa, _produto: material.produto_id });
+        const { data: vista, error: erroPrevia } = await usuario.rpc(
+          "membros_previa",
+          { _usuario: previa, _produto: material.produto_id },
+        );
         if (erroPrevia) return resposta({ erro: "sem_permissao" }, 403);
-        const autorizado = vista?.materiais?.find((item: { id: string }) => item.id === material.id);
+        const autorizado = vista?.materiais?.find(
+          (item: { id: string }) => item.id === material.id,
+        );
         if (!autorizado) return resposta({ erro: "sem_permissao" }, 403);
         m = autorizado;
       }
@@ -93,9 +120,16 @@ Deno.serve(async (req) => {
       await usuario.rpc("membros_admin");
     if (erroPapel || admin !== true)
       return resposta({ erro: "sem_permissao" }, 403);
-    const { data: habilitado, error: erroTrava } = await usuario.rpc("membros_pagamentos_habilitados");
+    const { data: habilitado, error: erroTrava } = await usuario.rpc(
+      "membros_pagamentos_habilitados",
+    );
     if (erroTrava) return resposta({ erro: "configuracao_indisponivel" }, 503);
-    if (habilitado !== true) return resposta({ ok: true, pendente: true, motivo: "pagamentos_desativados" });
+    if (habilitado !== true)
+      return resposta({
+        ok: true,
+        pendente: true,
+        motivo: "pagamentos_desativados",
+      });
     if (typeof corpo.evento_id !== "string" || !UUID.test(corpo.evento_id))
       return resposta({ erro: "evento_invalido" }, 400);
     const servico = createClient(

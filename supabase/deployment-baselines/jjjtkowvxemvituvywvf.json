@@ -1935,6 +1935,11 @@
       "version": "20261020162028",
       "name": "membros_previa_admin_pagamentos_pausados",
       "statements_sha256": "2eb4ce6dd49361bb5e414f3ded1bfdd766ff2d5f1c7ac7af546944c93a858230"
+    },
+    {
+      "version": "20261020173752",
+      "name": "membros_experiencia_cliente",
+      "statements_sha256": "71c37b7eba4f70d0c0a9b064aa3923eb0534c592b9bfedbf3e949dd8c76938eb"
     }
   ],
   "pending_migrations": []

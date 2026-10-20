@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   BookOpen,
@@ -9,9 +9,20 @@ import {
   LogOut,
   Search,
   Settings2,
+  Play,
+  LockKeyhole,
+  RotateCcw,
+  FlaskConical,
+  Trophy,
+  Check,
+  BookCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { carregarCatalogo, mensagemDoErro } from "@/lib/membros/api";
+import {
+  carregarCatalogo,
+  mensagemDoErro,
+  reiniciarTeste,
+} from "@/lib/membros/api";
 import {
   buscarProdutos,
   destinoOperacional,
@@ -20,6 +31,8 @@ import {
   trilhos,
   urlHttps,
   type Produto,
+  type TesteCliente,
+  type Catalogo,
 } from "@/lib/membros/modelo";
 import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
 import { texto } from "@/components/sistema";
@@ -34,7 +47,9 @@ export function CapaProduto({
   destaque?: boolean;
 }) {
   const [falhou, setFalhou] = useState(false);
-  const capa = urlHttps(produto.capa_url);
+  const capa =
+    urlHttps(produto.capa_url) ||
+    (destaque ? "/membros/capas/boas-vindas-v2.webp" : null);
   return capa && !falhou ? (
     <img
       className="membros-capa"
@@ -51,7 +66,7 @@ export function CapaProduto({
     <div className="membros-capa membros-fallback">
       <BookOpen size={32} className="text-primary mb-4" aria-hidden="true" />
       <span className="text-[12px] text-muted-foreground">
-        Sem capa cadastrada
+        {produto.categoria || "Aceleriq · Biblioteca"}
       </span>
       <span className="mt-2 text-[12px] text-muted-foreground">
         {produto.formato}
@@ -125,7 +140,10 @@ export function TrilhoProdutos({
                 {p.titulo}
               </h3>
               <p className="text-[12px] leading-5 text-muted-foreground mt-1">
-                {rotuloDoAcesso(p)}
+                {p.progresso === 100 ? "Concluído" : rotuloDoAcesso(p)}
+                {podeAbrir(p) &&
+                  p.materiais_total !== undefined &&
+                  ` · ${p.materiais_total} materiais`}
               </p>
               {p.progresso > 0 && podeAbrir(p) && (
                 <div
@@ -151,12 +169,150 @@ export function TrilhoProdutos({
     </section>
   );
 }
+function Jornada({ jornada }: { jornada: NonNullable<Catalogo["jornada"]> }) {
+  const percentual = jornada.materiais
+    ? Math.round((100 * jornada.concluidos) / jornada.materiais)
+    : 0;
+  return (
+    <section className="membros-jornada" aria-label="Sua jornada">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <BookCheck size={17} className="text-primary" />
+          <h2 className="text-[14px] font-semibold">Sua jornada</h2>
+        </div>
+        <p className="text-[12px] text-muted-foreground mt-1">
+          {jornada.concluidos} de {jornada.materiais} materiais concluídos
+        </p>
+        <div
+          className="membros-progresso mt-3"
+          role="progressbar"
+          aria-label="Materiais concluídos"
+          aria-valuenow={percentual}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <span style={{ width: `${percentual}%` }} />
+        </div>
+      </div>
+      <div className="membros-conquistas">
+        <span className={jornada.concluidos > 0 ? "conquistado" : ""}>
+          <Check size={17} />
+          {jornada.concluidos > 0
+            ? "Primeiro passo concluído"
+            : "Sua primeira conquista começa na aula"}
+        </span>
+        <span className={jornada.produtos_concluidos > 0 ? "conquistado" : ""}>
+          <Trophy size={17} />
+          {jornada.produtos_concluidos > 0
+            ? `${jornada.produtos_concluidos} produto${jornada.produtos_concluidos > 1 ? "s" : ""} concluído${jornada.produtos_concluidos > 1 ? "s" : ""}`
+            : "Próxima conquista: concluir um produto"}
+        </span>
+      </div>
+    </section>
+  );
+}
+function ControlesTeste({
+  teste,
+  mudar,
+}: {
+  teste: TesteCliente;
+  mudar: (bloqueado: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const [reiniciando, setReiniciando] = useState(false);
+  const reinicioRef = useRef<HTMLDetailsElement>(null);
+  const [aviso, setAviso] = useState("");
+  async function reiniciar() {
+    setReiniciando(true);
+    setAviso("");
+    try {
+      await reiniciarTeste();
+      await qc.invalidateQueries({ queryKey: ["membros"] });
+      if (reinicioRef.current) reinicioRef.current.open = false;
+      setAviso("Progresso do teste reiniciado.");
+    } catch (e) {
+      setAviso(mensagemDoErro(e));
+    } finally {
+      setReiniciando(false);
+    }
+  }
+  return (
+    <aside className="membros-teste" aria-label="Teste como cliente">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <strong className="flex items-center gap-2 text-[13px]">
+          <FlaskConical size={17} className="text-primary" />
+          Teste como cliente
+        </strong>
+        <span className="text-[12px] text-muted-foreground">
+          {teste.bloqueado
+            ? "Bloqueio simulado no servidor"
+            : "Somente seus acessos de membro · progresso separado"}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
+          className="membros-acao border border-border"
+          aria-pressed={teste.bloqueado}
+          onClick={() => mudar(!teste.bloqueado)}
+        >
+          <LockKeyhole size={15} />
+          {teste.bloqueado ? "Voltar ao acesso liberado" : "Simular bloqueio"}
+        </button>
+        <details ref={reinicioRef} className="relative">
+          <summary className="membros-acao cursor-pointer text-muted-foreground">
+            <RotateCcw size={15} />
+            Reiniciar teste
+          </summary>
+          <div className="membros-teste-confirmacao">
+            <p className="text-[12px]">
+              Apaga apenas o seu progresso de teste. O acesso manual e o
+              progresso dos membros são preservados.
+            </p>
+            <button
+              className="membros-acao border border-border mt-2"
+              disabled={reiniciando}
+              onClick={() => {
+                void reiniciar();
+              }}
+            >
+              {reiniciando ? "Reiniciando…" : "Reiniciar progresso do teste"}
+            </button>
+            <button
+              className="membros-acao text-muted-foreground mt-1"
+              disabled={reiniciando}
+              onClick={() => {
+                if (reinicioRef.current) reinicioRef.current.open = false;
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </details>
+        <Link
+          className="membros-acao text-muted-foreground"
+          to="/membros/administrar"
+        >
+          Sair do teste <ArrowRight size={15} />
+        </Link>
+      </div>
+      {aviso && (
+        <p role="status" className="w-full text-[12px]">
+          {aviso}
+        </p>
+      )}
+    </aside>
+  );
+}
 export default function AreaDeMembros() {
   const { profile, user, logout } = useAuth();
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
   const [parametros, setParametros] = useSearchParams();
-  const previa = parametros.get("visao") || undefined;
+  const teste: TesteCliente | undefined =
+    parametros.get("modo") === "cliente"
+      ? { teste: true, bloqueado: parametros.get("bloqueado") === "1" }
+      : undefined;
+  const previa = teste ? undefined : parametros.get("visao") || undefined;
   const aberto = parametros.get("produto");
   const setAberto = (id: string | null) => {
     const proximos = new URLSearchParams(parametros);
@@ -165,8 +321,15 @@ export default function AreaDeMembros() {
     setParametros(proximos);
   };
   const catalogo = useQuery({
-    queryKey: ["membros", "catalogo", user?.id, previa],
-    queryFn: () => carregarCatalogo(previa),
+    queryKey: [
+      "membros",
+      "catalogo",
+      user?.id,
+      previa,
+      teste?.teste,
+      teste?.bloqueado,
+    ],
+    queryFn: () => carregarCatalogo(previa, teste),
     retry: false,
   });
   const produtos = catalogo.data?.produtos || [];
@@ -190,14 +353,23 @@ export default function AreaDeMembros() {
       </a>
       <header className="membros-topo">
         <div>
-          <Link to="/membros" aria-label="Biblioteca Aceleriq">
+          <Link
+            to={
+              teste
+                ? `/membros?modo=cliente${teste.bloqueado ? "&bloqueado=1" : ""}`
+                : previa
+                  ? `/membros?visao=${encodeURIComponent(previa)}`
+                  : "/membros"
+            }
+            aria-label="Biblioteca Aceleriq"
+          >
             <MarcaAceleriq altura={24} />
           </Link>
           <nav
             aria-label="Navegação da biblioteca"
             className="flex items-center min-w-0 gap-1"
           >
-            {profile?.role === "admin" && !previa && (
+            {profile?.role === "admin" && !previa && !teste && (
               <Link
                 className="membros-acao text-muted-foreground"
                 to="/membros/administrar"
@@ -207,13 +379,15 @@ export default function AreaDeMembros() {
                 <span className="hidden sm:inline">Administrar</span>
               </Link>
             )}
-            <Link
-              to={destinoOperacional(profile?.role)}
-              className="membros-acao text-muted-foreground"
-            >
-              Painel Aceleriq
-              <ArrowRight size={16} className="hidden sm:block" />
-            </Link>
+            {!teste && (
+              <Link
+                to={destinoOperacional(profile?.role)}
+                className="membros-acao text-muted-foreground"
+              >
+                Painel Aceleriq
+                <ArrowRight size={16} className="hidden sm:block" />
+              </Link>
+            )}
             <button
               className="membros-acao text-muted-foreground"
               onClick={() => void logout()}
@@ -225,6 +399,16 @@ export default function AreaDeMembros() {
         </div>
       </header>
       <main id="biblioteca" className="membros-conteudo space-y-8">
+        {teste && profile?.role === "admin" && (
+          <ControlesTeste
+            teste={teste}
+            mudar={(bloqueado) => {
+              const proximos = new URLSearchParams({ modo: "cliente" });
+              if (bloqueado) proximos.set("bloqueado", "1");
+              setParametros(proximos);
+            }}
+          />
+        )}
         {previa && (
           <aside
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-[13px]"
@@ -284,7 +468,7 @@ export default function AreaDeMembros() {
               Ainda não há produtos disponíveis. Quando um material for
               publicado ou seu acesso for concedido, ele aparecerá aqui.
             </p>
-            {profile?.role === "admin" && !previa && (
+            {profile?.role === "admin" && !previa && !teste && (
               <Link
                 className="membros-acao bg-primary text-primary-foreground"
                 to="/membros/administrar"
@@ -300,12 +484,18 @@ export default function AreaDeMembros() {
                 className="membros-destaque"
                 aria-label="Produto em destaque"
               >
-                <div className="space-y-4">
-                  <p className="text-[12px] text-primary font-medium">
+                <div className="membros-destaque-capa" aria-hidden="true">
+                  <CapaProduto key={destaque.id} produto={destaque} destaque />
+                </div>
+                <div className="membros-destaque-texto space-y-4">
+                  <p className="text-[11px] uppercase tracking-[.16em] text-white/75 font-medium">
+                    ACELERIQ · SEU PRÓXIMO PASSO
+                  </p>
+                  <p className="text-[12px] text-emerald-300 font-medium">
                     {rotuloDoAcesso(destaque)} · {destaque.formato}
                   </p>
                   <h2>{destaque.titulo}</h2>
-                  <p className="text-[13px] leading-6 text-muted-foreground max-w-lg line-clamp-4">
+                  <p className="text-[14px] leading-6 text-white/75 max-w-lg line-clamp-3">
                     {destaque.descricao}
                   </p>
                   <button
@@ -315,17 +505,17 @@ export default function AreaDeMembros() {
                     {podeAbrir(destaque)
                       ? "Continuar na biblioteca"
                       : "Conhecer produto"}
-                    <ArrowRight size={16} />
+                    {podeAbrir(destaque) ? (
+                      <Play size={16} fill="currentColor" />
+                    ) : (
+                      <LockKeyhole size={16} />
+                    )}
                   </button>
                 </div>
-                <button
-                  className="text-left rounded-xl focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setAberto(destaque.id)}
-                  aria-label={`Ver ${destaque.titulo}`}
-                >
-                  <CapaProduto key={destaque.id} produto={destaque} destaque />
-                </button>
               </section>
+            )}
+            {catalogo.data?.jornada && (
+              <Jornada jornada={catalogo.data.jornada} />
             )}
             <div className="flex flex-wrap gap-3 items-center">
               <label className="relative block w-full sm:max-w-sm">
@@ -409,8 +599,9 @@ export default function AreaDeMembros() {
       )}
       {produtoAberto && (
         <LeitorDeProduto
-          key={`${previa || "proprio"}-${produtoAberto.id}`}
+          key={`${previa || "proprio"}-${teste?.teste}-${teste?.bloqueado}-${produtoAberto.id}`}
           previa={previa}
+          teste={teste}
           produto={produtoAberto}
           pendente={
             !!catalogo.data?.pendentes.some(

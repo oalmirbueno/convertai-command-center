@@ -30,6 +30,7 @@ import {
   type Material,
   type Produto,
   type Progresso,
+  type TesteCliente,
 } from "@/lib/membros/modelo";
 import { texto } from "@/components/sistema";
 
@@ -37,10 +38,12 @@ export function ConsumoMaterial({
   material,
   progresso,
   previa,
+  teste,
 }: {
   material: Material;
   progresso?: Progresso;
   previa?: string;
+  teste?: TesteCliente;
 }) {
   const cliente = useQueryClient();
   const { user } = useAuth();
@@ -48,47 +51,90 @@ export function ConsumoMaterial({
   const [salvando, setSalvando] = useState(false);
   const [feito, setFeito] = useState(progresso?.concluido || false);
   const [baixando, setBaixando] = useState(false);
+  const fila = useRef(Promise.resolve());
+  const contexto = useRef({ previa, teste, feito });
+  contexto.current.previa = previa;
+  contexto.current.teste = teste;
   const ultimo = useRef(0);
   const posicaoAtual = useRef({
     posicao: progresso?.posicao || 0,
     duracao: progresso?.duracao || 0,
   });
   const fonte = useQuery({
-    queryKey: ["membros", "arquivo", user?.id, previa, material.id],
-    queryFn: () => abrirArquivo(material.id, false, previa),
+    queryKey: [
+      "membros",
+      "arquivo",
+      user?.id,
+      previa,
+      teste?.teste,
+      teste?.bloqueado,
+      material.id,
+    ],
+    queryFn: () => abrirArquivo(material.id, false, previa, teste),
     enabled: !!material.arquivo,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const salvar = async (posicao = 0, duracao = 0, concluido = feito) => {
+  const salvar = async (
+    posicao = 0,
+    duracao = 0,
+    concluido = contexto.current.feito,
+  ) => {
     if (previa) return;
+    contexto.current.feito = concluido;
     setSalvando(true);
     setFalha("");
     try {
-      await gravarProgresso(material.id, posicao, duracao, concluido);
+      // Pausa, término e conclusão não podem se ultrapassar na rede.
+      fila.current = fila.current
+        .catch(() => {})
+        .then(() =>
+          gravarProgresso(material.id, posicao, duracao, concluido, teste),
+        );
+      await fila.current;
       setFeito(concluido);
       void cliente.invalidateQueries({ queryKey: ["membros", "catalogo"] });
+      void cliente.invalidateQueries({ queryKey: ["membros", "materiais"] });
     } catch (e) {
       setFalha(`Não salvamos o progresso. ${mensagemDoErro(e)}`);
     } finally {
       setSalvando(false);
     }
   };
+  useEffect(
+    () => () => {
+      const {
+        previa: somenteLeitura,
+        teste: modo,
+        feito: concluido,
+      } = contexto.current;
+      const { posicao, duracao } = posicaoAtual.current;
+      if (somenteLeitura || posicao <= 0) return;
+      // Trocar a aula ou fechar o leitor preserva os segundos desde o último salvamento.
+      fila.current = fila.current
+        .catch(() => {})
+        .then(() =>
+          gravarProgresso(material.id, posicao, duracao, concluido, modo),
+        )
+        .catch(() => {});
+    },
+    [material.id],
+  );
   const atualizar = (el: HTMLMediaElement, fim = false, forcar = false) => {
     if (!Number.isFinite(el.duration) || !Number.isFinite(el.currentTime))
       return;
     posicaoAtual.current = { posicao: el.currentTime, duracao: el.duration };
     if (!fim && !forcar && Date.now() - ultimo.current < 15000) return;
     ultimo.current = Date.now();
-    void salvar(el.currentTime, el.duration, fim || feito);
+    void salvar(el.currentTime, el.duration, fim || contexto.current.feito);
   };
   async function baixar() {
     setBaixando(true);
     setFalha("");
     try {
-      const { url } = await abrirArquivo(material.id, true, previa);
+      const { url } = await abrirArquivo(material.id, true, previa, teste);
       const a = document.createElement("a");
       a.href = url;
       a.rel = "noopener";
@@ -196,13 +242,18 @@ export function ConsumoMaterial({
                 : ". O download não foi autorizado. Peça à administração uma versão de leitura."}
             </p>
           )}
-          <button
-            className="membros-acao text-muted-foreground"
-            onClick={() => void fonte.refetch()}
-          >
-            <RefreshCw size={16} />
-            Renovar acesso ao arquivo
-          </button>
+          <details className="text-[12px] text-muted-foreground">
+            <summary className="cursor-pointer min-h-11 inline-flex items-center gap-2">
+              <RefreshCw size={14} />
+              Problema ao abrir?
+            </summary>
+            <button
+              className="membros-acao"
+              onClick={() => void fonte.refetch()}
+            >
+              Renovar acesso ao arquivo
+            </button>
+          </details>
         </>
       ) : null}
       {falha && (
@@ -249,18 +300,28 @@ export default function LeitorDeProduto({
   fechar,
   pendente,
   previa,
+  teste,
 }: {
   produto: Produto;
   fechar: () => void;
   pendente: boolean;
   previa?: string;
+  teste?: TesteCliente;
 }) {
   const { user } = useAuth();
   const permitido = podeAbrir(produto);
   const [selecionado, setSelecionado] = useState(produto.ultimo_material || "");
   const materiais = useQuery({
-    queryKey: ["membros", "materiais", user?.id, previa, produto.id],
-    queryFn: () => carregarMateriais(produto.id, previa),
+    queryKey: [
+      "membros",
+      "materiais",
+      user?.id,
+      previa,
+      teste?.teste,
+      teste?.bloqueado,
+      produto.id,
+    ],
+    queryFn: () => carregarMateriais(produto.id, previa, teste),
     enabled: permitido,
     retry: false,
     staleTime: 0,
@@ -343,6 +404,7 @@ export default function LeitorDeProduto({
             {atual && (
               <ConsumoMaterial
                 previa={previa}
+                teste={teste}
                 key={atual.id}
                 material={atual}
                 progresso={materiais.data.progresso.find(
@@ -350,7 +412,19 @@ export default function LeitorDeProduto({
                 )}
               />
             )}
-            <nav aria-label="Materiais do produto" className="space-y-1">
+            <nav
+              aria-label="Materiais do produto"
+              className="membros-sumario space-y-1"
+            >
+              <div className="pb-3 mb-2 border-b border-border">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Dentro deste produto
+                </p>
+                <p className="text-[13px] mt-2">
+                  {materiais.data.progresso.filter((p) => p.concluido).length}{" "}
+                  de {materiais.data.materiais.length} concluídos
+                </p>
+              </div>
               {materiais.data.materiais.map((m) => (
                 <button
                   key={m.id}
@@ -363,7 +437,18 @@ export default function LeitorDeProduto({
                   ) : (
                     <FileText size={16} className="shrink-0" />
                   )}
-                  <span className="min-w-0 break-words">{m.titulo}</span>
+                  <span className="min-w-0 break-words flex-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {m.tipo === "video"
+                        ? "Aula em vídeo"
+                        : m.permite_download
+                          ? "Material para baixar"
+                          : m.tipo === "audio"
+                            ? "Áudio"
+                            : "Material de leitura"}
+                    </span>
+                    {m.titulo}
+                  </span>
                   {materiais.data.progresso.find((p) => p.material_id === m.id)
                     ?.concluido && (
                     <Check size={14} className="shrink-0 text-primary" />
