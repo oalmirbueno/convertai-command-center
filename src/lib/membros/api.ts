@@ -7,7 +7,11 @@ import type {
   Progresso,
   ItemChecklist,
   TesteCliente,
+  Modulo,
+  PassoFunil,
 } from "./modelo";
+
+import { limparProduto, limparMaterial, semTravessoes } from "./modelo";
 
 // Contrato local explícito da biblioteca; mantém os tipos operacionais existentes.
 const banco = supabase as unknown as SupabaseClient;
@@ -49,6 +53,8 @@ export type Processamento = {
   atualizado_em: string;
 };
 export type DadosAdmin = {
+  modulos: Modulo[];
+  funil: PassoFunil[];
   produtos: ProdutoEditavel[];
   materiais: Material[];
   acessos: Acesso[];
@@ -118,46 +124,35 @@ export async function carregarCatalogo(
     !Array.isArray((dado as Catalogo).pendentes)
   )
     throw new Error("Resposta da biblioteca inválida");
-  return dado as Catalogo;
+  const catalogo = dado as Catalogo;
+  return { ...catalogo, produtos: catalogo.produtos.map(limparProduto) };
 }
 export async function carregarMateriais(
   produto: string,
   previa?: string,
   teste?: TesteCliente,
-): Promise<{ materiais: Material[]; progresso: Progresso[] }> {
-  if (teste)
-    return conferir(
-      await banco.rpc("membros_teste_materiais", {
-        _produto: produto,
-        _bloqueado: teste.bloqueado,
-      }),
-    );
-  if (previa)
-    return conferir(
-      await banco.rpc("membros_previa", {
-        _usuario: previa,
-        _produto: produto,
-      }),
-    );
-  const materiais = conferir(
-    await banco
-      .from("membros_materiais")
-      .select("id,produto_id,titulo,tipo,texto,arquivo,permite_download,ordem")
-      .eq("produto_id", produto)
-      .order("ordem")
-      .returns<Material[]>(),
+): Promise<{
+  materiais: Material[];
+  progresso: Progresso[];
+  modulos?: Modulo[];
+}> {
+  const dado = conferir(
+    await banco.rpc("membros_acervo", {
+      _produto: produto,
+      _teste: !!teste,
+      _bloqueado: !!teste?.bloqueado,
+      _previa: previa || null,
+    }),
   );
-  const ids = materiais.map((m) => m.id);
-  const progresso = ids.length
-    ? conferir(
-        await banco
-          .from("membros_progresso")
-          .select("material_id,posicao,duracao,concluido,atualizado_em")
-          .in("material_id", ids)
-          .returns<Progresso[]>(),
-      )
-    : [];
-  return { materiais, progresso };
+  return {
+    ...dado,
+    materiais: (dado?.materiais || []).map(limparMaterial),
+    modulos: (dado?.modulos || []).map((m: Modulo) => ({
+      ...m,
+      titulo: semTravessoes(m.titulo),
+      descricao: semTravessoes(m.descricao),
+    })),
+  };
 }
 export async function gravarProgresso(
   material: string,
@@ -250,6 +245,8 @@ export async function carregarAdmin(): Promise<DadosAdmin> {
       .eq("ativo", true)
       .in("gateway", ["kiwify", "asaas"]),
     banco.from("profiles").select("id,full_name,email").order("full_name"),
+    banco.from("membros_modulos").select("*").order("ordem"),
+    banco.from("membros_funil").select("*").order("ordem"),
   ]);
   const rows = respostas.map(conferir);
   return Object.fromEntries(
@@ -265,7 +262,33 @@ export async function carregarAdmin(): Promise<DadosAdmin> {
       "planos",
       "integracoes",
       "pessoas",
-    ].map((key, i) => [key, rows[i] || []]),
+      "modulos",
+      "funil",
+    ].map((key, i) => [
+      key,
+      (rows[i] || []).map((row: Record<string, unknown>) =>
+        Object.fromEntries(
+          Object.entries(row).map(([k, v]) => [
+            k,
+            typeof v === "string" &&
+            [
+              "titulo",
+              "descricao",
+              "texto",
+              "categoria",
+              "formato",
+              "condicoes",
+              "observacao",
+              "mensagem",
+              "full_name",
+              "name",
+            ].includes(k)
+              ? semTravessoes(v)
+              : v,
+          ]),
+        ),
+      ),
+    ]),
   ) as DadosAdmin;
 }
 export async function salvarLinha(
@@ -275,13 +298,34 @@ export async function salvarLinha(
     | "membros_acessos"
     | "membros_beneficios_plano"
     | "membros_vinculos_venda"
-    | "membros_checklist",
+    | "membros_checklist"
+    | "membros_modulos"
+    | "membros_funil",
   dados: Record<string, unknown>,
   conflito = "id",
 ): Promise<void> {
   const resultado = await banco
     .from(tabela)
-    .upsert(dados, { onConflict: conflito })
+    .upsert(
+      Object.fromEntries(
+        Object.entries(dados).map(([k, v]) => [
+          k,
+          typeof v === "string" &&
+          [
+            "titulo",
+            "descricao",
+            "texto",
+            "condicoes",
+            "formato",
+            "categoria",
+            "cta",
+          ].includes(k)
+            ? semTravessoes(v)
+            : v,
+        ]),
+      ),
+      { onConflict: conflito },
+    )
     .select();
   const rows = conferir(resultado);
   if (!rows?.length) throw new Error("Gravação não confirmada");

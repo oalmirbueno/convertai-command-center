@@ -12,16 +12,21 @@ import {
   Eye,
   FlaskConical,
   ShieldCheck,
+  Waypoints,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import {
   carregarAdmin,
-  enviarMaterial,
   mensagemDoErro,
   reprocessarEvento,
   salvarLinha,
   type DadosAdmin,
   type ProdutoEditavel,
 } from "@/lib/membros/api";
+import EditorDoCurso from "@/components/membros/EditorDoCurso";
+import PessoasEFunil, { EditorFunil } from "@/components/membros/PessoasEFunil";
+import ConfiguracaoKiwify from "@/components/membros/ConfiguracaoKiwify";
 import ChecklistLancamento from "@/components/membros/ChecklistLancamento";
 import { urlHttps } from "@/lib/membros/modelo";
 import { texto } from "@/components/sistema";
@@ -69,6 +74,7 @@ export default function AdminMembros() {
   const [sucesso, setSucesso] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [pessoa, setPessoa] = useState("");
+  const [recolhida, setRecolhida] = useState(false);
   const [secao, setSecao] = useState("produtos");
   const dados = useQuery({
     queryKey: ["membros", "admin"],
@@ -145,11 +151,27 @@ export default function AdminMembros() {
           </button>
         </section>
       ) : dados.data ? (
-        <div className="membros-admin-corpo">
+        <div className={`membros-admin-corpo ${recolhida ? "recolhida" : ""}`}>
           <nav
             className="membros-admin-nav"
             aria-label="Administração da biblioteca"
           >
+            <button
+              className="membros-acao"
+              aria-label={
+                recolhida
+                  ? "Expandir menu administrativo"
+                  : "Recolher menu administrativo"
+              }
+              onClick={() => setRecolhida((r) => !r)}
+            >
+              {recolhida ? (
+                <PanelLeftOpen size={17} />
+              ) : (
+                <PanelLeftClose size={17} />
+              )}
+              <span>Administração</span>
+            </button>
             {[
               {
                 id: "produtos",
@@ -169,11 +191,13 @@ export default function AdminMembros() {
                 icone: KeyRound,
                 total: dados.data.acessos.filter((a) => !a.revogado_em).length,
               },
+              { id: "funil", nome: "Esteira de produtos", icone: Waypoints },
               { id: "cliente", nome: "Visão do cliente", icone: Eye },
               { id: "pagamentos", nome: "Pagamentos", icone: CreditCard },
             ].map((s) => (
               <button
                 key={s.id}
+                title={s.nome}
                 className="membros-acao"
                 aria-current={secao === s.id ? "page" : undefined}
                 onClick={() => setSecao(s.id)}
@@ -254,13 +278,25 @@ export default function AdminMembros() {
               hidden={secao !== "materiais"}
               aria-label="Editar materiais"
             >
-              <Materiais dados={dados.data} agir={agir} />
+              <EditorDoCurso dados={dados.data} agir={agir} />
             </section>
             <section
               hidden={secao !== "acessos"}
               aria-label="Gerenciar acessos"
             >
-              <Direitos dados={dados.data} agir={agir} />
+              {secao === "acessos" && (
+                <PessoasEFunil dados={dados.data} agir={agir} />
+              )}
+              <details className="mt-6 membros-caixa">
+                <summary>Planos e concessões existentes</summary>
+                <Direitos dados={dados.data} agir={agir} />
+              </details>
+            </section>
+            <section
+              hidden={secao !== "funil"}
+              aria-label="Esteira de produtos"
+            >
+              <EditorFunil dados={dados.data} agir={agir} />
             </section>
             <section
               hidden={secao !== "pagamentos"}
@@ -274,6 +310,7 @@ export default function AdminMembros() {
                 validação dos pagamentos. Para testar, conceda um acesso manual
                 abaixo.
               </p>
+              {secao === "pagamentos" && <ConfiguracaoKiwify />}
               <Pagamentos dados={dados.data} agir={agir} />
             </section>
           </fieldset>
@@ -354,6 +391,13 @@ function FormProduto({
     destaque: produto?.destaque || false,
     condicoes: produto?.condicoes || "",
     ordem: produto?.ordem || 0,
+    tipo_produto: produto?.tipo_produto || "curso",
+    landing_url: produto?.landing_url || "",
+    landing_embutida: produto?.landing_embutida || false,
+    checkout_embutido: produto?.checkout_embutido || false,
+    em_venda: produto?.em_venda || false,
+    cta: produto?.cta || "Conhecer oferta",
+    comunidade_ativa: produto?.comunidade_ativa || false,
   });
   const enviar = (e: FormEvent) => {
     e.preventDefault();
@@ -361,6 +405,7 @@ function FormProduto({
       ...v,
       capa_url: v.capa_url || null,
       checkout_url: v.checkout_url || null,
+      landing_url: v.landing_url || null,
     });
   };
   return (
@@ -471,6 +516,80 @@ function FormProduto({
         />
         Destacar na biblioteca
       </label>
+      <Campo titulo="Tipo de produto">
+        <select
+          className={campo}
+          value={v.tipo_produto}
+          onChange={(e) =>
+            setV({
+              ...v,
+              tipo_produto: e.target.value as typeof v.tipo_produto,
+            })
+          }
+        >
+          <option value="curso">Curso</option>
+          <option value="material">Material ou kit</option>
+          <option value="comunidade">Comunidade</option>
+        </select>
+      </Campo>
+      <Campo titulo="Página de vendas (HTTPS)">
+        <input
+          className={campo}
+          type="url"
+          pattern="https://.*"
+          value={v.landing_url}
+          onChange={(e) => setV({ ...v, landing_url: e.target.value })}
+        />
+      </Campo>
+      <Campo titulo="Texto do botão de compra">
+        <input
+          className={campo}
+          maxLength={60}
+          value={v.cta}
+          onChange={(e) => setV({ ...v, cta: e.target.value })}
+        />
+      </Campo>
+      <Campo titulo="Ordem no catálogo">
+        <input
+          className={campo}
+          type="number"
+          min={0}
+          max={10000}
+          value={v.ordem}
+          onChange={(e) => setV({ ...v, ordem: Number(e.target.value) })}
+        />
+      </Campo>
+      {(
+        [
+          { k: "em_venda", nome: "Disponível para compra" },
+          { k: "comunidade_ativa", nome: "Comunidade deste produto" },
+          {
+            k: "landing_embutida",
+            nome: "Abrir página de vendas dentro da biblioteca",
+          },
+          {
+            k: "checkout_embutido",
+            nome: "Abrir checkout dentro da biblioteca",
+          },
+        ] as const
+      ).map((i) => (
+        <label
+          key={i.k}
+          className="flex gap-2 items-center min-h-11 text-[13px]"
+        >
+          <input
+            type="checkbox"
+            checked={v[i.k]}
+            onChange={(e) => setV({ ...v, [i.k]: e.target.checked })}
+          />
+          {i.nome}
+        </label>
+      ))}
+      <p className="sm:col-span-2 text-[12px] text-muted-foreground">
+        Páginas externas precisam permitir a abertura dentro de outro site. A
+        opção de nova guia continua disponível. A liberação automática por
+        pagamento permanece desligada.
+      </p>
       <button
         className="membros-acao bg-primary text-primary-foreground justify-self-start"
         type="submit"
@@ -505,220 +624,12 @@ function SeletorProduto({
     </select>
   );
 }
-function Materiais({ dados, agir }: Props) {
-  const [produto, setProduto] = useState(dados.produtos[0]?.id || "");
-  const [titulo, setTitulo] = useState("");
-  const [tipo, setTipo] = useState("texto");
-  const [conteudo, setConteudo] = useState("");
-  const [arquivo, setArquivo] = useState<File | null>(null);
-  const [download, setDownload] = useState(false);
-  const enviar = (e: FormEvent) => {
-    e.preventDefault();
-    void agir(async () => {
-      const id = crypto.randomUUID();
-      if (tipo !== "texto" && !arquivo) throw new Error("Selecione o arquivo");
-      const caminho =
-        tipo !== "texto" && arquivo
-          ? await enviarMaterial(produto, id, arquivo)
-          : null;
-      await salvarLinha("membros_materiais", {
-        id,
-        produto_id: produto,
-        titulo,
-        tipo,
-        texto: tipo === "texto" ? conteudo : "",
-        arquivo: caminho,
-        permite_download: download,
-        ordem: dados.materiais.filter((m) => m.produto_id === produto).length,
-      });
-      setTitulo("");
-      setConteudo("");
-      setArquivo(null);
-    });
-  };
-  return (
-    <Bloco titulo="Materiais">
-      <form onSubmit={enviar} className="grid sm:grid-cols-2 gap-4 max-w-4xl">
-        <Campo titulo="Produto">
-          <SeletorProduto dados={dados} value={produto} onChange={setProduto} />
-        </Campo>
-        <Campo titulo="Título do material">
-          <input
-            className={campo}
-            required
-            maxLength={180}
-            value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
-          />
-        </Campo>
-        <Campo titulo="Tipo">
-          <select
-            className={campo}
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value)}
-          >
-            <option value="texto">Texto ou guia</option>
-            <option value="video">Vídeo</option>
-            <option value="audio">Áudio</option>
-            <option value="pdf">PDF</option>
-            <option value="arquivo">Arquivo, kit ou template</option>
-          </select>
-        </Campo>
-        <label className="min-h-11 flex items-center gap-2 text-[13px]">
-          <input
-            type="checkbox"
-            checked={download}
-            onChange={(e) => setDownload(e.target.checked)}
-          />
-          Permitir download
-        </label>
-        <div className="sm:col-span-2">
-          {tipo === "texto" ? (
-            <Campo titulo="Conteúdo (Markdown)">
-              <textarea
-                className={`${campo} min-h-40`}
-                required
-                maxLength={200000}
-                value={conteudo}
-                onChange={(e) => setConteudo(e.target.value)}
-              />
-            </Campo>
-          ) : (
-            <Campo titulo="Arquivo privado (até 500 MB)">
-              <input
-                key={`${produto}:${tipo}`}
-                className={campo}
-                required
-                type="file"
-                accept={
-                  tipo === "video"
-                    ? "video/mp4,video/webm"
-                    : tipo === "audio"
-                      ? "audio/mpeg,audio/mp4,audio/ogg"
-                      : tipo === "pdf"
-                        ? "application/pdf"
-                        : undefined
-                }
-                onChange={(e) => setArquivo(e.target.files?.[0] || null)}
-              />
-            </Campo>
-          )}
-        </div>
-        <button
-          className="membros-acao bg-primary text-primary-foreground justify-self-start"
-          type="submit"
-        >
-          Adicionar material
-        </button>
-      </form>
-      <ul className="mt-6 divide-y divide-border">
-        {dados.materiais
-          .filter((m) => !produto || m.produto_id === produto)
-          .map((m) => (
-            <li
-              key={m.id}
-              className="py-3 flex flex-wrap gap-2 justify-between text-[13px]"
-            >
-              <span>
-                {dados.produtos.find((p) => p.id === m.produto_id)?.titulo} ·{" "}
-                {m.titulo}
-              </span>
-              <button
-                className="membros-acao text-muted-foreground"
-                onClick={() =>
-                  void agir(() =>
-                    salvarLinha("membros_materiais", {
-                      ...m,
-                      permite_download: !m.permite_download,
-                    }),
-                  )
-                }
-              >
-                {m.permite_download
-                  ? "Desativar download"
-                  : "Permitir download"}
-              </button>
-            </li>
-          ))}
-      </ul>
-    </Bloco>
-  );
-}
 function Direitos({ dados, agir }: Props) {
-  const [produto, setProduto] = useState("");
-  const [pessoa, setPessoa] = useState("");
-  const [fim, setFim] = useState("");
-  const [semPrazo, setSemPrazo] = useState(false);
   const [plano, setPlano] = useState("");
   const [beneficio, setBeneficio] = useState("");
   return (
     <Bloco titulo="Acessos e benefícios">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <section>
-          <h2 className={`${texto.tituloSecao} mb-4`}>
-            Conceder acesso manual
-          </h2>
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void agir(() =>
-                salvarLinha("membros_acessos", {
-                  id: crypto.randomUUID(),
-                  user_id: pessoa,
-                  produto_id: produto,
-                  origem: "manual",
-                  referencia: crypto.randomUUID(),
-                  fim: semPrazo ? null : new Date(fim).toISOString(),
-                }),
-              );
-            }}
-          >
-            <Campo titulo="Pessoa cadastrada">
-              <select
-                required
-                className={campo}
-                value={pessoa}
-                onChange={(e) => setPessoa(e.target.value)}
-              >
-                <option value="">Selecione a identidade</option>
-                {dados.pessoas.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name} · {p.email}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo titulo="Produto">
-              <SeletorProduto
-                dados={dados}
-                value={produto}
-                onChange={setProduto}
-              />
-            </Campo>
-            <Campo titulo="Acesso até">
-              <input
-                className={campo}
-                required={!semPrazo}
-                disabled={semPrazo}
-                type="datetime-local"
-                value={fim}
-                onChange={(e) => setFim(e.target.value)}
-              />
-            </Campo>
-            <label className="text-[13px] flex items-center gap-2 min-h-11">
-              <input
-                type="checkbox"
-                checked={semPrazo}
-                onChange={(e) => setSemPrazo(e.target.checked)}
-              />
-              Conceder explicitamente sem prazo
-            </label>
-            <button className="membros-acao bg-primary text-primary-foreground">
-              Conceder acesso
-            </button>
-          </form>
-        </section>
+      <div className="max-w-xl">
         <section>
           <h2 className={`${texto.tituloSecao} mb-4`}>
             Vincular benefício a plano existente

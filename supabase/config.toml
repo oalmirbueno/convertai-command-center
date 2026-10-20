@@ -203,3 +203,6 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.area-membros]
     verify_jwt = true
+
+  [functions.area-membros-kiwify]
+    verify_jwt = true
