@@ -646,6 +646,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   // 19/10: Laboratório v1 (agente do projeto e nós especialistas), até o catálogo ter o agente dele.
   "laboratorio/acoes.ts#chamarPlanejar": "laboratorio.v1",
   "laboratorio/executar.ts#texto": "laboratorio.v1",
+  // 20/10: o "Gerar com IA" do nó (no_preencher) também preenche campos pelo esquema do tipo, como o executar.
+  "laboratorio/inteligencia.ts#texto": "laboratorio.v1",
   // 17/10: chamadas novas de outras frentes, cada uma com o porquê.
   "agente-calendario/index.ts#corrigirTutoriais": "revisoes",
   "agente-calendario/index.ts#planejarMes": "revisoes",

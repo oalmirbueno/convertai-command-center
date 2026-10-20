@@ -310,4 +310,9 @@ export const VARIANTES_DAS_FUNCOES: VariantesDeTeste = {
   "laboratorio/executar.ts": ["ESQUEMA_DA_COPY", "ESQUEMA_DO_CARROSSEL", "ESQUEMA_DO_ANUNCIO", "ESQUEMA_DA_OFERTA", "ESQUEMA_DO_FUNIL"]
     .concat(["avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina", "sequencia_mensagens", "refino_tom"].map((t) => `ESPECIALISTAS.${t}.esquema`))
     .map((nome) => ({ o: `({ esquema: ${nome} })` })),
+  // 20/10: o "Gerar com IA" do nó (no_preencher) monta o esquema pelos campos do tipo (texto, escolha e lista).
+  "laboratorio/inteligencia.ts": [
+    { t: `({ esquema: esquemaDoPreenchimento("copy", ["titulo", "formato", "instrucao"]) })` },
+    { t: `({ esquema: esquemaDoPreenchimento("contexto", ["titulo", "texto"]) })` },
+  ],
 };
