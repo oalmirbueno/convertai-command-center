@@ -12,6 +12,7 @@ import type {
 } from "./modelo";
 
 import { limparProduto, limparMaterial, semTravessoes } from "./modelo";
+import { validarMaterial } from "./arquivos";
 
 // Contrato local explícito da biblioteca; mantém os tipos operacionais existentes.
 const banco = supabase as unknown as SupabaseClient;
@@ -75,6 +76,28 @@ export function mensagemDoErro(e: unknown): string {
     message?: string;
     context?: { status?: number };
   };
+  const mensagensClaras = [
+    "O acesso a esta ferramenta não está liberado ou venceu. Seus dados permanecem privados.",
+    "A ferramenta está aberta em outro dispositivo ou a sessão venceu. Abra novamente para continuar.",
+    "Este contato mudou em outra aba. Atualize antes de salvar.",
+    "Este negócio mudou em outra aba. Atualize antes de salvar.",
+    "O material mudou depois deste rascunho. Prepare uma nova versão antes de publicar.",
+    "Entre e confirme seu cadastro",
+    "Abra a ferramenta novamente",
+    "Não troque o tipo de uma ferramenta que já tem licenças",
+  ];
+  if (obj?.message && mensagensClaras.includes(obj.message)) return obj.message;
+  if (
+    e instanceof Error &&
+    /^(Escolha |Este arquivo |O arquivo escolhido |Arquivo compactado |Diretório do pacote |Este pacote |O pacote contém |Permita o armazenamento |Não foi possível preparar |Não foi possível copiar\.)/.test(
+      e.message,
+    )
+  )
+    return e.message;
+  if (obj?.code === "40001")
+    return "Este registro mudou em outra aba. Atualize antes de salvar.";
+  if (["22023", "23514", "23502", "22P02"].includes(obj?.code || ""))
+    return "Confira os campos e o arquivo selecionado antes de salvar.";
   if (obj?.code === "MEMBROS_PAGAMENTOS_PAUSADOS")
     return "A liberação por Kiwify e Asaas está desativada até validarmos os pagamentos. Use um acesso manual para testar.";
   if (obj?.code === "MEMBROS_PENDENTE")
@@ -346,7 +369,9 @@ export async function enviarMaterial(
   material: string,
   arquivo: File,
 ): Promise<string> {
-  if (arquivo.size > 524288000) throw { code: "ARQUIVO_GRANDE" };
+  if (![produto, material].every((id) => /^[a-f0-9-]{36}$/i.test(id)))
+    throw Error("Destino do arquivo inválido.");
+  const contentType = await validarMaterial(arquivo);
   const nome = arquivo.name
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -356,10 +381,7 @@ export async function enviarMaterial(
   conferir(
     await banco.storage.from("membros-materiais").upload(caminho, arquivo, {
       upsert: false,
-      contentType:
-        arquivo.type === "application/x-zip-compressed"
-          ? "application/zip"
-          : arquivo.type || "application/octet-stream",
+      contentType,
     }),
   );
   return caminho;

@@ -95,7 +95,7 @@ describe("rota /mesa só para a equipe que produz", () => {
   it("admin, gestor e design entram; o resto volta para o painel", () => {
     const linha = app.split("\n").find((l) => l.indexOf('path="/mesa"') >= 0) || "";
     // A trava de login fica na rota-mãe (casca do painel montada uma vez só).
-    expect(app).toContain("<Route element={<ProtectedRoute><AppLayout><Suspense fallback={<EsqueletoDaPagina />}><Outlet /></Suspense></AppLayout></ProtectedRoute>}>");
+    expect(app).toContain("<Route element={<ProtectedRoute><OperationalRoute><AppLayout><Suspense fallback={<EsqueletoDaPagina />}><Outlet /></Suspense></AppLayout></OperationalRoute></ProtectedRoute>}>");
     expect(linha).toContain('["admin", "manager", "design"].includes(profile?.role || "")');
     expect(linha).toContain("<MesaDoCliente />");
     expect(linha).toContain('<Navigate to="/dashboard" replace />');

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // Contrato da funcao estudio-arte (docs/mesa-do-cliente/SPEC.md, secao 5).
 // Regra do dono: o gerador desenha a lamina inteira, texto incluido; nunca
 // texto em camada por cima; ajuste e edicao dentro do gerador.
-const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
+const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
 const fonte = ler("supabase/functions/estudio-arte/index.ts");
 const config = ler("supabase/config.toml");
 
@@ -197,7 +197,7 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(corpoDe("globaisParaALamina")).toContain('.from("referencias_globais")');
     expect(corpoDe("globaisParaALamina")).toContain('textSearch("leitura"');
     // Marca por projeto (docs/marcas): a arte publicada é a da marca do trabalho.
-    expect(e).toContain('notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho)');
+    expect(e).toContain('notas.find((x) => x.r.papel === "identidade")?.r ?? (livre ? null : await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho))');
     // Escolha da equipe na tela vale antes do Jev.
     expect(e.indexOf("escolhidasNaTela")).toBeLessThan(e.indexOf("await jevPerguntar("));
     expect(fonte).toContain("const MAX_REFERENCIAS = 2;");

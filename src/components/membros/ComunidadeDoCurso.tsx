@@ -7,7 +7,11 @@ import {
   Pencil,
   Send,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
+import { AjudaRecolhida } from "@/components/sistema";
+import { carregarCanais } from "@/lib/membros/canais";
+import { urlHttps } from "@/lib/membros/modelo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   carregarComunidade,
@@ -20,10 +24,12 @@ export default function ComunidadeDoCurso({
   produto,
   teste,
   previa,
+  tituloOculto = false,
 }: {
   produto: string;
   teste?: TesteCliente;
   previa?: string;
+  tituloOculto?: boolean;
 }) {
   const { user, profile } = useAuth();
   const qc = useQueryClient();
@@ -48,6 +54,11 @@ export default function ComunidadeDoCurso({
     queryFn: () => carregarComunidade(produto, teste, previa),
     retry: false,
     refetchInterval: 30000,
+  });
+  const canais = useQuery({
+    queryKey: [...chave, "canais"],
+    queryFn: () => carregarCanais(produto, teste, previa),
+    retry: false,
   });
   async function agir(
     t: string,
@@ -165,16 +176,40 @@ export default function ComunidadeDoCurso({
   }
   return (
     <section className="membros-comunidade" aria-label="Comunidade do curso">
-      <header className="flex items-center justify-between gap-2">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-[17px] font-semibold flex items-center gap-2">
+          <h2
+            className={`${tituloOculto ? "sr-only" : "text-[15px] font-semibold flex items-center gap-2"}`}
+          >
             <MessageCircle size={19} className="text-primary" />
             Comunidade
+            {!tituloOculto && (
+              <AjudaRecolhida rotulo="Sobre a comunidade">
+                Converse com quem estuda este produto. Os grupos externos são
+                configurados pela administração e abrem em outra guia.
+              </AjudaRecolhida>
+            )}
           </h2>
-          <p className="text-[12px] text-muted-foreground mt-1">
-            Converse com quem estuda este produto.
-          </p>
         </div>
+        {!!canais.data?.length && (
+          <nav className="membros-canais" aria-label="Grupos da comunidade">
+            {canais.data
+              .filter((c) => urlHttps(c.url))
+              .map((c) => (
+                <a
+                  key={c.id}
+                  className="membros-acao bg-muted"
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle size={16} />
+                  <span>{c.nome}</span>
+                  <ExternalLink size={13} />
+                </a>
+              ))}
+          </nav>
+        )}
         <button
           className="membros-acao"
           aria-label="Atualizar comunidade"
@@ -183,6 +218,14 @@ export default function ComunidadeDoCurso({
           <RefreshCw size={15} />
         </button>
       </header>
+      {canais.isError && (
+        <p role="status" className="text-[12px] text-muted-foreground">
+          Os links dos grupos não carregaram.{" "}
+          <button className="underline" onClick={() => void canais.refetch()}>
+            Tentar novamente
+          </button>
+        </p>
+      )}
       {leitura ? (
         <p className="text-[12px] rounded-lg bg-muted p-3">
           Nesta visualização você acompanha a comunidade sem publicar mensagens.

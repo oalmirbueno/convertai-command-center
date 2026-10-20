@@ -5,6 +5,7 @@ const cors = {
   "Access-Control-Allow-Headers":
     "authorization,apikey,content-type,x-client-info",
   "Access-Control-Allow-Methods": "POST,OPTIONS",
+  "Access-Control-Max-Age": "7200",
 };
 const resposta = (v: unknown, status = 200) =>
   new Response(JSON.stringify(v), {

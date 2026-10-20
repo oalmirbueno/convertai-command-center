@@ -2,6 +2,7 @@
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pdfMembrosTeste } from "./pdf-membros-teste.mjs";
 const origin = "http://127.0.0.1:4178";
 const output = resolve("outputs/membros-visual");
 await mkdir(output, { recursive: true });
@@ -29,6 +30,7 @@ const produtos = Array.from({ length: 6 }, (_, i) => ({
   origens:
     i === 4 ? ["gratuito"] : i < 3 ? ["compra"] : i === 3 ? ["plano"] : [],
   progresso: i === 0 ? 35 : 0,
+  comunidade_ativa: i === 0,
   ultimo_material: i === 0 ? "material-teste" : null,
 }));
 const material = {
@@ -113,7 +115,7 @@ try {
       if (url.pathname === "/teste-guia.pdf")
         return route.fulfill({
           contentType: "application/pdf",
-          path: resolve("outputs/membros-demo/guia-de-teste-aceleriq.pdf"),
+          body: pdfMembrosTeste(),
         });
       if (url.pathname === "/src/contexts/AuthContext.tsx")
         return route.fulfill({
@@ -125,6 +127,32 @@ try {
           contentType: "application/javascript",
           body: `export const carregarLista=async()=>[];export const favoritar=async()=>{};export const carregarFunil=async()=>[];export const carregarComunidade=async()=>[];export const salvarConversa=async()=>{};export const carregarPessoas=async()=>({pessoas:[],total:0,resumo:{pessoas:0,compradores:0,liberados:0,encerrados:0,pendentes:0}});export const carregarPessoa=async()=>({});export const liberarPessoas=async()=>{};export const revogarManual=async()=>{};export const salvarNome=async()=>{};export const ordenar=async()=>{};`,
         });
+      if (url.pathname === "/src/lib/membros/canais.ts")
+        return route.fulfill({
+          contentType: "application/javascript",
+          body: `export const carregarCanais=async()=>[{id:'grupo-teste',nome:'WhatsApp · grupo de teste',url:'https://example.invalid/grupo',ativo:true,tipo:'whatsapp'}];export const salvarCanal=async()=>{};`,
+        });
+      if (url.pathname === "/src/lib/membros/capas.ts")
+        return route.fulfill({
+          contentType: "application/javascript",
+          body: `export const enviarCapa=async()=>location.origin+'/membros/capas/boas-vindas-v2.webp';`,
+        });
+      if (url.pathname === "/src/lib/membros/editorial.ts")
+        return route.fulfill({
+          contentType: "application/javascript",
+          body: `export const lerVersoes=async()=>[];export const versionarConteudo=async()=>'';export const arquivoDaVersao=async()=>location.origin+'/teste-guia.pdf';`,
+        });
+      if (url.pathname === "/src/lib/membros/ferramentas.ts")
+        return route.fulfill({
+          contentType: "application/javascript",
+          body: `
+        const crm={contatos:[{id:'contato-teste',nome:'Contato sintético',empresa:'Empresa de teste',email:'',telefone:'',notas:'',arquivado:false,versao:1}],negocios:[{id:'negocio-teste',titulo:'Proposta de teste',contato_id:'contato-teste',estagio:'proposta',valor:125,proxima_acao:'Conferir escopo do orçamento',proxima_data:'2026-10-21',notas:'',arquivado:false,versao:1}]};
+        crm.negocios.push(...Array.from({length:16},(_,i)=>({...crm.negocios[0],id:'volume-teste-'+i,titulo:'Oportunidade sintética '+(i+1)})));
+        export const listarFerramentas=async()=>[{produto_id:'produto-teste-0',titulo:'CRM de teste',motor:'crm',fim:'2027-10-20T12:00:00Z'}];
+        export const obterProvaCompartilhada=async()=> 'prova-sintetica';export const abrirSessaoFerramenta=async()=>({conflito:false,licenca_fim:'2027-10-20T12:00:00Z'});
+        export const operarCrm=async()=>structuredClone(crm);export const carregarAdminFerramentas=async()=>({...crm,ferramentas:[],licencas:[],exclusoes:[]});
+        export const prepararUpgradeMensal=async()=>{};export const configurarFerramenta=async()=>{};export const licenciarTeste=async()=>'';export const revogarLicenca=async()=>{};export const atenderExclusaoCrm=async()=>({});export const pedirExclusaoCrm=async()=>{};export const proximaResposta=async()=>({});`,
+        });
       if (url.pathname === "/src/lib/membros/api.ts")
         return route.fulfill({
           contentType: "application/javascript",
@@ -134,7 +162,10 @@ try {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(120000);
-    page.on("pageerror", (e) => erros.push(e.message));
+    page.on("pageerror", (e) => {
+      erros.push(e.message);
+      console.error("Erro de interface local:", e.message);
+    });
     await page.goto(`${origin}/membros`, {
       waitUntil: "domcontentloaded",
       timeout: 180000,
@@ -159,6 +190,7 @@ try {
           `Transbordamento ${largura}px ${etapa}: ${JSON.stringify(tamanho)}`,
         );
       resultados.push({ largura, etapa, sem_transbordamento: true });
+      console.log(JSON.stringify({ largura, etapa }));
     };
     await checar("biblioteca");
     await page.screenshot({
@@ -181,6 +213,40 @@ try {
     if (gravou !== true) throw Error("Conclusão não enviada pela interface");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog").waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Comunidade", exact: true }).click();
+    await page
+      .getByRole("link", { name: "WhatsApp · grupo de teste" })
+      .waitFor();
+    const comunidadeLargura = await page
+      .locator(".membros-comunidade")
+      .evaluate((el) => ({
+        largura: el.getBoundingClientRect().width,
+        pai: el.parentElement.getBoundingClientRect().width,
+      }));
+    if (comunidadeLargura.largura < comunidadeLargura.pai - 4)
+      throw Error("Comunidade não ocupa a largura disponível");
+    await checar("comunidade");
+    await page.screenshot({
+      path: resolve(output, `comunidade-${largura}.png`),
+    });
+    await page
+      .getByRole("button", { name: "Ferramentas", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Abrir ferramenta", exact: true })
+      .click();
+    await page.getByRole("button", { name: /Proposta de teste/ }).waitFor();
+    await checar("crm");
+    if(largura>=768){
+      const coluna=page.locator('.membros-crm-coluna').filter({has:page.getByRole('heading',{name:'Proposta',exact:true})}).locator('.membros-crm-coluna-rolagem');
+      const antes=await page.evaluate(()=>window.scrollY);
+      const scroll=await coluna.evaluate(el=>{el.scrollTop=el.scrollHeight;return {top:el.scrollTop,altura:el.clientHeight,conteudo:el.scrollHeight};});
+      if(scroll.top<=0||scroll.conteudo<=scroll.altura)throw Error('A coluna do CRM não tem rolagem própria');
+      if(await page.evaluate(()=>window.scrollY)!==antes)throw Error('Rolar a coluna moveu a página');
+      await coluna.evaluate(el=>{el.scrollTop=0;});await checar('crm-rolagem-propria');
+    }
+    await page.screenshot({ path: resolve(output, `crm-${largura}.png`) });
+    await page.getByRole("button", { name: "Início", exact: true }).click();
     if ([390, 1440].includes(largura)) {
       await page.evaluate(() => {
         window.__membrosTeste.materiais = [
@@ -217,13 +283,51 @@ try {
         .getByRole("button", { name: "Ampliar PDF", exact: true })
         .click();
       await page.getByRole("button", { name: "Ajustar PDF à largura" }).click();
-      await page.getByRole("button", { name: "Entrar no modo foco" }).click();
-      const foco = await page
-        .getByRole("dialog")
+      await page
+        .getByRole("button", { name: "Próxima página", exact: true })
+        .click();
+      if (
+        (await page
+          .getByRole("spinbutton", { name: "Número da página" })
+          .inputValue()) !== "2"
+      )
+        throw Error("PDF não avançou para página 2");
+      await page
+        .getByRole("button", { name: "Página anterior", exact: true })
+        .click();
+      if (
+        (await page
+          .getByRole("spinbutton", { name: "Número da página" })
+          .inputValue()) !== "1"
+      )
+        throw Error("PDF não voltou para página 1");
+      await checar("pdf-navegacao");
+      await page
+        .getByRole("button", { name: "Abrir PDF em tela cheia" })
+        .click();
+      await page
+        .getByRole("button", { name: "Sair da tela cheia do PDF" })
+        .waitFor();
+      await checar("pdf-tela-cheia");
+      const pdfTela = await page
+        .locator(".membros-pdf-tela-cheia")
         .evaluate((el) => ({
-          width: el.getBoundingClientRect().width,
-          height: el.getBoundingClientRect().height,
+          w: el.getBoundingClientRect().width,
+          h: el.getBoundingClientRect().height,
         }));
+      if (pdfTela.w < largura - 2 || pdfTela.h < 898)
+        throw Error("PDF não ocupa a tela inteira");
+      await page.screenshot({
+        path: resolve(output, `pdf-tela-cheia-${largura}.png`),
+      });
+      await page
+        .getByRole("button", { name: "Sair da tela cheia do PDF" })
+        .click();
+      await page.getByRole("button", { name: "Entrar no modo foco" }).click();
+      const foco = await page.getByRole("dialog").evaluate((el) => ({
+        width: el.getBoundingClientRect().width,
+        height: el.getBoundingClientRect().height,
+      }));
       if (foco.width < largura - 2 || foco.height < 898)
         throw Error("Modo foco não ocupa a tela: " + JSON.stringify(foco));
       await checar("pdf-e-foco");
@@ -236,7 +340,16 @@ try {
       await page.getByRole("button", { name: "Começar", exact: true }).click();
       await page.getByRole("timer").waitFor();
       await checar("pomodoro");
-      await page.keyboard.press("Escape");
+      await page
+        .getByRole("button", { name: "Minimizar", exact: true })
+        .click();
+      await page
+        .getByRole("complementary", { name: "Pomodoro compacto" })
+        .waitFor();
+      await checar("pomodoro-compacto");
+      await page.screenshot({
+        path: resolve(output, `pomodoro-compacto-${largura}.png`),
+      });
       await page.keyboard.press("Escape");
       await page.getByRole("dialog").waitFor({ state: "hidden" });
       await page.evaluate(() => {

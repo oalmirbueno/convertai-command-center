@@ -168,7 +168,7 @@ function PlanoDeTesteNaTela({ e, mensagemId, onPlanoPronto }: { e: EstrategiaSen
           </div>
         ))}
       </dl>
-      {!t && <p className="mt-1 text-[11px] text-muted-foreground">O que o agente não disse (público, verba, critério) o painel preenche com a conta e o briefing, e marca como lacuna o que não tiver base.</p>}
+      {!t && <AjudaRecolhida rotulo="Saiba mais">O que o agente não disse (público, verba, critério) o painel preenche com a conta e o briefing, e marca como lacuna o que não tiver base.</AjudaRecolhida>}
     </section>
   );
 }
@@ -708,9 +708,9 @@ export default function AgenteSenior({
       {conversa.isLoading && <Esqueleto />}
       {conversa.isError && <AvisoDeErro erro={conversa.error} />}
       {conversa.data && mensagens.length === 0 && !envio && (
-        <p className="py-3 text-center text-[12px] leading-relaxed text-muted-foreground">
+        <AjudaRecolhida rotulo="Saiba mais">
           Peça o que fazer com a conta. Ele mostra o que leu, faz o que é seguro quando você pede e deixa o resto pronto para confirmar.
-        </p>
+        </AjudaRecolhida>
       )}
       {antigas.length > 0 && (
         <div className="min-w-0">

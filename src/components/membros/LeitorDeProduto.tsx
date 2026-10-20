@@ -42,8 +42,8 @@ import {
   type Progresso,
   type TesteCliente,
 } from "@/lib/membros/modelo";
-import { texto } from "@/components/sistema";
-import { BotaoPomodoro } from "./FocoDeEstudo";
+import { texto, AjudaRecolhida } from "@/components/sistema";
+import { BotaoPomodoro, PomodoroCompacto } from "./FocoDeEstudo";
 import OfertaDoProduto from "./OfertaDoProduto";
 import ComunidadeDoCurso from "./ComunidadeDoCurso";
 const PdfSeguro = lazy(() => import("./PdfSeguro"));
@@ -424,6 +424,7 @@ export default function LeitorDeProduto({
   const [aba, setAba] = useState<"aula" | "materiais" | "comunidade">("aula");
   const [autoProxima, setAutoProxima] = useState(false);
   const [autoplay, setAutoplay] = useState(false);
+  const rolagem = useRef<HTMLDivElement>(null);
   const dados = useQuery({
     queryKey: [
       "membros",
@@ -480,6 +481,7 @@ export default function LeitorDeProduto({
     setSelecionado(id);
     setAba("aula");
     setAutoplay(automatico);
+    rolagem.current?.scrollTo({ top: 0, behavior: "instant" });
   }
   return (
     <Dialog
@@ -498,11 +500,29 @@ export default function LeitorDeProduto({
         }}
       >
         <header className="membros-leitor-cabecalho">
+          {permitido && (
+            <button
+              className="membros-acao shrink-0"
+              aria-label={
+                sumario
+                  ? "Recolher conteúdo do curso"
+                  : "Mostrar conteúdo do curso"
+              }
+              aria-expanded={sumario}
+              onClick={() => setSumario((s) => !s)}
+            >
+              {sumario ? (
+                <PanelLeftClose size={17} />
+              ) : (
+                <PanelLeftOpen size={17} />
+              )}
+            </button>
+          )}
           <div className="min-w-0">
             <DialogTitle className={texto.tituloPagina}>
               {produto.titulo}
             </DialogTitle>
-            <DialogDescription className="text-[12px] text-muted-foreground mt-1">
+            <DialogDescription className="sr-only">
               {rotuloDoAcesso(produto)} · {produto.formato}
             </DialogDescription>
           </div>
@@ -519,21 +539,6 @@ export default function LeitorDeProduto({
                 }}
               >
                 {foco ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
-              </button>
-              <button
-                className="membros-acao"
-                aria-label={
-                  sumario
-                    ? "Recolher conteúdo do curso"
-                    : "Mostrar conteúdo do curso"
-                }
-                onClick={() => setSumario((s) => !s)}
-              >
-                {sumario ? (
-                  <PanelLeftClose size={17} />
-                ) : (
-                  <PanelLeftOpen size={17} />
-                )}
               </button>
             </div>
           )}
@@ -664,7 +669,7 @@ export default function LeitorDeProduto({
                   </button>
                 )}
               </div>
-              <div className="membros-aula-rolagem">
+              <div className="membros-aula-rolagem" ref={rolagem}>
                 {aba === "aula" && atual && (
                   <ConsumoMaterial
                     key={atual.id}
@@ -686,12 +691,13 @@ export default function LeitorDeProduto({
                     className="space-y-4"
                     aria-label="Materiais complementares"
                   >
-                    <h2 className="text-[17px] font-semibold">
+                    <h2 className="text-[15px] font-semibold">
                       Materiais complementares
                     </h2>
-                    <p className="text-[12px] text-muted-foreground">
-                      {base?.titulo}
-                    </p>
+                    <AjudaRecolhida rotulo="Sobre os complementos">
+                      Materiais vinculados a {base?.titulo}. Abra para ler ou
+                      baixar quando disponível.
+                    </AjudaRecolhida>
                     {complementos.length ? (
                       complementos.map((m) => (
                         <button
@@ -733,26 +739,43 @@ export default function LeitorDeProduto({
               <footer className="membros-aula-rodape">
                 <button
                   className="membros-acao"
-                  disabled={!anterior}
-                  onClick={() => anterior && abrir(anterior.id)}
+                  aria-label={atual?.aula_id ? "Voltar à aula" : "Anterior"}
+                  disabled={!atual?.aula_id && !anterior}
+                  onClick={() =>
+                    atual?.aula_id && base
+                      ? abrir(base.id)
+                      : anterior && abrir(anterior.id)
+                  }
                 >
                   <ChevronLeft size={16} />
-                  Anterior
+                  <span className="hidden sm:inline">
+                    {atual?.aula_id ? "Voltar à aula" : "Anterior"}
+                  </span>
                 </button>
-                <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={autoProxima}
-                    onChange={(e) => setAutoProxima(e.target.checked)}
-                  />
-                  Próxima aula automaticamente
-                </label>
+                <PomodoroCompacto />
+                <AjudaRecolhida rotulo="Opções de reprodução">
+                  <label className="flex items-center gap-2 text-[12px]">
+                    <input
+                      type="checkbox"
+                      checked={autoProxima}
+                      onChange={(e) => setAutoProxima(e.target.checked)}
+                    />
+                    Próxima aula automaticamente
+                  </label>
+                </AjudaRecolhida>
                 <button
                   className="membros-acao border border-border"
+                  aria-label={
+                    base?.tipo === "video" ? "Próxima aula" : "Próximo conteúdo"
+                  }
                   disabled={!proxima}
                   onClick={() => proxima && abrir(proxima.id)}
                 >
-                  Próxima aula
+                  <span className="hidden sm:inline">
+                    {base?.tipo === "video"
+                      ? "Próxima aula"
+                      : "Próximo conteúdo"}
+                  </span>
                   <ChevronRight size={16} />
                 </button>
               </footer>

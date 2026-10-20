@@ -1,3 +1,4 @@
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +22,7 @@ import {
   MessageCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  Wrench,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -47,7 +49,8 @@ import {
 import { FocoDeEstudo, BotaoPomodoro } from "@/components/membros/FocoDeEstudo";
 import ComunidadeDoCurso from "@/components/membros/ComunidadeDoCurso";
 import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
-import { texto } from "@/components/sistema";
+import FerramentasDoMembro from "@/components/membros/FerramentasDoMembro";
+import { texto, AjudaRecolhida } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import "@/components/membros/membros.css";
 
@@ -294,10 +297,10 @@ function ControlesTeste({
             Reiniciar teste
           </summary>
           <div className="membros-teste-confirmacao">
-            <p className="text-[12px]">
+            <AjudaRecolhida rotulo="Saiba mais">
               Apaga apenas o seu progresso de teste. O acesso manual e o
               progresso dos membros são preservados.
-            </p>
+            </AjudaRecolhida>
             <button
               className="membros-acao border border-border mt-2"
               disabled={reiniciando}
@@ -426,6 +429,7 @@ export default function AreaDeMembros() {
     <FocoDeEstudo
       key={user?.id || "visitante"}
       usuario={user?.id || "visitante"}
+      leitorAberto={!!produtoAberto}
     >
       <div className="membros bg-background text-foreground">
         <a
@@ -499,17 +503,18 @@ export default function AreaDeMembros() {
               ) : (
                 <PanelLeftClose size={18} />
               )}
-              <span>Biblioteca</span>
             </button>
             {[
               { id: "inicio", nome: "Início", icone: Home },
               { id: "lista", nome: "Minha lista", icone: Bookmark },
               { id: "comunidade", nome: "Comunidade", icone: MessageCircle },
+              { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
             ].map((i) => (
               <button
                 key={i.id}
                 className="membros-acao"
                 title={i.nome}
+                aria-label={i.nome}
                 aria-current={secao === i.id ? "page" : undefined}
                 onClick={() => setSecao(i.id)}
               >
@@ -520,6 +525,12 @@ export default function AreaDeMembros() {
             <BotaoPomodoro compacto={recolhida} />
           </aside>
           <main id="biblioteca" className="membros-conteudo space-y-8">
+            {secao === "ferramentas" && (
+              <FerramentasDoMembro
+                somenteLeitura={!!previa || !!teste}
+                conhecer={setAberto}
+              />
+            )}
             {teste && profile?.role === "admin" && (
               <ControlesTeste
                 teste={teste}
@@ -539,10 +550,10 @@ export default function AreaDeMembros() {
                   <strong>
                     Visão de {catalogo.data?.pessoa?.nome || "cliente"}
                   </strong>
-                  <p className="text-muted-foreground">
+                  <AjudaRecolhida rotulo="Mais informações">
                     Mesma biblioteca e acessos. Esta visualização não altera o
                     progresso.
-                  </p>
+                  </AjudaRecolhida>
                 </div>
                 <Link
                   className="membros-acao border border-border"
@@ -559,7 +570,7 @@ export default function AreaDeMembros() {
             )}
             {secao === "lista" && (
               <section className="space-y-5">
-                <h1 className="text-[24px] font-semibold">Minha lista</h1>
+                <CabecalhoDePagina titulo={<> Minha lista </>} />
                 {previa ? (
                   <p className="text-[13px]">
                     A lista pessoal fica disponível na própria conta do membro.
@@ -578,20 +589,20 @@ export default function AreaDeMembros() {
                     {...propsLista}
                   />
                 ) : (
-                  <p className="text-[13px] text-muted-foreground">
+                  <AjudaRecolhida rotulo="Mais informações">
                     Use o marcador na capa para guardar o que quer assistir
                     depois.
-                  </p>
+                  </AjudaRecolhida>
                 )}
               </section>
             )}
             {secao === "comunidade" && (
               <section className="space-y-5">
-                <h1 className="text-[24px] font-semibold">Comunidade</h1>
+                <CabecalhoDePagina titulo={<> Comunidade </>} />
                 {comunidades.length ? (
                   <>
                     <label className="block text-[12px] space-y-2 max-w-md">
-                      <span>Comunidade do produto</span>
+                      <span className="sr-only">Comunidade do produto</span>
                       <select
                         className="w-full bg-muted p-3 rounded-lg"
                         value={comunidade || comunidades[0]?.id}
@@ -609,19 +620,23 @@ export default function AreaDeMembros() {
                       produto={comunidade || comunidades[0].id}
                       previa={previa}
                       teste={teste}
+                      tituloOculto
                     />
                   </>
                 ) : (
-                  <p className="text-[13px] text-muted-foreground">
+                  <AjudaRecolhida rotulo="Saiba mais">
                     As comunidades dos produtos liberados para você aparecerão
                     aqui quando estiverem disponíveis.
-                  </p>
+                  </AjudaRecolhida>
                 )}
               </section>
             )}
             <div hidden={secao !== "inicio"} className="space-y-8">
               {produtos.length > 0 && (
-                <h1 className="sr-only">Biblioteca Aceleriq</h1>
+                <CabecalhoDePagina
+                  className="sr-only"
+                  titulo={<> Biblioteca Aceleriq </>}
+                />
               )}
               {catalogo.isPending ? (
                 <div
@@ -635,9 +650,9 @@ export default function AreaDeMembros() {
                 </div>
               ) : catalogo.isError ? (
                 <section role="alert" className="py-16 max-w-xl space-y-4">
-                  <h1 className={texto.tituloPagina}>
-                    Não conseguimos abrir sua biblioteca
-                  </h1>
+                  <CabecalhoDePagina
+                    titulo={<> Não conseguimos abrir sua biblioteca </>}
+                  />
                   <p className={texto.corpo}>
                     {mensagemDoErro(catalogo.error)}
                   </p>
@@ -654,13 +669,13 @@ export default function AreaDeMembros() {
               ) : !produtos.length ? (
                 <section className="py-16 max-w-xl space-y-4">
                   <BookOpen size={36} className="text-primary" />
-                  <h1 className={texto.tituloPagina}>
-                    Sua biblioteca começa aqui
-                  </h1>
-                  <p className={texto.corpo}>
+                  <CabecalhoDePagina
+                    titulo={<> Sua biblioteca começa aqui </>}
+                  />
+                  <AjudaRecolhida rotulo="Saiba mais">
                     Ainda não há produtos disponíveis. Quando um material for
                     publicado ou seu acesso for concedido, ele aparecerá aqui.
-                  </p>
+                  </AjudaRecolhida>
                   {profile?.role === "admin" && !previa && !teste && (
                     <Link
                       className="membros-acao bg-primary text-primary-foreground"
@@ -685,16 +700,15 @@ export default function AreaDeMembros() {
                         />
                       </div>
                       <div className="membros-destaque-texto space-y-4">
-                        <p className="text-[11px] uppercase tracking-[.16em] text-white/75 font-medium">
-                          ACELERIQ · SEU PRÓXIMO PASSO
-                        </p>
                         <p className="text-[12px] text-emerald-300 font-medium">
                           {rotuloDoAcesso(destaque)} · {destaque.formato}
                         </p>
-                        <h2>{destaque.titulo}</h2>
-                        <p className="text-[14px] leading-6 text-white/75 max-w-lg line-clamp-3">
-                          {destaque.descricao}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <h2>{destaque.titulo}</h2>
+                          <AjudaRecolhida rotulo={`Sobre ${destaque.titulo}`}>
+                            {destaque.descricao}
+                          </AjudaRecolhida>
+                        </div>
                         <button
                           className="membros-acao bg-primary text-primary-foreground"
                           onClick={() => setAberto(destaque.id)}

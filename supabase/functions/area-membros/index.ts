@@ -7,6 +7,7 @@ const cors = {
   "Access-Control-Allow-Headers":
     "authorization,apikey,content-type,x-client-info",
   "Access-Control-Allow-Methods": "POST,OPTIONS",
+  "Access-Control-Max-Age": "7200",
 };
 const resposta = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), {
@@ -46,6 +47,21 @@ Deno.serve(async (req) => {
     return resposta({ erro: "pedido_invalido" }, 400);
   }
   try {
+    if (corpo.acao === "arquivo_versao") {
+      if (typeof corpo.material_id !== "string" || !UUID.test(corpo.material_id) || typeof corpo.versao_id !== "string" || !UUID.test(corpo.versao_id)
+        || corpo.previa_usuario !== undefined || corpo.teste_cliente !== undefined || corpo.download !== undefined)
+        return resposta({erro:"versao_invalida"},400);
+      // A consulta usa o JWT real e só a administração pode ler versões.
+      const {data:versoes,error}=await usuario.rpc("membros_conteudo_versoes_ler",{_material:corpo.material_id});
+      if(error) return resposta({erro:"sem_permissao"},403);
+      const versao=Array.isArray(versoes)?versoes.find(v=>v.id===corpo.versao_id):null;
+      const caminho=versao?.dados?.arquivo;
+      if(typeof caminho!=="string" || caminho.split('/')[1]!==corpo.material_id || !UUID.test(caminho.split('/')[0]))
+        return resposta({erro:"arquivo_indisponivel"},404);
+      const {data:arquivo,error:erroArquivo}=await usuario.storage.from("membros-materiais").createSignedUrl(caminho,60);
+      if(erroArquivo||!arquivo) return resposta({erro:"arquivo_indisponivel"},503);
+      return resposta({url:arquivo.signedUrl,expira_em:new Date(Date.now()+60000).toISOString()});
+    }
     if (corpo.acao === "arquivo") {
       if (
         typeof corpo.material_id !== "string" ||

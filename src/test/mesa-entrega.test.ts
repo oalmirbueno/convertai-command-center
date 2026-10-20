@@ -121,9 +121,9 @@ describe("custo do Jev na carteira", () => {
     // + a fidelidade do gancho à referência (02/10) e o mundo real e a pessoa pública na direção (17/10).
     // 18/10: + a capa escolhida pelo Jev (37b5256c) e as referências do Workspace que servem ao pedido
     // (d2a4c32b). Os módulos recebem um `julgar` de fora; a pergunta e a cobrança ficam juntas no index.ts.
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(15);
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(16);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(9);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(14);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(15);
     // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
     for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {
       expect(ler(`supabase/functions/estudio-arte/modulos/${m}.ts`)).not.toMatch(/jevPerguntar\(/);
@@ -137,7 +137,7 @@ describe("custo do Jev na carteira", () => {
     expect(ajuste).toContain("await cobrarJev(r,");
     // Cada jevPerguntar do Estúdio tem o seu cobrarJev logo depois (uma cobrança por pergunta).
     const perguntas = estudio.split("await jevPerguntar(").slice(1);
-    for (const trecho of perguntas) expect(trecho.slice(0, 1200)).toContain("await cobrarJev(");
+    for (const trecho of perguntas) expect(trecho).toContain("await cobrarJev(");
     // A conferência do rosto devolve o guardado sem pagar de novo.
     const conferir = estudio.slice(estudio.indexOf("async function conferirRosto("), estudio.indexOf("function registroDoRosto("));
     expect(conferir).toContain("if (ja && typeof ja === \"object\") return json({ trabalho_id: t.id, ordem, versao: alvo.versao, conferencia: ja, custo_usd: 0 });");

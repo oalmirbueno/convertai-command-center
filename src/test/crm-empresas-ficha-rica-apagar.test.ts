@@ -14,7 +14,7 @@ import { CAMPOS_DA_EMPRESA, CAMPOS_DE_QUALIFICACAO } from "@/lib/comercial";
  */
 
 const raiz = resolve(__dirname, "../..");
-const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
+const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8").replace(/\r\n/g, "\n");
 
 const migracao = ler("supabase/migrations/20260917200000_crm_empresa_automatica_e_ficha_rica.sql");
 const lib = ler("src/lib/comercial.ts");
