@@ -1,0 +1,2 @@
+# Preserve os bytes conferidos e aplicados; não normalizar este SQL novamente.
+supabase/migrations/20261020180352_membros_cursos_comunidade_funil.sql -text whitespace=cr-at-eol
