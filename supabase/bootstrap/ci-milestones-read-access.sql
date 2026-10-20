@@ -42,8 +42,12 @@ BEGIN
     SELECT 1 FROM pg_policy p WHERE p.polrelid='public.milestones'::regclass
       AND p.polname='milestones_select' AND p.polcmd='r' AND p.polpermissive
       AND p.polroles=ARRAY['authenticated'::regrole::oid]
-      AND pg_get_expr(p.polqual,p.polrelid)=
-        '(is_staff(auth.uid()) OR user_owns_project(auth.uid(), project_id))'
+      -- Both reviewed forms enforce the same staff/client boundary. The
+      -- 20260930296100 optimization evaluates identity once per statement.
+      AND regexp_replace(pg_get_expr(p.polqual,p.polrelid),'\s+',' ','g') IN (
+        '(is_staff(auth.uid()) OR user_owns_project(auth.uid(), project_id))',
+        '(( SELECT is_staff(( SELECT auth.uid() AS uid)) AS is_staff) OR user_owns_project(( SELECT auth.uid() AS uid), project_id))'
+      )
   ) OR NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conrelid='public.tasks'::regclass
       AND conname='tasks_milestone_id_fkey' AND contype='f'

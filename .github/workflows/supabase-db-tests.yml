@@ -221,8 +221,10 @@ jobs:
       - name: Type-check portable and public Edge Functions
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: |
+          # Auth templates have their own pinned React Email packages. Resolve
+          # them in Deno's cache without changing the application's node_modules.
+          deno check --node-modules-dir=none --no-lock supabase/functions/auth-email-hook/index.ts
           deno check \
-            supabase/functions/auth-email-hook/index.ts \
             supabase/functions/vendas-webhook/index.ts \
             supabase/functions/agente-contexto/index.ts \
             supabase/functions/estudio-arte/index.ts \

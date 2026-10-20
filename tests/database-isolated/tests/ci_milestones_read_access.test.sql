@@ -9,6 +9,17 @@ UPDATE aceleriq_ci_replay.operator_parent_attestation SET frozen=true;
 SELECT ok(NOT has_table_privilege('authenticated','public.milestones','SELECT'),
   'fresh replay reproduces the missing authenticated read privilege');
 
+CREATE TEMP TABLE reviewed_milestone_predicate AS
+SELECT pg_get_expr(polqual,polrelid) AS expression
+FROM pg_policy WHERE polrelid='public.milestones'::regclass AND polname='milestones_select';
+ALTER POLICY milestones_select ON public.milestones USING(true);
+SELECT throws_ok(__GRANT_SCRIPT__,'P0001','CI_MILESTONES_CANONICAL_SCHEMA_DRIFT',
+  'an unreviewed broad policy cannot gain the CI read grant');
+DO $$ BEGIN
+  EXECUTE 'ALTER POLICY milestones_select ON public.milestones USING ('||
+    (SELECT expression FROM reviewed_milestone_predicate)||')';
+END $$;
+
 CREATE TEMP TABLE milestone_metadata_before AS
 SELECT jsonb_build_object('oid',c.oid,'owner',c.relowner,'rls',c.relrowsecurity,
   'force_rls',c.relforcerowsecurity,

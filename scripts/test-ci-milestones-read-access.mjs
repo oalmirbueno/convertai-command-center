@@ -34,6 +34,7 @@ const canonical={
   update:["20260223213218_7f5eaf50-9c1c-4335-ae01-2d40f859dbac.sql","f4dc564483240ac55c230359ce421f4c69e25d85c0963d3c5b6f5316247b75c9"],
   scope:["20260528163622_b27ffa65-a154-4bb5-bb92-1478927a8a75.sql","0efdae4d2c7da9cda7aa3e322e0dcff2d6718fab8004f290698afdd7a46d8254"],
   link:["20260226160142_2376ec24-03eb-4270-9d08-324821aa39ab.sql","4cdafcf187426d7d40add2e9347eb14d5375bc6206a69a85fb4ea403368a7c3a"],
+  optimized:["20260930296100_rls_tarefas_em_conjunto.sql","c55a9b1508db1b30148db49c08465ad94f095089d73360245ef064765fdfef47"],
 };
 function match(source,pattern,label) {
   const result=source.match(pattern);
@@ -73,11 +74,16 @@ try {
   const grantSql=await readFile(path.join(root,"supabase/bootstrap/ci-milestones-read-access.sql"),"utf8");
   const testSql=(await readFile(path.join(root,"tests/database-isolated/tests/ci_milestones_read_access.test.sql"),"utf8"))
     .replaceAll("__GRANT_SCRIPT__", "$grant_script$"+grantSql+"$grant_script$");
-  const tap=sql(testSql).replaceAll("\r","");
-  const count=[...tap.matchAll(/^ok \d+ /gm)].length;
-  const plans=[...tap.matchAll(/^1\.\.(\d+)$/gm)];
-  assert(!/^not ok\b|^Bail out!/m.test(tap)&&plans.length===1&&Number(plans[0][1])===count&&count>0,tap);
-  console.log("Milestones CI access: "+count+" PostgreSQL assertions passed; "+database+" retained.");
+  let total=0;
+  for(const version of ["legacy","initplan"]){
+    if(version==="initplan")sql(match(sources.optimized,/ALTER POLICY milestones_select ON public\.milestones[\s\S]*?;/,"optimized milestone read policy"));
+    const tap=sql(testSql).replaceAll("\r","");
+    const count=[...tap.matchAll(/^ok \d+ /gm)].length;
+    const plans=[...tap.matchAll(/^1\.\.(\d+)$/gm)];
+    assert(!/^not ok\b|^Bail out!/m.test(tap)&&plans.length===1&&Number(plans[0][1])===count&&count>0,tap);
+    total+=count;
+  }
+  console.log("Milestones CI access: "+total+" PostgreSQL assertions passed for legacy and optimized policies; "+database+" retained.");
 } finally {
   await writeFile(path.join(logDir,"ci-milestones-read-access.log"),output);
 }
