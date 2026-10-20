@@ -8,7 +8,7 @@
  *    POST /functions/v1/vendas-webhook/<gateway>/<chave>
  *    gateway: hotmart | kiwify | stripe | mercado_pago | asaas
  *    A assinatura de cada gateway é conferida antes de ler o corpo (detalhes em
- *    _shared/vendas-gateways.ts). O evento vai para vendas_eventos (único por
+ *    modulos/gateways.ts). O evento vai para vendas_eventos (único por
  *    integração e id externo) e liga ao lead do CRM pelo e-mail ou WhatsApp;
  *    sem lead, o banco cria um com origin 'checkout'.
  *
@@ -28,7 +28,7 @@
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { ehGateway, type EventoDeVenda, type Gateway, SEGREDO_GERADO_PELO_PAINEL, TOKEN_API_DO_GATEWAY, VALIDACAO_DO_GATEWAY } from "../_shared/vendas-gateways.ts";
+import { ehGateway, type EventoDeVenda, type Gateway, SEGREDO_GERADO_PELO_PAINEL, TOKEN_API_DO_GATEWAY, VALIDACAO_DO_GATEWAY } from "./modulos/gateways.ts";
 import { type IntegracaoParaWebhook, LIMITE_DO_CORPO, type PortaDeVendas, receberWebhook, rotaDoWebhook } from "./nucleo.ts";
 
 const cors = {

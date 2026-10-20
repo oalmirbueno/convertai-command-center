@@ -147,7 +147,7 @@ function trabalho(over: Linha = {}) {
 }
 
 const descricao = { capa: "título grande no topo, foto do produto à direita", miolo: "checklist em cartão com ícones", cor: "fundo claro, destaque verde", tipografia: "título pesado em caixa alta" };
-const gravarOk = () => vi.fn(async () => ({ gravada: true, situacao: "criado", id: "77777777-6666-4555-8444-333333333333", reforcos: 1, erro: null }));
+const gravarOk = () => vi.fn<import("../../supabase/functions/_shared/aprendizado-das-entregas").GravarNoCerebro>(async () => ({ gravada: true, situacao: "criado", id: "77777777-6666-4555-8444-333333333333", reforcos: 1, erro: null }));
 
 // ────────────────────────────────────────────────────────────── entrega
 

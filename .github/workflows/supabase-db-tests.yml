@@ -57,6 +57,9 @@ jobs:
           test "$(npm --version)" = "11.9.0"
           npm ci
 
+      - name: Install pinned code worker types without running installers
+        run: npm ci --prefix workers/motor-codigo --ignore-scripts
+
       - name: Install versioned Lovable MCP compatibility dependencies
         id: compat_dependencies
         run: npm ci --prefix integrations/lovable-mcp-compat
@@ -112,7 +115,12 @@ jobs:
           node scripts/prepare-ci-editorial-replay.mjs --stage
 
       - name: Start Supabase local stack
-        run: supabase start
+        # Client-specific data SQL runs with synthetic, immediately removed
+        # parents. No source migration is rewritten or skipped.
+        run: |
+          node scripts/prepare-ci-brand-replay.mjs --self-test
+          node scripts/prepare-ci-brand-replay.mjs --stage
+          supabase start
 
       - name: Apply migrations
         id: db_reset
@@ -174,7 +182,9 @@ jobs:
 
       - name: Restore editorial CI compatibility staging
         if: always()
-        run: node scripts/prepare-ci-editorial-replay.mjs --restore
+        run: |
+          node scripts/prepare-ci-brand-replay.mjs --restore
+          node scripts/prepare-ci-editorial-replay.mjs --restore
 
       - name: Remove CI-only legacy prerequisites migration
         if: always()

@@ -141,7 +141,7 @@ const valorDaFoto = (extra: Partial<MesaFotoValor> = {}): MesaFotoValor => ({
 
 function montar(filho: any, foto: MesaFotoValor) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, { initialEntries: [`/mesa-foto?client=${CLIENTE}`] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(MesaFotoProvider, { valor: foto }, filho)))));
+  return render(h(MemoryRouter, { initialEntries: [`/mesa-foto?client=${CLIENTE}`] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: h(MesaFotoProvider, { valor: foto, children: filho }) }))));
 }
 
 const esperar = async (seletor: string) =>

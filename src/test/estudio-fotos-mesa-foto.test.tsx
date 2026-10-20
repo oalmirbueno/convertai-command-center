@@ -68,7 +68,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any, rota = "/mesa?aba=estudio") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 const foto = (id: string, extra: Partial<FotoDaMesaFoto>): FotoDaMesaFoto & { client_id: string; ativa: boolean } => ({

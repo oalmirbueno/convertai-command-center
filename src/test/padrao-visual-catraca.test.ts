@@ -474,7 +474,7 @@ describe("tudo recolhe (28/09)", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
     try {
       window.localStorage.clear();
-      render(h(AreaDeTrabalho, { lateral: h("div", null, "lista lateral"), rotuloDaLateral: "Lista", memoria: "teste-tirinha" }, h("p", null, "principal")));
+      render(h(AreaDeTrabalho, { lateral: h("div", null, "lista lateral"), rotuloDaLateral: "Lista", memoria: "teste-tirinha", children: h("p", null, "principal") }));
       fireEvent.click(screen.getByRole("button", { name: "Recolher lista" }));
       expect(screen.queryByText("lista lateral")).toBeNull();
       const tirinha = screen.getByRole("button", { name: "Abrir lista" });

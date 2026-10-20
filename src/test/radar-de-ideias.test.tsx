@@ -175,7 +175,7 @@ describe("Radar de ideias", () => {
     fireEvent.click(aplicar);
 
     expect(props.onIdeiaEvoluida).toHaveBeenCalledTimes(1);
-    const [antiga, nova] = props.onIdeiaEvoluida.mock.calls[0] as [RadarIdea, RadarIdea];
+    const [antiga, nova] = vi.mocked(props.onIdeiaEvoluida).mock.calls[0];
     expect(antiga).toBe(IDEIAS[0]);
     expect(nova.id).toBe("a:bastidor");
     expect(nova.title).toBe("Alfa Peças: o processo em vídeo curto");
@@ -267,7 +267,7 @@ describe("Radar de ideias", () => {
 
     fireEvent.click(within(janela).getByRole("button", { name: "Adicionar ao radar: bastidor ao vivo" }));
     expect(props.onNovasIdeias).toHaveBeenCalledTimes(1);
-    const [clienteId, novas] = props.onNovasIdeias.mock.calls[0] as [string, RadarIdea[]];
+    const [clienteId, novas] = vi.mocked(props.onNovasIdeias).mock.calls[0];
     expect(clienteId).toBe("a");
     expect(novas).toHaveLength(1);
     expect(novas[0].id).toMatch(/^a:var-\d+-0$/);

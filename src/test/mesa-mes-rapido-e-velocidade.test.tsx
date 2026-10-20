@@ -73,7 +73,7 @@ const valorDaMesa = (): MesaValor => ({
 });
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho)));
+  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho })));
 }
 const chamadasDe = (acao: string) =>
   mock.invoke.mock.calls.filter((c) => c[0] === "agente-calendario" && c[1] && c[1].body && c[1].body.acao === acao).map((c) => c[1].body);

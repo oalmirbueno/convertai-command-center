@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-// @ts-expect-error módulo JS da borda da Cloudflare, sem tipos
 import borda from "../../config/painel-worker.js";
 
 /**

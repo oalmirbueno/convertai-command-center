@@ -397,7 +397,7 @@ describe("tomadas, prompts e estimativa", () => {
   });
 
   it("proibições por tipo: pessoa e alimento", () => {
-    const pessoa = kitProduto({ tipo: "pessoa", nome: "Ana", autorizacao: { confirmada: true, finalidade: null, escopo: null, validade: null, observacao: null } });
+    const pessoa = kitProduto({ tipo: "pessoa", nome: "Ana", autorizacao: { confirmada: true, quem: null, data: null, finalidade: null, escopo: null, validade: null, observacao: null } });
     const tp = montarTomada({ id: "r", nome: "Retrato", camera: cameraDoPreset("a0-e0-ddetalhe") }, { kit: pessoa, refs: [ref(1, "rosto")], receita: null, formatos: ["4:5"] });
     const pp = promptDaTomada({ kit: pessoa, tomada: tp, finalidade: "", marca: { nome: "X" }, fontes: [ref(1, "rosto")], estilos: [], guiaTexto: null, versoesAntes: 0, rejeicoes: [] });
     expect(pp).toContain("não mudar o rosto");

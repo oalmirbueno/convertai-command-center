@@ -574,7 +574,7 @@ export function validarBlocos(bruto: unknown, opcoes: OpcoesDeValidacao = {}): R
 
 const textoOuNulo = { type: ["string", "null"] } as const;
 
-function objetoEstrito(properties: Record<string, unknown>) {
+function objetoEstrito<P extends Record<string, unknown>>(properties: P) {
   return { type: "object", additionalProperties: false, properties, required: Object.keys(properties) } as const;
 }
 

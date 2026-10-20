@@ -326,11 +326,11 @@ describe("Mesa Vídeos: motores do fal sem semente", () => {
     expect(corpos("mesa-videos", "gerar_video")).toHaveLength(0);
     fireEvent.click(gerar);
     expect(corpos("mesa-videos", "gerar_video")).toHaveLength(0);
-    fireEvent.click(await screen.findByRole("button", { name: "Confirmar", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(corpos("mesa-videos", "gerar_video")).toHaveLength(1));
     expect(corpos("mesa-videos", "gerar_video")[0]).toMatchObject({ client_id: CLIENTE, tipo: "gerar_livre", modo: "texto", prompt: "Produto da marca em luz natural, aproximação suave.", variacoes: 1 });
     expect(corpos("mesa-videos", "gerar_video")[0].custo_confirmado_usd).toBeGreaterThan(0);
-    fireEvent.click(await screen.findByRole("button", { name: "Ver resultado", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ver resultado" }));
     expect(irPara).toHaveBeenCalledWith("resultados");
   }, 20000);
 
@@ -347,7 +347,7 @@ describe("Mesa Vídeos: motores do fal sem semente", () => {
     mock.tabelas.foto_cenas_da_historia = [{ canvas_id: CANVAS, client_id: CLIENTE, canvas_nome: "Reel da loja", historia: {}, no_id: "n1", numero: 1, titulo: "Chegada", acao: "A dona abre a loja", enquadramento: "livre", cenario: "", narrativa: "Bom dia", imagem_id: "55555555-5555-4555-8555-555555555555", resultados: [] }];
     montar(h(EtapaGerar, { irPara: vi.fn() }));
     await waitFor(() => expect(corpos("mesa-videos", "motores_estado")).toHaveLength(1));
-    fireEvent.click(screen.getByRole("button", { name: "Cena do roteiro", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Cena do roteiro" }));
     const cena = (await screen.findByRole("combobox", { name: "Cena" }, { timeout: 8000 })) as HTMLSelectElement;
     expect(document.body.textContent).not.toMatch(/em breve|a ligar|Preparar pedido/i);
     fireEvent.change(cena, { target: { value: `cena:${CANVAS}:n1` } });

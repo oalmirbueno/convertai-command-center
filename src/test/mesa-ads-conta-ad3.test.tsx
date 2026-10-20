@@ -32,6 +32,7 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "a
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import GerenciadorAoVivo, { SituacaoDaConta } from "@/components/mesa-ads/GerenciadorAoVivo";
+import { normalizarMetricas } from "@/components/mesa-ads/adsApi";
 import AbaConta from "@/components/mesa-ads/AbaConta";
 import { diagnosticoCurto, normalizarAnuncioAberto, normalizarGerenciador, nosDoNivel, pedidoDeOtimizar, totalDaLista } from "@/components/mesa-ads/gerenciadorApi";
 import { chaveDoPeriodo, corpoDoPeriodo, resolverPeriodo } from "@/components/mesa-ads/periodoDaConta";
@@ -228,7 +229,7 @@ describe("gerenciador como o da Meta", () => {
       dias: 14,
       onOtimizar,
       onVariar,
-      anuncios: [{ ad_id: "140000000000001", nome: "Reel do jardim", imagem_url: "https://arquivo.test/ficha.png", titulo: "", corpo: "", cta: "", destino: "", sinal: "escalar", diagnostico: null, tendencia: { ctr_var_pct: -30, custo_resultado_var_pct: null, frequencia: 3.4 }, referencia_id: "ref-1" }],
+      anuncios: [{ ad_id: "140000000000001", nome: "Reel do jardim", status: "ACTIVE", campaign_id: null, campanha: "", descricao: "", metricas: normalizarMetricas({}), imagem_url: "https://arquivo.test/ficha.png", titulo: "", corpo: "", cta: "", destino: "", sinal: "escalar", diagnostico: null, tendencia: { ctr_var_pct: -30, custo_resultado_var_pct: null, frequencia: 3.4 }, referencia_id: "ref-1" }],
     }));
     const g = await screen.findByRole("region", { name: "Gerenciador de anúncios" });
     await within(g).findByText("Mensagens | Jardim");

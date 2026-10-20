@@ -72,6 +72,9 @@ const linhaDaMarca = (extra: Partial<MarcaDoCliente>): MarcaDoCliente => ({
   regras: null,
   tom: null,
   contexto_extra: null,
+  contexto: {},
+  logo_tom: null,
+  logo_alt_tom: null,
   ...extra,
 });
 const ACERBI = linhaDaMarca({});

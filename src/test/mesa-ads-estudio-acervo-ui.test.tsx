@@ -160,7 +160,7 @@ describe("Estúdio Ads mais limpo (AD4)", () => {
     mock.tabelas.video_arquivos = [{ id: "v1", client_id: CLIENTE, pedido_id: "p1", estado: "ativo", mime: "video/mp4", storage_path: "video.mp4", criado_em: "2026-10-06" }];
     montar();
     await screen.findByText(TODOS_NA_SITUACAO.entregue);
-    fireEvent.click(screen.getByRole("button", { name: "Vídeo", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Vídeo" }));
     await screen.findByText("Bancada de vídeo");
     const coluna = screen.getByRole("complementary", { name: "Criativos de vídeo" });
     expect(within(coluna).queryByText("Entregue")).toBeNull();
@@ -169,7 +169,7 @@ describe("Estúdio Ads mais limpo (AD4)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Situação dos vídeos: Todos (2)" }));
     fireEvent.click(screen.getByRole("option", { name: "Para criar (1)" }));
     expect(within(coluna).queryByText(/Para revisar.*1 versão/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Arte", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Arte" }));
     expect(await screen.findByText(TODOS_NA_SITUACAO.entregue)).toBeInTheDocument();
   });
   it("todos entregues: selo compacto na linha de estado, sem o filtro; um primário (Enviar para a conta) e o resto no ...", async () => {

@@ -59,7 +59,7 @@ const diretor: ModeloIa = {
   id: "openai:diretor",
   provedor: "openai",
   modelo_api: "diretor",
-  tipo: "texto",
+  tipo: "texto" as const,
   rotulo: "Diretor",
   preco_entrada_1m: 1,
   preco_saida_1m: 2,
@@ -88,7 +88,7 @@ const valorDaMesa = (extra: Partial<MesaValor> = {}): MesaValor => ({
 
 function montar(filho: any, valor = valorDaMesa()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor }, filho))));
+  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor, children: filho }))));
 }
 
 /** Banco falso: cada tabela devolve as linhas que passam nos filtros usados pela tela. */
@@ -291,7 +291,7 @@ describe("o preparo decide tudo antes da direção", () => {
       h(EstudioPreparar, {
         roteiro: null,
         postUnico: false,
-        partesDiretor: () => [{ modeloId: diretor.id, tipo: "texto", tokensEntrada: 20000, tokensSaida: 8000 }],
+        partesDiretor: () => [{ modeloId: diretor.id, tipo: "texto" as const, tokensEntrada: 20000, tokensSaida: 8000 }],
         onPreparar,
         onConcluido,
       }),
@@ -330,7 +330,7 @@ describe("o preparo decide tudo antes da direção", () => {
         roteiro: { laminas: 4, continuo: false, longas: 2 },
         postUnico: false,
         partesDiretor: () => [],
-        partesEnxugar: () => [{ modeloId: diretor.id, tipo: "texto", tokensEntrada: 3000, tokensSaida: 1500 }],
+        partesEnxugar: () => [{ modeloId: diretor.id, tipo: "texto" as const, tokensEntrada: 3000, tokensSaida: 1500 }],
         onPreparar,
         onConcluido: vi.fn(),
       }),
@@ -488,7 +488,7 @@ describe("a aba inteira no computador (faixa das pautas em cima, estúdio grande
   function montarAba(tarefaId: string) {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const arvore = (id: string) =>
-      h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor: valorDaMesa() }, h(AbaEstudio, { mes: "2026-09-01", onMes: vi.fn(), tarefaId: id, onTarefa: vi.fn() })))));
+      h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: h(AbaEstudio, { mes: "2026-09-01", onMes: vi.fn(), tarefaId: id, onTarefa: vi.fn() }) }))));
     const r = render(arvore(tarefaId));
     return { ...r, trocar: (id: string) => r.rerender(arvore(id)) };
   }

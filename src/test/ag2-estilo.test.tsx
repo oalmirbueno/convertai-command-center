@@ -377,7 +377,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 const ESTADO_VAZIO = { client_id: CLIENTE, ativo: false, versao_atual: 0, guia: null, versoes: [], referencias: [], aprendizados: [], testes: [], sugeridas_pelas_entregas: [], conversa_id: null, mensagens: [] };

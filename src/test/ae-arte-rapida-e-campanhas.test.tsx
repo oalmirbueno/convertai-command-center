@@ -91,6 +91,9 @@ const marca = (id: string, principal: boolean, project_id: string): MarcaDoClien
   regras: null,
   tom: null,
   contexto_extra: null,
+  contexto: {},
+  logo_tom: null,
+  logo_alt_tom: null,
 });
 const ACERBI = marca(ACERBI_ID, true, PROJ_ACERBI);
 const CME = marca(CME_ID, false, PROJ_CME);
@@ -472,7 +475,7 @@ function bancoFalso(tabelas: Record<string, any[]>) {
 function montar(endereco: string, valor = valorDaMesa()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    h(MemoryRouter, { initialEntries: [endereco] }, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor }, h(AbaEstudio, { mes: "2026-09-01", onMes: vi.fn(), tarefaId: null, onTarefa: vi.fn() }))))),
+    h(MemoryRouter, { initialEntries: [endereco] }, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor, children: h(AbaEstudio, { mes: "2026-09-01", onMes: vi.fn(), tarefaId: null, onTarefa: vi.fn() }) })))),
   );
 }
 

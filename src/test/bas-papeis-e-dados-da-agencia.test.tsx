@@ -44,7 +44,7 @@ import {
   normalizarDadosDaAgencia,
   qualificacaoDaContratada,
   textoDasFaltas,
-  type DadosDaAgencia,
+  type DadosDaAgencia as DadosDaAgenciaModelo,
 } from "@/lib/agencia/dadosDaAgencia";
 import {
   DadosDaAgenciaIncompletos,
@@ -77,7 +77,7 @@ function modelo(id: string, papeis: string[], ativo = true, tipo: "texto" | "ima
   };
 }
 
-const COMPLETO: Partial<DadosDaAgencia> = {
+const COMPLETO: Partial<DadosDaAgenciaModelo> = {
   razao_social: "Agência Exemplo Ltda",
   nome_fantasia: "Exemplo",
   cnpj: "11.222.333/0001-81",

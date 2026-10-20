@@ -87,7 +87,7 @@ const valorDaMesa = (): MesaValor => ({
 function montar(filho: any, rota = "/mesa?client=c&mes=2026-09-01") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa() }, filho)))),
+    h(MemoryRouter, { initialEntries: [rota] }, h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: filho })))),
   );
 }
 

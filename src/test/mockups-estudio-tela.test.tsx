@@ -223,7 +223,7 @@ describe("estúdio de mockups na tela", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Em cima, à esquerda" }));
     fireEvent.click(screen.getByRole("button", { name: /Salvar e escolher/ }));
     await waitFor(() => expect(salvarAplicacao).toHaveBeenCalledTimes(1));
-    const pedido = vi.mocked(salvarAplicacao).mock.calls[0][0] as { mockupId: string; config: { ajustes: Record<string, unknown> } };
+    const pedido = vi.mocked(salvarAplicacao).mock.calls[0][0];
     expect(pedido.mockupId).toBe("cartao-colorido");
     expect(pedido.config.ajustes).toEqual({ posicaoX: -1, posicaoY: -1 });
     expect(await screen.findByText(/· ajustado/)).toBeTruthy();

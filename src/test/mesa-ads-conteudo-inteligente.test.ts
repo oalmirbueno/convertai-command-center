@@ -136,7 +136,7 @@ describe("reescrita única das reprovadas", () => {
   const ruim = { variacao: 2, angulo_de_venda: "desejo", texto_principal: "Descubra a solução ideal.", titulo: "Aproveite já", headline_arte: "Qualidade que você merece", cta_arte: "" };
 
   it("chama o modelo uma vez só, só para as reprovadas, e troca no lugar", async () => {
-    const escrever = vi.fn(async () => [{ ...boa, variacao: 2, angulo_de_venda: "prova", texto_principal: "1.200 sofás limpos em Curitiba desde 2019: o seu seca no mesmo dia." }]);
+    const escrever = vi.fn(async (_prompt: string) => [{ ...boa, variacao: 2, angulo_de_venda: "prova", texto_principal: "1.200 sofás limpos em Curitiba desde 2019: o seu seca no mesmo dia." }]);
     const r = await reescreverReprovadas(escrever, [boa, ruim], f);
     expect(escrever).toHaveBeenCalledTimes(1);
     expect(String(escrever.mock.calls[0][0])).toContain("REPROVADAS");

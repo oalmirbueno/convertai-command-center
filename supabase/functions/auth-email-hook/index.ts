@@ -2,12 +2,12 @@ import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { SignupEmail } from '../_shared/email-templates/signup.tsx'
-import { InviteEmail } from '../_shared/email-templates/invite.tsx'
-import { MagicLinkEmail } from '../_shared/email-templates/magic-link.tsx'
-import { RecoveryEmail } from '../_shared/email-templates/recovery.tsx'
-import { EmailChangeEmail } from '../_shared/email-templates/email-change.tsx'
-import { ReauthenticationEmail } from '../_shared/email-templates/reauthentication.tsx'
+import { SignupEmail } from './modelos/signup.tsx'
+import { InviteEmail } from './modelos/invite.tsx'
+import { MagicLinkEmail } from './modelos/magic-link.tsx'
+import { RecoveryEmail } from './modelos/recovery.tsx'
+import { EmailChangeEmail } from './modelos/email-change.tsx'
+import { ReauthenticationEmail } from './modelos/reauthentication.tsx'
 import {
   EMAIL_APP_URL as APP_PUBLIC_URL,
   EMAIL_FROM_DOMAIN as FROM_DOMAIN,

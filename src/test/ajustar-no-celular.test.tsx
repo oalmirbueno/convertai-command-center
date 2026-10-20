@@ -90,7 +90,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function envolver(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 /** Banco falso: cada tabela devolve as linhas que passam nos filtros usados pela tela. */

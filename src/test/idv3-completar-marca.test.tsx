@@ -571,8 +571,7 @@ function montar(dados: Record<string, unknown>, filho: ReactNode) {
   return render(
     h(MemoryRouter, null,
       h(QueryClientProvider, { client: qc },
-        h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: catalogo as any, catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } },
-          h(ProjetoProvider, { valor }, filho)))),
+        h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: catalogo as any, catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined }, children: h(ProjetoProvider, { valor, children: filho }) }))),
   );
 }
 

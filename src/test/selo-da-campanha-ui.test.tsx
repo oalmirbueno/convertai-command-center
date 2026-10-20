@@ -168,7 +168,7 @@ const chamadas = (acao: string, funcao = "agente-calendario") =>
 
 function montar(c: Campanha = campanha) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(CampanhaSelo, { campanha: c }))));
+  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa(), children: h(CampanhaSelo, { campanha: c }) })));
 }
 
 /** O aviso de sucesso com esse texto (toast.success do mock). */

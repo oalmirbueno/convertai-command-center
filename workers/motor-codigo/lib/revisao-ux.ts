@@ -2,7 +2,7 @@
  * Revisão de UX do build (frente UXM, 30/09/2026): as regras da base UI UX
  * Pro Max conferidas por código em TODAS as páginas pré-renderizadas
  * (dist/index.html e dist/<slug>/index.html, revisarUxDasPaginas, puro, em
- * _shared/uiux/revisao-ux.ts) e no CSS do dist, mais a prova que o agente do
+ * regras-ux.ts) e no CSS do dist, mais a prova que o agente do
  * motor deixou em .aceleriq/ux/<seção>.json (regras que pedem o layout vivo).
  *
  * A prova é lida pelo MESMO leitor do evento da passada (normalizarProvaDeUx
@@ -14,7 +14,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { nomeDoComponente } from "../../../supabase/functions/_shared/site-metodo.ts";
-import { type AvisoDeUx, lerTokensDoCss, type PaginaParaRevisar, type ProvaDoAgente, revisarUxDasPaginas } from "../../../supabase/functions/_shared/uiux/revisao-ux.ts";
+import { type AvisoDeUx, lerTokensDoCss, type PaginaParaRevisar, type ProvaDoAgente, revisarUxDasPaginas } from "./regras-ux.ts";
 import { git } from "./projeto.ts";
 import { normalizarProvaDeUx, PASTA_DA_PROVA_DE_UX, regrasDeUxDaBase } from "./prova-da-base.ts";
 

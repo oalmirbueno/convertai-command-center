@@ -227,7 +227,7 @@ describe("Central de Autonomia: tarefa e execução separadas", () => {
 
 describe("Gestor Aceleriq: conversa", () => {
   it("abertura, fechamento e sugestões saem das contagens (sem fato novo)", () => {
-    const base = { feito: 1, concluido_sem_prova: 0, em_revisao: 2, em_andamento: 3, bloqueado: 1, decisao: 1, lacuna: 0, proximo: 0 };
+    const base = { feito: 1, concluido_sem_prova: 0, em_revisao: 2, em_andamento: 3, bloqueado: 1, decisao: 1, lacuna: 0, proximo: 0, anexo: 0, conversa: 0 };
     const c = conversaDoRecorte({ nome: "Acerbi", periodo: "esta semana (05/10 a 08/10)", contagem: base, totalDeFontes: 8, temCliente: true });
     expect(c.abertura).toBe("Dei uma olhada em Acerbi (esta semana (05/10 a 08/10)). Achei 8 registros no OS; vou te contar o que importa.");
     expect(c.fechamento).toBe("Tem 1 decisão esperando você. Quer ver agora?");

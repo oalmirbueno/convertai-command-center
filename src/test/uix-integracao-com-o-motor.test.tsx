@@ -14,7 +14,7 @@ import { contraste, textoSobre } from "../../supabase/functions/_shared/cores-da
 import { BASE_COMPLETA, apoioDoProduto, pacoteDaBaseDeDesign } from "../../supabase/functions/_shared/uiux/base-completa";
 import { baseHerdada, direcaoParaOAgente, graficoParaDados, lerBaseDeDesign, type SerieReal } from "../../supabase/functions/_shared/uiux/consultas";
 import { GRAFICO_DA_FORMA, PRESET_DO_ESTILO, ROTULO_DO_GRAFICO } from "../../supabase/functions/_shared/uiux/mapeamentos";
-import { itensDoChecklistDeUx, lerTokensDoCss, REGRAS_DE_PAGINA, revisarUx, revisarUxDasPaginas } from "../../supabase/functions/_shared/uiux/revisao-ux";
+import { itensDoChecklistDeUx, lerTokensDoCss, REGRAS_DE_PAGINA, revisarUx, revisarUxDasPaginas } from "../../workers/motor-codigo/lib/regras-ux";
 import { perguntasDaBase, perguntasDoRerank } from "../../supabase/functions/_shared/uiux/jev-da-base";
 import { REGRAS_DE_UX_DA_BASE } from "../../supabase/functions/_shared/uiux/dados/ux";
 import { ATRIBUTOS_DO_DNA, MAX_ATRIBUTOS, promptDaSecao, type PacoteDoSite } from "../../supabase/functions/_shared/site-metodo";

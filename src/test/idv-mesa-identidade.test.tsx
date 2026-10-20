@@ -99,7 +99,7 @@ describe("Mesa Identidade: etapas em sequência", () => {
   it("concluir exige o mínimo da etapa (nada inventado) e devolve a próxima", () => {
     const falha = concluirEtapa(zero, "briefing", {});
     expect(falha.ok).toBe(false);
-    if (!falha.ok) expect(falha.falta).toEqual(["O que o negócio faz", "Para quem é a marca", "A personalidade da marca (3 a 5 palavras)"]);
+    if (falha.ok === false) expect(falha.falta).toEqual(["O que o negócio faz", "Para quem é a marca", "A personalidade da marca (3 a 5 palavras)"]);
     const ok = concluirEtapa(zero, "briefing", { briefing: { negocio: "Padaria", publico: "Bairro", personalidade: ["calorosa"] } });
     expect(ok).toEqual({ ok: true, concluidas: ["inicio", "briefing"], proxima: "pesquisa" });
     // Depois da pesquisa vem a estratégia (IDV2); rebranding sem naming pula da estratégia para o conceito.

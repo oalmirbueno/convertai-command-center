@@ -56,8 +56,7 @@ describe("UXS: Sistema abre leve (IDV-11)", () => {
     render(
       h(MemoryRouter, null,
         h(QueryClientProvider, { client: qc },
-          h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } },
-            h(ProjetoProvider, { valor }, h(EtapaSistema))))),
+          h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined }, children: h(ProjetoProvider, { valor, children: h(EtapaSistema) }) }))),
     );
     const links = () => document.head.querySelectorAll("link[data-fonte-da-marca]");
     expect(links().length).toBe(1);

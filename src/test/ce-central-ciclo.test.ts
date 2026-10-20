@@ -47,7 +47,7 @@ function bancoFalso(tabelas: Record<string, unknown[] | Error>, registro: Array<
     };
     return q;
   };
-  return { from: construtor, rpc: vi.fn(async () => ({ data: 2, error: null })) };
+  return { from: construtor, rpc: vi.fn(async (_nome: string, _args?: Record<string, unknown>) => ({ data: 2, error: null })) };
 }
 
 describe("metas de seguidores", () => {
@@ -285,7 +285,7 @@ describe("modelo: GPT-6 Luna com raciocínio baixo, reserva uma vez", () => {
   });
 
   it("motor sem saldo cai uma vez no GPT-4.1 e avisa; o legado nem chama o motor", async () => {
-    const motor = vi.fn(async () => { throw Object.assign(new Error("x"), { codigo: "saldo_insuficiente" }); });
+    const motor = vi.fn(async (_pedido: Record<string, unknown>) => { throw Object.assign(new Error("x"), { codigo: "saldo_insuficiente" }); });
     const legado = vi.fn(async () => ({ texto: "{\"body\":\"oi\"}", modelo: "gpt-4.1", usage: null }));
     const r = await escreverComModeloDaCentral({ clientId: "c1", sistema: "s", usuario: "u" }, { motor, legado });
     expect(motor).toHaveBeenCalledTimes(1);

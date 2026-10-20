@@ -2,3 +2,6 @@
 supabase/migrations/20261020180352_membros_cursos_comunidade_funil.sql -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 # Fontes novas de membros mantêm LF no disco e no índice para conferir o manifesto.
 supabase/migrations/20261020190625_membros_estudo_ferramentas.sql text eol=lf
+# O tamanho enviado das fontes compartilhadas deve ser igual no Windows e no CI.
+supabase/functions/_shared/**/*.ts text eol=lf
+supabase/functions/_shared/**/*.tsx text eol=lf

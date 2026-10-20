@@ -24,7 +24,7 @@ import {
   normalizarAsaas,
   normalizarMercadoPago,
   type PedidoDoGateway,
-} from "../_shared/vendas-gateways.ts";
+} from "./modulos/gateways.ts";
 
 export type IntegracaoParaWebhook = {
   id: string;

@@ -119,7 +119,7 @@ const valorDaMesa = (podeRecarregar = true): MesaValor => ({
 function montar(trabalho: any, podeRecarregar = true) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor: valorDaMesa(podeRecarregar) }, h(LevarParaAgenda, { trabalho, onAbrirItem: vi.fn() }))))),
+    h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor: valorDaMesa(podeRecarregar), children: h(LevarParaAgenda, { trabalho, onAbrirItem: vi.fn() }) })))),
   );
 }
 

@@ -537,8 +537,7 @@ describe("IDV2: tela da Estratégia", () => {
     render(
       h(MemoryRouter, null,
         h(QueryClientProvider, { client: qc },
-          h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } },
-            h(ProjetoProvider, { valor: valorDoProjeto }, h(EtapaEstrategia))))),
+          h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined }, children: h(ProjetoProvider, { valor: valorDoProjeto, children: h(EtapaEstrategia) }) }))),
     );
     const grupo = screen.getByRole("radiogroup", { name: "Arquétipo principal" });
     expect(grupo.querySelectorAll('[role="radio"]').length).toBe(12);

@@ -357,8 +357,8 @@ export function normalizarPlanoDoCliente(bruto: RespostaDoPlano | null | undefin
     const ativos = a.projetos.filter((p) => p.status !== "done" && p.status !== "cancelled");
     if (ativos.length === 1) projetoAlvo = { novo: false, projeto: ativos[0] };
   }
-  const destino = projetoAlvo ? (projetoAlvo.novo ? { projeto_novo: "pn1" } : { projeto_id: projetoAlvo.projeto.id }) : null;
-  const nomeDoDestino = projetoAlvo ? (projetoAlvo.novo ? "projeto novo" : umaLinha(projetoAlvo.projeto.name, 80)) : "";
+  const destino = projetoAlvo ? (projetoAlvo.novo === true ? { projeto_novo: "pn1" } : { projeto_id: projetoAlvo.projeto.id }) : null;
+  const nomeDoDestino = projetoAlvo ? (projetoAlvo.novo === true ? "projeto novo" : umaLinha(projetoAlvo.projeto.name, 80)) : "";
 
   // Marcos novos.
   const marcosNovos = new Map<string, { titulo: string; prazo: string }>();
@@ -394,7 +394,7 @@ export function normalizarPlanoDoCliente(bruto: RespostaDoPlano | null | undefin
   }
 
   // Tarefas novas.
-  const titulosExistentes = new Set(a.tarefas.filter((t) => !projetoAlvo || projetoAlvo.novo || t.project_id === projetoAlvo.projeto.id).map((t) => chaveDeTitulo(t.title)));
+  const titulosExistentes = new Set(a.tarefas.filter((t) => !projetoAlvo || projetoAlvo.novo === true || t.project_id === projetoAlvo.projeto.id).map((t) => chaveDeTitulo(t.title)));
   const tarefasBrutas = plano && Array.isArray(plano.tarefas) ? plano.tarefas : [];
   let k = 0;
   for (const tb of tarefasBrutas.slice(0, MAX_TAREFAS_NO_PLANO * 2)) {

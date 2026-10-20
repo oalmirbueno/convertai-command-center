@@ -165,14 +165,9 @@ describe("AreaDeTrabalho e PainelDoAgente", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
     try {
       render(
-        h(
-          AreaDeTrabalho,
-          {
+        h(AreaDeTrabalho, {
             rotuloDaLateral: "Agente de teste",
-            lateral: h(PainelDoAgente, { titulo: "Agente de teste", compositor: h("textarea", { "aria-label": "mensagem" }) }, h("p", null, "olá")),
-          },
-          h("p", null, "principal"),
-        ),
+            lateral: h(PainelDoAgente, { titulo: "Agente de teste", compositor: h("textarea", { "aria-label": "mensagem" }) }, h("p", null, "olá")), children: h("p", null, "principal") }),
       );
       expect(screen.queryByLabelText("mensagem")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Agente de teste" }));
@@ -190,7 +185,7 @@ describe("AreaDeTrabalho e PainelDoAgente", () => {
 
 describe("CampoDeFormulario", () => {
   it("rótulo em cima ligado ao campo, apoio e erro no aria-describedby", () => {
-    render(h(CampoDeFormulario, { rotulo: "Objetivo", erro: "Conte o objetivo." }, h("input", null)));
+    render(h(CampoDeFormulario, { rotulo: "Objetivo", erro: "Conte o objetivo.", children: h("input", null) }));
     const campo = screen.getByLabelText("Objetivo");
     expect(campo.getAttribute("aria-invalid")).toBe("true");
     expect(document.getElementById(String(campo.getAttribute("aria-describedby")))!.textContent).toBe("Conte o objetivo.");

@@ -105,7 +105,7 @@ const valorDaMesa = (extra: Partial<MesaValor> = {}): MesaValor => ({
 
 function envolver(filho: any, valor = valorDaMesa()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor }, filho))));
+  return h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor, children: filho }))));
 }
 
 /** Banco falso: cada tabela devolve as linhas que passam nos filtros usados pela tela. */

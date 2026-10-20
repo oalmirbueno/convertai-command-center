@@ -65,7 +65,7 @@ function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     h(MemoryRouter, { initialEntries: ["/mesa?client=c&mes=2026-09-01"] },
-      h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa() }, h(AgendaDoMes, {}))))),
+      h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: h(AgendaDoMes, {}) })))),
   );
 }
 

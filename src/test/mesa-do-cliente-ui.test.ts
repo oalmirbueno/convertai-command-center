@@ -84,7 +84,7 @@ const valorDaMesa = (extra: Partial<MesaValor> = {}): MesaValor => ({
 
 function montar(filho: any, valor = valorDaMesa()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor }, filho))));
+  return render(h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MesaProvider, { valor, children: filho }))));
 }
 
 beforeEach(() => {
@@ -204,12 +204,12 @@ describe("estimativa antes de toda ação que gasta", () => {
       h(BotaoComCusto, {
         rotulo: "Gerar card",
         titulo: "Gerar o card 1",
-        partes: () => [{ modeloId: "openai:gpt-image-2", tipo: "imagem", imagens: 1, qualidade: "alta" }],
+        partes: () => [{ modeloId: "openai:gpt-image-2", tipo: "imagem" as const, imagens: 1, qualidade: "alta" as const }],
         executar,
       }),
     );
     await screen.findByText("~US$ 0,25");
-    expect(mock.invoke).toHaveBeenCalledWith("ia-gateway", { body: expect.objectContaining({ acao: "estimar", modelo_id: "openai:gpt-image-2", tipo: "imagem", qualidade: "alta" }) });
+    expect(mock.invoke).toHaveBeenCalledWith("ia-gateway", { body: expect.objectContaining({ acao: "estimar", modelo_id: "openai:gpt-image-2", tipo: "imagem" as const, qualidade: "alta" as const }) });
     expect(executar).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Gerar card/ }));
@@ -219,7 +219,7 @@ describe("estimativa antes de toda ação que gasta", () => {
   it("acima de US$ 1 pede um segundo clique antes de gastar", async () => {
     mock.invoke.mockResolvedValue({ data: { custo_usd: 1.5 }, error: null });
     const executar = vi.fn().mockResolvedValue({ custo_usd: 1.4 });
-    montar(h(BotaoComCusto, { rotulo: "Gerar tudo", titulo: "Gerar tudo", partes: () => [{ modeloId: "x", tipo: "imagem", imagens: 40 }], executar }));
+    montar(h(BotaoComCusto, { rotulo: "Gerar tudo", titulo: "Gerar tudo", partes: () => [{ modeloId: "x", tipo: "imagem" as const, imagens: 40 }], executar }));
     await screen.findByText("~US$ 1,50");
     fireEvent.click(screen.getByRole("button", { name: /Gerar tudo/ }));
     expect(executar).not.toHaveBeenCalled();
@@ -230,7 +230,7 @@ describe("estimativa antes de toda ação que gasta", () => {
   it("sem estimativa também pede um segundo clique", async () => {
     mock.invoke.mockResolvedValue({ data: null, error: { name: "FunctionsFetchError" } });
     const executar = vi.fn().mockResolvedValue({});
-    montar(h(BotaoComCusto, { rotulo: "Ler", titulo: "Ler", partes: () => [{ modeloId: "x", tipo: "texto" }], executar }));
+    montar(h(BotaoComCusto, { rotulo: "Ler", titulo: "Ler", partes: () => [{ modeloId: "x", tipo: "texto" as const }], executar }));
     await waitFor(() => expect(mock.invoke).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /Ler/ }));
     expect(executar).not.toHaveBeenCalled();
@@ -325,7 +325,7 @@ describe("o estúdio nunca põe texto por cima da arte", () => {
 
 describe("catálogo de modelos", () => {
   const base: ModeloIa = {
-    id: "openai:gpt-image-2", provedor: "openai", modelo_api: "gpt-image-2", tipo: "imagem", rotulo: "GPT Image 2",
+    id: "openai:gpt-image-2", provedor: "openai", modelo_api: "gpt-image-2", tipo: "imagem" as const, rotulo: "GPT Image 2",
     preco_entrada_1m: null, preco_saida_1m: null, preco_cache_1m: null, preco_imagem: { baixa: 0.01, media: 0.04, alta: 0.17 },
     raciocinio: [], padrao_para: ["imagem"], ativo: true,
   };

@@ -188,7 +188,7 @@ describe("E05: o carrossel não volta para a lâmina 1 quando a tela de cima ren
 
 describe("E10: pasta só de leitura não entra na fila de miniatura", () => {
   it("mesa/biblioteca e mesa/globais ficam de fora; a pasta do cliente continua", async () => {
-    const buscar = vi.fn(async () => ({ ok: false }));
+    const buscar = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: false }));
     vi.stubGlobal("fetch", buscar);
     definirAutoMiniaturas(true);
     agendarMiniatura("mesa", "biblioteca/fontes/abril-fatface/amostra.png", "https://x/amostra");

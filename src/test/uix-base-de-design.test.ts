@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { lerCsv, objetosDoCsv } from "../../supabase/functions/_shared/uiux/csv";
+import { lerCsv, objetosDoCsv } from "../../scripts/uiux/csv";
 import * as estilos from "../../supabase/functions/_shared/uiux/dados/estilos";
 import * as produtos from "../../supabase/functions/_shared/uiux/dados/produtos";
 import * as paletas from "../../supabase/functions/_shared/uiux/dados/paletas";
@@ -208,7 +208,7 @@ describe("cobertura das tabelas escritas à mão", () => {
 
 describe("texto e código seguros", () => {
   const UIUX = "supabase/functions/_shared/uiux";
-  const aMao = ["pt.ts", "mapeamentos.ts", "consultas.ts", "jev-da-base.ts", "apoio-da-paleta.ts", "revisao-ux.ts", "checklist-de-ux.ts", "citar.ts", "csv.ts", "base-completa.ts"].map((f) => `${UIUX}/${f}`).concat(["supabase/functions/_shared/site-variantes.ts", "supabase/functions/mesa-site/base-de-design.ts", "supabase/functions/mesa-identidade/base-acoes.ts"]);
+  const aMao = ["pt.ts", "mapeamentos.ts", "consultas.ts", "jev-da-base.ts", "apoio-da-paleta.ts", "checklist-de-ux.ts", "citar.ts", "base-completa.ts"].map((f) => `${UIUX}/${f}`).concat(["workers/motor-codigo/lib/regras-ux.ts", "scripts/uiux/csv.ts", "supabase/functions/_shared/site-variantes.ts", "supabase/functions/mesa-site/base-de-design.ts", "supabase/functions/mesa-identidade/base-acoes.ts"]);
 
   it("nenhum texto escrito à mão com travessão", () => {
     for (const p of aMao) expect(ler(p), p).not.toMatch(/[—–]/);
