@@ -33,7 +33,7 @@ function cenario() {
   const deps: DepsDasFontesReais<typeof ch, TrabalhoTeste> = {
     erro, json: (b) => new Response(JSON.stringify(b)), trabalhoComAcesso: acesso,
     mutarTrabalho: vi.fn(async (_id, mudar) => { atual = { ...atual, ...mudar(structuredClone(atual)) }; return structuredClone(atual); }),
-    jsonDoCommons: consulta, buscarImagem: baixar, validarImagem: vi.fn(() => "image/jpeg"), guardarImagem: upload,
+    jsonDoCommons: consulta, buscarImagem: baixar, validarImagem: vi.fn((): "image/jpeg" => "image/jpeg"), guardarImagem: upload,
     descartarUpload: descartar, ehPostDeFotos: (t) => t.tipo === "fotos",
   };
   const acoes = acoesDasFontesReais(deps);
