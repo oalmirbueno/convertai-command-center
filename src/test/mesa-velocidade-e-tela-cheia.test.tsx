@@ -61,6 +61,11 @@ describe("a etapa baixa junto com a mesa", () => {
     // 20/10/2026: a aba Stories baixa junto (pré-carga com a mesma chave da página).
     expect(etapaQueVaiAbrir("/mesa", `?client=${C1}&aba=stories`)).toBe("stories");
     expect(cargasDaMesa("/mesa", `?client=${C1}&aba=stories`).map(([k]) => k)).toContain("mesa/stories");
+    expect(Object.keys(MESAS_DO_PAINEL["/mesa"].etapas)).toEqual(["contexto", "instagram", "stories", "mes", "campanhas", "estudio", "organizacao", "entrega"]);
+    expect(etapaQueVaiAbrir("/mesa", `?client=${C1}&aba=organizacao`)).toBe("organizacao");
+    expect(cargasDaMesa("/mesa", `?client=${C1}&aba=organizacao`).map(([k]) => k)).toEqual(["pagina/mesa", "mesa/organizacao"]);
+    window.localStorage.setItem(`mesa:onde:${C1}`, JSON.stringify({ aba: "organizacao" }));
+    expect(etapaQueVaiAbrir("/mesa", `?client=${C1}`)).toBe("organizacao");
     // 30/09 (frente FTL): a Mesa Foto abre no passo 1 da linha de produção.
     expect(etapaQueVaiAbrir("/mesa-foto", `?client=${C1}`)).toBe("criar");
     expect(etapaQueVaiAbrir("/mesa-foto", `?client=${C1}&etapa=invalida`)).toBe("criar");

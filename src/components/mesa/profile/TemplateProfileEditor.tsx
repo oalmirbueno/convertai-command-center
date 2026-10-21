@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { texto } from "@/components/sistema/estilos";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { useMarcaDaMesa, useMesa, useUrlDaMesa } from "../MesaContexto";
@@ -128,7 +130,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
   };
 
   return <div className="space-y-4" aria-label="Template Profile">
-    <p className="text-[12px] text-muted-foreground">Use o texto preparado pela IA e as fotos reais. A montagem do template não consome geração de imagem.</p>
+    <div className="flex items-center gap-1.5"><span className={texto.auxiliar}>Texto e fotos reais</span><AjudaRecolhida rotulo="Como funciona o template Profile">Use o texto preparado pela IA e as fotos reais. A montagem do template não consome geração de imagem.</AjudaRecolhida></div>
     <fieldset disabled={ocupado || bloqueado} className="space-y-3 disabled:opacity-70">
       <label className="block text-[12px] font-medium">Template<select aria-label="Estilo do template" value={ajustes.estilo} onChange={(e) => mudar("estilo", e.target.value)} className="mt-1 w-full rounded-md border bg-background p-2 text-[13px]"><option value="twitter">Profile · Twitter</option><option value="instagram">Profile · Publicação Instagram</option></select></label>
       {!livre && (perfil.data?.contas.length || 0) > 1 && <label className="block text-[12px]">Conta do Instagram<select aria-label="Conta do Instagram do template" value={contaId || perfil.data?.conta_id || ""} onChange={(e) => { setContaId(e.target.value); setAjustes((a) => ({ ...a, nome: null, username: null, foto_caminho: undefined, verificado: false })); }} className="mt-1 w-full rounded-md border bg-background p-2">{perfil.data?.contas.map((c) => <option key={c.id} value={c.id}>@{c.username}</option>)}</select></label>}

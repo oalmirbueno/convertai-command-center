@@ -371,7 +371,8 @@ describe("tela: corpo das chamadas e leitura da conversa", () => {
 
 describe("tela: o diretor no Estúdio e na Mesa Ads", () => {
   it("Estúdio: ferramenta Diretor, botão claro e refazer pelo fluxo normal", () => {
-    expect(abaEstudio).toContain('producao: ["lamina", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
+    // Template complementa a barra depois de Lâmina; Diretor e as ferramentas anteriores conservam a ordem.
+    expect(abaEstudio).toContain('producao: ["lamina", "template", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
     expect(abaEstudio).toContain("Conversar com o diretor");
     expect(abaEstudio).toContain("<DiretorDoEstudio");
     expect(abaEstudio).toContain("onRefazer={(ordens) => gerarVarias(ordens)}");

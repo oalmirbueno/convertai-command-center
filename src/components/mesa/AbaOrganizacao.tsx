@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { campo, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { openFile } from "@/lib/fileActions";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -42,7 +43,7 @@ function CartaoDoArquivo({ item, clientId, onOrganizar }: { item: ItemDaOrganiza
       <div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted/40">
         {imagem && abrir && !error ? <img src={abrir} alt={item.nome} className="h-full w-full object-contain" loading="lazy" /> :
           <div className="px-3 text-center text-muted-foreground">{imagem ? <Image className="mx-auto h-7 w-7" aria-hidden="true" /> : <FileText className="mx-auto h-7 w-7" aria-hidden="true" />}
-            {error && <p className="mt-2 text-xs">Prévia indisponível</p>}
+            {error && <p className={juntar(texto.auxiliar, "mt-2")}>Prévia indisponível</p>}
           </div>}
       </div>
       <div className="flex min-w-0 flex-1 flex-col p-3">
@@ -104,20 +105,20 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
   const linha = (valor: string, rotulo: string, total: number, indentada = false) => <button
     type="button" key={valor} onClick={() => escolher(valor)} aria-pressed={selecao === valor}
     title={rotulo} className={juntar("flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-[13px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary", indentada && "pl-5", selecao === valor ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-secondary hover:text-foreground")}>
-    <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{rotulo}</span><span className="ml-auto text-xs tabular-nums">{total}</span>
+    <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{rotulo}</span><span className={juntar(texto.etiqueta, "ml-auto tabular-nums")}>{total}</span>
   </button>;
 
   return (
     <section aria-label="Organização do cliente" className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0"><h2 className="text-base font-semibold">Organização</h2><p className="text-[13px] text-muted-foreground">Pastas e arquivos de {clientName}, junto com o Workspace.</p></div>
+        <div className="min-w-0"><h2 className={texto.tituloSecao}>Organização</h2><p className="text-[13px] text-muted-foreground">Pastas e arquivos de {clientName}, junto com o Workspace.</p></div>
         <div className="flex flex-wrap gap-1.5">
           <Button variant="ghost" size="sm" onClick={() => { atualizar(); }} disabled={consulta.isFetching} aria-label="Atualizar organização"><RefreshCw className={juntar("h-4 w-4", consulta.isFetching && "animate-spin")} /></Button>
           <Button variant="outline" size="sm" onClick={onAbrirMes}><CalendarDays className="mr-1.5 h-4 w-4" />Planejar o mês</Button>
           <Button variant="outline" size="sm" asChild><Link to={linkDoWorkspaceDaOrganizacao(clientId, pastaAtual)}>Workspace<ExternalLink className="ml-1.5 h-3.5 w-3.5" /></Link></Button>
         </div>
       </div>
-      {marca && <p className="text-xs text-muted-foreground">Arquivos do painel: {marca.nome}. As pastas do Workspace são compartilhadas entre as marcas deste cliente.</p>}
+      {marca && <div className="flex items-center gap-1.5"><p className={texto.auxiliar}>Arquivos do painel: {marca.nome}</p><AjudaRecolhida rotulo="Pastas compartilhadas entre marcas">As pastas do Workspace são compartilhadas entre as marcas deste cliente.</AjudaRecolhida></div>}
       <div className="grid min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
         <aside aria-label="Pastas da organização" className={juntar(superficie.painel, "min-w-0 self-start p-2")}>
           {linha("todos", "Todos os arquivos", itens.length)}
@@ -133,7 +134,7 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
             <label className="relative min-w-0 flex-1"><span className="sr-only">Buscar arquivos</span><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><Input className="pl-8" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(60); }} placeholder="Buscar arquivos…" /></label>
             <Button variant="outline" size="sm" onClick={() => setOrganizador(true)} disabled={!consulta.isSuccess} title="Organizar as pastas e os arquivos do Workspace, com prévia antes de confirmar"><Wand2 className="mr-1.5 h-4 w-4" />Organizar com IA</Button>
           </div>
-          <p className="text-xs text-muted-foreground">{nomeDaPasta || (selecao === "todos" ? "Todos os arquivos" : selecao === "workspace" ? "Workspace do cliente" : selecao.startsWith("arquivos:") ? selecao.slice(9) : "Arquivos do painel")} · {visiveis.length} arquivo{visiveis.length === 1 ? "" : "s"}</p>
+          <p className={texto.auxiliar}>{nomeDaPasta || (selecao === "todos" ? "Todos os arquivos" : selecao === "workspace" ? "Workspace do cliente" : selecao.startsWith("arquivos:") ? selecao.slice(9) : "Arquivos do painel")} · {visiveis.length} arquivo{visiveis.length === 1 ? "" : "s"}</p>
           {consulta.isError ? <EstadoDeErro titulo="Não foi possível ler os arquivos" descricao={textoDoErro(consulta.error)} acao={<Button variant="outline" size="sm" onClick={() => void consulta.refetch()}>Tentar novamente</Button>} /> :
             consulta.isLoading ? <Carregando forma="grade" linhas={6} rotulo="Lendo a organização do cliente" /> :
               !visiveis.length ? <EstadoVazio icone={<Folder className="h-5 w-5" />} titulo={busca ? "Nenhum arquivo encontrado" : "Esta seleção ainda não tem arquivos"} descricao="Os arquivos enviados ao Workspace ou entregues pelo painel aparecem aqui." /> :
@@ -144,8 +145,8 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
       <Dialog open={novaPasta || !!movendo} onOpenChange={(aberto) => { if (!aberto && !salvando) { setNovaPasta(false); setMovendo(null); setNome(""); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{movendo ? "Organizar arquivo" : "Nova pasta"}</DialogTitle><DialogDescription>{movendo ? `Mover “${movendo.nome}” para outra pasta do mesmo cliente.` : `Criar no Workspace de ${clientName}${nomeDaPasta ? `, dentro de ${nomeDaPasta}` : ", na raiz"}.`}</DialogDescription></DialogHeader>
-          {movendo ? <label className="space-y-1 text-sm"><span>Pasta de destino</span><select aria-label="Pasta de destino" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={destino} onChange={(e) => setDestino(e.target.value)} disabled={salvando}><option value="">Raiz do cliente</option>{pastas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></label> :
-            <label className="space-y-1 text-sm"><span>Nome da pasta</span><Input autoFocus value={nome} maxLength={120} onChange={(e) => setNome(e.target.value)} placeholder="Campanha, tema ou nicho" disabled={salvando} /></label>}
+          {movendo ? <label className={juntar(texto.corpo, "space-y-1")}><span>Pasta de destino</span><select aria-label="Pasta de destino" className={juntar(campo, "h-10")} value={destino} onChange={(e) => setDestino(e.target.value)} disabled={salvando}><option value="">Raiz do cliente</option>{pastas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></label> :
+            <label className={juntar(texto.corpo, "space-y-1")}><span>Nome da pasta</span><Input autoFocus value={nome} maxLength={120} onChange={(e) => setNome(e.target.value)} placeholder="Campanha, tema ou nicho" disabled={salvando} /></label>}
           <DialogFooter><Button variant="outline" disabled={salvando} onClick={() => { setNovaPasta(false); setMovendo(null); }}>Cancelar</Button><Button onClick={() => void salvar()} disabled={salvando || (!movendo && !nome.trim())}>{salvando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}{movendo ? "Mover arquivo" : "Criar pasta"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
