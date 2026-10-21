@@ -1,9 +1,10 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type ConnectionLineComponentProps, type Edge, type EdgeProps } from "@xyflow/react";
 import { X, Zap } from "lucide-react";
 import { TIPOS_DE_NO, ehTipoDeNo, type Gatilho, type TipoDeNo } from "@/lib/laboratorio/nos";
 import SeletorDeGatilho from "../SeletorDeGatilho";
 import { useAcoesDoQuadro } from "./contexto";
+import { caminhoArredondado, rotaSemCartoes, type ObstaculoDoQuadro } from "./visualDoQuadro";
 
 /**
  * A ligação do quadro: curva suave na cor do nó de origem; com o destino
@@ -26,6 +27,9 @@ export interface DadosDaLigacao extends Record<string, unknown> {
   tipoDaOrigem?: TipoDeNo | null;
   /** A origem tem gatilhos (página, checkout, quiz, webinar, teste A/B). */
   aceitaGatilho?: boolean;
+  opacidade?: number;
+  destacada?: boolean;
+  obstaculos?: ObstaculoDoQuadro[];
 }
 
 const CURVA = 0.32;
@@ -33,7 +37,10 @@ const SOMBRA = "0 4px 12px -4px rgba(0,0,0,0.35)";
 
 export const LigacaoDoLab = memo(function LigacaoDoLab({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected }: EdgeProps<Edge<DadosDaLigacao>>) {
   const a = useAcoesDoQuadro();
-  const [caminho, meioX, meioY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, curvature: CURVA });
+  const [caminho, meioX, meioY] = useMemo(() => {
+    const rota = rotaSemCartoes({ x: sourceX, y: sourceY }, { x: targetX, y: targetY }, data?.obstaculos || []);
+    return rota ? [caminhoArredondado(rota), (rota[2].x + rota[3].x) / 2, rota[2].y] as const : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, curvature: CURVA });
+  }, [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, data?.obstaculos]);
   const [perto, setPerto] = useState(false);
   const [escolhendo, setEscolhendo] = useState(false);
   const relogio = useRef<number | null>(null);
@@ -73,6 +80,7 @@ export const LigacaoDoLab = memo(function LigacaoDoLab({ id, sourceX, sourceY, t
   };
   const cor = (data && data.cor) || "hsl(var(--muted-foreground))";
   const ativa = perto || !!selected;
+  const opacidade = ativa ? 0.95 : data?.destacada ? Math.max(0.55, data?.opacidade || 0.24) : data?.opacidade ?? 0.24;
   const gatilho = data && data.gatilho ? data.gatilho : null;
   const rotulo = (data && data.rotuloDoGatilho) || "";
   const tipoDaOrigem = data && data.tipoDaOrigem ? data.tipoDaOrigem : null;
@@ -83,7 +91,7 @@ export const LigacaoDoLab = memo(function LigacaoDoLab({ id, sourceX, sourceY, t
   };
   return (
     <>
-      <BaseEdge id={id} path={caminho} interactionWidth={0} style={{ stroke: cor, strokeWidth: ativa ? 3 : 2.25, strokeLinecap: "round", opacity: ativa ? 1 : 0.9, transition: "stroke-width 120ms" }} />
+      <BaseEdge id={id} path={caminho} interactionWidth={0} style={{ stroke: cor, strokeWidth: ativa ? 2.25 : 1.5, strokeLinecap: "round", opacity: opacidade, transition: "stroke-width 150ms, opacity 150ms" }} />
       {/* Faixa invisível e larga: o mouse acha a linha sem precisar mirar. */}
       <path
         d={caminho}
@@ -101,7 +109,7 @@ export const LigacaoDoLab = memo(function LigacaoDoLab({ id, sourceX, sourceY, t
           <animateMotion dur="1.4s" repeatCount="indefinite" path={caminho} />
         </circle>
       ) : null}
-      {gatilho || mostraBotoes || escolhendo ? (
+      {(gatilho && (ativa || data?.destacada)) || mostraBotoes || escolhendo ? (
         <EdgeLabelRenderer>
           <div
             ref={caixa}
@@ -115,7 +123,7 @@ export const LigacaoDoLab = memo(function LigacaoDoLab({ id, sourceX, sourceY, t
               {gatilho && rotulo ? (
                 <button
                   type="button"
-                  className="inline-flex h-6 max-w-[180px] items-center rounded-full border bg-popover px-2 text-[11px] font-medium leading-none text-foreground transition-colors hover:bg-muted disabled:cursor-default"
+                  className="inline-flex h-7 max-w-[220px] items-center rounded-full border bg-popover px-2 text-[12px] font-medium leading-none text-foreground transition-colors hover:bg-muted disabled:cursor-default"
                   style={{ borderColor: cor, boxShadow: SOMBRA }}
                   onClick={(e) => {
                     e.stopPropagation();

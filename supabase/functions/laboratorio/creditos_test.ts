@@ -180,9 +180,10 @@ Deno.test("seguirRodada (executar.ts): o nó que falha e o que dependia dele dev
     const canvas = {
       nos: [
         { id: "copy_1", tipo: "copy", x: 0, y: 0, dados: {} },
-        { id: "copy_2", tipo: "copy", x: 300, y: 0, dados: {} },
+        { id: "base", tipo: "gravity", x: 150, y: 0, dados: {} },
+        { id: "copy_2", tipo: "imagem", x: 300, y: 0, dados: {} },
       ],
-      ligacoes: [{ id: "l1", de: "copy_1", para: "copy_2" }],
+      ligacoes: [{ id: "l1", de: "copy_1", para: "base" }, { id: "l2", de: "base", para: "copy_2" }],
       viewport: { x: 0, y: 0, zoom: 1 },
     };
     const ctx = {

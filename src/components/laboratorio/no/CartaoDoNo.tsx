@@ -133,6 +133,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
   const titulo = typeof no.dados.titulo === "string" && no.dados.titulo.trim() ? no.dados.titulo.trim() : def.rotulo;
   const [gerar, setGerar] = useState(false);
   const midia = no.tipo === "midia";
+  const podeGerarIA = SEM_GERAR.indexOf(no.tipo) < 0 && !(no.tipo === "area_membros" && (no.dados.plataforma || "painel") === "painel");
 
   const sombra = selected
     ? `0 0 0 2px ${def.cor}, 0 0 0 6px ${def.cor}26, 0 14px 34px -12px ${def.cor}99`
@@ -167,7 +168,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
         <span className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: `${def.cor}1f`, color: def.cor }}>
           <IconeDoNo tipo={no.tipo} className="h-4 w-4" />
         </span>
-        <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")} title={`${def.rotulo}: ${def.dica}`}>
+        <span className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-snug" title={`${def.rotulo}: ${def.dica}`}>
           {titulo}
         </span>
         {data.auto === "aguardando" && !ocupado ? (
@@ -190,7 +191,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
             <Lock className="h-3.5 w-3.5" aria-hidden="true" />
           </span>
         ) : null}
-        {SEM_GERAR.indexOf(no.tipo) < 0 ? (
+        {podeGerarIA ? (
           <button
             type="button"
             className={juntar(botao.icone, "nodrag ml-1 h-7 w-7 text-primary", gerar && "bg-primary/10")}
@@ -222,8 +223,8 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
         </button>
       </div>
 
-      <div className={juntar("nodrag nowheel nopan min-w-0 cursor-auto px-3", midia ? "pb-0" : "pb-3")} data-corpo-do-no="">
-        {SEM_GERAR.indexOf(no.tipo) < 0 ? <GerarComIA no={no} aberto={gerar} onFechar={() => setGerar(false)} /> : null}
+      <div className={juntar("nodrag nowheel nopan min-w-0 cursor-auto px-3", midia ? "pb-0" : "pb-3")} data-corpo-do-no="" tabIndex={0} aria-label={`Conteúdo de ${titulo}`}>
+        {podeGerarIA ? <GerarComIA no={no} aberto={gerar} onFechar={() => setGerar(false)} /> : null}
         {data.solto ? (
           <p className={juntar(texto.auxiliar, "mb-2 flex items-center text-warning")} title={data.solto} data-no-solto="">
             <AlertTriangle className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />

@@ -22,7 +22,7 @@ import { Chips, SeletorDeProporcao, Segmentos, Stepper } from "./no/SeletoresVis
 /** Campos que, vazios, seguem a Configuração ligada (ou o padrão da função). */
 export const SEGUEM_A_CONFIGURACAO = ["proporcao", "quantidade", "qualidade", "motor"];
 
-/** Tipos de campo que ficam só no nó expandido (e no inspetor). */
+/** O operador é avançado; modelos ficam sempre ao alcance, sem abrir o inspetor. */
 const SO_NO_EXPANDIDO = ["modelo", "motor", "operador"];
 
 /** Os campos que o nó mostra recolhido: os dois primeiros que não são modelo, motor nem operador. */
@@ -30,10 +30,12 @@ export function camposPrincipais(tipo: TipoDeNo): CampoDoNo[] {
   const tratados = CAMPOS_TRATADOS[tipo] || [];
   const campos = TIPOS_DE_NO[tipo].campos.filter((c) => tratados.indexOf(c.chave) < 0);
   // Configuração mostra os três seletores visuais; o Agente mostra o modelo junto do papel.
-  if (tipo === "config") return campos.filter((c) => c.chave !== "motor");
+  if (tipo === "config") return campos;
   if (tipo === "agente") return campos;
   const principais = campos.filter((c) => SO_NO_EXPANDIDO.indexOf(c.tipo) < 0).slice(0, 2);
-  return principais.length ? principais : campos.slice(0, 1);
+  const seletores = campos.filter((c) => c.tipo === "modelo" || c.tipo === "motor");
+  const base = principais.length ? principais : campos.slice(0, 1);
+  return base.concat(seletores.filter((c) => !base.some((p) => p.chave === c.chave)));
 }
 
 /** Campos que o corpo próprio do nó já mostra (no/CorpoEspecial e no/MidiaDoNo): os genéricos pulam. */
@@ -41,6 +43,8 @@ export const CAMPOS_TRATADOS: Partial<Record<TipoDeNo, string[]>> = {
   midia: ["imagens"],
   marca: ["paleta", "fontes", "logo"],
   referencias: ["links"],
+  area_membros: ["produto_membros_id"],
+  crm: ["crm_origem", "produto_crm_id"],
 };
 
 /** Escolha curta vira segmentos no nó; com mais de 4 opções fica a lista. */
@@ -58,7 +62,7 @@ export function useOpcoes(tipo: CampoDoNo["tipo"]): Opcao[] {
   const operadores = useQuery({ queryKey: ["laboratorio", "operadores"], queryFn: lerOperadoresExternos, staleTime: 10 * 60_000, enabled: tipo === "operador" });
   if (tipo === "modelo") {
     const lista = modelosAtivos(catalogo.data || [], "texto").map((m) => ({ valor: m.id, rotulo: nomeDoModelo(m) }));
-    return lista.length ? lista : MODELOS_DO_LAB.map((m) => ({ valor: m.valor, rotulo: m.rotulo }));
+    return lista;
   }
   if (tipo === "motor") return modelosAtivos(catalogo.data || [], "imagem").map((m) => ({ valor: m.id, rotulo: nomeDoModelo(m) }));
   if (tipo === "operador") {
@@ -149,9 +153,9 @@ export function Campo({ def, valor, onMudar, projetoId, clienteId, opcional, id,
     const base: Opcao[] = def.tipo === "escolha" ? (def.opcoes || []).map((o) => ({ valor: o.valor, rotulo: o.rotulo })) : doBanco;
     const atual = String(valor ?? "");
     // Valor salvo que não está mais na lista (modelo desligado, operador inativo): continua visível.
-    const opcoes: Opcao[] = (def.vazio ? [{ valor: "", rotulo: def.vazio }] : opcional || def.tipo === "motor" ? [{ valor: "", rotulo: def.tipo === "motor" ? "Padrão do Laboratório" : "Da configuração" }] : [])
+    const opcoes: Opcao[] = (def.vazio ? [{ valor: "", rotulo: def.vazio }] : opcional || def.tipo === "motor" || def.tipo === "modelo" ? [{ valor: "", rotulo: def.tipo === "modelo" ? "Padrão do Laboratório" : def.tipo === "motor" ? "Da configuração ou padrão" : "Da configuração" }] : [])
       .concat(base)
-      .concat(atual && !base.some((o) => o.valor === atual) ? [{ valor: atual, rotulo: atual }] : []);
+      .concat(atual && !base.some((o) => o.valor === atual) ? [{ valor: atual, rotulo: MODELOS_DO_LAB.find((m) => m.valor === atual)?.rotulo || atual }] : []);
     return (
       <div className="min-w-0">
         {rotulo}
@@ -219,8 +223,8 @@ function CampoDeImagens({ rotulo, valor, onMudar, projetoId }: { rotulo: string;
 /** Lê `dados.arquivos` (documentos do nó) como veio do canvas. */
 export function arquivosDe(valor: unknown): ArquivoDoNo[] {
   return (Array.isArray(valor) ? valor : [])
-    .filter((x) => !!x && typeof x === "object")
-    .map((x: any) => ({ id: String(x.id || ""), nome: String(x.nome || x.name || "Documento"), url: typeof x.url === "string" ? x.url : "", tipo: typeof x.tipo === "string" ? x.tipo : "", ...(typeof x.path === "string" && x.path ? { path: x.path } : {}) }));
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x))
+    .map((x) => ({ id: String(x.id || ""), nome: String(x.nome || x.name || "Documento"), url: typeof x.url === "string" ? x.url : "", tipo: typeof x.tipo === "string" ? x.tipo : "", ...(typeof x.path === "string" && x.path ? { path: x.path } : {}) }));
 }
 
 const ehVideo = (a: ArquivoDoNo) => a.tipo.indexOf("video/") === 0 || /\.(mp4|mov|webm|m4v)$/i.test(a.nome);
@@ -369,7 +373,7 @@ export default function CamposDoNo({
   /** Campos que outro bloco do nó já mostra. */
   pular?: string[];
 }) {
-  const fora = pular || [];
+  const fora = (pular || []).concat(no.tipo === "area_membros" && (no.dados.plataforma || "painel") === "painel" ? ["modelo_id", "modulos", "aulas_por_modulo", "liberacao"] : []);
   const campos = (todos ? TIPOS_DE_NO[no.tipo].campos : camposPrincipais(no.tipo)).filter((c) => fora.indexOf(c.chave) < 0);
   if (!campos.length) return null;
   return (

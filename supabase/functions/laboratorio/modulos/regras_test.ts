@@ -173,9 +173,9 @@ Deno.test("estimar: soma por nó e total; nós estáticos e externos não custam
   ], [["c", "r"], ["cfg", "r"], ["c", "ag"], ["c", "car"]]);
   const preco = (ch: Chamada) => (ch.tipo === "imagem" ? ch.imagens * 0.1 : 0.05);
   const r = somarEstimativa(c, ["c", "cfg", "r", "ag", "car", "ext"], preco);
-  // 20/10: Resultado e Carrossel no motor da casa (direção + imagens + conferência de cada lâmina).
-  assertEquals(r.por_no.map((p) => [p.no_id, p.custo_usd]), [["r", 0.4], ["ag", 0.05], ["car", 0.5], ["ext", 0]]);
-  assertEquals(r.total_usd, 0.95);
+  // Resultado usa a casa; carrossel com modelo textual explícito usa planejamento + imagens diretos.
+  assertEquals(r.por_no.map((p) => [p.no_id, p.custo_usd]), [["r", 0.4], ["ag", 0.05], ["car", 0.45], ["ext", 0]]);
+  assertEquals(r.total_usd, 0.9);
   // A chamada de imagem leva a configuração ligada.
   const ch = chamadasDoNo(c, c.nos[2]).find((x) => x.tipo === "imagem")!;
   assertEquals([ch.modelo_id, ch.imagens, ch.qualidade], ["img:teste", 3, "alta"]);

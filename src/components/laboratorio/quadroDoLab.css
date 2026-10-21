@@ -1,0 +1,21 @@
+/* Só o canvas do Lab: tipografia legível sem alterar a escala do painel. */
+[data-quadro-do-lab] [data-no-do-quadro] {
+  font-size: 14px;
+  line-height: 1.5;
+}
+[data-quadro-do-lab] [data-corpo-do-no] {
+  max-height: 640px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+}
+[data-quadro-do-lab] [data-expandido] [data-corpo-do-no] { max-height: 800px; }
+[data-quadro-do-lab] [data-campos-do-no="no"] label { font-size: 13px; line-height: 1.4; }
+[data-quadro-do-lab] [data-campos-do-no="no"] :is(input, select, textarea) { font-size: 14px; line-height: 1.5; }
+[data-quadro-do-lab] [data-campos-do-no="no"] :is(select, input:not([type="checkbox"])) { min-height: 36px; }
+[data-quadro-do-lab] [data-campos-do-no="no"] textarea { min-height: 88px; }
+[data-quadro-do-lab] .react-flow__edge-interaction:focus-visible { outline: 2px solid hsl(var(--primary)); }
+@media (max-height: 640px) {
+  [data-quadro-do-lab] [data-controles-do-quadro] { max-height: calc(100dvh - 150px); overflow-y: auto; scrollbar-width: thin; }
+}

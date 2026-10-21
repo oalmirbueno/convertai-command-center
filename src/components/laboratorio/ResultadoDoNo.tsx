@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Copy, Download, ExternalLink, Loader2, Maximize2, PauseCircle, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Columns2, Copy, Download, ExternalLink, Grid2X2, Loader2, Maximize2, PauseCircle, Rows3, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { JanelaCentral, botao, etiqueta, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, JanelaCentral, botao, etiqueta, juntar, texto } from "@/components/sistema";
 import { enderecoParaBaixar, enderecosAssinados, lerHtmlSalvo } from "@/lib/laboratorio/arquivos";
 import { enderecoDaAprovacao, type EstadoNoAr, type ExecucaoDoLab, type FonteDaPesquisa, type ImagemDoLab, type SaidaDaExecucao, type StatusDaExecucao, type StoryboardDoFilme } from "@/lib/laboratorio/api";
 import type { TipoDeNo } from "@/lib/laboratorio/nos";
+import { caminhoDoArquivo, htmlSeguroDaPrevia, MENSAGEM_DE_FORMULARIO, MENSAGEM_DE_NAVEGACAO, nonceDaPrevia, resolverDestinoDaPrevia } from "@/lib/laboratorio/previas";
+import { usePaginasDaPrevia } from "./ContextoDasPrevias";
 
 /**
  * O resultado no próprio nó: estado com cor, texto resumido, miniaturas,
@@ -68,34 +70,83 @@ export function Miniaturas({ imagens, escolhida, max = 4 }: { imagens: ImagemDoL
   );
 }
 
-/** Prévia da landing: o HTML salvo num iframe sem mesma origem (scripts só para o Tailwind por CDN). */
+/** O arquivo de origem é a chave: trocar de nó apaga imediatamente a prévia e o erro anteriores. */
 export function PreviaDaLanding({ caminho, url, alta = false, cheia = false }: { caminho: string; url: string; alta?: boolean; cheia?: boolean }) {
-  const [html, setHtml] = useState<string | null>(null);
-  const [erro, setErro] = useState(false);
+  if (!caminho) return url ? <p className={texto.auxiliar}>Esta prévia precisa do arquivo HTML salvo no projeto.</p> : null;
+  return <PaginaNaPrevia key={caminho} caminho={caminho} alta={alta} cheia={cheia} />;
+}
+
+function PaginaNaPrevia({ caminho, alta, cheia }: { caminho: string; alta: boolean; cheia: boolean }) {
+  const paginas = usePaginasDaPrevia();
+  const iframe = useRef<HTMLIFrameElement>(null);
+  const [pagina, setPagina] = useState({ htmlPath: caminho, caminho: caminhoDoArquivo(paginas, caminho) });
+  const [historico, setHistorico] = useState<typeof pagina[]>([]);
+  const [html, setHtml] = useState<{ arquivo: string; conteudo: string } | null>(null);
+  const [erro, setErro] = useState<{ arquivo: string; texto: string } | null>(null);
+  const [aviso, setAviso] = useState("");
+  const caminhoAtual = pagina.caminho || caminhoDoArquivo(paginas, pagina.htmlPath);
+  const navegar = useCallback((pedido: unknown) => {
+    const destino = resolverDestinoDaPrevia(paginas, pagina.caminho || caminhoDoArquivo(paginas, pagina.htmlPath), pedido);
+    if (destino.ok === false) { setAviso(destino.motivo); return; }
+    if (destino.pagina.htmlPath === pagina.htmlPath) { setAviso(""); return; }
+    setHistorico((anterior) => anterior[anterior.length - 1]?.htmlPath === pagina.htmlPath ? anterior : [...anterior.slice(-39), pagina]);
+    setPagina({ htmlPath: destino.pagina.htmlPath, caminho: destino.pagina.caminho });
+  }, [paginas, pagina]);
   useEffect(() => {
-    if (!caminho) return;
     let vivo = true;
-    lerHtmlSalvo(caminho)
+    setHtml(null);
+    setErro(null);
+    setAviso("");
+    lerHtmlSalvo(pagina.htmlPath)
       .then((t) => {
-        if (vivo) setHtml(t);
+        if (vivo) setHtml({ arquivo: pagina.htmlPath, conteudo: htmlSeguroDaPrevia(t, nonceDaPrevia()) });
       })
       .catch(() => {
-        if (vivo) setErro(true);
+        if (vivo) setErro({ arquivo: pagina.htmlPath, texto: "Não foi possível carregar esta página. A prévia anterior não foi reutilizada." });
       });
     return () => {
       vivo = false;
     };
-  }, [caminho]);
-  if (!caminho && !url) return null;
-  if (erro) return <p className={texto.auxiliar}>Não deu para abrir a prévia.</p>;
+  }, [pagina.htmlPath]);
+  useEffect(() => {
+    const receber = (evento: MessageEvent) => {
+      if (!iframe.current?.contentWindow || evento.source !== iframe.current.contentWindow || !evento.data || typeof evento.data !== "object" || Array.isArray(evento.data)) return;
+      if (evento.data.tipo === MENSAGEM_DE_FORMULARIO) { setAviso("Formulários não são enviados na prévia. Nenhum contato foi salvo e nenhum pagamento foi feito."); return; }
+      if (evento.data.tipo !== MENSAGEM_DE_NAVEGACAO) return;
+      navegar(evento.data.caminho);
+    };
+    window.addEventListener("message", receber);
+    return () => window.removeEventListener("message", receber);
+  }, [navegar]);
+  const conteudo = html?.arquivo === pagina.htmlPath ? html.conteudo : null;
+  const falha = erro?.arquivo === pagina.htmlPath ? erro.texto : "";
+  const voltar = () => {
+    const anterior = historico[historico.length - 1];
+    if (!anterior) return;
+    setHistorico((h) => h.slice(0, -1));
+    setPagina(anterior);
+  };
   return (
-    <iframe
-      title="Prévia da landing"
-      sandbox="allow-scripts"
-      {...(html !== null ? { srcDoc: html } : caminho ? {} : { src: url })}
-      className={juntar("w-full bg-white", cheia ? "pointer-events-none h-full" : "rounded border border-border", !cheia && (alta ? "h-[70vh]" : "pointer-events-none h-32"))}
-      data-previa-da-landing=""
-    />
+    <div className={juntar("min-w-0", cheia && "h-full")} data-pagina-na-previa="">
+      {alta ? <div className="flex min-w-0 items-center gap-1.5 px-2 py-1.5">
+        <button type="button" className={botao.icone} onClick={voltar} disabled={!historico.length} title="Página anterior da prévia" aria-label="Página anterior da prévia"><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
+        <select className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate rounded bg-transparent px-1 py-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-primary")} value={caminhoAtual || ""} onChange={(e) => navegar(e.target.value)} aria-label="Página da prévia" title="Página da prévia" data-caminho-da-previa="">
+          {!caminhoAtual ? <option value="">Prévia da página</option> : null}
+          {paginas.map((p) => <option key={`${p.noId}|${p.caminho}|${p.htmlPath}`} value={p.caminho} disabled={paginas.filter((outra) => outra.caminho === p.caminho).length > 1}>{p.nome.length > 40 ? `${p.nome.slice(0, 37)}…` : p.nome} · {p.caminho}</option>)}
+        </select>
+        <AjudaRecolhida rotulo="Como navegar nesta prévia?">Navegue pelos links internos das páginas já geradas neste projeto. Formulários, links externos e pagamentos ficam desativados. Scripts da página não são executados.</AjudaRecolhida>
+      </div> : null}
+      {aviso && alta ? <p role="status" className={juntar(texto.auxiliar, "px-3 pb-2 text-warning")} data-aviso-da-previa="">{aviso}</p> : null}
+      {falha ? <p role="alert" className={juntar(texto.auxiliar, "p-3")}>{falha}</p> : conteudo === null ? <div className={juntar("flex items-center justify-center bg-muted", alta ? "h-[70vh]" : cheia ? "h-full" : "h-32")} role="status" aria-label="Carregando prévia"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /></div> : <iframe
+        ref={iframe}
+        title="Prévia da landing"
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        srcDoc={conteudo}
+        className={juntar("w-full bg-white", cheia ? "pointer-events-none h-full" : "rounded border border-border", !cheia && (alta ? "h-[70vh]" : "pointer-events-none h-32"))}
+        data-previa-da-landing=""
+      />}
+    </div>
   );
 }
 
@@ -121,23 +172,34 @@ export async function baixarImagem(img: ImagemDoLab, url: string, nome: string) 
  * As imagens geradas no próprio nó (Resultado, Carrossel, Logo): grade
  * quadrada; tocar amplia numa janela central, com anterior, próxima e baixar.
  */
+export type DisposicaoDasImagens = "grade" | "linha" | "coluna";
+
+export function SeletorDasImagens({ valor, onMudar }: { valor: DisposicaoDasImagens; onMudar: (v: DisposicaoDasImagens) => void }) {
+  const modos = [{ valor: "grade" as const, rotulo: "Imagens em grade", Icone: Grid2X2 }, { valor: "linha" as const, rotulo: "Imagens lado a lado", Icone: Columns2 }, { valor: "coluna" as const, rotulo: "Imagens em coluna", Icone: Rows3 }];
+  return <div className="nodrag inline-flex items-center rounded-md bg-muted/40 p-0.5" role="group" aria-label="Disposição das imagens">
+    {modos.map(({ valor: modo, rotulo, Icone }) => <button key={modo} type="button" className={juntar(botao.icone, "h-7 w-7", valor === modo && "bg-background text-primary")} onClick={(e) => { e.stopPropagation(); onMudar(modo); }} aria-label={rotulo} title={rotulo} aria-pressed={valor === modo}><Icone className="h-3.5 w-3.5" aria-hidden="true" /></button>)}
+  </div>;
+}
+
 export function GradeDeImagens({ imagens, escolhida, colunas = 2 }: { imagens: ImagemDoLab[]; escolhida?: number | null; colunas?: 2 | 3 }) {
   const urls = useImagens(imagens);
   const [aberta, setAberta] = useState<number | null>(null);
+  const [disposicao, setDisposicao] = useState<DisposicaoDasImagens>("grade");
   if (!imagens.length) return null;
   const total = imagens.length;
   const nome = (i: number) => `imagem-${i + 1}.png`;
   const ir = (passo: number) => setAberta((a) => (a === null ? a : (a + passo + total) % total));
   return (
     <div className="min-w-0" data-grade-de-imagens="">
-      <div className={juntar("grid min-w-0 gap-1.5", total === 1 ? "grid-cols-1" : colunas === 3 ? "grid-cols-3" : "grid-cols-2")}>
+      {total > 1 ? <div className="mb-1.5 flex justify-end"><SeletorDasImagens valor={disposicao} onMudar={setDisposicao} /></div> : null}
+      <div className={juntar("nowheel min-w-0 gap-1.5", disposicao === "linha" && total > 1 ? "flex overflow-x-auto pb-1" : "grid", total === 1 || disposicao === "coluna" ? "grid-cols-1" : colunas === 3 ? "grid-cols-3" : "grid-cols-2")} data-disposicao={disposicao}>
         {urls.map((u, i) => (
           <button
             key={i}
             type="button"
-            className={juntar("nodrag relative block w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90", escolhida === i && "ring-2 ring-primary")}
+            className={juntar("nodrag relative block w-full overflow-hidden rounded-md bg-muted transition-opacity hover:opacity-90", disposicao === "linha" && total > 1 && "w-[180px] shrink-0", escolhida === i && "ring-2 ring-primary")}
             // Uma imagem só fica cheia, na proporção dela; várias, em grade quadrada.
-            style={total === 1 ? undefined : { paddingTop: "100%" }}
+            style={total === 1 || disposicao !== "grade" ? undefined : { paddingTop: "100%" }}
             onClick={(e) => {
               e.stopPropagation();
               setAberta(i);
@@ -146,7 +208,7 @@ export function GradeDeImagens({ imagens, escolhida, colunas = 2 }: { imagens: I
             title={`Ampliar a imagem ${i + 1}`}
             data-escolhida={escolhida === i ? "" : undefined}
           >
-            {u ? <img src={u} alt="" className={total === 1 ? "block h-auto max-h-[420px] w-full object-cover" : "absolute inset-0 h-full w-full object-cover"} loading="lazy" /> : total === 1 ? <span className="block h-40" /> : null}
+            {u ? <img src={u} alt="" className={total === 1 || disposicao !== "grade" ? "block h-auto max-h-[420px] w-full object-contain" : "absolute inset-0 h-full w-full object-contain"} loading="lazy" /> : total === 1 ? <span className="block h-40" /> : null}
           </button>
         ))}
       </div>
@@ -256,7 +318,7 @@ function ResumoDaOferta({ json, compacto }: { json: Record<string, unknown>; com
 
 /** Funil: o desenho das etapas, em sequência. */
 function DesenhoDoFunil({ json, compacto }: { json: Record<string, unknown>; compacto: boolean }) {
-  const etapas = (Array.isArray(json.etapas) ? json.etapas : []).map((e: any) => (typeof e === "string" ? { nome: e } : e && typeof e === "object" ? e : null)).filter(Boolean) as Array<Record<string, unknown>>;
+  const etapas = (Array.isArray(json.etapas) ? json.etapas : []).map((e: unknown) => (typeof e === "string" ? { nome: e } : e && typeof e === "object" && !Array.isArray(e) ? e : null)).filter(Boolean) as Array<Record<string, unknown>>;
   if (!etapas.length) return null;
   return (
     <div className="min-w-0" data-desenho-do-funil="">
@@ -511,7 +573,7 @@ export default function ResultadoDoNo({
       ) : null}
       {s.json && t === "anuncio" ? (
         <p className={juntar(texto.auxiliar, "line-clamp-2")}>
-          {String((s.json as any).titulo || (Array.isArray((s.json as any).titulos) ? (s.json as any).titulos[0] : "") || "Pacote pronto")} · nasce pausado
+          {textoDe(s.json.titulo) || (Array.isArray(s.json.titulos) ? textoDe(s.json.titulos[0]) : "") || "Pacote pronto"} · nasce pausado
         </p>
       ) : null}
       {s.tarefa_url || s.tarefa_id ? (

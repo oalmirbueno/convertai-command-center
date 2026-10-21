@@ -32,3 +32,11 @@ Deno.test("Pôr no ar com pedido aberto (aguardando aprovação ou com o agente)
     assert(m && m.indexOf("Pôr no ar tem um pedido aberto") >= 0, estado);
   }
 });
+
+Deno.test("rodada esperando dependências não perde a reserva ao excluir, mesmo com execução posterior", () => {
+  const motivo = motivoDoProjetoEmUso([
+    { no_id: "pagina", tipo: "landing", status: "aguardando", saida: { aguardando_dependencias: true }, created_at: "2026-10-21T10:00:00Z" },
+    { no_id: "pagina", tipo: "landing", status: "pronto", saida: {}, created_at: "2026-10-21T11:00:00Z" },
+  ]);
+  assert(motivo?.includes("valor reservado"));
+});

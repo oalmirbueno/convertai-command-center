@@ -31,9 +31,9 @@ export function rotaDoMotor(tipo: TipoDeNo): RotaDoMotor {
  * Os nós que a própria estudio-arte cobra da carteira do Laboratório pelo custo real (Resultado e Carrossel no
  * motor da casa num projeto SEM cliente: o trabalho do Estúdio livre). O Laboratório não reserva nem estorna esses.
  */
-export function cobradosPeloEstudio(clientId: string | null, nos: Array<{ id: string; tipo: TipoDeNo }>): string[] {
+export function cobradosPeloEstudio(clientId: string | null, nos: Array<{ id: string; tipo: TipoDeNo; dados?: Record<string, unknown> }>): string[] {
   if (clientId) return [];
-  return nos.filter((n) => rotaDoMotor(n.tipo) === "estudio_arte").map((n) => n.id);
+  return nos.filter((n) => rotaDoMotor(n.tipo) === "estudio_arte" && !(n.tipo === "carrossel" && txt(n.dados?.modelo_id, 200))).map((n) => n.id);
 }
 
 /** Formato do post do Estúdio pela proporção do nó (ou da Configuração ligada). */

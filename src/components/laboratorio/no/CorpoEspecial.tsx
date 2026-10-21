@@ -11,6 +11,7 @@ import { useAcoesDoQuadro } from "./contexto";
 import GerarComIA, { useFontesDoCliente } from "./GerarComIA";
 import { Chips } from "./SeletoresVisuais";
 import SeletorDeMarca from "@/components/mesa/SeletorDeMarca";
+import ConexoesDaCasa from "./ConexoesDaCasa";
 import { useMarcasDoCliente } from "@/lib/mesa/marcas";
 
 /**
@@ -436,6 +437,9 @@ function CorpoDoDocumento({ no }: { no: NoDoLab }) {
 /** O corpo próprio do tipo, antes dos campos genéricos (nada para os tipos sem corpo próprio). */
 export default function CorpoEspecial({ no }: { no: NoDoLab }) {
   switch (no.tipo) {
+    case "crm":
+    case "area_membros":
+      return <ConexoesDaCasa no={no} />;
     case "cliente":
       return <CorpoDoCliente no={no} />;
     case "marca":

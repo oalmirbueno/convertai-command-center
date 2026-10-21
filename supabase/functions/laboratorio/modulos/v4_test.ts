@@ -79,6 +79,18 @@ Deno.test("v4: dados dos nós novos são limpos (escolha fora da lista, número 
   assertEquals(dadosDoTipo("ugc", { variacoes: 0 }).dados.variacoes, 1);
 });
 
+Deno.test("v4: produto fecha o funil pelo checkout usando tanto landing legada quanto página atual", () => {
+  for (const tipo of ["landing", "pagina"] as const) {
+    const c: Canvas = {
+      nos: [no("produto", "produto"), no("venda", tipo), no("checkout", "checkout"), no("obrigado", "pagina")],
+      ligacoes: [{ id: "a", de: "produto", para: "venda" }, { id: "b", de: "venda", para: "checkout" }, { id: "c", de: "checkout", para: "obrigado", gatilho: "compra_aprovada" }],
+      viewport: vp,
+    };
+    assertEquals(errosDoCanvas(c), [], tipo);
+    assertEquals(normalizarCanvas(c).ligacoes, c.ligacoes, tipo);
+  }
+});
+
 Deno.test("v4: gatilho no fio só vale para a origem que tem aquele gatilho", () => {
   assert(gatilhoValido("checkout", "compra_aprovada"));
   assert(!gatilhoValido("pagina", "compra_aprovada"));

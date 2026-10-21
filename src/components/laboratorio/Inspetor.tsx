@@ -9,6 +9,7 @@ import { IconeDoNo } from "./icones";
 import BlocosSemFonte, { type ResolverBloco } from "./BlocosSemFonte";
 import SeletorDeGatilho from "./SeletorDeGatilho";
 import IntegracaoDeVendas from "./no/IntegracaoDeVendas";
+import ConexoesDaCasa from "./no/ConexoesDaCasa";
 
 /**
  * Inspetor do nó selecionado: os campos do tipo (texto, modelo, motor,
@@ -37,6 +38,8 @@ export default function Inspetor({
   onResolverBloco,
   clienteId = null,
   onMudarGatilho,
+  antesDeChamar,
+  clientes = [],
 }: {
   canvas: CanvasDoLab;
   no: NoDoLab;
@@ -63,6 +66,8 @@ export default function Inspetor({
   onResolverBloco?: ResolverBloco;
   /** v4: escolher o gatilho do fio que sai deste nó (vazio tira). */
   onMudarGatilho?: (ligacaoId: string, gatilho: string | null) => void;
+  antesDeChamar?: () => Promise<void>;
+  clientes?: Array<{ id: string; nome: string }>;
 }) {
   const def = TIPOS_DE_NO[no.tipo];
   const [motivo, setMotivo] = useState<string | null>(null);
@@ -90,7 +95,8 @@ export default function Inspetor({
         )}
       </div>
 
-      <CamposDoNo no={no} projetoId={projetoId} clienteId={clienteId} onMudarDados={onMudarDados} lugar="inspetor" grande />
+      {no.tipo === "crm" || no.tipo === "area_membros" ? <ConexoesDaCasa no={no} acoes={{ projetoId, clienteId, clientes, antesDeChamar: antesDeChamar || (() => Promise.resolve()), mudarDados: (_id, dados) => onMudarDados(dados) }} /> : null}
+      <CamposDoNo no={no} projetoId={projetoId} clienteId={clienteId} onMudarDados={onMudarDados} lugar="inspetor" grande pular={no.tipo === "crm" ? ["crm_origem", "produto_crm_id"] : no.tipo === "area_membros" ? ["produto_membros_id"] : undefined} />
       {/* v4: o webhook de vendas do gateway do cliente (o checkout só mede o clique sem ele). */}
       {no.tipo === "checkout" ? <IntegracaoDeVendas clienteId={clienteId || null} gateway={String(no.dados.gateway || "")} /> : null}
       {no.tipo === "por_no_ar" ? (

@@ -1,8 +1,9 @@
-import type { Page, Response } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CI_E2E_API_ORIGIN, CI_E2E_APP_ORIGIN } from "../config/ci-e2e-environment";
 import { readCiFixture, USER_ROLES, type UserRole } from "./support/ci-fixture";
 import { test, expect, isLocalEndpoint } from "./support/network";
+import type { WorkReadResult } from "./support/work-reads";
 
 async function login(page: Page, role: UserRole) {
   const user = readCiFixture().users[role];
@@ -54,72 +55,18 @@ async function readPublicClientHistory(page: Page, clientId: string) {
   }, clientId);
 }
 
-interface ReadResult {
-  status: number;
-  ids: string[];
-  validRows: boolean;
-  queryKeys: string[];
-  errorCode: string | null;
-  errorMessage: string | null;
-  taskCards?: { id: string; title: string; status: string }[];
-}
-
-function assertScopedRead(table: "projects" | "tasks", result: ReadResult, allowedIds: string[]) {
+function assertScopedRead(table: "projects" | "tasks", result: WorkReadResult, allowedIds: string[]) {
   // Only the synthetic projects/tasks PostgREST errors reach this diagnostic.
   // No auth response, headers, request body or session is collected.
   const diagnostic = table + " REST: HTTP " + result.status
+    + "; body=" + result.bodyState + "; shape=" + result.jsonShape
     + (result.errorCode ? " [" + result.errorCode + "]" : "")
     + (result.errorMessage ? " " + result.errorMessage : "");
   expect(result.status, diagnostic).toBe(200);
+  expect(result.bodyState, diagnostic + "; real response body must be readable JSON").toBe("json");
   expect(result.validRows, diagnostic + "; expected an array of rows").toBe(true);
   expect(result.ids.filter((id) => !allowedIds.includes(id)),
     table + " response must not expose cross-client rows").toEqual([]);
-}
-
-function observeWorkReads(page: Page) {
-  const reads: Record<"projects" | "tasks", ReadResult[]> = { projects: [], tasks: [] };
-  const pending = new Set<Promise<void>>();
-  const handler = (response: Response) => {
-    const url = new URL(response.url());
-    const table = url.pathname === "/rest/v1/projects" ? "projects"
-      : url.pathname === "/rest/v1/tasks" ? "tasks" : null;
-    if (url.origin !== CI_E2E_API_ORIGIN || !table
-      || response.request().method() !== "GET"
-      || !url.searchParams.get("select")?.startsWith("*")) return;
-    const done = (async () => {
-      let rows: unknown;
-      try { rows = await response.json(); } catch { rows = null; }
-      const validRows = Array.isArray(rows)
-        && rows.every((row) => row && typeof row.id === "string");
-      const error = !validRows && rows && typeof rows === "object"
-        ? rows as { code?: unknown; message?: unknown } : null;
-      reads[table].push({
-        status: response.status(),
-        validRows,
-        queryKeys: [...url.searchParams.keys()].sort(),
-        ids: validRows ? (rows as { id: string }[]).map((row) => row.id).sort() : [],
-        errorCode: typeof error?.code === "string" ? error.code.slice(0, 24) : null,
-        errorMessage: typeof error?.message === "string"
-          ? error.message.replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 300)
-          : null,
-        taskCards: table === "tasks" && validRows
-          ? (rows as { id: string; title: string; status: string }[])
-            .map((row) => ({ id: row.id, title: row.title, status: row.status }))
-            .sort((left, right) => left.id.localeCompare(right.id))
-          : undefined,
-      });
-    })();
-    pending.add(done);
-    void done.finally(() => pending.delete(done));
-  };
-  page.on("response", handler);
-  return {
-    reads,
-    async finish() {
-      page.off("response", handler);
-      await Promise.all(pending);
-    },
-  };
 }
 
 async function readProjectsWithoutScopeFilter(page: Page) {
@@ -184,11 +131,11 @@ async function kanbanCardDiagnostic(page: Page, titles: string[]) {
 }
 
 for (const role of USER_ROLES) {
-  test(`${role}: real login, scoped work, permitted controls and logout`, async ({ page }) => {
+  test(`${role}: real login, scoped work, permitted controls and logout`, async ({ page, egress }) => {
     const fixture = readCiFixture();
     const allowed = role === "admin" ? ["clientA", "clientB"] as const
       : role === "unassignedStaff" ? [] : [role === "clientB" ? "clientB" : "clientA"] as const;
-    const observation = observeWorkReads(page);
+    const observation = egress.workReads;
     await login(page, role);
 
     // useTasks asks for the full table, without a client filter. Inspecting
@@ -284,11 +231,13 @@ for (const role of USER_ROLES) {
       await expect(list.getByText(fixture.projects[role].name, { exact: true })).toBeVisible();
     }
 
+    await observation.drain();
     const readsBeforeKanban = observation.reads.tasks.length;
     await page.goto("/kanban");
     if (role === "clientA" || role === "clientB") {
       await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/dashboard");
       await expect(page.getByRole("heading", { name: "Kanban", exact: true })).toHaveCount(0);
+      await observation.drain();
       await page.goto("/clientes");
       await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/dashboard");
     } else {
@@ -318,6 +267,7 @@ for (const role of USER_ROLES) {
         await expect(page.getByText("Nenhuma tarefa ainda.", { exact: true })).toBeVisible();
       }
       if (role !== "admin") {
+        await observation.drain();
         await page.goto("/comercial");
         await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/dashboard");
       }

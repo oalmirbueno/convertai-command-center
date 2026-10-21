@@ -46,6 +46,7 @@ export interface ResultadoDaConstrucao {
   feitas: number;
   falhas: Array<{ recibo: string; motivo: string }>;
   novos: number;
+  idsParaGerar?: string[];
 }
 
 interface Ultima {
@@ -71,6 +72,7 @@ export default function CanvasStudio({
   recolhido = false,
   onRecolher,
   onEtapa,
+  onGerar,
 }: {
   projetoId: string;
   nosNoQuadro: number;
@@ -90,11 +92,14 @@ export default function CanvasStudio({
   onRecolher?: (v: boolean) => void;
   /** A etapa grande (pesquisando ou perguntas) está no lugar do canvas. */
   onEtapa?: (aberta: boolean) => void;
+  /** Depois de montar, confere o custo dos nós novos/alterados; não publica nem refaz peças intactas. */
+  onGerar?: (ids: string[]) => Promise<void>;
 }) {
   const [pedido, setPedido] = useState("");
   const [modelo, setModelo] = useState(MODELO_PADRAO_DO_LAB);
   const [atalho, setAtalho] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [gerarDepois, setGerarDepois] = useState(true);
   const [ultima, setUltima] = useState<Ultima | null>(null);
   const [perguntas, setPerguntas] = useState<PerguntasPendentes | null>(null);
   /** Projeto completo pedido num quadro vazio: a etapa "pesquisando" fica no lugar do canvas. */
@@ -125,7 +130,7 @@ export default function CanvasStudio({
       }
       setPerguntas(null);
       const montouCompleto = completo || r.modo === "projeto_completo";
-      const feito = r.operacoes.length ? onConstruir(r.operacoes, montouCompleto, r.canvas_previsto) : { feitas: 0, falhas: [], novos: 0 };
+      const feito: ResultadoDaConstrucao = r.operacoes.length ? onConstruir(r.operacoes, montouCompleto, r.canvas_previsto) : { feitas: 0, falhas: [], novos: 0 };
       const resposta = r.resposta || (feito.feitas ? "Montei no quadro." : "Sem mudança no quadro.");
       historico.current = historico.current.concat({ papel: "usuario", texto: msg }, { papel: "agente", texto: resposta }).slice(-12);
       if (onConversa) onConversa(msg, resposta);
@@ -133,6 +138,7 @@ export default function CanvasStudio({
       setPedido("");
       setAtalho(null);
       if (feito.falhas.length) toast.warning(`${feito.feitas} de ${r.operacoes.length} operações entraram`, { description: feito.falhas.slice(0, 3).map((f) => `${f.recibo}: ${f.motivo}`).join(" ") });
+      if (gerarDepois && onGerar && feito.feitas && !feito.falhas.length) await onGerar(feito.idsParaGerar || []);
     } catch (e) {
       toast.error("O Canvas Studio não montou", { description: textoDoErro(e) });
     } finally {
@@ -268,9 +274,10 @@ export default function CanvasStudio({
         onAtalho={escolherAtalho}
         rotulo="Pedido para o Canvas Studio"
         placeholder={nosNoQuadro ? "Canvas Studio: peça um ajuste ou um projeto inteiro…" : "Canvas Studio: quero montar uma empresa, um produto low ticket, um funil de vendas…"}
-        tituloDoEnviar="Montar no canvas (o agente pesquisa e liga os nós; nada é gerado ainda)"
+        tituloDoEnviar={gerarDepois && onGerar ? "Montar e conferir o custo para gerar os conteúdos" : "Montar os nós no canvas"}
         extra={
           <>
+            {onGerar ? <button type="button" className={juntar(botao.barra, "h-8 shrink-0")} onClick={() => setGerarDepois((v) => !v)} aria-pressed={gerarDepois} disabled={enviando} title="Depois de montar, mostra o custo dos conteúdos antes de gerar. Peças intactas são preservadas; publicação tem aprovação própria.">{gerarDepois ? "Montar e gerar" : "Só montar"}</button> : null}
             {desfazer}
             {onRecolher ? (
               <button type="button" className={juntar(botao.icone, "h-8 w-8")} onClick={() => onRecolher(true)} aria-label="Recolher o Canvas Studio" title="Recolher o Canvas Studio (o canvas ganha a altura)" aria-expanded data-recolher-studio="">
