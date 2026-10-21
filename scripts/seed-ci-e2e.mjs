@@ -40,7 +40,18 @@ const verifySql=`DO $ci$ DECLARE g record; actual jsonb; BEGIN
     OR EXISTS(SELECT 1 FROM public.render_nuvem WHERE ligada OR url_acordar IS NOT NULL)
     OR EXISTS(SELECT 1 FROM jsonb_to_recordset(g.hook_state) h(trigger_oid oid,enabled text)
       LEFT JOIN pg_trigger t ON t.oid=h.trigger_oid WHERE t.oid IS NULL OR t.tgenabled::text<>h.enabled) THEN
-    RAISE EXCEPTION 'E2E_HTTP_OR_HOOK_POSTCONDITION_FAILED';
+    RAISE EXCEPTION 'E2E_HTTP_OR_HOOK_POSTCONDITION_FAILED' USING DETAIL =
+      'E2E_POSTCONDITION_FLAGS: '||jsonb_build_object(
+        'hooks_restored',g.restored,'seeded',g.seeded,
+        'http_sequence_changed',actual IS DISTINCT FROM g.http_state,
+        'http_queue_count',(SELECT count(*) FROM net.http_request_queue),
+        'vault_metadata_changed',g.vault_state IS DISTINCT FROM (
+          SELECT jsonb_agg(jsonb_build_object('id',s.id,'name',s.name,'description',s.description,
+            'created_at',s.created_at,'updated_at',s.updated_at) ORDER BY s.id) FROM vault.secrets AS s),
+        'render_connected_count',(SELECT count(*) FROM public.render_nuvem WHERE ligada OR url_acordar IS NOT NULL),
+        'hook_mismatch_count',(SELECT count(*) FROM jsonb_to_recordset(g.hook_state) h(trigger_oid oid,enabled text)
+          LEFT JOIN pg_trigger t ON t.oid=h.trigger_oid WHERE t.oid IS NULL OR t.tgenabled::text<>h.enabled)
+      )::text;
   END IF;
   IF g.business_state IS DISTINCT FROM ${businessStateSql}
     OR (SELECT count(*) FROM auth.users)<>5 OR (SELECT count(*) FROM public.profiles)<>5
@@ -68,6 +79,21 @@ export function validateRequest(input) {
   assert(url.pathname.startsWith('/auth/v1/'),'E2E seed only calls the local Auth API.');
   return url;
 }
+/** Only this closed scalar contract may leave psql stderr; never print its raw details or SQL. */
+export function postconditionDiagnostic(stderr) {
+  if(typeof stderr!=='string'||!stderr.includes('E2E_HTTP_OR_HOOK_POSTCONDITION_FAILED'))return null;
+  const match=stderr.match(/^DETAIL:\s+E2E_POSTCONDITION_FLAGS:\s*(\{[^\r\n]*\})\s*$/m);
+  if(!match||match[1].length>1024)return null;
+  let flags;
+  try {flags=JSON.parse(match[1]);} catch {return null;}
+  const booleans=['hooks_restored','seeded','http_sequence_changed','vault_metadata_changed'];
+  const counts=['http_queue_count','render_connected_count','hook_mismatch_count'];
+  if(!flags||typeof flags!=='object'||Array.isArray(flags)
+    ||JSON.stringify(Object.keys(flags).sort())!==JSON.stringify([...booleans,...counts].sort())
+    ||booleans.some(key=>typeof flags[key]!=='boolean')
+    ||counts.some(key=>!Number.isSafeInteger(flags[key])||flags[key]<0))return null;
+  return Object.fromEntries([...booleans,...counts].map(key=>[key,flags[key]]));
+}
 function databaseSql(source) {
   const env={...process.env,PGHOST:'127.0.0.1',PGHOSTADDR:'127.0.0.1',PGPORT:'54322',PGUSER:'postgres',PGDATABASE:'postgres',PGCONNECT_TIMEOUT:'5'};
   for(const key of ['PGSERVICE','PGSERVICEFILE','PGOPTIONS'])delete env[key];
@@ -76,8 +102,10 @@ function databaseSql(source) {
     {input:"SET statement_timeout='30s'; SET search_path=public,pg_catalog;\n"+source,encoding:'utf8',env,windowsHide:true,timeout:40000});
   if(result.error)throw new Error('E2E local psql could not run: '+result.error.code);
   if(result.status!==0) {
-    // SQL contains only synthetic IDs/data, but still report just the guard code.
+    // SQL contains only synthetic IDs/data. Keep stderr private, except reviewed scalar diagnostics.
     const code=(result.stderr||'').match(/E2E_[A-Z_]+/)?.[0]||'E2E_LOCAL_SQL_FAILED';
+    const diagnostic=code==='E2E_HTTP_OR_HOOK_POSTCONDITION_FAILED'?postconditionDiagnostic(result.stderr):null;
+    if(diagnostic)console.error('CI E2E postcondition flags: '+JSON.stringify(diagnostic));
     throw new Error(code+'; no auth credentials or SQL bodies were logged.');
   }
   return (result.stdout||'').trim();

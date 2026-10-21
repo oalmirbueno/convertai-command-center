@@ -9,6 +9,20 @@ A suspensão é separada da revogação: não pode restaurar acesso revogado por
 regra nem renovar licença vencida. Uma licença suspensa que vencer durante a pausa
 continua vencida. Os contatos e negócios permanecem privados e salvos.
 
+## Cartão na biblioteca
+
+No Início e na Minha lista, o cartão do CRM mostra **Licença ativa** somente
+quando o catálogo de ferramentas confirma uma licença própria vigente. O clique
+abre diretamente o CRM, que revalida a licença no servidor. Links antigos com
+`?produto=` para o CRM também seguem esse caminho. Sem licença válida, o cartão
+mostra **Sem licença ativa** e os registros permanecem bloqueados.
+
+A licença do CRM não concede aulas, materiais ou downloads do produto nem de
+outros produtos. Esses conteúdos mantêm suas permissões próprias. Cursos e guias
+já liberados continuam acessíveis se a consulta de licenças estiver indisponível.
+Prévias administrativas não abrem ferramentas com a licença da administração.
+Esta correção não altera concessões, pagamentos, validade ou dados do CRM.
+
 ## Aplicação incremental
 
 - Fonte: `supabase/migrations/20261021130623_membros_crm_suspensao_licenca.sql`.

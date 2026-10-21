@@ -5,6 +5,7 @@ import {
   fireEvent,
   waitFor,
   cleanup,
+  act,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -17,10 +18,15 @@ const mocks = vi.hoisted(() => ({
   progresso: vi.fn(),
   logout: vi.fn(),
   role: "member",
+  usuario: "usuario",
+  ferramentas: vi.fn(),
+  sessao: vi.fn(),
+  crm: vi.fn(),
+  lista: vi.fn(),
 }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
-    user: { id: "usuario" },
+    user: { id: mocks.usuario },
     profile: { role: mocks.role },
     logout: mocks.logout,
   }),
@@ -34,11 +40,18 @@ vi.mock("@/lib/membros/api", () => ({
   mensagemDoErro: () => "Falha de conexão. Tente novamente.",
 }));
 vi.mock("@/lib/membros/aprendizado", () => ({
-  carregarLista: vi.fn(async () => []),
+  carregarLista: mocks.lista,
   carregarFunil: vi.fn(async () => []),
   favoritar: vi.fn(async () => {}),
   carregarComunidade: vi.fn(async () => []),
   salvarConversa: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/membros/ferramentas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/membros/ferramentas")>()),
+  listarFerramentas: mocks.ferramentas,
+  obterProvaCompartilhada: async () => "prova-do-teste",
+  abrirSessaoFerramenta: mocks.sessao,
+  operarCrm: mocks.crm,
 }));
 vi.mock("@/components/membros/PdfSeguro", () => ({
   default: ({ titulo }: { titulo: string }) => (
@@ -65,22 +78,26 @@ const produto = (v: Partial<Produto> = {}): Produto => ({
   ultimo_material: null,
   ...v,
 });
-function montar(inicio = "/membros") {
-  const qc = new QueryClient({
+function montar(inicio = "/membros", qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return render(
+  })) {
+  return { qc, ...render(
     <MemoryRouter initialEntries={[inicio]}>
       <QueryClientProvider client={qc}>
         <AreaDeMembros />
       </QueryClientProvider>
     </MemoryRouter>,
-  );
+  ) };
 }
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.role = "member";
+  mocks.usuario = "usuario";
+  mocks.ferramentas.mockResolvedValue([]);
+  mocks.lista.mockResolvedValue([]);
+  mocks.sessao.mockResolvedValue({ conflito: false });
+  mocks.crm.mockResolvedValue({ contatos: [], negocios: [] });
   mocks.catalogo.mockResolvedValue({
     produtos: [produto()],
     pendentes: [],
@@ -88,6 +105,171 @@ beforeEach(() => {
   mocks.materiais.mockResolvedValue({ materiais: [], progresso: [] });
 });
 describe("biblioteca integrada", () => {
+  const produtoCrm = (origens: Produto["origens"] = []) => produto({
+    id: "crm", titulo: "CRM privado", categoria: "Ferramentas", formato: "CRM",
+    origens, em_venda: false,
+  });
+  const ferramentaCrm = (fim: string | null = "2037-10-21T12:00:00Z") => ({
+    produto_id: "crm", titulo: "CRM privado", motor: "crm", capa_url: null, fim,
+    disponivel: true,
+  });
+  it("o cartão usa a licença própria e abre diretamente o CRM sem conceder acesso aos materiais", async () => {
+    const p = produtoCrm();
+    mocks.catalogo.mockResolvedValue({ produtos: [p], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "CRM privado · Licença ativa" }));
+    await screen.findByRole("button", { name: "Novo negócio" });
+    expect(mocks.sessao).toHaveBeenCalledWith("crm", "prova-do-teste", false);
+    expect(mocks.crm).toHaveBeenCalledWith("crm", "prova-do-teste");
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.arquivo).not.toHaveBeenCalled();
+    expect(p.origens).toEqual([]);
+    expect(mocks.ferramentas).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Voltar às ferramentas" }));
+    await screen.findByRole("button", { name: "Abrir ferramenta" });
+    expect(mocks.ferramentas).toHaveBeenCalledTimes(1);
+  });
+  it("o destaque abre o motor pela licença, e não pelo privilégio de administrador", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm(["administracao"])], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir ferramenta" }));
+    await screen.findByRole("button", { name: "Novo negócio" });
+    expect(mocks.materiais).not.toHaveBeenCalled();
+  });
+  it("o acesso ao acervo ou o perfil admin não substituem uma licença suspensa", async () => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm(["administracao"])], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm(null)]);
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "CRM privado · Sem licença ativa" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("A licença desta ferramenta não está liberada ou venceu");
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    expect(mocks.crm).not.toHaveBeenCalled();
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.arquivo).not.toHaveBeenCalled();
+  });
+  it("não oferece abertura enquanto a licença é conferida nem usa materiais da URL antiga", async () => {
+    let concluir: ((dados: ReturnType<typeof ferramentaCrm>[]) => void) | undefined;
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockImplementation(() => new Promise((resolve) => { concluir = resolve; }));
+    montar("/membros?produto=crm");
+    expect(await screen.findByRole("button", { name: "CRM privado · Conferindo acesso…" })).toBeDisabled();
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    await act(async () => concluir?.([ferramentaCrm()]));
+    await screen.findByRole("button", { name: "Novo negócio" });
+    expect(mocks.materiais).not.toHaveBeenCalled();
+  });
+  it("falha fechada se não conseguir consultar a licença e permite tentar novamente", async () => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockRejectedValue(new Error("rede"));
+    montar("/membros?produto=crm");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível conferir as licenças");
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    fireEvent.click(screen.getByRole("button", { name: "Conferir licenças novamente" }));
+    await screen.findByRole("button", { name: "Novo negócio" });
+    expect(mocks.ferramentas).toHaveBeenCalledTimes(2);
+  });
+  it("minha lista usa a mesma licença e a mesma consulta do início", async () => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    mocks.lista.mockResolvedValue(["crm"]);
+    montar();
+    await screen.findByRole("button", { name: "CRM privado · Licença ativa" });
+    fireEvent.click(screen.getByRole("button", { name: "Minha lista" }));
+    fireEvent.click(await screen.findByRole("button", { name: "CRM privado · Licença ativa" }));
+    await screen.findByRole("button", { name: "Novo negócio" });
+    expect(mocks.ferramentas).toHaveBeenCalledTimes(1);
+    expect(mocks.materiais).not.toHaveBeenCalled();
+  });
+  it("remove o CRM aberto quando a licença é suspensa e recupera o acesso após reativar", async () => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    const tela = montar();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir ferramenta" }));
+    await screen.findByRole("button", { name: "Novo negócio" });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm(null)]);
+    await act(async () => { await tela.qc.invalidateQueries({ queryKey: ["membros", "ferramentas"] }); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Seus dados continuam guardados");
+    expect(screen.queryByRole("button", { name: "Novo negócio" })).not.toBeInTheDocument();
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    await act(async () => { await tela.qc.invalidateQueries({ queryKey: ["membros", "ferramentas"] }); });
+    await screen.findByRole("button", { name: "Novo negócio" });
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.arquivo).not.toHaveBeenCalled();
+  });
+  it.each(["2020-10-21T12:00:00Z", "inválida"])("não abre CRM com prazo %s", async (fim) => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm(fim)]);
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "CRM privado · Sem licença ativa" }));
+    await screen.findByRole("alert");
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    expect(mocks.materiais).not.toHaveBeenCalled();
+  });
+  it.each(["/membros?visao=outro", "/membros?modo=cliente"])("não aplica licença própria à prévia %s", async (url) => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    montar(url);
+    await screen.findByText("Conhecer produto");
+    fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
+    expect(await screen.findByText("Ferramentas disponíveis na conta do próprio titular.")).toBeInTheDocument();
+    expect(mocks.ferramentas).not.toHaveBeenCalled();
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    expect(mocks.crm).not.toHaveBeenCalled();
+  });
+  it("não reaproveita a licença da primeira conta depois de trocar o titular", async () => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    const primeira = montar();
+    await screen.findByRole("button", { name: "CRM privado · Licença ativa" });
+    primeira.unmount();
+    mocks.usuario = "outro-titular";
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm(null)]);
+    montar("/membros", primeira.qc);
+    await screen.findByRole("button", { name: "CRM privado · Sem licença ativa" });
+    expect(screen.queryByRole("button", { name: "Abrir ferramenta" })).not.toBeInTheDocument();
+    expect(mocks.ferramentas).toHaveBeenCalledTimes(2);
+    expect(mocks.sessao).not.toHaveBeenCalled();
+  });
+  it("mantém cursos comuns e guias da Próxima Resposta no leitor de conteúdo", async () => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produto({ origens: ["compra"] })], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([{ ...ferramentaCrm(), produto_id: "p", motor: "proxima_resposta" }]);
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "Continuar na biblioteca" }));
+    await screen.findByText("Os materiais deste produto ainda não estão disponíveis.");
+    expect(mocks.materiais).toHaveBeenCalledWith("p", undefined, undefined);
+    expect(mocks.sessao).not.toHaveBeenCalled();
+  });
+  it.each([
+    { conteudo: "curso", consulta: "pendente", url: "/membros" },
+    { conteudo: "curso", consulta: "com erro", url: "/membros?produto=p" },
+    { conteudo: "guia da Próxima Resposta", consulta: "pendente", url: "/membros?produto=p" },
+    { conteudo: "guia da Próxima Resposta", consulta: "com erro", url: "/membros" },
+  ])("preserva $conteudo já liberado com consulta de ferramentas $consulta", async ({ conteudo, consulta, url }) => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produto({ origens: ["compra"] })], pendentes: [] });
+    let concluir: ((dados: ReturnType<typeof ferramentaCrm>[]) => void) | undefined;
+    if (consulta === "pendente")
+      mocks.ferramentas.mockImplementation(() => new Promise((resolve) => { concluir = resolve; }));
+    else mocks.ferramentas.mockRejectedValue(new Error("rede"));
+    montar(url);
+    if (!url.includes("produto="))
+      fireEvent.click(await screen.findByRole("button", { name: "Continuar na biblioteca" }));
+    await screen.findByText("Os materiais deste produto ainda não estão disponíveis.");
+    expect(mocks.materiais).toHaveBeenCalledWith("p", undefined, undefined);
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    expect(mocks.crm).not.toHaveBeenCalled();
+    if (concluir) {
+      const dados = conteudo === "curso" ? [] : [{ ...ferramentaCrm(), produto_id: "p", motor: "proxima_resposta" }];
+      await act(async () => concluir?.(dados));
+    }
+  });
   it("abre mesma biblioteca na visão do cliente sem salvar progresso", async () => {
     mocks.role = "admin";
     mocks.catalogo.mockResolvedValue({
