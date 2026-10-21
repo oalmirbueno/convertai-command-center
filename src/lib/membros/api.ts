@@ -88,6 +88,12 @@ export function mensagemDoErro(e: unknown): string {
     "Licença de CRM indisponível.",
     "Esta licença foi revogada e não pode ser reativada.",
     "Esta licença venceu ou ainda não começou.",
+    "Somente administração com cadastro confirmado",
+    "O titular precisa confirmar o cadastro.",
+    "Não é possível renovar uma licença revogada ou que ainda não começou.",
+    "Escolha o período mais recente deste titular para renovar.",
+    "A licença mudou. Confira uma nova prévia.",
+    "A prévia venceu ou a data mudou. Confira uma nova prévia.",
   ];
   if (obj?.message && mensagensClaras.includes(obj.message)) return obj.message;
   if (

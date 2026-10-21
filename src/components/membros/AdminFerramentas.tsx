@@ -16,14 +16,68 @@ import {
   revogarLicenca,
   suspenderLicencaCrm,
   reativarLicencaCrm,
+  prepararRenovacaoCrm,
+  renovarLicencaCrm,
   estadoDaLicenca,
   atenderExclusaoCrm,
   prepararUpgradeMensal,
   type AdminFerramentas as DadosFerramentas,
   type FerramentaMembro,
+  type LicencaMembro,
+  type RenovacaoLicencaCrm,
 } from "@/lib/membros/ferramentas";
 import { mensagemDoErro, type DadosAdmin } from "@/lib/membros/api";
 import { QuadroCrm } from "./CrmDoMembro";
+
+function instanteDaCriacao(data?: string) {
+  const milissegundos = Date.parse(data || "");
+  if (!Number.isFinite(milissegundos)) return null;
+  // PostgreSQL preserves six fractional digits; Date.parse keeps only three.
+  const fracao = data?.match(/[T ]\d{2}:\d{2}:\d{2}\.(\d+)/)?.[1] || "";
+  const microsRestantes = Number(fracao.padEnd(6, "0").slice(3, 6));
+  return { milissegundos, microsRestantes };
+}
+
+function periodoMaisRecente(licenca: LicencaMembro, todas: LicencaMembro[]) {
+  const criada = instanteDaCriacao(licenca.criado_em);
+  if (!criada) return false;
+  return (
+    todas.every((outra) => {
+      if (
+        outra.user_id !== licenca.user_id ||
+        outra.produto_id !== licenca.produto_id
+      ) return true;
+      const criadaOutra = instanteDaCriacao(outra.criado_em);
+      return (
+        criadaOutra !== null &&
+        (criadaOutra.milissegundos < criada.milissegundos ||
+          (criadaOutra.milissegundos === criada.milissegundos &&
+            (criadaOutra.microsRestantes < criada.microsRestantes ||
+              (criadaOutra.microsRestantes === criada.microsRestantes &&
+                outra.id <= licenca.id))))
+      );
+    }) &&
+    !todas.some(
+      (outra) => outra.referencia === `renovacao-manual-crm:${licenca.id}`,
+    )
+  );
+}
+
+function origemDaLicenca(licenca: LicencaMembro) {
+  if (licenca.referencia?.startsWith("renovacao-manual-crm:"))
+    return "Renovação manual";
+  if (licenca.origem === "validacao_manual") return "Teste manual";
+  if (licenca.origem === "pagamento") return "Pagamento confirmado";
+  return "Liberação manual";
+}
+
+function dataDaRenovacao(data: string) {
+  return new Date(data).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
 export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -39,6 +93,13 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
   const [erro, setErro] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const operacaoEmCurso = useRef(false);
+  const [renovacao, setRenovacao] = useState<LicencaMembro | null>(null);
+  const [previaRenovacao, setPreviaRenovacao] =
+    useState<RenovacaoLicencaCrm | null>(null);
+  const [erroRenovacao, setErroRenovacao] = useState("");
+  const [conferindoRenovacao, setConferindoRenovacao] = useState(false);
+  const previaEmCurso = useRef(false);
+  const sequenciaPrevia = useRef(0);
   const [exclusao, setExclusao] = useState<
     DadosFerramentas["exclusoes"][number] | null
   >(null);
@@ -69,6 +130,96 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
     } catch (e) {
       setErro(true);
       setAviso(mensagemDoErro(e));
+    } finally {
+      operacaoEmCurso.current = false;
+      setOcupado(false);
+    }
+  }
+  function fecharRenovacao() {
+    if (operacaoEmCurso.current) return;
+    sequenciaPrevia.current++;
+    previaEmCurso.current = false;
+    setConferindoRenovacao(false);
+    setRenovacao(null);
+    setPreviaRenovacao(null);
+    setErroRenovacao("");
+  }
+  async function conferirRenovacao(licenca: LicencaMembro) {
+    if (operacaoEmCurso.current || previaEmCurso.current) return;
+    const sequencia = ++sequenciaPrevia.current;
+    previaEmCurso.current = true;
+    setRenovacao(licenca);
+    setConferindoRenovacao(true);
+    setPreviaRenovacao(null);
+    setErroRenovacao("");
+    setAviso("");
+    setErro(false);
+    try {
+      const previa = await prepararRenovacaoCrm(licenca.id);
+      if (sequencia !== sequenciaPrevia.current) return;
+      if (
+        previa.licenca_anterior_id !== licenca.id ||
+        previa.user_id !== licenca.user_id ||
+        previa.produto_id !== licenca.produto_id ||
+        ![previa.inicio, previa.fim, previa.fim_anterior].every(
+          (data) => Number.isFinite(Date.parse(data)),
+        )
+      ) {
+        setErroRenovacao(
+          "Não foi possível conferir esta renovação. Tente novamente.",
+        );
+        return;
+      }
+      setPreviaRenovacao(previa);
+      if (previa.ja_renovada)
+        await qc.invalidateQueries({ queryKey: ["membros"] });
+    } catch (e) {
+      if (sequencia === sequenciaPrevia.current)
+        setErroRenovacao(mensagemDoErro(e));
+    } finally {
+      if (sequencia === sequenciaPrevia.current) {
+        previaEmCurso.current = false;
+        setConferindoRenovacao(false);
+      }
+    }
+  }
+  async function confirmarRenovacao() {
+    if (
+      !renovacao ||
+      !previaRenovacao ||
+      previaRenovacao.ja_renovada ||
+      conferindoRenovacao ||
+      operacaoEmCurso.current
+    ) return;
+    operacaoEmCurso.current = true;
+    setOcupado(true);
+    setErroRenovacao("");
+    setAviso("");
+    setErro(false);
+    try {
+      const resultado = await renovarLicencaCrm(
+        renovacao.id,
+        previaRenovacao.inicio,
+        previaRenovacao.fim_anterior,
+        previaRenovacao.suspenso_em,
+      );
+      await qc.invalidateQueries({ queryKey: ["membros"] });
+      setRenovacao(null);
+      setPreviaRenovacao(null);
+      setAviso(
+        resultado.ja_renovada
+          ? "Esta renovação já foi registrada. Nenhum período adicional foi criado."
+          : resultado.suspenso_em
+            ? "Licença renovada por 12 meses. A suspensão e os dados do CRM foram preservados."
+            : "Licença renovada por 12 meses. Contatos e negócios preservados.",
+      );
+    } catch (e) {
+      if ((e as { code?: string })?.code === "40001") {
+        setPreviaRenovacao(null);
+        setErroRenovacao(
+          "A licença mudou enquanto esta janela estava aberta. Confira novamente antes de renovar.",
+        );
+      } else setErroRenovacao(mensagemDoErro(e));
     } finally {
       operacaoEmCurso.current = false;
       setOcupado(false);
@@ -291,9 +442,7 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
                           <small>
                             {dados.produtos.find((p) => p.id === l.produto_id)
                               ?.titulo || "Produto indisponível"}
-                            {l.origem === "validacao_manual"
-                              ? " · Teste manual"
-                              : " · Pagamento confirmado"}
+                            {" · "}{origemDaLicenca(l)}
                           </small>
                         </td>
                         <td>
@@ -343,6 +492,20 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
                               }
                             >
                               Reativar licença
+                            </button>
+                          )}
+                          {crm &&
+                            estado !== "Revogado" &&
+                            estado !== "Não iniciada" &&
+                            Number.isFinite(Date.parse(l.fim || "")) &&
+                            Number.isFinite(Date.parse(l.confirmado_em)) &&
+                            periodoMaisRecente(l, admin.data?.licencas || []) && (
+                            <button
+                              className="membros-acao"
+                              disabled={ocupado || conferindoRenovacao}
+                              onClick={() => void conferirRenovacao(l)}
+                            >
+                              Renovar licença
                             </button>
                           )}
                           {!crm && !l.revogado_em && (
@@ -411,6 +574,87 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
         <p role={erro ? "alert" : "status"} className="text-[13px]">
           {aviso}
         </p>
+      )}
+      {renovacao && (
+        <Dialog
+          open
+          onOpenChange={(aberto) => {
+            if (!aberto) fecharRenovacao();
+          }}
+        >
+          <DialogContent>
+            <DialogTitle>Renovar licença do CRM</DialogTitle>
+            <DialogDescription>
+              {renovacao.titular || renovacao.email} ·{" "}
+              {dados.produtos.find((p) => p.id === renovacao.produto_id)?.titulo ||
+                "CRM"}
+            </DialogDescription>
+            {conferindoRenovacao && <p role="status">Conferindo o novo período…</p>}
+            {previaRenovacao && (
+              <>
+                <dl className="grid sm:grid-cols-2 gap-3 text-[13px]">
+                  <div>
+                    <dt className="text-muted-foreground">Validade atual</dt>
+                    <dd>{dataDaRenovacao(previaRenovacao.fim_anterior)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Novo início</dt>
+                    <dd>{dataDaRenovacao(previaRenovacao.inicio)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Novo vencimento</dt>
+                    <dd>{dataDaRenovacao(previaRenovacao.fim)}</dd>
+                  </div>
+                </dl>
+                <p className="text-[12px] text-muted-foreground">
+                  Novo período de 12 meses. Contatos e negócios preservados.
+                  Nenhuma cobrança. Kiwify e Asaas continuam desligados.
+                </p>
+                {previaRenovacao.suspenso_em && (
+                  <p className="text-[13px]">
+                    O novo período continuará suspenso. Renovar não libera o acesso.
+                  </p>
+                )}
+                {previaRenovacao.ja_renovada && (
+                  <p role="status">
+                    Esta licença já foi renovada. Nenhum período adicional será
+                    criado.
+                  </p>
+                )}
+              </>
+            )}
+            {erroRenovacao && (
+              <p role="alert" className="text-[13px]">{erroRenovacao}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="membros-acao"
+                disabled={ocupado}
+                onClick={fecharRenovacao}
+              >
+                {previaRenovacao?.ja_renovada ? "Fechar" : "Cancelar"}
+              </button>
+              {(!previaRenovacao || erroRenovacao) && (
+                <button
+                  className="membros-acao"
+                  disabled={ocupado || conferindoRenovacao}
+                  onClick={() => void conferirRenovacao(renovacao)}
+                >
+                  Conferir novamente
+                </button>
+              )}
+              {!previaRenovacao?.ja_renovada && (
+                <button
+                  className="membros-acao bg-primary text-primary-foreground"
+                  disabled={ocupado || conferindoRenovacao || !previaRenovacao}
+                  onClick={() => void confirmarRenovacao()}
+                >
+                  {ocupado ? "Renovando…" : "Confirmar renovação"}
+                </button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       {exclusao && (
         <Dialog

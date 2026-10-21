@@ -60,6 +60,19 @@ export type LicencaMembro = {
   fim: string | null;
   revogado_em: string | null;
   suspenso_em?: string | null;
+  referencia?: string;
+  criado_em?: string;
+};
+export type RenovacaoLicencaCrm = {
+  licenca_anterior_id: string;
+  user_id: string;
+  produto_id: string;
+  inicio: string;
+  fim: string;
+  fim_anterior: string;
+  suspenso_em: string | null;
+  ja_renovada: boolean;
+  licenca_nova_id: string | null;
 };
 export type AdminFerramentas = DadosCrmMembro & {
   ferramentas: {
@@ -177,6 +190,22 @@ export const suspenderLicencaCrm = (licenca: string) =>
   rpc<void>("membros_crm_licenca_suspender", { _licenca: licenca });
 export const reativarLicencaCrm = (licenca: string) =>
   rpc<void>("membros_crm_licenca_reativar", { _licenca: licenca });
+export const prepararRenovacaoCrm = (licenca: string) =>
+  rpc<RenovacaoLicencaCrm>("membros_crm_licenca_renovacao_previa", {
+    _licenca: licenca,
+  });
+export const renovarLicencaCrm = (
+  licenca: string,
+  inicio: string,
+  fimAnterior: string,
+  suspensoEsperado: string | null,
+) =>
+  rpc<RenovacaoLicencaCrm>("membros_crm_licenca_renovar", {
+    _licenca: licenca,
+    _inicio: inicio,
+    _fim_anterior: fimAnterior,
+    _suspenso_em_esperado: suspensoEsperado,
+  });
 export function estadoDaLicenca(
   licenca: LicencaMembro,
   agora = Date.now(),
