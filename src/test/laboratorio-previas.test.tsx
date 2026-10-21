@@ -278,6 +278,7 @@ describe("HTML da prévia sem execução de ações externas", () => {
         const Nativo = janela.MutationObserver;
         janela.MutationObserver = class extends Nativo {
           constructor(callback: ConstructorParameters<typeof Nativo>[0]) { super(callback); observadores.push(this); }
+          disconnect() { super.disconnect(); }
         };
       },
     });
