@@ -2449,6 +2449,14 @@
       "remote_name": "membros_crm_suspensao_licenca",
       "remote_statements_sha256": "8ce91da0fbca0f695d1561033d51ac6b677e57da646442c085d3453467fe7008",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261021154113",
+      "path": "supabase/migrations/20261021154113_membros_crm_renovacao_manual.sql",
+      "local_sha256": "9b40e677ddc3d07c20b7b47ff039b46c56e71dee60ae16f65d4725ef33ca6c45",
+      "remote_name": "membros_crm_renovacao_manual",
+      "remote_statements_sha256": "adc0a5bba160d667bea1f4771c550f4b425dceab1c0dd8ac7c811de916f457ff",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

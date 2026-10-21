@@ -1,4 +1,4 @@
-# Suspender e reativar o CRM
+# Administrar a licença do CRM
 
 Na administração da biblioteca, em **Ferramentas > Titulares e prazos**, a licença
 vigente do CRM oferece **Suspender licença**. Após a suspensão, a mesma linha passa
@@ -8,6 +8,41 @@ a data de confirmação e o vencimento original.
 A suspensão é separada da revogação: não pode restaurar acesso revogado por outra
 regra nem renovar licença vencida. Uma licença suspensa que vencer durante a pausa
 continua vencida. Os contatos e negócios permanecem privados e salvos.
+
+## Renovar manualmente
+
+Em **Ferramentas > Titulares e prazos**, o período mais recente de cada titular
+oferece **Renovar licença**. A janela identifica a pessoa e o CRM e mostra o prazo
+anterior e as datas exatas do novo período, conferidas pelo servidor. Abrir a janela
+ou cancelar não altera o acesso.
+
+A confirmação cria um período de 12 meses de calendário, mantendo a licença anterior
+e todo o histórico. Se ainda houver prazo, o novo período começa após o último
+vencimento não revogado; se já venceu, começa no instante conferido na prévia.
+A renovação não cobra nem ativa Kiwify ou Asaas e não concede aulas ou materiais.
+
+Contatos, negócios e histórico continuam vinculados ao mesmo titular e produto.
+Uma licença suspensa é renovada com a suspensão preservada. Reativar continua sendo
+uma ação separada. Não é possível renovar uma licença revogada ou um período futuro.
+Repetir a confirmação da mesma licença devolve a renovação existente sem duplicar
+períodos nem histórico. Se a licença mudar durante a confirmação ou a prévia expirar,
+é preciso conferir novamente antes de confirmar.
+
+### Migração da renovação
+
+- Fonte: `supabase/migrations/20261021154113_membros_crm_renovacao_manual.sql`.
+- Acrescenta duas RPCs administrativas, sem alterar tabelas, períodos ou dados existentes.
+- Prévia sem escrita; confirmação serializada por titular e produto, com histórico
+  na mesma transação e referência única derivada da licença anterior.
+- A confirmação exige as datas e a suspensão conferidas. Para períodos vencidos, a
+  prévia vale por até cinco minutos; não há token adicional persistido para a prévia.
+- Autorização interna exige administração com cadastro confirmado e CRM publicado
+  e ativo. Membros comuns não podem renovar a própria licença.
+- Aplicar somente pelo workflow forward-only, no tip revisado de `main`, com backup
+  restaurável e checklist privado reais. Conferir ledger e pagamentos antes e depois.
+- Retorno lógico: voltar o Worker à versão anterior e, se necessário, suspender o
+  novo período pela administração. Preservar a migration, as licenças e o histórico.
+  Nunca apagar registros ou encurtar o período anterior para desfazer a publicação.
 
 ## Cartão na biblioteca
 
@@ -32,7 +67,7 @@ Esta correção não altera concessões, pagamentos, validade ou dados do CRM.
 - Leituras e escritas do CRM conferem licença vigente, não revogada e não suspensa.
 - Cada transição efetiva registra histórico; repetir a ação não duplica a transição.
 - Kiwify e Asaas continuam sem liberação automática; não há alteração de checkout,
-  cobrança, eventos de pagamento, valores ou renovação.
+  cobrança, eventos de pagamento ou valores.
 
 ## Conferência antes de publicar
 
