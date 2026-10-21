@@ -1,0 +1,14 @@
+{
+  "name": "Tailwind CSS Play CDN browser runtime",
+  "version": "3.4.17",
+  "sourceUrl": "https://cdn.tailwindcss.com/3.4.17",
+  "repositoryUrl": "https://github.com/tailwindlabs/tailwindcss/tree/v3.4.17",
+  "retrievedAt": "2026-10-21T20:50:51.689Z",
+  "sha256": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15",
+  "bytes": 407279,
+  "modified": false,
+  "license": "MIT",
+  "licenseSourceUrl": "https://raw.githubusercontent.com/tailwindlabs/tailwindcss/v3.4.17/LICENSE",
+  "licenseFile": "tailwindcss-3.4.17.LICENSE.txt",
+  "usage": "Somente para compilar as classes reais do HTML gerado no visor isolado do Laboratório. Nenhum JavaScript gerado pela IA é executado."
+}

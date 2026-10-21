@@ -221,13 +221,18 @@ export type EsquemaColetado = {
   erro?: string;
 };
 
+/** Só fontes executadas pelas funções, sem declarações nem fixtures de teste Deno/Vitest. */
+export function ehFonteDeProducaoDasFuncoes(nome: string): boolean {
+  return /\.tsx?$/.test(nome) && !/(?:\.d|_test|\.test|\.spec)\.tsx?$/.test(nome);
+}
+
 function arquivosTs(dir: string): string[] {
   const saida: string[] = [];
   for (const nome of readdirSync(dir)) {
     const p = resolve(dir, nome);
     const s = statSync(p);
     if (s.isDirectory()) saida.push(...arquivosTs(p));
-    else if (/\.tsx?$/.test(nome) && !/\.d\.ts$/.test(nome)) saida.push(p);
+    else if (ehFonteDeProducaoDasFuncoes(nome)) saida.push(p);
   }
   return saida;
 }

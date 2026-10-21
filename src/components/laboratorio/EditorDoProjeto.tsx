@@ -33,6 +33,7 @@ import {
   salvarTemplate,
   ultimaPorNo,
   type ExecucaoDoLab,
+  type ImagemDoLab,
   type ProjetoDoLab,
 } from "@/lib/laboratorio/api";
 import {
@@ -69,6 +70,8 @@ import JanelaDeExcluirProjeto from "./JanelaDeExcluirProjeto";
 import ExportarProjeto from "./ExportarProjeto";
 import ProvedorDasPrevias from "./ContextoDasPrevias";
 import { alvosDoPedido, temCartoesSobrepostos } from "@/lib/laboratorio/execucaoDoPedido";
+import { dadosDasMidias } from "./no/MidiaDoNo";
+import { LARGURA_DO_NO } from "./no/montar";
 import "./telaCheiaDoLab.css";
 
 /**
@@ -486,6 +489,25 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     [mudar],
   );
 
+  const aoNovaExecucao = useCallback((id: string, ex: ExecucaoDoLab) => {
+    setExecucoes((atuais) => ({ ...atuais, [id]: ex }));
+    setVigiar(true);
+  }, []);
+
+  const usarImagemComoReferencia = useCallback((noId: string, imagem: ImagemDoLab) => {
+    const c = atual.current;
+    const destino = c.nos.find((n) => n.id === noId);
+    if (!destino) return;
+    const entradas = c.ligacoes.filter((l) => l.para === noId).length;
+    const criada = criarNo(c, "midia", { x: destino.x - LARGURA_DO_NO - 80, y: destino.y + entradas * 60 }, dadosDasMidias([{ id: imagem.path || imagem.url, tipo: "imagem", url: imagem.url, path: imagem.path, nome: "Referência" }]));
+    if (!criada.no) { toast.warning("O quadro está cheio", { description: criada.erro }); return; }
+    const novaId = criada.no.id;
+    const permitida = podeLigar(criada.canvas, novaId, noId);
+    if (!permitida.ok) { toast.warning("Não foi possível ligar a referência", { description: permitida.motivo }); return; }
+    mudar(() => ligar(criada.canvas, novaId, noId));
+    setSelecionado(novaId);
+  }, [mudar]);
+
   useEffect(() => {
     if (!avisoDoQuadro) return;
     const id = window.setTimeout(() => setAvisoDoQuadro(null), 7000);
@@ -722,6 +744,14 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
       escolhendo={escolhendo && escolhendo.no === noSel.id ? escolhendo.indice : null}
       trava={travasDoNoAr[noSel.id] || null}
       onResolverBloco={resolverOBloco}
+      acoesDasImagens={{
+        projetoId,
+        clienteId: clienteDoProjeto,
+        antesDeChamar: garantirSalvo,
+        mudarDados: (id, dados) => mudar((c) => mudarDados(c, id, dados)),
+        novaExecucao: aoNovaExecucao,
+        usarComoReferencia: usarImagemComoReferencia,
+      }}
     />
   ) : null;
 
@@ -893,10 +923,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
               soCanvas={soCanvas}
               onSoCanvas={() => setSoCanvas(!soCanvas)}
               onRodarAutomatico={rodarAutomatico}
-              onNovaExecucao={(id, ex) => {
-                setExecucoes((x) => ({ ...x, [id]: ex }));
-                setVigiar(true);
-              }}
+              onNovaExecucao={aoNovaExecucao}
             />
             {!canvas.nos.length && (
               <p className={juntar(texto.auxiliar, "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center")}>Peça no Canvas Studio acima, toque num ícone da paleta ou fale com o agente do projeto.</p>
