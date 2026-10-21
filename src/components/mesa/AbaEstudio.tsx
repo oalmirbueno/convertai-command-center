@@ -1948,6 +1948,8 @@ export function DetalheDoItem({
       onRefazer={(ordens) => gerarVarias(ordens)}
       onAtualizar={atualizar}
       executarPasso={executarPassoDoPlano}
+      onAbrirTemplate={ehPostDeFotos(trabalho.direcao) ? undefined : () => abrirFerramenta("template")}
+      onAbrirFotos={() => abrirFerramenta("fotos")}
       className="h-full"
     />
   ) : null;

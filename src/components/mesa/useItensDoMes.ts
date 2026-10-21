@@ -90,6 +90,11 @@ export interface CardDaDirecao {
   imagem_anterior?: string;
   /** Fotos reais trazidas pela equipe para compor a lâmina (contrato V5): até 1 fundo e 2 elementos. */
   fotos_livres?: FotoLivre[];
+  /** Elementos reais já obtidos pelo preparo, preservados também no Profile. */
+  vitrine_de_logos?: Array<{ caminho: string; nome: string }>;
+  vitrine_tipo?: string;
+  /** Biblioteca complementar escolhida no Diretor: não entra no gerador de imagem automaticamente. */
+  fontes_reais?: Array<{ caminho: string; nome: string; fonte_url: string; licenca: string; autor: string | null; tipo: "imagem" | "logo" }>;
   /** Fidelidade à referência só desta lâmina (frente E); sem ela, o padrão do trabalho. */
   fidelidade_referencia?: string;
   /** Frente RO: uso da foto do acervo (imagens_ids). "rosto" = só a identidade, cena nova; sem o campo, exata. */

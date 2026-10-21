@@ -21,6 +21,7 @@ import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import AnexosComPapel, { anexosComPapel, corpoDosAnexos, usePapeisDosAnexos } from "./AnexosComPapel";
 import PlanoDoDiretor, { type ExecutorDoPasso } from "./PlanoDoDiretor";
+import ImagensReaisDoDiretor from "./ImagensReaisDoDiretor";
 import type { PassoDoPlano } from "../../../supabase/functions/estudio-arte/diretor-agentico";
 import {
   ajustarTextoDaLamina,
@@ -86,6 +87,8 @@ export interface PropsDoDiretor {
   executarPasso?: ExecutorDoPasso;
   /** Custo dos passos do plano; sem ele, pela estimativa desta tela. */
   partesDoPlano?: (passos: PassoDoPlano[]) => ParteDaEstimativa[];
+  onAbrirTemplate?: () => void;
+  onAbrirFotos?: () => void;
   className?: string;
 }
 
@@ -114,6 +117,8 @@ export default function DiretorDoEstudio({
   onAtualizar,
   executarPasso,
   partesDoPlano,
+  onAbrirTemplate,
+  onAbrirFotos,
   className = "",
 }: PropsDoDiretor) {
   const { catalogo, clientId } = useMesa();
@@ -557,6 +562,7 @@ export default function DiretorDoEstudio({
       </div>
       {/* Casca fixa de agente do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
       <MensagensDoAgente ref={listaRef} rotulo="Conversa com o diretor de arte" className="px-4 py-3">
+        {ordemEmFoco && onAbrirTemplate && <ImagensReaisDoDiretor key={`${trabalho.id}:${ordemEmFoco}`} trabalho={trabalho} ordem={ordemEmFoco} bloqueado={bloqueado || ocupado || !!envio || !!aplicando} onAtualizar={onAtualizar} onAbrirTemplate={onAbrirTemplate} onAbrirFotos={onAbrirFotos} />}
         {estiloPedido && (
           <p className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[12px] leading-snug [overflow-wrap:anywhere]">
             <span className="font-medium">Estilo pedido para este trabalho:</span> <span className="text-muted-foreground">{estiloPedido}</span>

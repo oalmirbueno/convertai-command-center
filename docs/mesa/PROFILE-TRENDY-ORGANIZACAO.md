@@ -23,11 +23,19 @@ Não foi encontrada opção de exportação MP4/Reels nos controles examinados d
 2. Abra **Template** na barra de ferramentas e escolha **Profile · Twitter** ou **Profile · Publicação Instagram**.
 3. Na Mesa de um cliente, o nome, @ e avatar vêm da leitura de Redes. Havendo várias contas, selecione a conta. O avatar só é usado quando pertence ao @ exibido. No Livre sem cliente, a identidade é preenchida pela equipe; a conta interna da agência não é herdada.
 4. Ajuste texto, tema, fundo, tamanho do perfil, espaçamento e cantos. O selo depende de escolha explícita; não é inferido de dados que não confirmam verificação.
-5. A imagem vem da ferramenta Fotos: prioridade à foto de fundo exata e depois à ordem das fotos selecionadas. Os pixels do produto são preservados e a fotografia cabe inteira no quadro. O avatar pode ser enviado quando a origem remota não permitir composição por CORS.
+5. A imagem vem da ferramenta Fotos, do acervo ou das fontes reais já pesquisadas pelo Diretor. A prioridade inicial continua nas fotos escolhidas pela equipe; o seletor permite trocar a fonte sem apagar fotos anteriores. Os pixels são preservados e a imagem cabe inteira no quadro. Confira a origem e a licença quando disponíveis. O avatar pode ser enviado quando a origem remota não permitir composição por CORS.
 6. Confira em **Ver prévia grande**. **Guardar nova versão** acrescenta uma lâmina. **Montar todas as lâminas** compõe o conjunto com a copy e a foto de cada lâmina. Não há chamada a modelo de imagem nessa montagem.
 7. Continue em **Entrega**: aprovação da agência/cliente ou arquivo livre, conforme o fluxo que já corresponde ao trabalho.
 
 A edição do template é um rascunho até guardar. Texto que não cabe é recusado com orientação para reduzir o tamanho, mudar o formato ou dividir a lâmina. A imagem anterior permanece no histórico. Se a direção mudar desde a abertura do rascunho, a equipe deve escolher entre usar o texto atual e manter sua edição; o servidor também recusa uma base concorrente.
+
+## Imagens reais e tutoriais
+
+No **Diretor**, escolha uma lâmina e abra **Imagens reais**. Ajuste o assunto ou a marca e busque na Wikimedia. A busca não chama IA nem gera imagens. Os resultados mostram a fonte, autoria e licença; confira a pertinência antes de usar. **Usar na lâmina** importa o arquivo para a pasta do cliente e acrescenta uma fonte selecionável no Profile. Não apaga as fotos, não altera versões anteriores nem envia essa fonte nova ao gerador normal.
+
+O link opcional aceita o arquivo HTTPS de uma imagem pública. HTML, páginas de login e painéis privados não são convertidos em capturas supostamente autenticadas: envie o print real em **Fotos**. A importação continua no servidor, com validação de acesso, origem, tipo, tamanho e concorrência.
+
+Para um tutorial, use a captura atual do painel correto. Na prévia do Template, ative o marcador e clique no botão mostrado na própria imagem; edite o rótulo e confira o PNG. A posição é normalizada na imagem original e segue o mesmo desenho na prévia e na exportação. O marcador não é transferido para outras lâminas em **Montar todas**. O sistema não inventa telas, estados de configuração nem coordenadas de botões. Este modo complementa a composição anterior e não altera seu tratamento global de fotos e logos.
 
 ## Organização e sincronismo
 
@@ -55,6 +63,6 @@ Texto de IA, pesquisa e planejamento continuam com seus custos atuais. Não há 
 
 Foram preparados testes de identidade/conta, Livre, rascunho desatualizado, aprovação, overflow, preservação de foto, PNG, cliente, concorrência, replay, pastas, filtros, calendário explícito e compatibilidade legada. Os resultados finais do lote ficam registrados no PR e no relatório da entrega. O schema remoto foi consultado somente em leitura para confirmar as colunas utilizadas.
 
-Publicar exige revisar e integrar a branch, implantar as versões compatíveis de `estudio-arte` e `agente-calendario` e só então disponibilizar o frontend do mesmo commit pelo procedimento do projeto. Não há SQL para aplicar. Preview autenticado deve confirmar perfil de duas contas, duas marcas, dois clientes, edição/entrega e Livre; testes automatizados não substituem essa conferência final do ambiente publicado.
+Publicar exige revisão, CI e Preview; a autorização de Almir em 21/10/2026 permite merge e publicação se essas verificações passarem. O frontend atual está na Cloudflare: `wrangler versions upload --preview-alias pr94` permite testar o Worker existente sem mudar o tráfego de produção. O merge no `main` dispara o workflow de publicação. Implantar individualmente `estudio-arte` e `agente-calendario`, com JWT preservado, antes de expor ações novas. Não há SQL para aplicar. Confirmar `/version.json` e os fluxos autenticados; testes automatizados não substituem essa conferência final. Os resultados efetivos são registrados na entrega, sem considerar uma etapa concluída apenas por estar planejada.
 
 Rollback lógico: voltar o frontend ao commit anterior interrompe a entrada de novos templates; as ações opcionais são compatíveis com os pedidos antigos. Versões, arquivos e propostas já guardados não devem ser apagados.

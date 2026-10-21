@@ -19,6 +19,8 @@ export interface TemplateProfile {
   arredondamento: number;
   foto_caminho?: string;
   imagem_caminho?: string;
+  /** Anotação sobre a imagem original; o renderizador converte pelo mesmo contain da foto. */
+  destaque?: { x: number; y: number; rotulo: string };
 }
 
 export interface VersaoDoTemplate {
@@ -111,6 +113,13 @@ export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Er
     const p = campo(o[k], 500, true, erro);
     if (!p.startsWith(`${clientId}/`) || /[\\%?#:]/.test(p) || p.split("/").some((s) => !s || s === "." || s === "..")) throw erro(400, "foto_template_invalida", "A imagem do template precisa pertencer a este cliente.");
     t[k] = p;
+  }
+  if (o.destaque !== undefined && o.destaque !== null) {
+    const destaque = objeto(o.destaque);
+    if (typeof destaque.x !== "number" || !Number.isFinite(destaque.x) || destaque.x < 0 || destaque.x > 1 || typeof destaque.y !== "number" || !Number.isFinite(destaque.y) || destaque.y < 0 || destaque.y > 1) throw erro(400, "destaque_template_invalido", "Escolha um ponto dentro da imagem para o destaque.");
+    const rotulo = campo(destaque.rotulo, 60, true, erro);
+    if (/[\r\n\t<>]/.test(rotulo)) throw erro(400, "destaque_template_invalido", "Use um rótulo curto de uma linha no destaque.");
+    t.destaque = { x: destaque.x, y: destaque.y, rotulo };
   }
   return t;
 }

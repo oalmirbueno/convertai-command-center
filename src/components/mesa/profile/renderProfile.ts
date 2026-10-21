@@ -39,11 +39,13 @@ function caixa(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
 }
 
 /** Preserva a foto inteira; a composição não regenera nem recorta o produto. */
-function fotoInteira(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, raio: number, fundo: string) {
+function fotoInteira(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, raio: number, fundo: string): RetanguloProfile {
   ctx.save(); caixa(ctx, x, y, w, h, raio); ctx.clip(); ctx.fillStyle = fundo; ctx.fillRect(x, y, w, h);
   const escala = Math.min(w / img.naturalWidth, h / img.naturalHeight);
   const iw = img.naturalWidth * escala, ih = img.naturalHeight * escala;
-  ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); ctx.restore();
+  const quadro = { x: x + (w - iw) / 2, y: y + (h - ih) / 2, largura: iw, altura: ih };
+  ctx.drawImage(img, quadro.x, quadro.y, iw, ih); ctx.restore();
+  return quadro;
 }
 
 function selo(ctx: CanvasRenderingContext2D, x: number, y: number) {
@@ -51,10 +53,31 @@ function selo(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x - 1, y + 5); ctx.lineTo(x + 7, y - 5); ctx.stroke();
 }
 
-export interface RecursosProfile { avatar?: HTMLImageElement | null; imagem?: HTMLImageElement | null }
+export interface RetanguloProfile { x: number; y: number; largura: number; altura: number }
+export interface ResultadoProfile { imagem: RetanguloProfile | null }
+export interface RecursosProfile { avatar?: HTMLImageElement | null; imagem?: HTMLImageElement | null; imagemExata?: boolean }
+
+function desenharDestaque(ctx: CanvasRenderingContext2D, imagem: RetanguloProfile, destaque: NonNullable<TemplateProfile["destaque"]>) {
+  if (!Number.isFinite(destaque.x) || !Number.isFinite(destaque.y) || destaque.x < 0 || destaque.x > 1 || destaque.y < 0 || destaque.y > 1) throw new Error("Marque um ponto dentro da imagem real.");
+  const rotulo = destaque.rotulo.trim();
+  if (!rotulo || rotulo.length > 60 || /[\r\n\t<>]/.test(rotulo)) throw new Error("Escreva um rótulo simples de até 60 caracteres para o ponto.");
+  const x = imagem.x + imagem.largura * destaque.x, y = imagem.y + imagem.altura * destaque.y;
+  ctx.save(); ctx.strokeStyle = "#efb300"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(x, y, 17, 0, Math.PI * 2); ctx.stroke();
+  ctx.font = "600 22px Arial, sans-serif";
+  const linhas = linhasProfile(rotulo, 280, (s) => ctx.measureText(s).width);
+  const w = Math.max(70, ...linhas.map((s) => ctx.measureText(s).width)) + 24, h = linhas.length * 29 + 18;
+  const lx = Math.max(24, Math.min(1080 - w - 24, x + 36 + w > 1056 ? x - w - 36 : x + 36));
+  const ly = Math.max(24, y - h - 24);
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lx + w / 2, ly + h); ctx.stroke();
+  ctx.fillStyle = "#fff2bc"; caixa(ctx, lx, ly, w, h, 8); ctx.fill();
+  ctx.fillStyle = "#1a1a1a"; ctx.textBaseline = "top";
+  linhas.forEach((linha, i) => ctx.fillText(linha, lx + 12, ly + 9 + i * 29));
+  ctx.restore();
+}
 
 /** Mesmo desenho na prévia e no PNG entregue; erro de tamanho nunca vira corte silencioso. */
-export function desenharProfile(canvas: HTMLCanvasElement, template: TemplateProfile, formato: FormatoProfile, recursos: RecursosProfile = {}) {
+export function desenharProfile(canvas: HTMLCanvasElement, template: TemplateProfile, formato: FormatoProfile, recursos: RecursosProfile = {}): ResultadoProfile {
   canvas.width = 1080; canvas.height = ALTURAS_PROFILE[formato];
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Seu navegador não disponibilizou a prévia do template.");
   const escuro = template.tema === "escuro";
@@ -96,12 +119,19 @@ export function desenharProfile(canvas: HTMLCanvasElement, template: TemplatePro
   ctx.font = "400 25px Arial, sans-serif"; ctx.fillStyle = cinza;
   ctx.fillText(`@${template.username.replace(/^@/, "")}`, nx, iy + 65, maxNome);
   let cursor = iy + alturaCabecalho + gap;
-  if (insta && recursos.imagem) { fotoInteira(ctx, recursos.imagem, ix, cursor, interna, alturaImagem, template.arredondamento ?? 16, fundo); cursor += alturaImagem + gap; }
+  let imagem: RetanguloProfile | null = null;
+  const cantos = recursos.imagemExata || template.destaque ? 0 : template.arredondamento ?? 16;
+  if (insta && recursos.imagem) { imagem = fotoInteira(ctx, recursos.imagem, ix, cursor, interna, alturaImagem, cantos, fundo); cursor += alturaImagem + gap; }
   if (insta) {
     ctx.fillStyle = cinza; ctx.font = "400 28px Arial, sans-serif"; ctx.fillText("♡   ◯   ↗", ix, cursor + 20); cursor += alturaIcones;
   }
   ctx.font = `400 ${tamanho}px Arial, sans-serif`; ctx.fillStyle = tinta; ctx.textBaseline = "top";
   for (const linha of linhas) { ctx.fillText(linha, ix, cursor); cursor += tamanho * 1.32; }
   ctx.textBaseline = "alphabetic";
-  if (!insta && recursos.imagem) fotoInteira(ctx, recursos.imagem, ix, cursor + gap, interna, alturaImagem, template.arredondamento ?? 16, fundo);
+  if (!insta && recursos.imagem) imagem = fotoInteira(ctx, recursos.imagem, ix, cursor + gap, interna, alturaImagem, cantos, fundo);
+  if (template.destaque) {
+    if (!imagem) throw new Error("Escolha a imagem real antes de marcar um ponto.");
+    desenharDestaque(ctx, imagem, template.destaque);
+  }
+  return { imagem };
 }

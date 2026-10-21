@@ -17,7 +17,7 @@ A Aceleriq é uma operação de Engenharia de Crescimento apoiada no Método A.C
 - Projeto Lovable: Aceleriq Comando OS.
 - Backend atual: Supabase/Postgres `jjjtkowvxemvituvywvf`; painel `https://aceleriq.online`.
 - Atualização confirmada por Almir em 12/09/2026: a migração do projeto anterior `gicbrgagstyvbaaumprj` para o atual já ocorreu. A data exata e o procedimento dessa migração não foram auditados neste lote. Referências ao projeto anterior em artefatos legados são históricas e não definem o destino de uma nova implantação. Lovable continua no fluxo do frontend e da compatibilidade.
-- O Lovable continua como host atual do frontend e camada de compatibilidade, mas o build e a hospedagem não dependem exclusivamente dele. A portabilidade está registrada no [`ADR-0003`](decisions/ADR-0003-portabilidade-do-frontend-e-endpoints-mcp.md).
+- Hospedagem verificada em 21/10/2026: o frontend público é servido pelo Worker Cloudflare `aceleriq-painel` (`wrangler.jsonc` e workflow `deploy-cloudflare-pages.yml`). O domínio e a URL `workers.dev` serviam a revisão `cc53d61e` antes do PR #94. O Lovable permanece no fluxo de edição e compatibilidade; seu Preview não comprova a revisão de uma branch. Procedimento em [`CLOUDFLARE-PAGES.md`](../hospedagem/CLOUDFLARE-PAGES.md) e portabilidade no [`ADR-0003`](decisions/ADR-0003-portabilidade-do-frontend-e-endpoints-mcp.md).
 - O runtime portátil não exige Lovable para MCP, IA ou e-mail: IA usa provider OpenAI-compatible/OpenAI, o transporte chama Resend diretamente e os hooks portáteis usam Standard Webhooks. `LOVABLE_API_KEY` e `/functions/v1/mcp` permanecem somente como fallbacks de transição.
 - O sistema já é usado por clientes e pela equipe; evolução deve ser incremental e compatível.
 - Neste lote, não criar novo Cloud nem migrar de plataforma. “Migration” significa SQL incremental e controlado no mesmo banco; uma eventual migração do projeto Supabase exige plano, autorização e validação próprios.
@@ -97,11 +97,12 @@ Planos-base editáveis: R$ 597, R$ 1.197, R$ 2.297, R$ 5.597 e Sob Medida. Servi
 8. Aplicar migrations pelo workflow GitHub forward-only compatível com o ledger do projeto alvo, somente no tip atual de `main`, depois de confirmar backup restaurável e checklist privado real; nunca usar reset, seed, repair, `--include-all` ou escrita manual na ledger de produção. O workflow atualizado usa a view revisada por projeto, com sentinelas para versões já aplicadas e SQL somente para as pendentes; o gerador histórico permanece fora do caminho de implantação do backend novo.
 9. Confirmar o binding OAuth no banco e só então publicar ou reverter o MCP pelo workflow GitHub a partir de SHA imutável, validando o smoke remoto.
 10. Confirmar sincronização no Lovable e gerar, quando aplicável, o artefato portátil a partir do mesmo commit.
-11. Publish manual no host aprovado somente depois do aceite; o Lovable permanece o destino atual até um corte explicitamente autorizado.
+11. Publicar no host atual aprovado somente depois do aceite. Na Cloudflare, testar a versão de Preview antes de direcionar tráfego; o merge no `main` dispara o workflow de publicação. Confirmar o SHA servido em `/version.json`, além do status do workflow.
 
 ## Estado atual de referência
 
 - Lote em revisão de 21/10/2026: templates Profile em composição determinística no Estúdio/Mesa/Livre, Organização sobre o Workspace existente, filtros Trendy e calendário por período. Contratos, preservação das versões, custos, aprovação e publicação estão em [`PROFILE-TRENDY-ORGANIZACAO.md`](../mesa/PROFILE-TRENDY-ORGANIZACAO.md). Não há nova migration; esta referência não confirma implantação em produção.
+- Complemento do PR #94: o Diretor pesquisa imagens reais da Wikimedia ou importa uma imagem pública com origem; a escolha entra nas fontes do Profile, sem alterar a geração anterior. Capturas e logos preservam seus pixels na composição. Um marcador manual pode indicar o botão real de uma captura; telas autenticadas exigem a captura da sessão correta.
 
 - O Segundo Cérebro está ao vivo. Houve anteriormente um período de respostas transitórias 503, mantido aqui apenas como histórico; não tratar esse incidente como estado atual.
 - O Ops foi descontinuado e está fora da arquitetura e do caminho crítico do Aceleriq OS. Artefatos legados com `ops` permanecem somente como histórico técnico: não devem ser chamados, ampliados, reativados ou removidos fora de um lote separado, reversível e explicitamente autorizado. Ops não é o Segundo Cérebro nem o OpenClaw.
