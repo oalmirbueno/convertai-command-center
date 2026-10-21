@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Wrench, Eye, ShieldCheck } from "lucide-react";
 import { AjudaRecolhida } from "@/components/sistema";
@@ -14,6 +14,9 @@ import {
   configurarFerramenta,
   licenciarTeste,
   revogarLicenca,
+  suspenderLicencaCrm,
+  reativarLicencaCrm,
+  estadoDaLicenca,
   atenderExclusaoCrm,
   prepararUpgradeMensal,
   type AdminFerramentas as DadosFerramentas,
@@ -33,7 +36,9 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
     null,
   );
   const [aviso, setAviso] = useState("");
+  const [erro, setErro] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const operacaoEmCurso = useRef(false);
   const [exclusao, setExclusao] = useState<
     DadosFerramentas["exclusoes"][number] | null
   >(null);
@@ -48,16 +53,24 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
     queryFn: () => carregarAdminFerramentas(ver?.usuario, ver?.produto),
     retry: false,
   });
-  async function agir(f: () => Promise<unknown>) {
+  async function agir(
+    f: () => Promise<unknown>,
+    mensagem = "Alteração salva.",
+  ) {
+    if (operacaoEmCurso.current) return;
+    operacaoEmCurso.current = true;
     setOcupado(true);
     setAviso("");
+    setErro(false);
     try {
       await f();
       await qc.invalidateQueries({ queryKey: ["membros"] });
-      setAviso("Alteração salva.");
+      setAviso(mensagem);
     } catch (e) {
+      setErro(true);
       setAviso(mensagemDoErro(e));
     } finally {
+      operacaoEmCurso.current = false;
       setOcupado(false);
     }
   }
@@ -71,7 +84,9 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
           Licença individual por 12 meses. Pagamentos continuam desligados.
           Liberar para teste não cobra e não altera acessos antigos. O CRM fica
           guardado após vencer até o titular pedir exclusão. Acompanhamento
-          administrativo é somente leitura.
+          administrativo é somente leitura. Suspender o CRM bloqueia o acesso
+          e mantém os dados e a validade original. Reativar recupera o acesso
+          pelo prazo restante, sem renovar nem cobrar.
         </AjudaRecolhida>
       </header>
       {admin.isError ? (
@@ -244,7 +259,15 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
             </div>
           </details>
           <section className="space-y-3">
-            <h3 className="font-semibold text-[15px]">Titulares e prazos</h3>
+            <header className="flex items-center gap-2">
+              <h3 className="font-semibold text-[15px]">Titulares e prazos</h3>
+              <AjudaRecolhida rotulo="Sobre suspensão e reativação do CRM">
+                A suspensão é temporária e preserva contatos, negócios e a
+                data de vencimento. Só é possível reativar uma licença
+                suspensa que ainda esteja no prazo e não tenha sido revogada.
+                Uma licença vencida não é renovada por esta ação.
+              </AjudaRecolhida>
+            </header>
             <div className="membros-tabela-rolagem">
               <table className="membros-tabela">
                 <thead>
@@ -255,55 +278,88 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(admin.data?.licencas || []).map((l) => (
-                    <tr key={l.id}>
-                      <td>
-                        {l.titular || l.email}
-                        <small>
-                          {dados.produtos.find((p) => p.id === l.produto_id)
-                            ?.titulo || "Produto indisponível"}
-                          {l.origem === "validacao_manual"
-                            ? " · Teste manual"
-                            : " · Pagamento confirmado"}
-                        </small>
-                      </td>
-                      <td>
-                        {l.revogado_em
-                          ? "Revogado"
-                          : new Date(l.fim) > new Date()
-                            ? "Liberado"
-                            : "Vencido"}
-                        <small>
-                          {new Date(l.fim).toLocaleDateString("pt-BR")}
-                        </small>
-                      </td>
-                      <td>
-                        <button
-                          className="membros-acao"
-                          onClick={() =>
-                            setVer({
-                              usuario: l.user_id,
-                              produto: l.produto_id,
-                            })
-                          }
-                        >
-                          <Eye size={15} />
-                          Acompanhar
-                        </button>
-                        {!l.revogado_em && (
+                  {(admin.data?.licencas || []).map((l) => {
+                    const estado = estadoDaLicenca(l);
+                    const crm = admin.data?.ferramentas.some(
+                      (f) => f.produto_id === l.produto_id && f.motor === "crm",
+                    );
+                    const fim = l.fim ? new Date(l.fim) : null;
+                    return (
+                      <tr key={l.id}>
+                        <td>
+                          {l.titular || l.email}
+                          <small>
+                            {dados.produtos.find((p) => p.id === l.produto_id)
+                              ?.titulo || "Produto indisponível"}
+                            {l.origem === "validacao_manual"
+                              ? " · Teste manual"
+                              : " · Pagamento confirmado"}
+                          </small>
+                        </td>
+                        <td>
+                          {estado}
+                          <small>
+                            {fim && Number.isFinite(fim.getTime())
+                              ? fim.toLocaleDateString("pt-BR")
+                              : "Validade não informada"}
+                          </small>
+                        </td>
+                        <td>
                           <button
                             className="membros-acao"
-                            disabled={ocupado}
                             onClick={() =>
-                              void agir(() => revogarLicenca(l.id))
+                              setVer({
+                                usuario: l.user_id,
+                                produto: l.produto_id,
+                              })
                             }
                           >
-                            Revogar licença
+                            <Eye size={15} />
+                            Acompanhar
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          {crm && estado === "Liberado" && (
+                            <button
+                              className="membros-acao"
+                              disabled={ocupado}
+                              onClick={() =>
+                                void agir(
+                                  () => suspenderLicencaCrm(l.id),
+                                  "Licença suspensa. Os dados e a validade original foram preservados.",
+                                )
+                              }
+                            >
+                              Suspender licença
+                            </button>
+                          )}
+                          {crm && estado === "Suspensa" && (
+                            <button
+                              className="membros-acao"
+                              disabled={ocupado}
+                              onClick={() =>
+                                void agir(
+                                  () => reativarLicencaCrm(l.id),
+                                  "Licença reativada. Os dados e a validade original foram preservados.",
+                                )
+                              }
+                            >
+                              Reativar licença
+                            </button>
+                          )}
+                          {!crm && !l.revogado_em && (
+                            <button
+                              className="membros-acao"
+                              disabled={ocupado}
+                              onClick={() =>
+                                void agir(() => revogarLicenca(l.id))
+                              }
+                            >
+                              Revogar licença
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -352,7 +408,7 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
         </>
       )}
       {aviso && (
-        <p role="status" className="text-[13px]">
+        <p role={erro ? "alert" : "status"} className="text-[13px]">
           {aviso}
         </p>
       )}

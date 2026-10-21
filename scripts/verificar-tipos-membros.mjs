@@ -12,6 +12,7 @@ const config = ts.getParsedCommandLineOfConfigFile(
 );
 const arquivos = [
   "src/test/membros-ferramentas.test.tsx",
+  "src/test/membros-crm-licenca-admin.test.tsx",
   "src/test/membros-arquivos.test.ts",
   "src/test/membros-foco.test.tsx",
   "src/test/membros-pdf-tela-cheia.test.tsx",

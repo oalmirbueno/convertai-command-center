@@ -49,11 +49,13 @@ for source in \
   supabase/tests/membros/previa.sql \
   supabase/tests/membros/cursos_comunidade.sql \
   supabase/migrations/20261020190625_membros_estudo_ferramentas.sql \
-  supabase/tests/membros/ferramentas.sql; do
+  supabase/tests/membros/ferramentas.sql \
+  supabase/migrations/20261021130623_membros_crm_suspensao_licenca.sql \
+  supabase/tests/membros/crm_suspensao.sql; do
   run_sql "$source"
 done
 # A real server restart verifies that progress and access were persisted.
 docker restart --time 10 "$container_id" >/dev/null
 wait_ready
 run_sql supabase/tests/membros/persistencia.sql
-echo 'Members SQL permissions, previews, tools and restart persistence passed.'
+echo 'Members SQL permissions, previews, tools, CRM suspension and restart persistence passed.'
