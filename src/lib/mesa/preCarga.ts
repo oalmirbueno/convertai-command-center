@@ -50,6 +50,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       mes: () => import("@/components/mesa/AbaMes"),
       campanhas: () => import("@/components/mesa/AbaCampanhas"),
       estudio: () => import("@/components/mesa/AbaEstudio"),
+      organizacao: () => import("@/components/mesa/AbaOrganizacao"),
       entrega: () => import("@/components/mesa/AbaEntrega"),
     },
     // Sem cliente, a Mesa abre na fila de prioridades da equipe.

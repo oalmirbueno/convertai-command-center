@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Brain, Building2, Calculator, CalendarDays, Check, ChevronsUpDown, GalleryVerticalEnd, Instagram, ListOrdered, Loader2, Megaphone, PackageCheck, Palette, Search } from "lucide-react";
+import { Brain, Building2, Calculator, CalendarDays, Check, ChevronsUpDown, Folder, GalleryVerticalEnd, Instagram, ListOrdered, Loader2, Megaphone, PackageCheck, Palette, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -27,7 +27,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
  *
  * Traz para dentro do painel o calendário e a arte que eram feitos fora.
- * Sete abas em sequência (Contexto, Redes, Stories, Mês, Campanhas, Estúdio, Entrega) e uma
+ * Abas em sequência (Contexto, Redes, Stories, Mês, Campanhas, Estúdio, Organização, Entrega) e uma
  * barra fina fixa no topo (pedido do dono em 23/09, noite: sem o título
  * grande, tudo numa faixa só): seletor de cliente com busca, as etapas e o
  * saldo e o gasto pequenos, com recarga, modelos e chaves em botões curtos. Endereço completo:
@@ -53,6 +53,7 @@ const carregarStories = () => import("@/components/mesa/AbaStories");
 const carregarMes = () => import("@/components/mesa/AbaMes");
 const carregarCampanhas = () => import("@/components/mesa/AbaCampanhas");
 const carregarEstudio = () => import("@/components/mesa/AbaEstudio");
+const carregarOrganizacao = () => import("@/components/mesa/AbaOrganizacao");
 const carregarEntrega = () => import("@/components/mesa/AbaEntrega");
 // Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts): o que já
 // baixou antes do clique aparece direto, sem esqueleto.
@@ -62,6 +63,7 @@ const AbaStories = lazyComPreCarga("mesa/stories", carregarStories);
 const AbaMes = lazyComPreCarga("mesa/mes", carregarMes);
 const AbaCampanhas = lazyComPreCarga("mesa/campanhas", carregarCampanhas);
 const AbaEstudio = lazyComPreCarga("mesa/estudio", carregarEstudio);
+const AbaOrganizacao = lazyComPreCarga("mesa/organizacao", carregarOrganizacao);
 const AbaEntrega = lazyComPreCarga("mesa/entrega", carregarEntrega);
 // Janelas do admin: só baixam na primeira vez que abrem.
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
@@ -80,6 +82,7 @@ const ABAS = [
   { valor: "mes", rotulo: "Mês" },
   { valor: "campanhas", rotulo: "Campanhas" },
   { valor: "estudio", rotulo: "Estúdio" },
+  { valor: "organizacao", rotulo: "Organização" },
   { valor: "entrega", rotulo: "Entrega" },
 ] as const;
 
@@ -98,6 +101,7 @@ const ICONES_DAS_ABAS: Record<Aba, ReactNode> = {
   mes: <CalendarDays className="h-4 w-4" />,
   campanhas: <Megaphone className="h-4 w-4" />,
   estudio: <Palette className="h-4 w-4" />,
+  organizacao: <Folder className="h-4 w-4" />,
   entrega: <PackageCheck className="h-4 w-4" />,
 };
 
@@ -444,7 +448,7 @@ export default function MesaDoCliente() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const aba of [AbaContexto, AbaInstagram, AbaStories, AbaMes, AbaCampanhas, AbaEstudio, AbaEntrega]) {
+        for (const aba of [AbaContexto, AbaInstagram, AbaStories, AbaMes, AbaCampanhas, AbaEstudio, AbaOrganizacao, AbaEntrega]) {
           aba.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a aba abrir */
           });
@@ -672,6 +676,7 @@ export default function MesaDoCliente() {
               {aba === "entrega" && (
                 <AbaEntrega mes={mes} onMes={(m) => mudar({ mes: m })} onAbrir={(id) => mudar({ aba: "estudio", task: id })} />
               )}
+              {aba === "organizacao" && <AbaOrganizacao onAbrirMes={() => mudar({ aba: "mes", task: null })} />}
             </Suspense>
           </div>
 

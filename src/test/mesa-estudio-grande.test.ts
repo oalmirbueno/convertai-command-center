@@ -435,7 +435,8 @@ describe("foto real composta (fotos_livres)", () => {
 
   it("a ferramenta Fotos está na barra do estúdio e grava pelo configurar da lâmina", () => {
     const estudio = ler("src/components/mesa/AbaEstudio.tsx");
-    expect(estudio).toContain('producao: ["lamina", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
+    // Profile acrescenta Template sem retirar Fotos nem mudar a sequência das ferramentas existentes.
+    expect(estudio).toContain('producao: ["lamina", "template", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
     expect(estudio).toContain("onSalvar={(corpo) => configurar(corpo)}");
     expect(estudio).toContain('await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });');
     // O trabalho devolvido entra no cache na hora: a escolha aparece na lâmina sem esperar a lista do mês.

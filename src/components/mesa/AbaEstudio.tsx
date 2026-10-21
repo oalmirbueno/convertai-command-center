@@ -11,6 +11,7 @@ import {
   Hash,
   ImagePlus,
   Layers,
+  LayoutTemplate,
   ListChecks,
   Loader2,
   Lock,
@@ -202,6 +203,7 @@ import { superficie, juntar } from "@/components/sistema/estilos";
  */
 
 const EstudioDaPauta = lazy(() => import("./EstudioDaPauta"));
+const TemplateProfileEditor = lazy(() => import("./profile/TemplateProfileEditor"));
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
@@ -253,11 +255,12 @@ export function precosPorQualidade(
 }
 
 type Filtro = FiltroDoEstudio;
-type Ferramenta = "lamina" | "diretor" | "fotos" | "referencias" | "conjunto" | "legenda" | "entrega" | "post" | "pauta";
+type Ferramenta = "lamina" | "template" | "diretor" | "fotos" | "referencias" | "conjunto" | "legenda" | "entrega" | "post" | "pauta";
 type EstadoDoItem = "producao" | "agenda" | "preparar";
 
 const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typeof PenLine }> = {
   lamina: { rotulo: "Lâmina", dica: "Texto, conferência, ajustes e versões da lâmina escolhida", icone: PenLine },
+  template: { rotulo: "Template", dica: "Profile: Twitter ou publicação Instagram com perfil e fotos reais", icone: LayoutTemplate },
   diretor: { rotulo: "Diretor", dica: "Conversar com o diretor de arte: estilo, cenário, luz e cores, com mudanças que você aplica com um clique", icone: MessageSquare },
   fotos: { rotulo: "Fotos", dica: "Fotos reais para compor: fundo, pessoa ou objeto (cole com Ctrl+V)", icone: ImagePlus },
   referencias: { rotulo: "Referências", dica: "Referências que o gerador segue de perto, com a identidade da marca", icone: Bookmark },
@@ -269,7 +272,7 @@ const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typ
 };
 
 export const FERRAMENTAS_DO_ESTADO: Record<EstadoDoItem, Ferramenta[]> = {
-  producao: ["lamina", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"],
+  producao: ["lamina", "template", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"],
   agenda: ["post"],
   preparar: ["pauta"],
 };
@@ -1945,6 +1948,8 @@ export function DetalheDoItem({
       onRefazer={(ordens) => gerarVarias(ordens)}
       onAtualizar={atualizar}
       executarPasso={executarPassoDoPlano}
+      onAbrirTemplate={ehPostDeFotos(trabalho.direcao) ? undefined : () => abrirFerramenta("template")}
+      onAbrirFotos={() => abrirFerramenta("fotos")}
       className="h-full"
     />
   ) : null;
@@ -2265,6 +2270,19 @@ export function DetalheDoItem({
     switch (f) {
       case "lamina":
         return ferramentaLamina;
+      case "template":
+        return trabalho && cardSelecionado ? (
+          <Suspense fallback={<p className="text-[12px] text-muted-foreground">Abrindo templates…</p>}>
+            <TemplateProfileEditor
+              key={`${clientId}:${marcaDaMesa?.id || "-"}:${trabalho.id}:${cardSelecionado.ordem}`}
+              trabalho={trabalho}
+              card={cardSelecionado}
+              bloqueado={entregue || algoGerando || entregando}
+              onMudou={atualizar}
+              onAbrirFotos={() => abrirFerramenta("fotos", false)}
+            />
+          </Suspense>
+        ) : <p className="text-[12px] text-muted-foreground">Prepare a pauta e escolha uma lâmina para usar um template.</p>;
       case "diretor":
         return ferramentaDiretor;
       case "fotos":

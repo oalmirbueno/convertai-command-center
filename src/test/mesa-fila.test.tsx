@@ -445,8 +445,8 @@ describe("Mesa: fila na entrada e botões no topo", () => {
     expect((screen.getByRole("combobox", { name: "Cliente" }) as HTMLSelectElement).value).toBe(A);
 
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa" });
-    // 20/10/2026: sete etapas, Stories logo depois de Redes.
-    expect(Array.from(nav.querySelectorAll("[data-etapa]")).map((b) => b.getAttribute("data-etapa"))).toEqual(["contexto", "instagram", "stories", "mes", "campanhas", "estudio", "entrega"]);
+    // 21/10/2026: oito etapas, Organização depois de Estúdio; todas as etapas anteriores conservam sua ordem.
+    expect(Array.from(nav.querySelectorAll("[data-etapa]")).map((b) => b.getAttribute("data-etapa"))).toEqual(["contexto", "instagram", "stories", "mes", "campanhas", "estudio", "organizacao", "entrega"]);
     fireEvent.click(within(nav).getByRole("button", { name: /Entrega/ }));
     await waitFor(() => expect(screen.getByTestId("endereco").textContent).not.toContain("painel="));
     expect(await screen.findByText("aba entrega")).toBeTruthy();

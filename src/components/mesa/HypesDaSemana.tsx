@@ -7,7 +7,8 @@ import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Cronometro } from "./Cronometro";
-import { ganchoDaDescricao, hypeNaAgenda } from "./momentoDoGancho";
+import { ganchoDaDescricao } from "./momentoDoGancho";
+import { dadosDoTrendy, filtrarTrendy, FILTROS_INICIAIS_DO_TRENDY, FORMATOS_DO_TRENDY, itensDoTrendy, type FiltrosDoTrendy, type FormatoDoTrendy, type TipoDoTrendy } from "./trendy";
 import { supabase } from "@/integrations/supabase/client";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
 import {
@@ -126,6 +127,11 @@ function CartaoDoHype({
         </p>
       )}
       {hype.o_que_e && <p title={hype.o_que_e} className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{hype.o_que_e}</p>}
+      {link && (
+        <a href={link} target="_blank" rel="noopener noreferrer" aria-label={`Ver fonte de ${hype.titulo}`} className="mt-1.5 inline-flex max-w-full items-center self-start text-[11px] text-primary hover:underline">
+          <span className="truncate">{dominioDoLink(link)}</span><ExternalLink className="ml-1 h-3 w-3 shrink-0" aria-hidden="true" />
+        </a>
+      )}
       {detalhes && (
         <dl className="mt-2 space-y-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere]">
           {hype.por_que_agora && (
@@ -147,14 +153,6 @@ function CartaoDoHype({
                   <ol className="mt-1 list-decimal space-y-0.5 pl-4">{hype.pauta.laminas.map((l, i) => <li key={i}>{l}</li>)}</ol>
                 )}
               </dd>
-            </div>
-          )}
-          {link && (
-            <div>
-              <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center text-[12px] text-primary hover:underline">
-                <span className="truncate">{dominioDoLink(link)}</span>
-                <ExternalLink className="ml-1 h-3 w-3 shrink-0" />
-              </a>
             </div>
           )}
         </dl>
@@ -201,21 +199,29 @@ export default function HypesDaSemana({
   // Recolher padronizado (TituloRecolhivel): lembrado por cliente.
   const [recolhido, setRecolhido] = useRecolhido(`mesa:mes:hypes:${clientId}`, lerRecolhido());
   const [todos, setTodos] = useState(false);
+  const [escolha, setEscolha] = useState<{ clientId: string; filtros: FiltrosDoTrendy }>({ clientId, filtros: FILTROS_INICIAIS_DO_TRENDY });
+  const filtros = escolha.clientId === clientId ? escolha.filtros : FILTROS_INICIAIS_DO_TRENDY;
+  const mudarFiltros = (campos: Partial<FiltrosDoTrendy>) => {
+    setEscolha({ clientId, filtros: { ...filtros, ...campos } });
+    setTodos(false);
+  };
   const [buscandoDesde, setBuscandoDesde] = useState<number | null>(null);
 
   const hypes = useQuery({ queryKey: chaves.hypes(clientId), queryFn: () => lerHypes(clientId) });
   const naAgenda = useQuery({ queryKey: ["mesa", "hypes-na-agenda", clientId], queryFn: () => lerGanchosNaAgenda(clientId), staleTime: 30_000, retry: false });
   const semanaAtual = segundaDaSemanaIso(hojeIso());
-  const dados = hypes.data || null;
+  const dados = dadosDoTrendy(hypes.data, clientId);
   const daSemana = !!dados && dados.semana === semanaAtual;
   const itens = dados ? dados.itens : [];
   // O índice original segue junto: "Criar campanha" aponta o item certo da lista gravada.
   // O que já virou conteúdo na agenda sai da lista (o índice original segue para o "Criar campanha").
   const ganchos = naAgenda.data || [];
-  const comIndice = itens.map((h, indice) => ({ h, indice })).filter((x) => !hypeNaAgenda(x.h.titulo, ganchos));
+  const comIndice = itensDoTrendy(itens, ganchos);
   const jaNaAgenda = itens.length - comIndice.length;
-  const doMomento = comIndice.filter((x) => x.h.tipo !== "nicho");
-  const doNicho = comIndice.filter((x) => x.h.tipo === "nicho");
+  const filtrados = filtrarTrendy(comIndice, filtros);
+  const doMomento = filtrados.filter((x) => x.h.tipo !== "nicho");
+  const doNicho = filtrados.filter((x) => x.h.tipo === "nicho");
+  const temFiltro = filtros.tipo !== "todos" || filtros.formato !== "todos" || !!filtros.busca.trim();
 
   const alternar = () => setRecolhido(!recolhido);
 
@@ -241,8 +247,7 @@ export default function HypesDaSemana({
     : "";
   // Uma linha de estado: quantos e de quando (à vista também com o bloco recolhido).
   const linhaDeEstado = [
-    doMomento.length ? `${doMomento.length} ${doMomento.length === 1 ? "hype" : "hypes"}` : "",
-    doNicho.length ? `${doNicho.length} em alta no nicho` : "",
+    comIndice.length ? `${comIndice.length} sugestões` : "",
     jaNaAgenda ? `${jaNaAgenda} já na agenda` : "",
     dados ? (daSemana ? rotuloQuando : `semana de ${periodoCurto(dados.semana)}`) : "",
   ]
@@ -251,9 +256,9 @@ export default function HypesDaSemana({
 
   return (
     // Seção sem caixa (docs/design/SISTEMA.md): título de seção, ação à direita, conteúdo logo abaixo.
-    <section className="min-w-0" aria-label="Hypes da semana">
+    <section className="min-w-0" aria-label="Trendy" data-trendy-client={clientId}>
       <CabecalhoDeSecao
-        titulo="Hypes da semana"
+        titulo="Trendy"
         icone={<Flame className="h-4 w-4" />}
         truncar
         descricao={linhaDeEstado || undefined}
@@ -304,6 +309,23 @@ export default function HypesDaSemana({
             <p className="text-[12px] text-muted-foreground">Estes são da semana de {periodoCurto(dados.semana)}. Busque os desta semana.</p>
           )}
           {dados && dados.resumo && <p className="text-[13px] leading-relaxed [overflow-wrap:anywhere]">{dados.resumo}</p>}
+          {dados && comIndice.length > 0 && (
+            <div className="flex flex-wrap items-end gap-2" aria-label="Filtros do Trendy">
+              <label className="min-w-40 flex-1 text-[11px] text-muted-foreground">Buscar nas sugestões
+                <input type="search" value={filtros.busca} onChange={(e) => mudarFiltros({ busca: e.target.value })} placeholder="Assunto, gancho ou fonte" className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-[12px] text-foreground" />
+              </label>
+              <label className="text-[11px] text-muted-foreground">Tipo
+                <select value={filtros.tipo} onChange={(e) => mudarFiltros({ tipo: e.target.value as TipoDoTrendy })} className="mt-1 block h-8 rounded-md border border-border bg-background px-2 text-[12px] text-foreground"><option value="todos">Todos</option><option value="momento">Momento</option><option value="nicho">Nicho</option></select>
+              </label>
+              <label className="text-[11px] text-muted-foreground">Formato
+                <select value={filtros.formato} onChange={(e) => mudarFiltros({ formato: e.target.value as FormatoDoTrendy })} className="mt-1 block h-8 rounded-md border border-border bg-background px-2 text-[12px] text-foreground">{FORMATOS_DO_TRENDY.map((f) => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}</select>
+              </label>
+              {temFiltro && <button type="button" onClick={() => mudarFiltros(FILTROS_INICIAIS_DO_TRENDY)} className="h-8 text-[12px] text-primary hover:underline">Limpar filtros</button>}
+              <p role="status" className="w-full text-[11px] text-muted-foreground">{filtrados.length} de {comIndice.length} sugestões{rotuloQuando ? ` · ${rotuloQuando}` : ""}</p>
+            </div>
+          )}
+          {dados && comIndice.length > 0 && !filtrados.length && <p className="text-[12px] text-muted-foreground">Nenhuma sugestão com estes filtros.</p>}
+          {dados && itens.length > 0 && !comIndice.length && <p className="text-[12px] text-muted-foreground">As sugestões desta pesquisa já estão na agenda.</p>}
           {[
             { chave: "momento", titulo: "Hypes do momento", lista: doMomento },
             { chave: "nicho", titulo: "Em alta no nicho", lista: doNicho },
@@ -334,7 +356,7 @@ export default function HypesDaSemana({
           })}
           {(doMomento.length > VISIVEIS || doNicho.length > VISIVEIS) && (
             <button type="button" onClick={() => setTodos((v) => !v)} className="text-[12px] font-medium text-primary hover:underline">
-              {todos ? "Mostrar menos" : `Ver todos (${itens.length})`}
+              {todos ? "Mostrar menos" : `Ver todos (${filtrados.length})`}
             </button>
           )}
         </div>

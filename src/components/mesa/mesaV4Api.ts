@@ -434,6 +434,8 @@ export interface CorpoDoPedido {
   anexos?: string[];
   campanhaId?: string | null;
   dataInicio?: string;
+  /** Janela explícita do Novo calendário, limitada ao mês selecionado; ausência preserva pedidos antigos. */
+  dataFim?: string;
   /** 02/10: as linhas do lote do "Criar conteúdos" (data, formato e direção da foto valem exatamente). */
   pecas?: Array<{ data: string; formato: string; tema: string; foto?: DirecaoDeFoto | null; video?: DirecaoDeVideoDaPauta | null }>;
   /**
@@ -451,6 +453,7 @@ export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
   if (p.anexos && p.anexos.length) corpo.anexos = p.anexos.slice(0, MAX_ANEXOS);
   if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.dataInicio) corpo.data_inicio = p.dataInicio;
+  if (p.dataFim) corpo.data_fim = p.dataFim;
   if (p.mes) corpo.mes = p.mes.slice(0, 7);
   if (p.rotear) corpo.rotear = true;
   if (p.pecas && p.pecas.length) corpo.pecas = p.pecas.slice(0, 12);

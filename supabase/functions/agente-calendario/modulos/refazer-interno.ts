@@ -13,6 +13,7 @@
 
 import type { FormatoDoMes } from "./peca-de-foto.ts";
 import { formatoDoMes, normalizarDirecaoDeFoto, type DirecaoDeFoto } from "./peca-de-foto.ts";
+import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./periodo-do-pedido.ts";
 
 export const ACAO_REFAZER_INTERNO = "refazer_proposta_interno";
 
@@ -92,6 +93,17 @@ export function linhasDaPropostaAntiga(itens: ItemAntigo[]): LinhaRefeita[] {
   return saida.sort((a, b) => a.data.localeCompare(b.data));
 }
 
+/** Novo calendário conserva sua janela também ao refazer; marcador incompleto nunca vira o mês inteiro. */
+export function periodoGuardadoDaProposta(parametros: Record<string, unknown> | null): { inicio: string; fim: string; mes: string } | null {
+  const bruto = parametros?.periodo_pedido;
+  if (bruto === undefined) return null;
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) throw new ErroDoPeriodoDoPedido("O período guardado da proposta está inválido. Gere uma nova proposta.");
+  const periodo = bruto as { inicio?: unknown; fim?: unknown };
+  if (typeof periodo.inicio !== "string" || periodo.fim === undefined) throw new ErroDoPeriodoDoPedido("O período guardado da proposta está incompleto. Gere uma nova proposta.");
+  const janela = janelaDoPedidoComLimite(periodo.inicio, "", periodo.fim);
+  return { inicio: periodo.inicio, fim: janela.fim, mes: periodo.inicio.slice(0, 7) };
+}
+
 /**
  * Corpo do pedido livre de um lote refeito: os parâmetros guardados da
  * proposta antiga (anexos, campanha, modelo, projeto) e as linhas do lote
@@ -108,6 +120,13 @@ export function corpoDoLoteRefeito(
   if (typeof p.campanha_id === "string" && p.campanha_id) corpo.campanha_id = p.campanha_id;
   if (typeof p.modelo === "string" && p.modelo) corpo.modelo_id = p.modelo;
   if (antiga.project_id) corpo.project_id = antiga.project_id;
+  const periodo = periodoGuardadoDaProposta(p);
+  if (periodo) {
+    conferirDatasDoPeriodo(pecas, periodo.inicio, periodo.fim);
+    corpo.data_inicio = periodo.inicio;
+    corpo.data_fim = periodo.fim;
+    corpo.mes = periodo.mes;
+  }
   return corpo;
 }
 

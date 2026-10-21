@@ -1164,7 +1164,7 @@ describe("compatibilidade Safari 11 / Chrome 64, texto de tela e fotografia", ()
   it("grades da Mesa Foto têm min-w-0 (celular sem rolagem lateral) e as queries guardam só JSON", () => {
     arquivos.forEach((a) => {
       const texto = readFileSync(a, "utf8");
-      const grades = texto.match(/className="[^"]*\bgrid\b[^"]*"/g) || [];
+      const grades: string[] = texto.match(/className="[^"]*\bgrid\b[^"]*"/g) || [];
       grades.forEach((g) => {
         if (g.indexOf("grid-cols-") >= 0 && g.indexOf("min-w-0") < 0 && g.indexOf("grid-cols-2 gap-2\"") < 0 && g.indexOf("grid-cols-3 gap-0.5") < 0) {
           throw new Error(`${a.split(/[\\/]/).pop()}: grade sem min-w-0: ${g}`);

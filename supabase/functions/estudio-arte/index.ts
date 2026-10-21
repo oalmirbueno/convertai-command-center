@@ -2,9 +2,11 @@
  * estudio-arte: diretor de arte e gerador da Mesa do cliente
  * (docs/mesa-do-cliente/SPEC.md, secao 5).
  *
- * Regra do dono, sem excecao: o gerador de imagem desenha a lamina INTEIRA,
+ * No modo de arte por IA, o gerador de imagem desenha a lamina INTEIRA,
  * texto incluido. Esta funcao nunca desenha texto por cima da imagem nem monta
  * a lamina em camadas. Ajuste e edicao dentro do gerador, sobre a versao atual.
+ * Profile (21/10): opção separada de template determinístico escolhida pela
+ * equipe, com texto e fotos reais; salvar_template acrescenta o PNG final sem IA.
  *
  * Acoes (POST { acao, ... }), so equipe com acesso ao cliente:
  * - preparar { task_id, modelo_imagem_id?, qualidade? }: le o item da agenda,
@@ -570,6 +572,8 @@ import { acoesDasFotosNaAgenda, liberarItemParaArte } from "./fotos-na-agenda.ts
 import { acoesDaPublicacaoDaPeca, dataDoConteudo, horaComEspacoNoDia, type TrabalhoDaPublicacao } from "./publicacao-da-peca.ts";
 // Frente EN (28/09): entregar com três opções (pronto para agendar, aprovação, só Arquivos).
 import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-opcoes.ts";
+import { acoesDoTemplateProfile, type TemplateProfile } from "./modulos/template-profile.ts";
+import { acoesDasFontesReais, type FonteRealDoDiretor } from "./modulos/fontes-reais-do-diretor.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
 import {
   aplicarArquivosNasLaminas,
@@ -1274,6 +1278,11 @@ type VersaoCard = {
   uso_ids: string[];
   criado_em: string;
   criado_por: string;
+  /** Profile: nova versão composta pela equipe, sem geração de imagem. */
+  modo?: string;
+  template_profile?: TemplateProfile;
+  pedido_id?: string;
+  template_hash?: string;
 };
 
 type Trabalho = {
@@ -9098,9 +9107,10 @@ async function importarLink(ch: Chamador, corpo: Record<string, unknown>) {
 }
 
 /** GET de um link público com redirecionamento conferido a cada salto (só https público), tempo e teto de bytes. */
-async function buscarLinkSeguro(inicial: URL, maxBytes: number, aceitar: string, cortar = false): Promise<{ url: URL; bytes: Uint8Array } | null> {
+async function buscarLinkSeguro(inicial: URL, maxBytes: number, aceitar: string, cortar = false, permitir?: (url: URL) => boolean): Promise<{ url: URL; bytes: Uint8Array } | null> {
   let url: URL | null = inicial;
   for (let salto = 0; url && salto < 5; salto++) {
+    if (permitir && !permitir(url)) return null;
     if (!(await hostResolvePublico(url.hostname))) return null;
     let res: Response;
     try {
@@ -9682,6 +9692,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       evitar: c.evitar || null,
       foto_real: foto || (c.fotos_livres ?? []).some((f) => f.papel === "fundo") ? { apelido: rotuloDaFoto(c), resumo: foto ? resumoDaFoto(foto) : null, uso: usoDaFotoNaLamina(c) } : null,
       fotos_da_equipe: (c.fotos_livres ?? []).map((f) => ({ papel: f.papel, nota: f.nota ?? null, uso: usoDaFotoLivre(f) })),
+      // Biblioteca disponível no Profile; nenhuma destas fontes entra na geração automaticamente.
+      fontes_reais: ((c as CardDirecao & { fontes_reais?: FonteRealDoDiretor[] }).fontes_reais || []).map((f) => ({ nome: f.nome, tipo: f.tipo, fonte_url: f.fonte_url, licenca: f.licenca, autor: f.autor })),
       referencias_proprias: (c.referencias_ids ?? []).length,
       leva_logo: levaLogo(t, c.ordem),
       // Frente AG: o que está escrito hoje na arte (lido na conferência), sem as letras da logo.
@@ -11076,6 +11088,46 @@ async function processarFila(ch: Chamador, _corpo: Record<string, unknown>) {
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   preparar,
   configurar,
+  ...acoesDasFontesReais<Chamador, Trabalho>({
+    erro: (status, codigo, mensagem, detalhes) => new ErroEstudio(status, codigo, mensagem, detalhes),
+    json, trabalhoComAcesso, mutarTrabalho, jsonDoCommons,
+    buscarImagem: (url, limite, permitir) => buscarLinkSeguro(url, limite, "image/png,image/jpeg,image/webp", false, permitir),
+    validarImagem: (bytes, limite) => {
+      const mime = mimeDe(bytes);
+      if (defeitoDaImagem(bytes, limite) || (mime !== "image/png" && mime !== "image/jpeg" && mime !== "image/webp")) return null;
+      const dimensoes = dimensoesDoCabecalho(bytes);
+      if (!dimensoes || dimensoes.largura < 1 || dimensoes.altura < 1 || dimensoes.largura * dimensoes.altura > 40_000_000) return null;
+      return mime;
+    },
+    guardarImagem: async (t, bytes, mime) => {
+      const ext = mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
+      const caminho = `${t.client_id}/estudio/fontes-reais/${crypto.randomUUID()}.${ext}`;
+      const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: false });
+      if (error) throw new ErroEstudio(503, "imagem_real_nao_guardada", "Não foi possível guardar esta imagem. Tente novamente.");
+      return caminho;
+    },
+    descartarUpload: async (caminho) => { await servico().storage.from("mesa").remove([caminho]); },
+    ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
+  }),
+  // Composição Profile: mesmo trabalho, arquivos, autorização e entrega; nenhuma cobrança de IA.
+  ...acoesDoTemplateProfile<Chamador, Trabalho>({
+    erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem),
+    json,
+    trabalhoComAcesso,
+    mutarTrabalho,
+    salvarImagem: (t, ordem, proxima, png) => salvarNaMesa(t, ordem, proxima, png, "image/png"),
+    descartarUpload: async (caminho) => { await servico().storage.from("mesa").remove([caminho]); },
+    quadro: (t) => {
+      const formato = formatoDoPost(t.direcao.formato);
+      return { formato, ...QUADRO_DO_POST[formato].final };
+    },
+    ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
+    statusDepoisDeGerar: (t, ordem) => t.direcao.cards.every((c) => c.ordem === ordem || t.cards.some((v) => v.ordem === c.ordem)) ? "pronto" : "gerando",
+    atualizarTexto: (t, ordem, novoTexto) => ({
+      ...t.direcao,
+      cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: novoTexto, blocos: blocosDoTexto(novoTexto, c.funcao) } : c),
+    }),
+  }),
   preparar_fundo: prepararFundo,
   gerar_card: gerarCard,
   conferir_card: conferirCard,

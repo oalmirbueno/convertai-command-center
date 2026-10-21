@@ -84,9 +84,20 @@ export function normalizarAnexos(bruto: unknown, clientId: string): AnexoPedido[
   return saida;
 }
 
+/** Um print pode ser conteúdo: só a instrução explícita de usar intacto supera o diagnóstico. */
+export function pedePrintExato(pedido: string): boolean {
+  const p = String(pedido || "").toLowerCase();
+  if (/n[aã]o\s+(use|usa|utilize|coloque|coloca|insira|insere|aplique)/.test(p)) return false;
+  if (/(print|captura|screenshot|tela)[\s\S]{0,40}(para|pra)\s+(corrigir|diagnosticar|entender|analisar|mostrar (o )?erro)/.test(p)) return false;
+  const inserir = /(\buse\b|\busa\b|\busar\b|utiliz|coloc|insir|insere|ponha|p[oõ]e|apliqu)[\s\S]{0,100}(print|captura|screenshot|tela)/.test(p);
+  const intacto = /exatamente|\bigual\b|como est[aá]|intact|sem (redesenhar|refazer|alterar|mudar)/.test(p);
+  return inserir && intacto;
+}
+
 /** Papel pelas palavras do pedido (sem o Jev), ou null. */
 export function papelPelaRegra(pedido: string): PapelDoAnexo | null {
   const p = String(pedido || "").toLowerCase();
+  if (pedePrintExato(pedido)) return "exata";
   if (/(print|erro|errad|olha (o|isso|aqui)|t[aá] vendo|problema)/.test(p)) return "erro";
   if (/(s[oó] o rosto|us[a-z]* o rosto|outra pose|identidade)/.test(p)) return "rosto";
   if (/(logo|logomarca|marca do parceiro|patrocin)/.test(p)) return "logo";
@@ -104,10 +115,10 @@ export function perguntaDoPapelDoAnexo(i: number, nome: string) {
     criteria: {
       estilo: { what: "Referência de estilo: a arte deve ficar com a cara dela (luz, cor, textura, composição).", examples: ["deixa com essa cara", "quero nesse estilo", "nessa pegada"] },
       elemento: { what: "Elemento para inserir na arte como é: produto, ícone, objeto, selo.", examples: ["põe esse produto aqui", "coloca esse ícone no canto", "insere essa garrafa"] },
-      exata: { what: "Foto que entra exatamente como está, sem ser refeita.", examples: ["usa esta foto aqui, igual", "coloca essa foto exatamente assim"] },
+      exata: { what: "Foto, print ou captura que entra como conteúdo exatamente como está, sem ser refeita.", examples: ["usa esta foto aqui, igual", "coloca essa foto exatamente assim", "use este print exatamente, sem redesenhar"] },
       rosto: { what: "Foto de uma pessoa usada só pelo rosto (identidade), numa cena e pose novas.", examples: ["usa o rosto dele", "coloca ela em outra pose"] },
       logo: { what: "Logo ou marca para aplicar como está.", examples: ["põe essa logo embaixo", "a logo do patrocinador"] },
-      erro: { what: "Print ou captura mostrando o que está errado, para corrigir.", examples: ["olha o que está errado", "tá vendo esse erro?", "esse print mostra o problema"] },
+      erro: { what: "Print ou captura usado só para mostrar e corrigir um problema; não há pedido de inserir essa imagem intacta como conteúdo.", examples: ["olha o que está errado", "tá vendo esse erro?", "esse print mostra o problema"] },
     },
   };
 }
@@ -118,6 +129,8 @@ type Resposta = { choice?: string; confidence?: number };
 export function decidirPapeis(anexos: AnexoPedido[], respostas: Record<string, Resposta> | null, pedido: string): AnexoDoAjuste[] {
   return anexos.map((a, i) => {
     if (a.papel !== "auto") return { caminho: a.caminho || null, imagem_id: a.imagem_id || null, nome: a.nome || "imagem", papel: a.papel, papel_por: "equipe" };
+    // Um anexo e instrução inequívoca: o classificador não converte o conteúdo pedido em diagnóstico.
+    if (anexos.length === 1 && pedePrintExato(pedido)) return { caminho: a.caminho || null, imagem_id: a.imagem_id || null, nome: a.nome || "imagem", papel: "exata", papel_por: "regra" };
     const r = respostas ? respostas[`papel_${i + 1}`] : undefined;
     const doJev = r ? lerPapelDoAnexo(r.choice) : null;
     const c = r && typeof r.confidence === "number" ? r.confidence : null;

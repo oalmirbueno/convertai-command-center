@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, CalendarRange, Check, FilePlus2, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
+import { CalendarCheck2, CalendarPlus, CalendarRange, Check, FilePlus2, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -31,6 +31,7 @@ import DiagnosticoDoMes from "./DiagnosticoDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
+import PlanejarPeriodo from "./PlanejarPeriodo";
 import { atualizarAgenda, editarItemDaProposta, novoIdDaProposta, type CamposDoItem, type ItemProposto } from "./mesaV4Api";
 // 02/10: as publicações por semana (formato que troca, Mesa Foto ou Estúdio, título que edita no lugar).
 import SemanasDoMes from "./SemanasDoMes";
@@ -759,10 +760,12 @@ function PlanoDoMesEmDestaque({
   mes,
   onConversar,
   onRapido,
+  onPeriodo,
 }: {
   mes: string;
   onConversar: (modo: ModoDoAgente, mes: string) => void;
   onRapido?: () => void;
+  onPeriodo?: () => void;
 }) {
   const { clientId } = useMesa();
   const planos = useQuery({ queryKey: chavesDoPlano.planos(clientId), queryFn: () => lerPlanosCombinados(clientId) });
@@ -804,6 +807,7 @@ function PlanoDoMesEmDestaque({
         </div>
         {/* Ações só em ícone, na linha do título. Um primário por área (28/09): o da aba é o "Agente do mês" que flutua. */}
         <div className="ml-2 flex shrink-0 items-center">
+          {onPeriodo && <button type="button" className={botao.icone} onClick={onPeriodo} aria-label="Novo calendário" title="Novo calendário"><CalendarPlus className="h-4 w-4" /></button>}
           {onRapido && (
             <button type="button" className={botao.icone} onClick={onRapido} aria-label="Conteúdo rápido" title="Conteúdo rápido">
               <Zap className="h-4 w-4" />
@@ -876,6 +880,7 @@ export default function AbaMes({
   const mesDaUrl = params.get("mes") || "";
   const mes = MES_VALIDO.test(mesDaUrl) ? mesDaUrl : inicioDoMes();
   const [rapidoAberto, setRapidoAberto] = useState(false);
+  const [periodoAberto, setPeriodoAberto] = useState(false);
   const { clientId } = useMesa();
   /** Abrir no Estúdio: pela aba-mãe quando ela manda; senão pela URL, igual à Agenda do mês. */
   const abrirNoEstudio = (taskId: string, mesAlvo: string) => {
@@ -930,7 +935,9 @@ export default function AbaMes({
     <div className="min-w-0" data-agente="pop-up">
       <AreaDeTrabalho rotuloDoPrincipal="Mês" memoriaDaRolagem={`mesa:mes:${clientId}`}>
       <div className="min-w-0 space-y-6 pb-28">
-      <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} onRapido={() => setRapidoAberto(true)} />
+      <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} onRapido={() => setRapidoAberto(true)} onPeriodo={() => setPeriodoAberto(true)} />
+
+      <PlanejarPeriodo aberto={periodoAberto} onAbertoChange={setPeriodoAberto} mes={mes} onPedidoInicio={(p) => { setPendente(p); abrirAgente("criar", mes); }} onPedidoFim={() => setPendente(null)} />
 
       <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNoEstudio} onVerNoMes={verNoMes} />
 

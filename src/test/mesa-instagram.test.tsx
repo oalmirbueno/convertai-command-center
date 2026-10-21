@@ -390,16 +390,18 @@ describe("contrato da função mesa-instagram e da aba", () => {
     expect(f).toContain("corDoKitOuNulo(e.fundo, kit.paleta)");
   });
 
-  it("a Mesa tem sete abas, Redes (aba=instagram) logo depois de Contexto e Stories depois de Redes, com pré-carga", () => {
+  it("a Mesa tem oito abas, preserva Redes depois de Contexto e Stories depois de Redes, e inclui Organização com pré-carga", () => {
     expect(pagina).toContain('{ valor: "instagram", rotulo: "Redes" }');
     expect(pagina).toContain('{ valor: "stories", rotulo: "Stories" }');
     const abas = pagina.slice(pagina.indexOf("const ABAS = ["), pagina.indexOf("] as const;"));
     const ordem = (abas.match(/valor: "([a-z]+)"/g) || []).map((x) => x.replace(/valor: "|"/g, ""));
-    expect(ordem).toEqual(["contexto", "instagram", "stories", "mes", "campanhas", "estudio", "entrega"]);
+    expect(ordem).toEqual(["contexto", "instagram", "stories", "mes", "campanhas", "estudio", "organizacao", "entrega"]);
     expect(pagina).toContain('lazyComPreCarga("mesa/stories", carregarStories)');
     expect(ler("src/lib/mesa/preCarga.ts")).toContain('stories: () => import("@/components/mesa/AbaStories")');
     expect(pagina).toContain('lazyComPreCarga("mesa/instagram", carregarInstagram)');
     expect(ler("src/lib/mesa/preCarga.ts")).toContain('instagram: () => import("@/components/mesa/AbaInstagram")');
+    expect(pagina).toContain('lazyComPreCarga("mesa/organizacao", carregarOrganizacao)');
+    expect(ler("src/lib/mesa/preCarga.ts")).toContain('organizacao: () => import("@/components/mesa/AbaOrganizacao")');
   });
 
   it("o Contexto puxa a logo da foto do perfil pela função, com a conferência do fundo", () => {
