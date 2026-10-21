@@ -27,7 +27,10 @@ O pedido é trabalhar dentro dos nós: gerar conteúdos conectados, escolher mod
 - Primeira rodada visual: 38 testes React aprovados, incluindo troca de contexto e descarte de resposta atrasada.
 - PDF sintético de seis páginas verificado visualmente e por extração. Word conferido como OOXML; não houve renderização em LibreOffice.
 - Navegador local com os componentes reais e respostas de demonstração: leitura das conexões, recolhimento, abertura no celular, navegação de página para checkout e obrigado e download de PDF pelo botão.
-- Os testes antigos foram atualizados para os novos contratos, mantendo as verificações de conteúdo e ligações. A rodada final de interface, tipos e build deve constar com o resultado exato na descrição do PR.
+- Interface relevante: 23 arquivos e 272 casos na primeira validação; após corrigir três divergências, os quatro arquivos afetados passaram nos 58 casos repetidos. A bateria completa no CI aprovou 10.211 casos e apontou dois ajustes de contrato visual no exportador, corrigidos sem alterar os limites dos testes.
+- Compilação local aprovada (6.006 módulos). No CI também passaram a checagem completa de tipos, build, contratos SQL/pgTAP, testes MCP Deno, checagem das funções e compatibilidade Lovable MCP. `verify` e `generate` da compatibilidade passaram localmente, sem modificar manifest, artefatos ou lock.
+- Lint dos arquivos de interface alterados: 103 erros anteriores e 98 atuais, sem erro novo. Permanece um aviso novo de Fast Refresh na exportação conjunta do provedor e hook de prévias.
+- No teste geral de perfis, uma resposta HTTP 200 não pôde ser validada após navegação completa, e o diagnóstico antigo ocultava falhas de leitura do corpo. A coleta foi movida para a mesma resposta autenticada já obtida pelo guard local, antes de entregar ao navegador; sem segunda consulta, mudança de RLS ou redução das verificações. O resultado final dessa rodada deve constar no PR #95.
 - Sem geração paga ou gravação em dados reais nos testes deste lote.
 
 ## Limites e operação

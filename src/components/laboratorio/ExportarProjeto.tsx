@@ -34,7 +34,7 @@ export default function ExportarProjeto({ projeto, canvas, execucoes, clienteNom
     <JanelaCentral aberta={aberta} onFechar={() => setAberta(false)} titulo="Documentação do projeto" icone={<FileText className="h-4 w-4" />} largura="lg" ajuda="Leva o contexto, as configurações, os modelos, as ligações e os resultados disponíveis para continuar o trabalho. Não executa o funil nem publica nada. Arquivos são referências, sem credenciais ou links temporários. PDF e Word são documentos completos; Markdown e JSON ajudam outro agente a retomar a construção.">
       {documento ? <div className="space-y-4" data-documentacao-projeto="">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{documento.titulo}</span>
+          <span className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{documento.titulo}</span>
           <span className={texto.auxiliar}>{documento.totalNos} nós · {documento.totalExecucoes} execuções</span>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -46,8 +46,8 @@ export default function ExportarProjeto({ projeto, canvas, execucoes, clienteNom
         <button type="button" className={juntar(botao.discreto, "justify-start")} onClick={imprimir} disabled={ocupado}><Printer className="mr-2 h-4 w-4" aria-hidden="true" />Imprimir</button>
         {ocupado ? <p role="status" className={juntar(texto.corpo, "flex items-center")}><Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />Preparando documento</p> : null}
         <details className="rounded-lg bg-muted/40 p-3">
-          <summary className="cursor-pointer text-sm font-medium">Prévia do conteúdo</summary>
-          <pre className="mt-3 max-h-[45vh] overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed" tabIndex={0} aria-label="Prévia da documentação">{documento.markdown}</pre>
+          <summary className={juntar(texto.corpo, "cursor-pointer font-medium")}>Prévia do conteúdo</summary>
+          <pre className={juntar(texto.corpo, "mt-3 max-h-[45vh] overflow-auto whitespace-pre-wrap break-words")} tabIndex={0} aria-label="Prévia da documentação">{documento.markdown}</pre>
         </details>
       </div> : null}
     </JanelaCentral>

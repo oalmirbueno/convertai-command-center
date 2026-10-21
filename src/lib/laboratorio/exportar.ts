@@ -152,7 +152,7 @@ export function htmlParaImprimir(documento: DocumentoDoProjeto): string {
     const h = /^(#{1,4}) (.+)$/.exec(linha);
     return h ? `<h${h[1].length}>${escapar(h[2])}</h${h[1].length}>` : linha ? `<p>${escapar(linha)}</p>` : "";
   }).join("\n");
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>${escapar(documento.titulo)}</title><style>@page{size:A4;margin:20mm}body{font:11pt/1.5 Arial,sans-serif;color:#161616;margin:24px auto;max-width:820px}h1{font-size:24pt}h2{font-size:17pt;margin-top:24pt;border-bottom:1px solid #ddd;padding-bottom:5pt}h3{font-size:14pt;margin-top:19pt}h4{font-size:12pt;margin-top:14pt}h1,h2,h3,h4{break-after:avoid}p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 6pt;orphans:3;widows:3}@media print{body{margin:0;max-width:none}h2{break-before:auto}}</style></head><body>${corpo}</body></html>`;
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>${escapar(documento.titulo)}</title><style>@page{size:A4;margin:20mm}body{font:11pt/1.5 Arial,sans-serif;color:#161616;margin:24px auto;max-width:820px}h1{font-size:24pt}h2{font-size:17pt;margin-top:24pt;border-bottom:1px solid #ddd;padding-bottom:5pt}h3{font-size:14pt;margin-top:19pt}h4{font-size:12pt;margin-top:14pt}h1,h2,h3,h4{break-after:avoid}p {white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 6pt;orphans:3;widows:3}@media print{body{margin:0;max-width:none}h2{break-before:auto}}</style></head><body>${corpo}</body></html>`;
 }
 
 /** DOCX OOXML real, sem macros, HTML ativo, relações externas ou necessidade de outro serviço. */

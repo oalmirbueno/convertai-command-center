@@ -1,6 +1,7 @@
 import { test as base, expect, type BrowserContext } from "@playwright/test";
 import { CI_E2E_API_ORIGIN, CI_E2E_APP_ORIGIN } from "../../config/ci-e2e-environment";
 import { isClientHistoryRead } from "./read-contract";
+import { observedWorkTable, observeWorkReads, summarizeWorkRead, type WorkReadObservation } from "./work-reads";
 
 const HTTP_ORIGINS = new Set([CI_E2E_APP_ORIGIN, CI_E2E_API_ORIGIN]);
 const WS_ORIGINS = new Set(["ws://127.0.0.1:4173", "ws://127.0.0.1:54321"]);
@@ -29,6 +30,7 @@ function endpoint(raw: string): string {
 export interface EgressGuard {
   blocked: string[];
   unexpected: string[];
+  workReads: WorkReadObservation;
   expectBlocked(raw: string): void;
   close(): Promise<void>;
 }
@@ -39,6 +41,7 @@ export async function installEgressGuard(context: BrowserContext): Promise<Egres
   const guard: EgressGuard = {
     blocked: [],
     unexpected: [],
+    workReads: observeWorkReads(),
     expectBlocked(raw) {
       if (isLocalEndpoint(raw, "http") || isLocalEndpoint(raw, "ws")) {
         throw new Error("Expected-block probes must not authorize a local request.");
@@ -74,8 +77,9 @@ export async function installEgressGuard(context: BrowserContext): Promise<Egres
     const isApi = url.origin === CI_E2E_API_ORIGIN;
     const normalLoginPost = request.method() === "POST"
       && ["/auth/v1/token", "/auth/v1/logout", "/functions/v1/notify-admin"].includes(url.pathname);
-    // Do not inspect credential-bearing Auth bodies. Only this public history
-    // payload (UUID, date range, visibility flag) is parsed by the read guard.
+    // Never inspect credential-bearing Auth bodies. Only the reviewed public
+    // history payload is parsed from a request; synthetic work GET responses
+    // are summarized separately before fulfillment, without headers/session.
     const clientHistoryRead = isApi && url.pathname === "/rest/v1/rpc/movimentos_do_cliente"
       && isClientHistoryRead(request.method(), raw, request.postData());
     const outsideReadContract = isApi && request.method() !== "OPTIONS"
@@ -90,7 +94,8 @@ export async function installEgressGuard(context: BrowserContext): Promise<Egres
       await route.abort("blockedbyclient");
       return;
     }
-    try {
+    const workTable = guard.workReads.active ? observedWorkTable(request.method(), raw) : null;
+    const forwarding = (async () => {
       // Do not let Playwright's API client follow an allowed origin's redirect
       // to a remote endpoint. These password-login/read flows need no 3xx.
       const response = await route.fetch({ maxRedirects: 0, timeout: 30_000 });
@@ -98,9 +103,20 @@ export async function installEgressGuard(context: BrowserContext): Promise<Egres
         && response.headers().location) {
         block(new URL(response.headers().location, raw).href);
         await route.abort("blockedbyclient");
-        return;
+        return null;
       }
+      const read = workTable ? await summarizeWorkRead(workTable, raw, response) : null;
       await route.fulfill({ response });
+      return read;
+    })();
+    if (workTable) {
+      guard.workReads.track(workTable, raw, forwarding.then((read) => {
+        if (!read) throw new Error("Observed work response is missing.");
+        return read;
+      }));
+    }
+    try {
+      await forwarding;
     } catch {
       if (closing) return;
       guard.unexpected.push("local-request-failed:" + endpoint(raw));
