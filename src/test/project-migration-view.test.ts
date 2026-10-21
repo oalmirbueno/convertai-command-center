@@ -61,6 +61,33 @@ const plan = (entries = baseline().document.entries) =>
   planProjectMigrationView({ ...options, ledgerCsv: csv(entries) });
 
 describe("reviewed project forward-only migration view", () => {
+  it("includes the exact current CRM renewal source without changing the historical fixture", () => {
+    const current = loadReviewedProjectBaseline({ projectRef: reviewedProjectRef });
+    const view = planProjectMigrationView({
+      projectRef: reviewedProjectRef,
+      ledgerCsv: csv(current.document.entries),
+    });
+    expect(view).toMatchObject({
+      status: "pending",
+      actual_count: 389,
+      expected_count: 391,
+      reviewed_count: 389,
+      sentinel_count: 389,
+      pending_versions: ["20261021130623", "20261021154113"],
+    });
+    expect(view.files).toHaveLength(391);
+    const renewal = view.files.find((file) => file.version === "20261021154113")!;
+    expect(renewal.kind).toBe("pending");
+    expect(renewal.filename).toBe("20261021154113_membros_crm_renovacao_manual.sql");
+    expect(renewal.bytes).toEqual(readFileSync(resolve(repoRoot, "supabase/migrations", renewal.filename)));
+    expect(current.document.pending_migrations.at(-1)).toMatchObject({
+      version: "20261021154113",
+      local_sha256: "9b40e677ddc3d07c20b7b47ff039b46c56e71dee60ae16f65d4725ef33ca6c45",
+      statements_sha256: "adc0a5bba160d667bea1f4771c550f4b425dceab1c0dd8ac7c811de916f457ff",
+      hash_mode: "supabase_cli_split",
+    });
+  });
+
   it("preserves all 206 historical versions as aborting sentinels and includes only the three reviewed SQL files", () => {
     const view = plan();
     expect(view).toMatchObject({
