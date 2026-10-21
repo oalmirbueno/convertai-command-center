@@ -3,7 +3,7 @@ import { fontesDoProfile, fonteDoProfile, pontoNaImagemProfile, urlDaFonteProfil
 import { desenharProfile } from "@/components/mesa/profile/renderProfile";
 import type { TemplateProfile } from "../../supabase/functions/estudio-arte/modulos/template-profile";
 
-const template: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Loja A", username: "loja.a", texto: "Abra as configurações do painel.", verificado: false, tema: "claro", tamanho_texto: 36 };
+const template: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Loja A", username: "loja.a", texto: "Abra as configurações do painel.", verificado: false, tema: "claro", cor_fundo: "#ffffff", tamanho_texto: 36, tamanho_foto: 76, espacamento: 30, arredondamento: 16 };
 function quadro() {
   const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), measureText: (s: string) => ({ width: s.length * 12 }) };
   return { canvas: { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement, ctx };

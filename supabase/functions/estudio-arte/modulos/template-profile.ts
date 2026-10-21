@@ -19,6 +19,8 @@ export interface TemplateProfile {
   arredondamento: number;
   foto_caminho?: string;
   imagem_caminho?: string;
+  /** Acervo do cliente já escolhido nesta lâmina; nunca um bucket informado pela tela. */
+  imagem_acervo_id?: string;
   /** Anotação sobre a imagem original; o renderizador converte pelo mesmo contain da foto. */
   destaque?: { x: number; y: number; rotulo: string };
 }
@@ -39,7 +41,7 @@ export interface TrabalhoDoTemplate {
   status: string;
   tipo?: string | null;
   entrega_status?: string | null;
-  direcao: { cards: Array<{ ordem: number; texto_exato: string }>; formato?: unknown };
+  direcao: { cards: Array<{ ordem: number; texto_exato: string; imagens_ids?: string[] }>; formato?: unknown };
   cards: VersaoDoTemplate[];
 }
 
@@ -114,6 +116,11 @@ export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Er
     if (!p.startsWith(`${clientId}/`) || /[\\%?#:]/.test(p) || p.split("/").some((s) => !s || s === "." || s === "..")) throw erro(400, "foto_template_invalida", "A imagem do template precisa pertencer a este cliente.");
     t[k] = p;
   }
+  if (o.imagem_acervo_id !== undefined && o.imagem_acervo_id !== null && o.imagem_acervo_id !== "") {
+    if (typeof o.imagem_acervo_id !== "string" || !UUID.test(o.imagem_acervo_id)) throw erro(400, "imagem_acervo_template_invalida", "Escolha uma imagem do acervo desta lâmina.");
+    if (t.imagem_caminho) throw erro(400, "fonte_template_ambigua", "Escolha uma única imagem principal para o template.");
+    t.imagem_acervo_id = o.imagem_acervo_id.toLowerCase();
+  }
   if (o.destaque !== undefined && o.destaque !== null) {
     const destaque = objeto(o.destaque);
     if (typeof destaque.x !== "number" || !Number.isFinite(destaque.x) || destaque.x < 0 || destaque.x > 1 || typeof destaque.y !== "number" || !Number.isFinite(destaque.y) || destaque.y < 0 || destaque.y > 1) throw erro(400, "destaque_template_invalido", "Escolha um ponto dentro da imagem para o destaque.");
@@ -122,6 +129,13 @@ export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Er
     t.destaque = { x: destaque.x, y: destaque.y, rotulo };
   }
   return t;
+}
+
+/** O ID só preserva a seleção existente; não concede leitura nem aceita bucket arbitrário. */
+function conferirFonteDoAcervo(t: TrabalhoDoTemplate, ordem: number, template: TemplateProfile, erro: Erro) {
+  if (!template.imagem_acervo_id) return;
+  const ids = t.direcao.cards.find((c) => c.ordem === ordem)?.imagens_ids || [];
+  if (!ids.some((id) => typeof id === "string" && id.toLowerCase() === template.imagem_acervo_id)) throw erro(409, "fonte_template_alterada", "A imagem escolhida não está mais no acervo desta lâmina. Atualize e selecione a fonte novamente.");
 }
 
 /** Limite antes de decodificar; assinatura, IHDR e estrutura antes de armazenar. */
@@ -199,6 +213,7 @@ export function acoesDoTemplateProfile<C extends { userId: string }, T extends T
     const anterior = replay(t);
     if (anterior) return resposta(t, anterior, true);
     editavel(t, corpo.ordem, corpo.versao_esperada, corpo.texto_base, d);
+    conferirFonteDoAcervo(t, corpo.ordem, template, d.erro);
     const ordem = corpo.ordem;
     const esperado = corpo.versao_esperada;
     const textoBase = corpo.texto_base;
@@ -218,6 +233,7 @@ export function acoesDoTemplateProfile<C extends { userId: string }, T extends T
           const repetido = replay(atual);
           if (repetido) throw new ReplayDoTemplate(atual, repetido);
           editavel(atual, ordem, esperado, textoBase, d);
+          conferirFonteDoAcervo(atual, ordem, template, d.erro);
           if (d.quadro(atual).formato !== quadro.formato) throw d.erro(409, "formato_template_alterado", "O formato do trabalho mudou. Gere a prévia novamente.");
         } catch (e) {
           if (e instanceof ReplayDoTemplate) throw e;

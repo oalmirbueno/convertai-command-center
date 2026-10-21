@@ -14,6 +14,7 @@ import {
 const CLIENTE = "11111111-1111-4111-8111-111111111111";
 const TRABALHO = "22222222-2222-4222-8222-222222222222";
 const PEDIDO = "33333333-3333-4333-8333-333333333333";
+const ACERVO = "44444444-4444-4444-8444-444444444444";
 const ch = { userId: "equipe" };
 const erro = (status: number, codigo: string, mensagem: string) => Object.assign(new Error(mensagem), { status, codigo });
 const template = () => ({ versao: 1, estilo: "twitter", nome: "Cliente", username: "@cliente", texto: "Conteúdo real\nSegunda linha", tamanho_texto: 36, cor_fundo: "#FFFFFF" });
@@ -65,7 +66,7 @@ function cenario() {
     statusDepoisDeGerar: () => "gerando",
     atualizarTexto: (t, ordem, texto) => ({ ...t.direcao, cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: texto } : c) }),
   };
-  return { deps, upload, acesso, descartar, ler: () => atual, mudar: (v: Partial<TrabalhoTeste>) => { atual = { ...atual, ...v }; }, salvar: (body = pedido()) => acoesDoTemplateProfile(deps).salvar_template(ch, body) };
+  return { deps, upload, acesso, descartar, ler: () => atual, mudar: (v: Partial<TrabalhoTeste>) => { atual = { ...atual, ...v }; }, salvar: (body: Record<string, unknown> = pedido()) => acoesDoTemplateProfile(deps).salvar_template(ch, body) };
 }
 
 beforeAll(() => { vi.stubGlobal("crypto", webcrypto); });
@@ -87,6 +88,13 @@ describe("contrato Profile", () => {
       expect(() => normalizarTemplateProfile({ ...template(), ...extra }, CLIENTE, erro)).toThrow();
     }
   });
+  it("preserva seleção por ID de acervo, sem aceitar bucket nem duas fontes principais", () => {
+    expect(normalizarTemplateProfile({ ...template(), imagem_acervo_id: ACERVO, bucket: "arbitrario" }, CLIENTE, erro)).toMatchObject({ imagem_acervo_id: ACERVO });
+    expect(normalizarTemplateProfile({ ...template(), imagem_acervo_id: ACERVO, bucket: "arbitrario" }, CLIENTE, erro)).not.toHaveProperty("bucket");
+    for (const imagem_acervo_id of ["não é UUID", "https://exemplo.com/foto.png", 123, `${CLIENTE}/foto.png`]) expect(() => normalizarTemplateProfile({ ...template(), imagem_acervo_id }, CLIENTE, erro)).toThrow();
+    expect(() => normalizarTemplateProfile({ ...template(), imagem_acervo_id: ACERVO, imagem_caminho: `${CLIENTE}/foto.png` }, CLIENTE, erro)).toThrow(/única imagem/);
+    expect(normalizarTemplateProfile({ ...template(), imagem_acervo_id: ACERVO, foto_caminho: `${CLIENTE}/avatar.png` }, CLIENTE, erro).foto_caminho).toBe(`${CLIENTE}/avatar.png`);
+  });
 });
 
 describe("PNG do Profile", () => {
@@ -107,6 +115,31 @@ describe("PNG do Profile", () => {
 });
 
 describe("salvar_template: acesso, versões e aprovação", () => {
+  it("guarda ID de acervo presente na lâmina com a anotação da imagem original", async () => {
+    const c = cenario();
+    c.mudar({ direcao: { ...c.ler().direcao, cards: [{ ordem: 1, texto_exato: "Original", imagens_ids: [ACERVO] }] } });
+    const r = await (await c.salvar({ ...pedido(), template: { ...template(), imagem_acervo_id: ACERVO, destaque: { x: .25, y: .75, rotulo: "Botão" } } })).json();
+    expect(r.trabalho.cards[0].template_profile).toMatchObject({ imagem_acervo_id: ACERVO, destaque: { x: .25, y: .75, rotulo: "Botão" } });
+    expect(r.trabalho.cards[0].template_profile).not.toHaveProperty("imagem_caminho");
+    expect(r.trabalho.direcao.cards[0].imagens_ids).toEqual([ACERVO]);
+  });
+  it("recusa ID fora da lâmina antes do upload, inclusive imagem de outra lâmina", async () => {
+    const c = cenario();
+    c.mudar({ direcao: { ...c.ler().direcao, cards: [{ ordem: 1, texto_exato: "Original" }, { ordem: 2, texto_exato: "Preservado", imagens_ids: [ACERVO] }] } });
+    await expect(c.salvar({ ...pedido(), template: { ...template(), imagem_acervo_id: ACERVO } })).rejects.toMatchObject({ status: 409, codigo: "fonte_template_alterada" });
+    expect(c.upload).not.toHaveBeenCalled();
+  });
+  it("reconfere ID de acervo dentro do CAS se a fonte mudar durante o upload", async () => {
+    const c = cenario();
+    c.mudar({ direcao: { ...c.ler().direcao, cards: [{ ordem: 1, texto_exato: "Original", imagens_ids: [ACERVO] }] } });
+    c.upload.mockImplementationOnce(async (_t, _o, v) => {
+      c.mudar({ direcao: { ...c.ler().direcao, cards: [{ ordem: 1, texto_exato: "Original", imagens_ids: [] }] } });
+      return { caminho: "upload-acervo-recusado", versao: v };
+    });
+    await expect(c.salvar({ ...pedido(), template: { ...template(), imagem_acervo_id: ACERVO } })).rejects.toMatchObject({ status: 409, codigo: "fonte_template_alterada" });
+    expect(c.ler().cards).toEqual([]);
+    expect(c.descartar).toHaveBeenCalledExactlyOnceWith("upload-acervo-recusado");
+  });
   it("acrescenta uma versão sem modelo de imagem ou custo, mantendo outras lâminas", async () => {
     const c = cenario();
     const r = await (await c.salvar()).json();

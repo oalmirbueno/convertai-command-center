@@ -16,7 +16,7 @@ import { useAcervo } from "../SeletorDoAcervo";
 import { formatoDoTrabalho, gravarTrabalhoNoCache, useEstadoGuardado, type TrabalhoGravado } from "../estudioUtil";
 import type { CardDaDirecao, CardGerado, Trabalho } from "../useItensDoMes";
 import { carregarImagemProfile, desenharProfile, type FormatoProfile, type RetanguloProfile } from "./renderProfile";
-import { fontesDoProfile, pontoNaImagemProfile } from "./fontesDoProfile";
+import { chaveDaFonteProfile, fontesDoProfile, pontoNaImagemProfile, referenciaDaFonteProfile, resolverFonteProfile, type FonteProfile } from "./fontesDoProfile";
 import type { TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
 
 const ultimaVersao = (trabalho: Trabalho, ordem: number): CardGerado | undefined => trabalho.cards.filter((v) => v.ordem === ordem).sort((a, b) => b.versao - a.versao)[0];
@@ -51,8 +51,9 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
   // IDs anexados pela equipe são escolhas explícitas, também no Livre. Isso não importa identidade.
   const acervo = useAcervo(!!trabalho.direcao.cards?.some((c) => c.imagens_ids?.length));
   const fontes = fontesDoProfile(card, acervo.data || [], mesa.clientId);
-  const fonte = fontes.find((f) => f.caminho === ajustes.imagem_caminho) || fontes[0];
-  const fonteMudou = !!ajustes.imagem_caminho && fonte?.caminho !== ajustes.imagem_caminho;
+  const preferida = resolverFonteProfile(fontes, ajustes);
+  const fonte = preferida || fontes[0];
+  const fonteMudou = !preferida && !!(ajustes.imagem_acervo_id || ajustes.imagem_caminho) || !!ajustes.destaque && !ajustes.imagem_acervo_id && !ajustes.imagem_caminho;
   const foto = useUrlDaMesa(fonte?.caminho, fonte?.bucket);
   const avatarGuardado = useUrlDaMesa(ajustes.foto_caminho);
   const nome = ajustes.nome ?? (!livre ? perfil.data?.perfil.nome : "") ?? "";
@@ -66,16 +67,15 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
     if (!contaId && contaSalvaId && contaSalvaId !== perfil.data?.conta_id) setContaId(contaSalvaId);
   }, [contaId, contaSalvaId, perfil.data?.conta_id]);
   const formato = formatoDoTrabalho(trabalho.direcao as { formato?: unknown }) as FormatoProfile;
-  const template: TemplateProfile = { ...ajustes, nome, username, ...(fonte?.bucket === "mesa" ? { imagem_caminho: fonte.caminho } : {}) };
-  if (fonte?.bucket !== "mesa") delete template.imagem_caminho;
+  const template: TemplateProfile = { ...ajustes, nome, username, ...referenciaDaFonteProfile(fonte) };
   if (fonteMudou) delete template.destaque;
   const assinatura = JSON.stringify(template);
   const fotosPendentes = (!!fonte && !foto.data) || (!!ajustes.foto_caminho && !avatarGuardado.data) || (!!card.imagens_ids?.length && acervo.isPending);
   const erroDasFontes = foto.isError || avatarGuardado.isError || acervo.isError;
   const rotuloValido = !!rotulo.trim() && rotulo.trim().length <= 60 && !/[\r\n\t<>]/.test(rotulo);
-  const escolherFonte = (caminho: string | undefined) => {
+  const escolherFonte = (escolhida: FonteProfile | undefined) => {
     setMarcando(false);
-    setAjustes((a) => ({ ...a, imagem_caminho: caminho, destaque: undefined }));
+    setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(escolhida), destaque: undefined }));
   };
 
   useEffect(() => {
@@ -102,14 +102,14 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
         if (!vivo.current) break;
         setAndamento(`Montando ${feitas + 1} de ${ordens.length}`);
         const disponiveis = fontesDoProfile(c, acervo.data || [], mesa.clientId);
-        const preferida = c.ordem === card.ordem ? fonte?.caminho : metadados(ultimaVersao(trabalho, c.ordem))?.imagem_caminho;
-        const f = disponiveis.find((s) => s.caminho === preferida) || disponiveis[0];
+        const salvoDoCard = metadados(ultimaVersao(trabalho, c.ordem));
+        const escolha = c.ordem === card.ordem ? template : salvoDoCard;
+        const f = resolverFonteProfile(disponiveis, escolha);
+        if (!f && (escolha?.imagem_acervo_id || escolha?.imagem_caminho)) throw new Error(`A imagem guardada saiu da lâmina ${c.ordem}. Escolha novamente em seu Template.`);
         if (c.imagens_ids?.length && !f && !c.fotos_livres?.length) throw new Error(`Escolha uma foto em Fotos para a lâmina ${c.ordem}.`);
-        const cfg: TemplateProfile = { ...template, texto: c.ordem === card.ordem ? template.texto : c.texto_exato || "" };
-        delete cfg.imagem_caminho;
-        // O ponto marcado pertence apenas à imagem desta lâmina, nunca às demais do lote.
-        if (c.ordem !== card.ordem) delete cfg.destaque;
-        if (f?.bucket === "mesa") cfg.imagem_caminho = f.caminho;
+        const cfg: TemplateProfile = { ...template, ...referenciaDaFonteProfile(f), texto: c.ordem === card.ordem ? template.texto : c.texto_exato || "" };
+        // Cada ponto pertence à sua própria fonte autorizada, inclusive ao montar o lote.
+        if (c.ordem !== card.ordem) cfg.destaque = f && (salvoDoCard?.imagem_acervo_id || salvoDoCard?.imagem_caminho) ? salvoDoCard.destaque : undefined;
         const imagemUrl = f ? await supabase.storage.from(f.bucket).createSignedUrl(f.caminho, 3600) : null;
         if (imagemUrl?.error) throw imagemUrl.error;
         const [avatar, imagem] = await Promise.all([avatarUrl ? carregarImagemProfile(avatarUrl) : null, imagemUrl?.data?.signedUrl ? carregarImagemProfile(imagemUrl.data.signedUrl) : null]);
@@ -122,7 +122,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
         if (!pedidoId) { pedidoId = crypto.randomUUID(); tentativas.current.set(chaveDoPedido, pedidoId); }
         const r = await chamarFuncao<{ trabalho: TrabalhoGravado }>("estudio-arte", { acao: "salvar_template", trabalho_id: trabalho.id, ordem: c.ordem, versao_esperada: versao, texto_base: c.texto_exato || "", pedido_id: pedidoId, png_base64: png, template: cfg });
         gravarTrabalhoNoCache(cache, mesa.clientId, r.trabalho);
-        if (vivo.current && c.ordem === card.ordem) setAjustes((a) => ({ ...a, texto_base: cfg.texto }));
+        if (vivo.current && c.ordem === card.ordem) setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(f), texto_base: cfg.texto }));
         feitas++;
       }
       if (vivo.current) toast.success(`${feitas === 1 ? "Template guardado como nova versão" : `${feitas} lâminas montadas`}`, { description: "Confira a peça na prancheta e continue em Entrega." });
@@ -161,9 +161,9 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
       <label className="block text-[12px]">Texto da lâmina<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={1200} onChange={(e) => mudar("texto", e.target.value)} rows={5} className="mt-1" /></label>
       {textoDesatualizado && <div role="status" className="space-y-2 rounded-md border p-2 text-[12px]"><p>O texto da lâmina mudou desde que você abriu este rascunho.</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setAjustes((a) => ({ ...a, texto: card.texto_exato || "", texto_base: card.texto_exato || "" }))}>Usar texto atual da lâmina</Button><Button size="sm" variant="ghost" onClick={() => setAjustes((a) => ({ ...a, texto_base: card.texto_exato || "" }))}>Manter minha edição</Button></div></div>}
       <div className="flex items-center justify-between gap-2 text-[12px]"><span>{fonte ? "Foto real da lâmina" : "Template sem imagem"}</span><Button size="sm" variant="outline" onClick={onAbrirFotos}>Escolher em Fotos</Button></div>
-      {fontes.length > 1 && <label className={`block ${texto.rotulo}`}>Imagem da lâmina<select aria-label="Imagem real do template" className={`mt-1 ${campo}`} value={fonte?.caminho || ""} onChange={(e) => escolherFonte(e.target.value)}>{fontes.map((f) => <option key={`${f.bucket}:${f.caminho}`} value={f.caminho}>{f.nome} · {f.origem}</option>)}</select></label>}
+      {fontes.length > 1 && <label className={`block ${texto.rotulo}`}>Imagem da lâmina<select aria-label="Imagem real do template" className={`mt-1 ${campo}`} value={fonte ? chaveDaFonteProfile(fonte) : ""} onChange={(e) => escolherFonte(fontes.find((f) => chaveDaFonteProfile(f) === e.target.value))}>{fontes.map((f) => <option key={chaveDaFonteProfile(f)} value={chaveDaFonteProfile(f)}>{f.nome} · {f.origem}</option>)}</select></label>}
       {fonte && <div className={texto.auxiliar}><span>{fonte.origem}: {fonte.nome}</span>{fonte.url && <> · <a href={fonte.url} target="_blank" rel="noopener noreferrer" className="underline">Abrir fonte da imagem</a></>}{fonte.autor && <span> · {fonte.autor}</span>}{fonte.licenca && <span> · {fonte.licenca}</span>}</div>}
-      {fonteMudou && <div role="status" className={texto.auxiliar}>A imagem guardada saiu desta lâmina. <Button size="sm" variant="outline" onClick={() => escolherFonte(fonte?.caminho)}>Usar imagem atual</Button></div>}
+      {fonteMudou && <div role="status" className={texto.auxiliar}>A imagem guardada saiu desta lâmina. <Button size="sm" variant="outline" onClick={() => escolherFonte(fonte)}>Usar imagem atual</Button></div>}
       {fonte && <div className="space-y-2">
         <div className="flex items-center space-x-1.5"><span className={texto.rotulo}>Indicar botão ou ponto</span><AjudaRecolhida rotulo="Como marcar um ponto na imagem">Escreva um rótulo e ative a marcação. Clique no botão ou ponto da imagem real na prévia. O marcador usa essa posição no PNG; trocar de imagem remove a marcação.</AjudaRecolhida></div>
         <Input aria-label="Rótulo do ponto na imagem" placeholder="Ex.: Clique em Configurações" maxLength={60} value={rotulo} onChange={(e) => { const valor = e.target.value; setRotulo(valor); if (ajustes.destaque) setAjustes((a) => ({ ...a, destaque: a.destaque ? { ...a.destaque, rotulo: valor } : undefined })); }} />
@@ -182,7 +182,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado, onMud
       const largura = limites.width - esquerda - direita, altura = limites.height - topo - baixo;
       const ponto = largura > 0 && altura > 0 ? pontoNaImagemProfile((e.clientX - limites.left - esquerda) * quadro.width / largura, (e.clientY - limites.top - topo) * quadro.height / altura, imagemNaPrevia.current) : null;
       if (!ponto) { setErro("Clique dentro da imagem real, fora das margens do template."); return; }
-      setAjustes((a) => ({ ...a, imagem_caminho: fonte?.caminho, destaque: { ...ponto, rotulo: rotulo.trim() } })); setMarcando(false);
+      setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(fonte), destaque: { ...ponto, rotulo: rotulo.trim() } })); setMarcando(false);
     }} />
     {pronto && <Button size="sm" variant="ghost" onClick={() => { try { setGrande(canvas.current?.toDataURL("image/png") || null); } catch { setErro("A prévia não pôde ser ampliada."); } }}><Expand className="mr-1 h-3.5 w-3.5" />Ver prévia grande</Button>}
     {!pronto && !erro && !fotosPendentes && !erroDasFontes && <p role="status" className="text-[12px] text-muted-foreground">Preencha nome, @perfil e texto para ver a prévia.</p>}

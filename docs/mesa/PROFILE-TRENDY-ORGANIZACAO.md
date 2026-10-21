@@ -19,7 +19,7 @@ Não foi encontrada opção de exportação MP4/Reels nos controles examinados d
 
 ## Como usar
 
-1. No Estúdio, prepare a pauta ou a arte rápida normalmente. A copy continua sendo criada pelo motor existente.
+1. No Estúdio, prepare a pauta ou a arte rápida normalmente. A copy continua sendo criada pelo motor existente. Para uma arte única que será montada pelo Profile, desligue **Gerar a arte logo em seguida** no pedido; assim você prepara a direção sem contratar antes uma geração de imagem.
 2. Abra **Template** na barra de ferramentas e escolha **Profile · Twitter** ou **Profile · Publicação Instagram**.
 3. Na Mesa de um cliente, o nome, @ e avatar vêm da leitura de Redes. Havendo várias contas, selecione a conta. O avatar só é usado quando pertence ao @ exibido. No Livre sem cliente, a identidade é preenchida pela equipe; a conta interna da agência não é herdada.
 4. Ajuste texto, tema, fundo, tamanho do perfil, espaçamento e cantos. O selo depende de escolha explícita; não é inferido de dados que não confirmam verificação.
