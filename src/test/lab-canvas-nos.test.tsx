@@ -448,12 +448,13 @@ describe("barra do nó, menu rápido e controles", () => {
     expect(ler("src/components/laboratorio/SeletorDeGatilho.tsx")).not.toMatch(/text-(xs|sm|base|lg)/);
   });
 
-  it("landing pronta: miniatura da página no nó", () => {
+  it("a miniatura sem arquivo salvo explica a pendência e não embute uma página externa", () => {
     const ex = normalizarExecucao({ id: "e2", no_id: "l1", tipo: "landing", status: "pronto", saida: { html_url: "https://site.test/p.html" } })!;
     render(<ResultadoDoNo execucao={ex} tipo="landing" largura={248} />);
     const mini = document.querySelector("[data-miniatura-da-landing]") as HTMLElement;
     expect(mini).not.toBeNull();
-    expect(mini.querySelector("iframe")!.getAttribute("src")).toBe("https://site.test/p.html");
+    expect(mini.querySelector("iframe")).toBeNull();
+    expect(mini.textContent).toContain("Esta prévia precisa do arquivo HTML salvo no projeto.");
   });
 
   it("código novo sem lookbehind, \\p{} nem grupo nomeado", () => {

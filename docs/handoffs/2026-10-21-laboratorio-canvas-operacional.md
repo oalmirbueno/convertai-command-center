@@ -23,7 +23,7 @@ O pedido é trabalhar dentro dos nós: gerar conteúdos conectados, escolher mod
 
 ## Verificação
 
-- Backend: 142 testes Deno, `deno check` do entrypoint e diff check aprovados.
+- Backend: 143 testes Deno, `deno check` do entrypoint e diff check aprovados, incluindo Landing legada e Página v4 ligadas ao Checkout.
 - Primeira rodada visual: 38 testes React aprovados, incluindo troca de contexto e descarte de resposta atrasada.
 - PDF sintético de seis páginas verificado visualmente e por extração. Word conferido como OOXML; não houve renderização em LibreOffice.
 - Navegador local com os componentes reais e respostas de demonstração: leitura das conexões, recolhimento, abertura no celular, navegação de página para checkout e obrigado e download de PDF pelo botão.
