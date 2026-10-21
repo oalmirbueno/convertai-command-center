@@ -49,6 +49,8 @@ Novo calendário usa o cliente e a marca abertos, o mês selecionado, um início
 
 O formulário chama `pedido_livre`, exibe custo pelo componente existente e abre a conversa com uma proposta. Não chama `gravar` nem executa a agenda automaticamente. `data_fim` é opcional no contrato; pedidos antigos conservam a janela anterior. Propostas novas registram `parametros.periodo_pedido`, usado também na revisão, gravação e ao refazer. Datas fora da janela são recusadas.
 
+Se o agente não propuser conteúdos para um período explícito válido, a explicação fica guardada na conversa, com quantidade zero e sem criar proposta vazia ou tarefas. A resposta reaproveita o uso de IA já realizado. JSON malformado e pedidos legados sem itens continuam retornando erro; falha ao guardar a explicação também é informada.
+
 Trendy lê as mesmas pesquisas e mantém as ações de criar conteúdo e campanha, inclusive o índice original após filtrar. A data exibida é a data real da pesquisa; não se inventa data de publicação da notícia. Os filtros não fazem nova chamada de IA.
 
 ## Contrato e custos

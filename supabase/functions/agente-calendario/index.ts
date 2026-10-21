@@ -1,5 +1,6 @@
 import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
 import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./modulos/periodo-do-pedido.ts";
+import { concluirPeriodoSemItens } from "./modulos/pedido-vazio-do-periodo.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
@@ -998,6 +999,7 @@ async function registrarMensagens(
   conversaId: string,
   clientId: string,
   msgs: Array<{ papel: "usuario" | "agente" | "sistema"; conteudo: string; uso_id?: string | null; anexos?: unknown[] }>,
+  exigirPersistencia = false,
 ) {
   const base = Date.now();
   const linhas = msgs
@@ -1018,6 +1020,7 @@ async function registrarMensagens(
     if (!error) return;
     console.error("[agente-calendario] mensagens nao gravadas", { conversa_id: conversaId, code: error.code, tentativa, motivo: String(error.message || "").slice(0, 200) });
   }
+  if (exigirPersistencia) throw new ErroHttp(503, "mensagem_nao_gravada", "O agente respondeu, mas não foi possível guardar a explicação na conversa. Atualize o histórico antes de fazer outro pedido.");
 }
 
 // ------------------------------------------------------------ contexto real
@@ -3997,7 +4000,18 @@ ${REGRAS_DOS_ITENS}`;
   // que veio de um hype grava o gancho exato em cada conteúdo (a tela casa pelo título, não pelo que o modelo escreveu).
   const ganchoDoPedido = ganchoDoHypeDoPedido(corpo.hype);
   if (ganchoDoPedido) for (const item of itens) item.gancho_do_momento = ganchoDoPedido;
-  if (!itens.length) throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
+  if (!itens.length) {
+    const semProposta = await concluirPeriodoSemItens({
+      periodo: corpo.data_fim !== undefined ? { inicio, fim } : null,
+      itensDoModelo: r.itens, respostaDoModelo: r.resposta, mensagem, conversaId, projectId, uso: s,
+      anexosDoUsuario: [
+        ...anexos.caminhos.map((c) => ({ caminho: c })),
+        ...(arquivosDoPedido.lidos.length || arquivosDoPedido.nao_lidos.length ? [resumoDosArquivos(arquivosDoPedido.lidos, arquivosDoPedido.nao_lidos, null)] : []),
+      ],
+    }, (mensagens) => registrarMensagens(servico, conversaId, clientId, mensagens, true));
+    if (semProposta) return json(semProposta);
+    throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
+  }
   itens.sort((a, b) => a.data.localeCompare(b.data));
   // 17/10 (dono: "de vez em quando ele posta 50 artes tudo no mesmo dia; o hype pode até ficar no mesmo dia, em
   // horário diferente; nunca jogar para dezembro"): a data que o pedido citou fica; o resto vai para o próximo
