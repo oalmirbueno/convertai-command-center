@@ -9,6 +9,14 @@ export type FerramentaMembro = {
   fim: string | null;
   disponivel?: boolean;
 };
+export function temLicencaDaFerramenta(ferramenta: FerramentaMembro): boolean {
+  const fim = ferramenta.fim ? Date.parse(ferramenta.fim) : NaN;
+  return (
+    ferramenta.disponivel !== false &&
+    Number.isFinite(fim) &&
+    fim > Date.now()
+  );
+}
 export type SessaoFerramenta = {
   conflito: boolean;
   mensagem?: string;

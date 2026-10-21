@@ -21,7 +21,8 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/lib/membros/api", () => ({
   mensagemDoErro: (e: Error) => e.message,
 }));
-vi.mock("@/lib/membros/ferramentas", () => ({
+vi.mock("@/lib/membros/ferramentas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/membros/ferramentas")>()),
   listarFerramentas: m.listar,
   abrirSessaoFerramenta: m.sessao,
   obterProvaCompartilhada: async () => "prova-de-teste",

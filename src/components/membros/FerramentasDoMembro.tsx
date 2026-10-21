@@ -1,7 +1,7 @@
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import TituloMembros from "./TituloMembros";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   LockKeyhole,
@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import { AjudaRecolhida } from "@/components/sistema";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
 import { mensagemDoErro } from "@/lib/membros/api";
 import {
-  listarFerramentas,
+  temLicencaDaFerramenta,
   abrirSessaoFerramenta,
   obterProvaCompartilhada,
   proximaResposta,
@@ -28,21 +29,31 @@ import CrmDoMembro from "./CrmDoMembro";
 export default function FerramentasDoMembro({
   somenteLeitura = false,
   conhecer,
+  catalogo,
+  produtoInicial,
+  aoVoltar,
 }: {
   somenteLeitura?: boolean;
   conhecer: (produto: string) => void;
+  catalogo?: ReturnType<typeof useCatalogoFerramentas>;
+  produtoInicial?: string | null;
+  aoVoltar?: () => void;
 }) {
   const { user } = useAuth();
-  const [selecionada, setSelecionada] = useState<FerramentaMembro | null>(null);
+  const [selecionada, setSelecionada] = useState<string | null>(null);
   const [aviso, setAviso] = useState("");
-  const dados = useQuery({
-    queryKey: ["membros", "ferramentas", user?.id],
-    queryFn: listarFerramentas,
-    enabled: !somenteLeitura,
-    retry: false,
-    staleTime: 0,
-    gcTime: 0,
-  });
+  const propria = useCatalogoFerramentas(user?.id, !somenteLeitura && !catalogo);
+  const dados = catalogo || propria;
+  const produto = produtoInicial || selecionada;
+  const ferramenta = dados.isSuccess
+    ? dados.data.find(
+        (f) => f.produto_id === produto && temLicencaDaFerramenta(f),
+      )
+    : undefined;
+  const voltar = () => {
+    setSelecionada(null);
+    aoVoltar?.();
+  };
   if (somenteLeitura)
     return (
       <section className="space-y-5">
@@ -56,13 +67,13 @@ export default function FerramentasDoMembro({
         <p>Ferramentas disponíveis na conta do próprio titular.</p>
       </section>
     );
-  if (selecionada && user)
+  if (ferramenta && user)
     return (
       <SessaoDaFerramenta
-        key={`${user.id}:${selecionada.produto_id}`}
-        ferramenta={selecionada}
+        key={`${user.id}:${ferramenta.produto_id}`}
+        ferramenta={ferramenta}
         usuario={user.id}
-        voltar={() => setSelecionada(null)}
+        voltar={voltar}
       />
     );
   return (
@@ -76,6 +87,17 @@ export default function FerramentasDoMembro({
         Compras e aulas continuam independentes. Ao vencer, o CRM fica guardado
         até você solicitar exclusão.
       </TituloMembros>
+      {produto && dados.isSuccess && !ferramenta && (
+        <div role="alert" className="space-y-3">
+          <p>
+            A licença desta ferramenta não está liberada ou venceu. Seus dados
+            continuam guardados.
+          </p>
+          <button className="membros-acao" onClick={voltar}>
+            Voltar às ferramentas
+          </button>
+        </div>
+      )}
       {dados.isPending ? (
         <p role="status">Carregando ferramentas…</p>
       ) : dados.isError ? (
@@ -99,7 +121,7 @@ export default function FerramentasDoMembro({
               <Wrench size={23} className="text-primary" />
               <h2 className="font-semibold">{f.titulo}</h2>
               <p className="text-[12px] text-muted-foreground">
-                {f.fim
+                {temLicencaDaFerramenta(f)
                   ? `Acesso até ${new Date(f.fim).toLocaleDateString("pt-BR")}`
                   : "Acesso não liberado ou vencido"}
               </p>
@@ -109,10 +131,12 @@ export default function FerramentasDoMembro({
                 <button
                   className="membros-acao bg-primary text-primary-foreground"
                   onClick={() =>
-                    f.fim ? setSelecionada(f) : conhecer(f.produto_id)
+                    temLicencaDaFerramenta(f)
+                      ? setSelecionada(f.produto_id)
+                      : conhecer(f.produto_id)
                   }
                 >
-                  {f.fim ? (
+                  {temLicencaDaFerramenta(f) ? (
                     "Abrir ferramenta"
                   ) : (
                     <>

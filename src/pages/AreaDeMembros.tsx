@@ -51,9 +51,18 @@ import { FocoDeEstudo, BotaoPomodoro } from "@/components/membros/FocoDeEstudo";
 import ComunidadeDoCurso from "@/components/membros/ComunidadeDoCurso";
 import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
 import FerramentasDoMembro from "@/components/membros/FerramentasDoMembro";
+import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
+import { temLicencaDaFerramenta } from "@/lib/membros/ferramentas";
 import { texto, AjudaRecolhida } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import "@/components/membros/membros.css";
+
+type AcessoDoCartao = {
+  rotulo: string;
+  ferramenta: boolean;
+  liberado: boolean;
+  conferindo?: boolean;
+};
 
 export function CapaProduto({
   produto,
@@ -96,12 +105,14 @@ export function TrilhoProdutos({
   abrir,
   lista,
   alternarLista,
+  acesso,
 }: {
   titulo: string;
   produtos: Produto[];
   abrir: (p: Produto) => void;
   lista?: string[];
   alternarLista?: (p: Produto) => void;
+  acesso?: (p: Produto) => AcessoDoCartao;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const id = `trilho-${titulo.normalize("NFD").replace(/[^a-zA-Z]/g, "")}`;
@@ -147,58 +158,66 @@ export function TrilhoProdutos({
         </div>
       </div>
       <div id={id} className="membros-trilho" ref={ref}>
-        {produtos.map((p) => (
-          <div className="membros-cartao-grupo" key={p.id}>
-            <button
-              className="membros-cartao"
-              onClick={() => abrir(p)}
-              aria-label={`${p.titulo} · ${rotuloDoAcesso(p)}`}
-            >
-              <CapaProduto produto={p} />
-              <div className="pt-3 px-1">
-                <h3 className="text-[13px] leading-5 font-medium line-clamp-2">
-                  {p.titulo}
-                </h3>
-                <p className="text-[12px] leading-5 text-muted-foreground mt-1">
-                  {p.progresso === 100 ? "Concluído" : rotuloDoAcesso(p)}
-                  {podeAbrir(p) &&
-                    p.materiais_total !== undefined &&
-                    ` · ${p.materiais_total} materiais`}
-                </p>
-                {p.progresso > 0 && podeAbrir(p) && (
-                  <div
-                    role="progressbar"
-                    aria-label={`Progresso de ${p.titulo}`}
-                    aria-valuenow={p.progresso}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    className="h-1 mt-2 rounded-full bg-muted"
-                  >
-                    <div
-                      className="h-1 rounded-full bg-primary"
-                      style={{
-                        width: `${Math.min(100, Math.max(0, p.progresso))}%`,
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </button>
-            {alternarLista && (
+        {produtos.map((p) => {
+          const estado = acesso?.(p) || {
+            rotulo: rotuloDoAcesso(p),
+            ferramenta: false,
+            liberado: podeAbrir(p),
+          };
+          return (
+            <div className="membros-cartao-grupo" key={p.id}>
               <button
-                className="membros-favoritar"
-                aria-label={`${lista?.includes(p.id) ? "Retirar" : "Adicionar"} ${p.titulo} ${lista?.includes(p.id) ? "da" : "à"} minha lista`}
-                aria-pressed={!!lista?.includes(p.id)}
-                onClick={() => alternarLista(p)}
+                className="membros-cartao"
+                onClick={() => abrir(p)}
+                aria-label={`${p.titulo} · ${estado.rotulo}`}
+                disabled={estado.conferindo}
               >
-                <Bookmark
-                  size={17}
-                  fill={lista?.includes(p.id) ? "currentColor" : "none"}
-                />
+                <CapaProduto produto={p} />
+                <div className="pt-3 px-1">
+                  <h3 className="text-[13px] leading-5 font-medium line-clamp-2">
+                    {p.titulo}
+                  </h3>
+                  <p className="text-[12px] leading-5 text-muted-foreground mt-1">
+                    {!estado.ferramenta && p.progresso === 100 ? "Concluído" : estado.rotulo}
+                    {!estado.ferramenta && estado.liberado &&
+                      p.materiais_total !== undefined &&
+                      ` · ${p.materiais_total} materiais`}
+                  </p>
+                  {!estado.ferramenta && p.progresso > 0 && estado.liberado && (
+                    <div
+                      role="progressbar"
+                      aria-label={`Progresso de ${p.titulo}`}
+                      aria-valuenow={p.progresso}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      className="h-1 mt-2 rounded-full bg-muted"
+                    >
+                      <div
+                        className="h-1 rounded-full bg-primary"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, p.progresso))}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               </button>
-            )}
-          </div>
-        ))}
+              {alternarLista && (
+                <button
+                  className="membros-favoritar"
+                  aria-label={`${lista?.includes(p.id) ? "Retirar" : "Adicionar"} ${p.titulo} ${lista?.includes(p.id) ? "da" : "à"} minha lista`}
+                  aria-pressed={!!lista?.includes(p.id)}
+                  onClick={() => alternarLista(p)}
+                >
+                  <Bookmark
+                    size={17}
+                    fill={lista?.includes(p.id) ? "currentColor" : "none"}
+                  />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -352,6 +371,8 @@ export default function AreaDeMembros() {
       ? { teste: true, bloqueado: parametros.get("bloqueado") === "1" }
       : undefined;
   const previa = teste ? undefined : parametros.get("visao") || undefined;
+  const somenteLeitura = !!previa || !!teste;
+  const ferramentas = useCatalogoFerramentas(user?.id, !somenteLeitura);
   const aberto = parametros.get("produto");
   const setAberto = (id: string | null) => {
     const proximos = new URLSearchParams(parametros);
@@ -400,7 +421,64 @@ export default function AreaDeMembros() {
   const propsLista = {
     lista: lista.data,
     alternarLista: previa ? undefined : (p: Produto) => void alternarLista(p),
+    acesso: acessoDoCartao,
   };
+  function crmDoProduto(id: string) {
+    return !somenteLeitura && ferramentas.isSuccess
+      ? ferramentas.data.find((f) => f.produto_id === id && f.motor === "crm")
+      : undefined;
+  }
+  function acessoDoCartao(p: Produto): AcessoDoCartao {
+    if (!somenteLeitura && !podeAbrir(p) && ferramentas.isPending)
+      return {
+        rotulo: "Conferindo acesso…",
+        ferramenta: true,
+        liberado: false,
+        conferindo: true,
+      };
+    if (!somenteLeitura && !podeAbrir(p) && ferramentas.isError)
+      return { rotulo: "Conferir acesso", ferramenta: true, liberado: false };
+    const crm = crmDoProduto(p.id);
+    if (crm) {
+      const liberado = temLicencaDaFerramenta(crm);
+      return {
+        rotulo: liberado ? "Licença ativa" : "Sem licença ativa",
+        ferramenta: true,
+        liberado,
+      };
+    }
+    return {
+      rotulo: rotuloDoAcesso(p),
+      ferramenta: false,
+      liberado: podeAbrir(p),
+    };
+  }
+  function abrirProduto(p: Produto) {
+    if (!somenteLeitura && !ferramentas.isSuccess && !podeAbrir(p)) {
+      if (ferramentas.isError) void ferramentas.refetch();
+      return;
+    }
+    if (crmDoProduto(p.id)) {
+      const proximos = new URLSearchParams(parametros);
+      proximos.delete("produto");
+      proximos.set("ferramenta", p.id);
+      setParametros(proximos);
+      return;
+    }
+    setAberto(p.id);
+  }
+  function voltarDasFerramentas() {
+    const proximos = new URLSearchParams(parametros);
+    proximos.delete("ferramenta");
+    // Compatibilidade com links antigos que usavam o leitor de produtos.
+    if (aberto && crmDoProduto(aberto)) proximos.delete("produto");
+    setParametros(proximos);
+    setSecao("ferramentas");
+  }
+  const ferramentaAberta =
+    parametros.get("ferramenta") ||
+    (aberto && crmDoProduto(aberto) ? aberto : null);
+  const secaoAtual = ferramentaAberta ? "ferramentas" : secao;
   const produtos = catalogo.data?.produtos || [];
   const comunidades = produtos.filter(
     (p) => p.comunidade_ativa && podeAbrir(p),
@@ -417,6 +495,17 @@ export default function AreaDeMembros() {
     .map((f) => produtos.find((p) => p.id === f.produto_destino))
     .filter((p): p is Produto => !!p && !podeAbrir(p));
   const encontrados = buscarProdutos(produtos, busca, categoria);
+  const trilhosDaBiblioteca = trilhos(
+    produtos.filter((p) => !crmDoProduto(p.id)),
+  );
+  for (const p of produtos.filter((p) => !!crmDoProduto(p.id))) {
+    const titulo = acessoDoCartao(p).liberado
+      ? "Minha biblioteca"
+      : "Explorar produtos";
+    const trilho = trilhosDaBiblioteca.find((t) => t.titulo === titulo);
+    if (trilho) trilho.produtos.push(p);
+    else trilhosDaBiblioteca.push({ titulo, produtos: [p] });
+  }
   const destaque =
     produtos.find((p) => p.destaque && podeAbrir(p)) ||
     produtos.find((p) => p.destaque) ||
@@ -426,11 +515,20 @@ export default function AreaDeMembros() {
     new Set(produtos.map((p) => p.categoria).filter(Boolean)),
   );
   const produtoAberto = produtos.find((p) => p.id === aberto);
+  const acessoDestaque = destaque ? acessoDoCartao(destaque) : null;
+  let acaoDestaque = "Conhecer produto";
+  if (acessoDestaque?.conferindo) acaoDestaque = "Conferindo acesso…";
+  else if (acessoDestaque?.ferramenta)
+    acaoDestaque = acessoDestaque.liberado
+      ? "Abrir ferramenta"
+      : "Conferir licença";
+  else if (destaque && podeAbrir(destaque))
+    acaoDestaque = "Continuar na biblioteca";
   return (
     <FocoDeEstudo
       key={user?.id || "visitante"}
       usuario={user?.id || "visitante"}
-      leitorAberto={!!produtoAberto}
+      leitorAberto={!!produtoAberto && !ferramentaAberta}
     >
       <div className="membros bg-background text-foreground">
         <a
@@ -516,8 +614,16 @@ export default function AreaDeMembros() {
                 className="membros-acao"
                 title={i.nome}
                 aria-label={i.nome}
-                aria-current={secao === i.id ? "page" : undefined}
-                onClick={() => setSecao(i.id)}
+                aria-current={secaoAtual === i.id ? "page" : undefined}
+                onClick={() => {
+                  if (ferramentaAberta) {
+                    const proximos = new URLSearchParams(parametros);
+                    proximos.delete("ferramenta");
+                    if (aberto && crmDoProduto(aberto)) proximos.delete("produto");
+                    setParametros(proximos);
+                  }
+                  setSecao(i.id);
+                }}
               >
                 <i.icone size={18} />
                 <span>{i.nome}</span>
@@ -526,10 +632,21 @@ export default function AreaDeMembros() {
             <BotaoPomodoro compacto={recolhida} />
           </aside>
           <main id="biblioteca" className="membros-conteudo space-y-8">
-            {secao === "ferramentas" && (
+            {secaoAtual === "ferramentas" && (
               <FerramentasDoMembro
-                somenteLeitura={!!previa || !!teste}
-                conhecer={setAberto}
+                somenteLeitura={somenteLeitura}
+                catalogo={ferramentas}
+                produtoInicial={ferramentaAberta}
+                aoVoltar={voltarDasFerramentas}
+                conhecer={(id) => {
+                  if (crmDoProduto(id)) {
+                    setAvisoLista(
+                      "Peça à administração para conferir sua licença do CRM. Seus contatos e negócios continuam guardados.",
+                    );
+                    return;
+                  }
+                  setAberto(id);
+                }}
               />
             )}
             {teste && profile?.role === "admin" && (
@@ -569,7 +686,7 @@ export default function AreaDeMembros() {
                 {avisoLista}
               </p>
             )}
-            {secao === "lista" && (
+            {secaoAtual === "lista" && (
               <section className="space-y-5">
                 <TituloMembros titulo="Minha lista" principal>
                   Use o marcador na capa para guardar o que quer assistir
@@ -589,7 +706,7 @@ export default function AreaDeMembros() {
                     produtos={produtos.filter((p) =>
                       lista.data?.includes(p.id),
                     )}
-                    abrir={(p) => setAberto(p.id)}
+                    abrir={abrirProduto}
                     {...propsLista}
                   />
                 ) : (
@@ -606,7 +723,7 @@ export default function AreaDeMembros() {
                 )}
               </section>
             )}
-            {secao === "comunidade" && (
+            {secaoAtual === "comunidade" && (
               <section className="space-y-5">
                 <TituloMembros titulo="Comunidade" principal>
                   Escolha um produto para acompanhar as conversas e entrar nos
@@ -653,7 +770,21 @@ export default function AreaDeMembros() {
                 )}
               </section>
             )}
-            <div hidden={secao !== "inicio"} className="space-y-8">
+            {!somenteLeitura && ferramentas.isError && (
+              <div role="alert" className="space-y-3">
+                <p>
+                  Não foi possível conferir as licenças das ferramentas. Seus
+                  conteúdos já liberados continuam disponíveis.
+                </p>
+                <button
+                  className="membros-acao"
+                  onClick={() => void ferramentas.refetch()}
+                >
+                  Conferir licenças novamente
+                </button>
+              </div>
+            )}
+            <div hidden={secaoAtual !== "inicio"} className="space-y-8">
               {produtos.length > 0 && (
                 <CabecalhoDePagina
                   className="sr-only"
@@ -723,7 +854,7 @@ export default function AreaDeMembros() {
                       </div>
                       <div className="membros-destaque-texto space-y-4">
                         <p className="text-[12px] text-emerald-300 font-medium">
-                          {rotuloDoAcesso(destaque)} · {destaque.formato}
+                          {acessoDestaque?.rotulo} · {destaque.formato}
                         </p>
                         <div className="flex items-center gap-2">
                           <h2>{destaque.titulo}</h2>
@@ -733,12 +864,13 @@ export default function AreaDeMembros() {
                         </div>
                         <button
                           className="membros-acao bg-primary text-primary-foreground"
-                          onClick={() => setAberto(destaque.id)}
+                          onClick={() => abrirProduto(destaque)}
+                          disabled={acessoDestaque?.conferindo}
                         >
-                          {podeAbrir(destaque)
-                            ? "Continuar na biblioteca"
-                            : "Conhecer produto"}
-                          {podeAbrir(destaque) ? (
+                          {acaoDestaque}
+                          {acessoDestaque?.ferramenta && acessoDestaque.liberado ? (
+                            <Wrench size={16} />
+                          ) : podeAbrir(destaque) && !acessoDestaque?.ferramenta ? (
                             <Play size={16} fill="currentColor" />
                           ) : (
                             <LockKeyhole size={16} />
@@ -795,7 +927,7 @@ export default function AreaDeMembros() {
                       produtos={Array.from(
                         new Map(indicados.map((p) => [p.id, p])).values(),
                       )}
-                      abrir={(p) => setAberto(p.id)}
+                      abrir={abrirProduto}
                       {...propsLista}
                     />
                   )}
@@ -805,7 +937,7 @@ export default function AreaDeMembros() {
                         {...propsLista}
                         titulo="Resultados da busca"
                         produtos={encontrados}
-                        abrir={(p) => setAberto(p.id)}
+                        abrir={abrirProduto}
                       />
                     ) : (
                       <section className="py-8">
@@ -824,13 +956,13 @@ export default function AreaDeMembros() {
                       </section>
                     )
                   ) : (
-                    trilhos(produtos).map((t) => (
+                    trilhosDaBiblioteca.map((t) => (
                       <TrilhoProdutos
                         key={t.titulo}
                         {...propsLista}
                         titulo={t.titulo}
                         produtos={t.produtos}
-                        abrir={(p) => setAberto(p.id)}
+                        abrir={abrirProduto}
                       />
                     ))
                   )}
@@ -847,7 +979,9 @@ export default function AreaDeMembros() {
             </button>
           </section>
         )}
-        {produtoAberto && (
+        {produtoAberto &&
+          !ferramentaAberta &&
+          (somenteLeitura || ferramentas.isSuccess || podeAbrir(produtoAberto)) && (
           <LeitorDeProduto
             key={`${previa || "proprio"}-${teste?.teste}-${teste?.bloqueado}-${produtoAberto.id}`}
             previa={previa}
