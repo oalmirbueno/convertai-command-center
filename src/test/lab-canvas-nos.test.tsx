@@ -279,7 +279,7 @@ describe("campos no próprio nó (o mesmo esquema do inspetor)", () => {
     const grande = noNaTela("a1");
     expect(within(grande).getByLabelText("Modelo")).toBeInTheDocument();
     expect((within(grande).getByLabelText("Instrução") as HTMLElement).className).toContain("min-h-[160px]");
-    expect(grande.style.width).toBe("384px");
+    expect(grande.style.width).toBe("448px");
   });
 
   it("o inspetor usa o mesmo renderizador (CamposDoNo) e os ids não batem com os do nó", () => {
@@ -379,6 +379,27 @@ describe("barra do nó, menu rápido e controles", () => {
     expect(within(janela).getByRole("img", { name: "Imagem 2" }).getAttribute("src")).toBe("https://img.test/b.png");
   });
 
+  it("filtrar ou suavizar os fios muda só a leitura e preserva o canvas salvo", async () => {
+    const canvas = { ...BASE, ligacoes: [{ id: "leitura1", de: "c1", para: "a1" }] };
+    const fora = montar({ canvas });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Aparência das conexões" }));
+      fireEvent.change(screen.getByLabelText("Conexões"), { target: { value: "selecionado" } });
+      await waitFor(() => expect(fora.loja!.getState().edges[0].hidden).toBe(true));
+      expect(screen.getByText("Selecione um nó para ver suas conexões.")).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("Intensidade das linhas"), { target: { value: "suave" } });
+      await waitFor(() => expect(fora.loja!.getState().edges[0].data!.opacidade).toBe(0.1));
+      fireEvent.click(noNaTela("c1"));
+      await waitFor(() => expect(fora.loja!.getState().edges[0].hidden).toBe(false));
+      expect(fora.canvas).toBe(canvas);
+      expect(fora.canvas.ligacoes).toEqual([{ id: "leitura1", de: "c1", para: "a1" }]);
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("group", { name: "Leitura das conexões" })).toBeNull();
+    } finally {
+      window.localStorage.removeItem("lab:leitura:aaaaaaaa-0000-4000-8000-000000000001");
+    }
+  });
+
   it("gatilho do funil: etiqueta no meio do fio e o seletor abre ali mesmo", async () => {
     const onMudarGatilho = vi.fn();
     const canvas: CanvasDoLab = {
@@ -389,7 +410,7 @@ describe("barra do nó, menu rápido e controles", () => {
       ligacoes: [{ id: "g1", de: "pg", para: "a1", gatilho: "enviou_formulario" }],
       viewport: { x: 0, y: 0, zoom: 1 },
     };
-    const fora = montar({ canvas, onMudarGatilho });
+    const fora = montar({ canvas, onMudarGatilho, selecionado: "pg" });
     await waitFor(() => expect(fora.loja).not.toBeNull());
     // jsdom não mede: dá tamanho aos elementos e mede as alças à mão para o xyflow desenhar o fio.
     const largura = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
@@ -427,12 +448,13 @@ describe("barra do nó, menu rápido e controles", () => {
     expect(ler("src/components/laboratorio/SeletorDeGatilho.tsx")).not.toMatch(/text-(xs|sm|base|lg)/);
   });
 
-  it("landing pronta: miniatura da página no nó", () => {
+  it("a miniatura sem arquivo salvo explica a pendência e não embute uma página externa", () => {
     const ex = normalizarExecucao({ id: "e2", no_id: "l1", tipo: "landing", status: "pronto", saida: { html_url: "https://site.test/p.html" } })!;
     render(<ResultadoDoNo execucao={ex} tipo="landing" largura={248} />);
     const mini = document.querySelector("[data-miniatura-da-landing]") as HTMLElement;
     expect(mini).not.toBeNull();
-    expect(mini.querySelector("iframe")!.getAttribute("src")).toBe("https://site.test/p.html");
+    expect(mini.querySelector("iframe")).toBeNull();
+    expect(mini.textContent).toContain("Esta prévia precisa do arquivo HTML salvo no projeto.");
   });
 
   it("código novo sem lookbehind, \\p{} nem grupo nomeado", () => {

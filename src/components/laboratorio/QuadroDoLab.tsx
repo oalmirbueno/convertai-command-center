@@ -43,6 +43,8 @@ import ControlesDoQuadro from "./no/ControlesDoQuadro";
 import MenuRapido from "./no/MenuRapido";
 import { ContextoDoQuadro, type AcoesDoQuadro } from "./no/contexto";
 import { LARGURA_DO_NO, LARGURA_EXPANDIDA, lerMudancas, memoriaVazia, montarNo, type MemoriaDoQuadro } from "./no/montar";
+import { LEITURA_PADRAO, OPACIDADE_DAS_LIGACOES, lerLeituraDoQuadro, mostrarLigacao, type LeituraDoQuadro, type ObstaculoDoQuadro } from "./no/visualDoQuadro";
+import "./quadroDoLab.css";
 
 /**
  * O quadro do projeto (@xyflow/react): cartões por tipo com os campos e o
@@ -153,6 +155,14 @@ export default function QuadroDoLab({
   const [mapa, setMapa] = useState(false);
   const [menu, setMenu] = useState<MenuAberto | null>(null);
   const [ligacaoSelecionada, setLigacaoSelecionada] = useState<string | null>(null);
+  const [leitura, setLeitura] = useState<LeituraDoQuadro>(LEITURA_PADRAO);
+  useEffect(() => {
+    try { setLeitura(lerLeituraDoQuadro(window.localStorage.getItem(`lab:leitura:${projetoId}`))); } catch { /* armazenamento indisponível */ }
+  }, [projetoId]);
+  const mudarLeitura = (valor: LeituraDoQuadro) => {
+    setLeitura(valor);
+    try { window.localStorage.setItem(`lab:leitura:${projetoId}`, JSON.stringify(valor)); } catch { /* leitura funciona sem armazenamento */ }
+  };
   // Nós que o planejar deixou soltos (no_id → motivo): aviso discreto até o nó ganhar uma ligação.
   const [soltos, setSoltos] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -168,7 +178,7 @@ export default function QuadroDoLab({
     if (!ajustarVista) return;
     const id = window.setTimeout(() => {
       try {
-        void rf.fitView({ padding: 0.15, maxZoom: 1, duration: 400 });
+        void rf.fitView({ padding: 0.15, minZoom: 0.65, maxZoom: 1, duration: 400 });
       } catch {
         /* quadro ainda sem medida */
       }
@@ -247,6 +257,9 @@ export default function QuadroDoLab({
     ids.forEach((id) => onRodarAutomatico(id));
   }, [canvas, execucoes, onRodarAutomatico]);
 
+  // Digitar ou trocar o modelo não recalcula a rota de todos os fios; só a geometria muda o mapa.
+  const geometria = JSON.stringify(nodes.map((n) => ({ x: n.position.x, y: n.position.y, largura: n.width || LARGURA_DO_NO, altura: n.measured?.height || 360 })));
+  const obstaculos = useMemo(() => JSON.parse(geometria) as ObstaculoDoQuadro[], [geometria]);
   const edges = useMemo(
     (): Edge<DadosDaLigacao>[] =>
       canvas.ligacoes.map((l) => {
@@ -260,6 +273,7 @@ export default function QuadroDoLab({
           targetHandle: "entrada",
           type: "lab",
           selected: ligacaoSelecionada === l.id,
+          hidden: !mostrarLigacao(leitura.foco, selecionado, l.de, l.para),
           data: {
             cor: origem ? TIPOS_DE_NO[origem.tipo].cor : "#71717a",
             rodando: !!destino && (destino.status === "rodando" || destino.status === "na_fila"),
@@ -267,10 +281,13 @@ export default function QuadroDoLab({
             rotuloDoGatilho: l.gatilho ? rotuloDoGatilho(l.gatilho) : "",
             tipoDaOrigem: origem ? origem.tipo : null,
             aceitaGatilho: !!origem && gatilhosDe(origem.tipo).length > 0,
+            opacidade: OPACIDADE_DAS_LIGACOES[leitura.intensidade],
+            destacada: l.de === selecionado || l.para === selecionado,
+            obstaculos,
           },
         };
       }),
-    [canvas, execucoes, ligacaoSelecionada],
+    [canvas, execucoes, ligacaoSelecionada, leitura, selecionado, obstaculos],
   );
 
   const aoMudarNos = useCallback(
@@ -501,8 +518,8 @@ export default function QuadroDoLab({
           }}
           onMoveEnd={(_e, v) => onViewport(v)}
           defaultViewport={canvas.viewport}
-          fitView={canvas.nos.length > 0}
-          fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+          fitView={canvas.nos.length > 0 && canvas.viewport.x === 0 && canvas.viewport.y === 0 && canvas.viewport.zoom === 1}
+          fitViewOptions={{ padding: 0.2, minZoom: 0.65, maxZoom: 1, nodes: canvas.nos.slice(0, 3).map((n) => ({ id: n.id })) }}
           minZoom={0.2}
           maxZoom={1.6}
           nodesDraggable={!travado}
@@ -523,8 +540,8 @@ export default function QuadroDoLab({
           colorMode={theme === "light" ? "light" : "dark"}
           style={estilo}
         >
-          <Background id="lab" variant={BackgroundVariant.Dots} gap={22} size={1.4} color="hsl(var(--muted-foreground) / 0.35)" />
-          <ControlesDoQuadro travado={travado} onTravar={setTravado} mapa={mapa} onMapa={setMapa} soCanvas={soCanvas} onSoCanvas={onSoCanvas} projetoId={projetoId} />
+          <Background id="lab" variant={BackgroundVariant.Dots} gap={24} size={1} color="hsl(var(--muted-foreground) / 0.18)" />
+          <ControlesDoQuadro travado={travado} onTravar={setTravado} mapa={mapa} onMapa={setMapa} soCanvas={soCanvas} onSoCanvas={onSoCanvas} projetoId={projetoId} leitura={leitura} onLeitura={mudarLeitura} temSelecao={!!selecionado} />
           {mapa ? (
             <MiniMap
               position="bottom-right"

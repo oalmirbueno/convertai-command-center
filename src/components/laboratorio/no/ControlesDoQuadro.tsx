@@ -1,11 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { Panel, useReactFlow } from "@xyflow/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fullscreen, Lock, LockOpen, Map as IconeDoMapa, Minimize2, Minus, Plus, Scan, Zap } from "lucide-react";
+import { Fullscreen, Lock, LockOpen, Map as IconeDoMapa, Minimize2, Minus, Plus, Scan, SlidersHorizontal, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { botao, campo, juntar, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { autoAteUsdValido, lerConfigDoProjeto, salvarConfigDoProjeto } from "@/lib/laboratorio/api";
+import { LEITURA_PADRAO, type LeituraDoQuadro } from "./visualDoQuadro";
+
+export function OpcoesDeLeitura({ leitura, onLeitura, temSelecao }: { leitura: LeituraDoQuadro; onLeitura: (valor: LeituraDoQuadro) => void; temSelecao: boolean }) {
+  return (
+    <div className="nodrag nopan nowheel absolute bottom-0 left-12 w-[232px] max-w-[calc(100vw-88px)] space-y-3 rounded-xl border border-border bg-popover p-3 text-[14px] text-popover-foreground shadow-sm" role="group" aria-label="Leitura das conexões">
+      <label className="block space-y-1">
+        <span className="font-medium">Conexões</span>
+        <select className={juntar(campo, "h-9 text-[14px]")} value={leitura.foco} onChange={(e) => onLeitura({ ...leitura, foco: e.target.value as LeituraDoQuadro["foco"] })}>
+          <option value="todas">Todas</option>
+          <option value="selecionado">Só do nó selecionado</option>
+          <option value="ocultas">Ocultar</option>
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="font-medium">Intensidade das linhas</span>
+        <select className={juntar(campo, "h-9 text-[14px]")} value={leitura.intensidade} onChange={(e) => onLeitura({ ...leitura, intensidade: e.target.value as LeituraDoQuadro["intensidade"] })}>
+          <option value="suave">Quase transparentes</option>
+          <option value="discreta">Discretas</option>
+          <option value="normal">Mais visíveis</option>
+        </select>
+      </label>
+      {leitura.foco === "selecionado" && !temSelecao ? <p className="text-[12px] leading-relaxed text-muted-foreground">Selecione um nó para ver suas conexões.</p> : null}
+    </div>
+  );
+}
 
 /**
  * Controles do quadro numa pílula vertical flutuante: aumentar, diminuir,
@@ -77,6 +102,9 @@ export default function ControlesDoQuadro({
   soCanvas = false,
   onSoCanvas,
   projetoId = "",
+  leitura = LEITURA_PADRAO,
+  onLeitura,
+  temSelecao = false,
 }: {
   travado: boolean;
   onTravar: (v: boolean) => void;
@@ -85,9 +113,22 @@ export default function ControlesDoQuadro({
   soCanvas?: boolean;
   onSoCanvas?: () => void;
   projetoId?: string;
+  leitura?: LeituraDoQuadro;
+  onLeitura?: (valor: LeituraDoQuadro) => void;
+  temSelecao?: boolean;
 }) {
   const rf = useReactFlow();
   const [teto, setTeto] = useState(false);
+  const [ler, setLer] = useState(false);
+  const painel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ler) return;
+    const fechar = (e: MouseEvent) => { if (e.target instanceof Node && !painel.current?.contains(e.target)) setLer(false); };
+    const tecla = (e: KeyboardEvent) => { if (e.key === "Escape") setLer(false); };
+    document.addEventListener("mousedown", fechar);
+    document.addEventListener("keydown", tecla);
+    return () => { document.removeEventListener("mousedown", fechar); document.removeEventListener("keydown", tecla); };
+  }, [ler]);
   const acao = juntar(botao.icone, "h-8 w-8 rounded-full");
   const tentar = (fn: () => unknown) => {
     try {
@@ -98,7 +139,7 @@ export default function ControlesDoQuadro({
   };
   return (
     <Panel position="bottom-left" className="!m-3">
-      <div className="relative">
+      <div className="relative" ref={painel}>
         <div
           role="toolbar"
           aria-label="Controles do quadro"
@@ -116,6 +157,7 @@ export default function ControlesDoQuadro({
           <button type="button" className={acao} onClick={() => tentar(() => rf.fitView({ padding: 0.15, maxZoom: 1, duration: 300 }))} aria-label="Ajustar à tela" title="Ajustar à tela">
             <Scan className="h-4 w-4" aria-hidden="true" />
           </button>
+          <button type="button" className={acao} onClick={() => tentar(() => rf.zoomTo(1, { duration: 250 }))} aria-label="Ler em tamanho real" title="Ler em tamanho real (100%)"><span className="text-[11px] font-semibold tabular-nums">100%</span></button>
           {onSoCanvas ? (
             <button
               type="button"
@@ -131,6 +173,7 @@ export default function ControlesDoQuadro({
             </button>
           ) : null}
           <span className="my-0.5 h-px w-4 bg-border" aria-hidden="true" />
+          {onLeitura ? <button type="button" className={juntar(acao, ler && "bg-muted text-foreground")} aria-label="Aparência das conexões" aria-expanded={ler} title="Aparência das conexões" onClick={() => { setLer(!ler); setTeto(false); }}><SlidersHorizontal className="h-4 w-4" aria-hidden="true" /></button> : null}
           <button
             type="button"
             className={juntar(acao, travado && "bg-muted text-foreground")}
@@ -152,12 +195,13 @@ export default function ControlesDoQuadro({
             <IconeDoMapa className="h-4 w-4" aria-hidden="true" />
           </button>
           {projetoId ? (
-            <button type="button" className={juntar(acao, teto && "bg-muted text-foreground")} onClick={() => setTeto(!teto)} aria-pressed={teto} aria-label="Rodar sozinho até" title="Automático: rodar sozinho até US$ X por nó" data-abrir-teto-auto="">
+            <button type="button" className={juntar(acao, teto && "bg-muted text-foreground")} onClick={() => { setTeto(!teto); setLer(false); }} aria-pressed={teto} aria-label="Rodar sozinho até" title="Automático: rodar sozinho até US$ X por nó" data-abrir-teto-auto="">
               <Zap className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : null}
         </div>
         {teto && projetoId ? <TetoDoAutomatico projetoId={projetoId} onFechar={() => setTeto(false)} /> : null}
+        {ler && onLeitura ? <OpcoesDeLeitura leitura={leitura} onLeitura={onLeitura} temSelecao={temSelecao} /> : null}
       </div>
     </Panel>
   );

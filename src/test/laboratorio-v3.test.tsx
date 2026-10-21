@@ -240,6 +240,9 @@ describe("Perguntas guiadas antes de montar", () => {
     });
     montarEditor();
     const barra = await achar("[data-canvas-studio]");
+    // Perguntar e montar é o escopo deste caso; gerar é uma etapa própria com confirmação de custo.
+    fireEvent.click(within(barra).getByRole("button", { name: "Montar e gerar" }));
+    expect(within(barra).getByRole("button", { name: "Só montar" })).toHaveAttribute("aria-pressed", "false");
     const caixa = within(barra).getByLabelText("Pedido para o Canvas Studio") as HTMLTextAreaElement;
     fireEvent.change(caixa, { target: { value: "Quero montar um produto low ticket do zero" } });
     fireEvent.click(within(barra).getByRole("button", { name: "Enviar o pedido" }));

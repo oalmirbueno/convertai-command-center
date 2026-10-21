@@ -87,6 +87,11 @@ describe("v4: nós novos iguais na tela e na função", () => {
     const valores = (k: keyof typeof OPCOES_DA_V4) => OPCOES_DA_V4[k].map((o) => o.valor);
     for (const k of Object.keys(OPCOES_V4)) {
       if (k === "via") continue;
+      if (k === "crm_origem") {
+        const campo = TIPOS_DA_TELA.crm.campos.find((c) => c.chave === "crm_origem")!;
+        expect(campo.opcoes?.map((o) => o.valor), k).toEqual([...OPCOES_V4[k]]);
+        continue;
+      }
       expect(valores(k as keyof typeof OPCOES_DA_V4), k).toEqual([...OPCOES_V4[k]]);
     }
     expect([...valores("via_whatsapp"), ...valores("via_recuperacao")].sort()).toEqual([...OPCOES_V4.via].sort());

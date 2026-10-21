@@ -6,7 +6,7 @@ import { textoDoErro } from "@/lib/mesa/api";
 import { ajustarImagem, custoDoPreencher, noMotorDaCasa, salvarNosArquivos, variarImagem, type ExecucaoDoLab, type ImagemDoLab } from "@/lib/laboratorio/api";
 import { ErroDaMesa } from "@/lib/mesa/api";
 import type { NoDoLab, TipoDeNo } from "@/lib/laboratorio/nos";
-import { baixarImagem, useImagens } from "../ResultadoDoNo";
+import { baixarImagem, SeletorDasImagens, useImagens, type DisposicaoDasImagens } from "../ResultadoDoNo";
 import { useAcoesDoQuadro } from "./contexto";
 import { Segmentos } from "./SeletoresVisuais";
 
@@ -22,6 +22,7 @@ import { Segmentos } from "./SeletoresVisuais";
  */
 
 export const TIPOS_CRIATIVOS: TipoDeNo[] = ["imagem", "carrossel", "anuncio", "template_designer", "influenciador", "ugc", "logo"];
+const SEM_IMAGENS: ImagemDoLab[] = [];
 
 const dinheiro = (v: number) => `US$ ${v.toFixed(2).replace(".", ",")}`;
 
@@ -29,6 +30,7 @@ const dinheiro = (v: number) => `US$ ${v.toFixed(2).replace(".", ",")}`;
 function NoMotor({ desde, chegaram }: { desde: string; chegaram: number }) {
   const inicio = useRef<number>(Date.parse(desde) || Date.now());
   const [agora, setAgora] = useState(Date.now());
+  useEffect(() => { inicio.current = Date.parse(desde) || Date.now(); }, [desde]);
   useEffect(() => {
     const id = window.setInterval(() => setAgora(Date.now()), 1000);
     return () => window.clearInterval(id);
@@ -39,13 +41,13 @@ function NoMotor({ desde, chegaram }: { desde: string; chegaram: number }) {
     <div className="mb-2 min-w-0" data-no-motor="">
       <div className="mb-1 flex min-w-0 items-center">
         <Sparkles className="mr-1 h-3.5 w-3.5 shrink-0 animate-pulse text-primary motion-reduce:animate-none" aria-hidden="true" />
-        <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate font-medium text-foreground")}>No motor{chegaram ? ` · ${chegaram} pronta(s)` : ""}</span>
+        <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate font-medium text-foreground")}>No motor{chegaram ? ` · ${chegaram} peça(s) no nó` : ""}</span>
         <span className={juntar(texto.auxiliar, "tabular-nums")} data-tempo-no-motor="">
           {tempo}
         </span>
       </div>
       <div className="h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="No motor" aria-valuetext={tempo}>
-        <div className="h-full animate-pulse rounded-full bg-primary motion-reduce:animate-none" style={{ width: `${Math.min(92, 8 + s * 0.8)}%` }} />
+        <div className="h-full w-1/3 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
       </div>
     </div>
   );
@@ -54,7 +56,7 @@ function NoMotor({ desde, chegaram }: { desde: string; chegaram: number }) {
 type Pedido = { modo: "ajustar" | "variar"; indice: number };
 
 /** Ajustar (pedido curto) ou variar (1 a 4), com o custo antes, compacto. */
-function PedidoDaImagem({ no, pedido, onFechar }: { no: NoDoLab; pedido: Pedido; onFechar: () => void }) {
+function PedidoDaImagem({ no, pedido, onFechar, onIniciado }: { no: NoDoLab; pedido: Pedido; onFechar: () => void; onIniciado: (pedido: Pedido) => void }) {
   const a = useAcoesDoQuadro();
   const [textoDoPedido, setTextoDoPedido] = useState("");
   const [quantas, setQuantas] = useState("2");
@@ -74,8 +76,9 @@ function PedidoDaImagem({ no, pedido, onFechar }: { no: NoDoLab; pedido: Pedido;
         pedido.modo === "ajustar"
           ? await ajustarImagem({ projetoId: a.projetoId, noId: no.id, indice: pedido.indice, pedido: textoDoPedido, confirmado })
           : await variarImagem({ projetoId: a.projetoId, noId: no.id, indice: pedido.indice, quantidade: Number(quantas), confirmado });
+      onIniciado(pedido);
       a.novaExecucao(no.id, ex);
-      toast.success(pedido.modo === "ajustar" ? "Ajuste no motor" : "Variações no motor", { description: "As imagens aparecem no nó conforme chegam." });
+      toast.success(pedido.modo === "ajustar" ? `Ajustando a peça ${pedido.indice + 1}` : `Variações da peça ${pedido.indice + 1} no motor`, { description: "As outras peças continuam preservadas." });
       onFechar();
     } catch (e) {
       const c = custoDoPreencher(e);
@@ -87,6 +90,7 @@ function PedidoDaImagem({ no, pedido, onFechar }: { no: NoDoLab; pedido: Pedido;
   };
   return (
     <div className="mb-2 min-w-0 rounded-md bg-primary/[0.06] p-2" data-pedido-da-imagem={pedido.modo}>
+      <p className={juntar(texto.auxiliar, "mb-1.5 text-foreground")}>Só a peça {pedido.indice + 1}{pedido.modo === "variar" ? " ganha variações" : " será ajustada"}. As demais permanecem.</p>
       {custo !== null ? (
         <div className="flex min-w-0 flex-wrap items-center" data-confirmar-custo="">
           <span className={juntar(texto.corpo, "mb-1 block w-full")}>
@@ -242,7 +246,15 @@ function AcoesDaImagem({ no, imagens, urls, indice, principal, onPedido, onAmpli
 }
 
 export default function ImagensDoResultado({ no, execucao }: { no: NoDoLab; execucao: ExecucaoDoLab | undefined }) {
-  const imagens = execucao ? execucao.saida.imagens : [];
+  const anteriores = useRef<{ noId: string; imagens: ImagemDoLab[] }>({ noId: no.id, imagens: [] });
+  const recebidas = execucao ? execucao.saida.imagens : SEM_IMAGENS;
+  const emCurso = !!execucao && (execucao.status === "rodando" || execucao.status === "na_fila" || noMotorDaCasa(no.tipo, execucao));
+  useEffect(() => {
+    if (recebidas.length) anteriores.current = { noId: no.id, imagens: recebidas };
+    else if (anteriores.current.noId !== no.id) anteriores.current = { noId: no.id, imagens: [] };
+  }, [no.id, recebidas]);
+  // A execução nova pode chegar antes das peças. O quadro mantém a última prévia até o motor substituí-la.
+  const imagens = recebidas.length ? recebidas : (emCurso || execucao?.status === "erro") && anteriores.current.noId === no.id ? anteriores.current.imagens : [];
   const urls = useImagens(imagens);
   const total = imagens.length;
   const doJev = execucao && execucao.saida.escolha ? execucao.saida.escolha.indice : 0;
@@ -251,23 +263,31 @@ export default function ImagensDoResultado({ no, execucao }: { no: NoDoLab; exec
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [comparar, setComparar] = useState(false);
   const [pedido, setPedido] = useState<Pedido | null>(null);
+  const [ajusteEmCurso, setAjusteEmCurso] = useState<Pedido | null>(null);
+  const [disposicao, setDisposicao] = useState<DisposicaoDasImagens>("grade");
+  const origem = execucao?.saida.origem;
+  const ajusteAtivo = ajusteEmCurso || (origem && Number.isInteger(origem.indice) && origem.indice >= 0 && (origem.modo === "ajustar" || origem.modo === "variar") ? origem : null);
   // Na fila, rodando, ou aguardando o motor da casa (estudio_arte): só o no_acompanhar termina.
-  const noMotor = !!execucao && (execucao.status === "rodando" || execucao.status === "na_fila" || noMotorDaCasa(no.tipo, execucao));
+  const noMotor = emCurso;
+  useEffect(() => { if (!noMotor) setAjusteEmCurso(null); }, [noMotor]);
   const i = Math.min(atual, Math.max(0, total - 1));
   if (!total && !noMotor) return null;
   const ir = (passo: number) => setAmpliada((x) => (x === null ? x : (x + passo + total) % total));
   return (
     <div className="mt-2 min-w-0" data-imagens-do-resultado={no.id}>
       {noMotor ? <NoMotor desde={execucao ? execucao.created_at : ""} chegaram={total} /> : null}
+      {execucao?.status === "erro" && !recebidas.length && total ? <p role="status" className={juntar(texto.auxiliar, "mb-2")}>A prévia anterior foi preservada. O ajuste não terminou.</p> : null}
+      {noMotor && ajusteAtivo ? <p role="status" className={juntar(texto.auxiliar, "mb-2 text-primary")} data-peca-em-ajuste={ajusteAtivo.indice}>Peça {ajusteAtivo.indice + 1} em {ajusteAtivo.modo === "ajustar" ? "ajuste" : "variação"}. As outras continuam no lugar.</p> : null}
       {total ? (
         <>
-          <div className={juntar("grid min-w-0 gap-1.5", total === 1 ? "grid-cols-1" : total > 4 ? "grid-cols-3" : "grid-cols-2")}>
+          {total > 1 ? <div className="mb-1.5 flex items-center justify-between"><span className={texto.auxiliar}>Peça {i + 1} de {total}</span><SeletorDasImagens valor={disposicao} onMudar={setDisposicao} /></div> : null}
+          <div className={juntar("nowheel min-w-0 gap-1.5", disposicao === "linha" && total > 1 ? "flex overflow-x-auto pb-1" : "grid", total === 1 || disposicao === "coluna" ? "grid-cols-1" : total > 4 ? "grid-cols-3" : "grid-cols-2")} data-disposicao={disposicao}>
             {urls.map((u, k) => (
               <button
                 key={k}
                 type="button"
-                className={juntar("nodrag relative block w-full overflow-hidden rounded-md bg-muted", k === i && total > 1 && "ring-2 ring-primary")}
-                style={total === 1 ? undefined : { paddingTop: "100%" }}
+                className={juntar("nodrag relative block w-full overflow-hidden rounded-md bg-muted", disposicao === "linha" && total > 1 && "w-[180px] shrink-0", k === i && total > 1 && "ring-2 ring-primary")}
+                style={total === 1 || disposicao !== "grade" ? undefined : { paddingTop: "100%" }}
                 onClick={() => setAtual(k)}
                 onDoubleClick={() => setAmpliada(k)}
                 aria-label={`Imagem ${k + 1}${k === principal ? " (principal)" : ""}`}
@@ -275,7 +295,7 @@ export default function ImagensDoResultado({ no, execucao }: { no: NoDoLab; exec
                 title="Toque para escolher; dois toques para ampliar"
                 data-imagem-gerada={k}
               >
-                {u ? <img src={u} alt="" className={total === 1 ? "block h-auto max-h-[420px] w-full object-cover" : "absolute inset-0 h-full w-full object-cover"} loading="lazy" /> : <span className={total === 1 ? "block h-40" : ""} />}
+                {u ? <img src={u} alt="" className={total === 1 || disposicao !== "grade" ? "block h-auto max-h-[420px] w-full object-contain" : "absolute inset-0 h-full w-full object-contain"} loading="lazy" /> : <span className={total === 1 ? "block h-40" : ""} />}
                 {k === principal ? (
                   <span className="pointer-events-none absolute left-1 top-1 inline-flex h-5 items-center rounded-full bg-black/60 px-1.5 text-[11px] font-medium text-white" data-selo-principal="">
                     <Star className="mr-0.5 h-3 w-3 fill-current text-amber-400" aria-hidden="true" />
@@ -285,10 +305,10 @@ export default function ImagensDoResultado({ no, execucao }: { no: NoDoLab; exec
               </button>
             ))}
           </div>
-          <div className="mt-1 min-w-0">
+          <fieldset disabled={noMotor} className="mt-1 min-w-0 border-0 p-0">
             <AcoesDaImagem no={no} imagens={imagens} urls={urls} indice={i} principal={principal} onPedido={setPedido} onAmpliar={() => setAmpliada(i)} />
-          </div>
-          {pedido ? <PedidoDaImagem key={`${pedido.modo}-${pedido.indice}`} no={no} pedido={pedido} onFechar={() => setPedido(null)} /> : null}
+          </fieldset>
+          {pedido ? <PedidoDaImagem key={`${pedido.modo}-${pedido.indice}`} no={no} pedido={pedido} onFechar={() => setPedido(null)} onIniciado={setAjusteEmCurso} /> : null}
         </>
       ) : null}
 

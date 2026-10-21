@@ -20,6 +20,7 @@ import { type AprovacaoLida, type EntradaDoPacote, type Operador, pedirNoAr, typ
 import { executoresDaV4, saidaDoNoCliente, saidaEstaticaDaV4 } from "./nos-v4.ts";
 import { faltasParaPorNoAr } from "./modulos/funil.ts";
 import { baixarDoEstudio, type PortaDoMotor, portaDoMotor, rodarNoEstudio } from "./motor-da-casa.ts";
+import { assinaturaDoNo, dependenciasExecutaveis, type ExecucaoDaRodada, planoDaRodada, prepararFilasDaRodada } from "./rodada.ts";
 import {
   ancestraisDe,
   arred,
@@ -90,7 +91,7 @@ export type ProjetoDoLab = {
   updated_at: string;
 };
 
-export type ImagemSaida = { path: string; url: string | null; bucket?: string; no_workspace_id?: string | null; ordem?: number };
+export type ImagemSaida = { path: string; url: string | null; bucket?: string; no_workspace_id?: string | null; ordem?: number; variacao?: number };
 export type SaidaDoNo = {
   texto?: string;
   imagens?: ImagemSaida[];
@@ -123,6 +124,7 @@ export type Contexto = {
   motorDoEstudio?: PortaDoMotor;
   /** Créditos do Laboratório reservados na confirmação: o nó que falha ou não roda devolve a parte dele. */
   cobranca?: CobrancaDoLab;
+  entradasReutilizadas?: ExecucaoDaRodada[];
 };
 
 const rotuloDoNo = (no: NoDoCanvas) => (typeof no.dados.titulo === "string" && no.dados.titulo.trim() ? no.dados.titulo.trim() : ROTULO_DO_TIPO[no.tipo]);
@@ -154,13 +156,30 @@ export async function estimarCanvas(canvas: Canvas, ids: string[]) {
   return somarEstimativa(canvas, ids, preco);
 }
 
+/** Preserva entregas de entrada quando a pessoa pediu somente nós específicos. */
+export async function prepararRodada(projeto: ProjetoDoLab, alvos: string[] | null) {
+  let ultimas: ExecucaoDaRodada[] = [];
+  {
+    const ids = ordemTopologica(projeto.canvas, alvos);
+    if (!ids.some((id) => ehExecutavel(projeto.canvas.nos.find((n) => n.id === id)!.tipo))) return { ordem: [], reutilizados: [], ocupados: [] };
+    const { data, error } = await servico().from("lab_execucoes").select("id, no_id, status, saida, entrada, created_by")
+      .eq("projeto_id", projeto.id).in("no_id", ids).order("created_at", { ascending: false }).limit(1000);
+    if (error) throw new ErroHttp(503, "entradas_indisponiveis", "Não consegui conferir as peças prontas. Nada foi cobrado.");
+    const vistos = new Set<string>();
+    ultimas = ((data || []) as ExecucaoDaRodada[]).filter((e) => { if (vistos.has(e.no_id)) return false; vistos.add(e.no_id); return true; });
+  }
+  const plano = await planoDaRodada(projeto.canvas, alvos, ultimas, projeto.contexto, projeto.client_id);
+  if (plano.ocupados.length) throw new ErroHttp(409, "entradas_gerando", "Uma peça anterior ainda está em andamento. Aguarde antes de iniciar outra rodada.", { nos: plano.ocupados });
+  return plano;
+}
+
 // ------------------------------------------------------------------ linhas de lab_execucoes
 
-export async function criarExecucao(o: { projetoId: string; no: NoDoCanvas; status: string; entrada: Record<string, unknown>; rodadaId: string | null; userId: string }): Promise<string> {
+export async function criarExecucao(o: { projetoId: string; no: NoDoCanvas; status: string; entrada: Record<string, unknown>; rodadaId: string | null; userId: string; saida?: SaidaDoNo }): Promise<string> {
   const operador = o.no.tipo === "agente_externo" ? (txt(o.no.dados.operador, 80) || OPERADOR_HERMES) : null;
   const { data, error } = await servico()
     .from("lab_execucoes")
-    .insert({ projeto_id: o.projetoId, no_id: o.no.id, tipo: o.no.tipo, status: o.status, entrada: o.entrada, rodada_id: o.rodadaId, operador_slug: operador, created_by: o.userId })
+    .insert({ projeto_id: o.projetoId, no_id: o.no.id, tipo: o.no.tipo, status: o.status, entrada: o.entrada, rodada_id: o.rodadaId, operador_slug: operador, created_by: o.userId, ...(o.saida ? { saida: o.saida } : {}) })
     .select("id")
     .single();
   if (error || !data) throw new ErroHttp(503, "execucao_nao_criada", "Não consegui registrar a execução do nó.");
@@ -235,7 +254,10 @@ export async function entradasMontadas(ctx: Contexto, no: NoDoCanvas): Promise<E
   // Documentos anexados no próprio nó (Agente): valem como entrada.
   const proprios = await textoDosDocumentos(ctx, no.dados.arquivos);
   if (proprios) textos.push(`Documentos de ${rotuloDoNo(no)}:\n${proprios}`);
-  for (const antes of entradasDo(ctx.canvas, no.id)) {
+  // A copy não deve apagar o produto, a marca e os documentos que recebeu: o próximo nó
+  // continua vendo a base e as entregas dos ancestrais, sem duplicar a mesma origem.
+  const idsAntes = new Set(ancestraisDe(ctx.canvas, no.id));
+  for (const antes of ctx.canvas.nos.filter((n) => idsAntes.has(n.id))) {
     const s = await saidaDe(ctx, antes);
     if (!s) continue;
     const rotulo = rotuloDoNo(antes);
@@ -288,8 +310,22 @@ export function portaDoMotorDe(ctx: Contexto): PortaDoMotor {
  * livre" num projeto sem cliente, cai no motor de imagem direto, com o aviso.
  */
 async function noNoEstudio(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  // O Estúdio decide seus modelos textuais internamente. Uma escolha explícita no carrossel
+  // usa o planejador deste nó, que aceita esse modelo, em vez de fingir que o Estúdio o usou.
+  if (no.tipo === "carrossel" && txt(no.dados.modelo_id, 200)) {
+    const r = await noCarrossel(ctx, no, e, execucaoId);
+    r.saida.motor = "direto";
+    r.saida.avisos = [...(r.saida.avisos || []), "Carrossel gerado pelo planejador do nó com o modelo de texto escolhido e o motor de imagem selecionado."];
+    return r;
+  }
   try {
-    return await rodarNoEstudio(portaDoMotorDe(ctx), ctx, no, await saidasDasEntradas(ctx, no), execucaoId);
+    const entradas = await saidasDasEntradas(ctx, no);
+    const presentes = new Set(entradas.map((x) => x.no.id));
+    for (const id of ancestraisDe(ctx.canvas, no.id)) {
+      const anterior = ctx.canvas.nos.find((n) => n.id === id)!;
+      if (!presentes.has(id)) entradas.push({ no: anterior, saida: await saidaDe(ctx, anterior) });
+    }
+    return await rodarNoEstudio(portaDoMotorDe(ctx), ctx, no, entradas, execucaoId);
   } catch (err) {
     if (!(err instanceof ErroHttp) || (err.codigo !== "sem_cliente_interno" && err.codigo !== "sem_cliente_do_estudio_livre")) throw err;
     const r = no.tipo === "carrossel" ? await noCarrossel(ctx, no, e, execucaoId) : await noImagem(ctx, no, e, execucaoId);
@@ -491,7 +527,7 @@ async function noCarrossel(ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoI
   );
   const imagens = g.arquivos.map((a, i) => (a ? imagemDoArquivo(a, i + 1) : null)).filter((a): a is ImagemSaida => !!a);
   return {
-    saida: { imagens, laminas, avisos: g.avisos, usos: [plano.usoId, ...g.usos], texto: laminas.map((l) => `${l.ordem}. ${l.texto}`).join("\n") },
+    saida: { imagens, laminas, modelo_id: plano.modeloId, modelo_imagem_id: cfg.motor || MODELO_IMAGEM_PADRAO, avisos: g.avisos, usos: [plano.usoId, ...g.usos], texto: laminas.map((l) => `${l.ordem}. ${l.texto}`).join("\n") },
     custo: arred(plano.custoUsd + g.custo),
     usoId: plano.usoId,
   };
@@ -991,16 +1027,28 @@ export async function rodarNo(ctx: Contexto, no: NoDoCanvas, execucaoId: string)
  * Rodar tudo: ordem topológica; cada nó executável ganha a linha na_fila antes de começar (a tela vê o plano todo).
  * Nó que falha marca erro nele e nos que dependem dele; saldo, cota ou chave param a rodada.
  */
-export async function rodarTudo(ctx: Contexto, alvos: string[] | null): Promise<{ ordem: string[]; execucoes: Record<string, string> }> {
-  const ordem = ordemTopologica(ctx.canvas, alvos).filter((id) => {
+export async function rodarTudo(ctx: Contexto, alvos: string[] | null, preparados?: string[]): Promise<{ ordem: string[]; execucoes: Record<string, string> }> {
+  const ordem = (preparados || ordemTopologica(ctx.canvas, alvos)).filter((id) => {
     const no = ctx.canvas.nos.find((n) => n.id === id);
     return !!no && ehExecutavel(no.tipo);
   });
-  const execucoes: Record<string, string> = {};
-  for (const id of ordem) {
-    const no = ctx.canvas.nos.find((n) => n.id === id)!;
-    execucoes[id] = await criarExecucao({ projetoId: ctx.projeto.id, no, status: "na_fila", entrada: { rodada: true }, rodadaId: ctx.rodadaId, userId: ctx.userId });
-  }
+  const execucoes = await prepararFilasDaRodada(ordem, {
+    async criar(id) {
+      const no = ctx.canvas.nos.find((n) => n.id === id)!;
+      const assinatura = await assinaturaDoNo(ctx.canvas, id, ctx.projeto.contexto, ctx.projeto.client_id);
+      return await criarExecucao({ projetoId: ctx.projeto.id, no, status: "na_fila", entrada: { rodada: true, assinatura_no: assinatura, fontes_reutilizadas: ctx.entradasReutilizadas?.map((e) => e.id) || [], lab_rodada: { assinatura, client_id: ctx.projeto.client_id, ator_id: ctx.userId, reserva: ctx.cobranca?.reserva || null, custo_usd: ctx.cobranca?.porNo[id] || 0 } }, rodadaId: ctx.rodadaId, userId: ctx.userId });
+    },
+    async abortar(ids) {
+      let q = servico().from("lab_execucoes").update({ status: "erro", erro: "A preparação da rodada falhou. Nenhum nó começou; a reserva será devolvida.", finished_at: new Date().toISOString() })
+        .eq("projeto_id", ctx.projeto.id).eq("created_by", ctx.userId).eq("status", "na_fila").in("id", ids);
+      q = ctx.rodadaId ? q.eq("rodada_id", ctx.rodadaId) : q.is("rodada_id", null);
+      const { error } = await q;
+      if (error) {
+        registrarFalha("laboratorio: filas parciais não foram encerradas", error, { projeto_id: ctx.projeto.id, rodada_id: ctx.rodadaId });
+        throw new ErroHttp(503, "preparacao_parcial", "A rodada não começou. Não consegui confirmar o encerramento da fila parcial; confira a execução antes de tentar novamente.");
+      }
+    },
+  });
   return { ordem, execucoes };
 }
 
@@ -1015,7 +1063,7 @@ export async function seguirRodada(ctx: Contexto, ordem: string[], execucoes: Re
       await ctx.cobranca?.devolverNo(id, execucoes[id], parar);
       continue;
     }
-    const antes = ctx.canvas.ligacoes.filter((l) => l.para === id).map((l) => l.de);
+    const antes = dependenciasExecutaveis(ctx.canvas, id).map((n) => n.id);
     if (antes.some((a) => falhos.has(a))) {
       falhos.add(id);
       await atualizarExecucao(execucoes[id], { status: "erro", erro: "Um nó antes deste falhou; nada foi gerado aqui.", finished_at: new Date().toISOString() });
@@ -1025,15 +1073,14 @@ export async function seguirRodada(ctx: Contexto, ordem: string[], execucoes: Re
     // O Filme fica esperando a escolha do storyboard: quem depende dele espera também (roda depois).
     if (antes.some((a) => esperando.has(a))) {
       esperando.add(id);
-      await atualizarExecucao(execucoes[id], { status: "aguardando", saida: { texto: "Espera o Filme ficar pronto (escolha o storyboard); rode este nó depois." }, finished_at: null });
-      // Não rodou agora (roda depois, com o custo de novo): a parte dele volta.
-      await ctx.cobranca?.devolverNo(id, execucoes[id], "esperando o Filme; roda depois");
+      await atualizarExecucao(execucoes[id], { status: "aguardando", saida: { aguardando_dependencias: true, espera_de: antes.filter((a) => esperando.has(a)), texto: "Aguardando as peças anteriores. Continua automaticamente com a confirmação original quando elas ficarem prontas." }, finished_at: null });
+      // A reserva original acompanha a execução; a continuação não cria outra cobrança.
       continue;
     }
     try {
       const saida = await rodarNo(ctx, no, execucoes[id]);
       // Filme e motor da casa ficam esperando (storyboard; lâminas na fila do Estúdio): quem depende roda depois.
-      if (no.tipo === "filme" || (saida && saida.motor === "estudio_arte" && saida.etapa === "gerando")) esperando.add(id);
+      if (no.tipo === "filme" || no.tipo === "por_no_ar" || no.tipo === "agente_externo" || (saida && saida.motor === "estudio_arte" && saida.etapa === "gerando")) esperando.add(id);
     } catch (err) {
       falhos.add(id);
       if (erroQueSobe(err)) parar = `Rodada parada: ${err instanceof Error ? err.message : motivoDaFalha(err)}`;

@@ -34,6 +34,9 @@ function ultimaPorNo(execucoes: ExecucaoParaExcluir[]): ExecucaoParaExcluir[] {
 
 /** Frase do motivo quando o projeto está em uso (409 projeto_em_uso); null quando pode excluir. */
 export function motivoDoProjetoEmUso(execucoes: ExecucaoParaExcluir[]): string | null {
+  if (execucoes.some((e) => e.status === "aguardando" && e.saida?.aguardando_dependencias === true)) {
+    return "Este projeto tem uma rodada confirmada esperando as peças anteriores. Espere terminar antes de excluir; as entregas e o valor reservado continuam vinculados ao projeto. Nada foi apagado.";
+  }
   const ultimas = ultimaPorNo(execucoes);
   const rodando = ultimas.filter((e) => RODANDO.indexOf(e.status) >= 0).length;
   const pedidos = ultimas.filter((e) => {

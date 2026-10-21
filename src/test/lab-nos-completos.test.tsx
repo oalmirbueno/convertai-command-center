@@ -18,6 +18,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ chamar: vi.fn(), upload: vi.fn() }));
 
 vi.mock("@/lib/mesa/api", async (orig) => ({ ...(await orig<typeof import("@/lib/mesa/api")>()), chamarFuncao: m.chamar }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "admin" }, user: { id: "u1" } }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/integrations/supabase/client", () => {
   const cadeia = (): any => {
@@ -90,6 +91,7 @@ beforeEach(() => {
     if (corpo.acao === "fontes_do_cliente") return FONTES;
     if (corpo.acao === "estimar") return { por_no: [{ no_id: corpo.nos && corpo.nos[0], custo_usd: 0.04 }], total_usd: 0.04 };
     if (corpo.acao === "projeto_config") return { config: { auto_ate_usd: 0 } };
+    if (corpo.acao === "conexoes_da_casa" && corpo.catalogo) return { produtos: [] };
     return {};
   });
 });
@@ -455,7 +457,7 @@ describe("nó com cara de completo", () => {
     expect(no("c1").querySelector("[data-copiar-texto]")).not.toBeNull();
   });
 
-  it("todos os tipos abrem sem quebrar e com Gerar com IA (menos mídia e vídeo)", () => {
+  it("todos os tipos abrem; mídia, vídeo e biblioteca nativa não prometem geração por IA", () => {
     const tipos = Object.keys(TIPOS_DE_NO);
     expect(tipos.length).toBeGreaterThanOrEqual(47);
     const canvas: CanvasDoLab = { nos: tipos.map((t, i) => ({ id: `n${i}`, tipo: t as any, x: (i % 8) * 400, y: Math.floor(i / 8) * 600, dados: {} })), ligacoes: [], viewport: { x: 0, y: 0, zoom: 1 } };
@@ -463,8 +465,14 @@ describe("nó com cara de completo", () => {
     tipos.forEach((t, i) => {
       const el = no(`n${i}`);
       const tem = !!el.querySelector(`[data-varinha-do-no="n${i}"]`);
-      expect(tem, t).toBe(t !== "midia" && t !== "video");
+      expect(tem, t).toBe(!["midia", "video", "area_membros"].includes(t));
     });
+  });
+
+  it("estrutura para plataforma externa mantém geração por IA, diferente da biblioteca nativa", () => {
+    montar({ canvas: umNo("area_membros", { plataforma: "hotmart_club" }) });
+    expect(within(no("n1")).getByLabelText("Gerar com IA")).toBeInTheDocument();
+    expect(within(no("n1")).getByLabelText("Modelo")).toBeInTheDocument();
   });
 });
 

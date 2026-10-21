@@ -23,6 +23,9 @@
  * - estimar { projeto_id, nos? } -> { por_no: [{ no_id, tipo, custo_usd, chamadas }], total_usd, ordem, carteira_client_id, livre }
  *   ou { alvo: "logo", n?, motor?, qualidade?, client_id? } / { alvo: "planejar", modelo_id?, mensagem? }
  * - no_executar { projeto_id, no_id, confirmado } -> { execucao_id, execucao, saida? } (carrossel/landing: 202 e segue)
+ * - estimar { projeto_id, nos?, rodada?: true }: com rodada, inclui ancestrais necessários e reutiliza entradas prontas.
+ * - rodada_cancelar { projeto_id, rodada_id } -> { canceladas: no_id[] }; só etapas aguardando dependências, nunca trabalho já iniciado.
+ * - conexoes_da_casa { projeto_id, no_id, catalogo?: true } -> { produtos } ou { contexto }; somente leituras autorizadas de CRM/biblioteca.
  * - rodar_tudo { projeto_id, confirmado, nos? } -> 202 { rodada_id, ordem, execucoes: { [no_id]: execucao_id } } (segue com waitUntil)
  * - execucoes_ler { projeto_id, rodada_id?, no_id?, limite? } -> { execucoes }
  * Agente do projeto (nunca gera nem publica):

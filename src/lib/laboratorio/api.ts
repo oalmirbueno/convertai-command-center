@@ -72,6 +72,13 @@ export interface SaidaDaExecucao {
   usou?: UsoDaEntrada[];
   /** Motor que gera a peça ("estudio_arte": o motor da casa, acompanhado pelo no_acompanhar). */
   motor?: string;
+  /** Revisão localizada: mantém a referência à peça corrigida ao reabrir o projeto. */
+  origem?: { execucao_id: string; indice: number; modo: "ajustar" | "variar" };
+  revisao_texto?: string;
+  /** Etapa reservada que ainda espera uma saída anterior da mesma rodada. */
+  aguardando_dependencias?: boolean;
+  /** Páginas do mesmo nó, como inscrição, sala e encerramento de um webinar. */
+  paginas?: Array<{ nome: string; caminho: string; html_path: string; html_url: string }>;
 }
 
 /** Pergunta guiada antes de montar (até 4): os exemplos só preenchem a caixa. */
@@ -269,6 +276,11 @@ export function normalizarSaida(s: unknown): SaidaDaExecucao {
   // Filme pronto: video_url, ou o primeiro dos `videos` (um por formato) que já tem link.
   const videos = (Array.isArray(o.videos) ? o.videos : []).map(objeto);
   const primeiroVideo = videos.find((v) => texto(v.url)) || videos.find((v) => texto(v.path)) || {};
+  const origem = objeto(o.origem);
+  const indice = num(origem.indice);
+  const revisao = typeof origem.execucao_id === "string" && origem.execucao_id && indice !== null && Number.isInteger(indice) && indice >= 0 && (origem.modo === "ajustar" || origem.modo === "variar")
+    ? { execucao_id: origem.execucao_id, indice, modo: origem.modo as "ajustar" | "variar" }
+    : undefined;
   return {
     texto: texto(o.texto),
     imagens: imagens(o.imagens),
@@ -296,6 +308,13 @@ export function normalizarSaida(s: unknown): SaidaDaExecucao {
     rascunho_sem_fonte: blocosSemFonte(o.rascunho_sem_fonte),
     usou: usouDe(o.usou),
     motor: texto(o.motor),
+    origem: revisao,
+    revisao_texto: typeof o.revisao_texto === "string" ? o.revisao_texto : undefined,
+    aguardando_dependencias: o.aguardando_dependencias === true,
+    paginas: (Array.isArray(o.paginas) ? o.paginas : []).map((p: unknown) => {
+      const pagina = objeto(p);
+      return { nome: texto(pagina.nome), caminho: texto(pagina.caminho), html_path: texto(pagina.html_path), html_url: texto(pagina.html_url) };
+    }).filter((p) => p.caminho && p.html_path),
   };
 }
 
@@ -497,8 +516,17 @@ export function precisaAcompanhar(tipo: string, e: ExecucaoDoLab | undefined): b
   if (!e || e.status === "erro" || e.status === "pronto") return false;
   // 21/10: Resultado e Carrossel no motor da casa (estudio_arte) ficam "aguardando"; só o no_acompanhar avança.
   if (noMotorDaCasa(tipo, e)) return true;
+  if (tipo === "agente_externo") return !!e.saida.tarefa_id;
+  if (tipo === "por_no_ar") return !!e.saida.aprovacao_id;
   if (tipo !== "filme") return false;
   return e.saida.storyboard_escolhido !== null && (e.saida.etapa_filme === "renderizando" || e.saida.etapa_filme === "montando");
+}
+
+/** A leitura da rodada também dá continuidade às dependências, inclusive de arte e vídeo. */
+export function precisaLerExecucao(tipo: string, e: ExecucaoDoLab): boolean {
+  if (e.status === "pronto" || e.status === "erro") return false;
+  if (e.status === "aguardando" && !e.saida.aguardando_dependencias && ["filme", "por_no_ar", "agente_externo", "imagem", "carrossel"].includes(tipo)) return false;
+  return true;
 }
 
 /** Pôr no ar já tem um pedido aberto para o nó (409 ja_pedido): acompanhe por ele. */
@@ -508,8 +536,8 @@ export async function salvarTemplate(projetoId: string, nome: string, descricao 
   await chamar("template_salvar", { projeto_id: projetoId, nome, descricao });
 }
 
-export async function estimar(projetoId: string, nos?: string[]): Promise<EstimativaDoLab> {
-  const data = await chamar("estimar", nos ? { projeto_id: projetoId, nos } : { projeto_id: projetoId });
+export async function estimar(projetoId: string, nos?: string[], opcoes?: { rodada?: boolean }): Promise<EstimativaDoLab> {
+  const data = await chamar("estimar", { projeto_id: projetoId, ...(nos ? { nos } : {}), ...(opcoes?.rodada ? { rodada: true } : {}) });
   const lista = porNo(data && data.por_no);
   const total = num(data && data.total_usd);
   return {
@@ -549,6 +577,12 @@ export async function rodarTudo(projetoId: string, nos?: string[], confirmado = 
 export async function lerExecucoes(projetoId: string, rodadaId?: string | null): Promise<ExecucaoDoLab[]> {
   const data = await chamar("execucoes_ler", rodadaId ? { projeto_id: projetoId, rodada_id: rodadaId } : { projeto_id: projetoId });
   return valores(data && data.execucoes).map(normalizarExecucao).filter(Boolean) as ExecucaoDoLab[];
+}
+
+/** Cancela somente etapas da rodada que ainda não começaram; o servidor estorna a reserva delas. */
+export async function cancelarRodada(projetoId: string, rodadaId: string): Promise<string[]> {
+  const data = await chamar("rodada_cancelar", { projeto_id: projetoId, rodada_id: rodadaId });
+  return (Array.isArray(data?.canceladas) ? data.canceladas : []).filter((id: unknown): id is string => typeof id === "string");
 }
 
 /** A última execução de cada nó (a lista vem em qualquer ordem). */

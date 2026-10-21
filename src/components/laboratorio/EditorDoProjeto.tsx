@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { ReactFlowProvider } from "@xyflow/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, ArrowLeft, BookmarkPlus, Check, Copy, Fullscreen, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, PanelTopOpen, Play, RefreshCw, Trash2, Workflow } from "lucide-react";
+import { Archive, ArrowLeft, BookmarkPlus, Check, CircleStop, Copy, Fullscreen, LayoutGrid, LayoutList, Loader2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, PanelTopOpen, Play, RefreshCw, Trash2, Workflow } from "lucide-react";
 import { Carregando, EstadoDeErro, JanelaCentral, MenuMais, botao, campo, juntar, texto, useEstadoDaTela } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,7 @@ import {
   acompanharNo,
   arquivarProjeto,
   blocosPorNo,
+  cancelarRodada,
   chaveDosProjetos,
   custoAConfirmar,
   ehConflitoDeVersao,
@@ -25,6 +26,7 @@ import {
   lerExecucoes,
   lerProjeto,
   precisaAcompanhar,
+  precisaLerExecucao,
   resolverBloco,
   rodarTudo,
   salvarProjeto,
@@ -64,6 +66,9 @@ import { emAndamento } from "./ResultadoDoNo";
 import { nomeDoCliente, type ClienteDoLab } from "./Seletores";
 import { duplicarProjeto, nomeDaCopia as nomeDaCopiaNaTela } from "@/lib/laboratorio/duplicar";
 import JanelaDeExcluirProjeto from "./JanelaDeExcluirProjeto";
+import ExportarProjeto from "./ExportarProjeto";
+import ProvedorDasPrevias from "./ContextoDasPrevias";
+import { alvosDoPedido, temCartoesSobrepostos } from "@/lib/laboratorio/execucaoDoPedido";
 import "./telaCheiaDoLab.css";
 
 /**
@@ -110,7 +115,6 @@ const VIGIA_MS = 3000;
 const ACOMPANHAR_MS = 5000;
 /** Esperam algo de fora (escolha, render, aprovação): quem vigia é o no_acompanhar, não o execucoes_ler. */
 // 21/10: Resultado e Carrossel no motor da casa (estudio_arte) também esperam: quem avança é o no_acompanhar.
-const ESPERAM_DE_FORA = ["filme", "por_no_ar", "imagem", "carrossel"];
 
 /** Piso da altura do canvas: a janela inteira, menos o respiro de baixo (21/10, dono: "de verdade 100%"; nunca menos de 420 px). */
 export function alturaMinimaDoCanvas(alturaDaJanela: number): number {
@@ -196,6 +200,10 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const [custo, setCusto] = useState<{ alvo: Alvo; titulo: string; linhas: LinhaDeCusto[]; total: number } | null>(null);
   const [estimando, setEstimando] = useState<string | null>(null);
   const [rodando, setRodando] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const rodadasPendentes = useMemo(() => [...new Set(Object.values(execucoes)
+    .filter((e) => e.status === "aguardando" && e.saida.aguardando_dependencias && e.rodada_id)
+    .map((e) => e.rodada_id!))], [execucoes]);
   const [vigiar, setVigiar] = useState(false);
   const [cheiaPropria, setCheiaPropria] = useState(false);
   const cheia = telaCheia !== undefined ? telaCheia : cheiaPropria;
@@ -248,9 +256,11 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   }, []);
 
   const carregar = useCallback((p: ProjetoDoLab, execs: ExecucaoDoLab[]) => {
+    const quadro = temCartoesSobrepostos(p.canvas) ? organizar(p.canvas) : p.canvas;
     setProjeto(p);
-    setCanvas(p.canvas);
-    atual.current = p.canvas;
+    setCanvas(quadro);
+    atual.current = quadro;
+    if (quadro !== p.canvas) setAjustarVista((v) => v + 1);
     versao.current = p.versao;
     setNome(p.nome);
     nomeAtual.current = p.nome;
@@ -329,11 +339,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   // Vigia das execuções: enquanto algo roda, lê o progresso a cada 3 s.
   const tipoDoNo = useCallback((id: string, e?: ExecucaoDoLab) => (e && e.tipo) || ((atual.current.nos.find((n) => n.id === id) || { tipo: "" }).tipo as string), []);
   const algoRodando = useMemo(
-    () => Object.keys(execucoes).some((k) => {
-      const e = execucoes[k];
-      if (e.status === "aguardando" && ESPERAM_DE_FORA.indexOf(tipoDoNo(k, e)) >= 0) return false;
-      return emAndamento(e.status);
-    }),
+    () => Object.values(execucoes).some((e) => precisaLerExecucao(tipoDoNo(e.no_id, e), e)),
     [execucoes, tipoDoNo],
   );
   // Regra contra invenção (v3): cada Pôr no ar travado por bloco sem fonte antes dele (motivo por id).
@@ -360,6 +366,19 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     [projetoId],
   );
   const aAcompanhar = useMemo(() => Object.keys(execucoes).filter((k) => precisaAcompanhar(tipoDoNo(k, execucoes[k]), execucoes[k])).sort().join("|"), [execucoes, tipoDoNo]);
+  const cancelarEtapasRestantes = async () => {
+    if (cancelando) return;
+    setCancelando(true);
+    try {
+      for (const rodada of rodadasPendentes) await cancelarRodada(projetoId, rodada);
+      setExecucoes(ultimaPorNo(await lerExecucoes(projetoId)));
+      toast.success("Etapas restantes canceladas", { description: "O que já ficou pronto foi preservado. A reserva das etapas canceladas foi devolvida." });
+    } catch (e) {
+      toast.error("Não foi possível cancelar todas as etapas", { description: textoDoErro(e) });
+    } finally {
+      setCancelando(false);
+    }
+  };
   useEffect(() => {
     if (!aAcompanhar) return;
     let vivo = true;
@@ -416,7 +435,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
           if (!vivo) return;
           const ultimas = ultimaPorNo(l);
           setExecucoes((antes) => ({ ...antes, ...ultimas }));
-          if (!l.some((e) => emAndamento(e.status) && !(e.status === "aguardando" && ESPERAM_DE_FORA.indexOf(tipoDoNo(e.no_id, e)) >= 0))) setVigiar(false);
+          if (!l.some((e) => precisaLerExecucao(tipoDoNo(e.no_id, e), e))) setVigiar(false);
         })
         .catch(() => undefined);
     }, VIGIA_MS);
@@ -480,7 +499,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
       try {
         await garantirSalvo();
         const ids = alvo.tipo === "no" ? [alvo.id] : alvo.tipo === "lista" ? alvo.ids : undefined;
-        const est = await estimar(projetoId, ids);
+        const est = await estimar(projetoId, ids, alvo.tipo === "lista" ? { rodada: true } : undefined);
         const c = atual.current;
         const linhas = est.nos.map((x) => ({ id: x.no_id, nome: nomeDoNo(c, x.no_id), custo_usd: x.custo_usd }));
         const titulo = alvo.tipo === "no" ? `Rodar ${nomeDoNo(c, alvo.id)}` : alvo.tipo === "lista" ? alvo.titulo : "Rodar tudo";
@@ -550,7 +569,8 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
       const posicoes: Record<string, { x: number; y: number }> = {};
       if (previsto) previsto.nos.forEach((n) => (posicoes[n.id] = { x: n.x, y: n.y }));
       const casou = previsto ? r.canvas.nos.filter((n) => posicoes[n.id]).length : 0;
-      const final = casou ? { ...r.canvas, nos: r.canvas.nos.map((n) => (posicoes[n.id] ? { ...n, x: posicoes[n.id].x, y: posicoes[n.id].y } : n)) } : arrumar ? organizar(r.canvas) : r.canvas;
+      const distribuido = casou ? { ...r.canvas, nos: r.canvas.nos.map((n) => (posicoes[n.id] ? { ...n, x: posicoes[n.id].x, y: posicoes[n.id].y } : n)) } : r.canvas;
+      const final = arrumar || temCartoesSobrepostos(distribuido) ? organizar(distribuido) : distribuido;
       const novos = final.nos.filter((n) => !antes.nos.some((x) => x.id === n.id)).map((n) => n.id);
       mudar(() => final);
       setAntesDaConstrucao(antes);
@@ -570,9 +590,10 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
 
   const construirDoStudio = useCallback(
     (ops: OperacaoDoAgente[], completo: boolean, previsto: CanvasDoLab | null): ResultadoDaConstrucao => {
+      const antes = atual.current;
       // Projeto completo ou quadro que estava vazio: em colunas (as da função, por etapa, de Pesquisa a Pôr no ar).
       const r = construir(ops, completo || atual.current.nos.length === 0 || ops.filter((o) => o.op === "criar").length >= 3, previsto);
-      return { feitas: r.feitas, falhas: r.falhas, novos: r.novos.length };
+      return { feitas: r.feitas, falhas: r.falhas, novos: r.novos.length, idsParaGerar: alvosDoPedido(antes, atual.current) };
     },
     [construir],
   );
@@ -671,6 +692,8 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     <Inspetor
       key={noSel.id}
       clienteId={clienteDoProjeto}
+      clientes={clientesDoSeletor}
+      antesDeChamar={garantirSalvo}
       canvas={canvas}
       no={noSel}
       projetoId={projetoId}
@@ -721,6 +744,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   return (
     // !m-0: a página põe espaço entre os blocos (space-y) e o margin-top empurrava a tela cheia
     // 24 px para baixo, com o cabeçalho do Laboratório aparecendo por cima ("uma bordinha").
+    <ProvedorDasPrevias canvas={canvas} execucoes={Object.values(execucoes)}>
     <div
       className={juntar("min-w-0", cobre && "fixed inset-0 z-40 !m-0 flex flex-col bg-background")}
       style={cobre ? AREA_SEGURA : undefined}
@@ -763,6 +787,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         )}
         {/* No celular o nome ocupa a sobra (sem espaçador); de 640 para cima o espaçador empurra as ações. */}
         <span className="hidden flex-1 sm:block" />
+        {projeto ? <ExportarProjeto projeto={{ ...projeto, nome, client_id: clienteDoProjeto }} canvas={canvas} execucoes={Object.values(execucoes)} clienteNome={nomeDoCliente(clientes, clienteDoProjeto)} disabled={rodando} /> : null}
         {/* Celular (< 640): só ícone, nome no title; o nome do projeto fica visível ao lado. */}
         <button type="button" className={juntar(botao.primario, "h-8 w-8 shrink-0 px-0 sm:w-auto sm:px-3")} onClick={() => void pedirCusto({ tipo: "tudo" })} disabled={!!estimando || rodando || !canvas.nos.length} aria-label="Rodar tudo" title="Rodar tudo (mostra o custo antes)" data-rodar-tudo="">
           {estimando === "tudo" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" aria-hidden="true" /> : <Play className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />}
@@ -786,6 +811,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
           rotulo="Mais ações do projeto"
           itens={[
             { rotulo: "Organizar o quadro", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => mudar(organizar) },
+            rodadasPendentes.length > 0 && { rotulo: cancelando ? "Cancelando etapas…" : "Cancelar etapas restantes", icone: <CircleStop className="h-4 w-4" />, desativado: cancelando, dica: "Cancela só o que ainda está esperando. As peças em geração ou prontas são preservadas.", aoEscolher: () => void cancelarEtapasRestantes() },
             { rotulo: "Salvar como fluxo pessoal", icone: <BookmarkPlus className="h-4 w-4" />, aoEscolher: () => setSalvarComo(nome) },
             { rotulo: "Duplicar para outro cliente", icone: <Copy className="h-4 w-4" />, aoEscolher: () => setDuplicarPara("") },
             {
@@ -815,6 +841,10 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         onCliente={mudarCliente}
         antesDePlanejar={garantirSalvo}
         onConstruir={construirDoStudio}
+        onGerar={async (ids) => {
+          if (!ids.length) { toast.info("Quadro atualizado", { description: "Os conteúdos prontos foram preservados. Use Gerar no nó para criar uma nova versão." }); return; }
+          await pedirCusto({ tipo: "lista", ids, titulo: "Gerar os conteúdos do pedido" });
+        }}
         onDesfazer={antesDaConstrucao ? desfazerConstrucao : null}
         onConversa={(pedido, resposta) => setRegistro({ id: String(Date.now()), pedido, resposta })}
         recolhido={studioRecolhido}
@@ -1005,6 +1035,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
         }}
       />
     </div>
+    </ProvedorDasPrevias>
   );
 }
 
