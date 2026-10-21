@@ -17,6 +17,7 @@ import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
 import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
 import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos, usePedidoDaCampanha } from "./campanhasApi";
+import { tirarSementeDaCampanha, type SementeDaCampanha } from "./sementeDaCampanha";
 // Frente IDV (30/09): o criador de nomes da Mesa Identidade também dá nome de campanha (só baixa quando abre).
 const NamingDaCampanha = lazy(() => import("@/components/mesa-identidade/NamingDaCampanha"));
 
@@ -157,7 +158,13 @@ export default function AbaCampanhas({
   hypeIndice = null,
   onLimparHype,
   onAbrirNoEstudio,
+  onAbrirArteRapida,
+  novaPedida = false,
 }: {
+  /** 21/10/2026: &nova=1 (o Mês juntou hypes e trendings): abre a campanha nova e lê a semente. */
+  novaPedida?: boolean;
+  /** 21/10/2026: abre a peça da campanha (arte rápida) no Estúdio. */
+  onAbrirArteRapida?: (trabalhoId: string) => void;
   campanhaId?: string | null;
   onCampanha?: (id: string | null) => void;
   /** Índice do hype (na busca mais recente) que abre a campanha nova já preenchida. */
@@ -172,11 +179,21 @@ export default function AbaCampanhas({
   const agenteFixo = useMidia("(min-width: 1280px)");
   const colunasFixas = useMidia("(min-width: 1024px)");
   const [idLocal, setIdLocal] = useState<string | null>(campanhaId);
-  const [nova, setNova] = useState(hypeIndice !== null);
+  const [nova, setNova] = useState(hypeIndice !== null || novaPedida);
   const [projetoDaCriacao, setProjetoDaCriacao] = useState<Record<string, string>>({});
   const [gaveta, setGaveta] = useState(false);
   const [rascunho, setRascunho] = useState<RascunhoParaOAgente | null>(null);
   const [nomes, setNomes] = useState(false);
+  // 21/10/2026: a semente do Mês (hypes + trendings + pedido) chega uma vez e abre a campanha nova preenchida.
+  const [semente, setSemente] = useState<SementeDaCampanha | null>(null);
+  useEffect(() => {
+    const s = tirarSementeDaCampanha(clientId);
+    if (s) setSemente(s);
+    if (!s && !novaPedida) return;
+    setNova(true);
+    setIdLocal(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, novaPedida]);
 
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
   const hypes = useQuery({ queryKey: chaves.hypes(clientId), enabled: hypeIndice !== null, queryFn: () => lerHypes(clientId) });
@@ -185,6 +202,7 @@ export default function AbaCampanhas({
   // "Do hype") mantém o que já foi escrito no formulário.
   const chaveDaNova = useRef("nova");
   if (hype && hypeIndice !== null) chaveDaNova.current = `hype-${hypeIndice}`;
+  if (semente) chaveDaNova.current = `semente-${semente.criada_em}`;
 
   // Frente AE: com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
   const { marca } = useMarcaDaMesa();
@@ -223,6 +241,7 @@ export default function AbaCampanhas({
 
   const fecharNova = () => {
     setNova(false);
+    setSemente(null);
     if (onLimparHype) onLimparHype();
   };
 
@@ -233,6 +252,7 @@ export default function AbaCampanhas({
 
   const criada = (c: Campanha, projectId: string | null) => {
     if (projectId) setProjetoDaCriacao((m) => ({ ...m, [c.id]: projectId }));
+    setSemente(null);
     if (onLimparHype) onLimparHype();
     abrir(c.id);
   };
@@ -305,6 +325,8 @@ export default function AbaCampanhas({
       <CampanhaNova
         key={chaveDaNova.current}
         hype={hype}
+        semente={semente}
+        onLimparSemente={() => setSemente(null)}
         onLimparHype={onLimparHype}
         onCancelar={fecharNova}
         onCriada={criada}
@@ -318,6 +340,7 @@ export default function AbaCampanhas({
       onAbrirNoEstudio={onAbrirNoEstudio}
       onPedirAoAgente={pedirAoAgente}
       onAbrirAgente={agenteFixo ? undefined : () => setGaveta(true)}
+      onAbrirArteRapida={onAbrirArteRapida}
     />
   ) : campanhas.isError && !listaAoLado ? (
     <AvisoDeErro erro={campanhas.error} />

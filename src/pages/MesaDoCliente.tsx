@@ -409,7 +409,7 @@ export default function MesaDoCliente() {
   // Trocar de cliente volta para a aba, o mês e o item em que parou nele.
   const trocarCliente = (id: string) => {
     const onde = lerOnde(id);
-    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null, campanha: null, hype: null, painel: null, marca: null });
+    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null, campanha: null, hype: null, nova: null, painel: null, marca: null });
   };
 
   // Da fila de prioridades direto para a aba certa do cliente certo.
@@ -554,7 +554,7 @@ export default function MesaDoCliente() {
             soIcone
             itens={ABAS.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: ICONES_DAS_ABAS[a.valor] }))}
             valor={painel ? null : aba}
-            onEscolher={(v) => mudar({ aba: v, hype: null, painel: null })}
+            onEscolher={(v) => mudar({ aba: v, hype: null, painel: null, nova: null })}
           />
         ) : null
       }
@@ -653,16 +653,19 @@ export default function MesaDoCliente() {
               {aba === "mes" && (
                 <AbaMes
                   onAbrirNoEstudio={(taskId, mesDoItem) => mudar({ aba: "estudio", task: taskId, mes: mesDoItem })}
-                  onCriarCampanha={(indice) => mudar({ aba: "campanhas", hype: String(indice), campanha: null })}
+                  // 21/10: a semente (itens juntados no Hype e Trending) já foi gravada; abre a campanha nova. O &hype=<n> antigo segue lido abaixo.
+                  onCriarCampanha={() => mudar({ aba: "campanhas", campanha: null, hype: null, nova: "1" })}
                 />
               )}
               {aba === "campanhas" && (
                 <AbaCampanhas
                   campanhaId={campanhaUrl}
-                  onCampanha={(id) => mudar({ campanha: id, hype: null }, true)}
+                  onCampanha={(id) => mudar({ campanha: id, hype: null, nova: null }, true)}
                   hypeIndice={hypeUrl}
-                  onLimparHype={() => mudar({ hype: null }, true)}
+                  onLimparHype={() => mudar({ hype: null, nova: null }, true)}
+                  novaPedida={params.get("nova") === "1"}
                   onAbrirNoEstudio={(taskId, mesDoItem) => mudar({ aba: "estudio", task: taskId, mes: mesDoItem || null, hype: null })}
+                  onAbrirArteRapida={(trabalhoId) => mudar({ aba: "estudio", rapida: trabalhoId, task: null, hype: null })}
                 />
               )}
               {aba === "estudio" && (

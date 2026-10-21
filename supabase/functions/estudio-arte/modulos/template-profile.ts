@@ -3,9 +3,18 @@
  * já preparados entram num PNG final; guardar acrescenta uma versão, sem IA.
  * Não importa Deno/Supabase: o contrato e as travas são os mesmos nos testes.
  */
+export interface NumerosDoPost {
+  respostas?: number;
+  reposts?: number;
+  curtidas?: number;
+  visualizacoes?: number;
+  comentarios?: number;
+}
+
 export interface TemplateProfile {
   versao: 1;
-  estilo: "twitter" | "instagram";
+  /** "twitter" é o post do X (nome antigo mantido); "story" é o Story 9:16 do Instagram. */
+  estilo: "twitter" | "instagram" | "story";
   nome: string;
   username: string;
   /** Escolha visual explícita; nunca significa confirmação oficial da conta. */
@@ -13,7 +22,8 @@ export interface TemplateProfile {
   texto: string;
   tamanho_texto: number;
   cor_fundo: string;
-  tema: "claro" | "escuro";
+  /** "dim" é o tema azul-escuro do X; no Instagram e no Story vale como escuro. */
+  tema: "claro" | "escuro" | "dim";
   tamanho_foto: number;
   espacamento: number;
   arredondamento: number;
@@ -23,6 +33,17 @@ export interface TemplateProfile {
   imagem_acervo_id?: string;
   /** Anotação sobre a imagem original; o renderizador converte pelo mesmo contain da foto. */
   destaque?: { x: number; y: number; rotulo: string };
+  /** Simulação real (21/10): tempo do post ("2h"), local do Instagram e números opcionais. */
+  tempo?: string;
+  local?: string;
+  curtido_por?: string;
+  numeros?: NumerosDoPost;
+  /** Proporção da mídia dentro do post: X 16:9 ou 1:1; Instagram 1:1 ou 4:5. */
+  proporcao?: "16:9" | "1:1" | "4:5";
+  /** Fio do X: a linha que liga um post ao seguinte. */
+  fio?: boolean;
+  /** Legenda do Instagram aberta (como depois de tocar em "mais"). */
+  legenda_completa?: boolean;
 }
 
 export interface VersaoDoTemplate {
@@ -45,7 +66,7 @@ export interface TrabalhoDoTemplate {
   cards: VersaoDoTemplate[];
 }
 
-type Erro = (status: number, codigo: string, mensagem: string) => Error;
+type Erro = (status: number, codigo: string, mensagem: string, detalhes?: Record<string, unknown>) => Error;
 export type DepsDoTemplate<C extends { userId: string }, T extends TrabalhoDoTemplate> = {
   erro: Erro;
   json: (body: unknown, status?: number) => Response;
@@ -93,19 +114,20 @@ function campo(v: unknown, max: number, obrigatorio: boolean, erro: Erro): strin
 /** Metadados permitem só campos conhecidos e caminhos do bucket mesa do cliente. */
 export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Erro): TemplateProfile {
   const o = objeto(v);
-  if (o.versao !== 1 || (o.estilo !== "twitter" && o.estilo !== "instagram")) throw erro(400, "template_invalido", "Escolha um template Profile válido.");
+  if (o.versao !== 1 || (o.estilo !== "twitter" && o.estilo !== "instagram" && o.estilo !== "story")) throw erro(400, "template_invalido", "Escolha um template válido: post do X, post do Instagram ou Story.");
   if (o.verificado !== undefined && typeof o.verificado !== "boolean") throw erro(400, "selo_template_invalido", "A opção de selo do template deve ser explícita.");
   const username = campo(o.username, 31, true, erro).replace(/^@/, "");
   if (!/^[a-zA-Z0-9_.]{1,30}$/.test(username)) throw erro(400, "perfil_template_invalido", "Use o @perfil do Instagram, sem endereço ou espaços.");
   if (typeof o.cor_fundo !== "string" || !/^#[0-9a-f]{6}$/i.test(o.cor_fundo)) throw erro(400, "cor_template_invalida", "Escolha uma cor de fundo hexadecimal válida.");
-  if (o.tema !== undefined && o.tema !== "claro" && o.tema !== "escuro") throw erro(400, "tema_template_invalido", "Escolha tema claro ou escuro.");
+  if (o.tema !== undefined && o.tema !== "claro" && o.tema !== "escuro" && o.tema !== "dim") throw erro(400, "tema_template_invalido", "Escolha o tema claro, escuro ou dim.");
   const t: TemplateProfile = {
     versao: 1, estilo: o.estilo,
     nome: campo(o.nome, 120, true, erro), username,
     verificado: o.verificado === true,
-    texto: campo(o.texto, 1200, true, erro),
+    // A legenda do Instagram vai até 2.200 caracteres; X e Story têm aviso próprio na tela.
+    texto: campo(o.texto, 2200, true, erro),
     tamanho_texto: faixa(o.tamanho_texto, 36, 24, 56, erro),
-    cor_fundo: o.cor_fundo.toLowerCase(), tema: o.tema === "escuro" ? "escuro" : "claro",
+    cor_fundo: o.cor_fundo.toLowerCase(), tema: o.tema === "escuro" || o.tema === "dim" ? o.tema : "claro",
     tamanho_foto: faixa(o.tamanho_foto, 72, 40, 120, erro),
     espacamento: faixa(o.espacamento, 40, 16, 96, erro),
     arredondamento: faixa(o.arredondamento, 20, 0, 48, erro),
@@ -128,7 +150,49 @@ export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Er
     if (/[\r\n\t<>]/.test(rotulo)) throw erro(400, "destaque_template_invalido", "Use um rótulo curto de uma linha no destaque.");
     t.destaque = { x: destaque.x, y: destaque.y, rotulo };
   }
+  normalizarSimulacao(o, t, erro);
   return t;
+}
+
+const CHAVES_DOS_NUMEROS = ["respostas", "reposts", "curtidas", "visualizacoes", "comentarios"] as const;
+
+/** Campos da simulação real: todos opcionais, curtos e sem quebra de linha. */
+function normalizarSimulacao(o: Record<string, unknown>, t: TemplateProfile, erro: Erro) {
+  const linha = (v: unknown, max: number, codigo: string, mensagem: string): string | undefined => {
+    if (v === undefined || v === null || v === "") return undefined;
+    if (typeof v !== "string" || v.length > max || /[\r\n\t<>]/.test(v)) throw erro(400, codigo, mensagem);
+    return v.trim() || undefined;
+  };
+  const tempo = linha(o.tempo, 24, "tempo_template_invalido", "Use um tempo curto, como 2h ou 21 de outubro.");
+  if (tempo) t.tempo = tempo;
+  const local = linha(o.local, 60, "local_template_invalido", "Use um local de até 60 caracteres.");
+  if (local) t.local = local;
+  const curtido = linha(o.curtido_por, 31, "curtido_template_invalido", "Use só o @ de quem curtiu.");
+  if (curtido) {
+    const u = curtido.replace(/^@/, "");
+    if (!/^[a-zA-Z0-9_.]{1,30}$/.test(u)) throw erro(400, "curtido_template_invalido", "Use só o @ de quem curtiu.");
+    t.curtido_por = u;
+  }
+  if (o.numeros !== undefined && o.numeros !== null) {
+    const n = objeto(o.numeros);
+    const numeros: NumerosDoPost = {};
+    for (const k of CHAVES_DOS_NUMEROS) {
+      const v = n[k];
+      if (v === undefined || v === null) continue;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 9_999_999_999) throw erro(400, "numeros_template_invalidos", "Os números do post precisam ser inteiros, sem negativos.");
+      numeros[k] = v;
+    }
+    if (Object.keys(numeros).length) t.numeros = numeros;
+  }
+  if (o.proporcao !== undefined && o.proporcao !== null) {
+    if (o.proporcao !== "16:9" && o.proporcao !== "1:1" && o.proporcao !== "4:5") throw erro(400, "proporcao_template_invalida", "Escolha a proporção 16:9, 1:1 ou 4:5.");
+    t.proporcao = o.proporcao;
+  }
+  for (const k of ["fio", "legenda_completa"] as const) {
+    if (o[k] === undefined || o[k] === null) continue;
+    if (typeof o[k] !== "boolean") throw erro(400, "opcao_template_invalida", "Uma opção do template precisa ser sim ou não.");
+    if (o[k] === true) t[k] = true;
+  }
 }
 
 /** O ID só preserva a seleção existente; não concede leitura nem aceita bucket arbitrário. */
@@ -239,7 +303,9 @@ export function acoesDoTemplateProfile<C extends { userId: string }, T extends T
           if (e instanceof ReplayDoTemplate) throw e;
           throw new RecusaDoTemplate(atual, e);
         }
-        return { cards: [...atual.cards, nova], direcao: d.atualizarTexto(atual, ordem, template.texto), status: d.statusDepoisDeGerar(atual, ordem) };
+        // No Instagram o texto do template é a legenda do post (aparece com "mais"): o texto da lâmina fica como está.
+        const direcao = template.estilo === "instagram" ? atual.direcao : d.atualizarTexto(atual, ordem, template.texto);
+        return { cards: [...atual.cards, nova], direcao, status: d.statusDepoisDeGerar(atual, ordem) };
       });
       return resposta(gravado, nova);
     } catch (e) {

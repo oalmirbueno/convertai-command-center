@@ -4,7 +4,7 @@ import type { TemplateProfile } from "../../supabase/functions/estudio-arte/modu
 
 const template: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Loja A", username: "loja.a", texto: "Leia as instruções.", verificado: false, tema: "claro", cor_fundo: "#ffffff", tamanho_texto: 36, tamanho_foto: 76, espacamento: 30, arredondamento: 16 };
 function quadro() {
-  const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), measureText: (s: string) => ({ width: Array.from(s).length * Number(ctx.font.match(/(\d+)px/)?.[1] || "36") * .6 }) };
+  const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), translate: vi.fn(), scale: vi.fn(), bezierCurveTo: vi.fn(), createLinearGradient: () => ({ addColorStop: vi.fn() }), measureText: (s: string) => ({ width: Array.from(s).length * Number(ctx.font.match(/(\d+)px/)?.[1] || "36") * .6 }) };
   return { canvas: { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement, ctx };
 }
 const pontos = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: .5, y: 0 }, { x: .5, y: 1 }, { x: 0, y: .5 }, { x: 1, y: .5 }];

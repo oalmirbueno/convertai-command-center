@@ -11,8 +11,8 @@ const estado = vi.hoisted(() => ({ chamar: vi.fn(), desenhar: vi.fn(), assinar: 
 vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: "cliente-a", carteira: "cliente" }), useMarcaDaMesa: () => ({ marca: null }), useUrlDaMesa: (caminho?: string, bucket = "mesa") => ({ data: caminho ? `https://arquivos.exemplo.com/${bucket}/${caminho}` : undefined, isError: false }) }));
 vi.mock("@/components/mesa/instagram/instagramApi", () => ({ chamarInstagram: vi.fn(async () => ({ perfil: { nome: "Loja A", username: "loja.a", foto_url: null }, contas: [], conta_id: null })), normalizarPainel: (v: unknown) => v }));
 vi.mock("@/components/mesa/SeletorDoAcervo", () => ({ useAcervo: () => ({ data: estado.acervo(), isPending: false, isError: false }) }));
-vi.mock("@/lib/mesa/api", () => ({ chamarFuncao: (...args: unknown[]) => estado.chamar(...args), textoDoErro: (e: Error) => e.message }));
-vi.mock("@/components/mesa/profile/renderProfile", () => ({ carregarImagemProfile: vi.fn(async (src: string) => ({ src, naturalWidth: 400, naturalHeight: 500 })), desenharProfile: (...args: unknown[]) => estado.desenhar(...args) }));
+vi.mock("@/lib/mesa/api", () => ({ chamarFuncao: (...args: unknown[]) => estado.chamar(...args), textoDoErro: (e: Error) => e.message, padraoPara: () => null }));
+vi.mock("@/components/mesa/profile/renderProfile", () => ({ TEMPO_PADRAO: { twitter: "2h", instagram: "Há 2 horas", story: "2 h" }, carregarImagemProfile: vi.fn(async (src: string) => ({ src, naturalWidth: 400, naturalHeight: 500 })), desenharProfile: (...args: unknown[]) => estado.desenhar(...args) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { storage: { from: (bucket: string) => ({ createSignedUrl: (...args: unknown[]) => estado.assinar(bucket, ...args), upload: vi.fn() }) } } }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 import TemplateProfileEditor from "@/components/mesa/profile/TemplateProfileEditor";
@@ -25,8 +25,9 @@ function montar(t = trabalho, ordem = 1) {
   return render(<QueryClientProvider client={cache}><TemplateProfileEditor trabalho={t} card={t.direcao.cards!.find((c) => c.ordem === ordem)!} bloqueado={false} onMudou={vi.fn()} onAbrirFotos={vi.fn()} /></QueryClientProvider>);
 }
 const pronto = () => waitFor(() => expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeEnabled());
+const etapa = (nome: string) => fireEvent.click(screen.getByRole("button", { name: nome }));
 beforeEach(() => {
-  sessionStorage.clear(); estado.acervo.mockReset().mockReturnValue(acervo);
+  sessionStorage.clear(); Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 }); estado.acervo.mockReset().mockReturnValue(acervo);
   estado.chamar.mockReset().mockResolvedValue({ trabalho });
   estado.assinar.mockReset().mockImplementation(async (bucket: string, caminho: string) => ({ data: { signedUrl: `https://arquivos.exemplo.com/${bucket}/${caminho}` }, error: null }));
   estado.desenhar.mockReset().mockImplementation((canvas: HTMLCanvasElement) => { canvas.width = 1080; canvas.height = 1350; return { imagem: { x: 200, y: 400, largura: 400, altura: 500 } }; });
@@ -43,7 +44,7 @@ describe("Profile mantém a imagem de acervo pelo ID autorizado", () => {
     expect(resolverFonteProfile(fontes, { imagem_caminho: acervo[1].storage_path })).toBeUndefined();
   });
   it("salva a segunda imagem, reabre pelos metadados e a preserva com seu ponto no lote", async () => {
-    const tela = montar(); await pronto();
+    const tela = montar(); await pronto(); etapa("Imagem");
     fireEvent.change(screen.getByLabelText("Imagem real do template"), { target: { value: `acervo:${ids[1]}` } });
     await pronto();
     fireEvent.change(screen.getByLabelText("Rótulo do ponto na imagem"), { target: { value: ponto.rotulo } });
@@ -58,13 +59,13 @@ describe("Profile mantém a imagem de acervo pelo ID autorizado", () => {
     expect(estado.assinar).toHaveBeenCalledWith("workspace", acervo[1].storage_path, 3600);
     tela.unmount(); sessionStorage.clear(); estado.chamar.mockClear(); estado.assinar.mockClear();
     const reaberto: Trabalho = { ...trabalho, cards: [{ ordem: 1, versao: 1, storage_path: "cliente-a/arte-1.png", template_profile: salvo }, { ordem: 2, versao: 1, storage_path: "cliente-a/arte-2.png", template_profile: { ...cfg, imagem_acervo_id: ids[2] } }] };
-    const previa = montar(reaberto); await pronto();
+    const previa = montar(reaberto); await pronto(); etapa("Imagem");
     expect(screen.getByLabelText("Imagem real do template")).toHaveValue(`acervo:${ids[1]}`);
     expect(screen.getByRole("button", { name: "Remover ponto" })).toBeInTheDocument();
     expect(estado.desenhar.mock.calls[estado.desenhar.mock.calls.length - 1][3].imagem.src).toContain(acervo[1].storage_path);
     previa.unmount(); sessionStorage.clear();
     // Mesmo abrindo outra lâmina, Montar todas conserva a escolha e o ponto da primeira.
-    montar(reaberto, 2); await pronto();
+    montar(reaberto, 2); await pronto(); etapa("Prévia e guardar");
     fireEvent.click(screen.getByRole("button", { name: "Montar todas as lâminas" }));
     await waitFor(() => expect(estado.chamar).toHaveBeenCalledTimes(2));
     expect(estado.chamar.mock.calls[0][1]).toMatchObject({ ordem: 1, template: { imagem_acervo_id: ids[1], destaque: ponto } });

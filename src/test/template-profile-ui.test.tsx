@@ -7,8 +7,8 @@ const estado = vi.hoisted(() => ({ clientId: "cliente-a", carteira: "cliente", p
 vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: estado.clientId, carteira: estado.carteira }), useMarcaDaMesa: () => ({ marca: null }), useUrlDaMesa: () => ({ data: undefined, isError: false }) }));
 vi.mock("@/components/mesa/instagram/instagramApi", () => ({ chamarInstagram: (...args: unknown[]) => estado.perfil(...args), normalizarPainel: (v: unknown) => v }));
 vi.mock("@/components/mesa/SeletorDoAcervo", () => ({ useAcervo: (ativo: boolean) => { estado.acervoAtivo(ativo); return { data: [], isPending: false, isError: false }; } }));
-vi.mock("@/lib/mesa/api", () => ({ chamarFuncao: (...args: unknown[]) => estado.chamar(...args), textoDoErro: (e: Error) => e.message }));
-vi.mock("@/components/mesa/profile/renderProfile", () => ({ carregarImagemProfile: vi.fn(async () => ({})), desenharProfile: vi.fn() }));
+vi.mock("@/lib/mesa/api", () => ({ chamarFuncao: (...args: unknown[]) => estado.chamar(...args), textoDoErro: (e: Error) => e.message, padraoPara: () => null }));
+vi.mock("@/components/mesa/profile/renderProfile", () => ({ TEMPO_PADRAO: { twitter: "2h", instagram: "Há 2 horas", story: "2 h" }, carregarImagemProfile: vi.fn(async () => ({})), desenharProfile: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { storage: { from: () => ({ createSignedUrl: vi.fn(), upload: vi.fn() }) } } }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import TemplateProfileEditor from "@/components/mesa/profile/TemplateProfileEditor";
@@ -21,7 +21,7 @@ function montar(t = trabalho) {
   return render(<QueryClientProvider client={cache}><TemplateProfileEditor key={estado.clientId} trabalho={t} card={t.direcao.cards![0]} bloqueado={false} onMudou={vi.fn()} onAbrirFotos={vi.fn()} /></QueryClientProvider>);
 }
 beforeEach(() => {
-  sessionStorage.clear(); estado.clientId = "cliente-a"; estado.carteira = "cliente";
+  sessionStorage.clear(); estado.clientId = "cliente-a"; estado.carteira = "cliente"; Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
   estado.perfil.mockReset().mockResolvedValue(painel("Loja A", "loja.a")); estado.chamar.mockReset().mockResolvedValue({ trabalho: { ...trabalho } }); estado.acervoAtivo.mockClear();
   vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,cG5n");
 });
@@ -76,6 +76,6 @@ describe("Template Profile no Estúdio compartilhado", () => {
     montar({ ...trabalho, entrega_status: "aguardando_cliente" });
     await waitFor(() => expect(screen.getByLabelText("Nome de exibição do template")).toHaveValue("Loja A"));
     expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeDisabled();
-    expect(screen.getByLabelText("Estilo do template")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Post do X" })).toBeDisabled();
   });
 });

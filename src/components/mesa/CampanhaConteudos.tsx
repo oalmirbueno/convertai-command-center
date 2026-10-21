@@ -129,7 +129,6 @@ function EditorDoConteudo({
         <Button type="button" size="sm" variant="ghost" className="mr-1 h-8 w-8 p-0" onClick={onCancelar} disabled={salvando} aria-label="Cancelar" title="Cancelar"><X className="h-4 w-4" aria-hidden="true" /></Button>
         <Button type="button" size="sm" className="h-8 w-8 p-0" onClick={salvar} disabled={salvando} aria-label="Salvar" title="Salvar">
           {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
-          Salvar
         </Button>
       </div>
     </div>
@@ -264,7 +263,10 @@ export default function CampanhaConteudos({
   projetoSugerido,
   onAbrirNoEstudio,
   onPedirAoAgente,
+  temasComPeca = [],
 }: {
+  /** 21/10/2026: conteúdos que já viraram peça do Estúdio (arte rápida): vão à agenda pela Revisão, não daqui. */
+  temasComPeca?: string[];
   campanha: Campanha;
   proposta: PropostaV4 | null;
   carregando: boolean;
@@ -288,7 +290,7 @@ export default function CampanhaConteudos({
     () => ((proposta && proposta.itens) || []).slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || ""))),
     [proposta],
   );
-  const livres = itens.filter((i) => !i.task_id && i.tema_id);
+  const livres = itens.filter((i) => !i.task_id && i.tema_id && temasComPeca.indexOf(i.tema_id) < 0);
   const naAgenda = itens.filter((i) => !!i.task_id);
   // Padrão: todos os que ainda não estão na agenda ficam marcados.
   const selecao = marcados === null ? livres.map((i) => i.tema_id as string) : marcados.filter((id) => livres.some((i) => i.tema_id === id));

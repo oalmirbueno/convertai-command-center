@@ -867,14 +867,15 @@ function PlanoDoMesEmDestaque({
  * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
  * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
  * Fotos, vídeos e artes abrem na mesma aba; o Estúdio reconhece o formato da pauta.
- * `onCriarCampanha` abre a aba Campanhas com o hype escolhido já preenchido.
+ * `onCriarCampanha` abre a aba Campanhas na campanha nova; o Hype e Trending já gravou a semente
+ * (sementeDaCampanha.ts) com os itens juntados. Sem ela, a URL vai a aba=campanhas&nova=1.
  */
 export default function AbaMes({
   onAbrirNoEstudio,
   onCriarCampanha,
 }: {
   onAbrirNoEstudio?: (taskId: string, mes: string) => void;
-  onCriarCampanha?: (hypeIndice: number) => void;
+  onCriarCampanha?: () => void;
 } = {}) {
   const [params, setParams] = useSearchParams();
   const mesDaUrl = params.get("mes") || "";
@@ -942,7 +943,15 @@ export default function AbaMes({
       <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNoEstudio} onVerNoMes={verNoMes} />
 
       <HypesDaSemana
-        onCriarCampanha={(i) => onCriarCampanha?.(i)}
+        onCriarCampanha={() => {
+          if (onCriarCampanha) return onCriarCampanha();
+          const next = new URLSearchParams(params);
+          next.set("aba", "campanhas");
+          next.set("nova", "1");
+          next.delete("campanha");
+          next.delete("hype");
+          setParams(next);
+        }}
         onPedidoInicio={(p) => {
           setPendente(p);
           abrirAgente("criar");

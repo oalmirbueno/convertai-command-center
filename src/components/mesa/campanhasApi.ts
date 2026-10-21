@@ -15,6 +15,10 @@ import {
   type PlanoDeImagens,
   type PropostaV4,
 } from "./mesaV4Api";
+import type { TrabalhoDaPeca } from "./regrasDaCampanha";
+import { entregarComModo } from "@/lib/mesa/entregaComOpcoes";
+import { novoLote } from "./seloApi";
+import { ESTILO_AUTOMATICO, planoDasOpcoes } from "../../../supabase/functions/_shared/selo-da-campanha";
 
 /**
  * Campanhas, versão 5 (23/09, noite): a conversa com o agente da campanha.
@@ -232,7 +236,21 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
     provas: (Array.isArray(o.provas) ? o.provas : []).map((p) => textoLimpo(p, 300)).filter(Boolean).slice(0, 6),
     tom: textoLimpo(o.tom, 300),
     cta: textoLimpo(o.cta, 200),
+    ...canaisLimpos(o.canais),
   };
+}
+
+/** Canais em que a campanha roda (21/10/2026). A equipe marca; a lista fixa é a da casa. */
+export const CANAIS_DA_CAMPANHA = ["Feed do Instagram", "Stories", "Reels", "Facebook", "WhatsApp", "E-mail", "Google"];
+
+/** Canais sem repetir, até 8; vazio não entra (o briefing antigo segue igual). */
+function canaisLimpos(v: unknown): { canais?: string[] } {
+  const lista: string[] = [];
+  (Array.isArray(v) ? v : []).forEach((c) => {
+    const t = textoLimpo(c, 40);
+    if (t && lista.indexOf(t) < 0) lista.push(t);
+  });
+  return lista.length ? { canais: lista.slice(0, 8) } : {};
 }
 
 const UUID_DA_IMAGEM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -319,6 +337,10 @@ export interface CorpoDoSalvar {
   objetivo?: string;
   /** Frente AE: trocar o tipo da campanha (sem IA); "nenhum" tira. */
   tipo?: string;
+  /** 21/10/2026: nome e período na etapa Briefing (sem IA). */
+  nome?: string;
+  periodoInicio?: string;
+  periodoFim?: string;
 }
 
 export function corpoDoSalvarCampanha(c: CorpoDoSalvar): Record<string, unknown> {
@@ -327,6 +349,9 @@ export function corpoDoSalvarCampanha(c: CorpoDoSalvar): Record<string, unknown>
   if (c.briefing) corpo.briefing = c.briefing;
   if (c.imagens) corpo.imagens = c.imagens.slice(0, MAX_IMAGENS_CAMPANHA);
   if (typeof c.objetivo === "string") corpo.objetivo = c.objetivo;
+  if (c.nome && c.nome.trim()) corpo.nome = c.nome.trim();
+  if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
+  if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
   return corpo;
 }
 
@@ -371,3 +396,115 @@ export const partesDoPlanoDeImagens = (catalogo: ModeloIa[], imagens: number, co
     },
   ];
 };
+
+// ------------------------------------------------------------------ campanha completa (21/10/2026)
+
+/**
+ * As peças da campanha são artes rápidas do Estúdio (estudio_trabalhos com direcao.arte_rapida.campanha_id):
+ * lidas direto (RLS da equipe), mais novas por último. O andamento do gerador vem da fila do servidor.
+ */
+export const chavesDaCampanhaCompleta = {
+  pecas: (clientId: string, campanhaId: string) => ["mesa", "campanha-pecas", clientId, campanhaId] as const,
+  fila: (campanhaId: string, ids: string[]) => ["mesa", "campanha-pecas-fila", campanhaId, ids.join(",")] as const,
+  conferencia: (campanhaId: string) => ["mesa", "campanha-conferencia", campanhaId] as const,
+};
+
+export async function lerTrabalhosDaCampanha(clientId: string, campanhaId: string): Promise<TrabalhoDaPeca[]> {
+  const { data, error } = await (supabase as any)
+    .from("estudio_trabalhos")
+    .select("id, status, direcao, cards, legenda, task_id, aprovado_em, atualizado_em")
+    .eq("client_id", clientId)
+    .eq("origem", "mesa")
+    .eq("direcao->arte_rapida->>campanha_id", campanhaId)
+    .order("atualizado_em", { ascending: true })
+    .limit(60);
+  if (error) throw error;
+  return ((data || []) as Record<string, unknown>[]).map((t) => ({
+    ...(t as unknown as TrabalhoDaPeca),
+    cards: Array.isArray(t.cards) ? (t.cards as TrabalhoDaPeca["cards"]) : [],
+    direcao: t.direcao && typeof t.direcao === "object" ? (t.direcao as TrabalhoDaPeca["direcao"]) : {},
+  }));
+}
+
+export async function lerFilaDosTrabalhos(ids: string[]): Promise<{ trabalho_id: string; status: string; ordem: number }[]> {
+  if (!ids.length) return [];
+  const { data, error } = await (supabase as any)
+    .from("estudio_fila")
+    .select("trabalho_id, status, ordem, criado_em")
+    .in("trabalho_id", ids.slice(0, 60))
+    .in("status", ["fila", "rodando", "erro"])
+    .order("criado_em", { ascending: false })
+    .limit(300);
+  // Sem a tabela da fila (banco antigo): o andamento sai só das lâminas gravadas.
+  if (error) return [];
+  return ((data || []) as { trabalho_id: string; status: string; ordem: number }[]).map((f) => ({ trabalho_id: String(f.trabalho_id), status: String(f.status), ordem: Number(f.ordem) || 0 }));
+}
+
+/** Cria a direção da peça (rapida_preparar) e pede todas as lâminas ao gerador. */
+export async function prepararPecaDaCampanha(corpo: Record<string, unknown>, marcaId: string | null): Promise<{ trabalhoId: string; ordens: number[]; avisos: string[] }> {
+  const r = await chamarFuncao<any>("estudio-arte", corpo);
+  const t = r && r.trabalho ? (r.trabalho as { id: string; direcao?: { cards?: { ordem: number }[] } }) : null;
+  if (!t || !t.id) throw new Error("O Estúdio não devolveu a peça.");
+  const ordens = ((t.direcao && t.direcao.cards) || []).map((c) => c.ordem);
+  if (ordens.length) await gerarLaminasDaPeca(t.id, ordens, marcaId);
+  return { trabalhoId: t.id, ordens, avisos: r && Array.isArray(r.avisos) ? r.avisos : [] };
+}
+
+/** Pede as lâminas à fila do gerador do servidor (a geração segue mesmo com a tela fechada). */
+export async function gerarLaminasDaPeca(trabalhoId: string, ordens: number[], marcaId: string | null): Promise<void> {
+  if (!ordens.length) return;
+  await chamarFuncao<any>("estudio-arte", { acao: "enfileirar", trabalho_id: trabalhoId, ordens, ...(marcaId ? { marca_id: marcaId } : {}) });
+}
+
+/** Tira da fila as lâminas que ainda não começaram (cancelar a campanha completa). */
+export async function cancelarFilaDasPecas(trabalhoIds: string[]): Promise<void> {
+  for (const id of trabalhoIds) {
+    await chamarFuncao<any>("estudio-arte", { acao: "cancelar_fila", trabalho_id: id }).catch(() => null);
+  }
+}
+
+/** Selo da campanha pelo gerador: uma opção no estilo automático, já escolhida. */
+export async function gerarSeloDaCampanha(campanha: Campanha, modeloId: string | null): Promise<void> {
+  const tipo = campanha.identidade && campanha.identidade.tipo ? String(campanha.identidade.tipo) : null;
+  // Estilo automático pelo tipo da campanha (o mesmo plano da tela do selo), uma opção só.
+  const opcao = planoDasOpcoes(ESTILO_AUTOMATICO, tipo, 1)[0];
+  const r = await chamarFuncao<any>("agente-calendario", {
+    acao: "selo_gerar",
+    campanha_id: campanha.id,
+    lote_id: novoLote(),
+    estilo: opcao.estilo,
+    variacao: opcao.variacao,
+    ...(modeloId ? { modelo_id: modeloId } : {}),
+    qualidade: "media",
+  });
+  const id = r && r.versao && r.versao.id ? String(r.versao.id) : "";
+  if (!id) throw new Error("O selo não saiu do gerador.");
+  await chamarFuncao<any>("agente-calendario", { acao: "selo_escolher", campanha_id: campanha.id, selo_id: id });
+}
+
+/** Conferência do Jev: cada peça bate com o briefing? E qual gancho abre melhor a campanha. Sem gravar. */
+export interface ConferenciaDaCampanha {
+  pecas: { tema_id: string; nota: number | null; nivel: "forte" | "ok" | "fraca" | null; confianca: number | null }[];
+  melhor_gancho: string | null;
+  confianca_do_gancho: number | null;
+  jev_erro: string | null;
+  custo_usd: number;
+}
+
+export const campanhaConferir = (campanhaId: string) => chamarFuncao<ConferenciaDaCampanha>("agente-calendario", { acao: "campanha_conferir", campanha_id: campanhaId });
+
+/**
+ * Aprovar a peça e levar pelo fluxo de sempre da arte rápida: item na Agenda na data do conteúdo, legenda
+ * (se faltar), entrega em Arquivos e envio para a aprovação do cliente (aba Entrega).
+ */
+export async function levarPecaParaAgenda(trabalho: { id: string; legenda?: string | null }, data: string): Promise<{ taskId: string; ok: boolean; erro?: string; custo_usd: number }> {
+  const r = await chamarFuncao<any>("estudio-arte", { acao: "rapida_para_agenda", trabalho_id: trabalho.id, data, pedido_id: `${trabalho.id}:${data}` });
+  const taskId = r && r.task ? String(r.task.id) : "";
+  let custo = 0;
+  if (!String(trabalho.legenda || "").trim()) {
+    const l = await chamarFuncao<any>("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id });
+    custo += Number(l && l.custo_usd) || 0;
+  }
+  const entrega = await entregarComModo(trabalho.id, "aprovacao");
+  return { taskId, ok: entrega.ok, erro: entrega.erro, custo_usd: custo };
+}

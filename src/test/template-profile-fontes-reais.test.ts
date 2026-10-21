@@ -5,7 +5,7 @@ import type { TemplateProfile } from "../../supabase/functions/estudio-arte/modu
 
 const template: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Loja A", username: "loja.a", texto: "Abra as configurações do painel.", verificado: false, tema: "claro", cor_fundo: "#ffffff", tamanho_texto: 36, tamanho_foto: 76, espacamento: 30, arredondamento: 16 };
 function quadro() {
-  const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), measureText: (s: string) => ({ width: s.length * 12 }) };
+  const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), translate: vi.fn(), scale: vi.fn(), bezierCurveTo: vi.fn(), createLinearGradient: () => ({ addColorStop: vi.fn() }), measureText: (s: string) => ({ width: s.length * 12 }) };
   return { canvas: { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement, ctx };
 }
 describe("Fontes reais do Profile", () => {
@@ -40,6 +40,11 @@ describe("Fontes reais do Profile", () => {
     expect(pontoNaImagemProfile(300, 700, null)).toBeNull();
   });
 });
+/** Raio do recorte da mídia: a caixa que começa no canto da área preenchida da foto (3º fillRect: fundo, avatar, mídia). */
+function raioDaMidia(ctx: { fillRect: { mock: { calls: number[][] } }; arcTo: { mock: { calls: number[][] } } }): number | undefined {
+  const [ax, ay, aw, ah] = ctx.fillRect.mock.calls[2];
+  return ctx.arcTo.mock.calls.find((c) => c[0] === ax + aw && c[1] === ay && c[2] === ax + aw && c[3] === ay + ah)?.[4];
+}
 describe("Anotação determinística sobre a imagem real", () => {
   it.each(["twitter", "instagram"] as const)("preserva imagem inteira e a posição do ponto no PNG %s", (estilo) => {
     const imagem = { naturalWidth: 400, naturalHeight: 1200 } as HTMLImageElement;
@@ -54,20 +59,20 @@ describe("Anotação determinística sobre a imagem real", () => {
     expect(circulos[circulos.length - 1]).toEqual([rect.x + rect.largura * .25, rect.y + rect.altura * .6, 17, 0, Math.PI * 2]);
     expect(salvo.ctx.arc.mock.calls).toEqual(circulos);
     expect(salvo.ctx.drawImage.mock.calls).toEqual(previa.ctx.drawImage.mock.calls);
-    // A segunda caixa é a imagem exata: cantos sem recorte; a última é o rótulo.
-    expect(previa.ctx.arcTo.mock.calls.slice(4, 8).every((c) => c[4] === 0)).toBe(true);
+    // A caixa da mídia (o recorte da foto) é a imagem exata: cantos sem recorte.
+    expect(raioDaMidia(previa.ctx)).toBe(0);
     expect(imagem).toEqual({ naturalWidth: 400, naturalHeight: 1200 });
   });
   it("não inventa um ponto e rejeita anotação sem imagem ou fora dela", () => {
     const { canvas, ctx } = quadro();
     desenharProfile(canvas, template, "feed_4x5");
-    expect(ctx.arc).toHaveBeenCalledTimes(1); // somente o avatar
+    expect(ctx.arc.mock.calls.some((c) => c[2] === 17)).toBe(false); // nenhum círculo de destaque
     expect(() => desenharProfile(canvas, { ...template, destaque: { x: .2, y: .4, rotulo: "Abrir" } }, "feed_4x5")).toThrow("imagem real");
     expect(() => desenharProfile(canvas, { ...template, destaque: { x: 2, y: .4, rotulo: "Abrir" } }, "feed_4x5", { imagem: { naturalWidth: 400, naturalHeight: 400 } as HTMLImageElement })).toThrow("dentro da imagem");
   });
   it("uma captura enviada em Fotos também mantém as bordas quando recebe um ponto", () => {
     const { canvas, ctx } = quadro();
     desenharProfile(canvas, { ...template, arredondamento: 48, destaque: { x: .1, y: .2, rotulo: "Botão" } }, "feed_4x5", { imagem: { naturalWidth: 1600, naturalHeight: 900 } as HTMLImageElement });
-    expect(ctx.arcTo.mock.calls.slice(4, 8).every((c) => c[4] === 0)).toBe(true);
+    expect(raioDaMidia(ctx)).toBe(0);
   });
 });

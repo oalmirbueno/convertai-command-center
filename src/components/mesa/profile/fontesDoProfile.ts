@@ -12,7 +12,12 @@ export interface FonteProfile {
   exata?: boolean;
   /** Identidade autorizada pelo card, independente do bucket de armazenamento. */
   acervo_id?: string;
+  /** De onde veio (21/10): do gerador da casa, da internet (com licença) ou do cliente (Fotos e acervo). */
+  grupo: GrupoDaFonte;
 }
+
+export type GrupoDaFonte = "gerada" | "internet" | "cliente";
+export const ROTULO_DO_GRUPO: Record<GrupoDaFonte, string> = { gerada: "Gerada no Estúdio", internet: "Da internet", cliente: "Do cliente" };
 
 export interface ReferenciaProfile { imagem_caminho?: string; imagem_acervo_id?: string }
 
@@ -28,7 +33,18 @@ type CardComFontes = Omit<CardDaDirecao, "vitrine_de_logos"> & {
   vitrine_de_logos?: Array<{ caminho: string; nome?: string; url_origem?: string }>;
   vitrine_tipo?: string;
   fontes_reais?: Array<{ caminho: string; nome: string; fonte_url: string; licenca: string; autor: string | null; tipo: "imagem" | "logo" }>;
+  /** Fotos do post feitas pelo gerador da casa no Template (sem texto dentro). */
+  imagens_do_template?: Array<{ caminho: string; descricao?: string; proporcao?: string; criado_em?: string }>;
 };
+export type { CardComFontes };
+/** Banco de onde veio a imagem real pesquisada, pelo endereço da página da licença. */
+function origemDaPesquisa(url: string, tipo: "imagem" | "logo"): string {
+  const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
+  const banco = /wikimedia\.org$|wikipedia\.org$/.test(host) ? "Wikimedia" : /openverse\.org$/.test(host) ? "Openverse" : host.replace(/^www\./, "");
+  if (tipo === "logo") return banco ? `Logo real · ${banco}` : "Logo real da pesquisa";
+  return banco ? `Imagem real · ${banco}` : "Imagem real da pesquisa";
+}
+
 export function urlDaFonteProfile(valor: unknown): string | undefined {
   if (typeof valor !== "string") return undefined;
   try { const u = new URL(valor); return (u.protocol === "https:" || u.protocol === "http:") && !u.username && !u.password ? u.href : undefined; } catch { return undefined; }
@@ -44,12 +60,14 @@ export function fontesDoProfile(card: CardComFontes, acervo: ImagemDoAcervo[], c
   };
   const fotos = card.fotos_livres || [];
   const ordenadas = [...fotos.filter((f) => f.papel === "fundo" && f.uso !== "rosto"), ...fotos.filter((f) => f.uso !== "rosto"), ...fotos];
-  ordenadas.forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nota || f.caminho.split("/").pop() || "Foto da lâmina", origem: "Fotos da lâmina", exata: f.uso !== "rosto" }));
-  (card.imagens_ids || []).forEach((id) => { const i = acervo.find((a) => a.id === id); if (i) adicionar({ caminho: i.storage_path, bucket: i.storage_bucket || "mesa", nome: i.nome, origem: "Acervo do cliente", url: urlDaFonteProfile(i.origem), exata: card.uso_do_acervo !== "rosto", acervo_id: i.id }); });
+  ordenadas.forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nota || f.caminho.split("/").pop() || "Foto da lâmina", origem: "Fotos da lâmina", exata: f.uso !== "rosto", grupo: "cliente" }));
+  (card.imagens_ids || []).forEach((id) => { const i = acervo.find((a) => a.id === id); if (i) adicionar({ caminho: i.storage_path, bucket: i.storage_bucket || "mesa", nome: i.nome, origem: "Acervo do cliente", url: urlDaFonteProfile(i.origem), exata: card.uso_do_acervo !== "rosto", acervo_id: i.id, grupo: "cliente" }); });
   const tipo = card.vitrine_tipo || "";
   const origem = tipo.startsWith("pagina_real") ? "Captura real da pesquisa" : tipo === "marca_real" ? "Logo real da pesquisa" : tipo === "pessoa_real" ? "Foto real da pesquisa" : "Imagem real da direção";
-  (card.vitrine_de_logos || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome || "Imagem real", origem, url: urlDaFonteProfile(f.url_origem) || urlDaFonteProfile(f.nome), exata: true }));
-  (card.fontes_reais || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome, origem: f.tipo === "logo" ? "Logo real da pesquisa" : "Imagem real da pesquisa", url: urlDaFonteProfile(f.fonte_url), licenca: f.licenca || undefined, autor: f.autor || undefined, exata: true }));
+  (card.vitrine_de_logos || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome || "Imagem real", origem, url: urlDaFonteProfile(f.url_origem) || urlDaFonteProfile(f.nome), exata: true, grupo: "internet" }));
+  (card.fontes_reais || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome, origem: origemDaPesquisa(f.fonte_url, f.tipo), url: urlDaFonteProfile(f.fonte_url), licenca: f.licenca || undefined, autor: f.autor || undefined, exata: true, grupo: "internet" }));
+  // As geradas por último na lista, mas a mais nova primeiro entre elas.
+  [...(card.imagens_do_template || [])].reverse().forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.descricao ? f.descricao.slice(0, 80) : "Foto gerada", origem: "Foto sem texto", exata: false, grupo: "gerada" }));
   return saida;
 }
 

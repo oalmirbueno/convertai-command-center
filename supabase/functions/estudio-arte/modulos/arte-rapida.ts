@@ -220,6 +220,23 @@ export interface ArteRapida {
   leitura_dos_cards?: LeituraDosCards | null;
   /** 02/10: o pedido fala de produto, app, marca ou tela real (pesquisa ligada e logos reais). */
   mundo_real?: { por: QuemDecidiu; marcas: string[]; tutorial: boolean } | null;
+  /** 21/10/2026: a peça de uma série de campanha (Campanhas › Gerar campanha completa): o conteúdo de origem. */
+  peca_da_campanha?: PecaDaCampanha | null;
+}
+
+/** A peça da série de campanha que esta arte rápida faz (campanha e o tema_id do conteúdo na proposta). */
+export interface PecaDaCampanha {
+  campanha_id: string;
+  tema_id: string;
+}
+
+/** peca_da_campanha do corpo ou do que está gravado, em forma fixa, ou null. */
+export function pecaDaCampanhaValida(v: unknown): PecaDaCampanha | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const campanha = typeof o.campanha_id === "string" && UUID.test(o.campanha_id) ? o.campanha_id.toLowerCase() : "";
+  const tema = texto(o.tema_id, 40);
+  return campanha && tema ? { campanha_id: campanha, tema_id: tema } : null;
 }
 
 /** Pedido já limpo (o que a função aceita). */
@@ -304,6 +321,8 @@ export function arteRapidaDa(direcao: unknown): ArteRapida | null {
     fidelidade_por: o.fidelidade_por === "jev" || o.fidelidade_por === "regra" ? (o.fidelidade_por as QuemDecidiu) : o.fidelidade ? "equipe" : null,
     leitura_dos_cards: leituraGravada(o.leitura_dos_cards),
     mundo_real: mundoRealGravado(o.mundo_real),
+    // Só quando há (o objeto antigo segue igual, byte a byte).
+    ...(pecaDaCampanhaValida(o.peca_da_campanha) ? { peca_da_campanha: pecaDaCampanhaValida(o.peca_da_campanha) } : {}),
   };
 }
 

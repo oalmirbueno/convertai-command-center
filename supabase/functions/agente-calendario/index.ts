@@ -2,6 +2,7 @@ import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
 import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./modulos/periodo-do-pedido.ts";
 import { concluirPeriodoSemItens } from "./modulos/pedido-vazio-do-periodo.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
+import { assuntosSugeridos, assuntoValido, CACHE_DAS_NOTICIAS_MS, CacheCurto, datasParaOJev, filtrarPorRecencia, LIMITE_DE_NOTICIAS, lerRssDeNoticias, NIVEIS_DA_DATA, recenciaValida, ROTULO_DO_NIVEL_DA_DATA, urlDoGoogleNoticias, type Noticia } from "./modulos/trending-noticias.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
 import { ehHype, encaixarNaAgenda, type Ocupacao, regraDoCliente, type RegraDoDia } from "../_shared/agenda-inteligente.ts";
@@ -145,6 +146,7 @@ import { legendaDoItem } from "./modulos/legenda-do-item.ts";
 // 12/10/2026: regras do carrossel (até 10 pela API, loop na 1ª, um pedido na última) e as legendas do plano pelo Jev.
 import { avisosDoCarrossel, MAX_LAMINAS_PELA_API } from "../_shared/regras-do-carrossel.ts";
 import { conferirLegendasComJev } from "./modulos/legendas-com-jev.ts";
+import { lerConferencia, perguntasDaConferencia, type PecaParaConferir } from "./modulos/conferencia-da-campanha.ts";
 // 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
 import { blocoDosMoldes, type Molde, moldesDosVencedores, type PostDoMolde } from "./modulos/moldes.ts";
 // 02/10: refazer uma proposta no servidor (chamada interna com a chave de serviço e o x-cron-secret).
@@ -3378,6 +3380,8 @@ type BriefingDaCampanha = {
   provas: string[];
   tom: string;
   cta: string;
+  /** 21/10/2026: canais escolhidos pela equipe (Feed, Stories, Reels...). Só aparece quando há. */
+  canais?: string[];
 };
 
 /** Linha do acervo (cliente_imagens) que a campanha usa. */
@@ -3413,7 +3417,18 @@ export function normalizarBriefing(bruto: unknown): BriefingDaCampanha {
     provas,
     tom: texto(o.tom, 300),
     cta: texto(o.cta, 200),
+    ...canaisDoBriefing(o.canais),
   };
+}
+
+/** Canais da campanha (até 8, sem repetir); vazio não entra no objeto (o briefing antigo segue igual). */
+function canaisDoBriefing(v: unknown): { canais?: string[] } {
+  const lista: string[] = [];
+  for (const c of Array.isArray(v) ? v : []) {
+    const t = texto(c, 40);
+    if (t && lista.indexOf(t) < 0) lista.push(t);
+  }
+  return lista.length ? { canais: lista.slice(0, 8) } : {};
 }
 
 /** O que a equipe definiu vale sobre o que o estrategista sugeriu (campo vazio não apaga). */
@@ -3426,6 +3441,7 @@ export function juntarBriefing(daIa: BriefingDaCampanha, daEquipe: BriefingDaCam
     provas: daEquipe.provas.length ? daEquipe.provas : daIa.provas,
     tom: daEquipe.tom || daIa.tom,
     cta: daEquipe.cta || daIa.cta,
+    ...canaisDoBriefing(daEquipe.canais && daEquipe.canais.length ? daEquipe.canais : daIa.canais),
   };
 }
 
@@ -4847,6 +4863,107 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
   return json({ hypes: gravado, cache: false, custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null, sinais_do_instagram: contarSinais(sinais) });
 }
 
+// --------------------------------------------------------------- hype e trending (21/10/2026)
+
+/** Notícias por assunto + recência (públicas): cache curto na memória desta instância. */
+const cacheDasNoticias = new CacheCurto<Noticia[]>(CACHE_DAS_NOTICIAS_MS);
+/** Notas do Jev das datas do hype por cliente + lista: 6 h na memória (o Jev é cobrado uma vez). */
+const cacheDasNotasDoHype = new CacheCurto<Record<string, { nota: number | null; nivel: string | null }>>(6 * 3_600_000, 300);
+
+/** Segmento do cadastro comercial e títulos do "em alta no nicho" da leitura mais recente. */
+async function sugeridosDoTrending(servico: SupabaseClient, clientId: string): Promise<string[]> {
+  const [org, hypes] = await Promise.all([
+    servico.from("commercial_organizations").select("segment").eq("client_id", clientId).not("segment", "is", null).limit(1),
+    servico.from("mesa_hypes").select("itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1),
+  ]);
+  const segmento = ((org.data ?? []) as Array<{ segment: string | null }>)[0]?.segment ?? null;
+  const itens = (((hypes.data ?? []) as Array<{ itens: unknown }>)[0]?.itens ?? []) as Array<{ tipo?: string; titulo?: string }>;
+  const doNicho = Array.isArray(itens) ? itens.filter((h) => h && h.tipo === "nicho").map((h) => h.titulo) : [];
+  return assuntosSugeridos(segmento, doNicho);
+}
+
+/**
+ * buscar_trending { client_id, assunto?, recencia? }: manchetes REAIS do Google Notícias (RSS público, sem
+ * custo) por assunto, com fonte, data real e link. Sem assunto: o 1º sugerido do cliente. Nunca inventa.
+ */
+async function buscarTrending(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const recencia = recenciaValida(corpo.recencia);
+  const sugeridos = await sugeridosDoTrending(servico, clientId).catch(() => [] as string[]);
+  const assunto = assuntoValido(corpo.assunto) || sugeridos[0] || "";
+  const agora = Date.now();
+  if (!assunto) return json({ assunto: "", recencia, itens: [], sugeridos, buscado_em: new Date(agora).toISOString(), fonte: "Google Notícias", sem_assunto: true });
+  const chave = `${assunto.toLowerCase()}|${recencia}`;
+  let itens = cacheDasNoticias.ler(chave, agora);
+  const doCache = !!itens;
+  if (!itens) {
+    let res: Response;
+    try {
+      res = await fetch(urlDoGoogleNoticias(assunto, recencia), { headers: { "Accept": "application/rss+xml, application/xml" }, signal: AbortSignal.timeout(8000) });
+    } catch {
+      throw new ErroHttp(502, "noticias_indisponiveis", "O Google Notícias não respondeu. Tente de novo.");
+    }
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      throw new ErroHttp(502, "noticias_indisponiveis", "O Google Notícias não respondeu. Tente de novo.");
+    }
+    const xml = (await res.text()).slice(0, 2_000_000);
+    itens = filtrarPorRecencia(lerRssDeNoticias(xml, LIMITE_DE_NOTICIAS * 2), recencia, agora).slice(0, LIMITE_DE_NOTICIAS);
+    cacheDasNoticias.guardar(chave, itens, agora);
+  }
+  return json({ assunto, recencia, itens, sugeridos, buscado_em: new Date(agora).toISOString(), fonte: "Google Notícias", cache: doCache, custo_usd: 0 });
+}
+
+/**
+ * ordenar_datas_do_hype { client_id, datas: [{ id, titulo, tipo, quando }] }: o Jev (Score) diz quanto cada
+ * data do calendário fixo serve a ESTE cliente. Uma pergunta por data, um pedido só. Sem Jev: jev_erro e a
+ * tela fica na ordem da data.
+ */
+async function ordenarDatasDoHype(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const datas = datasParaOJev(corpo.datas);
+  if (!datas.length) throw new ErroHttp(400, "sem_datas", "Mande ao menos uma data do calendário.");
+  const agora = Date.now();
+  const chave = `${clientId}|${datas.map((d) => d.id).join(",")}`;
+  const guardado = cacheDasNotasDoHype.ler(chave, agora);
+  if (guardado) return json({ notas: guardado, cache: true, custo_usd: 0 });
+  const [perfil, kit, org] = await Promise.all([
+    servico.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle(),
+    servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
+    servico.from("commercial_organizations").select("segment").eq("client_id", clientId).not("segment", "is", null).limit(1),
+  ]);
+  const p = perfil.data as { full_name: string | null; company_name: string | null } | null;
+  const ctx = ((kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {}) as Record<string, unknown>;
+  const curto = (v: unknown) => (typeof v === "string" ? v.slice(0, 1200) : v == null ? null : JSON.stringify(v).slice(0, 1200));
+  const cliente = {
+    nome: p?.company_name?.trim() || p?.full_name?.trim() || "Cliente",
+    segmento: ((org.data ?? []) as Array<{ segment: string | null }>)[0]?.segment ?? null,
+    negocio: curto(ctx.negocio),
+    publico: curto(ctx.publico),
+  };
+  const questions: Record<string, PerguntaJev> = {};
+  datas.forEach((_, i) => {
+    questions[`d${i}`] = { type: "score", instructions: `Quanto a data \`datas[${i}]\` serve para a marca em \`cliente\` falar com o público dela (ou vender) nessa data?`, criteria: NIVEIS_DA_DATA };
+  });
+  try {
+    const j = await jevPerguntar({ state: { cliente, datas }, questions });
+    const cobrado = await cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: "mesa_hypes", id: clientId }, criadoPor: chamador.userId }).catch(() => null);
+    const notas: Record<string, { nota: number | null; nivel: string | null }> = {};
+    datas.forEach((d, i) => {
+      const n = notaScore(j.answers[`d${i}`]);
+      notas[d.id] = { nota: notaDe0a10(n, NIVEIS_DA_DATA.length), nivel: n == null ? null : ROTULO_DO_NIVEL_DA_DATA[Math.max(0, Math.min(NIVEIS_DA_DATA.length - 1, Math.round(n)))] };
+    });
+    cacheDasNotasDoHype.guardar(chave, notas, agora);
+    return json({ notas, cache: false, custo_usd: cobrado?.custoUsd ?? 0 });
+  } catch (e) {
+    const codigo = e instanceof JevErro ? e.codigo : "jev_falhou";
+    console.error("agente-calendario: jev das datas do hype falhou", { client_id: clientId, codigo });
+    return json({ notas: {}, jev_erro: codigo, custo_usd: 0 });
+  }
+}
+
 // --------------------------------------------------------------- campanhas
 
 const ESQUEMA_CAMPANHA = {
@@ -5071,7 +5188,8 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
   const linhaDaCampanha: Record<string, unknown> = {
     id: campanhaId,
     client_id: clientId,
-    nome: texto(r.nome, 120) || "Campanha",
+    // 21/10/2026: o nome escrito na tela (a semente do Mês) vale sobre o sugerido pelo estrategista.
+    nome: texto(corpo.nome, 120) || texto(r.nome, 120) || "Campanha",
     pedido: pedidoTexto,
     objetivo: texto(r.objetivo, 600) || null,
     periodo_inicio: inicio,
@@ -5494,6 +5612,16 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
   let recusadas: string[] = [];
   if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing(corpo.briefing);
   if (typeof corpo.objetivo === "string") campos.objetivo = texto(corpo.objetivo, 600) || null;
+  // 21/10/2026: nome e período na etapa Briefing da campanha (sem IA).
+  if (typeof corpo.nome === "string" && texto(corpo.nome, 120)) campos.nome = texto(corpo.nome, 120);
+  if (corpo.periodo_inicio !== undefined || corpo.periodo_fim !== undefined) {
+    const ini = typeof corpo.periodo_inicio === "string" && DATA.test(corpo.periodo_inicio) ? corpo.periodo_inicio : c.periodo_inicio;
+    const fim = typeof corpo.periodo_fim === "string" && DATA.test(corpo.periodo_fim) ? corpo.periodo_fim : c.periodo_fim;
+    if (!ini || !fim || fim < ini) throw new ErroHttp(400, "periodo_invalido", "O fim da campanha vem antes do início.");
+    if (diasEntre(ini, fim) > 62) throw new ErroHttp(400, "periodo_longo", "Campanha de até 2 meses por vez.");
+    campos.periodo_inicio = ini;
+    campos.periodo_fim = fim;
+  }
   // Frente AE: trocar o tipo da campanha na tela (sem IA); "nenhum" tira o tipo.
   if (corpo.tipo !== undefined) {
     const base = { ...((c.identidade ?? {}) as Record<string, unknown>) };
@@ -5508,7 +5636,7 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
     campos.imagens = pedidas.filter((i) => achadas.has(i.imagem_id));
     recusadas = pedidas.filter((i) => !achadas.has(i.imagem_id)).map((i) => i.imagem_id);
   }
-  if (!Object.keys(campos).length) throw new ErroHttp(400, "nada_para_salvar", "Nada para salvar: mande briefing, imagens, objetivo ou tipo.");
+  if (!Object.keys(campos).length) throw new ErroHttp(400, "nada_para_salvar", "Nada para salvar: mande briefing, imagens, objetivo, tipo, nome ou período.");
   const { data, error } = await servico
     .from("mesa_campanhas")
     .update(campos)
@@ -5521,6 +5649,42 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
   }
   if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "Não foi possível salvar a campanha. Tente de novo.");
   return json({ campanha: data, recusadas, custo_usd: 0 });
+}
+
+/**
+ * campanha_conferir { campanha_id } -> { pecas: [{ tema_id, nota, nivel, confianca }], melhor_gancho, confianca_do_gancho, jev_erro, custo_usd }
+ * 21/10/2026: o Jev confere cada peça da série contra o briefing (Score) e escolhe o gancho que abre melhor a
+ * campanha (Choice), numa chamada só. Só leitura: nada é reescrito nem gravado (a tela mostra o aviso).
+ */
+async function campanhaConferir(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  if (!c.proposta_id) throw new ErroHttp(409, "campanha_sem_conteudos", "A campanha ainda não tem conteúdos para conferir.");
+  const { data: proposta } = await servico.from("calendario_propostas").select("itens").eq("id", c.proposta_id).eq("client_id", c.client_id).maybeSingle();
+  const itens = (Array.isArray(proposta?.itens) ? proposta.itens : []) as Record<string, unknown>[];
+  const pecas: PecaParaConferir[] = itens
+    .filter((i) => i && typeof i.tema_id === "string" && i.formato !== "foto" && i.formato !== "video")
+    .map((i) => ({
+      tema_id: String(i.tema_id),
+      data: texto(i.data, 10),
+      etapa: texto(i.etapa, 60),
+      formato: texto(i.formato, 20),
+      tema: texto(i.tema, 200),
+      gancho: texto(i.gancho, 300),
+      laminas: (Array.isArray(i.cards) ? i.cards : []).map((x) => texto((x as Record<string, unknown>)?.texto, 300)).filter(Boolean),
+      cta: texto(i.cta, 200),
+    }));
+  if (!pecas.length) throw new ErroHttp(409, "campanha_sem_conteudos", "A campanha ainda não tem conteúdos para conferir.");
+  const p = perguntasDaConferencia({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, briefing: normalizarBriefing(c.briefing) as unknown as Record<string, unknown> }, pecas);
+  try {
+    const r = await jevPerguntar({ state: p.state, questions: p.questions as Record<string, PerguntaJev> });
+    const cobrado = await cobrarJev(r, { clientId: c.client_id, tarefa: "calendario", referencia: { tipo: "mesa_campanha", id: c.id }, criadoPor: chamador.userId }).catch(() => null);
+    const lida = lerConferencia(r.answers as Record<string, { score?: number; confidence?: number; choice?: string }>, p.pecas);
+    return json({ ...lida, jev_erro: null, custo_usd: cobrado?.custoUsd ?? 0 });
+  } catch (e) {
+    if (!(e instanceof JevErro)) throw e;
+    return json({ pecas: p.pecas.map((x) => ({ tema_id: x.tema_id, nota: null, nivel: null, confianca: null })), melhor_gancho: null, confianca_do_gancho: null, jev_erro: e.codigo, custo_usd: 0 });
+  }
 }
 
 /**
@@ -7824,12 +7988,15 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   restaurar_item_agenda: restaurarItemDaAgenda,
   pedido_livre: pedidoLivre,
   buscar_hypes: buscarHypes,
+  buscar_trending: buscarTrending,
+  ordenar_datas_do_hype: ordenarDatasDoHype,
   campanha_criar: campanhaCriar,
   campanha_ajustar: campanhaAjustar,
   ...selo.acoes,
   campanha_conversar: campanhaConversar,
   campanha_salvar: campanhaSalvar,
   campanha_plano_imagens: campanhaPlanoImagens,
+  campanha_conferir: campanhaConferir,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,

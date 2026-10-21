@@ -53,6 +53,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import AgenteDoMes from "@/components/mesa/AgenteDoMes";
 import HypesDaSemana from "@/components/mesa/HypesDaSemana";
+import { tirarSementeDaCampanha } from "@/components/mesa/sementeDaCampanha";
 import CampanhaNova from "@/components/mesa/CampanhaNova";
 import CampanhaDetalhe from "@/components/mesa/CampanhaDetalhe";
 import AbaCampanhas from "@/components/mesa/AbaCampanhas";
@@ -209,10 +210,11 @@ describe("hypes da semana", () => {
     const inicio = vi.fn();
     const fim = vi.fn();
     montar(h(HypesDaSemana, { onCriarCampanha: vi.fn(), onPedidoInicio: inicio, onPedidoFim: fim }));
-    await screen.findByText("Dia das Crianças");
+    // 21/10: a leitura da semana fica no Hype, junto do calendário fixo; cada linha tem as próprias ações.
+    const linha = (await screen.findByText("Dia das Crianças")).closest("li") as HTMLElement;
     expect(screen.getByRole("button", { name: /Buscar de novo/ })).toBeTruthy();
     expect(chamadasDe("buscar_hypes").length).toBe(0);
-    fireEvent.click(screen.getByRole("button", { name: /Criar conteúdo/ }));
+    fireEvent.click(within(linha).getByRole("button", { name: /Criar conteúdo/ }));
     await waitFor(() => expect(chamadasDe("pedido_livre").length).toBe(1));
     // 17/10: o hype vai junto e o servidor grava o gancho exato (some da lista quando vai para a agenda).
     expect(chamadasDe("pedido_livre")[0]).toEqual({ acao: "pedido_livre", client_id: CLIENTE, mensagem: mensagemDoHype(hype), hype: { tipo: "hype", titulo: hype.titulo } });
@@ -221,13 +223,16 @@ describe("hypes da semana", () => {
     await waitFor(() => expect(fim).toHaveBeenCalled());
   });
 
-  it("Buscar de novo força a busca; Criar campanha avisa o índice do hype", async () => {
+  it("Buscar de novo força a busca; Criar campanha de um item grava a semente com o índice do hype", async () => {
     mock.tabelas.mesa_hypes = [{ client_id: CLIENTE, semana: segundaDaSemanaIso(hojeIso()), itens: [hype], resumo: null, criado_em: new Date().toISOString() }];
     const criarCampanha = vi.fn();
     montar(h(HypesDaSemana, { onCriarCampanha: criarCampanha }));
-    await screen.findByText("Dia das Crianças");
-    fireEvent.click(screen.getByRole("button", { name: /Criar campanha/ }));
-    expect(criarCampanha).toHaveBeenCalledWith(0);
+    const linha = (await screen.findByText("Dia das Crianças")).closest("li") as HTMLElement;
+    fireEvent.click(within(linha).getByRole("button", { name: /Criar campanha/ }));
+    expect(criarCampanha).toHaveBeenCalledTimes(1);
+    const semente = tirarSementeDaCampanha(CLIENTE);
+    expect(semente && semente.hypes).toEqual([{ titulo: "Dia das Crianças", quando: "próximas semanas", por_que_agora: undefined, como_usar: "Kit presente", indice: 0 }]);
+    expect(semente && semente.trends).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: /Buscar de novo/ }));
     await waitFor(() => expect(chamadasDe("buscar_hypes").length).toBe(1));
     expect(chamadasDe("buscar_hypes")[0]).toEqual({ acao: "buscar_hypes", client_id: CLIENTE, forcar: true });
@@ -266,12 +271,14 @@ describe("campanhas", () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
     await screen.findByText("Teaser do amor");
+    // 21/10/2026: os conteúdos moram na etapa Série de conteúdos.
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Partes da campanha" })).getByRole("button", { name: /Série/ }));
     // 25/09: a equipe escolhe (todos os que faltam vêm marcados) e manda só os escolhidos.
     fireEvent.click(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ }));
     await waitFor(() => expect(chamadasDe("gravar").length).toBe(1));
     expect(chamadasDe("gravar")[0]).toEqual({ acao: "gravar", proposta_id: proposta.id, tema_ids: ["c1"], project_id: proposta.project_id });
     // Frente SEL (30/09): o selo tem parte própria (16/10/2026: aba em ícone); abrir não gasta nada.
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Partes da campanha" })).getByRole("button", { name: /Selo/ }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Partes da campanha" })).getByRole("button", { name: /Identidade/ }));
     expect(await screen.findByRole("button", { name: /Escolher o selo/ })).toBeTruthy();
     await waitFor(() => expect(chamadasDe("selo_estado").length).toBe(1));
     expect(chamadasDe("selo_estado")[0]).toEqual({ acao: "selo_estado", campanha_id: campanha.id });

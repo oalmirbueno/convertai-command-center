@@ -9,7 +9,8 @@ import { textoDoErro } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
 import type { BriefingDaCampanha, Campanha } from "./mesaV4Api";
 import { briefingEstaVazio } from "./mesaV4Api";
-import { campanhaSalvar, normalizarBriefing, trocarCampanhaNoCache } from "./campanhasApi";
+import { campanhaSalvar, CANAIS_DA_CAMPANHA, normalizarBriefing, trocarCampanhaNoCache } from "./campanhasApi";
+import { DIAS_MAX_CAMPANHA, diasEntreIso, periodoCurto } from "./mesaV4Api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
 /**
@@ -77,6 +78,7 @@ export function FormularioDoBriefing({
                     type="button"
                     onClick={() => mudar({ produtos: produtos.filter((_, j) => j !== i) })}
                     aria-label={`Tirar o produto ${i + 1}`}
+                    title={`Tirar o produto ${i + 1}`}
                     disabled={desabilitado}
                     className="ml-1 shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
                   >
@@ -133,6 +135,26 @@ export function FormularioDoBriefing({
         <Campo rotulo="Tom" id={`${prefixo}-tom`}>
           <Input id={`${prefixo}-tom`} value={valor.tom} onChange={(e) => mudar({ tom: e.target.value })} disabled={desabilitado} placeholder="Ex.: leve, próximo, com humor" className="h-8 text-[13px]" />
         </Campo>
+        <div className="sm:col-span-2">
+          <p className="mb-1 text-[11px] font-medium text-muted-foreground">Canais</p>
+          <div role="group" aria-label="Canais da campanha" className="flex min-w-0 flex-wrap">
+            {CANAIS_DA_CAMPANHA.map((c) => {
+              const marcado = (valor.canais || []).indexOf(c) >= 0;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  aria-pressed={marcado}
+                  disabled={desabilitado}
+                  onClick={() => mudar({ canais: marcado ? (valor.canais || []).filter((x) => x !== c) : (valor.canais || []).concat([c]) })}
+                  className={`mb-1.5 mr-1.5 inline-flex h-7 items-center rounded-full border px-2.5 text-[12px] transition-colors ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/50"}`}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -160,16 +182,24 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState<BriefingDaCampanha>(briefing);
   const [salvando, setSalvando] = useState(false);
+  // 21/10/2026: o período mora no briefing da campanha (a série e as peças seguem a janela).
+  const [inicio, setInicio] = useState(campanha.periodo_inicio || "");
+  const [fim, setFim] = useState(campanha.periodo_fim || "");
+  const dias = inicio && fim ? diasEntreIso(inicio, fim) : -1;
+  const erroDoPeriodo = !inicio || !fim ? "Escolha o início e o fim." : dias < 0 ? "O fim vem antes do início." : dias > DIAS_MAX_CAMPANHA ? `Até ${DIAS_MAX_CAMPANHA} dias por campanha.` : "";
 
   const abrirEdicao = () => {
     setRascunho(normalizarBriefing(campanha.briefing));
+    setInicio(campanha.periodo_inicio || "");
+    setFim(campanha.periodo_fim || "");
     setEditando(true);
   };
 
   const salvar = async () => {
     setSalvando(true);
     try {
-      const r = await campanhaSalvar({ campanhaId: campanha.id, briefing: briefingParaEnviar(rascunho) });
+      const mudouPeriodo = inicio !== (campanha.periodo_inicio || "") || fim !== (campanha.periodo_fim || "");
+      const r = await campanhaSalvar({ campanhaId: campanha.id, briefing: briefingParaEnviar(rascunho), ...(mudouPeriodo ? { periodoInicio: inicio, periodoFim: fim } : {}) });
       if (r && r.campanha) trocarCampanhaNoCache(queryClient, clientId, r.campanha);
       setEditando(false);
     } catch (e) {
@@ -182,12 +212,21 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
   if (editando) {
     return (
       <div className="min-w-0 space-y-3">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:max-w-sm">
+          <Campo rotulo="Início" id={`briefing-${campanha.id}-inicio`}>
+            <Input id={`briefing-${campanha.id}-inicio`} type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} disabled={salvando} className="h-8 min-w-0 text-[13px]" />
+          </Campo>
+          <Campo rotulo="Fim" id={`briefing-${campanha.id}-fim`}>
+            <Input id={`briefing-${campanha.id}-fim`} type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} disabled={salvando} className="h-8 min-w-0 text-[13px]" />
+          </Campo>
+        </div>
+        {erroDoPeriodo && <p className="text-[12px] text-destructive">{erroDoPeriodo}</p>}
         <FormularioDoBriefing valor={rascunho} onChange={setRascunho} prefixo={`briefing-${campanha.id}`} desabilitado={salvando} />
         <div className="flex flex-wrap items-center justify-end">
           <Button type="button" size="sm" variant="ghost" className="mr-1.5 h-8" onClick={() => setEditando(false)} disabled={salvando}>
             Cancelar
           </Button>
-          <Button type="button" size="sm" className="h-8" onClick={() => void salvar()} disabled={salvando}>
+          <Button type="button" size="sm" className="h-8" onClick={() => void salvar()} disabled={salvando || !!erroDoPeriodo}>
             {salvando ? "Salvando…" : "Salvar briefing"}
           </Button>
         </div>
@@ -207,6 +246,8 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
         </p>
       ) : (
         <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
+          {briefing.canais && briefing.canais.length > 0 && <Linha rotulo="Canais">{briefing.canais.join(", ")}</Linha>}
           {briefing.produtos.length > 0 && (
             <div className="sm:col-span-2">
               <Linha rotulo="Produto(s) em foco">

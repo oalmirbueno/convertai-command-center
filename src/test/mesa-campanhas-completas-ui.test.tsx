@@ -288,15 +288,16 @@ describe("campanha aberta", () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
     const partes = screen.getByRole("navigation", { name: "Partes da campanha" });
-    for (const secao of ["Briefing", "Imagens da campanha", "Plano de imagens"]) {
+    // 21/10/2026: o caminho guiado (Campanha, Ideia, Briefing, Identidade, Série, Peças, Revisão e agenda);
+    // as imagens moram no Briefing e o plano de imagens na Série.
+    for (const secao of ["Campanha", "Ideia", "Briefing", "Identidade", "Série de conteúdos", "Peças", "Revisão e agenda"]) {
       expect(within(partes).getByRole("button", { name: new RegExp(secao) })).toBeTruthy();
     }
     abrirParte("Briefing");
     expect(screen.getByText("20% nos kits até 20/10")).toBeTruthy();
     expect(screen.getByText("Presente que fala por você")).toBeTruthy();
-    abrirParte("Imagens da campanha");
     expect(await screen.findByRole("list", { name: "Imagens da campanha" })).toBeTruthy();
-    abrirParte("Plano de imagens");
+    abrirParte("Série");
     expect(await screen.findByText("A capa precisa do produto herói inteiro.")).toBeTruthy();
     expect(screen.getByText(/Escolha do Jev \(82%\) entre 2 candidatas/)).toBeTruthy();
     expect(screen.getByText(/nenhuma das fotos serve bem/)).toBeTruthy();
@@ -308,7 +309,7 @@ describe("campanha aberta", () => {
   it("trocar o papel de uma imagem salva a lista inteira pela campanha_salvar (sem custo)", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
-    abrirParte("Imagens da campanha");
+    abrirParte("Briefing");
     const lista = await screen.findByRole("list", { name: "Imagens da campanha" });
     const papeis = within(lista).getAllByRole("group", { name: "Papel da imagem" });
     fireEvent.click(within(papeis[1]).getByRole("button", { name: "Apoio" }));
@@ -336,7 +337,7 @@ describe("campanha aberta", () => {
   it("Refazer o plano chama campanha_plano_imagens com o id da campanha", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
-    abrirParte("Plano de imagens");
+    abrirParte("Série");
     await screen.findByText("A capa precisa do produto herói inteiro.");
     fireEvent.click(screen.getByRole("button", { name: /Refazer o plano/ }));
     await waitFor(() => expect(chamadasDe("campanha_plano_imagens").length).toBe(1));
@@ -346,7 +347,7 @@ describe("campanha aberta", () => {
   it("plano feito sobre outras imagens avisa que ficou velho", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha: { ...campanha, imagens: [imagens[0]] } }));
-    abrirParte("Plano de imagens");
+    abrirParte("Série");
     expect(await screen.findByText(/Desatualizado: refaça o plano/)).toBeTruthy();
   });
 });

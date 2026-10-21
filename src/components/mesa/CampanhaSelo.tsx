@@ -438,7 +438,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
       <div className="flex min-w-0 flex-col sm:flex-row">
         <div className="mb-3 shrink-0 sm:mb-0 sm:mr-4">
           {caminhoAtual ? (
-            <button type="button" onClick={() => setAmpliar(caminhoAtual)} aria-label="Ver o selo grande" className="block cursor-zoom-in">
+            <button type="button" onClick={() => setAmpliar(caminhoAtual)} aria-label="Ver o selo grande" title="Ver o selo grande" className="block cursor-zoom-in">
               <Miniatura caminho={caminhoAtual} alt={`Selo da campanha ${campanha.nome}`} tamanho="h-32 w-32" />
             </button>
           ) : (
@@ -539,7 +539,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
               {refsDeMelhora.map((c) => (
                 <span key={c} className="mr-1 inline-flex items-center">
                   <Miniatura caminho={c} alt="Referência do Melhorar" tamanho="h-8 w-8" />
-                  <button type="button" aria-label="Tirar a referência" className="ml-0.5 text-muted-foreground hover:text-foreground" onClick={() => setRefsDeMelhora((l) => l.filter((x) => x !== c))}>
+                  <button type="button" aria-label="Tirar a referência" title="Tirar a referência" className="ml-0.5 text-muted-foreground hover:text-foreground" onClick={() => setRefsDeMelhora((l) => l.filter((x) => x !== c))}>
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </span>
@@ -809,7 +809,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                   <ul className="mt-1.5 flex min-w-0 flex-wrap" aria-label="Selos de outras campanhas">
                     {antigos.map((s) => (
                       <li key={s.id} className="mb-2 mr-2">
-                        <button type="button" disabled={trocando} onClick={() => void usarPronto({ origem: "arquivo", selo_id: s.id }, "Selo antigo escolhido.")} aria-label={`Usar o selo ${s.texto || "antigo"}`}>
+                        <button type="button" disabled={trocando} onClick={() => void usarPronto({ origem: "arquivo", selo_id: s.id }, "Selo antigo escolhido.")} aria-label={`Usar o selo ${s.texto || "antigo"}`} title={`Usar o selo ${s.texto || "antigo"}`}>
                           <Miniatura caminho={s.caminho} alt={s.texto || "Selo antigo"} />
                         </button>
                       </li>
@@ -830,7 +830,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
           <ul className="mt-2 grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Opções de selo">
             {opcoes.map((o) => (
               <li key={o.versao.id} className="min-w-0">
-                <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliar(o.versao.caminho)} aria-label="Ver a opção grande">
+                <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliar(o.versao.caminho)} aria-label="Ver a opção grande" title="Ver a opção grande">
                   <span className="relative block w-full overflow-hidden rounded-md border border-border bg-background" style={{ paddingBottom: "100%" }}>
                     <ImagemDaMesa caminho={o.versao.caminho} alt={`Opção ${rotuloDoEstilo(o.versao.estilo)}`} className="absolute inset-0 h-full w-full !object-contain p-2" />
                   </span>
@@ -862,7 +862,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
               const eAtual = !!atual && v.id === atual.id;
               return (
                 <li key={v.id} className="mb-2 mr-3 w-20 min-w-0">
-                  <button type="button" onClick={() => setAmpliar(v.caminho)} className="block cursor-zoom-in" aria-label="Ver a versão grande">
+                  <button type="button" onClick={() => setAmpliar(v.caminho)} className="block cursor-zoom-in" aria-label="Ver a versão grande" title="Ver a versão grande">
                     <Miniatura caminho={v.caminho} alt={`Versão ${ROTULO_DA_ORIGEM[v.origem] || v.origem}`} marcada={eAtual} />
                   </button>
                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{ROTULO_DA_ORIGEM[v.origem] || v.origem}</p>

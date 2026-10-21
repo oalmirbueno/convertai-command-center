@@ -164,6 +164,8 @@ export interface BriefingDaCampanha {
   provas: string[];
   tom: string;
   cta: string;
+  /** 21/10/2026: canais em que a campanha roda (só quando a equipe marca). */
+  canais?: string[];
 }
 
 export type PapelDaImagemDaCampanha = "heroi" | "apoio" | "ambiente";
@@ -550,11 +552,14 @@ export interface CorpoDaCampanha {
   imagens?: ImagemDaCampanha[];
   /** Frente AE: tipo escolhido na tela (promocao, lancamento...); sem ele, o Jev lê o pedido. */
   tipo?: string | null;
+  /** 21/10/2026: nome escrito na tela (semente do Mês); vale sobre o do estrategista. */
+  nome?: string | null;
 }
 
 export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao: "campanha_criar", client_id: c.clientId, pedido: c.pedido };
   if (c.tipo) corpo.tipo = c.tipo;
+  if (c.nome && c.nome.trim()) corpo.nome = c.nome.trim().slice(0, 120);
   if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
   if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
   if (c.quantidade) corpo.quantidade = c.quantidade;
@@ -572,7 +577,8 @@ export function briefingEstaVazio(b: Partial<BriefingDaCampanha> | null | undefi
   const tem = (v: unknown) => typeof v === "string" && v.trim().length > 0;
   const produtos = Array.isArray(b.produtos) ? b.produtos.filter((p) => p && tem(p.nome)) : [];
   const provas = Array.isArray(b.provas) ? b.provas.filter(tem) : [];
-  return !produtos.length && !provas.length && !tem(b.oferta) && !tem(b.mensagem_central) && !tem(b.publico) && !tem(b.tom) && !tem(b.cta);
+  const canais = Array.isArray(b.canais) ? b.canais.filter(tem) : [];
+  return !produtos.length && !provas.length && !canais.length && !tem(b.oferta) && !tem(b.mensagem_central) && !tem(b.publico) && !tem(b.tom) && !tem(b.cta);
 }
 
 export const campanhaCriar = (c: CorpoDaCampanha) => chamarFuncao<any>("agente-calendario", corpoDaCampanha(c));

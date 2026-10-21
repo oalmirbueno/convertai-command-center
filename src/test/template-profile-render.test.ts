@@ -4,7 +4,7 @@ import type { TemplateProfile } from "../../supabase/functions/estudio-arte/modu
 
 const template: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Cliente Exemplo", username: "cliente.exemplo", verificado: false, texto: "Uma foto real.\nUma história do seu negócio.", tamanho_texto: 36, cor_fundo: "#ffffff", tema: "claro", tamanho_foto: 76, espacamento: 30, arredondamento: 16 };
 function quadro() {
-  const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), measureText: (s: string) => ({ width: Array.from(s).length * (parseFloat(ctx.font.match(/(\d+)px/)?.[1] || "36")) * .5 }) };
+  const ctx = { font: "", save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), translate: vi.fn(), scale: vi.fn(), bezierCurveTo: vi.fn(), createLinearGradient: () => ({ addColorStop: vi.fn() }), measureText: (s: string) => ({ width: Array.from(s).length * (parseFloat(ctx.font.match(/(\d+)px/)?.[1] || "36")) * .5 }) };
   const canvas = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
   return { canvas, ctx };
 }
@@ -19,9 +19,10 @@ describe("Profile conserva o conteúdo no quadro final", () => {
   it.each(Object.entries(ALTURAS_PROFILE))("exporta formato %s com dimensões reais e texto dentro da tela", (formato, altura) => {
     for (const estilo of ["twitter", "instagram"] as const) {
       const { canvas, ctx } = quadro();
-      desenharProfile(canvas, { ...template, estilo }, formato as keyof typeof ALTURAS_PROFILE);
+      // No Instagram a legenda aberta mostra o texto inteiro (sem o "mais"), quebrado na largura do post.
+      desenharProfile(canvas, { ...template, estilo, ...(estilo === "instagram" ? { legenda_completa: true, proporcao: "1:1" as const } : {}) }, formato as keyof typeof ALTURAS_PROFILE);
       expect([canvas.width, canvas.height]).toEqual([1080, altura]);
-      expect(ctx.fillText.mock.calls.map((c) => c[0])).toContain("Uma foto real.");
+      expect(ctx.fillText.mock.calls.map((c) => c[0]).join(" ").replace(/\s+/g, " ")).toContain("Uma foto real.");
       for (const c of ctx.fillText.mock.calls) { expect(c[1]).toBeGreaterThan(0); expect(c[2]).toBeGreaterThan(0); expect(c[2]).toBeLessThan(altura - 30); }
     }
   });

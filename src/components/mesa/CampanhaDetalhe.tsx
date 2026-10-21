@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bookmark, BookmarkPlus, ChevronLeft, ClipboardList, ExternalLink, Images, Info, LayoutList, ListTree, Loader2, MessageSquare, Stamp, SwatchBook, X } from "lucide-react";
+import { BookmarkPlus, CalendarCheck2, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Stamp, X } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
@@ -12,10 +12,17 @@ import {
   chaves,
   lerProposta,
   mesDaData,
+  hojeIso,
   periodoCurto,
   salvarReferenciasDaCampanha,
   type Campanha,
 } from "./mesaV4Api";
+import { briefingEstaVazio } from "./mesaV4Api";
+import { sugestoesDaCampanha } from "./regrasDaCampanha";
+import { GerarCampanhaCompleta, usePecasDaCampanha } from "./CampanhaCompleta";
+import CampanhaPecas from "./CampanhaPecas";
+import CampanhaRevisao from "./CampanhaRevisao";
+import CampanhaVisao from "./CampanhaVisao";
 import {
   MAX_IMAGENS_CAMPANHA,
   normalizarBriefing,
@@ -32,12 +39,14 @@ import CampanhaSelo from "./CampanhaSelo";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
 /**
- * A campanha aberta, no centro da aba: seções claras e recolhíveis (visão
- * geral, selo (CampanhaSelo.tsx), identidade do tema, referências e conteúdos). Os
- * ajustes são pedidos ao agente da campanha, ao lado; aqui ficam as ações
- * diretas: gerar os conteúdos na hora, editar cada um, escolher e mandar para
- * a agenda (CampanhaConteudos.tsx), escolher o selo, escolher referências e
- * abrir no Estúdio.
+ * A campanha aberta, no centro da aba. 21/10/2026 (dono: "a área de campanha de maneira fácil, completa e
+ * inteligente"): um caminho guiado em etapas (Etapas soIcone), com a campanha pronta na frente:
+ *   Campanha (capa, números, linha do tempo e grade das artes, exportar) ·
+ *   1 Ideia (pedido, objetivo, conceito e sugestões) · 2 Briefing (período, oferta, público, tom, canais,
+ *   imagens e referências) · 3 Identidade (selo e paleta) · 4 Série (os conteúdos por fase e o plano de
+ *   imagens) · 5 Peças (cada conteúdo gerado pelo Estúdio) · 6 Revisão e agenda (Jev, conflitos, aprovar).
+ * "Gerar campanha completa" (CampanhaCompleta.tsx) faz o que falta da 3 à 5 com o custo total antes.
+ * Os ajustes finos seguem com o agente da campanha, ao lado.
  */
 
 export const ROTULO_DO_ESTADO: Record<string, string> = { planejada: "planejada", gravada: "gravada", encerrada: "encerrada" };
@@ -49,35 +58,40 @@ export function SeloDoEstado({ estado }: { estado: string }) {
 
 // ------------------------------------------------------------------ seções
 
-type IdDaSecao = "visao" | "briefing" | "imagens" | "plano" | "selo" | "identidade" | "referencias" | "conteudos";
+type IdDaSecao = "visao" | "ideia" | "briefing" | "identidade" | "serie" | "pecas" | "revisao";
 
-/**
- * As partes da campanha, na ordem das abas (16/10/2026: as seções empilhadas
- * viraram abas em ícone no topo). Um ícone por parte, sem repetir.
- */
-const ORDEM_DAS_SECOES: IdDaSecao[] = ["conteudos", "visao", "briefing", "imagens", "plano", "selo", "identidade", "referencias"];
+/** O caminho da campanha, na ordem: a campanha pronta e as seis etapas. Um ícone por etapa. */
+const ORDEM_DAS_SECOES: IdDaSecao[] = ["visao", "ideia", "briefing", "identidade", "serie", "pecas", "revisao"];
 
 export const NOMES_DAS_SECOES: Record<IdDaSecao, string> = {
-  visao: "Visão geral",
-  conteudos: "Conteúdos",
+  visao: "Campanha",
+  ideia: "Ideia",
   briefing: "Briefing",
-  imagens: "Imagens da campanha",
-  plano: "Plano de imagens",
-  selo: "Selo",
-  identidade: "Identidade do tema",
-  referencias: "Referências",
+  identidade: "Identidade",
+  serie: "Série de conteúdos",
+  pecas: "Peças",
+  revisao: "Revisão e agenda",
 };
 
 const ICONES_DAS_SECOES: Record<IdDaSecao, ReactNode> = {
-  visao: <Info className="h-4 w-4" />,
-  conteudos: <LayoutList className="h-4 w-4" />,
+  visao: <LayoutGrid className="h-4 w-4" />,
+  ideia: <Lightbulb className="h-4 w-4" />,
   briefing: <ClipboardList className="h-4 w-4" />,
-  imagens: <Images className="h-4 w-4" />,
-  plano: <ListTree className="h-4 w-4" />,
-  selo: <Stamp className="h-4 w-4" />,
-  identidade: <SwatchBook className="h-4 w-4" />,
-  referencias: <Bookmark className="h-4 w-4" />,
+  identidade: <Stamp className="h-4 w-4" />,
+  serie: <LayoutList className="h-4 w-4" />,
+  pecas: <Images className="h-4 w-4" />,
+  revisao: <CalendarCheck2 className="h-4 w-4" />,
 };
+
+/** Subtítulo de uma parte dentro da etapa (sem caixa: título e espaço). */
+function Parte({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section className="min-w-0 border-t border-border pt-4" aria-label={titulo}>
+      <h3 className={juntar(texto.rotulo, "mb-2")}>{titulo}</h3>
+      {children}
+    </section>
+  );
+}
 
 /** A aba aberta fica lembrada no navegador (vale para todas as campanhas). */
 const CHAVE_DA_ABA = "mesa:campanha:aba";
@@ -85,9 +99,9 @@ const CHAVE_DA_ABA = "mesa:campanha:aba";
 function lerAba(): IdDaSecao {
   try {
     const v = window.localStorage.getItem(CHAVE_DA_ABA) || "";
-    return ORDEM_DAS_SECOES.indexOf(v as IdDaSecao) >= 0 ? (v as IdDaSecao) : "conteudos";
+    return ORDEM_DAS_SECOES.indexOf(v as IdDaSecao) >= 0 ? (v as IdDaSecao) : "visao";
   } catch {
-    return "conteudos";
+    return "visao";
   }
 }
 
@@ -117,7 +131,10 @@ export default function CampanhaDetalhe({
   onAbrirNoEstudio,
   onPedirAoAgente,
   onAbrirAgente,
+  onAbrirArteRapida,
 }: {
+  /** Abre a peça (arte rápida) no Estúdio. */
+  onAbrirArteRapida?: (trabalhoId: string) => void;
   campanha: Campanha;
   projetoSugerido?: string | null;
   /** Celular: volta para a lista. */
@@ -152,6 +169,8 @@ export default function CampanhaDetalhe({
     enabled: !!campanha.proposta_id,
     queryFn: () => lerProposta(campanha.proposta_id as string),
   });
+
+  const { pecas, carregando: lendoPecas } = usePecasDaCampanha(campanha, proposta.data);
 
   const escolher = (s: IdDaSecao) => {
     setAba(s);
@@ -214,23 +233,36 @@ export default function CampanhaDetalhe({
       ? `${itens.length} conteúdo(s)${naAgenda ? `, ${naAgenda} na agenda` : ""}`
       : "nenhum ainda";
 
-  // O resumo de cada parte (antes ao lado do título da seção) vai para a dica da aba.
+  const deArte = pecas.filter((p) => p.estado !== "outra_mesa");
+  const prontas = deArte.filter((p) => p.estado === "pronta" || p.estado === "na_agenda").length;
+  const naAgendaPecas = deArte.filter((p) => p.estado === "na_agenda" || p.estado === "no_roteiro").length;
+  // O resumo de cada etapa vai para a dica (title); a feita ganha o check.
   const resumos: Record<IdDaSecao, string> = {
-    visao: campanha.objetivo || "",
-    conteudos: conteudosResumo,
+    visao: periodoCurto(campanha.periodo_inicio, campanha.periodo_fim),
+    ideia: campanha.objetivo || "",
     briefing: produtosEmFoco || briefing.oferta || "",
-    imagens: `${imagensDaCampanha.length} de ${MAX_IMAGENS_CAMPANHA}`,
-    plano: planoResumo,
-    selo: campanha.selo_path ? "com selo" : "sem selo ainda",
-    identidade: id.tema_visual || "",
-    referencias: `${referencias.length} de ${MAX_REFERENCIAS}`,
+    identidade: campanha.selo_path ? "com selo" : "sem selo ainda",
+    serie: conteudosResumo,
+    pecas: deArte.length ? `${prontas} de ${deArte.length} prontas` : "",
+    revisao: deArte.length ? `${naAgendaPecas} de ${deArte.length} na agenda` : "",
+  };
+  const feitas: Record<IdDaSecao, boolean> = {
+    visao: false,
+    ideia: !!campanha.objetivo || !!campanha.conceito,
+    briefing: !briefingEstaVazio(briefing),
+    identidade: !!campanha.selo_path,
+    serie: itens.length > 0,
+    pecas: deArte.length > 0 && prontas === deArte.length,
+    revisao: deArte.length > 0 && naAgendaPecas === deArte.length,
   };
   const abas = ORDEM_DAS_SECOES.map((s) => ({
     valor: s,
     rotulo: NOMES_DAS_SECOES[s],
     icone: ICONES_DAS_SECOES[s],
+    feita: feitas[s],
     dica: resumos[s] ? `${NOMES_DAS_SECOES[s]} · ${resumos[s]}` : NOMES_DAS_SECOES[s],
   }));
+  const sugestoes = sugestoesDaCampanha(campanha, pecas, hojeIso());
 
   return (
     <div className="min-w-0 space-y-3">
@@ -276,7 +308,7 @@ export default function CampanhaDetalhe({
             </button>
           )}
           {/* Com os conteúdos abertos, a barra deles já tem "Abrir no Estúdio". */}
-          {gravada && primeiraTarefa && onAbrirNoEstudio && aba !== "conteudos" && (
+          {gravada && primeiraTarefa && onAbrirNoEstudio && aba !== "serie" && (
             <button
               type="button"
               className={juntar(botao.icone, "ml-0.5 text-primary hover:text-primary")}
@@ -293,127 +325,144 @@ export default function CampanhaDetalhe({
       {/* Frente AE: a campanha ligada às mesas (usar nas mesas, levar para, tipo e a base). */}
       <CampanhaNasMesas campanha={campanha} />
 
+      {/* 21/10/2026: o que falta da campanha completa (selo e peças), com o custo total antes e o andamento. */}
+      <GerarCampanhaCompleta campanha={campanha} pecas={pecas} carregando={lendoPecas || (!!campanha.proposta_id && proposta.isLoading)} />
+
       {/* 16/10/2026 (dono: "tem muito texto" e "seções empilhadas viram abas em ícone no topo"):
           as oito seções viraram abas em ícone; a aberta mostra o nome e o resumo curto vai no title. */}
       <Etapas soIcone rotulo="Partes da campanha" itens={abas} valor={aba} onEscolher={(v) => escolher(v as IdDaSecao)} className="-mx-1 border-b border-border pb-1" />
 
-      <div className="min-w-0 pt-1" role="region" aria-label={NOMES_DAS_SECOES[aba]}>
-        {aba === "visao" && (
-          <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
-            <Linha rotulo="Nome">{campanha.nome}</Linha>
-            <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
-            {campanha.objetivo && (
-              <div className="sm:col-span-2">
-                <Linha rotulo="Objetivo">{campanha.objetivo}</Linha>
-              </div>
-            )}
-            {campanha.conceito && (
-              <div className="sm:col-span-2">
-                <Linha rotulo="Conceito">{campanha.conceito}</Linha>
-              </div>
-            )}
-            {campanha.pedido && (
-              <div className="sm:col-span-2">
-                <Linha rotulo="Pedido original"><span className="text-muted-foreground">{campanha.pedido}</span></Linha>
-              </div>
-            )}
-          </dl>
-        )}
+      <div className="min-w-0 space-y-4 pt-1" role="region" aria-label={NOMES_DAS_SECOES[aba]}>
+        {aba === "visao" && <CampanhaVisao campanha={campanha} pecas={pecas} />}
 
-        {/* Conteúdos: gerar na hora, editar, escolher e mandar para a agenda. */}
-        {aba === "conteudos" && (
-          <CampanhaConteudos
-            campanha={campanha}
-            proposta={proposta.data || null}
-            carregando={!!campanha.proposta_id && proposta.isLoading}
-            erro={proposta.isError ? proposta.error : null}
-            projetoSugerido={projetoSugerido || null}
-            onAbrirNoEstudio={onAbrirNoEstudio}
-            onPedirAoAgente={onPedirAoAgente ? pedir : undefined}
-          />
-        )}
-
-        {/* Briefing: produto em foco, oferta, mensagem, público, provas, tom e CTA. */}
-        {aba === "briefing" && <CampanhaBriefing campanha={campanha} onPedirAoAgente={onPedirAoAgente ? pedir : undefined} />}
-
-        {/* Imagens da campanha: do acervo (inclusive Mesa Foto) ou enviadas, com papel e porquê. */}
-        {aba === "imagens" && (
+        {/* 1. Ideia: o pedido, o objetivo, o conceito e as sugestões pela janela e pela série. */}
+        {aba === "ideia" && (
           <>
-            {salvandoImagens > 0 && <Loader2 className="mb-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando as imagens" />}
-            <ImagensDaCampanhaSalvas campanha={campanha} onSalvando={setSalvandoImagens} />
+            <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Linha rotulo="Nome">{campanha.nome}</Linha>
+              <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
+              {campanha.objetivo && (
+                <div className="sm:col-span-2">
+                  <Linha rotulo="Objetivo">{campanha.objetivo}</Linha>
+                </div>
+              )}
+              {campanha.conceito && (
+                <div className="sm:col-span-2">
+                  <Linha rotulo="Conceito">{campanha.conceito}</Linha>
+                </div>
+              )}
+              {campanha.pedido && (
+                <div className="sm:col-span-2">
+                  <Linha rotulo="Pedido original"><span className="whitespace-pre-line text-muted-foreground">{campanha.pedido}</span></Linha>
+                </div>
+              )}
+            </dl>
+            {sugestoes.length > 0 && (
+              <Parte titulo="Sugestões">
+                <ul className="list-disc space-y-1 pl-4 text-[13px]" aria-label="Sugestões da campanha">
+                  {sugestoes.map((t) => <li key={t}>{t}</li>)}
+                </ul>
+              </Parte>
+            )}
           </>
         )}
 
-        {/* Plano de imagens: qual imagem vai em qual lâmina e por quê (estrategista + Jev). */}
-        {aba === "plano" && <CampanhaPlanoDeImagens campanha={campanha} itens={proposta.data ? itens : campanha.proposta_id ? null : []} />}
+        {/* 2. Briefing: período, produto, oferta, mensagem, público, provas, tom, CTA e canais; imagens e referências. */}
+        {aba === "briefing" && (
+          <>
+            <CampanhaBriefing campanha={campanha} onPedirAoAgente={onPedirAoAgente ? pedir : undefined} />
+            <Parte titulo={`Imagens da campanha · ${imagensDaCampanha.length} de ${MAX_IMAGENS_CAMPANHA}`}>
+              {salvandoImagens > 0 && <Loader2 className="mb-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando as imagens" />}
+              <ImagensDaCampanhaSalvas campanha={campanha} onSalvando={setSalvandoImagens} />
+            </Parte>
+            <Parte titulo={`Referências · ${referencias.length} de ${MAX_REFERENCIAS}`}>
+              <div className="mb-2 flex min-w-0 items-center justify-end">
+                {salvandoRefs > 0 && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando" />}
+                <button
+                  type="button"
+                  className={juntar(botao.icone, galeria && "bg-muted text-foreground")}
+                  aria-expanded={galeria}
+                  aria-label={galeria ? "Fechar a galeria de referências" : "Escolher referências"}
+                  title={galeria ? "Fechar a galeria" : "Escolher referências"}
+                  onClick={() => setGaleria((v) => !v)}
+                >
+                  {galeria ? <X className="h-4 w-4" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
+                </button>
+              </div>
+              {galeria ? (
+                <CampanhaReferencias valor={referencias} onChange={gravarReferencias} />
+              ) : (
+                <ReferenciasEscolhidas ids={referencias} onTirar={(rid) => gravarReferencias(referencias.filter((x) => x !== rid))} vazio="Nenhuma escolhida." />
+              )}
+            </Parte>
+          </>
+        )}
 
-        {/* Frente SEL (30/09): o selo, com os 4 caminhos, Melhorar, referências e versões. */}
-        {aba === "selo" && <CampanhaSelo campanha={campanha} />}
-
-        {/* Identidade do tema. */}
+        {/* 3. Identidade: o selo (4 caminhos, Melhorar, versões) e a identidade do tema com a paleta. */}
         {aba === "identidade" && (
-          <dl className="min-w-0 space-y-3.5">
-            {id.tema_visual && <Linha rotulo="Tema visual">{id.tema_visual}</Linha>}
-            {paleta.length > 0 && (
-              <div className="min-w-0">
-                <dt className={texto.rotulo}>Cores de apoio</dt>
-                <dd className="mt-1.5 flex flex-wrap">
-                  {paleta.map((c, i) => (
-                    <span key={`${c.hex}-${i}`} className="mb-2 mr-3 inline-flex min-w-0 items-center">
-                      <span className="mr-2 inline-block h-9 w-9 shrink-0 rounded-lg shadow-sm" style={{ backgroundColor: c.hex }} />
-                      <span className="min-w-0">
-                        {c.nome && <span className="block text-[12px] font-medium [overflow-wrap:anywhere]">{c.nome}</span>}
-                        <span className="block font-mono text-[11px] uppercase text-muted-foreground">{c.hex}</span>
-                      </span>
-                    </span>
-                  ))}
-                </dd>
-              </div>
-            )}
-            {id.tipografia && <Linha rotulo="Tipografia">{id.tipografia}</Linha>}
-            {id.elementos && <Linha rotulo="Elementos">{id.elementos}</Linha>}
-            {id.tom && <Linha rotulo="Tom">{id.tom}</Linha>}
-            {(selo.texto || selo.descricao) && (
-              <Linha rotulo="Selo">
-                {selo.texto && <strong className="font-medium">{selo.texto}</strong>}
-                {selo.texto && selo.descricao ? ". " : ""}
-                {selo.descricao}
-              </Linha>
-            )}
-            {!id.tema_visual && !paleta.length && !id.tipografia && !id.elementos && !id.tom && (
-              <p className="text-[12px] text-muted-foreground">Sem identidade ainda.</p>
-            )}
-          </dl>
-        )}
-
-        {/* Referências (o interior é do CampanhaReferencias). */}
-        {aba === "referencias" && (
           <>
-            <div className="mb-2 flex min-w-0 items-center">
-              <span className="mr-auto text-[12px] tabular-nums text-muted-foreground">{referencias.length} de {MAX_REFERENCIAS}</span>
-              {salvandoRefs > 0 && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando" />}
-              <button
-                type="button"
-                className={juntar(botao.icone, galeria && "bg-muted text-foreground")}
-                aria-expanded={galeria}
-                aria-label={galeria ? "Fechar a galeria de referências" : "Escolher referências"}
-                title={galeria ? "Fechar a galeria" : "Escolher referências"}
-                onClick={() => setGaleria((v) => !v)}
-              >
-                {galeria ? <X className="h-4 w-4" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
-              </button>
-            </div>
-            {galeria ? (
-              <CampanhaReferencias valor={referencias} onChange={gravarReferencias} />
-            ) : (
-              <ReferenciasEscolhidas
-                ids={referencias}
-                onTirar={(rid) => gravarReferencias(referencias.filter((x) => x !== rid))}
-                vazio="Nenhuma escolhida."
-              />
-            )}
+            <CampanhaSelo campanha={campanha} />
+            <Parte titulo="Identidade do tema">
+              <dl className="min-w-0 space-y-3.5">
+                {id.tema_visual && <Linha rotulo="Tema visual">{id.tema_visual}</Linha>}
+                {paleta.length > 0 && (
+                  <div className="min-w-0">
+                    <dt className={texto.rotulo}>Paleta da campanha</dt>
+                    <dd className="mt-1.5 flex flex-wrap">
+                      {paleta.map((c, i) => (
+                        <span key={`${c.hex}-${i}`} className="mb-2 mr-3 inline-flex min-w-0 items-center">
+                          <span className="mr-2 inline-block h-9 w-9 shrink-0 rounded-lg border border-border" style={{ backgroundColor: c.hex }} />
+                          <span className="min-w-0">
+                            {c.nome && <span className="block text-[12px] font-medium [overflow-wrap:anywhere]">{c.nome}</span>}
+                            <span className="block font-mono text-[11px] uppercase text-muted-foreground">{c.hex}</span>
+                          </span>
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+                {id.tipografia && <Linha rotulo="Tipografia">{id.tipografia}</Linha>}
+                {id.elementos && <Linha rotulo="Elementos">{id.elementos}</Linha>}
+                {id.tom && <Linha rotulo="Tom">{id.tom}</Linha>}
+                {(selo.texto || selo.descricao) && (
+                  <Linha rotulo="Selo">
+                    {selo.texto && <strong className="font-medium">{selo.texto}</strong>}
+                    {selo.texto && selo.descricao ? ". " : ""}
+                    {selo.descricao}
+                  </Linha>
+                )}
+                {!id.tema_visual && !paleta.length && !id.tipografia && !id.elementos && !id.tom && (
+                  <p className="text-[12px] text-muted-foreground">Sem identidade ainda.</p>
+                )}
+              </dl>
+            </Parte>
           </>
         )}
+
+        {/* 4. Série: gerar na hora, editar, escolher e mandar para a agenda; o plano de imagens embaixo. */}
+        {aba === "serie" && (
+          <>
+            <CampanhaConteudos
+              campanha={campanha}
+              proposta={proposta.data || null}
+              carregando={!!campanha.proposta_id && proposta.isLoading}
+              erro={proposta.isError ? proposta.error : null}
+              projetoSugerido={projetoSugerido || null}
+              onAbrirNoEstudio={onAbrirNoEstudio}
+              onPedirAoAgente={onPedirAoAgente ? pedir : undefined}
+              temasComPeca={pecas.filter((p) => !!p.trabalho).map((p) => p.item.tema_id || "").filter(Boolean)}
+            />
+            <Parte titulo={`Plano de imagens · ${planoResumo}`}>
+              <CampanhaPlanoDeImagens campanha={campanha} itens={proposta.data ? itens : campanha.proposta_id ? null : []} />
+            </Parte>
+          </>
+        )}
+
+        {/* 5. Peças: cada conteúdo gerado pelo Estúdio, com a identidade da campanha. */}
+        {aba === "pecas" && <CampanhaPecas campanha={campanha} pecas={pecas} carregando={lendoPecas} onAbrirArteRapida={onAbrirArteRapida} />}
+
+        {/* 6. Revisão e agenda: Jev, conflitos com a agenda, aprovar e levar pelo fluxo de sempre. */}
+        {aba === "revisao" && <CampanhaRevisao campanha={campanha} proposta={proposta.data || null} pecas={pecas} onAbrirArteRapida={onAbrirArteRapida} />}
       </div>
     </div>
   );

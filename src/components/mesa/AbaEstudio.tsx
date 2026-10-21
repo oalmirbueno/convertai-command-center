@@ -260,7 +260,7 @@ type EstadoDoItem = "producao" | "agenda" | "preparar";
 
 const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typeof PenLine }> = {
   lamina: { rotulo: "Lâmina", dica: "Texto, conferência, ajustes e versões da lâmina escolhida", icone: PenLine },
-  template: { rotulo: "Template", dica: "Profile: Twitter ou publicação Instagram com perfil e fotos reais", icone: LayoutTemplate },
+  template: { rotulo: "Template", dica: "Post do X, do Instagram ou Story, com texto e foto gerados ou reais", icone: LayoutTemplate },
   diretor: { rotulo: "Diretor", dica: "Conversar com o diretor de arte: estilo, cenário, luz e cores, com mudanças que você aplica com um clique", icone: MessageSquare },
   fotos: { rotulo: "Fotos", dica: "Fotos reais para compor: fundo, pessoa ou objeto (cole com Ctrl+V)", icone: ImagePlus },
   referencias: { rotulo: "Referências", dica: "Referências que o gerador segue de perto, com a identidade da marca", icone: Bookmark },
@@ -2280,6 +2280,7 @@ export function DetalheDoItem({
               bloqueado={entregue || algoGerando || entregando}
               onMudou={atualizar}
               onAbrirFotos={() => abrirFerramenta("fotos", false)}
+              onEscolherLamina={setSelecionado}
             />
           </Suspense>
         ) : <p className="text-[12px] text-muted-foreground">Prepare a pauta e escolha uma lâmina para usar um template.</p>;

@@ -94,7 +94,7 @@ function CartaoDaImagem({
             type="button"
             onClick={onTirar}
             disabled={desabilitado}
-            aria-label={`Tirar ${vista ? vista.nome : "a imagem"} da campanha`}
+            aria-label={`Tirar ${vista ? vista.nome : "a imagem"} da campanha`} title={`Tirar ${vista ? vista.nome : "a imagem"} da campanha`}
             className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" />

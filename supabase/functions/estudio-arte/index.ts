@@ -573,11 +573,15 @@ import { acoesDaPublicacaoDaPeca, dataDoConteudo, horaComEspacoNoDia, type Traba
 // Frente EN (28/09): entregar com três opções (pronto para agendar, aprovação, só Arquivos).
 import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-opcoes.ts";
 import { acoesDoTemplateProfile, type TemplateProfile } from "./modulos/template-profile.ts";
+// 21/10: Template com "Gerar" (texto do post e foto sem texto), custo antes por 409 confirmar_custo.
+import { acoesDaGeracaoDoTemplate, TAMANHO_DA_FOTO } from "./modulos/template-geracao.ts";
+import { estimarComModelo as estimarPeloCatalogo } from "../_shared/ia-motor.ts";
 import { acoesDasFontesReais, type FonteRealDoDiretor } from "./modulos/fontes-reais-do-diretor.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
 import {
   aplicarArquivosNasLaminas,
   arteRapidaDa,
+  pecaDaCampanhaValida,
   type ArteRapida,
   type CampanhaCandidata,
   comTituloDaArte,
@@ -4587,6 +4591,10 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
       ...fidelidadeDoPedido(pedido.fidelidade, pedido.pedido, d.arquivos, pedido.post),
       mundo_real: decidirMundoReal(pedido, respostas ? (respostas as Record<string, { noul?: number }>).mundo_real : null, LIMIAR_DO_MUNDO_REAL),
     };
+    // 21/10/2026: peça da série de uma campanha (Campanhas › Gerar campanha completa): guarda o conteúdo de
+    // origem para a campanha achar a peça e continuar de onde parou. Só vale para a campanha desta arte.
+    const pecaDaCampanha = pecaDaCampanhaValida(corpo.peca_da_campanha);
+    if (pecaDaCampanha && campanhaId && pecaDaCampanha.campanha_id === campanhaId.toLowerCase()) gravada = { ...gravada, peca_da_campanha: pecaDaCampanha };
     // Carrossel com a quantidade da tela; arte única nunca leva "laminas".
     if (gravada.peca === "unica") delete corpo.laminas;
     // Vitrine em carrossel sem quantidade da equipe: a capa e as lâminas de logos (até 9 cada).
@@ -11091,6 +11099,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   ...acoesDasFontesReais<Chamador, Trabalho>({
     erro: (status, codigo, mensagem, detalhes) => new ErroEstudio(status, codigo, mensagem, detalhes),
     json, trabalhoComAcesso, mutarTrabalho, jsonDoCommons,
+    // 21/10: Openverse na busca do Template (mesma leitura JSON com teto; URL fixa da API pública).
+    jsonDoOpenverse: jsonDoCommons,
     buscarImagem: (url, limite, permitir) => buscarLinkSeguro(url, limite, "image/png,image/jpeg,image/webp", false, permitir),
     validarImagem: (bytes, limite) => {
       const mime = mimeDe(bytes);
@@ -11111,7 +11121,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   }),
   // Composição Profile: mesmo trabalho, arquivos, autorização e entrega; nenhuma cobrança de IA.
   ...acoesDoTemplateProfile<Chamador, Trabalho>({
-    erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem),
+    erro: (status, codigo, mensagem, detalhes) => new ErroEstudio(status, codigo, mensagem, detalhes),
     json,
     trabalhoComAcesso,
     mutarTrabalho,
@@ -11127,6 +11137,81 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       ...t.direcao,
       cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: novoTexto, blocos: blocosDoTexto(novoTexto, c.funcao) } : c),
     }),
+  }),
+  // 21/10: "Gerar" no Template. Texto pelo redator do refino (base de copy, voz e cérebro); foto pelo gerador do trabalho, sem texto.
+  ...acoesDaGeracaoDoTemplate<Chamador, Trabalho>({
+    erro: (status, codigo, mensagem, detalhes) => new ErroEstudio(status, codigo, mensagem, detalhes),
+    json,
+    trabalhoComAcesso,
+    mutarTrabalho,
+    ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
+    atualizarTexto: (t, ordem, novoTexto) => ({
+      ...t.direcao,
+      cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: novoTexto, blocos: blocosDoTexto(novoTexto, c.funcao) } : c),
+    }),
+    estimarTexto: async () => estimarPeloCatalogo(await modeloDoPapel("diretor_arte"), { tokensEntrada: 9_000, tokensSaida: 3_000 }),
+    estimarImagem: async (t, proporcao) => estimarPeloCatalogo(await carregarModelo(t.modelo_imagem_id!, "imagem"), {
+      imagens: 1,
+      qualidade: (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade,
+      tokensEntrada: 1_500,
+      tamanho: TAMANHO_DA_FOTO[proporcao],
+    }),
+    escreverTexto: async (ch, t, e) => {
+      const [redator, contexto, cerebro, marcaDoTexto] = await Promise.all([
+        modeloDoPapel("diretor_arte"),
+        lerContextoConsolidado(servico(), t.client_id).catch(nuloComLog("estudio-arte: contexto do cliente não lido no template", { trabalho_id: t.id })),
+        resumoDoCerebro(servico(), t.client_id, ["copy", "arte", "campanha"], { limite: 14, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }),
+        marcaDe(t.client_id, t),
+      ]);
+      const voz = await vozDaMarca(servico(), t.client_id, marcaDoTexto ?? null);
+      const r = await chamarTexto({
+        clientId: t.client_id,
+        tarefa: "estudio",
+        agente: "diretor_arte",
+        modeloId: redator.id,
+        raciocinio: raciocinioPara(redator, ["low", "medium"]),
+        sistema: `${e.sistema}\n\n${baseDoRefino()}`,
+        mensagens: [{
+          papel: "usuario",
+          conteudo: JSON.stringify({
+            ...e.pedido,
+            marca: { nome: marcaDoTexto ? texto(marcaDoTexto.nome, 120) : null, contexto: contexto ? contextoComMarca(contexto, marcaDoTexto) : null },
+            cerebro_do_cliente: cerebro.texto || null,
+            motor_de_copy: blocoDoMotor({ canal: e.rede === "instagram" ? "legenda" : "lamina", objetivo: objetivoDaCopy((t.direcao as { objetivo?: unknown }).objetivo ?? ""), variacoes: 1, regras: voz.regras }),
+          }),
+        }],
+        esquemaJson: e.esquema as typeof ESQUEMA_REFINO,
+        maxTokensSaida: 4_000,
+        timeoutMs: 300_000,
+        referencia: { tipo: "estudio_trabalho", id: t.id },
+        criadoPor: ch.userId,
+      });
+      return { json: r.json, custoUsd: r.custoUsd, saldoUsd: r.saldoUsd };
+    },
+    gerarFoto: async (ch, t, e) => {
+      const img = await chamarImagem({
+        clientId: t.client_id,
+        modeloId: t.modelo_imagem_id!,
+        prompt: e.prompt,
+        referencias: [],
+        qualidade: (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade,
+        tamanho: e.tamanho,
+        tamanhoFixo: false,
+        referencia: { tipo: "estudio_trabalho", id: t.id },
+        criadoPor: ch.userId,
+        tarefa: "estudio",
+        agente: "gerador_imagem",
+      });
+      return { bytes: img.png, mime: img.mime, custoUsd: img.custoUsd, saldoUsd: img.saldoUsd };
+    },
+    guardarFoto: async (t, bytes, mime) => {
+      const ext = mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
+      const caminho = `${t.client_id}/estudio/template/${crypto.randomUUID()}.${ext}`;
+      const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: false });
+      if (error) throw new ErroEstudio(503, "foto_template_nao_guardada", "A foto foi gerada, mas não foi guardada. Tente novamente.");
+      return caminho;
+    },
+    descartarUpload: async (caminho) => { await servico().storage.from("mesa").remove([caminho]); },
   }),
   preparar_fundo: prepararFundo,
   gerar_card: gerarCard,
@@ -11209,6 +11294,9 @@ for (const acao of ACOES_SO_DA_MESA) if (ACOES[acao]) ACOES[acao] = soDaMesa(ACO
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
 const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
+// 21/10: o texto e a foto gerados no Template também passam de 150 s.
+ACOES_LONGAS.add("template_conteudo");
+ACOES_LONGAS.add("template_imagem");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

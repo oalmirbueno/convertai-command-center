@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, ChevronDown, Flame, Rocket, X } from "lucide-react";
+import { BookmarkPlus, ChevronDown, Flame, Lightbulb, Rocket, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,6 +33,12 @@ import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
+import { padraoPara } from "@/lib/mesa/api";
+import { useMarcaDaMesa } from "./MesaContexto";
+import type { SementeDaCampanha } from "./sementeDaCampanha";
+import { campanhaDaSemente, partesDosPassos, passosQueFaltam, resumoDosPassos } from "./regrasDaCampanha";
+import { depsDaCampanha, ProgressoDaCampanha } from "./CampanhaCompleta";
+import { emAndamento, executarCampanha, useExecucao } from "./execucaoDaCampanha";
 
 /**
  * Tipo da campanha (frente AE, 28/09, dono: "não é só promoção"): cada tipo
@@ -75,11 +81,16 @@ const QUANTIDADES = ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
 export default function CampanhaNova({
   hype,
+  semente = null,
+  onLimparSemente,
   onLimparHype,
   onCriada,
   onCancelar,
 }: {
   hype?: Hype | null;
+  /** 21/10/2026: o que o Mês juntou (hypes, trendings e o pedido): a campanha nasce preenchida. */
+  semente?: SementeDaCampanha | null;
+  onLimparSemente?: () => void;
   onLimparHype?: () => void;
   onCriada: (campanha: Campanha, projectId: string | null) => void;
   onCancelar?: () => void;
@@ -88,14 +99,18 @@ export default function CampanhaNova({
   const queryClient = useQueryClient();
   const anexos = useAnexos(clientId);
   const hoje = hojeIso();
-  const [pedido, setPedido] = useState(() => (hype ? pedidoDaCampanhaDoHype(hype) : ""));
-  const [inicio, setInicio] = useState(hoje);
-  const [fim, setFim] = useState(() => somarDiasIso(hoje, DIAS_PADRAO_CAMPANHA));
+  const { marca } = useMarcaDaMesa();
+  // A semente vira título, pedido, briefing e período (a janela do hype; trending: agora + 7 ou 14 dias).
+  const [daSemente] = useState(() => (semente ? campanhaDaSemente(semente, hoje) : null));
+  const [nome, setNome] = useState(() => (daSemente ? daSemente.titulo : ""));
+  const [pedido, setPedido] = useState(() => (daSemente ? daSemente.pedido : hype ? pedidoDaCampanhaDoHype(hype) : ""));
+  const [inicio, setInicio] = useState(() => (daSemente ? daSemente.inicio : hoje));
+  const [fim, setFim] = useState(() => (daSemente ? daSemente.fim : somarDiasIso(hoje, DIAS_PADRAO_CAMPANHA)));
   const [quantidade, setQuantidade] = useState("auto");
   const [referencias, setReferencias] = useState<string[]>([]);
   const [imagens, setImagens] = useState<ImagemDaCampanha[]>([]);
-  const [briefing, setBriefing] = useState<BriefingDaCampanha>(briefingEmBranco);
-  const [maisOpcoes, setMaisOpcoes] = useState(false);
+  const [briefing, setBriefing] = useState<BriefingDaCampanha>(() => ({ ...briefingEmBranco(), ...(daSemente ? daSemente.briefing : {}) }));
+  const [maisOpcoes, setMaisOpcoes] = useState(!!daSemente);
   const [tipo, setTipo] = useState<TipoDeCampanha | "">("");
   const [galeria, setGaleria] = useState(false);
   const [desde, setDesde] = useState<number | null>(null);
@@ -121,10 +136,11 @@ export default function CampanhaNova({
         quantidade: qtd,
         anexos: anexos.caminhos,
         referenciasIds: referencias,
-        hype: hype || null,
+        hype: hype || (daSemente ? daSemente.hype : null),
         briefing: briefingParaEnviar(briefing),
         imagens,
         tipo: tipo || null,
+        nome: nome.trim() || null,
       });
     } finally {
       setDesde(null);
@@ -138,6 +154,34 @@ export default function CampanhaNova({
     void queryClient.invalidateQueries({ queryKey: chaves.campanhas(clientId) });
     anexos.limpar();
     if (campanha) onCriada(campanha, data.project_id ? String(data.project_id) : null);
+  };
+
+  // 21/10/2026: "Gerar campanha completa": cria a campanha (briefing, identidade e série), o selo e cada peça
+  // pelo Estúdio, em sequência, com o custo total antes. Ao criar, a tela vai para a campanha e o andamento segue.
+  const qc = queryClient;
+  const chaveDaExecucao = `nova:${clientId}`;
+  const execucao = useExecucao(chaveDaExecucao);
+  const andando = emAndamento(execucao);
+  const imagemPadrao = padraoPara(catalogo, "imagem");
+  const passosDaCompleta = passosQueFaltam({ temCampanha: false, temSelo: false, pecas: [], quantidadePrevista: qtd || 6 });
+  const gerarCompleta = async () => {
+    void executarCampanha(
+      chaveDaExecucao,
+      null,
+      passosDaCompleta,
+      depsDaCampanha({
+        qc,
+        clientId,
+        catalogo,
+        marcaId: marca ? marca.id : null,
+        criarCampanha: async () => {
+          const data = await criar();
+          concluir(data);
+          return { campanha: data.campanha as Campanha, proposta: data.proposta && data.proposta.id ? data.proposta : null };
+        },
+      }),
+    );
+    return { custo_usd: 0 };
   };
 
   return (
@@ -167,12 +211,37 @@ export default function CampanhaNova({
             <Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate">Do hype: <strong className="font-medium">{hype.titulo}</strong></span>
             {onLimparHype && (
-              <button type="button" onClick={onLimparHype} aria-label="Tirar o hype" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
+              <button type="button" onClick={onLimparHype} aria-label="Tirar o hype" title="Tirar o hype" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
         )}
+
+        {daSemente && (
+          <div className="mt-4 rounded-md bg-muted px-3 py-2 text-[12px]" data-semente="">
+            <div className="flex min-w-0 items-center">
+              <Lightbulb className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate">Do Mês: <strong className="font-medium">{daSemente.titulo}</strong></span>
+              {onLimparSemente && (
+                <button type="button" onClick={onLimparSemente} aria-label="Tirar o que veio do Mês" title="Tirar o que veio do Mês" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            {daSemente.sugestoes.length > 0 && (
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground" aria-label="Sugestões do Mês">
+                {daSemente.sugestoes.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4">
+          <Campo rotulo="Nome (opcional)">
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="O agente sugere, se ficar vazio" className="h-9 min-w-0 text-[13px]" aria-label="Nome da campanha" maxLength={120} />
+          </Campo>
+        </div>
 
         <div className="mt-4">
           <EscolhaDoTipo valor={tipo} onValor={setTipo} desabilitado={desde !== null} />
@@ -272,8 +341,22 @@ export default function CampanhaNova({
           )}
         </div>
 
+        {execucao && <div className="mt-4"><ProgressoDaCampanha execucao={execucao} /></div>}
+
         <div className="mt-4 flex flex-wrap items-center justify-end">
           {desde !== null && <span className="mb-1 mr-3 min-w-0"><Cronometro desde={desde} rotulo="Criando a campanha" previsao="~1min" /></span>}
+          <BotaoComCusto
+            rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Gerar campanha completa</span></>}
+            titulo="Campanha completa"
+            descricao={`Gerar campanha completa: ${resumoDosPassos(passosDaCompleta)}, tudo pelo gerador do Estúdio. Custo total estimado ao lado; confirme no segundo clique.`}
+            partes={() => partesDosPassos(passosDaCompleta, catalogo, { modeloImagemId: imagemPadrao ? imagemPadrao.id : null, quantidade: qtd, anexos: anexos.caminhos.length + imagens.length })}
+            executar={gerarCompleta}
+            fecharAoConfirmar
+            sempreConfirmar
+            disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null || andando}
+            variant="outline"
+            className="mb-1 mr-2 h-9 gap-0 px-3"
+          />
           <BotaoComCusto
             rotulo={<><Rocket className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Criar campanha</span></>}
             titulo="Campanha criada"
@@ -281,7 +364,7 @@ export default function CampanhaNova({
             partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length)}
             executar={criar}
             aoConcluir={concluir}
-            disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null}
+            disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null || andando}
             className="mb-1 h-9 gap-0 px-3"
           />
         </div>

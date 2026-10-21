@@ -232,13 +232,14 @@ describe("aba Campanhas, mesa de trabalho", () => {
     const lista = await screen.findByRole("navigation", { name: "Campanhas do cliente" });
     expect(await within(lista).findByText("Promoção do amor")).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "Promoção do amor" })).toBeTruthy();
-    // 16/10/2026 (dono: "seções empilhadas viram abas em ícone no topo"): as partes são abas; abre em Conteúdos.
+    // 21/10/2026: o caminho guiado em etapas (ícones no topo); abre na campanha pronta (capa, números, série).
     const partes = screen.getByRole("navigation", { name: "Partes da campanha" });
-    for (const secao of ["Visão geral", "Identidade do tema", "Referências", "Conteúdos"]) {
+    for (const secao of ["Campanha", "Ideia", "Briefing", "Identidade", "Série de conteúdos", "Peças", "Revisão e agenda"]) {
       expect(within(partes).getByRole("button", { name: new RegExp(secao) })).toBeTruthy();
     }
-    expect(within(partes).getByRole("button", { name: /Conteúdos/ })).toHaveAttribute("aria-current", "page");
+    expect(within(partes).getByRole("button", { name: /^Campanha/ })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("Teaser do amor")).toBeTruthy();
+    fireEvent.click(within(partes).getByRole("button", { name: /Série/ }));
     expect(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ })).toBeTruthy();
 
     const agente = screen.getByRole("complementary", { name: "Agente da campanha" });
@@ -251,8 +252,8 @@ describe("aba Campanhas, mesa de trabalho", () => {
     expect(chamadasDe("campanha_conversar")[0]).toEqual({ acao: "campanha_conversar", campanha_id: campanha.id, mensagem: "Mude o nome e acrescente um depoimento" });
     expect(await screen.findByRole("heading", { name: "Amor em dobro" })).toBeTruthy();
     expect(await screen.findByText("Depoimento de casal")).toBeTruthy();
-    // 16/10/2026: o tom mora na aba Identidade do tema.
-    fireEvent.click(screen.getByRole("button", { name: /Identidade do tema/ }));
+    // O tom mora na etapa Identidade.
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Partes da campanha" })).getByRole("button", { name: /Identidade/ }));
     expect(screen.getByText("Divertido")).toBeTruthy();
   });
 
@@ -263,11 +264,12 @@ describe("aba Campanhas, mesa de trabalho", () => {
     montar(h(AbaCampanhas, { campanhaId: campanha.id }));
     expect(await screen.findByText("Teaser do amor")).toBeTruthy();
     expect(screen.queryByText("Serifa")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Identidade do tema/ }));
+    const partes = screen.getByRole("navigation", { name: "Partes da campanha" });
+    fireEvent.click(within(partes).getByRole("button", { name: /Identidade/ }));
     expect(await screen.findByText("Luz quente", { selector: "dd" })).toBeTruthy();
     expect(screen.getByText("Serifa")).toBeTruthy();
     expect(screen.queryByText("Teaser do amor")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Conteúdos/ }));
+    fireEvent.click(within(partes).getByRole("button", { name: /Série/ }));
     expect(screen.queryByText("Serifa")).toBeNull();
   });
 
