@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Hype, HypesDaSemana } from "@/components/mesa/mesaV4Api";
+import type { Hype, HypesDaSemana as PesquisaDeHypes } from "@/components/mesa/mesaV4Api";
 import { dadosDoTrendy, filtrarTrendy, FILTROS_INICIAIS_DO_TRENDY, formatoDoTrendy, itensDoTrendy } from "@/components/mesa/trendy";
 
 const estado = vi.hoisted(() => ({ clientId: "cliente-a", dados: {} as Record<string, unknown>, ler: vi.fn() }));
@@ -22,7 +22,7 @@ const hypes: Hype[] = [
   { tipo: "nicho", titulo: "Decoração da vitrine", formato: "carrossel", sinal: "Busca por ambientes reais", fonte: "https://fonte.test/vitrine" },
   { tipo: "nicho", titulo: "Vídeo da montagem", formato: "reels", sinal: "Bastidores da loja" },
 ];
-const pesquisa = (clientId: string, itens = hypes): HypesDaSemana => ({ client_id: clientId, itens, semana: "2026-10-19", criado_em: "2026-10-21T15:00:00Z", resumo: null });
+const pesquisa = (clientId: string, itens = hypes): PesquisaDeHypes => ({ client_id: clientId, itens, semana: "2026-10-19", criado_em: "2026-10-21T15:00:00Z", resumo: null });
 
 beforeEach(() => { estado.clientId = "cliente-a"; estado.dados = { "cliente-a": pesquisa("cliente-a") }; estado.ler.mockClear(); });
 
