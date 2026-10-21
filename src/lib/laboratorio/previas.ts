@@ -83,9 +83,16 @@ function semControles(valor: string): boolean {
   return Array.from(valor).every((c) => { const cp = c.codePointAt(0)!; return cp >= 32 && cp !== 127; });
 }
 
+/** Controlador estático: srcdoc herda a CSP do painel, que bloqueia scripts inline novos. */
+export const CAMINHO_DO_CONTROLADOR = "/lab-preview-controller.js";
+export const CAMINHO_DO_TAILWIND = "/vendor/tailwindcss-3.4.17.js";
+
 /** Só o script do visor e o Tailwind conhecido podem rodar; ações da página gerada ficam inativas. */
 export function htmlSeguroDaPrevia(html: string, nonce: string): string {
   if (!/^[a-zA-Z0-9_-]{16,128}$/.test(nonce)) throw new Error("Identificador inválido da prévia.");
+  const controlador = new URL(CAMINHO_DO_CONTROLADOR, window.location.origin);
+  const tailwind = new URL(CAMINHO_DO_TAILWIND, window.location.origin);
+  if (!["https:", "http:"].includes(controlador.protocol)) throw new Error("Origem inválida da prévia.");
   const doc = new DOMParser().parseFromString(html, "text/html");
   doc.querySelectorAll("iframe,frame,object,embed,base,meta[http-equiv]").forEach((el) => el.remove());
   doc.querySelectorAll("link").forEach((link) => {
@@ -98,7 +105,13 @@ export function htmlSeguroDaPrevia(html: string, nonce: string): string {
   doc.querySelectorAll("script").forEach((script) => {
     try {
       const url = new URL(script.getAttribute("src") || "");
-      if (url.protocol === "https:" && url.hostname === "cdn.tailwindcss.com" && (url.pathname === "/" || url.pathname === "")) return;
+      if (url.protocol === "https:" && url.hostname === "cdn.tailwindcss.com" && !url.port && !url.username && !url.password && !url.search && !url.hash && ["/", "/3.4.17"].includes(url.pathname)) {
+        // O runtime oficial e fixo compila as classes do próprio documento.
+        // Não executa configuração ou JavaScript fornecido na página gerada.
+        script.src = tailwind.href;
+        for (const attr of ["type", "integrity", "crossorigin"]) script.removeAttribute(attr);
+        return;
+      }
     } catch { /* Inline e scripts de outras origens são retirados. */ }
     script.remove();
   });
@@ -111,7 +124,11 @@ export function htmlSeguroDaPrevia(html: string, nonce: string): string {
     if (["a", "area"].includes(el.tagName.toLowerCase())) {
       const href = el.getAttribute("href") || el.getAttribute("xlink:href") || "";
       el.setAttribute("data-lab-destino", semControles(href) ? href : "");
-      el.setAttribute("href", "#");
+      // Sem href, uma falha de carregamento do controlador nunca abre o painel
+      // dentro do iframe. O controlador também oferece a ativação pelo teclado.
+      el.removeAttribute("href");
+      el.setAttribute("role", "link");
+      el.setAttribute("tabindex", "0");
       el.removeAttribute("xlink:href");
     }
   });
@@ -120,15 +137,10 @@ export function htmlSeguroDaPrevia(html: string, nonce: string): string {
   referrer.content = "no-referrer";
   const csp = doc.createElement("meta");
   csp.httpEquiv = "Content-Security-Policy";
-  csp.content = `default-src 'none'; script-src 'nonce-${nonce}' https://cdn.tailwindcss.com; style-src 'unsafe-inline' https://fonts.googleapis.com; img-src https: data: blob:; font-src https://fonts.gstatic.com data:; media-src https: blob:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'`;
+  csp.content = `default-src 'none'; script-src ${controlador.href} ${tailwind.href}; style-src 'unsafe-inline' https://fonts.googleapis.com; img-src https: data: blob:; font-src https://fonts.gstatic.com data:; media-src https: blob:; connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'`;
   const script = doc.createElement("script");
   script.setAttribute("nonce", nonce);
-  script.textContent = `(function(){
-    function enviar(tipo,caminho){window.parent.postMessage({tipo:tipo,caminho:caminho},'*');}
-    document.addEventListener('click',function(e){var alvo=e.target;var link=alvo&&alvo.closest?alvo.closest('a,area'):null;if(!link)return;e.preventDefault();e.stopImmediatePropagation();var destino=link.getAttribute('data-lab-destino')||'';if(destino.charAt(0)==='#'){try{var secao=document.getElementById(decodeURIComponent(destino.slice(1)));if(secao)secao.scrollIntoView();}catch(_){}return;}enviar('${MENSAGEM_DE_NAVEGACAO}',destino);},true);
-    document.addEventListener('submit',function(e){e.preventDefault();e.stopImmediatePropagation();enviar('${MENSAGEM_DE_FORMULARIO}','');},true);
-    HTMLFormElement.prototype.submit=function(){enviar('${MENSAGEM_DE_FORMULARIO}','');};
-  })();`;
+  script.src = controlador.href;
   // Entram antes dos recursos e de qualquer conteúdo original.
   doc.head.prepend(script);
   doc.head.prepend(referrer);

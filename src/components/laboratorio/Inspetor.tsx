@@ -10,6 +10,7 @@ import BlocosSemFonte, { type ResolverBloco } from "./BlocosSemFonte";
 import SeletorDeGatilho from "./SeletorDeGatilho";
 import IntegracaoDeVendas from "./no/IntegracaoDeVendas";
 import ConexoesDaCasa from "./no/ConexoesDaCasa";
+import ImagensDoResultado, { TIPOS_CRIATIVOS, type AcoesDasImagens } from "./no/ImagensDoResultado";
 
 /**
  * Inspetor do nó selecionado: os campos do tipo (texto, modelo, motor,
@@ -40,6 +41,7 @@ export default function Inspetor({
   onMudarGatilho,
   antesDeChamar,
   clientes = [],
+  acoesDasImagens,
 }: {
   canvas: CanvasDoLab;
   no: NoDoLab;
@@ -68,6 +70,8 @@ export default function Inspetor({
   onMudarGatilho?: (ligacaoId: string, gatilho: string | null) => void;
   antesDeChamar?: () => Promise<void>;
   clientes?: Array<{ id: string; nome: string }>;
+  /** Ações reais do editor, também quando o quadro não está montado no celular. */
+  acoesDasImagens?: AcoesDasImagens;
 }) {
   const def = TIPOS_DE_NO[no.tipo];
   const [motivo, setMotivo] = useState<string | null>(null);
@@ -79,6 +83,7 @@ export default function Inspetor({
   };
   const outros = canvas.nos.filter((n) => n.id !== no.id);
   const aviso = motivo || avisoDeLigacao;
+  const editaImagens = !!acoesDasImagens && TIPOS_CRIATIVOS.includes(no.tipo);
 
   return (
     <div className="min-w-0 space-y-3" data-inspetor={no.id}>
@@ -162,7 +167,8 @@ export default function Inspetor({
 
       {trava && trava.travado && onResolverBloco ? <BlocosSemFonte blocos={trava.blocos} motivo={trava.motivo} onResolver={onResolverBloco} /> : null}
 
-      <ResultadoDoNo execucao={execucao} compacto={false} tipo={no.tipo} onEscolherStoryboard={onEscolherStoryboard} escolhendo={escolhendo} />
+      {editaImagens ? <ImagensDoResultado no={no} execucao={execucao} acoes={acoesDasImagens} /> : null}
+      <ResultadoDoNo execucao={execucao} compacto={false} tipo={no.tipo} onEscolherStoryboard={onEscolherStoryboard} escolhendo={escolhendo} semImagens={editaImagens} />
       {execucao && execucao.status === "pronto" && onResolverBloco ? (
         <BlocosSemFonte blocos={execucao.saida.rascunho_sem_fonte.map((b) => ({ ...b, no_id: no.id }))} onResolver={onResolverBloco} />
       ) : null}

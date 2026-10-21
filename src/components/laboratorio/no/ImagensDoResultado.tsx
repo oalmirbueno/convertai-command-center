@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Columns2, Copy, Download, FolderDown, ImagePlus, Loader2, Maximize2, SlidersHorizontal, Sparkles, Star } from "lucide-react";
 import { toast } from "sonner";
 import { JanelaCentral, botao, campo, juntar, texto } from "@/components/sistema";
@@ -7,7 +7,7 @@ import { ajustarImagem, custoDoPreencher, noMotorDaCasa, salvarNosArquivos, vari
 import { ErroDaMesa } from "@/lib/mesa/api";
 import type { NoDoLab, TipoDeNo } from "@/lib/laboratorio/nos";
 import { baixarImagem, SeletorDasImagens, useImagens, type DisposicaoDasImagens } from "../ResultadoDoNo";
-import { useAcoesDoQuadro } from "./contexto";
+import { useAcoesDoQuadro, type AcoesDoQuadro } from "./contexto";
 import { Segmentos } from "./SeletoresVisuais";
 
 /**
@@ -23,6 +23,15 @@ import { Segmentos } from "./SeletoresVisuais";
 
 export const TIPOS_CRIATIVOS: TipoDeNo[] = ["imagem", "carrossel", "anuncio", "template_designer", "influenciador", "ugc", "logo"];
 const SEM_IMAGENS: ImagemDoLab[] = [];
+
+/** O inspetor e o modo lista usam as mesmas ações sem depender do quadro montado. */
+export type AcoesDasImagens = Pick<AcoesDoQuadro, "projetoId" | "clienteId" | "antesDeChamar" | "mudarDados" | "novaExecucao" | "usarComoReferencia">;
+const ContextoDasImagens = createContext<AcoesDasImagens | null>(null);
+function useAcoesDasImagens(): AcoesDasImagens {
+  const imagens = useContext(ContextoDasImagens);
+  const quadro = useAcoesDoQuadro();
+  return imagens || quadro;
+}
 
 const dinheiro = (v: number) => `US$ ${v.toFixed(2).replace(".", ",")}`;
 
@@ -57,7 +66,7 @@ type Pedido = { modo: "ajustar" | "variar"; indice: number };
 
 /** Ajustar (pedido curto) ou variar (1 a 4), com o custo antes, compacto. */
 function PedidoDaImagem({ no, pedido, onFechar, onIniciado }: { no: NoDoLab; pedido: Pedido; onFechar: () => void; onIniciado: (pedido: Pedido) => void }) {
-  const a = useAcoesDoQuadro();
+  const a = useAcoesDasImagens();
   const [textoDoPedido, setTextoDoPedido] = useState("");
   const [quantas, setQuantas] = useState("2");
   const [custo, setCusto] = useState<number | null>(null);
@@ -152,7 +161,7 @@ function PedidoDaImagem({ no, pedido, onFechar, onIniciado }: { no: NoDoLab; ped
 
 /** Salvar nos arquivos: do cliente ou na pasta do Laboratório (sem cliente, só a do Lab). */
 function SalvarNosArquivos({ no, indice, grande = false }: { no: NoDoLab; indice: number; grande?: boolean }) {
-  const a = useAcoesDoQuadro();
+  const a = useAcoesDasImagens();
   const [aberto, setAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
@@ -206,7 +215,7 @@ function SalvarNosArquivos({ no, indice, grande = false }: { no: NoDoLab; indice
 
 /** As ações de uma imagem (no nó e na ampliação). */
 function AcoesDaImagem({ no, imagens, urls, indice, principal, onPedido, onAmpliar, grande = false }: { no: NoDoLab; imagens: ImagemDoLab[]; urls: string[]; indice: number; principal: number; onPedido: (p: Pedido) => void; onAmpliar?: () => void; grande?: boolean }) {
-  const a = useAcoesDoQuadro();
+  const a = useAcoesDasImagens();
   const ehPrincipal = indice === principal;
   const tam = grande ? "h-8 w-8" : "h-7 w-7";
   const icone = "h-3.5 w-3.5";
@@ -245,7 +254,11 @@ function AcoesDaImagem({ no, imagens, urls, indice, principal, onPedido, onAmpli
   );
 }
 
-export default function ImagensDoResultado({ no, execucao }: { no: NoDoLab; execucao: ExecucaoDoLab | undefined }) {
+export default function ImagensDoResultado({ no, execucao, acoes }: { no: NoDoLab; execucao: ExecucaoDoLab | undefined; acoes?: AcoesDasImagens }) {
+  return <ContextoDasImagens.Provider value={acoes || null}><ConteudoDasImagens no={no} execucao={execucao} /></ContextoDasImagens.Provider>;
+}
+
+function ConteudoDasImagens({ no, execucao }: { no: NoDoLab; execucao: ExecucaoDoLab | undefined }) {
   const anteriores = useRef<{ noId: string; imagens: ImagemDoLab[] }>({ noId: no.id, imagens: [] });
   const recebidas = execucao ? execucao.saida.imagens : SEM_IMAGENS;
   const emCurso = !!execucao && (execucao.status === "rodando" || execucao.status === "na_fila" || noMotorDaCasa(no.tipo, execucao));

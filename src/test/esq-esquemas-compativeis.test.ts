@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { coletarEsquemasDasFuncoes, type EsquemaColetado, RAIZ_DAS_FUNCOES, VARIANTES_DAS_FUNCOES } from "./fixtures/esquemas-das-funcoes";
+import { coletarEsquemasDasFuncoes, ehFonteDeProducaoDasFuncoes, type EsquemaColetado, RAIZ_DAS_FUNCOES, VARIANTES_DAS_FUNCOES } from "./fixtures/esquemas-das-funcoes";
 import {
   converterParaAnthropic,
   diagnosticarEsquema,
@@ -140,6 +140,31 @@ let coletados: EsquemaColetado[] | null = null;
 const todos = () => (coletados = coletados || coletarEsquemasDasFuncoes(VARIANTES_DAS_FUNCOES));
 
 describe("contrato: cada esquema que as funções mandam ao motor cabe na Anthropic depois da conversão", { timeout: 180_000 }, () => {
+  it.each([
+    ["laboratorio/modulos/planejar_schema_test.ts", false],
+    ["laboratorio/modulos/planejar.test.ts", false],
+    ["laboratorio/modulos/planejar.spec.ts", false],
+    ["laboratorio/modulos/planejar_test.tsx", false],
+    ["laboratorio/modulos/planejar.test.tsx", false],
+    ["laboratorio/modulos/planejar.spec.tsx", false],
+    ["laboratorio/modulos/tipos.d.ts", false],
+    ["laboratorio/modulos/planejar.ts", true],
+    ["laboratorio/modulos/componente.tsx", true],
+    ["laboratorio/modulos/testemunhos.ts", true],
+    ["laboratorio/modulos/planejar.js", false],
+  ] as const)("limita a coleta às fontes de produção: %s", (arquivo, esperado) => {
+    expect(ehFonteDeProducaoDasFuncoes(arquivo)).toBe(esperado);
+  });
+
+  it("não coleta o fixture Deno de schemas e continua coletando o planejador de produção", () => {
+    const arquivos = todos().map((e) => e.arquivo);
+    expect(arquivos).not.toContain("laboratorio/modulos/planejar_schema_test.ts");
+    expect(todos()).toContainEqual(expect.objectContaining({
+      arquivo: "laboratorio/acoes.ts", expressao: "ESQUEMA_DO_PLANEJAR", dinamico: false,
+    }));
+    expect(arquivos.every(ehFonteDeProducaoDasFuncoes)).toBe(true);
+  });
+
   it("o coletor lê todos os esquemaJson do código (nenhum ficou sem avaliar)", () => {
     const lista = todos();
     const semAvaliar = lista.filter((e) => e.dinamico).map((e) => `${e.rotulo}: ${e.erro}`);
@@ -150,7 +175,7 @@ describe("contrato: cada esquema que as funções mandam ao motor cabe na Anthro
       for (const nome of readdirSync(dir)) {
         const p = resolve(dir, nome);
         if (statSync(p).isDirectory()) andar(p);
-        else if (/\.tsx?$/.test(nome)) {
+        else if (ehFonteDeProducaoDasFuncoes(nome)) {
           const rel = relative(RAIZ_DAS_FUNCOES, p).split("\\").join("/");
           if (rel === "_shared/ia-motor.ts") continue;
           readFileSync(p, "utf8").split("\n").forEach((l, i) => {

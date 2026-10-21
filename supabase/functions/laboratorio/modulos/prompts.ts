@@ -179,7 +179,7 @@ export const ESQUEMA_DA_COPY = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["titulos", "textos", "cta", "texto_completo", "blocos_sem_fonte"],
+    required: ["titulos", "textos", "cta", "hashtags", "texto_completo", "blocos_sem_fonte"],
     properties: {
       titulos: { type: "array", items: { type: "string" } },
       textos: { type: "array", items: { type: "string" } },
@@ -205,7 +205,7 @@ export const ESQUEMA_DO_CARROSSEL = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["ordem", "texto", "prompt_imagem"],
+          required: ["ordem", "titulo", "texto", "prompt_imagem"],
           properties: { ordem: { type: "number" }, titulo: { type: "string" }, texto: { type: "string" }, prompt_imagem: { type: "string" } },
         },
       },
