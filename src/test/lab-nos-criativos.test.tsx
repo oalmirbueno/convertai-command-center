@@ -49,9 +49,7 @@ vi.mock("@/integrations/supabase/client", () => {
 import QuadroDoLab from "@/components/laboratorio/QuadroDoLab";
 import { ErroDaMesa } from "@/lib/mesa/api";
 import { ligar, podeLigar, type CanvasDoLab } from "@/lib/laboratorio/nos";
-import { avisarNosSoltos, normalizarExecucao, precisaAcompanhar, type ExecucaoDoLab } from "@/lib/laboratorio/api";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { avisarNosSoltos, normalizarExecucao, precisaAcompanhar, precisaLerExecucao, type ExecucaoDoLab } from "@/lib/laboratorio/api";
 import { pacoteDoNo, sugestoesDoNo, usandoDoNo } from "@/lib/laboratorio/complemento";
 
 const P = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -253,8 +251,12 @@ describe("contrato final do motor da casa", () => {
     montar({ canvas: umaImagem(), execucoes: { i1: aguardando } });
     expect(no("i1").querySelector('[data-estado-do-no="no_motor"]')).not.toBeNull();
     expect(no("i1").querySelector("[data-no-motor] [data-tempo-no-motor]")!.textContent).toMatch(/^\d+ s$/);
-    const editor = readFileSync(resolve(__dirname, "../..", "src/components/laboratorio/EditorDoProjeto.tsx"), "utf8");
-    expect(editor).toContain('const ESPERAM_DE_FORA = ["filme", "por_no_ar", "imagem", "carrossel"];');
+    // O motor externo avança pelo acompanhamento; dependentes ainda não iniciados seguem pela rodada.
+    expect(precisaLerExecucao("imagem", aguardando)).toBe(false);
+    const dependente = ex("copy", "aguardando", { aguardando_dependencias: true });
+    expect(precisaLerExecucao("copy", dependente)).toBe(true);
+    expect(precisaLerExecucao("imagem", dependente)).toBe(true);
+    expect(precisaLerExecucao("imagem", ex("i1", "pronto", { imagens }))).toBe(false);
   });
 
   it("ajustar confirmado responde 202 { execucao_id, status: 'rodando' }", async () => {
@@ -328,7 +330,7 @@ describe("fila do motor", () => {
     const desde = new Date(Date.now() - 65_000).toISOString();
     montar({ canvas: umaImagem(), execucoes: { i1: ex("i1", "rodando", { imagens: imagens.slice(0, 1) }, desde) } });
     const motor = no("i1").querySelector("[data-no-motor]") as HTMLElement;
-    expect(motor.textContent).toContain("No motor · 1 pronta(s)");
+    expect(motor.textContent).toContain("No motor · 1 peça(s) no nó");
     expect(motor.querySelector("[data-tempo-no-motor]")!.textContent).toMatch(/^1 min \d+ s$/);
     expect(no("i1").querySelectorAll("[data-imagem-gerada]")).toHaveLength(1);
   });

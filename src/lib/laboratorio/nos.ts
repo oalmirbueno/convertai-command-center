@@ -249,7 +249,7 @@ export const OPCOES_DA_V4 = {
   via_recuperacao: op([["email", "E-mail"], ["whatsapp", "WhatsApp"], ["ambos", "E-mail e WhatsApp"]]),
   tipo_mensagem: op([["dentro_janela", "Dentro da janela de 24 h"], ["modelo", "Modelo aprovado"]]),
   categoria: op([["utilidade", "Utilidade"], ["marketing", "Marketing"], ["autenticacao", "Autenticação"]]),
-  plataforma: op([["hotmart_club", "Hotmart Club"], ["kiwify", "Kiwify"], ["memberkit", "Memberkit"], ["cademi", "Cademí"], ["outra", "Outra"], ["pagina_simples", "Página simples do site"]]),
+  plataforma: op([["painel", "Área de membros do painel"], ["hotmart_club", "Hotmart Club"], ["kiwify", "Kiwify"], ["memberkit", "Memberkit"], ["cademi", "Cademí"], ["outra", "Outra"], ["pagina_simples", "Página simples do site"]]),
   liberacao: op([["tudo", "Tudo de uma vez"], ["por_dia", "Por dia"]]),
   estilo_ugc: op([["depoimento", "Depoimento"], ["unboxing", "Unboxing"], ["antes_depois", "Antes e depois"], ["problema_solucao", "Problema → solução"], ["reacao", "Reação"]]),
   formato_arte: op([["post_1_1", "Post 1:1"], ["feed_4_5", "Feed 4:5"], ["story_9_16", "Story 9:16"], ["carrossel", "Carrossel"], ["capa_reel", "Capa de Reel"], ["banner", "Banner"]]),
@@ -492,12 +492,12 @@ const DEFINICOES_DA_V4: Record<TipoDaV4, DefinicaoDoNo> = {
   area_membros: {
     tipo: "area_membros",
     rotulo: "Área de membros",
-    dica: "Estrutura do curso (módulos, aulas, roteiros) e a página de boas-vindas; a entrega é na plataforma do cliente",
+    dica: "Conecta um produto da biblioteca do painel ou gera módulos e boas-vindas para outra plataforma",
     saida: "json",
     entradas: [...GUIAS, "avatar", ...FONTES_V4, "checkout", "video"],
     roda: true,
-    campos: [esc("plataforma", "Onde entrega", OPCOES_DA_V4.plataforma), num("modulos", "Módulos", 1, 12), num("aulas_por_modulo", "Aulas por módulo", 1, 15), esc("liberacao", "Liberação", OPCOES_DA_V4.liberacao), MODELO],
-    padrao: { plataforma: "hotmart_club", modulos: 4, aulas_por_modulo: 4, liberacao: "tudo" },
+    campos: [esc("plataforma", "Onde entrega", OPCOES_DA_V4.plataforma), tx("produto_membros_id", "Produto da biblioteca"), num("modulos", "Módulos", 1, 12), num("aulas_por_modulo", "Aulas por módulo", 1, 15), esc("liberacao", "Liberação", OPCOES_DA_V4.liberacao), MODELO],
+    padrao: { plataforma: "painel", modulos: 4, aulas_por_modulo: 4, liberacao: "tudo" },
     cor: "#b45309",
     grupo: "funil",
   },
@@ -539,12 +539,12 @@ const DEFINICOES_DA_V4: Record<TipoDaV4, DefinicaoDoNo> = {
   },
   crm: {
     tipo: "crm",
-    rotulo: "Etapa do CRM",
-    dica: "Põe o lead na etapa quando o gatilho acontece, sem automação; o lead nunca volta etapa",
+    rotulo: "CRM e etapas",
+    dica: "Puxa o contexto do CRM da agência ou do cliente e prepara as etapas do funil",
     saida: "estado",
     entradas: ["pagina", "checkout", "quiz", "webinar", "automacao", "area_membros"],
     roda: true,
-    campos: [tx("pipeline", "Pipeline"), tx("etapa", "Etapa"), tx("temperatura", "Somar à temperatura", "De -100 a 100, ex.: 40"), tx("responsavel", "Responsável")],
+    campos: [esc("crm_origem", "Origem do CRM", op([["agencia", "CRM da agência"], ["cliente", "CRM do cliente"]])), tx("produto_crm_id", "Produto CRM do cliente"), tx("pipeline", "Funil"), tx("etapa", "Etapa"), tx("temperatura", "Somar à temperatura", "De -100 a 100, ex.: 40"), tx("responsavel", "Responsável")],
     padrao: { pipeline: "Funil", etapa: "", temperatura: "" },
     cor: "#0f766e",
     grupo: "funil",
@@ -898,33 +898,51 @@ export const TIPOS_DE_NO: Record<TipoDeNo, DefinicaoDoNo> = {
   ...DEFINICOES_DA_V4,
 };
 
+/** Só os especialistas que de fato chamam texto oferecem escolha de modelo. */
+export const NOS_COM_MODELO_DE_TEXTO: TipoDeNo[] = [
+  "agente", "copy", "carrossel", "landing", "anuncio", "pesquisa", "oferta", "funil", "filme",
+  "avatar", "order_bump", "upsell", "downsell", "sequencia_ofertas", "secoes_pagina",
+  "sequencia_mensagens", "refino_tom", "referencias", "pagina", "checkout", "quiz", "webinar",
+  "automacao", "email", "whatsapp", "area_membros", "ugc", "influenciador", "template_designer", "recuperacao",
+];
+for (const tipo of NOS_COM_MODELO_DE_TEXTO) {
+  if (!TIPOS_DE_NO[tipo].campos.some((c) => c.chave === "modelo_id")) TIPOS_DE_NO[tipo].campos = TIPOS_DE_NO[tipo].campos.concat(MODELO);
+}
+for (const tipo of ["carrossel", "logo"] as TipoDeNo[]) {
+  if (!TIPOS_DE_NO[tipo].campos.some((c) => c.chave === "motor")) TIPOS_DE_NO[tipo].campos = TIPOS_DE_NO[tipo].campos.concat(MOTOR);
+}
+
 /**
  * v4: o que os tipos antigos passam a receber dos nós novos (ENTRADAS_EXTRAS_V4 da função; o teste
  * laboratorio-contrato confere par a par).
  */
 export const ENTRADAS_EXTRAS_V4: Partial<Record<TipoDeNo, TipoDeNo[]>> = {
   gravity: ["marca", "referencias", "influenciador"],
-  agente: [...FONTES_V4, "video"],
-  copy: [...FONTES_V4, "video", "influenciador"],
+  agente: [...FONTES_V4, "video", "crm"],
+  copy: [...FONTES_V4, "video", "influenciador", "crm"],
   imagem: [...FONTES_V4, "influenciador"],
   carrossel: [...FONTES_V4, "influenciador"],
   logo: ["marca", "cliente", "referencias"],
-  landing: [...FONTES_V4],
+  landing: [...FONTES_V4, "crm"],
   anuncio: [...FONTES_V4, "ugc", "template_designer", "pagina", "checkout", "quiz", "webinar"],
   agente_externo: [...FONTES_V4, ...PECAS_V4],
   pesquisa: ["cliente", "referencias", "arquivo", "produto"],
-  oferta: [...FONTES_V4],
-  funil: [...FONTES_V4],
+  oferta: [...FONTES_V4, "crm"],
+  funil: [...FONTES_V4, "crm"],
   filme: ["marca", "cliente", "produto", "video", "arquivo"],
   por_no_ar: [...PECAS_V4],
-  avatar: ["cliente", "referencias", "arquivo", "produto"],
+  avatar: ["cliente", "referencias", "arquivo", "produto", "crm"],
   order_bump: [...FONTES_V4],
   upsell: [...FONTES_V4],
   downsell: [...FONTES_V4],
   sequencia_ofertas: [...FONTES_V4],
   secoes_pagina: [...FONTES_V4],
-  sequencia_mensagens: [...FONTES_V4, "pagina", "checkout", "quiz", "webinar"],
+  sequencia_mensagens: [...FONTES_V4, "pagina", "checkout", "quiz", "webinar", "crm"],
   refino_tom: [...FONTES_V4, "email", "whatsapp"],
+  pagina: ["crm"],
+  recuperacao: ["crm"],
+  email: ["crm"],
+  whatsapp: ["crm"],
 };
 (Object.keys(ENTRADAS_EXTRAS_V4) as TipoDeNo[]).forEach((t) => {
   const extras = ENTRADAS_EXTRAS_V4[t] || [];
@@ -1301,7 +1319,7 @@ export function organizar(canvas: CanvasDoLab): CanvasDoLab {
       const col = nivel[n.id] || 0;
       const linha = porColuna[col] || 0;
       porColuna[col] = linha + 1;
-      return { ...n, x: 60 + col * 320, y: 60 + linha * 220 };
+      return { ...n, x: 60 + col * 544, y: 60 + linha * 1000 };
     }),
   };
 }
@@ -1463,6 +1481,11 @@ export function aplicarOperacoes(canvas: CanvasDoLab, ops: OperacaoDoAgente[]): 
 /** Uma linha que resume o nó (cartão, lista, prévia). */
 export function resumoDoNo(no: NoDoLab): string {
   const d = no.dados || {};
+  if (no.tipo === "pagina" || no.tipo === "checkout") {
+    const chave = no.tipo === "pagina" ? "tipo_pagina" : "gateway";
+    const rotulo = TIPOS_DE_NO[no.tipo].campos.find((c) => c.chave === chave)?.opcoes?.find((o) => o.valor === d[chave])?.rotulo;
+    return [rotulo, typeof d.caminho === "string" ? d.caminho : ""].filter(Boolean).join(" · ");
+  }
   const primeiro = ["texto", "prompt", "instrucao", "tema", "ideia", "conceito", "prompt_base", "objetivo", "produto", "publico", "tom", "nome"]
     .map((k) => (typeof d[k] === "string" ? String(d[k]).trim() : ""))
     .find(Boolean);

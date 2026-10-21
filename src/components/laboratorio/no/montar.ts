@@ -17,8 +17,8 @@ import type { NoDoLab } from "@/lib/laboratorio/nos";
  * de crescer (expandir, resultado chegando). A altura medida vai em `measured`.
  */
 
-export const LARGURA_DO_NO = 272;
-export const LARGURA_EXPANDIDA = 384;
+export const LARGURA_DO_NO = 336;
+export const LARGURA_EXPANDIDA = 448;
 
 export type Medida = { width: number; height: number };
 

@@ -96,6 +96,7 @@ export async function rodarNoEstudio(porta: PortaDoMotor, ctx: Pick<Contexto, "p
   const cfg = configDe(ctx.canvas, no);
   const gravity = gravityDe(ctx.canvas, no);
   const m = materiaisDoMotor(no, entradas as EntradaDoMotor[], { proporcao: cfg.proporcao, prompt_base: gravity?.prompt_base || null, laminas: limitar(no.dados.laminas, 2, 10, 5) });
+  if (ctx.projeto.contexto?.trim()) m.documentos.unshift({ nome: "Contexto do projeto", texto: ctx.projeto.contexto.trim().slice(0, 8000) });
   const clienteDoProjeto = ctx.projeto.client_id;
   const clienteDoTrabalho = clienteDoProjeto || (await porta.clienteDoLivre());
   if (!clienteDoTrabalho) throw new ErroHttp(409, "sem_cliente_interno", "O cliente interno da agência não foi encontrado: sem ele não dá para gerar sem cliente no Estúdio.");
@@ -173,13 +174,15 @@ export async function acompanharNoEstudio(porta: PortaDoMotor, saida: SaidaDoMot
   for (const x of andamentos) for (const l of x.a.prontas) pecas.push({ trabalho_id: x.id, ordem: l.ordem, versao: l.versao, path: l.storage_path });
   if (!pecas.length) return { saida: { ...saida, etapa: "parado", render_progresso: 0, avisos: erros }, status: "erro", erro: erros[0] || "O Estúdio não gerou a arte." };
   const imagens: ImagemSaida[] = [];
+  const pecasGuardadas: PecaDoMotor[] = [];
   for (let i = 0; i < pecas.length; i++) {
     const img = await porta.guardar({ path: pecas[i].path, rotulo, indice: i, total: pecas.length, execucaoId });
-    if (img) imagens.push({ ...img, ordem: i + 1 });
+    if (img) { imagens.push({ ...img, ordem: i + 1 }); pecasGuardadas.push(pecas[i]); }
+    else erros.push(`Não consegui guardar a lâmina ${pecas[i].ordem} no Laboratório.`);
   }
   if (!imagens.length) return { saida: { ...saida, etapa: "parado" }, status: "erro", erro: "As artes ficaram prontas, mas não consegui guardar na pasta do Laboratório." };
   return {
-    saida: { ...saida, etapa: "pronto", pecas, imagens, render_progresso: 100, avisos: erros, texto: `Pronto no Estúdio: ${imagens.length} arte${imagens.length > 1 ? "s" : ""} na pasta do projeto.${erros.length ? ` ${erros.length} lâmina(s) com erro.` : ""}` },
+    saida: { ...saida, etapa: "pronto", pecas: pecasGuardadas, imagens, render_progresso: 100, avisos: erros, texto: `Pronto no Estúdio: ${imagens.length} arte${imagens.length > 1 ? "s" : ""} na pasta do projeto.${erros.length ? ` ${erros.length} lâmina(s) com erro.` : ""}` },
     status: "pronto",
   };
 }
@@ -226,15 +229,16 @@ export async function ajustarNoEstudio(porta: PortaDoMotor, saida: Partial<Saida
   }
   if (!novas.length) throw new ErroHttp(502, "ajuste_sem_versao", "O Estúdio não devolveu a versão nova da arte.");
   const imagens: ImagemSaida[] = [];
+  const pecasGuardadas: PecaDoMotor[] = [];
   for (let i = 0; i < novas.length; i++) {
     const img = await porta.guardar({ path: novas[i].path, rotulo: `${o.rotulo} ${o.pedido ? "ajuste" : "variação"}`, indice: i, total: novas.length, execucaoId: o.execucaoId });
-    if (img) imagens.push({ ...img, ordem: i + 1 });
+    if (img) { imagens.push({ ...img, ordem: i + 1 }); pecasGuardadas.push(novas[i]); }
   }
   return {
     motor: "estudio_arte",
     estudio_trabalhos: [...new Set(novas.map((n) => n.trabalho_id))],
     etapa: "pronto",
-    pecas: novas,
+    pecas: pecasGuardadas,
     imagens,
     usou: Array.isArray(saida.usou) ? saida.usou : [],
     render_progresso: 100,

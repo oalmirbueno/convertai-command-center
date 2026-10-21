@@ -14,8 +14,8 @@
  */
 import { type Chamador, ErroHttp, json, limpo } from "./comum.ts";
 import type { ProjetoDoLab, SaidaDoNo } from "./executar.ts";
-import { arred, type Chamada, limitar, type NoDoCanvas, pastasDoLaboratorio } from "./modulos/regras.ts";
-import { MAX_PEDIDO_DO_AJUSTE, MAX_VARIACOES } from "./motor-da-casa.ts";
+import { arred, type Chamada, configDe, limitar, MODELO_IMAGEM_PADRAO, MODELO_TEXTO_PADRAO, type NoDoCanvas, pastasDoLaboratorio, type QualidadeLab } from "./modulos/regras.ts";
+import { MAX_PEDIDO_DO_AJUSTE, MAX_VARIACOES, pecaDoIndice, type SaidaDoMotor } from "./motor-da-casa.ts";
 
 type Corpo = Record<string, unknown>;
 export type ExecucaoLida = { id: string; status: string; saida: Record<string, unknown> | null };
@@ -30,12 +30,14 @@ export interface PortaDosAjustes {
   nomeDoCliente(clientId: string): Promise<string>;
   copiarParaOCliente(o: { clientId: string; projeto: ProjetoDoLab; imagens: ImagemDaSaida[]; userId: string }): Promise<Salvo[]>;
   preco(chamadas: Chamada[]): Promise<number>;
+  /** Configuração real do trabalho original, antes de orçar uma revisão pelo Estúdio. */
+  lerMotorDaPeca?(saida: Record<string, unknown>, indice: number): Promise<{ modelo_id: string; qualidade: QualidadeLab }>;
   /** foraDaReserva: a estudio-arte cobra os créditos do Laboratório direto (motor da casa sem cliente): só confere o saldo. */
   cobrar(o: { total: number; noId: string; projetoId: string; nota: string; userId: string; foraDaReserva?: boolean }): Promise<{ devolverTudo(motivo: string): Promise<void> }>;
-  criarExecucao(o: { p: ProjetoDoLab; no: NoDoCanvas; entrada: Record<string, unknown>; userId: string }): Promise<string>;
+  criarExecucao(o: { p: ProjetoDoLab; no: NoDoCanvas; entrada: Record<string, unknown>; saida: SaidaDoNo; userId: string }): Promise<string>;
   atualizarExecucao(id: string, campos: Record<string, unknown>): Promise<void>;
   /** Ajusta (pedido) ou varia (quantidade) a imagem do índice; a saída nova e o custo real. */
-  ajustar(ch: Chamador, p: ProjetoDoLab, no: NoDoCanvas, saida: Record<string, unknown>, o: { indice: number; pedido: string | null; quantidade: number; execucaoId: string }): Promise<{ saida: SaidaDoNo; custo: number }>;
+  ajustar(ch: Chamador, p: ProjetoDoLab, no: NoDoCanvas, saida: Record<string, unknown>, o: { indice: number; pedido: string | null; quantidade: number; execucaoId: string; motorDireto: boolean }): Promise<{ saida: SaidaDoNo; custo: number }>;
   /** Roda em segundo plano (EdgeRuntime.waitUntil); false = quem chamou espera. */
   segundoPlano(p: Promise<unknown>): boolean;
   execucao(id: string): Promise<Response>;
@@ -46,6 +48,32 @@ const imagensDe = (saida: Record<string, unknown> | null): ImagemDaSaida[] =>
     .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
     .filter((x) => typeof x.path === "string" && x.path)
     .map((x) => ({ path: String(x.path), url: typeof x.url === "string" ? x.url : null, bucket: typeof x.bucket === "string" ? x.bucket : "workspace", no_workspace_id: typeof x.no_workspace_id === "string" ? x.no_workspace_id : null }));
+
+/** Uma revisão troca só a peça escolhida; contexto e peças vizinhas continuam na mesma saída. */
+export function aplicarRevisaoNaSaida(anterior: Record<string, unknown>, nova: SaidaDoNo, indice: number): SaidaDoNo {
+  const antigas = Array.isArray(anterior.imagens) ? anterior.imagens : [];
+  const novas = Array.isArray(nova.imagens) ? nova.imagens : [];
+  if (!novas.length) throw new ErroHttp(502, "ajuste_sem_imagem", "O ajuste não devolveu imagem. As peças anteriores continuam salvas.");
+  const escolhida = antigas[indice] as Record<string, unknown> | undefined;
+  const ordemOriginal = Number(escolhida?.ordem);
+  const ordem = Number.isInteger(ordemOriginal) && ordemOriginal > 0 ? ordemOriginal : indice + 1;
+  const substitutas = novas.map((imagem, i) => ({ ...imagem, ordem, ...(novas.length > 1 ? { variacao: i + 1 } : {}) }));
+  // Ordens podem ter lacunas após geração parcial. A imagem intacta da lâmina 3 continua sendo a 3.
+  const imagens = [...antigas.slice(0, indice), substitutas[0], ...antigas.slice(indice + 1), ...substitutas.slice(1)];
+  const pecasAntigas = Array.isArray(anterior.pecas) ? anterior.pecas : [];
+  const pecasNovas = Array.isArray(nova.pecas) ? nova.pecas : [];
+  const pecas = pecasAntigas.length && pecasNovas.length
+    ? [...pecasAntigas.slice(0, indice), pecasNovas[0], ...pecasAntigas.slice(indice + 1), ...pecasNovas.slice(1)] : undefined;
+  return {
+    ...anterior, ...nova, imagens: imagens as SaidaDoNo["imagens"],
+    ...(pecas ? { pecas } : {}),
+    // O texto do carrossel não é substituído pela mensagem curta do ajuste.
+    ...(typeof anterior.texto === "string" && anterior.texto ? { texto: anterior.texto, revisao_texto: nova.texto } : {}),
+    ...(Array.isArray(anterior.laminas) ? { laminas: anterior.laminas } : {}),
+    avisos: [...new Set([...(Array.isArray(anterior.avisos) ? anterior.avisos : []), ...(nova.avisos || [])])],
+    ...(anterior.motor === "estudio_arte" ? { estudio_trabalhos: [...new Set([...(Array.isArray(anterior.estudio_trabalhos) ? anterior.estudio_trabalhos : []), ...(Array.isArray(nova.estudio_trabalhos) ? nova.estudio_trabalhos : [])])] } : {}),
+  };
+}
 
 function noDe(p: ProjetoDoLab, corpo: Corpo): NoDoCanvas {
   const no = p.canvas.nos.find((n) => n.id === limpo(corpo.no_id, 80));
@@ -90,21 +118,29 @@ async function ajustarOuVariar(porta: PortaDosAjustes, ch: Chamador, corpo: Corp
   const quantidade = modo === "variar" ? limitar(corpo.quantidade, 1, MAX_VARIACOES, 2) : 1;
   const { ex, imagens } = await imagensDoNo(porta, p, no);
   if (!Number.isInteger(indice) || indice < 0 || indice >= imagens.length) throw new ErroHttp(400, "indice_invalido", "Escolha uma das imagens geradas por este nó.");
-  const doEstudio = !!ex.saida && ex.saida.motor === "estudio_arte";
-  const motor = typeof no.dados.motor === "string" && no.dados.motor ? no.dados.motor : "";
+  const cfg = configDe(p.canvas, no);
+  const doEstudio = !!ex.saida && ex.saida.motor === "estudio_arte" && !!pecaDoIndice(ex.saida as Partial<SaidaDoMotor>, indice);
+  const original = doEstudio && porta.lerMotorDaPeca ? await porta.lerMotorDaPeca(ex.saida!, indice) : null;
+  const mudouMotor = !!original && (!!cfg.motor && cfg.motor !== original.modelo_id || cfg.qualidade !== original.qualidade);
+  const usarEstudio = doEstudio && !mudouMotor;
+  const motor = usarEstudio && original ? original.modelo_id : cfg.motor || MODELO_IMAGEM_PADRAO;
+  const qualidade = usarEstudio && original ? original.qualidade : cfg.qualidade;
   const chamadas: Chamada[] = [
-    { tipo: "imagem", modelo_id: motor || "openrouter:openai/gpt-image-2.5-sunburst", tokens_entrada: 1200, tokens_saida: 0, imagens: quantidade, qualidade: "alta", imagens_entrada: 1 },
-    ...(doEstudio ? [{ tipo: "texto" as const, modelo_id: "openrouter:anthropic/claude-opus-5.5", tokens_entrada: 4000 * quantidade, tokens_saida: 800 * quantidade, imagens: 0, qualidade: null }] : []),
+    { tipo: "imagem", modelo_id: motor, tokens_entrada: 1200, tokens_saida: 0, imagens: quantidade, qualidade, imagens_entrada: 1 },
+    ...(usarEstudio ? [{ tipo: "texto" as const, modelo_id: MODELO_TEXTO_PADRAO, tokens_entrada: 4000 * quantidade, tokens_saida: 800 * quantidade, imagens: 0, qualidade: null }] : []),
   ];
   const custo = arred(await porta.preco(chamadas));
   if (corpo.confirmado !== true) {
     throw new ErroHttp(409, "confirmacao_necessaria", `Isto custa cerca de US$ ${custo.toFixed(4)}. Confirme para ${modo === "ajustar" ? "ajustar" : "gerar as variações"}.`, { total_usd: custo, por_no: [{ no_id: no.id, tipo: no.tipo, custo_usd: custo, chamadas }] });
   }
   // 20/10 (cobrança dupla): sem cliente, o ajuste no motor da casa é cobrado pela estudio-arte direto nos créditos do Lab.
-  const cobranca = await porta.cobrar({ foraDaReserva: doEstudio && !p.client_id, total: custo, noId: no.id, projetoId: p.id, nota: `${modo === "ajustar" ? "Ajustar" : "Variar"} ${typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo}`.slice(0, 120), userId: ch.userId });
+  const cobranca = await porta.cobrar({ foraDaReserva: usarEstudio && !p.client_id, total: custo, noId: no.id, projetoId: p.id, nota: `${modo === "ajustar" ? "Ajustar" : "Variar"} ${typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo}`.slice(0, 120), userId: ch.userId });
+  // A saída inicial é persistida na mesma inserção: recarregar durante uma revisão não apaga a prévia.
+  const origem = { execucao_id: ex.id, indice, modo };
+  const preservada: SaidaDoNo = { ...(ex.saida || {}), origem, revisao_texto: `Aguardando ${modo === "ajustar" ? "o ajuste" : "as variações"} da peça ${indice + 1}. As outras peças continuam preservadas.` };
   let execucaoId: string;
   try {
-    execucaoId = await porta.criarExecucao({ p, no, entrada: { [modo]: { indice, ...(pedido ? { pedido } : { quantidade }) }, origem_execucao_id: ex.id, estimativa_usd: custo }, userId: ch.userId });
+    execucaoId = await porta.criarExecucao({ p, no, entrada: { [modo]: { indice, ...(pedido ? { pedido } : { quantidade }) }, origem_execucao_id: ex.id, estimativa_usd: custo }, saida: preservada, userId: ch.userId });
   } catch (err) {
     await cobranca.devolverTudo("o ajuste não chegou a começar");
     throw err;
@@ -112,11 +148,12 @@ async function ajustarOuVariar(porta: PortaDosAjustes, ch: Chamador, corpo: Corp
   const trabalho = (async () => {
     try {
       await porta.atualizarExecucao(execucaoId, { status: "rodando" });
-      const r = await porta.ajustar(ch, p, no, ex.saida || {}, { indice, pedido, quantidade, execucaoId });
-      await porta.atualizarExecucao(execucaoId, { status: "pronto", saida: { ...r.saida, origem: { execucao_id: ex.id, indice, modo } }, custo_usd: arred(r.custo), finished_at: new Date().toISOString() });
+      const r = await porta.ajustar(ch, p, no, ex.saida || {}, { indice, pedido, quantidade, execucaoId, motorDireto: !usarEstudio });
+      const saida = aplicarRevisaoNaSaida(ex.saida || {}, r.saida, indice);
+      await porta.atualizarExecucao(execucaoId, { status: "pronto", saida: { ...saida, origem }, custo_usd: arred(r.custo), finished_at: new Date().toISOString() });
     } catch (err) {
       const motivo = err instanceof Error ? err.message : "O ajuste falhou.";
-      await porta.atualizarExecucao(execucaoId, { status: "erro", erro: motivo.slice(0, 500), finished_at: new Date().toISOString() });
+      await porta.atualizarExecucao(execucaoId, { status: "erro", saida: { ...preservada, revisao_texto: "A revisão não terminou. As peças e o contexto anteriores continuam preservados." }, erro: motivo.slice(0, 500), finished_at: new Date().toISOString() });
       await cobranca.devolverTudo(motivo);
       throw err;
     }

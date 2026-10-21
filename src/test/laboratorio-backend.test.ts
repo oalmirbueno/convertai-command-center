@@ -37,6 +37,8 @@ const ACOES_DO_CONTRATO = [
   "fontes_do_cliente", "no_preencher", "ler_documento", "projeto_config",
   // 20/10: motor da casa (salvar, ajustar e variar a imagem do nó)
   "salvar_nos_arquivos", "no_ajustar", "no_variar",
+  // Continuidade da confirmação original e fontes nativas, sem publicação ou licença automática.
+  "rodada_cancelar", "conexoes_da_casa",
 ];
 
 /** Os tipos de nó da v1 (o CHECK da 20261019180000); a v2 amplia na 20261019233000. */

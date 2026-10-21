@@ -6,9 +6,9 @@
  */
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { type Chamador, ErroHttp } from "./comum.ts";
-import type { ProjetoDoLab } from "./executar.ts";
+import type { Contexto, ProjetoDoLab } from "./executar.ts";
 import { acompanharNoEstudio, ajustarNoEstudio, type PortaDoMotor, rodarNoEstudio, type SaidaDoMotor } from "./motor-da-casa.ts";
-import { noAjustar, noVariar, type PortaDosAjustes, salvarNosArquivos } from "./ajustes.ts";
+import { aplicarRevisaoNaSaida, noAjustar, noVariar, type PortaDosAjustes, salvarNosArquivos } from "./ajustes.ts";
 import { andamentoDoEstudio, formatoDoEstudio, materiaisDoMotor, nosSoltos, REGRA_DA_CADEIA, rotaDoMotor } from "./modulos/motor.ts";
 import { SISTEMA_DO_PLANEJAR } from "./modulos/prompts.ts";
 import { type Canvas, chamadasDoNo, type NoDoCanvas } from "./modulos/regras.ts";
@@ -115,6 +115,33 @@ Deno.test("motor: rodar prepara a Arte rápida (origem laboratorio) e põe na fi
   assertEquals(s.usou.length, 6);
 });
 
+Deno.test("seguirRodada: uma base estática conserva a espera pela arte e não inicia o próximo gerador", async () => {
+  const env = { url: Deno.env.get("SUPABASE_URL"), key: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") };
+  Deno.env.set("SUPABASE_URL", "http://banco-falso.local");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "chave-falsa");
+  const fetchOriginal = globalThis.fetch;
+  const gravacoes: Array<{ status?: string; saida?: Record<string, unknown> }> = [];
+  globalThis.fetch = ((_url, init) => {
+    if (init?.method === "PATCH" && typeof init.body === "string") gravacoes.push(JSON.parse(init.body));
+    return Promise.resolve(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
+  }) as typeof fetch;
+  try {
+    const { seguirRodada } = await import("./executar.ts");
+    const c = canvas([no("arte", "imagem", { prompt: "Criar a primeira arte" }), no("base", "gravity"), no("segunda", "imagem", { prompt: "Derivar da primeira arte" })], [["arte", "base"], ["base", "segunda"]]);
+    const f = motorFalso();
+    const ctx: Contexto = { projeto: projeto(c), canvas: c, carteira: { clientId: CLIENTE, livre: false }, marca: "", nomeDoCliente: "Teste", userId: ch.userId, token: ch.token, rodadaId: "r1", saidas: new Map(), motorDoEstudio: f.porta };
+    await seguirRodada(ctx, ["arte", "segunda"], { arte: "e1", segunda: "e2" });
+    assertEquals(f.nomes().filter((n) => n === "rapida_preparar").length, 1);
+    assertEquals(gravacoes.at(-1)?.status, "aguardando");
+    assertEquals(gravacoes.at(-1)?.saida?.aguardando_dependencias, true);
+    assertEquals(gravacoes.at(-1)?.saida?.espera_de, ["arte"]);
+  } finally {
+    globalThis.fetch = fetchOriginal;
+    if (env.url === undefined) Deno.env.delete("SUPABASE_URL"); else Deno.env.set("SUPABASE_URL", env.url);
+    if (env.key === undefined) Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY"); else Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", env.key);
+  }
+});
+
 Deno.test("motor: projeto sem cliente vai sem marca no cliente do Estúdio livre; sem ele, 409", async () => {
   const { c, res, entradas } = fluxo();
   const f = motorFalso();
@@ -157,6 +184,50 @@ Deno.test("ajustar e variar no motor da casa: ajustar_card na lâmina escolhida,
   await assertRejects(() => ajustarNoEstudio(motorFalso().porta, saida, { indice: 5, pedido: "x", variacoes: 1, execucaoId: "e", rotulo: "r" }), ErroHttp);
 });
 
+Deno.test("guardar parcialmente: o índice visível continua apontando para a lâmina certa no Estúdio", async () => {
+  const f = motorFalso({ trabalho: { direcao: { cards: [{ ordem: 1 }, { ordem: 2 }] }, cards: [{ ordem: 1, versao: 1, storage_path: "primeira.png" }, { ordem: 2, versao: 1, storage_path: "segunda.png" }] } });
+  f.porta.guardar = async (o) => o.path === "primeira.png" ? null : { path: "segunda-workspace.png", url: null };
+  const r = await acompanharNoEstudio(f.porta, { motor: "estudio_arte", estudio_trabalhos: ["t"], etapa: "gerando", pecas: [], imagens: [], usou: [], render_progresso: 0 } as SaidaDoMotor, "exec", "Carrossel");
+  assertEquals(r.saida.imagens!.map((i) => i.path), ["segunda-workspace.png"]);
+  assertEquals(r.saida.pecas.map((p) => p.ordem), [2]);
+  assertEquals(r.saida.avisos!.length, 1);
+});
+
+Deno.test("revisão: mantém o carrossel e o contexto, troca apenas a peça escolhida, incluindo a referência do Estúdio", () => {
+  const anterior = { motor: "estudio_arte", imagens: [{ path: "primeira.png" }, { path: "segunda.png" }, { path: "terceira.png" }], pecas: [{ trabalho_id: "t", ordem: 1, versao: 1 }, { trabalho_id: "t", ordem: 2, versao: 1 }, { trabalho_id: "t", ordem: 3, versao: 1 }], laminas: [{ ordem: 1 }, { ordem: 2 }, { ordem: 3 }], texto: "Texto completo das três lâminas", json: { produto: "Café" }, estudio_trabalhos: ["t"] };
+  const antes = JSON.stringify(anterior);
+  const ajustada = aplicarRevisaoNaSaida(anterior, { imagens: [{ path: "segunda-v2.png", url: null }], pecas: [{ trabalho_id: "t", ordem: 2, versao: 2 }], texto: "Ajuste pronto", estudio_trabalhos: ["t"] }, 1);
+  assertEquals(ajustada.imagens!.map((i) => i.path), ["primeira.png", "segunda-v2.png", "terceira.png"]);
+  assertEquals(ajustada.pecas, [{ trabalho_id: "t", ordem: 1, versao: 1 }, { trabalho_id: "t", ordem: 2, versao: 2 }, { trabalho_id: "t", ordem: 3, versao: 1 }]);
+  assertEquals([ajustada.texto, ajustada.revisao_texto, ajustada.json], [anterior.texto, "Ajuste pronto", anterior.json]);
+  assertEquals(ajustada.estudio_trabalhos, ["t"]);
+  assertEquals(JSON.stringify(anterior), antes);
+  const variada = aplicarRevisaoNaSaida(anterior, { imagens: [{ path: "var-a.png", url: null }, { path: "var-b.png", url: null }] }, 1);
+  assertEquals(variada.imagens!.map((i) => i.path), ["primeira.png", "var-a.png", "terceira.png", "var-b.png"]);
+});
+
+Deno.test("revisão: resposta vazia nunca substitui as peças anteriores", async () => {
+  await assertRejects(async () => aplicarRevisaoNaSaida({ imagens: [{ path: "original.png" }] }, { imagens: [] }, 0), ErroHttp, "não devolveu imagem");
+});
+
+Deno.test("revisão: geração parcial e variantes mantêm a ordem das lâminas intactas", () => {
+  const anterior = { imagens: [{ path: "primeira.png", url: null, ordem: 1 }, { path: "terceira.png", url: null, ordem: 3 }], laminas: [{ ordem: 1, texto: "Primeira" }, { ordem: 2, texto: "Segunda" }, { ordem: 3, texto: "Terceira" }] };
+  const r = aplicarRevisaoNaSaida(anterior, { imagens: [{ path: "v1.png", url: null }, { path: "v2.png", url: null }] }, 0);
+  assertEquals(r.imagens, [{ path: "v1.png", url: null, ordem: 1, variacao: 1 }, anterior.imagens[1], { path: "v2.png", url: null, ordem: 1, variacao: 2 }]);
+  assertEquals(r.imagens![1].path, "terceira.png"); // Principal numérica e peças vizinhas não deslocam.
+  assertEquals(r.laminas, anterior.laminas);
+});
+
+Deno.test("modelo explícito do carrossel: a estimativa respeita texto e imagem e a reserva não é cobrada pelo Estúdio", async () => {
+  const { cobradosPeloEstudio } = await import("./modulos/motor.ts");
+  const n = no("car", "carrossel", { modelo_id: "texto:escolhido", motor: "imagem:escolhida", laminas: 4 });
+  const ch = chamadasDoNo(canvas([n], []), n);
+  assertEquals(ch.map((c) => [c.tipo, c.modelo_id]), [["texto", "texto:escolhido"], ["imagem", "imagem:escolhida"]]);
+  assertEquals(ch[1].imagens, 4);
+  assertEquals(cobradosPeloEstudio(null, [n]), []);
+  assertEquals(chamadasDoNo(canvas([no("m", "area_membros", { plataforma: "painel" })], []), no("m", "area_membros", { plataforma: "painel" })), []);
+});
+
 // ------------------------------------------------------------------ salvar, ajustar e variar (ações)
 
 function ajustesFalsos(o: { clientId?: string | null; acesso?: boolean; semImagem?: boolean; falha?: boolean; segundoPlano?: boolean } = {}) {
@@ -169,7 +240,7 @@ function ajustesFalsos(o: { clientId?: string | null; acesso?: boolean; semImage
       reg("garantirAcesso", id);
       if (o.acesso === false) throw new ErroHttp(403, "sem_acesso_ao_cliente", "Sem acesso.");
     },
-    ultimaPronta: async () => (o.semImagem ? null : { id: "ex1", status: "pronto", saida: { motor: "estudio_arte", imagens: [{ path: "global/laboratorio/p/a-01.png" }, { path: "global/laboratorio/p/a-02.png" }] } }),
+    ultimaPronta: async () => (o.semImagem ? null : { id: "ex1", status: "pronto", saida: { motor: "estudio_arte", pecas: [{ trabalho_id: "t1", ordem: 1, versao: 1, path: "a.png" }, { trabalho_id: "t1", ordem: 2, versao: 1, path: "b.png" }], imagens: [{ path: "global/laboratorio/p/a-01.png" }, { path: "global/laboratorio/p/a-02.png" }] } }),
     nomeDoCliente: async () => "Café X",
     async copiarParaOCliente(c) {
       reg("copiar", c.imagens.map((i) => i.path));
@@ -230,6 +301,54 @@ Deno.test("no_ajustar e no_variar: 409 com o custo antes; com confirmado reserva
   assertEquals(ruim.nomes().slice(-2), ["atualizar", "devolverTudo"]);
   const fora = await assertRejects(() => noVariar(ajustesFalsos().porta, ch, { projeto_id: "p", no_id: "res", indice: 7, confirmado: true }), ErroHttp);
   assertEquals((fora as ErroHttp).codigo, "indice_invalido");
+});
+
+Deno.test("revisão: saída inicial e falha persistem as peças e contexto para reabrir sem memória do componente", async () => {
+  const f = ajustesFalsos({ falha: true });
+  const original = { texto: "Copy original", imagens: [{ path: "a.png", url: null }, { path: "b.png", url: null }], json: { contexto: "Produto original" }, laminas: [{ ordem: 1 }, { ordem: 2 }] };
+  f.porta.ultimaPronta = async () => ({ id: "ex-antiga", status: "pronto", saida: original });
+  let inicial: Record<string, unknown> = {}, falha: Record<string, unknown> = {};
+  f.porta.criarExecucao = async (o) => { inicial = o.saida; return "ex-revisao"; };
+  f.porta.atualizarExecucao = async (_id, campos) => { if (campos.status === "erro") falha = campos.saida as Record<string, unknown>; };
+  await noAjustar(f.porta, ch, { projeto_id: "p", no_id: "res", indice: 1, pedido: "Mude o título", confirmado: true });
+  for (const persistida of [inicial, falha]) {
+    assertEquals(persistida.imagens, original.imagens);
+    assertEquals(persistida.texto, original.texto);
+    assertEquals(persistida.json, original.json);
+    assertEquals(persistida.laminas, original.laminas);
+    assertEquals(persistida.origem, { execucao_id: "ex-antiga", indice: 1, modo: "ajustar" });
+    assert(typeof persistida.revisao_texto === "string");
+  }
+  assertEquals(f.nomes().filter((n) => n === "devolverTudo").length, 1);
+});
+
+Deno.test("revisão: novo motor ou qualidade troca para ajuste direto e orçamento usa a configuração executada", async () => {
+  for (const mudanca of ["motor", "qualidade"] as const) {
+    const f = ajustesFalsos({ clientId: null });
+    const lerProjeto = f.porta.lerProjeto;
+    f.porta.lerProjeto = async (c, id) => {
+      const p = await lerProjeto(c, id);
+      p.canvas.nos[0].dados = mudanca === "motor" ? { motor: "imagem:novo", qualidade: "media" } : { qualidade: "alta" };
+      return p;
+    };
+    f.porta.lerMotorDaPeca = async () => ({ modelo_id: "imagem:original", qualidade: "media" });
+    let orcamento: unknown[] = [], foraDaReserva: boolean | undefined;
+    f.porta.preco = async (cs) => { orcamento = cs; return 0.06; };
+    f.porta.cobrar = async (o) => { foraDaReserva = o.foraDaReserva; return { devolverTudo: async () => {} }; };
+    await noAjustar(f.porta, ch, { projeto_id: "p", no_id: "res", indice: 0, pedido: "Ajuste o título", confirmado: true });
+    assertEquals(orcamento.length, 1);
+    assertEquals((orcamento[0] as { tipo: string }).tipo, "imagem");
+    assertEquals((orcamento[0] as { qualidade: string }).qualidade, mudanca === "qualidade" ? "alta" : "media");
+    assertEquals(foraDaReserva, false);
+    assertEquals((f.chamadas.find((c) => c.nome === "ajustar")!.args[0] as { motorDireto: boolean }).motorDireto, true);
+  }
+  const semMudanca = ajustesFalsos();
+  semMudanca.porta.lerMotorDaPeca = async () => ({ modelo_id: "imagem:original", qualidade: "media" });
+  let modelos: string[] = [];
+  semMudanca.porta.preco = async (cs) => { modelos = cs.map((c) => c.modelo_id); return 0.06; };
+  await noAjustar(semMudanca.porta, ch, { projeto_id: "p", no_id: "res", indice: 0, pedido: "Ajuste o título", confirmado: true });
+  assertEquals(modelos[0], "imagem:original");
+  assertEquals((semMudanca.chamadas.find((c) => c.nome === "ajustar")!.args[0] as { motorDireto: boolean }).motorDireto, false);
 });
 
 // ------------------------------------------------------------------ cadeia e custo

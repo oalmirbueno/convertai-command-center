@@ -95,7 +95,8 @@ export async function estornarCreditos(
 
 /**
  * A cobrança de uma confirmação: a reserva e a parte de cada nó. Cada nó devolve a parte dele
- * uma vez só (falhou, um nó antes falhou, a rodada parou ou ficou esperando o Filme).
+ * uma vez só (falhou, um nó antes falhou, a rodada parou ou o dono cancelou as etapas restantes).
+ * Uma dependência assíncrona mantém sua parte reservada para a continuação já confirmada.
  */
 export class CobrancaDoLab {
   readonly reserva: Reserva | null;

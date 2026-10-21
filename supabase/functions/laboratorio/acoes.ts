@@ -2,6 +2,7 @@
  * laboratorio: as ações do contrato (ESPEC-LABORATORIO.md, "Função de borda laboratorio").
  */
 import { chamarTexto, cobrarJev, type ImagemEntrada, type MensagemMotor, type Qualidade } from "../_shared/ia-motor.ts";
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 import {
   type Chamador,
   carteiraDe,
@@ -26,6 +27,7 @@ import {
   gerarLogos,
   portaDoNoAr,
   precificador,
+  prepararRodada,
   type ProjetoDoLab,
   rodarNo,
   rodarTudo,
@@ -33,7 +35,10 @@ import {
 } from "./executar.ts";
 import { acompanharFilme, chamadorDaMesaMotion, escolherStoryboard, type SaidaDoFilme } from "./filme.ts";
 import { acompanharNoAr, type SaidaDoNoAr } from "./no-ar.ts";
-import { carregarCreditos, cobrarConfirmacao, definirLimite, lerCreditos } from "./creditos.ts";
+import { carregarCreditos, cobrarConfirmacao, CobrancaDoLab, definirLimite, lerCreditos } from "./creditos.ts";
+import { assinaturaDoNo, type AutorizacaoDaRodada, cancelarPendentes, continuarRodada, encerrarDependenciaPersistida, type ExecucaoDaRodada } from "./rodada.ts";
+import { catalogoDaCasa, lerCrmDaCasa, lerMembrosDaCasa } from "./integracoes-da-casa.ts";
+import { retornoDoAgenteExterno, type VinculoExterno } from "./agente-externo.ts";
 import { perguntasGuiadas, type ResultadoDasPerguntas } from "./perguntas.ts";
 import { type ExecucaoParaExcluir, motivoDoProjetoEmUso } from "./modulos/exclusao.ts";
 import {
@@ -53,7 +58,6 @@ import {
   MODELO_TEXTO_PADRAO,
   NOS_LONGOS,
   normalizarCanvas,
-  ordemTopologica,
   qualidadeValida,
   resolverBloco,
   resumoDoCanvas,
@@ -63,7 +67,7 @@ import { BLOCO_DO_PROJETO_COMPLETO, SISTEMA_DO_PLANEJAR } from "./modulos/prompt
 import { BUCKET, lerImagem } from "./workspace.ts";
 import { fontesDoCliente, lerDocumento, noPreencher, portaDaInteligencia, type PortaDaInteligencia } from "./inteligencia.ts";
 import { configDoProjeto, decidirAutomatico, tetoPedido } from "./modulos/inteligencia.ts";
-import { acompanharNoEstudio, ajustarNoEstudio, type SaidaDoMotor } from "./motor-da-casa.ts";
+import { acompanharNoEstudio, ajustarNoEstudio, pecaDoIndice, type SaidaDoMotor } from "./motor-da-casa.ts";
 import { type ImagemDaSaida, noAjustar, noVariar, type PortaDosAjustes, type Salvo, salvarNosArquivos } from "./ajustes.ts";
 import { ajustarImagemDireta, portaDoMotorDe } from "./executar.ts";
 import { nomeLimpo } from "./modulos/regras.ts";
@@ -382,11 +386,13 @@ export const estimar: Acao = async (ch, corpo) => {
   }
   const p = await lerProjeto(ch, corpo.projeto_id);
   const alvos = Array.isArray(corpo.nos) ? corpo.nos.map(String).filter(Boolean) : null;
-  const ordem = ordemTopologica(p.canvas, alvos);
-  const ids = alvos && alvos.length ? alvos : ordem;
-  const r = await estimarCanvas(p.canvas, ids);
+  const plano = corpo.rodada !== true && alvos?.length
+    ? { ordem: alvos.filter((id) => { const n = p.canvas.nos.find((x) => x.id === id); return !!n && ehExecutavel(n.tipo); }), reutilizados: [] }
+    : await prepararRodada(p, alvos);
+  const ordem = plano.ordem;
+  const r = await estimarCanvas(p.canvas, ordem);
   const carteira = await carteiraDe(p.client_id);
-  return json({ ...r, ordem: ordem.filter((id) => { const n = p.canvas.nos.find((x) => x.id === id); return !!n && ehExecutavel(n.tipo); }), carteira_client_id: carteira.clientId, livre: carteira.livre });
+  return json({ ...r, ordem, reutilizados: plano.reutilizados.map((e) => e.no_id), carteira_client_id: carteira.clientId, livre: carteira.livre });
 };
 
 // ------------------------------------------------------------------ execução
@@ -404,6 +410,8 @@ export const noExecutar: Acao = async (ch, corpo) => {
   const no = p.canvas.nos.find((n) => n.id === noId);
   if (!no) throw new ErroHttp(404, "no_inexistente", "Este nó não está no canvas salvo. Salve o projeto e tente de novo.");
   if (!ehExecutavel(no.tipo)) throw new ErroHttp(400, "no_nao_executavel", "Este nó só guarda dado; rode o nó que usa ele.");
+  const anterior = await ultimaDoNo(p, no.id);
+  if (anterior && ["na_fila", "rodando", "aguardando"].includes(anterior.status)) throw new ErroHttp(409, "no_em_andamento", "Este nó já está em andamento. Acompanhe a execução atual antes de iniciar outra; nada foi cobrado de novo.");
   const est = await estimarCanvas(p.canvas, [no.id]);
   // 20/10: automatico (nó com auto e custo dentro do teto do projeto) roda sem o 409: o dono autorizou o teto
   // antes. Tudo conferido aqui (o auto vem do canvas salvo, o teto do banco). Fora disso, o 409 de sempre.
@@ -422,7 +430,7 @@ export const noExecutar: Acao = async (ch, corpo) => {
   let execucaoId: string;
   try {
     ctx = { ...(await contextoDe(ch, p)), cobranca };
-    execucaoId = await criarExecucao({ projetoId: p.id, no, status: "na_fila", entrada: { estimativa_usd: est.total_usd }, rodadaId: null, userId: ch.userId });
+    execucaoId = await criarExecucao({ projetoId: p.id, no, status: "na_fila", entrada: { estimativa_usd: est.total_usd, assinatura_no: await assinaturaDoNo(p.canvas, no.id, p.contexto, p.client_id) }, rodadaId: null, userId: ch.userId });
   } catch (err) {
     await cobranca.devolverTudo("o nó não chegou a rodar");
     throw err;
@@ -451,8 +459,8 @@ async function execucaoAtual(id: string, saida?: unknown): Promise<Response> {
 export const rodarTudoAcao: Acao = async (ch, corpo) => {
   const p = await lerProjeto(ch, corpo.projeto_id);
   const alvos = Array.isArray(corpo.nos) ? corpo.nos.map(String).filter(Boolean) : null;
-  const ordemToda = ordemTopologica(p.canvas, alvos);
-  const est = await estimarCanvas(p.canvas, ordemToda);
+  const plano = await prepararRodada(p, alvos);
+  const est = await estimarCanvas(p.canvas, plano.ordem);
   if (!est.por_no.length) throw new ErroHttp(400, "nada_para_rodar", "O fluxo não tem nó que gere algo (Agente, Copy, Resultado, Carrossel, Logo, Landing, Anúncio ou Agente externo).");
   exigirConfirmacao(corpo, est.total_usd, est.por_no);
   // Créditos do Laboratório: reserva o total; cada nó que falha ou não roda devolve a parte dele.
@@ -462,20 +470,25 @@ export const rodarTudoAcao: Acao = async (ch, corpo) => {
   let ordem: string[];
   let execucoes: Record<string, string>;
   try {
-    ctx = { ...(await contextoDe(ch, p, rodadaId)), cobranca };
-    ({ ordem, execucoes } = await rodarTudo(ctx, alvos));
+    ctx = { ...(await contextoDe(ch, p, rodadaId)), cobranca, entradasReutilizadas: plano.reutilizados };
+    for (const ex of plano.reutilizados) if (ex.saida) ctx.saidas.set(ex.no_id, ex.saida);
+    ({ ordem, execucoes } = await rodarTudo(ctx, alvos, plano.ordem));
   } catch (err) {
     await cobranca.devolverTudo("a rodada não chegou a começar");
     throw err;
   }
   const trabalho = seguirRodada(ctx, ordem, execucoes);
   if (!emSegundoPlano(trabalho)) await trabalho;
-  return json({ rodada_id: rodadaId, ordem, execucoes, estimativa_usd: est.total_usd, status: "rodando", acompanhar: "execucoes_ler" }, 202);
+  return json({ rodada_id: rodadaId, ordem, execucoes, reutilizados: plano.reutilizados.map((e) => e.no_id), estimativa_usd: est.total_usd, status: "rodando", acompanhar: "execucoes_ler" }, 202);
 };
 
 /** execucoes_ler { projeto_id, rodada_id?, no_id?, limite? } → { execucoes } (mais novas primeiro). */
 export const execucoesLer: Acao = async (ch, corpo) => {
   const p = await lerProjeto(ch, corpo.projeto_id);
+  // O acompanhamento do canvas também libera os próximos nós da confirmação original.
+  // A atualização condicional no banco impede que duas abas iniciem a mesma peça.
+  const continuacao = retomarRodadas(ch, p);
+  if (!emSegundoPlano(continuacao)) await continuacao;
   let q = servico().from("lab_execucoes").select("*").eq("projeto_id", p.id).order("created_at", { ascending: false }).limit(limitar(corpo.limite, 1, 200, 50));
   const rodada = idOuNulo(corpo.rodada_id, "rodada_id");
   if (rodada) q = q.eq("rodada_id", rodada);
@@ -484,6 +497,101 @@ export const execucoesLer: Acao = async (ch, corpo) => {
   const { data, error } = await q;
   if (error) throw erroDoBanco(error, "execucoes_indisponiveis", "Não consegui ler as execuções agora.");
   return json({ execucoes: data || [] });
+};
+
+/** Persiste o fim antes de estornar. Não usa atualizarExecucao, cujo registro de falha é tolerante. */
+async function encerrarDependencia(ch: Chamador, p: ProjetoDoLab, rodadaId: string, ex: ExecucaoDaRodada, motivo: string, a: AutorizacaoDaRodada): Promise<void> {
+  const db = servico();
+  const alterar = async (campos: Record<string, unknown>) => {
+    const r = await db.from("lab_execucoes").update(campos).eq("id", ex.id).eq("projeto_id", p.id)
+      .eq("rodada_id", rodadaId).eq("created_by", ch.userId).eq("status", "na_fila")
+      .contains("saida", { aguardando_dependencias: true }).select("id").maybeSingle();
+    if (r.error) throw r.error;
+    return r.data?.id === ex.id;
+  };
+  await encerrarDependenciaPersistida({
+    salvarFim: () => alterar({ status: "erro", erro: motivo, finished_at: new Date().toISOString() }),
+    // Só a fila assumida de uma dependência, sem executor iniciado, pode voltar à espera.
+    reabrirEspera: () => alterar({ status: "aguardando", erro: null, finished_at: null }),
+    estornar: () => new CobrancaDoLab({ reserva: a.reserva, porNo: { [ex.no_id]: a.custo_usd }, userId: ch.userId }).devolverNo(ex.no_id, ex.id, motivo),
+    incidente: (erro) => registrarFalha("laboratorio: encerramento de dependência não confirmado", erro, { projeto_id: p.id, rodada_id: rodadaId, execucao_id: ex.id }),
+  });
+}
+
+async function retomarRodadas(ch: Chamador, p: ProjetoDoLab): Promise<void> {
+  const db = servico();
+  const { data, error } = await db.from("lab_execucoes").select("rodada_id")
+    .eq("projeto_id", p.id).eq("created_by", ch.userId).eq("status", "aguardando")
+    .not("rodada_id", "is", null).contains("saida", { aguardando_dependencias: true }).limit(80);
+  if (error) throw erroDoBanco(error, "rodada_indisponivel", "Não consegui continuar o fluxo agora. As peças prontas permanecem salvas.");
+  for (const rodadaId of [...new Set((data || []).map((e: { rodada_id: string }) => e.rodada_id))]) {
+    const linhas = await db.from("lab_execucoes").select("id, no_id, status, saida, entrada, created_by")
+      .eq("projeto_id", p.id).eq("rodada_id", rodadaId).order("created_at").limit(80);
+    if (linhas.error) throw erroDoBanco(linhas.error, "rodada_indisponivel", "Não consegui ler as etapas do fluxo agora.");
+    const execucoes = (linhas.data || []) as ExecucaoDaRodada[];
+    const idsDasFontes = [...new Set(execucoes.flatMap((e) => Array.isArray(e.entrada?.fontes_reutilizadas) ? e.entrada.fontes_reutilizadas.filter((id): id is string => typeof id === "string") : []))];
+    if (idsDasFontes.length) {
+      const fontes = await db.from("lab_execucoes").select("id, no_id, status, saida, entrada, created_by").eq("projeto_id", p.id).in("id", idsDasFontes).limit(80);
+      if (fontes.error) throw erroDoBanco(fontes.error, "entradas_indisponiveis", "Não consegui recuperar as entradas já prontas desta rodada.");
+      execucoes.push(...((fontes.data || []) as ExecucaoDaRodada[]));
+    }
+    const ctx = await contextoDe(ch, p, rodadaId);
+    // As entradas são da mesma rodada, nunca uma arte de outra tentativa mais recente.
+    for (const ex of execucoes) if (ex.status === "pronto" && ex.saida) ctx.saidas.set(ex.no_id, ex.saida);
+    await continuarRodada(p.canvas, execucoes, ch.userId, {
+      async assumir(ex) {
+        const r = await db.from("lab_execucoes").update({ status: "na_fila" }).eq("id", ex.id).eq("status", "aguardando")
+          .contains("saida", { aguardando_dependencias: true }).select("id").maybeSingle();
+        if (r.error) throw erroDoBanco(r.error, "rodada_indisponivel", "Não consegui reservar a próxima etapa do fluxo.");
+        return !!r.data;
+      },
+      async encerrar(ex, motivo, a) {
+        await encerrarDependencia(ch, p, rodadaId, ex, motivo, a);
+      },
+      async rodar(no, ex, a) {
+        ctx.cobranca = new CobrancaDoLab({ reserva: a.reserva, porNo: { [ex.no_id]: a.custo_usd }, userId: ch.userId });
+        try {
+          const saida = await rodarNo(ctx, no, ex.id);
+          const aguardando = no.tipo === "filme" || no.tipo === "por_no_ar" || no.tipo === "agente_externo" || (saida.motor === "estudio_arte" && saida.etapa === "gerando");
+          return { status: aguardando ? "aguardando" : "pronto", saida };
+        } catch { return { status: "erro", saida: null }; }
+      },
+    }, p.contexto, p.client_id);
+  }
+}
+
+/** Leitura nativa sem IA; os helpers usam o JWT e as permissões do produto/cliente. */
+export const conexoesDaCasa: Acao = async (ch, corpo) => {
+  const p = await lerProjeto(ch, corpo.projeto_id);
+  const no = noDoProjeto(p, corpo);
+  if (no.tipo !== "crm" && no.tipo !== "area_membros") throw new ErroHttp(400, "conexao_invalida", "Escolha um nó CRM ou Área de membros.");
+  const ctx = { projeto: p, token: ch.token, userId: ch.userId };
+  if (corpo.catalogo === true) return json({ produtos: await catalogoDaCasa(ctx, no) });
+  return json({ contexto: no.tipo === "crm" ? await lerCrmDaCasa(ctx, no) : await lerMembrosDaCasa(ctx, no) });
+};
+
+/** Cancela só as etapas ainda sem trabalho iniciado, preservando o que já está gerando e as aprovações. */
+export const rodadaCancelar: Acao = async (ch, corpo) => {
+  const p = await lerProjeto(ch, corpo.projeto_id);
+  if (!corpo.rodada_id) throw new ErroHttp(400, "rodada_necessaria", "Escolha a rodada que deseja interromper.");
+  const rodadaId = idDe(corpo.rodada_id, "rodada_id");
+  const db = servico();
+  const r = await db.from("lab_execucoes").select("id, no_id, status, saida, entrada, created_by")
+    .eq("projeto_id", p.id).eq("rodada_id", rodadaId).eq("created_by", ch.userId).limit(80);
+  if (r.error) throw erroDoBanco(r.error, "rodada_indisponivel", "Não consegui ler a rodada para interromper as etapas restantes.");
+  if (!r.data?.length) throw new ErroHttp(404, "rodada_inexistente", "Não encontrei uma rodada sua neste projeto.");
+  const canceladas = await cancelarPendentes(r.data as ExecucaoDaRodada[], ch.userId, {
+    async assumir(ex) {
+      const tomada = await db.from("lab_execucoes").update({ status: "na_fila" }).eq("id", ex.id).eq("status", "aguardando")
+        .contains("saida", { aguardando_dependencias: true }).select("id").maybeSingle();
+      if (tomada.error) throw erroDoBanco(tomada.error, "rodada_indisponivel", "Não consegui interromper esta etapa.");
+      return !!tomada.data;
+    },
+    async encerrar(ex, motivo, a) {
+      await encerrarDependencia(ch, p, rodadaId, ex, motivo, a);
+    },
+  });
+  return json({ canceladas });
 };
 
 // ------------------------------------------------------------------ agente do projeto
@@ -661,6 +769,14 @@ export const noAcompanhar: Acao = async (ch, corpo) => {
   const no = noDoProjeto(p, corpo);
   const ex = await ultimaDoNo(p, no.id);
   if (!ex) throw new ErroHttp(404, "sem_execucao", "Este nó ainda não rodou.");
+  if (no.tipo === "agente_externo" && ex.saida?.link_id && ex.saida?.tarefa_id) {
+    const lido = await servico().from("operator_task_links").select("status, last_action, last_evidence, next_step, block_reason, updated_at")
+      .eq("id", String(ex.saida.link_id)).eq("kanban_task_id", String(ex.saida.tarefa_id)).maybeSingle();
+    if (lido.error) throw erroDoBanco(lido.error, "agente_indisponivel", "Não consegui conferir o retorno do agente agora.");
+    const r = retornoDoAgenteExterno(ex.saida, (lido.data as VinculoExterno | null) || null);
+    await atualizarExecucao(ex.id, { status: r.status, saida: r.saida, erro: r.erro || null, finished_at: r.status === "aguardando" ? null : new Date().toISOString() });
+    return await execucaoAtual(ex.id);
+  }
   // 20/10: Resultado e Carrossel no motor da casa (lâminas na fila da estudio-arte).
   if (ex.saida && ex.saida.motor === "estudio_arte" && ex.saida.etapa === "gerando") {
     const ctx = await contextoDe(ch, p);
@@ -788,6 +904,8 @@ export const blocoResolver: Acao = async (ch, corpo) => {
 
 /** Contrato de ações (o teste confere que todas existem). */
 export const ACOES: Record<string, Acao> = {
+  rodada_cancelar: rodadaCancelar,
+  conexoes_da_casa: conexoesDaCasa,
   projetos_listar: projetosListar,
   projeto_criar: projetoCriar,
   projeto_ler: projetoLer,
@@ -851,6 +969,8 @@ function portaDosAjustes(): PortaDosAjustes {
     lerProjeto,
     garantirAcesso,
     async ultimaPronta(p, noId) {
+      const ultima = await ultimaDoNo(p, noId);
+      if (ultima && ["na_fila", "rodando", "aguardando"].includes(ultima.status)) throw new ErroHttp(409, "no_em_andamento", "Este nó já está em andamento. Aguarde a revisão atual antes de pedir outra; nada foi cobrado de novo.");
       const { data, error } = await servico().from("lab_execucoes").select("id, status, saida").eq("projeto_id", p.id).eq("no_id", noId).eq("status", "pronto").order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (error) throw erroDoBanco(error, "execucoes_indisponiveis", "Não consegui ler a execução do nó agora.");
       return (data as { id: string; status: string; saida: Record<string, unknown> | null } | null) ?? null;
@@ -883,21 +1003,30 @@ function portaDosAjustes(): PortaDosAjustes {
       const preco = await precificador(chamadas);
       return chamadas.reduce((s, c) => s + preco(c), 0);
     },
+    async lerMotorDaPeca(saida, indice) {
+      const peca = pecaDoIndice(saida as Partial<SaidaDoMotor>, indice);
+      if (!peca) throw new ErroHttp(400, "indice_invalido", "A peça escolhida não tem um trabalho do Estúdio.");
+      const { data, error } = await servico().from("estudio_trabalhos").select("modelo_imagem_id, qualidade").eq("id", peca.trabalho_id).maybeSingle();
+      if (error || !data?.modelo_imagem_id) throw new ErroHttp(503, "motor_original_indisponivel", "Não consegui conferir o modelo da peça original. Nada foi cobrado; tente novamente.");
+      return { modelo_id: String(data.modelo_imagem_id), qualidade: qualidadeValida(data.qualidade) || "media" };
+    },
     async cobrar(c) {
       return await cobrarConfirmacao({ porNo: [{ no_id: c.noId, custo_usd: c.total }], total: c.total, projetoId: c.projetoId, nota: c.nota, userId: c.userId, foraDaReserva: c.foraDaReserva ? [c.noId] : [] });
     },
-    criarExecucao: (o) => criarExecucao({ projetoId: o.p.id, no: o.no, status: "na_fila", entrada: o.entrada, rodadaId: null, userId: o.userId }),
+    criarExecucao: (o) => criarExecucao({ projetoId: o.p.id, no: o.no, status: "na_fila", entrada: o.entrada, saida: o.saida, rodadaId: null, userId: o.userId }),
     atualizarExecucao,
     async ajustar(ch, p, no, saida, o) {
       const ctx = await contextoDe(ch, p);
       const rotulo = typeof no.dados.titulo === "string" && no.dados.titulo ? no.dados.titulo : no.tipo;
-      if (saida.motor === "estudio_arte") {
+      if (saida.motor === "estudio_arte" && !o.motorDireto) {
         const nova = await ajustarNoEstudio(portaDoMotorDe(ctx), saida as Partial<SaidaDoMotor>, { indice: o.indice, pedido: o.pedido, variacoes: o.quantidade, execucaoId: o.execucaoId, rotulo });
         return { saida: nova, custo: 0 };
       }
       const imagem = (Array.isArray(saida.imagens) ? saida.imagens : [])[o.indice] as { path: string; bucket?: string } | undefined;
       if (!imagem || !imagem.path) throw new ErroHttp(400, "indice_invalido", "Escolha uma das imagens geradas por este nó.");
-      return await ajustarImagemDireta(ctx, no, imagem, { pedido: o.pedido, quantidade: o.quantidade, execucaoId: o.execucaoId });
+      const r = await ajustarImagemDireta(ctx, no, imagem, { pedido: o.pedido, quantidade: o.quantidade, execucaoId: o.execucaoId });
+      // Em uma coleção mista, só esta peça deixa de apontar para o trabalho antigo do Estúdio.
+      return { ...r, saida: { ...r.saida, pecas: (r.saida.imagens || []).map(() => ({ motor: "direto" })), avisos: [...(r.saida.avisos || []), ...(saida.motor === "estudio_arte" ? ["Revisão feita pelo motor de imagem selecionado; só esta peça foi alterada."] : [])] } };
     },
     segundoPlano: emSegundoPlano,
     execucao: (id) => execucaoAtual(id),

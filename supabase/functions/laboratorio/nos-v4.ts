@@ -14,6 +14,7 @@ import { ErroHttp } from "./comum.ts";
 import type { ArquivoSalvo } from "./workspace.ts";
 import type { Contexto, Entradas, ImagemSaida, SaidaDoNo } from "./executar.ts";
 import type { EntradaDoPacote } from "./no-ar.ts";
+import { lerCrmDaCasa, lerMembrosDaCasa } from "./integracoes-da-casa.ts";
 import {
   blocosSemFonte,
   configDe,
@@ -530,6 +531,7 @@ async function noTesteAb(kit: KitV4, ctx: Contexto, no: NoDoCanvas, _e: Entradas
 }
 
 async function noCrm(_kit: KitV4, ctx: Contexto, no: NoDoCanvas, _e: Entradas, _execucaoId: string): Promise<Resultado> {
+  const nativo = await lerCrmDaCasa(ctx, no);
   const quando = ctx.canvas.ligacoes
     .filter((l) => l.para === no.id)
     .map((l) => {
@@ -537,6 +539,7 @@ async function noCrm(_kit: KitV4, ctx: Contexto, no: NoDoCanvas, _e: Entradas, _
       return origem ? { no_id: origem.id, origem: rotuloDoNo(origem), gatilho: typeof l.gatilho === "string" ? l.gatilho : null } : null;
     })
     .filter(Boolean) as Array<{ no_id: string; origem: string; gatilho: string | null }>;
+  if (nativo && (!quando.length || !txt(no.dados.etapa, 120))) return { saida: nativo, custo: 0, usoId: null };
   if (!quando.length) throw new ErroHttp(400, "crm_sem_origem", "Ligue a página, o quiz, o checkout ou o webinar que põe o lead nesta etapa.");
   const etapa = txt(no.dados.etapa, 120);
   if (!etapa) throw new ErroHttp(400, "crm_sem_etapa", "Escreva a etapa do CRM (ex.: Lead novo, Agendou, Cliente).");
@@ -545,10 +548,11 @@ async function noCrm(_kit: KitV4, ctx: Contexto, no: NoDoCanvas, _e: Entradas, _
   return {
     saida: {
       texto: textoFinal([
+        nativo?.texto || "",
         `Lead vai para "${regra.etapa}" (${regra.pipeline})${temperatura ? `, temperatura ${temperatura > 0 ? "+" : ""}${temperatura}` : ""}, quando: ${quando.map((q) => `${q.origem}${q.gatilho ? ` [${ROTULO_DO_GATILHO[q.gatilho as keyof typeof ROTULO_DO_GATILHO] || q.gatilho}]` : ""}`).join("; ")}.`,
         "O fio não ocupa o redirecionamento da página e o lead nunca volta para uma etapa anterior.",
       ], ["a regra entra no CRM quando o funil for ao ar (Pôr no ar)"]),
-      json: regra,
+      json: { ...regra, ...(nativo ? { contexto_nativo: nativo.json } : {}) },
       falta_conectar: ["a regra entra no CRM quando o funil for ao ar"],
     },
     custo: 0,
@@ -724,9 +728,14 @@ async function noRecuperacao(kit: KitV4, ctx: Contexto, no: NoDoCanvas, e: Entra
 const PLATAFORMAS: Record<string, string> = { hotmart_club: "Hotmart Club", kiwify: "Kiwify", memberkit: "Memberkit", cademi: "Cademí", outra: "plataforma de membros", pagina_simples: "página do site" };
 
 async function noAreaMembros(kit: KitV4, ctx: Contexto, no: NoDoCanvas, e: Entradas, execucaoId: string): Promise<Resultado> {
+  const nativo = await lerMembrosDaCasa(ctx, no.dados.plataforma ? no : { ...no, dados: { ...no.dados, plataforma: "painel" } });
+  if (nativo) {
+    const arquivo = await kit.salvarHtml(ctx, execucaoId, rotuloDoNo(no), nativo.html);
+    return { saida: { texto: nativo.texto, json: nativo.json, html_path: arquivo.path, html_url: arquivo.url, no_workspace_id: arquivo.no_id, motor: "painel", pagamentos_ativados: false }, custo: 0, usoId: null };
+  }
   const nm = limitar(no.dados.modulos, 1, 12, 4);
   const na = limitar(no.dados.aulas_por_modulo, 1, 15, 4);
-  const plataforma = txt(no.dados.plataforma, 30) || "hotmart_club";
+  const plataforma = txt(no.dados.plataforma, 30) || "painel";
   const r = await kit.texto(ctx, {
     modelo: no.dados.modelo_id,
     sistema: SISTEMA_DA_AREA_DE_MEMBROS,

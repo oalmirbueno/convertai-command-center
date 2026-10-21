@@ -238,6 +238,9 @@ export const ENTRADAS_EXTRAS_V4: Partial<Record<TipoDeNo, readonly TipoDeNo[]>> 
   sequencia_mensagens: [...FONTES_V4, "pagina", "checkout", "quiz", "webinar"],
   refino_tom: [...FONTES_V4, "email", "whatsapp"],
 };
+for (const t of ["agente", "copy", "oferta", "funil", "landing", "pagina", "avatar", "sequencia_mensagens", "recuperacao", "email", "whatsapp"] as TipoDeNo[]) {
+  ENTRADAS_EXTRAS_V4[t] = [...(ENTRADAS_EXTRAS_V4[t] || []), "crm"];
+}
 for (const t of Object.keys(ENTRADAS_EXTRAS_V4) as TipoDeNo[]) {
   const extras = ENTRADAS_EXTRAS_V4[t] || [];
   ENTRADAS_ACEITAS[t] = ENTRADAS_ACEITAS[t].concat(extras.filter((x, i) => extras.indexOf(x) === i && ENTRADAS_ACEITAS[t].indexOf(x) < 0));
@@ -714,6 +717,9 @@ export function chamadasDoNo(c: Pick<Canvas, "nos" | "ligacoes">, no: NoDoCanvas
     case "imagem":
     case "carrossel": {
       const n = no.tipo === "carrossel" ? limitar(d.laminas, 2, MAX_LAMINAS, 5) : Math.min(4, cfg.quantidade);
+      if (no.tipo === "carrossel" && texto(d.modelo_id, 200).trim()) {
+        return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA.carrossel, imagens: 0, qualidade: null }, img(n)];
+      }
       const artes = no.tipo === "carrossel" ? 1 : n;
       return [
         { tipo: "texto", modelo_id: modeloTexto, tokens_entrada: artes * (TOKENS_DO_ESTUDIO.direcao_entrada + base) + n * TOKENS_DO_ESTUDIO.por_lamina_entrada, tokens_saida: artes * TOKENS_DO_ESTUDIO.direcao_saida + n * TOKENS_DO_ESTUDIO.por_lamina_saida, imagens: 0, qualidade: null },
@@ -748,6 +754,7 @@ export function chamadasDoNo(c: Pick<Canvas, "nos" | "ligacoes">, no: NoDoCanvas
     case "whatsapp":
     case "area_membros":
     case "recuperacao":
+      if (no.tipo === "area_membros" && (!d.plataforma || d.plataforma === "painel")) return [];
       return [{ tipo: "texto", modelo_id: modeloTexto, tokens_entrada: base, tokens_saida: SAIDA_ESPERADA[no.tipo], imagens: 0, qualidade: null }];
     case "referencias": {
       const links = linksDasReferencias(d.links).length;
@@ -891,11 +898,11 @@ export const CAMPOS_DO_TIPO: Record<TipoDeNo, readonly string[]> = {
   automacao: ["titulo", "quando", "condicoes", "espera", "objetivo_saida", "horario", "modelo_id"],
   email: ["titulo", "tipo_email", "mensagens", "remetente", "objetivo", "modelo_id"],
   whatsapp: ["titulo", "via", "tipo_mensagem", "mensagens", "categoria", "objetivo", "modelo_id"],
-  area_membros: ["titulo", "plataforma", "modulos", "aulas_por_modulo", "liberacao", "modelo_id"],
+  area_membros: ["titulo", "plataforma", "modulos", "aulas_por_modulo", "liberacao", "modelo_id", "produto_membros_id"],
   ugc: ["titulo", "estilo_ugc", "duracao", "variacoes", "instrucao", "modelo_id", "motor", "qualidade", "proporcao"],
   influenciador: ["titulo", "nome", "aparencia", "estilo", "poses", "motor", "qualidade", "modelo_id"],
   template_designer: ["titulo", "formato_arte", "estilo", "campos_variaveis", "lote", "motor", "qualidade", "modelo_id"],
-  crm: ["titulo", "pipeline", "etapa", "temperatura", "responsavel"],
+  crm: ["titulo", "pipeline", "etapa", "temperatura", "responsavel", "crm_origem", "produto_crm_id"],
   recuperacao: ["titulo", "situacao", "via", "toques", "modelo_id"],
   fontes_trafego: ["titulo", "canais", "url_base", "campanha"],
 };
@@ -991,7 +998,8 @@ export const OPCOES_V4: Record<string, readonly string[]> = {
   via: ["email", "whatsapp", "ambos", "cloud_api", "evolution"],
   tipo_mensagem: ["dentro_janela", "modelo"],
   categoria: ["utilidade", "marketing", "autenticacao"],
-  plataforma: ["hotmart_club", "kiwify", "memberkit", "cademi", "outra", "pagina_simples"],
+  plataforma: ["painel", "hotmart_club", "kiwify", "memberkit", "cademi", "outra", "pagina_simples"],
+  crm_origem: ["agencia", "cliente"],
   liberacao: ["tudo", "por_dia"],
   estilo_ugc: ["depoimento", "unboxing", "antes_depois", "problema_solucao", "reacao"],
   formato_arte: ["post_1_1", "feed_4_5", "story_9_16", "carrossel", "capa_reel", "banner"],

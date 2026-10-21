@@ -74,6 +74,7 @@ import { MesaProvider } from "@/components/mesa/MesaContexto";
 import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidade/Comuns";
 import { normalizarExecucao } from "@/lib/laboratorio/api";
 import { ALVOS_NO_AR, TIPOS_DA_V2, TIPOS_DE_NO as TIPOS_DA_TELA, aplicarOperacoes as aplicarNaTela, atrasosDaConstrucao, ehProjetoCompleto, normalizarOperacao, type CanvasDoLab } from "@/lib/laboratorio/nos";
+import { LARGURA_EXPANDIDA } from "@/components/laboratorio/no/montar";
 import {
   ALVOS_NO_AR as ALVOS_DA_FUNCAO,
   CAMPOS_DO_TIPO,
@@ -223,7 +224,7 @@ afterEach(() => {
 // ------------------------------------------------------------------ Canvas Studio
 
 describe("Canvas Studio", () => {
-  it("o atalho de projeto manda planejar com modo projeto_completo e as operações entram no quadro com a construção, nas colunas da função", async () => {
+  it("o atalho monta o projeto completo e preserva os conteúdos da função com espaço para ler cada nó", async () => {
     funcao({ planejar: (c) => planoComoAFuncao(c, canvasInicial, OPS_DO_LOW_TICKET, "Pesquisei o mercado e montei o low ticket.") });
     montarEditor();
     const barra = await studio();
@@ -232,6 +233,9 @@ describe("Canvas Studio", () => {
     // Modelo e cliente na mesma caixa da Início.
     expect(within(barra).getByLabelText("Modelo")).toBeInTheDocument();
     expect(within(barra).getByLabelText("Cliente")).toBeInTheDocument();
+    // Este caso testa a montagem; a opção separada evita abrir a confirmação de geração.
+    fireEvent.click(within(barra).getByRole("button", { name: "Montar e gerar" }));
+    expect(within(barra).getByRole("button", { name: "Só montar" })).toHaveAttribute("aria-pressed", "false");
 
     // 21/10 (o dono pediu a mudança: "quando ele escolhe [o projeto pronto], ele só abre essa parte aqui
     // das perguntas"): o atalho de PROJETO COMPLETO já manda o planejar em projeto_completo, sem esperar o
@@ -253,10 +257,17 @@ describe("Canvas Studio", () => {
     const salvo = corpos("projeto_salvar")[0].canvas as CanvasDoLab;
     expect(salvo.nos.map((n) => n.tipo).sort()).toEqual(["contexto", "funil", "imagem", "landing", "oferta", "pesquisa", "por_no_ar"]);
     const previsto = (await m.chamar.mock.results.find((r, i) => m.chamar.mock.calls[i][1].acao === "planejar")!.value).canvas_previsto as CanvasDoLab;
-    // Posições = colunas por etapa da função (canvas_previsto), não um arranjo próprio da tela.
+    // Os conteúdos e as conexões propostos permanecem. O espaçamento pode crescer para os cartões atuais.
     for (const n of salvo.nos) {
       const p = previsto.nos.find((x) => x.id === n.id)!;
-      expect([n.id, n.x, n.y]).toEqual([p.id, p.x, p.y]);
+      expect({ id: n.id, tipo: n.tipo }).toEqual({ id: p.id, tipo: p.tipo });
+      expect(n.dados).toMatchObject(p.dados);
+    }
+    expect(salvo.ligacoes.map(({ de, para, gatilho }) => ({ de, para, gatilho }))).toEqual(previsto.ligacoes.map(({ de, para, gatilho }) => ({ de, para, gatilho })));
+    for (const l of salvo.ligacoes) {
+      const origem = salvo.nos.find((n) => n.id === l.de)!;
+      const destino = salvo.nos.find((n) => n.id === l.para)!;
+      expect(destino.x - origem.x, `${l.de} → ${l.para}`).toBeGreaterThanOrEqual(LARGURA_EXPANDIDA + 48);
     }
     const pesquisa = salvo.nos.find((n) => n.tipo === "pesquisa")!;
     const noAr = salvo.nos.find((n) => n.tipo === "por_no_ar")!;
@@ -279,7 +290,10 @@ describe("Canvas Studio", () => {
     const r = aplicarNaTela(canvasInicial, [op]);
     expect(r.canvas.nos.map((n) => [n.id, n.x, n.y])).toEqual([["c1", 80, 80], ["i1", 1520, 80]]);
     const semPosicoes = aplicarNaTela(canvasInicial, [normalizarOperacao({ op: "organizar" })!]);
-    expect(semPosicoes.canvas.nos.map((n) => n.x)).toEqual([60, 380]);
+    expect(semPosicoes.canvas.nos.map(({ id, tipo, dados }) => ({ id, tipo, dados }))).toEqual(canvasInicial.nos.map(({ id, tipo, dados }) => ({ id, tipo, dados })));
+    const [origem, destino] = semPosicoes.canvas.nos;
+    expect(destino.x - origem.x).toBeGreaterThanOrEqual(LARGURA_EXPANDIDA + 48);
+    expect(destino.y).toBe(origem.y);
   });
 
   it("a animação de construção vai coluna por coluna (esquerda para a direita) e é curta", () => {
