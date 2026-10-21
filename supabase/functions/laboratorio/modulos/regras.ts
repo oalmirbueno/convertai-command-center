@@ -1416,16 +1416,20 @@ export const ESQUEMA_DO_PLANEJAR = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["op"],
+          // Structured outputs da OpenAI (inclusive pelo OpenRouter) exigem todas
+          // as propriedades em required. O vazio mantém os campos sem uso neutros
+          // para o parser e também é aceito pela Anthropic, sem uniões com null.
+          required: ["op", "ref", "tipo", "no", "de", "para", "gatilho", "dados_json"],
+          description: 'Preencha os campos que a operação usa. Nos demais, envie ""; em dados_json sem dados, envie "{}".',
           properties: {
             op: { type: "string", enum: [...OPERACOES] },
             ref: { type: "string" },
-            tipo: { type: "string", enum: [...TIPOS_DE_NO] },
+            tipo: { type: "string", enum: [...TIPOS_DE_NO, ""] },
             no: { type: "string" },
             de: { type: "string" },
             para: { type: "string" },
             /** ligar (v4): o gatilho do funil no fio. */
-            gatilho: { type: "string", enum: [...GATILHOS] },
+            gatilho: { type: "string", enum: [...GATILHOS, ""] },
             /** Os campos do nó em JSON (texto): objeto livre não passa no esquema estrito da Anthropic. */
             dados_json: { type: "string" },
           },
