@@ -57,6 +57,8 @@ export interface CardGerado {
   criado_em?: string;
   /** Como a versão nasceu (estudio-arte): normal, foto_real, foto_composta, panorama, continuo ou replicar_referencia. */
   modo?: string;
+  /** Layout editável composto com texto e fotos reais, sem geração de imagem. */
+  template_profile?: import("../../../supabase/functions/estudio-arte/modulos/template-profile").TemplateProfile;
   /** Replicar referência com foto: a foto do cliente foi recomposta pelo gerador (a tela pede para conferir o rosto). */
   foto_recomposta?: boolean;
   /** Referências anexadas nesta versão (ids; "g:" = banco da agência). */

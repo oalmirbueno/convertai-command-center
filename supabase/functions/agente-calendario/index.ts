@@ -1,4 +1,5 @@
 import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
+import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./modulos/periodo-do-pedido.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
@@ -155,6 +156,7 @@ import {
   type LinhaRefeita,
   linhasDaPropostaAntiga,
   orientacaoDaMensagem,
+  periodoGuardadoDaProposta,
 } from "./modulos/refazer-interno.ts";
 import { chave } from "../_shared/chaves.ts";
 // 02/10: peça de foto (formato "foto", contrato com a Mesa Foto) e cadência pedida conferida semana a semana.
@@ -934,6 +936,15 @@ async function exigirAcessoAoCliente(chamador: Chamador, clientId: string) {
  */
 function diasUteisDaProposta(p: Proposta): string[] {
   const origem = String((p.parametros ?? {}).origem ?? "");
+  const periodo = p.parametros?.periodo_pedido as { inicio?: unknown; fim?: unknown } | null | undefined;
+  if (periodo !== undefined) {
+    if (!periodo || typeof periodo !== "object" || typeof periodo.inicio !== "string" || periodo.fim === undefined) throw new ErroHttp(400, "periodo_do_pedido_invalido", "O período desta proposta está incompleto. Gere uma nova proposta.");
+    try { return janelaDoPedidoComLimite(periodo.inicio, "", periodo.fim).uteis; }
+    catch (e) {
+      if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(400, e.codigo, e.message);
+      throw e;
+    }
+  }
   if (origem !== "pedido_livre" && origem !== "conteudo_rapido") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
   return diasDaPropostaLivre({ periodo_inicio: p.periodo_inicio, periodo_fim: p.periodo_fim, mensagem: p.parametros.mensagem }, hojeSaoPaulo());
 }
@@ -3912,8 +3923,15 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
     }
   }
   const arquivosDoPedido = normalizarArquivos(corpo.arquivos);
+  if (corpo.data_fim !== undefined && (typeof corpo.data_inicio !== "string" || !DATA.test(corpo.data_inicio))) throw new ErroHttp(400, "periodo_do_pedido_invalido", "Informe o início do período escolhido.");
   const inicio = typeof corpo.data_inicio === "string" && DATA.test(corpo.data_inicio) ? corpo.data_inicio : hojeSaoPaulo();
-  const { fim, uteis } = janelaDoPedidoLivre(inicio, mensagem);
+  let periodoDoPedido: { fim: string; uteis: string[] };
+  try { periodoDoPedido = janelaDoPedidoComLimite(inicio, mensagem, corpo.data_fim, corpo.mes); }
+  catch (e) {
+    if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(400, e.codigo, e.message);
+    throw e;
+  }
+  const { fim, uteis } = periodoDoPedido;
 
   const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
   if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
@@ -4011,6 +4029,14 @@ ${REGRAS_DOS_ITENS}`;
   // 12/10/2026: legendas conferidas pelo Jev antes de gravar (avisos no item, nunca reescrita).
   await conferirLegendasComJev(servico, itens, { clientId, criadoPor: chamador.userId });
 
+  if (corpo.data_fim !== undefined) {
+    try { conferirDatasDoPeriodo(itens, inicio, fim); }
+    catch (e) {
+      if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(502, e.codigo, e.message, { uso_id: s.usoId });
+      throw e;
+    }
+  }
+
   const { data: proposta, error } = await servico
     .from("calendario_propostas")
     .insert({
@@ -4018,7 +4044,7 @@ ${REGRAS_DOS_ITENS}`;
       project_id: projectId,
       periodo_inicio: itens[0].data,
       periodo_fim: itens[itens.length - 1].data,
-      parametros: { origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id, ...(corpo.criacao_ref ? { criacao_ref: String(corpo.criacao_ref) } : {}) },
+      parametros: { origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id, ...(corpo.data_fim !== undefined ? { periodo_pedido: { inicio, fim } } : {}), ...(corpo.criacao_ref ? { criacao_ref: String(corpo.criacao_ref) } : {}) },
       status: "pronta",
       diagnostico: null,
       temas: [],
@@ -7846,9 +7872,15 @@ async function refazerPropostaInterno(servico: SupabaseClient, corpo: Record<str
   const antiga = await carregarProposta(servico, corpo.proposta_id);
   const chamador = await chamadorDoAutor(servico, antiga.criado_por, antiga.client_id);
   const origem = String(antiga.parametros.origem ?? "");
-  const mes = String(antiga.periodo_inicio).slice(0, 7);
-  const inicio = `${mes}-01`;
-  const fim = fimDoMes(mes);
+  let periodoGuardado: ReturnType<typeof periodoGuardadoDaProposta>;
+  try { periodoGuardado = periodoGuardadoDaProposta(antiga.parametros); }
+  catch (e) {
+    if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(400, e.codigo, e.message);
+    throw e;
+  }
+  const mes = periodoGuardado?.mes ?? String(antiga.periodo_inicio).slice(0, 7);
+  const inicio = periodoGuardado?.inicio ?? `${mes}-01`;
+  const fim = periodoGuardado?.fim ?? fimDoMes(mes);
   const hoje = hojeSaoPaulo();
   const ctx = await montarContexto(servico, antiga.client_id, inicio, fim, marcaDaChamada(servico, antiga.client_id, { project_id: antiga.project_id }, antiga.project_id));
   // A cadência: a mandada na chamada, senão a da conversa do agente do Mês e do plano combinado.
@@ -7893,7 +7925,13 @@ async function refazerPropostaInterno(servico: SupabaseClient, corpo: Record<str
     const novas: string[] = [];
     let custo = ajuste.custo;
     for (const lote of lotesDaCriacao(ajuste.criacao.itens)) {
-      const r = await pedidoLivre(servico, chamador, corpoDoLoteRefeito(antiga, pedidoParaCriar(lote, orientacao), lote as LinhaRefeita[]));
+      let corpoDoLote: Record<string, unknown>;
+      try { corpoDoLote = corpoDoLoteRefeito(antiga, pedidoParaCriar(lote, orientacao), lote as LinhaRefeita[]); }
+      catch (e) {
+        if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(400, e.codigo, e.message);
+        throw e;
+      }
+      const r = await pedidoLivre(servico, chamador, corpoDoLote);
       const dados = (await r.json()) as Record<string, unknown>;
       if (r.status !== 200) return json({ ...dados, propostas: novas, conferencia: ajuste.conferencia }, r.status);
       const id = String(((dados.proposta ?? {}) as Record<string, unknown>).id ?? "");
