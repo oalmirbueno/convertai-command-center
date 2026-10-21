@@ -17,7 +17,7 @@ export default function ConexoesDaCasa({ no, acoes }: { no: NoDoLab; acoes?: Par
   const [erro, setErro] = useState("");
   const crm = no.tipo === "crm";
   const origem = typeof no.dados.crm_origem === "string" ? no.dados.crm_origem : "";
-  const nativo = crm ? !!origem : no.dados.plataforma === "painel";
+  const nativo = crm ? !!origem : (no.dados.plataforma || "painel") === "painel";
   const precisaProduto = nativo && (!crm || origem === "cliente");
   const chaveProduto = crm ? "produto_crm_id" : "produto_membros_id";
   const produto = typeof no.dados[chaveProduto] === "string" ? no.dados[chaveProduto] as string : "";

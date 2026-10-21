@@ -133,7 +133,7 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
   const titulo = typeof no.dados.titulo === "string" && no.dados.titulo.trim() ? no.dados.titulo.trim() : def.rotulo;
   const [gerar, setGerar] = useState(false);
   const midia = no.tipo === "midia";
-  const podeGerarIA = SEM_GERAR.indexOf(no.tipo) < 0 && !(no.tipo === "area_membros" && no.dados.plataforma === "painel");
+  const podeGerarIA = SEM_GERAR.indexOf(no.tipo) < 0 && !(no.tipo === "area_membros" && (no.dados.plataforma || "painel") === "painel");
 
   const sombra = selected
     ? `0 0 0 2px ${def.cor}, 0 0 0 6px ${def.cor}26, 0 14px 34px -12px ${def.cor}99`

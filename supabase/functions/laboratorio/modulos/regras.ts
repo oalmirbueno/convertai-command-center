@@ -191,7 +191,7 @@ export const ENTRADAS_ACEITAS: Record<TipoDeNo, readonly TipoDeNo[]> = {
   fontes_trafego: [],
   // Funil: páginas ligadas entre si; a ligação pode levar o gatilho (GATILHOS_DA_ORIGEM).
   pagina: [...GUIAS, ...CRIACAO, ...FONTES_V4, "midia", "gravity", "imagem", "carrossel", "logo", "video", "fontes_trafego", "pagina", "checkout", "quiz", "webinar"],
-  checkout: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "quiz", "webinar", "fontes_trafego"],
+  checkout: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "landing", "pagina", "quiz", "webinar", "fontes_trafego"],
   quiz: [...GUIAS, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "fontes_trafego"],
   webinar: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "video", "pagina", "fontes_trafego"],
   teste_ab: ["pagina", "quiz", "fontes_trafego"],

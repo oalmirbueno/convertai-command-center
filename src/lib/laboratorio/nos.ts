@@ -361,7 +361,7 @@ const DEFINICOES_DA_V4: Record<TipoDaV4, DefinicaoDoNo> = {
     rotulo: "Checkout",
     dica: "Página de checkout com resumo, garantia e order bump; o botão leva ao link do gateway do cliente",
     saida: "html",
-    entradas: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "pagina", "quiz", "webinar", "fontes_trafego"],
+    entradas: [...GUIAS, ...CARRINHO, "avatar", "refino_tom", "secoes_pagina", ...FONTES_V4, "midia", "imagem", "logo", "landing", "pagina", "quiz", "webinar", "fontes_trafego"],
     roda: true,
     campos: [
       esc("gateway", "Gateway", OPCOES_DA_V4.gateway),

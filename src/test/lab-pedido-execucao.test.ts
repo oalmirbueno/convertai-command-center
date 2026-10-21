@@ -23,6 +23,7 @@ describe("pedido que monta e gera conteúdos", () => {
     let c = canvasVazio();
     for (const tipo of ["produto", "landing", "checkout", "copy"] as const) c = criarNo(c, tipo, undefined, {}, tipo).canvas;
     c = ligar(ligar(c, "produto", "landing"), "landing", "checkout");
+    expect(c.ligacoes.map((l) => `${l.de}:${l.para}`)).toEqual(["produto:landing", "landing:checkout"]);
     expect(alvosDoPedido(c, mudarDados(c, "produto", { preco: "197" }))).toEqual(["landing", "checkout"]);
   });
   it("uma ligação nova atualiza seu destino e a retirada de uma fonte atualiza a página", () => {

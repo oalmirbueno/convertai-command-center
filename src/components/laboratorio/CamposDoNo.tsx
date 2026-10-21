@@ -373,7 +373,7 @@ export default function CamposDoNo({
   /** Campos que outro bloco do nó já mostra. */
   pular?: string[];
 }) {
-  const fora = (pular || []).concat(no.tipo === "area_membros" && no.dados.plataforma === "painel" ? ["modelo_id", "modulos", "aulas_por_modulo", "liberacao"] : []);
+  const fora = (pular || []).concat(no.tipo === "area_membros" && (no.dados.plataforma || "painel") === "painel" ? ["modelo_id", "modulos", "aulas_por_modulo", "liberacao"] : []);
   const campos = (todos ? TIPOS_DE_NO[no.tipo].campos : camposPrincipais(no.tipo)).filter((c) => fora.indexOf(c.chave) < 0);
   if (!campos.length) return null;
   return (
