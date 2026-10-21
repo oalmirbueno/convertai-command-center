@@ -85,6 +85,9 @@ export function mensagemDoErro(e: unknown): string {
     "Entre e confirme seu cadastro",
     "Abra a ferramenta novamente",
     "Não troque o tipo de uma ferramenta que já tem licenças",
+    "Licença de CRM indisponível.",
+    "Esta licença foi revogada e não pode ser reativada.",
+    "Esta licença venceu ou ainda não começou.",
   ];
   if (obj?.message && mensagensClaras.includes(obj.message)) return obj.message;
   if (

@@ -49,8 +49,9 @@ export type LicencaMembro = {
   email: string;
   origem: string;
   confirmado_em: string;
-  fim: string;
+  fim: string | null;
   revogado_em: string | null;
+  suspenso_em?: string | null;
 };
 export type AdminFerramentas = DadosCrmMembro & {
   ferramentas: {
@@ -164,6 +165,21 @@ export const licenciarTeste = (produto: string, usuario: string) =>
   });
 export const revogarLicenca = (licenca: string) =>
   rpc<void>("membros_ferramenta_revogar", { _licenca: licenca });
+export const suspenderLicencaCrm = (licenca: string) =>
+  rpc<void>("membros_crm_licenca_suspender", { _licenca: licenca });
+export const reativarLicencaCrm = (licenca: string) =>
+  rpc<void>("membros_crm_licenca_reativar", { _licenca: licenca });
+export function estadoDaLicenca(
+  licenca: LicencaMembro,
+  agora = Date.now(),
+): "Revogado" | "Vencida" | "Não iniciada" | "Suspensa" | "Liberado" {
+  if (licenca.revogado_em) return "Revogado";
+  const fim = licenca.fim ? Date.parse(licenca.fim) : NaN;
+  if (!Number.isFinite(fim) || fim <= agora) return "Vencida";
+  const inicio = Date.parse(licenca.confirmado_em);
+  if (!Number.isFinite(inicio) || inicio > agora) return "Não iniciada";
+  return licenca.suspenso_em ? "Suspensa" : "Liberado";
+}
 export const pedirExclusaoCrm = (produto: string) =>
   rpc<void>("membros_ferramenta_pedir_exclusao", { _produto: produto });
 export const proximaResposta = (

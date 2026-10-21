@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project_ref": "jjjtkowvxemvituvywvf",
-  "reviewed_at": "2026-10-20",
+  "reviewed_at": "2026-10-21",
   "origin": "read_only_catalog",
   "scope": "ledger_stability_only",
   "ledger_hash_mode": "sha256_joined_statements_chr30",
@@ -1952,5 +1952,14 @@
       "statements_sha256": "d22cd2cd6339e893560a56ad7f52dd8d18d103d2fada402033d442cfe204d96f"
     }
   ],
-  "pending_migrations": []
+  "pending_migrations": [
+    {
+      "version": "20261021130623",
+      "name": "membros_crm_suspensao_licenca",
+      "path": "supabase/migrations/20261021130623_membros_crm_suspensao_licenca.sql",
+      "local_sha256": "458c96d26d7e0bfe6454ef46c3b0844f0e344702b73a30e68dce1fbfeddf5047",
+      "statements_sha256": "8ce91da0fbca0f695d1561033d51ac6b677e57da646442c085d3453467fe7008",
+      "hash_mode": "supabase_cli_split"
+    }
+  ]
 }

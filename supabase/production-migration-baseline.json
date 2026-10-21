@@ -2441,6 +2441,14 @@
       "remote_name": "membros_estudo_ferramentas",
       "remote_statements_sha256": "77b33dcb9359423a904bd9e20fc17ba05bbc049e19a7a9f283e3f839ec200896",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261021130623",
+      "path": "supabase/migrations/20261021130623_membros_crm_suspensao_licenca.sql",
+      "local_sha256": "458c96d26d7e0bfe6454ef46c3b0844f0e344702b73a30e68dce1fbfeddf5047",
+      "remote_name": "membros_crm_suspensao_licenca",
+      "remote_statements_sha256": "8ce91da0fbca0f695d1561033d51ac6b677e57da646442c085d3453467fe7008",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

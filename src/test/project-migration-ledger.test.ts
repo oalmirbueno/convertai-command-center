@@ -23,10 +23,10 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 describe("project-specific read-only deployment ledger", () => {
   it("pins the current reviewed package independently from the historical fixture", () => {
     const live = listProjectLedgerEntries({ projectRef: reviewedProjectRef });
-    expect(live).toHaveLength(389);
+    expect(live).toHaveLength(390);
     expect(live.at(-1)).toMatchObject({
-      name: "membros_estudo_ferramentas",
-      statements_sha256: "d22cd2cd6339e893560a56ad7f52dd8d18d103d2fada402033d442cfe204d96f",
+      name: "membros_crm_suspensao_licenca",
+      statements_sha256: "8ce91da0fbca0f695d1561033d51ac6b677e57da646442c085d3453467fe7008",
     });
   });
   it("keeps the 206 reviewed rows and explicitly requires all three reviewed migrations", () => {
