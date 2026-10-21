@@ -57,19 +57,25 @@ export interface RetanguloProfile { x: number; y: number; largura: number; altur
 export interface ResultadoProfile { imagem: RetanguloProfile | null }
 export interface RecursosProfile { avatar?: HTMLImageElement | null; imagem?: HTMLImageElement | null; imagemExata?: boolean }
 
-function desenharDestaque(ctx: CanvasRenderingContext2D, imagem: RetanguloProfile, destaque: NonNullable<TemplateProfile["destaque"]>) {
+function desenharDestaque(ctx: CanvasRenderingContext2D, imagem: RetanguloProfile, area: RetanguloProfile, destaque: NonNullable<TemplateProfile["destaque"]>) {
   if (!Number.isFinite(destaque.x) || !Number.isFinite(destaque.y) || destaque.x < 0 || destaque.x > 1 || destaque.y < 0 || destaque.y > 1) throw new Error("Marque um ponto dentro da imagem real.");
   const rotulo = destaque.rotulo.trim();
   if (!rotulo || rotulo.length > 60 || /[\r\n\t<>]/.test(rotulo)) throw new Error("Escreva um rótulo simples de até 60 caracteres para o ponto.");
   const x = imagem.x + imagem.largura * destaque.x, y = imagem.y + imagem.altura * destaque.y;
-  ctx.save(); ctx.strokeStyle = "#efb300"; ctx.lineWidth = 5;
+  // Toda a anotação fica no espaço reservado à foto, inclusive sobre o letterbox.
+  // O centro do círculo continua nos pixels da imagem inteira, sem deslocar o ponto.
+  ctx.save(); caixa(ctx, area.x, area.y, area.largura, area.altura, 0); ctx.clip();
+  ctx.strokeStyle = "#efb300"; ctx.lineWidth = 5;
   ctx.beginPath(); ctx.arc(x, y, 17, 0, Math.PI * 2); ctx.stroke();
   ctx.font = "600 22px Arial, sans-serif";
-  const linhas = linhasProfile(rotulo, 280, (s) => ctx.measureText(s).width);
+  const margem = 12, larguraDoTexto = Math.min(280, area.largura - margem * 2 - 24);
+  const linhas = linhasProfile(rotulo, larguraDoTexto, (s) => ctx.measureText(s).width);
   const w = Math.max(70, ...linhas.map((s) => ctx.measureText(s).width)) + 24, h = linhas.length * 29 + 18;
-  const lx = Math.max(24, Math.min(1080 - w - 24, x + 36 + w > 1056 ? x - w - 36 : x + 36));
-  const ly = Math.max(24, y - h - 24);
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lx + w / 2, ly + h); ctx.stroke();
+  if (w > area.largura - margem * 2 || h > area.altura - margem * 2) throw new Error("O rótulo não cabe na área da imagem. Use um rótulo mais curto.");
+  const direita = area.x + area.largura - margem, baixo = area.y + area.altura - margem;
+  const lx = Math.max(area.x + margem, Math.min(direita - w, x + 36 + w > direita ? x - w - 36 : x + 36));
+  const ly = Math.max(area.y + margem, Math.min(baixo - h, y - h - 24 < area.y + margem ? y + 24 : y - h - 24));
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(Math.max(lx, Math.min(lx + w, x)), Math.max(ly, Math.min(ly + h, y))); ctx.stroke();
   ctx.fillStyle = "#fff2bc"; caixa(ctx, lx, ly, w, h, 8); ctx.fill();
   ctx.fillStyle = "#1a1a1a"; ctx.textBaseline = "top";
   linhas.forEach((linha, i) => ctx.fillText(linha, lx + 12, ly + 9 + i * 29));
@@ -119,19 +125,25 @@ export function desenharProfile(canvas: HTMLCanvasElement, template: TemplatePro
   ctx.font = "400 25px Arial, sans-serif"; ctx.fillStyle = cinza;
   ctx.fillText(`@${template.username.replace(/^@/, "")}`, nx, iy + 65, maxNome);
   let cursor = iy + alturaCabecalho + gap;
-  let imagem: RetanguloProfile | null = null;
+  let imagem: RetanguloProfile | null = null, areaDaImagem: RetanguloProfile | null = null;
   const cantos = recursos.imagemExata || template.destaque ? 0 : template.arredondamento ?? 16;
-  if (insta && recursos.imagem) { imagem = fotoInteira(ctx, recursos.imagem, ix, cursor, interna, alturaImagem, cantos, fundo); cursor += alturaImagem + gap; }
+  if (insta && recursos.imagem) {
+    areaDaImagem = { x: ix, y: cursor, largura: interna, altura: alturaImagem };
+    imagem = fotoInteira(ctx, recursos.imagem, ix, cursor, interna, alturaImagem, cantos, fundo); cursor += alturaImagem + gap;
+  }
   if (insta) {
     ctx.fillStyle = cinza; ctx.font = "400 28px Arial, sans-serif"; ctx.fillText("♡   ◯   ↗", ix, cursor + 20); cursor += alturaIcones;
   }
   ctx.font = `400 ${tamanho}px Arial, sans-serif`; ctx.fillStyle = tinta; ctx.textBaseline = "top";
   for (const linha of linhas) { ctx.fillText(linha, ix, cursor); cursor += tamanho * 1.32; }
   ctx.textBaseline = "alphabetic";
-  if (!insta && recursos.imagem) imagem = fotoInteira(ctx, recursos.imagem, ix, cursor + gap, interna, alturaImagem, cantos, fundo);
+  if (!insta && recursos.imagem) {
+    areaDaImagem = { x: ix, y: cursor + gap, largura: interna, altura: alturaImagem };
+    imagem = fotoInteira(ctx, recursos.imagem, ix, cursor + gap, interna, alturaImagem, cantos, fundo);
+  }
   if (template.destaque) {
-    if (!imagem) throw new Error("Escolha a imagem real antes de marcar um ponto.");
-    desenharDestaque(ctx, imagem, template.destaque);
+    if (!imagem || !areaDaImagem) throw new Error("Escolha a imagem real antes de marcar um ponto.");
+    desenharDestaque(ctx, imagem, areaDaImagem, template.destaque);
   }
   return { imagem };
 }
