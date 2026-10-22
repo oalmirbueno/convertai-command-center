@@ -43,6 +43,7 @@ import { jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 import { fontesDaMarca, kitComMarca, type MarcaDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { normalizarPadrao, pedidoDoSeloPeloPadrao } from "../_shared/padrao-da-campanha.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { DEFINICAO_DO_TIPO, direcaoDoSeloDoTipo, tipoDaCampanha } from "../_shared/tipos-de-campanha.ts";
 import {
@@ -479,14 +480,20 @@ export function acoesDoSelo(deps: DepsDoSelo) {
     const variacao = Math.max(0, Math.min(3, Math.round(Number(corpo.variacao) || 0)));
     const texto = textoDoSelo(c, txt(corpo.texto, 60) || base?.texto || null);
     const avisos = avisosDoTexto(texto, tipo);
-    const refs = referenciasDoSelo(c.selo_referencias).concat(o.refsExtras ?? []).slice(0, MAX_REFERENCIAS_DO_SELO);
+    // 22/10/2026: com o padrão visual da campanha, o selo segue a pegada da referência (não um selo genérico):
+    // as referências do padrão (as da pasta do cliente) vão como estilo e o pedido leva o padrão.
+    const padrao = normalizarPadrao(c.briefing && typeof c.briefing === "object" ? (c.briefing as Record<string, unknown>).padrao : null);
+    const doPadrao: ReferenciaDoSelo[] = padrao ? padrao.caminhos.map((caminho) => ({ caminho, papel: "estilo" as const, nota: "padrão visual da campanha" })) : [];
+    const refs = referenciasDoSelo(c.selo_referencias).concat(o.refsExtras ?? []).concat(doPadrao)
+      .filter((r, i, l) => l.findIndex((x) => x.caminho === r.caminho) === i)
+      .slice(0, MAX_REFERENCIAS_DO_SELO);
     const { usadas, imagens } = await imagensDasReferencias(servico, refs, avisos);
     const transparente = aceitaFundoTransparente(modelo);
     const { ctx, resumo } = await montarContexto(servico, c, corpo, {
       estilo,
       variacao: base ? undefined : variacao,
       texto,
-      pedido: txt(corpo.pedido, 400) || null,
+      pedido: [txt(corpo.pedido, 400), pedidoDoSeloPeloPadrao(padrao)].filter(Boolean).join(" ").slice(0, 600) || null,
       refs: usadas,
       transparente,
       melhorar: base && o.pedidoDeMelhora ? { pedido: o.pedidoDeMelhora } : null,

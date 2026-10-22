@@ -67,6 +67,8 @@ import { EnvioAoGestor } from "./PacoteDaCopy";
 import KitDeRecepcao from "./KitDeRecepcao";
 import AcervoDoEstudio, { estaNaConta, podeIrParaAConta } from "./AcervoDoEstudio";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
+import PecasDaCampanha, { PuxarDeUmaCampanha } from "./PecasDaCampanha";
+import { campanhaDoCriativo } from "./campanhaDaMesaApi";
 
 /**
  * Etapa 4, Estúdio Ads: os criativos por plano e ângulo, cada um com a
@@ -150,13 +152,15 @@ export function agrupar(criativos: CriativoAds[], planos: PlanoAds[]): Grupo[] {
     const plano = iPlano >= 0 ? planos[iPlano] : null;
     const iAngulo = plano ? plano.angulos.findIndex((a) => a.id === c.angulo_id) : -1;
     const angulo = plano && iAngulo >= 0 ? plano.angulos[iAngulo] : null;
-    const chave = `${c.plano_id || "-"}:${c.angulo_id || "-"}`;
+    // 22/10/2026: criativo vindo de uma campanha da Mesa (sem plano): o grupo é a campanha.
+    const daCampanha = !c.plano_id ? campanhaDoCriativo(c) : null;
+    const chave = daCampanha ? `campanha:${daCampanha.id}` : `${c.plano_id || "-"}:${c.angulo_id || "-"}`;
     let g = grupos.find((x) => x.chave === chave);
     if (!g) {
       g = {
         chave,
-        plano: plano ? plano.nome : "Sem plano",
-        angulo: angulo ? angulo.nome : "Sem ângulo",
+        plano: daCampanha ? "Campanha da Mesa" : plano ? plano.nome : "Sem plano",
+        angulo: daCampanha ? daCampanha.nome : angulo ? angulo.nome : "Sem ângulo",
         criativos: [],
         ordemDoPlano: iPlano >= 0 ? iPlano : 999,
         ordemDoAngulo: angulo && typeof angulo.ordem_teste === "number" ? angulo.ordem_teste : iAngulo >= 0 ? 100 + iAngulo : 999,
@@ -189,6 +193,9 @@ export default function AbaEstudioAds({
   planoId,
   onVerTodos,
   onImportado,
+  campanhaMesaId = null,
+  onCampanhaMesa,
+  onAbrirSemPlano,
 }: {
   criativoId: string | null;
   onCriativo: (id: string | null) => void;
@@ -197,6 +204,11 @@ export default function AbaEstudioAds({
   onVerTodos?: () => void;
   /** v5: plano criado pelo "Importar pacote" (retorno do agente externo). */
   onImportado?: (planoId: string) => void;
+  /** 22/10/2026: campanha da Mesa (?campanha_mesa=) cujas peças prontas viram criativos aqui; null fecha. */
+  campanhaMesaId?: string | null;
+  onCampanhaMesa?: (id: string | null) => void;
+  /** Abre um criativo saindo do plano em foco (o criativo da campanha não tem plano). */
+  onAbrirSemPlano?: (criativoId: string) => void;
 }) {
   const mesa = useMesa();
   const { clientId, catalogo, clientName } = mesa;
@@ -343,7 +355,7 @@ export default function AbaEstudioAds({
     const t = window.setTimeout(medirAGrade, 30);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maisAberto, !!lote, !!pedidoDeArte, vista, desdePacote !== null, criativos.isLoading]);
+  }, [maisAberto, !!lote, !!pedidoDeArte, vista, desdePacote !== null, criativos.isLoading, campanhaMesaId]);
 
   useEffect(() => {
     if (!planoId || !pedidoDeArte || !trabalhosProntos || desdeLote !== null) return;
@@ -439,15 +451,31 @@ export default function AbaEstudioAds({
     void enviarParaConta(lista);
   };
 
+  // 22/10/2026: as peças prontas da campanha da Mesa, acima da lista (atalho da campanha ou "Puxar de uma campanha").
+  const abrirDaCampanha = (id: string) => {
+    setVista("criativos");
+    setMidia("arte");
+    if (onAbrirSemPlano) onAbrirSemPlano(id);
+    else onCriativo(id);
+  };
+  const painelDaCampanha =
+    campanhaMesaId && onCampanhaMesa ? (
+      <PecasDaCampanha key={campanhaMesaId} campanhaId={campanhaMesaId} onFechar={() => onCampanhaMesa(null)} onAbrirCriativo={abrirDaCampanha} aoMudarAltura={medirAGrade} />
+    ) : null;
+
   if (criativos.isLoading) return <Carregando forma="aba" rotulo="Lendo os criativos" />;
   if (criativos.isError) return <AvisoDeErro erro={criativos.error} />;
   if (!todos.length) {
     return (
-      <EstadoVazio
-        icone={<Clapperboard className="h-5 w-5" />}
-        titulo="Nenhum criativo produzido ainda"
-        descricao={'No Plano de teste, escolha os ângulos e os formatos e use "Produzir criativos".'}
-      />
+      <div className="min-w-0 space-y-4">
+        {painelDaCampanha}
+        <EstadoVazio
+          icone={<Clapperboard className="h-5 w-5" />}
+          titulo="Nenhum criativo produzido ainda"
+          descricao={'No Plano de teste, escolha os ângulos e os formatos e use "Produzir criativos", ou puxe as peças prontas de uma campanha.'}
+          acao={!campanhaMesaId && onCampanhaMesa ? <PuxarDeUmaCampanha onEscolher={onCampanhaMesa} /> : undefined}
+        />
+      </div>
     );
   }
 
@@ -458,6 +486,7 @@ export default function AbaEstudioAds({
   const anguloAberto = aberto && planoAberto ? planoAberto.angulos.find((a) => a.id === aberto.angulo_id) || null : null;
   const anuncioLigado = aberto && aberto.ad_id ? listaDeAnuncios.find((a) => a.ad_id === aberto.ad_id) : null;
   const situacaoAberta = aberto ? situacao(aberto) : "sem_arte";
+  const campanhaAberta = aberto ? campanhaDoCriativo(aberto) : null;
 
   // 28/09 (frente AD4, dono): "Todos entregues" vira um selo na linha de estado, sem o filtro gigante.
   const naContaN = visiveis.filter(estaNaConta).length;
@@ -608,6 +637,7 @@ export default function AbaEstudioAds({
               onEscolher={(v) => setFiltro(v as SituacaoDoCriativo | "")}
             />
           )}
+          {!campanhaMesaId && onCampanhaMesa && <PuxarDeUmaCampanha className="mb-1 mr-2" onEscolher={onCampanhaMesa} />}
           {vista === "criativos" && midia === "video" && <SeletorCompacto rotulo="Situação dos vídeos" className="mb-1" valor={filtroVideo} onEscolher={(v) => setFiltroVideo(v as EstadoVideoAds | "")} opcoes={[{ valor: "", rotulo: `Todos (${visiveis.length})` }, ...ESTADOS_VIDEO_ADS.map((e) => ({ valor: e.id, rotulo: `${e.nome} (${visiveis.filter((c) => videoDe(c).estado === e.id).length})` }))]} />}
         </div>
         {/* O "...": o secundário num lugar só (estilo, importar, copy do plano e o que não é o primário agora). */}
@@ -664,6 +694,8 @@ export default function AbaEstudioAds({
           <p className="mt-2 text-[12px] text-muted-foreground" role="status">Preparando as artes dos criativos novos…</p>
         ) : null}
       </section>
+
+      {painelDaCampanha}
 
       {vista === "acervo" ? (
         <AcervoDoEstudio
@@ -733,6 +765,11 @@ export default function AbaEstudioAds({
                         {midia === "arte" && estaNaConta(c) && <span className="ml-1 text-[11px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
                         {midia === "arte" && c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
                       </span>
+                      {midia === "arte" && campanhaDoCriativo(c) && (
+                        <span className="mt-0.5 block truncate text-[11px] text-primary" data-da-campanha="" title={`Da campanha ${campanhaDoCriativo(c)!.nome}`}>
+                          Da campanha {campanhaDoCriativo(c)!.nome}
+                        </span>
+                      )}
                     </span>
                   </button>
                 </li>
@@ -781,6 +818,17 @@ export default function AbaEstudioAds({
                     </span>
                     {midia === "arte" && estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[11px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
                   </div>
+                  {midia === "arte" && campanhaAberta && (
+                    <p className="mt-0.5 flex min-w-0 items-center text-[12px]" data-etiqueta-da-campanha={campanhaAberta.id}>
+                      {onCampanhaMesa && campanhaMesaId !== campanhaAberta.id ? (
+                        <button type="button" className="min-w-0 truncate font-medium text-primary hover:underline" onClick={() => onCampanhaMesa(campanhaAberta.id)} title="Ver as peças desta campanha">
+                          Da campanha {campanhaAberta.nome}
+                        </button>
+                      ) : (
+                        <span className="min-w-0 truncate font-medium text-primary">Da campanha {campanhaAberta.nome}</span>
+                      )}
+                    </p>
+                  )}
                   <p className="truncate text-[12px] text-muted-foreground">
                     {midia === "video" ? "Vídeo · base e copy da campanha" : formatoDe(aberto.formato).rotulo}
                     {midia === "video" ? "" : anuncioLigado ? ` · no Meta: ${nomeDoAnuncio(anuncioLigado)}` : aberto.ad_id ? ` · no Meta: ${aberto.ad_id}` : " · sem anúncio ligado"}

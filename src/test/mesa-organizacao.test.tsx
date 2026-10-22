@@ -114,4 +114,21 @@ describe("Organização na Mesa", () => {
     expect(onAbrirMes).toHaveBeenCalledOnce();
     unmount(); qc.clear();
   });
+
+  it("22/10: Abrir mostra o arquivo na própria tela (visor grande), sem abrir aba nova, e a lateral fica parada", async () => {
+    const valor: MesaValor = { clientId: cliente, clientName: "Cliente A", userId: "operador", isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: vi.fn(), abrirRecarga: vi.fn(), abrirChaves: vi.fn(), abrirModelos: vi.fn() };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { container, unmount } = render(<QueryClientProvider client={qc}><MemoryRouter><MesaProvider valor={valor}><AbaOrganizacao onAbrirMes={vi.fn()} /></MesaProvider></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Promoção.png")).toBeTruthy();
+    expect(container.querySelector("[data-lateral-fixa]")?.className).toContain("md:sticky");
+    const abrir = screen.queryAllByRole("button", { name: /^Abrir / });
+    if (abrir.length) {
+      fireEvent.click(abrir[0]);
+      expect(await screen.findByRole("dialog")).toBeTruthy();
+      expect(abrirJanela).not.toHaveBeenCalled();
+    }
+    abrirJanela.mockRestore();
+    unmount(); qc.clear();
+  });
 });

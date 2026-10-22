@@ -147,6 +147,7 @@ import { legendaDoItem } from "./modulos/legenda-do-item.ts";
 import { avisosDoCarrossel, MAX_LAMINAS_PELA_API } from "../_shared/regras-do-carrossel.ts";
 import { conferirLegendasComJev } from "./modulos/legendas-com-jev.ts";
 import { lerConferencia, perguntasDaConferencia, type PecaParaConferir } from "./modulos/conferencia-da-campanha.ts";
+import { normalizarPadrao, type PadraoDaCampanha } from "../_shared/padrao-da-campanha.ts";
 // 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
 import { blocoDosMoldes, type Molde, moldesDosVencedores, type PostDoMolde } from "./modulos/moldes.ts";
 // 02/10: refazer uma proposta no servidor (chamada interna com a chave de serviço e o x-cron-secret).
@@ -3387,6 +3388,8 @@ type BriefingDaCampanha = {
   stories?: StoryDaCampanha[];
   /** 22/10/2026: vínculo opcional com uma campanha de anúncios (ads_campaigns.campaign_id). */
   ads?: { campaign_id: string; nome: string; vinculado_em: string };
+  /** 22/10/2026: o padrão visual da campanha (a referência lida uma vez; _shared/padrao-da-campanha.ts). */
+  padrao?: PadraoDaCampanha;
 };
 
 type FormatosDaCampanha = { posts: number; carrosseis: number; stories: number; videos: number };
@@ -3440,6 +3443,7 @@ function extrasDoBriefing(v: unknown): Partial<BriefingDaCampanha> {
     ...(f ? { formatos: f } : {}),
     ...(st.length ? { stories: st } : {}),
     ...(campaignId ? { ads: { campaign_id: campaignId, nome: texto(ads?.nome, 160), vinculado_em: texto(ads?.vinculado_em, 40) } } : {}),
+    ...(normalizarPadrao(o.padrao) ? { padrao: normalizarPadrao(o.padrao) as PadraoDaCampanha } : {}),
   };
 }
 

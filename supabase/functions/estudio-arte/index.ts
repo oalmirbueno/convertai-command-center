@@ -573,6 +573,9 @@ import { acoesDaPublicacaoDaPeca, dataDoConteudo, horaComEspacoNoDia, type Traba
 // Frente EN (28/09): entregar com três opções (pronto para agendar, aprovação, só Arquivos).
 import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-opcoes.ts";
 import { acoesDoTemplateProfile, type TemplateProfile } from "./modulos/template-profile.ts";
+// 22/10/2026: o padrão visual da campanha (referência da campanha lida uma vez; toda peça e o selo seguem).
+import { blocoDoPadrao, normalizarPadrao, referenciasDaPecaComPadrao } from "../_shared/padrao-da-campanha.ts";
+import { acoesDoPadraoDaCampanha } from "./modulos/padrao-da-campanha-acao.ts";
 // 21/10: Template com "Gerar" (texto do post e foto sem texto), custo antes por 409 confirmar_custo.
 import { acoesDaGeracaoDoTemplate, TAMANHO_DA_FOTO } from "./modulos/template-geracao.ts";
 import { estimarComModelo as estimarPeloCatalogo } from "../_shared/ia-motor.ts";
@@ -1206,6 +1209,8 @@ function blocoDaCampanha(c: CampanhaDaLamina): string {
       : "",
     b.oferta ? `- Oferta da campanha (contexto; na arte vai só o texto exato da lâmina): ${b.oferta}` : "",
     b.mensagem_central ? `- Mensagem central (o clima e a imagem reforçam esta ideia): ${b.mensagem_central}` : "",
+    // 22/10/2026: o padrão visual da campanha (a referência lida uma vez) vale para toda peça.
+    blocoDoPadrao(normalizarPadrao(c.briefing && typeof c.briefing === "object" ? (c.briefing as Record<string, unknown>).padrao : null)),
   ].filter(Boolean).join("\n");
 }
 
@@ -4068,7 +4073,14 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   if (formato !== "feed_4x5") direcao.formato = formato;
   if (campanha) {
     direcao.campanha_id = campanha.id;
-    if (!direcao.referencias_ids?.length && campanha.referencias_ids?.length) direcao.referencias_ids = campanha.referencias_ids.slice(0, 4);
+    // 22/10/2026: com padrão visual, as referências dele vão sempre na frente (todas as peças com o mesmo
+    // guia) e a fidelidade é "inspirada" (mesmo sistema gráfico, composição nova, nada editado da referência).
+    const padraoDaCampanha = normalizarPadrao(campanha.briefing && typeof campanha.briefing === "object" ? (campanha.briefing as Record<string, unknown>).padrao : null);
+    if (padraoDaCampanha) {
+      const comPadrao = referenciasDaPecaComPadrao(padraoDaCampanha, direcao.referencias_ids, direcao.fidelidade_referencia);
+      direcao.referencias_ids = comPadrao.referencias_ids;
+      direcao.fidelidade_referencia = comPadrao.fidelidade_referencia as typeof direcao.fidelidade_referencia;
+    } else if (!direcao.referencias_ids?.length && campanha.referencias_ids?.length) direcao.referencias_ids = campanha.referencias_ids.slice(0, 4);
   }
   if (rapida) {
     // Os avisos da conferência ficam na arte (o histórico mostra); os de uma direção anterior saem.
@@ -11261,6 +11273,20 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   rapida_preparar: (ch, corpo) => rapidaPreparar(ch, corpo, null),
   rapida_para_agenda: rapidaParaAgenda,
   rapida_arquivar: rapidaArquivar,
+  // 22/10/2026: a referência da campanha vira o padrão visual dela (uma leitura por visão, custo antes na tela).
+  ...acoesDoPadraoDaCampanha({
+    servico: () => servico() as never,
+    garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId),
+    lerCampanhaPorId: async (id) => {
+      if (!UUID.test(id)) return null;
+      const { data } = await servico().from("mesa_campanhas").select("*").eq("id", id).maybeSingle();
+      return (data as never) ?? null;
+    },
+    referenciasPorId: (clientId, ids) => referenciasPorId(clientId, ids),
+    imagemDaReferencia: (r) => imagemDaReferencia(r as Referencia),
+    json,
+    erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem),
+  }).acoes,
   // 02/10: o post do Instagram colado no pedido (sem login), com as imagens guardadas na pasta do cliente.
   rapida_instagram: rapidaInstagram,
   // Frente MF: fotos_preparar (post de fotos da Mesa Foto, sem gerar arte).
@@ -11300,7 +11326,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 for (const acao of ACOES_SO_DA_MESA) if (ACOES[acao]) ACOES[acao] = soDaMesa(ACOES[acao]);
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
-const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto"]);
+const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto", "campanha_padrao"]);
 // 21/10: o texto e a foto gerados no Template também passam de 150 s.
 ACOES_LONGAS.add("template_conteudo");
 ACOES_LONGAS.add("template_imagem");

@@ -739,7 +739,9 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   return (
     <section id="agenda-do-mes" className="scroll-mt-40 space-y-3 lg:scroll-mt-4" data-recolhido={recolhido ? "sim" : "nao"}>
       <CabecalhoDeSecao
-        titulo="Agenda do mês"
+        // 21/10: "Calendário", com ícone, na ordem do Mês (Calendário → Radar → Propostas e agente).
+        titulo="Calendário"
+        icone={<CalendarDays className="h-4 w-4" />}
         recolher={{
           recolhido,
           onAlternar: () => setRecolhido(!recolhido),

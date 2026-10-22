@@ -6,6 +6,7 @@ import type { ImagemDoAcervo } from "../SeletorDoAcervo";
 import { areaDoAdesivo, corDaLetra, hexValido, LAYOUT_DO_TEXTO, ZONA_SEGURA } from "./layoutDoStory";
 import { caminhoDoAdesivo, type Adesivo, type Story, type TipoDeAdesivo } from "./storiesApi";
 import { corDoFundo } from "./arteDoStory";
+import { estiloCssDoTexto, textoNaCaixa, textoNativoDoStory } from "./textoNativo";
 
 /**
  * Prévia do story como o celular mostra (9:16): a foto ou a cor da marca, o
@@ -194,7 +195,12 @@ export default function PreviaDoStory({
 }) {
   const u = largura / 100;
   const gerada = story.fundo.tipo === "gerada";
+  const natural = story.fundo.tipo === "natural";
   const caminhoGerado = gerada ? (imagem && imagem.caminho) || story.fundo.caminho || null : null;
+  // 22/10: a foto natural (sem texto dentro) e, por cima, a camada de texto nativo do Instagram.
+  const caminhoNatural = natural ? story.fundo.caminho || null : null;
+  const nativo = natural ? textoNativoDoStory(story) : null;
+  const cssNativo = nativo ? estiloCssDoTexto(nativo, largura) : null;
   const comFoto = story.fundo.tipo === "foto" && !!foto;
   const fundo = corDoFundo(story, paleta);
   const caixa = hexValido(paleta[0]) || "#111111";
@@ -204,12 +210,20 @@ export default function PreviaDoStory({
   const texto = (story.texto_na_tela || "").trim();
   const corpo = largura * (texto.length > 70 ? LAYOUT_DO_TEXTO.corpoMinimo : LAYOUT_DO_TEXTO.corpo);
   // Rascunho da imagem a gerar: a cor da marca em degradê (nunca foto colada).
-  const rascunho = gerada && !caminhoGerado ? `linear-gradient(165deg, ${hexValido(paleta[0]) || "#1f2937"} 0%, ${hexValido(paleta[1]) || hexValido(paleta[0]) || "#111827"} 100%)` : null;
+  const rascunho = natural && !caminhoNatural ? "linear-gradient(170deg, #8a8f98 0%, #3f434a 100%)" : gerada && !caminhoGerado ? `linear-gradient(165deg, ${hexValido(paleta[0]) || "#1f2937"} 0%, ${hexValido(paleta[1]) || hexValido(paleta[0]) || "#111827"} 100%)` : null;
   const letraDoRascunho = corDaLetra(hexValido(paleta[0]) || "#1f2937", paleta);
 
   return (
     <div className={juntar("relative min-w-0 overflow-hidden rounded-md", className)} style={{ width: largura, maxWidth: "100%" }} data-previa-do-story="">
-      <div className="relative w-full" style={{ paddingBottom: "177.78%", background: caminhoGerado || comFoto ? "#000" : rascunho || fundo }} data-imagem-gerada={caminhoGerado ? "sim" : gerada ? "a_gerar" : undefined}>
+      <div className="relative w-full" style={{ paddingBottom: "177.78%", background: caminhoGerado || caminhoNatural || comFoto ? "#000" : rascunho || fundo }} data-imagem-gerada={caminhoGerado ? "sim" : caminhoNatural ? "natural" : gerada || natural ? "a_gerar" : undefined} data-estilo-da-imagem={natural ? "natural" : gerada ? "destaque" : undefined}>
+        {caminhoNatural ? <ImagemDaMesa caminho={caminhoNatural} alt={texto || "Foto do story"} className="absolute inset-0 h-full w-full" /> : null}
+        {nativo && nativo.texto && cssNativo ? (
+          <p className="absolute" style={cssNativo.bloco} data-texto-nativo={nativo.estilo} data-caixa={nativo.caixa ? "sim" : "nao"} data-posicao={nativo.posicao}>
+            <span className="[-webkit-box-decoration-break:clone] [box-decoration-break:clone]" style={cssNativo.linha}>
+              {textoNaCaixa(nativo)}
+            </span>
+          </p>
+        ) : null}
         {caminhoGerado ? <ImagemDaMesa caminho={caminhoGerado} alt={texto || "Imagem do story"} className="absolute inset-0 h-full w-full" /> : null}
         {!gerada && comFoto && foto ? <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="absolute inset-0 h-full w-full" /> : null}
 
@@ -228,7 +242,7 @@ export default function PreviaDoStory({
           </>
         ) : null}
 
-        {texto && !caminhoGerado ? (
+        {texto && !caminhoGerado && !natural ? (
           <p
             className="absolute text-center font-semibold"
             style={{
@@ -265,14 +279,14 @@ export default function PreviaDoStory({
           </div>
         ) : null}
 
-        {gerada && (!caminhoGerado || estado || desatualizada) ? (
+        {(gerada && (!caminhoGerado || estado || desatualizada)) || (natural && (!caminhoNatural || estado)) ? (
           <span
             className="absolute left-1/2 inline-flex max-w-[90%] -translate-x-1/2 items-center whitespace-nowrap rounded-full bg-black/60 font-medium text-white"
             style={{ top: "40%", fontSize: Math.max(10, 3.6 * u), padding: `${1.2 * u}px ${3 * u}px` }}
             data-estado-da-imagem={estado || (desatualizada ? "desatualizada" : "a_gerar")}
           >
             {estado === "fila" || estado === "rodando" ? <Loader2 className={juntar("shrink-0 animate-spin", largura >= 100 ? "mr-1" : "")} style={{ width: Math.max(10, 3.6 * u), height: Math.max(10, 3.6 * u) }} aria-hidden="true" /> : estado === "erro" || desatualizada ? <AlertTriangle className={juntar("shrink-0", largura >= 100 ? "mr-1" : "")} style={{ width: Math.max(10, 3.6 * u), height: Math.max(10, 3.6 * u) }} aria-hidden="true" /> : <ImageIcon className={juntar("shrink-0", largura >= 100 ? "mr-1" : "")} style={{ width: Math.max(10, 3.6 * u), height: Math.max(10, 3.6 * u) }} aria-hidden="true" />}
-            {largura >= 100 ? <span className="truncate">{estado === "fila" ? "Na fila" : estado === "rodando" ? "Gerando" : estado === "erro" ? "Falhou" : desatualizada ? "Texto mudou" : "Imagem a gerar"}</span> : null}
+            {largura >= 100 ? <span className="truncate">{estado === "fila" ? "Na fila" : estado === "rodando" ? "Gerando" : estado === "erro" ? "Falhou" : desatualizada ? "Texto mudou" : natural ? "Foto a gerar" : "Imagem a gerar"}</span> : null}
           </span>
         ) : null}
 

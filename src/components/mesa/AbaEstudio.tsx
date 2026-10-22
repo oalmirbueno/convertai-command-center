@@ -1192,8 +1192,11 @@ export function DetalheDoItem({
       ? (ferramentaGuardada as Ferramenta)
       : ferramentas[0];
   // Escolher a ferramenta Template põe a área no modo do post do X (sai pelo ícone "Sair do Template" no centro).
+  // Só na chegada à ferramenta; dentro dela, "No centro do Estúdio" troca entre a arte e o post do X.
+  const ferramentaAnterior = useRef(ferramenta);
   useEffect(() => {
-    if (ferramenta === "template") setModoTemplate(true);
+    if (ferramenta === "template" && ferramentaAnterior.current !== "template") setModoTemplate(true);
+    ferramentaAnterior.current = ferramenta;
   }, [ferramenta, setModoTemplate]);
   const emTemplate = modoTemplate && estado === "producao" && !!trabalho && !ehPostDeFotos(trabalho.direcao);
 
@@ -1742,7 +1745,8 @@ export function DetalheDoItem({
     />
   ) : null;
 
-  // Template · X: no lugar da lâmina grande, o post do X editável; prancheta, legenda e entrega seguem iguais.
+  // Template · X (rodada 4): a MESMA lâmina grande do Estúdio (título, versões, ampliar, quadro); só a faixa e o
+  // desenho do quadro vêm do Template. Prancheta, legenda e entrega seguem iguais.
   const laminaGrande = emTemplate && trabalho && cardSelecionado ? (
     <Suspense fallback={<p className="text-[12px] text-muted-foreground">Abrindo o Template…</p>}>
       <TemplateProfileEditor
@@ -1753,9 +1757,26 @@ export function DetalheDoItem({
         bloqueado={entregue || algoGerando || entregando}
         onMudou={atualizar}
         onAbrirFotos={() => abrirFerramenta("fotos", false)}
-        onEscolherLamina={setSelecionado}
-        onSalvarTexto={(novo) => configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } })}
-        onSair={() => { setModoTemplate(false); if (ferramenta === "template") setFerramenta("lamina"); }}
+        moldura={({ faixa, conteudo }) => (
+          <EstudioLaminaGrande
+            card={cardSelecionado}
+            total={cardsDaDirecao.length}
+            versoes={(trabalho.cards || []).filter((v) => v.ordem === cardSelecionado.ordem)}
+            versaoVista={versaoVista}
+            onVersaoVista={setVersaoVista}
+            desenhandoAreas={false}
+            areas={areas}
+            onAreas={setAreas}
+            ocupado={laminaOcupada(cardSelecionado.ordem)}
+            andamento={andamento[cardSelecionado.ordem]}
+            onAmpliar={() => ampliarLamina(cardSelecionado.ordem)}
+            soPelaLargura={!colunas}
+            proporcao={proporcao}
+            aviso={avisoDeEntregue}
+            faixa={faixa}
+            conteudo={conteudo}
+          />
+        )}
       />
     </Suspense>
   ) : laminaDeArte;
@@ -2315,7 +2336,8 @@ export function DetalheDoItem({
               bloqueado={entregue || algoGerando || entregando}
               onMudou={atualizar}
               onAbrirFotos={() => abrirFerramenta("fotos", false)}
-              onEscolherLamina={setSelecionado}
+              modoTemplate={modoTemplate}
+              onModoTemplate={setModoTemplate}
             />
           </Suspense>
         ) : <p className="text-[12px] text-muted-foreground">Prepare a pauta e escolha uma lâmina para usar um template.</p>;

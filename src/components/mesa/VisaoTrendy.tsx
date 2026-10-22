@@ -7,7 +7,7 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { useMesa } from "./MesaContexto";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
-import LinhaDoHypeETrending, { BlocoDaLinha, CabecalhoDaColuna, Detalhe, MenuCriar, MenuDeFiltro } from "./LinhaDoHypeETrending";
+import LinhaDoHypeETrending, { BlocoDaLinha, CabecalhoDaColuna, Detalhe, AcoesDeCriar, MenuDeFiltro } from "./LinhaDoHypeETrending";
 import { COLUNA_DO_HYPE } from "./AreaDoHype";
 import { juntadoDaLeitura, podeJuntar, type ItemJuntado } from "./hypeETrending";
 import { chaves, mensagemDoHype, partesDoPedido, pedidoLivre, ROTULO_DA_JANELA, type HypesDaSemana } from "./mesaV4Api";
@@ -133,7 +133,7 @@ export default function VisaoTrendy({
                       )}
                     </>
                   }
-                  criar={<MenuCriar titulo={h.titulo} rotuloDoConteudo={temPauta ? "Usar a pauta" : "Conteúdo"} partes={() => partesDoPedido(catalogo, 0)} executar={() => pedir(h)} onCampanha={() => onCriarCampanha(item)} />}
+                  criar={<AcoesDeCriar titulo={h.titulo} rotuloDoConteudo={temPauta ? "Usar a pauta" : "Criar conteúdo"} partes={() => partesDoPedido(catalogo, 0)} executar={() => pedir(h)} onCampanha={() => onCriarCampanha(item)} />}
                 />
               );
             })}

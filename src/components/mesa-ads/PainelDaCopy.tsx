@@ -41,6 +41,7 @@ import { SeletorDoModeloDaCopy, useModeloDaCopy } from "./ModeloDaCopy";
 import PacoteDaCopy from "./PacoteDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 import { superficie } from "@/components/sistema/estilos";
+import { campanhaDoCriativo } from "./campanhaDaMesaApi";
 
 /**
  * A copy do anúncio ao lado da arte: texto principal (o Meta mostra cerca de
@@ -180,6 +181,8 @@ export default function PainelDaCopy({
   // Por que esta copy virou criativo (gravado na produção): uma linha, com a nota do Jev.
   const porqueDaCopy = criativo.copy.escolha && typeof criativo.copy.escolha.porque === "string" ? criativo.copy.escolha.porque : "";
   const [desde, rodar] = useAndamento();
+  // 22/10/2026: criativo vindo de uma campanha da Mesa: a copy começou pela peça e o Refinar parte dela e do briefing.
+  const daCampanha = campanhaDoCriativo(criativo);
   const salvo = JSON.stringify(limpa(criativo.copy));
 
   useEffect(() => {
@@ -239,6 +242,12 @@ export default function PainelDaCopy({
           <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-porque-da-copy="">
             <span className="font-medium text-foreground">Por que esta copy: </span>
             {porqueDaCopy}
+          </p>
+        )}
+        {daCampanha && (
+          <p className="text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-copy-da-campanha={daCampanha.id}>
+            <span className="font-medium text-foreground">Da campanha {daCampanha.nome}: </span>
+            o Refinar parte da peça, da oferta e do CTA.
           </p>
         )}
         {(anguloAtual || (criativo.copy.conferencia_casa && criativo.copy.conferencia_casa.reprovada) || criativo.copy.referencia_replicada) && (

@@ -246,12 +246,15 @@ describe("imagem pelo gerador da casa (sem colagem)", () => {
     ]);
     expect(within(modelos).getByRole("radio", { name: /Sequência que converte/ }).getAttribute("aria-checked")).toBe("true");
     fireEvent.change(screen.getByLabelText("Telas"), { target: { value: "3" } });
+    // 22/10: o padrão é Natural; este caso é o estilo Destaque (designer, Arte rápida 9:16).
+    expect(screen.getByRole("tab", { name: "Natural (padrão de story)" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Destaque (designer)" }));
     expect(Array.from(document.querySelectorAll("[data-estrutura] [data-papel]")).map((x) => x.getAttribute("data-papel"))).toEqual(["gancho", "oferta", "cta"]);
 
     fireEvent.click(screen.getByRole("button", { name: /Criar a sequência/ }));
     fireEvent.click(screen.getByRole("button", { name: /clique de novo/ }));
     await waitFor(() => expect(chamadas("estudio-arte", "enfileirar").length).toBe(1));
-    expect(chamadas("mesa-stories", "planejar_sequencia")[0]).toMatchObject({ modelo_da_sequencia: "conversao", quantidade: 3, data: AMANHA });
+    expect(chamadas("mesa-stories", "planejar_sequencia")[0]).toMatchObject({ modelo_da_sequencia: "conversao", quantidade: 3, data: AMANHA, estilo: "destaque" });
 
     // A imagem sai do gerador: Arte rápida 9:16, uma lâmina por tela, criativo, foto só como referência.
     const preparo = chamadas("estudio-arte", "rapida_preparar")[0];

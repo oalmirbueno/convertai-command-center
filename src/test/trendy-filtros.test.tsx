@@ -67,10 +67,6 @@ const montar = (criar = vi.fn()) => {
   return { ...r, cache };
 };
 const abrirVisao = (nome: RegExp) => fireEvent.click(screen.getByRole("button", { name: nome }));
-/** Abre o menu Radix do botão (teclado: Enter abre). */
-const abrirMenu = (botao: HTMLElement) => {
-  fireEvent.keyDown(botao, { key: "Enter" });
-};
 
 describe("leitura da semana", () => {
   it("aceita pesquisas antigas sem tipo, conserva os índices e não mistura clientes", () => {
@@ -92,8 +88,8 @@ describe("leitura da semana", () => {
 describe("três visões: Da semana (a de antes, primeiro), Datas e Em alta", () => {
   it("abre na Da semana, igual ao modelo antigo: cartões, grupos, resumo, nota, sinal e Como usar com a pauta", async () => {
     const { cache } = montar();
-    const nav = screen.getByRole("navigation", { name: "Visões do Hype e Trending" });
-    expect(within(nav).getAllByRole("button").map((b) => b.getAttribute("data-etapa"))).toEqual(["semana", "datas", "em-alta", "trendy"]);
+    const nav = screen.getByRole("navigation", { name: "Visões do Radar" });
+    expect(within(nav).getAllByRole("button").map((b) => b.getAttribute("data-etapa")).filter(Boolean)).toEqual(["semana", "datas", "em-alta", "trendy"]);
     expect(within(nav).getByRole("button", { name: /Da semana/ }).getAttribute("aria-current")).toBe("page");
     await screen.findByText("Dia do café");
     expect(screen.getByText("Hypes do momento")).toBeTruthy();
@@ -104,11 +100,13 @@ describe("três visões: Da semana (a de antes, primeiro), Datas e Em alta", () 
     expect(within(cartao).getByText("8")).toBeTruthy();
     fireEvent.click(within(cartao).getByRole("button", { name: /Como usar/ }));
     expect(within(cartao).getByText("Café da casa")).toBeTruthy();
-    // Uma ação só: "Criar", com "Usar a pauta" e o custo dentro do menu.
-    abrirMenu(within(cartao).getByRole("button", { name: "Criar a partir de Dia do café" }));
-    const item = await screen.findByRole("menuitem", { name: /Usar a pauta/ });
-    expect(item.textContent).toContain("~US$");
-    fireEvent.click(item);
+    // Dois ícones diretos, sem menu: "Usar a pauta" (custo só no title) e "Criar campanha".
+    expect(cartao.querySelectorAll("[role='menu'], [data-menu-criar]")).toHaveLength(0);
+    const usar = within(cartao).getByRole("button", { name: "Usar a pauta" });
+    expect(usar.getAttribute("title")).toBe("Usar a pauta · ~US$ 0,14");
+    expect(cartao.textContent).not.toMatch(/US\$/);
+    expect(within(cartao).getByRole("button", { name: "Criar campanha" })).toBeTruthy();
+    fireEvent.click(usar);
     await waitFor(() => expect(estado.pedido).toHaveBeenCalledWith(expect.objectContaining({ clientId: "cliente-a", hype: { tipo: undefined, titulo: "Dia do café" } })));
     cache.clear();
   });
@@ -139,8 +137,8 @@ describe("três visões: Da semana (a de antes, primeiro), Datas e Em alta", () 
     for (const l of linhas) {
       expect(l.textContent).not.toMatch(/US\$/);
       expect(l.querySelector("[data-bloco]")).not.toBeNull();
-      expect(l.querySelectorAll("[data-acoes] button")).toHaveLength(1);
-      expect(l.querySelector("[data-acoes] [data-menu-criar]")).not.toBeNull();
+      expect(Array.from(l.querySelectorAll("[data-acoes] button")).map((b) => b.getAttribute("aria-label"))).toEqual(["Criar conteúdo", "Criar campanha"]);
+      expect(l.querySelector("[data-acoes] [data-criar-conteudo]")!.getAttribute("title")).toMatch(/^Criar conteúdo · ~US\$/);
     }
     // O mês curto do bloco vem em maiúsculas pelo código ("25 OUT").
     expect(linhas[0].querySelector("[data-bloco]")!.textContent).toMatch(/^\d{2}[A-Z]{3}$/);
@@ -170,7 +168,7 @@ describe("três visões: Da semana (a de antes, primeiro), Datas e Em alta", () 
     expect(screen.getByRole("link", { name: `Abrir a matéria: ${noticia.titulo}` }).getAttribute("href")).toBe(noticia.link);
     const linha = screen.getByText(noticia.titulo).closest("li") as HTMLElement;
     expect(linha.textContent).not.toMatch(/US\$/);
-    expect(linha.querySelectorAll("[data-acoes] button")).toHaveLength(1);
+    expect(Array.from(linha.querySelectorAll("[data-acoes] button")).map((b) => b.getAttribute("aria-label"))).toEqual(["Criar conteúdo desta notícia", "Criar campanha"]);
     cache.clear();
   });
 });
@@ -235,8 +233,8 @@ describe("nicho do cliente (o que cabe no marketing)", () => {
 describe("Trendy (4ª visão, o do Codex de volta)", () => {
   it("existe depois de Em alta, com busca, tipo, formato só dos que existem, fonte e a data da pesquisa", async () => {
     const { cache } = montar();
-    const nav = screen.getByRole("navigation", { name: "Visões do Hype e Trending" });
-    expect(within(nav).getAllByRole("button").map((b) => b.getAttribute("data-etapa"))).toEqual(["semana", "datas", "em-alta", "trendy"]);
+    const nav = screen.getByRole("navigation", { name: "Visões do Radar" });
+    expect(within(nav).getAllByRole("button").map((b) => b.getAttribute("data-etapa")).filter(Boolean)).toEqual(["semana", "datas", "em-alta", "trendy"]);
     await screen.findByText("Dia do café");
     abrirVisao(/^Trendy/);
     const area = document.querySelector('[data-area="trendy"]') as HTMLElement;
@@ -259,7 +257,7 @@ describe("Trendy (4ª visão, o do Codex de volta)", () => {
     cache.clear();
   });
 
-  it("Criar > Campanha leva o índice original; juntar funciona no Trendy", async () => {
+  it("o ícone Criar campanha leva o índice original; juntar funciona no Trendy", async () => {
     const criar = vi.fn();
     const { cache } = montar(criar);
     await screen.findByText("Dia do café");
@@ -267,8 +265,7 @@ describe("Trendy (4ª visão, o do Codex de volta)", () => {
     const area = () => document.querySelector('[data-area="trendy"]') as HTMLElement;
     fireEvent.change(within(area()).getByLabelText("Buscar nas sugestões"), { target: { value: "montagem" } });
     const linha = within(area()).getByText("Vídeo da montagem").closest("li") as HTMLElement;
-    fireEvent.keyDown(within(linha).getByRole("button", { name: /Criar a partir de/ }), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Campanha/ }));
+    fireEvent.click(within(linha).getByRole("button", { name: "Criar campanha" }));
     expect(criar).toHaveBeenCalledTimes(1);
     expect(tirarSementeDaCampanha("cliente-a")!.trends.map((t) => t.titulo)).toEqual(["Vídeo da montagem"]);
     // Juntar: a mesma chave da leitura (índice original 0 do Dia do café).
@@ -323,12 +320,11 @@ describe("juntar para a campanha", () => {
     cache.clear();
   });
 
-  it("Criar > Campanha num item só grava a semente de um item", async () => {
+  it("o ícone Criar campanha de um item só grava a semente de um item", async () => {
     const criar = vi.fn();
     const { cache } = montar(criar);
     const cartao = (await screen.findByText("Decoração da vitrine")).closest("article") as HTMLElement;
-    abrirMenu(within(cartao).getByRole("button", { name: /Criar a partir de/ }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Campanha/ }));
+    fireEvent.click(within(cartao).getByRole("button", { name: "Criar campanha" }));
     expect(criar).toHaveBeenCalledTimes(1);
     const s = tirarSementeDaCampanha("cliente-a")!;
     expect(s.hypes).toEqual([]);

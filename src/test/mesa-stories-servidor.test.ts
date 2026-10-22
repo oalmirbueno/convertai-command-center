@@ -142,15 +142,15 @@ describe("função mesa-stories", () => {
       expect(funcao, a).toContain(`  ${a},`);
     }
     // 21/10: a sequência da campanha também chama o roteirista (resposta com fôlego).
-    for (const a of ["stories_da_campanha: storiesDaCampanha", "sequencias_da_campanha: sequenciasDaCampanha", "ligar_imagens: ligarImagens", "reordenar"]) expect(funcao, a).toContain(`  ${a},`);
-    expect(funcao).toContain('const ACOES_LONGAS = new Set(["planejar_sequencia", "adaptar_molde", "conversar", "stories_da_campanha"]);');
+    for (const a of ["stories_da_campanha: storiesDaCampanha", "sequencias_da_campanha: sequenciasDaCampanha", "ligar_imagens: ligarImagens", "reordenar", "foto_natural: fotoNatural", "capa_do_story: capaDoStory"]) expect(funcao, a).toContain(`  ${a},`);
+    expect(funcao).toContain('const ACOES_LONGAS = new Set(["planejar_sequencia", "adaptar_molde", "conversar", "stories_da_campanha", "foto_natural", "capa_do_story"]);');
     expect(funcao).toContain("respostaComFolego(rodar, corsHeaders)");
   });
 
   it("identifica a equipe e confere o acesso ao cliente antes de tudo", () => {
     expect(funcao).toContain('servico().rpc("is_staff", { _user_id: userId })');
     expect(funcao).toContain('ch.doChamador.rpc("can_access_client", { _client_id: clientId })');
-    expect(funcao.match(/const c = await abrir\(ch, corpo\);/g)?.length).toBe(13);
+    expect(funcao.match(/const c = await abrir\(ch, corpo\);/g)?.length).toBe(15);
   });
 
   it("modelo do motor com raciocínio low ou medium (nunca max), carteira do cliente e base do roteirista", () => {

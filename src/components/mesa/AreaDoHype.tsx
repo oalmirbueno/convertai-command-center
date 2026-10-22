@@ -8,7 +8,7 @@ import { usd } from "@/lib/mesa/api";
 import { avisarCustoReal, useAvisarErro } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
-import LinhaDoHypeETrending, { BlocoDaLinha, CabecalhoDaColuna, Detalhe, MenuCriar, MenuDeFiltro, SubtituloDaLista } from "./LinhaDoHypeETrending";
+import LinhaDoHypeETrending, { BlocoDaLinha, CabecalhoDaColuna, Detalhe, AcoesDeCriar, MenuDeFiltro, SubtituloDaLista } from "./LinhaDoHypeETrending";
 import {
   agruparPorPeriodo, blocoDaData, datasDasProximasSemanas, faixaDaLinha, linhaCurtaDaData, posicaoNaLinha, quandoDaData,
   ROTULO_DO_TIPO_DE_DATA, segundaDe, seloDaData, separarPeloNicho, type DataDoHype, type TipoDeData,
@@ -24,8 +24,11 @@ const SEMANAS = 8;
 export const COLUNA_DO_HYPE = "flex min-w-0 flex-col lg:h-[640px]";
 const CUSTO_DO_JEV_USD = CUSTO_DO_JEV_NAS_DATAS_USD;
 
+/** Onde ficam as notas do Jev da semana (por cliente). */
+export const chaveDasNotasDaSemana = (clientId: string, hoje: string) => `mesa:hype:notas:${clientId}:${segundaDe(hoje)}`;
+
 /** As notas do Jev da semana ficam no navegador: reabrir na mesma semana não paga de novo. */
-function lerNotasGuardadas(chave: string): RespostaDasNotas | null {
+export function lerNotasGuardadas(chave: string): RespostaDasNotas | null {
   try {
     const bruto = window.localStorage.getItem(chave);
     const v = bruto ? JSON.parse(bruto) : null;
@@ -97,7 +100,7 @@ export default function AreaDoHype({ hoje, juntando, juntados, onAlternar, onCri
   const [linhaRecolhida, setLinhaRecolhida] = useRecolhido(`mesa:mes:hype:linha:${clientId}`, true);
   const todas = useMemo(() => datasDasProximasSemanas(hoje, SEMANAS), [hoje]);
   const chaveDasNotas = ["mesa", "hype-notas", clientId, todas.map((d) => d.id).join(",")];
-  const chaveDaSemana = `mesa:hype:notas:${clientId}:${segundaDe(hoje)}`;
+  const chaveDaSemana = chaveDasNotasDaSemana(clientId, hoje);
   // 21/10 (dono: "tem que puxar com base no nicho"): as notas do Jev da semana; na 1ª abertura da semana o Jev roda sozinho.
   const notas = useQuery<RespostaDasNotas | null>({ queryKey: chaveDasNotas, queryFn: () => lerNotasGuardadas(chaveDaSemana), staleTime: Infinity });
   const notasPorId = notas.data && notas.data.notas && Object.keys(notas.data.notas).length ? notas.data.notas : null;
@@ -156,8 +159,8 @@ export default function AreaDoHype({ hoje, juntando, juntados, onAlternar, onCri
     }
   };
 
-  const criar = (titulo: string, mensagem: () => string, hype: { tipo: "hype" | "nicho"; titulo: string }, item: ItemJuntado, rotulo = "Conteúdo") => (
-    <MenuCriar titulo={titulo} rotuloDoConteudo={rotulo} partes={() => partesDoPedido(catalogo, 0)} executar={() => pedir(mensagem(), hype)} onCampanha={() => onCriarCampanha(item)} />
+  const criar = (titulo: string, mensagem: () => string, hype: { tipo: "hype" | "nicho"; titulo: string }, item: ItemJuntado, rotulo = "Criar conteúdo") => (
+    <AcoesDeCriar titulo={titulo} rotuloDoConteudo={rotulo} partes={() => partesDoPedido(catalogo, 0)} executar={() => pedir(mensagem(), hype)} onCampanha={() => onCriarCampanha(item)} />
   );
 
   const linhaDaData = (d: DataDoHype) => {

@@ -27,6 +27,7 @@ export default function CelularDoStory({
   nome,
   laminas,
   largura = 290,
+  emAndamento,
 }: {
   stories: Story[];
   atual: number;
@@ -36,6 +37,7 @@ export default function CelularDoStory({
   nome: string;
   laminas?: Record<string, LaminasDoTrabalho>;
   largura?: number;
+  emAndamento?: Record<string, boolean>;
 }) {
   const [tocando, setTocando] = useState(false);
   const total = stories.length;
@@ -83,7 +85,7 @@ export default function CelularDoStory({
             posicao={{ atual: i, total }}
             semSelo
             imagem={imagemDoStory(s, laminas)}
-            estado={filaDoStory(s, laminas)}
+            estado={emAndamento && emAndamento[s.id] ? "rodando" : filaDoStory(s, laminas)}
             desatualizada={imagemDesatualizada(s)}
           />
 

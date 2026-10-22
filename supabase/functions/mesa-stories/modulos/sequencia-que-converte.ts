@@ -21,6 +21,18 @@
 
 import { type Objetivo, type TipoDoAdesivo, TIPOS_DE_ADESIVO } from "./moldes-de-stories.ts";
 import { adesivoLimpo, caminhoDoAdesivo, limpar, type PlanoDaSequencia, rascunhoLimpo, roteiroDoAdesivo, type StoryRascunho } from "./regras-dos-stories.ts";
+import { textoNativoPadrao } from "./foto-natural-do-story.ts";
+
+/**
+ * 22/10: o estilo das imagens. "natural" (padrão de story): foto do momento,
+ * de celular, sem texto, e o texto nativo do Instagram por cima, desenhado
+ * pelo código. "destaque" (designer): a arte da Arte rápida 9:16 com o texto
+ * integrado pelo motor e a referência da campanha.
+ */
+export const ESTILOS_DA_IMAGEM = ["natural", "destaque"] as const;
+export type EstiloDaImagem = (typeof ESTILOS_DA_IMAGEM)[number];
+export const ehEstiloDaImagem = (v: unknown): v is EstiloDaImagem => v === "natural" || v === "destaque";
+export const ROTULO_DO_ESTILO: Record<EstiloDaImagem, string> = { natural: "Natural (padrão de story)", destaque: "Destaque (designer)" };
 
 // ------------------------------------------------------------------ estrutura
 
@@ -407,12 +419,15 @@ export const SISTEMA_DA_CONVERSAO = [
 ].join("\n");
 
 /** O pedido do usuário para o roteirista: a estrutura tela a tela, a campanha (quando tem) e o pedido da equipe. */
-export function pedidoDaSequenciaQueConverte(e: { modelo: ModeloDeSequencia; telas: TelaDoModelo[]; data: string; campanha?: CampanhaDosStories | null; pedido?: string }): string {
+export function pedidoDaSequenciaQueConverte(e: { modelo: ModeloDeSequencia; telas: TelaDoModelo[]; data: string; campanha?: CampanhaDosStories | null; pedido?: string; estilo?: EstiloDaImagem }): string {
   const estrutura = e.telas.map((t, i) => `${i + 1}) ${t.papel}${t.adesivo !== "nenhum" ? ` (adesivo ${t.adesivo})` : ""}: ${t.dica}`).join("\n");
   return [
     `MODELO: ${e.modelo.nome}. ${e.modelo.descricao}`,
     `ESTRUTURA (${e.telas.length} stories, nesta ordem):\n${estrutura}`,
     e.campanha ? blocoDaCampanha(e.campanha) : "",
+    e.estilo === "destaque"
+      ? "ESTILO DAS IMAGENS: Destaque (designer). A cena é a arte desenhada da tela."
+      : "ESTILO DAS IMAGENS: Natural, padrão de story. A cena é um momento cotidiano do perfil fotografado no celular (bastidor, mesa de trabalho, café, rua, atendimento, mão segurando um documento), com gente e lugar de verdade do negócio. Nada de produto em estúdio. O texto_na_tela é o texto que a pessoa digita no app: poucas palavras (até 8), tom de conversa.",
     `PEDIDO: ${e.telas.length} stories para ${e.data}.${e.pedido ? ` Pedido da equipe: ${e.pedido}` : ""}`,
   ].filter(Boolean).join("\n\n");
 }
@@ -437,7 +452,7 @@ export function adesivoPadraoDoCta(tipo: TipoDoAdesivo, briefing?: BriefingDosSt
  * vem da estrutura (na ordem), a cena vai para o fundo (imagem a gerar) e o CTA
  * sempre fecha com adesivo.
  */
-export function planoQueConverteLimpo(bruto: unknown, telas: TelaDoModelo[], briefing?: BriefingDosStories | null): PlanoDaSequencia {
+export function planoQueConverteLimpo(bruto: unknown, telas: TelaDoModelo[], briefing?: BriefingDosStories | null, estilo: EstiloDaImagem = "destaque"): PlanoDaSequencia {
   const o = objeto(bruto);
   const lista = (Array.isArray(o.stories) ? o.stories : []).slice(0, telas.length);
   const stories: StoryRascunho[] = [];
@@ -457,7 +472,9 @@ export function planoQueConverteLimpo(bruto: unknown, telas: TelaDoModelo[], bri
       adesivo,
       caminho: caminhoDoAdesivo(adesivo),
       roteiro_do_adesivo: adesivo.tipo === "nenhum" ? null : (roteiroDoAdesivo(adesivo) || r.roteiro_do_adesivo),
-      fundo: { tipo: "gerada", papel: ultimo ? "cta" : tela.papel, cena: limpar(b.cena, 400) },
+      fundo: estilo === "natural"
+        ? { tipo: "natural", papel: ultimo ? "cta" : tela.papel, cena: limpar(b.cena, 400), ...textoNativoPadrao(ultimo ? "cta" : tela.papel, adesivo.tipo !== "nenhum") }
+        : { tipo: "gerada", papel: ultimo ? "cta" : tela.papel, cena: limpar(b.cena, 400) },
     });
   });
   return {
@@ -508,7 +525,10 @@ export type TelaParaOGerador = { ordem: number; texto_na_tela: string; papel?: s
  * Teto de 3.000 caracteres (o do Estúdio): a cena encolhe antes; a regra sem
  * colagem nunca é cortada.
  */
-export function pedidoDasImagens(e: { titulo: string; telas: TelaParaOGerador[]; campanha?: { nome: string; fase?: FaseDaCampanha | null; identidade?: IdentidadeDosStories | null } | null; tom?: string | null }): string {
+/** O padrão visual da campanha (briefing.padrao, lido pelo Estúdio): referências de estilo e o resumo. */
+export type PadraoDosStories = { caminhos?: string[]; referencias_ids?: string[]; resumo?: string; paleta?: Array<{ hex?: string; nome?: string }>; tratamento_de_foto?: string };
+
+export function pedidoDasImagens(e: { titulo: string; telas: TelaParaOGerador[]; campanha?: { nome: string; fase?: FaseDaCampanha | null; identidade?: IdentidadeDosStories | null; padrao?: PadraoDosStories | null } | null; tom?: string | null }): string {
   const total = e.telas.length;
   const montar = (maxCena: number) => {
     const linhas: string[] = [
@@ -528,6 +548,10 @@ export function pedidoDasImagens(e: { titulo: string; telas: TelaParaOGerador[];
     if (e.campanha) {
       const ident = e.campanha.identidade ? identidadeEmTexto(e.campanha.identidade) : "";
       linhas.push(`Campanha "${e.campanha.nome}"${e.campanha.fase ? `, fase de ${ROTULO_DA_FASE[e.campanha.fase].toLowerCase()}` : ""}: siga a identidade da campanha${ident ? ` (${ident})` : ""}; o selo da campanha entra desenhado pelo gerador, nunca colado.`);
+      const p = e.campanha.padrao;
+      if (p && ((p.caminhos && p.caminhos.length) || p.resumo)) {
+        linhas.push(`Padrão visual da campanha${p.resumo ? `: ${limpar(p.resumo, 240)}` : ""}. As imagens de padrão anexadas são referência de estilo (layout, tipografia, tratamento, cor): siga o estilo, nunca cole nem copie texto, logo ou pessoa delas.`);
+      }
     }
     if (e.tom) linhas.push(`Tom: ${e.tom}.`);
     linhas.push(REGRA_SEM_COLAGEM_DOS_STORIES);
@@ -562,12 +586,15 @@ export type ParteDoCustoDosStories = {
 };
 
 /** As partes do custo: o plano (opcional), a direção da série e cada imagem com a conferência. */
-export function partesDoCustoDosStories(telas: number, o: { comPlano: boolean; comImagens: boolean; comDiretor?: boolean }): ParteDoCustoDosStories[] {
+export function partesDoCustoDosStories(telas: number, o: { comPlano: boolean; comImagens: boolean; comDiretor?: boolean; natural?: boolean }): ParteDoCustoDosStories[] {
   const n = Math.max(0, Math.round(telas));
   const saida: ParteDoCustoDosStories[] = [];
   const T = TAMANHOS_DOS_STORIES;
   if (o.comPlano) saida.push({ papel: "plano", tipo: "texto", tokensEntrada: T.plano.entrada, tokensSaida: T.plano.saida, vezes: T.plano.versoes });
-  if (o.comImagens && n > 0) {
+  // Natural: só a foto de cada tela (sem direção de arte nem conferência de texto: o texto é a camada nativa).
+  if (o.comImagens && n > 0 && o.natural) {
+    saida.push({ papel: "imagem", tipo: "imagem", tokensEntrada: T.imagem.entrada, imagens: 1, vezes: n });
+  } else if (o.comImagens && n > 0) {
     if (o.comDiretor !== false) saida.push({ papel: "diretor_arte", tipo: "texto", tokensEntrada: T.diretor.entrada, tokensSaida: T.diretor.saida, vezes: 1 });
     saida.push({ papel: "imagem", tipo: "imagem", tokensEntrada: T.imagem.entrada, imagens: 1, vezes: n });
     saida.push({ papel: "leitura", tipo: "texto", tokensEntrada: T.leitura.entrada, tokensSaida: T.leitura.saida, vezes: n });

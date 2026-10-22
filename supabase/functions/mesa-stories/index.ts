@@ -44,11 +44,21 @@
  *   lâmina vira o arquivo do story (a imagem do gerador, inteira).
  * - reordenar { sequencia_id, ids }: a nova ordem (os horários seguem a ordem).
  *
+ * 22/10/2026 (dono: "mais natural de story ... momento cotidiano, humanizado"),
+ * regras em modulos/foto-natural-do-story.ts:
+ * - estilo "natural" (padrão) ou "destaque" no planejar e na campanha.
+ * - foto_natural { id, pedido?, confirmado? }: a foto do momento pelo gerador,
+ *   sem texto dentro (o texto é a camada nativa do Instagram, desenhada pela
+ *   tela); fotos reais do cliente como referência. Sem confirmado: 409.
+ * - capa_do_story { id, nome?, paleta?, confirmado? }: a capa de destaque no
+ *   estilo Destaque com a imagem da tela como referência; vira destaque do
+ *   perfil e o story fica marcado nele. Sem confirmado: 409.
+ *
  * Sem travessão.
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { carregarModelo, chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, type ModeloIa, modeloPadrao } from "../_shared/ia-motor.ts";
+import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, type ImagemEntrada, type ModeloIa, modeloPadrao } from "../_shared/ia-motor.ts";
 import { jevPerguntar, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { lerContextoDaMarca, lerDossieDaMarca, type MarcaDoCliente, marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
@@ -100,11 +110,14 @@ import {
   situacaoPelaPublicacao,
   type Story,
 } from "./modulos/regras-dos-stories.ts";
+import { nomeDoDestaqueDoStory, promptDaCapaDoStory, promptDaFotoNatural, textoNativoPadrao } from "./modulos/foto-natural-do-story.ts";
 import {
   briefingLimpo,
   type CampanhaDosStories,
+  ehEstiloDaImagem,
   ehFase,
   ESQUEMA_DA_SEQUENCIA_QUE_CONVERTE,
+  type EstiloDaImagem,
   identidadeLimpa,
   juntarBriefing,
   juntarIdentidade,
@@ -516,7 +529,7 @@ async function planejarSequencia(ch: Chamador, corpo: Record<string, unknown>): 
   if (corpo.modelo_da_sequencia !== undefined && corpo.modelo_da_sequencia !== null && corpo.modelo_da_sequencia !== "") {
     const modelo = modeloPorChave(corpo.modelo_da_sequencia);
     if (!modelo) throw new ErroHttp(400, "modelo_invalido", "Escolha um modelo de sequência do catálogo.");
-    return json(await planejarQueConverte(ch, c, { data, modelo, quantidade: Number(corpo.quantidade), pedido: limpar(corpo.pedido, 2000), campanha: null, corpo }));
+    return json(await planejarQueConverte(ch, c, { data, modelo, quantidade: Number(corpo.quantidade), pedido: limpar(corpo.pedido, 2000), campanha: null, estilo: estiloDoPedido(corpo), corpo }));
   }
   if (!ehObjetivo(corpo.objetivo)) throw new ErroHttp(400, "objetivo_invalido", "Escolha o objetivo: engajar, vender, lançar, relacionamento ou bastidor.");
   const objetivo = corpo.objetivo;
@@ -596,6 +609,8 @@ async function planejarSequencia(ch: Chamador, corpo: Record<string, unknown>): 
   if (erroSeq || !seq) throw new ErroHttp(503, "gravacao_falhou", "A sequência não foi gravada. Tente de novo.");
   const sequenciaId = (seq as { id: string }).id;
   const horarios = horariosDaSequencia(data, plano.stories.length, new Date());
+  // 22/10: a novela também nasce no estilo Natural (padrão de story), salvo quando pedem Destaque.
+  const natural = estiloDoPedido(corpo) === "natural";
   const linhas = plano.stories.map((s, i) => ({
     sequencia_id: sequenciaId,
     client_id: c.clientId,
@@ -604,7 +619,9 @@ async function planejarSequencia(ch: Chamador, corpo: Record<string, unknown>): 
     titulo: s.titulo,
     texto_na_tela: s.texto_na_tela,
     adesivo: s.adesivo,
-    fundo: s.fundo,
+    fundo: natural
+      ? fundoLimpo({ tipo: "natural", papel: s.papel, referencia_id: s.fundo.tipo === "foto" ? s.fundo.imagem_id : undefined, ...textoNativoPadrao(s.papel, s.adesivo.tipo !== "nenhum") })
+      : s.fundo,
     horario: horarios[i] ?? null,
     caminho: s.caminho,
     situacao: "rascunho",
@@ -638,7 +655,7 @@ type SaidaDoPlanejar = { sequencia: Record<string, unknown>; stories: Story[]; e
 async function planejarQueConverte(
   ch: Chamador,
   c: Contexto,
-  e: { data: string; modelo: ModeloDeSequencia; quantidade: number; pedido: string; campanha: CampanhaDosStories | null; heroi?: string | null; corpo: Record<string, unknown> },
+  e: { data: string; modelo: ModeloDeSequencia; quantidade: number; pedido: string; campanha: CampanhaDosStories | null; heroi?: string | null; estilo: EstiloDaImagem; corpo: Record<string, unknown> },
 ): Promise<SaidaDoPlanejar> {
   const telas = telasDaEstrutura(e.modelo, e.quantidade);
   const pedidoDoAgente = `Sequência ${e.modelo.nome} de ${telas.length} stories para ${e.data}.${e.campanha ? ` Campanha ${e.campanha.nome}.` : ""} ${e.pedido}`.trim();
@@ -653,7 +670,7 @@ async function planejarQueConverte(
     `DADOS:\n${dados.texto}`,
     `JÁ USADO NA SEMANA (não repetir): ganchos: ${usado.ganchos.slice(0, 7).map((g) => `"${g.slice(0, 120)}"`).join("; ") || "nenhum"}.`,
     hojeParaOAgente().texto,
-    pedidoDaSequenciaQueConverte({ modelo: e.modelo, telas, data: e.data, campanha: e.campanha, pedido: e.pedido }),
+    pedidoDaSequenciaQueConverte({ modelo: e.modelo, telas, data: e.data, campanha: e.campanha, pedido: e.pedido, estilo: e.estilo }),
   ].filter(Boolean).join("\n\n");
   const referencia = e.campanha ? { tipo: "mesa_campanha", id: e.campanha.id } : { tipo: REF_CONVERSA, id: c.clientId };
   const umaVersao = (extra: string) =>
@@ -682,7 +699,7 @@ async function planejarQueConverte(
       continue;
     }
     custo += x.value.custoUsd;
-    const plano = planoQueConverteLimpo(x.value.json, telas, e.campanha ? e.campanha.briefing : null);
+    const plano = planoQueConverteLimpo(x.value.json, telas, e.campanha ? e.campanha.briefing : null, e.estilo);
     if (plano.stories.length) planos.push(plano);
   }
   if (!planos.length) {
@@ -699,6 +716,7 @@ async function planejarQueConverte(
   }
   escolha.modelo = e.modelo.chave;
   escolha.estrutura = "conversao";
+  escolha.estilo = e.estilo;
   if (e.campanha) escolha.campanha = { campanha_id: e.campanha.id, tema_id: e.campanha.tema_id, fase: e.campanha.fase, nome: e.campanha.nome };
   const plano = planos[escolhida];
   const avisos: string[] = [];
@@ -770,7 +788,7 @@ function heroiDaCampanha(c: LinhaDaCampanha): string | null {
 }
 
 /** Custo TOTAL estimado (plano, direção e imagens), pelo catálogo, sem chamar o provedor. */
-async function custoDaSequenciaComImagens(corpo: Record<string, unknown>, telas: number): Promise<number> {
+async function custoDaSequenciaComImagens(corpo: Record<string, unknown>, telas: number, natural: boolean): Promise<number> {
   const { modeloId } = modeloEscolhido(corpo);
   const [plano, diretor, imagem, leitura] = await Promise.all([
     carregarModelo(modeloId, "texto").catch(() => null),
@@ -780,7 +798,7 @@ async function custoDaSequenciaComImagens(corpo: Record<string, unknown>, telas:
   ]);
   const porPapel: Record<string, ModeloIa | null> = { plano, diretor_arte: diretor, imagem, leitura };
   let total = 0;
-  for (const p of partesDoCustoDosStories(telas, { comPlano: true, comImagens: true })) {
+  for (const p of partesDoCustoDosStories(telas, { comPlano: true, comImagens: true, natural })) {
     const m = porPapel[p.papel];
     if (!m) continue;
     total += p.vezes * estimarComModelo(m, { tokensEntrada: p.tokensEntrada, tokensSaida: p.tokensSaida, imagens: p.imagens, qualidade: "media" });
@@ -828,7 +846,7 @@ async function storiesDaCampanha(ch: Chamador, corpo: Record<string, unknown>): 
     }
   }
   if (corpo.confirmado !== true) {
-    const custo = await custoDaSequenciaComImagens(corpo, telas);
+    const custo = await custoDaSequenciaComImagens(corpo, telas, estiloDoPedido(corpo) === "natural");
     throw new ErroHttp(409, "confirmar_custo", `A sequência de ${telas} stories com imagens custa cerca de US$ ${custo.toFixed(2).replace(".", ",")}. Confirme para continuar.`, {
       precisa_confirmar: true,
       custo_estimado_usd: custo,
@@ -849,7 +867,7 @@ async function storiesDaCampanha(ch: Chamador, corpo: Record<string, unknown>): 
     identidade: juntarIdentidade(identidadeLimpa(corpo.identidade), identidadeLimpa(linha.identidade)),
     tem_selo: !!linha.selo_path,
   };
-  const r = await planejarQueConverte(ch, c, { data, modelo, quantidade, pedido: limpar(corpo.pedido, 2000), campanha, heroi: heroiDaCampanha(linha), corpo });
+  const r = await planejarQueConverte(ch, c, { data, modelo, quantidade, pedido: limpar(corpo.pedido, 2000), campanha, heroi: heroiDaCampanha(linha), estilo: estiloDoPedido(corpo), corpo });
   return json({ ...r, ja_existia: false });
 }
 
@@ -949,6 +967,194 @@ async function reordenar(ch: Chamador, corpo: Record<string, unknown>): Promise<
   return json({ stories: saida, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------------ foto natural e capa de destaque (22/10)
+
+/** O estilo pedido: Natural é o padrão de story; Destaque só quando pedem. */
+const estiloDoPedido = (corpo: Record<string, unknown>): EstiloDaImagem => (ehEstiloDaImagem(corpo.estilo) ? corpo.estilo : "natural");
+
+const MAX_BYTES_DA_REFERENCIA = 6 * 1024 * 1024;
+
+/** Baixa uma imagem do Storage como referência do gerador (null quando não abre ou é grande demais). */
+async function imagemDeReferencia(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada | null> {
+  const { data, error } = await servico().storage.from(bucket).download(caminho);
+  if (error || !data) return null;
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  const mime = mimeDe(bytes) || (bytes.length > 12 && bytes[8] === 0x57 && bytes[9] === 0x45 ? "image/webp" : null);
+  if (!mime || bytes.byteLength > MAX_BYTES_DA_REFERENCIA) return null;
+  return { bytes, mime, nome };
+}
+
+/** Fotos reais do cliente para a referência de pessoa e lugar: a da tela e, sem ela, as primeiras do acervo. */
+async function fotosReaisDoCliente(clientId: string, preferida: string | undefined): Promise<ImagemEntrada[]> {
+  const { data } = await servico().from("cliente_imagens").select("id, storage_bucket, storage_path, categoria").eq("client_id", clientId).limit(24);
+  const lista = ((data as Array<{ id: string; storage_bucket: string | null; storage_path: string | null; categoria: string | null }> | null) ?? [])
+    .filter((f) => !!f.storage_path && (f.categoria || "") !== "logo");
+  const ordem = preferida ? lista.filter((f) => f.id === preferida).concat(lista.filter((f) => f.id !== preferida)) : lista;
+  const saida: ImagemEntrada[] = [];
+  for (const f of ordem.slice(0, 4)) {
+    if (saida.length >= 2) break;
+    const img = await imagemDeReferencia(f.storage_bucket || "mesa", String(f.storage_path), `foto-real-${saida.length + 1}`).catch(() => null);
+    if (img) saida.push(img);
+  }
+  return saida;
+}
+
+const usdBr = (v: number) => `US$ ${v.toFixed(2).replace(".", ",")}`;
+
+/**
+ * foto_natural: a foto do momento, como tirada no celular por alguém do
+ * perfil, SEM texto (o texto é a camada nativa do Instagram, desenhada pela
+ * tela). Custo antes: sem `confirmado: true`, 409 confirmar_custo.
+ */
+async function fotoNatural(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  const c = await abrir(ch, corpo);
+  const s = await lerStory(c.clientId, corpo.id);
+  if (travadoNaAgenda(s) || s.situacao === "postar_pelo_app") throw new ErroHttp(409, "story_na_agenda", "Este story já está na Agenda. Para trocar a foto, desfaça o agendamento.");
+  const modelo = await modeloPadrao("imagem");
+  if (!modelo) throw new ErroHttp(503, "modelo_padrao_ausente", "Nenhum gerador de imagem ligado no catálogo.");
+  const referencias = await fotosReaisDoCliente(c.clientId, s.fundo.referencia_id || (s.fundo.tipo === "foto" ? s.fundo.imagem_id : undefined));
+  if (corpo.confirmado !== true) {
+    const custo = Math.round(estimarComModelo(modelo, { imagens: 1, qualidade: "media", tokensEntrada: 3000, imagensEntrada: referencias.length }) * 1e4) / 1e4;
+    throw new ErroHttp(409, "confirmar_custo", `A foto natural custa cerca de ${usdBr(custo)}. Confirme para continuar.`, { precisa_confirmar: true, custo_estimado_usd: custo });
+  }
+  const ctx = (await lerContextoDaMarca(servico(), c.clientId, c.marca).catch(() => ({}))) as Record<string, unknown>;
+  const clima = await climaDaCampanhaDoStory(c.clientId, s);
+  const prompt = promptDaFotoNatural({
+    campanha: clima,
+    cena: s.fundo.cena,
+    papel: s.fundo.papel,
+    texto: s.texto_na_tela,
+    negocio: limpar(ctx.negocio, 300),
+    publico: limpar(ctx.publico, 200),
+    comReferencia: referencias.length > 0,
+    pedido: limpar(corpo.pedido, 300),
+  });
+  const img = await chamarImagem({
+    clientId: c.clientId,
+    modeloId: modelo.id,
+    prompt,
+    referencias,
+    qualidade: "media",
+    tamanho: "1088x1920",
+    referencia: { tipo: REF_CONVERSA, id: c.clientId },
+    criadoPor: ch.userId,
+    tarefa: "estudio",
+    agente: "gerador_imagem",
+  });
+  const mime = mimeDe(img.png) || img.mime || "image/png";
+  const ext = mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
+  const caminho = `${c.clientId}/stories/${s.id}/natural-${crypto.randomUUID()}.${ext}`;
+  const { error: erroUp } = await servico().storage.from("mesa").upload(caminho, img.png, { contentType: mime, upsert: false });
+  if (erroUp) throw new ErroHttp(503, "foto_nao_guardada", "A foto foi gerada, mas não deu para guardar. Tente de novo.");
+  const fundo = fundoLimpo({ ...s.fundo, tipo: "natural", caminho, versao: (s.fundo.tipo === "natural" && s.fundo.versao ? s.fundo.versao : 0) + 1 });
+  const mudanca: Record<string, unknown> = { fundo, file_id: null, motivo: null };
+  if (s.situacao === "arte_pronta" || s.situacao === "falhou") mudanca.situacao = "rascunho";
+  const story = await gravarMudanca(c.clientId, s.id, mudanca);
+  return json({ story, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd, reserva_usada: img.reservaUsada || null });
+}
+
+/**
+ * O padrão da campanha da sequência (briefing.padrao, do Estúdio) para a foto
+ * Natural: só o tom, a paleta e o tratamento de foto, sem imagem de
+ * referência (no Natural o padrão não força arte; no Destaque a tela anexa).
+ */
+async function climaDaCampanhaDoStory(clientId: string, s: Story): Promise<{ tom: string | null; paleta: string[]; tratamento: string | null } | null> {
+  if (!s.sequencia_id) return null;
+  const { data } = await servico().from("cliente_stories_sequencias").select("escolha").eq("id", s.sequencia_id).maybeSingle();
+  const id = ((data as { escolha?: { campanha?: { campanha_id?: string } } } | null)?.escolha?.campanha?.campanha_id) || null;
+  if (!id || !UUID.test(id)) return null;
+  const camp = await campanhaDoCliente(clientId, id).catch(() => null);
+  if (!camp) return null;
+  const b = (camp.briefing && typeof camp.briefing === "object" ? camp.briefing : {}) as Record<string, unknown>;
+  const p = (b.padrao && typeof b.padrao === "object" ? b.padrao : {}) as Record<string, unknown>;
+  const ident = identidadeLimpa(camp.identidade);
+  const paleta = (Array.isArray(p.paleta) ? p.paleta as Array<{ hex?: unknown }> : []).map((x) => String(x && x.hex || "")).concat((ident.paleta_apoio || []).map((x) => String(x.hex || "")));
+  return { tom: limpar(b.tom, 160) || ident.tom || null, paleta: paleta.filter((x) => /^#[0-9a-f]{6}$/i.test(x)).slice(0, 4), tratamento: limpar(p.tratamento_de_foto, 160) || null };
+}
+
+/** O caminho da imagem da tela no bucket mesa (foto natural ou lâmina do Destaque), para a referência da capa. */
+async function caminhoDaImagemDaTela(clientId: string, s: Story): Promise<string | null> {
+  if (s.fundo.tipo === "natural" && s.fundo.caminho) return s.fundo.caminho;
+  if (s.fundo.tipo === "gerada" && s.fundo.trabalho_id && s.fundo.lamina) {
+    const t = await trabalhoDoCliente(clientId, s.fundo.trabalho_id).catch(() => null);
+    const v = t ? versaoDaLamina(t.cards, s.fundo.lamina) : null;
+    return v ? v.storage_path : s.fundo.caminho || null;
+  }
+  return null;
+}
+
+/**
+ * capa_do_story: "Usar como capa de destaque" a partir de uma tela. A capa
+ * sai do gerador no estilo Destaque (designer), com a imagem da tela (e o selo
+ * da campanha, quando tem) como referência; vira destaque do perfil
+ * (cliente_instagram_destaques, a mesma lista da aba Redes) e o story fica
+ * marcado nele. Custo antes: sem `confirmado: true`, 409 confirmar_custo.
+ */
+async function capaDoStory(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  const c = await abrir(ch, corpo);
+  const s = await lerStory(c.clientId, corpo.id);
+  const modelo = await modeloPadrao("imagem");
+  if (!modelo) throw new ErroHttp(503, "modelo_padrao_ausente", "Nenhum gerador de imagem ligado no catálogo.");
+  const caminhoDaTela = await caminhoDaImagemDaTela(c.clientId, s);
+  if (!caminhoDaTela) throw new ErroHttp(409, "tela_sem_imagem", "Gere a imagem desta tela antes de usar como capa.");
+  let selo: string | null = null;
+  if (s.sequencia_id) {
+    const { data } = await servico().from("cliente_stories_sequencias").select("escolha").eq("id", s.sequencia_id).maybeSingle();
+    const v = ((data as { escolha?: { campanha?: { campanha_id?: string } } } | null)?.escolha?.campanha?.campanha_id) || null;
+    if (v && UUID.test(v)) {
+      const camp = await campanhaDoCliente(c.clientId, v).catch(() => null);
+      selo = camp && camp.selo_path ? camp.selo_path : null;
+    }
+  }
+  if (corpo.confirmado !== true) {
+    const custo = Math.round(estimarComModelo(modelo, { imagens: 1, qualidade: "media", tokensEntrada: 2000, imagensEntrada: selo ? 2 : 1 }) * 1e4) / 1e4;
+    throw new ErroHttp(409, "confirmar_custo", `A capa de destaque custa cerca de ${usdBr(custo)}. Confirme para continuar.`, { precisa_confirmar: true, custo_estimado_usd: custo });
+  }
+  const nome = nomeDoDestaqueDoStory(corpo.nome, s.titulo || s.texto_na_tela);
+  const paleta = (Array.isArray(corpo.paleta) ? corpo.paleta : []).filter((x): x is string => typeof x === "string" && /^#[0-9a-f]{6}$/i.test(x)).slice(0, 6);
+  const referencias: ImagemEntrada[] = [];
+  const daTela = await imagemDeReferencia("mesa", caminhoDaTela, "tela-do-story");
+  if (!daTela) throw new ErroHttp(409, "tela_sem_imagem", "A imagem desta tela não abriu. Gere de novo.");
+  referencias.push(daTela);
+  const doSelo = selo ? await imagemDeReferencia("mesa", selo, "selo-da-campanha") : null;
+  if (doSelo) referencias.push(doSelo);
+  const img = await chamarImagem({
+    clientId: c.clientId,
+    modeloId: modelo.id,
+    prompt: promptDaCapaDoStory({ nome, cena: s.fundo.cena, paleta, comSelo: !!doSelo }),
+    referencias,
+    qualidade: "media",
+    tamanho: "1024x1024",
+    referencia: { tipo: "instagram_destaque", id: c.clientId },
+    criadoPor: ch.userId,
+    tarefa: "estudio",
+    agente: "gerador_imagem",
+  });
+  const mime = mimeDe(img.png) || img.mime || "image/png";
+  const id = crypto.randomUUID();
+  const caminho = `${c.clientId}/instagram/destaques/${id}.${mime === "image/jpeg" ? "jpg" : "png"}`;
+  const { error: erroUp } = await servico().storage.from("mesa").upload(caminho, img.png, { contentType: mime, upsert: true });
+  if (erroUp) throw new ErroHttp(503, "capa_nao_guardada", "A capa foi gerada, mas não deu para guardar. Tente de novo.");
+  const { error } = await servico().from("cliente_instagram_destaques").insert({
+    id,
+    client_id: c.clientId,
+    nome,
+    icone: limpar(s.fundo.cena || s.texto_na_tela, 80) || null,
+    estilo: paleta.length ? { fundo: paleta[0], desenho: paleta[1] || paleta[0], traco: "cheio" } : {},
+    caminho,
+    modelo_id: modelo.id,
+    custo_usd: Math.round(img.custoUsd * 1e6) / 1e6,
+    ordem: 0,
+    criado_por: ch.userId,
+  });
+  if (error) {
+    registrarFalha("[mesa-stories] capa do story não registrada", error, { client_id: c.clientId });
+    throw new ErroHttp(503, "capa_nao_registrada", "A capa foi gerada, mas não entrou nos destaques. Tente de novo.");
+  }
+  const story = await gravarMudanca(c.clientId, s.id, { destaque_id: id });
+  return json({ destaque: { id, nome, caminho }, story, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd });
+}
+
 // ------------------------------------------------------------------ adaptar molde
 
 async function adaptarMolde(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
@@ -1027,6 +1233,13 @@ async function salvarStory(ch: Chamador, corpo: Record<string, unknown>): Promis
   const atualDoPedido = typeof e.id === "string" && e.id ? await lerStory(c.clientId, e.id) : null;
   // 21/10: a imagem gerada é do servidor (ligar_imagens e registrar_arte): o trabalho, a lâmina, a versão e o
   // texto da arte vêm do story gravado; trabalho novo (story duplicado) só se for deste cliente.
+  // 22/10: a foto natural também é do servidor (foto_natural): o caminho e a versão vêm do story gravado.
+  if (mudanca.fundo && (mudanca.fundo as { tipo: string }).tipo === "natural") {
+    const f = mudanca.fundo as ReturnType<typeof fundoLimpo>;
+    const antes = atualDoPedido ? atualDoPedido.fundo : null;
+    if (antes && antes.tipo === "natural" && antes.caminho) mudanca.fundo = fundoLimpo({ ...f, caminho: antes.caminho, versao: antes.versao });
+    else if (f.caminho && !f.caminho.startsWith(`${c.clientId}/stories/`)) mudanca.fundo = fundoLimpo({ ...f, caminho: null });
+  }
   if (mudanca.fundo && (mudanca.fundo as { tipo: string }).tipo === "gerada") {
     const f = mudanca.fundo as ReturnType<typeof fundoLimpo>;
     const antes = atualDoPedido ? atualDoPedido.fundo : null;
@@ -1451,10 +1664,13 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   sequencias_da_campanha: sequenciasDaCampanha,
   ligar_imagens: ligarImagens,
   reordenar,
+  // 22/10: foto natural de story (sem texto: o texto é a camada nativa) e capa de destaque a partir de uma tela.
+  foto_natural: fotoNatural,
+  capa_do_story: capaDoStory,
 };
 
 /** Ações que chamam IA (podem passar de 150 s): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["planejar_sequencia", "adaptar_molde", "conversar", "stories_da_campanha"]);
+const ACOES_LONGAS = new Set(["planejar_sequencia", "adaptar_molde", "conversar", "stories_da_campanha", "foto_natural", "capa_do_story"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

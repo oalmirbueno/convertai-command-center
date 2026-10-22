@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { modeloDoSelo as modeloDoSeloPreferido } from "./campanhasApi";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, Check, ChevronDown, ImagePlus, Link2, Loader2, RotateCcw, RotateCw, Sparkles, Stamp, Undo2, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -143,7 +144,7 @@ function ArtesDaCampanha({ impacto, onRefeito }: { impacto: ImpactoNaTela; onRef
   const n = laminasARefazer(impacto);
   const enviadas = impacto.refazer.filter((r) => r.enviada).length;
   if (impacto.erro) return <Linha tom="aviso">{impacto.erro}</Linha>;
-  const aprovadas = impacto.aprovadas.laminas;
+  const aprovadas = impacto.aprovadas ? impacto.aprovadas.laminas : 0;
   if (!aprovadas && !n) return null;
   const refazer = async () => {
     let naFila = 0;
@@ -222,7 +223,8 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
   // O guardado só vale se ainda estiver ativo; senão o padrão de imagem. Conta a cada render: o catálogo que chega depois acerta sozinho.
   const modeloValido = modeloGuardado && modelosAtivos(catalogo, "imagem").some((m) => m.id === modeloGuardado) ? modeloGuardado : "";
   const imagemPadrao = padraoPara(catalogo, "imagem");
-  const modeloId = modeloValido || (imagemPadrao ? imagemPadrao.id : "");
+  // 22/10/2026: o selo no GPT Image 2.5 do catálogo (campanhasApi.MODELOS_DO_SELO); a equipe ainda troca.
+  const modeloId = modeloValido || modeloDoSeloPreferido(catalogo) || (imagemPadrao ? imagemPadrao.id : "");
   const modeloDoSelo = modeloId ? catalogo.find((m) => m.id === modeloId) || null : null;
   const nomeDoModeloDoSelo = modeloDoSelo ? nomeDoModelo(modeloDoSelo) : catalogoCarregando ? "Lendo os modelos" : "Escolha o modelo";
   // A grade dos ajustes: recolhida por padrão, aberta quando a campanha não tem selo; a escolha fica guardada.

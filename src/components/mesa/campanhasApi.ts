@@ -18,6 +18,7 @@ import {
 import type { TrabalhoDaPeca } from "./regrasDaCampanha";
 import { entregarComModo } from "@/lib/mesa/entregaComOpcoes";
 import { novoLote } from "./seloApi";
+import { normalizarPadrao, pedidoDoSeloPeloPadrao } from "../../../supabase/functions/_shared/padrao-da-campanha";
 import * as storiesApi from "./stories/storiesApi";
 import { ESTILO_AUTOMATICO, planoDasOpcoes } from "../../../supabase/functions/_shared/selo-da-campanha";
 
@@ -242,6 +243,7 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
     ...(o.formatos && typeof o.formatos === "object" ? { formatos: o.formatos as BriefingDaCampanha["formatos"] } : {}),
     ...(Array.isArray(o.stories) && o.stories.length ? { stories: o.stories as BriefingDaCampanha["stories"] } : {}),
     ...(o.ads && typeof o.ads === "object" && (o.ads as Record<string, unknown>).campaign_id ? { ads: o.ads as BriefingDaCampanha["ads"] } : {}),
+    ...(normalizarPadrao(o.padrao) ? { padrao: normalizarPadrao(o.padrao) } : {}),
   };
 }
 
@@ -479,6 +481,21 @@ export async function cancelarFilaDasPecas(trabalhoIds: string[]): Promise<void>
 }
 
 /** Selo da campanha pelo gerador: uma opção no estilo automático, já escolhida. */
+/**
+ * 22/10/2026 (dono: "o selo gerado pelo GPT Image 2.5"): o modelo do selo, na ordem, o primeiro ativo no catálogo
+ * (ia_modelos). Configurável aqui; sem nenhum deles, o padrão de imagem da casa.
+ */
+export const MODELOS_DO_SELO = ["openai:gpt-image-2.5-sunburst", "openai:gpt-image-2.5-flare", "openrouter:openai/gpt-image-2.5-sunburst"];
+
+export function modeloDoSelo(catalogo: { id: string; tipo?: string; ativo?: boolean; padrao_para?: string[] }[]): string | null {
+  for (const id of MODELOS_DO_SELO) {
+    const m = catalogo.filter((x) => x.id === id && x.ativo !== false)[0];
+    if (m) return m.id;
+  }
+  const padrao = catalogo.filter((x) => x.tipo === "imagem" && x.ativo !== false && (x.padrao_para || []).indexOf("imagem") >= 0)[0];
+  return padrao ? padrao.id : null;
+}
+
 export async function gerarSeloDaCampanha(campanha: Campanha, modeloId: string | null): Promise<void> {
   const tipo = campanha.identidade && campanha.identidade.tipo ? String(campanha.identidade.tipo) : null;
   // Estilo automático pelo tipo da campanha (o mesmo plano da tela do selo), uma opção só.
@@ -491,6 +508,8 @@ export async function gerarSeloDaCampanha(campanha: Campanha, modeloId: string |
     variacao: opcao.variacao,
     ...(modeloId ? { modelo_id: modeloId } : {}),
     qualidade: "media",
+    // O selo segue o padrão visual da campanha (o servidor também anexa as referências dele).
+    ...(pedidoDoSeloPeloPadrao(normalizarPadrao(normalizarBriefing(campanha.briefing).padrao)) ? { pedido: pedidoDoSeloPeloPadrao(normalizarPadrao(normalizarBriefing(campanha.briefing).padrao)) } : {}),
   });
   const id = r && r.versao && r.versao.id ? String(r.versao.id) : "";
   if (!id) throw new Error("O selo não saiu do gerador.");
@@ -580,3 +599,18 @@ export async function lerTrabalhosDasCampanhas(clientId: string): Promise<Trabal
     direcao: t.direcao && typeof t.direcao === "object" ? (t.direcao as TrabalhoDaPeca["direcao"]) : {},
   }));
 }
+
+// ------------------------------------------------------------------ referência da campanha (22/10/2026)
+
+/** O padrão visual gravado na campanha, ou null. */
+export const padraoDaCampanha = (c: Pick<Campanha, "briefing">) => normalizarPadrao(normalizarBriefing(c.briefing).padrao);
+
+/** Lê as referências (1 a 3) e grava o padrão visual na campanha; lista vazia tira o padrão (sem custo). */
+export const definirPadraoDaCampanha = (campanhaId: string, referenciasIds: string[]) =>
+  chamarFuncao<{ campanha: Campanha; padrao: unknown; custo_usd: number }>("estudio-arte", { acao: "campanha_padrao", campanha_id: campanhaId, referencias_ids: referenciasIds.slice(0, 3) });
+
+/** Uma leitura por visão das referências (o modelo de leitura do catálogo). */
+export const partesDoPadrao = (catalogo: ModeloIa[], referencias: number): ParteDaEstimativa[] => {
+  const m = padraoPara(catalogo, "leitura") || padraoPara(catalogo, "estrategista");
+  return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: 3000 + Math.max(1, referencias) * TAMANHOS.imagemAnexos.entrada, tokensSaida: 1600 }];
+};

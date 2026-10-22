@@ -9,6 +9,8 @@ import { diaCurto, type Campanha } from "./mesaV4Api";
 import { corpoDaPeca, ehPecaDeArte, FASES, faseDaPeca, ROTULO_DO_ESTADO_DA_PECA, TELAS_DO_STORY, type ChaveDoFormato, type EstadoDaPeca, type ItemDeStory, type SituacaoDaPeca } from "./regrasDaCampanha";
 import { chavesDaCampanhaCompleta, gerarLaminasDaPeca, gerarStoryDaCampanha, geradorDeStoriesDisponivel, normalizarBriefing, prepararPecaSemGerar } from "./campanhasApi";
 import { ICONE_DO_FORMATO } from "./CampanhaFormatos";
+import { padraoDaCampanha } from "./campanhasApi";
+import { resumoDoPadraoParaAPeca } from "../../../supabase/functions/_shared/padrao-da-campanha";
 import { chaves } from "./mesaV4Api";
 
 /** A chave do formato da peça (para o ícone). */
@@ -175,7 +177,8 @@ export function useAcoesDasPecas({
                 fase: faseDaPeca(p.item, campanha.periodo_inicio, campanha.periodo_fim),
                 quantidadeDeTelas: p.laminas || TELAS_DO_STORY,
                 data: p.item.data || null,
-                pedido: [p.item.tema, p.item.gancho].concat((p.item.cards || []).map((x) => x.texto || "")).filter(Boolean).join(" / "),
+                pedido: [p.item.tema, p.item.gancho].concat((p.item.cards || []).map((x) => x.texto || "")).filter(Boolean).join(" / ") + (padraoDaCampanha(campanha) ? `
+${resumoDoPadraoParaAPeca(padraoDaCampanha(campanha))}` : ""),
                 marcaId,
               });
             } finally {

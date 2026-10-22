@@ -7,7 +7,7 @@ import { textoDoErro } from "@/lib/mesa/api";
 import { copiarTexto } from "../instagram/instagramApi";
 import { noFuso } from "../instagram/calendario-da-grade";
 import PreviaDoStory, { SeloDoCaminho } from "./PreviaDoStory";
-import { baixarArteDoStory } from "./arteDoStory";
+import { baixarStory } from "./baixarStories";
 import type { MarcaDosStories } from "./marcaDosStories";
 import { chamarStories, diaCurto, hojeLocal, normalizarStory, roteiroDoAdesivo, SITUACOES, somarDias, type Story } from "./storiesApi";
 
@@ -54,7 +54,7 @@ function ItemDaAgenda({ clientId, s, marca, onMudou, onAbrir }: { clientId: stri
   const baixar = async () => {
     setOcupado("baixar");
     try {
-      await baixarArteDoStory(s, marca);
+      await baixarStory(s, marca);
     } catch (e) {
       toast.error("Não deu para baixar a arte", { description: textoDoErro(e) });
     } finally {

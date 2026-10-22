@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download, Expand, Image as IconeDeImagem, LogOut, Loader2, Minus, Plus, Sparkles, Upload } from "lucide-react";
+import { Image as IconeDeImagem, Loader2, Minus, Plus, Sparkles, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, padraoPara, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
@@ -25,14 +24,12 @@ import type { NumerosDoPost, TemplateProfile } from "../../../../supabase/functi
 import { limiteDoTexto } from "../../../../supabase/functions/estudio-arte/modulos/limites-do-post";
 
 /**
- * Template do Estúdio: só o post do X (rodada 2, 21/10, dono: "deixar só o X ali ... não abrir em pop-up,
- * e sim: se eu escolher o template, ele muda a área do Estúdio e funciona igual à sequência").
- * - parte "centro": no lugar da lâmina grande, o post grande, o texto editável e o Guardar; os posts do
- *   fio são as lâminas da prancheta ao lado (miniatura, ordem, arrastar, adicionar, duplicar, tirar).
- * - parte "painel": na ferramenta Template, Conteúdo (perfil e Gerar), Imagem e Aparência (tamanhos,
- *   escala, cor de fundo da marca ou livre, tema, mostrar números/selo/tempo), com prévia ao vivo.
- * Legenda, aprovação, agenda e postar continuam nas ferramentas da sequência. Templates antigos de
- * Instagram ou Story abrem como foram guardados. A moldura é desenho; a foto entra inteira.
+ * Template do Estúdio: só o post do X, no padrão do Estúdio (rodada 4, 21/10, dono: "ele recriou e não precisava").
+ * - parte "centro": entra na lâmina grande do Estúdio pela `moldura` (mesmo título, versões, ampliar e quadro);
+ *   daqui vêm só a faixa (estado e Guardar, no lugar do "Gerar de novo") e o desenho do post no quadro.
+ * - parte "painel": a ferramenta Template (arte ou post no centro, aparência, imagem, perfil e Gerar).
+ * O texto do post é o texto da lâmina, editado na ferramenta Lâmina; a prancheta mostra a miniatura do X.
+ * Legenda, aprovação, agenda e postar continuam nas ferramentas da sequência. A foto entra inteira.
  */
 
 const ultimaVersao = (trabalho: Trabalho, ordem: number): CardGerado | undefined => trabalho.cards.filter((v) => v.ordem === ordem).sort((a, b) => b.versao - a.versao)[0];
@@ -61,19 +58,17 @@ export const partesDaFotoDoTemplate = (modeloImagemId: string | null | undefined
 ];
 
 /** O painel remonta por cliente/marca/trabalho/lâmina: consultas pendentes nunca mostram o perfil anterior. */
-export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqueadoDeFora, onMudou, onAbrirFotos, onEscolherLamina, parte = "tudo", onSair, onSalvarTexto }: {
+export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqueadoDeFora, onMudou, onAbrirFotos, parte = "tudo", moldura, modoTemplate, onModoTemplate }: {
   trabalho: Trabalho; card: CardDaDirecao; bloqueado: boolean; onMudou: () => void; onAbrirFotos: () => void;
-  /** Troca a lâmina aberta (setas da prévia). */
-  onEscolherLamina?: (ordem: number) => void;
   /**
-   * Rodada 2 (21/10, dono: "não abrir em pop-up ... muda a área do Estúdio"): "centro" é o post grande no
-   * lugar da lâmina grande; "painel" são os ajustes na ferramenta Template. Os dois dividem o mesmo rascunho.
+   * "centro": o post entra na lâmina grande do Estúdio pela `moldura` (a faixa e o desenho do quadro);
+   * "painel": a ferramenta Template. Os dois dividem o mesmo rascunho.
    */
   parte?: "tudo" | "centro" | "painel";
-  /** Volta o centro do Estúdio para a lâmina de arte. */
-  onSair?: () => void;
-  /** Rodada 3: o texto do post é o texto da lâmina; o centro grava pelo mesmo campo (configurar). */
-  onSalvarTexto?: (texto: string) => Promise<void>;
+  moldura?: (p: { faixa: ReactNode; conteudo: (largura: number) => ReactNode }) => ReactNode;
+  /** O centro do Estúdio mostra a arte da lâmina (false) ou o post do X (true): troca dentro da própria ferramenta. */
+  modoTemplate?: boolean;
+  onModoTemplate?: (template: boolean) => void;
 }) {
   const mesa = useMesa(), { marca } = useMarcaDaMesa(), cache = useQueryClient();
   const bloqueado = bloqueadoDeFora || ["aguardando_agencia", "aguardando_cliente", "aprovado", "agendado"].includes(trabalho.entrega_status || "");
@@ -84,8 +79,12 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const [origem, setOrigem] = useEstadoGuardado<Origem>(`mesa:template:origem:${trabalho.id}`, "gerar");
   const [contaId, setContaId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false), [pronto, setPronto] = useState(false), [erro, setErro] = useState("");
-  const [andamento, setAndamento] = useState(""), [grande, setGrande] = useState<string | null>(null);
-  const [marcando, setMarcando] = useState(false), [rotulo, setRotulo] = useState(ajustes.destaque?.rotulo || "");
+  const [andamento, setAndamento] = useState("");
+  // A marcação do ponto começa no painel e termina no clique no centro: estado dividido, como o rascunho.
+  const [marcacao, setMarcacao] = useRascunhoCompartilhado<{ marcando: boolean; rotulo: string }>(`${chave}:marcacao`, { marcando: false, rotulo: ajustes.destaque?.rotulo || "" });
+  const marcando = marcacao.marcando, rotulo = marcacao.rotulo;
+  const setMarcando = (v: boolean | ((antes: boolean) => boolean)) => setMarcacao((m) => ({ ...m, marcando: typeof v === "function" ? v(m.marcando) : v }));
+  const setRotulo = (valor: string) => setMarcacao((m) => ({ ...m, rotulo: valor }));
   const [gerarAberto, setGerarAberto] = useState(false), [tema, setTema] = useState(""), [todas, setTodas] = useState(true), [gravarLegenda, setGravarLegenda] = useState(!trabalho.legenda);
   const [avisosDoGerar, setAvisosDoGerar] = useState<string[]>([]);
   const [descricaoDaFoto, setDescricaoDaFoto] = useState(() => (card.composicao || card.ilustracao || card.texto_exato || "").replace(/\s+/g, " ").trim().slice(0, 600));
@@ -102,7 +101,6 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // IDs anexados pela equipe são escolhas explícitas, também no Livre. Isso não importa identidade.
   const acervo = useAcervo(!!trabalho.direcao.cards?.some((c) => c.imagens_ids?.length));
   const cardsOrdenados = [...(trabalho.direcao.cards || [card])].sort((a, b) => a.ordem - b.ordem);
-  const indice = Math.max(0, cardsOrdenados.findIndex((c) => c.ordem === card.ordem));
   const posicaoDe = (ordem: number) => ({ atual: Math.max(1, cardsOrdenados.findIndex((c) => c.ordem === ordem) + 1), total: Math.max(1, cardsOrdenados.length) });
   const fontes = fontesDoProfile(card as CardComFontes, acervo.data || [], mesa.clientId);
   const preferida = ajustes.sem_imagem ? undefined : resolverFonteProfile(fontes, ajustes);
@@ -117,10 +115,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const textoDesatualizado = ajustes.texto_base !== textoDaLamina;
   // Post do X: um texto só, o da lâmina (o mesmo campo de conteúdo do Estúdio). Rascunho de texto só nos antigos.
   const ehX = ajustes.estilo === "twitter";
-  const [textoLocal, setTextoLocal] = useState(textoDaLamina);
-  const editandoTexto = useRef(false);
-  useEffect(() => { if (!editandoTexto.current) setTextoLocal(textoDaLamina); }, [textoDaLamina]);
-  const textoDoPost = ehX ? textoLocal : ajustes.texto;
+  const textoDoPost = ehX ? textoDaLamina : ajustes.texto;
   const conflitoDeTexto = !ehX && textoDesatualizado && !ehInstagram && ajustes.texto !== ajustes.texto_base;
   // Só quando o texto da lâmina chega diferente (abertura ou mudança de fora); o Gerar já põe o texto novo antes.
   const ultimoTextoDaLamina = useRef<string | null>(null);
@@ -197,9 +192,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (!pronto || ocupado || bloqueado || conflitoDeTexto || fonteMudou || faltaImagemDoIG) return;
     setOcupado(true); setErro(""); let feitas = 0;
     try {
-      // O texto digitado no centro vai primeiro para a lâmina; a versão nova parte dele.
-      let baseDaAberta = card.texto_exato || "";
-      if (ehX && onSalvarTexto && textoLocal !== baseDaAberta) { await onSalvarTexto(textoLocal); baseDaAberta = textoLocal; }
+      const baseDaAberta = card.texto_exato || "";
       const ordens = todasAsLaminas ? cardsOrdenados : [card];
       for (const c of ordens) {
         if (!vivo.current) break;
@@ -264,7 +257,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (vivo.current) {
       const meu = r.posts.find((p) => p.ordem === card.ordem);
       if (ajustes.estilo === "instagram" && r.legenda) setAjustes((a) => ({ ...a, texto: r.legenda || a.texto }));
-      else if (meu) { setTextoLocal(meu.texto); setAjustes((a) => ({ ...a, texto: meu.texto, texto_base: meu.texto })); }
+      else if (meu) setAjustes((a) => ({ ...a, texto: meu.texto, texto_base: meu.texto }));
       setAvisosDoGerar(r.avisos || []);
     }
     onMudou();
@@ -296,78 +289,48 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // ---------------------------------------------------------------- partes da tela
 
   const travado = ocupado || bloqueado;
-  const baixar = () => {
-    if (!quadro || !pronto) return;
-    try {
-      const a = document.createElement("a");
-      a.href = quadro.toDataURL("image/png"); a.download = `template-${ehX ? "x" : ajustes.estilo}-post-${card.ordem}.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-    } catch { setErro("O PNG não pôde ser baixado."); }
-  };
-  const ampliar = () => { try { setGrande(quadro?.toDataURL("image/png") || null); } catch { setErro("A prévia não pôde ser ampliada."); } };
-  const outra = (passo: number) => { const c = cardsOrdenados[indice + passo]; if (c && onEscolherLamina) onEscolherLamina(c.ordem); };
-  const escala = ajustes.escala ?? 100;
-  const mudarEscala = (delta: number) => setAjustes((a) => ({ ...a, escala: Math.max(50, Math.min(150, (a.escala ?? 100) + delta)) }));
+  const pendencia = !nome.trim() || !username ? "Preencha nome e @ do perfil na ferramenta Template" : limite.passou ? limite.texto : fonteMudou ? "A imagem guardada saiu desta lâmina" : faltaImagemDoIG ? "O post do Instagram precisa de uma foto" : "";
+  const podeGuardar = pronto && !travado && !conflitoDeTexto && !fonteMudou && !faltaImagemDoIG;
 
-  const checagens: Array<[boolean, string]> = [
-    [!!nome.trim() && !!username, "Nome e @ do perfil"],
-    [!!textoDoPost.trim() && !limite.passou, limite.passou ? "Texto acima do limite da rede" : "Texto dentro do limite"],
-    [!!fonte || !ehInstagram, fonte ? `Imagem: ${ROTULO_DO_GRUPO[fonte.grupo].toLowerCase()}` : ehInstagram ? "Falta a foto do post" : "Sem imagem"],
-    [!conflitoDeTexto && !fonteMudou, "Rascunho em dia com o post"],
-  ];
-
-  /** O centro do Estúdio no Template: o post grande, o texto à mão e o guardar (os posts ficam na prancheta ao lado). */
-  const centro = <div className="min-w-0 space-y-3" data-previa-do-template="">
-    <div className="flex min-w-0 items-center">
-      <p className={juntar(texto.rotulo, "min-w-0 flex-1 truncate")}>{cardsOrdenados.length > 1 ? `Post ${indice + 1} de ${cardsOrdenados.length} do fio` : "Post do X"}</p>
-      {onEscolherLamina && cardsOrdenados.length > 1 && <>
-        <button type="button" className={botao.icone} aria-label="Lâmina anterior" title="Post anterior" disabled={indice <= 0 || ocupado} onClick={() => outra(-1)}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
-        <button type="button" className={botao.icone} aria-label="Próxima lâmina" title="Próximo post" disabled={indice >= cardsOrdenados.length - 1 || ocupado} onClick={() => outra(1)}><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
-      </>}
-      <button type="button" className={botao.icone} aria-label="Diminuir o post" title={`Diminuir o post no quadro (${escala}%)`} disabled={travado || escala <= 50} onClick={() => mudarEscala(-10)}><Minus className="h-4 w-4" aria-hidden="true" /></button>
-      <button type="button" className={botao.icone} aria-label="Aumentar o post" title={`Aumentar o post no quadro (${escala}%)`} disabled={travado || escala >= 150} onClick={() => mudarEscala(10)}><Plus className="h-4 w-4" aria-hidden="true" /></button>
-      <button type="button" className={botao.icone} aria-label="Ver prévia grande" title="Ver prévia grande" disabled={!pronto} onClick={ampliar}><Expand className="h-4 w-4" aria-hidden="true" /></button>
-      <button type="button" className={botao.icone} aria-label="Baixar PNG" title="Baixar PNG (1080 px, igual ao que será guardado)" disabled={!pronto} onClick={baixar}><Download className="h-4 w-4" aria-hidden="true" /></button>
-      {onSair && <button type="button" className={botao.icone} aria-label="Sair do Template" title="Sair do Template: volta para a lâmina de arte" onClick={onSair}><LogOut className="h-4 w-4" aria-hidden="true" /></button>}
+  /**
+   * Rodada 4 (dono: "o Estúdio ali dá pra deixar o mesmo padrão com o templates; ele recriou e não
+   * precisava"): o centro é a lâmina grande do Estúdio (EstudioLaminaGrande, pela `moldura`), com o mesmo
+   * título, versões, ampliar e quadro. Do Template só vem a faixa (estado e Guardar, no lugar do "Gerar de
+   * novo") e o desenho do post no quadro. Texto: o da lâmina, editado na ferramenta Lâmina, como sempre.
+   */
+  const faixa = <div className="mb-2 min-w-0 space-y-1.5" data-faixa-do-template="">
+    <div className="flex min-h-7 min-w-0 items-center">
+      <p className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate", pendencia && "text-warning")} role="status" data-limite-do-texto="">{andamento || pendencia || `Post do X · ${limite.texto}`}</p>
+      <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2.5 text-[12px]" disabled={!podeGuardar} onClick={() => void salvar(false)} title="Guarda o post como nova versão da lâmina (sem custo)">{ocupado && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Guardar nova versão</Button>
     </div>
     {!ehX && <div role="status" className={juntar(texto.auxiliar, "flex flex-wrap items-center")}><span className="mb-1 mr-2">Template antigo ({ajustes.estilo === "instagram" ? "Instagram" : "Story"}): abre como foi guardado. Os novos são do X.</span><Button size="sm" variant="outline" className="mb-1" disabled={travado} onClick={() => trocarRede("twitter")}>Passar para post do X</Button></div>}
-    {marcando && <p role="status" className={texto.auxiliar}>Clique no ponto exato da imagem na prévia.</p>}
-    <div className="flex min-w-0 justify-center">
-      <canvas ref={setQuadro} aria-label="Prévia do template Profile" className={juntar("block h-auto max-h-[720px] w-auto max-w-full rounded-md shadow-sm", marcando && "cursor-crosshair", !pronto && "hidden")} onClick={(e) => {
-        if (!marcando || ocupado || bloqueado || !pronto || !rotuloValido || fonteMudou) return;
-        const q = e.currentTarget, limites = q.getBoundingClientRect(), estilo = getComputedStyle(q);
-        const esquerda = Number.parseFloat(estilo.borderLeftWidth) || 0, direita = Number.parseFloat(estilo.borderRightWidth) || 0;
-        const topo = Number.parseFloat(estilo.borderTopWidth) || 0, baixo = Number.parseFloat(estilo.borderBottomWidth) || 0;
-        const largura = limites.width - esquerda - direita, altura = limites.height - topo - baixo;
-        const ponto = largura > 0 && altura > 0 ? pontoNaImagemProfile((e.clientX - limites.left - esquerda) * q.width / largura, (e.clientY - limites.top - topo) * q.height / altura, imagemNaPrevia.current) : null;
-        if (!ponto) { setErro("Clique dentro da imagem real, fora das margens do template."); return; }
-        setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(fonte), destaque: { ...ponto, rotulo: rotulo.trim() } })); setMarcando(false);
-      }} />
-      {!pronto && <p role="status" className={juntar(texto.auxiliar, "py-16 text-center")}>{fotosPendentes ? "Carregando fotos…" : erro || erroDasFontes ? "Prévia indisponível" : "Preencha nome, @ e texto para ver a prévia."}</p>}
-    </div>
     {(erro || erroDasFontes) && <p role="alert" className="text-[12px] text-destructive">{erro || "Não foi possível ler as fotos selecionadas. Confira a ferramenta Fotos."}</p>}
-    <div className="space-y-1">
-      <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : ajustes.estilo === "story" ? "Texto do Story" : "Texto do post"}<Textarea aria-label="Texto do template" value={textoDoPost} maxLength={2200} rows={4} disabled={travado} onFocus={() => { editandoTexto.current = true; }} onChange={(e) => (ehX ? setTextoLocal(e.target.value) : mudar("texto", e.target.value))} onBlur={() => { editandoTexto.current = false; if (ehX && onSalvarTexto && textoLocal !== textoDaLamina) void onSalvarTexto(textoLocal).catch((er: unknown) => setErro(textoDoErro(er))); }} className="mt-1" /></label>
-      <p className={juntar(texto.auxiliar, limite.passou && "text-destructive")} role={limite.passou ? "alert" : undefined} data-limite-do-texto="">{limite.texto}</p>
-    </div>
     {conflitoDeTexto && <div role="status" className="space-y-2 text-[12px]"><p>O texto da lâmina mudou desde que você abriu este rascunho.</p><div className="flex flex-wrap"><Button size="sm" variant="outline" className="mb-1 mr-2" onClick={() => setAjustes((a) => ({ ...a, texto: textoDaLamina, texto_base: textoDaLamina }))}>Usar texto atual da lâmina</Button><Button size="sm" variant="ghost" className="mb-1" onClick={() => setAjustes((a) => ({ ...a, texto_base: textoDaLamina }))}>Manter minha edição</Button></div></div>}
     {fonteMudou && <div role="status" className={texto.auxiliar}>A imagem guardada saiu desta lâmina. <Button size="sm" variant="outline" onClick={() => escolherFonte(fonte || fontes[0])}>Usar imagem atual</Button></div>}
-    {faltaImagemDoIG && <p role="status" className={texto.auxiliar}>O post do Instagram precisa de uma foto: escolha na etapa Imagem.</p>}
-    {fonte && <div className="min-w-0 space-y-2 border-t border-border pt-3">
-      <div className="flex items-center"><span className={texto.rotulo}>Indicar botão ou ponto</span><AjudaRecolhida className="ml-1.5" rotulo="Como marcar um ponto na imagem">Escreva um rótulo e ative a marcação. Clique no botão ou ponto da imagem real na prévia. O marcador usa essa posição no PNG; trocar de imagem remove a marcação.</AjudaRecolhida></div>
-      <Input aria-label="Rótulo do ponto na imagem" placeholder="Ex.: Clique em Configurações" maxLength={60} value={rotulo} disabled={travado} onChange={(e) => { const valor = e.target.value; setRotulo(valor); if (ajustes.destaque) setAjustes((a) => ({ ...a, destaque: a.destaque ? { ...a.destaque, rotulo: valor } : undefined })); }} />
-      <div className="flex flex-wrap"><Button size="sm" variant="outline" className="mb-1 mr-2" disabled={!pronto || !rotuloValido || fonteMudou || travado} aria-pressed={marcando} onClick={() => setMarcando((v) => !v)}>{marcando ? "Cancelar marcação" : "Marcar ponto na imagem"}</Button>{ajustes.destaque && <Button size="sm" variant="ghost" className="mb-1" disabled={travado} onClick={() => { setMarcando(false); setAjustes((a) => ({ ...a, destaque: undefined })); }}>Remover ponto</Button>}</div>
-    </div>}
-    <ul className="space-y-1" aria-label="Antes de guardar">
-      {checagens.map(([ok, rotuloDaChecagem]) => <li key={rotuloDaChecagem} className="flex items-center text-[12px]"><span aria-hidden="true" className={juntar("mr-2 inline-block h-2 w-2 shrink-0 rounded-full", ok ? "bg-success" : "bg-warning")} />{rotuloDaChecagem}</li>)}
-    </ul>
-    <div className="flex flex-wrap items-center">
-      <Button size="sm" className="mb-1 mr-2" disabled={!pronto || travado || conflitoDeTexto || fonteMudou || faltaImagemDoIG} onClick={() => void salvar(false)}>{ocupado && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Guardar nova versão</Button>
-      {cardsOrdenados.length > 1 && <Button size="sm" variant="outline" className="mb-1 mr-2" disabled={!pronto || travado || conflitoDeTexto || fonteMudou || faltaImagemDoIG} onClick={() => void salvar(true)}>Montar todas as lâminas</Button>}
-      {andamento && <span role="status" className={juntar(texto.auxiliar, "mb-1")}>{andamento}</span>}
-      <AjudaRecolhida className="mb-1" rotulo="E depois de guardar?">Cada post guardado vira a versão da lâmina na prancheta. Legenda, aprovação, agenda e postar seguem pelas ferramentas Legenda e Entrega, como na sequência.</AjudaRecolhida>
-    </div>
+    {marcando && <p role="status" className={texto.auxiliar}>Clique no ponto exato da imagem no post.</p>}
   </div>;
+
+  /** O post do X dentro do quadro da lâmina grande (o mesmo PNG que será guardado). */
+  const conteudo = () => <>
+    <canvas ref={setQuadro} aria-label="Prévia do template Profile" className={juntar("block h-full w-full", marcando && "cursor-crosshair", !pronto && "hidden")} onClick={(e) => {
+      if (!marcando || ocupado || bloqueado || !pronto || !rotuloValido || fonteMudou) return;
+      const q = e.currentTarget, limites = q.getBoundingClientRect(), estilo = getComputedStyle(q);
+      const esquerda = Number.parseFloat(estilo.borderLeftWidth) || 0, direita = Number.parseFloat(estilo.borderRightWidth) || 0;
+      const topo = Number.parseFloat(estilo.borderTopWidth) || 0, baixo = Number.parseFloat(estilo.borderBottomWidth) || 0;
+      const largura = limites.width - esquerda - direita, altura = limites.height - topo - baixo;
+      const ponto = largura > 0 && altura > 0 ? pontoNaImagemProfile((e.clientX - limites.left - esquerda) * q.width / largura, (e.clientY - limites.top - topo) * q.height / altura, imagemNaPrevia.current) : null;
+      if (!ponto) { setErro("Clique dentro da imagem real, fora das margens do template."); return; }
+      setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(fonte), destaque: { ...ponto, rotulo: rotulo.trim() } })); setMarcando(false);
+    }} />
+    {!pronto && <p role="status" className={juntar(texto.auxiliar, "flex h-full items-center justify-center p-4 text-center")}>{fotosPendentes ? "Carregando fotos…" : erro || erroDasFontes ? "Prévia indisponível" : "Preencha nome e @ na ferramenta Template."}</p>}
+  </>;
+  const centro = moldura ? moldura({ faixa, conteudo }) : <div className="min-w-0" data-previa-do-template="">{faixa}<div className="relative mx-auto w-full max-w-[540px]" style={{ paddingTop: "125%" }}><div className="absolute inset-0">{conteudo()}</div></div></div>;
+
+  const destaqueDaImagem = fonte ? <div className="min-w-0 space-y-2">
+    <div className="flex items-center"><span className={texto.rotulo}>Indicar botão ou ponto</span><AjudaRecolhida className="ml-1.5" rotulo="Como marcar um ponto na imagem">Escreva um rótulo e ative a marcação. Clique no botão ou ponto da imagem real no post do centro. O marcador usa essa posição no PNG; trocar de imagem remove a marcação.</AjudaRecolhida></div>
+    <Input aria-label="Rótulo do ponto na imagem" placeholder="Ex.: Clique em Configurações" maxLength={60} value={rotulo} disabled={travado} onChange={(e) => { const valor = e.target.value; setRotulo(valor); if (ajustes.destaque) setAjustes((a) => ({ ...a, destaque: a.destaque ? { ...a.destaque, rotulo: valor } : undefined })); }} />
+    <div className="flex flex-wrap"><Button size="sm" variant="outline" className="mb-1 mr-2" disabled={!pronto || !rotuloValido || fonteMudou || travado} aria-pressed={marcando} onClick={() => setMarcando((v) => !v)}>{marcando ? "Cancelar marcação" : "Marcar ponto na imagem"}</Button>{ajustes.destaque && <Button size="sm" variant="ghost" className="mb-1" disabled={travado} onClick={() => { setMarcando(false); setAjustes((a) => ({ ...a, destaque: undefined })); }}>Remover ponto</Button>}</div>
+  </div> : null;
 
   const conteudoDoPerfil = <div className="space-y-4">
     {!livre && (perfil.data?.contas.length || 0) > 1 && <label className={juntar("block", texto.rotulo)}>Conta do perfil<select aria-label="Conta do Instagram do template" value={contaId || perfil.data?.conta_id || ""} disabled={travado} onChange={(e) => { setContaId(e.target.value); setAjustes((a) => ({ ...a, nome: null, username: null, foto_caminho: undefined, verificado: false })); }} className={juntar(campo, "mt-1")}>{perfil.data?.contas.map((c) => <option key={c.id} value={c.id}>@{c.username}</option>)}</select></label>}
@@ -497,14 +460,19 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // Rodada 3 (dono: "ser exatamente o Estúdio"): a ferramenta Template é uma seção aberta, como as outras
   // ferramentas do painel; sem abas próprias. Primeiro o desenho do post, depois a imagem, o perfil e o Gerar.
   const secao = (titulo: string, corpo: JSX.Element, primeira = false) => <section className={juntar("min-w-0 space-y-3", !primeira && "border-t border-border pt-4")} aria-label={titulo}><p className={juntar(texto.corpo, "font-semibold")}>{titulo}</p>{corpo}</section>;
+  const peca = <div className="space-y-3">
+    {onModoTemplate && <Segmentado<"arte" | "x"> rotulo="No centro do Estúdio" opcoes={[{ valor: "arte", rotulo: "Arte da lâmina" }, { valor: "x", rotulo: "Post do X" }]} valor={modoTemplate ? "x" : "arte"} onEscolher={(v) => onModoTemplate(v === "x")} />}
+    {cardsOrdenados.length > 1 && <Button size="sm" variant="outline" disabled={!podeGuardar} onClick={() => void salvar(true)}>Montar todas as lâminas</Button>}
+    {!ehX && <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : "Texto do Story"}<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={2200} rows={5} disabled={travado} onChange={(e) => mudar("texto", e.target.value)} className="mt-1" /></label>}
+  </div>;
   const painel = <div className="min-w-0 space-y-4" data-ferramenta-template="">
-    {secao("Aparência do post", conteudoDaAparencia, true)}
-    {secao("Imagem do post", conteudoDaImagem)}
+    {secao("Post do X", peca, true)}
+    {secao("Aparência do post", conteudoDaAparencia)}
+    {secao("Imagem do post", <div className="space-y-4">{conteudoDaImagem}{destaqueDaImagem}</div>)}
     {secao("Perfil e conteúdo", conteudoDoPerfil)}
   </div>;
-  const dialogoGrande = <JanelaCentral aberta={!!grande} onMudar={(v) => { if (!v) setGrande(null); }} titulo="Prévia do post" largura="xl" descricaoOculta="A peça como será guardada">{grande && <img src={grande} alt="Template antes de guardar" className="mx-auto max-h-[78vh] w-auto object-contain" />}</JanelaCentral>;
 
-  if (parte === "centro") return <div aria-label="Template Profile" className="min-w-0">{centro}{dialogoGrande}</div>;
+  if (parte === "centro") return <>{centro}</>;
   if (parte === "painel") return <div aria-label="Ajustes do template" className="min-w-0">{painel}</div>;
-  return <div className="grid min-w-0 gap-6" aria-label="Template Profile">{centro}{painel}{dialogoGrande}</div>;
+  return <div className="grid min-w-0 gap-6" aria-label="Template Profile">{centro}{painel}</div>;
 }

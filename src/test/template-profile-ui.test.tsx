@@ -45,11 +45,13 @@ describe("Template Profile no Estúdio compartilhado", () => {
   });
   it("o post do X segue o texto da lâmina, sem um segundo texto guardado à parte", async () => {
     const tela = montar(); await waitFor(() => expect(screen.getByLabelText("Nome de exibição do template")).toHaveValue("Loja A"));
-    fireEvent.change(screen.getByLabelText("Texto do template"), { target: { value: "Minha edição antiga" } }); tela.unmount();
+    expect(screen.queryByLabelText("Texto do template")).not.toBeInTheDocument(); tela.unmount();
     montar({ ...trabalho, direcao: { cards: [{ ordem: 1, texto_exato: "Novo texto do diretor" }] } });
-    expect(screen.getByLabelText("Texto do template")).toHaveValue("Novo texto do diretor");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Guardar nova versão" }));
+    await waitFor(() => expect(estado.chamar).toHaveBeenCalledOnce());
+    expect(estado.chamar.mock.calls[0][1]).toMatchObject({ texto_base: "Novo texto do diretor", template: { texto: "Novo texto do diretor" } });
     expect(screen.queryByText("O texto da lâmina mudou desde que você abriu este rascunho.")).not.toBeInTheDocument();
-    expect(estado.chamar).not.toHaveBeenCalled();
   });
   it("prioriza a foto de fundo real sobre uma referência de rosto", () => {
     expect(fonteDoProfile({ ordem: 1, fotos_livres: [{ caminho: "a/rosto.png", papel: "elemento", uso: "rosto" }, { caminho: "a/produto.png", papel: "fundo" }] }, [])).toEqual({ caminho: "a/produto.png", bucket: "mesa" });
@@ -74,6 +76,6 @@ describe("Template Profile no Estúdio compartilhado", () => {
     montar({ ...trabalho, entrega_status: "aguardando_cliente" });
     await waitFor(() => expect(screen.getByLabelText("Nome de exibição do template")).toHaveValue("Loja A"));
     expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeDisabled();
-    expect(screen.getByLabelText("Texto do template")).toBeDisabled();
+    expect(screen.getByLabelText("Nome de exibição do template")).toBeDisabled();
   });
 });

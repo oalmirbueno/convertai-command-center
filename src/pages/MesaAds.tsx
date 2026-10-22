@@ -121,6 +121,8 @@ export default function MesaAds() {
   const etapa: Etapa = ETAPAS_DA_MESA_ADS.some((e) => e.valor === etapaUrl) ? (etapaUrl as Etapa) : "oferta";
   const planoUrl = uuidOuNulo(params.get("plano"));
   const criativoUrl = uuidOuNulo(params.get("criativo"));
+  // 22/10/2026: a campanha da Mesa cujas peças prontas viram criativos no Estúdio Ads (atalho da campanha).
+  const campanhaMesaUrl = uuidOuNulo(params.get("campanha_mesa"));
 
   const [recargaAberta, setRecargaAberta] = useState(false);
   const [chavesAbertas, setChavesAbertas] = useState(false);
@@ -163,7 +165,7 @@ export default function MesaAds() {
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
     setPedidoDePlano(null);
-    mudar({ client: id, etapa: o.etapa || "oferta", plano: null, criativo: null, marca: null });
+    mudar({ client: id, etapa: o.etapa || "oferta", plano: null, criativo: null, marca: null, campanha_mesa: null });
   };
 
   /** Pedido de plano vindo de outra etapa: vai ao Plano de teste, que gera uma vez. */
@@ -318,6 +320,9 @@ export default function MesaAds() {
                   planoId={planoUrl}
                   onVerTodos={() => mudar({ plano: null }, true)}
                   onImportado={(id) => mudar({ plano: id, criativo: null }, true)}
+                  campanhaMesaId={campanhaMesaUrl}
+                  onCampanhaMesa={(id) => mudar({ campanha_mesa: id }, true)}
+                  onAbrirSemPlano={(id) => mudar({ plano: null, criativo: id }, true)}
                 />
               )}
               {etapa === "conta" && (

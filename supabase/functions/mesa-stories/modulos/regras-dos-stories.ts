@@ -28,9 +28,26 @@ export type Adesivo = { tipo: TipoDoAdesivo; pergunta?: string; opcoes?: string[
  * `cena` é o que a imagem mostra; `referencia_id` é a foto real do acervo que
  * vai inteira como referência (nunca colada). `papel` é o papel na estrutura
  * (gancho, problema_ou_desejo, prova, oferta, cta ou o arco da novela).
+ *
+ * 22/10 (dono: "mais natural de story ... momento cotidiano, humanizado"):
+ * "natural" é a foto de celular do momento, pelo gerador da casa, SEM texto
+ * nenhum dentro (`caminho` no bucket mesa, em <cliente>/stories/<story>/), e o
+ * texto do story é a camada de texto nativo do Instagram, desenhada pelo
+ * código como o app desenha (`estilo_texto`, `caixa`, `posicao`). "gerada"
+ * virou o estilo Destaque (designer).
  */
+export const ESTILOS_DO_TEXTO_NATIVO = ["classico", "moderno", "maquina", "forte"] as const;
+export type EstiloDoTextoNativo = (typeof ESTILOS_DO_TEXTO_NATIVO)[number];
+export const POSICOES_DO_TEXTO = ["topo", "meio", "baixo"] as const;
+export type PosicaoDoTexto = (typeof POSICOES_DO_TEXTO)[number];
+/** Foto natural do story no bucket mesa: <cliente>/stories/<story>/natural-<id>.<ext>. */
+export const CAMINHO_DA_FOTO_NATURAL = /^[0-9a-f-]{36}\/stories\/[0-9a-f-]{36}\/natural-[a-z0-9-]{1,60}\.(png|jpe?g|webp)$/i;
+
 export type Fundo = {
-  tipo: "foto" | "cor" | "gerada";
+  tipo: "foto" | "cor" | "gerada" | "natural";
+  estilo_texto?: EstiloDoTextoNativo;
+  caixa?: boolean;
+  posicao?: PosicaoDoTexto;
   imagem_id?: string;
   cor?: string;
   papel?: string;
@@ -157,6 +174,22 @@ export function fundoLimpo(v: unknown): Fundo {
     const f: Fundo = { tipo: "foto" };
     if (typeof o.imagem_id === "string" && UUID.test(o.imagem_id)) f.imagem_id = o.imagem_id;
     if (papel) f.papel = papel;
+    return f;
+  }
+  if (o.tipo === "natural") {
+    const f: Fundo = { tipo: "natural" };
+    if (papel) f.papel = papel;
+    const cena = limpar(o.cena, 400);
+    if (cena) f.cena = cena;
+    if (typeof o.referencia_id === "string" && UUID.test(o.referencia_id)) f.referencia_id = o.referencia_id;
+    if (typeof o.caminho === "string" && CAMINHO_DA_FOTO_NATURAL.test(o.caminho) && o.caminho.indexOf("..") < 0) {
+      f.caminho = o.caminho;
+      const versao = Math.round(Number(o.versao));
+      if (versao >= 1) f.versao = versao;
+    }
+    f.estilo_texto = (ESTILOS_DO_TEXTO_NATIVO as readonly string[]).indexOf(String(o.estilo_texto)) >= 0 ? o.estilo_texto as EstiloDoTextoNativo : "classico";
+    f.caixa = o.caixa === true;
+    f.posicao = (POSICOES_DO_TEXTO as readonly string[]).indexOf(String(o.posicao)) >= 0 ? o.posicao as PosicaoDoTexto : "topo";
     return f;
   }
   if (o.tipo === "gerada") {

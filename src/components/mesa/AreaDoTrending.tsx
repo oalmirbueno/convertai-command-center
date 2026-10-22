@@ -8,7 +8,7 @@ import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
-import LinhaDoHypeETrending, { BlocoDaLinha, CabecalhoDaColuna, MenuCriar, MenuDeFiltro, SubtituloDaLista } from "./LinhaDoHypeETrending";
+import LinhaDoHypeETrending, { BlocoDaLinha, CabecalhoDaColuna, AcoesDeCriar, MenuDeFiltro, SubtituloDaLista } from "./LinhaDoHypeETrending";
 import { COLUNA_DO_HYPE } from "./AreaDoHype";
 import { blocoDaData } from "./datasDoHype";
 import {
@@ -119,7 +119,7 @@ export default function AreaDoTrending({ consulta, onConsulta, assuntosExtras, j
         marcado={marcado(item.chave)}
         podeMarcar={podeJuntar(juntados, item)}
         onMarcar={() => onAlternar(item)}
-        criar={<MenuCriar titulo={n.titulo} rotuloDoConteudo="Conteúdo desta notícia" partes={() => partesDoPedido(catalogo, 0)} executar={() => pedir(mensagemDaNoticia(n), n.titulo)} onCampanha={() => onCriarCampanha(item)} />}
+        criar={<AcoesDeCriar titulo={n.titulo} rotuloDoConteudo="Criar conteúdo desta notícia" partes={() => partesDoPedido(catalogo, 0)} executar={() => pedir(mensagemDaNoticia(n), n.titulo)} onCampanha={() => onCriarCampanha(item)} />}
       />
     );
   };

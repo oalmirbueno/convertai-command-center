@@ -1,5 +1,5 @@
 import { DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { Copy, GripVertical, Plus, Trash2 } from "lucide-react";
+import { Copy, Download, GripVertical, Plus, Trash2 } from "lucide-react";
 import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { noFuso } from "../instagram/calendario-da-grade";
 import PreviaDoStory, { IconeDoAdesivo } from "./PreviaDoStory";
@@ -26,7 +26,9 @@ import {
 const MINIATURA = 54;
 
 /** O estado curto do cartão: a imagem manda enquanto não há arte registrada. */
-export function estadoDoCartao(s: Story, laminas: Record<string, LaminasDoTrabalho> | undefined): { rotulo: string; tom: string } {
+export function estadoDoCartao(s: Story, laminas: Record<string, LaminasDoTrabalho> | undefined, emAndamento?: boolean): { rotulo: string; tom: string } {
+  if (emAndamento) return { rotulo: "Gerando", tom: "bg-primary/10 text-primary" };
+  if (s.fundo.tipo === "natural" && !s.fundo.caminho && s.situacao === "rascunho") return { rotulo: "Sem foto", tom: SITUACOES.rascunho.tom };
   const fila = filaDoStory(s, laminas);
   if (fila === "fila" || fila === "rodando") return { rotulo: fila === "fila" ? "Na fila" : "Gerando", tom: "bg-primary/10 text-primary" };
   if (fila === "erro" && !s.file_id) return { rotulo: "Imagem falhou", tom: SITUACOES.falhou.tom };
@@ -43,6 +45,8 @@ function Cartao({
   onSelecionar,
   onDuplicar,
   onRemover,
+  onBaixar,
+  emAndamento,
   arrastavel,
 }: {
   s: Story;
@@ -52,12 +56,15 @@ function Cartao({
   onSelecionar: () => void;
   onDuplicar: () => void;
   onRemover: () => void;
+  onBaixar?: () => void;
+  emAndamento?: boolean;
   arrastavel: boolean;
 }) {
   const arrasto = useDraggable({ id: s.id, disabled: !arrastavel });
   const alvo = useDroppable({ id: s.id });
   const deslocamento = arrasto.transform ? `translate3d(${arrasto.transform.x}px, ${arrasto.transform.y}px, 0)` : undefined;
-  const estado = estadoDoCartao(s, laminas);
+  const estado = estadoDoCartao(s, laminas, emAndamento);
+  const temImagem = s.fundo.tipo === "natural" ? !!s.fundo.caminho : !!imagemDoStory(s, laminas) || !!s.file_id || s.fundo.tipo === "cor";
   const papel = s.fundo.papel ? ROTULO_DO_PAPEL[s.fundo.papel] || s.fundo.papel : s.titulo || "Story";
   const travado = !!s.publicacao_id || s.situacao === "publicado" || s.situacao === "agendado";
   return (
@@ -88,6 +95,7 @@ function Cartao({
               foto={marca.foto(s.fundo.imagem_id)}
               semSelo
               imagem={imagemDoStory(s, laminas)}
+              estado={emAndamento ? "rodando" : filaDoStory(s, laminas)}
             />
           </span>
           <span className="ml-2.5 min-w-0 flex-1">
@@ -119,6 +127,11 @@ function Cartao({
               <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           ) : null}
+          {onBaixar ? (
+            <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={onBaixar} disabled={!temImagem} aria-label={`Baixar o story ${s.ordem}`} title={temImagem ? "Baixar o PNG para postar" : "Gere a imagem antes"}>
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : null}
           <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={onDuplicar} aria-label={`Duplicar o story ${s.ordem}`} title="Duplicar">
             <Copy className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -142,6 +155,8 @@ export default function CartoesDaSequencia({
   onDuplicar,
   onRemover,
   onNovo,
+  onBaixar,
+  emAndamento,
 }: {
   stories: Story[];
   selecionado: string | null;
@@ -154,6 +169,9 @@ export default function CartoesDaSequencia({
   onDuplicar: (s: Story) => void;
   onRemover: (s: Story) => void;
   onNovo: () => void;
+  onBaixar?: (s: Story) => void;
+  /** Telas com a foto natural sendo gerada agora. */
+  emAndamento?: Record<string, boolean>;
 }) {
   const sensores = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
   const ids = stories.map((s) => s.id);
@@ -176,6 +194,8 @@ export default function CartoesDaSequencia({
               onSelecionar={() => onSelecionar(s)}
               onDuplicar={() => onDuplicar(s)}
               onRemover={() => onRemover(s)}
+              onBaixar={onBaixar ? () => onBaixar(s) : undefined}
+              emAndamento={!!(emAndamento && emAndamento[s.id])}
               arrastavel={!ocupado && stories.length > 1}
             />
           ))}

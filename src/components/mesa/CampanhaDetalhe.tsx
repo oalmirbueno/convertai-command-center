@@ -24,6 +24,7 @@ import { GerarCampanhaCompleta, usePecasDaCampanha } from "./CampanhaCompleta";
 import CampanhaPecas from "./CampanhaPecas";
 import CampanhaRevisao from "./CampanhaRevisao";
 import CampanhaVisao from "./CampanhaVisao";
+import CampanhaReferenciaPadrao from "./CampanhaReferenciaPadrao";
 import {
   MAX_IMAGENS_CAMPANHA,
   normalizarBriefing,
@@ -416,7 +417,11 @@ export default function CampanhaDetalhe({
         {/* 3. Identidade: o selo (4 caminhos, Melhorar, versões) e a identidade do tema com a paleta. */}
         {aba === "identidade" && (
           <>
-            <CampanhaSelo campanha={campanha} />
+            {/* 22/10/2026: a referência da campanha (1 a 3 posts) vira o padrão visual de todas as peças e do selo. */}
+            <CampanhaReferenciaPadrao campanha={campanha} pecas={pecas} />
+            <Parte titulo="Selo">
+              <CampanhaSelo campanha={campanha} />
+            </Parte>
             <Parte titulo="Identidade do tema">
               <dl className="min-w-0 space-y-3.5">
                 {id.tema_visual && <Linha rotulo="Tema visual">{id.tema_visual}</Linha>}

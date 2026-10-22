@@ -1,7 +1,7 @@
 /**
  * Quiz pelo formulário do site: o que passa e o que vira quiz_invalido.
  *
- *   deno test supabase/functions/_shared/quiz-do-site_test.ts
+ *   deno test supabase/functions/site-formulario/modulos/quiz-do-site_test.ts
  */
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { lerQuiz } from "./quiz-do-site.ts";

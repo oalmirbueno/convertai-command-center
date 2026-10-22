@@ -7,6 +7,7 @@ import { periodoCurto, type Campanha } from "./mesaV4Api";
 import { numerosDaCampanha, resumoDaCampanhaEmHtml, type SituacaoDaPeca } from "./regrasDaCampanha";
 import { PecasPorFase, useAcoesDasPecas } from "./CampanhaPecas";
 import CampanhaAds from "./CampanhaAds";
+import CampanhaReferenciaPadrao from "./CampanhaReferenciaPadrao";
 import { SeloDoEstado } from "./CampanhaDetalhe";
 
 /**
@@ -117,6 +118,11 @@ export default function CampanhaVisao({
           { rotulo: "Aprovadas", valor: n.aprovadas, apoio: n.comErro ? `${n.comErro} com erro` : undefined },
         ]}
       />
+
+      {/* 22/10/2026: o padrão visual da campanha (referências e o estilo em uma frase), com trocar. */}
+      <div className="min-w-0 border-t border-border pt-4">
+        <CampanhaReferenciaPadrao campanha={campanha} pecas={pecas} compacto />
+      </div>
 
       {/* Vínculo opcional com a campanha de anúncios (números da Meta já sincronizados e atalho para a Mesa Ads). */}
       <div className="min-w-0 border-t border-border pt-4">

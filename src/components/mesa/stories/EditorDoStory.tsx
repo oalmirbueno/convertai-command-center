@@ -38,8 +38,9 @@ import {
 
 /** O fundo como o editor mostra: foto antiga vira referência da imagem gerada. */
 export function fundoNoEditor(f: Fundo | undefined | null, paleta: string[]): Fundo {
-  if (!f) return { tipo: "gerada" };
-  if (f.tipo === "foto") return { tipo: "gerada", ...(f.papel ? { papel: f.papel } : {}), ...(f.imagem_id ? { referencia_id: f.imagem_id } : {}) };
+  // 22/10: o padrão é a foto Natural (padrão de story) com o texto nativo.
+  if (!f) return { tipo: "natural", estilo_texto: "classico", caixa: false, posicao: "topo" };
+  if (f.tipo === "foto") return { tipo: "natural", estilo_texto: "classico", caixa: false, posicao: "topo", ...(f.papel ? { papel: f.papel } : {}), ...(f.imagem_id ? { referencia_id: f.imagem_id } : {}) };
   if (f.tipo === "cor") return { ...f, cor: f.cor || paleta[0] };
   return { ...f };
 }
@@ -47,7 +48,7 @@ export function fundoNoEditor(f: Fundo | undefined | null, paleta: string[]): Fu
 /** O fundo que o Salvar manda (o servidor guarda o trabalho, a lâmina e a versão). */
 export function fundoParaSalvar(f: Fundo, paleta: string[]): Fundo {
   if (f.tipo === "cor") return { tipo: "cor", cor: f.cor || paleta[0] || "#111111", ...(f.papel ? { papel: f.papel } : {}) };
-  const saida: Fundo = { ...f, tipo: "gerada" };
+  const saida: Fundo = { ...f, tipo: f.tipo === "natural" ? "natural" : "gerada" };
   delete saida.imagem_id;
   if (saida.cena !== undefined) saida.cena = saida.cena.trim();
   if (!saida.cena) delete saida.cena;
@@ -313,19 +314,28 @@ export default function EditorDoStory({
               <p className={texto.rotulo}>Imagem</p>
               <SeletorCompacto
                 rotulo="Imagem do story"
-                valor={fundo.tipo === "cor" ? "cor" : "gerada"}
+                valor={fundo.tipo === "cor" ? "cor" : fundo.tipo === "natural" ? "natural" : "gerada"}
                 onEscolher={(v) =>
-                  setFundo(v === "cor" ? { tipo: "cor", cor: fundo.cor || marca.paleta[0], ...(fundo.papel ? { papel: fundo.papel } : {}) } : fundoNoEditor(aberto.fundo && aberto.fundo.tipo !== "cor" ? aberto.fundo : { tipo: "gerada", ...(fundo.papel ? { papel: fundo.papel } : {}) }, marca.paleta))
+                  setFundo(
+                    v === "cor"
+                      ? { tipo: "cor", cor: fundo.cor || marca.paleta[0], ...(fundo.papel ? { papel: fundo.papel } : {}) }
+                      : aberto.fundo && aberto.fundo.tipo === v
+                        ? fundoNoEditor(aberto.fundo, marca.paleta)
+                        : v === "natural"
+                          ? { tipo: "natural", estilo_texto: "classico", caixa: false, posicao: "topo", papel: fundo.papel, cena: fundo.cena, referencia_id: fundo.referencia_id }
+                          : { tipo: "gerada", papel: fundo.papel, cena: fundo.cena, referencia_id: fundo.referencia_id },
+                  )
                 }
                 opcoes={[
-                  { valor: "gerada", rotulo: "Do gerador" },
+                  { valor: "natural", rotulo: "Natural" },
+                  { valor: "gerada", rotulo: "Destaque" },
                   { valor: "cor", rotulo: "Só a cor da marca" },
                 ]}
               />
             </div>
             {fundo.tipo !== "cor" ? (
               <div className="mt-2 min-w-0 space-y-3">
-                <CampoDeFormulario rotulo="Cena da imagem" apoio="O que a imagem mostra; o gerador desenha a tela com o texto integrado">
+                <CampoDeFormulario rotulo="Cena da imagem" apoio={fundo.tipo === "natural" ? "O momento do dia, como foto de celular; o texto entra pelo Instagram" : "O que a arte mostra; o texto vem integrado"}>
                   <textarea className={juntar(campoTexto, "min-h-[56px]")} rows={2} value={fundo.cena || ""} maxLength={400} onChange={(e) => setFundo({ ...fundo, cena: e.target.value })} placeholder="Ex.: o combo na mesa de madeira, luz da tarde" />
                 </CampoDeFormulario>
                 <div className="flex min-w-0 items-center">

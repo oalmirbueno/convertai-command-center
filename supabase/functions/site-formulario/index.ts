@@ -26,7 +26,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { CHAVE_DO_FORMULARIO, lerEnvio, origemPermitida } from "../_shared/site-lancamento.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerOrigemDoClique } from "../_shared/origem-clique.ts";
-import { lerQuiz } from "../_shared/quiz-do-site.ts";
+import { lerQuiz } from "./modulos/quiz-do-site.ts";
 
 const cors = (origem: string | null) => ({
   "Access-Control-Allow-Origin": origem || "*",

@@ -15,8 +15,8 @@ import { ROTULO_DO_SELO } from "./datasDoHype";
  * Peças comuns do Hype e do Trending (21/10/2026, 3ª rodada: "mais intuitivo e organizado").
  *
  * Toda linha é a MESMA grade: [caixinha, só no modo juntar] | bloco à esquerda (data "25 OUT" ou ícone) |
- * título e uma linha curta | selo e nota | um botão "Criar" com menu (Conteúdo, com o custo ali dentro, e
- * Campanha). Clicar na linha abre os detalhes. Sem custo fixo em cada linha e sem ícones soltos.
+ * título e uma linha curta | selo e nota | dois ícones diretos: Criar conteúdo (custo no title) e Criar
+ * campanha. Clicar na linha abre os detalhes. Sem custo fixo em cada linha.
  */
 export const GRADE_DA_LINHA = "grid min-w-0 grid-cols-[40px_minmax(0,1fr)_auto_auto] items-center gap-x-3";
 export const GRADE_DA_LINHA_JUNTANDO = "grid min-w-0 grid-cols-[16px_40px_minmax(0,1fr)_auto_auto] items-center gap-x-3";
@@ -35,8 +35,13 @@ export function BlocoDaLinha({ dia, mes, icone, destaque = false }: { dia?: stri
   );
 }
 
-/** O botão único de ação: "Criar" abre Conteúdo (com o custo na hora) e Campanha. */
-export function MenuCriar({ titulo, rotuloDoConteudo = "Conteúdo", partes, executar, onCampanha }: {
+/**
+ * As ações de criar, direto na linha (21/10/2026, dono: "deixe o ícone ali e não pra selecionar"): dois ícones,
+ * sempre na mesma posição à direita. "Criar conteúdo" (ou "Usar a pauta") faz na hora, com o custo no title
+ * ("Criar conteúdo · ~US$ 0,14"); ação acima de US$ 1 pede o segundo clique. "Criar campanha" abre a campanha
+ * nova com o item. Área de toque de 44 px no celular (toque-compacto do botão de ícone).
+ */
+export function AcoesDeCriar({ titulo, rotuloDoConteudo = "Criar conteúdo", partes, executar, onCampanha }: {
   titulo: string;
   rotuloDoConteudo?: string;
   partes: () => ParteDaEstimativa[];
@@ -45,15 +50,23 @@ export function MenuCriar({ titulo, rotuloDoConteudo = "Conteúdo", partes, exec
 }) {
   const mesa = useMesa();
   const avisarErro = useAvisarErro();
-  const [aberto, setAberto] = useState(false);
   const [rodando, setRodando] = useState(false);
+  const [armado, setArmado] = useState(false);
   let partesAtuais: ParteDaEstimativa[] | null = null;
-  if (aberto) {
-    try { partesAtuais = partes(); } catch { partesAtuais = null; }
-  }
-  const estimativa = useEstimativa(partesAtuais, aberto);
+  try { partesAtuais = partes(); } catch { partesAtuais = null; }
+  const estimativa = useEstimativa(partesAtuais, true);
+  const valor = estimativa.data;
+  const custo = valor !== undefined ? ` · ~${usd(valor)}` : "";
   const nome = `Conteúdo sobre "${titulo}"`;
   const criarConteudo = async () => {
+    if (rodando) return;
+    // Mesma regra do BotaoComCusto: caro (acima de US$ 1) ou sem estimativa pede o segundo clique.
+    if ((valor === undefined || valor > 1) && !armado) {
+      setArmado(true);
+      window.setTimeout(() => setArmado(false), 6000);
+      return;
+    }
+    setArmado(false);
     setRodando(true);
     try {
       const data = await executar();
@@ -65,27 +78,16 @@ export function MenuCriar({ titulo, rotuloDoConteudo = "Conteúdo", partes, exec
       setRodando(false);
     }
   };
+  const rotuloDoBotao = armado ? `${rotuloDoConteudo}: clique de novo para confirmar${custo}` : `${rotuloDoConteudo}${custo}`;
   return (
-    <DropdownMenu modal={false} open={aberto} onOpenChange={setAberto}>
-      <DropdownMenuTrigger asChild disabled={rodando}>
-        <button type="button" className={juntar(botao.discreto, "h-8 px-2.5 text-foreground")} aria-label={`Criar a partir de ${titulo}`} title="Criar conteúdo ou campanha" data-menu-criar="" onClick={(e) => e.stopPropagation()}>
-          {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
-          Criar
-          <ChevronDown className="ml-1 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={6} className="min-w-[220px] p-1" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuItem className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]" onSelect={() => void criarConteudo()}>
-          <FilePlus2 className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span className="mr-3 flex-1">{rotuloDoConteudo}</span>
-          <span className="text-[11px] tabular-nums text-muted-foreground" data-custo="">{estimativa.data !== undefined ? `~${usd(estimativa.data)}` : "…"}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]" onSelect={onCampanha}>
-          <Megaphone className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          Campanha
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <span className="inline-flex items-center" data-acoes-de-criar="">
+      <button type="button" className={juntar(botao.icone, armado ? "bg-primary/10 text-primary" : "")} onClick={(e) => { e.stopPropagation(); void criarConteudo(); }} disabled={rodando} aria-label={rotuloDoConteudo} title={rotuloDoBotao} data-criar-conteudo="">
+        {rodando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FilePlus2 className="h-4 w-4" aria-hidden="true" />}
+      </button>
+      <button type="button" className={botao.icone} onClick={(e) => { e.stopPropagation(); onCampanha(); }} aria-label="Criar campanha" title={`Criar campanha com "${titulo}"`} data-criar-campanha="">
+        <Megaphone className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </span>
   );
 }
 

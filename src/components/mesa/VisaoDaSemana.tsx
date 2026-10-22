@@ -6,7 +6,7 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar, superficie, texto } from "@/components/sistema/estilos";
 import { useMesa } from "./MesaContexto";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
-import { MenuCriar } from "./LinhaDoHypeETrending";
+import { AcoesDeCriar } from "./LinhaDoHypeETrending";
 import { juntadoDaLeitura, podeJuntar, type ItemJuntado } from "./hypeETrending";
 import { chaves, dominioDoLink, linkSeguro, mensagemDoHype, partesDoPedido, pedidoLivre, periodoCurto, ROTULO_DA_JANELA, type Hype, type HypesDaSemana } from "./mesaV4Api";
 import type { ItemDoTrendy } from "./trendy";
@@ -121,7 +121,7 @@ function CartaoDoHype({
           {detalhes ? "Menos" : "Como usar"}
           <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${detalhes ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
-        <MenuCriar titulo={hype.titulo} rotuloDoConteudo={temPauta ? "Usar a pauta" : "Conteúdo"} partes={() => partesDoPedido(catalogo, 0)} executar={criarConteudo} onCampanha={onCriarCampanha} />
+        <AcoesDeCriar titulo={hype.titulo} rotuloDoConteudo={temPauta ? "Usar a pauta" : "Criar conteúdo"} partes={() => partesDoPedido(catalogo, 0)} executar={criarConteudo} onCampanha={onCriarCampanha} />
       </div>
     </article>
   );

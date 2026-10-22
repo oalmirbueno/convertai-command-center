@@ -1,14 +1,15 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { CalendarDays, ExternalLink, FileText, Folder, FolderInput, FolderPlus, Image, Loader2, RefreshCw, Search, Wand2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Folder, FolderInput, FolderPlus, Image, Loader2, RefreshCw, Search, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { campo, juntar, superficie, texto } from "@/components/sistema/estilos";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
+import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { openFile } from "@/lib/fileActions";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -19,25 +20,17 @@ import {
   type ItemDaOrganizacao,
 } from "./organizacaoDaMesa";
 
+// 22/10 (dono: "está abrindo fora; tem que abrir ali mesmo em tela maior, igual no Workspace"): o mesmo visor das entregas.
+const FilePreviewContent = lazy(() => import("@/components/shared/FilePreviewContent"));
 const OrganizadorInteligente = lazy(() => import("@/components/workspace/OrganizadorInteligente"));
 const VAZIO = { nos: [], arquivos: [] };
 
-function CartaoDoArquivo({ item, clientId, onOrganizar }: { item: ItemDaOrganizacao; clientId: string; onOrganizar: () => void }) {
-  const [abrindo, setAbrindo] = useState(false);
+function CartaoDoArquivo({ item, clientId, onOrganizar, onAbrir }: { item: ItemDaOrganizacao; clientId: string; onOrganizar: () => void; onAbrir: () => void }) {
   const imagem = item.mime.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif)$/i.test(item.nome);
   const { url, error } = useResolvedFileUrl({
     fileUrl: item.fileUrl, storageBucket: item.bucket, storagePath: item.caminho, miniatura: imagem,
   });
   const abrir = /^https?:\/\//i.test(url) ? url : "";
-  const abrirOriginal = async () => {
-    setAbrindo(true);
-    try {
-      const original = await resolveFileUrl({ fileUrl: item.fileUrl, storageBucket: item.bucket, storagePath: item.caminho });
-      if (!/^https?:\/\//i.test(original)) throw new Error("Arquivo indisponível. Abra no Workspace para verificar.");
-      openFile(original);
-    } catch (e) { toast.error(textoDoErro(e)); }
-    finally { setAbrindo(false); }
-  };
   return (
     <article className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden")}>
       <div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-muted/40">
@@ -50,7 +43,7 @@ function CartaoDoArquivo({ item, clientId, onOrganizar }: { item: ItemDaOrganiza
         <p title={item.nome} className="line-clamp-2 break-words text-[13px] font-medium">{item.nome}</p>
         <p className="mt-1 text-[11px] text-muted-foreground">{item.origem === "workspace" ? "Workspace" : "Arquivos do painel"}</p>
         <div className="mt-auto flex flex-wrap gap-1 pt-3">
-          {abrir ? <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => void abrirOriginal()} disabled={abrindo} aria-label={`Abrir ${item.nome}`}>Abrir{abrindo ? <Loader2 className="ml-1 h-3 w-3 animate-spin" /> : <ExternalLink className="ml-1 h-3 w-3" />}</Button> :
+          {abrir ? <Button variant="outline" size="sm" className="h-7 px-2" onClick={onAbrir} aria-label={`Abrir ${item.nome}`} data-abrir-na-tela="">Abrir</Button> :
             <Button variant="outline" size="sm" className="h-7 px-2" asChild><Link to={linkDoWorkspaceDaOrganizacao(clientId, item.origem === "workspace" ? item.pasta : null)}>No Workspace</Link></Button>}
           {item.origem === "workspace" ? <Button variant="ghost" size="sm" className="h-7 px-2" onClick={onOrganizar} aria-label={`Organizar ${item.nome}`}><FolderInput className="mr-1 h-3 w-3" />Organizar</Button> :
             <Button variant="ghost" size="sm" className="h-7 px-2" asChild><Link to={linkDoWorkspaceDaOrganizacao(clientId)} aria-label={`Organizar ${item.nome} no Workspace`}>Organizar</Link></Button>}
@@ -61,12 +54,53 @@ function CartaoDoArquivo({ item, clientId, onOrganizar }: { item: ItemDaOrganiza
 }
 
 /** Organização é outra vista dos arquivos reais do cliente, com o mesmo organizador e as mesmas pastas do Workspace. */
+/** Visor na própria tela (como no Workspace): o arquivo grande, setas para os vizinhos da seleção e "abrir em nova aba". */
+function VisorDoArquivo({ item, lista, onTrocar, onFechar }: { item: ItemDaOrganizacao; lista: ItemDaOrganizacao[]; onTrocar: (i: ItemDaOrganizacao) => void; onFechar: () => void }) {
+  const [abrindo, setAbrindo] = useState(false);
+  const pos = lista.findIndex((x) => x.origem === item.origem && x.id === item.id);
+  const anterior = pos > 0 ? lista[pos - 1] : null;
+  const proximo = pos >= 0 && pos < lista.length - 1 ? lista[pos + 1] : null;
+  const novaAba = async () => {
+    setAbrindo(true);
+    try {
+      const original = await resolveFileUrl({ fileUrl: item.fileUrl, storageBucket: item.bucket, storagePath: item.caminho });
+      if (!/^https?:\/\//i.test(original)) throw new Error("Arquivo indisponível. Abra no Workspace para verificar.");
+      openFile(original);
+    } catch (e) { toast.error(textoDoErro(e)); }
+    finally { setAbrindo(false); }
+  };
+  return (
+    <JanelaCentral
+      aberta
+      onFechar={onFechar}
+      titulo={item.nome}
+      descricao={item.origem === "workspace" ? "Workspace" : "Arquivos do painel"}
+      largura="tela"
+      corpo="fixo"
+      acoes={
+        <>
+          <button type="button" className={botao.icone} onClick={() => anterior && onTrocar(anterior)} disabled={!anterior} aria-label="Arquivo anterior" title="Anterior"><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" className={botao.icone} onClick={() => proximo && onTrocar(proximo)} disabled={!proximo} aria-label="Próximo arquivo" title="Próximo"><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+          <button type="button" className={botao.icone} onClick={() => void novaAba()} disabled={abrindo} aria-label="Abrir em nova aba" title="Abrir em nova aba">{abrindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ExternalLink className="h-4 w-4" aria-hidden="true" />}</button>
+        </>
+      }
+    >
+      <div className="h-full min-h-0 overflow-y-auto" data-visor-da-organizacao="">
+        <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo o arquivo" />}>
+          <FilePreviewContent key={`${item.origem}:${item.id}`} fileName={item.nome} fileUrl={item.fileUrl || ""} fileId={item.id} storageBucket={item.bucket} storagePath={item.caminho} mimeType={item.mime} />
+        </Suspense>
+      </div>
+    </JanelaCentral>
+  );
+}
+
 export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void }) {
   const { clientId, clientName, userId } = useMesa();
   const { marca } = useMarcaDaMesa();
   const filtro = useFiltroDaMarca();
   const qc = useQueryClient();
   const [selecao, setSelecao] = useState("todos");
+  const [vendo, setVendo] = useState<ItemDaOrganizacao | null>(null);
   const [busca, setBusca] = useState("");
   const [limite, setLimite] = useState(60);
   const [novaPasta, setNovaPasta] = useState(false);
@@ -120,7 +154,8 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
       </div>
       {marca && <div className="flex items-center gap-1.5"><p className={texto.auxiliar}>Arquivos do painel: {marca.nome}</p><AjudaRecolhida rotulo="Pastas compartilhadas entre marcas">As pastas do Workspace são compartilhadas entre as marcas deste cliente.</AjudaRecolhida></div>}
       <div className="grid min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-        <aside aria-label="Pastas da organização" className={juntar(superficie.painel, "min-w-0 self-start p-2")}>
+        {/* 22/10 (dono: "tá rolando inteiro"): no computador a lateral de pastas fica parada (cada lista de pastas rola sozinha); só a galeria rola com a página. */}
+        <aside aria-label="Pastas da organização" data-lateral-fixa="" className={juntar(superficie.painel, "min-w-0 self-start p-2 md:sticky md:top-[calc(env(safe-area-inset-top)+152px)]")}>
           {linha("todos", "Todos os arquivos", itens.length)}
           {linha("workspace", "Workspace do cliente", itens.filter((i) => i.origem === "workspace").length)}
           <div className="max-h-72 overflow-y-auto">{pastas.map((p) => linha(`workspace:${p.id}`, p.nome, contagens.get(p.id) || 0, true))}</div>
@@ -138,7 +173,7 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
           {consulta.isError ? <EstadoDeErro titulo="Não foi possível ler os arquivos" descricao={textoDoErro(consulta.error)} acao={<Button variant="outline" size="sm" onClick={() => void consulta.refetch()}>Tentar novamente</Button>} /> :
             consulta.isLoading ? <Carregando forma="grade" linhas={6} rotulo="Lendo a organização do cliente" /> :
               !visiveis.length ? <EstadoVazio icone={<Folder className="h-5 w-5" />} titulo={busca ? "Nenhum arquivo encontrado" : "Esta seleção ainda não tem arquivos"} descricao="Os arquivos enviados ao Workspace ou entregues pelo painel aparecem aqui." /> :
-                <><div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">{visiveis.slice(0, limite).map((item) => <CartaoDoArquivo key={`${item.origem}:${item.id}`} item={item} clientId={clientId} onOrganizar={() => { setMovendo(item); setDestino(item.pasta || ""); }} />)}</div>
+                <><div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">{visiveis.slice(0, limite).map((item) => <CartaoDoArquivo key={`${item.origem}:${item.id}`} item={item} clientId={clientId} onOrganizar={() => { setMovendo(item); setDestino(item.pasta || ""); }} onAbrir={() => setVendo(item)} />)}</div>
                   {visiveis.length > limite && <Button variant="outline" onClick={() => setLimite((v) => v + 60)}>Mostrar mais arquivos</Button>}</>}
         </div>
       </div>
@@ -151,6 +186,7 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
         </DialogContent>
       </Dialog>
       {organizador && <Suspense fallback={<Carregando rotulo="Abrindo o organizador" />}><OrganizadorInteligente aberto onFechar={() => setOrganizador(false)} clientId={clientId} parentId={pastaAtual} nivelNome={nomeDaPasta || `o Workspace de ${clientName}`} onMudou={atualizar} /></Suspense>}
+      {vendo ? <VisorDoArquivo item={vendo} lista={visiveis} onTrocar={setVendo} onFechar={() => setVendo(null)} /> : null}
     </section>
   );
 }

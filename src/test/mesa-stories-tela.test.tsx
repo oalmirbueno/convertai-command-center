@@ -337,6 +337,9 @@ describe("regras da tela dos stories", () => {
       "src/components/mesa/stories/PainelDaTela.tsx",
       "src/components/mesa/stories/NovaSequencia.tsx",
       "supabase/functions/mesa-stories/modulos/sequencia-que-converte.ts",
+      "supabase/functions/mesa-stories/modulos/foto-natural-do-story.ts",
+      "src/components/mesa/stories/textoNativo.ts",
+      "src/components/mesa/stories/baixarStories.ts",
     ];
     for (const arq of arquivos) {
       const fonte = ler(arq);

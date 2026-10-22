@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Flame, ListChecks, Newspaper, RefreshCw, Sparkles } from "lucide-react";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import Etapas from "@/components/sistema/Etapas";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
@@ -23,7 +24,7 @@ import { buscarHypes, chaves, hojeIso, lerHypes, partesDosHypes, periodoCurto, s
 import { botao, juntar } from "@/components/sistema/estilos";
 
 /**
- * Hype e Trending no Mês (21/10/2026). Três visões em abas de ícone e rótulo, no topo da seção:
+ * Radar do nicho no Mês (21/10/2026, antes "Hype e Trending"). Quatro visões em abas de ícone e rótulo:
  * - "Da semana" (abre primeiro): o modelo de antes, em cartões (VisaoDaSemana.tsx), com a leitura semanal
  *   (buscar_hypes): hypes do momento e "em alta no nicho", pauta pronta, Criar conteúdo/Usar a pauta e campanha.
  *   A leitura mora só aqui.
@@ -36,7 +37,15 @@ import { botao, juntar } from "@/components/sistema/estilos";
  * nicho (conferidas pelo Jev) e refaz a leitura semanal (custo à vista). Em cada item, uma ação só: "Criar".
  */
 
-type VisaoDoHype = "semana" | "datas" | "em-alta" | "trendy";
+export type VisaoDoHype = "semana" | "datas" | "em-alta" | "trendy";
+
+/** Uma frase por visão, para o "?" ao lado das abas. */
+const AJUDA_DA_VISAO: Record<VisaoDoHype, string> = {
+  semana: "Da semana: o que a pesquisa da semana achou em alta para o público deste cliente e no nicho dele.",
+  datas: "Datas: as datas e eventos que vêm por aí e que têm a ver com o nicho, com quando aquecer.",
+  "em-alta": "Em alta: notícias reais de agora sobre o nicho, só as que servem ao marketing do cliente.",
+  trendy: "Trendy: buscar e filtrar as sugestões da semana por tipo, formato e fonte, sem nova pesquisa.",
+};
 
 const CHAVE_RECOLHIDO = "mesa:hypes:recolhido";
 
@@ -69,6 +78,8 @@ export default function HypesDaSemana({
   onPedidoInicio,
   onPedidoFim,
   onJuntando,
+  visao,
+  onVisao,
 }: {
   /** Abre a aba Campanhas na campanha nova (a semente já foi gravada por aqui). */
   onCriarCampanha?: () => void;
@@ -76,12 +87,20 @@ export default function HypesDaSemana({
   onPedidoFim?: () => void;
   /** Avisa quando a barra de juntar aparece ou some (o Mês afasta o botão do agente dela). */
   onJuntando?: (ativo: boolean) => void;
+  /** Visão aberta controlada pelo Mês (o "O que fazer agora" abre o Em alta ou a Da semana). */
+  visao?: VisaoDoHype;
+  onVisao?: (v: VisaoDoHype) => void;
 }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const [recolhido, setRecolhido] = useRecolhido(`mesa:mes:hypes:${clientId}`, lerRecolhido());
   // Três visões; abre na "Da semana" (o modelo de antes, que o dono conhecia).
-  const [aba, setAba] = useState<VisaoDoHype>("semana");
+  const [abaInterna, setAbaInterna] = useState<VisaoDoHype>("semana");
+  const aba = visao || abaInterna;
+  const setAba = (v: VisaoDoHype) => {
+    setAbaInterna(v);
+    if (onVisao) onVisao(v);
+  };
   const [modoJuntar, setModoJuntar] = useState(false);
   const [buscandoDesde, setBuscandoDesde] = useState<number | null>(null);
   // Seleção por cliente: trocar de cliente nunca leva itens do anterior.
@@ -152,13 +171,13 @@ export default function HypesDaSemana({
   };
 
   return (
-    <section className="min-w-0" aria-label="Hype e Trending" data-hype-trending={clientId}>
+    <section id="radar-do-mes" className="min-w-0 scroll-mt-40 lg:scroll-mt-4" aria-label="Radar do nicho" data-hype-trending={clientId}>
       <CabecalhoDeSecao
-        titulo="Hype e Trending"
+        titulo="Radar do nicho"
         icone={<Flame className="h-4 w-4" />}
         truncar
         descricao={linhaDeEstado || undefined}
-        ajuda="Da semana: a leitura semanal da web (hypes e o que viraliza no nicho), em cartões. Datas: o calendário do que vem por aí. Em alta: notícias reais de agora. Trendy: buscar e filtrar a leitura da semana. Ligue “Juntar” para marcar itens e criar uma campanha com eles. O botão do topo busca as notícias do nicho e refaz a leitura da semana (custo à vista)."
+        ajuda="O que está em alta e o que vem por aí para o nicho deste cliente. Da semana: a leitura semanal da web (hypes e o que viraliza no nicho), em cartões. Datas: o calendário do que vem por aí. Em alta: notícias reais de agora. Trendy: buscar e filtrar a leitura da semana. Ligue “Juntar” para marcar itens e criar uma campanha com eles. O botão do topo busca as notícias do nicho e refaz a leitura da semana (custo à vista)."
         recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: linhaDeEstado || undefined }}
         acao={
           <>
@@ -186,7 +205,8 @@ export default function HypesDaSemana({
         <div className="min-w-0 space-y-3 pt-3">
           {hypes.isError && <AvisoDeErro erro={hypes.error} />}
           <Etapas
-            rotulo="Visões do Hype e Trending"
+            rotulo="Visões do Radar"
+            depois={<AjudaRecolhida rotulo="O que é esta visão?">{AJUDA_DA_VISAO[aba]}</AjudaRecolhida>}
             valor={aba}
             onEscolher={(v) => setAba(v as VisaoDoHype)}
             itens={[

@@ -78,6 +78,7 @@ export default function EstudioLaminaGrande({
   faixa,
   proporcao = 0.8,
   aviso,
+  conteudo,
 }: {
   card: CardDaDirecao;
   total: number;
@@ -101,6 +102,8 @@ export default function EstudioLaminaGrande({
   proporcao?: number;
   /** Aviso acima da faixa (ex.: trabalho entregue, com o botão de reabrir). */
   aviso?: ReactNode;
+  /** Template · X (21/10): o desenho que entra no quadro no lugar da imagem da lâmina; o resto da tela é o mesmo. */
+  conteudo?: (largura: number) => ReactNode;
 }) {
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
@@ -147,7 +150,9 @@ export default function EstudioLaminaGrande({
       {faixa}
       <QuadroQueCabe soPelaLargura={soPelaLargura} proporcao={proporcao}>
         {(largura) =>
-          desenhandoAreas && ultima ? (
+          conteudo && !desenhandoAreas ? (
+            conteudo(largura)
+          ) : desenhandoAreas && ultima ? (
             <SeletorDeAreas caminho={ultima.storage_path} areas={areas} onMudar={onAreas} disabled={ocupado} />
           ) : vista ? (
             <>

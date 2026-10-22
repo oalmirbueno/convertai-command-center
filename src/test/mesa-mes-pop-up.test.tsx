@@ -134,3 +134,24 @@ describe("botão do agente e a barra de juntar (21/10)", () => {
     expect(caixa().className).not.toContain("md:justify-end");
   });
 });
+
+describe("Mês fácil de reconhecer (21/10)", () => {
+  it("topo com o mês e o resumo, as ações do mês no topo e as áreas na ordem Calendário → Radar → Propostas e agente", async () => {
+    montar();
+    const topo = document.querySelector("[data-topo-do-mes]") as HTMLElement;
+    expect(topo.querySelector("[data-mes-do-topo]")!.textContent).toBe("Outubro de 2026");
+    expect(topo.querySelector("[data-resumo-do-mes]")!.textContent).toContain("no radar");
+    expect(within(topo).getByRole("button", { name: "Criar conteúdos" })).toBeTruthy();
+    expect(within(topo).getByRole("button", { name: "Novo calendário" })).toBeTruthy();
+    // Uma vez só (o plano não repete as ações).
+    expect(screen.getAllByRole("button", { name: "Criar conteúdos" })).toHaveLength(1);
+    const ordem = (no: Node) => document.body.textContent!.indexOf(no.textContent!);
+    const agenda = screen.getByText("agenda do mês");
+    const radar = screen.getByText("hypes");
+    const propostas = screen.getByRole("heading", { name: "Propostas e agente" });
+    expect(topo.compareDocumentPosition(agenda) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(agenda.compareDocumentPosition(radar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(radar.compareDocumentPosition(propostas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ordem(propostas)).toBeGreaterThan(0);
+  });
+});

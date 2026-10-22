@@ -15,6 +15,9 @@ import {
   modeloPorChave,
   partesDoCustoDosStories,
   pedidoDasImagens,
+  ROTULO_DO_ESTILO,
+  type EstiloDaImagem,
+  type PadraoDosStories,
   ROTULO_DA_FASE,
   ROTULO_DO_PAPEL,
   telasDaEstrutura,
@@ -48,7 +51,12 @@ export interface Adesivo {
  * (a foto agora vai inteira como referência da imagem gerada, nunca colada).
  */
 export interface Fundo {
-  tipo: "foto" | "cor" | "gerada";
+  /** 22/10: "natural" é a foto de celular do momento (sem texto dentro) com o texto nativo do Instagram por cima. */
+  tipo: "foto" | "cor" | "gerada" | "natural";
+  /** Natural: o estilo do texto nativo (classico, moderno, maquina, forte), a caixa de fundo e a posição. */
+  estilo_texto?: string;
+  caixa?: boolean;
+  posicao?: string;
   imagem_id?: string;
   cor?: string;
   /** Papel na estrutura (gancho, problema_ou_desejo, prova, oferta, cta ou o arco da novela). */
@@ -117,6 +125,8 @@ export interface Sequencia {
   /** 21/10: o modelo da sequência (conversao, lancamento...) e a campanha, quando tem. */
   modelo?: string | null;
   campanha?: VinculoDaCampanha | null;
+  /** 22/10: o estilo das imagens escolhido na criação. */
+  estilo?: EstiloDaImagem | null;
 }
 
 export interface Molde {
@@ -215,6 +225,16 @@ export function normalizarAdesivo(a: any): Adesivo {
 export function normalizarFundo(f: any): Fundo {
   const o = f && typeof f === "object" ? f : {};
   const papel = typeof o.papel === "string" && o.papel ? { papel: o.papel } : {};
+  if (o.tipo === "natural") {
+    const n: Fundo = { tipo: "natural", ...papel, caixa: o.caixa === true };
+    if (typeof o.cena === "string" && o.cena) n.cena = o.cena;
+    if (typeof o.referencia_id === "string" && o.referencia_id) n.referencia_id = o.referencia_id;
+    if (typeof o.caminho === "string" && o.caminho) n.caminho = o.caminho;
+    if (Number(o.versao) >= 1) n.versao = Math.round(Number(o.versao));
+    n.estilo_texto = typeof o.estilo_texto === "string" && o.estilo_texto ? o.estilo_texto : "classico";
+    n.posicao = typeof o.posicao === "string" && o.posicao ? o.posicao : "topo";
+    return n;
+  }
   if (o.tipo === "gerada") {
     const g: Fundo = { tipo: "gerada", ...papel };
     if (typeof o.cena === "string" && o.cena) g.cena = o.cena;
@@ -274,6 +294,7 @@ export function normalizarSequencia(s: any): Sequencia {
     gancho_de_amanha: textoOuNulo(o.gancho_de_amanha),
     criado_em: textoOu(o.criado_em),
     modelo: o.escolha && typeof o.escolha.modelo === "string" ? o.escolha.modelo : null,
+    estilo: o.escolha && (o.escolha.estilo === "natural" || o.escolha.estilo === "destaque") ? o.escolha.estilo : null,
     campanha: normalizarVinculo(o.escolha && o.escolha.campanha),
   };
 }
@@ -458,8 +479,15 @@ export const FORMATO_DOS_STORIES = "stories_9x16";
 /** O story tem imagem do gerador ligada (trabalho e lâmina). */
 export const temImagemGerada = (s: Pick<Story, "fundo">) => s.fundo.tipo === "gerada" && !!s.fundo.trabalho_id && !!s.fundo.lamina;
 
-/** Precisa pedir imagem ao gerador: sem lâmina ligada, sem arte registrada (as antigas valem) e fora da agenda. */
-export const precisaDeImagem = (s: Story) => !temImagemGerada(s) && !s.file_id && s.situacao !== "publicado" && s.situacao !== "agendado" && s.situacao !== "postar_pelo_app";
+/** Tem a foto natural do momento (22/10). */
+export const temFotoNatural = (s: Pick<Story, "fundo">) => s.fundo.tipo === "natural" && !!s.fundo.caminho;
+
+/**
+ * Precisa pedir imagem ao gerador e fora da agenda. Natural: sem a foto ainda.
+ * Destaque: sem lâmina ligada e sem arte registrada (as antigas valem).
+ */
+export const precisaDeImagem = (s: Story) =>
+  s.situacao !== "publicado" && s.situacao !== "agendado" && s.situacao !== "postar_pelo_app" && (s.fundo.tipo === "natural" ? !s.fundo.caminho : !temImagemGerada(s) && !s.file_id);
 
 /** O texto do story mudou depois da imagem: a arte tem o texto antigo. */
 export const imagemDesatualizada = (s: Pick<Story, "fundo" | "texto_na_tela">) =>
@@ -480,6 +508,14 @@ export interface CampanhaDoPedido {
   nome: string;
   fase?: FaseDaCampanha | null;
   identidade?: IdentidadeDosStories | null;
+  /** 22/10: o padrão visual da campanha (briefing.padrao): no Destaque as referências vão ao gerador (estilo, nunca colagem). */
+  padrao?: PadraoDosStories | null;
+}
+
+/** As imagens do padrão da campanha que vão ao Destaque como referência (só da pasta do cliente, até 3). */
+export function referenciasDoPadrao(clientId: string, padrao: PadraoDosStories | null | undefined): string[] {
+  const caminhos = padrao && Array.isArray(padrao.caminhos) ? padrao.caminhos : [];
+  return caminhos.filter((c) => typeof c === "string" && c.indexOf(`${clientId}/`) === 0 && c.indexOf("..") < 0).slice(0, 3);
 }
 
 /** O corpo do rapida_preparar das imagens: 9:16, uma lâmina por tela, criativo, só referência (sem colagem). */
@@ -492,20 +528,23 @@ export function corpoDasImagens(e: {
   modeloImagemId?: string | null;
 }): Record<string, unknown> {
   const n = e.stories.length;
-  const refs = referenciasDosStories(e.stories);
+  const doPadrao = e.campanha ? referenciasDoPadrao(e.clientId, e.campanha.padrao) : [];
+  const refs = referenciasDosStories(e.stories).slice(0, Math.max(1, 5 - doPadrao.length));
   const corpo: Record<string, unknown> = {
     acao: "rapida_preparar",
     client_id: e.clientId,
     pedido: pedidoDasImagens({
       titulo: e.titulo,
       telas: e.stories.map((s, i) => ({ ordem: i + 1, texto_na_tela: s.texto_na_tela, papel: s.fundo.papel || null, cena: s.fundo.cena || null, adesivo: s.adesivo })),
-      campanha: e.campanha ? { nome: e.campanha.nome, fase: e.campanha.fase || null, identidade: e.campanha.identidade || null } : null,
+      campanha: e.campanha ? { nome: e.campanha.nome, fase: e.campanha.fase || null, identidade: e.campanha.identidade || null, padrao: e.campanha.padrao || null } : null,
     }),
     peca: n > 1 ? "carrossel" : "unica",
     formato: FORMATO_DOS_STORIES,
     qualidade: "media",
     fidelidade: "criativo",
-    arquivos: refs.map((id, i) => ({ imagem_id: id, nome: `Foto de referência ${i + 1}`, papel: "referencia" })),
+    arquivos: doPadrao
+      .map((caminho, i) => ({ caminho, nome: `Padrão da campanha ${i + 1}`, papel: "referencia" } as Record<string, unknown>))
+      .concat(refs.map((id, i) => ({ imagem_id: id, nome: `Foto de referência ${i + 1}`, papel: "referencia" }))),
   };
   if (n > 1) corpo.laminas = n;
   if (e.campanha) corpo.campanha_id = e.campanha.id;
@@ -662,7 +701,7 @@ export function precisaRegistrar(s: Story, laminas: Record<string, LaminasDoTrab
 const MODELO_DO_ROTEIRISTA = "openrouter:openai/gpt-6-luna";
 
 /** As partes da estimativa (BotaoComCusto): o plano, a direção e as imagens. */
-export function partesDaEstimativaDosStories(catalogo: ModeloIa[], telas: number, o: { comPlano: boolean; comImagens: boolean; comDiretor?: boolean; modeloImagemId?: string | null }): ParteDaEstimativa[] {
+export function partesDaEstimativaDosStories(catalogo: ModeloIa[], telas: number, o: { comPlano: boolean; comImagens: boolean; comDiretor?: boolean; natural?: boolean; modeloImagemId?: string | null }): ParteDaEstimativa[] {
   const roteirista = catalogo.filter((m) => m.id === MODELO_DO_ROTEIRISTA && m.ativo)[0] || padraoPara(catalogo, "estrategista");
   const porPapel: Record<string, ModeloIa | null> = {
     plano: roteirista,
@@ -670,7 +709,7 @@ export function partesDaEstimativaDosStories(catalogo: ModeloIa[], telas: number
     imagem: modeloDoPapel(catalogo, "imagem", o.modeloImagemId || null),
     leitura: padraoPara(catalogo, "leitura"),
   };
-  return partesDoCustoDosStories(telas, { comPlano: o.comPlano, comImagens: o.comImagens, comDiretor: o.comDiretor }).map((p) => {
+  return partesDoCustoDosStories(telas, { comPlano: o.comPlano, comImagens: o.comImagens, comDiretor: o.comDiretor, natural: o.natural }).map((p) => {
     const m = porPapel[p.papel];
     const parte: ParteDaEstimativa = { modeloId: m ? m.id : null, tipo: p.tipo, tokensEntrada: p.tokensEntrada, vezes: p.vezes };
     if (p.tokensSaida) parte.tokensSaida = p.tokensSaida;
@@ -710,6 +749,8 @@ export interface PedidoDosStoriesDaCampanha {
   modeloImagemId?: string | null;
   /** Nome da campanha (para o pedido do gerador), quando quem chama já tem. */
   nomeDaCampanha?: string | null;
+  /** 22/10: Natural (padrão de story, o padrão) ou Destaque (designer, arte com a referência da campanha). */
+  estilo?: EstiloDaImagem;
 }
 
 export type ResultadoDosStoriesDaCampanha =
@@ -748,6 +789,7 @@ export async function gerarStoriesDaCampanha(p: PedidoDosStoriesDaCampanha): Pro
     ...(p.refazer ? { refazer: true } : {}),
     ...(p.confirmado ? { confirmado: true } : {}),
     ...(p.marcaId ? { marca_id: p.marcaId } : {}),
+    estilo: p.estilo || "natural",
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let r: any;
@@ -767,12 +809,29 @@ export async function gerarStoriesDaCampanha(p: PedidoDosStoriesDaCampanha): Pro
   let custo = Number(r && r.custo_usd) || 0;
   let trabalhoId: string | null = null;
   const faltam = stories.filter(precisaDeImagem);
-  if (faltam.length) {
+  const naturais = faltam.filter((s) => s.fundo.tipo === "natural");
+  if (naturais.length) {
+    // Natural: a foto do momento de cada tela (o custo já foi confirmado no 409 da sequência).
+    const f = await gerarFotosNaturais(p.clientId, naturais);
+    custo += f.custo_usd;
+    avisos.push(...f.avisos);
+    const novos: Record<string, Story> = {};
+    for (const s of f.stories) novos[s.id] = s;
+    stories = stories.map((s) => novos[s.id] || s);
+  }
+  const destaques = faltam.filter((s) => s.fundo.tipo !== "natural");
+  if (destaques.length) {
     const img = await gerarImagensDosStories({
       clientId: p.clientId,
       titulo: sequencia.titulo,
-      stories: faltam,
-      campanha: { id: p.campanhaId, nome: (sequencia.campanha && sequencia.campanha.nome) || p.nomeDaCampanha || "Campanha", fase: p.fase, identidade: p.identidade ? identidadeLimpa(p.identidade) : null },
+      stories: destaques,
+      campanha: {
+        id: p.campanhaId,
+        nome: (sequencia.campanha && sequencia.campanha.nome) || p.nomeDaCampanha || "Campanha",
+        fase: p.fase,
+        identidade: p.identidade ? identidadeLimpa(p.identidade) : null,
+        padrao: p.briefing && (p.briefing as { padrao?: PadraoDosStories | null }).padrao ? (p.briefing as { padrao?: PadraoDosStories | null }).padrao : null,
+      },
       marcaId: p.marcaId || null,
       modeloImagemId: p.modeloImagemId || null,
     });
@@ -828,5 +887,40 @@ export function campanhasDasSequencias(sequencias: Sequencia[]): Array<{ id: str
   return saida;
 }
 
-export { MODELOS_DE_SEQUENCIA, ROTULO_DO_PAPEL, FASES_DA_CAMPANHA, ROTULO_DA_FASE, MODELO_DA_FASE, modeloPorChave, telasDaEstrutura, estruturaDaSequencia, pedidoDasImagens };
-export type { FaseDaCampanha, BriefingDosStories, IdentidadeDosStories };
+// ------------------------------------------------------------------ foto natural e capa de destaque (22/10)
+
+/** A foto natural de uma tela (o gerador faz só a foto do momento; o texto é a camada nativa). */
+export async function gerarFotoNatural(clientId: string, s: Pick<Story, "id">, pedido?: string | null): Promise<{ story: Story; custo_usd: number }> {
+  const r = await chamarStories<{ story: unknown; custo_usd?: number }>("foto_natural", clientId, { id: s.id, confirmado: true, ...(pedido && pedido.trim() ? { pedido: pedido.trim() } : {}) });
+  return { story: normalizarStory(r && r.story), custo_usd: Number(r && r.custo_usd) || 0 };
+}
+
+/** As fotos naturais de várias telas, uma por vez (com andamento); a que falha fica para gerar de novo. */
+export async function gerarFotosNaturais(clientId: string, stories: Story[], aoAndar?: (feitas: number, total: number, atual: Story) => void): Promise<{ stories: Story[]; avisos: string[]; custo_usd: number }> {
+  const saida: Story[] = [];
+  const avisos: string[] = [];
+  let custo = 0;
+  const alvo = stories.slice().sort((a, b) => a.ordem - b.ordem);
+  for (let i = 0; i < alvo.length; i++) {
+    if (aoAndar) aoAndar(i, alvo.length, alvo[i]);
+    try {
+      const r = await gerarFotoNatural(clientId, alvo[i]);
+      if (r.story.id) saida.push(r.story);
+      custo += r.custo_usd;
+    } catch (e) {
+      // Saldo, cota ou chave: as próximas também falhariam.
+      if (e instanceof ErroDaMesa && (e.acao || e.codigo === "saldo_insuficiente")) throw e;
+      avisos.push(`A foto do story ${alvo[i].ordem} não saiu: gere de novo nele.`);
+    }
+  }
+  return { stories: saida, avisos, custo_usd: custo };
+}
+
+/** "Usar como capa de destaque": a capa no estilo Destaque com a tela como referência; o story fica marcado no destaque novo. */
+export async function capaDeDestaqueDoStory(clientId: string, s: Pick<Story, "id">, o: { nome: string; paleta: string[] }): Promise<{ story: Story; destaque: DestaqueDoPerfil; custo_usd: number }> {
+  const r = await chamarStories<{ story: unknown; destaque: { id: string; nome: string; caminho: string | null }; custo_usd?: number }>("capa_do_story", clientId, { id: s.id, nome: o.nome, paleta: o.paleta, confirmado: true });
+  return { story: normalizarStory(r && r.story), destaque: { id: String(r.destaque.id), nome: String(r.destaque.nome), caminho: r.destaque.caminho || null }, custo_usd: Number(r && r.custo_usd) || 0 };
+}
+
+export { MODELOS_DE_SEQUENCIA, ROTULO_DO_PAPEL, ROTULO_DO_ESTILO, FASES_DA_CAMPANHA, ROTULO_DA_FASE, MODELO_DA_FASE, modeloPorChave, telasDaEstrutura, estruturaDaSequencia, pedidoDasImagens };
+export type { FaseDaCampanha, BriefingDosStories, IdentidadeDosStories, EstiloDaImagem };

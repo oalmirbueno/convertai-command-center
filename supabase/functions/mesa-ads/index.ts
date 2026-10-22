@@ -489,6 +489,8 @@ import {
   resumoDaProposta,
   type VariacaoBruta,
 } from "./modulos/conteudo-do-estudio.ts";
+// 22/10/2026: peças prontas de uma campanha da Mesa como criativos (sem IA, sem copiar arquivo).
+import { blocoDaCampanhaDaMesa, criativoDaPeca, pecasDoCorpo } from "./campanha-da-mesa.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3678,12 +3680,14 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   custoExtra += mundo.custo;
   if (mundo.aviso) avisos.push(mundo.aviso);
   const blocoMundo = blocoDoMundoReal(mundo.pesquisa, mundo.entidades);
+  // 22/10/2026: criativo vindo de uma campanha da Mesa: a copy parte da peça e do briefing atual da campanha.
+  const blocoCampanha = await blocoDaCampanhaParaCopy(servico, c);
   const pedidoDaVariacao = `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
 ÂNGULO: ${JSON.stringify(angulo ? { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, hipotese: angulo.hipotese } : null)}
 COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, framework: c.copy.framework ?? null })}
 
 ${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
-${replicacao.rep ? `\n${replicacao.rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
+${replicacao.rep ? `\n${replicacao.rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}${blocoCampanha ? `\n${blocoCampanha}\n` : ""}
 ${copyQueConverteParaOPrompt()}
 
 ${regrasDoTomParaCopy(tom)}
@@ -10947,6 +10951,107 @@ async function rotinaCron(servico: SupabaseClient, inicioMs: number) {
   return json({ rodadas, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------ peças da campanha da Mesa (22/10/2026)
+
+/** O bloco da campanha da Mesa para o copy_variar (briefing lido agora; vazio quando o criativo não veio de campanha). */
+async function blocoDaCampanhaParaCopy(servico: SupabaseClient, c: Criativo): Promise<string> {
+  const id = typeof c.copy.campanha_mesa_id === "string" && UUID.test(c.copy.campanha_mesa_id) ? c.copy.campanha_mesa_id : null;
+  if (!id) return "";
+  const { data, error } = await servico.from("mesa_campanhas").select("briefing").eq("id", id).eq("client_id", c.client_id).maybeSingle();
+  if (error) registrarFalha("mesa-ads: briefing da campanha da Mesa não lido", error, { criativo_id: c.id });
+  const bruto = data ? (data as { briefing?: unknown }).briefing : null;
+  const briefing = bruto && typeof bruto === "object" && !Array.isArray(bruto) ? (bruto as Record<string, unknown>) : null;
+  return blocoDaCampanhaDaMesa(c.copy, briefing);
+}
+
+/**
+ * criativos_da_campanha_mesa { client_id, campanha_id, pecas: [{ trabalho_id, formato, titulo?, tema_id?, sequencia_id?, fase?, data? }] }
+ * -> { criativos, ja_existiam: [criativo_id], recusadas: [trabalho_id], custo_usd: 0 }
+ *
+ * As peças prontas da campanha da Mesa viram criativos (rascunho) apontando para o MESMO trabalho do Estúdio:
+ * nenhum arquivo é copiado e nada vai à Meta (subir continua pausado e com aprovação, pelo fluxo de sempre).
+ * Cada peça é conferida: arte rápida da campanha (direcao.arte_rapida.campanha_id) ou imagem de uma sequência
+ * de stories da campanha (escolha.campanha). Peça que já é criativo não duplica. Grátis, sem IA.
+ */
+async function criativosDaCampanhaMesa(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const campanhaId = String(corpo.campanha_id ?? "").toLowerCase();
+  if (!UUID.test(campanhaId)) throw new ErroHttp(400, "campanha_invalida", "campanha_id precisa ser um UUID.");
+  const pecas = pecasDoCorpo(corpo.pecas);
+  if (!pecas.length) throw new ErroHttp(400, "sem_pecas", "Escolha ao menos uma peça pronta.");
+  const { data: linha, error: erroCampanha } = await servico.from("mesa_campanhas").select("id, nome, briefing").eq("id", campanhaId).eq("client_id", clientId).maybeSingle();
+  if (erroCampanha) throw new ErroHttp(503, "campanha_indisponivel", "Não foi possível ler a campanha.");
+  if (!linha) throw new ErroHttp(404, "campanha_inexistente", "Campanha não encontrada para este cliente.");
+  const campanha = linha as { id: string; nome: string | null; briefing: Record<string, unknown> | null };
+  const ids = pecas.map((p) => p.trabalho_id);
+  const [lidos, existentes] = await Promise.all([
+    servico.from("estudio_trabalhos").select("id, direcao, cards, legenda").eq("client_id", clientId).in("id", ids),
+    servico.from("ads_criativos").select("id, trabalho_id").eq("client_id", clientId).in("trabalho_id", ids),
+  ]);
+  if (lidos.error || existentes.error) throw new ErroHttp(503, "pecas_indisponiveis", "Não foi possível ler as peças da campanha.");
+  // Stories: a sequência precisa ser da campanha e ter story com a imagem deste trabalho.
+  const seqIds = [...new Set(pecas.map((p) => p.sequencia_id).filter((x): x is string => !!x))];
+  const doStory = new Set<string>();
+  if (seqIds.length) {
+    const { data: seqs, error: erroSeq } = await servico.from("cliente_stories_sequencias").select("id, escolha").eq("client_id", clientId).in("id", seqIds);
+    if (erroSeq) throw new ErroHttp(503, "stories_indisponiveis", "Não foi possível ler os stories da campanha.");
+    const daCampanha = ((seqs ?? []) as { id: string; escolha: Record<string, unknown> | null }[])
+      .filter((s) => {
+        const v = s.escolha && s.escolha.campanha && typeof s.escolha.campanha === "object" ? (s.escolha.campanha as Record<string, unknown>) : null;
+        return !!v && String(v.campanha_id ?? "").toLowerCase() === campanhaId;
+      })
+      .map((s) => s.id);
+    if (daCampanha.length) {
+      const { data: sts, error: erroSts } = await servico.from("cliente_stories").select("sequencia_id, fundo").eq("client_id", clientId).in("sequencia_id", daCampanha);
+      if (erroSts) throw new ErroHttp(503, "stories_indisponiveis", "Não foi possível ler os stories da campanha.");
+      for (const st of (sts ?? []) as { sequencia_id: string; fundo: Record<string, unknown> | null }[]) {
+        const t = st.fundo && typeof st.fundo.trabalho_id === "string" ? st.fundo.trabalho_id : "";
+        if (t) doStory.add(`${st.sequencia_id}:${t}`);
+      }
+    }
+  }
+  const trabalhos = (lidos.data ?? []) as { id: string; direcao: Record<string, unknown> | null; cards: unknown; legenda: string | null }[];
+  const jaCriativos = (existentes.data ?? []) as { id: string; trabalho_id: string }[];
+  const linhas: Record<string, unknown>[] = [];
+  const jaExistiam: string[] = [];
+  const recusadas: string[] = [];
+  for (const p of pecas) {
+    const ja = jaCriativos.find((c) => c.trabalho_id === p.trabalho_id);
+    if (ja) {
+      jaExistiam.push(ja.id);
+      continue;
+    }
+    const t = trabalhos.find((x) => x.id === p.trabalho_id);
+    const direcao = t && t.direcao && typeof t.direcao === "object" ? t.direcao : {};
+    const arte = direcao.arte_rapida && typeof direcao.arte_rapida === "object" ? (direcao.arte_rapida as Record<string, unknown>) : {};
+    const comArte = !!t && Array.isArray(t.cards) && t.cards.some((c) => !!c && typeof (c as { storage_path?: unknown }).storage_path === "string");
+    const daCampanha = p.sequencia_id
+      ? doStory.has(`${p.sequencia_id}:${p.trabalho_id}`)
+      : String(arte.campanha_id ?? "").toLowerCase() === campanhaId && !arte.arquivada_em;
+    if (!t || !comArte || !daCampanha) {
+      recusadas.push(p.trabalho_id);
+      continue;
+    }
+    const laminas = Array.isArray(direcao.cards) ? direcao.cards.length : 1;
+    linhas.push(criativoDaPeca(
+      { id: campanha.id, nome: campanha.nome || "Campanha", briefing: campanha.briefing },
+      p,
+      { legenda: t.legenda, titulo: typeof arte.titulo === "string" ? arte.titulo : null, laminas: p.sequencia_id ? 1 : laminas },
+      clientId,
+      chamador.userId,
+    ));
+  }
+  let criativos: Record<string, unknown>[] = [];
+  if (linhas.length) {
+    const { data, error } = await servico.from("ads_criativos").insert(linhas).select("*");
+    if (error || !data) throw new ErroHttp(503, "criativos_nao_salvos", "As peças não viraram criativos agora. Tente de novo.");
+    criativos = data as Record<string, unknown>[];
+  }
+  if (!criativos.length && !jaExistiam.length) throw new ErroHttp(409, "pecas_recusadas", "Nenhuma das peças escolhidas é uma arte pronta desta campanha.", { recusadas });
+  return json({ criativos, ja_existiam: jaExistiam, recusadas, custo_usd: 0 });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   briefing_sugerir: briefingSugerir,
   briefing_salvar: briefingSalvar,
@@ -11029,6 +11134,8 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   conta_alertas: contaAlertas,
   auditoria_rodar: auditoriaRodar,
   auditoria_ler: auditoriaLer,
+  // 22/10/2026: as peças prontas da campanha da Mesa viram criativos (grátis, sem IA, sem copiar arquivo).
+  criativos_da_campanha_mesa: criativosDaCampanhaMesa,
 };
 
 /**

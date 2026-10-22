@@ -29,7 +29,7 @@ const trabalho: Trabalho = {
 function montar(t: Trabalho = trabalho, largura = 800) {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: largura });
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const props = { trabalho: t, card: t.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn(), onEscolherLamina: vi.fn() };
+  const props = { trabalho: t, card: t.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
   const tela = render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} /></QueryClientProvider>);
   return { ...tela, props, refazer: (novo: Trabalho) => tela.rerender(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} trabalho={novo} card={novo.direcao.cards![0]} /></QueryClientProvider>) };
 }
@@ -52,19 +52,19 @@ describe("Template: gerar o conteúdo com custo antes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Gerar conteúdo do template" }));
     await waitFor(() => expect(estado.chamar).toHaveBeenCalledOnce());
     expect(estado.chamar.mock.calls[0][1]).toEqual({ acao: "template_conteudo", trabalho_id: "trabalho-a", ordem: 1, rede: "twitter", tema: "pão de fermentação", todas: true, gravar_legenda: false, confirmado: true });
-    await waitFor(() => expect(screen.getByLabelText("Texto do template")).toHaveValue("Pão quentinho às 7h."));
+    // O texto novo entra na lâmina pelo servidor; o post do centro desenha o texto da lâmina (não há outro campo).
+    expect(screen.queryByLabelText("Texto do template")).not.toBeInTheDocument();
     expect(screen.getByText("O post da lâmina 2 passou de 280 caracteres do X.")).toBeInTheDocument();
   });
-  it("avisa o limite real do X no campo, acima de 280", () => {
-    montar();
-    fireEvent.change(screen.getByLabelText("Texto do template"), { target: { value: "a".repeat(281) } });
-    expect(screen.getByText("Passou 1 do limite de 280 do X")).toBeInTheDocument();
+  it("avisa o limite real do X na faixa da lâmina, acima de 280", async () => {
+    montar({ ...trabalho, direcao: { cards: [{ ordem: 1, texto_exato: "a".repeat(281) }] } });
+    expect(await screen.findByText("Passou 1 do limite de 280 do X")).toBeInTheDocument();
   });
-  it("é só o post do X: sem escolha de Instagram ou Story, e o template antigo abre com aviso", () => {
+  it("é só o post do X: sem escolha de Instagram ou Story, e o template antigo abre com aviso", async () => {
     const tela = montar();
     expect(screen.queryByRole("button", { name: "Instagram" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Story" })).not.toBeInTheDocument();
-    expect(screen.getByText("Post 1 de 2 do fio")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector("[data-faixa-do-template]")).toHaveTextContent("Post do X"));
     tela.unmount(); sessionStorage.clear();
     const antigo: Trabalho = { ...trabalho, cards: [{ ordem: 1, versao: 1, storage_path: "cliente-a/arte.png", template_profile: { versao: 1, estilo: "instagram", nome: "Padaria", username: "padaria", texto: "Legenda antiga", verificado: false, tema: "claro", cor_fundo: "#ffffff", tamanho_texto: 34, tamanho_foto: 88, espacamento: 48, arredondamento: 24 } }] };
     montar(antigo);
@@ -124,45 +124,41 @@ describe("Template: organização da tela", () => {
     for (const rotulo of ["Tamanho do texto", "Tamanho do avatar", "Tamanho da mídia", "Escala do post", "Respiro em volta", "Cantos do post", "Cor de fundo do template", "Respostas", "Reposts", "Curtidas", "Visualizações"]) expect(screen.getByLabelText(rotulo)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Tema do post" })).toHaveTextContent("Dim");
   });
-  it("o texto do post é o texto da lâmina: um só, gravado pelo mesmo campo", async () => {
-    const salvarTexto = vi.fn(async () => undefined);
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const props = { trabalho, card: trabalho.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
-    const tela = render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} parte="centro" onSalvarTexto={salvarTexto} /></QueryClientProvider>);
-    const campo = screen.getByLabelText("Texto do template");
-    expect(campo).toHaveValue("Pão às 7h");
-    fireEvent.focus(campo);
-    fireEvent.change(campo, { target: { value: "Pão às 7h em ponto" } });
-    fireEvent.blur(campo);
-    expect(salvarTexto).toHaveBeenCalledWith("Pão às 7h em ponto");
-    // Mudou no campo de conteúdo do Estúdio: o centro acompanha.
+  it("o texto do post é o texto da lâmina: um só, sem campo próprio no Template", async () => {
+    const desenhar = (await import("@/components/mesa/profile/renderProfile")).desenharProfile as unknown as { mock: { calls: unknown[][] } };
+    const tela = montar();
+    expect(screen.queryByLabelText("Texto do template")).not.toBeInTheDocument();
+    await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ texto: "Pão às 7h" }));
     const novo = { ...trabalho, direcao: { ...trabalho.direcao, cards: [{ ...trabalho.direcao.cards![0], texto_exato: "Texto vindo da lâmina" }, trabalho.direcao.cards![1]] } } as Trabalho;
-    tela.rerender(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} trabalho={novo} card={novo.direcao.cards![0]} parte="centro" onSalvarTexto={salvarTexto} /></QueryClientProvider>);
-    await waitFor(() => expect(screen.getByLabelText("Texto do template")).toHaveValue("Texto vindo da lâmina"));
+    tela.refazer(novo);
+    await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ texto: "Texto vindo da lâmina" }));
   });
   it("sem pop-up: o centro é o post e o painel são os ajustes, com o mesmo rascunho ao vivo", async () => {
     const desenhar = (await import("@/components/mesa/profile/renderProfile")).desenharProfile as unknown as { mock: { calls: unknown[][] } };
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const props = { trabalho, card: trabalho.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
-    render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} parte="centro" onSair={vi.fn()} /><TemplateProfileEditor {...props} parte="painel" /></QueryClientProvider>);
+    render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} parte="centro" moldura={({ faixa, conteudo }) => <div data-lamina-grande-do-estudio="">{faixa}{conteudo(400)}</div>} /><TemplateProfileEditor {...props} parte="painel" /></QueryClientProvider>);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Prévia do template Profile")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sair do Template" })).toBeInTheDocument();
+    // O centro entra na moldura do Estúdio (a lâmina grande): nada de barra, setas ou zoom próprios.
+    expect(document.querySelector("[data-lamina-grande-do-estudio] canvas")).not.toBeNull();
+    for (const nome of ["Sair do Template", "Aumentar o post", "Próxima lâmina", "Ver prévia grande", "Baixar PNG"]) expect(screen.queryByRole("button", { name: nome })).not.toBeInTheDocument();
     etapa("Aparência");
     fireEvent.click(screen.getByRole("button", { name: "Aumentar tamanho do texto" }));
     fireEvent.click(screen.getByRole("button", { name: "Fundo #15202b" }));
     await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ tamanho_texto: 36, cor_fundo: "#15202b" }));
-    fireEvent.click(screen.getByRole("button", { name: "Aumentar o post" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar escala do post" }));
     fireEvent.click(screen.getByLabelText("Mostrar números"));
     fireEvent.click(screen.getByLabelText("Mostrar tempo"));
-    await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ escala: 110, ocultar_numeros: true, ocultar_tempo: true }));
+    await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ escala: 102, ocultar_numeros: true, ocultar_tempo: true }));
   });
-  it("as setas da prévia trocam de lâmina", () => {
-    const { props } = montar();
-    fireEvent.click(screen.getByRole("button", { name: "Próxima lâmina" }));
-    expect(props.onEscolherLamina).toHaveBeenCalledWith(2);
-    expect(screen.getByRole("button", { name: "Lâmina anterior" })).toBeDisabled();
+  it("a troca entre a arte e o post do X fica dentro da ferramenta Template, sem botão novo no centro", () => {
+    const trocar = vi.fn();
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={cache}><TemplateProfileEditor trabalho={trabalho} card={trabalho.direcao.cards![0]} bloqueado={false} onMudou={vi.fn()} onAbrirFotos={vi.fn()} parte="painel" modoTemplate onModoTemplate={trocar} /></QueryClientProvider>);
+    expect(screen.getByRole("button", { name: "Post do X" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Arte da lâmina" }));
+    expect(trocar).toHaveBeenCalledWith(false);
   });
 });

@@ -29,7 +29,8 @@ import MetodoDoAgente from "@/components/agentes/MetodoDoAgente";
 import SeletorDoPerfil from "@/components/mesa-foto/SeletorDoPerfil";
 import DiagnosticoDoMes from "./DiagnosticoDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
-import HypesDaSemana from "./HypesDaSemana";
+import HypesDaSemana, { type VisaoDoHype } from "./HypesDaSemana";
+import TopoDoMes from "./TopoDoMes";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
 import PlanejarPeriodo from "./PlanejarPeriodo";
 import { atualizarAgenda, editarItemDaProposta, novoIdDaProposta, type CamposDoItem, type ItemProposto } from "./mesaV4Api";
@@ -761,11 +762,14 @@ function PlanoDoMesEmDestaque({
   onConversar,
   onRapido,
   onPeriodo,
+  semAcoes = false,
 }: {
   mes: string;
   onConversar: (modo: ModoDoAgente, mes: string) => void;
   onRapido?: () => void;
   onPeriodo?: () => void;
+  /** 21/10: as ações (Novo calendário, Rápido, Planejar, Criar) moram no topo do Mês; aqui fica o plano. */
+  semAcoes?: boolean;
 }) {
   const { clientId } = useMesa();
   const planos = useQuery({ queryKey: chavesDoPlano.planos(clientId), queryFn: () => lerPlanosCombinados(clientId) });
@@ -806,7 +810,7 @@ function PlanoDoMesEmDestaque({
           )}
         </div>
         {/* Ações só em ícone, na linha do título. Um primário por área (28/09): o da aba é o "Agente do mês" que flutua. */}
-        <div className="ml-2 flex shrink-0 items-center">
+        {!semAcoes && <div className="ml-2 flex shrink-0 items-center">
           {onPeriodo && <button type="button" className={botao.icone} onClick={onPeriodo} aria-label="Novo calendário" title="Novo calendário"><CalendarPlus className="h-4 w-4" /></button>}
           {onRapido && (
             <button type="button" className={botao.icone} onClick={onRapido} aria-label="Conteúdo rápido" title="Conteúdo rápido">
@@ -825,7 +829,7 @@ function PlanoDoMesEmDestaque({
           <button type="button" className={botao.icone} onClick={() => onConversar("criar", mes)} aria-label="Criar conteúdos" title="Criar conteúdos">
             <FilePlus2 className="h-4 w-4" />
           </button>
-        </div>
+        </div>}
       </div>
       <div className="mt-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Próximos meses">
         {proximos.map((m) => {
@@ -851,14 +855,13 @@ function PlanoDoMesEmDestaque({
 }
 
 /**
- * Aba Mês (pedido do dono em 24/09): organizada de cima para baixo.
- * 1. O plano combinado do mês e os dois caminhos com o agente.
- * 2. Os hypes da semana.
- * 3. A Agenda do mês: o mesmo calendário da Agenda do painel, com seleção,
- *    completar com o agente, abrir no Estúdio e apagar o que não serviu.
- * 4. O gerador de meses: "Planejar e preencher a agenda" faz sozinho mês a mês
- *    (PlanejamentoAutomatico.tsx); "Uma proposta por vez" é o caminho manual.
- *    Os dois seguem o plano combinado de cada mês.
+ * Aba Mês, de cima para baixo (21/10/2026, dono: "mais intuitivo, alinhado com cada nicho, e inteligente"):
+ * 1. Topo (TopoDoMes.tsx): mês e ano, nicho e cliente, o resumo de uma linha, as ações do mês e o
+ *    "O que fazer agora" (até 3 sugestões, cada uma com a fonte e o ícone da ação).
+ * 2. Calendário (AgendaDoMes.tsx): a agenda do mês, com seleção, agente, Estúdio e apagar.
+ * 3. Radar do nicho (HypesDaSemana.tsx): Da semana, Datas, Em alta e Trendy.
+ * 4. Propostas e agente: o plano combinado do mês, a linha de evolução e o gerador de meses
+ *    ("Planejar e preencher a agenda" ou "Uma proposta por vez").
  *
  * O Agente do mês fica sempre à vista: botão flutuante no centro da base da
  * tela (acima da barra do celular) que abre o agente num pop-up grande,
@@ -914,6 +917,22 @@ export default function AbaMes({
   const [pendente, setPendente] = useState<PedidoEmAndamento | null>(null);
   // 21/10: com a barra de juntar (Hype e Trending) à vista, o botão do agente vai para o canto no computador e não a cobre.
   const [juntando, setJuntando] = useState(false);
+  // 21/10: o "O que fazer agora" abre a visão certa do Radar e rola até ele.
+  const [visaoDoRadar, setVisaoDoRadar] = useState<VisaoDoHype>("semana");
+  const abrirRadar = (v: VisaoDoHype) => {
+    setVisaoDoRadar(v);
+    const radar = typeof document !== "undefined" ? document.getElementById("radar-do-mes") : null;
+    if (radar && typeof radar.scrollIntoView === "function") radar.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const criarCampanhaDoMes = () => {
+    if (onCriarCampanha) return onCriarCampanha();
+    const next = new URLSearchParams(params);
+    next.set("aba", "campanhas");
+    next.set("nova", "1");
+    next.delete("campanha");
+    next.delete("hype");
+    setParams(next);
+  };
 
   const trocarModo = (m: ModoDePlanejar) => {
     setModo(m);
@@ -938,22 +957,29 @@ export default function AbaMes({
     <div className="min-w-0" data-agente="pop-up">
       <AreaDeTrabalho rotuloDoPrincipal="Mês" memoriaDaRolagem={`mesa:mes:${clientId}`}>
       <div className="min-w-0 space-y-6 pb-28">
-      <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} onRapido={() => setRapidoAberto(true)} onPeriodo={() => setPeriodoAberto(true)} />
+      {/* 21/10 (dono: "mais intuitivo e fácil de reconhecer"): topo com mês, nicho e resumo; depois Calendário → Radar → Propostas e agente. */}
+      <TopoDoMes
+        mes={mes}
+        onCriarCampanha={criarCampanhaDoMes}
+        onAbrirRadar={abrirRadar}
+        onAgente={() => abrirAgente("criar", mes)}
+        onConversar={(m) => abrirAgente(m, mes)}
+        onRapido={() => setRapidoAberto(true)}
+        onPeriodo={() => setPeriodoAberto(true)}
+      />
 
       <PlanejarPeriodo aberto={periodoAberto} onAbertoChange={setPeriodoAberto} mes={mes} onPedidoInicio={(p) => { setPendente(p); abrirAgente("criar", mes); }} onPedidoFim={() => setPendente(null)} />
 
       <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNoEstudio} onVerNoMes={verNoMes} />
 
+      <SeletorDoPerfil />
+
+      <AgendaDoMes onAbrirNoEstudio={abrirNoEstudio} />
+
       <HypesDaSemana
-        onCriarCampanha={() => {
-          if (onCriarCampanha) return onCriarCampanha();
-          const next = new URLSearchParams(params);
-          next.set("aba", "campanhas");
-          next.set("nova", "1");
-          next.delete("campanha");
-          next.delete("hype");
-          setParams(next);
-        }}
+        visao={visaoDoRadar}
+        onVisao={setVisaoDoRadar}
+        onCriarCampanha={criarCampanhaDoMes}
         onPedidoInicio={(p) => {
           setPendente(p);
           abrirAgente("criar");
@@ -962,11 +988,14 @@ export default function AbaMes({
         onJuntando={setJuntando}
       />
 
-      <SeletorDoPerfil />
-
-      <AgendaDoMes onAbrirNoEstudio={abrirNoEstudio} />
-
-      <LinhaDeEvolucaoDoMes clientId={clientId} />
+      <div className="min-w-0 space-y-4" data-area-do-mes="propostas">
+        <h2 className={juntar(estiloDeTexto.tituloSecao, "flex items-center")}>
+          <MessagesSquare className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
+          Propostas e agente
+        </h2>
+        <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} semAcoes />
+        <LinhaDeEvolucaoDoMes clientId={clientId} />
+      </div>
 
       <Secao
         divisoria

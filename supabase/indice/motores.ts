@@ -660,6 +660,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes",
   "estudio-arte/index.ts#conversar": "revisoes",
   "estudio-arte/index.ts#lerCardsDaReferencia/lerCardsDoPost": "leituras",
+  // 22/10/2026: a referência da campanha lida uma vez por visão vira o padrão visual dela (extração).
+  "estudio-arte/modulos/padrao-da-campanha-acao.ts#lerPadraoDaCampanha": "leituras",
   "editor-video/index.ts#agentePesquisar/respostaComFolego": "leituras",
   "mesa-ads/index.ts#textoLidoDaReferenciaAds/lerTextoDaReferencia": "leituras",
   "mesa-ads/index.ts#mundoRealDoAssunto/pesquisarFatosReais": "leituras",

@@ -1,8 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
-import { baixarDoStorage, nomeDoArquivo, salvarBlob } from "../instagram/capaDoDestaque";
+import { baixarDoStorage, nomeDoArquivo } from "../instagram/capaDoDestaque";
 import { corDaLetra, hexValido, LAYOUT_DO_TEXTO, quebrarEmLinhas, TAMANHO_DO_STORY } from "./layoutDoStory";
 import type { Story } from "./storiesApi";
-import type { MarcaDosStories } from "./marcaDosStories";
 
 /**
  * A arte do story de cor da marca montada no navegador (1080 x 1920, sem
@@ -119,34 +118,4 @@ export async function arteRegistrada(fileId: string): Promise<Blob | null> {
   const { data } = await db.from("files").select("storage_bucket, storage_path").eq("id", fileId).maybeSingle();
   if (!data || !data.storage_path) return null;
   return baixarDoStorage(String(data.storage_bucket || "mesa"), String(data.storage_path));
-}
-
-/**
- * "Baixar arte" (caminho pelo app): a arte registrada (arte_url do painel ou o
- * arquivo); sem ela, a imagem do gerador (a lâmina do Estúdio, inteira). 21/10
- * (regra da casa: nada colado por cima): foto do acervo não vira arte montada
- * aqui; só o story de cor da marca, que é texto puro, ainda sai do navegador.
- */
-export async function baixarArteDoStory(story: Story, marca: MarcaDosStories, imagemViva?: string | null): Promise<void> {
-  let png: Blob | null = null;
-  if (story.arte_url) {
-    try {
-      const r = await fetch(story.arte_url);
-      png = r.ok ? await r.blob() : null;
-    } catch {
-      png = null;
-    }
-  }
-  if (!png && story.file_id) {
-    try {
-      png = await arteRegistrada(story.file_id);
-    } catch {
-      png = null;
-    }
-  }
-  const lamina = imagemViva || (story.fundo.tipo === "gerada" ? story.fundo.caminho : null);
-  if (!png && lamina) png = await baixarDoStorage("mesa", lamina);
-  if (!png && story.fundo.tipo === "cor") png = await montarArteDoStory(story, { paleta: marca.paleta, familia: marca.familia }, null);
-  if (!png) throw new Error("Este story ainda não tem imagem. Gere a imagem pelo gerador.");
-  salvarBlob(png, nomeDaArte(story));
 }

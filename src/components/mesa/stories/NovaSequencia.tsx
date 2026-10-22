@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Clapperboard, Flame, Megaphone, MessageCircleQuestion, Rocket, Sparkles, Star, Zap, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import Secao from "@/components/sistema/Secao";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { campo, juntar, texto } from "@/components/sistema/estilos";
 import { BotaoComCusto } from "../Custo";
@@ -12,6 +13,9 @@ import { IconeDoAdesivo } from "./PreviaDoStory";
 import {
   chamarStories,
   FASES_DA_CAMPANHA,
+  gerarFotosNaturais,
+  ROTULO_DO_ESTILO,
+  type EstiloDaImagem,
   gerarImagensDosStories,
   gerarStoriesDaCampanha,
   hojeLocal,
@@ -40,7 +44,7 @@ import {
  * custo total ao lado do botão antes de gastar.
  */
 
-type Pedido = { data: string; modelo: string; telas: number; campanhaId: string; fase: FaseDaCampanha; pedido: string; objetivo: string; comImagens: boolean };
+type Pedido = { data: string; modelo: string; telas: number; campanhaId: string; fase: FaseDaCampanha; pedido: string; objetivo: string; comImagens: boolean; estilo?: EstiloDaImagem };
 
 const NOVELA = "novela";
 const ICONES: Record<string, LucideIcon> = {
@@ -84,6 +88,7 @@ export default function NovaSequencia({
   const daMarca = useMemo(() => campanhasDaMarca(campanhas.data || [], marcaId), [campanhas.data, marcaId]);
   const campanha = p.campanhaId ? daMarca.filter((c) => c.id === p.campanhaId)[0] || null : null;
   const novela = p.modelo === NOVELA;
+  const estilo: EstiloDaImagem = p.estilo === "destaque" ? "destaque" : "natural";
   const modelo = modeloPorChave(p.modelo);
   const estrutura = modelo ? telasDaEstrutura(modelo, p.telas) : [];
   const hoje = hojeLocal();
@@ -108,6 +113,7 @@ export default function NovaSequencia({
         refazer: true,
         marcaId,
         nomeDaCampanha: campanha.nome,
+        estilo,
       });
       if (r.situacao !== "pronta") throw new Error(r.mensagem);
       sequencia = r.sequencia;
@@ -119,6 +125,7 @@ export default function NovaSequencia({
         data: p.data,
         quantidade: p.telas,
         ...(novela ? { objetivo: p.objetivo } : { modelo_da_sequencia: p.modelo }),
+        estilo,
         ...(p.pedido.trim() ? { pedido: p.pedido.trim() } : {}),
       });
       sequencia = normalizarSequencia(r && r.sequencia);
@@ -129,7 +136,10 @@ export default function NovaSequencia({
       onCriada(sequencia, stories);
       if (p.comImagens && stories.length) {
         try {
-          const img = await gerarImagensDosStories({ clientId, titulo: sequencia.titulo, stories, campanha: null, marcaId });
+          const img =
+            estilo === "natural"
+              ? await gerarFotosNaturais(clientId, stories.filter((s) => s.fundo.tipo === "natural"))
+              : await gerarImagensDosStories({ clientId, titulo: sequencia.titulo, stories, campanha: null, marcaId });
           const novos: Record<string, Story> = {};
           img.stories.forEach((s) => (novos[s.id] = s));
           stories = stories.map((s) => novos[s.id] || s);
@@ -180,6 +190,22 @@ export default function NovaSequencia({
               </button>
             );
           })}
+      </div>
+
+      <div className="mt-3 flex min-w-0 flex-wrap items-center" data-estilo-da-sequencia={estilo}>
+        <span className={juntar(texto.rotulo, "mb-1 mr-3")}>Imagens</span>
+        <SeletorCompacto
+          rotulo="Estilo das imagens"
+          valor={estilo}
+          onEscolher={(v) => mudar({ estilo: v === "destaque" ? "destaque" : "natural" })}
+          opcoes={[
+            { valor: "natural", rotulo: ROTULO_DO_ESTILO.natural },
+            { valor: "destaque", rotulo: ROTULO_DO_ESTILO.destaque },
+          ]}
+        />
+        <span className={juntar(texto.auxiliar, "mb-1 ml-3 min-w-0 flex-1 truncate")}>
+          {estilo === "natural" ? "Foto do momento, de celular, com o texto do próprio Instagram" : "Arte de designer com a referência da campanha"}
+        </span>
       </div>
 
       {estrutura.length ? (
@@ -280,8 +306,8 @@ export default function NovaSequencia({
             </>
           }
           titulo="Sequência de stories"
-          descricao={`Roteiro${(campanha && !novela) || p.comImagens ? ` e ${p.telas} imagens 9:16 pelo gerador` : ""}. Custo total ao lado.`}
-          partes={() => partesDaEstimativaDosStories(catalogo, p.telas, { comPlano: true, comImagens: (!!campanha && !novela) || p.comImagens })}
+          descricao={`Roteiro${(campanha && !novela) || p.comImagens ? ` e ${p.telas} ${estilo === "natural" ? "fotos naturais de story" : "artes 9:16 de designer"} pelo gerador` : ""}.`}
+          partes={() => partesDaEstimativaDosStories(catalogo, p.telas, { comPlano: true, comImagens: (!!campanha && !novela) || p.comImagens, natural: estilo === "natural" })}
           executar={criar}
           disabled={!dataValida}
           className="mb-1"

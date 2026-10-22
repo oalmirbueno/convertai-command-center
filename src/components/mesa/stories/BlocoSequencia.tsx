@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarCheck, CheckCircle2, Clapperboard, Loader2, Megaphone, Wand2 } from "lucide-react";
+import { Camera, CalendarCheck, CheckCircle2, Clapperboard, Download, Loader2, Megaphone, Wand2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Secao from "@/components/sistema/Secao";
 import { EstadoVazio } from "@/components/sistema/Estados";
@@ -13,6 +14,8 @@ import CartoesDaSequencia from "./CartoesDaSequencia";
 import CelularDoStory from "./CelularDoStory";
 import NovaSequencia from "./NovaSequencia";
 import PainelDaTela from "./PainelDaTela";
+import { lerCampanhas } from "../mesaV4Api";
+import { baixarStory, baixarTodosOsStories, precisaRegistrarNatural, registrarStoryNatural } from "./baixarStories";
 import type { MarcaDosStories } from "./marcaDosStories";
 import type { StoryNoEditor } from "./EditorDoStory";
 import {
@@ -20,6 +23,7 @@ import {
   chamarStories,
   diaCurto,
   estruturaDaSequencia,
+  gerarFotosNaturais,
   gerarImagensDosStories,
   imagemDoStory,
   modeloPorChave,
@@ -91,6 +95,16 @@ export default function BlocoSequencia({
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [agendando, setAgendando] = useState(false);
   const [ordenando, setOrdenando] = useState(false);
+  // 22/10: as fotos naturais sendo geradas agora (andamento por tela).
+  const [emAndamento, setEmAndamento] = useState<Record<string, boolean>>({});
+  const [baixandoTodas, setBaixandoTodas] = useState(false);
+  const marcarAndamento = (id: string, andando: boolean) =>
+    setEmAndamento((m) => {
+      const n = { ...m };
+      if (andando) n[id] = true;
+      else delete n[id];
+      return n;
+    });
 
   const trabalhoIds = useMemo(() => stories.map((s) => s.fundo.trabalho_id || "").filter(Boolean), [stories]);
   const laminasQ = useLaminasDosStories(clientId, trabalhoIds);
@@ -114,6 +128,23 @@ export default function BlocoSequencia({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stories, laminas, clientId]);
 
+  // Natural: a foto com o texto nativo (sem o adesivo) vira o arquivo do story sozinha; mudou o texto, refaz.
+  const tentadosNaturais = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    for (const s of stories) {
+      if (!precisaRegistrarNatural(s) || emAndamento[s.id]) continue;
+      const chave = `${s.id}:${s.fundo.caminho}:${s.texto_na_tela}:${s.fundo.estilo_texto}:${s.fundo.caixa}:${s.fundo.posicao}`;
+      if (tentadosNaturais.current[chave]) continue;
+      tentadosNaturais.current[chave] = true;
+      void registrarStoryNatural(clientId, s, marca)
+        .then((novo) => atualizar.stories([novo]))
+        .catch(() => {
+          // Fica para a próxima mudança (o cartão mostra que falta a arte).
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stories, clientId, emAndamento]);
+
   const campanhas = useMemo(() => campanhasDasSequencias(painel.sequencias), [painel.sequencias]);
   const filtroValido = filtro !== TODAS && campanhas.some((c) => c.id === filtro) ? filtro : TODAS;
   const sequenciasVisiveis = useMemo(
@@ -131,15 +162,54 @@ export default function BlocoSequencia({
   const semHorario = stories.filter((s) => !s.horario && s.situacao !== "publicado").length;
   const modelo = sequencia && sequencia.modelo ? modeloPorChave(sequencia.modelo) : null;
   const estrutura = modelo ? estruturaDaSequencia(stories) : null;
-  const campanhaDoPedido: CampanhaDoPedido | null = sequencia && sequencia.campanha ? { id: sequencia.campanha.campanha_id, nome: sequencia.campanha.nome, fase: sequencia.campanha.fase } : null;
+  // O padrão visual da campanha (briefing.padrao) vem da campanha guardada: no Destaque as referências vão ao gerador.
+  const campanhasQ = useQuery({ queryKey: ["mesa", "campanhas", clientId], queryFn: () => lerCampanhas(clientId), enabled: !!(sequencia && sequencia.campanha), staleTime: 60_000, retry: 1 });
+  const daCampanha = sequencia && sequencia.campanha ? (campanhasQ.data || []).filter((c) => c.id === sequencia.campanha!.campanha_id)[0] || null : null;
+  const campanhaDoPedido: CampanhaDoPedido | null =
+    sequencia && sequencia.campanha
+      ? { id: sequencia.campanha.campanha_id, nome: sequencia.campanha.nome, fase: sequencia.campanha.fase, padrao: daCampanha && daCampanha.briefing ? (daCampanha.briefing as { padrao?: CampanhaDoPedido["padrao"] }).padrao || null : null }
+      : null;
+  const naturaisSemFoto = semImagem.filter((s) => s.fundo.tipo === "natural");
+  const destaquesSemArte = semImagem.filter((s) => s.fundo.tipo !== "natural");
 
   const gerarImagens = async () => {
     if (!sequencia || !semImagem.length) return { custo_usd: 0 };
-    const r = await gerarImagensDosStories({ clientId, titulo: sequencia.titulo, stories: semImagem, campanha: campanhaDoPedido, marcaId });
-    atualizar.stories(r.stories);
-    void laminasQ.refetch();
-    if (r.avisos.length) toast.message("Imagens pedidas com avisos", { description: r.avisos.join(" ") });
-    return { custo_usd: r.custo_usd };
+    let custo = 0;
+    const avisos: string[] = [];
+    if (destaquesSemArte.length) {
+      const r = await gerarImagensDosStories({ clientId, titulo: sequencia.titulo, stories: destaquesSemArte, campanha: campanhaDoPedido, marcaId });
+      atualizar.stories(r.stories);
+      void laminasQ.refetch();
+      custo += r.custo_usd;
+      avisos.push(...r.avisos);
+    }
+    if (naturaisSemFoto.length) {
+      naturaisSemFoto.forEach((s) => marcarAndamento(s.id, true));
+      try {
+        const r = await gerarFotosNaturais(clientId, naturaisSemFoto, undefined);
+        atualizar.stories(r.stories);
+        custo += r.custo_usd;
+        avisos.push(...r.avisos);
+      } finally {
+        naturaisSemFoto.forEach((s) => marcarAndamento(s.id, false));
+      }
+    }
+    if (avisos.length) toast.message("Imagens pedidas com avisos", { description: avisos.join(" ") });
+    return { custo_usd: custo };
+  };
+
+  const baixarTodas = async () => {
+    if (!sequencia) return;
+    setBaixandoTodas(true);
+    try {
+      const r = await baixarTodosOsStories(stories, marca, { laminas, nome: sequencia.titulo || sequencia.data });
+      if (!r.baixadas) toast.error("Nenhuma tela tem imagem ainda", { description: "Gere as imagens antes de baixar." });
+      else if (r.deFora.length) toast.message(`${r.baixadas} telas baixadas`, { description: `Sem imagem ainda: ${r.deFora.join(", ")}.` });
+    } catch (e) {
+      toast.error("Não deu para baixar", { description: textoDoErro(e) });
+    } finally {
+      setBaixandoTodas(false);
+    }
   };
 
   const agendar = async () => {
@@ -261,19 +331,27 @@ export default function BlocoSequencia({
               <BotaoComCusto
                 rotulo={
                   <>
-                    <Wand2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    {destaquesSemArte.length ? <Wand2 className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Camera className="mr-1.5 h-4 w-4" aria-hidden="true" />}
                     Gerar imagens
                     {semImagem.length ? <span className="ml-1 tabular-nums">({semImagem.length})</span> : null}
                   </>
                 }
                 titulo="Imagens da sequência"
                 descricao={semImagem.length ? `${semImagem.length} imagens 9:16 pelo gerador do Estúdio, com o texto integrado` : "Todas as telas já têm imagem"}
-                partes={() => partesDaEstimativaDosStories(catalogo, semImagem.length, { comPlano: false, comImagens: true })}
+                partes={() =>
+                  partesDaEstimativaDosStories(catalogo, naturaisSemFoto.length, { comPlano: false, comImagens: true, natural: true }).concat(
+                    partesDaEstimativaDosStories(catalogo, destaquesSemArte.length, { comPlano: false, comImagens: true }),
+                  )
+                }
                 executar={gerarImagens}
                 disabled={!semImagem.length}
                 variant="outline"
                 className="h-9"
               />
+              <button type="button" className={juntar(botao.secundario, "h-9")} onClick={() => void baixarTodas()} disabled={baixandoTodas || !stories.length} title="Baixar todas as telas (ZIP com os PNG 1080 x 1920, com texto e adesivo)">
+                {baixandoTodas ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+                Baixar todas
+              </button>
               <button type="button" className={botao.primario} onClick={() => void agendar()} disabled={!prontos.length || agendando}>
                 {agendando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <CalendarCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />}
                 Agendar a sequência
@@ -318,8 +396,10 @@ export default function BlocoSequencia({
                 onDuplicar={(s) => void duplicar(s)}
                 onRemover={(s) => void remover(s)}
                 onNovo={novoStory}
+                onBaixar={(s) => void baixarStory(s, marca, laminas).catch((e) => toast.error("Não deu para baixar", { description: textoDoErro(e) }))}
+                emAndamento={emAndamento}
               />
-              <CelularDoStory stories={stories} atual={indice} onMudar={(i) => stories[i] && setSelecionado(stories[i].id)} marca={marca} nome={clientName || "perfil"} laminas={laminas} largura={270} />
+              <CelularDoStory stories={stories} atual={indice} onMudar={(i) => stories[i] && setSelecionado(stories[i].id)} marca={marca} nome={clientName || "perfil"} laminas={laminas} largura={270} emAndamento={emAndamento} />
               {atual ? (
                 <PainelDaTela
                   clientId={clientId}
@@ -332,6 +412,10 @@ export default function BlocoSequencia({
                   onEditar={onEditar}
                   onMudou={(l) => atualizar.stories(l)}
                   onReler={() => void laminasQ.refetch()}
+                  dia={sequencia.data}
+                  emAndamento={!!emAndamento[atual.id]}
+                  onAndamento={marcarAndamento}
+                  onNovoDestaque={(d) => atualizar.mudar((p) => ({ ...p, destaques: p.destaques.filter((x) => x.id !== d.id).concat([d]) }))}
                 />
               ) : null}
             </div>

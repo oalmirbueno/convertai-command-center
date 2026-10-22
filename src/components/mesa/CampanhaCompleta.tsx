@@ -12,7 +12,9 @@ import {
   gerarLaminasDaPeca,
   gerarSeloDaCampanha,
   gerarStoryDaCampanha,
+  modeloDoSelo,
   normalizarBriefing,
+  padraoDaCampanha,
   lerFilaDosTrabalhos,
   lerTrabalhosDaCampanha,
   prepararPecaDaCampanha,
@@ -30,6 +32,7 @@ import {
   type PassoDaCampanha,
   type SituacaoDaPeca,
 } from "./regrasDaCampanha";
+import { resumoDoPadraoParaAPeca } from "../../../supabase/functions/_shared/padrao-da-campanha";
 import { cancelar, continuar, emAndamento, esquecer, executarCampanha, pausar, useExecucao, type DepsDaExecucao, type Execucao } from "./execucaoDaCampanha";
 
 /**
@@ -113,7 +116,8 @@ export function depsDaCampanha(a: {
     gerarSelo: async (campanhaId) => {
       const c = await campanhaAtual(campanhaId);
       if (c.selo_path) return;
-      await gerarSeloDaCampanha(c, imagem ? imagem.id : null);
+      // O selo no GPT Image 2.5 do catálogo (MODELOS_DO_SELO), seguindo o padrão visual da campanha.
+      await gerarSeloDaCampanha(c, modeloDoSelo(a.catalogo) || (imagem ? imagem.id : null));
       await a.qc.invalidateQueries({ queryKey: chaves.campanhas(a.clientId) });
     },
     prepararPeca: async (campanhaId, passo) => {
@@ -153,7 +157,8 @@ export function depsDaCampanha(a: {
         fase: faseDaPeca(item, c.periodo_inicio, c.periodo_fim),
         quantidadeDeTelas: passo.laminas || 3,
         data: item.data || null,
-        pedido: [item.tema, item.gancho].concat((item.cards || []).map((c) => c.texto || "")).filter(Boolean).join(" / "),
+        pedido: [item.tema, item.gancho].concat((item.cards || []).map((c) => c.texto || "")).filter(Boolean).join(" / ") + (padraoDaCampanha(c) ? `
+${resumoDoPadraoParaAPeca(padraoDaCampanha(c))}` : ""),
         marcaId: (c.identidade && c.identidade.marca_id) || a.marcaId,
       });
       await a.qc.invalidateQueries({ queryKey: chaves.campanhas(a.clientId) });
