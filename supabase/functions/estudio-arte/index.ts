@@ -341,6 +341,8 @@ import {
   semLinhaDosVagos,
   type TextoCopiado,
 } from "./modulos/inventario-da-referencia.ts";
+import { cronometro, emParalelo, falhaDoMoldeGuardada, falhaDoMoldeParaGuardar } from "./velocidade.ts";
+import { type AcabamentoDaConferencia, acabamentoDaConferencia, LEITURA_DO_ACABAMENTO, perguntasDeAcabamento, REGRA_TEXTO_INTEIRO } from "./qualidade-da-lamina.ts";
 import {
   conferirFidelidade,
   devolverGanchoNaCapa,
@@ -675,7 +677,7 @@ import { ESQUEMA_REFINO, INSTRUCOES_REFINO, limparOpcoesDoRefino, OBJETIVOS_DO_R
 import { blocoDoMotor, frameworkDaCopy, objetivoDaCopy, ofertaDosFatos, porqueDaEscolha } from "../_shared/motor-de-copy.ts";
 import { vozDaMarca } from "../_shared/motor-de-copy-servidor.ts";
 // 23/10 (frente COPY-V): skill "copy viral do nicho" (contexto forte, ganchos do banco, guia da casa), Jev viral e modelo da copy.
-import { escolherComViralidade, modeloDaCopy, nichosEmTexto, prepararCopyViral } from "./modulos/copy-viral-servidor.ts";
+import { escolherComViralidade, modeloDaCopyEscolhido, modeloDoRefino, nichosEmTexto, prepararCopyViral } from "./modulos/copy-viral-servidor.ts";
 // Frente R3 (26/09): jogada do texto, palavra decorativa, cor por papel e miolo enxuto e desenhado.
 import { blocoDoMioloDesenhado, enxugarMiolo, ESQUEMA_MIOLO_ENXUTO, passaDoLimite, termoDecorativoDaLamina, textoEsperadoNaConferencia } from "./composicao-dinamica.ts";
 import { blocosDeLeitura } from "../_shared/jogada-do-texto.ts";
@@ -1293,6 +1295,11 @@ type Verificacao = {
    * se o indicador de arrastar (capa e meio) ou os ícones (última) vieram (Noul do Jev).
    */
   navegacao?: { esperado: NavegacaoDaLamina; probabilidade: number | null; veio: boolean | null; aviso: string | null } | { esperado: NavegacaoDaLamina; erro: string } | null;
+  /**
+   * 23/10 (qualidade, fase 2), só AVISO (a autocorreção não lê; sem laço): texto difícil de ler no celular,
+   * rosto ou mão deformados e logo deformada, pelo Noul do Jev sobre a descrição do leitor (qualidade-da-lamina.ts).
+   */
+  acabamento?: AcabamentoDaConferencia | { erro: string } | null;
 };
 
 /** Marca da versão que nasceu da autocorreção (corrigir_card). */
@@ -1958,9 +1965,18 @@ async function leituraDaLogo(t: Trabalho, logo: { imagem: ImagemEntrada; achatad
 async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string, avisos?: string[]): Promise<MoldeDaReferencia | null> {
   const caminho = `${pastaDasLeituras(t.client_id)}/molde-${ref.id.replace(/[^0-9a-z-]/gi, "-")}.json`;
   const guardado = await leituraGuardada(caminho);
-  if (guardado && guardado.versao === VERSAO_DO_MOLDE) return normalizarMolde(guardado.molde);
+  if (guardado && guardado.versao === VERSAO_DO_MOLDE && guardado.falhou !== true) return normalizarMolde(guardado.molde);
+  // 23/10 (velocidade): a referência cujo molde falhou com este leitor (JSON que não fecha, sem resposta) segue sem
+  // o molde na hora, com o mesmo aviso, em vez de esperar ~95 s pela mesma falha a cada lâmina (velocidade.ts).
+  let modeloDoLeitor = "";
   try {
     const leitor = await modeloDoPapel("leitura");
+    modeloDoLeitor = leitor.id;
+    const falhaGuardada = falhaDoMoldeGuardada(guardado, { versao: VERSAO_DO_MOLDE, modeloId: leitor.id, agora: new Date() });
+    if (falhaGuardada) {
+      avisos?.push(`O layout da referência não foi medido (${falhaGuardada}, já visto antes nesta referência): a arte seguiu a imagem da referência, sem as medidas do molde.`);
+      return null;
+    }
     const r = await chamarTexto({
       clientId: t.client_id,
       tarefa: "leitura_referencia",
@@ -1980,6 +1996,8 @@ async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEnt
     // Frente FS: saldo, cota e chave sobem; o resto fica no log e vira aviso (a arte segue a imagem, sem as medidas).
     if (erroQueSobe(e)) throw e;
     const motivo = registrarFalha("estudio-arte: molde da referência falhou", e, { trabalho_id: t.id, referencia_id: ref.id });
+    const falha = falhaDoMoldeParaGuardar({ versao: VERSAO_DO_MOLDE, refId: ref.id, modeloId: modeloDoLeitor, codigo: codigoMotor(e), agora: new Date() });
+    if (falha) await guardarLeitura(caminho, falha);
     avisos?.push(`O layout da referência não foi medido (${motivo}): a arte seguiu a imagem da referência, sem as medidas do molde.`);
     return null;
   }
@@ -3612,7 +3630,10 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   } else {
     // 02/10 (dono: "não repetir, não tudo roxo"): o que as últimas peças deste cliente já usaram (nunca lança).
     const variarAgoraP = variarAgoraNoEstudio(db, clientId, { excluirId: existente?.id ?? null, marca: marcaDoItem, paleta: marca.paleta, pedido: [instrucao, item.tarefa.title, item.tarefa.description].filter(Boolean).join(" ") });
-    const modeloDiretor = await modeloDoPapel("diretor_arte");
+    // 23/10 (dono: "o seletor tem que ser no gerar a copy do conteúdo"): quem escreve a direção (texto exato e blocos)
+    // é o modelo da copy do conteúdo SÓ com escolha explícita (da tela ou lembrada do cliente); sem escolha e na arte
+    // livre, o diretor de arte de hoje (o dono aprovou a parte visual: ela não muda sozinha).
+    const modeloDiretor = (semMarca ? null : await modeloDaCopyEscolhido(db as never, clientId, corpo.modelo_copy_id).catch(nuloComLog("estudio-arte: modelo da copy do conteúdo não lido", { client_id: clientId }))) ?? await modeloDoPapel("diretor_arte");
     const [prompt, memoria, acervo, refsRes, artesRes, preferencias] = await Promise.all([
       promptDoDiretor(clientId),
       semMarca ? Promise.resolve([]) : memoriaDoDiretor(clientId),
@@ -5273,6 +5294,12 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
   const tomPedido = ads ? tomValido(t.direcao.tom) : null;
   // Frente AG: no carrossel orgânico, o indicador de arrastar ou os ícones que o gerador tinha de desenhar.
   const navegacaoDaConferencia = navegacaoDaLamina({ ordem: card.ordem, total: totalCards(t), anuncio: ads, post: quadro.post });
+  // 23/10 (velocidade): a logo do kit e as regras EVITAR não dependem da leitura: começam junto com ela.
+  const logoDaConferenciaP = levaLogo(t, card.ordem)
+    ? baixarLogoBruta(t.client_id, kit).catch(nuloComLog("estudio-arte: logo da conferência não abriu", { trabalho_id: t.id }))
+    : Promise.resolve(null);
+  const regrasDaConferenciaP = ads ? Promise.resolve([] as Awaited<ReturnType<typeof regrasDoEstudio>>) : regrasDoEstudio(t);
+  regrasDaConferenciaP.catch(() => null);
   try {
     const recorte = await laminaFinal(caminho, quadro.final);
     v.leitura_no_recorte = recorte.redimensionada;
@@ -5298,7 +5325,8 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
       tarefa: "verificacao",
       agente: "leitor",
       modeloId: leitor.id,
-      sistema: SISTEMA_LEITURA,
+      // 23/10 (qualidade): o leitor também aponta texto difícil de ler e rosto, mão ou logo deformados.
+      sistema: `${SISTEMA_LEITURA}${LEITURA_DO_ACABAMENTO}`,
       mensagens: [{ papel: "usuario", conteudo: pedido + semOSelo + semAVitrine, imagens: [{ bytes: recorte.bytes, mime: "image/png", nome: `card-${card.ordem}.png` }] }],
       esquemaJson: ESQUEMA_LEITURA,
       maxTokensSaida: 6_000,
@@ -5312,7 +5340,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     v.logo_presente = typeof l.logo_presente === "boolean" ? l.logo_presente : null;
     // Logo só é esperada quando a lâmina leva logo E o cliente tem o arquivo:
     // sem logo cadastrada, "logo faltando" era alarme falso (Mirante Luz, 23/09).
-    const esperaLogo = levaLogo(t, card.ordem) && !!(await baixarLogoBruta(t.client_id, kit).catch(nuloComLog("estudio-arte: logo da conferência não abriu", { trabalho_id: t.id })));
+    const esperaLogo = levaLogo(t, card.ordem) && !!(await logoDaConferenciaP);
     v.logo_ok = v.logo_presente == null ? null : !esperaLogo && !v.logo_presente ? null : v.logo_presente === esperaLogo;
     const cmp = compararTexto(card.texto_exato, v.texto_lido);
     v.ortografia_ok = cmp.ortografia_ok;
@@ -5335,7 +5363,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
 
   // Frente RO, fase 2 (dono: "tem coisas que ele não pode mais fazer quando eu peço"): a conferência também
   // pergunta ao Jev, na mesma chamada, se a arte faz o que uma regra EVITAR proíbe (até 3). Só aviso, sem laço.
-  const regrasEvitar = ads ? [] : (await regrasDoEstudio(t)).filter((r) => r.tipo === "evitar").slice(0, 3);
+  const regrasEvitar = (await regrasDaConferenciaP).filter((r) => r.tipo === "evitar").slice(0, 3);
   try {
     const questions: Record<string, PerguntaJev> = {
       identidade: {
@@ -5386,6 +5414,9 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     }
     // Frente AG: o indicador ou os ícones do carrossel, na mesma chamada (só aviso).
     if (navegacaoDaConferencia) questions.navegacao = perguntaDaNavegacao(navegacaoDaConferencia) as PerguntaJev;
+    // 23/10 (qualidade): o acabamento (texto legível, pessoas e logo sem deformação), na mesma chamada (só aviso).
+    const perguntasDoAcabamento = perguntasDeAcabamento({ esperaLogo: levaLogo(t, card.ordem) && !!(await logoDaConferenciaP), logoPresente: v.logo_presente });
+    for (const [k, q] of Object.entries(perguntasDoAcabamento)) questions[k] = q as PerguntaJev;
     const res = await jevPerguntar({
       state: {
         kit: {
@@ -5422,6 +5453,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     });
     if (cobrado) usos.push(cobrado);
     v.identidade = notaDoJev(res.answers.identidade, NIVEIS_IDENTIDADE);
+    v.acabamento = acabamentoDaConferencia(res.answers as Record<string, unknown>, (r) => probabilidadeNoul(r as Parameters<typeof probabilidadeNoul>[0]), perguntasDoAcabamento);
     if (regrasEvitar.length) {
       (v as Verificacao & { regras_evitar?: unknown }).regras_evitar = regrasEvitar.map((r, k) => {
         const p = probabilidadeNoul(res.answers[`evitar_${k + 1}`]);
@@ -5447,6 +5479,7 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
   } catch (e) {
     registrarFalha("estudio-arte: jev da conferência falhou", e, { trabalho_id: t.id });
     v.identidade = { erro: codigoMotor(e) };
+    v.acabamento = { erro: codigoMotor(e) };
     if (navegacaoDaConferencia) v.navegacao = { esperado: navegacaoDaConferencia, erro: codigoMotor(e) };
     if (ads) {
       v.politica = { erro: codigoMotor(e) };
@@ -5563,6 +5596,8 @@ function regrasDeRender(
     "REGRAS FINAIS (valem sobre tudo acima)",
     `- ${REGRA_TEXTO_NA_ARTE}`,
     `- Escreva exatamente este texto, com a mesma grafia e acentuação, e nenhum outro texto: "${card.texto_exato}"`,
+    // 23/10 (qualidade, fase 2): só acrescenta; as regras de antes seguem iguais (qualidade-da-lamina.ts).
+    REGRA_TEXTO_INTEIRO,
     formatoAntigo ? "- Tela 1024 x 1536. A peça final é vertical 4:5 (1080 x 1350), cortada pelo centro." : "",
     formatoAntigo
       ? "- ÁREA ÚTIL: todo o texto, a logo e os elementos importantes ficam DENTRO da área central de 1024 x 1280 (de y = 128 a y = 1408), com margem de respiro de pelo menos 48 px até o limite dela. Nenhuma letra pode encostar ou entrar nas faixas de 128 px do topo e da base."
@@ -6185,6 +6220,8 @@ const NOME_DO_ANEXO: Partial<Record<TipoDoAnexo, string>> = {
 };
 
 async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
+  // 23/10 (velocidade): tempo de cada etapa antes do gerador, no log "estudio-arte: tempos da lâmina".
+  const tempos = cronometro();
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   // Frente FS (29/09): cada passo que falha e muda a arte deixa um aviso aqui (vai para a versão e para a resposta).
   const avisosDaGeracao: string[] = [];
@@ -6241,6 +6278,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // limite do papel, uma chamada curta ao redator (guardada por texto); o texto enxuto vai para a direção e segue.
   const textoNaGeracao = ads ? null : await textoDaLaminaNaGeracao(t, card, { total, userId: ch.userId, desligado: corpo.enxugar === false });
   if (textoNaGeracao) card = textoNaGeracao.card;
+  tempos.marcar("preparo_e_texto_enxuto");
 
   // Foto real escolhida para a lâmina (pelo diretor ou pela equipe), do acervo
   // ou trazida pela equipe (colada ou solta) como fundo.
@@ -6487,23 +6525,31 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const refDaAdaptacao = querAdaptar ? refDoMolde(refsDaEquipe[0]) : null;
   const depsDaCopia = querAdaptar ? depsDaAdaptacao(t, imagensDasRefs[0], ch.userId) : null;
   const leituraDoConteudoP = refDaAdaptacao && depsDaCopia ? leituraDoConteudo(refDaAdaptacao.id, depsDaCopia) : Promise.resolve(null);
-  const [anexoLogo, moldes] = await Promise.all([
-    logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId, avisosDaGeracao) : Promise.resolve(null),
-    Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refDoMolde(refsDaEquipe[i]), img, ch.userId, avisosDaGeracao) : Promise.resolve(null)))),
-  ]);
   // 22/10/2026: o mapa "elemento -> texto" desta lâmina (balões, caixas, selos e listas da referência): cada um com o
   // texto novo ou fora inteiro, nunca vazio nem com o texto da referência. Sem elemento: nada muda.
-  const doPreenchimento = await preenchimentoNaGeracao(t, card, {
-    ordem,
-    total,
-    ads,
-    replicar,
-    fidelidade,
-    refId: replicar && refsDaEquipe[0] && imagensDasRefs[0] ? refDoMolde(refsDaEquipe[0]).id : null,
-    refImagem: replicar ? imagensDasRefs[0] ?? null : null,
-    userId: ch.userId,
-    avisos: avisosDaGeracao,
-  });
+  // 23/10 (velocidade): o inventário e o preenchimento não dependem do molde nem da logo: rodam JUNTO com eles
+  // (antes esperavam o molde, ~30 a 50 s a mais na lâmina que replica). Os avisos dele entram depois dos do molde, como antes.
+  const avisosDoPreenchimento: string[] = [];
+  const [[anexoLogo, moldes], doPreenchimento] = await emParalelo(
+    Promise.all([
+      logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId, avisosDaGeracao) : Promise.resolve(null),
+      Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refDoMolde(refsDaEquipe[i]), img, ch.userId, avisosDaGeracao) : Promise.resolve(null)))),
+    ]),
+    preenchimentoNaGeracao(t, card, {
+      ordem,
+      total,
+      ads,
+      replicar,
+      fidelidade,
+      refId: replicar && refsDaEquipe[0] && imagensDasRefs[0] ? refDoMolde(refsDaEquipe[0]).id : null,
+      refImagem: replicar ? imagensDasRefs[0] ?? null : null,
+      userId: ch.userId,
+      avisos: avisosDoPreenchimento,
+    }),
+  );
+  avisosDaGeracao.push(...avisosDoPreenchimento);
+  tempos.marcar("referencia_molde_e_preenchimento");
+  if (replicar) console.info("estudio-arte: tempos da lâmina", { trabalho_id: t.id, ordem, ...tempos.tempos() });
   const preenchimentoDaReferencia = doPreenchimento.preenchimento;
   const blocoDoPreenchimentoAqui = blocoDoPreenchimento(preenchimentoDaReferencia);
   const cardComElementos = (c: CardDirecao): CardDirecao => (preenchimentoDaReferencia ? { ...c, texto_exato: comTextoDosElementos(c.texto_exato, preenchimentoDaReferencia) } : c);
@@ -8079,7 +8125,8 @@ const ESQUEMA_LEGENDA = {
 
 /** Variações de legenda que o Estúdio pede (gerar a mais e escolher, sem laço). */
 // 12/10/2026: 4 variações (gerar a mais e escolher; a conferência ganhou as marcas de texto de IA).
-const VARIACOES_DA_LEGENDA = 4;
+// 23/10 (dono: "deixe mais rápido"): 3 variações (eram 4) e o Jev só com a conferência da casa (sem as notas virais).
+const VARIACOES_DA_LEGENDA = 3;
 
 const INSTRUCOES_LEGENDA = `LEGENDA FINAL DO POST
 
@@ -8150,7 +8197,7 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Frente AE: a arte rápida ainda sem item escreve a legenda pelo pedido (item sintético).
   const item = t.task_id ? await lerItemDaAgenda(t.task_id) : itemDaArteRapida(t);
-  const [prompt, diretor, contexto, recentes, perfil, marcaDaLegenda, modeloEscolhidoDaCopy] = await Promise.all([
+  const [prompt, diretor, contexto, recentes, perfil, marcaDaLegenda] = await Promise.all([
     promptDoDiretor(t.client_id),
     modeloDoPapel("diretor_arte"),
     lerContextoConsolidado(servico(), t.client_id),
@@ -8165,10 +8212,9 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
       .limit(5),
     servico().from("profiles").select("company_name, full_name").eq("id", t.client_id).maybeSingle(),
     marcaDe(t.client_id, t),
-    // 23/10 (COPY-V): o modelo da copy (o pedido, o lembrado do cliente ou o melhor para copy); sem ele, o do diretor, como antes.
-    modeloDaCopy(servico(), t.client_id, corpo.modelo_copy_id).catch(nuloComLog("estudio-arte: modelo da copy não lido", { trabalho_id: t.id })),
   ]);
-  const escritorDaLegenda = modeloEscolhidoDaCopy ?? diretor;
+  // 23/10 (dono): a legenda fica no modelo do diretor (GPT-6 Luna), sem o seletor da copy; o modelo da copy é do conteúdo.
+  const escritorDaLegenda = diretor;
   const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
   // Marca por projeto (Acerbi e CME): nome e tom da marca do item; cliente sem marca segue igual.
   const marca = {
@@ -8183,6 +8229,8 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
       clientId: t.client_id,
       formato: "legenda_primeira_linha",
       versoes: VARIACOES_DA_LEGENDA,
+      // Mais rápida (23/10): menos exemplos no pedido.
+      n: 8,
       semente: t.id,
       contexto: { oferta: item.itemProposta ? texto(item.itemProposta.cta, 300) || null : null },
     }),
@@ -8256,6 +8304,8 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     nicho: nichosEmTexto(copyViral.nichos),
     publico: copyViral.contexto.publico ?? null,
     fontes: [fatosDoItem, voz.bloco, marca.contexto, t.direcao.cards.map((c) => c.texto_exato).join(" ")],
+    // Legenda mais rápida (23/10): o Jev só com a conferência da casa; humanizer e corte do que não tem fonte continuam.
+    semViral: true,
     cobranca: { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId },
   });
   const opcoes = conf.ordem.map((i) => ({
@@ -10578,7 +10628,7 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
   const objetivos = objetivosDoRefino(corpo.objetivos);
   const framework = frameworkPorId(texto(corpo.framework, 40).toLowerCase());
   const pedido = texto(corpo.pedido, 600);
-  const [diretor, contexto, cerebro, marcaDoTexto, perfil, spRefino, modeloEscolhidoDaCopy] = await Promise.all([
+  const [diretor, contexto, cerebro, marcaDoTexto, perfil, spRefino, modeloEscolhidoDoRefino] = await Promise.all([
     modeloDoPapel("diretor_arte"),
     lerContextoConsolidado(servico(), t.client_id).catch(nuloComLog("estudio-arte: contexto do cliente não lido", { trabalho_id: t.id })),
     resumoDoCerebro(servico(), t.client_id, ["copy", "arte", "campanha"], { limite: 14, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }),
@@ -10586,10 +10636,10 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
     servico().from("profiles").select("company_name, full_name").eq("id", t.client_id).maybeSingle(),
     // Frente SPP (revisão 30/09): o refino é ajuste pedido pela equipe (receber e prova, escolhidos pelo código). Nunca lança.
     superpoderesPara(servico(), { agente: "estudio.refino", momento: "ajustar" }),
-    // 23/10 (COPY-V): o modelo da copy; sem ele, o do diretor, como antes.
-    modeloDaCopy(servico(), t.client_id, corpo.modelo_copy_id).catch(nuloComLog("estudio-arte: modelo da copy não lido", { trabalho_id: t.id })),
+    // 23/10 (dono): o seletor próprio do refinar copy (o pedido, o lembrado do cliente ou o melhor para copy); sem ele, o do diretor.
+    modeloDoRefino(servico(), t.client_id, corpo.modelo_refino_id).catch(nuloComLog("estudio-arte: modelo do refino não lido", { trabalho_id: t.id })),
   ]);
-  const redator = modeloEscolhidoDaCopy ?? diretor;
+  const redator = modeloEscolhidoDoRefino ?? diretor;
   // Frente CPY: a voz da marca para o motor de copy e para a conferência das opções. Nunca lança.
   // 23/10 (COPY-V): com a skill "copy viral do nicho" (contexto forte, ganchos do banco e guia da casa).
   const [voz, copyViral] = await Promise.all([

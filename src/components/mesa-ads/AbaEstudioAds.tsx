@@ -31,7 +31,8 @@ import {
   type PlanoAds,
   type StatusDoCriativo,
 } from "./adsApi";
-const VideoDoCriativo = lazy(() => import("./VideoDoCriativo"));
+// 23/10: a área de vídeo tem "Gerar com IA" (o Higgsfield, intocado) e "Gravar nós mesmos" (roteiro pela Mesa Roteiros).
+const VideoDoCriativo = lazy(() => import("./VideoOuGravacao"));
 import "./adsStudio.css";
 import { useArquivosDeVideo, usePedidos } from "../mesa-videos/videosApi";
 import { ESTADOS_VIDEO_ADS, resumoVideoAds, nomeBaseVideo, type EstadoVideoAds } from "./videoDoAnuncio";

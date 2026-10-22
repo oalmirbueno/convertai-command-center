@@ -166,12 +166,13 @@ describe("2. molde da referência: leitura por visão como especificação de la
   it("servidor: molde lido uma vez, guardado no bucket mesa (sem coluna nova), junto com a logo e em paralelo", () => {
     const m = corpoDe("moldeDaReferencia");
     expect(m).toContain("const guardado = await leituraGuardada(caminho);");
-    expect(m).toContain("if (guardado && guardado.versao === VERSAO_DO_MOLDE) return normalizarMolde(guardado.molde);");
+    expect(m).toContain("if (guardado && guardado.versao === VERSAO_DO_MOLDE && guardado.falhou !== true) return normalizarMolde(guardado.molde);"); // 23/10: a falha guardada (velocidade.ts) não conta como molde
     expect(m).toContain("esquemaJson: ESQUEMA_MOLDE,");
     expect(m).toContain('modeloDoPapel("leitura")');
     expect(estudio).toContain("const pastaDasLeituras = (clientId: string) => `${clientId}/estudio/leituras`;");
     const g = corpoDe("gerarCard");
-    expect(g).toContain("const [anexoLogo, moldes] = await Promise.all([");
+    // 23/10 (velocidade): molde e logo seguem em paralelo, agora junto também com o preenchimento (emParalelo).
+    expect(g).toContain("const [[anexoLogo, moldes], doPreenchimento] = await emParalelo(\n    Promise.all([");
     // Leitura que falha não trava a lâmina (volta null e o prompt usa a cópia geral).
     expect(m).toContain("return null;");
   });

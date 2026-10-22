@@ -88,7 +88,9 @@ describe("estudio-arte: uma lamina por chamada", () => {
   it("o gerador so e chamado em gerar (replicar referencia, foto composta, foto real ou panorama, normal, um por vez) e em ajustar, fora de laco", () => {
     // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada); + 1 do modo recorte (25/09).
     // A tela dupla (modo "continuar") saiu em 25/09: com o panorama ela nunca rodava.
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(7);
+    // + 1 do Template (21/10): a foto sem texto do "Gerar" no Template (gerarFoto), uma por pedido, fora de laço.
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(8);
+    expect(fonte).toContain("gerarFoto: async (ch, t, e) => {\n      const img = await chamarImagem({");
     expect(corpoDe("garantirFundoContinuo").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     const g = corpoDe("gerarCard");
     // 5 modos desde 25/09: replicar, foto composta, foto real ou panorama, recorte (pessoa ou produto sem fundo) e normal.
@@ -164,7 +166,8 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(c).toContain("alvo = versaoAtual(t, ordem);");
     expect(c).toContain("c.ordem === ordem && c.versao === versao");
     // Frente R3: o termo decorativo que a versão escreveu na arte entra no texto esperado.
-    expect(c).toContain("await verificar(ch, t, { ...card, texto_exato: textoEsperadoNaConferencia(card.texto_exato, alvo as { termo_decorativo?: unknown }) }, alvo.storage_path, kit, fontes)");
+    // 22/10: os textos dos elementos da referência (balões, caixas, listas) também entram no texto esperado.
+    expect(c).toContain("await verificar(ch, t, { ...card, texto_exato: comTextoDosElementos(textoEsperadoNaConferencia(card.texto_exato, alvo as { termo_decorativo?: unknown }), preenchimentoDaVersao) }, alvo.storage_path, kit, fontes)");
     expect(c).not.toContain("chamarImagem(");
   });
 

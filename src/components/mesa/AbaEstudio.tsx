@@ -103,7 +103,7 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useFiltroDaMarca, useMarcaDaMesa, useMesa } from "./MesaContexto";
-import { SeletorDoModeloDaCopyDoConteudo, useModeloDaCopyDoConteudo } from "./ModeloDaCopyDoConteudo";
+import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
@@ -519,8 +519,10 @@ export function DetalheDoItem({
   const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...andamentoLocal };
 
   const diretor = padraoPara(catalogo, "diretor_arte");
-  // 23/10 (COPY-V): a legenda e o refino são escritos pelo "Modelo da copy" (lembrado por cliente; padrão: o melhor para copy).
-  const modeloDaCopy = useModeloDaCopyDoConteudo();
+  // 23/10 (dono): seletores por escopo, lembrados por cliente. A copy do conteúdo escreve a direção (texto exato e
+  // blocos); o refinar copy tem o seu; a legenda fica no modelo do diretor, sem seletor.
+  const modeloDaCopy = useModeloDoEscopo("copy");
+  const modeloDoRefino = useModeloDoEscopo("refino");
   const leitor = padraoPara(catalogo, "leitura");
   const postUnico = FORMATOS_POST_UNICO.indexOf(item.delivery_type) >= 0;
 
@@ -540,16 +542,16 @@ export function DetalheDoItem({
     ...partesGerar(1),
   ];
   const partesDiretor = (): ParteDaEstimativa[] => [
-    { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida },
+    { modeloId: (modeloDaCopy.escolhido && modeloDaCopy.modeloId) || diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida },
   ];
   /** Uma chamada do redator (modelo do diretor), do tamanho da legenda (enxugar o miolo usa só ela). */
   const partesRefinar = (): ParteDaEstimativa[] => [
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
   ];
   /** Refinar texto: o redator e a conferência do motor de copy pelo Jev (frente CPY), que também é cobrada. */
-  // 23/10 (COPY-V): o refino é escrito pelo modelo da copy (o enxugar segue no do diretor).
+  // 23/10: o refino é escrito pelo modelo do refinar copy (o enxugar segue no do diretor).
   const partesDoRefinoConferido = (): ParteDaEstimativa[] => [
-    { modeloId: modeloDaCopy.modeloId || diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
+    { modeloId: modeloDoRefino.modeloId || diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
     parteDaConferenciaDoJev(),
   ];
 
@@ -856,6 +858,8 @@ export function DetalheDoItem({
   /** Primeiro posto: a direção com as escolhas feitas antes (modo, quantidade, contínuo e pedido). */
   const preparar = async (escolhas: EscolhasDoPreparo) => {
     const corpoDoPedido = corpoDoPreparar(item.id, escolhas, { postUnico, modeloImagemId: modeloImagem || undefined, qualidade });
+    // 23/10: quem escreve o texto da direção é o modelo da copy do conteúdo (o servidor também lê o lembrado).
+    Object.assign(corpoDoPedido, modeloDaCopy.corpoEscolhido);
     // Arte rápida: o trabalho vai junto (a função refaz a direção pelo pedido guardado, sem item da Agenda).
     if (rapida && trabalho) corpoDoPedido.trabalho_id = trabalho.id;
     const r = await chamarFuncao<any>("estudio-arte", corpoDoPedido);
@@ -1872,6 +1876,9 @@ export function DetalheDoItem({
       </div>
     ) : (
       <div className={colunas ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6" : "p-3"}>
+        <div className="mb-3 max-w-md">
+          <SeletorDoModeloDoEscopo estado={modeloDaCopy} padraoDoLugar={{ rotulo: "diretor de arte", modelo: diretor }} />
+        </div>
         <EstudioPreparar
           roteiro={roteiro}
           postUnico={postUnico}
@@ -1948,6 +1955,7 @@ export function DetalheDoItem({
             ordem={cardSelecionado.ordem}
             texto={cardSelecionado.texto_exato || ""}
             partes={partesDoRefinoConferido}
+            modelo={modeloDoRefino}
             bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
             onAplicar={async (novo) => {
               await configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } });
@@ -2178,6 +2186,7 @@ export function DetalheDoItem({
           disabled={entregue}
           title="O diretor refaz a direção pelo pedido; as artes já geradas ficam nas versões"
         />
+        {!entregue && <SeletorDoModeloDoEscopo estado={modeloDaCopy} padraoDoLugar={{ rotulo: "diretor de arte", modelo: diretor }} />}
         <div className="flex justify-end">
           <BotaoComCusto
             rotulo={<><MessageSquare className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{pedidoAoDiretor.trim() ? "Pedir ao diretor" : "Refazer a direção"}</span></>}
@@ -2193,6 +2202,7 @@ export function DetalheDoItem({
                 modo: "diretor",
                 instrucao: pedidoAoDiretor.trim() || undefined,
                 trabalho_id: trabalho.id,
+                ...modeloDaCopy.corpoEscolhido,
                 modelo_imagem_id: modeloImagem || undefined,
                 qualidade,
                 // Mantém o contínuo como está no trabalho: sem o campo, o
@@ -2222,8 +2232,8 @@ export function DetalheDoItem({
           variant="outline"
           className="h-8 gap-1 px-2.5 text-[12px]"
           disabled={entregue}
-          partes={() => [{ modeloId: modeloDaCopy.modeloId || diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }, parteDaConferenciaDoJev()]}
-          executar={() => chamarFuncao("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id, ...modeloDaCopy.corpo })}
+          partes={() => [{ modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }, parteDaConferenciaDoJev()]}
+          executar={() => chamarFuncao("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id })}
           aoConcluir={(data) => {
             if (typeof data?.legenda === "string") setLegenda(data.legenda);
             if (Array.isArray(data?.hashtags)) setHashtagsTexto(normalizarHashtags(data.hashtags).join(" "));
@@ -2232,7 +2242,6 @@ export function DetalheDoItem({
           }}
         />
       </div>
-      {!entregue && <SeletorDoModeloDaCopyDoConteudo estado={modeloDaCopy} />}
       {opcoesDaLegenda.length > 0 && opcoesDaLegenda[0].texto === legenda && <NotaDaCopy nota={opcoesDaLegenda[0].nota} alerta={opcoesDaLegenda[0].alerta} avisos={opcoesDaLegenda[0].avisos} framework={opcoesDaLegenda[0].framework} />}
       <Textarea
         value={legenda}
@@ -2257,6 +2266,7 @@ export function DetalheDoItem({
         alvo="legenda"
         texto={legenda}
         partes={partesDoRefinoConferido}
+        modelo={modeloDoRefino}
         bloqueado={entregue}
         onAplicar={(novo) => {
           setLegenda(novo);

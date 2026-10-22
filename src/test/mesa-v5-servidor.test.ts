@@ -139,7 +139,9 @@ describe("refazer que refaz (dono, 23/09 noite)", () => {
   });
   it("sem logo cadastrada, a conferência não acusa logo faltando", () => {
     const v = corpoDe(estudio, "verificar");
-    expect(v).toContain("levaLogo(t, card.ordem) && !!(await baixarLogoBruta(t.client_id, kit)");
+    // 23/10 (velocidade): a logo baixa junto com a leitura (logoDaConferenciaP); a regra é a mesma.
+    expect(v).toContain("const logoDaConferenciaP = levaLogo(t, card.ordem)\n    ? baixarLogoBruta(t.client_id, kit)");
+    expect(v).toContain("const esperaLogo = levaLogo(t, card.ordem) && !!(await logoDaConferenciaP);");
     expect(v).toContain("!esperaLogo && !v.logo_presente ? null");
   });
   it("a Mesa usa a tela larga", () => {

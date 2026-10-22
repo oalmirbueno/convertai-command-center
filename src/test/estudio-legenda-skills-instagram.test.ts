@@ -108,7 +108,7 @@ describe("carrossel", () => {
 describe("ligado nas mesas", () => {
   it("Estúdio: 4 variações, hashtags por tamanho e avisos de carrossel; agenda: até 10 lâminas e legenda pelo Jev", () => {
     const est = readFileSync(resolve(__dirname, "../../supabase/functions/estudio-arte/index.ts"), "utf8");
-    expect(est).toContain("const VARIACOES_DA_LEGENDA = 4;");
+    expect(est).toContain("const VARIACOES_DA_LEGENDA = 3;");
     expect(est).toContain("misturaDeHashtags(");
     expect(est).toContain("avisosDoCarrossel(direcao.cards");
     const cal = readFileSync(resolve(__dirname, "../../supabase/functions/agente-calendario/index.ts"), "utf8");

@@ -186,6 +186,8 @@ export type PedidoDaEscolhaViral = PedidoDaConferencia & {
   publico?: string | null;
   /** Contexto, pedido e item do plano: base do corte do que não tem fonte. */
   fontes: unknown;
+  /** Sem as 5 notas virais (a legenda, que precisa ser rápida): só a conferência da casa, humanizer e corte. */
+  semViral?: boolean;
 };
 
 export type ResultadoDaEscolhaViral = ResultadoDaConferencia & {
@@ -220,7 +222,7 @@ export async function escolherComViralidade(p: PedidoDaEscolhaViral): Promise<Re
     respostas = r.answers as Record<string, { score?: number }>;
     return r;
   };
-  const conf = await conferirCopies({ ...p, jev: comViral });
+  const conf = await conferirCopies(p.semViral ? p : { ...p, jev: comViral });
   const virais = lerViralidade(respostas, conf.textos.length);
   const ordem = ordemComViralidade(conf.conferencias.map((c) => ({ indice: c.indice, nota: c.nota, alerta: c.alerta })), virais);
   const passadas = conf.textos.map((t) => passadaFinal(t, p.fontes));
@@ -242,16 +244,68 @@ export async function escolherComViralidade(p: PedidoDaEscolhaViral): Promise<Re
 
 // ------------------------------------------------------------------ modelo da copy
 
-/** O id guardado para o cliente (mesa_cliente_config.modelo_copy_id); sem coluna ou sem linha, null. */
-export async function modeloDaCopyGuardado(db: Banco, clientId: string): Promise<string | null> {
+/**
+ * 23/10 (dono): três seletores, cada um no seu escopo e lembrado por cliente em coluna própria:
+ * a copy do conteúdo (lâminas, peça, detalhar e conteúdos do Mês), o refinar copy e o estrategista.
+ */
+export type EscopoDoModelo = "copy" | "refino" | "estrategista";
+
+export const COLUNA_DO_ESCOPO: Record<EscopoDoModelo, string> = {
+  copy: "modelo_copy_id",
+  refino: "modelo_refino_id",
+  estrategista: "modelo_estrategista_id",
+};
+
+/** O id guardado para o cliente no escopo (mesa_cliente_config); sem coluna ou sem linha, null. */
+export async function modeloGuardadoDoCliente(db: Banco, clientId: string, escopo: EscopoDoModelo): Promise<string | null> {
+  const coluna = COLUNA_DO_ESCOPO[escopo];
   try {
-    const { data, error } = await db.from("mesa_cliente_config").select("modelo_copy_id").eq("client_id", clientId).maybeSingle();
-    if (error) return null;
-    const id = data && typeof (data as { modelo_copy_id?: unknown }).modelo_copy_id === "string" ? String((data as { modelo_copy_id: string }).modelo_copy_id).trim() : "";
+    const { data, error } = await db.from("mesa_cliente_config").select(coluna).eq("client_id", clientId).maybeSingle();
+    if (error || !data) return null;
+    const v = (data as Record<string, unknown>)[coluna];
+    const id = typeof v === "string" ? v.trim() : "";
     return id || null;
   } catch {
     return null;
   }
+}
+
+/** O id guardado da copy do conteúdo (compatível com a rodada anterior). */
+export async function modeloDaCopyGuardado(db: Banco, clientId: string): Promise<string | null> {
+  return await modeloGuardadoDoCliente(db, clientId, "copy");
+}
+
+/**
+ * O modelo do escopo: o pedido na chamada; senão o lembrado do cliente; senão
+ * o padrão (copy e refino: o marcado "copy" no catálogo, o melhor para copy;
+ * estrategista: null, e a mesa segue com o padrão de hoje). null: a mesa segue
+ * com o modelo de antes (nada quebra sem a migration).
+ */
+export async function modeloDoEscopo(db: Banco, clientId: string, escopo: EscopoDoModelo, pedido?: unknown, opcoes: { semPadrao?: boolean } = {}): Promise<ModeloIa | null> {
+  const ids = [typeof pedido === "string" ? pedido.trim() : "", await modeloGuardadoDoCliente(db, clientId, escopo)].filter((x): x is string => !!x);
+  for (const id of ids) {
+    try {
+      return await carregarModelo(id, "texto");
+    } catch (e) {
+      registrarFalha("copy-viral: modelo escolhido não carregou (segue o padrão)", e, { client_id: clientId, modelo_id: id, escopo });
+    }
+  }
+  if (escopo === "estrategista" || opcoes.semPadrao) return null;
+  return await modeloPadrao(PAPEL_DA_COPY).catch(() => null);
+}
+
+/**
+ * Só a escolha explícita da copy do conteúdo (a da tela ou a lembrada do cliente), sem o padrão.
+ * 23/10 (dono): na direção do Estúdio, sem escolha continua o diretor de arte de hoje (a parte
+ * visual aprovada não muda sozinha).
+ */
+export async function modeloDaCopyEscolhido(db: Banco, clientId: string, pedido?: unknown): Promise<ModeloIa | null> {
+  return await modeloDoEscopo(db, clientId, "copy", pedido, { semPadrao: true });
+}
+
+/** O modelo do refinar copy (o pedido, o lembrado do cliente ou o melhor para copy). */
+export async function modeloDoRefino(db: Banco, clientId: string, pedido?: unknown): Promise<ModeloIa | null> {
+  return await modeloDoEscopo(db, clientId, "refino", pedido);
 }
 
 /**
@@ -260,13 +314,5 @@ export async function modeloDaCopyGuardado(db: Banco, clientId: string): Promise
  * mesa segue com o modelo de antes (nada quebra sem a migration).
  */
 export async function modeloDaCopy(db: Banco, clientId: string, pedido?: unknown): Promise<ModeloIa | null> {
-  const ids = [typeof pedido === "string" ? pedido.trim() : "", await modeloDaCopyGuardado(db, clientId)].filter((x): x is string => !!x);
-  for (const id of ids) {
-    try {
-      return await carregarModelo(id, "texto");
-    } catch (e) {
-      registrarFalha("copy-viral: modelo da copy escolhido não carregou (segue o padrão)", e, { client_id: clientId, modelo_id: id });
-    }
-  }
-  return await modeloPadrao(PAPEL_DA_COPY).catch(() => null);
+  return await modeloDoEscopo(db, clientId, "copy", pedido);
 }

@@ -55,8 +55,8 @@ import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useFiltroDaMarca, useMesa } from "./MesaContexto";
 import { filtrarPorMarca, projetosDaListaNaMarca } from "@/lib/mesa/marcas";
-import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
-import { SeletorDoModeloDaCopyDoConteudo, useModeloDaCopyDoConteudo } from "./ModeloDaCopyDoConteudo";
+import { Campo, SeletorDeRaciocinio } from "./Seletores";
+import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
 import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
@@ -305,7 +305,9 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
   const [oferta, setOferta] = useState("");
   const [modeloId, setModeloId] = useState("");
   // 23/10 (COPY-V): quem escreve os conteúdos (detalhar) é o "Modelo da copy", lembrado por cliente.
-  const modeloDaCopy = useModeloDaCopyDoConteudo();
+  const modeloDaCopy = useModeloDoEscopo("copy");
+  // 23/10 (dono): o estrategista (temas, plano e conversa) também lembrado por cliente, no mesmo padrão dos outros dois.
+  const modeloDoEstrategista = useModeloDoEscopo("estrategista");
   const [raciocinio, setRaciocinio] = useState("");
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
   const [projetoId, setProjetoId] = useState("");
@@ -366,7 +368,8 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
   // Parâmetros: da proposta aberta, ou o padrão do catálogo para uma nova.
   useEffect(() => {
     const p = proposta?.parametros || {};
-    const padrao = padraoPara(catalogo, "estrategista");
+    // A proposta aberta manda; sem ela, o lembrado do cliente; sem ele, o padrão do catálogo.
+    const padrao = (modeloDoEstrategista.guardadoId && catalogo.find((m) => m.id === modeloDoEstrategista.guardadoId)) || padraoPara(catalogo, "estrategista");
     const id = String(p.modelo_id || p.modelo || padrao?.id || "");
     setModeloId(id);
     const m = catalogo.find((x) => x.id === id);
@@ -388,6 +391,15 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
       });
     }
   }, [proposta?.id, catalogo.length]);
+
+  // O lembrado do estrategista chega depois do catálogo: vale quando a proposta não tem modelo gravado.
+  useEffect(() => {
+    const p = proposta?.parametros || {};
+    const lembrado = modeloDoEstrategista.guardadoId;
+    if (!lembrado || p.modelo_id || p.modelo || !catalogo.some((m) => m.id === lembrado)) return;
+    setModeloId(lembrado);
+    setRaciocinio(raciocinioPadraoDaTela(catalogo.find((m) => m.id === lembrado)?.raciocinio));
+  }, [modeloDoEstrategista.guardadoId, proposta?.id, catalogo.length]);
 
   useEffect(() => {
     if (!projetoId && projetos.data && projetos.data.length === 1) setProjetoId(projetos.data[0].id);
@@ -475,9 +487,9 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
         <Campo rotulo="Oferta principal"><Input value={oferta} onChange={(e) => setOferta(e.target.value)} placeholder="Ex.: kit de mudas de outono" className="h-9" /></Campo>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" />
+        <SeletorDoModeloDoEscopo estado={modeloDoEstrategista} valor={modeloId} aoTrocar={(id) => trocarModelo(id || (padraoPara(catalogo, "estrategista") || { id: "" }).id)} />
         <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
-        <SeletorDoModeloDaCopyDoConteudo estado={modeloDaCopy} />
+        <SeletorDoModeloDoEscopo estado={modeloDaCopy} />
       </div>
       <MesEscolhaEditorial valor={escolha} onChange={setEscolha} />
       {planoDoPeriodo && (

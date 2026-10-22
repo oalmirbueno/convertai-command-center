@@ -391,7 +391,7 @@ describe("4. Referência prancha", () => {
     expect(estudio).toContain("const caminhoDaPrancha = (clientId: string, refId: string) => `${pastaDasLeituras(clientId)}/prancha-");
     // A leitura do molde (VERSAO_DO_MOLDE, molde-<ref>.json) não mudou.
     expect(estudio).toContain("const caminho = `${pastaDasLeituras(t.client_id)}/molde-${ref.id.replace(/[^0-9a-z-]/gi, \"-\")}.json`;");
-    expect(estudio).toContain("if (guardado && guardado.versao === VERSAO_DO_MOLDE) return normalizarMolde(guardado.molde);");
+    expect(estudio).toContain("if (guardado && guardado.versao === VERSAO_DO_MOLDE && guardado.falhou !== true) return normalizarMolde(guardado.molde);"); // 23/10: a falha guardada (velocidade.ts) não conta como molde
   });
 
   it("configurar: fidelidade por lâmina e do trabalho, papéis dos quadros; tudo validado", () => {

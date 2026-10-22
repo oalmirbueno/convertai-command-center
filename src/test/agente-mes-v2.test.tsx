@@ -160,7 +160,8 @@ describe("modelo do agente do Mês: GPT-6 Sol alto, só aqui", () => {
     expect(calendario.match(/await resolverModeloDoMes\(/g)?.length || 0).toBe(0);
     expect(calendario.match(/resolverModeloDoMes\(corpo\.modelo_id, corpo\.raciocinio\)/g)?.length).toBe(1);
     expect(corpoDe("planejarMes")).toContain("resolverModeloDoMes(corpo.modelo_id, corpo.raciocinio)");
-    expect(corpoDe("pedidoLivre")).toContain('resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium")');
+    // 23/10 (COPY-V): o pedido livre escreve conteúdo: o modelo da copy do conteúdo quando houver; senão o do estrategista.
+    expect(corpoDe("pedidoLivre")).toContain('modeloDaEscrita(servico, clientId, corpo, { modelo: corpo.modelo_id, raciocinio: corpo.raciocinio ?? "medium" })');
     expect(corpoDe("resolverModeloDoMes")).toContain("modeloPadrao(PAPEL_DO_AGENTE_DO_MES)");
     expect(corpoDe("resolverModeloDoMes")).toContain("carregarModelo(MODELO_DO_AGENTE_DO_MES, \"texto\")");
   });
