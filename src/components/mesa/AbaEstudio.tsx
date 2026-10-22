@@ -1259,6 +1259,18 @@ export function DetalheDoItem({
   })();
   const [instrucaoDoCliente, setInstrucaoDoCliente] = useState<{ ordem: number; texto: string } | null>(null);
   const pedidoAplicado = useRef("");
+  // 23/10 (dono: "esse botão não funciona"): o pedido ia para o campo do diretor com a ferramenta fechada,
+  // então nada aparecia. Agora abre a ferramenta Diretor, rola até o campo e põe o cursor nele (sem gerar nada).
+  const levarAoDiretor = (texto: string) => {
+    setPedidoAoDiretor(texto);
+    abrirFerramenta("diretor", false);
+    window.setTimeout(() => {
+      const campo = document.querySelector<HTMLTextAreaElement>("[data-campo-pedir-ao-diretor]");
+      if (!campo) return;
+      campo.scrollIntoView({ block: "center" });
+      campo.focus();
+    }, 80);
+  };
   const aplicarPedidoDoCliente = () => {
     if (!pedidoDoCliente?.texto) return;
     const texto = `Pedido do cliente: ${pedidoDoCliente.texto}`;
@@ -1266,7 +1278,7 @@ export function DetalheDoItem({
       setInstrucaoDoCliente({ ordem: laminaDoPedido, texto });
       abrirPainel(laminaDoPedido, "livre");
     } else {
-      setPedidoAoDiretor(texto);
+      levarAoDiretor(texto);
     }
   };
   useEffect(() => {
@@ -1549,7 +1561,7 @@ export function DetalheDoItem({
       formatoAtual={formato}
       ocupado={ocupado || salvandoFormato}
       onAplicarNaLamina={aplicarPedidoDoCliente}
-      onPedirAoDiretor={(texto) => setPedidoAoDiretor(texto)}
+      onPedirAoDiretor={(texto) => levarAoDiretor(texto)}
       onMudarFormato={(f) => void mudarFormato(f)}
       onAbrirEntrega={() => abrirFerramenta("entrega", false)}
     />
@@ -2159,6 +2171,7 @@ export function DetalheDoItem({
         <Textarea
           value={pedidoAoDiretor}
           onChange={(e) => setPedidoAoDiretor(e.target.value)}
+          data-campo-pedir-ao-diretor=""
           rows={3}
           placeholder="Ex.: mais leve, com fotos reais do ambiente e menos texto por lâmina"
           className="text-[13px]"
