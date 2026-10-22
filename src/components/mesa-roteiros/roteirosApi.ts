@@ -286,9 +286,19 @@ export interface PedidoDeGeracao {
   /** Frente ROT: objetivo da base (autoridade, produto...) e o modelo da biblioteca ("auto" ou vazio: o agente escolhe). */
   objetivo_base?: string | null;
   modelo_base_id?: string | null;
+  /**
+   * 22/10/2026 (Campanhas, vídeo para gravar): a campanha da peça (o servidor lê o briefing, a fase da linha
+   * do tempo e o que a peça já tem na série) e o tema_id do item da série quando a peça não está na agenda.
+   */
+  campanha_id?: string | null;
+  tema_id?: string | null;
 }
 
 export const gerarRoteiro = (p: PedidoDeGeracao) => chamarRoteiros("gerar", p as unknown as Record<string, unknown>);
+
+/** Preço antes de gerar, pelo motor (ação estimar, sem IA): o valor e o modelo que a geração vai usar. */
+export const estimarGeracao = (clientId: string) =>
+  chamarRoteiros<{ estimativa_usd: number; modelo_id: string }>("estimar", { client_id: clientId, acao_alvo: "gerar" });
 export const salvarVersao = (roteiroId: string, conteudo: Roteiro, versaoBase: number, nota?: string) =>
   chamarRoteiros("versao_salvar", { roteiro_id: roteiroId, conteudo, versao_base: versaoBase, nota });
 export const mudarStatus = (roteiroId: string, status: StatusDoRoteiro) => chamarRoteiros<RespostaDoRoteiro & { modelo?: { id: string; nome: string } | null }>("status_mudar", { roteiro_id: roteiroId, status });

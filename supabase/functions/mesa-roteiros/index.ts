@@ -9,7 +9,7 @@
  *
  * Roteiro (o roteirista, com o conhecimento de conhecimento-roteiros.ts):
  * - estimar { client_id, acao_alvo: gerar|gancho|tom|conversa, quantidade?, modelo_id? } -> { estimativa_usd, modelo_id } (sem IA)
- * - gerar { client_id, task_id?, roteiro_id?, tipo, duracao_s?, objetivo?, pedido?, tema?, modelo_id?, modelo_roteiro_id?, campanha_id?, objetivo_base?, modelo_base_id? }
+ * - gerar { client_id, task_id?, roteiro_id?, tipo, duracao_s?, objetivo?, pedido?, tema?, modelo_id?, modelo_roteiro_id?, campanha_id?, tema_id?, objetivo_base?, modelo_base_id? }
  *   -> { roteiro, versao, aviso_jev, base, custo_usd, saldo_usd, aviso_banco? }
  * Base "Roteiros validados" (frente ROT, 30/09; modulos/roteiros-validados.ts): todo roteiro segue um
  * modelo da biblioteca. A equipe escolhe (modelo_base_id) ou o Jev escolhe entre os candidatos do
@@ -187,6 +187,8 @@ import {
   SISTEMA_DAS_IDEIAS,
 } from "./modulos/ideias-de-tema.ts";
 import { lerSinaisDoMundo } from "./modulos/sinais-do-mundo.ts";
+// 22/10/2026: a campanha no roteiro da peça (briefing, fase da linha do tempo e o que a peça já tem na série).
+import { campanhaParaORoteiro, itemDaPecaNaSerie } from "./modulos/campanha-da-peca.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
@@ -414,7 +416,7 @@ type ContextoDaPeca = {
   usando: string;
 };
 
-async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { campanhaId?: string | null; modeloRoteiroId?: string | null; tipo: TipoDeRoteiro; marcaId?: unknown }): Promise<ContextoDaPeca> {
+async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { campanhaId?: string | null; temaId?: string | null; modeloRoteiroId?: string | null; tipo: TipoDeRoteiro; marcaId?: unknown }): Promise<ContextoDaPeca> {
   const cerebroP = resumoDoCerebro(servico(), clientId, ["geral", "calendario", "campanha", "copy"], { limite: 1800 });
   // Frente MC (29/09): a marca da peça (projeto da tarefa) ou a aberta no topo; a CME não roteiriza com o contexto da Acerbi.
   const marca = await resolverMarca(servico(), clientId, { task_id: peca ? (peca as { id?: string }).id : null, marca_id: opcoes.marcaId }).catch((e) => (registrarFalha("mesa-roteiros: marca da peça falhou", e), null));
@@ -442,8 +444,20 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
   const campanhaId = opcoes.campanhaId || (item && typeof item.campanha_id === "string" && UUID.test(item.campanha_id) ? item.campanha_id : null);
   let campanha: Record<string, unknown> | null = null;
   if (campanhaId) {
-    const { data } = await servico().from("mesa_campanhas").select("id, nome, objetivo, conceito, pedido, periodo_inicio, periodo_fim, status").eq("id", campanhaId).eq("client_id", clientId).maybeSingle();
+    const { data } = await servico().from("mesa_campanhas").select("id, nome, objetivo, conceito, pedido, periodo_inicio, periodo_fim, status, briefing, proposta_id").eq("id", campanhaId).eq("client_id", clientId).maybeSingle();
     campanha = (data as Record<string, unknown> | null) || null;
+  }
+  // 22/10/2026: a peça na série da campanha (pela tarefa ou pelo tema_id), para a fase e o que ela já tem.
+  let pecaDaCampanha: Record<string, unknown> | null = item;
+  let propostaDaCampanha: string | null = null;
+  const serieDaCampanha = campanha && typeof campanha.proposta_id === "string" && UUID.test(campanha.proposta_id) ? campanha.proposta_id : null;
+  if (serieDaCampanha && (opcoes.temaId || peca) && !(item && proposta && proposta.id === serieDaCampanha)) {
+    const { data } = await servico().from("calendario_propostas").select("id, itens").eq("id", serieDaCampanha).eq("client_id", clientId).maybeSingle();
+    const achado = data ? itemDaPecaNaSerie((data as { itens: unknown }).itens, { taskId: peca ? peca.id : null, temaId: opcoes.temaId || null }) : null;
+    if (achado) {
+      pecaDaCampanha = achado;
+      propostaDaCampanha = serieDaCampanha;
+    }
   }
   // Memória: o modelo escolhido pela equipe; sem escolha, o último modelo do cliente do mesmo tipo (estilo aprovado).
   const listaModelos = ((modelos.error ? [] : modelos.data) as { id: string; escopo: string; client_id: string | null; nome: string; tipo: string; estrutura: unknown }[] | null) ?? [];
@@ -458,7 +472,7 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
   const oferta = typeof c.oferta === "string" ? c.oferta : null;
   return {
     cliente,
-    propostaId: proposta ? proposta.id : null,
+    propostaId: proposta ? proposta.id : propostaDaCampanha,
     campanhaId: campanha ? String(campanha.id) : null,
     oferta,
     termosPrivados: [cliente, ...cliente.split(/\s+/).filter((p) => p.length >= 4)],
@@ -491,7 +505,7 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
           cta: item.cta ?? null,
         }
         : null,
-      campanha: campanha ? { nome: campanha.nome, objetivo: campanha.objetivo, conceito: campanha.conceito, pedido: campanha.pedido, periodo: [campanha.periodo_inicio, campanha.periodo_fim] } : null,
+      campanha: campanha ? campanhaParaORoteiro(campanha, pecaDaCampanha) : null,
       modelo_aprovado: modelo ? modeloParaPrompt(normalizarEstruturaDoModelo(modelo.estrutura), modelo.nome) : null,
     },
   };
@@ -737,6 +751,8 @@ type PedidoDeRoteiro = {
   modeloId: unknown;
   modeloRoteiroId: string | null;
   campanhaId: string | null;
+  /** 22/10/2026: a peça da campanha sem tarefa na agenda (tema_id do item da série). */
+  temaId?: string | null;
   origem: OrigemDaVersao;
   /** Mudar o tom: reescreve o roteiro atual com este tom. */
   tom?: string;
@@ -753,7 +769,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
   const peca = p.taskId ? await lerPeca(p.clientId, p.taskId) : null;
   if (peca && !ehPecaDeVideo(peca.formato)) throw new ErroHttp(409, "peca_nao_e_video", "Esta peça da agenda não é de vídeo (Reels, vídeo, short ou story).");
   const atualDaLinha = p.linha ? versaoPorNumero(p.linha.versoes, p.linha.versao_atual) : null;
-  const ctxP = contextoDaPeca(p.clientId, peca, { campanhaId: p.campanhaId, modeloRoteiroId: p.modeloRoteiroId, tipo: p.tipo, marcaId: p.marcaId });
+  const ctxP = contextoDaPeca(p.clientId, peca, { campanhaId: p.campanhaId, temaId: p.temaId, modeloRoteiroId: p.modeloRoteiroId, tipo: p.tipo, marcaId: p.marcaId });
   // Frente ROT: a base sai junto com as outras leituras. Mudar o tom mantém a base da versão atual (o roteiro já a segue).
   const anterior = atualDaLinha && atualDaLinha.conteudo.base ? atualDaLinha.conteudo.base : null;
   const escolhaP: Promise<EscolhaDoModelo | null> = p.tom
@@ -934,6 +950,7 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: corpo.modelo_id,
     modeloRoteiroId: idOuNulo(corpo.modelo_roteiro_id, "modelo_roteiro_id"),
     campanhaId: idOuNulo(corpo.campanha_id, "campanha_id"),
+    temaId: limpo(corpo.tema_id, 80) || null,
     origem: "ia",
     marcaId: corpo.marca_id,
     // Frente ROT: "agora eu preciso de autoridade" (objetivo) ou o modelo escolhido na biblioteca.

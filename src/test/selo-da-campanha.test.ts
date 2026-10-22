@@ -329,7 +329,9 @@ describe("selo da campanha: servidor, Estúdio e SQL", () => {
 
   it("a função registra as ações do selo (com fôlego nas que usam IA) e o agente executa e desfaz o selo", () => {
     expect(cal).toContain("...selo.acoes,");
-    expect(cal).toContain('"trocar_angulo", "executar_acao_agente", ...selo.longas]);');
+    // 22/10: as ações novas da campanha entraram no fim da lista; o selo continua no fim e as dele seguem longas.
+    expect(cal).toContain('"trocar_angulo", "executar_acao_agente",');
+    expect(cal).toContain(', ...selo.longas]);');
     expect(cal).toContain('if (item.operacao === "selo_melhorar") return await melhorarSeloConfirmado(');
     expect(cal).toContain('if (x.operacao === "selo_trocar" || x.operacao === "selo_melhorar") {');
     expect(cal).toContain("falaDoSelo(mensagem)");

@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Check, Clapperboard, ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
+import { Camera, Check, Clapperboard, ExternalLink, FileText, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { textoDoErro } from "@/lib/mesa/api";
-import { botao, juntar, texto } from "@/components/sistema";
+import { botao, juntar, SeletorCompacto, texto } from "@/components/sistema";
 import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
@@ -29,6 +29,18 @@ import { direcaoDoRoteiro, faltasDoRoteiro, normalizarRoteiroDeVideo, type CenaD
 
 const cenaVazia = (ordem: number): CenaDoRoteiro => ({ ordem, descricao: "", fala: "", texto_na_tela: "", segundos: 4 });
 
+// 22/10 (dono: "no vídeo, gerar ou gravar"): os dois caminhos da peça, carregados só quando abertos.
+// Gravar: o roteiro completo pelo motor de roteiros, com PDF e Word para baixar.
+// Gerar: cenas pela Mesa Vídeos, narração e trilha ElevenLabs, montagem e render.
+const GravarVideoDaCampanha = lazy(() => import("./GravarVideoDaCampanha"));
+const GerarVideoDaCampanha = lazy(() => import("./GerarVideoDaCampanha"));
+type CaminhoDoVideo = "roteiro" | "gravar" | "gerar";
+const CAMINHOS_DO_VIDEO = [
+  { valor: "roteiro", rotulo: "Roteiro", icone: <FileText className="h-3.5 w-3.5" aria-hidden="true" /> },
+  { valor: "gravar", rotulo: "Gravar", icone: <Camera className="h-3.5 w-3.5" aria-hidden="true" /> },
+  { valor: "gerar", rotulo: "Gerar", icone: <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> },
+];
+
 /** O rascunho do gerador livre da Mesa Vídeos, preenchido pelo roteiro (o mesmo formato do GeradorLivre). */
 export function rascunhoDaMesaDeVideos(item: ItemProposto, r: RoteiroDeVideo | null) {
   const dir = r ? direcaoDoRoteiro(r) : { prompt: item.video ? item.video.prompt : item.tema, narracao: item.video ? item.video.narracao : "" };
@@ -46,6 +58,7 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
   const salvo = normalizarRoteiroDeVideo((item as ItemProposto & { roteiro_video?: unknown }).roteiro_video);
   const [r, setR] = useState<RoteiroDeVideo | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [caminho, setCaminho] = useState<CaminhoDoVideo>("roteiro");
   const pedidos = usePedidos(clientId);
   const doVideo = item.task_id ? ((pedidos.data && pedidos.data.itens) || []).filter((p) => p.parametros && p.parametros.task_id === item.task_id) : [];
   const editando = r !== null;
@@ -161,7 +174,24 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
           </div>
         </div>
       )}
-      {!roteiro && <p className={juntar(texto.auxiliar, "mt-1")}>Sem roteiro ainda: gere pelo agente da campanha ou pelo botão.</p>}
+      {!roteiro && caminho === "roteiro" && <p className={juntar(texto.auxiliar, "mt-1")}>Sem roteiro ainda: gere pelo agente da campanha ou pelo botão, ou escolha Gravar ou Gerar.</p>}
+      <SeletorCompacto
+        opcoes={CAMINHOS_DO_VIDEO}
+        valor={caminho}
+        onEscolher={(v) => setCaminho(v as CaminhoDoVideo)}
+        rotulo={`Caminho do vídeo ${item.tema || ""}`.trim()}
+        modo="segmentado"
+        className="mt-3"
+      />
+      {caminho !== "roteiro" && (
+        <div className="mt-3 min-w-0" data-caminho-do-video={caminho}>
+          <Suspense fallback={<p className={texto.auxiliar}><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Abrindo…</p>}>
+            {caminho === "gravar"
+              ? <GravarVideoDaCampanha clientId={clientId} campanha={campanha} propostaId={propostaId} item={item} />
+              : <GerarVideoDaCampanha clientId={clientId} campanha={campanha} propostaId={propostaId} item={item} />}
+          </Suspense>
+        </div>
+      )}
     </li>
   );
 }

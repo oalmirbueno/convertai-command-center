@@ -338,6 +338,7 @@ import { historicoParaOModelo, hojeParaOAgente } from "../_shared/conversa-segur
 import { acoesDoSelo, type CampanhaDoSelo } from "./selo-da-campanha.ts";
 // 22/10/2026: trilha e efeitos da campanha (ElevenLabs Music e Sound Effects; suno desligado).
 import { acoesDaTrilha, type CampanhaDaTrilha } from "./modulos/trilha-da-campanha.ts";
+import { acoesDaNarracao, type CampanhaDaNarracao, type PropostaDaNarracao } from "./modulos/narracao-da-campanha.ts";
 import { trilhaDoBriefing } from "./modulos/trilha-da-campanha-regras.ts";
 import { acaoDoSeloNaConversa, blocoDoSeloParaOEstrategista, type PedidoDoSeloNaConversa } from "./selo-na-conversa.ts";
 import { falaDoSelo, type IntencaoDoSelo } from "../_shared/selo-da-campanha.ts";
@@ -4472,6 +4473,10 @@ export function editarUmItem(antigo: Item, campos: Record<string, unknown>, utei
   if (novo.formato === "video" && campos.roteiro_video && typeof campos.roteiro_video === "object") {
     const r = normalizarRoteiroDeVideo(campos.roteiro_video);
     if (r) {
+      // 22/10/2026 (caminho Gerar): a narração e a montagem já feitas não se perdem quando a tela salva sem elas.
+      const antes = novo.roteiro_video;
+      if (antes && antes.narracao && !r.narracao) r.narracao = antes.narracao;
+      if (antes && antes.montagem && !r.montagem) r.montagem = antes.montagem;
       novo.roteiro_video = r;
       novo.video = normalizarVideoDaPauta({ ...(novo.video ?? {}), ...direcaoDoRoteiroDeVideo(r) });
       if (r.gancho) novo.gancho = r.gancho;
@@ -8853,6 +8858,18 @@ async function desfazerNaCampanha(servico: SupabaseClient, clientId: string, x: 
 
 /** Frente SEL (30/09): o selo da campanha (versões, 4 caminhos, Melhorar, referências). */
 const trilhaDaCampanha = acoesDaTrilha({ erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra ?? {}), json, carregarCampanha: (s, id) => carregarCampanha(s, id) as unknown as Promise<CampanhaDaTrilha>, exigirAcesso: exigirAcessoAoCliente, somarCusto: somarCustoDaCampanha, garantirSaldo: (id, v) => import("../_shared/ia-motor.ts").then((m) => m.garantirSaldo(id, v)), lerChave: () => chave("ELEVENLABS_API_KEY"), clienteDoChamador });
+/** 22/10/2026 (caminho Gerar do vídeo da campanha): a narração da peça pela ElevenLabs. */
+const narracaoDaCampanha = acoesDaNarracao({
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra ?? {}),
+  json,
+  carregarCampanha: (s, id) => carregarCampanha(s, id) as unknown as Promise<CampanhaDaNarracao>,
+  exigirAcesso: exigirAcessoAoCliente,
+  carregarProposta: (s, id) => carregarProposta(s, id) as unknown as Promise<PropostaDaNarracao>,
+  salvarItens: (s, p, itens) => salvarProposta(s, p as unknown as Proposta, { itens }) as unknown as Promise<PropostaDaNarracao>,
+  somarCusto: somarCustoDaCampanha,
+  garantirSaldo: (id, v) => import("../_shared/ia-motor.ts").then((m) => m.garantirSaldo(id, v)),
+  lerChave: () => chave("ELEVENLABS_API_KEY"),
+});
 const selo = acoesDoSelo({
   erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra ?? {}),
   json,
@@ -8907,10 +8924,11 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   trocar_angulo: trocarAngulo,
   campanha_conteudos: campanhaConteudos,
   campanha_trilha: trilhaDaCampanha.campanhaTrilha,
+  campanha_narracao: narracaoDaCampanha.campanhaNarracao,
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_trilha", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_trilha", "campanha_narracao", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 

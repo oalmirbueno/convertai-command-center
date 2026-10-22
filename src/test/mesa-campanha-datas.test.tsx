@@ -43,6 +43,9 @@ vi.mock("@/integrations/supabase/client", () => {
   };
 });
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+// 22/10: os caminhos Gravar e Gerar da peça de vídeo têm testes próprios (campanha-gravar-video e campanha-gerar-video).
+vi.mock("@/components/mesa/GravarVideoDaCampanha", () => ({ default: (p: { item: { tema: string } }) => h("div", { "data-testid": "gravar-video" }, `Gravar ${p.item.tema}`) }));
+vi.mock("@/components/mesa/GerarVideoDaCampanha", () => ({ default: (p: { item: { tema: string } }) => h("div", { "data-testid": "gerar-video" }, `Gerar ${p.item.tema}`) }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
@@ -503,5 +506,20 @@ describe("reorganizar: a fase é a da data e a 1ª peça é sempre introdução 
     const reorg = fonte.slice(fonte.indexOf("async function campanhaReorganizar("), fonte.indexOf("async function campanhaReorganizarInterno("));
     expect(reorg).toContain("introducoesPeloJev(c, pecas, chamador.userId)");
     expect(reorg).toContain("introducoes: introducoes.lista");
+  });
+});
+
+describe("peça de vídeo da campanha: gravar ou gerar (22/10)", () => {
+  it("Roteiro por padrão; Gravar e Gerar abrem cada caminho na própria peça", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(chaves.proposta(PROPOSTA_ID), proposta);
+    montar(h(CampanhaVideos, { campanha }), qc);
+    const regiao = await screen.findByRole("region", { name: /Vídeos: Prova e produtos/ });
+    expect(within(regiao).queryByTestId("gravar-video")).toBeNull();
+    fireEvent.click(within(regiao).getByRole("tab", { name: /Gravar/ }));
+    expect((await within(regiao).findByTestId("gravar-video")).textContent).toBe("Gravar Reels do PC assombrado");
+    fireEvent.click(within(regiao).getByRole("tab", { name: /Gerar/ }));
+    expect((await within(regiao).findByTestId("gerar-video")).textContent).toBe("Gerar Reels do PC assombrado");
+    expect(within(regiao).queryByTestId("gravar-video")).toBeNull();
   });
 });
