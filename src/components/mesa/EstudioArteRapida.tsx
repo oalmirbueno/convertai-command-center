@@ -467,7 +467,7 @@ function PedidoDaArteRapida({
   const corpo = (
     <div className="min-w-0 space-y-5">
       {semMarca ? (
-        <p className="text-[12px] text-muted-foreground" data-arte-sem-marca="">Livre: sem marca de cliente (sem logo, campanha nem identidade). Para usar a marca de um cliente, escolha o cliente no topo.</p>
+        <p className="text-[12px] text-muted-foreground" data-arte-sem-marca="">Livre, sem marca de cliente. Para usar uma marca, escolha o cliente no topo.</p>
       ) : (
         <EscolhaDaCampanha campanhas={lista} valor={campanha} onValor={escolherCampanha} carregando={campanhas.isLoading} emUso={emUso} />
       )}
