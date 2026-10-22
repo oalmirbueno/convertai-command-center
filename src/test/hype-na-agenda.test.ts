@@ -35,9 +35,10 @@ describe("hype na agenda", () => {
     const servidor = ler("supabase/functions/agente-calendario/index.ts");
     expect(servidor).toContain("const ganchoDoPedido = ganchoDoHypeDoPedido(corpo.hype);");
     expect(servidor).toContain("if (ganchoDoPedido) for (const item of itens) item.gancho_do_momento = ganchoDoPedido;");
-    // 21/10: o pedido sai das áreas Hype (datas e leitura) e Trending (notícias e nicho), sempre com o hype junto.
+    // 21/10: o pedido sai das visões Da semana (leitura), Datas e Em alta (notícias), sempre com o hype junto.
     expect(ler("src/components/mesa/AreaDoHype.tsx")).toContain("pedidoLivre({ clientId, mensagem, hype })");
-    expect(ler("src/components/mesa/AreaDoHype.tsx")).toContain('{ tipo: "hype", titulo: h.titulo }');
+    expect(ler("src/components/mesa/AreaDoHype.tsx")).toContain('{ tipo: "hype", titulo: d.titulo }');
+    expect(ler("src/components/mesa/VisaoDaSemana.tsx")).toContain("hype: { tipo: hype.tipo, titulo: hype.titulo }");
     expect(ler("src/components/mesa/AreaDoTrending.tsx")).toContain('hype: { tipo: "nicho", titulo }');
   });
 

@@ -25,7 +25,8 @@ function montar(t = trabalho, ordem = 1) {
   return render(<QueryClientProvider client={cache}><TemplateProfileEditor trabalho={t} card={t.direcao.cards!.find((c) => c.ordem === ordem)!} bloqueado={false} onMudou={vi.fn()} onAbrirFotos={vi.fn()} /></QueryClientProvider>);
 }
 const pronto = () => waitFor(() => expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeEnabled());
-const etapa = (nome: string) => fireEvent.click(screen.getByRole("button", { name: nome }));
+// Rodada 3: a ferramenta Template é uma seção só (sem abas); tudo fica à vista.
+const etapa = (_nome: string) => undefined;
 beforeEach(() => {
   sessionStorage.clear(); Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 }); estado.acervo.mockReset().mockReturnValue(acervo);
   estado.chamar.mockReset().mockResolvedValue({ trabalho });

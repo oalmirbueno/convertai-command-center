@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flame, Newspaper, RefreshCw } from "lucide-react";
+import { CalendarDays, Flame, ListChecks, Newspaper, RefreshCw, Sparkles } from "lucide-react";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import Etapas from "@/components/sistema/Etapas";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
@@ -8,36 +8,35 @@ import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Cronometro } from "./Cronometro";
 import { ganchoDaDescricao } from "./momentoDoGancho";
-import { dadosDoTrendy, itensDoTrendy, separarLeitura } from "./trendy";
+import { dadosDoTrendy, itensDoTrendy, ordenarPelaNota } from "./trendy";
 import { supabase } from "@/integrations/supabase/client";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
 import AreaDoHype from "./AreaDoHype";
 import AreaDoTrending, { type ConsultaDoTrending } from "./AreaDoTrending";
+import VisaoDaSemana from "./VisaoDaSemana";
+import VisaoTrendy from "./VisaoTrendy";
 import BarraDeJuntar from "./BarraDeJuntar";
 import { datasDasProximasSemanas } from "./datasDoHype";
-import { alternarJuntado, sementeDaSelecao, type ItemJuntado, type Recencia } from "./hypeETrending";
+import { alternarJuntado, CUSTO_DO_JEV_NAS_NOTICIAS_USD, sementeDaSelecao, type ItemJuntado, type Recencia } from "./hypeETrending";
 import { guardarSementeDaCampanha } from "./sementeDaCampanha";
-import { buscarHypes, chaves, hojeIso, lerHypes, partesDosHypes, periodoCurto, segundaDaSemanaIso, useMidia } from "./mesaV4Api";
+import { buscarHypes, chaves, hojeIso, lerHypes, partesDosHypes, periodoCurto, segundaDaSemanaIso } from "./mesaV4Api";
+import { botao, juntar } from "@/components/sistema/estilos";
 
 /**
- * Hype e Trending no Mês (21/10/2026, dono: "coloque a área de hype e a de trending, que é diferente, igual
- * do MyPostFlow, e deixe bem intuitivo e organizado").
+ * Hype e Trending no Mês (21/10/2026). Três visões em abas de ícone e rótulo, no topo da seção:
+ * - "Da semana" (abre primeiro): o modelo de antes, em cartões (VisaoDaSemana.tsx), com a leitura semanal
+ *   (buscar_hypes): hypes do momento e "em alta no nicho", pauta pronta, Criar conteúdo/Usar a pauta e campanha.
+ *   A leitura mora só aqui.
+ * - "Datas": o calendário fixo do que vem por aí (AreaDoHype.tsx), agrupado por período, com selo de urgência.
+ * - "Em alta": manchetes reais de agora (AreaDoTrending.tsx, buscar_trending).
+ * - "Trendy": a busca e os filtros do Codex sobre a leitura gravada (VisaoTrendy.tsx), sem nova pesquisa.
  *
- * - HYPE: datas e eventos que vêm por aí (calendário fixo em datasDoHype.ts, com a janela e a linha do tempo
- *   de 8 semanas) e os hypes da leitura semanal (tipo hype).
- * - TRENDING: o que está em alta AGORA: manchetes reais (agente-calendario/buscar_trending, Google Notícias)
- *   e o "em alta no nicho" da leitura semanal (tipo nicho).
- *
- * Computador largo: as duas lado a lado; celular e tablet: abas de ícone. Cada item tem a caixinha "juntar";
- * a barra embaixo grava a semente (sementeDaCampanha.ts) e abre a campanha nova na aba Campanhas.
- *
- * 2ª rodada (dono: "mais organizado, alinhado, com scroll, sem poluição; o do Mês é complementar"): as duas
- * colunas têm a mesma altura, cabeçalho fixo e rolagem própria (de 1024 px para cima); toda linha é a mesma
- * grade (LinhaDoHypeETrending.tsx); explicações só no "?". Nada do que havia sumiu: a leitura semanal
- * (hypes e "em alta no nicho", com pauta pronta, Criar conteúdo/Usar a pauta e Criar campanha) segue nas
- * colunas, e o "Novo calendário" do agente segue no topo do Mês. O botão do topo, "Buscar o que está em
- * alta agora", busca as notícias do nicho (sem custo) e refaz a leitura semanal (buscar_hypes, custo à vista).
+ * "Juntar" no topo liga as caixinhas nas três visões; a barra embaixo grava a semente
+ * (sementeDaCampanha.ts) e abre a campanha nova. "Buscar o que está em alta agora" busca as notícias do
+ * nicho (conferidas pelo Jev) e refaz a leitura semanal (custo à vista). Em cada item, uma ação só: "Criar".
  */
+
+type VisaoDoHype = "semana" | "datas" | "em-alta" | "trendy";
 
 const CHAVE_RECOLHIDO = "mesa:hypes:recolhido";
 
@@ -81,8 +80,9 @@ export default function HypesDaSemana({
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const [recolhido, setRecolhido] = useRecolhido(`mesa:mes:hypes:${clientId}`, lerRecolhido());
-  const [aba, setAba] = useState<"hype" | "trending">("hype");
-  const largo = useMidia("(min-width: 1280px)");
+  // Três visões; abre na "Da semana" (o modelo de antes, que o dono conhecia).
+  const [aba, setAba] = useState<VisaoDoHype>("semana");
+  const [modoJuntar, setModoJuntar] = useState(false);
   const [buscandoDesde, setBuscandoDesde] = useState<number | null>(null);
   // Seleção por cliente: trocar de cliente nunca leva itens do anterior.
   const [selecao, setSelecao] = useState<{ clientId: string; itens: ItemJuntado[]; pedido: string }>({ clientId, itens: [], pedido: "" });
@@ -99,7 +99,8 @@ export default function HypesDaSemana({
   const naAgenda = useQuery({ queryKey: ["mesa", "hypes-na-agenda", clientId], queryFn: () => lerGanchosNaAgenda(clientId), staleTime: 30_000, retry: false });
   const dados = dadosDoTrendy(hypes.data, clientId);
   const daSemana = !!dados && dados.semana === segundaDaSemanaIso(hoje);
-  const leitura = separarLeitura(itensDoTrendy(dados ? dados.itens : [], naAgenda.data || []));
+  // A leitura já vem do agente com o nicho; aqui a ordem é a da relevância ao cliente (nota do Jev), estável.
+  const leitura = ordenarPelaNota(itensDoTrendy(dados ? dados.itens : [], naAgenda.data || []));
   const pesquisadoEm = dados && dados.criado_em ? dados.criado_em.slice(0, 10) : null;
   const proximas = useMemo(() => datasDasProximasSemanas(hoje, 8).filter((d) => d.tipo === "varejo" || d.tipo === "cultural").slice(0, 3).map((d) => d.titulo), [hoje]);
 
@@ -125,29 +126,30 @@ export default function HypesDaSemana({
   const [consulta, setConsulta] = useState<ConsultaDoTrending | null>(null);
   const consultar = (c: { assunto: string; recencia: Recencia }) => setConsulta((antes) => ({ clientId, ...c, vez: antes ? antes.vez + 1 : 1 }));
 
-  /** "Buscar o que está em alta agora": as notícias do nicho (sem custo) e a leitura da web (com custo à vista). */
+  /** "Buscar o que está em alta agora": as notícias do nicho (com o Jev) e a leitura da web (custo à vista no botão). */
   const buscarAgora = async () => {
     consultar({ assunto: "", recencia: "7d" });
-    setAba("trending");
+    // As notícias chegam em segundos no "Em alta"; a leitura da semana segue no "Da semana".
+    setAba("em-alta");
     return buscar(daSemana);
   };
 
-  const jaNaAgenda = dados ? dados.itens.length - leitura.hype.length - leitura.nicho.length : 0;
+  const jaNaAgenda = dados ? dados.itens.length - leitura.length : 0;
+  // Com algo marcado, a caixinha continua à vista mesmo com o modo juntar desligado.
+  const juntando = modoJuntar || juntados.length > 0;
   const linhaDeEstado = [
     juntados.length ? `${juntados.length} para juntar` : "",
     dados ? (daSemana ? `leitura de ${pesquisadoEm ? `${pesquisadoEm.slice(8, 10)}/${pesquisadoEm.slice(5, 7)}` : "esta semana"}` : `leitura da semana de ${periodoCurto(dados.semana)}`) : "",
   ].filter(Boolean).join(" · ");
 
   const props = {
+    juntando,
     juntados,
     onAlternar: alternar,
     onCriarCampanha: (item: ItemJuntado) => abrirCampanha([item], ""),
     onPedidoInicio,
     onPedidoFim,
-    pesquisadoEm,
   };
-  const areaDoHype = <AreaDoHype {...props} hoje={hoje} leitura={leitura.hype} resumoDaLeitura={dados ? dados.resumo : null} jaNaAgenda={jaNaAgenda} />;
-  const areaDoTrending = <AreaDoTrending {...props} consulta={consulta} onConsulta={consultar} nicho={leitura.nicho} assuntosExtras={proximas} />;
 
   return (
     <section className="min-w-0" aria-label="Hype e Trending" data-hype-trending={clientId}>
@@ -156,20 +158,24 @@ export default function HypesDaSemana({
         icone={<Flame className="h-4 w-4" />}
         truncar
         descricao={linhaDeEstado || undefined}
-        ajuda="Hype: datas e eventos que vêm por aí. Trending: o que está em alta agora, em notícias reais, e o que viraliza no nicho. Marque a caixinha dos itens e crie uma campanha com eles juntos. O botão do topo busca as notícias do nicho e refaz a leitura da semana na web (com o custo à vista)."
+        ajuda="Da semana: a leitura semanal da web (hypes e o que viraliza no nicho), em cartões. Datas: o calendário do que vem por aí. Em alta: notícias reais de agora. Trendy: buscar e filtrar a leitura da semana. Ligue “Juntar” para marcar itens e criar uma campanha com eles. O botão do topo busca as notícias do nicho e refaz a leitura da semana (custo à vista)."
         recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: linhaDeEstado || undefined }}
         acao={
           <>
             {buscandoDesde !== null && <span className="hidden sm:inline-flex"><Cronometro desde={buscandoDesde} rotulo="Pesquisando" previsao="~90s" /></span>}
+            <button type="button" className={juntar(botao.barra, "toque-compacto", modoJuntar ? "bg-muted text-foreground" : "")} onClick={() => setModoJuntar(!modoJuntar)} aria-pressed={modoJuntar} aria-label="Juntar para campanha" title="Juntar para campanha: marque itens das três visões e crie uma campanha com eles">
+              <ListChecks className="h-4 w-4 sm:mr-1" aria-hidden="true" />
+              <span className="max-sm:sr-only">Juntar</span>
+            </button>
             <BotaoComCusto
               rotulo={<><RefreshCw className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" /><span className="max-sm:sr-only">Buscar o que está em alta agora</span></>}
               titulo="O que está em alta agora"
-              descricao="Busca as notícias do nicho agora (sem custo) e refaz a leitura da semana na web e no Instagram, com a nota do Jev. Leva de 60 a 90 segundos."
-              partes={() => partesDosHypes(catalogo)}
+              descricao="Busca as notícias do nicho agora, conferidas pelo Jev, e refaz a leitura da semana na web e no Instagram, com a nota do Jev. Leva de 60 a 90 segundos."
+              partes={() => partesDosHypes(catalogo).concat([{ modeloId: null, tipo: "texto", fixoUsd: CUSTO_DO_JEV_NAS_NOTICIAS_USD }])}
               executar={buscarAgora}
               aoConcluir={() => setRecolhido(false)}
               variant="outline"
-              className="toque-compacto h-8"
+              className="toque-compacto ml-1 h-8"
             />
           </>
         }
@@ -177,28 +183,23 @@ export default function HypesDaSemana({
       {buscandoDesde !== null && <div className="pb-2 pt-1 sm:hidden"><Cronometro desde={buscandoDesde} rotulo="Pesquisando na web" previsao="~90s" /></div>}
 
       {!recolhido && (
-        <div className="min-w-0 pt-3">
+        <div className="min-w-0 space-y-3 pt-3">
           {hypes.isError && <AvisoDeErro erro={hypes.error} />}
-          {largo ? (
-            <div className="grid min-w-0 grid-cols-2 items-start gap-x-8" data-colunas="">
-              {areaDoHype}
-              {areaDoTrending}
-            </div>
-          ) : (
-            <div className="min-w-0 space-y-3">
-              <Etapas
-                rotulo="Hype ou Trending"
-                soIcone
-                valor={aba}
-                onEscolher={(v) => setAba(v as "hype" | "trending")}
-                itens={[
-                  { valor: "hype", rotulo: "Hype", dica: "Datas e eventos que vêm por aí", icone: <Flame className="h-4 w-4" /> },
-                  { valor: "trending", rotulo: "Trending", dica: "O que está em alta agora", icone: <Newspaper className="h-4 w-4" /> },
-                ]}
-              />
-              {aba === "hype" ? areaDoHype : areaDoTrending}
-            </div>
-          )}
+          <Etapas
+            rotulo="Visões do Hype e Trending"
+            valor={aba}
+            onEscolher={(v) => setAba(v as VisaoDoHype)}
+            itens={[
+              { valor: "semana", rotulo: "Da semana", dica: "A leitura semanal da web, em cartões", icone: <Flame className="h-4 w-4" />, contador: leitura.length || null },
+              { valor: "datas", rotulo: "Datas", dica: "Datas e eventos que vêm por aí", icone: <CalendarDays className="h-4 w-4" /> },
+              { valor: "em-alta", rotulo: "Em alta", dica: "Notícias em alta agora", icone: <Newspaper className="h-4 w-4" /> },
+              { valor: "trendy", rotulo: "Trendy", dica: "Buscar e filtrar a leitura da semana (sem nova pesquisa)", icone: <Sparkles className="h-4 w-4" /> },
+            ]}
+          />
+          {aba === "semana" && <VisaoDaSemana {...props} dados={dados} daSemana={daSemana} carregando={hypes.isLoading} itens={leitura} jaNaAgenda={jaNaAgenda} />}
+          {aba === "datas" && <AreaDoHype {...props} hoje={hoje} />}
+          {aba === "em-alta" && <AreaDoTrending {...props} consulta={consulta} onConsulta={consultar} assuntosExtras={proximas} />}
+          {aba === "trendy" && <VisaoTrendy {...props} dados={dados} itens={leitura} />}
           <BarraDeJuntar
             quantos={juntados.length}
             pedido={pedido}

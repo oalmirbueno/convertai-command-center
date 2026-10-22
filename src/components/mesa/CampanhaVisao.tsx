@@ -5,7 +5,8 @@ import { FaixaDeNumeros, botao, juntar, texto } from "@/components/sistema";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { periodoCurto, type Campanha } from "./mesaV4Api";
 import { numerosDaCampanha, resumoDaCampanhaEmHtml, type SituacaoDaPeca } from "./regrasDaCampanha";
-import { PecasPorFase } from "./CampanhaPecas";
+import { PecasPorFase, useAcoesDasPecas } from "./CampanhaPecas";
+import CampanhaAds from "./CampanhaAds";
 import { SeloDoEstado } from "./CampanhaDetalhe";
 
 /**
@@ -45,7 +46,19 @@ export function exportarResumo(html: string, nome: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export default function CampanhaVisao({ campanha, pecas }: { campanha: Campanha; pecas: SituacaoDaPeca[] }) {
+export default function CampanhaVisao({
+  campanha,
+  pecas,
+  onAbrirArteRapida,
+  onAbrirStories,
+}: {
+  campanha: Campanha;
+  pecas: SituacaoDaPeca[];
+  onAbrirArteRapida?: (trabalhoId: string) => void;
+  onAbrirStories?: (sequenciaId: string) => void;
+}) {
+  // 22/10/2026: cada peça da visão abre no Estúdio (ou nos Stories) direto daqui.
+  const acoes = useAcoesDasPecas({ campanha, pecas, onAbrirArteRapida, onAbrirStories });
   const { clientName } = useMesa();
   const qc = useQueryClient();
   const n = numerosDaCampanha(pecas);
@@ -105,7 +118,12 @@ export default function CampanhaVisao({ campanha, pecas }: { campanha: Campanha;
         ]}
       />
 
-      <PecasPorFase pecas={pecas} vazio="Sem peças ainda: gere a campanha completa." />
+      {/* Vínculo opcional com a campanha de anúncios (números da Meta já sincronizados e atalho para a Mesa Ads). */}
+      <div className="min-w-0 border-t border-border pt-4">
+        <CampanhaAds campanha={campanha} />
+      </div>
+
+      <PecasPorFase pecas={pecas} acoes={acoes} vazio="Sem peças ainda: gere a campanha completa." />
     </div>
   );
 }

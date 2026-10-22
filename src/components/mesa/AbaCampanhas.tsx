@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Megaphone, Plus, Sparkles, Type } from "lucide-react";
+import { Copy, Loader2, Megaphone, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Sparkles, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
@@ -18,6 +18,10 @@ import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
 import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
 import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos, usePedidoDaCampanha } from "./campanhasApi";
 import { tirarSementeDaCampanha, type SementeDaCampanha } from "./sementeDaCampanha";
+import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { botao } from "@/components/sistema/estilos";
+import { chavesDaCampanhaCompleta, lerTrabalhosDasCampanhas } from "./campanhasApi";
+import { moldeDaCampanha, progressoDaCampanha, prontasPorCampanha, type MoldeDaCampanha } from "./regrasDaCampanha";
 // Frente IDV (30/09): o criador de nomes da Mesa Identidade também dá nome de campanha (só baixa quando abre).
 const NamingDaCampanha = lazy(() => import("@/components/mesa-identidade/NamingDaCampanha"));
 
@@ -50,18 +54,25 @@ function ItemDaLista({
   conteudos,
   ativa,
   onAbrir,
+  progresso = null,
+  onDuplicar,
 }: {
   campanha: Campanha;
   conteudos: number | null;
   ativa: boolean;
   onAbrir: () => void;
+  /** 22/10/2026: peças prontas de um total (a barra fina embaixo). */
+  progresso?: { prontas: number; total: number } | null;
+  /** 22/10/2026: "Nova campanha a partir desta" (a estrutura, com outro tema). */
+  onDuplicar?: () => void;
 }) {
   return (
+    <div className={`group flex w-full min-w-0 items-center rounded-lg transition-colors ${ativa ? "bg-primary/10" : "hover:bg-muted"}`}>
     <button
       type="button"
       onClick={onAbrir}
       aria-current={ativa ? "true" : undefined}
-      className={`flex w-full min-w-0 items-center rounded-lg px-2 py-2 text-left transition-colors ${ativa ? "bg-primary/10" : "hover:bg-muted"}`}
+      className="flex min-w-0 flex-1 items-center px-2 py-2 text-left"
     >
       <SeloPequeno campanha={campanha} />
       <span className="ml-2.5 min-w-0 flex-1">
@@ -74,8 +85,22 @@ function ItemDaLista({
           </span>
           <SeloDoEstado estado={campanha.status} />
         </span>
+        {progresso && (
+          <span className="mt-1 flex min-w-0 items-center" title={`${progresso.prontas} de ${progresso.total} peças prontas`} data-progresso={`${progresso.prontas}/${progresso.total}`}>
+            <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+              <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round((progresso.prontas / progresso.total) * 100)}%` }} />
+            </span>
+            <span className="ml-1.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">{progresso.prontas}/{progresso.total}</span>
+          </span>
+        )}
       </span>
     </button>
+    {onDuplicar && (
+      <button type="button" className={`${botao.icone} mr-1`} onClick={onDuplicar} aria-label={`Nova campanha a partir de ${campanha.nome}`} title="Nova campanha a partir desta (mesma estrutura, outro tema)">
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    )}
+    </div>
   );
 }
 
@@ -159,8 +184,11 @@ export default function AbaCampanhas({
   onLimparHype,
   onAbrirNoEstudio,
   onAbrirArteRapida,
+  onAbrirStories,
   novaPedida = false,
 }: {
+  /** 22/10/2026: abre a aba Stories (a sequência já fica escolhida). */
+  onAbrirStories?: () => void;
   /** 21/10/2026: &nova=1 (o Mês juntou hypes e trendings): abre a campanha nova e lê a semente. */
   novaPedida?: boolean;
   /** 21/10/2026: abre a peça da campanha (arte rápida) no Estúdio. */
@@ -186,6 +214,11 @@ export default function AbaCampanhas({
   const [nomes, setNomes] = useState(false);
   // 21/10/2026: a semente do Mês (hypes + trendings + pedido) chega uma vez e abre a campanha nova preenchida.
   const [semente, setSemente] = useState<SementeDaCampanha | null>(null);
+  // 22/10/2026: "Nova campanha a partir desta" (a estrutura de outra campanha, outro tema).
+  const [molde, setMolde] = useState<MoldeDaCampanha | null>(null);
+  // 22/10/2026 (dono: "coloque recolher o agente e a aba campanhas"): as laterais recolhem para o lado, lembrado por cliente.
+  const [listaRecolhida, setListaRecolhida] = useEstadoDaTela<boolean>(`mesa:campanhas:lista-recolhida:${clientId}`, false);
+  const [agenteRecolhido, setAgenteRecolhido] = useEstadoDaTela<boolean>(`mesa:campanhas:agente-recolhido:${clientId}`, false);
   useEffect(() => {
     const s = tirarSementeDaCampanha(clientId);
     if (s) setSemente(s);
@@ -203,6 +236,7 @@ export default function AbaCampanhas({
   const chaveDaNova = useRef("nova");
   if (hype && hypeIndice !== null) chaveDaNova.current = `hype-${hypeIndice}`;
   if (semente) chaveDaNova.current = `semente-${semente.criada_em}`;
+  if (molde) chaveDaNova.current = `molde-${molde.origemId}`;
 
   // Frente AE: com duas marcas (Acerbi e CME), só as campanhas da marca aberta.
   const { marca } = useMarcaDaMesa();
@@ -214,6 +248,16 @@ export default function AbaCampanhas({
     queryFn: () => lerContagemDosConteudos(idsDasPropostas),
   });
   const conteudosDe = (c: Campanha) => conteudosDaCampanha(queryClient, c, contagem.data);
+  // Progresso de cada campanha na lista: peças prontas (trabalhos do Estúdio) de um total.
+  const trabalhosDasCampanhas = useQuery({
+    queryKey: ["mesa", "campanhas-progresso", clientId],
+    enabled: lista.length > 0,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    queryFn: () => lerTrabalhosDasCampanhas(clientId),
+  });
+  const prontas = trabalhosDasCampanhas.data ? prontasPorCampanha(trabalhosDasCampanhas.data) : {};
+  const progressoDe = (c: Campanha) => (trabalhosDasCampanhas.data ? progressoDaCampanha(c, conteudosDe(c), prontas) : null);
 
   useEffect(() => { setIdLocal(campanhaId); }, [campanhaId]);
   useEffect(() => { if (hypeIndice !== null) setNova(true); }, [hypeIndice]);
@@ -224,7 +268,8 @@ export default function AbaCampanhas({
   const andando = !!usePedidoDaCampanha(escolhida ? escolhida.id : null);
   // Lista ao lado com três colunas, ou entre 1024 e 1279 (o agente vira gaveta);
   // entre 1280 e 1535, o agente fica e a lista vira seletor.
-  const listaAoLado = tresColunas || (colunasFixas && !agenteFixo);
+  // Agente recolhido libera espaço: a lista volta para o lado (de 1024 px para cima).
+  const listaAoLado = tresColunas || (colunasFixas && (!agenteFixo || agenteRecolhido));
 
   const abrir = (id: string | null) => {
     setIdLocal(id);
@@ -233,7 +278,8 @@ export default function AbaCampanhas({
     if (onCampanha) onCampanha(id);
   };
 
-  const comecarNova = () => {
+  const comecarNova = (m: MoldeDaCampanha | null = null) => {
+    setMolde(m);
     setNova(true);
     setIdLocal(null);
     if (onCampanha) onCampanha(null);
@@ -242,6 +288,7 @@ export default function AbaCampanhas({
   const fecharNova = () => {
     setNova(false);
     setSemente(null);
+    setMolde(null);
     if (onLimparHype) onLimparHype();
   };
 
@@ -253,6 +300,7 @@ export default function AbaCampanhas({
   const criada = (c: Campanha, projectId: string | null) => {
     if (projectId) setProjetoDaCriacao((m) => ({ ...m, [c.id]: projectId }));
     setSemente(null);
+    setMolde(null);
     if (onLimparHype) onLimparHype();
     abrir(c.id);
   };
@@ -265,7 +313,7 @@ export default function AbaCampanhas({
       <Button type="button" size="sm" variant="ghost" className="mr-0.5 h-8 w-8 shrink-0 p-0" onClick={() => setNomes(true)} title="Criar nome de campanha" aria-label="Criar nome de campanha">
         <Type className="h-4 w-4" aria-hidden="true" />
       </Button>
-      <Button type="button" size="sm" variant="ghost" className="h-8 w-8 shrink-0 p-0" onClick={comecarNova} disabled={nova} aria-label="Nova campanha" title="Nova campanha">
+      <Button type="button" size="sm" variant="ghost" className="h-8 w-8 shrink-0 p-0" onClick={() => comecarNova()} disabled={nova} aria-label="Nova campanha" title="Nova campanha">
         <Plus className="h-4 w-4" aria-hidden="true" />
       </Button>
     </>
@@ -276,6 +324,9 @@ export default function AbaCampanhas({
       <div className="flex shrink-0 items-center border-b border-border px-3 py-3">
         <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold">Campanhas</h2>
         {botaoNova}
+        <button type="button" className={`${botao.icone} ml-0.5`} onClick={() => setListaRecolhida(true)} aria-label="Recolher as campanhas" title="Recolher a lista de campanhas para o lado">
+          <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
         {campanhas.isLoading && (
@@ -292,7 +343,7 @@ export default function AbaCampanhas({
         <ul className="space-y-0.5">
           {lista.map((c) => (
             <li key={c.id} className="min-w-0">
-              <ItemDaLista campanha={c} conteudos={conteudosDe(c)} ativa={!!escolhida && escolhida.id === c.id} onAbrir={() => abrir(c.id)} />
+              <ItemDaLista campanha={c} conteudos={conteudosDe(c)} ativa={!!escolhida && escolhida.id === c.id} onAbrir={() => abrir(c.id)} progresso={progressoDe(c)} onDuplicar={() => comecarNova(moldeDaCampanha(c))} />
             </li>
           ))}
         </ul>
@@ -327,6 +378,8 @@ export default function AbaCampanhas({
         hype={hype}
         semente={semente}
         onLimparSemente={() => setSemente(null)}
+        molde={molde}
+        onLimparMolde={() => setMolde(null)}
         onLimparHype={onLimparHype}
         onCancelar={fecharNova}
         onCriada={criada}
@@ -341,11 +394,18 @@ export default function AbaCampanhas({
       onPedirAoAgente={pedirAoAgente}
       onAbrirAgente={agenteFixo ? undefined : () => setGaveta(true)}
       onAbrirArteRapida={onAbrirArteRapida}
+      onDuplicar={() => comecarNova(moldeDaCampanha(escolhida))}
+      onAbrirStories={onAbrirStories ? (sequenciaId) => {
+        // A aba Stories abre na sequência guardada no estado da tela dela (useEstadoDaTela).
+        gravarEstadoDaTela(`mesa:stories:sequencia:${clientId}`, sequenciaId);
+        gravarEstadoDaTela(`mesa:stories:bloco:${clientId}`, "sequencia");
+        onAbrirStories();
+      } : undefined}
     />
   ) : campanhas.isError && !listaAoLado ? (
     <AvisoDeErro erro={campanhas.error} />
   ) : (
-    <EstadoVazio lista={lista} contagem={conteudosDe} carregando={campanhas.isLoading} onNova={comecarNova} onAbrir={(id) => abrir(id)} />
+    <EstadoVazio lista={lista} contagem={conteudosDe} carregando={campanhas.isLoading} onNova={() => comecarNova()} onAbrir={(id) => abrir(id)} />
   );
 
   const agente = escolhida ? (
@@ -365,13 +425,19 @@ export default function AbaCampanhas({
   // é medida de onde a grade começa até o fim da janela, e não mais 100vh-260px
   // fixo. Na tela cheia o cabeçalho do painel some e a grade cresce junto.
   const { ref: refDaGrade, altura: alturaDaGrade } = useAlturaQueCabe(true);
-  const grade = listaAoLado && agenteAoLado
-    ? "lg:grid-cols-[250px_minmax(0,1fr)_360px]"
-    : listaAoLado
-      ? "lg:grid-cols-[250px_minmax(0,1fr)]"
-      : agenteAoLado
-        ? "lg:grid-cols-[minmax(0,1fr)_360px]"
-        : "lg:grid-cols-1";
+  // Cada lateral aberta (250 e 360 px) ou recolhida numa faixa fina (44 px); o centro fica com o resto.
+  const GRADES: Record<string, string> = {
+    "aberta-aberto": "lg:grid-cols-[250px_minmax(0,1fr)_360px]",
+    "aberta-recolhido": "lg:grid-cols-[250px_minmax(0,1fr)_44px]",
+    "recolhida-aberto": "lg:grid-cols-[44px_minmax(0,1fr)_360px]",
+    "recolhida-recolhido": "lg:grid-cols-[44px_minmax(0,1fr)_44px]",
+    "aberta-sem": "lg:grid-cols-[250px_minmax(0,1fr)]",
+    "recolhida-sem": "lg:grid-cols-[44px_minmax(0,1fr)]",
+    "sem-aberto": "lg:grid-cols-[minmax(0,1fr)_360px]",
+    "sem-recolhido": "lg:grid-cols-[minmax(0,1fr)_44px]",
+    "sem-sem": "lg:grid-cols-1",
+  };
+  const grade = GRADES[`${listaAoLado ? (listaRecolhida ? "recolhida" : "aberta") : "sem"}-${agenteAoLado ? (agenteRecolhido ? "recolhido" : "aberto") : "sem"}`];
 
   return (
     <>
@@ -383,20 +449,38 @@ export default function AbaCampanhas({
         style={alturaDaGrade ? { height: `${alturaDaGrade}px` } : undefined}
         data-altura-que-cabe=""
       >
-        {listaAoLado && (
+        {listaAoLado && (listaRecolhida ? (
+          <aside className="flex min-h-0 min-w-0 flex-col items-center pt-1" aria-label="Campanhas (recolhida)" data-lista-recolhida="">
+            <button type="button" className={botao.icone} onClick={() => setListaRecolhida(false)} aria-label="Abrir as campanhas" title="Abrir a lista de campanhas">
+              <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" className={`${botao.icone} mt-1`} onClick={() => comecarNova()} disabled={nova} aria-label="Nova campanha" title="Nova campanha">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </aside>
+        ) : (
           <aside className={juntar(superficie.painel, "min-h-0 min-w-0 overflow-hidden")}>{listaLateral}</aside>
-        )}
+        ))}
 
         <section className="min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" aria-label="Campanha">
           {!listaAoLado && seletor}
           {centro}
         </section>
 
-        {agenteAoLado && (
-          <aside className={juntar(superficie.painel, "min-h-0 min-w-0 overflow-hidden")} aria-label="Agente da campanha">
+        {agenteAoLado && (agenteRecolhido ? (
+          <aside className="flex min-h-0 min-w-0 flex-col items-center pt-1" aria-label="Agente da campanha (recolhido)" data-agente-recolhido="">
+            <button type="button" className={`${botao.icone} text-primary hover:text-primary`} onClick={() => setAgenteRecolhido(false)} aria-label="Abrir o agente da campanha" title="Abrir o agente da campanha">
+              {andando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PanelRightOpen className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          </aside>
+        ) : (
+          <aside className={juntar(superficie.painel, "relative min-h-0 min-w-0 overflow-hidden")} aria-label="Agente da campanha">
+            <button type="button" className={`${botao.icone} absolute right-2 top-2.5 z-10`} onClick={() => setAgenteRecolhido(true)} aria-label="Recolher o agente" title="Recolher o agente da campanha para o lado">
+              <PanelRightClose className="h-4 w-4" aria-hidden="true" />
+            </button>
             {agente}
           </aside>
-        )}
+        ))}
       </div>
 
       {nomes && (

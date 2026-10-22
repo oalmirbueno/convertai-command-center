@@ -58,3 +58,32 @@ export function useRascunhoCompartilhado<T>(chave: string, inicial: T): [T, (v: 
   }, [chave]);
   return [valor, mudar];
 }
+
+/**
+ * Rodada 3 (21/10): o desenho da lâmina aberta (perfil, tema, cores, tamanhos) vale para as miniaturas da
+ * prancheta no modo Template, ao vivo e antes de guardar. Só memória: some ao recarregar.
+ */
+export interface BaseDoTemplate {
+  template: import("../../../../supabase/functions/estudio-arte/modulos/template-profile").TemplateProfile;
+  avatarUrl: string | null;
+  formato: import("./renderProfile").FormatoProfile;
+}
+const bases = new Map<string, BaseDoTemplate>();
+const ouvintesDaBase = new Map<string, Set<() => void>>();
+
+export function publicarBaseDoTemplate(trabalhoId: string, base: BaseDoTemplate) {
+  const antes = bases.get(trabalhoId);
+  if (antes && JSON.stringify(antes) === JSON.stringify(base)) return;
+  bases.set(trabalhoId, base);
+  ouvintesDaBase.get(trabalhoId)?.forEach((f) => f());
+}
+
+export function useBaseDoTemplate(trabalhoId: string): BaseDoTemplate | null {
+  const assinar = useCallback((avisar: () => void) => {
+    let lista = ouvintesDaBase.get(trabalhoId);
+    if (!lista) { lista = new Set(); ouvintesDaBase.set(trabalhoId, lista); }
+    lista.add(avisar);
+    return () => { lista!.delete(avisar); };
+  }, [trabalhoId]);
+  return useSyncExternalStore(assinar, () => bases.get(trabalhoId) || null, () => null);
+}

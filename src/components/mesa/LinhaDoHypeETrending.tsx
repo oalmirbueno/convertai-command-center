@@ -1,65 +1,186 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown, FilePlus2, Loader2, Megaphone, SlidersHorizontal } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
+import { usd, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { avisarCustoReal, useAvisarErro, useEstimativa } from "./Custo";
+import { useMesa } from "./MesaContexto";
+import { ROTULO_DO_SELO } from "./datasDoHype";
 
 /**
- * Peças comuns do Hype e do Trending (21/10/2026, 2ª rodada: "tudo alinhadinho, sem poluição").
+ * Peças comuns do Hype e do Trending (21/10/2026, 3ª rodada: "mais intuitivo e organizado").
  *
- * Toda linha é a MESMA grade: caixinha "juntar" | título e metadados | nota do Jev | ações. A nota tem
- * lugar fixo (vazio quando não há) e as ações ficam sempre na mesma posição à direita: Criar conteúdo,
- * Criar campanha e a seta dos detalhes (com lugar reservado mesmo sem detalhes). Linha de lista do
- * sistema, sem caixa por item; só o item marcado ganha o fundo leve.
+ * Toda linha é a MESMA grade: [caixinha, só no modo juntar] | bloco à esquerda (data "25 OUT" ou ícone) |
+ * título e uma linha curta | selo e nota | um botão "Criar" com menu (Conteúdo, com o custo ali dentro, e
+ * Campanha). Clicar na linha abre os detalhes. Sem custo fixo em cada linha e sem ícones soltos.
  */
-export const GRADE_DA_LINHA = "grid min-w-0 grid-cols-[20px_minmax(0,1fr)_28px_auto] items-start gap-x-2";
+export const GRADE_DA_LINHA = "grid min-w-0 grid-cols-[40px_minmax(0,1fr)_auto_auto] items-center gap-x-3";
+export const GRADE_DA_LINHA_JUNTANDO = "grid min-w-0 grid-cols-[16px_40px_minmax(0,1fr)_auto_auto] items-center gap-x-3";
+
+/** Bloco de calendário (dia grande, mês curto) ou um ícone, sempre do mesmo tamanho. */
+export function BlocoDaLinha({ dia, mes, icone, destaque = false }: { dia?: string; mes?: string; icone?: ReactNode; destaque?: boolean }) {
+  return (
+    <span className={juntar("flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md", destaque ? "bg-primary/10 text-primary" : "bg-muted text-foreground")} aria-hidden="true" data-bloco="">
+      {icone ? <span className="text-muted-foreground">{icone}</span> : (
+        <>
+          <span className="text-[15px] font-semibold leading-4 tabular-nums">{dia}</span>
+          <span className="text-[11px] leading-3 text-muted-foreground">{mes}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** O botão único de ação: "Criar" abre Conteúdo (com o custo na hora) e Campanha. */
+export function MenuCriar({ titulo, rotuloDoConteudo = "Conteúdo", partes, executar, onCampanha }: {
+  titulo: string;
+  rotuloDoConteudo?: string;
+  partes: () => ParteDaEstimativa[];
+  executar: () => Promise<unknown>;
+  onCampanha: () => void;
+}) {
+  const mesa = useMesa();
+  const avisarErro = useAvisarErro();
+  const [aberto, setAberto] = useState(false);
+  const [rodando, setRodando] = useState(false);
+  let partesAtuais: ParteDaEstimativa[] | null = null;
+  if (aberto) {
+    try { partesAtuais = partes(); } catch { partesAtuais = null; }
+  }
+  const estimativa = useEstimativa(partesAtuais, aberto);
+  const nome = `Conteúdo sobre "${titulo}"`;
+  const criarConteudo = async () => {
+    setRodando(true);
+    try {
+      const data = await executar();
+      avisarCustoReal(nome, data, mesa.atualizarCusto);
+    } catch (e) {
+      mesa.atualizarCusto();
+      avisarErro(e, nome);
+    } finally {
+      setRodando(false);
+    }
+  };
+  return (
+    <DropdownMenu modal={false} open={aberto} onOpenChange={setAberto}>
+      <DropdownMenuTrigger asChild disabled={rodando}>
+        <button type="button" className={juntar(botao.discreto, "h-8 px-2.5 text-foreground")} aria-label={`Criar a partir de ${titulo}`} title="Criar conteúdo ou campanha" data-menu-criar="" onClick={(e) => e.stopPropagation()}>
+          {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+          Criar
+          <ChevronDown className="ml-1 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={6} className="min-w-[220px] p-1" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]" onSelect={() => void criarConteudo()}>
+          <FilePlus2 className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <span className="mr-3 flex-1">{rotuloDoConteudo}</span>
+          <span className="text-[11px] tabular-nums text-muted-foreground" data-custo="">{estimativa.data !== undefined ? `~${usd(estimativa.data)}` : "…"}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]" onSelect={onCampanha}>
+          <Megaphone className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          Campanha
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export interface OpcaoDoFiltro { valor: string; rotulo: string; apoio?: string }
+export interface GrupoDoFiltro { rotulo: string; valor: string; opcoes: OpcaoDoFiltro[]; onEscolher: (v: string) => void; /** Valor padrão (sem destaque no ícone); sem ele, a 1ª opção. */ padrao?: string }
+
+/** Filtrar e ordenar num lugar só: um ícone discreto que abre os grupos (Mostrar, Ordenar, Recência…). */
+export function MenuDeFiltro({ grupos, rotulo = "Filtrar e ordenar" }: { grupos: GrupoDoFiltro[]; rotulo?: string }) {
+  const mudou = grupos.some((g) => g.opcoes.length && g.valor !== (g.padrao !== undefined ? g.padrao : g.opcoes[0].valor));
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className={juntar(botao.icone, mudou ? "text-primary" : "")} aria-label={rotulo} title={rotulo} data-menu-filtro="">
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={6} className="min-w-[220px] p-1">
+        {grupos.map((g, i) => (
+          <div key={g.rotulo} role="group" aria-label={g.rotulo}>
+            {i > 0 && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium text-muted-foreground">{g.rotulo}</DropdownMenuLabel>
+            {g.opcoes.map((o) => (
+              <DropdownMenuItem key={o.valor} className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]" onSelect={() => g.onEscolher(o.valor)} aria-checked={g.valor === o.valor} role="menuitemradio">
+                <Check className={juntar("mr-2 h-3.5 w-3.5", g.valor === o.valor ? "text-primary" : "invisible")} aria-hidden="true" />
+                <span className="mr-3 flex-1">{o.rotulo}</span>
+                {o.apoio && <span className="text-[11px] tabular-nums text-muted-foreground">{o.apoio}</span>}
+              </DropdownMenuItem>
+            ))}
+          </div>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export default function LinhaDoHypeETrending({
+  bloco,
   titulo,
   apoio,
+  selo,
   nota,
   rotuloDaNota = "Quanto serve a este cliente, de 0 a 10 (Jev)",
+  juntando,
   marcado,
   podeMarcar,
   onMarcar,
   detalhes,
-  acoes,
+  criar,
 }: {
+  bloco: ReactNode;
   titulo: string;
   apoio?: ReactNode;
+  selo?: "agora" | "aqueca" | null;
   nota?: number | null;
   rotuloDaNota?: string;
+  /** Modo juntar ligado: a caixinha aparece. */
+  juntando: boolean;
   marcado: boolean;
   podeMarcar: boolean;
   onMarcar: () => void;
   detalhes?: ReactNode;
-  acoes?: ReactNode;
+  criar: ReactNode;
 }) {
   const [aberto, setAberto] = useState(false);
   const n = typeof nota === "number" && isFinite(nota) ? Math.round(nota * 10) / 10 : null;
+  const alternar = () => { if (detalhes) setAberto((v) => !v); };
   return (
-    <li className={juntar(lista.linha, GRADE_DA_LINHA, marcado ? lista.destaque : "")} data-juntado={marcado ? "" : undefined} data-linha-hype-trending="">
-      <label className="flex h-5 cursor-pointer items-center" title={podeMarcar || marcado ? "Juntar para criar uma campanha" : "Já tem 6 desta área na seleção"}>
-        <Checkbox className="toque-compacto" checked={marcado} disabled={!podeMarcar && !marcado} onCheckedChange={onMarcar} aria-label={`Juntar ${titulo}`} />
-      </label>
+    <li
+      className={juntar(lista.linha, juntando ? GRADE_DA_LINHA_JUNTANDO : GRADE_DA_LINHA, detalhes ? "cursor-pointer" : "", marcado ? lista.destaque : "")}
+      onClick={alternar}
+      data-juntado={marcado ? "" : undefined}
+      data-linha-hype-trending=""
+    >
+      {juntando && (
+        <span className="flex h-10 items-center" onClick={(e) => e.stopPropagation()}>
+          <Checkbox className="toque-compacto rounded" checked={marcado} disabled={!podeMarcar && !marcado} onCheckedChange={onMarcar} aria-label={`Juntar ${titulo}`} title={podeMarcar || marcado ? "Juntar para criar uma campanha" : "Já tem 6 desta área na seleção"} />
+        </span>
+      )}
+      {bloco}
       <div className="min-w-0">
-        <p className={juntar(texto.corpo, "truncate font-medium")} title={titulo}>{titulo}</p>
-        {apoio && <div className={juntar(texto.auxiliar, "mt-0.5 min-w-0 line-clamp-2 [overflow-wrap:anywhere] sm:line-clamp-1")}>{apoio}</div>}
-        {aberto && detalhes && <div className="mt-2 min-w-0 space-y-1.5 text-[12px] leading-5 [overflow-wrap:anywhere]">{detalhes}</div>}
-      </div>
-      <span className={juntar(texto.etiqueta, "h-5 text-right tabular-nums", n !== null && n >= 7 ? "text-primary" : "text-muted-foreground")} title={n !== null ? rotuloDaNota : undefined} data-nota="">
-        {n !== null ? n.toLocaleString("pt-BR") : ""}
-      </span>
-      <div className="-my-1.5 flex items-center justify-end" data-acoes="">
-        {acoes}
         {detalhes ? (
-          <button type="button" className={botao.icone} onClick={() => setAberto((v) => !v)} aria-expanded={aberto} aria-label={aberto ? "Menos" : "Como usar"} title={aberto ? "Menos" : "Como usar"}>
-            <ChevronDown className={juntar("h-4 w-4 transition-transform", aberto ? "rotate-180" : "")} aria-hidden="true" />
+          <button type="button" className="toque-compacto block w-full min-w-0 text-left" aria-expanded={aberto} onClick={(e) => { e.stopPropagation(); alternar(); }}>
+            <span className={juntar(texto.corpo, "block truncate font-medium")} title={titulo}>{titulo}</span>
           </button>
         ) : (
-          <span className="inline-block h-8 w-8 shrink-0" aria-hidden="true" />
+          <p className={juntar(texto.corpo, "truncate font-medium")} title={titulo}>{titulo}</p>
         )}
+        {apoio && <div className={juntar(texto.auxiliar, "mt-0.5 min-w-0 truncate")}>{apoio}</div>}
+        {aberto && detalhes && <div className="mt-2 min-w-0 cursor-auto space-y-1.5 pb-1 text-[12px] leading-5 [overflow-wrap:anywhere]" onClick={(e) => e.stopPropagation()}>{detalhes}</div>}
       </div>
+      <span className="flex items-center justify-end" data-meta="">
+        {selo && <span className={juntar(texto.etiqueta, "whitespace-nowrap rounded px-1.5", selo === "agora" ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary")} data-selo={selo}>{ROTULO_DO_SELO[selo]}</span>}
+        {n !== null && <span className={juntar(texto.etiqueta, "ml-2 w-6 text-right tabular-nums text-muted-foreground")} title={rotuloDaNota} data-nota="">{n.toLocaleString("pt-BR")}</span>}
+      </span>
+      <span className="flex justify-end" onClick={(e) => e.stopPropagation()} data-acoes="">{criar}</span>
     </li>
   );
 }
@@ -74,10 +195,10 @@ export function Detalhe({ rotulo, children }: { rotulo: string; children: ReactN
   );
 }
 
-/** Subtítulo dentro da lista (Lidos na web, Em alta no nicho), alinhado ao texto das linhas. */
+/** Subtítulo de grupo dentro da lista (Agora, Novembro, Lidos na web…), alinhado ao texto das linhas. */
 export function SubtituloDaLista({ children, apoio }: { children: ReactNode; apoio?: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-baseline pb-1 pl-7 pt-4">
+    <div className="flex min-w-0 items-baseline pb-1 pt-4 first:pt-2">
       <h4 className={juntar(texto.rotulo, "shrink-0")}>{children}</h4>
       {apoio && <span className={juntar(texto.auxiliar, "ml-2 min-w-0 truncate")}>{apoio}</span>}
     </div>
@@ -91,13 +212,13 @@ export function SubtituloDaLista({ children, apoio }: { children: ReactNode; apo
 export function CabecalhoDaColuna({ icone, titulo, ajuda, controles, abaixo }: { icone: ReactNode; titulo: string; ajuda: ReactNode; controles?: ReactNode; abaixo?: ReactNode }) {
   return (
     <div className="shrink-0 border-b border-border pb-2" data-cabecalho-da-coluna="">
-      <div className="flex min-h-9 min-w-0 flex-wrap items-center justify-between">
+      <div className="flex min-h-9 min-w-0 items-center justify-between">
         <h3 className={juntar(texto.tituloSecao, "mr-2 flex min-w-0 items-center")}>
           <span className="mr-1.5 inline-flex shrink-0 text-primary" aria-hidden="true">{icone}</span>
           <span className="truncate">{titulo}</span>
           <AjudaRecolhida rotulo={`O que é ${titulo}?`}>{ajuda}</AjudaRecolhida>
         </h3>
-        {controles && <div className="-m-1 flex min-w-0 flex-wrap items-center justify-end">{controles}</div>}
+        {controles && <div className="flex shrink-0 items-center">{controles}</div>}
       </div>
       {abaixo && <div className="mt-2 min-w-0">{abaixo}</div>}
     </div>

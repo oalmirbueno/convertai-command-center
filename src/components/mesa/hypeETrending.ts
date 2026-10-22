@@ -25,6 +25,22 @@ export interface Noticia {
   link: string;
   /** Data real da matéria (ISO). */
   data: string;
+  /** 21/10: "cabe no marketing deste cliente?" (Jev no servidor + corte de assunto sensível). Null: sem julgamento. */
+  julgamento?: { cabe: "serve" | "talvez" | "nao_serve"; motivo: string; sensivel: boolean } | null;
+}
+
+/** Custo do Jev embutido na busca de notícias (um pedido por lote de até 20 manchetes): à vista no botão. */
+export const CUSTO_DO_JEV_NAS_NOTICIAS_USD = 0.002;
+/** Custo do Jev que ordena as datas para o cliente (uma vez por semana). */
+export const CUSTO_DO_JEV_NAS_DATAS_USD = 0.001;
+
+/** Separa as manchetes: as que servem (e as sem julgamento) à vista; as que não servem, escondidas. */
+export function separarNoticias(itens: Noticia[]): { visiveis: Noticia[]; descartadas: Noticia[] } {
+  const descartadas = itens.filter((n) => n.julgamento && n.julgamento.cabe === "nao_serve");
+  const peso = (n: Noticia) => (!n.julgamento ? 2 : n.julgamento.cabe === "serve" ? 0 : 1);
+  const visiveis = itens.filter((n) => !(n.julgamento && n.julgamento.cabe === "nao_serve"))
+    .map((n, i) => ({ n, i })).sort((a, b) => peso(a.n) - peso(b.n) || a.i - b.i).map((x) => x.n);
+  return { visiveis, descartadas };
 }
 
 export interface RespostaDoTrending {
@@ -35,6 +51,8 @@ export interface RespostaDoTrending {
   buscado_em: string;
   fonte?: string;
   sem_assunto?: boolean;
+  custo_usd?: number;
+  jev_erro?: string | null;
 }
 
 export const buscarTrending = (clientId: string, assunto: string, recencia: Recencia) =>
@@ -106,6 +124,8 @@ export interface NotaDaData {
 
 export interface RespostaDasNotas {
   notas: Record<string, NotaDaData>;
+  /** Segmento do cadastro (a regra sem Jev usa). */
+  segmento?: string | null;
   jev_erro?: string;
   custo_usd?: number;
 }

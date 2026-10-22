@@ -181,3 +181,99 @@ export const NIVEIS_DA_DATA = [
 ];
 
 export const ROTULO_DO_NIVEL_DA_DATA = ["Não serve a este cliente", "Serve pouco a este cliente", "Serve a este cliente", "Serve muito a este cliente"];
+
+// ------------------------------------------------------------------ cabe no marketing do cliente? (21/10/2026)
+
+/** Palavras que marcam assunto que não serve para marca (tragédia, crime, política partidária). Sem acento, minúsculas. */
+const PALAVRAS_SENSIVEIS = [
+  "morte", "morre", "morreu", "mortos", "morta", "obito", "tragedia", "acidente", "assassin", "homicidio", "feminicidio", "estupro",
+  "chacina", "tiroteio", "baleado", "sequestro", "atentado", "terroris", "guerra", "massacre", "desabamento", "enchente", "incendio",
+  "suicid", "velorio", "luto", "eleicao", "eleicoes", "candidato", "partido", "deputado", "senador", "vereador", "prefeito", "governador",
+  "presidente lula", "bolsonaro", "stf", "impeachment", "cpi ", "corrupcao", "propina", "preso", "prisao", "policia", "delegacia",
+];
+
+const semAcentoServidor = (t: string) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+/** Corte em código (vale mesmo sem o Jev): manchete com termo de tragédia, crime ou política partidária. */
+export function assuntoSensivel(titulo: string): boolean {
+  // Começo de palavra: "luto" não pega "absoluto".
+  const t = ` ${semAcentoServidor(titulo).replace(/[^a-z0-9]+/g, " ").trim()} `;
+  return PALAVRAS_SENSIVEIS.some((p) => t.indexOf(` ${p}`) >= 0);
+}
+
+export type CabeNoMarketing = "serve" | "talvez" | "nao_serve";
+
+export interface Julgamento {
+  cabe: CabeNoMarketing;
+  /** Linha curta: por que serve (ou por que saiu). */
+  motivo: string;
+  sensivel: boolean;
+}
+
+export const CRITERIOS_DO_CABE: Record<CabeNoMarketing, string> = {
+  serve: "Serve: o assunto é do nicho ou do público deste cliente e a marca consegue falar dele com naturalidade em um post ou anúncio agora.",
+  talvez: "Talvez: tem alguma ligação com o nicho ou o público, mas exige um ângulo forçado ou é fraco para o marketing deste cliente.",
+  nao_serve: "Não serve: não tem relação com o negócio nem com o público deste cliente, ou falar disso pareceria oportunista.",
+};
+
+export const ANGULOS: Record<string, string> = {
+  educar: "educar o público do cliente sobre o assunto",
+  oferta: "puxar uma oferta ou promoção ligada à notícia",
+  autoridade: "mostrar autoridade e novidade do setor",
+  opiniao: "a marca comentar e dar a opinião dela",
+  tendencia: "surfar uma tendência que o público está acompanhando",
+};
+
+/** Perguntas do Jev para o lote de manchetes: cabe (Choice), sensível (Noul) e o ângulo (Choice). */
+export function perguntasDoCabe(qtd: number): Record<string, { type: "choice" | "noul"; instructions: string; criteria?: Record<string, string> | { true: string; false: string } }> {
+  const q: Record<string, { type: "choice" | "noul"; instructions: string; criteria?: Record<string, string> | { true: string; false: string } }> = {};
+  for (let i = 0; i < qtd; i += 1) {
+    q[`c${i}`] = { type: "choice", instructions: `A manchete \`noticias[${i}]\` cabe no marketing da marca em \`cliente\`?`, criteria: { ...CRITERIOS_DO_CABE } };
+    q[`s${i}`] = {
+      type: "noul",
+      instructions: `A manchete \`noticias[${i}]\` trata de tragédia, morte, crime, violência, desastre, política partidária ou outro assunto sensível em que uma marca não deve entrar?`,
+      criteria: { true: "Sim, é assunto sensível para uma marca.", false: "Não, é um assunto seguro para uma marca comentar." },
+    };
+    q[`a${i}`] = { type: "choice", instructions: `Qual o melhor uso da manchete \`noticias[${i}]\` no marketing da marca em \`cliente\`?`, criteria: { ...ANGULOS } };
+  }
+  return q;
+}
+
+/** Junta as respostas do Jev com o corte em código. Sem resposta para o item: julgamento null (fica como veio). */
+export function julgarNoticias<T extends { titulo: string }>(
+  itens: T[],
+  respostas: Record<string, { choice?: string; noul?: number }> | null,
+): Array<T & { julgamento: Julgamento | null }> {
+  return itens.map((n, i) => {
+    const sensivelNoCodigo = assuntoSensivel(n.titulo);
+    if (!respostas) {
+      return { ...n, julgamento: sensivelNoCodigo ? { cabe: "nao_serve" as const, motivo: "Assunto sensível: não serve para marca.", sensivel: true } : null };
+    }
+    const c = respostas[`c${i}`]?.choice as CabeNoMarketing | undefined;
+    const s = respostas[`s${i}`]?.noul;
+    const a = respostas[`a${i}`]?.choice;
+    const sensivel = sensivelNoCodigo || (typeof s === "number" && s >= 0.5);
+    if (sensivel) return { ...n, julgamento: { cabe: "nao_serve" as const, motivo: "Assunto sensível: não serve para marca.", sensivel: true } };
+    if (c !== "serve" && c !== "talvez" && c !== "nao_serve") return { ...n, julgamento: null };
+    const motivo = c === "nao_serve" ? "Não tem relação com o negócio ou o público do cliente." : `${c === "serve" ? "Serve" : "Talvez sirva"} para ${a && ANGULOS[a] ? ANGULOS[a] : "falar com o público do cliente"}.`;
+    return { ...n, julgamento: { cabe: c, motivo, sensivel: false } };
+  });
+}
+
+/** Ordem: serve, talvez, sem julgamento, não serve; dentro de cada um, a ordem que veio (mais novas primeiro). */
+export function ordenarPeloCabe<T extends { julgamento: Julgamento | null }>(itens: T[]): T[] {
+  const peso = (j: Julgamento | null) => (!j ? 2 : j.cabe === "serve" ? 0 : j.cabe === "talvez" ? 1 : 3);
+  return itens.map((n, i) => ({ n, i })).sort((x, y) => peso(x.n.julgamento) - peso(y.n.julgamento) || x.i - y.i).map((x) => x.n);
+}
+
+/** Assuntos do nicho para a busca automática: segmento, nicho/segmento do contexto da marca, produtos e o nicho lido. */
+export function assuntosDoNicho(c: { segmento?: unknown; contexto?: Record<string, unknown> | null; titulosDoNicho?: unknown[] }, maximo = 6): string[] {
+  const ctx = c.contexto || {};
+  const curto = (v: unknown) => {
+    if (typeof v !== "string") return "";
+    const primeira = v.split(/[.;\n]/)[0];
+    return primeira.split(" ").filter(Boolean).slice(0, 5).join(" ");
+  };
+  const lista: unknown[] = [c.segmento, ctx.nicho, ctx.segmento, curto(ctx.produtos), curto(ctx.negocio)];
+  return assuntosSugeridos(lista[0], lista.slice(1).concat(c.titulosDoNicho || []), maximo);
+}

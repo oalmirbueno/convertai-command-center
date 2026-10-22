@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, CalendarCheck2, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Stamp, X } from "lucide-react";
+import { BookmarkPlus, CalendarCheck2, Copy, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Stamp, X } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
@@ -133,9 +133,15 @@ export default function CampanhaDetalhe({
   onPedirAoAgente,
   onAbrirAgente,
   onAbrirArteRapida,
+  onAbrirStories,
+  onDuplicar,
 }: {
+  /** 22/10/2026: "Nova campanha a partir desta" (a estrutura, com outro tema). */
+  onDuplicar?: () => void;
   /** Abre a peça (arte rápida) no Estúdio. */
   onAbrirArteRapida?: (trabalhoId: string) => void;
+  /** 22/10/2026: abre a sequência de stories da campanha na aba Stories. */
+  onAbrirStories?: (sequenciaId: string) => void;
   campanha: Campanha;
   projetoSugerido?: string | null;
   /** Celular: volta para a lista. */
@@ -303,6 +309,11 @@ export default function CampanhaDetalhe({
           </p>
         </div>
         <div className="ml-2 flex shrink-0 items-center">
+          {onDuplicar && (
+            <button type="button" className={botao.icone} onClick={onDuplicar} aria-label="Nova campanha a partir desta" title="Nova campanha a partir desta (mesma estrutura, outro tema)">
+              <Copy className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
           {onAbrirAgente && (
             <button type="button" className={botao.icone} onClick={onAbrirAgente} aria-label="Conversar com o agente" title="Conversar com o agente da campanha">
               <MessageSquare className="h-4 w-4" aria-hidden="true" />
@@ -334,7 +345,7 @@ export default function CampanhaDetalhe({
       <Etapas soIcone rotulo="Partes da campanha" itens={abas} valor={aba} onEscolher={(v) => escolher(v as IdDaSecao)} className="-mx-1 border-b border-border pb-1" />
 
       <div className="min-w-0 space-y-4 pt-1" role="region" aria-label={NOMES_DAS_SECOES[aba]}>
-        {aba === "visao" && <CampanhaVisao campanha={campanha} pecas={pecas} />}
+        {aba === "visao" && <CampanhaVisao campanha={campanha} pecas={pecas} onAbrirArteRapida={onAbrirArteRapida} onAbrirStories={onAbrirStories} />}
 
         {/* 1. Ideia: o pedido, o objetivo, o conceito e as sugestões pela janela e pela série. */}
         {aba === "ideia" && (
@@ -463,7 +474,7 @@ export default function CampanhaDetalhe({
         )}
 
         {/* 5. Peças: cada conteúdo gerado pelo Estúdio, com a identidade da campanha. */}
-        {aba === "pecas" && <CampanhaPecas campanha={campanha} pecas={pecas} carregando={lendoPecas} onAbrirArteRapida={onAbrirArteRapida} />}
+        {aba === "pecas" && <CampanhaPecas campanha={campanha} pecas={pecas} carregando={lendoPecas} onAbrirArteRapida={onAbrirArteRapida} onAbrirStories={onAbrirStories} />}
 
         {/* 6. Revisão e agenda: Jev, conflitos com a agenda, aprovar e levar pelo fluxo de sempre. */}
         {aba === "revisao" && <CampanhaRevisao campanha={campanha} proposta={proposta.data || null} pecas={pecas} onAbrirArteRapida={onAbrirArteRapida} />}

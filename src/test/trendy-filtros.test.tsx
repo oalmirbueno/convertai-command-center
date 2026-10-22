@@ -4,36 +4,43 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Hype, HypesDaSemana as PesquisaDeHypes } from "@/components/mesa/mesaV4Api";
-import { dadosDoTrendy, itensDoTrendy, separarLeitura } from "@/components/mesa/trendy";
+import { dadosDoTrendy, itensDoTrendy } from "@/components/mesa/trendy";
 import { alternarJuntado, juntadoDaNoticia, MAXIMO_POR_LISTA, sementeDaSelecao, type ItemJuntado } from "@/components/mesa/hypeETrending";
 import { tirarSementeDaCampanha } from "@/components/mesa/sementeDaCampanha";
 
-const estado = vi.hoisted(() => ({ clientId: "cliente-a", dados: {} as Record<string, unknown>, ler: vi.fn(), trending: vi.fn() }));
-vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: estado.clientId, catalogo: [] }) }));
+const estado = vi.hoisted(() => ({ clientId: "cliente-a", dados: {} as Record<string, unknown>, ler: vi.fn(), trending: vi.fn(), pedido: vi.fn(), ordenar: vi.fn() }));
+vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: estado.clientId, catalogo: [], atualizarCusto: vi.fn() }) }));
 vi.mock("@/components/sistema/TituloRecolhivel", () => ({ useRecolhido: () => [false, vi.fn()] }));
 vi.mock("@/components/sistema/Secao", () => ({ CabecalhoDeSecao: ({ titulo, acao }: { titulo: string; acao: unknown }) => <div><h2>{titulo}</h2>{acao as never}</div> }));
 vi.mock("@/components/mesa/Custo", () => ({
   AvisoDeErro: () => null,
+  avisarCustoReal: vi.fn(),
+  useAvisarErro: () => vi.fn(),
+  // Estimativa fixa para o menu Criar mostrar o custo só ali dentro.
+  useEstimativa: (_p: unknown, ativo: boolean) => ({ data: ativo ? 0.14 : undefined }),
   BotaoComCusto: ({ rotulo, executar }: { rotulo: unknown; executar: () => Promise<unknown> }) => <button type="button" onClick={() => void executar()}>{rotulo as never}</button>,
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => { const q: Record<string, unknown> = {}; for (const m of ["select", "eq", "is", "limit", "in", "gte", "ilike"]) q[m] = () => q; q.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok); return q; } } }));
 vi.mock("@/components/mesa/mesaV4Api", async (original) => ({
   ...await original<typeof import("@/components/mesa/mesaV4Api")>(),
   lerHypes: async (id: string) => { estado.ler(id); return estado.dados[id] || null; },
+  pedidoLivre: (p: unknown) => estado.pedido(p),
+  buscarHypes: async () => ({}),
 }));
 vi.mock("@/components/mesa/hypeETrending", async (original) => ({
   ...await original<typeof import("@/components/mesa/hypeETrending")>(),
   buscarTrending: (...args: unknown[]) => estado.trending(...args),
+  ordenarDatasDoHype: (...args: unknown[]) => estado.ordenar(...args),
 }));
 
 import HypesDaSemana from "@/components/mesa/HypesDaSemana";
 
 const hypes: Hype[] = [
-  { titulo: "Dia do café", formato: "estatico", fonte: "https://fonte.test/cafe", janela: "esta_semana" },
+  { titulo: "Dia do café", formato: "estatico", fonte: "https://fonte.test/cafe", janela: "esta_semana", nota: 8, pauta: { tema: "Café da casa", gancho: "Hoje tem", laminas: ["a"], legenda: "x" } },
   { tipo: "nicho", titulo: "Decoração da vitrine", formato: "carrossel", sinal: "Busca por ambientes reais", fonte: "https://fonte.test/vitrine" },
   { tipo: "nicho", titulo: "Vídeo da montagem", formato: "reels", sinal: "Bastidores da loja" },
 ];
-const pesquisa = (clientId: string, itens = hypes): PesquisaDeHypes => ({ client_id: clientId, itens, semana: "2026-10-19", criado_em: "2026-10-21T15:00:00Z", resumo: null });
+const pesquisa = (clientId: string, itens = hypes): PesquisaDeHypes => ({ client_id: clientId, itens, semana: "2026-10-19", criado_em: "2026-10-21T15:00:00Z", resumo: "Semana de vitrine." });
 const agora = new Date().toISOString();
 const noticia = { titulo: "Varejo projeta Black Friday recorde", fonte: "Jornal Teste", fonte_url: "https://jornal.test", link: "https://news.google.com/rss/articles/abc", data: agora };
 
@@ -41,34 +48,236 @@ beforeEach(() => {
   estado.clientId = "cliente-a";
   estado.dados = { "cliente-a": pesquisa("cliente-a") };
   estado.ler.mockClear();
+  estado.pedido.mockReset().mockResolvedValue({});
   estado.trending.mockReset().mockResolvedValue({ assunto: "varejo", recencia: "7d", itens: [noticia], sugeridos: ["Varejo"], buscado_em: agora, fonte: "Google Notícias" });
+  // Jev das datas: profissão e gastronomia não servem a este cliente; o resto serve.
+  estado.ordenar.mockReset().mockImplementation(async (_c: string, datas: Array<{ id: string; tipo: string }>) => ({
+    notas: Object.fromEntries(datas.map((d) => [d.id, { nota: d.tipo === "profissao" || d.tipo === "gastronomia" ? 1 : 8, nivel: null }])),
+    segmento: "Moda",
+    custo_usd: 0.0004,
+  }));
+  try { window.localStorage.clear(); } catch { /* sem armazenamento */ }
   tirarSementeDaCampanha("cliente-a");
 });
 
 const tela = (cache: QueryClient, criar = vi.fn()) => <QueryClientProvider client={cache}><HypesDaSemana onCriarCampanha={criar} /></QueryClientProvider>;
+const montar = (criar = vi.fn()) => {
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const r = render(tela(cache, criar));
+  return { ...r, cache };
+};
+const abrirVisao = (nome: RegExp) => fireEvent.click(screen.getByRole("button", { name: nome }));
+/** Abre o menu Radix do botão (teclado: Enter abre). */
+const abrirMenu = (botao: HTMLElement) => {
+  fireEvent.keyDown(botao, { key: "Enter" });
+};
 
-describe("leitura da semana dentro de Hype e Trending", () => {
-  it("aceita pesquisas antigas sem tipo, conserva os índices e separa hype de nicho", () => {
-    const itens = itensDoTrendy(hypes, ["Hype: Dia do café"]);
-    expect(itens.map((x) => x.indice)).toEqual([1, 2]);
-    const { hype, nicho } = separarLeitura(itensDoTrendy(hypes, []));
-    expect(hype.map((x) => x.indice)).toEqual([0]);
-    expect(nicho.map((x) => x.indice)).toEqual([1, 2]);
-  });
-
-  it("não trata resultados de outro cliente como do cliente aberto", () => {
+describe("leitura da semana", () => {
+  it("aceita pesquisas antigas sem tipo, conserva os índices e não mistura clientes", () => {
+    expect(itensDoTrendy(hypes, ["Hype: Dia do café"]).map((x) => x.indice)).toEqual([1, 2]);
     const dados = pesquisa("cliente-a");
     expect(dadosDoTrendy(dados, "cliente-b")).toBeNull();
     expect(dadosDoTrendy(dados, "cliente-a")).toBe(dados);
-    expect(dadosDoTrendy(undefined, "cliente-a")).toBeNull();
   });
 
   it("a fonte da tela não usa gap em flex nem lookbehind, \\p{} ou grupo nomeado (Safari 11)", () => {
-    for (const arq of ["HypesDaSemana.tsx", "AreaDoHype.tsx", "AreaDoTrending.tsx", "BarraDeJuntar.tsx", "LinhaDoHypeETrending.tsx", "hypeETrending.ts", "datasDoHype.ts", "trendy.ts"]) {
+    for (const arq of ["HypesDaSemana.tsx", "VisaoDaSemana.tsx", "AreaDoHype.tsx", "AreaDoTrending.tsx", "BarraDeJuntar.tsx", "LinhaDoHypeETrending.tsx", "hypeETrending.ts", "datasDoHype.ts", "trendy.ts"]) {
       const fonte = readFileSync(resolve("src/components/mesa", arq), "utf8");
       expect(fonte, arq).not.toMatch(/\(\?<[=!]|\\p\{|\(\?<[a-z]/i);
       expect(fonte, arq).not.toMatch(/\bflex\b[^"`]*\bgap-\d/);
     }
+  });
+});
+
+describe("três visões: Da semana (a de antes, primeiro), Datas e Em alta", () => {
+  it("abre na Da semana, igual ao modelo antigo: cartões, grupos, resumo, nota, sinal e Como usar com a pauta", async () => {
+    const { cache } = montar();
+    const nav = screen.getByRole("navigation", { name: "Visões do Hype e Trending" });
+    expect(within(nav).getAllByRole("button").map((b) => b.getAttribute("data-etapa"))).toEqual(["semana", "datas", "em-alta", "trendy"]);
+    expect(within(nav).getByRole("button", { name: /Da semana/ }).getAttribute("aria-current")).toBe("page");
+    await screen.findByText("Dia do café");
+    expect(screen.getByText("Hypes do momento")).toBeTruthy();
+    expect(screen.getByText("Em alta no nicho")).toBeTruthy();
+    expect(screen.getByText("Semana de vitrine.")).toBeTruthy();
+    expect(screen.getByText("Busca por ambientes reais")).toBeTruthy();
+    const cartao = screen.getByText("Dia do café").closest("article") as HTMLElement;
+    expect(within(cartao).getByText("8")).toBeTruthy();
+    fireEvent.click(within(cartao).getByRole("button", { name: /Como usar/ }));
+    expect(within(cartao).getByText("Café da casa")).toBeTruthy();
+    // Uma ação só: "Criar", com "Usar a pauta" e o custo dentro do menu.
+    abrirMenu(within(cartao).getByRole("button", { name: "Criar a partir de Dia do café" }));
+    const item = await screen.findByRole("menuitem", { name: /Usar a pauta/ });
+    expect(item.textContent).toContain("~US$");
+    fireEvent.click(item);
+    await waitFor(() => expect(estado.pedido).toHaveBeenCalledWith(expect.objectContaining({ clientId: "cliente-a", hype: { tipo: undefined, titulo: "Dia do café" } })));
+    cache.clear();
+  });
+
+  it("sem duplicação: a leitura semanal só aparece na Da semana", async () => {
+    const { cache } = montar();
+    await screen.findByText("Dia do café");
+    abrirVisao(/^Datas/);
+    expect(screen.queryByText("Dia do café")).toBeNull();
+    expect(screen.queryByText("Lidos na web")).toBeNull();
+    abrirVisao(/^Em alta/);
+    expect(screen.queryByText("Decoração da vitrine")).toBeNull();
+    expect(screen.queryByText("Em alta no nicho")).toBeNull();
+    cache.clear();
+  });
+
+  it("Datas: agrupadas por período, bloco de calendário, uma ação só e sem custo fixo nas linhas", async () => {
+    const { cache } = montar();
+    abrirVisao(/^Datas/);
+    const area = document.querySelector('[data-area="hype"]') as HTMLElement;
+    await waitFor(() => expect(area.querySelector("[data-grupo='outras']")).not.toBeNull());
+    const grupos = Array.from(area.querySelectorAll("[data-grupo]:not([data-grupo='outras'])")).map((g) => g.querySelector("h4")!.textContent);
+    expect(grupos.length).toBeGreaterThan(1);
+    for (const g of grupos) expect(["Agora", "Próximas 2 semanas", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"].some((x) => (g || "").indexOf(x) === 0)).toBe(true);
+    const linhas = Array.from(area.querySelectorAll("[data-linha-hype-trending]")) as HTMLElement[];
+    expect(linhas.length).toBeGreaterThan(3);
+    // Nenhum custo à vista nas linhas; cada uma tem só o bloco e o "Criar".
+    for (const l of linhas) {
+      expect(l.textContent).not.toMatch(/US\$/);
+      expect(l.querySelector("[data-bloco]")).not.toBeNull();
+      expect(l.querySelectorAll("[data-acoes] button")).toHaveLength(1);
+      expect(l.querySelector("[data-acoes] [data-menu-criar]")).not.toBeNull();
+    }
+    // O mês curto do bloco vem em maiúsculas pelo código ("25 OUT").
+    expect(linhas[0].querySelector("[data-bloco]")!.textContent).toMatch(/^\d{2}[A-Z]{3}$/);
+    cache.clear();
+  });
+
+  it("Datas: o primeiro item fica logo abaixo do cabeçalho, sem rolagem guardada e com respiro", async () => {
+    const { cache } = montar();
+    abrirVisao(/^Datas/);
+    const area = document.querySelector('[data-area="hype"]') as HTMLElement;
+    expect(area.firstElementChild!.hasAttribute("data-cabecalho-da-coluna")).toBe(true);
+    const rola = Array.from(area.querySelectorAll("div")).find((d) => d.className.split(" ").indexOf("lg:overflow-y-auto") >= 0) as HTMLElement;
+    expect(rola.scrollTop).toBe(0);
+    expect(rola.className).toContain("pt-1");
+    expect(rola.className).toContain("pb-6");
+    cache.clear();
+  });
+
+  it("Em alta: vazio com ação, notícia real com link, uma ação só e erro com Tentar de novo", async () => {
+    estado.trending.mockReset().mockRejectedValueOnce(new Error("O Google Notícias não respondeu.")).mockResolvedValue({ assunto: "café", recencia: "7d", itens: [noticia], sugeridos: [], buscado_em: agora });
+    const { cache } = montar();
+    abrirVisao(/^Em alta/);
+    fireEvent.click(screen.getByRole("button", { name: /^Buscar o que está em alta\s*~/ }));
+    await screen.findByText("Não foi possível buscar as notícias.");
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    await screen.findByText(noticia.titulo);
+    expect(screen.getByRole("link", { name: `Abrir a matéria: ${noticia.titulo}` }).getAttribute("href")).toBe(noticia.link);
+    const linha = screen.getByText(noticia.titulo).closest("li") as HTMLElement;
+    expect(linha.textContent).not.toMatch(/US\$/);
+    expect(linha.querySelectorAll("[data-acoes] button")).toHaveLength(1);
+    cache.clear();
+  });
+});
+
+describe("nicho do cliente (o que cabe no marketing)", () => {
+  it("Em alta: mostra o que serve com o porquê; o que não serve fica em Mostrar descartadas", async () => {
+    estado.trending.mockReset().mockResolvedValue({
+      assunto: "Moda", recencia: "7d", sugeridos: ["Moda"], buscado_em: agora, fonte: "Google Notícias", custo_usd: 0.0012,
+      itens: [
+        { ...noticia, titulo: "Tendência de jeans volta às vitrines", link: "https://n.test/1", julgamento: { cabe: "serve", motivo: "Serve para surfar uma tendência que o público está acompanhando.", sensivel: false } },
+        { ...noticia, titulo: "Acidente na BR deixa feridos", link: "https://n.test/2", julgamento: { cabe: "nao_serve", motivo: "Assunto sensível: não serve para marca.", sensivel: true } },
+        { ...noticia, titulo: "Juros sobem de novo", link: "https://n.test/3", julgamento: { cabe: "nao_serve", motivo: "Não tem relação com o negócio ou o público do cliente.", sensivel: false } },
+      ],
+    });
+    const { cache } = montar();
+    abrirVisao(/^Em alta/);
+    fireEvent.click(screen.getByRole("button", { name: /^Buscar o que está em alta\s*~/ }));
+    await screen.findByText("Tendência de jeans volta às vitrines");
+    expect(screen.getByText("Serve para surfar uma tendência que o público está acompanhando.")).toBeTruthy();
+    expect(screen.queryByText("Acidente na BR deixa feridos")).toBeNull();
+    expect(screen.queryByText("Juros sobem de novo")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar descartadas (2)" }));
+    expect(screen.getByText("Acidente na BR deixa feridos")).toBeTruthy();
+    expect(screen.getByText("Assunto sensível: não serve para marca.")).toBeTruthy();
+    // O custo do Jev está à vista no botão de buscar.
+    expect(screen.getByRole("button", { name: "Buscar notícias" }).textContent).toMatch(/US\$/);
+    cache.clear();
+  });
+
+  it("Datas: o Jev roda sozinho na 1ª abertura da semana e o que não é do nicho fica em Outras datas (recolhido)", async () => {
+    const { cache } = montar();
+    abrirVisao(/^Datas/);
+    await waitFor(() => expect(estado.ordenar).toHaveBeenCalledTimes(1));
+    const area = () => document.querySelector('[data-area="hype"]') as HTMLElement;
+    await waitFor(() => expect(area().querySelector("[data-estado-do-jev]")!.textContent).toContain("Do nicho do cliente"));
+    const principal = Array.from(area().querySelectorAll("[data-grupo]:not([data-grupo='outras']) [data-linha-hype-trending]"));
+    expect(principal.length).toBeGreaterThan(0);
+    expect(area().textContent).not.toMatch(/Dia do (Médico|Dentista|Professor)/);
+    fireEvent.click(within(area()).getByRole("button", { name: /^Outras datas \(\d+\)/ }));
+    expect(within(area()).getByRole("list", { name: "Outras datas" })).toBeTruthy();
+    // Reabrir na mesma semana não chama o Jev de novo (notas guardadas).
+    abrirVisao(/^Em alta/);
+    abrirVisao(/^Datas/);
+    await waitFor(() => expect(area().querySelector("[data-estado-do-jev]")!.textContent).toContain("Do nicho do cliente"));
+    expect(estado.ordenar).toHaveBeenCalledTimes(1);
+    cache.clear();
+  });
+
+  it("Da semana e Trendy na ordem da relevância ao cliente (nota do Jev)", async () => {
+    estado.dados["cliente-a"] = pesquisa("cliente-a", [{ titulo: "Nota baixa", nota: 2, janela: "hoje" }, { titulo: "Nota alta", nota: 9, janela: "hoje" }, { titulo: "Sem nota", janela: "hoje" }]);
+    const { cache } = montar();
+    await screen.findByText("Nota alta");
+    const titulos = () => Array.from(document.querySelectorAll("[data-cartao-da-semana] h3")).map((x) => x.textContent);
+    expect(titulos()).toEqual(["Nota alta", "Nota baixa", "Sem nota"]);
+    abrirVisao(/^Trendy/);
+    const linhas = Array.from(document.querySelectorAll('[data-area="trendy"] [data-linha-hype-trending] button[aria-expanded] > span[title]')).map((x) => x.textContent);
+    expect(linhas).toEqual(["Nota alta", "Nota baixa", "Sem nota"]);
+    cache.clear();
+  });
+});
+
+describe("Trendy (4ª visão, o do Codex de volta)", () => {
+  it("existe depois de Em alta, com busca, tipo, formato só dos que existem, fonte e a data da pesquisa", async () => {
+    const { cache } = montar();
+    const nav = screen.getByRole("navigation", { name: "Visões do Hype e Trending" });
+    expect(within(nav).getAllByRole("button").map((b) => b.getAttribute("data-etapa"))).toEqual(["semana", "datas", "em-alta", "trendy"]);
+    await screen.findByText("Dia do café");
+    abrirVisao(/^Trendy/);
+    const area = document.querySelector('[data-area="trendy"]') as HTMLElement;
+    expect(within(area).getByRole("status").textContent).toBe("3 de 3 sugestões · pesquisa de 21/10");
+    // Formato: só os que existem (estático, carrossel, vídeo); nunca Foto nem Stories.
+    fireEvent.keyDown(within(area).getByRole("button", { name: "Filtrar e ordenar" }), { key: "Enter" });
+    const opcoes = (await screen.findAllByRole("menuitemradio")).map((o) => o.textContent);
+    expect(opcoes).toContain("Carrossel");
+    expect(opcoes).toContain("Estático");
+    expect(opcoes).toContain("Vídeo / Reels");
+    expect(opcoes).not.toContain("Foto");
+    expect(opcoes).not.toContain("Stories");
+    expect(opcoes).toContain("fonte.test");
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Nicho/ }));
+    expect(within(area).getByRole("status").textContent).toContain("2 de 3");
+    fireEvent.change(within(area).getByLabelText("Buscar nas sugestões"), { target: { value: "vitrine" } });
+    expect(within(area).getByRole("status").textContent).toContain("1 de 3");
+    fireEvent.click(within(area).getByRole("button", { name: "Limpar filtros" }));
+    expect(within(area).getByRole("status").textContent).toContain("3 de 3");
+    cache.clear();
+  });
+
+  it("Criar > Campanha leva o índice original; juntar funciona no Trendy", async () => {
+    const criar = vi.fn();
+    const { cache } = montar(criar);
+    await screen.findByText("Dia do café");
+    abrirVisao(/^Trendy/);
+    const area = () => document.querySelector('[data-area="trendy"]') as HTMLElement;
+    fireEvent.change(within(area()).getByLabelText("Buscar nas sugestões"), { target: { value: "montagem" } });
+    const linha = within(area()).getByText("Vídeo da montagem").closest("li") as HTMLElement;
+    fireEvent.keyDown(within(linha).getByRole("button", { name: /Criar a partir de/ }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Campanha/ }));
+    expect(criar).toHaveBeenCalledTimes(1);
+    expect(tirarSementeDaCampanha("cliente-a")!.trends.map((t) => t.titulo)).toEqual(["Vídeo da montagem"]);
+    // Juntar: a mesma chave da leitura (índice original 0 do Dia do café).
+    fireEvent.click(screen.getByRole("button", { name: "Juntar para campanha" }));
+    fireEvent.change(within(area()).getByLabelText("Buscar nas sugestões"), { target: { value: "" } });
+    fireEvent.click(within(area()).getByRole("checkbox", { name: "Juntar Dia do café" }));
+    fireEvent.click(within(document.querySelector("[data-barra-de-juntar]") as HTMLElement).getByRole("button", { name: "Criar campanha" }));
+    expect(tirarSementeDaCampanha("cliente-a")!.hypes).toEqual([expect.objectContaining({ titulo: "Dia do café", indice: 0 })]);
+    cache.clear();
   });
 });
 
@@ -79,56 +288,61 @@ describe("juntar para a campanha", () => {
     expect(lista).toHaveLength(MAXIMO_POR_LISTA);
     lista = alternarJuntado(lista, juntadoDaNoticia({ ...noticia, link: "https://n.test/0" }));
     expect(lista).toHaveLength(MAXIMO_POR_LISTA - 1);
-    expect(sementeDaSelecao(lista, "  ")).not.toHaveProperty("pedido");
     expect(sementeDaSelecao(lista, " Black Friday com 30% ").pedido).toBe("Black Friday com 30%");
   });
 
-  it("marca uma data, um hype da leitura e uma notícia; a barra grava a semente com o pedido e abre a campanha", async () => {
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  it("as caixinhas só aparecem no modo juntar; juntar funciona nas três visões e a barra grava a semente", async () => {
     const criar = vi.fn();
-    render(tela(cache, criar));
-    expect(screen.getByRole("heading", { name: "Hype e Trending" })).toBeTruthy();
+    const { cache } = montar(criar);
     await screen.findByText("Dia do café");
-    // Hype: a 1ª data do calendário fixo e o hype lido na web.
-    const datas = screen.getByRole("list", { name: "Datas que vêm por aí" });
-    const primeiraData = within(datas).getAllByRole("listitem")[0];
-    const tituloDaData = primeiraData.querySelector("p")!.textContent!;
-    fireEvent.click(within(primeiraData).getByRole("checkbox"));
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Juntar para campanha" }));
+    // Da semana
     fireEvent.click(screen.getByRole("checkbox", { name: "Juntar Dia do café" }));
-    expect((document.querySelector("[data-barra-de-juntar]") as HTMLElement).textContent).toContain("2 selecionados");
-    // Trending: vazio com ação; a busca traz a manchete real.
-    fireEvent.click(screen.getByRole("button", { name: /^Trending/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Buscar o que está em alta" }));
+    // Datas
+    abrirVisao(/^Datas/);
+    const primeira = document.querySelector('[data-area="hype"] [data-linha-hype-trending]') as HTMLElement;
+    const tituloDaData = primeira.querySelector("button[aria-expanded]")!.textContent!;
+    fireEvent.click(within(primeira).getByRole("checkbox"));
+    // Em alta
+    abrirVisao(/^Em alta/);
+    fireEvent.click(screen.getByRole("button", { name: /^Buscar o que está em alta\s*~/ }));
     await screen.findByText(noticia.titulo);
-    expect(estado.trending).toHaveBeenCalledWith("cliente-a", "", "7d");
-    expect(screen.getByRole("link", { name: `Abrir a matéria: ${noticia.titulo}` }).getAttribute("href")).toBe(noticia.link);
     fireEvent.click(screen.getByRole("checkbox", { name: `Juntar ${noticia.titulo}` }));
-    fireEvent.change(screen.getByLabelText("Pedido da campanha (opcional)"), { target: { value: "Black Friday com 30% no plano anual" } });
     const barra = document.querySelector("[data-barra-de-juntar]") as HTMLElement;
     expect(barra.textContent).toContain("3 selecionados");
+    fireEvent.change(screen.getByLabelText("Pedido da campanha (opcional)"), { target: { value: "Black Friday com 30% no plano anual" } });
     fireEvent.click(within(barra).getByRole("button", { name: "Criar campanha" }));
     expect(criar).toHaveBeenCalledTimes(1);
     const s = tirarSementeDaCampanha("cliente-a")!;
     expect(s.pedido).toBe("Black Friday com 30% no plano anual");
-    expect(s.hypes.map((h) => h.titulo)).toEqual([tituloDaData, "Dia do café"]);
-    expect(s.hypes[1].indice).toBe(0);
+    expect(s.hypes.map((h) => h.titulo)).toEqual(["Dia do café", tituloDaData]);
+    expect(s.hypes[0].indice).toBe(0);
     expect(s.trends).toEqual([{ titulo: noticia.titulo, fonte: "Jornal Teste", url: noticia.link, data: agora, resumo: undefined }]);
-    // A seleção zera depois de criar.
     expect(document.querySelector("[data-barra-de-juntar]")).toBeNull();
     cache.clear();
   });
 
-  it("erro do Trending mostra Tentar de novo, que busca outra vez", async () => {
-    estado.trending.mockReset().mockRejectedValueOnce(new Error("O Google Notícias não respondeu.")).mockResolvedValue({ assunto: "café", recencia: "24h", itens: [noticia], sugeridos: [], buscado_em: agora });
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(tela(cache));
-    fireEvent.click(screen.getByRole("button", { name: /^Trending/ }));
-    fireEvent.change(screen.getByLabelText("Assunto das notícias"), { target: { value: "café" } });
-    fireEvent.click(screen.getByRole("button", { name: "Buscar notícias" }));
-    await screen.findByText("Não foi possível buscar as notícias.");
-    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+  it("Criar > Campanha num item só grava a semente de um item", async () => {
+    const criar = vi.fn();
+    const { cache } = montar(criar);
+    const cartao = (await screen.findByText("Decoração da vitrine")).closest("article") as HTMLElement;
+    abrirMenu(within(cartao).getByRole("button", { name: /Criar a partir de/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Campanha/ }));
+    expect(criar).toHaveBeenCalledTimes(1);
+    const s = tirarSementeDaCampanha("cliente-a")!;
+    expect(s.hypes).toEqual([]);
+    expect(s.trends.map((t) => t.titulo)).toEqual(["Decoração da vitrine"]);
+    cache.clear();
+  });
+
+  it("Buscar o que está em alta agora busca as notícias do nicho e abre o Em alta", async () => {
+    const { cache } = montar();
+    await screen.findByText("Dia do café");
+    fireEvent.click(screen.getByRole("button", { name: /Buscar o que está em alta agora/ }));
     await screen.findByText(noticia.titulo);
-    expect(estado.trending).toHaveBeenLastCalledWith("cliente-a", "café", "7d");
+    expect(estado.trending).toHaveBeenCalledWith("cliente-a", "", "7d");
+    expect(screen.getByRole("button", { name: /^Em alta/ }).getAttribute("aria-current")).toBe("page");
     cache.clear();
   });
 
@@ -137,6 +351,7 @@ describe("juntar para a campanha", () => {
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { rerender } = render(tela(cache));
     await screen.findByText("Dia do café");
+    fireEvent.click(screen.getByRole("button", { name: "Juntar para campanha" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Juntar Dia do café" }));
     expect(document.querySelector("[data-barra-de-juntar]")).not.toBeNull();
     estado.clientId = "cliente-b";
@@ -144,72 +359,6 @@ describe("juntar para a campanha", () => {
     await screen.findByText("Flores do cliente B");
     expect(screen.queryByText("Dia do café")).toBeNull();
     expect(document.querySelector("[data-barra-de-juntar]")).toBeNull();
-    await waitFor(() => expect(estado.ler).toHaveBeenCalledWith("cliente-b"));
-    cache.clear();
-  });
-});
-
-describe("2ª rodada: organizado, alinhado e complementar", () => {
-  it("as duas colunas têm cabeçalho fixo e rolagem própria (de 1024 px para cima), com espaço no fim", async () => {
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(tela(cache));
-    await screen.findByText("Dia do café");
-    const colunas = [document.querySelector('[data-area="hype"]') as HTMLElement];
-    fireEvent.click(screen.getByRole("button", { name: /^Trending/ }));
-    colunas.push(document.querySelector('[data-area="trending"]') as HTMLElement);
-    for (const c of colunas) {
-      expect(c.className).toContain("lg:h-[640px]");
-      expect(c.firstElementChild!.hasAttribute("data-cabecalho-da-coluna")).toBe(true);
-      const rola = Array.from(c.querySelectorAll("div")).find((d) => d.className.split(" ").indexOf("lg:overflow-y-auto") >= 0) as HTMLElement;
-      expect(rola).not.toBeNull();
-      expect(rola.className).toContain("pb-6");
-      expect(rola.className).not.toMatch(/(^| )overflow-y-auto/);
-    }
-    cache.clear();
-  });
-
-  it("toda linha é a mesma grade: caixinha, texto, nota no mesmo lugar e as ações sempre por último", async () => {
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(tela(cache));
-    await screen.findByText("Dia do café");
-    const linhas = Array.from(document.querySelectorAll("[data-linha-hype-trending]"));
-    expect(linhas.length).toBeGreaterThan(3);
-    const grades = new Set(linhas.map((l) => (l.className.match(/grid-cols-\[[^\]]+\]/) || [""])[0]));
-    expect(Array.from(grades)).toEqual(["grid-cols-[20px_minmax(0,1fr)_28px_auto]"]);
-    for (const l of linhas) {
-      const filhos = Array.from(l.children);
-      expect(filhos).toHaveLength(4);
-      expect(filhos[2].hasAttribute("data-nota")).toBe(true);
-      expect(filhos[3].hasAttribute("data-acoes")).toBe(true);
-      // Criar conteúdo, Criar campanha e o lugar da seta: sempre 3 peças, na mesma ordem.
-      expect(filhos[3].children).toHaveLength(3);
-      expect(filhos[3].children[1].getAttribute("aria-label")).toBe("Criar campanha");
-    }
-    cache.clear();
-  });
-
-  it("mantém o que já havia: leitura semanal (hype e nicho), pauta pronta com Usar a pauta e o sinal do nicho", async () => {
-    estado.dados["cliente-a"] = pesquisa("cliente-a", hypes.concat([{ titulo: "Pauta do feriado", janela: "hoje", pauta: { tema: "Feriado", gancho: "Abre amanhã", laminas: ["a"], legenda: "x" } }]));
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(tela(cache));
-    const linha = (await screen.findByText("Pauta do feriado")).closest("li") as HTMLElement;
-    expect(within(linha).getByRole("button", { name: /Usar a pauta/ })).toBeTruthy();
-    expect(screen.getByText("Lidos na web")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Trending/ }));
-    expect(screen.getByText("Em alta no nicho")).toBeTruthy();
-    expect(screen.getByText("Decoração da vitrine")).toBeTruthy();
-    expect(screen.getByText("Busca por ambientes reais")).toBeTruthy();
-    cache.clear();
-  });
-
-  it("Buscar o que está em alta agora busca as notícias do nicho e abre o Trending", async () => {
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(tela(cache));
-    await screen.findByText("Dia do café");
-    fireEvent.click(screen.getByRole("button", { name: /Buscar o que está em alta agora/ }));
-    await screen.findByText(noticia.titulo);
-    expect(estado.trending).toHaveBeenCalledWith("cliente-a", "", "7d");
-    expect(document.querySelector('[data-area="trending"]')).not.toBeNull();
     cache.clear();
   });
 });

@@ -51,6 +51,9 @@ export function usePecasDaCampanha(campanha: Campanha, proposta: PropostaV4 | nu
     queryFn: () => lerTrabalhosDaCampanha(clientId, campanha.id),
     staleTime: 10_000,
     refetchInterval: vivo ? 5_000 : false,
+    // 22/10/2026: voltar do Estúdio (remonta a aba) ou focar a janela relê: a arte gerada lá aparece aqui.
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const ids = (trabalhos.data || []).map((t) => t.id);
   const fila = useQuery({
@@ -59,6 +62,8 @@ export function usePecasDaCampanha(campanha: Campanha, proposta: PropostaV4 | nu
     queryFn: () => lerFilaDosTrabalhos(ids),
     staleTime: 5_000,
     refetchInterval: vivo ? 5_000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const pecas: SituacaoDaPeca[] = useMemo(() => {
     // A série inteira: os conteúdos da proposta e os stories planejados (formato "story").

@@ -6,8 +6,8 @@ import { botao, juntar, texto } from "@/components/sistema";
 import { BotaoComCusto } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { diaCurto, type Campanha } from "./mesaV4Api";
-import { corpoDaPeca, ehPecaDeArte, FASES, faseDaPeca, ROTULO_DO_ESTADO_DA_PECA, TELAS_DO_STORY, type ChaveDoFormato, type EstadoDaPeca, type SituacaoDaPeca } from "./regrasDaCampanha";
-import { chavesDaCampanhaCompleta, gerarLaminasDaPeca, gerarStoryDaCampanha, geradorDeStoriesDisponivel, normalizarBriefing, prepararPecaDaCampanha } from "./campanhasApi";
+import { corpoDaPeca, ehPecaDeArte, FASES, faseDaPeca, ROTULO_DO_ESTADO_DA_PECA, TELAS_DO_STORY, type ChaveDoFormato, type EstadoDaPeca, type ItemDeStory, type SituacaoDaPeca } from "./regrasDaCampanha";
+import { chavesDaCampanhaCompleta, gerarLaminasDaPeca, gerarStoryDaCampanha, geradorDeStoriesDisponivel, normalizarBriefing, prepararPecaSemGerar } from "./campanhasApi";
 import { ICONE_DO_FORMATO } from "./CampanhaFormatos";
 import { chaves } from "./mesaV4Api";
 
@@ -97,16 +97,25 @@ export function PecasPorFase({ pecas, acoes, vazio }: { pecas: SituacaoDaPeca[];
   );
 }
 
-export default function CampanhaPecas({
+/**
+ * As ações de cada peça (22/10/2026, dono: "clico em abrir no Estúdio e ele já puxa a sequência e eu já gero
+ * por lá, já com o tema, e tudo pronto, só gerar; e quando eu voltar aparece ali"):
+ * - post e carrossel sem trabalho: "Abrir no Estúdio" cria a direção (rapida_preparar com o conteúdo, a
+ *   identidade, campanha_id e peca_da_campanha), SEM gerar, e abre a arte no Estúdio para a equipe gerar lá;
+ * - com trabalho: abre o trabalho existente (e "Gerar o que falta" quando faltam lâminas);
+ * - story: abre a sequência na aba Stories (ou cria pelo contrato, com custo antes, e abre);
+ * - vídeo: o roteiro mora na Série (sem ação aqui).
+ */
+export function useAcoesDasPecas({
   campanha,
   pecas,
-  carregando,
   onAbrirArteRapida,
+  onAbrirStories,
 }: {
   campanha: Campanha;
   pecas: SituacaoDaPeca[];
-  carregando: boolean;
   onAbrirArteRapida?: (trabalhoId: string) => void;
+  onAbrirStories?: (sequenciaId: string) => void;
 }) {
   const { clientId, catalogo } = useMesa();
   const { marca } = useMarcaDaMesa();
@@ -126,21 +135,38 @@ export default function CampanhaPecas({
     { modeloId: imagem ? imagem.id : null, tipo: "imagem", imagens: 1, qualidade: "media", tokensEntrada: TAMANHOS.imagemAnexos.entrada, vezes: n },
     { modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.leituraDoCard.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida, vezes: n },
   ];
+  const parteDaDirecao = (): ParteDaEstimativa => ({ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida });
 
-  const acoes = (p: SituacaoDaPeca) => {
+  const abrirTrabalho = (id: string, rotulo = "Abrir no Estúdio") =>
+    onAbrirArteRapida ? (
+      <button type="button" className={juntar(botao.icone, "h-7 w-7 text-primary")} onClick={() => onAbrirArteRapida(id)} aria-label={rotulo} title={`${rotulo}: conferir, ajustar e gerar lá`} data-abrir-no-estudio={id}>
+        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    ) : null;
+
+  return (p: SituacaoDaPeca): ReactNode => {
     const i = deArte.indexOf(p);
-    // Stories pela aba Stories (contrato gerarStoriesDaCampanha); sem ela ligada, a peça espera e diz por quê.
-    if (p.item.formato === "story" && p.estado === "a_fazer") {
+    if (p.item.formato === "story") {
+      const sequencia = (p.item as ItemDeStory).sequencia_id;
+      if (sequencia && onAbrirStories) {
+        return (
+          <button type="button" className={juntar(botao.icone, "h-7 w-7 text-primary")} onClick={() => onAbrirStories(sequencia)} aria-label="Abrir nos Stories" title="Abrir a sequência na aba Stories">
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        );
+      }
+      if (p.estado !== "a_fazer") return null;
       const pronto = geradorDeStoriesDisponivel();
       return (
         <BotaoComCusto
-          rotulo={<><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Criar os stories</span></>}
+          rotulo={<><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Criar e abrir nos Stories</span></>}
           titulo="Stories da campanha"
-          descricao={pronto ? "Criar esta sequência de stories pela aba Stories, com a identidade da campanha" : "Os stories da campanha ainda não estão ligados à aba Stories"}
-          partes={() => [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida } as ParteDaEstimativa].concat(partesDasLaminas(p.laminas || TELAS_DO_STORY))}
+          descricao={pronto ? "Criar esta sequência pela aba Stories, com a identidade da campanha, e abrir lá" : "Os stories da campanha ainda não estão ligados à aba Stories"}
+          partes={() => [parteDaDirecao()].concat(partesDasLaminas(p.laminas || TELAS_DO_STORY))}
           executar={async () => {
+            let id = "";
             try {
-              await gerarStoryDaCampanha(campanha, {
+              id = await gerarStoryDaCampanha(campanha, {
                 clientId,
                 campanhaId: campanha.id,
                 temaId: p.item.tema_id || "",
@@ -155,6 +181,7 @@ export default function CampanhaPecas({
             } finally {
               void qc.invalidateQueries({ queryKey: chaves.campanhas(clientId) });
             }
+            if (id && id !== "feita" && onAbrirStories) onAbrirStories(id);
             return { custo_usd: null };
           }}
           disabled={andando || !pronto}
@@ -163,65 +190,79 @@ export default function CampanhaPecas({
         />
       );
     }
-    if (p.item.formato === "story" || p.item.formato === "video") return null;
+    if (p.item.formato === "video") return null;
     if (p.estado === "a_fazer") {
+      // Abrir no Estúdio: só a direção (sem gerar); a equipe confere e gera lá.
       return (
         <BotaoComCusto
-          rotulo={<><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Criar esta peça</span></>}
-          titulo="Peça da campanha"
-          descricao="Criar esta peça pelo gerador do Estúdio, com a identidade da campanha"
-          partes={() => [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida } as ParteDaEstimativa].concat(partesDasLaminas(p.laminas))}
+          rotulo={<><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Abrir no Estúdio</span></>}
+          titulo="Peça no Estúdio"
+          descricao="Abrir no Estúdio com tudo pronto (tema, texto, lâminas e identidade da campanha); gerar fica lá"
+          partes={() => [parteDaDirecao()]}
           executar={async () => {
+            let id = "";
             try {
-              await prepararPecaDaCampanha(corpoDaPeca({ clientId, campanha, item: p.item, posicao: { i: i + 1, total: deArte.length }, marcaId, modeloImagemId: imagem ? imagem.id : null }), marcaId);
+              const r = await prepararPecaSemGerar(corpoDaPeca({ clientId, campanha, item: p.item, posicao: { i: i + 1, total: deArte.length }, marcaId, modeloImagemId: imagem ? imagem.id : null }));
+              id = r.trabalhoId;
             } finally {
               reler();
             }
+            if (id && onAbrirArteRapida) onAbrirArteRapida(id);
             return { custo_usd: null };
           }}
           disabled={andando}
           variant="ghost"
-          className="h-7 gap-0 px-1.5"
+          className="h-7 gap-0 px-1.5 text-primary"
         />
       );
     }
     if ((p.estado === "a_gerar" || p.estado === "erro") && p.trabalho && p.faltam.length) {
       const trabalhoId = p.trabalho.id;
       return (
-        <BotaoComCusto
-          rotulo={<><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Gerar o que falta</span></>}
-          titulo="Lâminas da peça"
-          descricao={`Gerar as ${p.faltam.length} lâmina(s) que faltam`}
-          partes={() => partesDasLaminas(p.faltam.length)}
-          executar={async () => {
-            try {
-              await gerarLaminasDaPeca(trabalhoId, p.faltam, marcaId);
-            } finally {
-              reler();
-            }
-            return { custo_usd: null };
-          }}
-          disabled={andando}
-          variant="ghost"
-          className="h-7 gap-0 px-1.5"
-        />
+        <>
+          <BotaoComCusto
+            rotulo={<><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Gerar o que falta</span></>}
+            titulo="Lâminas da peça"
+            descricao={`Gerar as ${p.faltam.length} lâmina(s) que faltam`}
+            partes={() => partesDasLaminas(p.faltam.length)}
+            executar={async () => {
+              try {
+                await gerarLaminasDaPeca(trabalhoId, p.faltam, marcaId);
+              } finally {
+                reler();
+              }
+              return { custo_usd: null };
+            }}
+            disabled={andando}
+            variant="ghost"
+            className="h-7 gap-0 px-1.5"
+          />
+          {abrirTrabalho(trabalhoId)}
+        </>
       );
     }
-    if (p.trabalho && onAbrirArteRapida) {
-      const id = p.trabalho.id;
-      return (
-        <button type="button" className={juntar(botao.icone, "h-7 w-7 text-primary")} onClick={() => onAbrirArteRapida(id)} aria-label="Abrir no Estúdio" title="Abrir no Estúdio para ajustar">
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
-      );
-    }
-    return null;
+    return p.trabalho ? abrirTrabalho(p.trabalho.id) : null;
   };
+}
 
+export default function CampanhaPecas({
+  campanha,
+  pecas,
+  carregando,
+  onAbrirArteRapida,
+  onAbrirStories,
+}: {
+  campanha: Campanha;
+  pecas: SituacaoDaPeca[];
+  carregando: boolean;
+  onAbrirArteRapida?: (trabalhoId: string) => void;
+  onAbrirStories?: (sequenciaId: string) => void;
+}) {
+  const acoes = useAcoesDasPecas({ campanha, pecas, onAbrirArteRapida, onAbrirStories });
   if (carregando) return <div className="h-40 animate-pulse rounded-xl bg-muted" />;
   return (
     <div className="min-w-0 space-y-3" data-pecas-da-campanha="">
-      <p className={texto.auxiliar}>Tudo pelo gerador do Estúdio; foto real só como referência.</p>
+      <p className={texto.auxiliar}>Abra no Estúdio: tudo pronto, só gerar lá.</p>
       <PecasPorFase pecas={pecas} acoes={acoes} vazio="A série ainda não tem conteúdos: gere a série na etapa anterior." />
     </div>
   );

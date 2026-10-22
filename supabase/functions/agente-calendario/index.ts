@@ -2,7 +2,7 @@ import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
 import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./modulos/periodo-do-pedido.ts";
 import { concluirPeriodoSemItens } from "./modulos/pedido-vazio-do-periodo.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
-import { assuntosSugeridos, assuntoValido, CACHE_DAS_NOTICIAS_MS, CacheCurto, datasParaOJev, filtrarPorRecencia, LIMITE_DE_NOTICIAS, lerRssDeNoticias, NIVEIS_DA_DATA, recenciaValida, ROTULO_DO_NIVEL_DA_DATA, urlDoGoogleNoticias, type Noticia } from "./modulos/trending-noticias.ts";
+import { assuntosDoNicho, assuntoValido, CACHE_DAS_NOTICIAS_MS, CacheCurto, datasParaOJev, filtrarPorRecencia, julgarNoticias, LIMITE_DE_NOTICIAS, lerRssDeNoticias, NIVEIS_DA_DATA, ordenarPeloCabe, perguntasDoCabe, recenciaValida, ROTULO_DO_NIVEL_DA_DATA, urlDoGoogleNoticias, type Noticia } from "./modulos/trending-noticias.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
 import { ehHype, encaixarNaAgenda, type Ocupacao, regraDoCliente, type RegraDoDia } from "../_shared/agenda-inteligente.ts";
@@ -3385,6 +3385,8 @@ type BriefingDaCampanha = {
   /** 21/10/2026: a mistura de formatos da campanha e os stories planejados (só aparecem quando há). */
   formatos?: FormatosDaCampanha;
   stories?: StoryDaCampanha[];
+  /** 22/10/2026: vínculo opcional com uma campanha de anúncios (ads_campaigns.campaign_id). */
+  ads?: { campaign_id: string; nome: string; vinculado_em: string };
 };
 
 type FormatosDaCampanha = { posts: number; carrosseis: number; stories: number; videos: number };
@@ -3431,7 +3433,14 @@ function extrasDoBriefing(v: unknown): Partial<BriefingDaCampanha> {
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
   const f = formatosDaCampanha(o.formatos);
   const st = storiesDaCampanha(o.stories);
-  return { ...canaisDoBriefing(o.canais), ...(f ? { formatos: f } : {}), ...(st.length ? { stories: st } : {}) };
+  const ads = (o.ads && typeof o.ads === "object" ? o.ads : null) as Record<string, unknown> | null;
+  const campaignId = ads ? texto(ads.campaign_id, 64) : "";
+  return {
+    ...canaisDoBriefing(o.canais),
+    ...(f ? { formatos: f } : {}),
+    ...(st.length ? { stories: st } : {}),
+    ...(campaignId ? { ads: { campaign_id: campaignId, nome: texto(ads?.nome, 160), vinculado_em: texto(ads?.vinculado_em, 40) } } : {}),
+  };
 }
 
 /** Linha do acervo (cliente_imagens) que a campanha usa. */
@@ -4922,55 +4931,107 @@ const cacheDasNoticias = new CacheCurto<Noticia[]>(CACHE_DAS_NOTICIAS_MS);
 /** Notas do Jev das datas do hype por cliente + lista: 6 h na memória (o Jev é cobrado uma vez). */
 const cacheDasNotasDoHype = new CacheCurto<Record<string, { nota: number | null; nivel: string | null }>>(6 * 3_600_000, 300);
 
-/** Segmento do cadastro comercial e títulos do "em alta no nicho" da leitura mais recente. */
-async function sugeridosDoTrending(servico: SupabaseClient, clientId: string): Promise<string[]> {
-  const [org, hypes] = await Promise.all([
+/** Leve: quem é o cliente para o nicho (cadastro, contexto da marca e o "em alta no nicho" da leitura mais recente). */
+async function nichoDoCliente(servico: SupabaseClient, clientId: string) {
+  const [perfil, kit, org, hypes] = await Promise.all([
+    servico.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle(),
+    servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
     servico.from("commercial_organizations").select("segment").eq("client_id", clientId).not("segment", "is", null).limit(1),
     servico.from("mesa_hypes").select("itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1),
   ]);
+  const p = perfil.data as { full_name: string | null; company_name: string | null } | null;
+  const contexto = ((kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {}) as Record<string, unknown>;
   const segmento = ((org.data ?? []) as Array<{ segment: string | null }>)[0]?.segment ?? null;
   const itens = (((hypes.data ?? []) as Array<{ itens: unknown }>)[0]?.itens ?? []) as Array<{ tipo?: string; titulo?: string }>;
-  const doNicho = Array.isArray(itens) ? itens.filter((h) => h && h.tipo === "nicho").map((h) => h.titulo) : [];
-  return assuntosSugeridos(segmento, doNicho);
+  const titulosDoNicho = Array.isArray(itens) ? itens.filter((h) => h && h.tipo === "nicho").map((h) => h.titulo) : [];
+  const curto = (v: unknown) => (typeof v === "string" ? v.slice(0, 1200) : v == null ? null : JSON.stringify(v).slice(0, 1200));
+  return {
+    nome: p?.company_name?.trim() || p?.full_name?.trim() || "Cliente",
+    segmento,
+    negocio: curto(contexto.negocio),
+    publico: curto(contexto.publico),
+    produtos: curto(contexto.produtos),
+    sugeridos: assuntosDoNicho({ segmento, contexto, titulosDoNicho }),
+  };
 }
 
+async function noticiasDoGoogle(assunto: string, recencia: ReturnType<typeof recenciaValida>, agora: number): Promise<{ itens: Noticia[]; cache: boolean }> {
+  const chave = `${assunto.toLowerCase()}|${recencia}`;
+  const guardado = cacheDasNoticias.ler(chave, agora);
+  if (guardado) return { itens: guardado, cache: true };
+  let res: Response;
+  try {
+    res = await fetch(urlDoGoogleNoticias(assunto, recencia), { headers: { "Accept": "application/rss+xml, application/xml" }, signal: AbortSignal.timeout(8000) });
+  } catch {
+    throw new ErroHttp(502, "noticias_indisponiveis", "O Google Notícias não respondeu. Tente de novo.");
+  }
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    throw new ErroHttp(502, "noticias_indisponiveis", "O Google Notícias não respondeu. Tente de novo.");
+  }
+  const xml = (await res.text()).slice(0, 2_000_000);
+  const itens = filtrarPorRecencia(lerRssDeNoticias(xml, LIMITE_DE_NOTICIAS * 2), recencia, agora).slice(0, LIMITE_DE_NOTICIAS);
+  cacheDasNoticias.guardar(chave, itens, agora);
+  return { itens, cache: false };
+}
+
+/** Julgamento do Jev por cliente + lote de manchetes (10 min na memória; o Jev é cobrado uma vez). */
+const cacheDoCabe = new CacheCurto<Record<string, { choice?: string; noul?: number }>>(CACHE_DAS_NOTICIAS_MS, 300);
+
 /**
- * buscar_trending { client_id, assunto?, recencia? }: manchetes REAIS do Google Notícias (RSS público, sem
- * custo) por assunto, com fonte, data real e link. Sem assunto: o 1º sugerido do cliente. Nunca inventa.
+ * buscar_trending { client_id, assunto?, recencia? }: manchetes REAIS do Google Notícias (RSS público), com
+ * fonte, data real e link. Sem assunto: os 2 primeiros assuntos do NICHO do cliente (segmento, contexto da
+ * marca, produtos e o nicho lido), juntos. Cada manchete passa por "cabe no marketing deste cliente?" (Jev,
+ * Choice serve/talvez/não serve + Noul de assunto sensível + Choice do ângulo, num pedido só); o sensível
+ * também é cortado em código. Nunca inventa manchete nem data.
  */
 async function buscarTrending(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
   const recencia = recenciaValida(corpo.recencia);
-  const sugeridos = await sugeridosDoTrending(servico, clientId).catch(() => [] as string[]);
-  const assunto = assuntoValido(corpo.assunto) || sugeridos[0] || "";
+  const nicho = await nichoDoCliente(servico, clientId);
+  const pedido = assuntoValido(corpo.assunto);
+  const assuntos = pedido ? [pedido] : nicho.sugeridos.slice(0, 2);
   const agora = Date.now();
-  if (!assunto) return json({ assunto: "", recencia, itens: [], sugeridos, buscado_em: new Date(agora).toISOString(), fonte: "Google Notícias", sem_assunto: true });
-  const chave = `${assunto.toLowerCase()}|${recencia}`;
-  let itens = cacheDasNoticias.ler(chave, agora);
-  const doCache = !!itens;
-  if (!itens) {
-    let res: Response;
-    try {
-      res = await fetch(urlDoGoogleNoticias(assunto, recencia), { headers: { "Accept": "application/rss+xml, application/xml" }, signal: AbortSignal.timeout(8000) });
-    } catch {
-      throw new ErroHttp(502, "noticias_indisponiveis", "O Google Notícias não respondeu. Tente de novo.");
+  const base = { recencia, sugeridos: nicho.sugeridos, buscado_em: new Date(agora).toISOString(), fonte: "Google Notícias" };
+  if (!assuntos.length) return json({ ...base, assunto: "", itens: [], sem_assunto: true, custo_usd: 0 });
+  const lotes = await Promise.all(assuntos.map((a) => noticiasDoGoogle(a, recencia, agora)));
+  const vistos: Record<string, true> = {};
+  const juntas = lotes.flatMap((l) => l.itens)
+    .filter((n) => (vistos[n.titulo.toLowerCase()] ? false : (vistos[n.titulo.toLowerCase()] = true)))
+    .sort((a, b) => Date.parse(b.data) - Date.parse(a.data))
+    .slice(0, LIMITE_DE_NOTICIAS);
+
+  let respostas: Record<string, { choice?: string; noul?: number }> | null = null;
+  let custo = 0;
+  let jevErro: string | null = null;
+  if (juntas.length) {
+    const chaveDoCabe = `${clientId}|${juntas.map((n) => n.link).join("|")}`;
+    respostas = cacheDoCabe.ler(chaveDoCabe, agora);
+    if (!respostas) {
+      try {
+        const j = await jevPerguntar({
+          state: { cliente: { nome: nicho.nome, segmento: nicho.segmento, negocio: nicho.negocio, publico: nicho.publico, produtos: nicho.produtos }, noticias: juntas.map((n) => ({ titulo: n.titulo, fonte: n.fonte })) },
+          questions: perguntasDoCabe(juntas.length) as Record<string, PerguntaJev>,
+        });
+        const cobrado = await cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: "mesa_hypes", id: clientId }, criadoPor: chamador.userId }).catch(() => null);
+        custo = cobrado?.custoUsd ?? 0;
+        respostas = j.answers as Record<string, { choice?: string; noul?: number }>;
+        cacheDoCabe.guardar(chaveDoCabe, respostas, agora);
+      } catch (e) {
+        jevErro = e instanceof JevErro ? e.codigo : "jev_falhou";
+        console.error("agente-calendario: jev das notícias falhou (fica o corte em código)", { client_id: clientId, codigo: jevErro });
+      }
     }
-    if (!res.ok) {
-      await res.body?.cancel().catch(() => {});
-      throw new ErroHttp(502, "noticias_indisponiveis", "O Google Notícias não respondeu. Tente de novo.");
-    }
-    const xml = (await res.text()).slice(0, 2_000_000);
-    itens = filtrarPorRecencia(lerRssDeNoticias(xml, LIMITE_DE_NOTICIAS * 2), recencia, agora).slice(0, LIMITE_DE_NOTICIAS);
-    cacheDasNoticias.guardar(chave, itens, agora);
   }
-  return json({ assunto, recencia, itens, sugeridos, buscado_em: new Date(agora).toISOString(), fonte: "Google Notícias", cache: doCache, custo_usd: 0 });
+  const itens = ordenarPeloCabe(julgarNoticias(juntas, respostas));
+  return json({ ...base, assunto: assuntos.join(" + "), itens, cache: lotes.every((l) => l.cache), custo_usd: Math.round(custo * 1e6) / 1e6, jev_erro: jevErro });
 }
 
 /**
  * ordenar_datas_do_hype { client_id, datas: [{ id, titulo, tipo, quando }] }: o Jev (Score) diz quanto cada
- * data do calendário fixo serve a ESTE cliente. Uma pergunta por data, um pedido só. Sem Jev: jev_erro e a
- * tela fica na ordem da data.
+ * data do calendário fixo serve a ESTE cliente. Uma pergunta por data, um pedido só. Devolve também o segmento
+ * do cadastro: sem Jev, a tela separa as datas pela regra de tipo e segmento.
  */
 async function ordenarDatasDoHype(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
@@ -4978,23 +5039,11 @@ async function ordenarDatasDoHype(servico: SupabaseClient, chamador: Chamador, c
   const datas = datasParaOJev(corpo.datas);
   if (!datas.length) throw new ErroHttp(400, "sem_datas", "Mande ao menos uma data do calendário.");
   const agora = Date.now();
+  const nicho = await nichoDoCliente(servico, clientId);
   const chave = `${clientId}|${datas.map((d) => d.id).join(",")}`;
   const guardado = cacheDasNotasDoHype.ler(chave, agora);
-  if (guardado) return json({ notas: guardado, cache: true, custo_usd: 0 });
-  const [perfil, kit, org] = await Promise.all([
-    servico.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle(),
-    servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
-    servico.from("commercial_organizations").select("segment").eq("client_id", clientId).not("segment", "is", null).limit(1),
-  ]);
-  const p = perfil.data as { full_name: string | null; company_name: string | null } | null;
-  const ctx = ((kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {}) as Record<string, unknown>;
-  const curto = (v: unknown) => (typeof v === "string" ? v.slice(0, 1200) : v == null ? null : JSON.stringify(v).slice(0, 1200));
-  const cliente = {
-    nome: p?.company_name?.trim() || p?.full_name?.trim() || "Cliente",
-    segmento: ((org.data ?? []) as Array<{ segment: string | null }>)[0]?.segment ?? null,
-    negocio: curto(ctx.negocio),
-    publico: curto(ctx.publico),
-  };
+  if (guardado) return json({ notas: guardado, segmento: nicho.segmento, cache: true, custo_usd: 0 });
+  const cliente = { nome: nicho.nome, segmento: nicho.segmento, negocio: nicho.negocio, publico: nicho.publico, produtos: nicho.produtos };
   const questions: Record<string, PerguntaJev> = {};
   datas.forEach((_, i) => {
     questions[`d${i}`] = { type: "score", instructions: `Quanto a data \`datas[${i}]\` serve para a marca em \`cliente\` falar com o público dela (ou vender) nessa data?`, criteria: NIVEIS_DA_DATA };
@@ -5008,11 +5057,11 @@ async function ordenarDatasDoHype(servico: SupabaseClient, chamador: Chamador, c
       notas[d.id] = { nota: notaDe0a10(n, NIVEIS_DA_DATA.length), nivel: n == null ? null : ROTULO_DO_NIVEL_DA_DATA[Math.max(0, Math.min(NIVEIS_DA_DATA.length - 1, Math.round(n)))] };
     });
     cacheDasNotasDoHype.guardar(chave, notas, agora);
-    return json({ notas, cache: false, custo_usd: cobrado?.custoUsd ?? 0 });
+    return json({ notas, segmento: nicho.segmento, cache: false, custo_usd: cobrado?.custoUsd ?? 0 });
   } catch (e) {
     const codigo = e instanceof JevErro ? e.codigo : "jev_falhou";
     console.error("agente-calendario: jev das datas do hype falhou", { client_id: clientId, codigo });
-    return json({ notas: {}, jev_erro: codigo, custo_usd: 0 });
+    return json({ notas: {}, segmento: nicho.segmento, jev_erro: codigo, custo_usd: 0 });
   }
 }
 

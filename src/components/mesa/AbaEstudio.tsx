@@ -83,6 +83,8 @@ import EstudioAvisoDoRosto, { EstudioAvisosDaGeracao } from "./EstudioAvisoDoRos
 import EstudioEntrega from "./EstudioEntrega";
 // Frente AE (28/09): arte rápida, fora do plano do mês, no mesmo Estúdio.
 import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
+// 22/10/2026: a peça de campanha aberta no Estúdio ganha "Voltar à campanha".
+import VoltarACampanha from "./VoltarACampanha";
 import { ModoDoEstudio, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA, tituloDoAviso } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
@@ -204,8 +206,8 @@ import { superficie, juntar } from "@/components/sistema/estilos";
 
 const EstudioDaPauta = lazy(() => import("./EstudioDaPauta"));
 const TemplateProfileEditor = lazy(() => import("./profile/TemplateProfileEditor"));
-// 21/10 (rodada 2): Template · X muda a área do Estúdio; as ações de cada post ficam embaixo do card da prancheta.
-const AcoesDoPostNaPrancheta = lazy(() => import("./profile/AcoesDoPostNaPrancheta"));
+// 21/10 (rodada 3): no modo Template, o card da prancheta mostra o post do X da lâmina (mesmos controles).
+const MiniaturaDoPostX = lazy(() => import("./profile/MiniaturaDoPostX"));
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
@@ -262,7 +264,7 @@ type EstadoDoItem = "producao" | "agenda" | "preparar";
 
 const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typeof PenLine }> = {
   lamina: { rotulo: "Lâmina", dica: "Texto, conferência, ajustes e versões da lâmina escolhida", icone: PenLine },
-  template: { rotulo: "Template · X", dica: "Template · X: a área vira o post do X, com o fio na prancheta e os ajustes aqui", icone: LayoutTemplate },
+  template: { rotulo: "Template", dica: "Template · X: o centro vira o post do X da lâmina; aqui ficam tema, cor, tamanhos e imagem", icone: LayoutTemplate },
   diretor: { rotulo: "Diretor", dica: "Conversar com o diretor de arte: estilo, cenário, luz e cores, com mudanças que você aplica com um clique", icone: MessageSquare },
   fotos: { rotulo: "Fotos", dica: "Fotos reais para compor: fundo, pessoa ou objeto (cole com Ctrl+V)", icone: ImagePlus },
   referencias: { rotulo: "Referências", dica: "Referências que o gerador segue de perto, com a identidade da marca", icone: Bookmark },
@@ -1615,11 +1617,12 @@ export function DetalheDoItem({
       onReordenar={(ordens) => void reordenar(ordens)}
       onVersoes={(ordem) => abrirPainel(ordem, "versoes")}
       onAjustar={(ordem) => abrirPainel(ordem, "livre")}
-      acoes={emTemplate && trabalho ? (c) => (
+      acoes={emTemplate ? undefined : acoesDaPrancheta}
+      miniatura={emTemplate && trabalho ? (c, v) => (
         <Suspense fallback={null}>
-          <AcoesDoPostNaPrancheta trabalhoId={trabalho.id} clientId={clientId} ordem={c.ordem} total={cardsDaDirecao.length} bloqueado={entregue || ocupado} onMudou={atualizar} onEscolher={setSelecionado} />
+          <MiniaturaDoPostX trabalhoId={trabalho.id} clientId={clientId} card={c} versao={v} posicao={{ atual: cardsDaDirecao.findIndex((x) => x.ordem === c.ordem) + 1, total: cardsDaDirecao.length }} />
         </Suspense>
-      ) : acoesDaPrancheta}
+      ) : undefined}
     />
   );
 
@@ -1751,6 +1754,7 @@ export function DetalheDoItem({
         onMudou={atualizar}
         onAbrirFotos={() => abrirFerramenta("fotos", false)}
         onEscolherLamina={setSelecionado}
+        onSalvarTexto={(novo) => configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } })}
         onSair={() => { setModoTemplate(false); if (ferramenta === "template") setFerramenta("lamina"); }}
       />
     </Suspense>
@@ -2781,7 +2785,7 @@ export default function AbaEstudio({
         refDaAltura={cabe.ref}
         foco={focoLigado}
         alturaDaJanela={alturaDaJanela}
-        topo={modoDoEstudio}
+        topo={<>{modoDoEstudio}<VoltarACampanha trabalhoId={alvoRapido} /></>}
         onAbrirItem={(taskId) => {
           const p = new URLSearchParams(parametrosDoModo.toString());
           p.delete(PARAMETRO_DA_ARTE_RAPIDA);

@@ -666,6 +666,7 @@ export default function MesaDoCliente() {
                   novaPedida={params.get("nova") === "1"}
                   onAbrirNoEstudio={(taskId, mesDoItem) => mudar({ aba: "estudio", task: taskId, mes: mesDoItem || null, hype: null })}
                   onAbrirArteRapida={(trabalhoId) => mudar({ aba: "estudio", rapida: trabalhoId, task: null, hype: null })}
+                  onAbrirStories={() => mudar({ aba: "stories", task: null, hype: null, nova: null })}
                 />
               )}
               {aba === "estudio" && (

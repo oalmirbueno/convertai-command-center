@@ -132,6 +132,8 @@ type Props = {
   onReordenar: (ordens: number[]) => void;
   /** Barrinha de ações sob a lâmina (sempre visível). */
   acoes?: (card: CardDaDirecao, versao: CardGerado | undefined) => ReactNode;
+  /** Template · X (21/10): o desenho do card no lugar da arte (o post do X da lâmina), com os mesmos controles. */
+  miniatura?: (card: CardDaDirecao, versao: CardGerado | undefined) => ReactNode;
   /** Versão sob a lâmina, clicável (abre as versões na ferramenta Lâmina). */
   onVersoes?: (ordem: number) => void;
   /** Ícone de ajuste sob a lâmina com arte (abre o ajuste na ferramenta Lâmina). */
@@ -300,6 +302,7 @@ function Lamina({
   primeira,
   ultima,
   acoes,
+  miniatura,
 }: {
   card: CardDaDirecao;
   total: number;
@@ -319,6 +322,7 @@ function Lamina({
   primeira: boolean;
   ultima: boolean;
   acoes?: ReactNode;
+  miniatura?: ReactNode;
 }) {
   const id = String(card.ordem);
   const arrasto = useDraggable({ id, disabled: !arrastavel });
@@ -351,7 +355,9 @@ function Lamina({
           style={{ height: altura }}
           className={`relative block w-full overflow-hidden bg-card text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cantos} ${ativo ? (colado ? "ring-[3px] ring-inset ring-primary" : "border-primary ring-2 ring-primary") : colado ? "" : "border-border hover:border-primary/60"}`}
         >
-          {versao ? (
+          {miniatura ? (
+            <div className="absolute inset-0 bg-background">{miniatura}</div>
+          ) : versao ? (
             <>
               <div className="absolute inset-0" style={trabalhando ? ESTILO_VELADO : undefined}>
                 <ImagemDaMesa caminho={versao.storage_path} alt={`Lâmina ${card.ordem}`} className="h-full w-full" />
@@ -442,6 +448,7 @@ export default function PranchetaDoEstudio({
   avisoDaOrdem,
   onReordenar,
   acoes,
+  miniatura,
   onVersoes,
   onAjustar,
 }: Props) {
@@ -488,6 +495,7 @@ export default function PranchetaDoEstudio({
           primeira={i === 0}
           ultima={i === cards.length - 1}
           acoes={acoes ? acoes(c, ultimas.get(c.ordem)) : undefined}
+          miniatura={miniatura ? miniatura(c, ultimas.get(c.ordem)) : undefined}
         />
       ))}
     </ul>

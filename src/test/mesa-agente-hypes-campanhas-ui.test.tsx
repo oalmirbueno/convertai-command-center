@@ -211,10 +211,12 @@ describe("hypes da semana", () => {
     const fim = vi.fn();
     montar(h(HypesDaSemana, { onCriarCampanha: vi.fn(), onPedidoInicio: inicio, onPedidoFim: fim }));
     // 21/10: a leitura da semana fica no Hype, junto do calendário fixo; cada linha tem as próprias ações.
-    const linha = (await screen.findByText("Dia das Crianças")).closest("li") as HTMLElement;
+    // 21/10: o cartão da semana (o modelo de antes) tem uma ação só, "Criar", com Conteúdo e Campanha.
+    const linha = (await screen.findByText("Dia das Crianças")).closest("article") as HTMLElement;
     expect(screen.getByRole("button", { name: /Buscar o que está em alta agora/ })).toBeTruthy();
     expect(chamadasDe("buscar_hypes").length).toBe(0);
-    fireEvent.click(within(linha).getByRole("button", { name: /Criar conteúdo/ }));
+    fireEvent.keyDown(within(linha).getByRole("button", { name: /Criar a partir de/ }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Conteúdo/ }));
     await waitFor(() => expect(chamadasDe("pedido_livre").length).toBe(1));
     // 17/10: o hype vai junto e o servidor grava o gancho exato (some da lista quando vai para a agenda).
     expect(chamadasDe("pedido_livre")[0]).toEqual({ acao: "pedido_livre", client_id: CLIENTE, mensagem: mensagemDoHype(hype), hype: { tipo: "hype", titulo: hype.titulo } });
@@ -227,8 +229,9 @@ describe("hypes da semana", () => {
     mock.tabelas.mesa_hypes = [{ client_id: CLIENTE, semana: segundaDaSemanaIso(hojeIso()), itens: [hype], resumo: null, criado_em: new Date().toISOString() }];
     const criarCampanha = vi.fn();
     montar(h(HypesDaSemana, { onCriarCampanha: criarCampanha }));
-    const linha = (await screen.findByText("Dia das Crianças")).closest("li") as HTMLElement;
-    fireEvent.click(within(linha).getByRole("button", { name: /Criar campanha/ }));
+    const linha = (await screen.findByText("Dia das Crianças")).closest("article") as HTMLElement;
+    fireEvent.keyDown(within(linha).getByRole("button", { name: /Criar a partir de/ }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Campanha/ }));
     expect(criarCampanha).toHaveBeenCalledTimes(1);
     const semente = tirarSementeDaCampanha(CLIENTE);
     expect(semente && semente.hypes).toEqual([{ titulo: "Dia das Crianças", quando: "próximas semanas", por_que_agora: undefined, como_usar: "Kit presente", indice: 0 }]);

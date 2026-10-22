@@ -169,6 +169,8 @@ export interface BriefingDaCampanha {
   /** 21/10/2026: a mistura de formatos e os stories planejados (regrasDaCampanha.ts). */
   formatos?: { posts: number; carrosseis: number; stories: number; videos: number };
   stories?: { tema_id: string; data: string; etapa: string; tema: string; gancho: string; telas: string[]; sequencia_id?: string | null }[];
+  /** 22/10/2026: vínculo opcional com uma campanha de anúncios (ads_campaigns.campaign_id). */
+  ads?: { campaign_id: string; nome: string; vinculado_em: string } | null;
 }
 
 export type PapelDaImagemDaCampanha = "heroi" | "apoio" | "ambiente";

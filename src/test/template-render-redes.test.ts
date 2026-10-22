@@ -26,7 +26,7 @@ function quadro() {
   return { canvas, chamadas, textos, de };
 }
 
-const base: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Padaria Bom Dia", username: "padariabomdia", verificado: true, texto: "Pão de fermentação natural sai às 7h.\nChegue cedo.", tamanho_texto: 34, cor_fundo: "#ffffff", tema: "claro", tamanho_foto: 88, espacamento: 48, arredondamento: 24 };
+const base: TemplateProfile = { versao: 1, estilo: "twitter", nome: "Padaria Bom Dia", username: "padariabomdia", verificado: true, texto: "Pão de fermentação natural sai às 7h.\nChegue cedo.", tamanho_texto: 34, cor_fundo: "#ffffff", tema: "claro", tamanho_foto: 88, espacamento: 48, arredondamento: 24, escala: 100 };
 const foto = { naturalWidth: 1600, naturalHeight: 900 } as HTMLImageElement;
 
 describe("Post do X desenhado como no app", () => {
@@ -172,5 +172,13 @@ describe("Edição à mão do post do X", () => {
   it("a escala aumenta ou diminui o post inteiro no quadro", () => {
     const larguraDoPost = (escala?: number) => { const q = quadro(); desenharProfile(q.canvas, { ...base, escala }, "feed_4x5"); return Math.max(...(q.de("arcTo").slice(0, 4) as number[][]).map((c) => c[0])) - Math.min(...(q.de("arcTo").slice(0, 4) as number[][]).map((c) => c[2])); };
     expect(larguraDoPost(60)).toBeLessThan(larguraDoPost(100));
+  });
+});
+
+describe("Quadro sem moldura vazia", () => {
+  it("sem escala escolhida, o post do X cresce até ocupar o quadro", () => {
+    const alturaDoPost = (escala?: number) => { const q = quadro(); desenharProfile(q.canvas, { ...base, escala }, "feed_4x5", { imagem: foto }); const cs = q.de("arcTo").slice(0, 4) as number[][]; return Math.max(...cs.map((c) => c[3])) - Math.min(...cs.map((c) => c[1])); };
+    expect(alturaDoPost(undefined)).toBeGreaterThan(alturaDoPost(100));
+    expect(alturaDoPost(undefined)).toBeLessThanOrEqual(1350 - 96);
   });
 });

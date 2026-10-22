@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download, Expand, Image as IconeDeImagem, LogOut, Loader2, Minus, Palette, Plus, Sparkles, Type, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Expand, Image as IconeDeImagem, LogOut, Loader2, Minus, Plus, Sparkles, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import Etapas from "@/components/sistema/Etapas";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,7 +16,7 @@ import { useAcervo } from "../SeletorDoAcervo";
 import { BotaoComCusto } from "../Custo";
 import ImagensReaisDoDiretor from "../ImagensReaisDoDiretor";
 import { formatoDoTrabalho, gravarTrabalhoNoCache, useEstadoGuardado, type TrabalhoGravado } from "../estudioUtil";
-import { useRascunhoCompartilhado } from "./rascunhoDoTemplate";
+import { publicarBaseDoTemplate, useRascunhoCompartilhado } from "./rascunhoDoTemplate";
 import type { CardDaDirecao, CardGerado, Trabalho } from "../useItensDoMes";
 import { carregarImagemProfile, desenharProfile, TEMPO_PADRAO, type FormatoProfile, type RetanguloProfile } from "./renderProfile";
 import { chaveDaFonteProfile, fontesDoProfile, pontoNaImagemProfile, referenciaDaFonteProfile, resolverFonteProfile, ROTULO_DO_GRUPO, type CardComFontes, type FonteProfile, type GrupoDaFonte } from "./fontesDoProfile";
@@ -39,7 +38,6 @@ import { limiteDoTexto } from "../../../../supabase/functions/estudio-arte/modul
 const ultimaVersao = (trabalho: Trabalho, ordem: number): CardGerado | undefined => trabalho.cards.filter((v) => v.ordem === ordem).sort((a, b) => b.versao - a.versao)[0];
 const metadados = (versao: CardGerado | undefined): TemplateProfile | undefined => versao?.template_profile;
 type Rede = TemplateProfile["estilo"];
-type Etapa = "conteudo" | "imagem" | "aparencia";
 type Origem = "gerar" | "internet" | "cliente";
 type Ajustes = Omit<TemplateProfile, "nome" | "username"> & { nome: string | null; username: string | null; texto_base: string; sem_imagem?: boolean };
 
@@ -63,7 +61,7 @@ export const partesDaFotoDoTemplate = (modeloImagemId: string | null | undefined
 ];
 
 /** O painel remonta por cliente/marca/trabalho/lâmina: consultas pendentes nunca mostram o perfil anterior. */
-export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqueadoDeFora, onMudou, onAbrirFotos, onEscolherLamina, parte = "tudo", onSair }: {
+export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqueadoDeFora, onMudou, onAbrirFotos, onEscolherLamina, parte = "tudo", onSair, onSalvarTexto }: {
   trabalho: Trabalho; card: CardDaDirecao; bloqueado: boolean; onMudou: () => void; onAbrirFotos: () => void;
   /** Troca a lâmina aberta (setas da prévia). */
   onEscolherLamina?: (ordem: number) => void;
@@ -74,6 +72,8 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   parte?: "tudo" | "centro" | "painel";
   /** Volta o centro do Estúdio para a lâmina de arte. */
   onSair?: () => void;
+  /** Rodada 3: o texto do post é o texto da lâmina; o centro grava pelo mesmo campo (configurar). */
+  onSalvarTexto?: (texto: string) => Promise<void>;
 }) {
   const mesa = useMesa(), { marca } = useMarcaDaMesa(), cache = useQueryClient();
   const bloqueado = bloqueadoDeFora || ["aguardando_agencia", "aguardando_cliente", "aprovado", "agendado"].includes(trabalho.entrega_status || "");
@@ -81,8 +81,6 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const salvo = metadados(ultimaVersao(trabalho, card.ordem));
   const chave = `mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:${card.ordem}`;
   const [ajustes, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, { ...PADRAO, ...salvo, nome: salvo?.nome ?? null, username: salvo?.username ?? null, texto: salvo?.texto ?? card.texto_exato ?? "", texto_base: card.texto_exato || "" });
-  const [etapaGuardada, setEtapa] = useEstadoGuardado<Etapa>(`mesa:template:etapa:${trabalho.id}`, "conteudo");
-  const etapa: Etapa = etapaGuardada === "imagem" || etapaGuardada === "aparencia" ? etapaGuardada : "conteudo";
   const [origem, setOrigem] = useEstadoGuardado<Origem>(`mesa:template:origem:${trabalho.id}`, "gerar");
   const [contaId, setContaId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false), [pronto, setPronto] = useState(false), [erro, setErro] = useState("");
@@ -117,7 +115,13 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const ehInstagram = ajustes.estilo === "instagram";
   // A legenda do Instagram não reescreve a lâmina: a base muda sozinha; no X e no Story, só sem edição da equipe.
   const textoDesatualizado = ajustes.texto_base !== textoDaLamina;
-  const conflitoDeTexto = textoDesatualizado && !ehInstagram && ajustes.texto !== ajustes.texto_base;
+  // Post do X: um texto só, o da lâmina (o mesmo campo de conteúdo do Estúdio). Rascunho de texto só nos antigos.
+  const ehX = ajustes.estilo === "twitter";
+  const [textoLocal, setTextoLocal] = useState(textoDaLamina);
+  const editandoTexto = useRef(false);
+  useEffect(() => { if (!editandoTexto.current) setTextoLocal(textoDaLamina); }, [textoDaLamina]);
+  const textoDoPost = ehX ? textoLocal : ajustes.texto;
+  const conflitoDeTexto = !ehX && textoDesatualizado && !ehInstagram && ajustes.texto !== ajustes.texto_base;
   // Só quando o texto da lâmina chega diferente (abertura ou mudança de fora); o Gerar já põe o texto novo antes.
   const ultimoTextoDaLamina = useRef<string | null>(null);
   useEffect(() => {
@@ -136,19 +140,27 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   }, [contaId, contaSalvaId, perfil.data?.conta_id]);
   const formato = formatoDoTrabalho(trabalho.direcao as { formato?: unknown }) as FormatoProfile;
   const { texto_base: _base, sem_imagem: _sem, ...semRascunho } = ajustes;
-  const template: TemplateProfile = { ...semRascunho, nome, username, ...referenciaDaFonteProfile(fonte) };
+  const template: TemplateProfile = { ...semRascunho, texto: textoDoPost, nome, username, ...referenciaDaFonteProfile(fonte) };
   if (fonteMudou || !fonte) delete template.destaque;
   const assinatura = JSON.stringify(template);
   const posicao = posicaoDe(card.ordem);
   const fotosPendentes = (!!fonte && !foto.data) || (!!ajustes.foto_caminho && !avatarGuardado.data) || (!!card.imagens_ids?.length && acervo.isPending);
   const erroDasFontes = foto.isError || avatarGuardado.isError || acervo.isError;
   const rotuloValido = !!rotulo.trim() && rotulo.trim().length <= 60 && !/[\r\n\t<>]/.test(rotulo);
-  const limite = limiteDoTexto(ajustes.estilo, ajustes.texto);
+  const limite = limiteDoTexto(ajustes.estilo, textoDoPost);
   const faltaImagemDoIG = ehInstagram && !fonte;
   const escolherFonte = (escolhida: FonteProfile | undefined) => {
     setMarcando(false);
     setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(escolhida), destaque: undefined, sem_imagem: !escolhida }));
   };
+
+  // As miniaturas da prancheta usam o desenho desta lâmina (perfil, tema, cores e tamanhos), ao vivo.
+  useEffect(() => {
+    if (parte === "painel") return;
+    const dados = JSON.parse(assinatura) as TemplateProfile;
+    delete dados.destaque;
+    publicarBaseDoTemplate(trabalho.id, { template: dados, avatarUrl: avatarUrl || null, formato });
+  }, [assinatura, avatarUrl, formato, parte, trabalho.id]);
 
   useEffect(() => {
     let atual = true; setPronto(false); setErro(""); imagemNaPrevia.current = null;
@@ -185,6 +197,9 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (!pronto || ocupado || bloqueado || conflitoDeTexto || fonteMudou || faltaImagemDoIG) return;
     setOcupado(true); setErro(""); let feitas = 0;
     try {
+      // O texto digitado no centro vai primeiro para a lâmina; a versão nova parte dele.
+      let baseDaAberta = card.texto_exato || "";
+      if (ehX && onSalvarTexto && textoLocal !== baseDaAberta) { await onSalvarTexto(textoLocal); baseDaAberta = textoLocal; }
       const ordens = todasAsLaminas ? cardsOrdenados : [card];
       for (const c of ordens) {
         if (!vivo.current) break;
@@ -212,7 +227,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         const chaveDoPedido = JSON.stringify([c.ordem, versao, c.texto_exato || "", cfg, formato]);
         let pedidoId = tentativas.current.get(chaveDoPedido);
         if (!pedidoId) { pedidoId = crypto.randomUUID(); tentativas.current.set(chaveDoPedido, pedidoId); }
-        const r = await chamarFuncao<{ trabalho: TrabalhoGravado }>("estudio-arte", { acao: "salvar_template", trabalho_id: trabalho.id, ordem: c.ordem, versao_esperada: versao, texto_base: c.texto_exato || "", pedido_id: pedidoId, png_base64: png, template: cfg });
+        const r = await chamarFuncao<{ trabalho: TrabalhoGravado }>("estudio-arte", { acao: "salvar_template", trabalho_id: trabalho.id, ordem: c.ordem, versao_esperada: versao, texto_base: esta ? baseDaAberta : c.texto_exato || "", pedido_id: pedidoId, png_base64: png, template: cfg });
         gravarTrabalhoNoCache(cache, mesa.clientId, r.trabalho);
         if (vivo.current && esta) setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(f), texto_base: template.estilo === "instagram" ? a.texto_base : cfg.texto }));
         feitas++;
@@ -249,7 +264,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (vivo.current) {
       const meu = r.posts.find((p) => p.ordem === card.ordem);
       if (ajustes.estilo === "instagram" && r.legenda) setAjustes((a) => ({ ...a, texto: r.legenda || a.texto }));
-      else if (meu) setAjustes((a) => ({ ...a, texto: meu.texto, texto_base: meu.texto }));
+      else if (meu) { setTextoLocal(meu.texto); setAjustes((a) => ({ ...a, texto: meu.texto, texto_base: meu.texto })); }
       setAvisosDoGerar(r.avisos || []);
     }
     onMudou();
@@ -281,7 +296,6 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // ---------------------------------------------------------------- partes da tela
 
   const travado = ocupado || bloqueado;
-  const ehX = ajustes.estilo === "twitter";
   const baixar = () => {
     if (!quadro || !pronto) return;
     try {
@@ -297,7 +311,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
 
   const checagens: Array<[boolean, string]> = [
     [!!nome.trim() && !!username, "Nome e @ do perfil"],
-    [!!ajustes.texto.trim() && !limite.passou, limite.passou ? "Texto acima do limite da rede" : "Texto dentro do limite"],
+    [!!textoDoPost.trim() && !limite.passou, limite.passou ? "Texto acima do limite da rede" : "Texto dentro do limite"],
     [!!fonte || !ehInstagram, fonte ? `Imagem: ${ROTULO_DO_GRUPO[fonte.grupo].toLowerCase()}` : ehInstagram ? "Falta a foto do post" : "Sem imagem"],
     [!conflitoDeTexto && !fonteMudou, "Rascunho em dia com o post"],
   ];
@@ -318,8 +332,8 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     </div>
     {!ehX && <div role="status" className={juntar(texto.auxiliar, "flex flex-wrap items-center")}><span className="mb-1 mr-2">Template antigo ({ajustes.estilo === "instagram" ? "Instagram" : "Story"}): abre como foi guardado. Os novos são do X.</span><Button size="sm" variant="outline" className="mb-1" disabled={travado} onClick={() => trocarRede("twitter")}>Passar para post do X</Button></div>}
     {marcando && <p role="status" className={texto.auxiliar}>Clique no ponto exato da imagem na prévia.</p>}
-    <div className="flex min-w-0 justify-center rounded-md bg-muted/50 p-2 sm:p-3">
-      <canvas ref={setQuadro} aria-label="Prévia do template Profile" className={juntar("block h-auto max-h-[640px] w-auto max-w-full rounded-md", marcando && "cursor-crosshair", !pronto && "hidden")} onClick={(e) => {
+    <div className="flex min-w-0 justify-center">
+      <canvas ref={setQuadro} aria-label="Prévia do template Profile" className={juntar("block h-auto max-h-[720px] w-auto max-w-full rounded-md shadow-sm", marcando && "cursor-crosshair", !pronto && "hidden")} onClick={(e) => {
         if (!marcando || ocupado || bloqueado || !pronto || !rotuloValido || fonteMudou) return;
         const q = e.currentTarget, limites = q.getBoundingClientRect(), estilo = getComputedStyle(q);
         const esquerda = Number.parseFloat(estilo.borderLeftWidth) || 0, direita = Number.parseFloat(estilo.borderRightWidth) || 0;
@@ -333,7 +347,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     </div>
     {(erro || erroDasFontes) && <p role="alert" className="text-[12px] text-destructive">{erro || "Não foi possível ler as fotos selecionadas. Confira a ferramenta Fotos."}</p>}
     <div className="space-y-1">
-      <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : ajustes.estilo === "story" ? "Texto do Story" : "Texto do post"}<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={2200} rows={4} disabled={travado} onChange={(e) => mudar("texto", e.target.value)} className="mt-1" /></label>
+      <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : ajustes.estilo === "story" ? "Texto do Story" : "Texto do post"}<Textarea aria-label="Texto do template" value={textoDoPost} maxLength={2200} rows={4} disabled={travado} onFocus={() => { editandoTexto.current = true; }} onChange={(e) => (ehX ? setTextoLocal(e.target.value) : mudar("texto", e.target.value))} onBlur={() => { editandoTexto.current = false; if (ehX && onSalvarTexto && textoLocal !== textoDaLamina) void onSalvarTexto(textoLocal).catch((er: unknown) => setErro(textoDoErro(er))); }} className="mt-1" /></label>
       <p className={juntar(texto.auxiliar, limite.passou && "text-destructive")} role={limite.passou ? "alert" : undefined} data-limite-do-texto="">{limite.texto}</p>
     </div>
     {conflitoDeTexto && <div role="status" className="space-y-2 text-[12px]"><p>O texto da lâmina mudou desde que você abriu este rascunho.</p><div className="flex flex-wrap"><Button size="sm" variant="outline" className="mb-1 mr-2" onClick={() => setAjustes((a) => ({ ...a, texto: textoDaLamina, texto_base: textoDaLamina }))}>Usar texto atual da lâmina</Button><Button size="sm" variant="ghost" className="mb-1" onClick={() => setAjustes((a) => ({ ...a, texto_base: textoDaLamina }))}>Manter minha edição</Button></div></div>}
@@ -480,14 +494,13 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     </div>}
   </div>;
 
-  const etapas = [
-    { valor: "conteudo", rotulo: "Conteúdo", icone: <Type className="h-4 w-4" />, ajuda: "Perfil e o Gerar: um post ou o fio inteiro, no limite do X. O texto se edita embaixo do post." },
-    { valor: "imagem", rotulo: "Imagem", icone: <IconeDeImagem className="h-4 w-4" />, ajuda: "Foto gerada pela casa (sem texto), da internet com fonte e licença, ou do cliente. Entra inteira na mídia do post." },
-    { valor: "aparencia", rotulo: "Aparência", icone: <Palette className="h-4 w-4" />, ajuda: "Tamanhos, escala, cor de fundo (da marca ou livre), tema e o que mostrar." },
-  ];
-  const painel = <div className="min-w-0 space-y-4">
-    <Etapas soIcone itens={etapas} valor={etapa} onEscolher={(v) => setEtapa(v as Etapa)} rotulo="Etapas do template" />
-    {etapa === "conteudo" ? conteudoDoPerfil : etapa === "imagem" ? conteudoDaImagem : conteudoDaAparencia}
+  // Rodada 3 (dono: "ser exatamente o Estúdio"): a ferramenta Template é uma seção aberta, como as outras
+  // ferramentas do painel; sem abas próprias. Primeiro o desenho do post, depois a imagem, o perfil e o Gerar.
+  const secao = (titulo: string, corpo: JSX.Element, primeira = false) => <section className={juntar("min-w-0 space-y-3", !primeira && "border-t border-border pt-4")} aria-label={titulo}><p className={juntar(texto.corpo, "font-semibold")}>{titulo}</p>{corpo}</section>;
+  const painel = <div className="min-w-0 space-y-4" data-ferramenta-template="">
+    {secao("Aparência do post", conteudoDaAparencia, true)}
+    {secao("Imagem do post", conteudoDaImagem)}
+    {secao("Perfil e conteúdo", conteudoDoPerfil)}
   </div>;
   const dialogoGrande = <JanelaCentral aberta={!!grande} onMudar={(v) => { if (!v) setGrande(null); }} titulo="Prévia do post" largura="xl" descricaoOculta="A peça como será guardada">{grande && <img src={grande} alt="Template antes de guardar" className="mx-auto max-h-[78vh] w-auto object-contain" />}</JanelaCentral>;
 

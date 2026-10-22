@@ -241,6 +241,7 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
     // A mistura de formatos e os stories planejados seguem como vieram (o servidor normaliza ao gravar).
     ...(o.formatos && typeof o.formatos === "object" ? { formatos: o.formatos as BriefingDaCampanha["formatos"] } : {}),
     ...(Array.isArray(o.stories) && o.stories.length ? { stories: o.stories as BriefingDaCampanha["stories"] } : {}),
+    ...(o.ads && typeof o.ads === "object" && (o.ads as Record<string, unknown>).campaign_id ? { ads: o.ads as BriefingDaCampanha["ads"] } : {}),
   };
 }
 
@@ -446,11 +447,21 @@ export async function lerFilaDosTrabalhos(ids: string[]): Promise<{ trabalho_id:
 
 /** Cria a direção da peça (rapida_preparar) e pede todas as lâminas ao gerador. */
 export async function prepararPecaDaCampanha(corpo: Record<string, unknown>, marcaId: string | null): Promise<{ trabalhoId: string; ordens: number[]; avisos: string[] }> {
+  const r = await prepararPecaSemGerar(corpo);
+  if (r.ordens.length) await gerarLaminasDaPeca(r.trabalhoId, r.ordens, marcaId);
+  return r;
+}
+
+/**
+ * 22/10/2026 (dono: "clico em abrir no Estúdio e ele já puxa a sequência e eu já gero por lá"): só a direção
+ * da peça (rapida_preparar com o conteúdo, a identidade, a campanha e peca_da_campanha), SEM pedir as lâminas
+ * ao gerador. O Estúdio abre com tudo pronto e a equipe clica em Gerar lá.
+ */
+export async function prepararPecaSemGerar(corpo: Record<string, unknown>): Promise<{ trabalhoId: string; ordens: number[]; avisos: string[] }> {
   const r = await chamarFuncao<any>("estudio-arte", corpo);
   const t = r && r.trabalho ? (r.trabalho as { id: string; direcao?: { cards?: { ordem: number }[] } }) : null;
   if (!t || !t.id) throw new Error("O Estúdio não devolveu a peça.");
   const ordens = ((t.direcao && t.direcao.cards) || []).map((c) => c.ordem);
-  if (ordens.length) await gerarLaminasDaPeca(t.id, ordens, marcaId);
   return { trabalhoId: t.id, ordens, avisos: r && Array.isArray(r.avisos) ? r.avisos : [] };
 }
 
@@ -550,4 +561,22 @@ export async function gerarStoryDaCampanha(campanha: Campanha, pedido: PedidoDeS
   const stories = (b.stories || []).map((s) => (s.tema_id === pedido.temaId ? { ...s, sequencia_id: id } : s));
   await campanhaSalvar({ campanhaId: campanha.id, briefing: { ...b, stories } });
   return id;
+}
+
+/** Os trabalhos de todas as campanhas do cliente (progresso na lista): só o que conta. */
+export async function lerTrabalhosDasCampanhas(clientId: string): Promise<TrabalhoDaPeca[]> {
+  const { data, error } = await (supabase as any)
+    .from("estudio_trabalhos")
+    .select("id, status, direcao, cards, task_id")
+    .eq("client_id", clientId)
+    .eq("origem", "mesa")
+    .not("direcao->arte_rapida->>campanha_id", "is", null)
+    .order("atualizado_em", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  return ((data || []) as Record<string, unknown>[]).map((t) => ({
+    ...(t as unknown as TrabalhoDaPeca),
+    cards: Array.isArray(t.cards) ? (t.cards as TrabalhoDaPeca["cards"]) : [],
+    direcao: t.direcao && typeof t.direcao === "object" ? (t.direcao as TrabalhoDaPeca["direcao"]) : {},
+  }));
 }

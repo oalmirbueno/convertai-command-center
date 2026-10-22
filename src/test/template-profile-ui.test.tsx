@@ -43,14 +43,12 @@ describe("Template Profile no Estúdio compartilhado", () => {
     expect(estado.acervoAtivo).toHaveBeenCalledWith(true);
     expect(screen.queryByText("Carregando fotos…")).not.toBeInTheDocument();
   });
-  it("rascunho antigo não sobrescreve copy atual sem uma escolha explícita", async () => {
+  it("o post do X segue o texto da lâmina, sem um segundo texto guardado à parte", async () => {
     const tela = montar(); await waitFor(() => expect(screen.getByLabelText("Nome de exibição do template")).toHaveValue("Loja A"));
     fireEvent.change(screen.getByLabelText("Texto do template"), { target: { value: "Minha edição antiga" } }); tela.unmount();
     montar({ ...trabalho, direcao: { cards: [{ ordem: 1, texto_exato: "Novo texto do diretor" }] } });
-    expect(screen.getByText("O texto da lâmina mudou desde que você abriu este rascunho.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Usar texto atual da lâmina" }));
     expect(screen.getByLabelText("Texto do template")).toHaveValue("Novo texto do diretor");
+    expect(screen.queryByText("O texto da lâmina mudou desde que você abriu este rascunho.")).not.toBeInTheDocument();
     expect(estado.chamar).not.toHaveBeenCalled();
   });
   it("prioriza a foto de fundo real sobre uma referência de rosto", () => {

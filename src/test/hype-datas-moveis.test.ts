@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agruparPorPeriodo, blocoDaData, linhaCurtaDaData, seloDaData,
   blackFriday, carnaval, datasDasProximasSemanas, datasDoAno, DEFINICOES_DO_HYPE, diaDasMaes, diaDoProgramador, diaDosPais,
   faixaDaLinha, nEsimoDiaDaSemana, pascoa, posicaoNaLinha, quandoDaData, segundaDe,
 } from "@/components/mesa/datasDoHype";
@@ -82,5 +83,40 @@ describe("datas móveis do calendário de hype", () => {
     const ordem = ordenarDatas(datas, notas, "relevancia").map((d) => d.id);
     expect(ordem.slice(0, 2)).toEqual(["natal", "halloween"]);
     expect(ordenarDatas(datas, notas, "data")).toEqual(datas);
+  });
+});
+
+describe("hierarquia das datas (3ª rodada)", () => {
+  const ano = datasDoAno(2026);
+  const d = (id: string) => ano.find((x) => x.id === id)!;
+
+  it("bloco de calendário com o dia e o mês curto", () => {
+    expect(blocoDaData("2026-10-25")).toEqual({ dia: "25", mes: "OUT" });
+    expect(blocoDaData("2026-01-08")).toEqual({ dia: "08", mes: "JAN" });
+  });
+
+  it("selo: Aqueça já na janela de aquecimento, Agora no pico, nada fora da janela", () => {
+    expect(seloDaData(d("halloween"), "2026-10-21")).toBe("aqueca");
+    expect(seloDaData(d("halloween"), "2026-10-31")).toBe("agora");
+    expect(seloDaData(d("outubro-rosa"), "2026-10-21")).toBe("agora");
+    expect(seloDaData(d("natal"), "2026-10-21")).toBeNull();
+    expect(seloDaData(d("dia-das-criancas"), "2026-10-21")).toBeNull();
+  });
+
+  it("linha curta: aquecer agora, no pico ou em N dias", () => {
+    expect(linhaCurtaDaData(d("halloween"), "2026-10-21")).toBe("Aquecer agora · pico em 10 dias");
+    expect(linhaCurtaDaData(d("outubro-rosa"), "2026-10-21")).toBe("No pico · até 31/10");
+    expect(linhaCurtaDaData(d("natal"), "2026-10-21")).toBe("em 65 dias · aquece 20/11");
+  });
+
+  it("agrupa por período: Agora, Próximas 2 semanas e os meses, na ordem do tempo", () => {
+    const grupos = agruparPorPeriodo(datasDasProximasSemanas("2026-10-21"), "2026-10-21");
+    expect(grupos.map((g) => g.titulo)).toEqual(["Agora", "Próximas 2 semanas", "Novembro", "Dezembro"]);
+    expect(grupos[0].datas.map((x) => x.id)).toContain("outubro-rosa");
+    expect(grupos[0].datas.map((x) => x.id)).toContain("halloween");
+    expect(grupos[3].datas.map((x) => x.id)).toContain("natal");
+    // A virada do ano ganha o ano no título.
+    const virada = agruparPorPeriodo(datasDasProximasSemanas("2026-12-28"), "2026-12-28").map((g) => g.titulo);
+    expect(virada.some((t) => t.indexOf("de 2027") > 0)).toBe(true);
   });
 });

@@ -774,3 +774,51 @@ export function sugestoesDaCampanha(campanha: Pick<Campanha, "periodo_inicio" | 
   }
   return saida.slice(0, 4);
 }
+
+// ------------------------------------------------------------------ várias campanhas por cliente (22/10/2026)
+
+/** Peças prontas por campanha (todas as lâminas com arte, ou já na agenda), pelos trabalhos do Estúdio. */
+export function prontasPorCampanha(trabalhos: TrabalhoDaPeca[]): Record<string, number> {
+  const saida: Record<string, number> = {};
+  trabalhos.forEach((t) => {
+    const a = arteRapidaDa(t.direcao);
+    if (!a || !a.campanha_id || a.arquivada_em) return;
+    const ordens = ((t.direcao && t.direcao.cards) || []).map((c) => c.ordem);
+    const feitas = ultimas(t.cards || []);
+    const pronta = !!a.task_id || (ordens.length > 0 && ordens.every((o) => !!feitas[o]));
+    if (pronta) saida[a.campanha_id] = (saida[a.campanha_id] || 0) + 1;
+  });
+  return saida;
+}
+
+/** Progresso da campanha na lista: prontas de um total (conteúdos da série + stories planejados). */
+export function progressoDaCampanha(campanha: Pick<Campanha, "id" | "briefing">, conteudos: number | null, prontas: Record<string, number>): { prontas: number; total: number } | null {
+  if (conteudos === null) return null;
+  const stories = storiesComoItens(campanha);
+  const total = conteudos + stories.length;
+  if (!total) return null;
+  const feitasDosStories = stories.filter((s) => !!s.sequencia_id).length;
+  return { prontas: Math.min(total, (prontas[campanha.id] || 0) + feitasDosStories), total };
+}
+
+/** O molde para "Nova campanha a partir desta": a estrutura (formatos, duração, tipo, público, tom, canais e CTA), outro tema. */
+export interface MoldeDaCampanha {
+  origemId: string;
+  origemNome: string;
+  formatos: FormatosDaCampanha | null;
+  dias: number;
+  tipo: string | null;
+  briefing: Partial<BriefingDaCampanha>;
+}
+
+export function moldeDaCampanha(c: Campanha): MoldeDaCampanha {
+  const b = normalizarBriefing(c.briefing);
+  const dias = c.periodo_inicio && c.periodo_fim ? Math.max(1, Math.min(DIAS_MAX_CAMPANHA, diasEntreIso(c.periodo_inicio, c.periodo_fim))) : 14;
+  const briefing: Partial<BriefingDaCampanha> = {};
+  if (b.publico) briefing.publico = b.publico;
+  if (b.tom) briefing.tom = b.tom;
+  if (b.cta) briefing.cta = b.cta;
+  if (b.canais && b.canais.length) briefing.canais = b.canais.slice();
+  const tipo = c.identidade && c.identidade.tipo ? String(c.identidade.tipo) : null;
+  return { origemId: c.id, origemNome: c.nome, formatos: normalizarFormatos(b.formatos), dias, tipo, briefing };
+}

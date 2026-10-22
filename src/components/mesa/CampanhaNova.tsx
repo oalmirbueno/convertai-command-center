@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, Flame, Lightbulb, Rocket, Wand2, X } from "lucide-react";
+import { BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, Copy, Flame, Lightbulb, Rocket, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +35,7 @@ import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../..
 import { padraoPara } from "@/lib/mesa/api";
 import { useMarcaDaMesa } from "./MesaContexto";
 import type { SementeDaCampanha } from "./sementeDaCampanha";
-import { campanhaDaSemente, normalizarFormatos, partesDosPassos, passosQueFaltam, resumoDosPassos, sugerirFormatos, totalNaSerie, type FormatosDaCampanha } from "./regrasDaCampanha";
+import { campanhaDaSemente, type MoldeDaCampanha, normalizarFormatos, partesDosPassos, passosQueFaltam, resumoDosPassos, sugerirFormatos, totalNaSerie, type FormatosDaCampanha } from "./regrasDaCampanha";
 import Etapas from "@/components/sistema/Etapas";
 import { PreviaDaCampanha, SeletorDeFormatos } from "./CampanhaFormatos";
 import { depsDaCampanha, ProgressoDaCampanha } from "./CampanhaCompleta";
@@ -94,6 +94,8 @@ export default function CampanhaNova({
   hype,
   semente = null,
   onLimparSemente,
+  molde = null,
+  onLimparMolde,
   onLimparHype,
   onCriada,
   onCancelar,
@@ -102,6 +104,9 @@ export default function CampanhaNova({
   /** 21/10/2026: o que o Mês juntou (hypes, trendings e o pedido): a campanha nasce preenchida. */
   semente?: SementeDaCampanha | null;
   onLimparSemente?: () => void;
+  /** 22/10/2026: "Nova campanha a partir desta": formatos, duração, tipo, público, tom, canais e CTA de outra campanha. */
+  molde?: MoldeDaCampanha | null;
+  onLimparMolde?: () => void;
   onLimparHype?: () => void;
   onCriada: (campanha: Campanha, projectId: string | null) => void;
   onCancelar?: () => void;
@@ -116,15 +121,15 @@ export default function CampanhaNova({
   const [nome, setNome] = useState(() => (daSemente ? daSemente.titulo : ""));
   const [pedido, setPedido] = useState(() => (daSemente ? daSemente.pedido : hype ? pedidoDaCampanhaDoHype(hype) : ""));
   const [inicio, setInicio] = useState(() => (daSemente ? daSemente.inicio : hoje));
-  const [fim, setFim] = useState(() => (daSemente ? daSemente.fim : somarDiasIso(hoje, DIAS_PADRAO_CAMPANHA)));
+  const [fim, setFim] = useState(() => (daSemente ? daSemente.fim : somarDiasIso(hoje, molde ? molde.dias : DIAS_PADRAO_CAMPANHA)));
   const [passo, setPasso] = useState<PassoDaNova>("oque");
   // Formatos: a sugestão pela duração até o dono mexer; depois vale a escolha dele.
-  const [formatosEscolhidos, setFormatosEscolhidos] = useState<FormatosDaCampanha | null>(null);
+  const [formatosEscolhidos, setFormatosEscolhidos] = useState<FormatosDaCampanha | null>(() => (molde ? molde.formatos : null));
   const [referencias, setReferencias] = useState<string[]>([]);
   const [imagens, setImagens] = useState<ImagemDaCampanha[]>([]);
-  const [briefing, setBriefing] = useState<BriefingDaCampanha>(() => ({ ...briefingEmBranco(), ...(daSemente ? daSemente.briefing : {}) }));
+  const [briefing, setBriefing] = useState<BriefingDaCampanha>(() => ({ ...briefingEmBranco(), ...(molde ? molde.briefing : {}), ...(daSemente ? daSemente.briefing : {}) }));
   const [maisOpcoes, setMaisOpcoes] = useState(!!daSemente);
-  const [tipo, setTipo] = useState<TipoDeCampanha | "">("");
+  const [tipo, setTipo] = useState<TipoDeCampanha | "">(() => (molde && molde.tipo && (TIPOS_DE_CAMPANHA as readonly string[]).indexOf(molde.tipo) >= 0 ? (molde.tipo as TipoDeCampanha) : ""));
   const [galeria, setGaleria] = useState(false);
   const [desde, setDesde] = useState<number | null>(null);
 
@@ -238,6 +243,17 @@ export default function CampanhaNova({
                   {onLimparHype && (
                     <button type="button" onClick={onLimparHype} aria-label="Tirar o hype" title="Tirar o hype" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
                       <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {molde && (
+                <div className="mb-3 flex min-w-0 items-center rounded-md bg-muted px-3 py-2 text-[12px]" data-molde={molde.origemId}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">A partir de: <strong className="font-medium">{molde.origemNome}</strong> (estrutura; o tema é novo)</span>
+                  {onLimparMolde && (
+                    <button type="button" onClick={onLimparMolde} aria-label="Tirar a campanha de origem" title="Tirar a campanha de origem" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
                 </div>

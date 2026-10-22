@@ -27,7 +27,8 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 10, y: 20, left: 10, top: 20, right: 550, bottom: 695, width: 540, height: 675, toJSON: () => ({}) });
 });
 async function pronto() { await waitFor(() => expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeEnabled()); }
-const etapa = (nome: string) => fireEvent.click(screen.getByRole("button", { name: nome }));
+// Rodada 3: a ferramenta Template é uma seção só (sem abas); tudo fica à vista.
+const etapa = (_nome: string) => undefined;
 describe("Profile com fontes e ponto manual", () => {
   it("apresenta fonte real existente e permite escolher outro arquivo, sem redesenho IA", async () => {
     montar(); await pronto(); etapa("Imagem");

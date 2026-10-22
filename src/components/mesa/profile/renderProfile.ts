@@ -486,8 +486,17 @@ export function desenharProfile(canvas: HTMLCanvasElement, template: TemplatePro
     const disponivel = canvas.height - margem * 2, minimo = 420;
     const ig = template.estilo === "instagram";
     // Zoom do post no quadro (50 a 150%): letra, avatar e largura crescem ou diminuem juntos.
-    const z = Math.max(0.5, Math.min(1.5, (template.escala ?? 100) / 100));
-    const t = z === 1 ? template : { ...template, tamanho_texto: template.tamanho_texto * z, tamanho_foto: template.tamanho_foto * z };
+    // Sem escala escolhida, o post do X cresce até ocupar o quadro (dono: "sem a moldura branca enorme vazia").
+    const escalaDe = (zz: number) => (zz === 1 ? template : { ...template, tamanho_texto: template.tamanho_texto * zz, tamanho_foto: template.tamanho_foto * zz });
+    let z = Math.max(0.5, Math.min(1.5, (template.escala ?? 100) / 100));
+    if (template.escala == null && !ig) {
+      const cheio = canvas.width - margem * 2;
+      for (let zz = 1.05; zz <= 1.3001; zz += 0.05) {
+        if (planoDoX(ctx, escalaDe(zz), cheio, !!recursos.imagem).altura > disponivel * 0.9) break;
+        z = zz;
+      }
+    }
+    const t = escalaDe(z);
     const medir = (W: number) => (ig ? planoDoIG(ctx, t, W) : planoDoX(ctx, t, W, !!recursos.imagem));
     let W = (canvas.width - margem * 2) * Math.min(1, z);
     let plano = medir(W);

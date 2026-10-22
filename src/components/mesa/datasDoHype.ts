@@ -37,6 +37,8 @@ interface Definicao {
   depois?: number;
   porQue: string;
   comoUsar: string;
+  /** Pedaços de palavra (sem acento) que ligam a data a um segmento: "dentis", "odonto". */
+  palavras?: string[];
 }
 
 export interface DataDoHype {
@@ -52,6 +54,8 @@ export interface DataDoHype {
   mesInteiro: boolean;
   porQue: string;
   comoUsar: string;
+  /** Só profissão e gastronomia: o que liga a data a um segmento (regra sem Jev). */
+  palavras?: string[];
 }
 
 // ------------------------------------------------------------------ datas civis
@@ -128,7 +132,52 @@ function fimDoMes(ano: number, mes: number): string {
 
 // ------------------------------------------------------------------ a lista fixa
 
+/** Pedaço do começo de cada palavra (sem acento): "corretores de imóveis" vira "corre" e "imove". */
+function radicais(texto: string): string[] {
+  const base = String(texto || "").toLowerCase().normalize("NFD");
+  let limpo = "";
+  for (let i = 0; i < base.length; i += 1) {
+    const c = base.charCodeAt(i);
+    if (c >= 0x300 && c <= 0x36f) continue;
+    limpo += base[i];
+  }
+  return limpo.split(" ").filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+}
+
+/** Segmentos que também casam com a data, além do nome da profissão ou do item. */
+const PALAVRAS_EXTRAS: Record<string, string[]> = {
+  "dia-do-dentista": ["odonto", "clare", "ortod", "sorri"],
+  "dia-do-medico": ["clini", "saude", "hospi", "consu"],
+  "dia-do-enfermeiro": ["saude", "hospi", "clini"],
+  "dia-do-farmaceutico": ["farma", "droga", "saude"],
+  "dia-do-psicologo": ["terap", "saude mental", "psico"],
+  "dia-do-nutricionista": ["nutri", "alime", "dieta", "fitne"],
+  "dia-do-fisioterapeuta": ["fisio", "pilat", "reabi", "clini"],
+  "dia-do-educador-fisico": ["acade", "fitne", "trein", "crossf", "esport"],
+  "dia-do-veterinario": ["pet", "anima", "veter"],
+  "dia-do-advogado": ["juridi", "advoc", "direi"],
+  "dia-do-contador": ["contab", "fisca", "finan"],
+  "dia-do-corretor": ["imobi", "imove"],
+  "dia-do-arquiteto": ["arqui", "decor", "inter", "moveis", "constr"],
+  "dia-do-engenheiro": ["engen", "constr", "obra"],
+  "dia-do-designer": ["desig", "agenc", "marke", "criat"],
+  "dia-do-publicitario": ["publi", "agenc", "marke"],
+  "dia-do-programador": ["tecno", "softw", "desen", "progr"],
+  "dia-do-fotografo": ["foto", "video", "audio"],
+  "dia-do-mecanico": ["auto", "carro", "ofici", "veicu", "moto"],
+  "dia-do-professor": ["escol", "educa", "ensin", "curso"],
+  "dia-do-empreendedor": ["empre", "negoc", "consul", "mento", "startu"],
+  "dia-do-cafe": ["cafet", "padar", "confe"],
+  "dia-do-hamburguer": ["lanch", "hambu", "burge"],
+  "dia-do-chocolate": ["doce", "confe", "choco", "padar"],
+  "dia-da-pizza": ["pizza"],
+  "dia-da-cerveja": ["cerve", "bar", "chope", "pub"],
+  "dia-do-sorvete": ["sorve", "gelat", "doce", "acai"],
+};
+const PALAVRAS_DA_GASTRONOMIA = ["resta", "alime", "gastr", "deliv", "comid", "cozin"];
+
 const profissao = (id: string, titulo: string, dia: number, mes: number, quem: string): Definicao => ({
+  palavras: radicais(quem).concat(PALAVRAS_EXTRAS[id] || []),
   id,
   titulo,
   tipo: "profissao",
@@ -139,6 +188,7 @@ const profissao = (id: string, titulo: string, dia: number, mes: number, quem: s
 });
 
 const gastronomia = (id: string, titulo: string, regra: Regra, item: string): Definicao => ({
+  palavras: radicais(item).concat(PALAVRAS_EXTRAS[id] || [], PALAVRAS_DA_GASTRONOMIA),
   id,
   titulo,
   tipo: "gastronomia",
@@ -223,7 +273,7 @@ function janelaDe(def: Definicao, ano: number): Pick<DataDoHype, "inicio" | "pic
 
 /** Todas as datas de um ano, na ordem do pico. */
 export function datasDoAno(ano: number): DataDoHype[] {
-  return DEFINICOES_DO_HYPE.map((d) => ({ id: d.id, titulo: d.titulo, tipo: d.tipo, porQue: d.porQue, comoUsar: d.comoUsar, ...janelaDe(d, ano) }))
+  return DEFINICOES_DO_HYPE.map((d) => ({ id: d.id, titulo: d.titulo, tipo: d.tipo, porQue: d.porQue, comoUsar: d.comoUsar, ...(d.palavras ? { palavras: d.palavras } : {}), ...janelaDe(d, ano) }))
     .sort((a, b) => (a.pico < b.pico ? -1 : a.pico > b.pico ? 1 : a.titulo.localeCompare(b.titulo, "pt-BR")));
 }
 
@@ -298,4 +348,111 @@ export function rotuloDoFalta(dias: number): string {
   if (dias === 1) return "amanhã";
   if (dias < 0) return "em andamento";
   return `em ${dias} dias`;
+}
+
+// ------------------------------------------------------------------ 3ª rodada: hierarquia (21/10/2026)
+
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MESES_LONGOS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+/** O bloco de calendário da linha: dia grande e mês curto ("25" e "OUT"). */
+export function blocoDaData(iso: string): { dia: string; mes: string } {
+  return { dia: iso.slice(8, 10), mes: MESES_CURTOS[Number(iso.slice(5, 7)) - 1].toUpperCase() };
+}
+
+export type SeloDaData = "agora" | "aqueca" | null;
+
+/** "Agora": hoje está no pico ou depois dele, ainda na janela (ou o mês temático em andamento). "Aqueça já": hoje está na janela de aquecimento. */
+export function seloDaData(d: Pick<DataDoHype, "inicio" | "pico" | "fim" | "mesInteiro">, hoje: string): SeloDaData {
+  if (hoje > d.fim || hoje < d.inicio) return null;
+  if (hoje >= d.pico) return "agora";
+  return "aqueca";
+}
+
+export const ROTULO_DO_SELO: Record<"agora" | "aqueca", string> = { agora: "Agora", aqueca: "Aqueça já" };
+
+/** A linha curta da data: "Aquecer agora · pico em 6 dias", "No pico · até 31/10" ou "em 37 dias". */
+export function linhaCurtaDaData(d: Pick<DataDoHype, "inicio" | "pico" | "fim" | "mesInteiro">, hoje: string): string {
+  const selo = seloDaData(d, hoje);
+  const falta = diasEntre(hoje, d.pico);
+  if (selo === "agora") return d.fim === hoje ? "Último dia" : `No pico · até ${curta(d.fim)}`;
+  if (selo === "aqueca") return `Aquecer agora · pico ${falta === 1 ? "amanhã" : `em ${falta} dias`}`;
+  return falta === 1 ? "amanhã" : `em ${falta} dias · aquece ${curta(d.inicio)}`;
+}
+
+export interface GrupoDeDatas {
+  chave: string;
+  titulo: string;
+  datas: DataDoHype[];
+}
+
+/** O período da data: "Agora" (já na janela), "Próximas 2 semanas" (pico em até 14 dias) ou o mês do pico. */
+export function periodoDaData(d: DataDoHype, hoje: string): { chave: string; titulo: string; ordem: number } {
+  if (d.inicio <= hoje) return { chave: "agora", titulo: "Agora", ordem: 0 };
+  if (diasEntre(hoje, d.pico) <= 14) return { chave: "duas-semanas", titulo: "Próximas 2 semanas", ordem: 1 };
+  const ano = Number(d.pico.slice(0, 4));
+  const mes = Number(d.pico.slice(5, 7));
+  const titulo = MESES_LONGOS[mes - 1] + (ano !== Number(hoje.slice(0, 4)) ? ` de ${ano}` : "");
+  return { chave: d.pico.slice(0, 7), titulo, ordem: 2 + ano * 12 + mes };
+}
+
+/** Agrupa mantendo a ordem de dentro (data ou relevância); os grupos seguem a ordem do tempo. */
+export function agruparPorPeriodo(datas: DataDoHype[], hoje: string): GrupoDeDatas[] {
+  const grupos: Array<GrupoDeDatas & { ordem: number }> = [];
+  datas.forEach((d) => {
+    const p = periodoDaData(d, hoje);
+    let g = grupos.find((x) => x.chave === p.chave);
+    if (!g) {
+      g = { chave: p.chave, titulo: p.titulo, datas: [], ordem: p.ordem };
+      grupos.push(g);
+    }
+    g.datas.push(d);
+  });
+  return grupos.sort((a, b) => a.ordem - b.ordem).map(({ chave, titulo, datas: lista }) => ({ chave, titulo, datas: lista }));
+}
+
+// ------------------------------------------------------------------ datas do nicho (21/10/2026)
+
+/** Nota mínima (0 a 10) do Jev para a data ficar na lista principal ("Serve": nível 2 de 0 a 3). */
+export const NOTA_MINIMA_DA_DATA = 5;
+
+/**
+ * Regra sem Jev: varejo, cultura e mês temático servem a todo cliente; profissão e gastronomia só quando o
+ * segmento do cadastro casa com as palavras da data (ex.: "Odontologia" com o Dia do Dentista).
+ */
+export function dataDoNicho(d: Pick<DataDoHype, "tipo" | "palavras">, segmento: string | null | undefined): boolean {
+  if (d.tipo !== "profissao" && d.tipo !== "gastronomia") return true;
+  // Palavras do segmento a partir de 3 letras ("pet", "bar"); casa pelo começo (até 5 letras da data).
+  const base = String(segmento || "").toLowerCase().normalize("NFD");
+  let limpo = "";
+  for (let i = 0; i < base.length; i += 1) {
+    const c = base.charCodeAt(i);
+    if (c >= 0x300 && c <= 0x36f) continue;
+    limpo += /[a-z0-9]/.test(base[i]) ? base[i] : " ";
+  }
+  const doSegmento = limpo.split(" ").filter((w) => w.length >= 3);
+  if (!doSegmento.length) return false;
+  return (d.palavras || []).some((p) => {
+    const pedaco = p.trim().slice(0, 5);
+    return pedaco.length >= 3 && doSegmento.some((w) => w.indexOf(pedaco) === 0);
+  });
+}
+
+/**
+ * Separa as datas: principais (servem a este cliente) e outras (recolhidas). Com a nota do Jev, vale a nota
+ * (sem nota para a data, cai na regra); sem Jev, a regra de tipo e segmento.
+ */
+export function separarPeloNicho(
+  datas: DataDoHype[],
+  notas: Record<string, { nota: number | null }> | null,
+  segmento: string | null | undefined,
+): { principais: DataDoHype[]; outras: DataDoHype[] } {
+  const principais: DataDoHype[] = [];
+  const outras: DataDoHype[] = [];
+  datas.forEach((d) => {
+    const n = notas && notas[d.id] && typeof notas[d.id].nota === "number" ? (notas[d.id].nota as number) : null;
+    const serve = n !== null ? n >= NOTA_MINIMA_DA_DATA : dataDoNicho(d, segmento);
+    (serve ? principais : outras).push(d);
+  });
+  return { principais, outras };
 }

@@ -33,7 +33,8 @@ function montar(t: Trabalho = trabalho, largura = 800) {
   const tela = render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} /></QueryClientProvider>);
   return { ...tela, props, refazer: (novo: Trabalho) => tela.rerender(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} trabalho={novo} card={novo.direcao.cards![0]} /></QueryClientProvider>) };
 }
-const etapa = (nome: string) => fireEvent.click(screen.getByRole("button", { name: nome }));
+// Rodada 3: a ferramenta Template é uma seção só (sem abas); tudo fica à vista.
+const etapa = (_nome: string) => undefined;
 beforeEach(() => {
   sessionStorage.clear(); estado.chamar.mockReset(); estado.botoes = [];
   vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,cG5n");
@@ -116,14 +117,29 @@ describe("Template: imagem gerada, da internet ou do cliente", () => {
 });
 
 describe("Template: organização da tela", () => {
-  it("tem as três etapas do painel no padrão e a Aparência com os ajustes antigos e os da rede", () => {
+  it("a ferramenta Template é uma seção do painel do Estúdio, sem abas próprias, com os ajustes antigos e os novos", () => {
     montar();
-    expect(screen.getByRole("navigation", { name: "Etapas do template" })).toBeInTheDocument();
-    for (const nome of ["Conteúdo", "Imagem", "Aparência"]) expect(screen.getByRole("button", { name: nome })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Prévia e guardar" })).not.toBeInTheDocument();
-    etapa("Aparência");
+    expect(screen.queryByRole("navigation", { name: "Etapas do template" })).not.toBeInTheDocument();
+    for (const nome of ["Aparência do post", "Imagem do post", "Perfil e conteúdo"]) expect(screen.getByRole("region", { name: nome })).toBeInTheDocument();
     for (const rotulo of ["Tamanho do texto", "Tamanho do avatar", "Tamanho da mídia", "Escala do post", "Respiro em volta", "Cantos do post", "Cor de fundo do template", "Respostas", "Reposts", "Curtidas", "Visualizações"]) expect(screen.getByLabelText(rotulo)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Tema do post" })).toHaveTextContent("Dim");
+  });
+  it("o texto do post é o texto da lâmina: um só, gravado pelo mesmo campo", async () => {
+    const salvarTexto = vi.fn(async () => undefined);
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const props = { trabalho, card: trabalho.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
+    const tela = render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} parte="centro" onSalvarTexto={salvarTexto} /></QueryClientProvider>);
+    const campo = screen.getByLabelText("Texto do template");
+    expect(campo).toHaveValue("Pão às 7h");
+    fireEvent.focus(campo);
+    fireEvent.change(campo, { target: { value: "Pão às 7h em ponto" } });
+    fireEvent.blur(campo);
+    expect(salvarTexto).toHaveBeenCalledWith("Pão às 7h em ponto");
+    // Mudou no campo de conteúdo do Estúdio: o centro acompanha.
+    const novo = { ...trabalho, direcao: { ...trabalho.direcao, cards: [{ ...trabalho.direcao.cards![0], texto_exato: "Texto vindo da lâmina" }, trabalho.direcao.cards![1]] } } as Trabalho;
+    tela.rerender(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} trabalho={novo} card={novo.direcao.cards![0]} parte="centro" onSalvarTexto={salvarTexto} /></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByLabelText("Texto do template")).toHaveValue("Texto vindo da lâmina"));
   });
   it("sem pop-up: o centro é o post e o painel são os ajustes, com o mesmo rascunho ao vivo", async () => {
     const desenhar = (await import("@/components/mesa/profile/renderProfile")).desenharProfile as unknown as { mock: { calls: unknown[][] } };
