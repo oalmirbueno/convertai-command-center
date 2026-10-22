@@ -229,7 +229,61 @@ export function calcularLinhaDoTempo(p: PedidoDaLinha): LinhaDoTempo {
     fases.push({ fase: f, etapa: ETAPA_DA_FASE[f], nome: cfg.nomes[f] || ROTULO_DA_FASE_DA_LINHA[f], papel: PAPEL_DA_FASE[f], inicio: dia, fim: fimDaFase, dias: n });
     dia = somarDiasDaLinha(fimDaFase, 1);
   });
+  ajustarAosDiasUteis(fases, avisos);
   return { esquema: String(p.esquema || "promocional"), evento, dias_antes: Math.max(0, diasEntreDaLinha(ideal, evento)), inicio, fim, fases, comprimida, avisos, calculada_em: p.hoje };
+}
+
+const temDiaUtil = (de: string, ate: string) => {
+  for (let d = de; d <= ate; d = somarDiasDaLinha(d, 1)) if (diaUtilDaLinha(d)) return true;
+  return false;
+};
+
+/**
+ * 23/10/2026 (Stop: a peça de lançamento empurrada do domingo foi parar noutra fase): o painel publica de
+ * segunda a sexta, então toda fase precisa de um dia útil. A fase que só tem fim de semana pega o dia útil
+ * vizinho (o encerramento olha para trás; as outras, para a frente), sem tirar o último dia útil da vizinha.
+ * Assim a data de cada peça sempre cai na janela da fase dela.
+ */
+export function ajustarAosDiasUteis(fases: FaseNaLinha[], avisos: string[] = []): FaseNaLinha[] {
+  for (let k = 0; k < fases.length; k++) {
+    const f = fases[k];
+    if (temDiaUtil(f.inicio, f.fim)) continue;
+    const proxima = fases[k + 1];
+    const anterior = fases[k - 1];
+    let feito = false;
+    if (proxima && k < fases.length - 1) {
+      // Para a frente: até o primeiro dia útil da próxima, se ela continuar com um dia útil.
+      let d = proxima.inicio;
+      while (d <= proxima.fim && !diaUtilDaLinha(d)) d = somarDiasDaLinha(d, 1);
+      if (d <= proxima.fim && d < proxima.fim && temDiaUtil(somarDiasDaLinha(d, 1), proxima.fim)) {
+        avisos.push(`${f.nome} caía só no fim de semana (${curta(f.inicio)}${f.fim !== f.inicio ? ` a ${curta(f.fim)}` : ""}): vai até ${curta(d)}, o primeiro dia útil.`);
+        f.fim = d;
+        proxima.inicio = somarDiasDaLinha(d, 1);
+        feito = true;
+      }
+    }
+    if (!feito && anterior) {
+      // Para trás: desde o último dia útil da anterior, se ela continuar com um dia útil.
+      let d = anterior.fim;
+      while (d >= anterior.inicio && !diaUtilDaLinha(d)) d = somarDiasDaLinha(d, -1);
+      if (d >= anterior.inicio && d > anterior.inicio && temDiaUtil(anterior.inicio, somarDiasDaLinha(d, -1))) {
+        avisos.push(`${f.nome} caía só no fim de semana (${curta(f.inicio)}${f.fim !== f.inicio ? ` a ${curta(f.fim)}` : ""}): começa em ${curta(d)}, o último dia útil antes.`);
+        f.inicio = d;
+        anterior.fim = somarDiasDaLinha(d, -1);
+      }
+    }
+  }
+  fases.forEach((f) => { f.dias = diasEntreDaLinha(f.inicio, f.fim) + 1; });
+  return fases;
+}
+
+/**
+ * Parece oferta (preço, desconto, condição ou chamada de compra)? Uma peça assim nunca conta como introdução,
+ * mesmo escrita como "aquecimento". Rede de segurança quando o Jev não responde.
+ */
+export function pareceOferta(texto: unknown): boolean {
+  const t = String(texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return /r\$\s*\d|\d+\s*%|\boferta\b|desconto|promoc|\bpor apenas\b|\bgaranta\b|\bcupom\b|\bcompre\b|\bcondicao especial\b|preco/.test(t);
 }
 
 /** A fase de uma data (fora da janela: null). */
@@ -279,7 +333,7 @@ export interface VagaDaPeca {
 export function vagasDasPecas(
   linha: LinhaDoTempo,
   n: number,
-  opcoes: { porDia?: number; ocupacao?: Record<string, number>; pesos?: Record<FaseDaLinha, number> } = {},
+  opcoes: { porDia?: number; ocupacao?: Record<string, number>; pesos?: Record<FaseDaLinha, number>; introducoes?: number } = {},
 ): { vagas: VagaDaPeca[]; avisos: string[] } {
   const avisos: string[] = [];
   if (n <= 0 || !linha.fases.length) return { vagas: [], avisos };
@@ -300,14 +354,35 @@ export function vagasDasPecas(
     let resto = meio - ideais.reduce((s, x) => s + Math.floor(x.v), 0);
     ideais.slice().sort((a, b) => (b.v - Math.floor(b.v)) - (a.v - Math.floor(a.v))).forEach((x) => { if (resto > 0) { conta[x.i]++; resto--; } });
   }
+  // 23/10/2026: na reorganização, a introdução tem exatamente as vagas das peças que são introdução (oferta
+  // nunca cai no aquecimento); a sobra vai para o lançamento (ou a fase seguinte).
+  if (typeof opcoes.introducoes === "number" && fases.length > 1 && n >= 2) {
+    const alvo = Math.max(1, Math.min(n - 1, Math.round(opcoes.introducoes)));
+    let diff = conta[0] - alvo;
+    conta[0] = alvo;
+    for (let i = 1; diff > 0 && i < fases.length; i++) { conta[i] += diff; diff = 0; }
+    while (diff < 0) {
+      // Faltou: tira de quem tem mais, sem zerar o encerramento.
+      let maior = -1;
+      for (let i = 1; i < fases.length; i++) if (conta[i] > (i === fases.length - 1 ? 1 : 0) && (maior < 0 || conta[i] > conta[maior])) maior = i;
+      if (maior < 0) break;
+      conta[maior]--;
+      diff++;
+    }
+  }
   const uteisDaJanela: string[] = [];
   for (let d = linha.inicio; d <= linha.fim; d = somarDiasDaLinha(d, 1)) if (diaUtilDaLinha(d)) uteisDaJanela.push(d);
   const livre = (d: string) => (usados[d] || 0) < porDia;
   const escolhidas: VagaDaPeca[] = [];
+  // A ponta (introdução ou encerramento) que só tinha fim de semana e foi para o dia útil vizinho mantém o papel.
+  const pontaDeslocada = new Set<VagaDaPeca>();
+  let deslocada = false;
   const marcar = (d: string, i: number) => {
     usados[d] = (usados[d] || 0) + 1;
     const f = fases[i];
-    escolhidas.push({ data: d, fase: f.fase, etapa: f.etapa, nome: f.nome, papel: f.papel });
+    const v = { data: d, fase: f.fase, etapa: f.etapa, nome: f.nome, papel: f.papel };
+    escolhidas.push(v);
+    if (deslocada && (i === 0 || i === fases.length - 1)) pontaDeslocada.add(v);
   };
   // A introdução e o encerramento primeiro (as pontas), depois o meio.
   const ordemDasFases = fases.map((_f, i) => i).sort((a, b) => (a === 0 ? -1 : b === 0 ? 1 : a === fases.length - 1 ? -1 : b === fases.length - 1 ? 1 : a - b));
@@ -316,6 +391,7 @@ export function vagasDasPecas(
     const c = conta[i];
     if (c <= 0) return;
     let dias = uteisDaJanela.filter((d) => d >= f.inicio && d <= f.fim);
+    deslocada = !dias.length;
     if (!dias.length) {
       // Sem dia útil na fase: o mais perto dentro da janela (o encerramento olha para trás; o resto, para a frente).
       const antes = uteisDaJanela.filter((d) => d < f.inicio);
@@ -332,13 +408,18 @@ export function vagasDasPecas(
     dias.forEach((d) => { for (let k = 0; k < porDia - (usados[d] || 0); k++) espacos.push(d); });
     for (let k = 0; k < c; k++) {
       if (espacos.length) {
-        const idx = Math.min(espacos.length - 1, Math.floor(((k + 0.5) * espacos.length) / c));
+        // A introdução começa no primeiro dia da campanha (o público é preparado desde o início).
+        const idx = Math.min(espacos.length - 1, Math.floor(((k + (i === 0 ? 0 : 0.5)) * espacos.length) / c));
         const d = espacos[idx];
         if (livre(d)) { marcar(d, i); espacos.splice(idx, 1); continue; }
       }
-      // Sem espaço na fase: o dia livre mais perto na janela; sem nenhum, o último dia da fase acima do limite.
+      // Sem espaço na fase: a introdução e o encerramento ficam na fase deles (acima do limite, com aviso); as
+      // outras vão para o dia livre mais perto, fora da introdução e do encerramento (a fase vira a da data).
+      const ponta = i === 0 || i === fases.length - 1;
       const alvo = dias[Math.floor(dias.length / 2)];
-      const livres = uteisDaJanela.filter(livre).sort((a, b) => Math.abs(diasEntreDaLinha(alvo, a)) - Math.abs(diasEntreDaLinha(alvo, b)));
+      const primeira = fases[0];
+      const ultima = fases[fases.length - 1];
+      const livres = ponta ? [] : uteisDaJanela.filter((d) => livre(d) && !(d >= primeira.inicio && d <= primeira.fim) && !(fases.length > 1 && d >= ultima.inicio && d <= ultima.fim)).sort((a, b) => Math.abs(diasEntreDaLinha(alvo, a)) - Math.abs(diasEntreDaLinha(alvo, b)));
       if (livres.length) marcar(livres[0], i);
       else {
         marcar(dias[dias.length - 1], i);
@@ -346,12 +427,13 @@ export function vagasDasPecas(
       }
     }
   });
-  // Na ordem das datas; a primeira é sempre introdução e a última, encerramento.
+  // 23/10/2026: a fase de cada vaga é a da janela em que a data cai (nunca a de onde ela veio).
+  escolhidas.forEach((v) => {
+    if (pontaDeslocada.has(v)) return;
+    const f = faseNaData(linha, v.data);
+    if (f) Object.assign(v, { fase: f.fase, etapa: f.etapa, nome: f.nome, papel: f.papel });
+  });
   escolhidas.sort((a, b) => a.data.localeCompare(b.data) || ORDEM_DAS_FASES.indexOf(a.fase) - ORDEM_DAS_FASES.indexOf(b.fase));
-  const primeira = fases[0];
-  const ultima = fases[fases.length - 1];
-  if (escolhidas.length && escolhidas[0].fase !== primeira.fase) Object.assign(escolhidas[0], { fase: primeira.fase, etapa: primeira.etapa, nome: primeira.nome, papel: primeira.papel });
-  if (escolhidas.length >= 2 && escolhidas[escolhidas.length - 1].fase !== ultima.fase) Object.assign(escolhidas[escolhidas.length - 1], { fase: ultima.fase, etapa: ultima.etapa, nome: ultima.nome, papel: ultima.papel });
   return { vagas: escolhidas, avisos: avisos.filter((a, i, l) => l.indexOf(a) === i) };
 }
 

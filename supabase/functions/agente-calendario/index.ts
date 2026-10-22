@@ -151,7 +151,7 @@ import { normalizarPadrao, type PadraoDaCampanha } from "../_shared/padrao-da-ca
 import { blocoDoTomDaCampanha, nichoRegulado, ofertaInformada, tomDaCampanha } from "./modulos/tom-da-campanha.ts";
 import { blocoDoEsquema, esquemaDaCampanha } from "./modulos/esquemas-de-campanha.ts";
 // 22/10/2026: a linha do tempo da campanha (fases e datas em código; o modelo só escreve o conteúdo).
-import { blocoDaLinhaDoTempo, calcularLinhaDoTempo, type LinhaDoTempo, normalizarLinhaDoTempo, vagasDasPecas, type VagaDaPeca } from "./modulos/linha-do-tempo.ts";
+import { blocoDaLinhaDoTempo, calcularLinhaDoTempo, faseDaEtapa, type LinhaDoTempo, normalizarLinhaDoTempo, vagasDasPecas, type VagaDaPeca } from "./modulos/linha-do-tempo.ts";
 import { type ConteudoDaPonta, conteudoDasPontas, ESQUEMA_DAS_PONTAS, itensDaReorganizacao, reorganizarPecas } from "./modulos/reorganizar-campanha.ts";
 import { direcaoDoRoteiro as direcaoDoRoteiroDeVideo, ESQUEMA_DO_ROTEIRO_DE_VIDEO, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "./modulos/roteiro-de-video.ts";
 import { blocoDoMercado, ESQUEMA_DO_MERCADO, mercadoComFonte, type MercadoDaCampanha, normalizarMercado } from "./modulos/mercado-da-campanha.ts";
@@ -6261,10 +6261,13 @@ async function campanhaReorganizar(servico: SupabaseClient, chamador: Chamador, 
   ]);
   // O calendário de fora conta (posts por dia); as protegidas desta campanha que não estão na agenda também.
   const protegidasForaDaAgenda = itensDaSerie.filter((i) => protegidas.has(i.tema_id) && !i.task_id).map((i) => i.data);
-  const reorganizada = reorganizarPecas({ linha, pecas, porDia: ctx.regraDoDia.porDia, ocupacao: ocupacaoComumPorDia(ctx, protegidasForaDaAgenda) });
+  // 23/10/2026: introdução de verdade (o Jev julga as peças escritas como aquecimento: preparam o público ou
+  // já são oferta?); sem o Jev, a etapa sem cara de oferta (reorganizar-campanha.ts).
+  const introducoes = await introducoesPeloJev(c, pecas, chamador.userId);
+  const reorganizada = reorganizarPecas({ linha, pecas, porDia: ctx.regraDoDia.porDia, ocupacao: ocupacaoComumPorDia(ctx, protegidasForaDaAgenda), introducoes: introducoes.lista });
 
   // O conteúdo das peças novas (introdução e encerramento): o modelo escreve, as datas já estão decididas.
-  let custo = 0;
+  let custo = introducoes.custo;
   let usoId: string | null = null;
   const padrao = (v: VagaDaPeca): ConteudoDaPonta => {
     const intro = v.fase === "aquecimento";
@@ -6325,6 +6328,33 @@ Para cada uma: tema (título curto), gancho, laminas (1 texto curto da arte), ct
   ]);
   if (corpo.aplicar !== true) return json({ acao, resposta, linha_do_tempo: { ...linha, avisos }, custo_usd: custo });
   return await aplicarAcaoPlanejada(servico, chamador, c, acao.id);
+}
+
+/** As peças escritas como aquecimento que são introdução de verdade (Jev Choice); null = sem o Jev. */
+async function introducoesPeloJev(c: Campanha, pecas: Array<{ tema_id: string; apelido: string; etapa: string; tema: string; gancho: string; cta: string; laminas: string[] }>, userId: string): Promise<{ lista: Set<string> | null; custo: number }> {
+  const candidatas = pecas.filter((p) => faseDaEtapa(p.etapa) === "aquecimento").slice(0, 12);
+  if (!candidatas.length) return { lista: new Set(), custo: 0 };
+  const questions: Record<string, PerguntaJev> = {};
+  candidatas.forEach((p, i) => {
+    questions[`p${i}`] = {
+      type: "choice",
+      instructions: `A peça \`pecas[${i}]\` da campanha é de introdução (prepara o público: o tema, a curiosidade, a lista de espera, o "vem aí", sem oferta) ou já é oferta (preço, desconto, condição, chamada de compra)? Julgue pelo tema, pelo gancho, pelas lâminas e pelo CTA.`,
+      criteria: { introducao: "Introdução: prepara o público, sem oferta nem preço.", oferta: "Já é oferta: preço, desconto, condição ou chamada de compra." },
+    };
+  });
+  try {
+    const r = await jevPerguntar({ state: { campanha: { nome: c.nome, oferta: normalizarBriefing(c.briefing).oferta }, pecas: candidatas.map((p) => ({ tema: p.tema, gancho: p.gancho, laminas: p.laminas.slice(0, 6), cta: p.cta })) }, questions });
+    const cobrado = await cobrarJev(r, { clientId: c.client_id, tarefa: "calendario", referencia: { tipo: REF_CAMPANHA, id: c.id }, criadoPor: userId }).catch(() => null);
+    const lista = new Set<string>();
+    candidatas.forEach((p, i) => {
+      const a = r.answers[`p${i}`] as { choice?: string } | undefined;
+      if (a && a.choice === "introducao") lista.add(p.tema_id);
+    });
+    return { lista, custo: cobrado?.custoUsd ?? 0 };
+  } catch (e) {
+    if (!(e instanceof JevErro)) registrarFalha("agente-calendario: Jev das introduções falhou", e);
+    return { lista: null, custo: 0 };
+  }
 }
 
 /**

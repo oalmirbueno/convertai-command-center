@@ -57,7 +57,7 @@ import { lerEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { chaves, hojeIso, type Campanha, type ItemProposto } from "@/components/mesa/mesaV4Api";
 import type { ModeloIa } from "@/lib/mesa/api";
 import type { AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
-import { calcularLinhaDoTempo, vagasDasPecas } from "../../supabase/functions/agente-calendario/modulos/linha-do-tempo";
+import { calcularLinhaDoTempo, faseNaData, vagasDasPecas } from "../../supabase/functions/agente-calendario/modulos/linha-do-tempo";
 import { itensDaReorganizacao, reorganizarPecas } from "../../supabase/functions/agente-calendario/modulos/reorganizar-campanha";
 import { aplicarMudanca, itensDaMudanca, pecasComApelido } from "../../supabase/functions/agente-calendario/modulos/mudanca-da-campanha";
 import { direcaoDoRoteiro, normalizarRoteiroDeVideo } from "../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
@@ -156,9 +156,12 @@ beforeEach(() => {
 describe("linha do tempo calculada em código", () => {
   const fases = (l: ReturnType<typeof calcularLinhaDoTempo>) => l.fases.map((f) => `${f.fase} ${f.inicio.slice(8)}-${f.fim.slice(8)}`);
 
-  it("Halloween em 31/10 começando 10 dias antes: 21-23, 24, 25-28, 29-30 e 31", () => {
+  it("Halloween em 31/10 começando 10 dias antes: a conta pelos dias, com as fases de fim de semana no dia útil vizinho", () => {
     const l = calcularLinhaDoTempo({ esquema: "halloween", evento: "2026-10-31", diasAntes: 10, hoje: "2026-10-01" });
-    expect(fases(l)).toEqual(["aquecimento 21-23", "lancamento 24-24", "sustentacao 25-28", "urgencia 29-30", "encerramento 31-31"]);
+    // A conta pelos dias: 21-23, 24, 25-28, 29-30, 31. Lançamento (sábado 24) e encerramento (sábado 31) só
+    // tinham fim de semana: o lançamento vai até a segunda 26 e o encerramento começa na sexta 30.
+    expect(fases(l)).toEqual(["aquecimento 21-23", "lancamento 24-26", "sustentacao 27-28", "urgencia 29-29", "encerramento 30-31"]);
+    expect(l.avisos.join(" ")).toContain("fim de semana");
     expect(l.comprimida).toBe(false);
   });
 
@@ -195,14 +198,18 @@ describe("linha do tempo calculada em código", () => {
     expect(vagas[vagas.length - 1].fase).toBe("encerramento");
     expect(vagas.map((v) => v.data)).toEqual(vagas.map((v) => v.data).slice().sort());
     vagas.forEach((v) => expect([0, 6]).not.toContain(new Date(`${v.data}T12:00:00Z`).getUTCDay()));
-    expect(avisos.join(" ")).toContain("fim de semana");
+    expect(linhaHalloween.avisos.concat(avisos).join(" ")).toContain("fim de semana");
   });
 
   it("respeita os posts por dia do cliente e o calendário que já existe", () => {
-    const cheio = { "2026-10-22": 1, "2026-10-23": 1 };
+    const cheio = { "2026-10-27": 1, "2026-10-28": 1 };
     const um = vagasDasPecas(linhaHalloween, 5, { porDia: 1, ocupacao: cheio });
-    expect(um.vagas.map((v) => v.data)).not.toContain("2026-10-22");
-    expect(um.vagas.map((v) => v.data)).not.toContain("2026-10-23");
+    expect(um.vagas.map((v) => v.data)).not.toContain("2026-10-27");
+    expect(um.vagas.map((v) => v.data)).not.toContain("2026-10-28");
+    // A introdução não sai da fase dela: com os dias dela cheios, fica acima do limite, com aviso.
+    const semIntro = vagasDasPecas(linhaHalloween, 3, { porDia: 1, ocupacao: { "2026-10-22": 1, "2026-10-23": 1 } });
+    expect(semIntro.vagas[0].fase).toBe("aquecimento");
+    expect(semIntro.avisos.join(" ")).toContain("acima do limite");
     const contagem: Record<string, number> = {};
     um.vagas.forEach((v) => { contagem[v.data] = (contagem[v.data] || 0) + 1; });
     Object.values(contagem).forEach((n) => expect(n).toBeLessThanOrEqual(1));
@@ -418,5 +425,83 @@ describe("agente da campanha mais agêntico", () => {
     const situacao = fonte.slice(fonte.indexOf("async function situacaoDaCampanhaParaOAgente("), fonte.indexOf("/** Acha a mensagem da ação planejada"));
     expect(situacao).toContain('from("ads_campaign_daily")');
     expect(situacao).toContain("Trilha escolhida");
+  });
+});
+
+// ------------------------------------------------------------------ Stop, 23/10/2026: as duas correções
+
+describe("reorganizar: a fase é a da data e a 1ª peça é sempre introdução (caso Stop)", () => {
+  // A Stop rodada em 22/10: evento 31/10, 9 dias antes; a 1ª peça existente era oferta escrita como aquecimento.
+  const linha = calcularLinhaDoTempo({ esquema: "halloween", evento: "2026-10-31", diasAntes: 9, hoje: "2026-10-22" });
+  const serie: any[] = [
+    { tema_id: "c1", data: "2026-10-23", formato: "estatico", etapa: "aquecimento", tema: "Poção anti-lentidão: oferta de formatação com backup", gancho: "Formatação com backup por R$ 89", cta: "Chame no WhatsApp", cards: [{ ordem: 1, texto: "R$ 89" }] },
+    { tema_id: "c2", data: "2026-10-23", formato: "estatico", etapa: "aquecimento", tema: "Seu PC está assombrado?", gancho: "Ele trava sozinho?", cta: "Fique de olho", cards: [{ ordem: 1, texto: "Vem aí" }] },
+    { tema_id: "c3", data: "2026-10-26", formato: "carrossel", etapa: "lançamento", tema: "Exorcismo de vírus", gancho: "R$ 69", cta: "Garanta", cards: [{ ordem: 1, texto: "R$ 69" }] },
+    { tema_id: "c4", data: "2026-10-26", formato: "estatico", etapa: "lançamento", tema: "Kit Ressurreição", gancho: "Backup e limpeza", cta: "Garanta", cards: [{ ordem: 1, texto: "Kit" }] },
+    { tema_id: "c5", data: "2026-10-27", formato: "estatico", etapa: "sustentação", tema: "Quem já fez", gancho: "4,9 estrelas", cta: "Chame", cards: [{ ordem: 1, texto: "4,9" }] },
+    { tema_id: "c6", data: "2026-10-27", formato: "estatico", etapa: "sustentação", tema: "Antes e depois", gancho: "De 3 min para 20 s", cta: "Chame", cards: [{ ordem: 1, texto: "20 s" }] },
+    { tema_id: "c7", data: "2026-10-27", formato: "estatico", etapa: "lançamento", tema: "Poção do Desconto: mouse promocional", gancho: "Mouse por R$ 39", cta: "Garanta", cards: [{ ordem: 1, texto: "R$ 39" }] },
+    { tema_id: "c8", data: "2026-10-29", formato: "estatico", etapa: "urgência", tema: "Faltam 2 dias", gancho: "Acaba dia 31", cta: "Garanta", cards: [{ ordem: 1, texto: "2 dias" }] },
+    { tema_id: "c9", data: "2026-10-30", formato: "estatico", etapa: "encerramento", tema: "Reta final", gancho: "Última chamada: acaba amanhã", cta: "Garanta hoje", cards: [{ ordem: 1, texto: "Última chamada" }] },
+  ];
+  // O calendário de fora já tem post em 27 e 28 (limite de 1 por dia): força peças a sair da fase delas.
+  const ocupacao = { "2026-10-27": 1, "2026-10-28": 1 };
+  const conteudo = (v: { fase: string }) => (v.fase === "aquecimento"
+    ? { tema: "O monstro aparece", gancho: "Algo estranho no seu PC", laminas: ["Vem aí"], cta: "Ative o lembrete", legenda: "" }
+    : { tema: "Última chamada", gancho: "Acaba hoje", laminas: ["Última chamada"], cta: "Garanta hoje", legenda: "" });
+  const rodar = (itensDaSerie: any[], antes: any) => {
+    const pecas = pecasComApelido(itensDaSerie, new Set(), new Set());
+    const r = reorganizarPecas({ linha, pecas, porDia: 1, ocupacao });
+    return { r, lista: itensDaReorganizacao(antes, linha, r, r.novas.map(conteudo)) };
+  };
+  const { r, lista } = rodar(serie, null);
+  const datas = r.movimentos.map((m) => m.data).concat(r.novas.map((v) => v.data));
+
+  it("toda peça fica com a fase da janela em que a data cai (a de lançamento empurrada não vira aquecimento)", () => {
+    r.movimentos.forEach((m) => expect(m.fase).toBe((faseNaData(linha, m.data) as any).fase));
+    r.novas.forEach((v) => expect(v.fase).toBe((faseNaData(linha, v.data) as any).fase));
+    const c7 = r.movimentos.filter((m) => m.peca.tema_id === "c7")[0];
+    expect(c7.fase).not.toBe("aquecimento");
+    expect(c7.etapa).toBe((faseNaData(linha, c7.data) as any).etapa);
+  });
+
+  it("a 1ª peça existente sendo oferta: a introdução de verdade vai para a ponta e a oferta sai do aquecimento", () => {
+    const primeira = datas.slice().sort()[0];
+    const c1 = r.movimentos.filter((m) => m.peca.tema_id === "c1")[0];
+    expect(c1.fase).not.toBe("aquecimento");
+    const c2 = r.movimentos.filter((m) => m.peca.tema_id === "c2")[0];
+    expect(c2.data).toBe(primeira);
+    expect(c2.fase).toBe("aquecimento");
+    expect(["2026-10-22", "2026-10-23"]).toContain(primeira);
+  });
+
+  it("sem nenhuma introdução de verdade, cria a introdução no começo (22 ou 23)", () => {
+    const soOferta = serie.filter((x) => x.tema_id !== "c2");
+    const { r: r2 } = rodar(soOferta, null);
+    expect(r2.novas[0].fase).toBe("aquecimento");
+    expect(["2026-10-22", "2026-10-23"]).toContain(r2.novas[0].data);
+    expect(r2.novas[0].data <= r2.movimentos.map((m) => m.data).sort()[0]).toBe(true);
+    expect(r2.movimentos.filter((m) => m.peca.tema_id === "c1")[0].fase).not.toBe("aquecimento");
+  });
+
+  it("a última peça é de encerramento (o sábado 31 vai para a sexta 30, dentro da janela do encerramento)", () => {
+    const ultima = r.movimentos.slice().sort((a, b) => a.data.localeCompare(b.data)).pop() as any;
+    expect(ultima.peca.tema_id).toBe("c9");
+    expect(ultima.fase).toBe("encerramento");
+    expect(ultima.data).toBe("2026-10-30");
+  });
+
+  it("idempotente: rodar de novo sobre o resultado não muda nada", () => {
+    const aplicado = aplicarMudanca({ briefing: {}, itens: serie }, lista);
+    const { r: r2, lista: lista2 } = rodar(aplicado.itens as any[], aplicado.briefing.linha_do_tempo);
+    expect(r2.novas).toEqual([]);
+    expect(lista2).toEqual([]);
+  });
+
+  it("no servidor: o Jev julga introdução ou oferta nas peças de aquecimento antes de reorganizar", () => {
+    const fonte = readFileSync(resolve(__dirname, "../../supabase/functions/agente-calendario/index.ts"), "utf8");
+    const reorg = fonte.slice(fonte.indexOf("async function campanhaReorganizar("), fonte.indexOf("async function campanhaReorganizarInterno("));
+    expect(reorg).toContain("introducoesPeloJev(c, pecas, chamador.userId)");
+    expect(reorg).toContain("introducoes: introducoes.lista");
   });
 });
