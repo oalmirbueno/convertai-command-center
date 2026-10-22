@@ -109,7 +109,7 @@ describe('canonical MCP transport hardening', () => {
     expect(server).toContain('if (!acceptsMcpResponse(req))');
     expect(server).toContain('validateJsonRpcRequest(body)');
     expect(server).toContain("status: 405");
-    expect(server).toContain("capabilities: { tools: { listChanged: false } }");
+    expect(server).toContain("capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } }");
     // O GET do painel (AB2) le a descoberta publica: so "configurado ou nao"
     // do Segundo Cerebro, nunca dono/repositorio/branch (bridgeStatus()).
     expect(server).toContain('decidirGet({');

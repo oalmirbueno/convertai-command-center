@@ -307,6 +307,9 @@ export const FRAMEWORKS_DE_COPY: FrameworkDeCopy[] = [
   { id: "objecao_e_quebra", nome: "Objeção e quebra", estrutura: "A trava de compra dita como o cliente fala, a resposta específica que desmonta a trava, a prova real e o CTA.", quando: "Quem já considerou e travou em preço, prazo ou confiança." },
   { id: "prova_primeiro", nome: "Prova primeiro", estrutura: "Abre com a prova real (número com período, depoimento autorizado, detalhe verificável), explica o porquê e chama para a ação.", quando: "Há prova forte no briefing." },
   { id: "oferta_direta", nome: "Oferta direta", estrutura: "O que é, para quem, a condição real, a reversão de risco e o próximo passo, sem rodeio.", quando: "Público quente e remarketing; oferta forte." },
+  // 22/10/2026 (dono: "os criativos são pra vender a ideia"): as duas estruturas de resposta direta que faltavam.
+  { id: "prova_oferta_urgencia", nome: "Prova, oferta e urgência", estrutura: "A prova real primeiro, a oferta com o que a pessoa leva e a condição, e o motivo REAL para agir agora (prazo ou vaga que está nos fatos), com o CTA.", quando: "Há prova e urgência reais nos fatos; público morno ou quente." },
+  { id: "porque_razao_real", nome: "Porque (razão real)", estrutura: "O pedido ou a promessa seguido de \"porque\" e a razão concreta e verificável (como funciona, o que está incluso, quem faz), e o CTA. A razão convence mais do que o adjetivo.", quando: "Público desconfiado ou oferta que parece boa demais; serviço técnico." },
 ];
 
 export const FRAMEWORKS_IDS: readonly string[] = FRAMEWORKS_DE_COPY.map((f) => f.id);

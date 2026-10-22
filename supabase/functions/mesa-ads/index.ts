@@ -404,7 +404,7 @@ import {
   totaisPorObjetivo,
 } from "./modulos/metricas-meta.ts";
 // Frente CPY: o motor de copy da casa (limpeza, clichê de IA e promessa proibida).
-import { conferirCopy, LIMIARES, limparCopy, perguntaDoCliche } from "../_shared/motor-de-copy.ts";
+import { conferirCopy, LIMIARES, limparCopy, marcasDeIa, perguntaDoCliche } from "../_shared/motor-de-copy.ts";
 import {
   anuncioDaReferencia,
   anuncioDasDiarias,
@@ -443,12 +443,19 @@ import {
   ANGULOS_DE_VENDA_IDS,
   anguloDeVenda,
   angulosParaVariacoes,
+  avisosDaVenda,
   blocoDeRespostaDireta,
   type ConferenciaDoAnuncio,
   type FatosDaOferta,
   fatosDaOferta,
+  ganchosParaACopy,
+  humanizarAnuncio,
   motivosDePolitica,
+  type NichoDaCopy,
+  ousadiaDoPedido,
+  perguntasDeVenda,
   resumoDaConferencia,
+  type VendaDaCopy,
 } from "./modulos/copy-de-resposta.ts";
 import {
   avisosDaFidelidade,
@@ -1642,6 +1649,10 @@ type NotasCopy = {
   parada?: number | null;
   /** Frente CPY: soa como texto genérico de IA (Noul do motor de copy), como aviso. */
   cliche_ia?: boolean | null;
+  /** 22/10/2026: vende a ideia, especificidade do nicho e prova real (Score do Jev, 0 a 10), só com `venda`. */
+  vende?: number | null;
+  nicho?: number | null;
+  prova_real?: number | null;
 };
 
 /** Probabilidade do Noul "genérico" a partir da qual a peça leva o aviso. */
@@ -1657,7 +1668,7 @@ async function conferirCopiesComJev(
   briefing: Briefing | null,
   cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string },
   tom: TomDoCriativo | null = null,
-  opcoes: { parada?: boolean } = {},
+  opcoes: { parada?: boolean; venda?: { nicho: NichoDaCopy | null; fatos: string[] } | null } = {},
 ): Promise<{ notas: (NotasCopy | null)[]; jev_erro: string | null; custo: number }> {
   if (!copies.length) return { notas: [], jev_erro: null, custo: 0 };
   const regrasTom = tom ? TONS[tom] : null;
@@ -1669,6 +1680,12 @@ async function conferirCopiesComJev(
     copies,
   };
   if (regrasTom) state.tom_pedido = { nome: regrasTom.nome, o_que_e: regrasTom.resumo, regras: regrasTom.copy };
+  // 22/10/2026: o nicho do cliente e os fatos da oferta, para o Jev medir venda, nicho e prova real.
+  if (opcoes.venda) {
+    const n = opcoes.venda.nicho;
+    state.nicho = n ? { nome: n.nome, dores: n.dores ?? [], desejos: n.desejos ?? [] } : "não identificado: julgue pelo público dos fatos";
+    state.fatos = opcoes.venda.fatos.length ? opcoes.venda.fatos : ["sem oferta cadastrada"];
+  }
   const questions: Record<string, PerguntaJev> = {};
   copies.forEach((_, i) => {
     questions[`risco_${i}`] = {
@@ -1701,10 +1718,17 @@ async function conferirCopiesComJev(
         criteria: NIVEIS_PARADA,
       };
     }
+    if (opcoes.venda) {
+      const q = perguntasDeVenda(`\`copies[${i}]\``);
+      questions[`vende_${i}`] = q.vende;
+      questions[`nicho_${i}`] = q.nicho;
+      questions[`provareal_${i}`] = q.prova;
+    }
   });
   try {
     const r = await jevPerguntar({ state, questions });
     const cobrado = await cobrarJev(r, { clientId: cobranca.clientId, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: cobranca.criadoPor });
+    const deVenda = (k: string, i: number, niveis: number) => notaDe0a10(notaScore(r.answers[`${k}_${i}`]), niveis);
     return {
       notas: copies.map((_, i) => {
         const risco = notaScore(r.answers[`risco_${i}`]);
@@ -1719,6 +1743,7 @@ async function conferirCopiesComJev(
           prob_generico: prob == null ? null : Math.round(prob * 100) / 100,
           tom: regrasTom ? notaDe0a10(notaScore(r.answers[`tom_${i}`]), regrasTom.niveis_jev.length) : null,
           ...(opcoes.parada ? { parada: notaDe0a10(notaScore(r.answers[`parada_${i}`]), NIVEIS_PARADA.length) } : {}),
+          ...(opcoes.venda ? { vende: deVenda("vende", i, 5), nicho: deVenda("nicho", i, 5), prova_real: deVenda("provareal", i, 5) } : {}),
         };
       }),
       jev_erro: null,
@@ -1848,12 +1873,15 @@ type CopyAnuncio = {
 function normalizarCopy(bruto: Record<string, unknown>): CopyAnuncio {
   const avisos: string[] = [];
   // Frente CPY: limpeza da casa pelo motor de copy (travessão, aspas, espaços) em cada campo, sem cortar (os tetos são os daqui).
-  const limpo = (v: unknown) => limparCopy(v, "anuncio", { cortar: false }).texto;
+  // 22/10/2026: passada de humanizer em código (pontuação repetida, emoji em excesso), sem mudar o sentido.
+  const limpo = (v: unknown) => humanizarAnuncio(limparCopy(v, "anuncio", { cortar: false }).texto).texto;
   const o: Record<string, unknown> = { ...bruto, texto_principal: limpo(bruto.texto_principal), texto_principal_longo: limpo(bruto.texto_principal_longo), titulo: limpo(bruto.titulo), descricao: bruto.descricao == null ? null : limpo(bruto.descricao) };
   // Clichê de IA e promessa proibida em código (o Jev confere política, clareza e genérico à parte): aviso, sem reescrever.
   for (const p of conferirCopy(`${o.texto_principal_longo || o.texto_principal}\n${o.titulo}`, "anuncio").problemas) {
     if (p.tipo === "cliche" || p.tipo === "promessa") avisos.push(p.texto);
   }
+  const marcas = marcasDeIa(`${o.texto_principal_longo || o.texto_principal}`);
+  if (marcas.length) avisos.push(`Soa como texto de IA: ${marcas.join(", ")}.`);
   const principal = texto(o.texto_principal, 400);
   if (principal.length > 125) avisos.push(`Texto principal com ${principal.length} caracteres: só cerca de 125 aparecem antes do "ver mais".`);
   const tituloBruto = texto(o.titulo, 200);
@@ -2005,6 +2033,43 @@ async function fatosDoPlano(servico: SupabaseClient, clientId: string, plano: Pl
     ? await carregarOferta(servico, clientId, id).then(ofertaDaLinha).catch((e) => (registrarFalha("mesa-ads: oferta do plano não lida (segue o briefing)", e), null))
     : null;
   return fatosDaOferta(oferta, briefing as never);
+}
+
+/** Ganchos lidos do banco por chamada (o nicho decide quais entram). */
+const MAX_GANCHOS_LIDOS = 200;
+
+/**
+ * 22/10/2026 (dono: "os criativos são pra vender a ideia"): o que a copy recebe
+ * para conversar com o nicho, sem custo de IA. O nicho vem do plano
+ * (estrutura.nicho), do guardado pela rotina (ads_rotina.estado.nicho) ou do
+ * último plano do cliente; os exemplos vêm de ganchos_vencedores (formato
+ * "anuncio"), tabela de outra frente (migration 20261023100000): sem a tabela
+ * ou com erro, segue sem exemplos e diz isso no aviso. Nunca derruba a copy.
+ */
+async function vendaDaCopy(servico: SupabaseClient, clientId: string, plano: Plano | null): Promise<{ venda: VendaDaCopy; aviso: string | null }> {
+  const porId = (v: unknown) => (typeof v === "string" && v ? NICHOS.find((n) => n.id === v) ?? null : null);
+  let nicho: Nicho | null = porId(plano?.estrutura?.nicho);
+  if (!nicho) {
+    const linha = await lerLinhaDaRotina(servico, clientId).catch(() => null);
+    const estado = linha && linha.estado && typeof linha.estado === "object" ? linha.estado as Record<string, unknown> : {};
+    nicho = porId(estado.nicho && typeof estado.nicho === "object" ? (estado.nicho as { id?: unknown }).id : null);
+  }
+  if (!nicho) {
+    const { data } = await servico.from("ads_planos").select("estrutura").eq("client_id", clientId).not("estrutura->>nicho", "is", null).order("atualizado_em", { ascending: false }).limit(1);
+    const e = ((data ?? [])[0] as { estrutura?: Record<string, unknown> } | undefined)?.estrutura;
+    nicho = porId(e?.nicho);
+  }
+  let ganchos: VendaDaCopy["ganchos"] = [];
+  let aviso: string | null = null;
+  try {
+    const { data, error } = await servico.from("ganchos_vencedores").select("*").eq("formato", "anuncio").limit(MAX_GANCHOS_LIDOS);
+    if (error) aviso = "Banco de ganchos vencedores ainda indisponível: a copy saiu sem os exemplos dele.";
+    else ganchos = ganchosParaACopy(data ?? [], nicho ? { id: nicho.id, nome: nicho.nome } : null);
+  } catch {
+    aviso = "Banco de ganchos vencedores ainda indisponível: a copy saiu sem os exemplos dele.";
+  }
+  const n: NichoDaCopy | null = nicho ? { id: nicho.id, nome: nicho.nome, dores: nicho.dores, desejos: nicho.desejos, ganchos: nicho.ganchos, riscos_de_politica: nicho.riscos_de_politica } : null;
+  return { venda: { nicho: n, ganchos }, aviso };
 }
 
 /**
@@ -3361,7 +3426,9 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
 
   // 02/10: os fatos concretos da oferta, o mundo real do assunto (uma pesquisa para a chamada inteira)
   // e a referência com Fidelidade (a escolhida ou, com fidelidade pedida, a 1ª do ângulo; lida uma vez).
-  const fatos = await fatosDoPlano(servico, p.client_id, p, briefing);
+  const [fatos, vendaLida] = await Promise.all([fatosDoPlano(servico, p.client_id, p, briefing), vendaDaCopy(servico, p.client_id, p)]);
+  const venda = vendaLida.venda;
+  if (vendaLida.aviso) avisos.push(vendaLida.aviso);
   const assunto = [texto(corpo.pedido, 1000), ...angulos.map((a) => `${a.nome}. ${a.situacao} ${a.mecanismo} ${a.gancho_verbal}`)].filter(Boolean).join("\n");
   // Base do criativo estático: uma leitura para a chamada inteira, em paralelo com a pesquisa do mundo real.
   const baseAdsP = basesDosCriativos(servico, { clientId: p.client_id, pedido: assunto, tarefa: TAREFA, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
@@ -3403,7 +3470,7 @@ OBJETIVO DA CAMPANHA: ${JSON.stringify(objetivo ? { id: objetivo.id, nome: objet
 FORMATOS: ${formatos.join(", ")}
 NÚMEROS REAIS DA OFERTA (os únicos que podem aparecer): ${JSON.stringify(numerosDaOferta)}
 
-${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
+${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda, venda })}
 ${rep ? `\n${rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
 ${copyQueConverteParaOPrompt({ comLayout: true })}
 
@@ -3462,7 +3529,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       briefing,
       { clientId: p.client_id, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId },
       tom === "direto" ? null : tom,
-      { parada: true },
+      { parada: true, venda: { nicho: venda.nicho, fatos: fatos.linhas } },
     );
     custo += conferencia.custo;
     if (conferencia.jev_erro) jevErro = conferencia.jev_erro;
@@ -3524,6 +3591,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       const avisosTom = avisosDeTom({ headline: texto(v.headline_arte, 120), texto_principal: copy.texto_principal }, regrasTom, numerosDaOferta);
       if (nota?.generico) avisosTom.unshift("Genérico pela conferência do Jev: serviria para qualquer concorrente.");
       if (nota?.cliche_ia) avisosTom.unshift("Soa como texto genérico de IA pela conferência do Jev.");
+      avisosTom.unshift(...avisosDaVenda(nota));
       if (typeof nota?.tom === "number" && nota.tom < 6) avisosTom.unshift(`Abaixo do tom ${regrasTom.nome.toLowerCase()} pedido (nota ${String(nota.tom).replace(".", ",")}).`);
       for (const x of avisosTom) avisos.push(`${a.nome}, variação ${i + 1}: ${x}`);
       // 02/10: ângulo de venda, conferência da casa (com a reescrita única), fidelidade à referência e mundo real.
@@ -3658,18 +3726,25 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const c = await carregarCriativo(servico, corpo.criativo_id);
   await exigirAcessoAoCliente(chamador, c.client_id);
   const qtd = Math.min(5, Math.max(1, Math.round(Number(corpo.quantidade) || 3)));
-  const pedidoEquipe = texto(corpo.pedido, 1500);
-  if (pedeRefazerTudo(pedidoEquipe)) return await criativosReescrever(servico, chamador, { ...corpo, criativo_id: c.id, plano_id: undefined });
+  // 22/10/2026: "mais ousada" / "mais segura" em um clique (tom e pedido prontos) a partir de uma variação da tela (base).
+  const ousadia = ousadiaDoPedido(corpo.ousadia);
+  const pedidoEquipe = [ousadia ? ousadia.pedido : "", texto(corpo.pedido, 1500)].filter(Boolean).join(" ");
+  const baseDaTela = corpo.base && typeof corpo.base === "object" ? corpo.base as Record<string, unknown> : null;
+  if (!ousadia && pedeRefazerTudo(pedidoEquipe)) return await criativosReescrever(servico, chamador, { ...corpo, criativo_id: c.id, plano_id: undefined });
   const plano = c.plano_id ? await carregarPlano(servico, c.plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null)) : null;
   const angulo = plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
   const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
-  const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, tomValido(c.copy.tom) ?? tomValido(plano?.estrutura.tom) ?? "direto");
+  const tom: TomDoCriativo = (ousadia ? ousadia.tom : null) ?? tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, tomValido(c.copy.tom) ?? tomValido(plano?.estrutura.tom) ?? "direto");
   // 02/10: fatos da oferta, ângulos de venda, referência com Fidelidade e mundo real do pedido.
   const avisos: string[] = [];
   let custoExtra = 0;
-  const fatos = await fatosDoPlano(servico, c.client_id, plano, briefing);
-  const angulosDeVenda = angulosParaVariacoes(qtd, fatos);
+  const [fatos, vendaLida] = await Promise.all([fatosDoPlano(servico, c.client_id, plano, briefing), vendaDaCopy(servico, c.client_id, plano)]);
+  const venda = vendaLida.venda;
+  if (vendaLida.aviso) avisos.push(vendaLida.aviso);
+  // Da variação da tela, mantém o ângulo de venda dela; senão, a roda de ângulos distintos.
+  const anguloDaBase = baseDaTela ? anguloDeVenda(baseDaTela.angulo_de_venda) : null;
+  const angulosDeVenda = anguloDaBase ? Array.from({ length: qtd }, () => anguloDaBase) : angulosParaVariacoes(qtd, fatos);
   const replicacao = await replicacaoDaReferencia(servico, chamador, c.client_id, corpo.referencia_id, corpo.fidelidade);
   custoExtra += replicacao.custo;
   if (replicacao.aviso) avisos.push(replicacao.aviso);
@@ -3684,9 +3759,11 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const blocoCampanha = await blocoDaCampanhaParaCopy(servico, c);
   const pedidoDaVariacao = `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
 ÂNGULO: ${JSON.stringify(angulo ? { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, hipotese: angulo.hipotese } : null)}
-COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, framework: c.copy.framework ?? null })}
+COPY ATUAL: ${JSON.stringify(baseDaTela
+    ? { texto_principal: texto(baseDaTela.texto_principal, 400), texto_principal_longo: texto(baseDaTela.texto_principal_longo, 2200), titulo: texto(baseDaTela.titulo, 120), descricao: textoOuNulo(baseDaTela.descricao, 120), cta_meta: texto(baseDaTela.cta_meta, 40), framework: doEnum(baseDaTela.framework, FRAMEWORKS_IDS) }
+    : { texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, framework: c.copy.framework ?? null })}
 
-${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
+${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda, venda })}
 ${replicacao.rep ? `\n${replicacao.rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}${blocoCampanha ? `\n${blocoCampanha}\n` : ""}
 ${copyQueConverteParaOPrompt()}
 
@@ -3744,7 +3821,7 @@ o_que_mudou: uma frase dizendo a variável que mudou.`;
       ...(replicacao.rep ? { referencia_replicada: { id: replicacao.rep.ref.id, titulo: replicacao.rep.ref.titulo, fidelidade: replicacao.rep.fidelidade, gancho_lido: replicacao.rep.lido ? replicacao.rep.lido.gancho : null } } : {}),
     };
   });
-  const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId }, tom === "direto" ? null : tom, { parada: true });
+  const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId }, tom === "direto" ? null : tom, { parada: true, venda: { nicho: venda.nicho, fatos: fatos.linhas } });
   // Frente CR: a melhor primeiro pela nota composta do Jev (política como trava), com o porquê em uma linha.
   const ordem = escolherMelhores(conferencia.notas, copies.length).ordem;
   const variacoes = ordem.map((k, i) => ({
@@ -3753,6 +3830,9 @@ o_que_mudou: uma frase dizendo a variável que mudou.`;
     jev: conferencia.notas[k] ?? null,
     melhor: i === 0 && copies.length > 1,
     porque: porqueDaCopy(conferencia.notas[k], copies[k].framework, i + 1, copies.length),
+    // A nota do Jev como aviso na tela (nunca reescreve sozinho).
+    avisos_venda: avisosDaVenda(conferencia.notas[k]),
+    ...(ousadia ? { ousadia: ousadia.ousadia } : {}),
     gerado_em: new Date().toISOString(),
   }));
   // Guarda as alternativas no criativo (as 10 mais recentes); a equipe escolhe e salva a copy na tela.
@@ -3847,7 +3927,9 @@ async function criativosReescrever(servico: SupabaseClient, chamador: Chamador, 
   const marca = await lerMarcaParaDirecaoDaMarca(servico, clientId, null).catch((e) => (registrarFalha("mesa-ads: marca não lida na reescrita", e), null));
   let custo = 0;
   let saldo: number | null = null;
-  const fatos = await fatosDoPlano(servico, clientId, plano, briefing);
+  const [fatos, vendaLida] = await Promise.all([fatosDoPlano(servico, clientId, plano, briefing), vendaDaCopy(servico, clientId, plano)]);
+  const venda = vendaLida.venda;
+  if (vendaLida.aviso) avisos.push(vendaLida.aviso);
   const angulosDeVenda = angulosParaVariacoes(n, fatos);
   const replicacao = await replicacaoDaReferencia(servico, chamador, clientId, corpo.referencia_id, corpo.fidelidade);
   custo += replicacao.custo;
@@ -3889,7 +3971,7 @@ async function criativosReescrever(servico: SupabaseClient, chamador: Chamador, 
 MARCA: ${JSON.stringify(marca ? { nome: marca.nomeCliente, tom_de_voz: marca.tomDeVoz, regras: marca.regras } : null)}
 CONTEÚDO ATUAL (vai ser TROCADO; não repita nem parafraseie): ${JSON.stringify(atuais)}
 
-${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
+${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda, venda })}
 ${replicacao.rep ? `\n${replicacao.rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
 ${copyQueConverteParaOPrompt({ comLayout: true })}
 
@@ -3936,7 +4018,7 @@ Nada de número, depoimento, prazo, preço ou urgência fora dos FATOS.`;
     briefing,
     { clientId, referencia: cobrarEm, criadoPor: chamador.userId },
     tom === "direto" ? null : tom,
-    { parada: true },
+    { parada: true, venda: { nicho: venda.nicho, fatos: fatos.linhas } },
   );
   custo += conferencia.custo;
   const logos = await logosDoTexto(variacoes.map(textoDaVariacao).join("\n"), mundo.entidades);

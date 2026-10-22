@@ -136,7 +136,7 @@ describe("pedidos_de_acesso: manifesto, baseline e MCP", () => {
   });
 
   it("MCP 2.13.0 registra as três ferramentas e ensina o caminho nas instruções", () => {
-    expect(MCP_VERSION).toBe("2.16.2");
+    expect(MCP_VERSION).toBe("2.17.0");
     const tools = ler("supabase/functions/_shared/mcp-tools.ts");
     for (const nome of ["aceleriq_acesso_pedir", "aceleriq_acesso_estado", "aceleriq_acesso_usar"]) {
       expect(tools).toContain(`name: '${nome}'`);

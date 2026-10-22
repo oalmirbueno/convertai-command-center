@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Secao, botao, campo, campoTexto, etiqueta, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { useAuth } from "@/contexts/AuthContext";
-import { AGENTES_COM_BASE, type AgenteComBase } from "../../supabase/functions/_shared/agentes-com-base";
+import { AGENTES_COM_BASE, type AgenteComBase, ehDaCasa } from "../../supabase/functions/_shared/agentes-com-base";
 import {
   apagarFicha,
   apagarFonte,
@@ -19,6 +19,7 @@ import {
   lerFichas,
   lerFontes,
   lerResumoDosAgentes,
+  ligarBibliotecaDaCasa,
   novaFicha,
   pesquisarAgora,
 } from "@/components/base-dos-agentes/baseDosAgentesApi";
@@ -67,6 +68,7 @@ function origemDaFonte(f: FonteDaBase): string {
   if (f.nome.indexOf("Números do Instagram") === 0) return "Números do Instagram";
   if (f.nome.indexOf("Concorrentes e referências") === 0) return "Concorrentes";
   if (f.nome.indexOf("Pedidos do cliente") === 0) return "Pedido do cliente";
+  if (f.nome.indexOf("Biblioteca da casa") === 0) return "Biblioteca da casa";
   return ROTULO_DO_TIPO[f.tipo];
 }
 
@@ -186,6 +188,7 @@ export default function BaseDosAgentes() {
             }
             acao={podeEnsinar ? <span className="inline-flex items-center"><BotaoDosResultados aoTerminar={recarregar} /><BotaoDePesquisa agente={agente} aoTerminar={recarregar} /></span> : undefined}
           >
+            <ChaveDaBiblioteca agente={agente} fichas={fichas.data || []} podeMudar={podeEnsinar} aoMudar={recarregar} />
             {podeEnsinar && <CaixaDeEnsino agente={agente} clientes={clientes.data || []} aoTerminar={recarregar} />}
           </Secao>
 
@@ -204,6 +207,43 @@ export default function BaseDosAgentes() {
           <ListaDeFontes fontes={fontes.data || []} podeApagar={podeEnsinar} nomeDoCliente={nomeDoCliente} aoMudar={recarregar} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 23/10: a Biblioteca da casa deste agente (documentos da agência). Em cada pedido entram só os mais relevantes,
+ * escolhidos pelo Jev; aqui liga ou desliga todos de uma vez.
+ */
+function ChaveDaBiblioteca({ agente, fichas, podeMudar, aoMudar }: { agente: AgenteComBase; fichas: FichaDaBase[]; podeMudar: boolean; aoMudar: () => void }) {
+  const [mudando, setMudando] = useState(false);
+  const daCasa = fichas.filter((f) => ehDaCasa(f.fonte_url));
+  if (!daCasa.length) return null;
+  const ligadas = daCasa.filter((f) => f.ativa).length;
+  const ligada = ligadas > 0;
+  const mudar = async (v: boolean) => {
+    if (mudando) return;
+    setMudando(true);
+    try {
+      await ligarBibliotecaDaCasa(agente.chave, v);
+      toast.success(v ? "Biblioteca da casa ligada" : "Biblioteca da casa desligada", { description: `${agente.nome} ${v ? "volta a usar" : "deixa de usar"} os documentos da casa.` });
+    } catch (e) {
+      toast.error("Não deu para mudar a Biblioteca da casa", { description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setMudando(false);
+      aoMudar();
+    }
+  };
+  return (
+    <div className={juntar(superficie.painel, "mb-3 flex min-w-0 items-center p-3")} data-biblioteca-da-casa={ligada ? "ligada" : "desligada"}>
+      <BookOpen className="mr-2.5 h-4 w-4 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-foreground">Biblioteca da casa</p>
+        <p className="text-[12px] text-muted-foreground">
+          {ligada ? `${ligadas} de ${daCasa.length} documentos em uso; em cada pedido entram só os mais relevantes.` : `Desligada para ${agente.nome}: os ${daCasa.length} documentos não entram nas gerações.`}
+        </p>
+      </div>
+      {podeMudar && <Switch checked={ligada} disabled={mudando} onCheckedChange={(v) => void mudar(v)} className="ml-3 shrink-0" aria-label={ligada ? "Desligar a Biblioteca da casa deste agente" : "Ligar a Biblioteca da casa deste agente"} />}
     </div>
   );
 }
@@ -488,17 +528,19 @@ function CartaoDaFicha({ ficha, fonte, cliente, podeEditar, aoEditar, aoMudar }:
         </p>
       )}
       <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mr-2.5">
-        <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? origemDaFonte(fonte) : "À mão"}</span>
+        {ehDaCasa(ficha.fonte_url)
+          ? <span className={juntar(etiqueta, "bg-primary/15 text-primary")} data-da-casa="">Biblioteca da casa</span>
+          : <span className={juntar(etiqueta, "bg-secondary text-foreground")}>{fonte ? origemDaFonte(fonte) : "À mão"}</span>}
         {cliente && <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>Só {cliente}</span>}
         {!ficha.ativa && ficha.arquivada_por && (
-          <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")} data-arquivada-por={ficha.arquivada_por} title="A faxina do mês desligou esta ficha. Ligue de novo se quiser.">
-            {ficha.arquivada_por === "repetida" ? "Arquivada: repetida" : "Arquivada: sem uso em 60 dias"}
+          <span className={juntar(etiqueta, "bg-secondary text-muted-foreground")} data-arquivada-por={ficha.arquivada_por} title={ficha.arquivada_por === "casa_desligada" ? "Desligada junto com a Biblioteca da casa deste agente." : "A faxina do mês desligou esta ficha. Ligue de novo se quiser."}>
+            {ficha.arquivada_por === "casa_desligada" ? "Biblioteca desligada" : ficha.arquivada_por === "repetida" ? "Arquivada: repetida" : "Arquivada: sem uso em 60 dias"}
           </span>
         )}
         <span className="tabular-nums">{ficha.usos ? `usada ${ficha.usos} ${ficha.usos === 1 ? "vez" : "vezes"} · ${haQuanto(ficha.ultimo_uso)}` : "ainda não usada"}</span>
         {resumoDoResultado(resultadoDe(ficha)) && <span className="tabular-nums text-foreground" data-resultado-da-ficha="">{resumoDoResultado(resultadoDe(ficha))}</span>}
-        {fonte && fonte.tipo !== "pesquisa" && <span className="min-w-0 max-w-[16rem] truncate" title={fonte.nome}>{fonte.nome}</span>}
-        {ficha.fonte_url && (
+        {fonte && fonte.tipo !== "pesquisa" && !ehDaCasa(ficha.fonte_url) && <span className="min-w-0 max-w-[16rem] truncate" title={fonte.nome}>{fonte.nome}</span>}
+        {ficha.fonte_url && !ehDaCasa(ficha.fonte_url) && (
           <a href={ficha.fonte_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-primary hover:underline">
             fonte <ExternalLink className="ml-0.5 h-3 w-3" />
           </a>

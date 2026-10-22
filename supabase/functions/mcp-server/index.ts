@@ -4,7 +4,7 @@
 // Bearer auth via public.api_keys. Audit via public.mcp_audit_log.
 // Does NOT modify api-gateway or any existing function.
 
-import { authenticate, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
+import { authenticate as conferirCredencial, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { MCP_RELEASE_SOURCE } from "../_shared/mcp-release-source.ts";
 import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
@@ -43,6 +43,17 @@ import {
 import { getMcpRuntimeConfig } from "../_shared/mcp-runtime.ts";
 import { decidirGet, descobertaDoMcp } from "../_shared/mcp-descoberta.ts";
 import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";
+import { executarFerramenta, segundoPlanoPadrao } from "./modulos/executar-ferramenta.ts";
+import { CredencialEmCache } from "./modulos/credencial-em-cache.ts";
+import { descritorEnxuto, lerRecurso, montarPrompt, PROMPTS, RECURSOS } from "./modulos/guia-do-painel.ts";
+
+// MCP 2.17: a credencial conferida vale 45 s (no OAuth eram cinco idas ao servidor por chamada).
+const credenciais = new CredencialEmCache<AuthResult>();
+const authenticate = (req: Request) => credenciais.autenticar(req, conferirCredencial);
+const ehForaDoEscopo = (e: unknown) => {
+  const message = (e as Error)?.message ?? String(e);
+  return e instanceof DataScopeError || message.startsWith("write:forbidden") || message.includes("outside this MCP principal data scope");
+};
 
 // ─── OAuth / Protected Resource metadata ──────────────────────
 const {
@@ -147,6 +158,8 @@ function isPublicRpc(msg: JsonRpcRequest): boolean {
     return true;
   }
   if (method === "tools/list") return true;
+  // MCP 2.17: mapa, regras e prompts são texto fixo, sem dado de cliente.
+  if (method === "resources/list" || method === "resources/read" || method === "prompts/list" || method === "prompts/get") return true;
   if (method === "tools/call") {
     const params = (msg?.params ?? {}) as Record<string, unknown>;
     const name = String((params?.name as string) ?? "");
@@ -184,13 +197,16 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
       // tornar a defasagem DETECTAVEL: as instrucoes abaixo sao relidas em
       // todo initialize e dizem o tamanho do catalogo desta versao, entao um
       // agente com lista menor consegue perceber sozinho que esta velha.
-      capabilities: { tools: { listChanged: false } },
+      capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } },
       serverInfo: SERVER_INFO,
       instructions:
         `Aceleriq OS ${SERVER_INFO.version}: este servidor expoe ${TOOLS.length} tools nesta versao. `
         + "Se a sua lista de funcoes tiver menos que isso, ela esta velha: chame tools/list de novo "
         + "(o servidor nao empurra aviso de mudanca, entao a lista so atualiza quando voce pergunta). "
         + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
+        + "Para se orientar barato: aceleriq_guia (mapa do painel, regras e o manual completo de cada ferramenta, porque a lista traz a descricao curta). "
+        + "Para ler rapido: aceleriq_panorama_do_cliente (um cliente inteiro numa chamada) e aceleriq_panorama_da_casa (o dia da agencia). "
+        + "Leituras vem enxutas; detalhe=completo traz tudo e proximo_cursor pagina. Erro volta com codigo, dica e se vale repetir (transitorio). "
         + "Antes de propor ou subir trafego pago, estude o que a Mesa Ads gerou com aceleriq_mesa_ads_contexto "
         + "(briefing, oferta, angulos e porques, notas do Jev, copy e artes) e as fotos aprovadas com aceleriq_mesa_foto_contexto. "
         + "Antes de criar conteudo, arte, campanha ou anuncio, leia o que o cliente ja ensinou com aceleriq_cerebro_do_cliente "
@@ -214,7 +230,30 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
     const visible = auth.ok
       ? TOOLS.filter((t) => canInvoke(auth.ctx, t) && canUseToolWithDataScope(auth.ctx, t))
       : TOOLS;
-    return rpcResult(id, { tools: visible.map(describeTool) });
+    // MCP 2.17: descrição curta e segurança sem o parágrafo repetido (o manual inteiro fica em aceleriq_guia).
+    return rpcResult(id, { tools: visible.map((t) => descritorEnxuto(describeTool(t))) });
+  }
+
+  if (method === "resources/list") {
+    return rpcResult(id, { resources: RECURSOS });
+  }
+
+  if (method === "resources/read") {
+    const uri = String(params?.uri ?? "");
+    const conteudo = lerRecurso(uri, TOOLS);
+    if (!conteudo) return rpcError(id, RpcErrors.invalidParams, `Recurso desconhecido: ${uri}. Veja resources/list.`);
+    return rpcResult(id, { contents: [conteudo] });
+  }
+
+  if (method === "prompts/list") {
+    return rpcResult(id, { prompts: PROMPTS });
+  }
+
+  if (method === "prompts/get") {
+    const nome = String(params?.name ?? "");
+    const prompt = montarPrompt(nome, (params?.arguments ?? {}) as Record<string, unknown>);
+    if (!prompt) return rpcError(id, RpcErrors.invalidParams, `Prompt desconhecido ou sem argumento obrigatório: ${nome}. Veja prompts/list.`);
+    return rpcResult(id, prompt);
   }
 
   // Everything else requires auth, except explicit public foundation tools.
@@ -224,15 +263,12 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
       const publicTool = TOOL_MAP.get(name);
       if (publicTool && publicTool.scopes.length === 0) {
         const publicCtx = publicAuthContext();
-        try {
-          const result = await publicTool.handler((params?.arguments as unknown) ?? {}, publicCtx);
-          return rpcResult(id, {
-            content: [{ type: "text", text: JSON.stringify(result) }],
-            structuredContent: result,
-          });
-        } catch (e) {
-          return rpcError(id, RpcErrors.internalError, (e as Error)?.message ?? String(e));
-        }
+        const desfecho = await executarFerramenta(publicTool, (params?.arguments as unknown) ?? {}, publicCtx, {
+          auditar: () => Promise.resolve(),
+          ehForaDoEscopo,
+        });
+        if (desfecho.tipo === "fora_do_escopo") return rpcError(id, RpcErrors.forbidden, "OAuth authorization required");
+        return rpcResult(id, desfecho.result);
       }
     }
     if (isNotification) return null;
@@ -302,51 +338,17 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
       return rpcError(id, RpcErrors.forbidden, "Tool is unavailable for this restricted client scope");
     }
 
-    try {
-      const resultRefHolder: { value?: string } = {};
-      const callCtx: AuthContext = { ...ctx, correlationId, resultRefHolder };
-      const result = await tool.handler(args, callCtx);
-      await auditLog({
-        correlationId,
-        toolName: name,
-        origin: ctx.origin,
-        keyId: ctx.keyId,
-        scopes: ctx.scopes,
-        input: args,
-        success: true,
-        statusCode: 200,
-        durationMs: Date.now() - started,
-        resultRef: resultRefHolder.value ?? null,
-      });
-      return rpcResult(id, {
-        content: [{ type: "text", text: JSON.stringify(result) }],
-        structuredContent: result,
-      });
-    } catch (e) {
-      const message = (e as Error)?.message ?? String(e);
-      const dataScopeDenied =
-        e instanceof DataScopeError ||
-        message.startsWith("write:forbidden") ||
-        message.includes("outside this MCP principal data scope");
-      await auditLog({
-        correlationId,
-        toolName: name,
-        origin: ctx.origin,
-        keyId: ctx.keyId,
-        scopes: ctx.scopes,
-        input: args,
-        success: false,
-        statusCode: dataScopeDenied ? 403 : 500,
-        durationMs: Date.now() - started,
-        errorCode: dataScopeDenied ? "data_scope_denied" : "handler_error",
-        errorMessage: message,
-      });
-      return rpcError(
-        id,
-        dataScopeDenied ? RpcErrors.forbidden : RpcErrors.internalError,
-        dataScopeDenied ? "Resource is outside this restricted client scope" : message,
-      );
+    // MCP 2.17: validação, cache curto, prazo, nova tentativa (só leitura e só transitório),
+    // erro claro com isError e registro leve. Ver modulos/executar-ferramenta.ts.
+    const desfecho = await executarFerramenta(tool, args, { ...ctx, correlationId }, {
+      auditar: auditLog,
+      emSegundoPlano: segundoPlanoPadrao,
+      ehForaDoEscopo,
+    });
+    if (desfecho.tipo === "fora_do_escopo") {
+      return rpcError(id, RpcErrors.forbidden, "Resource is outside this restricted client scope");
     }
+    return rpcResult(id, desfecho.result);
   }
 
   if (isNotification) return null;

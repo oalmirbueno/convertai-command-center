@@ -103,6 +103,7 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useFiltroDaMarca, useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { SeletorDoModeloDaCopyDoConteudo, useModeloDaCopyDoConteudo } from "./ModeloDaCopyDoConteudo";
 import { itemDaMarca } from "@/lib/mesa/marcas";
 import { arquivarDaFaixa, pautasParecidas, restaurarDaFaixa, tirarDaFila, type ArquivadaDaFaixa, type RecusadaDaFaixa } from "./arquivarDaFaixa";
 import ArquivadosDaFaixa, { chaveDosArquivados } from "./ArquivadosDaFaixa";
@@ -518,6 +519,8 @@ export function DetalheDoItem({
   const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...andamentoLocal };
 
   const diretor = padraoPara(catalogo, "diretor_arte");
+  // 23/10 (COPY-V): a legenda e o refino são escritos pelo "Modelo da copy" (lembrado por cliente; padrão: o melhor para copy).
+  const modeloDaCopy = useModeloDaCopyDoConteudo();
   const leitor = padraoPara(catalogo, "leitura");
   const postUnico = FORMATOS_POST_UNICO.indexOf(item.delivery_type) >= 0;
 
@@ -544,7 +547,11 @@ export function DetalheDoItem({
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
   ];
   /** Refinar texto: o redator e a conferência do motor de copy pelo Jev (frente CPY), que também é cobrada. */
-  const partesDoRefinoConferido = (): ParteDaEstimativa[] => [...partesRefinar(), parteDaConferenciaDoJev()];
+  // 23/10 (COPY-V): o refino é escrito pelo modelo da copy (o enxugar segue no do diretor).
+  const partesDoRefinoConferido = (): ParteDaEstimativa[] => [
+    { modeloId: modeloDaCopy.modeloId || diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
+    parteDaConferenciaDoJev(),
+  ];
 
   /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
   const marcar = (ordem: number, etapa: EtapaDaLamina, detalhe?: string) =>
@@ -2202,8 +2209,8 @@ export function DetalheDoItem({
           variant="outline"
           className="h-8 gap-1 px-2.5 text-[12px]"
           disabled={entregue}
-          partes={() => [{ modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }, parteDaConferenciaDoJev()]}
-          executar={() => chamarFuncao("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id })}
+          partes={() => [{ modeloId: modeloDaCopy.modeloId || diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }, parteDaConferenciaDoJev()]}
+          executar={() => chamarFuncao("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id, ...modeloDaCopy.corpo })}
           aoConcluir={(data) => {
             if (typeof data?.legenda === "string") setLegenda(data.legenda);
             if (Array.isArray(data?.hashtags)) setHashtagsTexto(normalizarHashtags(data.hashtags).join(" "));
@@ -2212,6 +2219,7 @@ export function DetalheDoItem({
           }}
         />
       </div>
+      {!entregue && <SeletorDoModeloDaCopyDoConteudo estado={modeloDaCopy} />}
       {opcoesDaLegenda.length > 0 && opcoesDaLegenda[0].texto === legenda && <NotaDaCopy nota={opcoesDaLegenda[0].nota} alerta={opcoesDaLegenda[0].alerta} avisos={opcoesDaLegenda[0].avisos} framework={opcoesDaLegenda[0].framework} />}
       <Textarea
         value={legenda}

@@ -207,6 +207,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_aviso_publicacao_fila',
     'aceleriq_aviso_publicacao_marcar_enviado',
     'aceleriq_aviso_publicacao_preparar',
+    'aceleriq_base_dos_agentes',
     'aceleriq_browser_act',
     'aceleriq_browser_session',
     'aceleriq_cancel_contract',
@@ -232,6 +233,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_delete_task',
     'aceleriq_dia_prioritario',
     'aceleriq_dia_prioritario_registrar',
+    'aceleriq_estudio_trabalhos',
     'aceleriq_fetch',
     'aceleriq_finalize_file_upload',
     'aceleriq_get_ads_campaigns',
@@ -261,8 +263,10 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_get_social_metrics',
     'aceleriq_get_weekly_cycle',
     'aceleriq_get_workspace_node',
+    'aceleriq_guia',
     'aceleriq_health',
     'aceleriq_instagram_diagnostico',
+    'aceleriq_laboratorio',
     'aceleriq_link_project_to_client',
     'aceleriq_list_briefings',
     'aceleriq_list_clients',
@@ -284,6 +288,9 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_list_social_posts',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
+    'aceleriq_mcp_saude',
+    'aceleriq_membros',
+    'aceleriq_mes_campanhas',
     'aceleriq_mesa_ads_arte_gerar',
     'aceleriq_mesa_ads_briefing_salvar',
     'aceleriq_mesa_ads_contexto',
@@ -295,10 +302,15 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_mesa_ads_saude',
     'aceleriq_mesa_calendario_gravar',
     'aceleriq_mesa_calendario_pedido',
+    'aceleriq_mesa_campanha_acao',
     'aceleriq_mesa_campanha_criar',
     'aceleriq_mesa_campanha_salvar',
     'aceleriq_mesa_enviar_para_aprovacao',
     'aceleriq_mesa_foto_contexto',
+    'aceleriq_mesa_hype',
+    'aceleriq_mesa_site',
+    'aceleriq_mesa_stories',
+    'aceleriq_mesa_templates',
     'aceleriq_move_opportunity',
     'aceleriq_operator_assign',
     'aceleriq_operator_board',
@@ -311,6 +323,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_operator_register',
     'aceleriq_operator_report',
     'aceleriq_operator_request_approval',
+    'aceleriq_panorama_da_casa',
+    'aceleriq_panorama_do_cliente',
     'aceleriq_prepare_file_upload',
     'aceleriq_register_dossier_progress',
     'aceleriq_reopen_task',
@@ -345,7 +359,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
 });
 
 Deno.test('foundation tools are open to any authenticated key; gated tools require the right scope', () => {
-  const foundation = ['aceleriq_health', 'aceleriq_capabilities'];
+  // 2.17: aceleriq_guia é o mapa do painel e o manual das ferramentas (o mesmo que tools/list já mostra), sem dado de cliente.
+  const foundation = ['aceleriq_health', 'aceleriq_capabilities', 'aceleriq_guia'];
   for (const t of TOOLS) {
     if (foundation.includes(t.name)) {
       assert(canInvoke(emptyCtx, t), `${t.name} should be public-auth`);
@@ -416,7 +431,7 @@ Deno.test('aceleriq_health returns server info + key context', async () => {
 Deno.test('aceleriq_capabilities lists only tools the key can invoke', async () => {
   const tool = TOOL_MAP.get('aceleriq_capabilities')!;
   const outEmpty = await tool.handler({}, emptyCtx) as Record<string, unknown>;
-  assertEquals((outEmpty.tools as any[]).map(t => t.name).sort(), ['aceleriq_capabilities', 'aceleriq_health']);
+  assertEquals((outEmpty.tools as any[]).map(t => t.name).sort(), ['aceleriq_capabilities', 'aceleriq_guia', 'aceleriq_health']);
   const outRead = await tool.handler({}, readCtx) as Record<string, unknown>;
   assert((outRead.tools as any[]).length > 2);
   const outRestricted = await tool.handler({}, {
@@ -1213,7 +1228,8 @@ Deno.test('2.3: o mapa do painel aponta as ações e o cérebro', async () => {
   assert(mapa.find((m) => m.area === 'Mesa Ads')!.pelo_mcp.includes('aceleriq_mesa_ads_oferta_salvar'));
   assert(mapa.find((m) => m.area === 'Cerebro do cliente')!.pelo_mcp.includes('aceleriq_cerebro_registrar'));
   assert(mapa.find((m) => m.area === 'Mesa Ads')!.pelo_mcp.includes('aceleriq_mesa_ads_entregar_ao_gestor'));
-  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length);
+  // 2.17: + aceleriq_mesa_campanha_acao (as ações novas da campanha).
+  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length + 1);
 });
 
 Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (JSON e SSE)', async () => {

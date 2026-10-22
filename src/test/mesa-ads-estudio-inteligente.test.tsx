@@ -203,7 +203,7 @@ describe("servidor: a ligação das peças novas na mesa-ads", () => {
 
   it("copy_variar desvia o 'trocar tudo' para a troca no lugar ANTES de chamar o modelo", () => {
     const corpo = corpoDe(indexAds, "copyVariar");
-    const desvio = corpo.indexOf("if (pedeRefazerTudo(pedidoEquipe)) return await criativosReescrever(");
+    const desvio = corpo.indexOf("if (!ousadia && pedeRefazerTudo(pedidoEquipe)) return await criativosReescrever(");
     expect(desvio).toBeGreaterThan(0);
     expect(desvio).toBeLessThan(corpo.indexOf("chamarTexto("));
     expect(corpo).toContain("blocoDeRespostaDireta(");

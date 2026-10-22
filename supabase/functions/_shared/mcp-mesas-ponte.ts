@@ -34,8 +34,14 @@
  * continuam fora.
  */
 export const ACOES_DA_PONTE = {
-  'agente-calendario': ['pedido_livre', 'gravar', 'campanha_criar', 'campanha_salvar'],
-  'mesa-ads': ['briefing_salvar', 'oferta_salvar', 'oferta_do_contexto', 'plano_gerar', 'criativos_produzir', 'pacote_enviar'],
+  'agente-calendario': [
+    'pedido_livre', 'gravar', 'campanha_criar', 'campanha_salvar',
+    // MCP 2.17 (22/10/2026): as ações novas da campanha, as mesmas da tela (o agente-calendario
+    // confere acesso, custo e protege peça aprovada/publicada).
+    'campanha_mudanca_planejar', 'campanha_mudanca_confirmar', 'campanha_mudanca_desfazer', 'campanha_versao_voltar',
+    'campanha_reorganizar', 'campanha_mercado', 'campanha_roteiro_video', 'campanha_trilha',
+  ],
+  'mesa-ads': ['briefing_salvar', 'oferta_salvar', 'oferta_do_contexto', 'plano_gerar', 'criativos_produzir', 'pacote_enviar', 'criativos_da_campanha_mesa'],
   'estudio-arte': ['entregar', 'enfileirar'],
 } as const;
 
@@ -49,6 +55,12 @@ export const ACOES_LONGAS_DA_PONTE: ReadonlySet<string> = new Set([
   'estudio-arte:entregar',
   'mesa-ads:plano_gerar',
   'mesa-ads:criativos_produzir',
+  'agente-calendario:campanha_mudanca_planejar',
+  'agente-calendario:campanha_mudanca_confirmar',
+  'agente-calendario:campanha_reorganizar',
+  'agente-calendario:campanha_mercado',
+  'agente-calendario:campanha_roteiro_video',
+  'agente-calendario:campanha_trilha',
 ]);
 
 /** RPCs do banco que a ponte pode chamar como a pessoa. */

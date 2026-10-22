@@ -49,7 +49,9 @@ describe("a lista velha do cliente fica detectavel", () => {
   it("nao promete o aviso de mudanca que nao temos como enviar", () => {
     // GET responde 405 (sem stream). `listChanged: true` seria o cliente
     // esperando para sempre por uma notificacao que nunca sai.
-    expect(servidor).toContain("capabilities: { tools: { listChanged: false } }");
+    // 2.17: recursos e prompts entram, e também sem prometer aviso de mudança.
+    expect(servidor).toContain("capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } }");
+    expect(servidor).not.toMatch(/listChanged: true/);
     expect(servidor).toContain('Allow: "POST, OPTIONS"');
   });
 

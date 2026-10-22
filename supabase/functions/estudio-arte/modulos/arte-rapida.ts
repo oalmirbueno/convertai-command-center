@@ -73,6 +73,7 @@ import {
   pedeVitrinePelaRegra,
 } from "./vitrine-de-logos.ts";
 import { type LeituraDosCards, leituraGravada, leituraParaODiretor, MAX_CARDS_LIDOS } from "./leitura-dos-cards.ts";
+import { type InventarioDaReferencia, inventarioGravado, inventarioParaODiretor } from "./inventario-da-referencia.ts";
 import { type Fidelidade, fidelidadeValida, ROTULO_DA_FIDELIDADE } from "./fidelidade-do-conteudo.ts";
 import { mundoRealPelaRegra, perguntaDoMundoReal } from "./mundo-real.ts";
 
@@ -218,6 +219,8 @@ export interface ArteRapida {
   fidelidade?: Fidelidade | null;
   fidelidade_por?: QuemDecidiu | null;
   leitura_dos_cards?: LeituraDosCards | null;
+  /** 22/10/2026: os elementos com texto das imagens de referência (balões, caixas, selos, listas), lidos uma vez por visão. */
+  inventario_da_referencia?: InventarioDaReferencia | null;
   /** 02/10: o pedido fala de produto, app, marca ou tela real (pesquisa ligada e logos reais). */
   mundo_real?: { por: QuemDecidiu; marcas: string[]; tutorial: boolean } | null;
   /** 21/10/2026: a peça de uma série de campanha (Campanhas › Gerar campanha completa): o conteúdo de origem. */
@@ -323,6 +326,8 @@ export function arteRapidaDa(direcao: unknown): ArteRapida | null {
     mundo_real: mundoRealGravado(o.mundo_real),
     // Só quando há (o objeto antigo segue igual, byte a byte).
     ...(pecaDaCampanhaValida(o.peca_da_campanha) ? { peca_da_campanha: pecaDaCampanhaValida(o.peca_da_campanha) } : {}),
+    // 22/10/2026: o inventário dos elementos da referência, só quando há.
+    ...(inventarioGravado(o.inventario_da_referencia) ? { inventario_da_referencia: inventarioGravado(o.inventario_da_referencia) } : {}),
   };
 }
 
@@ -791,7 +796,7 @@ O PEDIDO DA EQUIPE É A FONTE DA VERDADE (frente AG, 28/09: a arte do mouse pedi
 
 /** Contexto do pedido para o diretor (vai em item.pedido_avulso). */
 export function pedidoParaODiretor(
-  arte: Pick<ArteRapida, "pedido" | "peca" | "arquivos"> & Partial<Pick<ArteRapida, "post" | "vitrine" | "fidelidade" | "leitura_dos_cards">>,
+  arte: Pick<ArteRapida, "pedido" | "peca" | "arquivos"> & Partial<Pick<ArteRapida, "post" | "vitrine" | "fidelidade" | "leitura_dos_cards" | "inventario_da_referencia">>,
   documentos: DocumentoDaArteRapida[],
   laminas?: number | null,
 ) {
@@ -803,6 +808,8 @@ export function pedidoParaODiretor(
   };
   // 02/10: o texto dos cards da referência e a fidelidade (Idêntico, Próximo ou Criativo).
   if (arte.leitura_dos_cards) saida.conteudo_dos_cards = leituraParaODiretor(arte.leitura_dos_cards);
+  // 22/10/2026: os balões, caixas e listas da referência, para a cena prever cada um (o texto deles vem na geração).
+  if (arte.inventario_da_referencia && arte.inventario_da_referencia.elementos.length) saida.elementos_da_referencia = inventarioParaODiretor(arte.inventario_da_referencia);
   if (arte.fidelidade) saida.fidelidade = ROTULO_DA_FIDELIDADE[arte.fidelidade];
   const post = arte.post;
   if (post) {
