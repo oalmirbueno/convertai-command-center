@@ -1,4 +1,6 @@
 import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
+// 22/10: projeto ativo do cliente quando a proposta não tem projeto (o "Criar e gravar" falhava com project_id vazio).
+import { projetoAtivoDoCliente } from "./modulos/projeto-ativo.ts";
 import { conferirDatasDoPeriodo, ErroDoPeriodoDoPedido, janelaDoPedidoComLimite } from "./modulos/periodo-do-pedido.ts";
 import { concluirPeriodoSemItens } from "./modulos/pedido-vazio-do-periodo.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
@@ -2712,7 +2714,13 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   }
   // Sem projeto na tela nem na proposta: o projeto da marca escolhida (Acerbi ou CME), quando o cliente tem marca.
   const marcaDoGravar = corpo.project_id == null && p.project_id == null ? await marcaDaChamada(servico, p.client_id, corpo, null) : null;
-  const projectId = String(corpo.project_id ?? p.project_id ?? marcaDoGravar?.project_id ?? "");
+  // 22/10: sem projeto na tela, na proposta nem na marca (cliente de uma marca só), o "Criar e gravar" caía em
+  // "project_id precisa ser um UUID". Agora vale o projeto ativo mais recente do cliente, como na Mesa Ads.
+  let projectId = String(corpo.project_id ?? p.project_id ?? marcaDoGravar?.project_id ?? "");
+  if (!projectId) {
+    projectId = (await projetoAtivoDoCliente(servico, p.client_id)) ?? "";
+    if (!projectId) throw new ErroHttp(409, "cliente_sem_projeto", "Este cliente não tem projeto ativo. Crie um projeto no cadastro do cliente para gravar na agenda.");
+  }
   await exigirProjetoDoCliente(servico, projectId, p.client_id);
   if (p.itens.length === 0) throw new ErroHttp(409, "proposta_sem_itens", "A proposta não tem itens para gravar.");
   const temaIds = Array.isArray(corpo.tema_ids) ? corpo.tema_ids.map((x) => String(x ?? "")).filter(Boolean) : null;
