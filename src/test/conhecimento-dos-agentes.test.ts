@@ -195,8 +195,10 @@ describe("Calendário e campanhas: marketing por momento e cérebro", () => {
     expect(calendario).toContain('sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}');
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "temas"\)/g)?.length).toBe(1);
     expect(calendario.match(/sistema: sistemaDoCalendario\(e\.ctx, "diagnostico"\)/g)?.length).toBe(1);
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(2);
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha", "conversa"\)/g)?.length).toBe(1);
+    // 22/10: + reorganizar a campanha (introdução e encerramento) e o roteiro de vídeo da campanha.
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(4);
+    // 22/10: + a mudança planejada da campanha (o agente editor) também conversa com o mapa do painel.
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha", "conversa"\)/g)?.length).toBe(2);
     for (const r of ["carrossel, post estático, foto e vídeo rápido", "Respeite o formato pedido", "segunda a sexta", "sem travessões", "tipo_editorial e framework"]) expect(REGRAS_DE_SAIDA).toContain(r);
     expect(calendario).toContain("${BASE_DO_ESTRATEGISTA}");
   });
