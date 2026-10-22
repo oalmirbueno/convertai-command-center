@@ -151,7 +151,8 @@ beforeEach(() => {
   mock.tabelas = {};
   mock.upload.mockResolvedValue({ data: {}, error: null });
   mock.invoke.mockImplementation(async (_funcao: string, { body }: any) => {
-    if (body.acao === "campanha_conversar") {
+    // 22/10/2026: o compositor do agente pede a mudança planejada (campanha_mudanca_planejar); sem ação a confirmar, o servidor responde como a conversa.
+    if (body.acao === "campanha_conversar" || body.acao === "campanha_mudanca_planejar") {
       // O servidor grava: as releituras seguintes já trazem a campanha nova.
       mock.tabelas.mesa_campanhas = [campanhaAjustada];
       mock.tabelas.calendario_propostas = [propostaAjustada];
@@ -173,15 +174,15 @@ afterEach(() => {
 });
 
 describe("agente da campanha", () => {
-  it("Enviar chama campanha_conversar com o id da campanha e a mensagem", async () => {
+  it("Enviar chama campanha_mudanca_planejar com o id da campanha e a mensagem", async () => {
     montar(h(CampanhaAgente, { campanha }));
     fireEvent.change(screen.getByLabelText("Pedido ao agente da campanha"), { target: { value: "Mude o tom para mais divertido" } });
     const enviar = screen.getByRole("button", { name: /Enviar/ });
     await waitFor(() => expect(enviar).not.toBeDisabled());
     fireEvent.click(enviar);
-    await waitFor(() => expect(chamadasDe("campanha_conversar").length).toBe(1));
-    expect(chamadasDe("campanha_conversar")[0]).toEqual({
-      acao: "campanha_conversar",
+    await waitFor(() => expect(chamadasDe("campanha_mudanca_planejar").length).toBe(1));
+    expect(chamadasDe("campanha_mudanca_planejar")[0]).toEqual({
+      acao: "campanha_mudanca_planejar",
       campanha_id: campanha.id,
       mensagem: "Mude o tom para mais divertido",
     });
@@ -248,8 +249,8 @@ describe("aba Campanhas, mesa de trabalho", () => {
     await waitFor(() => expect(enviar).not.toBeDisabled());
     fireEvent.click(enviar);
 
-    await waitFor(() => expect(chamadasDe("campanha_conversar").length).toBe(1));
-    expect(chamadasDe("campanha_conversar")[0]).toEqual({ acao: "campanha_conversar", campanha_id: campanha.id, mensagem: "Mude o nome e acrescente um depoimento" });
+    await waitFor(() => expect(chamadasDe("campanha_mudanca_planejar").length).toBe(1));
+    expect(chamadasDe("campanha_mudanca_planejar")[0]).toEqual({ acao: "campanha_mudanca_planejar", campanha_id: campanha.id, mensagem: "Mude o nome e acrescente um depoimento" });
     expect(await screen.findByRole("heading", { name: "Amor em dobro" })).toBeTruthy();
     expect(await screen.findByText("Depoimento de casal")).toBeTruthy();
     // O tom mora na etapa Identidade.

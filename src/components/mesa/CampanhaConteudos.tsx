@@ -74,10 +74,12 @@ function EditorDoConteudo({
   const [cta, setCta] = useState(item.cta || "");
   const [copy, setCopy] = useState(item.copy || "");
   const [instrucao, setInstrucao] = useState(item.instrucao_arte || "");
+  // 22/10/2026: a fase da peça também se edita à mão (aquecimento, lançamento, urgência, encerramento).
+  const [etapa, setEtapa] = useState(item.etapa || "");
   const [cards, setCards] = useState(cardsIniciais.map((c) => ({ ordem: c.ordem, texto: c.texto || "" })));
 
   const salvar = () => {
-    const campos: CamposDoItem = { tema, gancho, cta, copy, instrucao_arte: instrucao };
+    const campos: CamposDoItem = { tema, gancho, cta, copy, instrucao_arte: instrucao, ...(etapa && etapa !== (item.etapa || "") ? { etapa } : {}) };
     const mudados = cards.filter((c) => {
       const antes = cardsIniciais.filter((x) => x.ordem === c.ordem)[0];
       return antes && (antes.texto || "") !== c.texto && c.texto.trim();
@@ -91,6 +93,13 @@ function EditorDoConteudo({
       <label className="block text-[11px] font-medium text-muted-foreground">
         Título
         <Input value={tema} onChange={(e) => setTema(e.target.value)} className="mt-1 h-8 text-[13px]" />
+      </label>
+      <label className="block text-[11px] font-medium text-muted-foreground">
+        Fase
+        <select value={etapa} onChange={(e) => setEtapa(e.target.value)} className="mt-1 block h-8 w-full rounded-md border border-border bg-background px-2 text-[13px] text-foreground">
+          <option value="">{item.etapa || "Sem fase"}</option>
+          {["aquecimento", "lançamento", "urgência", "encerramento"].filter((f) => f !== item.etapa).map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
       </label>
       <label className="block text-[11px] font-medium text-muted-foreground">
         Gancho

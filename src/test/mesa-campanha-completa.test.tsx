@@ -307,7 +307,8 @@ describe("conferência da série pelo Jev (servidor, puro)", () => {
         { tema_id: "c2", gancho: "30% hoje" },
       ],
     );
-    expect(Object.keys(p.questions)).toEqual(["peca_0", "peca_1", "melhor_gancho"]);
+    // 22/10/2026: mais um Score por peça para o tom comercial (CTA de ação e oferta).
+    expect(Object.keys(p.questions)).toEqual(["peca_0", "peca_1", "comercial_0", "comercial_1", "melhor_gancho"]);
     expect((p.questions.peca_0 as { type: string; criteria: string[] }).criteria.length).toBe(4);
     expect(Object.keys((p.questions.melhor_gancho as { criteria: Record<string, string> }).criteria)).toEqual(["p0", "p1", "nenhum"]);
     const lida = lerConferencia({ peca_0: { score: 3, confidence: 0.9 }, peca_1: { score: 1 }, melhor_gancho: { choice: "p1", confidence: 0.7 } }, p.pecas);

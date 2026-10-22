@@ -13,6 +13,8 @@ import { tituloDaSemente, type SementeDaCampanha } from "./sementeDaCampanha";
 import { normalizarBriefing, normalizarImagensDaCampanha, normalizarPlanoDeImagens } from "./campanhasApi";
 import { avisoDoDia, dataBr, proximoEspaco, type Ocupacao, type RegraDoDia } from "../../../supabase/functions/_shared/agenda-inteligente";
 import { arteRapidaDa, type ArquivoPedido, type PapelDoArquivo } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
+import { linhaDoTomParaAPeca, OFERTA_A_DEFINIR, ofertaInformada, tomDaCampanha } from "../../../supabase/functions/agente-calendario/modulos/tom-da-campanha";
+import type { ProdutoDaCampanha } from "./mesaV4Api";
 
 /**
  * Campanha completa (21/10/2026, pedido do dono: "com base no hype e trending eu conseguir juntar e criar
@@ -349,7 +351,26 @@ export const laminasDaPeca = (item: Pick<ItemProposto, "formato" | "cards">) => 
 };
 
 /** Fotos da campanha para a peça: as do plano para este conteúdo; sem plano, a do produto herói. Sempre como referência inteira. */
-export function arquivosDaPeca(campanha: Pick<Campanha, "imagens" | "plano_imagens">, item: Pick<ItemProposto, "tema_id">): ArquivoPedido[] {
+/**
+ * 22/10/2026: o produto da campanha que a peça vende: o citado na peça (campo produto, tema, gancho ou lâminas);
+ * sem citação, o produto em destaque. Null sem produto com foto ou nome.
+ */
+export function produtoDaPeca(briefing: unknown, item: Pick<ItemProposto, "tema" | "gancho" | "cards"> & { produto?: string }): ProdutoDaCampanha | null {
+  const produtos = normalizarBriefing(briefing).produtos;
+  if (!produtos.length) return null;
+  const texto = [item.produto, item.tema, item.gancho].concat((item.cards || []).map((c) => c.texto || "")).join(" ").toLowerCase();
+  const citado = produtos.filter((p) => p.nome && texto.indexOf(p.nome.toLowerCase()) >= 0)[0];
+  return citado || produtos.filter((p) => p.destaque)[0] || null;
+}
+
+export function arquivosDaPeca(campanha: Pick<Campanha, "imagens" | "plano_imagens"> & { briefing?: unknown }, item: Pick<ItemProposto, "tema_id"> & Partial<Pick<ItemProposto, "tema" | "gancho" | "cards">> & { produto?: string }): ArquivoPedido[] {
+  // A foto real do produto vai primeiro, inteira, como referência ao gerador (fiel, nunca colada).
+  const produto = produtoDaPeca(campanha.briefing, { tema: item.tema, gancho: item.gancho, cards: item.cards, produto: item.produto });
+  const doProduto: ArquivoPedido[] = produto && produto.imagem_id
+    ? [{ imagem_id: produto.imagem_id, nome: `Produto ${produto.nome}`, papel: "referencia" }]
+    : produto && produto.caminho
+      ? [{ caminho: produto.caminho, nome: `Produto ${produto.nome}`, papel: "referencia" }]
+      : [];
   const plano = normalizarPlanoDeImagens(campanha.plano_imagens);
   const imagens = normalizarImagensDaCampanha(campanha.imagens);
   const ids: string[] = [];
@@ -363,7 +384,8 @@ export function arquivosDaPeca(campanha: Pick<Campanha, "imagens" | "plano_image
     const heroi = imagens.filter((i) => i.papel === "heroi")[0];
     if (heroi) ids.push(heroi.imagem_id);
   }
-  return ids.slice(0, 4).map((id, i) => ({ imagem_id: id, nome: `Foto da campanha ${i + 1}`, papel: "referencia" as const }));
+  const daCampanha = ids.filter((id) => !doProduto.some((a) => a.imagem_id === id)).map((id, i) => ({ imagem_id: id, nome: `Foto da campanha ${i + 1}`, papel: "referencia" as const }));
+  return doProduto.concat(daCampanha).slice(0, 4);
 }
 
 /** Nenhum arquivo cola imagem na arte. */
@@ -400,6 +422,14 @@ export function pedidoDaPeca(campanha: Campanha, item: ItemProposto, posicao: { 
     b.tom ? `tom: ${b.tom}` : "",
   ].filter(Boolean);
   if (brief.length) linhas.push(`Briefing: ${brief.join("; ")}.`);
+  // 22/10/2026: o produto da peça (foto real anexada como referência) e o tom comercial da campanha.
+  const produto = produtoDaPeca(campanha.briefing, item as ItemProposto & { produto?: string });
+  if (produto) {
+    const preco = [produto.preco ? `de ${produto.preco}` : "", produto.preco_promocional ? `por ${produto.preco_promocional}` : ""].filter(Boolean).join(" ");
+    linhas.push(`Produto: ${produto.nome}${preco ? ` (${preco})` : ""}${produto.link ? `, link ${produto.link}` : ""}.${produto.imagem_id || produto.caminho ? " A foto anexada é o produto real: desenhe-o fiel (forma, cor, rótulo), sem colar a foto." : ""}`);
+  }
+  linhas.push(linhaDoTomParaAPeca(tomDaCampanha(b.tom_da_campanha)));
+  if (!ofertaInformada(b) && tomDaCampanha(b.tom_da_campanha) !== "institucional") linhas.push(`Oferta ainda não informada: onde a oferta entraria, escreva ${OFERTA_A_DEFINIR} (nunca invente preço, desconto ou prazo).`);
   const paleta = (id.paleta_apoio || []).map((c) => c.hex).filter(Boolean).join(", ");
   const ident = [id.tema_visual ? `tema visual: ${id.tema_visual}` : "", paleta ? `cores de apoio: ${paleta}` : "", id.selo && id.selo.texto ? `selo "${id.selo.texto}"` : ""].filter(Boolean);
   if (ident.length) linhas.push(`Identidade da campanha: ${ident.join("; ")}.`);
@@ -428,7 +458,7 @@ export function corpoDaPeca(c: CorpoDaPeca): Record<string, unknown> {
     pedido: pedidoDaPeca(c.campanha, c.item, c.posicao),
     peca: carrossel ? "carrossel" : "unica",
     campanha_id: c.campanha.id,
-    arquivos: arquivos.map((a) => ({ imagem_id: a.imagem_id, nome: a.nome, papel: a.papel })),
+    arquivos: arquivos.map((a) => (a.imagem_id ? { imagem_id: a.imagem_id, nome: a.nome, papel: a.papel } : { caminho: a.caminho, nome: a.nome, papel: a.papel })),
     qualidade: "media",
     fidelidade: "criativo",
     peca_da_campanha: { campanha_id: c.campanha.id, tema_id: c.item.tema_id || "" },
@@ -514,6 +544,8 @@ export interface SituacaoDaPeca {
   faltam: number[];
   capa: string | null;
   colagem: boolean;
+  /** 22/10/2026: a peça mudou pelo agente e a arte antiga foi arquivada: "a refazer". */
+  refazer?: boolean;
 }
 
 /** Onde cada peça está, pelo que está salvo (trabalho e fila do servidor). */
@@ -522,9 +554,10 @@ export function situacaoDaPeca(
   item: ItemProposto,
   trabalho: TrabalhoDaPeca | null,
   fila: { trabalho_id: string; status: string; ordem: number }[] = [],
+  refazer: string[] = [],
 ): SituacaoDaPeca {
   const fase = faseDaPeca(item, campanha.periodo_inicio, campanha.periodo_fim);
-  const base = { item, fase, trabalho, laminas: laminasDaPeca(item), feitas: 0, faltam: [] as number[], capa: null as string | null, colagem: false };
+  const base = { item, fase, trabalho, laminas: laminasDaPeca(item), feitas: 0, faltam: [] as number[], capa: null as string | null, colagem: false, refazer: !trabalho && !!item.tema_id && refazer.indexOf(item.tema_id) >= 0 };
   // Vídeo/Reels: o roteiro e a direção vêm prontos na série; o vídeo nasce no Estúdio depois da agenda.
   if (item.formato === "video") return { ...base, laminas: 0, estado: item.task_id ? "no_roteiro" : "roteiro_pronto" };
   // Stories: a sequência é feita pela aba Stories (contrato gerarStoriesDaCampanha); feita quando há sequencia_id.
@@ -821,4 +854,92 @@ export function moldeDaCampanha(c: Campanha): MoldeDaCampanha {
   if (b.canais && b.canais.length) briefing.canais = b.canais.slice();
   const tipo = c.identidade && c.identidade.tipo ? String(c.identidade.tipo) : null;
   return { origemId: c.id, origemNome: c.nome, formatos: normalizarFormatos(b.formatos), dias, tipo, briefing };
+}
+
+// ------------------------------------------------------------------ sugestões proativas (22/10/2026)
+
+export type FonteDaSugestao = "fase" | "fim" | "agenda" | "ads" | "hype";
+
+export interface SugestaoProativa {
+  id: string;
+  texto: string;
+  /** O pedido pronto ao agente da campanha (um clique). */
+  pedido: string;
+  fonte: FonteDaSugestao;
+  /** Ordem pela regra (a tela pode reordenar pelo Jev). */
+  peso: number;
+}
+
+export const ROTULO_DA_FONTE: Record<FonteDaSugestao, string> = { fase: "Fase", fim: "Prazo", agenda: "Agenda", ads: "Anúncio", hype: "Data" };
+
+/**
+ * Sugestões a partir do que existe: a fase atual contra as peças prontas, o fim chegando, dias sem peça, o
+ * anúncio vinculado sem lead (gasto e leads por dia) e as datas do calendário que caem na janela. Cada uma vira
+ * um pedido pronto ao agente. Função pura.
+ */
+export function sugestoesProativas(e: {
+  campanha: Pick<Campanha, "periodo_inicio" | "periodo_fim">;
+  pecas: SituacaoDaPeca[];
+  hoje: string;
+  adsPorDia?: { day: string; spend: number; leads: number }[] | null;
+  datas?: { titulo: string; pico: string }[];
+}): SugestaoProativa[] {
+  const saida: SugestaoProativa[] = [];
+  const ini = e.campanha.periodo_inicio;
+  const fim = e.campanha.periodo_fim;
+  if (!ini || !fim) return saida;
+  const deArte = e.pecas.filter((p) => p.estado !== "outra_mesa");
+  const resta = diasEntreIso(e.hoje, fim);
+  const emAndamento = diasEntreIso(ini, e.hoje) >= 0 && resta >= 0;
+  if (emAndamento && resta <= 3) {
+    saida.push({ id: "fim", fonte: "fim", peso: 90, texto: `Faltam ${resta} ${resta === 1 ? "dia" : "dias"} para o fim: entre com urgência.`, pedido: "Deixe a reta final mais urgente: prazo e escassez nas peças que faltam e uma última chamada no último dia." });
+  }
+  if (emAndamento) {
+    const faseAgora = faseDaPeca({ etapa: "", data: e.hoje }, ini, fim);
+    const daFase = deArte.filter((p) => p.fase === faseAgora);
+    const naoProntas = daFase.filter((p) => ["pronta", "na_agenda", "no_roteiro", "roteiro_pronto"].indexOf(p.estado) < 0);
+    if (naoProntas.length) {
+      saida.push({ id: "fase", fonte: "fase", peso: 80, texto: `A fase de ${rotuloDaFase(faseAgora).toLowerCase()} já começou e ${naoProntas.length} ${naoProntas.length === 1 ? "peça dela não está pronta" : "peças dela não estão prontas"}.`, pedido: `Adiante as peças da fase de ${rotuloDaFase(faseAgora).toLowerCase()} que não estão prontas e ajuste as datas para os próximos dias úteis.` });
+    }
+  }
+  // Dias úteis sem peça, de hoje (ou do início) ao fim: o maior buraco de 3 ou mais.
+  const desde = diasEntreIso(e.hoje, ini) > 0 ? ini : e.hoje;
+  if (diasEntreIso(desde, fim) >= 0) {
+    const ocupados: Record<string, true> = {};
+    deArte.forEach((p) => { if (p.item.data) ocupados[String(p.item.data)] = true; });
+    let maior = { de: "", ate: "", dias: 0 };
+    let atual = { de: "", ate: "", dias: 0 };
+    for (let d = desde; diasEntreIso(d, fim) >= 0; d = somarDiasIso(d, 1)) {
+      const sem = new Date(`${d}T12:00:00`).getDay();
+      if (sem === 0 || sem === 6) continue;
+      if (ocupados[d]) {
+        atual = { de: "", ate: "", dias: 0 };
+        continue;
+      }
+      atual = { de: atual.de || d, ate: d, dias: atual.dias + 1 };
+      if (atual.dias > maior.dias) maior = { ...atual };
+    }
+    if (maior.dias >= 3) {
+      saida.push({ id: "agenda", fonte: "agenda", peso: 60, texto: `De ${maior.de.slice(8, 10)}/${maior.de.slice(5, 7)} a ${maior.ate.slice(8, 10)}/${maior.ate.slice(5, 7)} não há peça (${maior.dias} dias úteis).`, pedido: `Acrescente peças entre ${maior.de} e ${maior.ate}: um post com a oferta e um story de lembrete.` });
+    }
+  }
+  // Anúncio vinculado: gasto sem lead nos últimos dias.
+  const dias = (e.adsPorDia || []).slice().sort((a, b) => b.day.localeCompare(a.day));
+  if (dias.length) {
+    let semLead = 0;
+    for (const d of dias) {
+      if (d.leads > 0) break;
+      if (d.spend > 0) semLead++;
+    }
+    if (semLead >= 3) {
+      saida.push({ id: "ads", fonte: "ads", peso: 85, texto: `O anúncio não gera lead há ${semLead} dias: troque o criativo.`, pedido: "Proponha 2 peças novas para o anúncio (gancho mais direto e a oferta na frente), para trocar o criativo que parou de gerar lead." });
+    }
+  }
+  // Datas do calendário que caem na janela (ainda por vir).
+  (e.datas || []).forEach((dt) => {
+    if (diasEntreIso(ini, dt.pico) >= 0 && diasEntreIso(dt.pico, fim) >= 0 && diasEntreIso(e.hoje, dt.pico) >= 0) {
+      saida.push({ id: `hype-${dt.pico}`, fonte: "hype", peso: 50, texto: `${dt.titulo} cai no meio da campanha (${dt.pico.slice(8, 10)}/${dt.pico.slice(5, 7)}).`, pedido: `Use ${dt.titulo} (${dt.pico}) como gancho: uma peça de oferta na data e um story de contagem regressiva.` });
+    }
+  });
+  return saida.sort((a, b) => b.peso - a.peso).slice(0, 5);
 }

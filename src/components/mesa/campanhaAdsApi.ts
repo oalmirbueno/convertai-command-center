@@ -74,6 +74,11 @@ function leadsDoDia(actions: unknown): number {
   return 0;
 }
 
+/** Gasto e leads de cada dia (para a sugestão "o anúncio não gera lead há X dias"). */
+export function diasComLeads(dias: DiaDoAds[]): { day: string; spend: number; leads: number }[] {
+  return dias.map((d) => ({ day: d.day, spend: Number(d.spend) || 0, leads: leadsDoDia(d.actions) }));
+}
+
 /** Gasto e leads somados, quantos dias e o frescor (a leitura mais recente). Função pura. */
 export function numerosDoAds(dias: DiaDoAds[]): NumerosDoAds {
   let gasto = 0;

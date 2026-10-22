@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, CalendarCheck2, Copy, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Stamp, X } from "lucide-react";
+import { BookmarkPlus, CalendarCheck2, Copy, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Music, Stamp, X } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
@@ -25,6 +25,9 @@ import CampanhaPecas from "./CampanhaPecas";
 import CampanhaRevisao from "./CampanhaRevisao";
 import CampanhaVisao from "./CampanhaVisao";
 import CampanhaReferenciaPadrao from "./CampanhaReferenciaPadrao";
+import CampanhaSugestoes from "./CampanhaSugestoes";
+import CampanhaProdutos from "./CampanhaProdutos";
+import { EditorDaIdeia, HistoricoDaCampanha, MercadoDaCampanha, ReescreverComercial } from "./CampanhaEditor";
 import {
   MAX_IMAGENS_CAMPANHA,
   normalizarBriefing,
@@ -38,6 +41,8 @@ import { ImagensDaCampanhaSalvas } from "./CampanhaImagens";
 import CampanhaPlanoDeImagens from "./CampanhaPlanoDeImagens";
 import CampanhaNasMesas from "./CampanhaNasMesas";
 import CampanhaSelo from "./CampanhaSelo";
+import CampanhaTrilha from "./CampanhaTrilha";
+import { trilhaSugeridaDaCampanha } from "./trilhaDaCampanhaApi";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
 /**
@@ -60,10 +65,10 @@ export function SeloDoEstado({ estado }: { estado: string }) {
 
 // ------------------------------------------------------------------ seções
 
-type IdDaSecao = "visao" | "ideia" | "briefing" | "identidade" | "serie" | "pecas" | "revisao";
+type IdDaSecao = "visao" | "ideia" | "briefing" | "identidade" | "serie" | "pecas" | "trilha" | "revisao";
 
 /** O caminho da campanha, na ordem: a campanha pronta e as seis etapas. Um ícone por etapa. */
-const ORDEM_DAS_SECOES: IdDaSecao[] = ["visao", "ideia", "briefing", "identidade", "serie", "pecas", "revisao"];
+const ORDEM_DAS_SECOES: IdDaSecao[] = ["visao", "ideia", "briefing", "identidade", "serie", "pecas", "trilha", "revisao"];
 
 export const NOMES_DAS_SECOES: Record<IdDaSecao, string> = {
   visao: "Campanha",
@@ -72,6 +77,7 @@ export const NOMES_DAS_SECOES: Record<IdDaSecao, string> = {
   identidade: "Identidade",
   serie: "Série de conteúdos",
   pecas: "Peças",
+  trilha: "Trilha e efeitos",
   revisao: "Revisão e agenda",
 };
 
@@ -82,6 +88,7 @@ const ICONES_DAS_SECOES: Record<IdDaSecao, ReactNode> = {
   identidade: <Stamp className="h-4 w-4" />,
   serie: <LayoutList className="h-4 w-4" />,
   pecas: <Images className="h-4 w-4" />,
+  trilha: <Music className="h-4 w-4" />,
   revisao: <CalendarCheck2 className="h-4 w-4" />,
 };
 
@@ -252,6 +259,7 @@ export default function CampanhaDetalhe({
     identidade: campanha.selo_path ? "com selo" : "sem selo ainda",
     serie: conteudosResumo,
     pecas: deArte.length ? `${prontas} de ${deArte.length} prontas` : "",
+    trilha: trilhaSugeridaDaCampanha(campanha.briefing)?.titulo || "",
     revisao: deArte.length ? `${naAgendaPecas} de ${deArte.length} na agenda` : "",
   };
   const feitas: Record<IdDaSecao, boolean> = {
@@ -261,6 +269,7 @@ export default function CampanhaDetalhe({
     identidade: !!campanha.selo_path,
     serie: itens.length > 0,
     pecas: deArte.length > 0 && prontas === deArte.length,
+    trilha: !!trilhaSugeridaDaCampanha(campanha.briefing),
     revisao: deArte.length > 0 && naAgendaPecas === deArte.length,
   };
   const abas = ORDEM_DAS_SECOES.map((s) => ({
@@ -341,6 +350,9 @@ export default function CampanhaDetalhe({
       {/* 21/10/2026: o que falta da campanha completa (selo e peças), com o custo total antes e o andamento. */}
       <GerarCampanhaCompleta campanha={campanha} pecas={pecas} carregando={lendoPecas || (!!campanha.proposta_id && proposta.isLoading)} />
 
+      {/* 22/10/2026: sugestões a partir do que existe (fase, fim, dias sem peça, anúncio, datas); um clique vira pedido ao agente. */}
+      {onPedirAoAgente && <CampanhaSugestoes campanha={campanha} onPedir={(t) => pedir(t)} />}
+
       {/* 16/10/2026 (dono: "tem muito texto" e "seções empilhadas viram abas em ícone no topo"):
           as oito seções viraram abas em ícone; a aberta mostra o nome e o resumo curto vai no title. */}
       <Etapas soIcone rotulo="Partes da campanha" itens={abas} valor={aba} onEscolher={(v) => escolher(v as IdDaSecao)} className="-mx-1 border-b border-border pb-1" />
@@ -351,6 +363,11 @@ export default function CampanhaDetalhe({
         {/* 1. Ideia: o pedido, o objetivo, o conceito e as sugestões pela janela e pela série. */}
         {aba === "ideia" && (
           <>
+            {/* 22/10/2026: editar à mão e reescrever no tom comercial, sem começar outra campanha. */}
+            <div className="flex min-w-0 items-center justify-end">
+              <ReescreverComercial campanha={campanha} pecas={pecas.length} onAbrirAgente={onAbrirAgente} />
+              <EditorDaIdeia campanha={campanha} />
+            </div>
             <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
               <Linha rotulo="Nome">{campanha.nome}</Linha>
               <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
@@ -374,12 +391,15 @@ export default function CampanhaDetalhe({
               <FormatosDaCampanhaAberta campanha={campanha} atual={contarFormatos(pecas)} />
             </Parte>
             {sugestoes.length > 0 && (
-              <Parte titulo="Sugestões">
-                <ul className="list-disc space-y-1 pl-4 text-[13px]" aria-label="Sugestões da campanha">
+              <Parte titulo="Situação">
+                <ul className="list-disc space-y-1 pl-4 text-[13px]" aria-label="Situação da campanha">
                   {sugestoes.map((t) => <li key={t}>{t}</li>)}
                 </ul>
               </Parte>
             )}
+            <Parte titulo="Histórico de versões">
+              <HistoricoDaCampanha campanha={campanha} />
+            </Parte>
           </>
         )}
 
@@ -387,6 +407,12 @@ export default function CampanhaDetalhe({
         {aba === "briefing" && (
           <>
             <CampanhaBriefing campanha={campanha} onPedirAoAgente={onPedirAoAgente ? pedir : undefined} />
+            <Parte titulo="Produtos">
+              <CampanhaProdutos campanha={campanha} />
+            </Parte>
+            <Parte titulo="O que o mercado está fazendo">
+              <MercadoDaCampanha campanha={campanha} />
+            </Parte>
             <Parte titulo={`Imagens da campanha · ${imagensDaCampanha.length} de ${MAX_IMAGENS_CAMPANHA}`}>
               {salvandoImagens > 0 && <Loader2 className="mb-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando as imagens" />}
               <ImagensDaCampanhaSalvas campanha={campanha} onSalvando={setSalvandoImagens} />
@@ -480,6 +506,9 @@ export default function CampanhaDetalhe({
 
         {/* 5. Peças: cada conteúdo gerado pelo Estúdio, com a identidade da campanha. */}
         {aba === "pecas" && <CampanhaPecas campanha={campanha} pecas={pecas} carregando={lendoPecas} onAbrirArteRapida={onAbrirArteRapida} onAbrirStories={onAbrirStories} />}
+
+        {/* 22/10/2026: trilha sem voz e efeitos do tema (ElevenLabs), escolhida vai para o briefing e Arquivos. */}
+        {aba === "trilha" && <CampanhaTrilha campanha={campanha} />}
 
         {/* 6. Revisão e agenda: Jev, conflitos com a agenda, aprovar e levar pelo fluxo de sempre. */}
         {aba === "revisao" && <CampanhaRevisao campanha={campanha} proposta={proposta.data || null} pecas={pecas} onAbrirArteRapida={onAbrirArteRapida} />}

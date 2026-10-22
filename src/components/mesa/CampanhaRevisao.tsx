@@ -165,6 +165,7 @@ export default function CampanhaRevisao({
                     <span className="mr-2">{rotuloDaFase(p.fase)}</span>
                     <span className="mr-2 font-medium">{ROTULO_DO_ESTADO_DA_PECA[p.estado]}</span>
                     {nota && nota.nivel && <span className={juntar("mr-2 font-medium", COR_DO_NIVEL[nota.nivel])}>{ROTULO_DO_NIVEL[nota.nivel]}</span>}
+                    {nota && nota.aviso_comercial && <span className="mr-2 font-medium text-warning" title={nota.aviso_comercial} data-aviso-comercial="">sem CTA ou oferta</span>}
                   </p>
                   {c && (
                     <p className="mt-0.5 flex min-w-0 flex-wrap items-center text-[11px] text-warning">

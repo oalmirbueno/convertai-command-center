@@ -12,7 +12,8 @@ import { Cronometro } from "./Cronometro";
 import type { Campanha, MensagemDoAgente } from "./mesaV4Api";
 import {
   aplicarRespostaDaCampanha,
-  campanhaConversar,
+  AGENTE_DA_MUDANCA,
+  planejarMudanca,
   chavesDaCampanha,
   lerConversaDaCampanha,
   marcarPedidoDaCampanha,
@@ -26,6 +27,8 @@ import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import AprendizadoNaConversa from "@/components/agentes/AprendizadoNaConversa";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { usd } from "@/lib/mesa/api";
+import CampanhaMudanca from "./CampanhaMudanca";
+import CampanhaSugestoes from "./CampanhaSugestoes";
 
 /**
  * Agente da campanha (pedido do dono em 23/09, noite): a conversa com o
@@ -43,6 +46,12 @@ export interface RascunhoParaOAgente {
 }
 
 const ATALHOS = [
+  // 22/10/2026: o agente edita a campanha em andamento (planeja, a equipe confirma tudo ou partes).
+  { rotulo: "Mais agressiva", texto: "Deixe a campanha mais agressiva: mais comercial e mais urgência nas peças que faltam." },
+  { rotulo: "Adiantar a urgência", texto: "Adiante a fase de urgência para " },
+  { rotulo: "Trocar a oferta para…", texto: "A oferta agora é " },
+  { rotulo: "Peças para um produto…", texto: "Crie 2 posts e 1 story para o produto " },
+  { rotulo: "Reescrever no tom comercial", texto: "Reescreva a campanha no tom comercial: oferta e CTA de ação em todas as peças que faltam." },
   { rotulo: "Mude o período…", texto: "A campanha vai de " },
   { rotulo: "Mude a oferta…", texto: "A oferta agora é " },
   { rotulo: "Mude o tom para…", texto: "Mude o tom para " },
@@ -132,7 +141,8 @@ export default function CampanhaAgente({
     if (onAndamento) onAndamento(true);
     setTexto("");
     try {
-      const data = await campanhaConversar({ campanhaId: campanha.id, mensagem, anexos: caminhos });
+      // 22/10/2026: o agente PLANEJA a mudança (o cartão com Confirmar aparece na conversa); pedido de selo segue a conversa de sempre.
+      const data = await planejarMudanca(campanha.id, mensagem, caminhos);
       // A campanha e os conteúdos mudam na tela antes de o "Trabalhando" sair.
       aplicarRespostaDaCampanha(queryClient, clientId, data);
       // Frente SEL: o agente pode ter trocado o selo (logo, imagem anexada).
@@ -181,7 +191,7 @@ export default function CampanhaAgente({
             <p className="inline-flex items-center text-[13px] font-medium">
               Converse para ajustar a campanha
               <AjudaRecolhida className="ml-1" rotulo="O que dá para pedir">
-                Peça mudanças no nome, no conceito, na identidade e nos conteúdos: mudar, acrescentar ou tirar. No selo: melhorar (com custo e Confirmar), usar a logo ou usar a imagem anexada (na hora, com Desfazer). A tela atualiza na hora.
+                Peça em linguagem natural ("mais agressiva", "trocar a oferta para 40%", "peças para o produto X"): o agente planeja a mudança e você confirma tudo ou só partes, com Desfazer. No selo: melhorar (com custo e Confirmar), usar a logo ou usar a imagem anexada (na hora, com Desfazer). A tela atualiza na hora.
               </AjudaRecolhida>
             </p>
           </div>
@@ -205,13 +215,18 @@ export default function CampanhaAgente({
                   ))}
                 </div>
               )}
+              {m.papel === "agente" && acoesDaMensagem(m.anexos).filter((a) => a.agente === AGENTE_DA_MUDANCA).map((a) => (
+                <div key={a.id} className="mr-6">
+                  <CampanhaMudanca campanha={campanha} mensagemId={m.id} acao={a} />
+                </div>
+              ))}
               {m.papel === "agente" && mexeuNosConteudos(m) && !acoesDaMensagem(m.anexos).length && (
                 <p className="mr-6 text-[11px] text-muted-foreground">Conteúdos atualizados na campanha.</p>
               )}
               {m.papel === "agente" && (
                 <div className="mr-6 space-y-1.5">
                   {/* 29/09: o que mudou na campanha, com o antes e o depois e o Desfazer (antes mudava calado). */}
-                  {acoesDaMensagem(m.anexos).map((a) => (
+                  {acoesDaMensagem(m.anexos).filter((a) => a.agente !== AGENTE_DA_MUDANCA).map((a) => (
                     <CartaoDeAcao
                       key={a.id}
                       acao={a}
@@ -247,6 +262,8 @@ export default function CampanhaAgente({
       </div>
 
       <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
+        {/* 22/10/2026: as sugestões da campanha viram pedido pronto no campo, com um clique. */}
+        <CampanhaSugestoes campanha={campanha} onPedir={preencher} compacto />
         <SugestoesDoAgente><div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente">
           {ATALHOS.map((a) => (
             <button
@@ -286,7 +303,7 @@ export default function CampanhaAgente({
                 <BotaoComCusto
                   rotulo="Enviar"
                   titulo="Pedido ao agente da campanha"
-                  descricao="Uma chamada do estrategista com o contexto do cliente e da campanha."
+                  descricao="O agente planeja a mudança (nada muda antes de você confirmar)."
                   partes={() => partesDaConversaDaCampanha(catalogo, anexos.caminhos.length)}
                   executar={enviar}
                   aoConcluir={concluir}

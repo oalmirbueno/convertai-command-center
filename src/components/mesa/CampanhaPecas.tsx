@@ -62,7 +62,7 @@ export function PecaNaGrade({ peca, acoes }: { peca: SituacaoDaPeca; acoes?: Rea
       <p className="mt-1.5 truncate text-[12px] font-medium" title={it.tema}>{it.tema || "Peça"}</p>
       <div className="flex min-w-0 items-center text-[11px]">
         <span className="mr-1.5 shrink-0 text-muted-foreground">{diaCurto(it.data)}</span>
-        <span className={juntar("min-w-0 truncate font-medium", COR_DO_ESTADO[peca.estado])}>{ROTULO_DO_ESTADO_DA_PECA[peca.estado]}</span>
+        <span className={juntar("min-w-0 truncate font-medium", peca.refazer ? "text-warning" : COR_DO_ESTADO[peca.estado])} data-refazer={peca.refazer ? "" : undefined}>{peca.refazer ? "a refazer" : ROTULO_DO_ESTADO_DA_PECA[peca.estado]}</span>
         {peca.colagem && (
           <span className="ml-1 shrink-0 text-warning" role="img" aria-label="Lâmina que não saiu do gerador" title="Uma lâmina não saiu do gerador (foto composta ou layout montado): refaça pelo gerador no Estúdio.">
             <AlertTriangle className="h-3 w-3" aria-hidden="true" />

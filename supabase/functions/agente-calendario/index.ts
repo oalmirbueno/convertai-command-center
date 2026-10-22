@@ -148,6 +148,10 @@ import { avisosDoCarrossel, MAX_LAMINAS_PELA_API } from "../_shared/regras-do-ca
 import { conferirLegendasComJev } from "./modulos/legendas-com-jev.ts";
 import { lerConferencia, perguntasDaConferencia, type PecaParaConferir } from "./modulos/conferencia-da-campanha.ts";
 import { normalizarPadrao, type PadraoDaCampanha } from "../_shared/padrao-da-campanha.ts";
+import { blocoDoTomDaCampanha, nichoRegulado, ofertaInformada, tomDaCampanha } from "./modulos/tom-da-campanha.ts";
+import { blocoDoEsquema, esquemaDaCampanha } from "./modulos/esquemas-de-campanha.ts";
+import { blocoDoMercado, ESQUEMA_DO_MERCADO, mercadoComFonte, type MercadoDaCampanha, normalizarMercado } from "./modulos/mercado-da-campanha.ts";
+import { aplicarMudanca as aplicarMudancaDaCampanha, ESQUEMA_DA_MUDANCA, type ItemDaMudanca, type ItemDaSerie, itensDaMudanca, itensEscolhidos, pecasComApelido as pecasDaCampanhaComApelido, REGRAS_DA_MUDANCA, type VersaoDaCampanha, versoesDaCampanha } from "./modulos/mudanca-da-campanha.ts";
 // 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
 import { blocoDosMoldes, type Molde, moldesDosVencedores, type PostDoMolde } from "./modulos/moldes.ts";
 // 02/10: refazer uma proposta no servidor (chamada interna com a chave de serviço e o x-cron-secret).
@@ -326,6 +330,9 @@ import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { historicoParaOModelo, hojeParaOAgente } from "../_shared/conversa-segura.ts";
 import { acoesDoSelo, type CampanhaDoSelo } from "./selo-da-campanha.ts";
+// 22/10/2026: trilha e efeitos da campanha (ElevenLabs Music e Sound Effects; suno desligado).
+import { acoesDaTrilha, type CampanhaDaTrilha } from "./modulos/trilha-da-campanha.ts";
+import { trilhaDoBriefing } from "./modulos/trilha-da-campanha-regras.ts";
 import { acaoDoSeloNaConversa, blocoDoSeloParaOEstrategista, type PedidoDoSeloNaConversa } from "./selo-na-conversa.ts";
 import { falaDoSelo, type IntencaoDoSelo } from "../_shared/selo-da-campanha.ts";
 import { acaoDaConversaDaCampanha, CAMPOS_DA_CAMPANHA_NA_CONVERSA, type CampanhaAtual, camposDaCampanhaNaConversa, mudancasDaCampanha, patchParaVoltar } from "./campanha-na-conversa.ts";
@@ -3374,7 +3381,7 @@ const ROTULO_DO_PAPEL: Record<PapelDaImagem, string> = {
 type ImagemDaCampanha = { imagem_id: string; papel: PapelDaImagem; nota: string };
 
 type BriefingDaCampanha = {
-  produtos: { nome: string; por_que: string }[];
+  produtos: { nome: string; por_que: string; imagem_id?: string; caminho?: string; preco?: string; preco_promocional?: string; link?: string; destaque?: boolean }[];
   oferta: string;
   mensagem_central: string;
   publico: string;
@@ -3390,6 +3397,13 @@ type BriefingDaCampanha = {
   ads?: { campaign_id: string; nome: string; vinculado_em: string };
   /** 22/10/2026: o padrão visual da campanha (a referência lida uma vez; _shared/padrao-da-campanha.ts). */
   padrao?: PadraoDaCampanha;
+  conducao?: string;
+  refazer?: string[];
+  versoes?: VersaoDaCampanha[];
+  /** 22/10/2026: tom comercial, esquema da ocasião e o que o mercado está fazendo. */
+  tom_da_campanha?: string;
+  esquema?: string;
+  mercado?: MercadoDaCampanha;
 };
 
 type FormatosDaCampanha = { posts: number; carrosseis: number; stories: number; videos: number };
@@ -3444,6 +3458,14 @@ function extrasDoBriefing(v: unknown): Partial<BriefingDaCampanha> {
     ...(st.length ? { stories: st } : {}),
     ...(campaignId ? { ads: { campaign_id: campaignId, nome: texto(ads?.nome, 160), vinculado_em: texto(ads?.vinculado_em, 40) } } : {}),
     ...(normalizarPadrao(o.padrao) ? { padrao: normalizarPadrao(o.padrao) as PadraoDaCampanha } : {}),
+    // 22/10/2026: a condução (agente da campanha), as peças a refazer e o índice das versões.
+    ...(texto(o.conducao, 600) ? { conducao: texto(o.conducao, 600) } : {}),
+    ...(Array.isArray(o.refazer) && o.refazer.length ? { refazer: (o.refazer as unknown[]).map((x) => texto(x, 40)).filter(Boolean).slice(0, 40) } : {}),
+    ...(versoesDaCampanha(o.versoes).length ? { versoes: versoesDaCampanha(o.versoes) } : {}),
+    ...(o.tom_da_campanha ? { tom_da_campanha: tomDaCampanha(o.tom_da_campanha) } : {}),
+    ...(trilhaDoBriefing(o.trilha) ? { trilha: trilhaDoBriefing(o.trilha) } : {}),
+    ...(texto(o.esquema, 40) ? { esquema: texto(o.esquema, 40) } : {}),
+    ...(normalizarMercado(o.mercado) ? { mercado: normalizarMercado(o.mercado) as MercadoDaCampanha } : {}),
   };
 }
 
@@ -3467,10 +3489,22 @@ export function normalizarBriefing(bruto: unknown): BriefingDaCampanha {
   const produtos = (Array.isArray(o.produtos) ? o.produtos : [])
     .map((p) => {
       const x = (p && typeof p === "object" ? p : { nome: p }) as Record<string, unknown>;
-      return { nome: texto(x.nome, 120), por_que: texto(x.por_que, 500) };
+      // 22/10/2026: o produto da campanha com foto (acervo ou enviada), preço, promoção, link e destaque.
+      const imagem = typeof x.imagem_id === "string" && UUID.test(x.imagem_id) ? x.imagem_id : "";
+      const caminho = typeof x.caminho === "string" && x.caminho.indexOf("..") < 0 ? x.caminho.slice(0, 300) : "";
+      return {
+        nome: texto(x.nome, 120),
+        por_que: texto(x.por_que, 500),
+        ...(imagem ? { imagem_id: imagem } : {}),
+        ...(caminho ? { caminho } : {}),
+        ...(texto(x.preco, 40) ? { preco: texto(x.preco, 40) } : {}),
+        ...(texto(x.preco_promocional, 40) ? { preco_promocional: texto(x.preco_promocional, 40) } : {}),
+        ...(texto(x.link, 400).indexOf("https://") === 0 ? { link: texto(x.link, 400) } : {}),
+        ...(x.destaque === true ? { destaque: true } : {}),
+      };
     })
     .filter((p) => p.nome)
-    .slice(0, 5);
+    .slice(0, 8);
   const provas = (Array.isArray(o.provas) ? o.provas : []).map((p) => texto(p, 300)).filter(Boolean).slice(0, 6);
   return {
     produtos,
@@ -4384,6 +4418,8 @@ export function editarUmItem(antigo: Item, campos: Record<string, unknown>, utei
     if (v) novo.instrucao_arte = v;
     else delete novo.instrucao_arte;
   }
+  // 22/10/2026: a fase da peça (etapa da campanha) também se edita à mão.
+  if (typeof campos.etapa === "string" && texto(campos.etapa, 60)) novo.etapa = texto(campos.etapa, 60);
   if (campos.tipo_editorial !== undefined) novo.tipo_editorial = normalizarTipo(campos.tipo_editorial);
   if (campos.framework !== undefined) novo.framework = normalizarFramework(campos.framework);
   if (Array.isArray(campos.cards)) {
@@ -4594,6 +4630,9 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
 
 CAMPANHA (JSON; siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas, tom e CTA):
 ${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), pedido_original: c.pedido })}
+
+${blocoComercialDaCampanha(c, ctx)}
+(A estrutura editorial de cada conteúdo é só o esqueleto: a voz é de campanha comercial, fechando com oferta e CTA de ação.)
 ${existentes.length ? `\nCONTEÚDOS QUE A CAMPANHA JÁ TEM (não repita tema, gancho nem estrutura):\n${existentes.map((i) => `- ${i.data}: ${i.tema}${i.etapa ? ` (${i.etapa})` : ""}`).join("\n")}\n` : ""}${fotosDaCamp.length ? '\nQuando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.\n' : ""}`;
 
   const lotes: typeof vagas[] = [];
@@ -5209,9 +5248,19 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const campanhaId = crypto.randomUUID();
   const tipoDaCriacao = await tipoPedidoP;
   const blocoDoTipo = blocoDoTipoParaOEstrategista(tipoDaCriacao.tipo);
+  // 22/10/2026: "O que o mercado está fazendo" (opcional, custo antes na tela) e o bloco comercial da campanha.
+  const mercadoP = corpo.mercado === true
+    ? pesquisarMercado(servico, { clientId, campanhaId, nome: texto(corpo.nome, 120), pedido: pedidoTexto, tipo: tipoDaCriacao.tipo, ctx, userId: chamador.userId, modeloId: corpo.modelo_id }).catch((e) => (registrarFalha("agente-calendario: pesquisa de mercado falhou", e), { mercado: null, custo: 0 }))
+    : Promise.resolve({ mercado: null as MercadoDaCampanha | null, custo: 0 });
+  const doMercado = await mercadoP;
+  const tomEscolhido = tomDaCampanha((corpo.briefing && typeof corpo.briefing === "object" ? (corpo.briefing as Record<string, unknown>).tom_da_campanha : null) ?? corpo.tom_da_campanha);
+  const esquemaDaCriacao = esquemaDaCampanha(`${texto(corpo.nome, 120)} ${pedidoTexto} ${hype && typeof hype === "object" ? String((hype as Record<string, unknown>).titulo ?? "") : ""}`, tipoDaCriacao.tipo);
+  const blocoComercial = blocoComercialDaCampanha({ nome: texto(corpo.nome, 120), pedido: `${pedidoTexto} ${esquemaDaCriacao.palavras[0]}`, briefing: { ...briefingDaEquipe, tom_da_campanha: tomEscolhido, ...(doMercado.mercado ? { mercado: doMercado.mercado } : {}) }, identidade: { tipo: tipoDaCriacao.tipo } }, ctx);
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
+
+${blocoComercial}
 ${blocoDoTipo ? `
 ${blocoDoTipo}
 ` : ""}${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}${notaDoSistema(avisosDasImagens.join(" ") || null)}
@@ -5256,7 +5305,14 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
   const briefingJunto = juntarBriefing(normalizarBriefing(r.briefing), briefingDaEquipe);
   // A mistura e os stories planejados ficam no briefing (a tela lê a mistura e manda cada story para a aba Stories).
   const storiesFeitos = formatos && formatos.stories ? storiesDaCampanha(r.stories).slice(0, formatos.stories).map((x, i) => ({ ...x, tema_id: `s${i + 1}`, data: x.data && x.data >= inicio && x.data <= fim ? x.data : uteis[Math.min(uteis.length - 1, Math.floor((i * uteis.length) / Math.max(1, formatos.stories)))] })) : [];
-  const briefing: BriefingDaCampanha = { ...briefingJunto, ...(formatos ? { formatos } : {}), ...(storiesFeitos.length ? { stories: storiesFeitos } : {}) };
+  const briefing: BriefingDaCampanha = {
+    ...briefingJunto,
+    ...(formatos ? { formatos } : {}),
+    ...(storiesFeitos.length ? { stories: storiesFeitos } : {}),
+    tom_da_campanha: tomEscolhido,
+    esquema: esquemaDaCriacao.id,
+    ...(doMercado.mercado ? { mercado: doMercado.mercado } : {}),
+  };
   // Plano de imagens: o do estrategista, decidido pelo Jev onde há mais de uma candidata.
   let plano: PlanoDeImagens | null = null;
   let custoJev = 0;
@@ -5285,7 +5341,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
       };
     }
   }
-  const custoTotal = Math.round((s.custoUsd + custoJev) * 1e6) / 1e6;
+  const custoTotal = Math.round((s.custoUsd + custoJev + doMercado.custo) * 1e6) / 1e6;
   // 12/10/2026: legendas conferidas pelo Jev antes de gravar (avisos no item, nunca reescrita).
   await conferirLegendasComJev(servico, itens, { clientId, criadoPor: chamador.userId });
 
@@ -5382,7 +5438,7 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `Você é o estrategista da agência ajustando uma campanha já criada. Mantenha tudo o que o pedido não manda mudar. Português do Brasil, sem travessões. Responda só com o JSON pedido.`,
-    mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade, briefing) e em resposta o que mudou.` }],
+    mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\n${blocoComercialDaCampanha(c, null)}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade, briefing) e em resposta o que mudou.` }],
     raciocinio,
     esquemaJson: ESQUEMA_AJUSTE_CAMPANHA,
     metodo: await metodoDaGeracao(servico, "ajustar"),
@@ -5522,6 +5578,8 @@ ${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), status: c.status, period
 
 CONTEÚDOS DA CAMPANHA (JSON; os com "na_agenda": true já estão na agenda e NÃO MUDAM):
 ${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task_id, task_id: undefined })))}
+
+${blocoComercialDaCampanha(c, ctx)}
 
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}${notaDoSistema(anexos.aviso)}${blocoDoSeloParaOEstrategista(intencaoDoSelo) ? `\n${blocoDoSeloParaOEstrategista(intencaoDoSelo)}\n` : ""}
@@ -5733,10 +5791,11 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
   await exigirAcessoAoCliente(chamador, c.client_id);
   const campos: Record<string, unknown> = {};
   let recusadas: string[] = [];
-  if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing(corpo.briefing);
+  if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing({ trilha: (c.briefing ?? {}).trilha, ...(corpo.briefing as Record<string, unknown>) });
   if (typeof corpo.objetivo === "string") campos.objetivo = texto(corpo.objetivo, 600) || null;
   // 21/10/2026: nome e período na etapa Briefing da campanha (sem IA).
   if (typeof corpo.nome === "string" && texto(corpo.nome, 120)) campos.nome = texto(corpo.nome, 120);
+  if (typeof corpo.conceito === "string") campos.conceito = texto(corpo.conceito, 2000) || null;
   if (corpo.periodo_inicio !== undefined || corpo.periodo_fim !== undefined) {
     const ini = typeof corpo.periodo_inicio === "string" && DATA.test(corpo.periodo_inicio) ? corpo.periodo_inicio : c.periodo_inicio;
     const fim = typeof corpo.periodo_fim === "string" && DATA.test(corpo.periodo_fim) ? corpo.periodo_fim : c.periodo_fim;
@@ -5774,6 +5833,382 @@ async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo
   return json({ campanha: data, recusadas, custo_usd: 0 });
 }
 
+// ------------------------------------------------ tom comercial, esquema e mercado da campanha (22/10/2026)
+
+/**
+ * O bloco comercial que vai em TODO prompt da campanha (criar, conteúdos, conversa, ajuste e mudança): o tom
+ * escolhido (Comercial direto por padrão), o esquema da ocasião (Black, Natal, promoção...), o nicho regulado
+ * (advocacia, saúde, finanças: comercial dentro da regra) e o que o mercado está fazendo (com fonte).
+ */
+function blocoComercialDaCampanha(c: { nome?: string | null; pedido?: string | null; briefing?: unknown; identidade?: unknown }, ctx: { kit_marca?: unknown } | null, extra = ""): string {
+  const b = (c.briefing && typeof c.briefing === "object" ? c.briefing : {}) as Record<string, unknown>;
+  const kit = (ctx && ctx.kit_marca && typeof ctx.kit_marca === "object" ? ctx.kit_marca : {}) as { contexto?: Record<string, unknown> };
+  const nicho = nichoRegulado(`${kit.contexto?.negocio ?? ""} ${kit.contexto?.segmento ?? ""}`);
+  const tipo = (c.identidade && typeof c.identidade === "object" ? (c.identidade as Record<string, unknown>).tipo : null) as string | null;
+  const esquema = esquemaDaCampanha(`${c.nome ?? ""} ${c.pedido ?? ""} ${extra}`, tipo);
+  const mercado = normalizarMercado(b.mercado);
+  return [
+    blocoDoTomDaCampanha(tomDaCampanha(b.tom_da_campanha), { nicho, temOferta: ofertaInformada(normalizarBriefing(b)) }),
+    blocoDoEsquema(esquema),
+    blocoDoMercado(mercado),
+  ].filter(Boolean).join("\n\n");
+}
+
+/**
+ * Pesquisa de mercado da campanha ("O que o mercado está fazendo"): campanhas reais atuais do tipo e do nicho,
+ * pela pesquisa na web do motor de texto. Só entra padrão com fonte que a busca citou; sem fonte, nada.
+ */
+async function pesquisarMercado(servico: SupabaseClient, a: { clientId: string; campanhaId: string; nome: string; pedido: string; tipo: string | null; ctx: Awaited<ReturnType<typeof montarContexto>>; userId: string; modeloId?: unknown }): Promise<{ mercado: MercadoDaCampanha | null; custo: number }> {
+  const esquema = esquemaDaCampanha(`${a.nome} ${a.pedido}`, a.tipo);
+  const { modelo, raciocinio } = await resolverModelo(a.modeloId, "low", { pesquisaWeb: true });
+  const kit = (a.ctx.kit_marca ?? {}) as { contexto?: Record<string, unknown> };
+  const s = await chamarTexto({
+    clientId: a.clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: "Você pesquisa campanhas reais que marcas brasileiras estão rodando agora, para um estrategista de campanha. Só fato com link real da busca. Português do Brasil, sem travessão.",
+    metodo: await metodoDaGeracao(servico),
+    mensagens: [{
+      papel: "usuario",
+      conteudo: `Hoje é ${hojeSaoPaulo()}. Campanha: ${a.nome || a.pedido} (ocasião: ${esquema.rotulo}). Cliente: ${a.ctx.cliente.nome}; negócio: ${String(kit.contexto?.negocio ?? "")}; público: ${String(kit.contexto?.publico ?? "")}.
+Pesquise na web campanhas REAIS e atuais desta ocasião neste nicho (concorrentes, marcas grandes do setor, varejo da região). Devolva:
+- padroes: 3 a 5 padrões que o mercado está usando agora (o que fazem, em 1 frase), cada um com fonte (nome do site ou da marca) e link (https) de uma página real da busca.
+- diferenciacao: o ângulo para ESTE cliente se diferenciar desses padrões (1 a 2 frases, ligado à oferta e ao público dele).
+- evitar: 2 a 4 coisas que todo mundo está fazendo e que este cliente deve evitar.
+Nada inventado: padrão sem link real da busca não entra.`,
+    }],
+    raciocinio,
+    pesquisaWeb: true,
+    esquemaJson: ESQUEMA_DO_MERCADO,
+    referencia: { tipo: REF_CAMPANHA, id: a.campanhaId },
+    criadoPor: a.userId,
+  });
+  const fontes = ((s as unknown as { fontes?: Array<{ url?: string }> }).fontes ?? []).map((f) => String(f.url || "")).filter(Boolean);
+  return { mercado: mercadoComFonte(s.json, fontes, hojeSaoPaulo()), custo: s.custoUsd };
+}
+
+/** campanha_mercado { campanha_id }: pesquisa o mercado de uma campanha que já existe e grava em briefing.mercado. */
+async function campanhaMercado(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const inicio = c.periodo_inicio ?? hojeSaoPaulo();
+  const ctx = await montarContexto(servico, c.client_id, inicio, c.periodo_fim ?? somarDias(inicio, 21), marcaDaChamada(servico, c.client_id, corpo));
+  const tipo = ((c.identidade ?? {}) as Record<string, unknown>).tipo as string | null;
+  const r = await pesquisarMercado(servico, { clientId: c.client_id, campanhaId: c.id, nome: c.nome, pedido: c.pedido ?? "", tipo, ctx, userId: chamador.userId, modeloId: corpo.modelo_id });
+  await somarCustoDaCampanha(servico, c.id, c.client_id, r.custo);
+  if (!r.mercado) return json({ campanha: c, mercado: null, aviso_da_acao: "A pesquisa não trouxe campanha com fonte real: nada entrou no briefing.", custo_usd: r.custo });
+  const briefing = { ...((c.briefing ?? {}) as Record<string, unknown>), mercado: r.mercado };
+  const { data, error } = await servico.from("mesa_campanhas").update({ briefing }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
+  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "A pesquisa foi feita, mas não foi guardada.");
+  return json({ campanha: data, mercado: r.mercado, custo_usd: r.custo });
+}
+
+/** O pedido da reescrita no tom comercial (a mesma mudança planejada do agente editor). */
+const PEDIDO_DA_REESCRITA_COMERCIAL = "Reescreva a campanha no tom de campanha comercial (TOM DA CAMPANHA e ESQUEMA DA CAMPANHA acima): nome com conceito puxando o tema; briefing (oferta, mensagem central, tom e CTA); e, em TODAS as peças não protegidas, tema, gancho, texto das lâminas, CTA e legenda, com problema, solução, oferta e CTA de ação direta com a urgência da fase. Nada de tom de aula. Sem inventar preço, desconto ou prazo: onde faltar a oferta, use [OFERTA A DEFINIR]. Não mexa nas peças protegidas.";
+
+/**
+ * campanha_reescrever_comercial { campanha_id, aplicar? }: planeja a reescrita no tom comercial (diff com
+ * Confirmar na conversa). Com aplicar: true, aplica na hora tudo menos o protegido (peças na agenda, aprovadas
+ * ou publicadas não mudam). Nunca aprova, agenda nem publica nada; as artes já geradas ficam "a refazer".
+ */
+async function campanhaReescreverComercial(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const planejado = await campanhaMudancaPlanejar(servico, chamador, { ...corpo, mensagem: PEDIDO_DA_REESCRITA_COMERCIAL });
+  if (corpo.aplicar !== true) return planejado;
+  const r = (await planejado.clone().json()) as { acao?: { id?: string } | null };
+  if (!r.acao || !r.acao.id) return planejado;
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  const conversaId = await conversaDaCampanha(servico, c, chamador.userId);
+  const { data } = await servico.from("agente_mensagens").select("id, anexos").eq("conversa_id", conversaId).eq("papel", "agente").order("criado_em", { ascending: false }).limit(5);
+  const linha = ((data ?? []) as Array<{ id: string; anexos: unknown }>).filter((m) => Array.isArray(m.anexos) && (m.anexos as Array<Record<string, unknown>>).some((a) => a && a.id === r.acao!.id))[0];
+  if (!linha) throw new ErroHttp(503, "mudanca_nao_achada", "A reescrita foi planejada, mas não foi achada para aplicar.");
+  return await campanhaMudancaConfirmar(servico, chamador, { mensagem_id: linha.id, acao_id: r.acao.id });
+}
+
+/**
+ * campanha_reescrever_comercial_interno { campanha_id, autor_id, aplicar? } (chave de serviço + x-cron-secret):
+ * a mesma reescrita assinada por um usuário da equipe com acesso ao cliente (conferido como no refazer interno).
+ */
+async function campanhaReescreverComercialInterno(servico: SupabaseClient, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  const chamador = await chamadorDoAutor(servico, typeof corpo.autor_id === "string" ? corpo.autor_id : null, c.client_id);
+  return await campanhaReescreverComercial(servico, chamador, { campanha_id: c.id, aplicar: corpo.aplicar === true });
+}
+
+// ------------------------------------------------ campanha em andamento: mudança planejada e versões (22/10/2026)
+
+const AGENTE_DA_MUDANCA = "campanha.mudanca";
+
+/** As artes da campanha no Estúdio (não arquivadas), com o tema da série e se já estão protegidas. */
+async function artesDaCampanha(servico: SupabaseClient, c: Campanha): Promise<Array<{ id: string; tema_id: string; protegida: boolean; direcao: Record<string, unknown> }>> {
+  const { data } = await servico
+    .from("estudio_trabalhos")
+    .select("id, status, direcao, aprovado_em, task_id")
+    .eq("client_id", c.client_id)
+    .eq("direcao->arte_rapida->>campanha_id", c.id)
+    .limit(200);
+  const saida: Array<{ id: string; tema_id: string; protegida: boolean; direcao: Record<string, unknown> }> = [];
+  for (const t of (data ?? []) as Array<{ id: string; status: string | null; direcao: Record<string, unknown> | null; aprovado_em: string | null; task_id: string | null }>) {
+    const a = (t.direcao && typeof t.direcao.arte_rapida === "object" ? t.direcao.arte_rapida : null) as Record<string, unknown> | null;
+    if (!a || a.arquivada_em) continue;
+    const peca = (a.peca_da_campanha && typeof a.peca_da_campanha === "object" ? a.peca_da_campanha : null) as Record<string, unknown> | null;
+    const tema = peca && typeof peca.tema_id === "string" ? peca.tema_id : "";
+    if (!tema) continue;
+    saida.push({ id: t.id, tema_id: tema, protegida: !!(a.task_id || t.task_id || t.aprovado_em || t.status === "entregue"), direcao: t.direcao ?? {} });
+  }
+  return saida;
+}
+
+/** Arquiva (ou desarquiva) as artes da arte rápida: nada é apagado; a peça volta a "a refazer". */
+async function marcarArtesArquivadas(servico: SupabaseClient, clientId: string, artes: Array<{ id: string; direcao: Record<string, unknown> }>, arquivar: boolean): Promise<string[]> {
+  const feitos: string[] = [];
+  for (const t of artes) {
+    const a = { ...((t.direcao.arte_rapida ?? {}) as Record<string, unknown>), arquivada_em: arquivar ? new Date().toISOString() : null };
+    const { error } = await servico.from("estudio_trabalhos").update({ direcao: { ...t.direcao, arte_rapida: a } }).eq("id", t.id).eq("client_id", clientId);
+    if (!error) feitos.push(t.id);
+  }
+  return feitos;
+}
+
+/** Guarda a campanha de agora (campos, briefing sem o índice e a série) num arquivo e devolve o índice novo. */
+async function guardarVersaoDaCampanha(servico: SupabaseClient, c: Campanha, itens: unknown[], motivo: string, userId: string): Promise<VersaoDaCampanha> {
+  const id = crypto.randomUUID();
+  const briefing = { ...((c.briefing ?? {}) as Record<string, unknown>) };
+  delete briefing.versoes;
+  const foto = { nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, periodo_inicio: c.periodo_inicio, periodo_fim: c.periodo_fim, identidade: c.identidade, briefing, referencias_ids: c.referencias_ids, itens };
+  const caminho = `${c.client_id}/campanhas/${c.id}/versoes/${Date.now()}-${id.slice(0, 8)}.json`;
+  const { error } = await servico.storage.from("mesa").upload(caminho, new Blob([JSON.stringify(foto)], { type: "application/json" }), { contentType: "application/json", upsert: false });
+  if (error) throw new ErroHttp(503, "versao_nao_guardada", "Não foi possível guardar a versão de antes. Nada mudou.");
+  return { id, criada_em: new Date().toISOString(), motivo: texto(motivo, 300), por: userId, caminho, arquivados: [] };
+}
+
+/**
+ * campanha_mudanca_planejar { campanha_id, mensagem, anexos? } -> { mensagem_id, acao, resposta, custo_usd }
+ * O agente da campanha planeja a mudança (não aplica): briefing, condução, peças que mudam, entram e saem,
+ * cada uma com apelido. Pedido sobre o selo segue pela conversa de sempre (campanha_conversar).
+ */
+async function campanhaMudancaPlanejar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const mensagem = texto(corpo.mensagem, 4000);
+  if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer mudar na campanha.");
+  if (falaDoSelo(mensagem)) return await campanhaConversar(servico, chamador, corpo);
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const inicio = c.periodo_inicio ?? hojeSaoPaulo();
+  const fim = c.periodo_fim ?? somarDias(inicio, 21);
+  const artes = await artesDaCampanha(servico, c);
+  const pecas = pecasDaCampanhaComApelido((proposta?.itens ?? []) as unknown as ItemDaSerie[], new Set(artes.filter((a) => a.protegida).map((a) => a.tema_id)), new Set(artes.map((a) => a.tema_id)));
+  const briefingAtual = normalizarBriefing(c.briefing);
+  const conducao = texto(((c.briefing ?? {}) as Record<string, unknown>).conducao, 600);
+  const spP = superpoderesPara(servico, { agente: "calendario.conversa", pedido: mensagem });
+  const [ctx, anexos, conversaId] = await Promise.all([
+    montarContexto(servico, c.client_id, inicio, fim, marcaDaChamada(servico, c.client_id, corpo)),
+    baixarAnexos(servico, c.client_id, corpo.anexos),
+    conversaDaCampanha(servico, c, chamador.userId),
+  ]);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+${hojeParaOAgente().texto}
+
+CAMPANHA EM ANDAMENTO (JSON):
+${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, periodo_inicio: inicio, periodo_fim: fim, briefing: briefingAtual, conducao })}
+
+PEÇAS DA SÉRIE (JSON, pelo apelido; "protegida": true = na agenda, aprovada ou publicada):
+${JSON.stringify(pecas.map((p) => ({ peca: p.apelido, data: p.data, formato: p.formato, etapa: p.etapa, tema: p.tema, gancho: p.gancho, cta: p.cta, laminas: p.laminas, protegida: p.protegida, com_arte: p.com_arte })))}
+
+${blocoComercialDaCampanha(c, ctx)}
+
+PEDIDO DA EQUIPE: ${mensagem}
+${anexos.imagens.length ? `A equipe anexou ${anexos.imagens.length} imagem(ns); use com fidelidade.\n` : ""}
+${REGRAS_DA_MUDANCA}`;
+  const s = await chamarTexto({
+    clientId: c.client_id,
+    tarefa: "conversa",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: sistemaDoCalendario(ctx, "campanha", "conversa"),
+    mensagens: [{ papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
+    raciocinio,
+    esquemaJson: ESQUEMA_DA_MUDANCA,
+    referencia: { tipo: REF_CAMPANHA, id: c.id },
+    criadoPor: chamador.userId,
+    metodo: await spP,
+  });
+  const r = (s.json ?? {}) as Record<string, unknown>;
+  const { itens, ignorados } = itensDaMudanca(r, pecas, { briefing: { ...(briefingAtual as unknown as Record<string, unknown>), __nome: c.nome }, conducao, periodo: { inicio, fim } });
+  const resposta = texto(r.resposta, 1200) || (itens.length ? "Planejei a mudança: confira e confirme." : "Nada para mudar com este pedido.");
+  const acao = itens.length
+    ? { tipo: "acao_agente", agente: AGENTE_DA_MUDANCA, id: crypto.randomUUID(), resumo: resposta, itens, ignorados, recusados: [], contexto: { campanha_id: c.id } }
+    : null;
+  await somarCustoDaCampanha(servico, c.id, c.client_id, s.custoUsd);
+  await registrarMensagens(servico, conversaId, c.client_id, [
+    { papel: "usuario", conteudo: mensagem },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: acao ? [acao] : [] },
+  ]);
+  return json({ acao, resposta, ignorados, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
+}
+
+/** A mudança guardada na mensagem do agente da campanha (o acesso é conferido aqui). */
+async function mudancaGuardada(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  try {
+    return await acaoGuardadaNaMensagem(servico, corpo.mensagem_id, async (cid) => { await exigirAcessoAoCliente(chamador, cid); }, { acaoId: corpo.acao_id, agente: AGENTE_DA_MUDANCA });
+  } catch (e) {
+    if (e instanceof ErroDaAcao) throw new ErroHttp(e.status, e.codigo, e.message);
+    throw e;
+  }
+}
+
+/**
+ * campanha_mudanca_confirmar { mensagem_id, acao_id?, refs?, descartar? } -> { anexo, campanha, proposta, versao }
+ * Aplica só os itens escolhidos (sem refs: todos menos os protegidos). Antes, guarda a versão (voltar depois).
+ * As artes das peças que mudaram ou saíram (não protegidas) são arquivadas: a peça fica "a refazer".
+ */
+async function campanhaMudancaConfirmar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await mudancaGuardada(servico, chamador, corpo);
+  if (corpo.descartar === true) {
+    const r = await confirmarAcaoGuardada(guardada, async () => {}, { descartar: true, userId: chamador.userId });
+    return json({ anexo: r.anexo });
+  }
+  const contexto = (guardada.acao.contexto ?? {}) as Record<string, unknown>;
+  const c = await carregarCampanha(servico, contexto.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const escolhidos = itensEscolhidos(guardada.acao.itens as ItemDaMudanca[], corpo.refs);
+  if (!escolhidos.length) throw new ErroHttp(400, "nada_escolhido", "Marque ao menos um item da mudança.");
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id) : null;
+  const itensAntes = (proposta?.itens ?? []) as unknown as ItemDaSerie[];
+  const versao = await guardarVersaoDaCampanha(servico, c, itensAntes, guardada.acao.resumo || "Mudança pelo agente", chamador.userId);
+  const aplicado = aplicarMudancaDaCampanha({ briefing: (c.briefing ?? {}) as Record<string, unknown>, itens: itensAntes }, escolhidos);
+  const uteis = diasUteisDoPeriodo(c.periodo_inicio ?? hojeSaoPaulo(), c.periodo_fim ?? somarDias(c.periodo_inicio ?? hojeSaoPaulo(), 21));
+  const novasIds = new Set(aplicado.novas.map((n) => n.tema_id));
+  const itensFinais = aplicado.itens.map((i) => {
+    if (!novasIds.has(i.tema_id)) return i;
+    const item = normalizarItem({ ...i }, uteis) as Item & { produto?: string };
+    item.tema_id = i.tema_id;
+    item.campanha_id = c.id;
+    if (i.etapa) item.etapa = String(i.etapa);
+    if (i.produto) item.produto = String(i.produto);
+    return item;
+  });
+  // A arte das peças que mudaram ou saíram (e não estão protegidas) é arquivada: volta a "a refazer".
+  const artes = await artesDaCampanha(servico, c);
+  const tocadas = new Set(aplicado.mudaram.concat(aplicado.sairam));
+  const arquivados = await marcarArtesArquivadas(servico, c.client_id, artes.filter((a) => tocadas.has(a.tema_id) && !a.protegida), true);
+  const refazerAntes = Array.isArray(((c.briefing ?? {}) as Record<string, unknown>).refazer) ? (((c.briefing ?? {}) as Record<string, unknown>).refazer as string[]) : [];
+  const refazer = refazerAntes.concat(artes.filter((a) => aplicado.mudaram.indexOf(a.tema_id) >= 0 && !a.protegida).map((a) => a.tema_id))
+    .filter((t, i, l) => l.indexOf(t) === i && aplicado.sairam.indexOf(t) < 0);
+  const indice = [{ ...versao, arquivados }].concat(versoesDaCampanha(((c.briefing ?? {}) as Record<string, unknown>).versoes)).slice(0, 20);
+  const novoNome = typeof aplicado.briefing.__nome === "string" ? texto(aplicado.briefing.__nome, 120) : "";
+  const briefing: Record<string, unknown> = { ...aplicado.briefing, refazer, versoes: indice };
+  delete briefing.__nome;
+  const { data: gravada, error } = await servico.from("mesa_campanhas").update({ briefing, ...(novoNome ? { nome: novoNome } : {}), atualizado_em: new Date().toISOString() }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
+  if (error || !gravada) throw new ErroHttp(503, "campanha_nao_salva", "A mudança não foi salva. Tente de novo.");
+  const propostaFinal = proposta ? await salvarProposta(servico, proposta, { itens: itensFinais, status: "pronta" }) : null;
+  // Só os escolhidos ficam na proposta da mudança; o executor só registra (a mudança já foi aplicada acima).
+  const comVersao = { ...guardada.acao, itens: escolhidos, contexto: { ...contexto, versao_id: versao.id } };
+  await guardada.gravar(comVersao);
+  const r = await confirmarAcaoGuardada({ ...guardada, acao: comVersao }, async () => ({ desfazer: { versao_id: versao.id } }), { userId: chamador.userId });
+  if (guardada.mensagem.conversa_id) {
+    await registrarMensagens(servico, guardada.mensagem.conversa_id, c.client_id, [{ papel: "sistema", conteudo: `Mudança aplicada: ${escolhidos.length} item(ns). A versão de antes ficou guardada.` }]);
+  }
+  return json({ anexo: r.anexo, campanha: gravada, proposta: propostaFinal, versao: { ...versao, arquivados }, custo_usd: 0 });
+}
+
+/** Volta a campanha (campos, briefing e série) a uma versão guardada; a de agora vira versão antes. */
+async function voltarAVersao(servico: SupabaseClient, chamador: Chamador, c: Campanha, versaoId: string) {
+  const indice = versoesDaCampanha(((c.briefing ?? {}) as Record<string, unknown>).versoes);
+  const alvo = indice.filter((v) => v.id === versaoId)[0];
+  if (!alvo) throw new ErroHttp(404, "versao_inexistente", "Esta versão não está mais no histórico.");
+  const { data: arquivo, error: erroDoArquivo } = await servico.storage.from("mesa").download(alvo.caminho);
+  if (erroDoArquivo || !arquivo) throw new ErroHttp(503, "versao_indisponivel", "O arquivo desta versão não abriu.");
+  const foto = JSON.parse(await arquivo.text()) as Record<string, unknown>;
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const agora = await guardarVersaoDaCampanha(servico, c, (proposta?.itens ?? []) as unknown[], `Antes de voltar à versão de ${alvo.criada_em.slice(0, 16).replace("T", " ")}`, chamador.userId);
+  // As artes arquivadas por aquela mudança voltam (a peça volta com a arte de antes).
+  const { data: artes } = await servico.from("estudio_trabalhos").select("id, direcao").eq("client_id", c.client_id).in("id", alvo.arquivados.length ? alvo.arquivados : ["00000000-0000-0000-0000-000000000000"]);
+  await marcarArtesArquivadas(servico, c.client_id, ((artes ?? []) as Array<{ id: string; direcao: Record<string, unknown> }>), false);
+  const briefingDaFoto = { ...((foto.briefing ?? {}) as Record<string, unknown>), versoes: [agora].concat(indice).slice(0, 20) };
+  const campos: Record<string, unknown> = {
+    nome: texto(foto.nome, 120) || c.nome,
+    objetivo: foto.objetivo ?? null,
+    conceito: foto.conceito ?? null,
+    periodo_inicio: foto.periodo_inicio ?? c.periodo_inicio,
+    periodo_fim: foto.periodo_fim ?? c.periodo_fim,
+    identidade: foto.identidade ?? c.identidade,
+    briefing: briefingDaFoto,
+    atualizado_em: new Date().toISOString(),
+  };
+  const { data: gravada, error } = await servico.from("mesa_campanhas").update(campos).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
+  if (error || !gravada) throw new ErroHttp(503, "campanha_nao_salva", "Não foi possível voltar a versão. Tente de novo.");
+  // A série volta, mas o que já está na agenda fica como está (task_id de agora vale).
+  let propostaFinal = proposta;
+  if (proposta && Array.isArray(foto.itens)) {
+    const naAgenda = new Map(proposta.itens.filter((i) => i.task_id).map((i) => [i.tema_id, i]));
+    const itens = (foto.itens as Item[]).map((i) => naAgenda.get(i.tema_id) ?? i);
+    naAgenda.forEach((i, tema) => { if (!itens.some((x) => x.tema_id === tema)) itens.push(i); });
+    propostaFinal = await salvarProposta(servico, proposta, { itens: itens.sort((a, b) => a.data.localeCompare(b.data)) });
+  }
+  return { campanha: gravada, proposta: propostaFinal, versao: agora };
+}
+
+/** campanha_mudanca_desfazer { mensagem_id, acao_id? }: volta à versão de antes da mudança. */
+async function campanhaMudancaDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const guardada = await mudancaGuardada(servico, chamador, corpo);
+  const contexto = (guardada.acao.contexto ?? {}) as Record<string, unknown>;
+  const c = await carregarCampanha(servico, contexto.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const versaoId = texto(contexto.versao_id, 64);
+  if (!versaoId) throw new ErroHttp(409, "acao_nao_feita", "Esta mudança ainda não foi aplicada.");
+  const feito = await voltarAVersao(servico, chamador, c, versaoId);
+  const r = await desfazerAcaoGuardada(guardada, async () => {}, { userId: chamador.userId });
+  return json({ anexo: r.anexo, ...feito, custo_usd: 0 });
+}
+
+/** campanha_versao_voltar { campanha_id, versao_id }: o histórico de versões, voltar a uma delas (sem IA). */
+async function campanhaVersaoVoltar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const feito = await voltarAVersao(servico, chamador, c, texto(corpo.versao_id, 64));
+  return json({ ...feito, custo_usd: 0 });
+}
+
+/**
+ * campanha_sugestoes_ordenar { campanha_id, sugestoes: [{ id, texto, fonte }] } -> { ordem: [{ id, nota }] }
+ * O Jev (Score) julga o quanto cada sugestão importa agora para o resultado da campanha; a tela ordena.
+ */
+async function campanhaSugestoesOrdenar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const sugestoes = (Array.isArray(corpo.sugestoes) ? corpo.sugestoes : []).slice(0, 8).map((x) => {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    return { id: texto(o.id, 40), texto: texto(o.texto, 300), fonte: texto(o.fonte, 20) };
+  }).filter((s) => s.id && s.texto);
+  if (!sugestoes.length) return json({ ordem: [], custo_usd: 0 });
+  const questions: Record<string, PerguntaJev> = {};
+  sugestoes.forEach((s, i) => {
+    questions[`s${i}`] = {
+      type: "score",
+      instructions: `Para a campanha em \`campanha\` (período, objetivo e oferta), o quanto agir AGORA na sugestão \`sugestoes[${i}]\` muda o resultado da campanha?`,
+      criteria: [
+        "Não muda nada agora: é detalhe ou já está resolvido.",
+        "Ajuda um pouco, mas pode esperar alguns dias sem perder venda.",
+        "Ajuda a campanha nesta semana: vale fazer logo.",
+        "Urgente: sem isso a campanha perde venda ou dinheiro já agora.",
+      ],
+    };
+  });
+  try {
+    const r = await jevPerguntar({ state: { campanha: { nome: c.nome, objetivo: c.objetivo, periodo_inicio: c.periodo_inicio, periodo_fim: c.periodo_fim, oferta: normalizarBriefing(c.briefing).oferta }, sugestoes }, questions });
+    const cobrado = await cobrarJev(r, { clientId: c.client_id, tarefa: "calendario", referencia: { tipo: REF_CAMPANHA, id: c.id }, criadoPor: chamador.userId }).catch(() => null);
+    const ordem = sugestoes.map((s, i) => ({ id: s.id, nota: notaScore(r.answers[`s${i}`]) })).sort((a, b) => (b.nota ?? -1) - (a.nota ?? -1));
+    return json({ ordem, custo_usd: cobrado?.custoUsd ?? 0 });
+  } catch (e) {
+    if (!(e instanceof JevErro)) throw e;
+    return json({ ordem: sugestoes.map((s) => ({ id: s.id, nota: null })), jev_erro: e.codigo, custo_usd: 0 });
+  }
+}
+
 /**
  * campanha_conferir { campanha_id } -> { pecas: [{ tema_id, nota, nivel, confianca }], melhor_gancho, confianca_do_gancho, jev_erro, custo_usd }
  * 21/10/2026: o Jev confere cada peça da série contra o briefing (Score) e escolhe o gancho que abre melhor a
@@ -5806,7 +6241,7 @@ async function campanhaConferir(servico: SupabaseClient, chamador: Chamador, cor
     return json({ ...lida, jev_erro: null, custo_usd: cobrado?.custoUsd ?? 0 });
   } catch (e) {
     if (!(e instanceof JevErro)) throw e;
-    return json({ pecas: p.pecas.map((x) => ({ tema_id: x.tema_id, nota: null, nivel: null, confianca: null })), melhor_gancho: null, confianca_do_gancho: null, jev_erro: e.codigo, custo_usd: 0 });
+    return json({ pecas: p.pecas.map((x) => ({ tema_id: x.tema_id, nota: null, nivel: null, confianca: null, comercial: null, aviso_comercial: null })), melhor_gancho: null, confianca_do_gancho: null, jev_erro: e.codigo, custo_usd: 0 });
   }
 }
 
@@ -8086,6 +8521,7 @@ async function desfazerNaCampanha(servico: SupabaseClient, clientId: string, x: 
 }
 
 /** Frente SEL (30/09): o selo da campanha (versões, 4 caminhos, Melhorar, referências). */
+const trilhaDaCampanha = acoesDaTrilha({ erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra ?? {}), json, carregarCampanha: (s, id) => carregarCampanha(s, id) as unknown as Promise<CampanhaDaTrilha>, exigirAcesso: exigirAcessoAoCliente, somarCusto: somarCustoDaCampanha, garantirSaldo: (id, v) => import("../_shared/ia-motor.ts").then((m) => m.garantirSaldo(id, v)), lerChave: () => chave("ELEVENLABS_API_KEY"), clienteDoChamador });
 const selo = acoesDoSelo({
   erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra ?? {}),
   json,
@@ -8120,6 +8556,13 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_salvar: campanhaSalvar,
   campanha_plano_imagens: campanhaPlanoImagens,
   campanha_conferir: campanhaConferir,
+  campanha_mudanca_planejar: campanhaMudancaPlanejar,
+  campanha_mudanca_confirmar: campanhaMudancaConfirmar,
+  campanha_mudanca_desfazer: campanhaMudancaDesfazer,
+  campanha_versao_voltar: campanhaVersaoVoltar,
+  campanha_sugestoes_ordenar: campanhaSugestoesOrdenar,
+  campanha_mercado: campanhaMercado,
+  campanha_reescrever_comercial: campanhaReescreverComercial,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,
@@ -8130,10 +8573,11 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   editar_item: editarItem,
   trocar_angulo: trocarAngulo,
   campanha_conteudos: campanhaConteudos,
+  campanha_trilha: trilhaDaCampanha.campanhaTrilha,
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_trilha", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 
@@ -8328,7 +8772,7 @@ Deno.serve(async (req) => {
     const acao = String(corpo.acao ?? corpo.action ?? "");
     // 02/10: refazer uma proposta no servidor. Só com a chave de serviço no Authorization e o x-cron-secret.
     // 17/10: a busca semanal de hype (agendador) usa a mesma porta.
-    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno") {
+    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno") {
       const autorizado = autorizarChamadaInterna({
         authorization: req.headers.get("Authorization"),
         cronSecretDoPedido: req.headers.get("x-cron-secret"),
@@ -8339,6 +8783,8 @@ Deno.serve(async (req) => {
       return respostaComFolego(async () => {
         try {
           if (acao === "hypes_da_semana_interno") return await hypesDaSemanaInterno(servico);
+          // 22/10/2026: reescrever uma campanha no tom comercial, assinada por um usuário da equipe (nunca aprova nem publica).
+          if (acao === "campanha_reescrever_comercial_interno") return await campanhaReescreverComercialInterno(servico, corpo);
           return await refazerPropostaInterno(servico, corpo);
         } catch (err) {
           return respostaDeErro(err);

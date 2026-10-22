@@ -226,10 +226,20 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
   const produtos = (Array.isArray(o.produtos) ? o.produtos : [])
     .map((p) => {
       const x = (p && typeof p === "object" ? p : { nome: p }) as Record<string, unknown>;
-      return { nome: textoLimpo(x.nome, 120), por_que: textoLimpo(x.por_que, 500) };
+      // 22/10/2026: foto, preço, promoção, link e destaque do produto seguem (o servidor confere ao gravar).
+      return {
+        nome: textoLimpo(x.nome, 120),
+        por_que: textoLimpo(x.por_que, 500),
+        ...(typeof x.imagem_id === "string" && x.imagem_id ? { imagem_id: x.imagem_id } : {}),
+        ...(typeof x.caminho === "string" && x.caminho ? { caminho: x.caminho } : {}),
+        ...(textoLimpo(x.preco, 40) ? { preco: textoLimpo(x.preco, 40) } : {}),
+        ...(textoLimpo(x.preco_promocional, 40) ? { preco_promocional: textoLimpo(x.preco_promocional, 40) } : {}),
+        ...(textoLimpo(x.link, 400) ? { link: textoLimpo(x.link, 400) } : {}),
+        ...(x.destaque === true ? { destaque: true } : {}),
+      };
     })
     .filter((p) => p.nome)
-    .slice(0, 5);
+    .slice(0, 8);
   return {
     produtos,
     oferta: textoLimpo(o.oferta),
@@ -244,6 +254,13 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
     ...(Array.isArray(o.stories) && o.stories.length ? { stories: o.stories as BriefingDaCampanha["stories"] } : {}),
     ...(o.ads && typeof o.ads === "object" && (o.ads as Record<string, unknown>).campaign_id ? { ads: o.ads as BriefingDaCampanha["ads"] } : {}),
     ...(normalizarPadrao(o.padrao) ? { padrao: normalizarPadrao(o.padrao) } : {}),
+    // 22/10/2026: o que o agente editor e a criação guardam no briefing seguem intactos ao salvar à mão.
+    ...(textoLimpo(o.conducao, 600) ? { conducao: textoLimpo(o.conducao, 600) } : {}),
+    ...(Array.isArray(o.refazer) && o.refazer.length ? { refazer: (o.refazer as unknown[]).map(String) } : {}),
+    ...(Array.isArray(o.versoes) && o.versoes.length ? { versoes: o.versoes as BriefingDaCampanha["versoes"] } : {}),
+    ...(typeof o.tom_da_campanha === "string" && o.tom_da_campanha ? { tom_da_campanha: o.tom_da_campanha } : {}),
+    ...(typeof o.esquema === "string" && o.esquema ? { esquema: o.esquema } : {}),
+    ...(o.mercado && typeof o.mercado === "object" ? { mercado: o.mercado as BriefingDaCampanha["mercado"] } : {}),
   };
 }
 
@@ -348,6 +365,7 @@ export interface CorpoDoSalvar {
   nome?: string;
   periodoInicio?: string;
   periodoFim?: string;
+  conceito?: string;
 }
 
 export function corpoDoSalvarCampanha(c: CorpoDoSalvar): Record<string, unknown> {
@@ -357,6 +375,7 @@ export function corpoDoSalvarCampanha(c: CorpoDoSalvar): Record<string, unknown>
   if (c.imagens) corpo.imagens = c.imagens.slice(0, MAX_IMAGENS_CAMPANHA);
   if (typeof c.objetivo === "string") corpo.objetivo = c.objetivo;
   if (c.nome && c.nome.trim()) corpo.nome = c.nome.trim();
+  if (typeof c.conceito === "string") corpo.conceito = c.conceito;
   if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
   if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
   return corpo;
@@ -518,7 +537,7 @@ export async function gerarSeloDaCampanha(campanha: Campanha, modeloId: string |
 
 /** Conferência do Jev: cada peça bate com o briefing? E qual gancho abre melhor a campanha. Sem gravar. */
 export interface ConferenciaDaCampanha {
-  pecas: { tema_id: string; nota: number | null; nivel: "forte" | "ok" | "fraca" | null; confianca: number | null }[];
+  pecas: { tema_id: string; nota: number | null; nivel: "forte" | "ok" | "fraca" | null; confianca: number | null; comercial?: number | null; aviso_comercial?: string | null }[];
   melhor_gancho: string | null;
   confianca_do_gancho: number | null;
   jev_erro: string | null;
@@ -614,3 +633,60 @@ export const partesDoPadrao = (catalogo: ModeloIa[], referencias: number): Parte
   const m = padraoPara(catalogo, "leitura") || padraoPara(catalogo, "estrategista");
   return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: 3000 + Math.max(1, referencias) * TAMANHOS.imagemAnexos.entrada, tokensSaida: 1600 }];
 };
+
+// ------------------------------------------------------------------ campanha em andamento (22/10/2026)
+
+/**
+ * O agente da campanha como editor da campanha rodando: ele PLANEJA a mudança (diff por item, apelidos a1..aN,
+ * anexo acao_agente do agente "campanha.mudanca") e nada muda até a equipe confirmar tudo ou só partes.
+ * Confirmar guarda a versão de antes; Desfazer e o histórico voltam a ela.
+ */
+export const AGENTE_DA_MUDANCA = "campanha.mudanca";
+
+export const planejarMudanca = (campanhaId: string, mensagem: string, anexos: string[] = []) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_mudanca_planejar", campanha_id: campanhaId, mensagem, ...(anexos.length ? { anexos: anexos.slice(0, MAX_ANEXOS) } : {}) });
+
+export const confirmarMudanca = (mensagemId: string, acaoId: string, refs: string[]) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_mudanca_confirmar", mensagem_id: mensagemId, acao_id: acaoId, refs });
+
+export const descartarMudanca = (mensagemId: string, acaoId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_mudanca_confirmar", mensagem_id: mensagemId, acao_id: acaoId, descartar: true });
+
+export const desfazerMudanca = (mensagemId: string, acaoId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_mudanca_desfazer", mensagem_id: mensagemId, acao_id: acaoId });
+
+export const voltarAVersao = (campanhaId: string, versaoId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_versao_voltar", campanha_id: campanhaId, versao_id: versaoId });
+
+export const pesquisarMercadoDaCampanha = (campanhaId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_mercado", campanha_id: campanhaId });
+
+/** "Reescrever no tom comercial": a mudança planejada com o pedido fixo (o diff vem para confirmar). */
+export const reescreverNoTomComercial = (campanhaId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_reescrever_comercial", campanha_id: campanhaId });
+
+export const ordenarSugestoes = (campanhaId: string, sugestoes: { id: string; texto: string; fonte: string }[]) =>
+  chamarFuncao<{ ordem: { id: string; nota: number | null }[]; custo_usd: number }>("agente-calendario", { acao: "campanha_sugestoes_ordenar", campanha_id: campanhaId, sugestoes });
+
+/** Planejar a mudança: uma chamada do estrategista com a campanha e a série à vista. */
+export const partesDaMudanca = (catalogo: ModeloIa[], pecas: number): ParteDaEstimativa[] => {
+  const m = padraoPara(catalogo, "estrategista");
+  return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: TAMANHOS.conversarMes.entrada + pecas * 500, tokensSaida: saidaPorRaciocinio("medium") + pecas * 250 }];
+};
+
+/** A pesquisa de mercado: uma chamada com busca na web. */
+export const partesDoMercado = (catalogo: ModeloIa[]): ParteDaEstimativa[] => {
+  const m = padraoPara(catalogo, "estrategista");
+  return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada, tokensSaida: saidaPorRaciocinio("low"), buscasWeb: 4 }];
+};
+
+/** Sobe a foto de um produto para a pasta da campanha (bucket mesa) e devolve o caminho. */
+export async function subirFotoDoProduto(clientId: string, campanhaId: string, arquivo: File): Promise<string> {
+  const ext = /png$/i.test(arquivo.type) ? "png" : /webp$/i.test(arquivo.type) ? "webp" : "jpg";
+  if (String(arquivo.type || "").indexOf("image/") !== 0) throw new Error("Envie uma imagem (JPG, PNG ou WEBP).");
+  if (arquivo.size > 12 * 1024 * 1024) throw new Error("Imagem acima de 12 MB.");
+  const caminho = `${clientId}/campanhas/${campanhaId}/produto-${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+  const { error } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: arquivo.type || "image/jpeg", upsert: false });
+  if (error) throw error;
+  return caminho;
+}

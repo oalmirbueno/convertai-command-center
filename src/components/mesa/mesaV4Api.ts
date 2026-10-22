@@ -156,8 +156,20 @@ export type EstadoDaCampanha = "planejada" | "gravada" | "encerrada";
  * docs/mesa/migrations/20260925120000_mesa_campanhas_completas.sql; ausentes
  * antes do SQL, por isso opcionais.
  */
+/** 22/10/2026: o produto da campanha (foto do acervo ou enviada, preço, promoção, link e destaque). */
+export interface ProdutoDaCampanha {
+  nome: string;
+  por_que: string;
+  imagem_id?: string;
+  caminho?: string;
+  preco?: string;
+  preco_promocional?: string;
+  link?: string;
+  destaque?: boolean;
+}
+
 export interface BriefingDaCampanha {
-  produtos: { nome: string; por_que: string }[];
+  produtos: ProdutoDaCampanha[];
   oferta: string;
   mensagem_central: string;
   publico: string;
@@ -173,6 +185,13 @@ export interface BriefingDaCampanha {
   ads?: { campaign_id: string; nome: string; vinculado_em: string } | null;
   /** 22/10/2026: o padrão visual da campanha (supabase/functions/_shared/padrao-da-campanha.ts). */
   padrao?: import("../../../supabase/functions/_shared/padrao-da-campanha").PadraoDaCampanha | null;
+  /** 22/10/2026: a condução (agente), as peças a refazer, o índice das versões, o tom, o esquema e o mercado. */
+  conducao?: string;
+  refazer?: string[];
+  versoes?: { id: string; criada_em: string; motivo: string; por: string | null; caminho: string; arquivados: string[] }[];
+  tom_da_campanha?: string;
+  esquema?: string;
+  mercado?: import("../../../supabase/functions/agente-calendario/modulos/mercado-da-campanha").MercadoDaCampanha | null;
 }
 
 export type PapelDaImagemDaCampanha = "heroi" | "apoio" | "ambiente";
@@ -501,6 +520,8 @@ export interface CamposDoItem {
   tipo_editorial?: string;
   framework?: string;
   cards?: { ordem: number; texto?: string; ilustracao?: string }[];
+  /** 22/10/2026: a fase da peça da campanha (aquecimento, lançamento, urgência, encerramento). */
+  etapa?: string;
 }
 
 export const editarItemDaProposta = (propostaId: string, temaId: string, campos: CamposDoItem) =>
@@ -563,6 +584,8 @@ export interface CorpoDaCampanha {
   nome?: string | null;
   /** 21/10/2026: a mistura de formatos (posts, carrosséis, stories, vídeos); manda na quantidade. */
   formatos?: { posts: number; carrosseis: number; stories: number; videos: number } | null;
+  /** 22/10/2026: pesquisar o que o mercado está fazendo antes de criar (custo antes). */
+  mercado?: boolean;
 }
 
 export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
@@ -570,6 +593,7 @@ export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
   if (c.tipo) corpo.tipo = c.tipo;
   if (c.nome && c.nome.trim()) corpo.nome = c.nome.trim().slice(0, 120);
   if (c.formatos) corpo.formatos = c.formatos;
+  if (c.mercado) corpo.mercado = true;
   if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
   if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
   if (c.quantidade) corpo.quantidade = c.quantidade;

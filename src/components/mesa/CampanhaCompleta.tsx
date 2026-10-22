@@ -71,7 +71,9 @@ export function usePecasDaCampanha(campanha: Campanha, proposta: PropostaV4 | nu
   const pecas: SituacaoDaPeca[] = useMemo(() => {
     // A série inteira: os conteúdos da proposta e os stories planejados (formato "story").
     const itens = ordenarPorData(((proposta && proposta.itens) || []).concat(storiesComoItens(campanha)));
-    return itens.map((it) => situacaoDaPeca(campanha, it, trabalhoDaPeca(trabalhos.data || [], it), fila.data || []));
+    // 22/10/2026: as peças que o agente mudou (arte antiga arquivada) aparecem como "a refazer".
+    const refazer = normalizarBriefing(campanha.briefing).refazer || [];
+    return itens.map((it) => situacaoDaPeca(campanha, it, trabalhoDaPeca(trabalhos.data || [], it), fila.data || [], refazer));
   }, [campanha, proposta, trabalhos.data, fila.data]);
   const agoraVivo = emAndamento(execucao) || pecas.some((p) => p.estado === "gerando");
   useEffect(() => {

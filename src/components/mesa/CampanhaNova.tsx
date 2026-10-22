@@ -26,7 +26,7 @@ import {
   type Hype,
   type ImagemDaCampanha,
 } from "./mesaV4Api";
-import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, trocarCampanhaNoCache } from "./campanhasApi";
+import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, partesDoMercado, trocarCampanhaNoCache } from "./campanhasApi";
 import CampanhaImagens from "./CampanhaImagens";
 import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -123,6 +123,8 @@ export default function CampanhaNova({
   const [inicio, setInicio] = useState(() => (daSemente ? daSemente.inicio : hoje));
   const [fim, setFim] = useState(() => (daSemente ? daSemente.fim : somarDiasIso(hoje, molde ? molde.dias : DIAS_PADRAO_CAMPANHA)));
   const [passo, setPasso] = useState<PassoDaNova>("oque");
+  // 22/10/2026: "O que o mercado está fazendo" antes de criar (campanhas reais com fonte; custo antes).
+  const [comMercado, setComMercado] = useState(true);
   // Formatos: a sugestão pela duração até o dono mexer; depois vale a escolha dele.
   const [formatosEscolhidos, setFormatosEscolhidos] = useState<FormatosDaCampanha | null>(() => (molde ? molde.formatos : null));
   const [referencias, setReferencias] = useState<string[]>([]);
@@ -161,6 +163,7 @@ export default function CampanhaNova({
         tipo: tipo || null,
         nome: nome.trim() || null,
         formatos: normalizarFormatos(formatos),
+        mercado: comMercado,
       });
     } finally {
       setDesde(null);
@@ -328,6 +331,10 @@ export default function CampanhaNova({
                 <strong className="font-medium">Campanha completa:</strong> {resumoDosPassos(passosDaCompleta)}.
               </p>
               <p className={juntar(estiloDeTexto.auxiliar, "mt-1")}>Ou só o plano: briefing, identidade e série, sem gerar as peças.</p>
+              <label className="mt-3 flex min-w-0 items-center text-[13px]">
+                <input type="checkbox" className="mr-2 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]" checked={comMercado} onChange={(e) => setComMercado(e.target.checked)} aria-label="Pesquisar o que o mercado está fazendo" />
+                <span className="min-w-0">O que o mercado está fazendo <span className="text-muted-foreground">(campanhas reais com fonte, para diferenciar)</span></span>
+              </label>
 
               <div className="mt-4 border-t border-border pt-3">
                 <button
@@ -395,7 +402,7 @@ export default function CampanhaNova({
                 rotulo={<><Rocket className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Criar campanha</span></>}
                 titulo="Campanha criada"
                 descricao="Criar campanha: só o plano (tema, identidade com o selo e a série nos formatos escolhidos), sem gerar as peças."
-                partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length)}
+                partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length).concat(comMercado ? partesDoMercado(catalogo) : [])}
                 executar={criar}
                 aoConcluir={concluir}
                 disabled={!podeGerar}
@@ -406,7 +413,7 @@ export default function CampanhaNova({
                 rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Gerar campanha completa</span></>}
                 titulo="Campanha completa"
                 descricao={`Gerar campanha completa: ${resumoDosPassos(passosDaCompleta)}, tudo pelo gerador do Estúdio. Custo total estimado ao lado; confirme no segundo clique.`}
-                partes={() => partesDosPassos(passosDaCompleta, catalogo, { modeloImagemId: imagemPadrao ? imagemPadrao.id : null, quantidade: qtd, anexos: anexos.caminhos.length + imagens.length })}
+                partes={() => partesDosPassos(passosDaCompleta, catalogo, { modeloImagemId: imagemPadrao ? imagemPadrao.id : null, quantidade: qtd, anexos: anexos.caminhos.length + imagens.length }).concat(comMercado ? partesDoMercado(catalogo) : [])}
                 executar={gerarCompleta}
                 fecharAoConfirmar
                 sempreConfirmar

@@ -575,6 +575,7 @@ import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-o
 import { acoesDoTemplateProfile, type TemplateProfile } from "./modulos/template-profile.ts";
 // 22/10/2026: o padrão visual da campanha (referência da campanha lida uma vez; toda peça e o selo seguem).
 import { blocoDoPadrao, normalizarPadrao, referenciasDaPecaComPadrao } from "../_shared/padrao-da-campanha.ts";
+import { linhaDoTomParaAPeca, tomDaCampanha } from "../agente-calendario/modulos/tom-da-campanha.ts";
 import { acoesDoPadraoDaCampanha } from "./modulos/padrao-da-campanha-acao.ts";
 // 21/10: Template com "Gerar" (texto do post e foto sem texto), custo antes por 409 confirmar_custo.
 import { acoesDaGeracaoDoTemplate, TAMANHO_DA_FOTO } from "./modulos/template-geracao.ts";
@@ -1211,6 +1212,8 @@ function blocoDaCampanha(c: CampanhaDaLamina): string {
     b.mensagem_central ? `- Mensagem central (o clima e a imagem reforçam esta ideia): ${b.mensagem_central}` : "",
     // 22/10/2026: o padrão visual da campanha (a referência lida uma vez) vale para toda peça.
     blocoDoPadrao(normalizarPadrao(c.briefing && typeof c.briefing === "object" ? (c.briefing as Record<string, unknown>).padrao : null)),
+    // 22/10/2026: o tom da campanha (comercial direto por padrão): a peça vende, com oferta e CTA de ação.
+    `- ${linhaDoTomParaAPeca(tomDaCampanha(c.briefing && typeof c.briefing === "object" ? (c.briefing as Record<string, unknown>).tom_da_campanha : null))}`,
   ].filter(Boolean).join("\n");
 }
 

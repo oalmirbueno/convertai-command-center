@@ -38,6 +38,13 @@ const NIVEIS = [
   "A peça é a campanha: mostra o produto em foco, sustenta a oferta e a mensagem central do briefing e fala direto com o público descrito.",
 ];
 
+const NIVEIS_COMERCIAIS = [
+  "Conteúdo educativo ou institucional: sem oferta e sem pedido de ação.",
+  "Fala do tema e do produto, mas o CTA é vago (siga, compartilhe, saiba mais) e não há oferta.",
+  "Tem CTA de ação direta, mas a oferta ou o benefício concreto ficam fracos ou escondidos.",
+  "Peça de campanha: problema, solução, oferta ou benefício claro e CTA de ação direta com prazo.",
+];
+
 export function perguntasDaConferencia(campanha: CampanhaParaConferir, pecas: PecaParaConferir[]) {
   const lista = pecas.slice(0, MAX_PECAS_CONFERIDAS);
   const questions: Record<string, unknown> = {};
@@ -46,6 +53,14 @@ export function perguntasDaConferencia(campanha: CampanhaParaConferir, pecas: Pe
       type: "score",
       instructions: `Avalie a peça \`serie[${i}]\` contra o briefing da campanha em \`campanha.briefing\`: ela mostra o produto em foco, sustenta a oferta e a mensagem central e fala com o público descrito? Julgue só esta peça, pelo gancho, pelas lâminas e pelo CTA.`,
       criteria: NIVEIS,
+    };
+  });
+  // 22/10/2026: a peça é de campanha comercial? (CTA de ação e oferta), aviso antes de gerar a arte.
+  lista.forEach((p, i) => {
+    questions[`comercial_${i}`] = {
+      type: "score",
+      instructions: `A peça \`serie[${i}]\` é de campanha comercial: tem oferta ou benefício concreto e fecha com um CTA de ação direta (chamar no WhatsApp, agendar, garantir, comprar)? Julgue pelo gancho, pelas lâminas e pelo CTA.`,
+      criteria: NIVEIS_COMERCIAIS,
     };
   });
   const opcoes: Record<string, string> = {};
@@ -84,15 +99,19 @@ export function nivelDaNota(nota: number | null): NivelDaPeca | null {
 export function lerConferencia(
   answers: Record<string, { score?: number; confidence?: number; choice?: string }>,
   pecas: PecaParaConferir[],
-): { pecas: { tema_id: string; nota: number | null; nivel: NivelDaPeca | null; confianca: number | null }[]; melhor_gancho: string | null; confianca_do_gancho: number | null } {
+): { pecas: { tema_id: string; nota: number | null; nivel: NivelDaPeca | null; confianca: number | null; comercial: number | null; aviso_comercial: string | null }[]; melhor_gancho: string | null; confianca_do_gancho: number | null } {
   const saida = pecas.map((p, i) => {
     const r = answers[`peca_${i}`];
     const nota = r && typeof r.score === "number" && isFinite(r.score) ? Math.max(0, Math.min(1, r.score / (NIVEIS.length - 1))) : null;
+    const rc = answers[`comercial_${i}`];
+    const comercial = rc && typeof rc.score === "number" && isFinite(rc.score) ? Math.round(Math.max(0, Math.min(1, rc.score / (NIVEIS_COMERCIAIS.length - 1))) * 100) / 100 : null;
     return {
       tema_id: p.tema_id,
       nota: nota === null ? null : Math.round(nota * 100) / 100,
       nivel: nivelDaNota(nota),
       confianca: r && typeof r.confidence === "number" ? r.confidence : null,
+      comercial,
+      aviso_comercial: comercial !== null && comercial < 0.5 ? "Sem CTA de ação ou sem oferta: reforce antes de gerar a arte." : null,
     };
   });
   const g = answers.melhor_gancho;

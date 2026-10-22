@@ -12,6 +12,8 @@ import { briefingEstaVazio } from "./mesaV4Api";
 import { campanhaSalvar, CANAIS_DA_CAMPANHA, normalizarBriefing, trocarCampanhaNoCache } from "./campanhasApi";
 import { DIAS_MAX_CAMPANHA, diasEntreIso, periodoCurto } from "./mesaV4Api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { SeletorDoTom } from "./CampanhaEditor";
+import { ROTULO_DO_TOM, tomDaCampanha } from "../../../supabase/functions/agente-calendario/modulos/tom-da-campanha";
 
 /**
  * Briefing da campanha (25/09): o que torna a campanha concreta. Produto(s) em
@@ -132,9 +134,13 @@ export function FormularioDoBriefing({
             />
           </Campo>
         </div>
-        <Campo rotulo="Tom" id={`${prefixo}-tom`}>
+        <Campo rotulo="Tom de voz" id={`${prefixo}-tom`}>
           <Input id={`${prefixo}-tom`} value={valor.tom} onChange={(e) => mudar({ tom: e.target.value })} disabled={desabilitado} placeholder="Ex.: leve, próximo, com humor" className="h-8 text-[13px]" />
         </Campo>
+        <div className="sm:col-span-2">
+          {/* 22/10/2026: o tom da campanha (Comercial direto por padrão); o agente e a criação respeitam. */}
+          <SeletorDoTom valor={valor.tom_da_campanha} onValor={(t) => mudar({ tom_da_campanha: t })} desabilitado={desabilitado} />
+        </div>
         <div className="sm:col-span-2">
           <p className="mb-1 text-[11px] font-medium text-muted-foreground">Canais</p>
           <div role="group" aria-label="Canais da campanha" className="flex min-w-0 flex-wrap">
@@ -247,6 +253,7 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
       ) : (
         <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
           <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
+          <Linha rotulo="Tom da campanha">{ROTULO_DO_TOM[tomDaCampanha(briefing.tom_da_campanha)]}</Linha>
           {briefing.canais && briefing.canais.length > 0 && <Linha rotulo="Canais">{briefing.canais.join(", ")}</Linha>}
           {briefing.produtos.length > 0 && (
             <div className="sm:col-span-2">
@@ -283,7 +290,7 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
               </Linha>
             </div>
           )}
-          {briefing.tom && <Linha rotulo="Tom da campanha">{briefing.tom}</Linha>}
+          {briefing.tom && <Linha rotulo="Tom de voz">{briefing.tom}</Linha>}
         </dl>
       )}
       <div className="mt-3 flex flex-wrap items-center">
