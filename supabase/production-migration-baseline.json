@@ -2461,9 +2461,9 @@
     {
       "version": "20261023100000",
       "path": "supabase/migrations/20261023100000_motor_de_copy_viral.sql",
-      "local_sha256": "a8499e8d699936bf7a0962000db4fcaf437a12b0e0aa60d417d35b61a8edd681",
+      "local_sha256": "193a789c5408ccba20415a746b72de7170118712393d03432712d352bc23efb6",
       "remote_name": "motor_de_copy_viral",
-      "remote_statements_sha256": "94011c684119aec9f0be6da8d884915993eac03a815d9b351b256a7893672a1a",
+      "remote_statements_sha256": "82994d0d077091e69b59b9925c000df79cc75e81740d06c55366e719f49b51d4",
       "remote_hash_mode": "supabase_cli_split"
     },
     {
