@@ -97,7 +97,8 @@ describe("campanha completa: imagens, briefing e plano de imagens", () => {
 
   it("campanha_salvar grava só o que veio e confere cada imagem no acervo do cliente (nunca referência da internet)", () => {
     const s = corpoDe(calendario, "campanhaSalvar");
-    expect(s).toContain("if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing(corpo.briefing);");
+    // 22/10: o salvar mantém a trilha escolhida quando a tela manda o briefing sem ela.
+    expect(s).toContain("if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing({ trilha: (c.briefing ?? {}).trilha, ...(corpo.briefing as Record<string, unknown>) });");
     expect(s).toContain("fotosDoAcervoPorId(servico, c.client_id");
     expect(s).toContain("recusadas");
     const acervo = corpoDe(calendario, "fotosDoAcervoPorId");
@@ -157,7 +158,8 @@ describe("campanha completa: imagens, briefing e plano de imagens", () => {
   it("pedido livre e conversa da campanha passam a enxergar o briefing e as imagens", () => {
     expect(corpoDe(calendario, "pedidoLivre")).toContain("resumoDaCampanha(campanha, fotosDaCamp)");
     expect(corpoDe(calendario, "campanhaConversar")).toContain("resumoDaCampanha(c, fotosDaCamp)");
-    expect(corpoDe(calendario, "campanhaConversar")).toContain("campos.briefing = normalizarBriefing(nova.briefing)");
+    // 22/10: a conversa preserva os extras do briefing (trilha, padrão, versões, linha do tempo) ao gravar o novo.
+    expect(corpoDe(calendario, "campanhaConversar")).toContain("campos.briefing = { ...extrasDoBriefing(c.briefing), ...normalizarBriefing(nova.briefing) }");
   });
 
   it("a assinatura do plano é a mesma conta na tela e na função", () => {

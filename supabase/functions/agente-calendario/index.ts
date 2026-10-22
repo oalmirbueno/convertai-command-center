@@ -150,6 +150,10 @@ import { lerConferencia, perguntasDaConferencia, type PecaParaConferir } from ".
 import { normalizarPadrao, type PadraoDaCampanha } from "../_shared/padrao-da-campanha.ts";
 import { blocoDoTomDaCampanha, nichoRegulado, ofertaInformada, tomDaCampanha } from "./modulos/tom-da-campanha.ts";
 import { blocoDoEsquema, esquemaDaCampanha } from "./modulos/esquemas-de-campanha.ts";
+// 22/10/2026: a linha do tempo da campanha (fases e datas em código; o modelo só escreve o conteúdo).
+import { blocoDaLinhaDoTempo, calcularLinhaDoTempo, type LinhaDoTempo, normalizarLinhaDoTempo, vagasDasPecas, type VagaDaPeca } from "./modulos/linha-do-tempo.ts";
+import { type ConteudoDaPonta, conteudoDasPontas, ESQUEMA_DAS_PONTAS, itensDaReorganizacao, reorganizarPecas } from "./modulos/reorganizar-campanha.ts";
+import { direcaoDoRoteiro as direcaoDoRoteiroDeVideo, ESQUEMA_DO_ROTEIRO_DE_VIDEO, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "./modulos/roteiro-de-video.ts";
 import { blocoDoMercado, ESQUEMA_DO_MERCADO, mercadoComFonte, type MercadoDaCampanha, normalizarMercado } from "./modulos/mercado-da-campanha.ts";
 import { aplicarMudanca as aplicarMudancaDaCampanha, ESQUEMA_DA_MUDANCA, type ItemDaMudanca, type ItemDaSerie, itensDaMudanca, itensEscolhidos, pecasComApelido as pecasDaCampanhaComApelido, REGRAS_DA_MUDANCA, type VersaoDaCampanha, versoesDaCampanha } from "./modulos/mudanca-da-campanha.ts";
 // 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
@@ -491,6 +495,8 @@ type Item = {
   /** 02/10: peça de foto (formato "foto"): a direção para a Mesa Foto, no contrato de modulos/peca-de-foto.ts. */
   foto?: DirecaoDeFoto | null;
   video?: DirecaoDeVideoDaPauta | null;
+  /** 22/10/2026: o roteiro da peça de vídeo da campanha (gancho, cenas, falas, texto na tela, duração e trilha). */
+  roteiro_video?: RoteiroDeVideo | null;
   /** Título do item (peça de foto: o tema, como a Mesa Foto lê). */
   titulo?: string;
 };
@@ -724,6 +730,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     ...(normalizarEvolucao(o.evolucao) ? { evolucao: normalizarEvolucao(o.evolucao)! } : {}),
     // 02/10: peça de foto vai para a Mesa Foto com a direção do contrato (e o título, como os outros itens).
     ...(formato === "video" ? { mesa: "video" as const, video: normalizarVideoDaPauta(o.video) } : {}),
+    ...(formato === "video" && normalizarRoteiroDeVideo(o.roteiro_video) ? { roteiro_video: normalizarRoteiroDeVideo(o.roteiro_video) } : {}),
     ...(formato === "foto"
       ? { mesa: "foto" as const, titulo: texto(o.tema, 200), foto: normalizarDirecaoDeFoto(o.foto, { tema: texto(o.tema, 200), objetivo: texto(o.resumo, 300) }) }
       : {}),
@@ -3404,6 +3411,8 @@ type BriefingDaCampanha = {
   tom_da_campanha?: string;
   esquema?: string;
   mercado?: MercadoDaCampanha;
+  /** 22/10/2026: as fases com as datas (calculadas em código; linha-do-tempo.ts). */
+  linha_do_tempo?: LinhaDoTempo;
 };
 
 type FormatosDaCampanha = { posts: number; carrosseis: number; stories: number; videos: number };
@@ -3466,7 +3475,38 @@ function extrasDoBriefing(v: unknown): Partial<BriefingDaCampanha> {
     ...(trilhaDoBriefing(o.trilha) ? { trilha: trilhaDoBriefing(o.trilha) } : {}),
     ...(texto(o.esquema, 40) ? { esquema: texto(o.esquema, 40) } : {}),
     ...(normalizarMercado(o.mercado) ? { mercado: normalizarMercado(o.mercado) as MercadoDaCampanha } : {}),
+    ...(normalizarLinhaDoTempo(o.linha_do_tempo) ? { linha_do_tempo: normalizarLinhaDoTempo(o.linha_do_tempo) as LinhaDoTempo } : {}),
   };
+}
+
+/** Os posts comuns que o calendário já tem por dia (a regra de posts por dia do cliente conta com eles). */
+function ocupacaoComumPorDia(ctx: Pick<Contexto, "ocupacao">, mais: string[] = []): Record<string, number> {
+  const saida: Record<string, number> = {};
+  ctx.ocupacao.filter((o) => !o.hype).forEach((o) => { saida[o.data] = (saida[o.data] || 0) + 1; });
+  mais.forEach((d) => { saida[d] = (saida[d] || 0) + 1; });
+  return saida;
+}
+
+/** Quantas peças cabem bem na linha (sem escolha da equipe): de 4 a 8, pelos dias úteis da janela. */
+function pecasPadraoDaLinha(linha: LinhaDoTempo): number {
+  const uteis = diasUteisDoPeriodo(linha.inicio, linha.fim).length;
+  return Math.max(Math.min(4, Math.max(2, uteis)), Math.min(8, Math.ceil(uteis * 0.7)));
+}
+
+/**
+ * A linha do tempo pedida na criação: data do evento (sem ela, o fim da oferta), "começar N dias antes" (sem,
+ * o início escolhido ou o padrão do tipo) e o fim.
+ */
+export function linhaDaCriacao(corpo: Record<string, unknown>, esquema: string, hoje: string): LinhaDoTempo {
+  const evento = typeof corpo.data_evento === "string" && DATA.test(corpo.data_evento) ? corpo.data_evento : null;
+  const inicioPedido = typeof corpo.periodo_inicio === "string" && DATA.test(corpo.periodo_inicio) ? corpo.periodo_inicio : null;
+  const fimPedido = typeof corpo.periodo_fim === "string" && DATA.test(corpo.periodo_fim) ? corpo.periodo_fim : null;
+  const diasAntes = corpo.dias_antes !== undefined && corpo.dias_antes !== null && Number.isFinite(Number(corpo.dias_antes)) ? Number(corpo.dias_antes) : null;
+  if (evento) return calcularLinhaDoTempo({ esquema, evento, diasAntes, inicio: inicioPedido, fim: fimPedido, hoje });
+  // Sem data do evento: o evento é o fim (o último dia da oferta) e a janela é a escolhida.
+  const inicio = inicioPedido || hoje;
+  const fim = fimPedido && fimPedido >= inicio ? fimPedido : somarDias(inicio, 21);
+  return calcularLinhaDoTempo({ esquema, evento: fim, diasAntes, inicio, fim, hoje });
 }
 
 /** Linha do acervo (cliente_imagens) que a campanha usa. */
@@ -4420,6 +4460,15 @@ export function editarUmItem(antigo: Item, campos: Record<string, unknown>, utei
   }
   // 22/10/2026: a fase da peça (etapa da campanha) também se edita à mão.
   if (typeof campos.etapa === "string" && texto(campos.etapa, 60)) novo.etapa = texto(campos.etapa, 60);
+  // 22/10/2026: o roteiro da peça de vídeo editado na campanha; a direção do estúdio de vídeo acompanha.
+  if (novo.formato === "video" && campos.roteiro_video && typeof campos.roteiro_video === "object") {
+    const r = normalizarRoteiroDeVideo(campos.roteiro_video);
+    if (r) {
+      novo.roteiro_video = r;
+      novo.video = normalizarVideoDaPauta({ ...(novo.video ?? {}), ...direcaoDoRoteiroDeVideo(r) });
+      if (r.gancho) novo.gancho = r.gancho;
+    }
+  }
   if (campos.tipo_editorial !== undefined) novo.tipo_editorial = normalizarTipo(campos.tipo_editorial);
   if (campos.framework !== undefined) novo.framework = normalizarFramework(campos.framework);
   if (Array.isArray(campos.cards)) {
@@ -5193,9 +5242,12 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   await exigirAcessoAoCliente(chamador, clientId);
   const pedidoTexto = texto(corpo.pedido, 4000);
   if (!pedidoTexto) throw new ErroHttp(400, "pedido_vazio", "Descreva a campanha (tema, ocasião, oferta).");
-  const inicio = typeof corpo.periodo_inicio === "string" && DATA.test(corpo.periodo_inicio) ? corpo.periodo_inicio : hojeSaoPaulo();
-  let fim = typeof corpo.periodo_fim === "string" && DATA.test(corpo.periodo_fim) ? corpo.periodo_fim : somarDias(inicio, 21);
-  if (fim < inicio) fim = inicio;
+  // 22/10/2026: as fases e as datas saem da linha do tempo (código), pelo esquema da ocasião.
+  const hypeDaLinha = corpo.hype && typeof corpo.hype === "object" ? String((corpo.hype as Record<string, unknown>).titulo ?? "") : "";
+  const esquemaDaLinha = esquemaDaCampanha(`${texto(corpo.nome, 120)} ${pedidoTexto} ${hypeDaLinha}`, tipoValido(corpo.tipo));
+  const linha = linhaDaCriacao(corpo, esquemaDaLinha.id, hojeSaoPaulo());
+  const inicio = linha.inicio;
+  const fim = linha.fim;
   if (diasEntre(inicio, fim) > 62) throw new ErroHttp(400, "periodo_longo", "Campanha de até 2 meses por vez.");
   const uteis = diasUteisDoPeriodo(inicio, fim);
   if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "O período não tem nenhum dia de segunda a sexta.");
@@ -5248,19 +5300,26 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const campanhaId = crypto.randomUUID();
   const tipoDaCriacao = await tipoPedidoP;
   const blocoDoTipo = blocoDoTipoParaOEstrategista(tipoDaCriacao.tipo);
+  // As vagas das peças pela linha (a primeira é introdução, a última encerramento; posts por dia do cliente).
+  const nVagas = quantidade ?? pecasPadraoDaLinha(linha);
+  const doCalendario = vagasDasPecas(linha, nVagas, { porDia: ctx.regraDoDia.porDia, ocupacao: ocupacaoComumPorDia(ctx) });
+  const vagasDaSerie: VagaDaPeca[] = doCalendario.vagas;
+  const avisosDaLinha = linha.avisos.concat(doCalendario.avisos);
   // 22/10/2026: "O que o mercado está fazendo" (opcional, custo antes na tela) e o bloco comercial da campanha.
   const mercadoP = corpo.mercado === true
     ? pesquisarMercado(servico, { clientId, campanhaId, nome: texto(corpo.nome, 120), pedido: pedidoTexto, tipo: tipoDaCriacao.tipo, ctx, userId: chamador.userId, modeloId: corpo.modelo_id }).catch((e) => (registrarFalha("agente-calendario: pesquisa de mercado falhou", e), { mercado: null, custo: 0 }))
     : Promise.resolve({ mercado: null as MercadoDaCampanha | null, custo: 0 });
   const doMercado = await mercadoP;
   const tomEscolhido = tomDaCampanha((corpo.briefing && typeof corpo.briefing === "object" ? (corpo.briefing as Record<string, unknown>).tom_da_campanha : null) ?? corpo.tom_da_campanha);
-  const esquemaDaCriacao = esquemaDaCampanha(`${texto(corpo.nome, 120)} ${pedidoTexto} ${hype && typeof hype === "object" ? String((hype as Record<string, unknown>).titulo ?? "") : ""}`, tipoDaCriacao.tipo);
+  const esquemaDaCriacao = esquemaDaLinha.id !== "promocional" ? esquemaDaLinha : esquemaDaCampanha(`${texto(corpo.nome, 120)} ${pedidoTexto} ${hypeDaLinha}`, tipoDaCriacao.tipo);
   const blocoComercial = blocoComercialDaCampanha({ nome: texto(corpo.nome, 120), pedido: `${pedidoTexto} ${esquemaDaCriacao.palavras[0]}`, briefing: { ...briefingDaEquipe, tom_da_campanha: tomEscolhido, ...(doMercado.mercado ? { mercado: doMercado.mercado } : {}) }, identidade: { tipo: tipoDaCriacao.tipo } }, ctx);
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
 
 ${blocoComercial}
+
+${blocoDaLinhaDoTempo(linha)}
 ${blocoDoTipo ? `
 ${blocoDoTipo}
 ` : ""}${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}${notaDoSistema(avisosDasImagens.join(" ") || null)}
@@ -5270,7 +5329,9 @@ TAREFA: crie a campanha completa para ${inicio} a ${fim}. Nada genérico: cada p
 - conceito: a grande ideia em 2 a 4 frases (o que a campanha diz, por que funciona para este público).
 - briefing: produtos (1 a 3 produtos ou serviços em foco, cada um com por_que: por que este produto nesta campanha e neste período), oferta (a oferta concreta; se o pedido e o contexto não disserem, escreva "sem oferta definida" e nunca invente preço, desconto ou prazo), mensagem_central (a frase que o público precisa entender), publico (quem a campanha quer alcançar, concreto: quem é, o que quer, o que trava), provas (1 a 4 provas reais do contexto: depoimentos, números, garantias; nunca invente; sem prova real, lista vazia), tom (como a campanha fala), cta (a ação principal pedida).
 - identidade: a identidade visual DO TEMA, que vive dentro da marca: tema_visual (clima, fotografia, composição recorrente em 3 a 5 frases), paleta_apoio (1 a 3 cores de apoio em hex que harmonizam com a paleta da marca, nunca substituindo a principal), tipografia (como o título da campanha aparece), elementos (grafismos, formas, selo, texturas), tom (como a campanha fala), selo (texto curto do selo ou logo do tema, até 4 palavras, e a descricao visual do selo).
-- itens: ${quantidade ? `exatamente ${quantidade}` : "de 3 a 8"} conteúdos dentro do período,${formatos && naSerie ? ` nesta mistura de formatos: ${formatos.posts} com formato "estatico" (post de arte única), ${formatos.carrosseis} com formato "carrossel" e ${formatos.videos} com formato "video" (Reels: preencha video com estilo, prompt, narracao e referencias; cards vazio);` : ""} contando a campanha do teaser ao fechamento (aquecimento, lançamento, prova, urgência, último chamado), sem repetir estrutura; datas só de segunda a sexta entre ${inicio} e ${fim}. Cada conteúdo mostra o produto em foco e serve à mensagem central.${fotosVistas.length ? ' Quando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.' : ""}
+- itens: exatamente ${vagasDaSerie.length} conteúdos, um para cada vaga abaixo e NA ORDEM das vagas (a data e a etapa de cada um já estão decididas: copie a data e a etapa da vaga),${formatos && naSerie ? ` nesta mistura de formatos: ${formatos.posts} com formato "estatico" (post de arte única), ${formatos.carrosseis} com formato "carrossel" e ${formatos.videos} com formato "video" (Reels: preencha video com estilo, prompt, narracao e referencias; cards vazio);` : ""} cada um fazendo o papel da sua fase, sem repetir estrutura:
+${vagasDaSerie.map((v, k) => `  vaga ${k + 1}: data ${v.data}, etapa ${v.etapa} (${v.nome}): ${v.papel}`).join("\n")}
+  Cada conteúdo mostra o produto em foco e serve à mensagem central.${fotosVistas.length ? ' Quando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.' : ""}
 ${formatos && formatos.stories ? `- stories: exatamente ${formatos.stories} sequências de stories espalhadas nas fases (aquecimento, lançamento, urgência, encerramento), cada uma com data (AAAA-MM-DD, de segunda a sexta no período), etapa, tema, gancho e telas (3 a 5 textos curtos, um por tela, o último com a ação).
 ` : ""}- plano_imagens: ${fotosVistas.length ? "qual foto da campanha vai em qual lâmina e por quê." : "sem fotos da campanha: analise e pecas vazias; nas lacunas, as fotos que a equipe deveria trazer."}
 - resposta: 1 a 3 frases com o resumo da campanha para a equipe.
@@ -5296,6 +5357,12 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
   const naOrdem = (Array.isArray(r.itens) ? r.itens : []).slice(0, 12).map((bruto, i) => {
     const item = normalizarItem(bruto, uteis);
     item.tema_id = `c${i + 1}`;
+    // A data e a etapa são as da vaga (código), nunca as do modelo.
+    const vaga = vagasDaSerie[i];
+    if (vaga) {
+      item.data = vaga.data;
+      item.etapa = vaga.etapa;
+    }
     (item as Item & { campanha_id?: string }).campanha_id = campanhaId;
     return item;
   });
@@ -5304,7 +5371,8 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
 
   const briefingJunto = juntarBriefing(normalizarBriefing(r.briefing), briefingDaEquipe);
   // A mistura e os stories planejados ficam no briefing (a tela lê a mistura e manda cada story para a aba Stories).
-  const storiesFeitos = formatos && formatos.stories ? storiesDaCampanha(r.stories).slice(0, formatos.stories).map((x, i) => ({ ...x, tema_id: `s${i + 1}`, data: x.data && x.data >= inicio && x.data <= fim ? x.data : uteis[Math.min(uteis.length - 1, Math.floor((i * uteis.length) / Math.max(1, formatos.stories)))] })) : [];
+  const vagasDosStories = formatos && formatos.stories ? vagasDasPecas(linha, formatos.stories, { porDia: 3 }).vagas : [];
+  const storiesFeitos = formatos && formatos.stories ? storiesDaCampanha(r.stories).slice(0, formatos.stories).map((x, i) => ({ ...x, tema_id: `s${i + 1}`, ...(vagasDosStories[i] ? { data: vagasDosStories[i].data, etapa: vagasDosStories[i].etapa } : { data: x.data && x.data >= inicio && x.data <= fim ? x.data : uteis[0] }) })) : [];
   const briefing: BriefingDaCampanha = {
     ...briefingJunto,
     ...(formatos ? { formatos } : {}),
@@ -5312,6 +5380,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     tom_da_campanha: tomEscolhido,
     esquema: esquemaDaCriacao.id,
     ...(doMercado.mercado ? { mercado: doMercado.mercado } : {}),
+    linha_do_tempo: { ...linha, avisos: avisosDaLinha.slice(0, 6) },
   };
   // Plano de imagens: o do estrategista, decidido pelo Jev onde há mais de uma candidata.
   let plano: PlanoDeImagens | null = null;
@@ -5409,7 +5478,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     console.error("[agente-calendario] conversa inicial da campanha nao gravada", { campanha_id: campanhaId, erro: String(e) });
   }
 
-  return json({ campanha, proposta, resposta: respostaComAvisos(texto(r.resposta, 2000), avisosDasImagens), avisos: avisosDasImagens, tipo: tipoDaCriacao.tipo, tipo_por: tipoDaCriacao.por, project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta, resposta: respostaComAvisos(texto(r.resposta, 2000), avisosDasImagens), avisos: avisosDasImagens.concat(avisosDaLinha), linha_do_tempo: linha, tipo: tipoDaCriacao.tipo, tipo_por: tipoDaCriacao.por, project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 const ESQUEMA_AJUSTE_CAMPANHA = {
@@ -5580,6 +5649,8 @@ CONTEÚDOS DA CAMPANHA (JSON; os com "na_agenda": true já estão na agenda e N�
 ${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task_id, task_id: undefined })))}
 
 ${blocoComercialDaCampanha(c, ctx)}
+
+${blocoDaLinhaDoTempo(normalizarLinhaDoTempo(((c.briefing ?? {}) as Record<string, unknown>).linha_do_tempo))}
 
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}${notaDoSistema(anexos.aviso)}${blocoDoSeloParaOEstrategista(intencaoDoSelo) ? `\n${blocoDoSeloParaOEstrategista(intencaoDoSelo)}\n` : ""}
@@ -6014,10 +6085,14 @@ ${hojeParaOAgente().texto}
 CAMPANHA EM ANDAMENTO (JSON):
 ${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, periodo_inicio: inicio, periodo_fim: fim, briefing: briefingAtual, conducao })}
 
+${await situacaoDaCampanhaParaOAgente(servico, c, pecas)}
+
 PEÇAS DA SÉRIE (JSON, pelo apelido; "protegida": true = na agenda, aprovada ou publicada):
 ${JSON.stringify(pecas.map((p) => ({ peca: p.apelido, data: p.data, formato: p.formato, etapa: p.etapa, tema: p.tema, gancho: p.gancho, cta: p.cta, laminas: p.laminas, protegida: p.protegida, com_arte: p.com_arte })))}
 
 ${blocoComercialDaCampanha(c, ctx)}
+
+${blocoDaLinhaDoTempo(normalizarLinhaDoTempo(((c.briefing ?? {}) as Record<string, unknown>).linha_do_tempo))}
 
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `A equipe anexou ${anexos.imagens.length} imagem(ns); use com fidelidade.\n` : ""}
@@ -6050,6 +6125,218 @@ ${REGRAS_DA_MUDANCA}`;
   return json({ acao, resposta, ignorados, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
 }
 
+/**
+ * campanha_roteiro_video { campanha_id, tema_id } -> { proposta, item, custo_usd }
+ * O roteiro da peça de vídeo (gancho, cenas com fala e texto na tela, duração, trilha e CTA), pela fase da
+ * linha do tempo, o tom comercial e a trilha da campanha. Grava no item (roteiro_video) e a direção do vídeo.
+ */
+async function campanhaRoteiroVideo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  if (!c.proposta_id) throw new ErroHttp(400, "campanha_sem_serie", "A campanha ainda não tem a série de conteúdos.");
+  const proposta = await carregarProposta(servico, c.proposta_id);
+  const temaId = texto(corpo.tema_id, 40);
+  const item = proposta.itens.filter((i) => i.tema_id === temaId)[0];
+  if (!item) throw new ErroHttp(404, "peca_inexistente", "Esta peça não está mais na série.");
+  if (item.formato !== "video") throw new ErroHttp(400, "peca_nao_e_video", "Só as peças de vídeo têm roteiro de vídeo.");
+  const b = (c.briefing ?? {}) as Record<string, unknown>;
+  const trilha = trilhaDoBriefing(b.trilha);
+  const linha = normalizarLinhaDoTempo(b.linha_do_tempo);
+  const ctx = await montarContexto(servico, c.client_id, c.periodo_inicio ?? hojeSaoPaulo(), c.periodo_fim ?? hojeSaoPaulo(), marcaDaChamada(servico, c.client_id, corpo));
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, "low");
+  const s = await chamarTexto({
+    clientId: c.client_id,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: sistemaDoCalendario(ctx, "campanha"),
+    metodo: await metodoDaGeracao(servico),
+    mensagens: [{
+      papel: "usuario",
+      conteudo: `CAMPANHA (JSON): ${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, briefing: normalizarBriefing(c.briefing) })}
+
+${blocoComercialDaCampanha(c, ctx)}
+
+${blocoDaLinhaDoTempo(linha)}
+
+PEÇA DE VÍDEO (Reels 9:16): ${JSON.stringify({ data: item.data, etapa: item.etapa, tema: item.tema, gancho: item.gancho, cta: item.cta, direcao: item.video })}
+${trilha ? `TRILHA DA CAMPANHA (já escolhida): ${trilha.titulo} (${trilha.duracao}s). Use-a como trilha.` : "Sem trilha escolhida: sugira o clima da trilha em poucas palavras."}
+
+TAREFA: o roteiro do Reels desta peça, no papel da fase dela. gancho (o que prende nos 2 primeiros segundos), cenas (3 a 6, cada uma com descricao do que aparece, fala exata ou vazia, texto_na_tela curto ou vazio e segundos), trilha e cta (ação direta). Total de 15 a 30 segundos. Só o que dá para gravar ou gerar com as fotos reais do cliente; nada de promessa que o briefing não sustenta. Sem travessão.`,
+    }],
+    raciocinio,
+    esquemaJson: ESQUEMA_DO_ROTEIRO_DE_VIDEO,
+    referencia: { tipo: REF_CAMPANHA, id: c.id },
+    criadoPor: chamador.userId,
+  });
+  const roteiro = normalizarRoteiroDeVideo({ ...((s.json ?? {}) as Record<string, unknown>), ...(trilha ? { trilha: trilha.titulo } : {}), gerado_em: new Date().toISOString() });
+  if (!roteiro) throw new ErroHttp(502, "roteiro_vazio", "O roteiro não voltou. Tente de novo.", { uso_id: s.usoId });
+  const { item: novo } = editarUmItem(item, { roteiro_video: roteiro, ...(roteiro.cta ? { cta: roteiro.cta } : {}) }, diasUteisDaProposta(proposta));
+  const itens = proposta.itens.map((i) => (i.tema_id === temaId ? novo : i));
+  const salva = await salvarProposta(servico, proposta, { itens });
+  await somarCustoDaCampanha(servico, c.id, c.client_id, s.custoUsd);
+  return json({ proposta: salva, item: novo, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
+}
+
+/**
+ * 22/10/2026: a situação da campanha para o agente responder e agir (peças por estado, stories, trilha e o
+ * anúncio vinculado nos últimos 7 dias). Só leitura; o que falhar fica de fora.
+ */
+async function situacaoDaCampanhaParaOAgente(servico: SupabaseClient, c: Campanha, pecas: Array<{ protegida: boolean; com_arte: boolean; formato: string }>): Promise<string> {
+  const b = (c.briefing ?? {}) as Record<string, unknown>;
+  const linhas: string[] = [];
+  const total = pecas.length;
+  const protegidas = pecas.filter((p) => p.protegida).length;
+  const comArte = pecas.filter((p) => p.com_arte).length;
+  const videos = pecas.filter((p) => p.formato === "video").length;
+  linhas.push(`- Peças: ${total} na série; ${comArte} com arte; ${protegidas} aprovadas ou na agenda; ${total - comArte - videos} posts sem arte; ${videos} vídeo(s).`);
+  const refazer = Array.isArray(b.refazer) ? (b.refazer as unknown[]).length : 0;
+  if (refazer) linhas.push(`- ${refazer} peça(s) a refazer (o texto mudou depois da arte).`);
+  const stories = Array.isArray(b.stories) ? (b.stories as Array<Record<string, unknown>>) : [];
+  if (stories.length) linhas.push(`- Stories planejados: ${stories.length} (${stories.filter((x) => x && x.sequencia_id).length} com sequência criada).`);
+  const trilha = trilhaDoBriefing(b.trilha);
+  linhas.push(trilha ? `- Trilha escolhida: ${trilha.titulo}.` : "- Sem trilha escolhida.");
+  const ads = (b.ads && typeof b.ads === "object" ? b.ads : null) as Record<string, unknown> | null;
+  if (ads && ads.campaign_id) {
+    try {
+      const desde = somarDias(hojeSaoPaulo(), -7);
+      const { data } = await servico.from("ads_campaign_daily").select("day, spend, actions").eq("client_id", c.client_id).eq("campaign_id", String(ads.campaign_id)).gte("day", desde).limit(50);
+      const dias = (data ?? []) as Array<{ day: string; spend: number | string | null; actions: unknown }>;
+      const gasto = dias.reduce((t, d) => t + (Number(d.spend) || 0), 0);
+      const leads = dias.reduce((t, d) => {
+        const lista = (Array.isArray(d.actions) ? d.actions : []) as Array<{ action_type?: string; value?: unknown }>;
+        const lead = lista.filter((a) => a && (a.action_type === "lead" || a.action_type === "onsite_conversion.lead_grouped" || a.action_type === "offsite_conversion.fb_pixel_lead"))[0];
+        return t + (lead ? Number(lead.value) || 0 : 0);
+      }, 0);
+      linhas.push(`- Anúncio vinculado (${texto(ads.nome, 120) || String(ads.campaign_id)}): últimos 7 dias, ${dias.length} dia(s) com dado, gasto R$ ${gasto.toFixed(2)}, ${leads} lead(s)${leads ? `, custo por lead R$ ${(gasto / leads).toFixed(2)}` : ""}.`);
+    } catch (e) {
+      registrarFalha("agente-calendario: números do anúncio não lidos", e);
+    }
+  } else linhas.push("- Sem anúncio vinculado.");
+  return [`SITUAÇÃO DA CAMPANHA AGORA (${hojeSaoPaulo()}):`].concat(linhas).join("\n");
+}
+
+/** Acha a mensagem da ação planejada (a mais nova da conversa) e confirma todos os itens não protegidos. */
+async function aplicarAcaoPlanejada(servico: SupabaseClient, chamador: Chamador, c: Campanha, acaoId: string) {
+  const conversaId = await conversaDaCampanha(servico, c, chamador.userId);
+  const { data } = await servico.from("agente_mensagens").select("id, anexos").eq("conversa_id", conversaId).eq("papel", "agente").order("criado_em", { ascending: false }).limit(5);
+  const linha = ((data ?? []) as Array<{ id: string; anexos: unknown }>).filter((m) => Array.isArray(m.anexos) && (m.anexos as Array<Record<string, unknown>>).some((a) => a && a.id === acaoId))[0];
+  if (!linha) throw new ErroHttp(503, "mudanca_nao_achada", "A mudança foi planejada, mas não foi achada para aplicar.");
+  return await campanhaMudancaConfirmar(servico, chamador, { mensagem_id: linha.id, acao_id: acaoId });
+}
+
+/**
+ * campanha_reorganizar { campanha_id, data_evento?, dias_antes?, fim?, aplicar? } -> { acao, resposta, linha_do_tempo }
+ * Recalcula a linha do tempo (evento e início; o que já passou começa hoje, com a introdução comprimida),
+ * redistribui as peças não aprovadas e não publicadas e cria as que faltam na introdução e no encerramento.
+ * Sai como mudança planejada (diff e Confirmar); com aplicar, confirma tudo o que não é protegido. Nunca aprova,
+ * publica nem gera arte: mudar de dia não refaz a arte; as peças novas entram sem arte.
+ */
+async function campanhaReorganizar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const hoje = hojeSaoPaulo();
+  const b = (c.briefing ?? {}) as Record<string, unknown>;
+  const antes = normalizarLinhaDoTempo(b.linha_do_tempo);
+  const esquema = texto(b.esquema, 40) || esquemaDaCampanha(`${c.nome} ${c.pedido ?? ""}`, (c.identidade as Record<string, unknown> | null)?.tipo as string | null).id;
+  const eventoPedido = typeof corpo.data_evento === "string" && DATA.test(corpo.data_evento) ? corpo.data_evento : null;
+  const evento = eventoPedido ?? antes?.evento ?? c.periodo_fim ?? hoje;
+  const diasAntes = corpo.dias_antes !== undefined && corpo.dias_antes !== null && Number.isFinite(Number(corpo.dias_antes))
+    ? Number(corpo.dias_antes)
+    : !eventoPedido && antes ? antes.dias_antes : null;
+  const fimPedido = typeof corpo.fim === "string" && DATA.test(corpo.fim) ? corpo.fim : null;
+  const fim = fimPedido ?? (antes && antes.evento === evento ? antes.fim : !antes && !eventoPedido && c.periodo_fim ? c.periodo_fim : null);
+  const linha = calcularLinhaDoTempo({ esquema, evento, diasAntes, fim, hoje });
+  if (diasEntre(linha.inicio, linha.fim) > 62) throw new ErroHttp(400, "periodo_longo", "Campanha de até 2 meses por vez.");
+
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const itensDaSerie = (proposta?.itens ?? []) as unknown as ItemDaSerie[];
+  const artes = await artesDaCampanha(servico, c);
+  const protegidas = new Set(artes.filter((a) => a.protegida).map((a) => a.tema_id));
+  const pecas = pecasDaCampanhaComApelido(itensDaSerie, protegidas, new Set(artes.map((a) => a.tema_id)));
+  const [ctx, conversaId] = await Promise.all([
+    montarContexto(servico, c.client_id, linha.inicio, linha.fim, marcaDaChamada(servico, c.client_id, corpo)),
+    conversaDaCampanha(servico, c, chamador.userId),
+  ]);
+  // O calendário de fora conta (posts por dia); as protegidas desta campanha que não estão na agenda também.
+  const protegidasForaDaAgenda = itensDaSerie.filter((i) => protegidas.has(i.tema_id) && !i.task_id).map((i) => i.data);
+  const reorganizada = reorganizarPecas({ linha, pecas, porDia: ctx.regraDoDia.porDia, ocupacao: ocupacaoComumPorDia(ctx, protegidasForaDaAgenda) });
+
+  // O conteúdo das peças novas (introdução e encerramento): o modelo escreve, as datas já estão decididas.
+  let custo = 0;
+  let usoId: string | null = null;
+  const padrao = (v: VagaDaPeca): ConteudoDaPonta => {
+    const intro = v.fase === "aquecimento";
+    const bri = normalizarBriefing(c.briefing);
+    return {
+      tema: `${v.nome}: ${c.nome}`.slice(0, 200),
+      gancho: intro ? `Vem aí: ${c.nome}` : `Última chamada: ${c.nome}`,
+      laminas: [intro ? `Vem aí: ${c.nome}. Fique de olho.` : `Última chamada: ${bri.oferta || c.nome}`],
+      cta: intro ? "Ative o lembrete e fale com a gente" : bri.cta || "Garanta agora",
+      legenda: "",
+    };
+  };
+  let conteudos: ConteudoDaPonta[] = reorganizada.novas.map(padrao);
+  if (reorganizada.novas.length) {
+    try {
+      const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, "low");
+      const s = await chamarTexto({
+        clientId: c.client_id,
+        tarefa: "calendario",
+        agente: AGENTE,
+        modeloId: modelo.id,
+        timeoutMs: TIMEOUT_CALENDARIO_MS,
+        sistema: sistemaDoCalendario(ctx, "campanha"),
+        metodo: await metodoDaGeracao(servico),
+        mensagens: [{
+          papel: "usuario",
+          conteudo: `CAMPANHA (JSON): ${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, briefing: normalizarBriefing(c.briefing) })}
+
+${blocoComercialDaCampanha(c, ctx)}
+
+${blocoDaLinhaDoTempo(linha)}
+
+TAREFA: escreva o conteúdo das peças novas abaixo (post de arte única), uma por vaga, na ordem. A data e a fase já estão decididas.
+${reorganizada.novas.map((v, k) => `- vaga ${k + 1}: ${v.data}, ${v.etapa} (${v.nome}): ${v.papel}`).join("\n")}
+Para cada uma: tema (título curto), gancho, laminas (1 texto curto da arte), cta (ação direta) e legenda (a legenda do post, curta, com o CTA). A introdução prepara o público e nunca abre com a oferta; o encerramento é a última chamada com o prazo real. Sem travessão.`,
+        }],
+        raciocinio,
+        esquemaJson: ESQUEMA_DAS_PONTAS,
+        referencia: { tipo: REF_CAMPANHA, id: c.id },
+        criadoPor: chamador.userId,
+      });
+      custo = s.custoUsd;
+      usoId = s.usoId ?? null;
+      conteudos = conteudoDasPontas(s.json, reorganizada.novas, padrao);
+    } catch (e) {
+      // Sem o modelo, as peças novas entram com o texto da fase (a equipe ajusta pelo agente).
+      registrarFalha("agente-calendario: conteúdo das pontas não escrito", e);
+    }
+  }
+  const itens = itensDaReorganizacao(antes, linha, reorganizada, conteudos);
+  const avisos = linha.avisos.concat(reorganizada.avisos);
+  const resposta = `Reorganizei as datas e as fases: ${linha.fases.map((f) => `${f.nome.toLowerCase()} de ${dataCurta(f.inicio)}${f.fim !== f.inicio ? ` a ${dataCurta(f.fim)}` : ""}`).join(", ")}.${reorganizada.novas.length ? ` Entram ${reorganizada.novas.length} peça(s) novas nas pontas (introdução e encerramento).` : ""}${avisos.length ? ` ${avisos.join(" ")}` : ""} Confira e confirme.`;
+  const acao = { tipo: "acao_agente", agente: AGENTE_DA_MUDANCA, id: crypto.randomUUID(), resumo: "Reorganizar datas e fases", itens, ignorados: [], recusados: [], contexto: { campanha_id: c.id, reorganizar: true } };
+  if (custo) await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
+  await registrarMensagens(servico, conversaId, c.client_id, [
+    { papel: "usuario", conteudo: `Reorganizar datas e fases (evento em ${dataCurta(linha.evento)})` },
+    { papel: "agente", conteudo: resposta, ...(usoId ? { uso_id: usoId } : {}), anexos: [acao] },
+  ]);
+  if (corpo.aplicar !== true) return json({ acao, resposta, linha_do_tempo: { ...linha, avisos }, custo_usd: custo });
+  return await aplicarAcaoPlanejada(servico, chamador, c, acao.id);
+}
+
+/**
+ * campanha_reorganizar_interno { campanha_id, autor_id, data_evento?, dias_antes?, fim?, aplicar? } (chave de
+ * serviço + x-cron-secret): a mesma reorganização assinada por um usuário da equipe com acesso ao cliente.
+ */
+async function campanhaReorganizarInterno(servico: SupabaseClient, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  const chamador = await chamadorDoAutor(servico, typeof corpo.autor_id === "string" ? corpo.autor_id : null, c.client_id);
+  return await campanhaReorganizar(servico, chamador, { campanha_id: c.id, data_evento: corpo.data_evento, dias_antes: corpo.dias_antes, fim: corpo.fim, aplicar: corpo.aplicar === true });
+}
+
 /** A mudança guardada na mensagem do agente da campanha (o acesso é conferido aqui). */
 async function mudancaGuardada(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   try {
@@ -6080,7 +6367,12 @@ async function campanhaMudancaConfirmar(servico: SupabaseClient, chamador: Chama
   const itensAntes = (proposta?.itens ?? []) as unknown as ItemDaSerie[];
   const versao = await guardarVersaoDaCampanha(servico, c, itensAntes, guardada.acao.resumo || "Mudança pelo agente", chamador.userId);
   const aplicado = aplicarMudancaDaCampanha({ briefing: (c.briefing ?? {}) as Record<string, unknown>, itens: itensAntes }, escolhidos);
-  const uteis = diasUteisDoPeriodo(c.periodo_inicio ?? hojeSaoPaulo(), c.periodo_fim ?? somarDias(c.periodo_inicio ?? hojeSaoPaulo(), 21));
+  // 22/10/2026: a linha do tempo nova (reorganizar) muda o período da campanha; as peças novas ficam na janela nova.
+  const linhaNova = normalizarLinhaDoTempo(aplicado.briefing.linha_do_tempo);
+  const mudouALinha = !!linhaNova && JSON.stringify(linhaNova) !== JSON.stringify(normalizarLinhaDoTempo(((c.briefing ?? {}) as Record<string, unknown>).linha_do_tempo));
+  const iniDaJanela = mudouALinha && linhaNova ? linhaNova.inicio : c.periodo_inicio ?? hojeSaoPaulo();
+  const fimDaJanela = mudouALinha && linhaNova ? linhaNova.fim : c.periodo_fim ?? somarDias(iniDaJanela, 21);
+  const uteis = diasUteisDoPeriodo(iniDaJanela, fimDaJanela);
   const novasIds = new Set(aplicado.novas.map((n) => n.tema_id));
   const itensFinais = aplicado.itens.map((i) => {
     if (!novasIds.has(i.tema_id)) return i;
@@ -6093,18 +6385,19 @@ async function campanhaMudancaConfirmar(servico: SupabaseClient, chamador: Chama
   });
   // A arte das peças que mudaram ou saíram (e não estão protegidas) é arquivada: volta a "a refazer".
   const artes = await artesDaCampanha(servico, c);
-  const tocadas = new Set(aplicado.mudaram.concat(aplicado.sairam));
+  // Mudar de dia ou de fase não refaz a arte: só o texto que mudou (ou a peça que saiu).
+  const tocadas = new Set(aplicado.mudouConteudo.concat(aplicado.sairam));
   const arquivados = await marcarArtesArquivadas(servico, c.client_id, artes.filter((a) => tocadas.has(a.tema_id) && !a.protegida), true);
   const refazerAntes = Array.isArray(((c.briefing ?? {}) as Record<string, unknown>).refazer) ? (((c.briefing ?? {}) as Record<string, unknown>).refazer as string[]) : [];
-  const refazer = refazerAntes.concat(artes.filter((a) => aplicado.mudaram.indexOf(a.tema_id) >= 0 && !a.protegida).map((a) => a.tema_id))
+  const refazer = refazerAntes.concat(artes.filter((a) => aplicado.mudouConteudo.indexOf(a.tema_id) >= 0 && !a.protegida).map((a) => a.tema_id))
     .filter((t, i, l) => l.indexOf(t) === i && aplicado.sairam.indexOf(t) < 0);
   const indice = [{ ...versao, arquivados }].concat(versoesDaCampanha(((c.briefing ?? {}) as Record<string, unknown>).versoes)).slice(0, 20);
   const novoNome = typeof aplicado.briefing.__nome === "string" ? texto(aplicado.briefing.__nome, 120) : "";
   const briefing: Record<string, unknown> = { ...aplicado.briefing, refazer, versoes: indice };
   delete briefing.__nome;
-  const { data: gravada, error } = await servico.from("mesa_campanhas").update({ briefing, ...(novoNome ? { nome: novoNome } : {}), atualizado_em: new Date().toISOString() }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
+  const { data: gravada, error } = await servico.from("mesa_campanhas").update({ briefing, ...(novoNome ? { nome: novoNome } : {}), ...(mudouALinha && linhaNova ? { periodo_inicio: linhaNova.inicio, periodo_fim: linhaNova.fim } : {}), atualizado_em: new Date().toISOString() }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
   if (error || !gravada) throw new ErroHttp(503, "campanha_nao_salva", "A mudança não foi salva. Tente de novo.");
-  const propostaFinal = proposta ? await salvarProposta(servico, proposta, { itens: itensFinais, status: "pronta" }) : null;
+  const propostaFinal = proposta ? await salvarProposta(servico, proposta, { itens: itensFinais, status: "pronta", ...(mudouALinha && linhaNova ? { periodo_inicio: linhaNova.inicio, periodo_fim: linhaNova.fim } : {}) }) : null;
   // Só os escolhidos ficam na proposta da mudança; o executor só registra (a mudança já foi aplicada acima).
   const comVersao = { ...guardada.acao, itens: escolhidos, contexto: { ...contexto, versao_id: versao.id } };
   await guardada.gravar(comVersao);
@@ -8563,6 +8856,8 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_sugestoes_ordenar: campanhaSugestoesOrdenar,
   campanha_mercado: campanhaMercado,
   campanha_reescrever_comercial: campanhaReescreverComercial,
+  campanha_reorganizar: campanhaReorganizar,
+  campanha_roteiro_video: campanhaRoteiroVideo,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,
@@ -8577,7 +8872,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_trilha", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_trilha", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 
@@ -8772,7 +9067,7 @@ Deno.serve(async (req) => {
     const acao = String(corpo.acao ?? corpo.action ?? "");
     // 02/10: refazer uma proposta no servidor. Só com a chave de serviço no Authorization e o x-cron-secret.
     // 17/10: a busca semanal de hype (agendador) usa a mesma porta.
-    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno") {
+    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno" || acao === "campanha_reorganizar_interno") {
       const autorizado = autorizarChamadaInterna({
         authorization: req.headers.get("Authorization"),
         cronSecretDoPedido: req.headers.get("x-cron-secret"),
@@ -8785,6 +9080,7 @@ Deno.serve(async (req) => {
           if (acao === "hypes_da_semana_interno") return await hypesDaSemanaInterno(servico);
           // 22/10/2026: reescrever uma campanha no tom comercial, assinada por um usuário da equipe (nunca aprova nem publica).
           if (acao === "campanha_reescrever_comercial_interno") return await campanhaReescreverComercialInterno(servico, corpo);
+          if (acao === "campanha_reorganizar_interno") return await campanhaReorganizarInterno(servico, corpo);
           return await refazerPropostaInterno(servico, corpo);
         } catch (err) {
           return respostaDeErro(err);

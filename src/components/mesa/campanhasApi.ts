@@ -19,6 +19,7 @@ import type { TrabalhoDaPeca } from "./regrasDaCampanha";
 import { entregarComModo } from "@/lib/mesa/entregaComOpcoes";
 import { novoLote } from "./seloApi";
 import { normalizarPadrao, pedidoDoSeloPeloPadrao } from "../../../supabase/functions/_shared/padrao-da-campanha";
+import { normalizarLinhaDoTempo } from "../../../supabase/functions/agente-calendario/modulos/linha-do-tempo";
 import * as storiesApi from "./stories/storiesApi";
 import { ESTILO_AUTOMATICO, planoDasOpcoes } from "../../../supabase/functions/_shared/selo-da-campanha";
 
@@ -261,7 +262,10 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
     ...(typeof o.tom_da_campanha === "string" && o.tom_da_campanha ? { tom_da_campanha: o.tom_da_campanha } : {}),
     ...(typeof o.esquema === "string" && o.esquema ? { esquema: o.esquema } : {}),
     ...(o.mercado && typeof o.mercado === "object" ? { mercado: o.mercado as BriefingDaCampanha["mercado"] } : {}),
-  };
+    ...(normalizarLinhaDoTempo(o.linha_do_tempo) ? { linha_do_tempo: normalizarLinhaDoTempo(o.linha_do_tempo) } : {}),
+    // A trilha da campanha (aba Trilha e efeitos) segue intacta ao salvar à mão.
+    ...(o.trilha && typeof o.trilha === "object" ? { trilha: o.trilha } : {}),
+  } as BriefingDaCampanha;
 }
 
 /** Canais em que a campanha roda (21/10/2026). A equipe marca; a lista fixa é a da casa. */
@@ -678,6 +682,25 @@ export const partesDaMudanca = (catalogo: ModeloIa[], pecas: number): ParteDaEst
 export const partesDoMercado = (catalogo: ModeloIa[]): ParteDaEstimativa[] => {
   const m = padraoPara(catalogo, "estrategista");
   return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada, tokensSaida: saidaPorRaciocinio("low"), buscasWeb: 4 }];
+};
+
+/**
+ * "Reorganizar datas e fases": recalcula a linha do tempo pelo evento e pelo início, redistribui as peças não
+ * aprovadas e cria as que faltam na introdução e no encerramento (mudança planejada; nada muda sem Confirmar).
+ */
+export const reorganizarCampanha = (campanhaId: string, o: { dataEvento?: string | null; diasAntes?: number | null; fim?: string | null } = {}) =>
+  chamarFuncao<any>("agente-calendario", {
+    acao: "campanha_reorganizar",
+    campanha_id: campanhaId,
+    ...(o.dataEvento ? { data_evento: o.dataEvento } : {}),
+    ...(typeof o.diasAntes === "number" ? { dias_antes: o.diasAntes } : {}),
+    ...(o.fim ? { fim: o.fim } : {}),
+  });
+
+/** Reorganizar: no máximo uma chamada curta (o texto das peças novas da introdução e do encerramento). */
+export const partesDaReorganizacao = (catalogo: ModeloIa[]): ParteDaEstimativa[] => {
+  const m = padraoPara(catalogo, "estrategista");
+  return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: TAMANHOS.conversarMes.entrada, tokensSaida: saidaPorRaciocinio("low") }];
 };
 
 /** Sobe a foto de um produto para a pasta da campanha (bucket mesa) e devolve o caminho. */

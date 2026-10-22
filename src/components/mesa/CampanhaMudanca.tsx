@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { padraoPara, TAMANHOS, textoDoErro, usd } from "@/lib/mesa/api";
 import { botao, juntar, texto } from "@/components/sistema";
 import { useEstimativa } from "./Custo";
-import { useMesa } from "./MesaContexto";
+import { useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { Cronometro } from "./Cronometro";
+import { executarPasso, FAZENDO_AGORA, lerPasso, partesDoPasso, type PassoDoPlano } from "./passosDaCampanha";
 import type { Campanha } from "./mesaV4Api";
 import { aplicarRespostaDaCampanha, chavesDaCampanha, chavesDaCampanhaCompleta, confirmarMudanca, descartarMudanca, desfazerMudanca } from "./campanhasApi";
 import type { AcaoDoAgente, ItemDaAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
@@ -21,13 +23,20 @@ const GRUPOS: { rotulo: string; operacoes: string[] }[] = [
   { rotulo: "Peças que mudam", operacoes: ["alterar_peca", "alterar_peca_protegida"] },
   { rotulo: "Peças que entram", operacoes: ["nova_peca"] },
   { rotulo: "Peças que saem", operacoes: ["tirar_peca", "tirar_peca_protegida"] },
+  { rotulo: "Datas e fases", operacoes: ["linha_do_tempo"] },
 ];
+
+/** Os passos do plano (ações da casa que o agente pôs na ordem). */
+const ehPasso = (i: ItemDaAcaoDoAgente) => i.operacao.indexOf("passo_") === 0;
 
 const protegido = (i: ItemDaAcaoDoAgente) => i.operacao.indexOf("_protegida") >= 0;
 
 export default function CampanhaMudanca({ campanha, mensagemId, acao }: { campanha: Campanha; mensagemId: string; acao: AcaoDoAgente }) {
   const { clientId, catalogo } = useMesa();
+  const { marca } = useMarcaDaMesa();
   const qc = useQueryClient();
+  // 22/10/2026: o plano em etapas (passos) roda depois do Confirmar, um por vez, com o que está fazendo agora.
+  const [fazendo, setFazendo] = useState<{ rotulo: string; desde: number } | null>(null);
   const [marcados, setMarcados] = useState<string[]>(() => acao.itens.filter((i) => !protegido(i)).map((i) => i.ref));
   const [ocupado, setOcupado] = useState(false);
   const aberta = !acao.executada_em && !acao.descartada_em;
@@ -37,10 +46,13 @@ export default function CampanhaMudanca({ campanha, mensagemId, acao }: { campan
   const refazer = acao.itens.filter((i) => marcados.indexOf(i.ref) >= 0 && ((i.operacao.indexOf("alterar_peca") === 0 && String(i.detalhe || "").indexOf("a arte será refeita") >= 0) || i.operacao === "nova_peca")).length;
   const diretor = padraoPara(catalogo, "diretor_arte");
   const imagem = padraoPara(catalogo, "imagem");
-  const estimativa = useEstimativa(refazer ? [
-    { modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida, vezes: refazer },
-    { modeloId: imagem ? imagem.id : null, tipo: "imagem", imagens: 1, qualidade: "media", tokensEntrada: TAMANHOS.imagemAnexos.entrada, vezes: refazer * 3 },
-  ] : null);
+  const passos = acao.itens.filter((i) => ehPasso(i) && marcados.indexOf(i.ref) >= 0).map((i) => lerPasso(i.para)).filter((p): p is PassoDoPlano => !!p);
+  const partesDosPassos = passos.reduce((l, p) => l.concat(partesDoPasso(p, catalogo)), [] as ReturnType<typeof partesDoPasso>);
+  const partes = (refazer ? [
+    { modeloId: diretor ? diretor.id : null, tipo: "texto" as const, tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida, vezes: refazer },
+    { modeloId: imagem ? imagem.id : null, tipo: "imagem" as const, imagens: 1, qualidade: "media" as const, tokensEntrada: TAMANHOS.imagemAnexos.entrada, vezes: refazer * 3 },
+  ] : []).concat(partesDosPassos as never[]);
+  const estimativa = useEstimativa(partes.length ? partes : null);
 
   const reler = (data: unknown) => {
     aplicarRespostaDaCampanha(qc, clientId, data);
@@ -54,6 +66,21 @@ export default function CampanhaMudanca({ campanha, mensagemId, acao }: { campan
     try {
       const data = o === "confirmar" ? await confirmarMudanca(mensagemId, acao.id, marcados) : o === "cancelar" ? await descartarMudanca(mensagemId, acao.id) : await desfazerMudanca(mensagemId, acao.id);
       reler(data);
+      // Os passos do plano, na ordem, um por vez (o que está fazendo agora, com o cronômetro).
+      if (o === "confirmar" && passos.length) {
+        for (const p of passos) {
+          setFazendo({ rotulo: FAZENDO_AGORA[p.acao], desde: Date.now() });
+          try {
+            const r = await executarPasso(p, { campanha: (data && data.campanha) || campanha, clientId, qc, marcaId: marca ? marca.id : null });
+            if (r.aviso) toast.info(r.aviso);
+          } catch (e) {
+            toast.error(`${FAZENDO_AGORA[p.acao]}: não deu certo`, { description: textoDoErro(e) });
+            break;
+          }
+        }
+        setFazendo(null);
+        reler(null);
+      }
       if (o === "confirmar") toast.success("Mudança aplicada", { description: `${marcados.length} item(ns). A versão de antes ficou guardada.` });
       if (o === "desfazer") toast.success("Mudança desfeita", { description: "A campanha voltou à versão de antes." });
     } catch (e) {
@@ -96,10 +123,43 @@ export default function CampanhaMudanca({ campanha, mensagemId, acao }: { campan
           </div>
         );
       })}
+      {acao.itens.some(ehPasso) && (
+        <div className="mt-2 min-w-0">
+          <p className={texto.rotulo}>Plano (feito na ordem, depois do Confirmar)</p>
+          <ol className="mt-1 space-y-1" aria-label="Plano do agente">
+            {acao.itens.filter(ehPasso).map((i, k) => (
+              <li key={i.ref} className="flex min-w-0 items-start text-[12px]" data-item-da-mudanca={i.ref} data-passo={(lerPasso(i.para) || { acao: "" }).acao}>
+                {aberta ? (
+                  <input
+                    type="checkbox"
+                    className="mr-2 mt-0.5 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]"
+                    checked={marcados.indexOf(i.ref) >= 0}
+                    onChange={(e) => setMarcados((l) => (e.target.checked ? l.concat([i.ref]) : l.filter((x) => x !== i.ref)))}
+                    aria-label={`Incluir ${i.titulo}`}
+                  />
+                ) : (
+                  <Check className={juntar("mr-2 mt-0.5 h-3.5 w-3.5 shrink-0", marcados.indexOf(i.ref) >= 0 ? "text-success" : "text-muted-foreground")} aria-hidden="true" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">{k + 1}. {i.titulo}</span>
+                  {i.detalhe && <span className="block text-muted-foreground">{i.detalhe}</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {fazendo && (
+        <div className="mt-2 min-w-0" data-fazendo-agora="">
+          <Cronometro desde={fazendo.desde} rotulo={`Agora: ${fazendo.rotulo}`} />
+        </div>
+      )}
       {aberta && (
         <div className="mt-2.5 flex min-w-0 items-center">
           <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate")}>
-            {refazer ? `${refazer} peça(s) a gerar de novo${estimativa.data !== undefined ? ` · ~${usd(estimativa.data)}` : ""}` : "Sem peça a gerar de novo"}
+            {refazer || passos.length
+              ? `${refazer ? `${refazer} peça(s) a gerar de novo` : ""}${refazer && passos.length ? " · " : ""}${passos.length ? `${passos.length} passo(s)` : ""}${estimativa.data !== undefined && estimativa.data > 0 ? ` · ~${usd(estimativa.data)}` : ""}`
+              : "Sem custo para aplicar"}
           </span>
           <button type="button" className={botao.icone} onClick={() => void fazer("cancelar")} disabled={ocupado} aria-label="Cancelar a mudança" title="Cancelar a mudança">
             <X className="h-4 w-4" aria-hidden="true" />

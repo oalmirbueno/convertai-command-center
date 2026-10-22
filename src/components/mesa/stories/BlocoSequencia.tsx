@@ -92,7 +92,8 @@ export default function BlocoSequencia({
   const marcaId = marcaDaMesa ? marcaDaMesa.id : null;
   const confirmar = useConfirm();
   const [filtro, setFiltro] = useEstadoDaTela<string>(`mesa:stories:filtro:${clientId}`, TODAS);
-  const [selecionado, setSelecionado] = useState<string | null>(null);
+  // 22/10/2026: a tela aberta fica lembrada (a campanha abre direto numa tela da sequência).
+  const [selecionado, setSelecionado] = useEstadoDaTela<string | null>(`mesa:stories:tela:${clientId}`, null);
   const [agendando, setAgendando] = useState(false);
   const [ordenando, setOrdenando] = useState(false);
   // 22/10: as fotos naturais sendo geradas agora (andamento por tela).

@@ -163,7 +163,8 @@ describe("semente do Mês vira campanha", () => {
     expect((screen.getByLabelText("Pedido da campanha") as HTMLTextAreaElement).value).toContain("Data/evento: Black Friday (27/11)");
     expect(screen.getByRole("list", { name: "Sugestões do Mês" })).toBeTruthy();
     const hoje = hojeIso();
-    const inicio = (screen.getByLabelText("Início da campanha") as HTMLInputElement).value;
+    // 22/10/2026: o início sai da linha do tempo (data do evento e dias antes); a prévia mostra a data.
+    const inicio = (document.querySelector("[data-inicio]") as HTMLElement).getAttribute("data-inicio") as string;
     expect(inicio >= hoje).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Criar campanha/ }));
     await waitFor(() => expect(chamadas("agente-calendario", "campanha_criar").length).toBe(1));

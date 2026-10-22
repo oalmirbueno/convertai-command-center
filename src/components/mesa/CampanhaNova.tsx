@@ -26,6 +26,7 @@ import {
   type Hype,
   type ImagemDaCampanha,
 } from "./mesaV4Api";
+import { EditorDaLinha, esquemaDaNova, linhaPrevista, type DatasDaNova } from "./CampanhaLinhaDoTempo";
 import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, partesDoMercado, trocarCampanhaNoCache } from "./campanhasApi";
 import CampanhaImagens from "./CampanhaImagens";
 import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
@@ -35,7 +36,7 @@ import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../..
 import { padraoPara } from "@/lib/mesa/api";
 import { useMarcaDaMesa } from "./MesaContexto";
 import type { SementeDaCampanha } from "./sementeDaCampanha";
-import { campanhaDaSemente, type MoldeDaCampanha, normalizarFormatos, partesDosPassos, passosQueFaltam, resumoDosPassos, sugerirFormatos, totalNaSerie, type FormatosDaCampanha } from "./regrasDaCampanha";
+import { campanhaDaSemente, datasDoQuando, type MoldeDaCampanha, normalizarFormatos, partesDosPassos, passosQueFaltam, resumoDosPassos, sugerirFormatos, totalNaSerie, type FormatosDaCampanha } from "./regrasDaCampanha";
 import Etapas from "@/components/sistema/Etapas";
 import { PreviaDaCampanha, SeletorDeFormatos } from "./CampanhaFormatos";
 import { depsDaCampanha, ProgressoDaCampanha } from "./CampanhaCompleta";
@@ -120,8 +121,16 @@ export default function CampanhaNova({
   const [daSemente] = useState(() => (semente ? campanhaDaSemente(semente, hoje) : null));
   const [nome, setNome] = useState(() => (daSemente ? daSemente.titulo : ""));
   const [pedido, setPedido] = useState(() => (daSemente ? daSemente.pedido : hype ? pedidoDaCampanhaDoHype(hype) : ""));
-  const [inicio, setInicio] = useState(() => (daSemente ? daSemente.inicio : hoje));
-  const [fim, setFim] = useState(() => (daSemente ? daSemente.fim : somarDiasIso(hoje, molde ? molde.dias : DIAS_PADRAO_CAMPANHA)));
+  // 22/10/2026: as datas saem da linha do tempo: data do evento, começar X dias antes e terminar em (sem a
+  // escolha, o evento é o fim da janela de antes: a semente, o molde ou os dias padrão).
+  const [datas, setDatas] = useState<DatasDaNova>(() => {
+    const ini = daSemente ? daSemente.inicio : hoje;
+    const fimDeAntes = daSemente ? daSemente.fim : somarDiasIso(hoje, molde ? molde.dias : DIAS_PADRAO_CAMPANHA);
+    // Do Mês com data (hype): o evento é a data do hype; senão, o fim da janela.
+    const doHype = semente && semente.hypes && semente.hypes[0] ? datasDoQuando(semente.hypes[0].quando, hoje).filter((d) => d >= hoje)[0] : "";
+    const evento = doHype || fimDeAntes;
+    return { evento, diasAntes: Math.max(0, diasEntreIso(ini, evento)), fim: doHype && fimDeAntes > doHype ? fimDeAntes : null };
+  });
   const [passo, setPasso] = useState<PassoDaNova>("oque");
   // 22/10/2026: "O que o mercado está fazendo" antes de criar (campanhas reais com fonte; custo antes).
   const [comMercado, setComMercado] = useState(true);
@@ -135,6 +144,10 @@ export default function CampanhaNova({
   const [galeria, setGaleria] = useState(false);
   const [desde, setDesde] = useState<number | null>(null);
 
+  const esquema = esquemaDaNova(`${nome} ${pedido} ${hype ? hype.titulo : ""}`, tipo || null);
+  const linha = linhaPrevista(datas, esquema, hoje);
+  const inicio = linha.inicio;
+  const fim = linha.fim;
   const dias = inicio && fim ? diasEntreIso(inicio, fim) : -1;
   const erroDoPeriodo = !inicio || !fim
     ? "Escolha o início e o fim."
@@ -154,6 +167,8 @@ export default function CampanhaNova({
         pedido: pedido.trim(),
         periodoInicio: inicio,
         periodoFim: fim,
+        dataEvento: datas.evento,
+        diasAntes: datas.diasAntes,
         quantidade: qtd,
         anexos: anexos.caminhos,
         referenciasIds: referencias,
@@ -305,13 +320,8 @@ export default function CampanhaNova({
                 </div>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Campo rotulo="Início">
-                  <Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9 min-w-0" aria-label="Início da campanha" />
-                </Campo>
-                <Campo rotulo="Fim">
-                  <Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9 min-w-0" aria-label="Fim da campanha" />
-                </Campo>
+              <div className="mt-3 min-w-0">
+                <EditorDaLinha datas={datas} onDatas={setDatas} esquema={esquema} desabilitado={desde !== null} />
               </div>
               {erroDoPeriodo && <p className="mt-2 text-[12px] text-destructive">{erroDoPeriodo}</p>}
             </div>
@@ -426,7 +436,7 @@ export default function CampanhaNova({
 
         {/* A prévia da campanha montando (ao lado no computador; embaixo no celular). */}
         <aside className="min-w-0 lg:pt-2">
-          <PreviaDaCampanha nome={nome} inicio={inicio} fim={fim} formatos={formatos} className="lg:sticky lg:top-2" />
+          <PreviaDaCampanha nome={nome} inicio={inicio} fim={fim} formatos={formatos} linha={linha} className="lg:sticky lg:top-2" />
         </aside>
       </div>
     </ZonaDeAnexos>

@@ -163,8 +163,10 @@ describe("refazer_proposta_interno", () => {
   it("no servidor: a ação interna passa antes da sessão, confere o autor com is_staff e as atribuições e nunca grava", () => {
     const serve = fonte.slice(fonte.indexOf("Deno.serve("));
     // 17/10: a busca semanal de hype (agendador) usa a mesma porta interna; 22/10: a reescrita comercial da campanha também.
-    expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno")')).toBeGreaterThan(-1);
-    expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno")')).toBeLessThan(serve.indexOf("await identificar(req, servico)"));
+    expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno"')).toBeGreaterThan(-1);
+    expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno"')).toBeLessThan(serve.indexOf("await identificar(req, servico)"));
+    // 22/10/2026: a reorganização de datas e fases da campanha também entra pela porta interna.
+    expect(serve).toContain('acao === "campanha_reorganizar_interno") {');
     expect(serve).toContain('cronSecretDoPedido: req.headers.get("x-cron-secret")');
     expect(serve).toContain('cronSecret: await chave("CRON_SECRET")');
     const autor = fonte.slice(fonte.indexOf("async function chamadorDoAutor("), fonte.indexOf("async function refazerPropostaInterno("));

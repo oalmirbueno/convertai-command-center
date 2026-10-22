@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, CalendarCheck2, Copy, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Music, Stamp, X } from "lucide-react";
+import { BookmarkPlus, CalendarCheck2, Clapperboard, Copy, ChevronLeft, ClipboardList, ExternalLink, Images, LayoutGrid, LayoutList, Lightbulb, Loader2, MessageSquare, Music, Smartphone, Stamp, X } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
@@ -42,6 +42,9 @@ import CampanhaPlanoDeImagens from "./CampanhaPlanoDeImagens";
 import CampanhaNasMesas from "./CampanhaNasMesas";
 import CampanhaSelo from "./CampanhaSelo";
 import CampanhaTrilha from "./CampanhaTrilha";
+import CampanhaLinhaDoTempo from "./CampanhaLinhaDoTempo";
+import CampanhaStories from "./CampanhaStories";
+import CampanhaVideos from "./CampanhaVideos";
 import { trilhaSugeridaDaCampanha } from "./trilhaDaCampanhaApi";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
@@ -65,10 +68,10 @@ export function SeloDoEstado({ estado }: { estado: string }) {
 
 // ------------------------------------------------------------------ seções
 
-type IdDaSecao = "visao" | "ideia" | "briefing" | "identidade" | "serie" | "pecas" | "trilha" | "revisao";
+type IdDaSecao = "visao" | "ideia" | "briefing" | "identidade" | "serie" | "pecas" | "stories" | "videos" | "trilha" | "revisao";
 
 /** O caminho da campanha, na ordem: a campanha pronta e as seis etapas. Um ícone por etapa. */
-const ORDEM_DAS_SECOES: IdDaSecao[] = ["visao", "ideia", "briefing", "identidade", "serie", "pecas", "trilha", "revisao"];
+const ORDEM_DAS_SECOES: IdDaSecao[] = ["visao", "ideia", "briefing", "identidade", "serie", "pecas", "stories", "videos", "trilha", "revisao"];
 
 export const NOMES_DAS_SECOES: Record<IdDaSecao, string> = {
   visao: "Campanha",
@@ -77,6 +80,8 @@ export const NOMES_DAS_SECOES: Record<IdDaSecao, string> = {
   identidade: "Identidade",
   serie: "Série de conteúdos",
   pecas: "Peças",
+  stories: "Stories",
+  videos: "Vídeos e Reels",
   trilha: "Trilha e efeitos",
   revisao: "Revisão e agenda",
 };
@@ -88,6 +93,8 @@ const ICONES_DAS_SECOES: Record<IdDaSecao, ReactNode> = {
   identidade: <Stamp className="h-4 w-4" />,
   serie: <LayoutList className="h-4 w-4" />,
   pecas: <Images className="h-4 w-4" />,
+  stories: <Smartphone className="h-4 w-4" />,
+  videos: <Clapperboard className="h-4 w-4" />,
   trilha: <Music className="h-4 w-4" />,
   revisao: <CalendarCheck2 className="h-4 w-4" />,
 };
@@ -149,7 +156,7 @@ export default function CampanhaDetalhe({
   /** Abre a peça (arte rápida) no Estúdio. */
   onAbrirArteRapida?: (trabalhoId: string) => void;
   /** 22/10/2026: abre a sequência de stories da campanha na aba Stories. */
-  onAbrirStories?: (sequenciaId: string) => void;
+  onAbrirStories?: (sequenciaId: string, storyId?: string) => void;
   campanha: Campanha;
   projetoSugerido?: string | null;
   /** Celular: volta para a lista. */
@@ -191,6 +198,17 @@ export default function CampanhaDetalhe({
     setAba(s);
     gravarAba(s);
   };
+
+  // 22/10/2026: o agente (e as áreas) pedem para mostrar uma parte da campanha (passo do plano).
+  useEffect(() => {
+    const ouvir = (e: Event) => {
+      const d = (e as CustomEvent<{ campanhaId?: string; aba?: string }>).detail || {};
+      if (d.campanhaId === campanha.id && d.aba && ORDEM_DAS_SECOES.indexOf(d.aba as IdDaSecao) >= 0) escolher(d.aba as IdDaSecao);
+    };
+    window.addEventListener("mesa:campanha:aba", ouvir);
+    return () => window.removeEventListener("mesa:campanha:aba", ouvir);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campanha.id]);
 
   const id = campanha.identidade || {};
   const paleta = (id.paleta_apoio || []).filter((c) => c && c.hex);
@@ -259,6 +277,8 @@ export default function CampanhaDetalhe({
     identidade: campanha.selo_path ? "com selo" : "sem selo ainda",
     serie: conteudosResumo,
     pecas: deArte.length ? `${prontas} de ${deArte.length} prontas` : "",
+    stories: (briefing.stories || []).length ? `${(briefing.stories || []).length} planejada(s)` : "",
+    videos: itens.filter((i) => i.formato === "video").length ? `${itens.filter((i) => i.formato === "video").length} vídeo(s)` : "",
     trilha: trilhaSugeridaDaCampanha(campanha.briefing)?.titulo || "",
     revisao: deArte.length ? `${naAgendaPecas} de ${deArte.length} na agenda` : "",
   };
@@ -269,6 +289,8 @@ export default function CampanhaDetalhe({
     identidade: !!campanha.selo_path,
     serie: itens.length > 0,
     pecas: deArte.length > 0 && prontas === deArte.length,
+    stories: (briefing.stories || []).length > 0 && (briefing.stories || []).every((s) => !!s.sequencia_id),
+    videos: itens.some((i) => i.formato === "video") && itens.filter((i) => i.formato === "video").every((i) => !!(i as { roteiro_video?: unknown }).roteiro_video),
     trilha: !!trilhaSugeridaDaCampanha(campanha.briefing),
     revisao: deArte.length > 0 && naAgendaPecas === deArte.length,
   };
@@ -488,6 +510,11 @@ export default function CampanhaDetalhe({
         {/* 4. Série: gerar na hora, editar, escolher e mandar para a agenda; o plano de imagens embaixo. */}
         {aba === "serie" && (
           <>
+            {/* 22/10/2026: a linha do tempo (fases com as datas, em código) e "Reorganizar datas e fases". */}
+            <section className="min-w-0" aria-label="Linha do tempo">
+              <h3 className={juntar(texto.rotulo, "mb-2")}>Linha do tempo</h3>
+              <CampanhaLinhaDoTempo campanha={campanha} onAbrirAgente={onAbrirAgente} />
+            </section>
             <CampanhaConteudos
               campanha={campanha}
               proposta={proposta.data || null}
@@ -506,6 +533,10 @@ export default function CampanhaDetalhe({
 
         {/* 5. Peças: cada conteúdo gerado pelo Estúdio, com a identidade da campanha. */}
         {aba === "pecas" && <CampanhaPecas campanha={campanha} pecas={pecas} carregando={lendoPecas} onAbrirArteRapida={onAbrirArteRapida} onAbrirStories={onAbrirStories} />}
+
+        {/* 22/10/2026: stories e vídeos da campanha ali mesmo (abrir, gerar e voltar já atualizado). */}
+        {aba === "stories" && <CampanhaStories campanha={campanha} onAbrirStories={onAbrirStories} />}
+        {aba === "videos" && <CampanhaVideos campanha={campanha} onAbrirNoEstudio={onAbrirNoEstudio} />}
 
         {/* 22/10/2026: trilha sem voz e efeitos do tema (ElevenLabs), escolhida vai para o briefing e Arquivos. */}
         {aba === "trilha" && <CampanhaTrilha campanha={campanha} />}

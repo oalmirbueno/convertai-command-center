@@ -35,13 +35,40 @@ export interface ItemDaMudanca {
   para_rotulo?: string | null;
 }
 
+/**
+ * 22/10/2026 ("o agente ser mais agêntico"): as ações da casa que o agente pode pôr no plano, além do diff. A
+ * tela mostra o custo de cada passo e só faz depois do Confirmar, na ordem, com o que está fazendo agora.
+ */
+export const PASSOS_DO_AGENTE = [
+  "reorganizar_datas",
+  "criar_stories_da_fase",
+  "gerar_roteiro_de_video",
+  "gerar_o_que_falta",
+  "abrir_peca_no_estudio",
+  "vincular_anuncio",
+  "escolher_trilha",
+  "pesquisar_mercado",
+] as const;
+export type PassoDoAgente = typeof PASSOS_DO_AGENTE[number];
+
+export const ROTULO_DO_PASSO: Record<PassoDoAgente, string> = {
+  reorganizar_datas: "Reorganizar datas e fases",
+  criar_stories_da_fase: "Criar a sequência de stories da fase",
+  gerar_roteiro_de_video: "Gerar o roteiro do vídeo",
+  gerar_o_que_falta: "Gerar o que falta (selo e peças)",
+  abrir_peca_no_estudio: "Abrir a peça no Estúdio",
+  vincular_anuncio: "Vincular o anúncio",
+  escolher_trilha: "Escolher a trilha",
+  pesquisar_mercado: "Pesquisar o que o mercado está fazendo",
+};
+
 /** Esquema estrito da mudança (campo vazio = sem mudança). */
 export const ESQUEMA_DA_MUDANCA = {
   nome: "mudanca_da_campanha",
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["resposta", "nome", "briefing", "conducao", "alterar", "novas", "sair"],
+    required: ["resposta", "nome", "briefing", "conducao", "alterar", "novas", "sair", "passos"],
     properties: {
       resposta: { type: "string" },
       nome: { type: "string" },
@@ -91,6 +118,16 @@ export const ESQUEMA_DA_MUDANCA = {
         },
       },
       sair: { type: "array", items: { type: "object", additionalProperties: false, required: ["peca", "motivo"], properties: { peca: { type: "string" }, motivo: { type: "string" } } } },
+      // 22/10/2026: o agente age na campanha inteira com as ações que já existem (o plano em etapas).
+      passos: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["acao", "alvo", "motivo"],
+          properties: { acao: { type: "string", enum: PASSOS_DO_AGENTE.slice() }, alvo: { type: "string" }, motivo: { type: "string" } },
+        },
+      },
     },
   },
 };
@@ -103,6 +140,8 @@ export const REGRAS_DA_MUDANCA = `MUDANÇA PLANEJADA (nada muda antes de a equip
 - alterar: só as peças que mudam, com os campos novos (o que não muda vai vazio; laminas vazia = mantém; legenda = a legenda nova do post). Data só de segunda a sexta dentro do período.
 - novas: peças novas (formato estatico, carrossel ou video), com data, etapa (aquecimento, lançamento, urgência ou encerramento), tema, gancho, lâminas e CTA; produto = o nome do produto da campanha que a peça vende, ou vazio.
 - sair: peças que saem, com o motivo.
+- passos: as ações da casa que o pedido precisa, na ordem em que fazem sentido (a equipe confirma e a tela faz uma por vez): reorganizar_datas (alvo vazio), criar_stories_da_fase (alvo = aquecimento, lançamento, sustentação, urgência ou encerramento), gerar_roteiro_de_video (alvo = apelido da peça de vídeo), gerar_o_que_falta, abrir_peca_no_estudio (alvo = apelido), vincular_anuncio, escolher_trilha, pesquisar_mercado. Pedido em várias etapas vira passos; sem ação, lista vazia.
+- Pergunta sobre a campanha ("o que falta?", "como está o anúncio?"): responda em resposta com os números do contexto (peças por estado, fases com datas, anúncio vinculado) e deixe o resto vazio.
 - resposta: em até 4 frases, o que a mudança faz e por quê. Sem travessão.`;
 
 const txt = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().replace(/\s*[–—]\s*/g, ", ").slice(0, max) : "");
@@ -203,7 +242,7 @@ export function itensDaMudanca(
       ref: ref(),
       alvo_id: p.tema_id,
       titulo: `${p.apelido} · ${p.tema || "Peça"}`,
-      detalhe: `${p.protegida ? "Já aprovada ou na agenda: só com a sua marcação. " : ""}${partes.join("; ")}${motivo ? ` (${motivo})` : ""}${p.com_arte ? " · a arte será refeita" : ""}`,
+      detalhe: `${p.protegida ? "Já aprovada ou na agenda: só com a sua marcação. " : ""}${partes.join("; ")}${motivo ? ` (${motivo})` : ""}${p.com_arte && ["tema", "gancho", "cta", "copy", "laminas"].some((k) => campos[k] !== undefined) ? " · a arte será refeita" : ""}`,
       operacao: p.protegida ? "alterar_peca_protegida" : "alterar_peca",
       rotulo: "Muda",
       para: JSON.stringify(campos),
@@ -253,6 +292,31 @@ export function itensDaMudanca(
       para: null,
     });
   });
+  (Array.isArray(r.passos) ? r.passos : []).slice(0, 8).forEach((x) => {
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    const acao = (PASSOS_DO_AGENTE as readonly string[]).indexOf(String(o.acao)) >= 0 ? (String(o.acao) as PassoDoAgente) : null;
+    if (!acao) return;
+    let alvo = txt(o.alvo, 40);
+    // O passo de uma peça leva o tema_id (o apelido só vale nesta conversa).
+    if (acao === "gerar_roteiro_de_video" || acao === "abrir_peca_no_estudio") {
+      const p = porApelido(alvo);
+      if (!p) {
+        ignorados.push(alvo || "?");
+        return;
+      }
+      alvo = p.tema_id;
+    }
+    const peca = pecas.filter((p) => p.tema_id === alvo)[0];
+    itens.push({
+      ref: ref(),
+      alvo_id: alvo,
+      titulo: `${ROTULO_DO_PASSO[acao]}${peca ? `: ${peca.apelido} · ${peca.tema || "peça"}` : alvo ? `: ${alvo}` : ""}`,
+      detalhe: txt(o.motivo, 200) || null,
+      operacao: `passo_${acao}`,
+      rotulo: "Passo",
+      para: JSON.stringify({ acao, alvo }),
+    });
+  });
   return { itens: itens.slice(0, 40), ignorados };
 }
 
@@ -283,10 +347,12 @@ export interface ItemDaSerie {
 export function aplicarMudanca(
   estado: { briefing: Record<string, unknown>; itens: ItemDaSerie[] },
   escolhidos: ItemDaMudanca[],
-): { briefing: Record<string, unknown>; itens: ItemDaSerie[]; mudaram: string[]; sairam: string[]; novas: ItemDaSerie[] } {
+): { briefing: Record<string, unknown>; itens: ItemDaSerie[]; mudaram: string[]; sairam: string[]; novas: ItemDaSerie[]; mudouConteudo: string[] } {
   const briefing = { ...estado.briefing };
   let itens = estado.itens.map((i) => ({ ...i, cards: (i.cards || []).map((c) => ({ ...c })) }));
   const mudaram: string[] = [];
+  // 22/10/2026: só mudança de texto pede arte nova (mudar de dia ou de fase não).
+  const mudouConteudo: string[] = [];
   const sairam: string[] = [];
   const novas: ItemDaSerie[] = [];
   let seq = Math.max(itens.length, ...itens.map((i) => Number(String(i.tema_id).replace(/^c/, "")) || 0));
@@ -302,6 +368,7 @@ export function aplicarMudanca(
     if (it.operacao === "briefing" && typeof p.campo === "string") briefing[p.campo] = String(p.valor || "");
     else if (it.operacao === "nome") briefing.__nome = String(p.valor || "");
     else if (it.operacao === "conducao") briefing.conducao = String(p.valor || "");
+    else if (it.operacao === "linha_do_tempo" && p.valor && typeof p.valor === "object") briefing.linha_do_tempo = p.valor;
     else if (it.operacao === "alterar_peca" || it.operacao === "alterar_peca_protegida") {
       itens = itens.map((i) => {
         if (i.tema_id !== it.alvo_id) return i;
@@ -315,6 +382,7 @@ export function aplicarMudanca(
           if (novo.formato === "estatico") novo.cards = novo.cards.slice(0, 1);
         }
         mudaram.push(i.tema_id);
+        if (["tema", "gancho", "cta", "copy"].some((k) => typeof p[k] === "string" && p[k]) || (Array.isArray(p.laminas) && p.laminas.length)) mudouConteudo.push(i.tema_id);
         return novo;
       });
     } else if (it.operacao === "tirar_peca" || it.operacao === "tirar_peca_protegida") {
@@ -332,6 +400,7 @@ export function aplicarMudanca(
         cta: String(p.cta || ""),
         cards: (laminas.length ? laminas : [String(p.gancho || p.tema || "")]).map((t, k) => ({ ordem: k + 1, texto: t })),
         ...(p.produto ? { produto: String(p.produto) } : {}),
+        ...(typeof p.legenda === "string" && p.legenda ? { copy: String(p.legenda) } : {}),
       };
       if (nova.formato === "estatico") nova.cards = nova.cards.slice(0, 1);
       if (nova.formato === "video") nova.cards = [];
@@ -340,7 +409,7 @@ export function aplicarMudanca(
     }
   });
   itens.sort((a, b) => String(a.data).localeCompare(String(b.data)));
-  return { briefing, itens, mudaram, sairam, novas };
+  return { briefing, itens, mudaram, sairam, novas, mudouConteudo };
 }
 
 /** Uma versão da campanha (o que estava antes da mudança): guardada em arquivo, o índice no briefing. */

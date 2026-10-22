@@ -9,9 +9,10 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import { Ditado } from "./Ditado";
 import { Cronometro } from "./Cronometro";
-import type { Campanha, MensagemDoAgente } from "./mesaV4Api";
+import { chaves, type Campanha, type MensagemDoAgente, type PropostaV4 } from "./mesaV4Api";
 import {
   aplicarRespostaDaCampanha,
+  normalizarBriefing,
   AGENTE_DA_MUDANCA,
   planejarMudanca,
   chavesDaCampanha,
@@ -43,6 +44,23 @@ export interface RascunhoParaOAgente {
   texto: string;
   /** Sobe a cada pedido novo, para o mesmo texto preencher de novo. */
   vez: number;
+}
+
+/**
+ * 22/10/2026 ("sugestões rápidas que mudam conforme o estado da campanha"): primeiro o que a campanha pede
+ * agora (sem linha do tempo, stories sem sequência, vídeo sem roteiro, anúncio vinculado, sem trilha); depois
+ * os pedidos de sempre. Pura.
+ */
+export function atalhosDoEstado(campanha: Pick<Campanha, "briefing">, itens: Array<{ formato?: string; roteiro_video?: unknown }>): { rotulo: string; texto: string }[] {
+  const b = normalizarBriefing(campanha.briefing) as ReturnType<typeof normalizarBriefing> & { trilha?: unknown };
+  const saida: { rotulo: string; texto: string }[] = [{ rotulo: "O que falta?", texto: "O que falta para esta campanha ficar pronta?" }];
+  if (!b.linha_do_tempo) saida.push({ rotulo: "Reorganizar datas e fases", texto: "Reorganize as datas e as fases da campanha pela data do evento, com introdução e encerramento." });
+  const stories = b.stories || [];
+  if (stories.some((x) => !x.sequencia_id)) saida.push({ rotulo: "Criar os stories que faltam", texto: "Crie as sequências de stories que faltam, fase por fase." });
+  if (itens.some((i) => i.formato === "video" && !i.roteiro_video)) saida.push({ rotulo: "Roteiros dos vídeos", texto: "Gere os roteiros dos vídeos que ainda não têm roteiro." });
+  if (b.ads && b.ads.campaign_id) saida.push({ rotulo: "Como está o anúncio?", texto: "Como está o anúncio vinculado nesta semana? O que mudar?" });
+  if (!b.trilha) saida.push({ rotulo: "Escolher a trilha", texto: "Escolha a trilha da campanha." });
+  return saida.concat(ATALHOS);
 }
 
 const ATALHOS = [
@@ -107,6 +125,9 @@ export default function CampanhaAgente({
   const chave = chavesDaCampanha.conversa(clientId, campanha.id);
 
   const conversa = useQuery({ queryKey: chave, queryFn: () => lerConversaDaCampanha(campanha.id) });
+  // As sugestões mudam com o estado (a série em cache, sem ler de novo).
+  const serie = campanha.proposta_id ? queryClient.getQueryData<PropostaV4 | null>(chaves.proposta(campanha.proposta_id)) : null;
+  const atalhos = atalhosDoEstado(campanha, (serie && serie.itens) || []);
   const mensagens = conversa.data ? conversa.data.mensagens : [];
   const lista = mensagens.filter((m) => m.conteudo || imagensDaMensagem(m).length);
 
@@ -115,7 +136,8 @@ export default function CampanhaAgente({
     window.setTimeout(() => {
       const el = campoRef.current;
       if (el) {
-        el.focus();
+        // Sem rolar a página: o campo já está à vista, parado embaixo do agente.
+        el.focus({ preventScroll: true });
         el.setSelectionRange(t.length, t.length);
       }
     }, 0);
@@ -165,7 +187,8 @@ export default function CampanhaAgente({
   const podeEnviar = !!texto.trim() && !anexos.subindo && !envio;
 
   return (
-    <div className={`flex min-h-0 min-w-0 flex-col bg-card ${className}`}>
+    // Altura da coluna (ou da janela), sem crescer com a conversa: só a conversa rola; o campo fica parado embaixo.
+    <div className={`flex min-h-0 min-w-0 flex-col overflow-hidden bg-card ${className}`} data-agente-da-campanha="">
       {!naJanela && (
         <div className="flex shrink-0 items-center border-b border-border py-3 pl-4 pr-4">
           <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -178,7 +201,7 @@ export default function CampanhaAgente({
         </div>
       )}
 
-      <div ref={listaRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3" aria-live="polite" aria-label="Conversa com o agente da campanha">
+      <div ref={listaRef} className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3" aria-live="polite" aria-label="Conversa com o agente da campanha">
         {conversa.isLoading && (
           <p className="text-[12px] text-muted-foreground">
             <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />
@@ -255,7 +278,8 @@ export default function CampanhaAgente({
               </Bolha>
             )}
             <div className={juntar(estiloDaConversa.balao, estiloDaConversa.doAgente)}>
-              <Cronometro desde={envio.desde} rotulo="Trabalhando na campanha" />
+              {/* O que o agente está fazendo agora, com o cronômetro. */}
+              <Cronometro desde={envio.desde} rotulo="Agora: lendo a campanha inteira e planejando" />
             </div>
           </div>
         )}
@@ -265,7 +289,7 @@ export default function CampanhaAgente({
         {/* 22/10/2026: as sugestões da campanha viram pedido pronto no campo, com um clique. */}
         <CampanhaSugestoes campanha={campanha} onPedir={preencher} compacto />
         <SugestoesDoAgente><div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente">
-          {ATALHOS.map((a) => (
+          {atalhos.map((a) => (
             <button
               key={a.rotulo}
               type="button"

@@ -192,6 +192,8 @@ export interface BriefingDaCampanha {
   tom_da_campanha?: string;
   esquema?: string;
   mercado?: import("../../../supabase/functions/agente-calendario/modulos/mercado-da-campanha").MercadoDaCampanha | null;
+  /** 22/10/2026: as fases com as datas (calculadas em código pela linha do tempo). */
+  linha_do_tempo?: import("../../../supabase/functions/agente-calendario/modulos/linha-do-tempo").LinhaDoTempo | null;
 }
 
 export type PapelDaImagemDaCampanha = "heroi" | "apoio" | "ambiente";
@@ -522,6 +524,8 @@ export interface CamposDoItem {
   cards?: { ordem: number; texto?: string; ilustracao?: string }[];
   /** 22/10/2026: a fase da peça da campanha (aquecimento, lançamento, urgência, encerramento). */
   etapa?: string;
+  /** 22/10/2026: o roteiro da peça de vídeo (a direção do vídeo acompanha no servidor). */
+  roteiro_video?: import("../../../supabase/functions/agente-calendario/modulos/roteiro-de-video").RoteiroDeVideo;
 }
 
 export const editarItemDaProposta = (propostaId: string, temaId: string, campos: CamposDoItem) =>
@@ -586,6 +590,9 @@ export interface CorpoDaCampanha {
   formatos?: { posts: number; carrosseis: number; stories: number; videos: number } | null;
   /** 22/10/2026: pesquisar o que o mercado está fazendo antes de criar (custo antes). */
   mercado?: boolean;
+  /** 22/10/2026: a data do evento e quantos dias antes começa (as fases saem da linha do tempo). */
+  dataEvento?: string | null;
+  diasAntes?: number | null;
 }
 
 export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
@@ -596,6 +603,8 @@ export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
   if (c.mercado) corpo.mercado = true;
   if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
   if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
+  if (c.dataEvento) corpo.data_evento = c.dataEvento;
+  if (typeof c.diasAntes === "number" && c.diasAntes >= 0) corpo.dias_antes = c.diasAntes;
   if (c.quantidade) corpo.quantidade = c.quantidade;
   if (c.anexos && c.anexos.length) corpo.anexos = c.anexos.slice(0, MAX_ANEXOS);
   if (c.referenciasIds && c.referenciasIds.length) corpo.referencias_ids = c.referenciasIds.slice(0, 8);

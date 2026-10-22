@@ -23,6 +23,7 @@ import {
   type FormatosDaCampanha,
 } from "./regrasDaCampanha";
 import { diasEntreIso, somarDiasIso } from "./mesaV4Api";
+import type { LinhaDoTempo } from "../../../supabase/functions/agente-calendario/modulos/linha-do-tempo";
 import { dataBr } from "../../../supabase/functions/_shared/agenda-inteligente";
 
 /**
@@ -142,7 +143,9 @@ export function janelasDasFases(inicio: string, fim: string): Record<string, { d
 }
 
 /** Prévia da campanha montando: nome, período, total e as fases com datas e formatos. */
-export function PreviaDaCampanha({ nome, inicio, fim, formatos, className = "" }: { nome: string; inicio: string; fim: string; formatos: FormatosDaCampanha; className?: string }) {
+export function PreviaDaCampanha({ nome, inicio, fim, formatos, className = "", linha = null }: { nome: string; inicio: string; fim: string; formatos: FormatosDaCampanha; className?: string; linha?: LinhaDoTempo | null }) {
+  // 22/10/2026: com a linha do tempo (data do evento), os nomes e as datas das fases são os dela.
+  const daLinha = (f: string) => (linha ? linha.fases.filter((x) => x.fase === f)[0] || null : null);
   const valido = !!inicio && !!fim && fim >= inicio;
   const porFase = distribuirPorFase(formatos);
   const janelas = valido ? janelasDasFases(inicio, fim) : null;
@@ -161,8 +164,10 @@ export function PreviaDaCampanha({ nome, inicio, fim, formatos, className = "" }
               <span className="mr-2.5 mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <p className="flex min-w-0 items-baseline text-[13px] font-medium">
-                  <span className="truncate">{f.rotulo}</span>
-                  {janelas && <span className="ml-1.5 shrink-0 text-[11px] font-normal text-muted-foreground">{dataBr(janelas[f.valor].de)}</span>}
+                  <span className="truncate">{daLinha(f.valor) ? (daLinha(f.valor) as { nome: string }).nome : f.rotulo}</span>
+                  {daLinha(f.valor)
+                    ? <span className="ml-1.5 shrink-0 text-[11px] font-normal text-muted-foreground">{dataBr((daLinha(f.valor) as { inicio: string }).inicio)}</span>
+                    : janelas && <span className="ml-1.5 shrink-0 text-[11px] font-normal text-muted-foreground">{dataBr(janelas[f.valor].de)}</span>}
                 </p>
                 <p className="mt-0.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                   {itens.length ? itens.map((x) => (

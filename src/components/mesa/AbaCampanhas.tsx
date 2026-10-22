@@ -395,10 +395,12 @@ export default function AbaCampanhas({
       onAbrirAgente={agenteFixo ? undefined : () => setGaveta(true)}
       onAbrirArteRapida={onAbrirArteRapida}
       onDuplicar={() => comecarNova(moldeDaCampanha(escolhida))}
-      onAbrirStories={onAbrirStories ? (sequenciaId) => {
-        // A aba Stories abre na sequência guardada no estado da tela dela (useEstadoDaTela).
+      onAbrirStories={onAbrirStories ? (sequenciaId, storyId) => {
+        // A aba Stories abre na sequência (e na tela) guardadas no estado da tela dela (useEstadoDaTela).
         gravarEstadoDaTela(`mesa:stories:sequencia:${clientId}`, sequenciaId);
         gravarEstadoDaTela(`mesa:stories:bloco:${clientId}`, "sequencia");
+        gravarEstadoDaTela(`mesa:stories:filtro:${clientId}`, "todas");
+        gravarEstadoDaTela(`mesa:stories:tela:${clientId}`, storyId || null);
         onAbrirStories();
       } : undefined}
     />
@@ -462,7 +464,9 @@ export default function AbaCampanhas({
           <aside className={juntar(superficie.painel, "min-h-0 min-w-0 overflow-hidden")}>{listaLateral}</aside>
         ))}
 
-        <section className="min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" aria-label="Campanha">
+        {/* 22/10/2026 (dono: "rolando lá pra baixo de forma muito longa"): relative prende o que é absoluto
+            (texto só para leitor de tela, selos) dentro da rolagem da coluna; sem ele a página crescia vazia. */}
+        <section className="relative min-h-0 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" aria-label="Campanha">
           {!listaAoLado && seletor}
           {centro}
         </section>
