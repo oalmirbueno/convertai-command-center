@@ -149,6 +149,71 @@ describe("juntar para a campanha", () => {
   });
 });
 
+describe("2ª rodada: organizado, alinhado e complementar", () => {
+  it("as duas colunas têm cabeçalho fixo e rolagem própria (de 1024 px para cima), com espaço no fim", async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(tela(cache));
+    await screen.findByText("Dia do café");
+    const colunas = [document.querySelector('[data-area="hype"]') as HTMLElement];
+    fireEvent.click(screen.getByRole("button", { name: /^Trending/ }));
+    colunas.push(document.querySelector('[data-area="trending"]') as HTMLElement);
+    for (const c of colunas) {
+      expect(c.className).toContain("lg:h-[640px]");
+      expect(c.firstElementChild!.hasAttribute("data-cabecalho-da-coluna")).toBe(true);
+      const rola = Array.from(c.querySelectorAll("div")).find((d) => d.className.split(" ").indexOf("lg:overflow-y-auto") >= 0) as HTMLElement;
+      expect(rola).not.toBeNull();
+      expect(rola.className).toContain("pb-6");
+      expect(rola.className).not.toMatch(/(^| )overflow-y-auto/);
+    }
+    cache.clear();
+  });
+
+  it("toda linha é a mesma grade: caixinha, texto, nota no mesmo lugar e as ações sempre por último", async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(tela(cache));
+    await screen.findByText("Dia do café");
+    const linhas = Array.from(document.querySelectorAll("[data-linha-hype-trending]"));
+    expect(linhas.length).toBeGreaterThan(3);
+    const grades = new Set(linhas.map((l) => (l.className.match(/grid-cols-\[[^\]]+\]/) || [""])[0]));
+    expect(Array.from(grades)).toEqual(["grid-cols-[20px_minmax(0,1fr)_28px_auto]"]);
+    for (const l of linhas) {
+      const filhos = Array.from(l.children);
+      expect(filhos).toHaveLength(4);
+      expect(filhos[2].hasAttribute("data-nota")).toBe(true);
+      expect(filhos[3].hasAttribute("data-acoes")).toBe(true);
+      // Criar conteúdo, Criar campanha e o lugar da seta: sempre 3 peças, na mesma ordem.
+      expect(filhos[3].children).toHaveLength(3);
+      expect(filhos[3].children[1].getAttribute("aria-label")).toBe("Criar campanha");
+    }
+    cache.clear();
+  });
+
+  it("mantém o que já havia: leitura semanal (hype e nicho), pauta pronta com Usar a pauta e o sinal do nicho", async () => {
+    estado.dados["cliente-a"] = pesquisa("cliente-a", hypes.concat([{ titulo: "Pauta do feriado", janela: "hoje", pauta: { tema: "Feriado", gancho: "Abre amanhã", laminas: ["a"], legenda: "x" } }]));
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(tela(cache));
+    const linha = (await screen.findByText("Pauta do feriado")).closest("li") as HTMLElement;
+    expect(within(linha).getByRole("button", { name: /Usar a pauta/ })).toBeTruthy();
+    expect(screen.getByText("Lidos na web")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Trending/ }));
+    expect(screen.getByText("Em alta no nicho")).toBeTruthy();
+    expect(screen.getByText("Decoração da vitrine")).toBeTruthy();
+    expect(screen.getByText("Busca por ambientes reais")).toBeTruthy();
+    cache.clear();
+  });
+
+  it("Buscar o que está em alta agora busca as notícias do nicho e abre o Trending", async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(tela(cache));
+    await screen.findByText("Dia do café");
+    fireEvent.click(screen.getByRole("button", { name: /Buscar o que está em alta agora/ }));
+    await screen.findByText(noticia.titulo);
+    expect(estado.trending).toHaveBeenCalledWith("cliente-a", "", "7d");
+    expect(document.querySelector('[data-area="trending"]')).not.toBeNull();
+    cache.clear();
+  });
+});
+
 describe("link antigo &hype=<n>", () => {
   it("a página ainda lê o parâmetro hype e o entrega à aba Campanhas; o novo caminho abre a campanha nova", () => {
     const pagina = readFileSync(resolve("src/pages/MesaDoCliente.tsx"), "utf8");

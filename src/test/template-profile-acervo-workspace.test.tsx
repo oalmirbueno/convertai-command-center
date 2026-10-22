@@ -65,7 +65,7 @@ describe("Profile mantém a imagem de acervo pelo ID autorizado", () => {
     expect(estado.desenhar.mock.calls[estado.desenhar.mock.calls.length - 1][3].imagem.src).toContain(acervo[1].storage_path);
     previa.unmount(); sessionStorage.clear();
     // Mesmo abrindo outra lâmina, Montar todas conserva a escolha e o ponto da primeira.
-    montar(reaberto, 2); await pronto(); etapa("Prévia e guardar");
+    montar(reaberto, 2); await pronto();
     fireEvent.click(screen.getByRole("button", { name: "Montar todas as lâminas" }));
     await waitFor(() => expect(estado.chamar).toHaveBeenCalledTimes(2));
     expect(estado.chamar.mock.calls[0][1]).toMatchObject({ ordem: 1, template: { imagem_acervo_id: ids[1], destaque: ponto } });

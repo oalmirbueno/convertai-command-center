@@ -77,7 +77,6 @@ describe("Profile com fontes e ponto manual", () => {
     fireEvent.click(screen.getByRole("button", { name: "Marcar ponto na imagem" }));
     fireEvent.click(screen.getByLabelText("Prévia do template Profile"), { clientX: 160, clientY: 370 });
     await pronto();
-    etapa("Prévia e guardar");
     fireEvent.click(screen.getByRole("button", { name: "Montar todas as lâminas" }));
     await waitFor(() => expect(estado.chamar).toHaveBeenCalledTimes(2));
     expect(estado.chamar.mock.calls[0][1].template.destaque).toMatchObject({ x: .25, y: .6 });

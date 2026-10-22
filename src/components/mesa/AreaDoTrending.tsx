@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, FilePlus2, Megaphone, Newspaper, Search, TrendingUp } from "lucide-react";
+import { ExternalLink, FilePlus2, Megaphone, Newspaper } from "lucide-react";
 import CampoDeBusca from "@/components/sistema/CampoDeBusca";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
-import LinhaDoHypeETrending, { Detalhe } from "./LinhaDoHypeETrending";
+import LinhaDoHypeETrending, { CabecalhoDaColuna, Detalhe, SubtituloDaLista } from "./LinhaDoHypeETrending";
+import { COLUNA_DO_HYPE } from "./AreaDoHype";
 import {
   buscarTrending, filtrarNoticias, fontesDasNoticias, juntadoDaLeitura, juntadoDaNoticia, mensagemDaNoticia, podeJuntar, quandoDaNoticia,
   RECENCIAS, type ItemJuntado, type Recencia,
@@ -16,7 +18,18 @@ import {
 import { chaves, dominioDoLink, linkSeguro, mensagemDoHype, partesDoPedido, pedidoLivre } from "./mesaV4Api";
 import type { ItemDoTrendy } from "./trendy";
 
+/** A busca de notícias em curso (fica na seção: o "Buscar o que está em alta agora" do topo também dispara). */
+export interface ConsultaDoTrending {
+  clientId: string;
+  assunto: string;
+  recencia: Recencia;
+  /** Muda a cada pedido explícito: a mesma busca refeita relê. */
+  vez: number;
+}
+
 interface Props {
+  consulta: ConsultaDoTrending | null;
+  onConsulta: (c: { assunto: string; recencia: Recencia }) => void;
   /** Assuntos prontos para clicar além dos que o servidor sugere (ex.: as próximas datas do Hype). */
   assuntosExtras: string[];
   nicho: ItemDoTrendy[];
@@ -28,22 +41,24 @@ interface Props {
   onPedidoFim?: () => void;
 }
 
+const MAXIMO_DE_SUGERIDOS = 4;
+
 /**
  * Trending: o que está em alta AGORA. Manchetes reais do Google Notícias (assunto, fonte, data real e link
- * da matéria), busca livre, recência (24 h, 7 dias, 30 dias) e fonte. Mais o "em alta no nicho" da leitura
- * semanal. Buscar notícias não custa IA.
+ * da matéria), busca livre, recência e fonte, mais o "em alta no nicho" da leitura semanal (o de antes).
+ * Buscar notícias não custa IA.
  */
-export default function AreaDoTrending({ assuntosExtras, nicho, pesquisadoEm, juntados, onAlternar, onCriarCampanha, onPedidoInicio, onPedidoFim }: Props) {
+export default function AreaDoTrending({ consulta, onConsulta, assuntosExtras, nicho, pesquisadoEm, juntados, onAlternar, onCriarCampanha, onPedidoInicio, onPedidoFim }: Props) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const [rascunho, setRascunho] = useState("");
-  const [pedido, setPedido] = useState<{ clientId: string; assunto: string; recencia: Recencia } | null>(null);
+  const atual = consulta && consulta.clientId === clientId ? consulta : null;
+  const [rascunho, setRascunho] = useState({ clientId, texto: "" });
+  const textoDoRascunho = rascunho.clientId === clientId ? rascunho.texto : "";
   const [fonte, setFonte] = useState("");
-  const atual = pedido && pedido.clientId === clientId ? pedido : null;
   const recencia: Recencia = atual ? atual.recencia : "7d";
 
   const noticias = useQuery({
-    queryKey: ["mesa", "trending", clientId, atual ? atual.assunto.toLowerCase() : "", recencia],
+    queryKey: ["mesa", "trending", clientId, atual ? atual.assunto.toLowerCase() : "", recencia, atual ? atual.vez : 0],
     queryFn: () => buscarTrending(clientId, atual ? atual.assunto : "", recencia),
     enabled: !!atual,
     staleTime: 5 * 60_000,
@@ -52,15 +67,15 @@ export default function AreaDoTrending({ assuntosExtras, nicho, pesquisadoEm, ju
 
   const buscar = (assunto: string, r: Recencia = recencia) => {
     setFonte("");
-    setRascunho(assunto);
-    setPedido({ clientId, assunto: assunto.trim(), recencia: r });
+    setRascunho({ clientId, texto: assunto });
+    onConsulta({ assunto: assunto.trim(), recencia: r });
   };
 
   const dados = noticias.data && atual ? noticias.data : null;
   const agora = Date.now();
   const itens = dados ? filtrarNoticias(dados.itens || [], { recencia, fonte }, agora) : [];
   const fontes = dados ? fontesDasNoticias(dados.itens || []) : [];
-  const sugeridos = (dados ? dados.sugeridos : []).concat(assuntosExtras).filter((a, i, l) => a && l.indexOf(a) === i).slice(0, 8);
+  const sugeridos = ((dados && dados.sugeridos) || []).concat(assuntosExtras).filter((a, i, l) => a && l.indexOf(a) === i).slice(0, MAXIMO_DE_SUGERIDOS);
   const marcado = (chave: string) => juntados.some((x) => x.chave === chave);
 
   const pedir = async (mensagem: string, titulo: string) => {
@@ -92,134 +107,143 @@ export default function AreaDoTrending({ assuntosExtras, nicho, pesquisadoEm, ju
   );
 
   return (
-    <div className="min-w-0 space-y-4" data-area="trending">
-      <form
-        className="flex min-w-0 items-center"
-        role="search"
-        onSubmit={(e) => {
-          e.preventDefault();
-          buscar(rascunho);
-        }}
-      >
-        <CampoDeBusca className="mr-2 flex-1" valor={rascunho} onMudar={setRascunho} placeholder="Assunto (ex.: Black Friday, odontologia)" rotulo="Assunto das notícias" />
-        <button type="submit" className={botao.secundario} aria-label="Buscar notícias" title="Buscar notícias deste assunto (sem custo)">
-          <Search className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </form>
-
-      {sugeridos.length > 0 && (
-        <div className="-m-1 flex min-w-0 flex-wrap" aria-label="Assuntos sugeridos">
-          {sugeridos.map((a) => (
-            <button key={a} type="button" onClick={() => buscar(a)} className={juntar(botao.barra, "m-1 max-w-full border border-border", atual && atual.assunto.toLowerCase() === a.toLowerCase() ? "border-primary text-primary" : "")} title={`Buscar notícias de ${a}`}>
-              <span className="truncate">{a}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {atual && (
-        <div className="-m-1 flex min-w-0 flex-wrap items-center">
-          <span className="m-1">
-            <SeletorCompacto rotulo="Recência" opcoes={RECENCIAS.map((r) => ({ valor: r.valor, rotulo: r.rotulo }))} valor={recencia} onEscolher={(v) => buscar(atual.assunto, v as Recencia)} />
-          </span>
-          {fontes.length > 1 && (
-            <span className="m-1">
-              <SeletorCompacto rotulo="Fonte" modo="lista" opcoes={[{ valor: "", rotulo: "Todas as fontes" }].concat(fontes.map((f) => ({ valor: f, rotulo: f })))} valor={fonte} onEscolher={setFonte} />
-            </span>
-          )}
-        </div>
-      )}
-
-      {!atual && (
-        <EstadoVazio
-          compacto
-          titulo="Notícias em alta agora."
-          descricao="Manchetes reais por assunto, com fonte, data e link."
-          acao={<button type="button" className={botao.primario} onClick={() => buscar(rascunho)}>Buscar o que está em alta</button>}
-        />
-      )}
-      {atual && noticias.isLoading && <Carregando rotulo="Buscando notícias" linhas={4} />}
-      {atual && noticias.isError && (
-        <EstadoDeErro
-          titulo="Não foi possível buscar as notícias."
-          descricao={noticias.error instanceof Error ? noticias.error.message : undefined}
-          acao={<button type="button" className={botao.secundario} onClick={() => void noticias.refetch()}>Tentar de novo</button>}
-        />
-      )}
-      {dados && dados.sem_assunto && <p className={texto.auxiliar}>Escreva um assunto ou escolha um dos sugeridos.</p>}
-      {dados && !dados.sem_assunto && (
-        <p role="status" className={texto.auxiliar}>
-          {itens.length} {itens.length === 1 ? "notícia" : "notícias"} sobre “{dados.assunto}” · {dados.fonte || "Google Notícias"}
-        </p>
-      )}
-      {dados && !dados.sem_assunto && !itens.length && !noticias.isFetching && (
-        <EstadoVazio compacto titulo="Nenhuma notícia nesse período." descricao="Tente 30 dias ou outro assunto." acao={recencia !== "30d" ? <button type="button" className={botao.secundario} onClick={() => buscar(dados.assunto, "30d")}>Ver 30 dias</button> : undefined} />
-      )}
-      {itens.length > 0 && (
-        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Notícias em alta">
-          {itens.map((n) => {
-            const item = juntadoDaNoticia(n);
-            return (
-              <LinhaDoHypeETrending
-                key={item.chave}
-                titulo={n.titulo}
-                apoio={
-                  <span className="flex min-w-0 items-center">
-                    <Newspaper className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{n.fonte} · {quandoDaNoticia(n.data, agora)}</span>
-                    <a href={n.link} target="_blank" rel="noopener noreferrer" className="ml-1.5 inline-flex shrink-0 items-center text-primary hover:underline" aria-label={`Abrir a matéria: ${n.titulo}`} title="Abrir a matéria">
-                      matéria<ExternalLink className="ml-0.5 h-3 w-3" aria-hidden="true" />
-                    </a>
-                  </span>
-                }
-                marcado={marcado(item.chave)}
-                podeMarcar={podeJuntar(juntados, item)}
-                onMarcar={() => onAlternar(item)}
-                acoes={acoes(n.titulo, () => mensagemDaNoticia(n), item, "Criar conteúdo desta notícia")}
-              />
-            );
-          })}
-        </ul>
-      )}
-
-      {nicho.length > 0 && (
-        <div className="min-w-0 space-y-1">
-          <h3 className={juntar(texto.rotulo, "flex items-center")}>
-            <TrendingUp className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            Em alta no nicho{pesquisadoEm ? ` (pesquisa de ${pesquisadoEm.slice(8, 10)}/${pesquisadoEm.slice(5, 7)})` : ""}
-          </h3>
-          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Em alta no nicho">
-            {nicho.map(({ h, indice }) => {
-              const item = juntadoDaLeitura(h, indice, pesquisadoEm);
-              const link = linkSeguro(h.fonte);
+    <div className={COLUNA_DO_HYPE} data-area="trending">
+      <CabecalhoDaColuna
+        icone={<Newspaper className="h-4 w-4" />}
+        titulo="Trending"
+        ajuda="O que está em alta agora: manchetes reais do Google Notícias por assunto, com a fonte, a data da matéria e o link. Buscar não custa IA. Abaixo, o que viraliza no nicho pela leitura semanal."
+        controles={
+          atual ? (
+            <>
+              <span className="m-1">
+                <SeletorCompacto rotulo="Recência" opcoes={RECENCIAS.map((r) => ({ valor: r.valor, rotulo: r.rotulo }))} valor={recencia} onEscolher={(v) => buscar(atual.assunto, v as Recencia)} />
+              </span>
+              {fontes.length > 1 && (
+                <span className="m-1">
+                  <SeletorCompacto rotulo="Fonte" modo="lista" opcoes={[{ valor: "", rotulo: "Todas as fontes" }].concat(fontes.map((f) => ({ valor: f, rotulo: f })))} valor={fonte} onEscolher={setFonte} />
+                </span>
+              )}
+            </>
+          ) : undefined
+        }
+        abaixo={
+          <>
+            <form className="min-w-0" role="search" onSubmit={(e) => { e.preventDefault(); buscar(textoDoRascunho); }}>
+              <CampoDeBusca valor={textoDoRascunho} onMudar={(v) => setRascunho({ clientId, texto: v })} placeholder="Buscar notícias por assunto" rotulo="Assunto das notícias" />
+              <button type="submit" className="sr-only">Buscar notícias</button>
+            </form>
+            {sugeridos.length > 0 && (
+              <div className="-mx-1 mt-1.5 flex min-w-0 flex-wrap" aria-label="Assuntos sugeridos">
+                {sugeridos.map((a) => {
+                  const ativo = !!atual && atual.assunto.toLowerCase() === a.toLowerCase();
+                  return (
+                    <button key={a} type="button" onClick={() => buscar(a)} aria-pressed={ativo} className={juntar(botao.barra, "mx-1 h-7 max-w-[11rem]", ativo ? "bg-muted text-foreground" : "")} title={`Buscar notícias de ${a}`}>
+                      <span className="truncate">{a}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        }
+      />
+      <RegiaoRolavel modo="lg" rotulo="Lista do Trending" memoria={`mesa:mes:trending:${clientId}`} className="pb-6">
+        {!atual && (
+          <EstadoVazio
+            compacto
+            className="mt-3"
+            titulo="Notícias em alta agora."
+            acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => buscar(textoDoRascunho)}>Buscar o que está em alta</button>}
+          />
+        )}
+        {atual && noticias.isLoading && <Carregando className="pt-3" rotulo="Buscando notícias" linhas={4} />}
+        {atual && noticias.isError && (
+          <EstadoDeErro
+            className="mt-3"
+            titulo="Não foi possível buscar as notícias."
+            descricao={noticias.error instanceof Error ? noticias.error.message : undefined}
+            acao={<button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void noticias.refetch()}>Tentar de novo</button>}
+          />
+        )}
+        {dados && dados.sem_assunto && <p className={juntar(texto.auxiliar, "pt-3")}>Escreva um assunto ou escolha um dos sugeridos.</p>}
+        {dados && !dados.sem_assunto && (
+          <SubtituloDaLista apoio={`${itens.length} ${itens.length === 1 ? "notícia" : "notícias"} · ${dados.fonte || "Google Notícias"}`}>
+            <span role="status">“{dados.assunto}”</span>
+          </SubtituloDaLista>
+        )}
+        {dados && !dados.sem_assunto && !itens.length && !noticias.isFetching && (
+          <EstadoVazio compacto titulo="Nenhuma notícia nesse período." acao={recencia !== "30d" ? <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => buscar(dados.assunto, "30d")}>Ver 30 dias</button> : undefined} />
+        )}
+        {itens.length > 0 && (
+          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Notícias em alta">
+            {itens.map((n) => {
+              const item = juntadoDaNoticia(n);
               return (
                 <LinhaDoHypeETrending
                   key={item.chave}
-                  titulo={h.titulo}
-                  nota={typeof h.nota === "number" ? h.nota : null}
-                  apoio={h.sinal || h.o_que_e || "em alta agora"}
+                  titulo={n.titulo}
+                  apoio={
+                    <>
+                      {n.fonte} · {quandoDaNoticia(n.data, agora)} ·{" "}
+                      <a href={n.link} target="_blank" rel="noopener noreferrer" className="toque-compacto inline-flex items-center text-primary hover:underline" aria-label={`Abrir a matéria: ${n.titulo}`} title="Abrir a matéria">
+                        matéria<ExternalLink className="ml-0.5 h-3 w-3" aria-hidden="true" />
+                      </a>
+                    </>
+                  }
                   marcado={marcado(item.chave)}
                   podeMarcar={podeJuntar(juntados, item)}
                   onMarcar={() => onAlternar(item)}
-                  detalhes={
-                    <>
-                      {h.o_que_e && <Detalhe rotulo="O que é">{h.o_que_e}</Detalhe>}
-                      {h.como_usar && <Detalhe rotulo="Como usar">{h.como_usar}</Detalhe>}
-                      {h.cuidado && <Detalhe rotulo="Cuidado">{h.cuidado}</Detalhe>}
-                      {link && (
-                        <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center text-primary hover:underline" aria-label={`Ver fonte de ${h.titulo}`}>
-                          <span className="truncate">{dominioDoLink(link)}</span><ExternalLink className="ml-1 h-3 w-3 shrink-0" aria-hidden="true" />
-                        </a>
-                      )}
-                    </>
-                  }
-                  acoes={acoes(h.titulo, () => mensagemDoHype(h), item, "Criar conteúdo")}
+                  acoes={acoes(n.titulo, () => mensagemDaNoticia(n), item, "Criar conteúdo desta notícia")}
                 />
               );
             })}
           </ul>
-        </div>
-      )}
+        )}
+
+        {nicho.length > 0 && (
+          <>
+            <SubtituloDaLista apoio={pesquisadoEm ? `pesquisa de ${pesquisadoEm.slice(8, 10)}/${pesquisadoEm.slice(5, 7)}` : undefined}>Em alta no nicho</SubtituloDaLista>
+            <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Em alta no nicho">
+              {nicho.map(({ h, indice }) => {
+                const item = juntadoDaLeitura(h, indice, pesquisadoEm);
+                const link = linkSeguro(h.fonte);
+                const temPauta = !!(h.pauta && h.pauta.tema);
+                return (
+                  <LinhaDoHypeETrending
+                    key={item.chave}
+                    titulo={h.titulo}
+                    nota={typeof h.nota === "number" ? h.nota : null}
+                    apoio={h.sinal || h.o_que_e || "em alta agora"}
+                    marcado={marcado(item.chave)}
+                    podeMarcar={podeJuntar(juntados, item)}
+                    onMarcar={() => onAlternar(item)}
+                    detalhes={
+                      <>
+                        {h.sinal && <Detalhe rotulo="Onde está viralizando">{h.sinal}</Detalhe>}
+                        {h.o_que_e && <Detalhe rotulo="O que é">{h.o_que_e}</Detalhe>}
+                        {h.como_usar && <Detalhe rotulo="Como usar">{h.como_usar}</Detalhe>}
+                        {h.cuidado && <Detalhe rotulo="Cuidado">{h.cuidado}</Detalhe>}
+                        {temPauta && h.pauta && (
+                          <Detalhe rotulo="Pauta pronta (sem data)">
+                            <p className="font-medium">{h.pauta.tema}</p>
+                            {h.pauta.gancho && <p className="text-muted-foreground">Capa: {h.pauta.gancho}</p>}
+                          </Detalhe>
+                        )}
+                        {link && (
+                          <a href={link} target="_blank" rel="noopener noreferrer" className="toque-compacto inline-flex max-w-full items-center text-primary hover:underline" aria-label={`Ver fonte de ${h.titulo}`}>
+                            <span className="truncate">{dominioDoLink(link)}</span><ExternalLink className="ml-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                          </a>
+                        )}
+                      </>
+                    }
+                    acoes={acoes(h.titulo, () => mensagemDoHype(h), item, temPauta ? "Usar a pauta" : "Criar conteúdo")}
+                  />
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </RegiaoRolavel>
     </div>
   );
 }

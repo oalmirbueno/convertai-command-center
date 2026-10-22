@@ -59,12 +59,17 @@ describe("Template: gerar o conteúdo com custo antes", () => {
     fireEvent.change(screen.getByLabelText("Texto do template"), { target: { value: "a".repeat(281) } });
     expect(screen.getByText("Passou 1 do limite de 280 do X")).toBeInTheDocument();
   });
-  it("no Instagram o texto vira a legenda do post (sem mexer na lâmina) e o post exige foto", async () => {
-    montar();
-    fireEvent.click(screen.getByRole("button", { name: "Instagram" }));
-    expect(screen.getByLabelText("Texto do template")).toHaveValue("Legenda já escrita do post");
-    expect(screen.getByText("O post do Instagram precisa de uma foto: escolha na etapa Imagem.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeDisabled();
+  it("é só o post do X: sem escolha de Instagram ou Story, e o template antigo abre com aviso", () => {
+    const tela = montar();
+    expect(screen.queryByRole("button", { name: "Instagram" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Story" })).not.toBeInTheDocument();
+    expect(screen.getByText("Post 1 de 2 do fio")).toBeInTheDocument();
+    tela.unmount(); sessionStorage.clear();
+    const antigo: Trabalho = { ...trabalho, cards: [{ ordem: 1, versao: 1, storage_path: "cliente-a/arte.png", template_profile: { versao: 1, estilo: "instagram", nome: "Padaria", username: "padaria", texto: "Legenda antiga", verificado: false, tema: "claro", cor_fundo: "#ffffff", tamanho_texto: 34, tamanho_foto: 88, espacamento: 48, arredondamento: 24 } }] };
+    montar(antigo);
+    expect(screen.getByText(/Template antigo \(Instagram\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Passar para post do X" }));
+    expect(screen.queryByText(/Template antigo/)).not.toBeInTheDocument();
   });
 });
 
@@ -111,21 +116,32 @@ describe("Template: imagem gerada, da internet ou do cliente", () => {
 });
 
 describe("Template: organização da tela", () => {
-  it("tem as quatro etapas no padrão e a Aparência com os ajustes antigos e os da rede", () => {
+  it("tem as três etapas do painel no padrão e a Aparência com os ajustes antigos e os da rede", () => {
     montar();
     expect(screen.getByRole("navigation", { name: "Etapas do template" })).toBeInTheDocument();
-    for (const nome of ["Conteúdo", "Imagem", "Aparência", "Prévia e guardar"]) expect(screen.getByRole("button", { name: nome })).toBeInTheDocument();
+    for (const nome of ["Conteúdo", "Imagem", "Aparência"]) expect(screen.getByRole("button", { name: nome })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Prévia e guardar" })).not.toBeInTheDocument();
     etapa("Aparência");
-    for (const rotulo of ["Tamanho do texto", "Tamanho do perfil", "Respiro em volta", "Cantos do post", "Cor de fundo do template", "Respostas", "Reposts", "Curtidas", "Visualizações"]) expect(screen.getByLabelText(rotulo)).toBeInTheDocument();
+    for (const rotulo of ["Tamanho do texto", "Tamanho do avatar", "Tamanho da mídia", "Escala do post", "Respiro em volta", "Cantos do post", "Cor de fundo do template", "Respostas", "Reposts", "Curtidas", "Visualizações"]) expect(screen.getByLabelText(rotulo)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Tema do post" })).toHaveTextContent("Dim");
   });
-  it("no computador o painel abre a janela grande com a prévia ao lado", async () => {
-    montar(trabalho, 1440);
-    // Com a janela aberta, o painel por trás fica fora da árvore acessível (Radix): por isso o hidden.
-    expect(screen.getByRole("button", { name: "Abrir o Template", hidden: true })).toBeInTheDocument();
-    const janela = await screen.findByRole("dialog");
-    expect(within(janela).getByRole("navigation", { name: "Etapas do template" })).toBeInTheDocument();
-    expect(within(janela).getByLabelText("Prévia do template Profile")).toBeInTheDocument();
+  it("sem pop-up: o centro é o post e o painel são os ajustes, com o mesmo rascunho ao vivo", async () => {
+    const desenhar = (await import("@/components/mesa/profile/renderProfile")).desenharProfile as unknown as { mock: { calls: unknown[][] } };
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const props = { trabalho, card: trabalho.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
+    render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} parte="centro" onSair={vi.fn()} /><TemplateProfileEditor {...props} parte="painel" /></QueryClientProvider>);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Prévia do template Profile")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sair do Template" })).toBeInTheDocument();
+    etapa("Aparência");
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar tamanho do texto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fundo #15202b" }));
+    await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ tamanho_texto: 36, cor_fundo: "#15202b" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar o post" }));
+    fireEvent.click(screen.getByLabelText("Mostrar números"));
+    fireEvent.click(screen.getByLabelText("Mostrar tempo"));
+    await waitFor(() => expect(desenhar.mock.calls[desenhar.mock.calls.length - 1][1]).toMatchObject({ escala: 110, ocultar_numeros: true, ocultar_tempo: true }));
   });
   it("as setas da prévia trocam de lâmina", () => {
     const { props } = montar();

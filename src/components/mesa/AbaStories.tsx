@@ -34,7 +34,7 @@ const BLOCOS: Array<{ valor: Bloco; rotulo: string; icone: ReactNode; ajuda: str
     valor: "sequencia",
     rotulo: "Sequência",
     icone: <Clapperboard className="h-4 w-4" />,
-    ajuda: "A novela do dia: o agente planeja, a equipe ajusta cada cartão, gera as artes 1080 x 1920 e agenda. Com adesivo vai pelo app; sem adesivo o painel publica sozinho.",
+    ajuda: "A sequência que converte (gancho, problema ou desejo, prova, oferta e CTA com adesivo), num modelo pronto ou da campanha: as imagens saem do gerador do Estúdio em 9:16 com o texto integrado; as telas ficam em cartões ao lado do celular. Com adesivo vai pelo app; sem adesivo o painel publica sozinho.",
   },
   { valor: "virais", rotulo: "Virais", icone: <Flame className="h-4 w-4" />, ajuda: "Moldes de story viral para encaixar na sequência aberta, já adaptados ao nicho do cliente." },
   { valor: "destaques", rotulo: "Destaques", icone: <Star className="h-4 w-4" />, ajuda: "Os stories marcados para cada destaque e as capas (as mesmas da aba Redes)." },

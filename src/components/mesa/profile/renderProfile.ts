@@ -188,9 +188,11 @@ function planoDoX(ctx: CanvasRenderingContext2D, t: TemplateProfile, W: number, 
   ctx.font = fonte(400, 15 * s);
   const linhas = linhasProfile(t.texto, cw, (x) => ctx.measureText(x).width);
   const lh = 20 * s, topo = 12 * s, cab = 20 * s, textoTopo = 2 * s, fim = 12 * s;
-  const midiaH = temImagem ? cw * razaoDaMidia(t) : 0;
+  // Largura da mídia ajustável à mão (40 a 100% da coluna do texto), alinhada à esquerda como no X.
+  const midiaW = cw * Math.max(40, Math.min(100, t.midia ?? 100)) / 100;
+  const midiaH = temImagem ? midiaW * razaoDaMidia(t) : 0;
   const conteudo = cab + textoTopo + linhas.length * lh + (midiaH ? 12 * s + midiaH : 0) + 12 * s + 20 * s;
-  return { s, pad, A, colX, cw, linhas, lh, topo, cab, textoTopo, fim, midiaH, altura: topo + Math.max(conteudo, A) + fim };
+  return { s, pad, A, colX, cw, linhas, lh, topo, cab, textoTopo, fim, midiaW, midiaH, altura: topo + Math.max(conteudo, A) + fim };
 }
 
 function pintarX(ctx: CanvasRenderingContext2D, t: TemplateProfile, x: number, y: number, W: number, p: ReturnType<typeof planoDoX>, rec: RecursosProfile) {
@@ -219,7 +221,8 @@ function pintarX(ctx: CanvasRenderingContext2D, t: TemplateProfile, x: number, y
   if (t.verificado) { selo(ctx, cursor + 2 * s + 9.4 * s, meio, 9.4 * s, AZUL_DO_X); cursor += espacoDoSelo; }
   ctx.font = fonte(400, 15 * s); ctx.fillStyle = cor.cinza;
   const resto = cx + larguraDaLinha - (cursor + 4 * s);
-  if (resto > 12 * s) ctx.fillText(cortar(ctx, `@${t.username} · ${t.tempo || TEMPO_PADRAO.twitter}`, resto), cursor + 4 * s, meio);
+  const handle = t.ocultar_tempo ? `@${t.username}` : `@${t.username} · ${t.tempo || TEMPO_PADRAO.twitter}`;
+  if (resto > 12 * s) ctx.fillText(cortar(ctx, handle, resto), cursor + 4 * s, meio);
   icone(ctx, PONTOS, x + W - pad - mais, meio - mais / 2, mais, cor.cinza, true);
   // Texto do post, com as quebras do autor.
   ctx.font = fonte(400, 15 * s); ctx.fillStyle = cor.texto; ctx.textBaseline = "top";
@@ -228,11 +231,11 @@ function pintarX(ctx: CanvasRenderingContext2D, t: TemplateProfile, x: number, y
   let imagem: RetanguloProfile | null = null, area: RetanguloProfile | null = null;
   if (rec.imagem && p.midiaH) {
     cy += 12 * s;
-    area = { x: cx, y: cy, largura: cw, altura: p.midiaH };
+    area = { x: cx, y: cy, largura: p.midiaW, altura: p.midiaH };
     // Foto gerada: cantos de 16 px como no X. Captura, logo ou foto exata (e ponto marcado): sem recorte nenhum.
     const raio = rec.imagemExata || t.destaque ? 0 : 16 * s;
-    imagem = fotoInteira(ctx, rec.imagem, cx, cy, cw, p.midiaH, raio, cor.fundoMidia);
-    ctx.strokeStyle = cor.midia; ctx.lineWidth = Math.max(1, s); caixa(ctx, cx, cy, cw, p.midiaH, raio); ctx.stroke();
+    imagem = fotoInteira(ctx, rec.imagem, cx, cy, p.midiaW, p.midiaH, raio, cor.fundoMidia);
+    ctx.strokeStyle = cor.midia; ctx.lineWidth = Math.max(1, s); caixa(ctx, cx, cy, p.midiaW, p.midiaH, raio); ctx.stroke();
     cy += p.midiaH;
   }
   // Ações: responder, repostar, curtir, ver; salvar e compartilhar à direita.
@@ -244,7 +247,7 @@ function pintarX(ctx: CanvasRenderingContext2D, t: TemplateProfile, x: number, y
   acoes.forEach(([nomeDoIcone, valor], i) => {
     const ix = cx + i * (esquerda / 4);
     icone(ctx, ICONES[nomeDoIcone], ix, linhaDoMeio - tam / 2, tam, cor.cinza);
-    if (typeof valor === "number" && valor > 0) { ctx.fillStyle = cor.cinza; ctx.fillText(numeroDoX(valor), ix + tam + 4 * s, linhaDoMeio); }
+    if (!t.ocultar_numeros && typeof valor === "number" && valor > 0) { ctx.fillStyle = cor.cinza; ctx.fillText(numeroDoX(valor), ix + tam + 4 * s, linhaDoMeio); }
   });
   icone(ctx, ICONES.salvar, cx + cw - direita, linhaDoMeio - tam / 2, tam, cor.cinza);
   icone(ctx, ICONES.compartilhar, cx + cw - tam, linhaDoMeio - tam / 2, tam, cor.cinza);
@@ -482,13 +485,16 @@ export function desenharProfile(canvas: HTMLCanvasElement, template: TemplatePro
   } else {
     const disponivel = canvas.height - margem * 2, minimo = 420;
     const ig = template.estilo === "instagram";
-    const medir = (W: number) => (ig ? planoDoIG(ctx, template, W) : planoDoX(ctx, template, W, !!recursos.imagem));
-    let W = canvas.width - margem * 2;
+    // Zoom do post no quadro (50 a 150%): letra, avatar e largura crescem ou diminuem juntos.
+    const z = Math.max(0.5, Math.min(1.5, (template.escala ?? 100) / 100));
+    const t = z === 1 ? template : { ...template, tamanho_texto: template.tamanho_texto * z, tamanho_foto: template.tamanho_foto * z };
+    const medir = (W: number) => (ig ? planoDoIG(ctx, t, W) : planoDoX(ctx, t, W, !!recursos.imagem));
+    let W = (canvas.width - margem * 2) * Math.min(1, z);
     let plano = medir(W);
     while (plano.altura > disponivel && W - 20 >= minimo) { W -= 20; plano = medir(W); }
     if (plano.altura > disponivel) throw new Error(NAO_CABE);
     const x = (canvas.width - W) / 2, y = (canvas.height - plano.altura) / 2;
-    r = ig ? pintarIG(ctx, template, x, y, W, plano as ReturnType<typeof planoDoIG>, recursos) : pintarX(ctx, template, x, y, W, plano as ReturnType<typeof planoDoX>, recursos);
+    r = ig ? pintarIG(ctx, t, x, y, W, plano as ReturnType<typeof planoDoIG>, recursos) : pintarX(ctx, t, x, y, W, plano as ReturnType<typeof planoDoX>, recursos);
   }
   if (template.destaque) {
     if (!r.imagem || !r.area) throw new Error("Escolha a imagem real antes de marcar um ponto.");

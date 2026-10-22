@@ -3382,7 +3382,57 @@ type BriefingDaCampanha = {
   cta: string;
   /** 21/10/2026: canais escolhidos pela equipe (Feed, Stories, Reels...). Só aparece quando há. */
   canais?: string[];
+  /** 21/10/2026: a mistura de formatos da campanha e os stories planejados (só aparecem quando há). */
+  formatos?: FormatosDaCampanha;
+  stories?: StoryDaCampanha[];
 };
+
+type FormatosDaCampanha = { posts: number; carrosseis: number; stories: number; videos: number };
+type StoryDaCampanha = { tema_id: string; data: string; etapa: string; tema: string; gancho: string; telas: string[]; sequencia_id?: string | null };
+
+/** Mistura de formatos (até 8 por formato; a série de feed cabe em 12). Null quando não há nada. */
+export function formatosDaCampanha(v: unknown): FormatosDaCampanha | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const n = (x: unknown) => Math.max(0, Math.min(8, Math.round(Number(x) || 0)));
+  const f = { posts: n(o.posts), carrosseis: n(o.carrosseis), stories: n(o.stories), videos: n(o.videos) };
+  let excesso = f.posts + f.carrosseis + f.videos - 12;
+  for (const k of ["posts", "carrosseis", "videos"] as const) {
+    if (excesso <= 0) break;
+    const tira = Math.min(excesso, f[k]);
+    f[k] -= tira;
+    excesso -= tira;
+  }
+  return f.posts + f.carrosseis + f.stories + f.videos ? f : null;
+}
+
+/** Stories planejados da campanha (até 8). */
+export function storiesDaCampanha(v: unknown): StoryDaCampanha[] {
+  return (Array.isArray(v) ? v : [])
+    .map((x, i) => {
+      const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const data = texto(o.data, 10);
+      return {
+        tema_id: texto(o.tema_id, 40) || `s${i + 1}`,
+        data: DATA.test(data) ? data : "",
+        etapa: texto(o.etapa, 60),
+        tema: texto(o.tema, 200),
+        gancho: texto(o.gancho, 300),
+        telas: (Array.isArray(o.telas) ? o.telas : []).map((t) => texto(t, 300)).filter(Boolean).slice(0, 10),
+        ...(texto(o.sequencia_id, 64) ? { sequencia_id: texto(o.sequencia_id, 64) } : {}),
+      };
+    })
+    .filter((x) => x.tema)
+    .slice(0, 8);
+}
+
+/** O que só a equipe (ou a criação) põe no briefing: o ajuste e a conversa do agente nunca apagam. */
+function extrasDoBriefing(v: unknown): Partial<BriefingDaCampanha> {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const f = formatosDaCampanha(o.formatos);
+  const st = storiesDaCampanha(o.stories);
+  return { ...canaisDoBriefing(o.canais), ...(f ? { formatos: f } : {}), ...(st.length ? { stories: st } : {}) };
+}
 
 /** Linha do acervo (cliente_imagens) que a campanha usa. */
 type FotoDaCampanha = {
@@ -3417,7 +3467,7 @@ export function normalizarBriefing(bruto: unknown): BriefingDaCampanha {
     provas,
     tom: texto(o.tom, 300),
     cta: texto(o.cta, 200),
-    ...canaisDoBriefing(o.canais),
+    ...extrasDoBriefing(o),
   };
 }
 
@@ -3442,6 +3492,8 @@ export function juntarBriefing(daIa: BriefingDaCampanha, daEquipe: BriefingDaCam
     tom: daEquipe.tom || daIa.tom,
     cta: daEquipe.cta || daIa.cta,
     ...canaisDoBriefing(daEquipe.canais && daEquipe.canais.length ? daEquipe.canais : daIa.canais),
+    ...(daEquipe.formatos || daIa.formatos ? { formatos: daEquipe.formatos || daIa.formatos } : {}),
+    ...(daEquipe.stories && daEquipe.stories.length ? { stories: daEquipe.stories } : daIa.stories && daIa.stories.length ? { stories: daIa.stories } : {}),
   };
 }
 
@@ -4987,6 +5039,15 @@ const ESQUEMA_CAMPANHA = {
   }),
 };
 
+/** 21/10/2026: a criação com stories na mistura pede também a sequência de cada story. */
+const ESQUEMA_CAMPANHA_COM_STORIES = {
+  nome: "campanha",
+  schema: obj({
+    ...ESQUEMA_CAMPANHA.schema.properties,
+    stories: { type: "array", items: obj({ data: S("string"), etapa: S("string"), tema: S("string"), gancho: S("string"), telas: { type: "array", items: S("string") } }) },
+  }),
+};
+
 function normalizarIdentidade(bruto: unknown, antes: { tipo?: unknown; marca_id?: unknown } | null = null): Record<string, unknown> {
   const o = (bruto ?? {}) as Record<string, any>;
   const HEX = /^#[0-9a-f]{6}$/i;
@@ -5046,7 +5107,12 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   if (diasEntre(inicio, fim) > 62) throw new ErroHttp(400, "periodo_longo", "Campanha de até 2 meses por vez.");
   const uteis = diasUteisDoPeriodo(inicio, fim);
   if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "O período não tem nenhum dia de segunda a sexta.");
-  const quantidade = Number.isInteger(Number(corpo.quantidade)) && Number(corpo.quantidade) >= 1 && Number(corpo.quantidade) <= 12 ? Number(corpo.quantidade) : null;
+  // 21/10/2026: a mistura de formatos escolhida na tela manda na quantidade e no formato de cada conteúdo.
+  const formatos = formatosDaCampanha(corpo.formatos);
+  const naSerie = formatos ? formatos.posts + formatos.carrosseis + formatos.videos : 0;
+  const quantidade = formatos && naSerie
+    ? naSerie
+    : Number.isInteger(Number(corpo.quantidade)) && Number(corpo.quantidade) >= 1 && Number(corpo.quantidade) <= 12 ? Number(corpo.quantidade) : null;
   const referencias = (Array.isArray(corpo.referencias_ids) ? corpo.referencias_ids : []).map(String).filter((r) => /^(g:)?[0-9a-f-]{36}$/i.test(r)).slice(0, 8);
   const hype = corpo.hype && typeof corpo.hype === "object" ? corpo.hype : null;
   // Briefing e imagens que a equipe já definiu no formulário (valem sobre o que o estrategista sugerir).
@@ -5102,8 +5168,9 @@ TAREFA: crie a campanha completa para ${inicio} a ${fim}. Nada genérico: cada p
 - conceito: a grande ideia em 2 a 4 frases (o que a campanha diz, por que funciona para este público).
 - briefing: produtos (1 a 3 produtos ou serviços em foco, cada um com por_que: por que este produto nesta campanha e neste período), oferta (a oferta concreta; se o pedido e o contexto não disserem, escreva "sem oferta definida" e nunca invente preço, desconto ou prazo), mensagem_central (a frase que o público precisa entender), publico (quem a campanha quer alcançar, concreto: quem é, o que quer, o que trava), provas (1 a 4 provas reais do contexto: depoimentos, números, garantias; nunca invente; sem prova real, lista vazia), tom (como a campanha fala), cta (a ação principal pedida).
 - identidade: a identidade visual DO TEMA, que vive dentro da marca: tema_visual (clima, fotografia, composição recorrente em 3 a 5 frases), paleta_apoio (1 a 3 cores de apoio em hex que harmonizam com a paleta da marca, nunca substituindo a principal), tipografia (como o título da campanha aparece), elementos (grafismos, formas, selo, texturas), tom (como a campanha fala), selo (texto curto do selo ou logo do tema, até 4 palavras, e a descricao visual do selo).
-- itens: ${quantidade ? `exatamente ${quantidade}` : "de 3 a 8"} conteúdos dentro do período, contando a campanha do teaser ao fechamento (aquecimento, lançamento, prova, urgência, último chamado), sem repetir estrutura; datas só de segunda a sexta entre ${inicio} e ${fim}. Cada conteúdo mostra o produto em foco e serve à mensagem central.${fotosVistas.length ? ' Quando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.' : ""}
-- plano_imagens: ${fotosVistas.length ? "qual foto da campanha vai em qual lâmina e por quê." : "sem fotos da campanha: analise e pecas vazias; nas lacunas, as fotos que a equipe deveria trazer."}
+- itens: ${quantidade ? `exatamente ${quantidade}` : "de 3 a 8"} conteúdos dentro do período,${formatos && naSerie ? ` nesta mistura de formatos: ${formatos.posts} com formato "estatico" (post de arte única), ${formatos.carrosseis} com formato "carrossel" e ${formatos.videos} com formato "video" (Reels: preencha video com estilo, prompt, narracao e referencias; cards vazio);` : ""} contando a campanha do teaser ao fechamento (aquecimento, lançamento, prova, urgência, último chamado), sem repetir estrutura; datas só de segunda a sexta entre ${inicio} e ${fim}. Cada conteúdo mostra o produto em foco e serve à mensagem central.${fotosVistas.length ? ' Quando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.' : ""}
+${formatos && formatos.stories ? `- stories: exatamente ${formatos.stories} sequências de stories espalhadas nas fases (aquecimento, lançamento, urgência, encerramento), cada uma com data (AAAA-MM-DD, de segunda a sexta no período), etapa, tema, gancho e telas (3 a 5 textos curtos, um por tela, o último com a ação).
+` : ""}- plano_imagens: ${fotosVistas.length ? "qual foto da campanha vai em qual lâmina e por quê." : "sem fotos da campanha: analise e pecas vazias; nas lacunas, as fotos que a equipe deveria trazer."}
 - resposta: 1 a 3 frases com o resumo da campanha para a equipe.
 ${REGRAS_DOS_ITENS}
 ${REGRAS_DO_PLANO_DE_IMAGENS}`;
@@ -5118,7 +5185,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     metodo: await metodoDaGeracao(servico),
     mensagens: [{ papel: "usuario", conteudo: pedido, imagens: imagensDaChamada.length ? imagensDaChamada : undefined }],
     raciocinio,
-    esquemaJson: ESQUEMA_CAMPANHA,
+    esquemaJson: formatos && formatos.stories ? ESQUEMA_CAMPANHA_COM_STORIES : ESQUEMA_CAMPANHA,
     referencia: { tipo: "mesa_campanha", id: campanhaId },
     criadoPor: chamador.userId,
   });
@@ -5133,7 +5200,10 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
   const itens = naOrdem.filter((i) => i.tema).sort((a, b) => a.data.localeCompare(b.data));
   if (!itens.length) throw new ErroHttp(502, "campanha_sem_itens", "O estrategista não devolveu os conteúdos da campanha. Tente de novo.", { uso_id: s.usoId });
 
-  const briefing = juntarBriefing(normalizarBriefing(r.briefing), briefingDaEquipe);
+  const briefingJunto = juntarBriefing(normalizarBriefing(r.briefing), briefingDaEquipe);
+  // A mistura e os stories planejados ficam no briefing (a tela lê a mistura e manda cada story para a aba Stories).
+  const storiesFeitos = formatos && formatos.stories ? storiesDaCampanha(r.stories).slice(0, formatos.stories).map((x, i) => ({ ...x, tema_id: `s${i + 1}`, data: x.data && x.data >= inicio && x.data <= fim ? x.data : uteis[Math.min(uteis.length - 1, Math.floor((i * uteis.length) / Math.max(1, formatos.stories)))] })) : [];
+  const briefing: BriefingDaCampanha = { ...briefingJunto, ...(formatos ? { formatos } : {}), ...(storiesFeitos.length ? { stories: storiesFeitos } : {}) };
   // Plano de imagens: o do estrategista, decidido pelo Jev onde há mais de uma candidata.
   let plano: PlanoDeImagens | null = null;
   let custoJev = 0;
@@ -5275,7 +5345,7 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
       conceito: texto(r.conceito, 2000) || c.conceito,
       identidade: r.identidade ? normalizarIdentidade(r.identidade, (c.identidade ?? null) as Record<string, unknown> | null) : c.identidade,
       // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
-      ...(c.briefing !== undefined && r.briefing ? { briefing: normalizarBriefing(r.briefing) } : {}),
+      ...(c.briefing !== undefined && r.briefing ? { briefing: { ...extrasDoBriefing(c.briefing), ...normalizarBriefing(r.briefing) } } : {}),
     })
     .eq("id", c.id)
     .eq("client_id", c.client_id)
@@ -5435,7 +5505,7 @@ ${REGRAS_DOS_ITENS}`;
     campos.conceito = texto(nova.conceito, 2000) || c.conceito;
     if (nova.identidade) campos.identidade = normalizarIdentidade(nova.identidade, (c.identidade ?? null) as Record<string, unknown> | null);
     // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
-    if (nova.briefing && c.briefing !== undefined) campos.briefing = normalizarBriefing(nova.briefing);
+    if (nova.briefing && c.briefing !== undefined) campos.briefing = { ...extrasDoBriefing(c.briefing), ...normalizarBriefing(nova.briefing) };
   }
   // Frente AG1: período, situação e tipo conferidos (data válida, fim depois do começo, vocabulário fechado).
   const conferidos = camposDaCampanhaNaConversa(nova, c as unknown as CampanhaAtual);

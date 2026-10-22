@@ -76,6 +76,6 @@ describe("Template Profile no Estúdio compartilhado", () => {
     montar({ ...trabalho, entrega_status: "aguardando_cliente" });
     await waitFor(() => expect(screen.getByLabelText("Nome de exibição do template")).toHaveValue("Loja A"));
     expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Post do X" })).toBeDisabled();
+    expect(screen.getByLabelText("Texto do template")).toBeDisabled();
   });
 });

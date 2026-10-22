@@ -181,7 +181,8 @@ describe("Gerar campanha completa", () => {
     montar(h(AbaCampanhas, {}));
     const botao = await screen.findByRole("button", { name: /Gerar campanha completa/ });
     expect(botao.textContent).toMatch(/~US\$/);
-    expect(botao.getAttribute("title")).toMatch(/selo, 6 peças, 18 lâminas/);
+    // A mistura sugerida para ~15 dias: 3 posts (1 lâmina), 3 carrosséis (5 lâminas), 4 stories e 2 vídeos (roteiro na série).
+    expect(botao.getAttribute("title")).toMatch(/selo, 6 peças, 4 sequências de stories, 18 lâminas/);
     fireEvent.click(botao);
     expect(await screen.findByText(/Clique de novo para confirmar/)).toBeTruthy();
     expect(mock.invoke).not.toHaveBeenCalled();

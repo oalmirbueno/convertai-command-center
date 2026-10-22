@@ -18,6 +18,7 @@ import {
 import type { TrabalhoDaPeca } from "./regrasDaCampanha";
 import { entregarComModo } from "@/lib/mesa/entregaComOpcoes";
 import { novoLote } from "./seloApi";
+import * as storiesApi from "./stories/storiesApi";
 import { ESTILO_AUTOMATICO, planoDasOpcoes } from "../../../supabase/functions/_shared/selo-da-campanha";
 
 /**
@@ -237,6 +238,9 @@ export function normalizarBriefing(v: unknown): BriefingDaCampanha {
     tom: textoLimpo(o.tom, 300),
     cta: textoLimpo(o.cta, 200),
     ...canaisLimpos(o.canais),
+    // A mistura de formatos e os stories planejados seguem como vieram (o servidor normaliza ao gravar).
+    ...(o.formatos && typeof o.formatos === "object" ? { formatos: o.formatos as BriefingDaCampanha["formatos"] } : {}),
+    ...(Array.isArray(o.stories) && o.stories.length ? { stories: o.stories as BriefingDaCampanha["stories"] } : {}),
   };
 }
 
@@ -369,7 +373,7 @@ export const campanhaPlanoImagens = (campanhaId: string) =>
 export interface CorpoDosConteudos {
   campanhaId: string;
   quantidade?: number;
-  formato?: "estatico" | "carrossel" | null;
+  formato?: "estatico" | "carrossel" | "video" | null;
   escolha?: { tipos: string[]; frameworks: string[] } | null;
 }
 
@@ -507,4 +511,43 @@ export async function levarPecaParaAgenda(trabalho: { id: string; legenda?: stri
   }
   const entrega = await entregarComModo(trabalho.id, "aprovacao");
   return { taskId, ok: entrega.ok, erro: entrega.erro, custo_usd: custo };
+}
+
+// ------------------------------------------------------------------ stories da campanha (contrato com a aba Stories)
+
+/**
+ * Contrato (21/10/2026): a aba Stories expõe gerarStoriesDaCampanha({ clientId, campanhaId, temaId, briefing,
+ * identidade, fase, quantidadeDeTelas }) em ./stories/storiesApi. Enquanto ela não existir, a peça de story
+ * fica "a criar" e a tela avisa (nada é gasto). Depois de gerar, a sequência fica marcada no briefing da
+ * campanha (stories[i].sequencia_id) para reabrir sem gerar de novo.
+ */
+export function geradorDeStoriesDisponivel(): boolean {
+  return typeof (storiesApi as unknown as Record<string, unknown>).gerarStoriesDaCampanha === "function";
+}
+
+export interface PedidoDeStoriesDaCampanha {
+  clientId: string;
+  campanhaId: string;
+  temaId: string;
+  briefing: BriefingDaCampanha;
+  identidade: Campanha["identidade"];
+  fase: string;
+  quantidadeDeTelas: number;
+  /** O custo total já foi mostrado e confirmado na campanha: a aba Stories não pede de novo. */
+  confirmado?: boolean;
+  data?: string | null;
+  pedido?: string | null;
+  marcaId?: string | null;
+}
+
+export async function gerarStoryDaCampanha(campanha: Campanha, pedido: PedidoDeStoriesDaCampanha): Promise<string> {
+  const gerar = (storiesApi as unknown as Record<string, unknown>).gerarStoriesDaCampanha as ((p: PedidoDeStoriesDaCampanha) => Promise<any>) | undefined;
+  if (typeof gerar !== "function") throw new Error("Os stories da campanha ainda não estão ligados à aba Stories.");
+  const r = await gerar({ confirmado: true, ...pedido });
+  if (r && r.situacao === "confirmar_custo") throw new Error(r.mensagem || "Os stories pediram para confirmar o custo.");
+  const id = String((r && (r.sequencia_id || (r.sequencia && r.sequencia.id) || r.id)) || "feita");
+  const b = normalizarBriefing(campanha.briefing);
+  const stories = (b.stories || []).map((s) => (s.tema_id === pedido.temaId ? { ...s, sequencia_id: id } : s));
+  await campanhaSalvar({ campanhaId: campanha.id, briefing: { ...b, stories } });
+  return id;
 }

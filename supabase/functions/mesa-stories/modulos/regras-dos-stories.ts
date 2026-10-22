@@ -20,7 +20,28 @@ import { ARCO_DA_NOVELA, moldePorChave, OBJETIVOS, type Objetivo, TIPOS_DE_ADESI
 // ------------------------------------------------------------------ tipos
 
 export type Adesivo = { tipo: TipoDoAdesivo; pergunta?: string; opcoes?: string[]; url?: string; texto_do_link?: string; quando?: string };
-export type Fundo = { tipo: "foto" | "cor"; imagem_id?: string; cor?: string };
+/**
+ * O fundo do story. 21/10: "gerada" é a imagem do gerador da casa (Arte rápida
+ * 9:16, texto integrado pelo motor): a lâmina `lamina` do trabalho do Estúdio
+ * `trabalho_id`, a versão registrada (`caminho`, `versao`) e o texto que foi
+ * para a arte (`texto`: mudou o texto na tela, a imagem fica desatualizada).
+ * `cena` é o que a imagem mostra; `referencia_id` é a foto real do acervo que
+ * vai inteira como referência (nunca colada). `papel` é o papel na estrutura
+ * (gancho, problema_ou_desejo, prova, oferta, cta ou o arco da novela).
+ */
+export type Fundo = {
+  tipo: "foto" | "cor" | "gerada";
+  imagem_id?: string;
+  cor?: string;
+  papel?: string;
+  cena?: string;
+  referencia_id?: string;
+  trabalho_id?: string;
+  lamina?: number;
+  caminho?: string;
+  versao?: number;
+  texto?: string;
+};
 export type Caminho = "automatico" | "pelo_app";
 export type Situacao = "rascunho" | "arte_pronta" | "agendado" | "postar_pelo_app" | "publicado" | "falhou";
 export const SITUACOES: readonly Situacao[] = ["rascunho", "arte_pronta", "agendado", "postar_pelo_app", "publicado", "falhou"];
@@ -125,15 +146,41 @@ export function adesivoLimpo(v: unknown): Adesivo {
   return a;
 }
 
+const PAPEL = /^[a-z_]{2,40}$/;
+/** Caminho da lâmina do Estúdio no bucket mesa: <cliente>/estudio/<trabalho>/<arquivo>. */
+export const CAMINHO_DA_LAMINA = /^[0-9a-f-]{36}\/estudio\/[0-9a-f-]{36}\/[a-z0-9_.-]{1,80}$/i;
+
 export function fundoLimpo(v: unknown): Fundo {
   const o = v && typeof v === "object" ? v as Record<string, unknown> : { tipo: v };
+  const papel = typeof o.papel === "string" && PAPEL.test(o.papel) ? o.papel : null;
   if (o.tipo === "foto") {
     const f: Fundo = { tipo: "foto" };
     if (typeof o.imagem_id === "string" && UUID.test(o.imagem_id)) f.imagem_id = o.imagem_id;
+    if (papel) f.papel = papel;
+    return f;
+  }
+  if (o.tipo === "gerada") {
+    const f: Fundo = { tipo: "gerada" };
+    if (papel) f.papel = papel;
+    const cena = limpar(o.cena, 400);
+    if (cena) f.cena = cena;
+    if (typeof o.referencia_id === "string" && UUID.test(o.referencia_id)) f.referencia_id = o.referencia_id;
+    if (typeof o.trabalho_id === "string" && UUID.test(o.trabalho_id)) {
+      f.trabalho_id = o.trabalho_id;
+      const lamina = Math.round(Number(o.lamina));
+      if (lamina >= 1 && lamina <= 20) f.lamina = lamina;
+      if (typeof o.caminho === "string" && CAMINHO_DA_LAMINA.test(o.caminho) && o.caminho.indexOf("..") < 0) f.caminho = o.caminho;
+      const versao = Math.round(Number(o.versao));
+      if (versao >= 1) f.versao = versao;
+      const texto = limpar(o.texto, MAX_TEXTO_NA_TELA);
+      if (texto || o.texto === "") f.texto = texto;
+    }
+    if (typeof o.cor === "string" && COR.test(o.cor)) f.cor = o.cor.toLowerCase();
     return f;
   }
   const f: Fundo = { tipo: "cor" };
   if (typeof o.cor === "string" && COR.test(o.cor)) f.cor = o.cor.toLowerCase();
+  if (papel) f.papel = papel;
   return f;
 }
 

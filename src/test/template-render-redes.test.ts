@@ -155,3 +155,22 @@ describe("Limites reais das redes", () => {
     expect(() => desenharProfile(q.canvas, { ...base, texto: "palavra ".repeat(400), tamanho_texto: 56 }, "quadrado_1x1")).toThrow("não cabe");
   });
 });
+
+describe("Edição à mão do post do X", () => {
+  const comNumeros = { ...base, numeros: { respostas: 12, curtidas: 1500 } };
+  it("esconde números e tempo quando pedido", () => {
+    const q = quadro();
+    desenharProfile(q.canvas, { ...comNumeros, ocultar_numeros: true, ocultar_tempo: true }, "feed_4x5");
+    expect(q.textos()).not.toContain("12");
+    expect(q.textos()).toContain("@padariabomdia");
+    expect(q.textos()).not.toContain("@padariabomdia · 2h");
+  });
+  it("a mídia encolhe pela porcentagem, sem cortar a foto", () => {
+    const larguraDaMidia = (midia?: number) => { const q = quadro(); desenharProfile(q.canvas, { ...base, midia }, "feed_4x5", { imagem: foto }); return (q.de("fillRect")[2] as number[])[2]; };
+    expect(larguraDaMidia(50)).toBeCloseTo(larguraDaMidia(100) / 2, 0);
+  });
+  it("a escala aumenta ou diminui o post inteiro no quadro", () => {
+    const larguraDoPost = (escala?: number) => { const q = quadro(); desenharProfile(q.canvas, { ...base, escala }, "feed_4x5"); return Math.max(...(q.de("arcTo").slice(0, 4) as number[][]).map((c) => c[0])) - Math.min(...(q.de("arcTo").slice(0, 4) as number[][]).map((c) => c[2])); };
+    expect(larguraDoPost(60)).toBeLessThan(larguraDoPost(100));
+  });
+});

@@ -44,6 +44,11 @@ export interface TemplateProfile {
   fio?: boolean;
   /** Legenda do Instagram aberta (como depois de tocar em "mais"). */
   legenda_completa?: boolean;
+  /** Edição à mão (21/10, rodada 2): zoom do post no quadro (%), largura da mídia (%) e o que esconder. */
+  escala?: number;
+  midia?: number;
+  ocultar_numeros?: boolean;
+  ocultar_tempo?: boolean;
 }
 
 export interface VersaoDoTemplate {
@@ -188,7 +193,9 @@ function normalizarSimulacao(o: Record<string, unknown>, t: TemplateProfile, err
     if (o.proporcao !== "16:9" && o.proporcao !== "1:1" && o.proporcao !== "4:5") throw erro(400, "proporcao_template_invalida", "Escolha a proporção 16:9, 1:1 ou 4:5.");
     t.proporcao = o.proporcao;
   }
-  for (const k of ["fio", "legenda_completa"] as const) {
+  if (o.escala !== undefined && o.escala !== null) t.escala = faixa(o.escala, 100, 50, 150, erro);
+  if (o.midia !== undefined && o.midia !== null) t.midia = faixa(o.midia, 100, 40, 100, erro);
+  for (const k of ["fio", "legenda_completa", "ocultar_numeros", "ocultar_tempo"] as const) {
     if (o[k] === undefined || o[k] === null) continue;
     if (typeof o[k] !== "boolean") throw erro(400, "opcao_template_invalida", "Uma opção do template precisa ser sim ou não.");
     if (o[k] === true) t[k] = true;

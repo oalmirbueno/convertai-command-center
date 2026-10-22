@@ -204,6 +204,8 @@ import { superficie, juntar } from "@/components/sistema/estilos";
 
 const EstudioDaPauta = lazy(() => import("./EstudioDaPauta"));
 const TemplateProfileEditor = lazy(() => import("./profile/TemplateProfileEditor"));
+// 21/10 (rodada 2): Template · X muda a área do Estúdio; as ações de cada post ficam embaixo do card da prancheta.
+const AcoesDoPostNaPrancheta = lazy(() => import("./profile/AcoesDoPostNaPrancheta"));
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
@@ -260,7 +262,7 @@ type EstadoDoItem = "producao" | "agenda" | "preparar";
 
 const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typeof PenLine }> = {
   lamina: { rotulo: "Lâmina", dica: "Texto, conferência, ajustes e versões da lâmina escolhida", icone: PenLine },
-  template: { rotulo: "Template", dica: "Post do X, do Instagram ou Story, com texto e foto gerados ou reais", icone: LayoutTemplate },
+  template: { rotulo: "Template · X", dica: "Template · X: a área vira o post do X, com o fio na prancheta e os ajustes aqui", icone: LayoutTemplate },
   diretor: { rotulo: "Diretor", dica: "Conversar com o diretor de arte: estilo, cenário, luz e cores, com mudanças que você aplica com um clique", icone: MessageSquare },
   fotos: { rotulo: "Fotos", dica: "Fotos reais para compor: fundo, pessoa ou objeto (cole com Ctrl+V)", icone: ImagePlus },
   referencias: { rotulo: "Referências", dica: "Referências que o gerador segue de perto, com a identidade da marca", icone: Bookmark },
@@ -469,6 +471,8 @@ export function DetalheDoItem({
   const [selecionado, setSelecionado] = useEstadoGuardado<number | null>(`${chave}:lamina`, null);
   const [painel, setPainel] = useEstadoGuardado<PainelDaLamina>(`${chave}:painel`, "direcao");
   const [ferramentaGuardada, setFerramenta] = useEstadoGuardado<Ferramenta | "">(`${chave}:ferramenta`, "lamina");
+  // Template · X (21/10, rodada 2): a área do Estúdio vira o post do X até a equipe sair do Template.
+  const [modoTemplate, setModoTemplate] = useEstadoGuardado<boolean>(`${chave}:template`, false);
   const [refsAlvo, setRefsAlvo] = useEstadoGuardado<AlvoDasReferencias>(`${chave}:refs-alvo`, "lamina");
   const [refsAba, setRefsAba] = useEstadoGuardado<"cliente" | "banco">(`${chave}:refs-aba`, "cliente");
   // "Corrigir sozinho": desligado por padrão (24/09/2026: a correção automática triplicava o custo); guardado por trabalho na sessão.
@@ -1185,6 +1189,11 @@ export function DetalheDoItem({
     : ferramentas.indexOf(ferramentaGuardada as Ferramenta) >= 0
       ? (ferramentaGuardada as Ferramenta)
       : ferramentas[0];
+  // Escolher a ferramenta Template põe a área no modo do post do X (sai pelo ícone "Sair do Template" no centro).
+  useEffect(() => {
+    if (ferramenta === "template") setModoTemplate(true);
+  }, [ferramenta, setModoTemplate]);
+  const emTemplate = modoTemplate && estado === "producao" && !!trabalho && !ehPostDeFotos(trabalho.direcao);
 
   /** Abre a ferramenta (o mesmo ícone fecha). No celular, o painel fica embaixo e a tela desce até ele. */
   const abrirFerramenta = (f: Ferramenta, alternar = true) => {
@@ -1606,7 +1615,11 @@ export function DetalheDoItem({
       onReordenar={(ordens) => void reordenar(ordens)}
       onVersoes={(ordem) => abrirPainel(ordem, "versoes")}
       onAjustar={(ordem) => abrirPainel(ordem, "livre")}
-      acoes={acoesDaPrancheta}
+      acoes={emTemplate && trabalho ? (c) => (
+        <Suspense fallback={null}>
+          <AcoesDoPostNaPrancheta trabalhoId={trabalho.id} clientId={clientId} ordem={c.ordem} total={cardsDaDirecao.length} bloqueado={entregue || ocupado} onMudou={atualizar} onEscolher={setSelecionado} />
+        </Suspense>
+      ) : acoesDaPrancheta}
     />
   );
 
@@ -1621,7 +1634,7 @@ export function DetalheDoItem({
   const versoesDaEscolhida = cardSelecionado ? (trabalho?.cards || []).filter((v) => v.ordem === cardSelecionado.ordem) : [];
   const versaoNaTela = (versaoVista !== null ? versoesDaEscolhida.find((v) => v.versao === versaoVista) : undefined) || ultimaDaEscolhida || null;
 
-  const laminaGrande = cardSelecionado ? (
+  const laminaDeArte = cardSelecionado ? (
     <EstudioLaminaGrande
       card={cardSelecionado}
       total={cardsDaDirecao.length}
@@ -1726,12 +1739,29 @@ export function DetalheDoItem({
     />
   ) : null;
 
+  // Template · X: no lugar da lâmina grande, o post do X editável; prancheta, legenda e entrega seguem iguais.
+  const laminaGrande = emTemplate && trabalho && cardSelecionado ? (
+    <Suspense fallback={<p className="text-[12px] text-muted-foreground">Abrindo o Template…</p>}>
+      <TemplateProfileEditor
+        key={`centro:${clientId}:${marcaDaMesa?.id || "-"}:${trabalho.id}:${cardSelecionado.ordem}`}
+        parte="centro"
+        trabalho={trabalho}
+        card={cardSelecionado}
+        bloqueado={entregue || algoGerando || entregando}
+        onMudou={atualizar}
+        onAbrirFotos={() => abrirFerramenta("fotos", false)}
+        onEscolherLamina={setSelecionado}
+        onSair={() => { setModoTemplate(false); if (ferramenta === "template") setFerramenta("lamina"); }}
+      />
+    </Suspense>
+  ) : laminaDeArte;
+
   // 17/10/2026 (dono: "no mobile está faltando um botão ali de ajustar [...] ajustar arte, assim por diante, ajustar lâmina"):
   // no celular e no tablet (a pilha, abaixo do lg), logo embaixo da lâmina grande, os dois ajustes com nome à vista.
   // "Ajustar lâmina" abre o ajuste livre da lâmina em foco; "Ajustar arte" abre o Diretor, que muda o conjunto todo.
   // Só aparece com arte gerada na lâmina, sem nada rodando nela e sem o trabalho entregue (aí o caminho é reabrir).
   const mostrarAjusteNoCelular = !colunas && !!cardSelecionado && !!ultimaDaEscolhida && !laminaOcupada(cardSelecionado.ordem) && !entregue;
-  const barraDeAjusteNoCelular = mostrarAjusteNoCelular && cardSelecionado ? (
+  const barraDeAjusteNoCelular = mostrarAjusteNoCelular && cardSelecionado && !emTemplate ? (
     <div className="mt-3 flex min-w-0 lg:hidden" role="group" aria-label="Ajustar" data-ajuste-no-celular="">
       <Button
         type="button"
@@ -2275,6 +2305,7 @@ export function DetalheDoItem({
           <Suspense fallback={<p className="text-[12px] text-muted-foreground">Abrindo templates…</p>}>
             <TemplateProfileEditor
               key={`${clientId}:${marcaDaMesa?.id || "-"}:${trabalho.id}:${cardSelecionado.ordem}`}
+              parte="painel"
               trabalho={trabalho}
               card={cardSelecionado}
               bloqueado={entregue || algoGerando || entregando}

@@ -166,6 +166,9 @@ export interface BriefingDaCampanha {
   cta: string;
   /** 21/10/2026: canais em que a campanha roda (só quando a equipe marca). */
   canais?: string[];
+  /** 21/10/2026: a mistura de formatos e os stories planejados (regrasDaCampanha.ts). */
+  formatos?: { posts: number; carrosseis: number; stories: number; videos: number };
+  stories?: { tema_id: string; data: string; etapa: string; tema: string; gancho: string; telas: string[]; sequencia_id?: string | null }[];
 }
 
 export type PapelDaImagemDaCampanha = "heroi" | "apoio" | "ambiente";
@@ -554,12 +557,15 @@ export interface CorpoDaCampanha {
   tipo?: string | null;
   /** 21/10/2026: nome escrito na tela (semente do Mês); vale sobre o do estrategista. */
   nome?: string | null;
+  /** 21/10/2026: a mistura de formatos (posts, carrosséis, stories, vídeos); manda na quantidade. */
+  formatos?: { posts: number; carrosseis: number; stories: number; videos: number } | null;
 }
 
 export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao: "campanha_criar", client_id: c.clientId, pedido: c.pedido };
   if (c.tipo) corpo.tipo = c.tipo;
   if (c.nome && c.nome.trim()) corpo.nome = c.nome.trim().slice(0, 120);
+  if (c.formatos) corpo.formatos = c.formatos;
   if (c.periodoInicio) corpo.periodo_inicio = c.periodoInicio;
   if (c.periodoFim) corpo.periodo_fim = c.periodoFim;
   if (c.quantidade) corpo.quantidade = c.quantidade;

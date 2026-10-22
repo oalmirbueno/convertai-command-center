@@ -160,33 +160,45 @@ beforeEach(() => {
 });
 
 describe("aba Stories: sequência", () => {
-  it("abre a aba, planeja com o agente, edita um cartão, mostra Pelo app com adesivo e agenda", { timeout: 60_000 }, async () => {
+  it("abre a aba, planeja a novela do dia, edita uma tela, mostra Pelo app com adesivo e agenda", { timeout: 60_000 }, async () => {
     servidor();
     montar();
     expect(await screen.findByText("Nenhuma sequência ainda")).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Blocos dos stories" });
     expect(Array.from(nav.querySelectorAll("[data-etapa]")).map((b) => b.getAttribute("data-etapa"))).toEqual(["sequencia", "virais", "destaques", "agenda"]);
 
-    // Planejar com o agente: dia, objetivo e quantidade vão no pedido.
+    // A novela do dia (o modelo de antes): dia, objetivo e quantidade vão no pedido; sem imagens agora.
+    fireEvent.click(screen.getByRole("radio", { name: /Novela do dia/ }));
     fireEvent.change(screen.getByLabelText("Objetivo"), { target: { value: "vender" } });
-    fireEvent.change(screen.getByLabelText("Stories"), { target: { value: "4" } });
-    fireEvent.click(screen.getByRole("button", { name: "Planejar com o agente" }));
+    fireEvent.change(screen.getByLabelText("Telas"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Já pedir as imagens/ }));
+    const criar = screen.getByRole("button", { name: /Criar a sequência/ });
+    fireEvent.click(criar);
+    // Sem catálogo não há estimativa: o segundo clique confirma.
+    fireEvent.click(screen.getByRole("button", { name: /clique de novo/ }));
     await waitFor(() => expect(document.querySelectorAll("[data-story]").length).toBe(2));
     expect(chamadasDe("planejar_sequencia")[0]).toMatchObject({ client_id: CLIENTE, data: AMANHA, objetivo: "vender", quantidade: 4 });
+    expect(chamadasDe("planejar_sequencia")[0].modelo_da_sequencia).toBeUndefined();
+    expect(mock.invoke.mock.calls.some((c: any[]) => c[0] === "estudio-arte")).toBe(false);
     expect(screen.getByText("Novela do combo")).toBeTruthy();
     expect(screen.getByText(/Amanhã eu conto o segredo/)).toBeTruthy();
 
-    // Selo: sem adesivo, Automático; com enquete, Pelo app (e a enquete desenhada no cartão).
-    const c1 = document.querySelector('[data-story="a1"]') as HTMLElement;
-    const c2 = document.querySelector('[data-story="a2"]') as HTMLElement;
-    expect(within(c1).getByText("Automático")).toBeTruthy();
-    expect(within(c2).getByText("Pelo app")).toBeTruthy();
-    expect(c2.querySelector('[data-area-do-adesivo="enquete"]')).toBeTruthy();
-    expect(within(c2).getByText("Qual sabor?")).toBeTruthy();
-    expect(within(c2).getByRole("button", { name: "Baixar a arte do story 2" })).toBeTruthy();
+    // As telas em cartões na lateral; a escolhida aparece no celular e ao lado, com o selo do caminho.
+    const painel = () => document.querySelector("[data-painel-da-tela]") as HTMLElement;
+    expect(painel().getAttribute("data-painel-da-tela")).toBe("a1");
+    expect(within(painel()).getByText("Automático")).toBeTruthy();
+    fireEvent.click(within(document.querySelector('[data-story="a2"]') as HTMLElement).getByRole("button", { name: /Story 2/ }));
+    expect(painel().getAttribute("data-painel-da-tela")).toBe("a2");
+    expect(within(painel()).getByText("Pelo app")).toBeTruthy();
+    const celular = document.querySelector("[data-celular-do-story]") as HTMLElement;
+    expect(celular.querySelector('[data-area-do-adesivo="enquete"]')).toBeTruthy();
+    expect(within(celular).getByText("Qual sabor?")).toBeTruthy();
+    expect(within(painel()).getByRole("button", { name: "Baixar a arte do story 2" })).toBeTruthy();
+    expect(within(painel()).getByRole("button", { name: "Copiar o roteiro do adesivo do story 2" })).toBeTruthy();
 
-    // Editar o cartão 1: texto novo e um adesivo de link; vira Pelo app.
-    fireEvent.click(within(c1).getByRole("button", { name: "Editar o story 1" }));
+    // Editar a tela 1: texto novo e um adesivo de link; vira Pelo app.
+    fireEvent.click(within(document.querySelector('[data-story="a1"]') as HTMLElement).getByRole("button", { name: /Story 1/ }));
+    fireEvent.click(within(painel()).getByRole("button", { name: "Editar o story 1" }));
     const janela = await screen.findByRole("dialog");
     fireEvent.change(within(janela).getByLabelText("Texto na tela"), { target: { value: "Combo novo hoje" } });
     fireEvent.change(within(janela).getByLabelText("Adesivo"), { target: { value: "link" } });
@@ -198,11 +210,10 @@ describe("aba Stories: sequência", () => {
     const salvo = chamadasDe("salvar_story")[0].story;
     expect(salvo).toMatchObject({ id: "a1", sequencia_id: "s1", texto_na_tela: "Combo novo hoje", caminho: "pelo_app", adesivo: { tipo: "link", url: "https://loja.test/combo" } });
     expect(typeof salvo.horario).toBe("string");
-    await waitFor(() => expect(within(document.querySelector('[data-story="a1"]') as HTMLElement).getByText("Combo novo hoje")).toBeTruthy());
+    await waitFor(() => expect(within(document.querySelector('[data-story="a1"]') as HTMLElement).getAllByText("Combo novo hoje").length).toBeGreaterThan(0));
 
-    // Agendar a sequência: os prontos (arte e horário) vão juntos.
-    // O texto mudou: a função tira a arte antiga e o story volta a pedir arte.
-    await waitFor(() => expect(screen.getByRole("button", { name: /Gerar artes/ }).textContent).toContain("(1)"));
+    // O texto mudou: a função tira a arte antiga e o story volta a pedir imagem do gerador.
+    await waitFor(() => expect(screen.getByRole("button", { name: /Gerar imagens/ }).textContent).toContain("(1)"));
     // Agendar a sequência: vão os prontos (arte e horário); o editado espera a arte nova.
     fireEvent.click(screen.getByRole("button", { name: "Agendar a sequência" }));
     await waitFor(() => expect(chamadasDe("agendar").length).toBe(1));
@@ -230,7 +241,7 @@ describe("aba Stories: virais e agenda", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-story]").length).toBe(3));
     expect(chamadasDe("adaptar_molde")[0]).toMatchObject({ client_id: CLIENTE, molde: "me_ajude" });
     expect(chamadasDe("salvar_story")[0].story).toMatchObject({ sequencia_id: "s1", ordem: 3, molde: "me_ajude", caminho: "pelo_app", texto_na_tela: "Morango ou chocolate?" });
-    expect(within(document.querySelector('[data-story="n1"]') as HTMLElement).getByText("Pelo app")).toBeTruthy();
+    expect(document.querySelector('[data-story="n1"]')).toBeTruthy();
   });
 
   it("a Agenda mostra a semana com a situação de cada story e o Postei dos que vão pelo app", async () => {
@@ -321,6 +332,11 @@ describe("regras da tela dos stories", () => {
       "src/components/mesa/stories/BlocoDestaques.tsx",
       "src/components/mesa/stories/BlocoAgenda.tsx",
       "src/components/mesa/stories/AgenteDosStories.tsx",
+      "src/components/mesa/stories/CelularDoStory.tsx",
+      "src/components/mesa/stories/CartoesDaSequencia.tsx",
+      "src/components/mesa/stories/PainelDaTela.tsx",
+      "src/components/mesa/stories/NovaSequencia.tsx",
+      "supabase/functions/mesa-stories/modulos/sequencia-que-converte.ts",
     ];
     for (const arq of arquivos) {
       const fonte = ler(arq);

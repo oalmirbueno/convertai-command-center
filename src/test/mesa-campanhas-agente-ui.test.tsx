@@ -292,8 +292,9 @@ describe("aba Campanhas, mesa de trabalho", () => {
     const botoes = screen.getAllByRole("button", { name: /Nova campanha/ });
     fireEvent.click(botoes[botoes.length - 1]);
     expect(await screen.findByLabelText("Pedido da campanha")).toBeTruthy();
-    // Referências ficam em "Mais opções".
-    expect(screen.getByRole("button", { name: /Mais opções/ })).toHaveAttribute("aria-expanded", "false");
+    // 21/10/2026: a nova abre em 3 passos; o avançado (tipo, imagens, briefing, referências) fica recolhido no último.
+    expect(screen.getByRole("navigation", { name: "Passos da campanha nova" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Mais opções/ })).toBeNull();
   });
 
   it("tela menor: a lista vira seletor e o agente vira gaveta", async () => {

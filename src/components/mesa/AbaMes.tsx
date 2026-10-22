@@ -912,6 +912,8 @@ export default function AbaMes({
   const [modoAoAbrir, setModoAoAbrir] = useState<ModoDoAgente | undefined>(undefined);
   const [mesDoAgente, setMesDoAgente] = useState(mes);
   const [pendente, setPendente] = useState<PedidoEmAndamento | null>(null);
+  // 21/10: com a barra de juntar (Hype e Trending) à vista, o botão do agente vai para o canto no computador e não a cobre.
+  const [juntando, setJuntando] = useState(false);
 
   const trocarModo = (m: ModoDePlanejar) => {
     setModo(m);
@@ -957,6 +959,7 @@ export default function AbaMes({
           abrirAgente("criar");
         }}
         onPedidoFim={() => setPendente(null)}
+        onJuntando={setJuntando}
       />
 
       <SeletorDoPerfil />
@@ -994,7 +997,7 @@ export default function AbaMes({
       {/* Botão do agente: centro da base da tela, acima da barra do celular. */}
       {!agenteAberto && (
         // 16/10/2026: acima da barra de baixo do celular contando a área segura do iPhone (antes encostava nela).
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-40 flex justify-center px-4 md:bottom-6">
+        <div className={`pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-40 flex justify-center px-4 md:bottom-6${juntando ? " md:justify-end md:px-6" : ""}`} data-agente-no-canto={juntando ? "" : undefined}>
           {/* 28/09: o "Rápido" que flutuava repetia o "Conteúdo rápido" do topo; ficou um só (o do topo). */}
           <button
             type="button"

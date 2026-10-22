@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { AtSign, BarChart3, Link2, ListChecks, MapPin, MessageCircleQuestion, SmilePlus, Smartphone, Timer, Type, Zap, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AtSign, BarChart3, ImageIcon, Link2, ListChecks, Loader2, MapPin, MessageCircleQuestion, SmilePlus, Smartphone, Timer, Type, Zap, type LucideIcon } from "lucide-react";
 import { juntar } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "../MesaContexto";
 import type { ImagemDoAcervo } from "../SeletorDoAcervo";
@@ -13,6 +13,11 @@ import { corDoFundo } from "./arteDoStory";
  * do Instagram vai ficar e o selo "Automático" ou "Pelo app". As medidas são
  * as mesmas da arte (layoutDoStory.ts); o tamanho da letra acompanha a largura.
  * Proporção por padding-bottom (sem aspect-ratio: Safari 11).
+ *
+ * 21/10: fundo "gerada" mostra a imagem do gerador inteira (o texto já está
+ * nela, integrado pelo motor: nada é desenhado por cima, só o adesivo da
+ * prévia, que entra pelo app). Sem imagem ainda, o rascunho na cor da marca
+ * com o texto planejado e o estado (a gerar, na fila, gerando, falhou).
  */
 
 type ParteDoStory = Pick<Story, "texto_na_tela" | "adesivo" | "fundo">;
@@ -163,6 +168,9 @@ export default function PreviaDoStory({
   mostrarZona = false,
   semSelo = false,
   className = "",
+  imagem = null,
+  estado = null,
+  desatualizada = false,
 }: {
   story: ParteDoStory;
   /** Largura do cartão em px (a letra acompanha). */
@@ -177,8 +185,16 @@ export default function PreviaDoStory({
   /** Sem o selo do caminho (miniatura). */
   semSelo?: boolean;
   className?: string;
+  /** A lâmina viva do gerador (antes de registrar); sem ela, a registrada no fundo. */
+  imagem?: { caminho: string } | null;
+  /** A lâmina na fila do servidor. */
+  estado?: "fila" | "rodando" | "erro" | null;
+  /** O texto mudou depois da imagem. */
+  desatualizada?: boolean;
 }) {
   const u = largura / 100;
+  const gerada = story.fundo.tipo === "gerada";
+  const caminhoGerado = gerada ? (imagem && imagem.caminho) || story.fundo.caminho || null : null;
   const comFoto = story.fundo.tipo === "foto" && !!foto;
   const fundo = corDoFundo(story, paleta);
   const caixa = hexValido(paleta[0]) || "#111111";
@@ -187,11 +203,15 @@ export default function PreviaDoStory({
   const corDoAdesivo = hexValido(paleta[0]) || "#6b2bd9";
   const texto = (story.texto_na_tela || "").trim();
   const corpo = largura * (texto.length > 70 ? LAYOUT_DO_TEXTO.corpoMinimo : LAYOUT_DO_TEXTO.corpo);
+  // Rascunho da imagem a gerar: a cor da marca em degradê (nunca foto colada).
+  const rascunho = gerada && !caminhoGerado ? `linear-gradient(165deg, ${hexValido(paleta[0]) || "#1f2937"} 0%, ${hexValido(paleta[1]) || hexValido(paleta[0]) || "#111827"} 100%)` : null;
+  const letraDoRascunho = corDaLetra(hexValido(paleta[0]) || "#1f2937", paleta);
 
   return (
     <div className={juntar("relative min-w-0 overflow-hidden rounded-md", className)} style={{ width: largura, maxWidth: "100%" }} data-previa-do-story="">
-      <div className="relative w-full" style={{ paddingBottom: "177.78%", background: comFoto ? "#000" : fundo }}>
-        {comFoto && foto ? <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="absolute inset-0 h-full w-full" /> : null}
+      <div className="relative w-full" style={{ paddingBottom: "177.78%", background: caminhoGerado || comFoto ? "#000" : rascunho || fundo }} data-imagem-gerada={caminhoGerado ? "sim" : gerada ? "a_gerar" : undefined}>
+        {caminhoGerado ? <ImagemDaMesa caminho={caminhoGerado} alt={texto || "Imagem do story"} className="absolute inset-0 h-full w-full" /> : null}
+        {!gerada && comFoto && foto ? <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="absolute inset-0 h-full w-full" /> : null}
 
         {posicao && posicao.total > 1 ? (
           <div className="absolute flex" style={{ left: 2 * u, right: 2 * u, top: 1.6 * u }} aria-hidden="true">
@@ -208,7 +228,7 @@ export default function PreviaDoStory({
           </>
         ) : null}
 
-        {texto ? (
+        {texto && !caminhoGerado ? (
           <p
             className="absolute text-center font-semibold"
             style={{
@@ -217,7 +237,8 @@ export default function PreviaDoStory({
               top: pct(LAYOUT_DO_TEXTO.topo),
               fontSize: corpo,
               lineHeight: LAYOUT_DO_TEXTO.entrelinha,
-              color: letra,
+              color: rascunho ? letraDoRascunho : letra,
+              opacity: rascunho ? 0.92 : 1,
               fontFamily: `${familia ? `"${familia}", ` : ""}Outfit, sans-serif`,
               whiteSpace: "pre-line",
               overflowWrap: "anywhere",
@@ -242,6 +263,17 @@ export default function PreviaDoStory({
           >
             <DesenhoDoAdesivo adesivo={story.adesivo} u={u} cor={corDoAdesivo} />
           </div>
+        ) : null}
+
+        {gerada && (!caminhoGerado || estado || desatualizada) ? (
+          <span
+            className="absolute left-1/2 inline-flex max-w-[90%] -translate-x-1/2 items-center whitespace-nowrap rounded-full bg-black/60 font-medium text-white"
+            style={{ top: "40%", fontSize: Math.max(10, 3.6 * u), padding: `${1.2 * u}px ${3 * u}px` }}
+            data-estado-da-imagem={estado || (desatualizada ? "desatualizada" : "a_gerar")}
+          >
+            {estado === "fila" || estado === "rodando" ? <Loader2 className={juntar("shrink-0 animate-spin", largura >= 100 ? "mr-1" : "")} style={{ width: Math.max(10, 3.6 * u), height: Math.max(10, 3.6 * u) }} aria-hidden="true" /> : estado === "erro" || desatualizada ? <AlertTriangle className={juntar("shrink-0", largura >= 100 ? "mr-1" : "")} style={{ width: Math.max(10, 3.6 * u), height: Math.max(10, 3.6 * u) }} aria-hidden="true" /> : <ImageIcon className={juntar("shrink-0", largura >= 100 ? "mr-1" : "")} style={{ width: Math.max(10, 3.6 * u), height: Math.max(10, 3.6 * u) }} aria-hidden="true" />}
+            {largura >= 100 ? <span className="truncate">{estado === "fila" ? "Na fila" : estado === "rodando" ? "Gerando" : estado === "erro" ? "Falhou" : desatualizada ? "Texto mudou" : "Imagem a gerar"}</span> : null}
+          </span>
         ) : null}
 
         {semSelo ? null : (

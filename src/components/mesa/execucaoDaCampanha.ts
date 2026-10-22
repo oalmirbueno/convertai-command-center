@@ -38,6 +38,8 @@ export interface DepsDaExecucao {
   prepararPeca: (campanhaId: string, passo: PassoDaCampanha) => Promise<void>;
   /** Pede ao gerador as lâminas que faltam. */
   gerarPeca: (campanhaId: string, passo: PassoDaCampanha) => Promise<void>;
+  /** Stories pela aba Stories (contrato gerarStoriesDaCampanha). */
+  gerarStory?: (campanhaId: string, passo: PassoDaCampanha) => Promise<void>;
   /** Cancelado: tira da fila o que esta execução pediu e ainda não começou. */
   aoCancelar?: (campanhaId: string | null) => Promise<void>;
   aoMudar?: (e: Execucao) => void;
@@ -168,6 +170,10 @@ export async function executarCampanha(chave: string, campanhaId: string | null,
       if (!e.campanhaId) throw new Error("Campanha ainda não criada.");
       if (passo.tipo === "selo") await deps.gerarSelo(e.campanhaId);
       else if (passo.tipo === "preparar") await deps.prepararPeca(e.campanhaId, passo);
+      else if (passo.tipo === "story") {
+        if (!deps.gerarStory) throw new Error("Os stories ainda não estão ligados à aba Stories.");
+        await deps.gerarStory(e.campanhaId, passo);
+      }
       else await deps.gerarPeca(e.campanhaId, passo);
       mudarPasso(passo.id, { situacao: "feito" });
     } catch (erro) {

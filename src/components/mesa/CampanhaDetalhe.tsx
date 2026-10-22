@@ -18,7 +18,8 @@ import {
   type Campanha,
 } from "./mesaV4Api";
 import { briefingEstaVazio } from "./mesaV4Api";
-import { sugestoesDaCampanha } from "./regrasDaCampanha";
+import { contarFormatos, sugestoesDaCampanha } from "./regrasDaCampanha";
+import { FormatosDaCampanhaAberta } from "./CampanhaFormatos";
 import { GerarCampanhaCompleta, usePecasDaCampanha } from "./CampanhaCompleta";
 import CampanhaPecas from "./CampanhaPecas";
 import CampanhaRevisao from "./CampanhaRevisao";
@@ -357,6 +358,9 @@ export default function CampanhaDetalhe({
                 </div>
               )}
             </dl>
+            <Parte titulo="Formatos">
+              <FormatosDaCampanhaAberta campanha={campanha} atual={contarFormatos(pecas)} />
+            </Parte>
             {sugestoes.length > 0 && (
               <Parte titulo="Sugestões">
                 <ul className="list-disc space-y-1 pl-4 text-[13px]" aria-label="Sugestões da campanha">

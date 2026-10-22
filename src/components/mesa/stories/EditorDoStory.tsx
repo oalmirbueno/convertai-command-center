@@ -29,10 +29,31 @@ import {
 
 /**
  * Editor de um story, na janela do centro: a prévia ao vivo à esquerda e, à
- * direita, texto na tela, adesivo, fundo (foto do acervo ou cor da marca),
+ * direita, texto na tela, adesivo, imagem (do gerador ou só a cor da marca),
  * horário e destaque. O caminho sai do adesivo: com adesivo, pelo app.
  * Story novo (sem id) nasce na sequência aberta; Salvar grava pela função.
+ * 21/10 (regra da casa: nada colado por cima): a foto do acervo não é mais
+ * fundo com texto em cima; vai inteira como referência da imagem gerada.
  */
+
+/** O fundo como o editor mostra: foto antiga vira referência da imagem gerada. */
+export function fundoNoEditor(f: Fundo | undefined | null, paleta: string[]): Fundo {
+  if (!f) return { tipo: "gerada" };
+  if (f.tipo === "foto") return { tipo: "gerada", ...(f.papel ? { papel: f.papel } : {}), ...(f.imagem_id ? { referencia_id: f.imagem_id } : {}) };
+  if (f.tipo === "cor") return { ...f, cor: f.cor || paleta[0] };
+  return { ...f };
+}
+
+/** O fundo que o Salvar manda (o servidor guarda o trabalho, a lâmina e a versão). */
+export function fundoParaSalvar(f: Fundo, paleta: string[]): Fundo {
+  if (f.tipo === "cor") return { tipo: "cor", cor: f.cor || paleta[0] || "#111111", ...(f.papel ? { papel: f.papel } : {}) };
+  const saida: Fundo = { ...f, tipo: "gerada" };
+  delete saida.imagem_id;
+  if (saida.cena !== undefined) saida.cena = saida.cena.trim();
+  if (!saida.cena) delete saida.cena;
+  if (!saida.referencia_id) delete saida.referencia_id;
+  return saida;
+}
 
 export type StoryNoEditor = Partial<Story> & { sequencia_id: string | null; ordem: number };
 
@@ -95,7 +116,7 @@ export default function EditorDoStory({
     setTextoNaTela(aberto.texto_na_tela || "");
     setTitulo(aberto.titulo || "");
     setAdesivo(aberto.adesivo ? { ...aberto.adesivo } : { tipo: "nenhum" });
-    setFundo(aberto.fundo ? { ...aberto.fundo } : { tipo: marca.fotos.length ? "foto" : "cor", ...(marca.paleta[0] ? { cor: marca.paleta[0] } : {}) });
+    setFundo(fundoNoEditor(aberto.fundo, marca.paleta));
     setHora(aberto.horario ? noFuso(aberto.horario).hora : "");
     setDestaque(aberto.destaque_id || "");
     setEscolhendoFoto(false);
@@ -107,7 +128,7 @@ export default function EditorDoStory({
   const tipo = adesivo.tipo;
   const opcoes = COM_OPCOES.indexOf(tipo) >= 0 ? opcoesIniciais(tipo, adesivo.opcoes) : [];
   const mudarAdesivo = (m: Partial<Adesivo>) => setAdesivo((a) => ({ ...a, ...m }));
-  const foto = fundo.tipo === "foto" ? marca.foto(fundo.imagem_id) : null;
+  const referencia = fundo.tipo === "gerada" ? marca.foto(fundo.referencia_id) : null;
   const previa = { texto_na_tela: textoNaTela, adesivo, fundo };
   const peloApp = caminhoDoAdesivo(adesivo) === "pelo_app";
   const roteiro = roteiroDoAdesivo({ adesivo, roteiro_do_adesivo: null });
@@ -137,7 +158,7 @@ export default function EditorDoStory({
       titulo: titulo.trim(),
       texto_na_tela: textoNaTela.trim(),
       adesivo: limpo,
-      fundo: fundo.tipo === "foto" && fundo.imagem_id ? { tipo: "foto", imagem_id: fundo.imagem_id } : { tipo: "cor", cor: fundo.cor || marca.paleta[0] || "#111111" },
+      fundo: fundoParaSalvar(fundo, marca.paleta),
       horario,
       caminho: caminhoDoAdesivo(limpo),
       destaque_id: destaque || null,
@@ -197,7 +218,7 @@ export default function EditorDoStory({
     >
       <div className="grid min-w-0 gap-6 md:grid-cols-[260px_minmax(0,1fr)]">
         <div className="min-w-0">
-          <PreviaDoStory story={previa} largura={260} paleta={marca.paleta} familia={marca.familia} foto={foto} mostrarZona className="mx-auto" />
+          <PreviaDoStory story={previa} largura={260} paleta={marca.paleta} familia={marca.familia} foto={null} mostrarZona className="mx-auto" />
           <p className={juntar(texto.auxiliar, "mt-2 text-center")}>Tracejado: zona segura</p>
         </div>
 
@@ -289,39 +310,50 @@ export default function EditorDoStory({
 
           <div className="min-w-0">
             <div className="flex min-w-0 items-center justify-between">
-              <p className={texto.rotulo}>Fundo</p>
+              <p className={texto.rotulo}>Imagem</p>
               <SeletorCompacto
-                rotulo="Fundo do story"
-                valor={fundo.tipo}
-                onEscolher={(v) => setFundo(v === "foto" ? { tipo: "foto", imagem_id: fundo.imagem_id } : { tipo: "cor", cor: fundo.cor || marca.paleta[0] })}
+                rotulo="Imagem do story"
+                valor={fundo.tipo === "cor" ? "cor" : "gerada"}
+                onEscolher={(v) =>
+                  setFundo(v === "cor" ? { tipo: "cor", cor: fundo.cor || marca.paleta[0], ...(fundo.papel ? { papel: fundo.papel } : {}) } : fundoNoEditor(aberto.fundo && aberto.fundo.tipo !== "cor" ? aberto.fundo : { tipo: "gerada", ...(fundo.papel ? { papel: fundo.papel } : {}) }, marca.paleta))
+                }
                 opcoes={[
-                  { valor: "foto", rotulo: "Foto do acervo" },
-                  { valor: "cor", rotulo: "Cor da marca" },
+                  { valor: "gerada", rotulo: "Do gerador" },
+                  { valor: "cor", rotulo: "Só a cor da marca" },
                 ]}
               />
             </div>
-            {fundo.tipo === "foto" ? (
-              <div className="mt-2 min-w-0">
+            {fundo.tipo !== "cor" ? (
+              <div className="mt-2 min-w-0 space-y-3">
+                <CampoDeFormulario rotulo="Cena da imagem" apoio="O que a imagem mostra; o gerador desenha a tela com o texto integrado">
+                  <textarea className={juntar(campoTexto, "min-h-[56px]")} rows={2} value={fundo.cena || ""} maxLength={400} onChange={(e) => setFundo({ ...fundo, cena: e.target.value })} placeholder="Ex.: o combo na mesa de madeira, luz da tarde" />
+                </CampoDeFormulario>
                 <div className="flex min-w-0 items-center">
-                  {foto ? (
+                  {referencia ? (
                     <span className="mr-3 block w-16 shrink-0">
-                      <FotoDoAcervo imagem={foto} />
+                      <FotoDoAcervo imagem={referencia} />
                     </span>
                   ) : null}
                   <button type="button" className={botao.secundario} onClick={() => setEscolhendoFoto(!escolhendoFoto)} aria-expanded={escolhendoFoto}>
                     <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    {foto ? "Trocar a foto" : "Escolher no acervo"}
+                    {referencia ? "Trocar a referência" : "Foto real de referência"}
                   </button>
+                  {referencia ? (
+                    <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => setFundo({ ...fundo, referencia_id: undefined })} aria-label="Tirar a foto de referência" title="Tirar a foto de referência">
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  ) : null}
                 </div>
-                {!marca.fotos.length && !marca.carregandoFotos ? <p className={juntar(texto.auxiliar, "mt-2")}>O acervo do cliente ainda não tem fotos</p> : null}
+                <p className={texto.auxiliar}>A foto vai inteira para o gerador como referência, nunca colada na arte.</p>
+                {!marca.fotos.length && !marca.carregandoFotos ? <p className={texto.auxiliar}>O acervo do cliente ainda não tem fotos</p> : null}
                 {escolhendoFoto ? (
-                  <div className="mt-3 min-w-0">
+                  <div className="min-w-0">
                     <SeletorDoAcervo
-                      titulo="Foto do story"
-                      escolhidas={fundo.imagem_id ? [fundo.imagem_id] : []}
+                      titulo="Foto de referência do story"
+                      escolhidas={fundo.referencia_id ? [fundo.referencia_id] : []}
                       onFechar={() => setEscolhendoFoto(false)}
                       onEscolher={(img) => {
-                        setFundo({ tipo: "foto", imagem_id: img.id });
+                        setFundo({ ...fundo, referencia_id: img.id });
                         setEscolhendoFoto(false);
                       }}
                     />
@@ -339,7 +371,7 @@ export default function EditorDoStory({
                       aria-checked={(fundo.cor || marca.paleta[0]) === c}
                       aria-label={`Cor ${c}`}
                       title={c}
-                      onClick={() => setFundo({ tipo: "cor", cor: c })}
+                      onClick={() => setFundo({ ...fundo, tipo: "cor", cor: c })}
                       className={juntar("mb-1 mr-1.5 h-7 w-7 rounded-full border border-border", (fundo.cor || marca.paleta[0]) === c ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "")}
                       style={{ backgroundColor: c }}
                     />

@@ -185,3 +185,45 @@ describe("Openverse nas imagens reais", () => {
     expect(r.fonte).toMatchObject({ caminho: `${CLIENTE}/estudio/fontes-reais/pao.jpg`, licenca: "CC BY-SA 2.0", autor: "Fotógrafa", fonte_url: "https://www.flickr.com/photos/1" });
   });
 });
+
+describe("template_lamina: os posts do fio na prancheta, sem custo", () => {
+  function comLaminas() {
+    const c = cenario();
+    const operar = vi.fn((t: T, operacao: "adicionar" | "duplicar" | "tirar", ordem: number, texto: string) => {
+      const cards = operacao === "tirar" ? t.direcao.cards.filter((x) => x.ordem !== ordem).map((x, i) => ({ ...x, ordem: i + 1 })) : [...t.direcao.cards.slice(0, ordem), { ordem: ordem + 1, texto_exato: operacao === "duplicar" ? t.direcao.cards[ordem - 1].texto_exato : texto }, ...t.direcao.cards.slice(ordem).map((x) => ({ ...x, ordem: x.ordem + 1 }))];
+      return { direcao: { ...t.direcao, cards } };
+    });
+    const acoes = acoesDaGeracaoDoTemplate({ ...c.deps, operarLamina: operar });
+    return { ...c, acoes, operar };
+  }
+  it("adiciona depois, duplica e tira, devolvendo a ordem para abrir", async () => {
+    const c = comLaminas();
+    const r1 = await json(await c.acoes.template_lamina(ch, { trabalho_id: TRABALHO, ordem: 1, operacao: "adicionar" }));
+    expect(r1).toMatchObject({ operacao: "adicionar", ordem: 2, custo_usd: 0 });
+    expect(c.ler().direcao.cards.map((x) => x.texto_exato)).toEqual(["Capa", "Novo post do fio", "Meio", "Fim"]);
+    await c.acoes.template_lamina(ch, { trabalho_id: TRABALHO, ordem: 3, operacao: "duplicar" });
+    expect(c.ler().direcao.cards).toHaveLength(5);
+    const r3 = await json(await c.acoes.template_lamina(ch, { trabalho_id: TRABALHO, ordem: 5, operacao: "tirar" }));
+    expect(r3.ordem).toBe(4);
+    expect(c.escrever).not.toHaveBeenCalled();
+    expect(c.gerar).not.toHaveBeenCalled();
+  });
+  it("recusa o último post, a operação desconhecida e o trabalho em aprovação", async () => {
+    const c = comLaminas();
+    c.mudar({ direcao: { ...c.ler().direcao, cards: [{ ordem: 1, texto_exato: "Só" }] } });
+    await expect(c.acoes.template_lamina(ch, { trabalho_id: TRABALHO, ordem: 1, operacao: "tirar" })).rejects.toMatchObject({ codigo: "ultima_lamina" });
+    await expect(c.acoes.template_lamina(ch, { trabalho_id: TRABALHO, ordem: 1, operacao: "mover" })).rejects.toMatchObject({ status: 400 });
+    c.mudar({ entrega_status: "aguardando_agencia" });
+    await expect(c.acoes.template_lamina(ch, { trabalho_id: TRABALHO, ordem: 1, operacao: "duplicar" })).rejects.toMatchObject({ codigo: "trabalho_entregue" });
+    expect(c.operar).not.toHaveBeenCalled();
+  });
+});
+
+describe("contrato da edição à mão", () => {
+  it("guarda escala, mídia e o que esconder, dentro das faixas", () => {
+    const base = { versao: 1, estilo: "twitter", nome: "Loja", username: "loja", texto: "Oi", tamanho_texto: 36, cor_fundo: "#123456" };
+    expect(normalizarTemplateProfile({ ...base, escala: 120, midia: 70, ocultar_numeros: true, ocultar_tempo: true }, CLIENTE, erro)).toMatchObject({ escala: 120, midia: 70, ocultar_numeros: true, ocultar_tempo: true, cor_fundo: "#123456" });
+    expect(() => normalizarTemplateProfile({ ...base, escala: 300 }, CLIENTE, erro)).toThrow();
+    expect(() => normalizarTemplateProfile({ ...base, midia: 10 }, CLIENTE, erro)).toThrow();
+  });
+});

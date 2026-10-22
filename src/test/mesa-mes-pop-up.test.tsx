@@ -38,7 +38,10 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 // O resto da aba tem testes próprios; aqui só a moldura do agente.
-vi.mock("@/components/mesa/HypesDaSemana", () => ({ default: () => h("p", null, "hypes") }));
+vi.mock("@/components/mesa/HypesDaSemana", () => ({
+  default: (p: { onJuntando?: (ativo: boolean) => void }) =>
+    h("div", null, h("p", null, "hypes"), h("button", { type: "button", onClick: () => p.onJuntando && p.onJuntando(true) }, "marcar para juntar"), h("button", { type: "button", onClick: () => p.onJuntando && p.onJuntando(false) }, "desmarcar")),
+}));
 vi.mock("@/components/mesa/AgendaDoMes", () => ({ default: () => h("p", null, "agenda do mês") }));
 vi.mock("@/components/mesa/PlanejamentoAutomatico", () => ({ default: () => h("p", null, "planejamento automático") }));
 
@@ -114,5 +117,20 @@ describe("agente do mês em pop-up centralizado", () => {
     fireEvent.click(novembro);
     const dialogo = await screen.findByRole("dialog");
     expect(within(dialogo).getByRole("tab", { name: /Planejar o mês/ }).getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("botão do agente e a barra de juntar (21/10)", () => {
+  it("com itens juntados no Hype e Trending, o botão vai para o canto no computador e volta ao centro depois", () => {
+    montar();
+    const caixa = () => screen.getByRole("button", { name: "Abrir o Agente do mês" }).parentElement as HTMLElement;
+    expect(caixa().className).not.toContain("md:justify-end");
+    fireEvent.click(screen.getByRole("button", { name: "marcar para juntar" }));
+    expect(caixa().className).toContain("md:justify-end");
+    expect(caixa().hasAttribute("data-agente-no-canto")).toBe(true);
+    // No celular continua no centro (a barra flutua acima dele).
+    expect(caixa().className).toContain("justify-center");
+    fireEvent.click(screen.getByRole("button", { name: "desmarcar" }));
+    expect(caixa().className).not.toContain("md:justify-end");
   });
 });

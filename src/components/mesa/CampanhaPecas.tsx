@@ -6,8 +6,13 @@ import { botao, juntar, texto } from "@/components/sistema";
 import { BotaoComCusto } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { diaCurto, type Campanha } from "./mesaV4Api";
-import { corpoDaPeca, ehPecaDeArte, FASES, ROTULO_DO_ESTADO_DA_PECA, type EstadoDaPeca, type SituacaoDaPeca } from "./regrasDaCampanha";
-import { chavesDaCampanhaCompleta, gerarLaminasDaPeca, prepararPecaDaCampanha } from "./campanhasApi";
+import { corpoDaPeca, ehPecaDeArte, FASES, faseDaPeca, ROTULO_DO_ESTADO_DA_PECA, TELAS_DO_STORY, type ChaveDoFormato, type EstadoDaPeca, type SituacaoDaPeca } from "./regrasDaCampanha";
+import { chavesDaCampanhaCompleta, gerarLaminasDaPeca, gerarStoryDaCampanha, geradorDeStoriesDisponivel, normalizarBriefing, prepararPecaDaCampanha } from "./campanhasApi";
+import { ICONE_DO_FORMATO } from "./CampanhaFormatos";
+import { chaves } from "./mesaV4Api";
+
+/** A chave do formato da peça (para o ícone). */
+const chaveDaPeca = (formato?: string): ChaveDoFormato => (formato === "estatico" ? "posts" : formato === "story" ? "stories" : formato === "video" ? "videos" : "carrosseis");
 import { emAndamento, useExecucao } from "./execucaoDaCampanha";
 
 /**
@@ -18,6 +23,7 @@ import { emAndamento, useExecucao } from "./execucaoDaCampanha";
 
 const COR_DO_ESTADO: Record<EstadoDaPeca, string> = {
   outra_mesa: "text-muted-foreground",
+  roteiro_pronto: "text-success",
   no_roteiro: "text-success",
   a_fazer: "text-muted-foreground",
   sem_direcao: "text-warning",
@@ -41,7 +47,10 @@ export function PecaNaGrade({ peca, acoes }: { peca: SituacaoDaPeca; acoes?: Rea
             {peca.estado === "gerando" ? <Loader2 className="h-5 w-5 animate-spin text-primary" aria-label="Gerando" /> : it.gancho || it.tema || "Peça"}
           </span>
         )}
-        {peca.laminas > 1 && (
+        <span className="absolute left-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-foreground [&>svg]:h-3.5 [&>svg]:w-3.5" role="img" aria-label={it.formato === "story" ? "Stories" : it.formato === "video" ? "Vídeo" : it.formato === "estatico" ? "Post" : "Carrossel"}>
+          {ICONE_DO_FORMATO[chaveDaPeca(it.formato)]}
+        </span>
+        {peca.laminas > 1 && it.formato !== "story" && (
           <span className="absolute right-1.5 top-1.5 inline-flex items-center rounded-full bg-background/90 px-1.5 py-0.5 text-[11px] font-medium text-foreground">
             <Layers className="mr-0.5 h-3 w-3" aria-hidden="true" />
             {peca.feitas}/{peca.laminas}
@@ -120,6 +129,41 @@ export default function CampanhaPecas({
 
   const acoes = (p: SituacaoDaPeca) => {
     const i = deArte.indexOf(p);
+    // Stories pela aba Stories (contrato gerarStoriesDaCampanha); sem ela ligada, a peça espera e diz por quê.
+    if (p.item.formato === "story" && p.estado === "a_fazer") {
+      const pronto = geradorDeStoriesDisponivel();
+      return (
+        <BotaoComCusto
+          rotulo={<><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">Criar os stories</span></>}
+          titulo="Stories da campanha"
+          descricao={pronto ? "Criar esta sequência de stories pela aba Stories, com a identidade da campanha" : "Os stories da campanha ainda não estão ligados à aba Stories"}
+          partes={() => [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida } as ParteDaEstimativa].concat(partesDasLaminas(p.laminas || TELAS_DO_STORY))}
+          executar={async () => {
+            try {
+              await gerarStoryDaCampanha(campanha, {
+                clientId,
+                campanhaId: campanha.id,
+                temaId: p.item.tema_id || "",
+                briefing: normalizarBriefing(campanha.briefing),
+                identidade: campanha.identidade,
+                fase: faseDaPeca(p.item, campanha.periodo_inicio, campanha.periodo_fim),
+                quantidadeDeTelas: p.laminas || TELAS_DO_STORY,
+                data: p.item.data || null,
+                pedido: [p.item.tema, p.item.gancho].concat((p.item.cards || []).map((x) => x.texto || "")).filter(Boolean).join(" / "),
+                marcaId,
+              });
+            } finally {
+              void qc.invalidateQueries({ queryKey: chaves.campanhas(clientId) });
+            }
+            return { custo_usd: null };
+          }}
+          disabled={andando || !pronto}
+          variant="ghost"
+          className="h-7 gap-0 px-1.5"
+        />
+      );
+    }
+    if (p.item.formato === "story" || p.item.formato === "video") return null;
     if (p.estado === "a_fazer") {
       return (
         <BotaoComCusto

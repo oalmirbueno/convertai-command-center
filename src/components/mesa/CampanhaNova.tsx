@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, ChevronDown, Flame, Lightbulb, Rocket, Wand2, X } from "lucide-react";
+import { BookmarkPlus, ChevronDown, ChevronLeft, ChevronRight, Flame, Lightbulb, Rocket, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
@@ -31,12 +30,14 @@ import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, trocarCampanhaNoCache } from ".
 import CampanhaImagens from "./CampanhaImagens";
 import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
+import { botao, juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, type TipoDeCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 import { padraoPara } from "@/lib/mesa/api";
 import { useMarcaDaMesa } from "./MesaContexto";
 import type { SementeDaCampanha } from "./sementeDaCampanha";
-import { campanhaDaSemente, partesDosPassos, passosQueFaltam, resumoDosPassos } from "./regrasDaCampanha";
+import { campanhaDaSemente, normalizarFormatos, partesDosPassos, passosQueFaltam, resumoDosPassos, sugerirFormatos, totalNaSerie, type FormatosDaCampanha } from "./regrasDaCampanha";
+import Etapas from "@/components/sistema/Etapas";
+import { PreviaDaCampanha, SeletorDeFormatos } from "./CampanhaFormatos";
 import { depsDaCampanha, ProgressoDaCampanha } from "./CampanhaCompleta";
 import { emAndamento, executarCampanha, useExecucao } from "./execucaoDaCampanha";
 
@@ -77,7 +78,17 @@ export function EscolhaDoTipo({ valor, onValor, desabilitado }: { valor: TipoDeC
  * plano de imagens; a campanha abre com o agente ao lado para os ajustes.
  */
 
-const QUANTIDADES = ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+/**
+ * 21/10/2026 (dono: "mais intuitivo, mais fácil, mais organizado e mais bonito"): a campanha nova em 3
+ * passos (O que é → Formatos → Gerar), com a prévia montando ao lado; tipo, imagens, briefing e
+ * referências ficam recolhidos em "Mais opções", no último passo. Os botões de gerar ficam sempre à mão.
+ */
+type PassoDaNova = "oque" | "formatos" | "gerar";
+const PASSOS_DA_NOVA: { valor: PassoDaNova; rotulo: string }[] = [
+  { valor: "oque", rotulo: "O que é a campanha" },
+  { valor: "formatos", rotulo: "Formatos" },
+  { valor: "gerar", rotulo: "Gerar" },
+];
 
 export default function CampanhaNova({
   hype,
@@ -106,7 +117,9 @@ export default function CampanhaNova({
   const [pedido, setPedido] = useState(() => (daSemente ? daSemente.pedido : hype ? pedidoDaCampanhaDoHype(hype) : ""));
   const [inicio, setInicio] = useState(() => (daSemente ? daSemente.inicio : hoje));
   const [fim, setFim] = useState(() => (daSemente ? daSemente.fim : somarDiasIso(hoje, DIAS_PADRAO_CAMPANHA)));
-  const [quantidade, setQuantidade] = useState("auto");
+  const [passo, setPasso] = useState<PassoDaNova>("oque");
+  // Formatos: a sugestão pela duração até o dono mexer; depois vale a escolha dele.
+  const [formatosEscolhidos, setFormatosEscolhidos] = useState<FormatosDaCampanha | null>(null);
   const [referencias, setReferencias] = useState<string[]>([]);
   const [imagens, setImagens] = useState<ImagemDaCampanha[]>([]);
   const [briefing, setBriefing] = useState<BriefingDaCampanha>(() => ({ ...briefingEmBranco(), ...(daSemente ? daSemente.briefing : {}) }));
@@ -123,7 +136,8 @@ export default function CampanhaNova({
       : dias > DIAS_MAX_CAMPANHA
         ? `Até ${DIAS_MAX_CAMPANHA} dias por campanha.`
         : "";
-  const qtd = quantidade === "auto" ? null : Number(quantidade);
+  const formatos = formatosEscolhidos || sugerirFormatos(Math.max(1, dias));
+  const qtd = totalNaSerie(formatos) || null;
 
   const criar = async () => {
     setDesde(Date.now());
@@ -141,6 +155,7 @@ export default function CampanhaNova({
         imagens,
         tipo: tipo || null,
         nome: nome.trim() || null,
+        formatos: normalizarFormatos(formatos),
       });
     } finally {
       setDesde(null);
@@ -163,7 +178,7 @@ export default function CampanhaNova({
   const execucao = useExecucao(chaveDaExecucao);
   const andando = emAndamento(execucao);
   const imagemPadrao = padraoPara(catalogo, "imagem");
-  const passosDaCompleta = passosQueFaltam({ temCampanha: false, temSelo: false, pecas: [], quantidadePrevista: qtd || 6 });
+  const passosDaCompleta = passosQueFaltam({ temCampanha: false, temSelo: false, pecas: [], formatos });
   const gerarCompleta = async () => {
     void executarCampanha(
       chaveDaExecucao,
@@ -184,191 +199,213 @@ export default function CampanhaNova({
     return { custo_usd: 0 };
   };
 
+  const indice = PASSOS_DA_NOVA.map((x) => x.valor).indexOf(passo);
+  const podeGerar = !!pedido.trim() && !erroDoPeriodo && !anexos.subindo && desde === null && !andando;
+  const extras = [tipo ? 1 : 0, imagens.length, referencias.length].reduce((a, b) => a + b, 0);
+
   return (
-    <ZonaDeAnexos anexos={anexos} className="mx-auto w-full min-w-0 max-w-2xl">
-      {/* O formulário é o assunto da tela: cartão com função (superficie.painel). Nada de outro cartão dentro. */}
-      <section className={juntar(superficie.painel, "min-w-0 p-4 sm:p-6")}>
-        <div className="flex min-w-0 items-start">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center">
-              <h2 className={juntar(estiloDeTexto.tituloSecao, "truncate")}>Nova campanha</h2>
-              <AjudaRecolhida className="ml-1.5" rotulo="O que o agente faz na campanha">
-                Descreva a campanha. O agente cria o tema, a identidade com o selo e os conteúdos do período.
-              </AjudaRecolhida>
-            </div>
-          </div>
-          {onCancelar && (
-            // Criando: a chamada já foi paga e segue no servidor; cancelar aqui
-            // não a pararia e, ao voltar, puxaria a tela para a campanha nova.
-            <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 w-8 shrink-0 p-0" aria-label="Cancelar" title="Cancelar" onClick={onCancelar} disabled={desde !== null}>
-              <X className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          )}
-        </div>
-
-        {hype && (
-          <div className="mt-4 flex min-w-0 items-center rounded-lg bg-muted px-3 py-2 text-[12px]">
-            <Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            <span className="min-w-0 flex-1 truncate">Do hype: <strong className="font-medium">{hype.titulo}</strong></span>
-            {onLimparHype && (
-              <button type="button" onClick={onLimparHype} aria-label="Tirar o hype" title="Tirar o hype" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {daSemente && (
-          <div className="mt-4 rounded-md bg-muted px-3 py-2 text-[12px]" data-semente="">
-            <div className="flex min-w-0 items-center">
-              <Lightbulb className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate">Do Mês: <strong className="font-medium">{daSemente.titulo}</strong></span>
-              {onLimparSemente && (
-                <button type="button" onClick={onLimparSemente} aria-label="Tirar o que veio do Mês" title="Tirar o que veio do Mês" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            {daSemente.sugestoes.length > 0 && (
-              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground" aria-label="Sugestões do Mês">
-                {daSemente.sugestoes.map((t) => <li key={t}>{t}</li>)}
-              </ul>
-            )}
-          </div>
-        )}
-
-        <div className="mt-4">
-          <Campo rotulo="Nome (opcional)">
-            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="O agente sugere, se ficar vazio" className="h-9 min-w-0 text-[13px]" aria-label="Nome da campanha" maxLength={120} />
-          </Campo>
-        </div>
-
-        <div className="mt-4">
-          <EscolhaDoTipo valor={tipo} onValor={setTipo} desabilitado={desde !== null} />
-        </div>
-
-        {/* O campo grande, como uma conversa: texto, microfone e imagens. */}
-        <div className="mt-3 rounded-md bg-muted/50 p-2.5 ring-primary/60 focus-within:ring-1">
-          <label htmlFor="pedido-da-campanha" className="block px-1 pb-1 text-[12px] font-medium text-muted-foreground">
-            O que é a campanha?
-          </label>
-          <Textarea
-            id="pedido-da-campanha"
-            value={pedido}
-            onChange={(e) => setPedido(e.target.value)}
-            rows={5}
-            aria-label="Pedido da campanha"
-            placeholder={tipo ? `Ex.: ${DEFINICAO_DO_TIPO[tipo].exemplo}` : "Ex.: promoção do amor no Dia dos Namorados, 20% em kits para casal, tom leve e romântico"}
-            className="min-h-[120px] resize-y border-0 bg-transparent px-1 py-1 text-[13px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-          <MiniaturasDosAnexos anexos={anexos} />
-          <div className="mt-1 flex min-w-0 items-center">
-            <BotaoDeAnexar anexos={anexos} className="mr-1.5" />
-            <Ditado valor={pedido} onChange={setPedido} disabled={desde !== null} className="min-w-0" />
-            <span className="ml-auto hidden truncate pl-2 text-[11px] text-muted-foreground sm:inline">Arraste ou cole imagens e prints</span>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Campo rotulo="Início">
-            <Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9 min-w-0" aria-label="Início da campanha" />
-          </Campo>
-          <Campo rotulo="Fim">
-            <Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9 min-w-0" aria-label="Fim da campanha" />
-          </Campo>
-          <Campo rotulo="Conteúdos" className="col-span-2 sm:col-span-1">
-            <Select value={quantidade} onValueChange={setQuantidade}>
-              <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Quantidade de conteúdos"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Automático</SelectItem>
-                {QUANTIDADES.map((q) => <SelectItem key={q} value={q}>{q}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Campo>
-        </div>
-        {erroDoPeriodo && <p className="mt-2 text-[12px] text-destructive">{erroDoPeriodo}</p>}
-
-        {/* Imagens da campanha: o estrategista olha cada uma e diz em qual peça ela vai e por quê. */}
-        <div className="mt-4 border-t border-border pt-3">
-          <p className="mb-2 text-[12px] font-medium text-muted-foreground">
-            Imagens da campanha <span className="font-normal">({imagens.length} de {MAX_IMAGENS_CAMPANHA}, opcional)</span>
-          </p>
-          <CampanhaImagens
-            valor={imagens}
-            onChange={setImagens}
-            desabilitado={desde !== null}
-            vazio="Escolha no acervo (inclusive as fotos da Mesa Foto) ou envie do computador. Marque o produto herói: o agente analisa e diz em qual peça cada imagem vai e por quê."
-          />
-        </div>
-
-        {/* Mais opções: as referências da campanha. */}
-        <div className="mt-4 border-t border-border pt-3">
-          <button
-            type="button"
-            onClick={() => setMaisOpcoes((v) => !v)}
-            aria-expanded={maisOpcoes}
-            className="inline-flex items-center text-[12px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ChevronDown className={`mr-1 h-4 w-4 transition-transform ${maisOpcoes ? "" : "-rotate-90"}`} />
-            Mais opções
-            {referencias.length > 0 ? <span className="ml-1.5 font-normal">({referencias.length} referência(s))</span> : <span className="ml-1.5 font-normal">(briefing e referências)</span>}
-          </button>
-          {maisOpcoes && (
-            <div className="mt-3 space-y-2">
-              <div className="mb-3 rounded-md bg-muted/50 p-3">
-                <p className="mb-2 flex items-center text-[12px] font-medium text-muted-foreground">
-                  Briefing
-                  <AjudaRecolhida className="ml-1" rotulo="Como o briefing vale">
-                    O que você preencher vale; o agente completa o resto.
-                  </AjudaRecolhida>
-                </p>
-                <FormularioDoBriefing valor={briefing} onChange={setBriefing} prefixo="briefing-nova" desabilitado={desde !== null} />
-              </div>
+    <ZonaDeAnexos anexos={anexos} className="mx-auto w-full min-w-0 max-w-5xl">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+        {/* O formulário é o assunto da tela: cartão com função (superficie.painel). Nada de outro cartão dentro. */}
+        <section className={juntar(superficie.painel, "min-w-0 p-4 sm:p-6")} aria-label="Nova campanha">
+          <div className="flex min-w-0 items-start">
+            <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center">
-                <p className="min-w-0 flex-1 text-[12px] font-medium text-muted-foreground">
-                  Referências <span className="font-normal">({referencias.length} de {MAX_REFERENCIAS})</span>
-                </p>
-                <Button type="button" size="sm" variant="ghost" className="h-8 w-8 shrink-0 p-0 text-primary" aria-expanded={galeria} aria-label={galeria ? "Fechar a galeria de referências" : "Escolher referências"} title={galeria ? "Fechar a galeria" : "Escolher referências"} onClick={() => setGaleria((v) => !v)}>
-                  {galeria ? <X className="h-4 w-4" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
-                </Button>
+                <h2 className={juntar(estiloDeTexto.tituloSecao, "truncate")}>Nova campanha</h2>
+                <AjudaRecolhida className="ml-1.5" rotulo="Como funciona">
+                  Diga o que é, escolha os formatos e gere. O agente cria o tema, a identidade com o selo e a série; o Estúdio faz as peças.
+                </AjudaRecolhida>
               </div>
-              {galeria ? (
-                <CampanhaReferencias valor={referencias} onChange={setReferencias} />
-              ) : (
-                <ReferenciasEscolhidas ids={referencias} onTirar={(id) => setReferencias((l) => l.filter((x) => x !== id))} />
+            </div>
+            {onCancelar && (
+              // Criando: a chamada já foi paga e segue no servidor; cancelar aqui
+              // não a pararia e, ao voltar, puxaria a tela para a campanha nova.
+              <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 w-8 shrink-0 p-0" aria-label="Cancelar" title="Cancelar" onClick={onCancelar} disabled={desde !== null}>
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
+          </div>
+
+          <Etapas numerar rotulo="Passos da campanha nova" itens={PASSOS_DA_NOVA.map((x, i) => ({ valor: x.valor, rotulo: x.rotulo, feita: i < indice }))} valor={passo} onEscolher={(v) => setPasso(v as PassoDaNova)} className="mt-3 border-b border-border" />
+
+          {/* 1. O que é a campanha: nome, o pedido (texto, voz e imagens) e o período. */}
+          {passo === "oque" && (
+            <div className="min-w-0 pt-4" data-passo-da-nova="oque">
+              {hype && (
+                <div className="mb-3 flex min-w-0 items-center rounded-md bg-muted px-3 py-2 text-[12px]">
+                  <Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate">Do hype: <strong className="font-medium">{hype.titulo}</strong></span>
+                  {onLimparHype && (
+                    <button type="button" onClick={onLimparHype} aria-label="Tirar o hype" title="Tirar o hype" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               )}
+              {daSemente && (
+                <div className="mb-3 rounded-md bg-muted px-3 py-2 text-[12px]" data-semente="">
+                  <div className="flex min-w-0 items-center">
+                    <Lightbulb className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate">Do Mês: <strong className="font-medium">{daSemente.titulo}</strong></span>
+                    {onLimparSemente && (
+                      <button type="button" onClick={onLimparSemente} aria-label="Tirar o que veio do Mês" title="Tirar o que veio do Mês" className="ml-2 shrink-0 text-muted-foreground hover:text-foreground">
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                  {daSemente.sugestoes.length > 0 && (
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground" aria-label="Sugestões do Mês">
+                      {daSemente.sugestoes.map((t) => <li key={t}>{t}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              <Campo rotulo="Nome (opcional)">
+                <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="O agente sugere, se ficar vazio" className="h-9 min-w-0 text-[13px]" aria-label="Nome da campanha" maxLength={120} />
+              </Campo>
+
+              {/* O campo grande, como uma conversa: texto, microfone e imagens. */}
+              <div className="mt-3 rounded-md bg-muted/50 p-2.5 ring-primary/60 focus-within:ring-1">
+                <label htmlFor="pedido-da-campanha" className="block px-1 pb-1 text-[12px] font-medium text-muted-foreground">
+                  O que é a campanha?
+                </label>
+                <Textarea
+                  id="pedido-da-campanha"
+                  value={pedido}
+                  onChange={(e) => setPedido(e.target.value)}
+                  rows={4}
+                  aria-label="Pedido da campanha"
+                  placeholder={tipo ? `Ex.: ${DEFINICAO_DO_TIPO[tipo].exemplo}` : "Ex.: Black Friday com 30% no plano anual, tom direto"}
+                  className="min-h-[104px] resize-y border-0 bg-transparent px-1 py-1 text-[13px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+                <MiniaturasDosAnexos anexos={anexos} />
+                <div className="mt-1 flex min-w-0 items-center">
+                  <BotaoDeAnexar anexos={anexos} className="mr-1.5" />
+                  <Ditado valor={pedido} onChange={setPedido} disabled={desde !== null} className="min-w-0" />
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Campo rotulo="Início">
+                  <Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9 min-w-0" aria-label="Início da campanha" />
+                </Campo>
+                <Campo rotulo="Fim">
+                  <Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9 min-w-0" aria-label="Fim da campanha" />
+                </Campo>
+              </div>
+              {erroDoPeriodo && <p className="mt-2 text-[12px] text-destructive">{erroDoPeriodo}</p>}
             </div>
           )}
-        </div>
 
-        {execucao && <div className="mt-4"><ProgressoDaCampanha execucao={execucao} /></div>}
+          {/* 2. Formatos: posts, carrosséis, stories e vídeos, com a sugestão pela duração. */}
+          {passo === "formatos" && (
+            <div className="min-w-0 pt-4" data-passo-da-nova="formatos">
+              <SeletorDeFormatos valor={formatos} onChange={setFormatosEscolhidos} dias={Math.max(1, dias)} desabilitado={desde !== null} />
+            </div>
+          )}
 
-        <div className="mt-4 flex flex-wrap items-center justify-end">
-          {desde !== null && <span className="mb-1 mr-3 min-w-0"><Cronometro desde={desde} rotulo="Criando a campanha" previsao="~1min" /></span>}
-          <BotaoComCusto
-            rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Gerar campanha completa</span></>}
-            titulo="Campanha completa"
-            descricao={`Gerar campanha completa: ${resumoDosPassos(passosDaCompleta)}, tudo pelo gerador do Estúdio. Custo total estimado ao lado; confirme no segundo clique.`}
-            partes={() => partesDosPassos(passosDaCompleta, catalogo, { modeloImagemId: imagemPadrao ? imagemPadrao.id : null, quantidade: qtd, anexos: anexos.caminhos.length + imagens.length })}
-            executar={gerarCompleta}
-            fecharAoConfirmar
-            sempreConfirmar
-            disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null || andando}
-            variant="outline"
-            className="mb-1 mr-2 h-9 gap-0 px-3"
-          />
-          <BotaoComCusto
-            rotulo={<><Rocket className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Criar campanha</span></>}
-            titulo="Campanha criada"
-            descricao="O estrategista cria o tema, a identidade com o selo e os conteúdos do período, pelo contexto do cliente."
-            partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length)}
-            executar={criar}
-            aoConcluir={concluir}
-            disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null || andando}
-            className="mb-1 h-9 gap-0 px-3"
-          />
-        </div>
-      </section>
+          {/* 3. Gerar: o que vai sair, o andamento e, recolhido, o avançado. */}
+          {passo === "gerar" && (
+            <div className="min-w-0 pt-4" data-passo-da-nova="gerar">
+              <p className="text-[13px]">
+                <strong className="font-medium">Campanha completa:</strong> {resumoDosPassos(passosDaCompleta)}.
+              </p>
+              <p className={juntar(estiloDeTexto.auxiliar, "mt-1")}>Ou só o plano: briefing, identidade e série, sem gerar as peças.</p>
+
+              <div className="mt-4 border-t border-border pt-3">
+                <button
+                  type="button"
+                  onClick={() => setMaisOpcoes((v) => !v)}
+                  aria-expanded={maisOpcoes}
+                  className="inline-flex items-center text-[12px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className={`mr-1 h-4 w-4 transition-transform ${maisOpcoes ? "" : "-rotate-90"}`} />
+                  Mais opções
+                  <span className="ml-1.5 font-normal">{extras ? `(${extras} escolhida(s))` : "(tipo, imagens, briefing, referências)"}</span>
+                </button>
+                {maisOpcoes && (
+                  <div className="mt-3 min-w-0 space-y-4">
+                    <EscolhaDoTipo valor={tipo} onValor={setTipo} desabilitado={desde !== null} />
+                    <div className="min-w-0">
+                      <p className="mb-2 text-[12px] font-medium text-muted-foreground">
+                        Imagens da campanha <span className="font-normal">({imagens.length} de {MAX_IMAGENS_CAMPANHA})</span>
+                      </p>
+                      <CampanhaImagens valor={imagens} onChange={setImagens} desabilitado={desde !== null} vazio="Do acervo ou do computador. Marque o produto herói." />
+                    </div>
+                    <div className="min-w-0 rounded-md bg-muted/50 p-3">
+                      <p className="mb-2 flex items-center text-[12px] font-medium text-muted-foreground">
+                        Briefing
+                        <AjudaRecolhida className="ml-1" rotulo="Como o briefing vale">
+                          O que você preencher vale; o agente completa o resto.
+                        </AjudaRecolhida>
+                      </p>
+                      <FormularioDoBriefing valor={briefing} onChange={setBriefing} prefixo="briefing-nova" desabilitado={desde !== null} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center">
+                        <p className="min-w-0 flex-1 text-[12px] font-medium text-muted-foreground">
+                          Referências <span className="font-normal">({referencias.length} de {MAX_REFERENCIAS})</span>
+                        </p>
+                        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 shrink-0 p-0 text-primary" aria-expanded={galeria} aria-label={galeria ? "Fechar a galeria de referências" : "Escolher referências"} title={galeria ? "Fechar a galeria" : "Escolher referências"} onClick={() => setGaleria((v) => !v)}>
+                          {galeria ? <X className="h-4 w-4" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
+                        </Button>
+                      </div>
+                      {galeria ? (
+                        <CampanhaReferencias valor={referencias} onChange={setReferencias} />
+                      ) : (
+                        <ReferenciasEscolhidas ids={referencias} onTirar={(id) => setReferencias((l) => l.filter((x) => x !== id))} />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {execucao && <div className="mt-4"><ProgressoDaCampanha execucao={execucao} /></div>}
+
+          {/* Barra: voltar e continuar entre os passos; gerar fica sempre à mão. */}
+          <div className="mt-5 flex min-w-0 flex-wrap items-center border-t border-border pt-3">
+            <button type="button" className={juntar(botao.icone, "mb-1")} onClick={() => setPasso(PASSOS_DA_NOVA[Math.max(0, indice - 1)].valor)} disabled={indice === 0} aria-label="Voltar" title="Voltar ao passo anterior">
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} onClick={() => setPasso(PASSOS_DA_NOVA[Math.min(PASSOS_DA_NOVA.length - 1, indice + 1)].valor)} disabled={indice === PASSOS_DA_NOVA.length - 1} aria-label="Continuar" title="Continuar para o próximo passo">
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <span className="ml-auto flex flex-wrap items-center justify-end">
+              {desde !== null && <span className="mb-1 mr-3 min-w-0"><Cronometro desde={desde} rotulo="Criando a campanha" previsao="~1min" /></span>}
+              <BotaoComCusto
+                rotulo={<><Rocket className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Criar campanha</span></>}
+                titulo="Campanha criada"
+                descricao="Criar campanha: só o plano (tema, identidade com o selo e a série nos formatos escolhidos), sem gerar as peças."
+                partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length)}
+                executar={criar}
+                aoConcluir={concluir}
+                disabled={!podeGerar}
+                variant="outline"
+                className="mb-1 mr-2 h-9 gap-0 px-3"
+              />
+              <BotaoComCusto
+                rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Gerar campanha completa</span></>}
+                titulo="Campanha completa"
+                descricao={`Gerar campanha completa: ${resumoDosPassos(passosDaCompleta)}, tudo pelo gerador do Estúdio. Custo total estimado ao lado; confirme no segundo clique.`}
+                partes={() => partesDosPassos(passosDaCompleta, catalogo, { modeloImagemId: imagemPadrao ? imagemPadrao.id : null, quantidade: qtd, anexos: anexos.caminhos.length + imagens.length })}
+                executar={gerarCompleta}
+                fecharAoConfirmar
+                sempreConfirmar
+                disabled={!podeGerar}
+                className="mb-1 h-9 gap-0 px-3"
+              />
+            </span>
+          </div>
+        </section>
+
+        {/* A prévia da campanha montando (ao lado no computador; embaixo no celular). */}
+        <aside className="min-w-0 lg:pt-2">
+          <PreviaDaCampanha nome={nome} inicio={inicio} fim={fim} formatos={formatos} className="lg:sticky lg:top-2" />
+        </aside>
+      </div>
     </ZonaDeAnexos>
   );
 }

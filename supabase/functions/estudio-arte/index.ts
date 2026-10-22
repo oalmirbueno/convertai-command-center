@@ -11212,6 +11212,13 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       return caminho;
     },
     descartarUpload: async (caminho) => { await servico().storage.from("mesa").remove([caminho]); },
+    // Rodada 2 (21/10): os cards da lateral do Template usam as mesmas operações de lâmina do Diretor, sem IA.
+    operarLamina: (t, operacao, ordem, novoTexto) => {
+      if (!ehAds(t) && t.direcao.carrossel_infinito && t.direcao.cards.length > 1) throw new Error(MOTIVO_CONTINUO_LAMINAS);
+      const x = t as unknown as TrabalhoParaAcoes;
+      const r = operacao === "tirar" ? tirarLaminaDoTrabalho(x, ordem) : operacao === "duplicar" ? duplicarLaminaDoTrabalho(x, ordem) : adicionarLaminaNoTrabalho(x, ordem, novoTexto);
+      return r.patch as unknown as Record<string, unknown>;
+    },
   }),
   preparar_fundo: prepararFundo,
   gerar_card: gerarCard,

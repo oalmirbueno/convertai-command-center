@@ -212,7 +212,7 @@ describe("hypes da semana", () => {
     montar(h(HypesDaSemana, { onCriarCampanha: vi.fn(), onPedidoInicio: inicio, onPedidoFim: fim }));
     // 21/10: a leitura da semana fica no Hype, junto do calendário fixo; cada linha tem as próprias ações.
     const linha = (await screen.findByText("Dia das Crianças")).closest("li") as HTMLElement;
-    expect(screen.getByRole("button", { name: /Buscar de novo/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Buscar o que está em alta agora/ })).toBeTruthy();
     expect(chamadasDe("buscar_hypes").length).toBe(0);
     fireEvent.click(within(linha).getByRole("button", { name: /Criar conteúdo/ }));
     await waitFor(() => expect(chamadasDe("pedido_livre").length).toBe(1));
@@ -223,7 +223,7 @@ describe("hypes da semana", () => {
     await waitFor(() => expect(fim).toHaveBeenCalled());
   });
 
-  it("Buscar de novo força a busca; Criar campanha de um item grava a semente com o índice do hype", async () => {
+  it("Buscar o que está em alta agora refaz a leitura da semana e busca as notícias; Criar campanha de um item grava a semente", async () => {
     mock.tabelas.mesa_hypes = [{ client_id: CLIENTE, semana: segundaDaSemanaIso(hojeIso()), itens: [hype], resumo: null, criado_em: new Date().toISOString() }];
     const criarCampanha = vi.fn();
     montar(h(HypesDaSemana, { onCriarCampanha: criarCampanha }));
@@ -233,14 +233,16 @@ describe("hypes da semana", () => {
     const semente = tirarSementeDaCampanha(CLIENTE);
     expect(semente && semente.hypes).toEqual([{ titulo: "Dia das Crianças", quando: "próximas semanas", por_que_agora: undefined, como_usar: "Kit presente", indice: 0 }]);
     expect(semente && semente.trends).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: /Buscar de novo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Buscar o que está em alta agora/ }));
     await waitFor(() => expect(chamadasDe("buscar_hypes").length).toBe(1));
     expect(chamadasDe("buscar_hypes")[0]).toEqual({ acao: "buscar_hypes", client_id: CLIENTE, forcar: true });
+    await waitFor(() => expect(chamadasDe("buscar_trending").length).toBe(1));
+    expect(chamadasDe("buscar_trending")[0]).toEqual({ acao: "buscar_trending", client_id: CLIENTE, recencia: "7d" });
   });
 
-  it("sem busca na semana, Buscar hypes não força", async () => {
+  it("sem leitura na semana, o Buscar o que está em alta agora não força", async () => {
     montar(h(HypesDaSemana, { onCriarCampanha: vi.fn() }));
-    const botao = await screen.findByRole("button", { name: /Buscar hypes/ });
+    const botao = await screen.findByRole("button", { name: /Buscar o que está em alta agora/ });
     fireEvent.click(botao);
     await waitFor(() => expect(chamadasDe("buscar_hypes").length).toBe(1));
     expect(chamadasDe("buscar_hypes")[0]).toEqual({ acao: "buscar_hypes", client_id: CLIENTE });
@@ -256,7 +258,9 @@ describe("campanhas", () => {
     await waitFor(() => expect(chamadasDe("campanha_criar").length).toBe(1));
     const corpo = chamadasDe("campanha_criar")[0];
     expect(corpo).toMatchObject({ acao: "campanha_criar", client_id: CLIENTE, pedido: "Promoção do amor", periodo_inicio: hojeIso() });
-    expect(corpo.quantidade).toBeUndefined();
+    // 21/10/2026: a mistura de formatos (sugerida pela duração de 21 dias) manda na quantidade.
+    expect(corpo.formatos).toEqual({ posts: 3, carrosseis: 3, stories: 4, videos: 2 });
+    expect(corpo.quantidade).toBe(8);
     await waitFor(() => expect(criada).toHaveBeenCalledWith(expect.objectContaining({ id: campanha.id }), "proj"));
   });
 

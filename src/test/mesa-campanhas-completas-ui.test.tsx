@@ -234,11 +234,19 @@ describe("contrato e regras puras", () => {
   });
 });
 
+/** A nova em 3 passos: vai ao Gerar e abre "Mais opções". */
+function abrirMaisOpcoes() {
+  fireEvent.click(within(screen.getByRole("navigation", { name: "Passos da campanha nova" })).getByRole("button", { name: /Gerar/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Mais opções/ }));
+}
+
 describe("campanha nova", () => {
   it("escolher imagens no acervo (a primeira vira produto herói) e o briefing vão no campanha_criar", { timeout: 20_000 }, async () => {
     const criada = vi.fn();
     montar(h(CampanhaNova, { onCriada: criada }));
     fireEvent.change(screen.getByLabelText("Pedido da campanha"), { target: { value: "Promoção do amor" } });
+    // 21/10/2026: imagens e briefing ficam em "Mais opções", no passo Gerar.
+    abrirMaisOpcoes();
 
     fireEvent.click(screen.getByRole("button", { name: /Escolher no acervo/ }));
     const busca = await screen.findByPlaceholderText("Buscar por nome, pasta, descrição ou tag");
@@ -255,7 +263,6 @@ describe("campanha nova", () => {
     fireEvent.change(nota, { target: { value: "Mostra o kit inteiro" } });
     fireEvent.blur(nota);
 
-    fireEvent.click(screen.getByRole("button", { name: /Mais opções/ }));
     fireEvent.change(screen.getByLabelText("Produto 1"), { target: { value: "Kit casal" } });
     fireEvent.change(screen.getByLabelText("Oferta"), { target: { value: "20% nos kits" } });
 
@@ -272,6 +279,7 @@ describe("campanha nova", () => {
 
   it("referência da internet (nao_publicar) não entra na campanha", async () => {
     montar(h(CampanhaNova, { onCriada: vi.fn() }));
+    abrirMaisOpcoes();
     fireEvent.click(screen.getByRole("button", { name: /Escolher no acervo/ }));
     fireEvent.change(await screen.findByPlaceholderText("Buscar por nome, pasta, descrição ou tag"), { target: { value: "internet" } });
     fireEvent.click(await screen.findByTitle("Ref. internet: kit"));

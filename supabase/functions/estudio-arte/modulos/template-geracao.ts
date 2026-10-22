@@ -56,6 +56,8 @@ export interface DepsDaGeracao<C extends { userId: string }, T extends TrabalhoD
   gerarFoto: (ch: C, t: T, e: { prompt: string; tamanho: string }) => Promise<FotoDoGerador>;
   guardarFoto: (t: T, bytes: Uint8Array, mime: string) => Promise<string>;
   descartarUpload?: (caminho: string) => Promise<void>;
+  /** Adicionar, duplicar ou tirar um post do fio (sem IA): devolve o patch do trabalho ou lança com o motivo. */
+  operarLamina?: (t: T, operacao: "adicionar" | "duplicar" | "tirar", ordem: number, texto: string) => Record<string, unknown>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -269,5 +271,28 @@ export function acoesDaGeracaoDoTemplate<C extends { userId: string }, T extends
     return d.json({ trabalho: gravado, imagem: nova, custo_usd: custo, saldo_usd: foto.saldoUsd ?? null });
   }
 
-  return { template_conteudo: conteudo, template_imagem: imagem };
+  /** Os cards da lateral do Template: adicionar depois, duplicar ou tirar um post, sem custo. */
+  async function lamina(ch: C, corpo: Record<string, unknown>): Promise<Response> {
+    if (typeof corpo.trabalho_id !== "string" || !UUID.test(corpo.trabalho_id)) throw d.erro(400, "pedido_template_invalido", "Informe o trabalho do template.");
+    if (typeof corpo.ordem !== "number" || !Number.isInteger(corpo.ordem) || corpo.ordem < 1) throw d.erro(400, "ordem_template_invalida", "Informe o post do fio.");
+    const operacao = corpo.operacao === "adicionar" || corpo.operacao === "duplicar" || corpo.operacao === "tirar" ? corpo.operacao : null;
+    if (!operacao || !d.operarLamina) throw d.erro(400, "operacao_template_invalida", "Escolha adicionar, duplicar ou tirar o post.");
+    if (corpo.texto !== undefined && (typeof corpo.texto !== "string" || corpo.texto.length > 2200)) throw d.erro(400, "texto_template_invalido", "Texto do post novo inválido.");
+    const texto = limpo(corpo.texto, 2200) || "Novo post do fio";
+    const ordem = corpo.ordem;
+    const t = await d.trabalhoComAcesso(ch, corpo.trabalho_id);
+    abrirTrabalho(t, ordem, d);
+    if (operacao !== "tirar" && t.direcao.cards.length >= 10) throw d.erro(409, "limite_laminas", "O fio já tem 10 posts.");
+    if (operacao === "tirar" && t.direcao.cards.length < 2) throw d.erro(409, "ultima_lamina", "O fio precisa de pelo menos um post.");
+    const operar = d.operarLamina;
+    const gravado = await d.mutarTrabalho(t.id, (atual) => {
+      abrirTrabalho(atual, ordem, d);
+      try { return operar(atual, operacao, ordem, texto); } catch (e) {
+        throw d.erro(409, "lamina_template_recusada", e instanceof Error ? e.message : "Não deu para mudar os posts.");
+      }
+    });
+    return d.json({ trabalho: gravado, operacao, ordem: operacao === "tirar" ? Math.max(1, Math.min(ordem, gravado.direcao.cards.length)) : ordem + 1, custo_usd: 0 });
+  }
+
+  return { template_conteudo: conteudo, template_imagem: imagem, template_lamina: lamina };
 }

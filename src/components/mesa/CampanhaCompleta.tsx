@@ -11,6 +11,8 @@ import {
   chavesDaCampanhaCompleta,
   gerarLaminasDaPeca,
   gerarSeloDaCampanha,
+  gerarStoryDaCampanha,
+  normalizarBriefing,
   lerFilaDosTrabalhos,
   lerTrabalhosDaCampanha,
   prepararPecaDaCampanha,
@@ -21,7 +23,9 @@ import {
   partesDosPassos,
   passosQueFaltam,
   resumoDosPassos,
+  faseDaPeca,
   situacaoDaPeca,
+  storiesComoItens,
   trabalhoDaPeca,
   type PassoDaCampanha,
   type SituacaoDaPeca,
@@ -57,7 +61,8 @@ export function usePecasDaCampanha(campanha: Campanha, proposta: PropostaV4 | nu
     refetchInterval: vivo ? 5_000 : false,
   });
   const pecas: SituacaoDaPeca[] = useMemo(() => {
-    const itens = ordenarPorData((proposta && proposta.itens) || []);
+    // A série inteira: os conteúdos da proposta e os stories planejados (formato "story").
+    const itens = ordenarPorData(((proposta && proposta.itens) || []).concat(storiesComoItens(campanha)));
     return itens.map((it) => situacaoDaPeca(campanha, it, trabalhoDaPeca(trabalhos.data || [], it), fila.data || []));
   }, [campanha, proposta, trabalhos.data, fila.data]);
   const agoraVivo = emAndamento(execucao) || pecas.some((p) => p.estado === "gerando");
@@ -95,7 +100,7 @@ export function depsDaCampanha(a: {
     criarCampanha: async () => {
       if (!a.criarCampanha) throw new Error("Sem campanha para criar.");
       const r = await a.criarCampanha();
-      const itens = ordenarPorData((r.proposta && r.proposta.itens) || []);
+      const itens = ordenarPorData(((r.proposta && r.proposta.itens) || []).concat(storiesComoItens(r.campanha)));
       const pecas = itens.map((it) => situacaoDaPeca(r.campanha, it, null));
       const passos = passosQueFaltam({ temCampanha: true, temSelo: !!r.campanha.selo_path, pecas });
       return { campanhaId: r.campanha.id, passos };
@@ -130,6 +135,24 @@ export function depsDaCampanha(a: {
         reler(campanhaId);
       }
     },
+    gerarStory: async (campanhaId, passo) => {
+      const c = await campanhaAtual(campanhaId);
+      const item = storiesComoItens(c).filter((x) => x.tema_id === passo.temaId)[0];
+      if (!item) throw new Error("Este story não está mais na campanha.");
+      await gerarStoryDaCampanha(c, {
+        clientId: a.clientId,
+        campanhaId,
+        temaId: passo.temaId || "",
+        briefing: normalizarBriefing(c.briefing),
+        identidade: c.identidade,
+        fase: faseDaPeca(item, c.periodo_inicio, c.periodo_fim),
+        quantidadeDeTelas: passo.laminas || 3,
+        data: item.data || null,
+        pedido: [item.tema, item.gancho].concat((item.cards || []).map((c) => c.texto || "")).filter(Boolean).join(" / "),
+        marcaId: (c.identidade && c.identidade.marca_id) || a.marcaId,
+      });
+      await a.qc.invalidateQueries({ queryKey: chaves.campanhas(a.clientId) });
+    },
     aoCancelar: async (campanhaId) => {
       if (!campanhaId) return;
       const trabalhos = await lerTrabalhosDaCampanha(a.clientId, campanhaId).catch(() => []);
@@ -159,7 +182,7 @@ const ROTULO_DA_SITUACAO: Record<Execucao["situacao"], string> = {
 
 /** Andamento: por etapa (campanha, selo, peças) e por peça, com pausar, continuar, cancelar. */
 export function ProgressoDaCampanha({ execucao }: { execucao: Execucao }) {
-  const pecas = execucao.passos.filter((p) => p.tipo === "preparar" || p.tipo === "gerar");
+  const pecas = execucao.passos.filter((p) => p.tipo === "preparar" || p.tipo === "gerar" || p.tipo === "story");
   const feitas = pecas.filter((p) => p.situacao === "feito").length;
   const erros = execucao.passos.filter((p) => p.situacao === "erro").length;
   const andando = emAndamento(execucao);
@@ -200,7 +223,7 @@ export function ProgressoDaCampanha({ execucao }: { execucao: Execucao }) {
           <li key={p.id} className="flex min-w-0 items-center text-[12px]" data-passo={p.situacao}>
             <span className="mr-1.5 shrink-0">{ICONE_DO_PASSO[p.situacao]}</span>
             <span className={juntar("min-w-0 truncate", p.situacao === "feito" || p.situacao === "pulado" ? "text-muted-foreground" : "")} title={p.erro || p.rotulo}>
-              {p.tipo === "preparar" ? "Peça: " : p.tipo === "gerar" ? "Gerar: " : ""}
+              {p.tipo === "preparar" ? "Peça: " : p.tipo === "gerar" ? "Gerar: " : p.tipo === "story" ? "Stories: " : ""}
               {p.rotulo}
             </span>
           </li>

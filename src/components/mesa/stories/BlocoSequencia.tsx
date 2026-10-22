@@ -1,30 +1,39 @@
-import { useMemo, useRef, useState } from "react";
-import { CalendarCheck, Clapperboard, Copy, Download, Loader2, Pencil, Plus, Sparkles, Square, Wand2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarCheck, CheckCircle2, Clapperboard, Loader2, Megaphone, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import Secao from "@/components/sistema/Secao";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import { textoDoErro } from "@/lib/mesa/api";
-import { useMesa } from "../MesaContexto";
-import { avisarCustoReal, useAvisarErro } from "../Custo";
-import { copiarTexto } from "../instagram/instagramApi";
-import { noFuso } from "../instagram/calendario-da-grade";
-import PreviaDoStory from "./PreviaDoStory";
-import { baixarArteDoStory, gerarArteDoStory } from "./arteDoStory";
+import { useMarcaDaMesa, useMesa } from "../MesaContexto";
+import { BotaoComCusto } from "../Custo";
+import CartoesDaSequencia from "./CartoesDaSequencia";
+import CelularDoStory from "./CelularDoStory";
+import NovaSequencia from "./NovaSequencia";
+import PainelDaTela from "./PainelDaTela";
 import type { MarcaDosStories } from "./marcaDosStories";
 import type { StoryNoEditor } from "./EditorDoStory";
 import {
+  campanhasDasSequencias,
   chamarStories,
   diaCurto,
-  hojeLocal,
-  normalizarSequencia,
+  estruturaDaSequencia,
+  gerarImagensDosStories,
+  imagemDoStory,
+  modeloPorChave,
   normalizarStory,
-  OBJETIVOS,
-  roteiroDoAdesivo,
+  partesDaEstimativaDosStories,
+  precisaDeImagem,
+  precisaRegistrar,
+  registrarImagemDoStory,
+  reordenarStories,
+  ROTULO_DA_FASE,
+  ROTULO_DO_PAPEL,
   rotuloDoObjetivo,
-  SITUACOES,
-  somarDias,
+  useLaminasDosStories,
+  type CampanhaDoPedido,
   type PainelDosStories,
   type Sequencia,
   type Story,
@@ -32,27 +41,28 @@ import {
 } from "./storiesApi";
 
 /**
- * Bloco Sequência (a novela do dia): escolher o dia, o objetivo e quantos
- * stories e pedir ao agente; a sequência aparece numa fila de cartões 9:16
- * (como o celular mostra), cada um abre o editor. "Gerar artes" monta cada
- * PNG na tela e registra como arquivo do cliente; "Agendar a sequência" leva
- * à agenda (automático no motor, pelo app com o aviso para a equipe).
+ * Bloco Sequência (20/10; refeito em 21/10/2026, dono: "melhore a área dos
+ * stories, deixe mais completa, mais bonita, e gera conteúdo com imagens ...
+ * algo que converte ... e que também combine com as campanhas"):
+ * - Nova sequência: o modelo (estrutura que converte e os prontos), o dia, a
+ *   campanha e a fase; um clique planeja e pede as imagens ao gerador.
+ * - A sequência aberta, no padrão do carrossel do Estúdio: as telas em cartões
+ *   na lateral (arrastar, duplicar, remover), o celular no meio (barra de
+ *   progresso, perfil, adesivo desenhado) e a tela escolhida ao lado (refazer
+ *   e ajustar a imagem com o custo antes).
+ * - A imagem do gerador vira o arquivo do story sozinha quando fica pronta
+ *   (registrar_arte da_lamina); "Agendar a sequência" leva à agenda
+ *   (automático no motor, pelo app com o aviso para a equipe).
+ * - Filtro "Da campanha X" quando há sequências ligadas a campanhas.
  */
 
-const LARGURA_DO_CARTAO = 176;
-const QUANTIDADES = [3, 4, 5, 6, 7, 8];
-
-type Pedido = { data: string; objetivo: string; quantidade: number; pedido: string };
-
-/** Pode gerar a arte: ainda não foi para a agenda nem saiu. */
+/** Pode ganhar arte: ainda não foi para a agenda nem saiu. */
 export const precisaDeArte = (s: Story) => (s.situacao === "rascunho" || s.situacao === "falhou" || !s.file_id) && s.situacao !== "publicado" && s.situacao !== "agendado" && s.situacao !== "postar_pelo_app";
 
 /** Pronto para agendar: arte, horário e ainda fora da agenda. */
 export const prontoParaAgendar = (s: Story) => !!s.file_id && !!s.horario && (s.situacao === "arte_pronta" || s.situacao === "rascunho" || s.situacao === "falhou");
 
-function horaDe(s: Story): string {
-  return s.horario ? noFuso(s.horario).hora : "sem horário";
-}
+const TODAS = "todas";
 
 export default function BlocoSequencia({
   clientId,
@@ -73,67 +83,63 @@ export default function BlocoSequencia({
   onSequencia: (id: string) => void;
   onEditar: (s: StoryNoEditor) => void;
 }) {
-  const { atualizarCusto } = useMesa();
-  const avisarErro = useAvisarErro();
-  const [pedido, setPedido] = useEstadoDaTela<Pedido>(`mesa:stories:pedido:${clientId}`, { data: somarDias(hojeLocal(), 1), objetivo: "engajar", quantidade: 6, pedido: "" }, {
-    validar: (v) => !!v && typeof (v as Pedido).data === "string" && typeof (v as Pedido).quantidade === "number",
-  });
-  const [planejando, setPlanejando] = useState(false);
-  const [andamento, setAndamento] = useState<{ feitos: number; total: number } | null>(null);
+  const { catalogo, clientName } = useMesa();
+  const { marca: marcaDaMesa } = useMarcaDaMesa();
+  const marcaId = marcaDaMesa ? marcaDaMesa.id : null;
+  const confirmar = useConfirm();
+  const [filtro, setFiltro] = useEstadoDaTela<string>(`mesa:stories:filtro:${clientId}`, TODAS);
+  const [selecionado, setSelecionado] = useState<string | null>(null);
   const [agendando, setAgendando] = useState(false);
-  const [baixando, setBaixando] = useState<string | null>(null);
-  const parar = useRef(false);
+  const [ordenando, setOrdenando] = useState(false);
 
-  const mudarPedido = (m: Partial<Pedido>) => setPedido({ ...pedido, ...m });
-  const semArte = useMemo(() => stories.filter(precisaDeArte), [stories]);
+  const trabalhoIds = useMemo(() => stories.map((s) => s.fundo.trabalho_id || "").filter(Boolean), [stories]);
+  const laminasQ = useLaminasDosStories(clientId, trabalhoIds);
+  const laminas = laminasQ.data;
+
+  // A imagem pronta vira o arquivo do story sozinha (uma tentativa por versão; a próxima leitura tenta de novo).
+  const tentados = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    for (const s of stories) {
+      if (!precisaRegistrar(s, laminas)) continue;
+      const viva = imagemDoStory(s, laminas);
+      const chave = `${s.id}:${viva ? viva.versao : 0}:${viva ? viva.caminho : ""}`;
+      if (tentados.current[chave]) continue;
+      tentados.current[chave] = true;
+      void registrarImagemDoStory(clientId, s)
+        .then((novo) => atualizar.stories([novo]))
+        .catch(() => {
+          // Fica para a próxima leitura das lâminas (o servidor diz o porquê no cartão ao agendar).
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stories, laminas, clientId]);
+
+  const campanhas = useMemo(() => campanhasDasSequencias(painel.sequencias), [painel.sequencias]);
+  const filtroValido = filtro !== TODAS && campanhas.some((c) => c.id === filtro) ? filtro : TODAS;
+  const sequenciasVisiveis = useMemo(
+    () =>
+      painel.sequencias
+        .filter((s) => filtroValido === TODAS || (s.campanha && s.campanha.campanha_id === filtroValido))
+        .sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0)),
+    [painel.sequencias, filtroValido],
+  );
+
+  const atual = stories.filter((s) => s.id === selecionado)[0] || stories[0] || null;
+  const indice = atual ? stories.indexOf(atual) : 0;
+  const semImagem = useMemo(() => stories.filter(precisaDeImagem), [stories]);
   const prontos = useMemo(() => stories.filter(prontoParaAgendar), [stories]);
   const semHorario = stories.filter((s) => !s.horario && s.situacao !== "publicado").length;
-  const sequenciasOrdenadas = useMemo(() => painel.sequencias.slice().sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0)), [painel.sequencias]);
+  const modelo = sequencia && sequencia.modelo ? modeloPorChave(sequencia.modelo) : null;
+  const estrutura = modelo ? estruturaDaSequencia(stories) : null;
+  const campanhaDoPedido: CampanhaDoPedido | null = sequencia && sequencia.campanha ? { id: sequencia.campanha.campanha_id, nome: sequencia.campanha.nome, fase: sequencia.campanha.fase } : null;
 
-  const planejar = async () => {
-    setPlanejando(true);
-    try {
-      const r = await chamarStories<{ sequencia: unknown; stories: unknown[]; avisos?: unknown[]; custo_usd?: number }>("planejar_sequencia", clientId, {
-        data: pedido.data,
-        objetivo: pedido.objetivo,
-        quantidade: pedido.quantidade,
-        ...(pedido.pedido.trim() ? { pedido: pedido.pedido.trim() } : {}),
-      });
-      const seq = normalizarSequencia(r && r.sequencia);
-      const novos = (r && Array.isArray(r.stories) ? r.stories : []).map(normalizarStory).filter((s) => !!s.id);
-      if (!seq.id) throw new Error("O agente não devolveu a sequência.");
-      atualizar.sequencia(seq);
-      atualizar.stories(novos);
-      onSequencia(seq.id);
-      mudarPedido({ pedido: "" });
-      if (Number(r && r.custo_usd) > 0) avisarCustoReal("Agente dos stories", r, atualizarCusto);
-      // Repetição da semana que sobrou na versão escolhida: a equipe vê e ajusta no cartão.
-      const avisos = (r && Array.isArray(r.avisos) ? r.avisos : []).filter((a): a is string => typeof a === "string" && !!a);
-      if (avisos.length) toast.message("Sequência planejada com avisos", { description: avisos.join(" ") });
-    } catch (e) {
-      avisarErro(e, "Planejar a sequência");
-    } finally {
-      setPlanejando(false);
-    }
-  };
-
-  const gerarArtes = async () => {
-    parar.current = false;
-    const alvo = semArte.slice();
-    let feitas = 0;
-    for (let i = 0; i < alvo.length; i++) {
-      if (parar.current) break;
-      setAndamento({ feitos: i, total: alvo.length });
-      try {
-        const novo = await gerarArteDoStory({ clientId, story: alvo[i], marca });
-        atualizar.stories([novo]);
-        feitas++;
-      } catch (e) {
-        toast.error(`A arte do story ${alvo[i].ordem} não saiu`, { description: textoDoErro(e) });
-      }
-    }
-    setAndamento(null);
-    if (feitas) toast.success(feitas === 1 ? "1 arte pronta" : `${feitas} artes prontas`);
+  const gerarImagens = async () => {
+    if (!sequencia || !semImagem.length) return { custo_usd: 0 };
+    const r = await gerarImagensDosStories({ clientId, titulo: sequencia.titulo, stories: semImagem, campanha: campanhaDoPedido, marcaId });
+    atualizar.stories(r.stories);
+    void laminasQ.refetch();
+    if (r.avisos.length) toast.message("Imagens pedidas com avisos", { description: r.avisos.join(" ") });
+    return { custo_usd: r.custo_usd };
   };
 
   const agendar = async () => {
@@ -155,14 +161,48 @@ export default function BlocoSequencia({
     }
   };
 
-  const baixar = async (s: Story) => {
-    setBaixando(s.id);
+  const reordenar = async (ids: string[]) => {
+    if (!sequencia) return;
+    const porId: Record<string, Story> = {};
+    stories.forEach((s) => (porId[s.id] = s));
+    // Na tela na hora; o servidor grava a ordem e acerta os horários.
+    atualizar.stories(ids.map((id, i) => ({ ...porId[id], ordem: i + 1 })));
+    setOrdenando(true);
     try {
-      await baixarArteDoStory(s, marca);
+      atualizar.stories(await reordenarStories(clientId, sequencia.id, ids));
     } catch (e) {
-      toast.error("Não deu para baixar a arte", { description: textoDoErro(e) });
+      toast.error("Não deu para mudar a ordem", { description: textoDoErro(e) });
+      void atualizar.reler();
     } finally {
-      setBaixando(null);
+      setOrdenando(false);
+    }
+  };
+
+  const duplicar = async (s: Story) => {
+    try {
+      const r = await chamarStories<{ story: unknown }>("salvar_story", clientId, {
+        story: { sequencia_id: s.sequencia_id, molde: s.molde, titulo: s.titulo, texto_na_tela: s.texto_na_tela, adesivo: s.adesivo, fundo: s.fundo, horario: null, destaque_id: s.destaque_id },
+      });
+      const novo = normalizarStory(r && r.story);
+      if (!novo.id) throw new Error("A cópia não voltou.");
+      atualizar.stories([novo]);
+      setSelecionado(novo.id);
+      const ids = stories.map((x) => x.id);
+      ids.splice(ids.indexOf(s.id) + 1, 0, novo.id);
+      if (sequencia) await reordenar(ids);
+    } catch (e) {
+      toast.error("Não deu para duplicar", { description: textoDoErro(e) });
+    }
+  };
+
+  const remover = async (s: Story) => {
+    const ok = await confirmar({ title: `Remover o story ${s.ordem}?`, description: "Ele sai da sequência e da agenda.", confirmLabel: "Remover", destructive: true });
+    if (!ok) return;
+    try {
+      await chamarStories("apagar_story", clientId, { id: s.id });
+      atualizar.tirar(s.id);
+    } catch (e) {
+      toast.error("Não deu para remover", { description: textoDoErro(e) });
     }
   };
 
@@ -170,146 +210,139 @@ export default function BlocoSequencia({
 
   return (
     <div className="min-w-0 space-y-6" data-bloco-dos-stories="sequencia">
-      <Secao
-        titulo="Nova sequência"
-        recolher={`mesa:stories:nova:${clientId}`}
-        ajuda="O agente monta a novela do dia: gancho, desenvolvimento, interação com adesivo, valor ou prova, convite e o gancho para amanhã. Lê a marca, o hype da semana e as últimas sequências para não repetir."
-      >
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-[150px_170px_110px_minmax(0,1fr)_auto] lg:items-end">
-          <label className="min-w-0">
-            <span className={texto.rotulo}>Dia</span>
-            <input className={juntar(campo, "mt-1")} type="date" value={pedido.data} onChange={(e) => e.target.value && mudarPedido({ data: e.target.value })} />
-          </label>
-          <label className="min-w-0">
-            <span className={texto.rotulo}>Objetivo</span>
-            <select className={juntar(campo, "mt-1")} value={pedido.objetivo} onChange={(e) => mudarPedido({ objetivo: e.target.value })}>
-              {OBJETIVOS.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.rotulo}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="min-w-0">
-            <span className={texto.rotulo}>Stories</span>
-            <select className={juntar(campo, "mt-1")} value={pedido.quantidade} onChange={(e) => mudarPedido({ quantidade: Number(e.target.value) })}>
-              {QUANTIDADES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="min-w-0">
-            <span className={texto.rotulo}>Pedido (opcional)</span>
-            <input className={juntar(campo, "mt-1")} value={pedido.pedido} onChange={(e) => mudarPedido({ pedido: e.target.value })} placeholder="Ex.: lançar o combo de sábado" />
-          </label>
-          <button type="button" className={botao.primario} onClick={() => void planejar()} disabled={planejando}>
-            {planejando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-            {planejando ? "Planejando..." : "Planejar com o agente"}
-          </button>
-        </div>
-      </Secao>
+      <NovaSequencia
+        clientId={clientId}
+        onCriada={(seq, novos) => {
+          atualizar.sequencia(seq);
+          atualizar.stories(novos);
+          onSequencia(seq.id);
+          setSelecionado(null);
+        }}
+      />
 
       {!sequencia ? (
-        <EstadoVazio icone={<Clapperboard className="h-5 w-5" />} titulo="Nenhuma sequência ainda" descricao="Escolha o dia e o objetivo e peça ao agente" />
+        <EstadoVazio icone={<Clapperboard className="h-5 w-5" />} titulo="Nenhuma sequência ainda" descricao="Escolha o modelo e o dia e crie a sequência" />
       ) : (
         <Secao
           divisoria
           recolher={`mesa:stories:aberta:${clientId}`}
           titulo={sequencia.titulo || `Sequência de ${diaCurto(sequencia.data)}`}
-          descricao={`${diaCurto(sequencia.data)} · ${rotuloDoObjetivo(sequencia.objetivo)} · ${stories.length} stories`}
+          descricao={`${diaCurto(sequencia.data)} · ${modelo ? modelo.nome : rotuloDoObjetivo(sequencia.objetivo)} · ${stories.length} stories`}
           acao={
             <div className="flex min-w-0 flex-wrap items-center justify-end [&>*]:mb-1 [&>*]:ml-2">
-              {sequenciasOrdenadas.length > 1 ? (
-                <select className={juntar(campo, "h-8 w-[170px]")} value={sequencia.id} onChange={(e) => onSequencia(e.target.value)} aria-label="Sequência aberta">
-                  {sequenciasOrdenadas.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {diaCurto(s.data)} · {rotuloDoObjetivo(s.objetivo)}
+              {campanhas.length ? (
+                <select
+                  className={juntar(campo, "h-8 w-[190px]")}
+                  value={filtroValido}
+                  onChange={(e) => {
+                    setFiltro(e.target.value);
+                    const primeira = painel.sequencias.filter((s) => e.target.value === TODAS || (s.campanha && s.campanha.campanha_id === e.target.value)).sort((a, b) => (a.data < b.data ? 1 : -1))[0];
+                    if (primeira) onSequencia(primeira.id);
+                  }}
+                  aria-label="Filtrar por campanha"
+                >
+                  <option value={TODAS}>Todas as sequências</option>
+                  {campanhas.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Da campanha {c.nome}
                     </option>
                   ))}
                 </select>
               ) : null}
-              {andamento ? (
-                <span className="inline-flex items-center">
-                  <span className={juntar(texto.auxiliar, "mr-1 tabular-nums")} aria-live="polite">
-                    {andamento.feitos + 1} de {andamento.total}
-                  </span>
-                  <button type="button" className={botao.icone} onClick={() => (parar.current = true)} aria-label="Parar" title="Parar">
-                    <Square className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </span>
-              ) : (
-                <button type="button" className={botao.secundario} onClick={() => void gerarArtes()} disabled={!semArte.length} title={semArte.length ? `Montar ${semArte.length} artes 1080 x 1920` : "Todas já têm arte"}>
-                  <Wand2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                  Gerar artes
-                  {semArte.length ? <span className="ml-1 tabular-nums">({semArte.length})</span> : null}
-                </button>
-              )}
-              <button type="button" className={botao.primario} onClick={() => void agendar()} disabled={!prontos.length || agendando || !!andamento}>
+              {sequenciasVisiveis.length > 1 ? (
+                <select className={juntar(campo, "h-8 w-[180px]")} value={sequencia.id} onChange={(e) => onSequencia(e.target.value)} aria-label="Sequência aberta">
+                  {sequenciasVisiveis.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {diaCurto(s.data)} · {s.titulo || rotuloDoObjetivo(s.objetivo)}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <BotaoComCusto
+                rotulo={
+                  <>
+                    <Wand2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    Gerar imagens
+                    {semImagem.length ? <span className="ml-1 tabular-nums">({semImagem.length})</span> : null}
+                  </>
+                }
+                titulo="Imagens da sequência"
+                descricao={semImagem.length ? `${semImagem.length} imagens 9:16 pelo gerador do Estúdio, com o texto integrado` : "Todas as telas já têm imagem"}
+                partes={() => partesDaEstimativaDosStories(catalogo, semImagem.length, { comPlano: false, comImagens: true })}
+                executar={gerarImagens}
+                disabled={!semImagem.length}
+                variant="outline"
+                className="h-9"
+              />
+              <button type="button" className={botao.primario} onClick={() => void agendar()} disabled={!prontos.length || agendando}>
                 {agendando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <CalendarCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />}
                 Agendar a sequência
               </button>
             </div>
           }
         >
-          {semHorario > 0 || (stories.length > 0 && !prontos.length && !semArte.length) ? (
-            <p className={texto.auxiliar}>{semHorario > 0 ? `${semHorario} sem horário: abra o story e escolha a hora` : "Tudo na agenda"}</p>
-          ) : null}
+          <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
+            {sequencia.campanha ? (
+              <span className={juntar(etiqueta, "bg-primary/10 text-primary")} data-campanha-da-sequencia={sequencia.campanha.campanha_id}>
+                <Megaphone className="mr-1 h-3 w-3" aria-hidden="true" />
+                Da campanha {sequencia.campanha.nome}
+                {sequencia.campanha.fase ? ` · ${ROTULO_DA_FASE[sequencia.campanha.fase]}` : ""}
+              </span>
+            ) : null}
+            {estrutura ? (
+              estrutura.completa ? (
+                <span className={juntar(etiqueta, "bg-success/15 text-success")} data-estrutura-completa="">
+                  <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" />
+                  Estrutura que converte
+                </span>
+              ) : (
+                <span className={juntar(etiqueta, "bg-warning/15 text-warning")} title="Gancho, problema ou desejo, prova, oferta e CTA com adesivo">
+                  {estrutura.ctaComAdesivo ? `Falta: ${estrutura.faltando.map((p) => ROTULO_DO_PAPEL[p].toLowerCase()).join(", ")}` : "O CTA final precisa de adesivo"}
+                </span>
+              )
+            ) : null}
+            {semHorario > 0 ? <span className={texto.auxiliar}>{semHorario} sem horário: abra o story e escolha a hora</span> : null}
+            {stories.length > 0 && !prontos.length && !semImagem.length && !semHorario ? <span className={texto.auxiliar}>Tudo na agenda ou esperando a imagem</span> : null}
+          </div>
 
-          <ol className="mt-4 flex min-w-0 overflow-x-auto overscroll-x-contain pb-3" aria-label="Stories da sequência" data-fila-de-stories="">
-            {stories.map((s, i) => {
-              const sit = SITUACOES[s.situacao];
-              const app = s.caminho === "pelo_app";
-              return (
-                <li key={s.id} className="mr-3 shrink-0" style={{ width: LARGURA_DO_CARTAO }} data-story={s.id}>
-                  <button type="button" className="block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onEditar(s)} aria-label={`Editar o story ${s.ordem}`}>
-                    <PreviaDoStory story={s} largura={LARGURA_DO_CARTAO} paleta={marca.paleta} familia={marca.familia} foto={marca.foto(s.fundo.imagem_id)} posicao={{ atual: i, total: stories.length }} />
-                  </button>
-                  <div className="mt-1.5 flex min-w-0 items-center">
-                    <span className={juntar(texto.etiqueta, "mr-1.5 tabular-nums text-muted-foreground")}>{s.ordem}</span>
-                    <span className={juntar(texto.auxiliar, "mr-1.5 tabular-nums")}>{horaDe(s)}</span>
-                    <span className={juntar(etiqueta, "min-w-0 truncate", sit.tom)} title={s.motivo || undefined}>
-                      {sit.rotulo}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex min-w-0 items-center">
-                    <span className={juntar(texto.auxiliar, "mr-1 min-w-0 flex-1 truncate")} title={s.titulo}>
-                      {s.titulo || s.molde.replace(/_/g, " ")}
-                    </span>
-                    {app ? (
-                      <>
-                        <button type="button" className={botao.icone} onClick={() => void copiarTexto(roteiroDoAdesivo(s)).then((ok) => (ok ? toast.success("Roteiro do adesivo copiado") : toast.error("Não deu para copiar")))} aria-label={`Copiar o roteiro do adesivo do story ${s.ordem}`} title="Copiar o roteiro do adesivo">
-                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button type="button" className={botao.icone} onClick={() => void baixar(s)} disabled={baixando === s.id} aria-label={`Baixar a arte do story ${s.ordem}`} title="Baixar arte">
-                          {baixando === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
-                        </button>
-                      </>
-                    ) : null}
-                    <button type="button" className={botao.icone} onClick={() => onEditar(s)} aria-label={`Abrir o story ${s.ordem}`} title="Editar">
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-            <li className="shrink-0" style={{ width: LARGURA_DO_CARTAO }}>
-              <button
-                type="button"
-                onClick={novoStory}
-                className="flex w-full flex-col items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
-                style={{ height: Math.round(LARGURA_DO_CARTAO * 1.7778) }}
-              >
-                <Plus className="h-5 w-5" aria-hidden="true" />
-                <span className={juntar(texto.auxiliar, "mt-1")}>Story</span>
-                <span className="sr-only">Adicionar um story na sequência</span>
-              </button>
-            </li>
-          </ol>
+          {stories.length ? (
+            <div className="mt-4 grid min-w-0 gap-6 lg:grid-cols-[260px_auto_minmax(0,1fr)] lg:items-start">
+              <CartoesDaSequencia
+                stories={stories}
+                selecionado={atual ? atual.id : null}
+                marca={marca}
+                laminas={laminas}
+                ocupado={ordenando}
+                onSelecionar={(s) => setSelecionado(s.id)}
+                onReordenar={(ids) => void reordenar(ids)}
+                onDuplicar={(s) => void duplicar(s)}
+                onRemover={(s) => void remover(s)}
+                onNovo={novoStory}
+              />
+              <CelularDoStory stories={stories} atual={indice} onMudar={(i) => stories[i] && setSelecionado(stories[i].id)} marca={marca} nome={clientName || "perfil"} laminas={laminas} largura={270} />
+              {atual ? (
+                <PainelDaTela
+                  clientId={clientId}
+                  story={atual}
+                  titulo={sequencia.titulo}
+                  campanha={campanhaDoPedido}
+                  marca={marca}
+                  marcaId={marcaId}
+                  laminas={laminas}
+                  onEditar={onEditar}
+                  onMudou={(l) => atualizar.stories(l)}
+                  onReler={() => void laminasQ.refetch()}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-4 min-w-0">
+              <CartoesDaSequencia stories={[]} selecionado={null} marca={marca} onSelecionar={() => undefined} onReordenar={() => undefined} onDuplicar={() => undefined} onRemover={() => undefined} onNovo={novoStory} />
+            </div>
+          )}
 
           {sequencia.gancho_de_amanha ? (
-            <p className={juntar(texto.auxiliar, "truncate")} title={sequencia.gancho_de_amanha}>
+            <p className={juntar(texto.auxiliar, "mt-4 truncate")} title={sequencia.gancho_de_amanha}>
               Gancho para amanhã: {sequencia.gancho_de_amanha}
             </p>
           ) : null}

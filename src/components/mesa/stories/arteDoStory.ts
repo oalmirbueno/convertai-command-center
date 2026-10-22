@@ -1,16 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
-import { novoIdDaProposta } from "../mesaV4Api";
 import { baixarDoStorage, nomeDoArquivo, salvarBlob } from "../instagram/capaDoDestaque";
 import { corDaLetra, hexValido, LAYOUT_DO_TEXTO, quebrarEmLinhas, TAMANHO_DO_STORY } from "./layoutDoStory";
-import { chamarStories, normalizarStory, type Story } from "./storiesApi";
+import type { Story } from "./storiesApi";
 import type { MarcaDosStories } from "./marcaDosStories";
 
 /**
- * A arte do story montada no navegador (1080 x 1920, sem custo), com a mesma
- * técnica das capas de destaque (capaDoDestaque.ts): a foto real do acervo
- * recortada para cobrir a tela, intacta (sem filtro, sem escurecer), e por
- * cima só o texto pedido, na fonte e nas cores da marca. Sem foto, a cor da
- * marca. A área do adesivo fica livre: o adesivo entra no app.
+ * A arte do story de cor da marca montada no navegador (1080 x 1920, sem
+ * custo): o texto pedido sobre a cor, na fonte e nas cores da marca. A área do
+ * adesivo fica livre: o adesivo entra no app.
+ * 21/10 (regra da casa: "nunca colocar imagem em cima, sempre gerar com o
+ * gerador"): story com imagem sai do gerador do Estúdio (storiesApi.ts,
+ * gerarImagensDosStories); a foto real vai inteira como referência, nunca
+ * recortada aqui com texto por cima. `montarArteDoStory` ainda aceita a foto
+ * (testes e sequências antigas), mas a tela só chama sem ela.
  * Safari 11 não tem createImageBitmap: abre pelo <img>.
  */
 
@@ -110,20 +112,6 @@ export function nomeDaArte(story: Pick<Story, "ordem" | "titulo" | "texto_na_tel
   return nomeDoArquivo(story.titulo || story.texto_na_tela.slice(0, 40) || "story", `story-${n}`);
 }
 
-/**
- * Sobe o PNG no bucket mesa (em <cliente>/stories/) e avisa a função
- * (registrar_arte com o caminho): ela guarda a arte em Arquivos (bucket files,
- * com o sha256 que a publicação automática exige) e liga o arquivo ao story.
- */
-export async function subirArteDoStory(o: { clientId: string; story: Story; png: Blob }): Promise<Story> {
-  const caminho = `${o.clientId}/stories/${o.story.id}/${novoIdDaProposta()}.png`;
-  const envio = await supabase.storage.from("mesa").upload(caminho, o.png, { contentType: "image/png", upsert: false });
-  if (envio.error) throw envio.error;
-  const r = await chamarStories<{ story: unknown }>("registrar_arte", o.clientId, { id: o.story.id, caminho });
-  if (!r || !r.story) throw new Error("A função não confirmou a arte. Gere de novo.");
-  return normalizarStory(r.story);
-}
-
 /** Baixa a arte registrada (o PNG do arquivo do cliente) ou devolve null quando não acha. */
 export async function arteRegistrada(fileId: string): Promise<Blob | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -133,22 +121,13 @@ export async function arteRegistrada(fileId: string): Promise<Blob | null> {
   return baixarDoStorage(String(data.storage_bucket || "mesa"), String(data.storage_path));
 }
 
-/** A foto do acervo do story, baixada (null: fundo de cor ou foto que saiu do acervo). */
-export async function fotoDoStory(story: Pick<Story, "fundo">, marca: Pick<MarcaDosStories, "foto">): Promise<Blob | null> {
-  if (story.fundo.tipo !== "foto") return null;
-  const f = marca.foto(story.fundo.imagem_id);
-  if (!f) return null;
-  return baixarDoStorage(f.storage_bucket || "mesa", f.storage_path);
-}
-
-/** Monta, sobe e registra a arte de um story (o "Gerar artes", um por vez). */
-export async function gerarArteDoStory(o: { clientId: string; story: Story; marca: MarcaDosStories }): Promise<Story> {
-  const png = await montarArteDoStory(o.story, { paleta: o.marca.paleta, familia: o.marca.familia }, await fotoDoStory(o.story, o.marca));
-  return subirArteDoStory({ clientId: o.clientId, story: o.story, png });
-}
-
-/** "Baixar arte" (caminho pelo app): a arte registrada (arte_url do painel ou o arquivo); sem ela, monta na hora. */
-export async function baixarArteDoStory(story: Story, marca: MarcaDosStories): Promise<void> {
+/**
+ * "Baixar arte" (caminho pelo app): a arte registrada (arte_url do painel ou o
+ * arquivo); sem ela, a imagem do gerador (a lâmina do Estúdio, inteira). 21/10
+ * (regra da casa: nada colado por cima): foto do acervo não vira arte montada
+ * aqui; só o story de cor da marca, que é texto puro, ainda sai do navegador.
+ */
+export async function baixarArteDoStory(story: Story, marca: MarcaDosStories, imagemViva?: string | null): Promise<void> {
   let png: Blob | null = null;
   if (story.arte_url) {
     try {
@@ -165,6 +144,9 @@ export async function baixarArteDoStory(story: Story, marca: MarcaDosStories): P
       png = null;
     }
   }
-  if (!png) png = await montarArteDoStory(story, { paleta: marca.paleta, familia: marca.familia }, await fotoDoStory(story, marca));
+  const lamina = imagemViva || (story.fundo.tipo === "gerada" ? story.fundo.caminho : null);
+  if (!png && lamina) png = await baixarDoStorage("mesa", lamina);
+  if (!png && story.fundo.tipo === "cor") png = await montarArteDoStory(story, { paleta: marca.paleta, familia: marca.familia }, null);
+  if (!png) throw new Error("Este story ainda não tem imagem. Gere a imagem pelo gerador.");
   salvarBlob(png, nomeDaArte(story));
 }

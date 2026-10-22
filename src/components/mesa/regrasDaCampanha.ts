@@ -157,6 +157,152 @@ export function campanhaDaSemente(s: SementeDaCampanha, hoje: string): CampanhaD
   };
 }
 
+// ------------------------------------------------------------------ formatos (21/10/2026, rodada 2)
+
+/**
+ * A mistura de formatos da campanha (dono: "escolher vídeos, posts, carrosséis e stories: eu escolho ali").
+ * Posts e carrosséis viram arte rápida do Estúdio; vídeos/Reels saem com roteiro e direção prontos na série
+ * (o vídeo nasce no Estúdio depois da agenda); stories são feitos pela aba Stories (gerarStoriesDaCampanha).
+ */
+export interface FormatosDaCampanha {
+  posts: number;
+  carrosseis: number;
+  stories: number;
+  videos: number;
+}
+
+export type ChaveDoFormato = keyof FormatosDaCampanha;
+
+export const FORMATOS_DA_CAMPANHA: { chave: ChaveDoFormato; rotulo: string; dica: string; formato: string }[] = [
+  { chave: "posts", rotulo: "Posts", dica: "Arte única no feed", formato: "estatico" },
+  { chave: "carrosseis", rotulo: "Carrosséis", dica: "Várias lâminas no feed", formato: "carrossel" },
+  { chave: "stories", rotulo: "Stories", dica: "Sequência de telas", formato: "story" },
+  { chave: "videos", rotulo: "Vídeos e Reels", dica: "Roteiro pronto para gravar ou gerar", formato: "video" },
+];
+
+/** Teto por formato e da série de feed (o estrategista faz até 12 conteúdos por campanha). */
+export const MAX_POR_FORMATO = 8;
+export const MAX_NA_SERIE = 12;
+export const LAMINAS_DO_CARROSSEL = 5;
+export const TELAS_DO_STORY = 3;
+
+export function normalizarFormatos(v: unknown): FormatosDaCampanha | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const n = (x: unknown) => Math.max(0, Math.min(MAX_POR_FORMATO, Math.round(Number(x) || 0)));
+  const f = { posts: n(o.posts), carrosseis: n(o.carrosseis), stories: n(o.stories), videos: n(o.videos) };
+  // A série de feed (posts + carrosséis + vídeos) cabe em 12: corta primeiro os posts, depois os carrosséis.
+  let excesso = f.posts + f.carrosseis + f.videos - MAX_NA_SERIE;
+  (["posts", "carrosseis", "videos"] as ChaveDoFormato[]).forEach((k) => {
+    if (excesso <= 0) return;
+    const tira = Math.min(excesso, f[k]);
+    f[k] -= tira;
+    excesso -= tira;
+  });
+  return f.posts + f.carrosseis + f.stories + f.videos ? f : null;
+}
+
+/** Sugestão pela duração (o dono ajusta): mais dias, mais peças; sempre ao menos 1 de cada. */
+export function sugerirFormatos(dias: number): FormatosDaCampanha {
+  if (dias <= 7) return { posts: 2, carrosseis: 1, stories: 2, videos: 1 };
+  if (dias <= 14) return { posts: 2, carrosseis: 2, stories: 3, videos: 1 };
+  if (dias <= 31) return { posts: 3, carrosseis: 3, stories: 4, videos: 2 };
+  return { posts: 4, carrosseis: 4, stories: 6, videos: 3 };
+}
+
+export const totalNaSerie = (f: FormatosDaCampanha) => f.posts + f.carrosseis + f.videos;
+
+/** O que a série tem hoje, por formato (para comparar com o planejado). */
+export function contarFormatos(pecas: { item: Pick<ItemProposto, "formato"> }[]): FormatosDaCampanha {
+  const f = { posts: 0, carrosseis: 0, stories: 0, videos: 0 };
+  pecas.forEach((p) => {
+    const fm = p.item.formato;
+    if (fm === "estatico") f.posts += 1;
+    else if (fm === "video") f.videos += 1;
+    else if (fm === "story") f.stories += 1;
+    else if (fm !== "foto") f.carrosseis += 1;
+  });
+  return f;
+}
+
+/** O que falta da mistura planejada (nunca negativo). */
+export function formatosQueFaltam(planejado: FormatosDaCampanha, atual: FormatosDaCampanha): FormatosDaCampanha {
+  return {
+    posts: Math.max(0, planejado.posts - atual.posts),
+    carrosseis: Math.max(0, planejado.carrosseis - atual.carrosseis),
+    stories: Math.max(0, planejado.stories - atual.stories),
+    videos: Math.max(0, planejado.videos - atual.videos),
+  };
+}
+
+/** Story da campanha guardado no briefing (feito pelo estrategista ao criar). */
+export interface StoryDaCampanha {
+  tema_id: string;
+  data: string;
+  etapa: string;
+  tema: string;
+  gancho: string;
+  telas: string[];
+  /** A sequência criada na aba Stories (gerarStoriesDaCampanha); sem ela, a fazer. */
+  sequencia_id?: string | null;
+}
+
+export type ItemDeStory = ItemProposto & { sequencia_id?: string | null };
+
+export function normalizarStories(v: unknown): StoryDaCampanha[] {
+  return (Array.isArray(v) ? v : [])
+    .map((x, i) => {
+      const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const t = (y: unknown, max: number) => (typeof y === "string" ? y.trim().slice(0, max) : "");
+      const data = t(o.data, 10);
+      return {
+        tema_id: t(o.tema_id, 40) || `s${i + 1}`,
+        data: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : "",
+        etapa: t(o.etapa, 60),
+        tema: t(o.tema, 200),
+        gancho: t(o.gancho, 300),
+        telas: (Array.isArray(o.telas) ? o.telas : []).map((y) => t(y, 300)).filter(Boolean).slice(0, 10),
+        sequencia_id: t(o.sequencia_id, 64) || null,
+      };
+    })
+    .filter((s) => s.tema)
+    .slice(0, MAX_POR_FORMATO);
+}
+
+/** Os stories da campanha como conteúdos da série (formato "story"), para a grade, a linha do tempo e as fases. */
+export function storiesComoItens(campanha: Pick<Campanha, "briefing">): ItemDeStory[] {
+  const b = (campanha.briefing || {}) as Record<string, unknown>;
+  return normalizarStories(b.stories).map((s) => ({
+    tema_id: s.tema_id,
+    data: s.data || undefined,
+    formato: "story",
+    etapa: s.etapa,
+    tema: s.tema,
+    gancho: s.gancho,
+    cards: s.telas.map((texto, i) => ({ ordem: i + 1, texto })),
+    sequencia_id: s.sequencia_id || null,
+  }));
+}
+
+/** Contrato com os Stories (21/10/2026): o que a peça de story da campanha guarda e manda. */
+export interface PecaDeStoryDaCampanha {
+  campanha_id: string;
+  tema_id: string;
+  formato: "story";
+  fase: FaseDaCampanha;
+  data: string | null;
+}
+
+export function pecaDeStory(campanha: Pick<Campanha, "id" | "periodo_inicio" | "periodo_fim">, item: Pick<ItemProposto, "tema_id" | "data" | "etapa">): PecaDeStoryDaCampanha {
+  return {
+    campanha_id: campanha.id,
+    tema_id: item.tema_id || "",
+    formato: "story",
+    fase: faseDaPeca(item, campanha.periodo_inicio, campanha.periodo_fim),
+    data: item.data || null,
+  };
+}
+
 // ------------------------------------------------------------------ fases
 
 export type FaseDaCampanha = "aquecimento" | "lancamento" | "urgencia" | "encerramento";
@@ -194,7 +340,7 @@ export function faseDaPeca(item: Pick<ItemProposto, "etapa" | "data">, inicio: s
 export const PAPEIS_DE_COLAGEM: PapelDoArquivo[] = ["foto", "logo", "arte_para_melhorar"];
 
 /** A peça é arte do Estúdio (estático ou carrossel); foto e vídeo são de outras mesas. */
-export const ehPecaDeArte = (item: Pick<ItemProposto, "formato">) => item.formato !== "foto" && item.formato !== "video";
+export const ehPecaDeArte = (item: Pick<ItemProposto, "formato">) => item.formato !== "foto" && item.formato !== "video" && item.formato !== "story";
 
 export const laminasDaPeca = (item: Pick<ItemProposto, "formato" | "cards">) => {
   if (item.formato === "estatico") return 1;
@@ -342,10 +488,11 @@ function ultimas(cards: TrabalhoDaPeca["cards"]): Record<number, TrabalhoDaPeca[
   return m;
 }
 
-export type EstadoDaPeca = "outra_mesa" | "no_roteiro" | "a_fazer" | "sem_direcao" | "a_gerar" | "gerando" | "erro" | "pronta" | "na_agenda";
+export type EstadoDaPeca = "outra_mesa" | "no_roteiro" | "a_fazer" | "sem_direcao" | "a_gerar" | "gerando" | "erro" | "pronta" | "na_agenda" | "roteiro_pronto";
 
 export const ROTULO_DO_ESTADO_DA_PECA: Record<EstadoDaPeca, string> = {
-  outra_mesa: "foto ou vídeo (outra mesa)",
+  outra_mesa: "foto (Mesa Foto)",
+  roteiro_pronto: "roteiro pronto",
   no_roteiro: "na agenda pelo roteiro",
   a_fazer: "a criar",
   sem_direcao: "sem direção",
@@ -378,6 +525,10 @@ export function situacaoDaPeca(
 ): SituacaoDaPeca {
   const fase = faseDaPeca(item, campanha.periodo_inicio, campanha.periodo_fim);
   const base = { item, fase, trabalho, laminas: laminasDaPeca(item), feitas: 0, faltam: [] as number[], capa: null as string | null, colagem: false };
+  // Vídeo/Reels: o roteiro e a direção vêm prontos na série; o vídeo nasce no Estúdio depois da agenda.
+  if (item.formato === "video") return { ...base, laminas: 0, estado: item.task_id ? "no_roteiro" : "roteiro_pronto" };
+  // Stories: a sequência é feita pela aba Stories (contrato gerarStoriesDaCampanha); feita quando há sequencia_id.
+  if (item.formato === "story") return { ...base, laminas: (item.cards || []).length || 3, estado: (item as ItemDeStory).sequencia_id ? "pronta" : "a_fazer" };
   if (!ehPecaDeArte(item)) return { ...base, estado: "outra_mesa" };
   if (!trabalho) return { ...base, estado: item.task_id ? "no_roteiro" : "a_fazer" };
   const ordens = ((trabalho.direcao && trabalho.direcao.cards) || []).map((c) => c.ordem);
@@ -411,7 +562,7 @@ export function numerosDaCampanha(pecas: SituacaoDaPeca[]): NumerosDaCampanha {
   const deArte = pecas.filter((p) => p.estado !== "outra_mesa");
   return {
     pecas: deArte.length,
-    prontas: deArte.filter((p) => p.estado === "pronta" || p.estado === "na_agenda").length,
+    prontas: deArte.filter((p) => p.estado === "pronta" || p.estado === "na_agenda" || p.estado === "roteiro_pronto").length,
     naAgenda: deArte.filter((p) => p.estado === "na_agenda" || p.estado === "no_roteiro").length,
     aprovadas: deArte.filter((p) => !!(p.trabalho && p.trabalho.aprovado_em)).length,
     gerando: deArte.filter((p) => p.estado === "gerando").length,
@@ -421,7 +572,7 @@ export function numerosDaCampanha(pecas: SituacaoDaPeca[]): NumerosDaCampanha {
 
 // ------------------------------------------------------------------ passos do "Gerar campanha completa"
 
-export type TipoDoPasso = "campanha" | "selo" | "preparar" | "gerar";
+export type TipoDoPasso = "campanha" | "selo" | "preparar" | "gerar" | "story";
 
 export interface PassoDaCampanha {
   id: string;
@@ -435,20 +586,25 @@ export interface PassoDaCampanha {
 }
 
 /** O que falta, pelo que está salvo: a campanha, o selo e cada peça (criar a direção ou gerar o que falta). */
-export function passosQueFaltam(e: { temCampanha: boolean; temSelo: boolean; pecas: SituacaoDaPeca[]; quantidadePrevista?: number | null }): PassoDaCampanha[] {
+export function passosQueFaltam(e: { temCampanha: boolean; temSelo: boolean; pecas: SituacaoDaPeca[]; quantidadePrevista?: number | null; formatos?: FormatosDaCampanha | null }): PassoDaCampanha[] {
   const passos: PassoDaCampanha[] = [];
   if (!e.temCampanha) {
     passos.push({ id: "campanha", tipo: "campanha", rotulo: "Ideia, briefing, identidade e série", laminas: 0 });
     passos.push({ id: "selo", tipo: "selo", rotulo: "Selo da campanha", laminas: 0 });
-    const n = e.quantidadePrevista || 6;
-    for (let i = 1; i <= n; i++) passos.push({ id: `peca-prevista-${i}`, tipo: "preparar", rotulo: `Peça ${i}`, laminas: 3 });
+    // Pela mistura escolhida: posts (1 lâmina), carrosséis (5), stories (3 telas). Vídeos saem com o roteiro na série.
+    const f = e.formatos || { posts: 0, carrosseis: 0, stories: 0, videos: 0, ...(e.quantidadePrevista ? { carrosseis: e.quantidadePrevista } : { carrosseis: 6 }) };
+    let k = 0;
+    for (let i = 0; i < f.posts; i++) passos.push({ id: `peca-prevista-${++k}`, tipo: "preparar", rotulo: `Post ${i + 1}`, laminas: 1 });
+    for (let i = 0; i < f.carrosseis; i++) passos.push({ id: `peca-prevista-${++k}`, tipo: "preparar", rotulo: `Carrossel ${i + 1}`, laminas: e.formatos ? LAMINAS_DO_CARROSSEL : 3 });
+    for (let i = 0; i < f.stories; i++) passos.push({ id: `story-previsto-${i + 1}`, tipo: "story", rotulo: `Stories ${i + 1}`, laminas: TELAS_DO_STORY });
     return passos;
   }
   if (!e.temSelo) passos.push({ id: "selo", tipo: "selo", rotulo: "Selo da campanha", laminas: 0 });
   e.pecas.forEach((p) => {
     const temaId = p.item.tema_id || "";
     const rotulo = p.item.tema || "Peça";
-    if (p.estado === "a_fazer") passos.push({ id: `preparar-${temaId}`, tipo: "preparar", rotulo, temaId, laminas: p.laminas });
+    if (p.estado === "a_fazer" && p.item.formato === "story") passos.push({ id: `story-${temaId}`, tipo: "story", rotulo, temaId, laminas: p.laminas });
+    else if (p.estado === "a_fazer") passos.push({ id: `preparar-${temaId}`, tipo: "preparar", rotulo, temaId, laminas: p.laminas });
     else if ((p.estado === "a_gerar" || p.estado === "erro") && p.trabalho && p.faltam.length) {
       passos.push({ id: `gerar-${temaId}`, tipo: "gerar", rotulo, temaId, trabalhoId: p.trabalho.id, laminas: p.faltam.length, ordens: p.faltam });
     }
@@ -474,7 +630,7 @@ export function partesDosPassos(passos: PassoDaCampanha[], catalogo: ModeloIa[],
     if (p.tipo === "campanha") partesDaCampanha(catalogo, opcoes.quantidade || null, opcoes.anexos || 0).forEach((x) => saida.push(x));
     else if (p.tipo === "selo") parteDasLaminas(catalogo, opcoes.modeloImagemId || null, 1).forEach((x) => saida.push(x));
     else {
-      if (p.tipo === "preparar") {
+      if (p.tipo === "preparar" || p.tipo === "story") {
         saida.push({ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada + TAMANHOS.imagemAnexos.entrada, tokensSaida: TAMANHOS.preparar.saida });
       }
       parteDasLaminas(catalogo, opcoes.modeloImagemId || null, p.laminas).forEach((x) => saida.push(x));
@@ -490,6 +646,8 @@ export function resumoDosPassos(passos: PassoDaCampanha[]): string {
   if (passos.some((p) => p.tipo === "selo")) partes.push("selo");
   const pecas = passos.filter((p) => p.tipo === "preparar" || p.tipo === "gerar");
   if (pecas.length) partes.push(`${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}`);
+  const stories = passos.filter((p) => p.tipo === "story").length;
+  if (stories) partes.push(`${stories} ${stories === 1 ? "sequência de stories" : "sequências de stories"}`);
   const laminas = pecas.reduce((s, p) => s + p.laminas, 0);
   if (laminas) partes.push(`${laminas} ${laminas === 1 ? "lâmina" : "lâminas"}`);
   return partes.join(", ");
