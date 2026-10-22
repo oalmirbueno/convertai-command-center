@@ -12,11 +12,11 @@
  * Autorizado pelo dono em 09/10/2026.
  */
 import { z } from 'https://esm.sh/zod@3.23.8';
-import type { ToolDefinition } from './mcp-tools.ts';
-import { db } from './aceleriq-read-services.ts';
-import type { AuthContext } from './mcp-auth.ts';
-import { ACOES_DO_NAVEGADOR, ErroDoNavegador, sessaoDoCliente, tocar, usarNavegador } from './navegador-operacional.ts';
-import { provedorDoAmbiente } from '../navegador-remoto/provedor.ts';
+import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
+import { db } from '../../_shared/aceleriq-read-services.ts';
+import type { AuthContext } from '../../_shared/mcp-auth.ts';
+import { ACOES_DO_NAVEGADOR, ErroDoNavegador, sessaoDoCliente, tocar, usarNavegador } from '../../_shared/navegador-operacional.ts';
+import { provedorDoAmbiente } from '../../navegador-remoto/provedor.ts';
 
 const UUID = z.string().uuid();
 

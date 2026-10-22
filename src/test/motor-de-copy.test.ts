@@ -169,8 +169,10 @@ describe("motor de copy ligado nas mesas", () => {
     expect(e).toContain("const VARIACOES_DA_LEGENDA = 4;");
     expect(e).toContain('motor_de_copy: blocoDoMotor({ canal: "legenda", objetivo: objetivoDoPost, variacoes: VARIACOES_DA_LEGENDA, partirDoPrevisto: temLegendaPrevista, regras: voz.regras })');
     expect(e).toContain("contexto_completo_da_marca: voz.bloco || null");
-    expect(e).toContain("const conf = await conferirCopies({");
-    expect(e).toContain("porque: porqueDaEscolha(conf.conferencias[conf.ordem[0]], escritas.length)");
+    // 23/10 (COPY-V): a conferência da casa vai junto das 5 notas virais do Jev (escolherComViralidade chama conferirCopies).
+    expect(e).toContain("const conf = await escolherComViralidade({");
+    expect(e).toContain("porque: [porqueDaEscolha(conf.conferencias[conf.ordem[0]], escritas.length), conf.porque_viral]");
+    expect(fonte("supabase/functions/estudio-arte/modulos/copy-viral-servidor.ts")).toContain("const conf = await conferirCopies({ ...p, jev: comViral });");
     // O refino também vem conferido e em ordem, sem cortar no teto do canal.
     expect(e).toContain("cortar: false,");
     expect(e).toContain("estruturaPedida: framework ? framework.nome : null");

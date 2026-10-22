@@ -128,6 +128,11 @@ export interface NotasDoJev {
   /** v3: quanto cumpre o tom pedido (só quando sóbrio ou agressivo). */
   tom?: number | null;
   alerta_politica?: unknown;
+  /** 22/10/2026: vende a ideia, especificidade do nicho e prova real (0 a 10). */
+  vende?: number | null;
+  nicho?: number | null;
+  prova_real?: number | null;
+  generico?: boolean | null;
 }
 
 // ------------------------------------------------------------------ v3: tom e foco em resultado
@@ -2139,11 +2144,27 @@ export interface ModeloDaCopy {
 export function resolverModeloDaCopy(catalogo: ModeloIa[], guardada: EscolhaGuardadaDoModelo | null | undefined): ModeloDaCopy {
   const ativos = catalogo.filter((m) => m.ativo && m.tipo === "texto");
   const escolhido = guardada && guardada.modelo ? ativos.find((m) => m.id === guardada.modelo) || null : null;
-  const modelo = escolhido || padraoPara(catalogo, "estrategista");
+  const modelo = escolhido || modeloRecomendadoParaCopy(catalogo);
   if (!modelo) return { modelo: null, raciocinio: null };
   const niveis = modelo.raciocinio || [];
   const pedido = escolhido && guardada && guardada.raciocinio && niveis.indexOf(guardada.raciocinio) >= 0 ? guardada.raciocinio : null;
   return { modelo, raciocinio: pedido || raciocinioMaximo(niveis) };
+}
+
+/**
+ * O melhor para copy (22/10/2026, dono: "seletor com o melhor para copy como
+ * padrão"): o modelo que o catálogo marca com o papel "copy"; sem isso, o
+ * Claude Opus mais novo do catálogo (o que escreve português de venda mais
+ * natural, pelos testes da casa); sem nenhum dos dois, o padrão do estrategista.
+ * Só modelo ativo e disponível.
+ */
+export function modeloRecomendadoParaCopy(catalogo: ModeloIa[]): ModeloIa | null {
+  const ativos = catalogo.filter((m) => m.ativo && m.tipo === "texto" && m.disponivel !== false);
+  const marcado = ativos.find((m) => (m.padrao_para || []).indexOf("copy") >= 0);
+  if (marcado) return marcado;
+  const opus = ativos.filter((m) => /claude[-_ ]?opus/i.test(`${m.modelo_api} ${m.id}`)).sort((a, b) => `${b.modelo_api}`.localeCompare(`${a.modelo_api}`, "en", { numeric: true }));
+  if (opus.length) return opus[0];
+  return padraoPara(catalogo, "estrategista");
 }
 
 /** Campos do modelo no corpo da ação (o servidor respeita: resolverModelo). */
@@ -2217,6 +2238,8 @@ export const ESTRUTURAS_DE_COPY: Record<string, string> = {
   objecao_e_quebra: "Objeção e quebra",
   prova_primeiro: "Prova primeiro",
   oferta_direta: "Oferta direta",
+  prova_oferta_urgencia: "Prova, oferta e urgência",
+  porque_razao_real: "Porque (razão real)",
 };
 
 /** Nota do Jev da escolha da copy (0 a 10) em texto curto, ou vazio. */
@@ -2299,7 +2322,7 @@ export { pedeRefazerTudo } from "../../../supabase/functions/mesa-ads/modulos/co
 export { FIDELIDADES_ADS, ROTULO_DA_FIDELIDADE_ADS, type FidelidadeAds } from "../../../supabase/functions/mesa-ads/modulos/replicar-referencia";
 
 /** Rótulo do ângulo de venda gravado na copy. */
-export const ROTULO_DO_ANGULO_DE_VENDA: Record<string, string> = { dor: "Dor", desejo: "Desejo", prova: "Prova", objecao: "Objeção", urgencia: "Urgência" };
+export const ROTULO_DO_ANGULO_DE_VENDA: Record<string, string> = { dor: "Dor", desejo: "Desejo", prova: "Prova", contrario: "Contrário", objecao: "Objeção", identidade: "Identidade", urgencia: "Urgência" };
 export const rotuloDoAnguloDeVenda = (v: unknown) => (typeof v === "string" && ROTULO_DO_ANGULO_DE_VENDA[v]) || null;
 
 export interface LogoRealAds {

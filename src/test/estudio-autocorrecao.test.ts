@@ -164,7 +164,9 @@ describe("contratos do servidor", () => {
 
   it("conferir_card devolve e grava a decisão da autocorreção", () => {
     const c = corpoDe("conferirCard");
-    expect(c).toContain("decidirAutocorrecao(verificacao, { ads: ehAds(t), textoExato: card.texto_exato })");
+    // 22/10/2026: o texto esperado leva também os textos dos elementos da referência (balões, caixas, listas).
+    expect(c).toContain("decidirAutocorrecao(verificacao, { ads: ehAds(t), textoExato: esperadoNaArte })");
+    expect(c).toContain("const esperadoNaArte = comTextoDosElementos(card.texto_exato, preenchimentoDaVersao);");
     expect(c).toContain("verificacao.autocorrecao = autocorrecao;");
     expect(c).toContain("verificacao, autocorrecao, custo_usd: custo");
   });

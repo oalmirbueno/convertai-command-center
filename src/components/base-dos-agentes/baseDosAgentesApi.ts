@@ -29,8 +29,8 @@ export interface FichaDaBase {
   /** 17/10 (rodada 4): anúncios no ar feitos com a ficha e a eficiência média (custo por resultado contra o normal da conta). */
   anuncios: number;
   eficiencia: number | string | null;
-  /** Arquivada pela faxina: sem uso em 60 dias ou repetida de outra. */
-  arquivada_por: "sem_uso" | "repetida" | null;
+  /** Arquivada pela faxina (sem uso em 60 dias ou repetida de outra) ou desligada com a Biblioteca da casa (23/10). */
+  arquivada_por: "sem_uso" | "repetida" | "casa_desligada" | null;
 }
 
 export interface FonteDaBase {
@@ -138,6 +138,10 @@ export const editarFicha = (id: string, mudar: Partial<Pick<FichaDaBase, "titulo
 export const apagarFicha = (id: string) => chamarFuncao("base-dos-agentes", { acao: "apagar_ficha", id });
 
 export const apagarFonte = (id: string) => chamarFuncao("base-dos-agentes", { acao: "apagar_fonte", id });
+
+/** 23/10: liga ou desliga de uma vez os documentos da Biblioteca da casa deste agente. */
+export const ligarBibliotecaDaCasa = (agente: string, ligada: boolean) =>
+  chamarFuncao<{ ligada: boolean; fichas: number }>("base-dos-agentes", { acao: "biblioteca_da_casa", agente, ligada });
 
 /** O que a base aprendeu nos últimos 7 dias e as carteiras que travam a pesquisa e a leitura. */
 export interface ResumoDaSemana {

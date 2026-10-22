@@ -141,3 +141,15 @@ export const CHAVES_COM_BASE = AGENTES_COM_BASE.map((a) => a.chave);
 export function agenteComBase(chave: string): AgenteComBase | null {
   return AGENTES_COM_BASE.find((a) => a.chave === chave) ?? null;
 }
+
+/**
+ * 23/10: a Biblioteca da casa (documentos da agência carregados em todos os
+ * agentes, seed da migration 20261023110000). A ficha da casa se reconhece pelo
+ * fonte_url "biblioteca:<versão>/<agente>/<slug>": na geração entram só as mais
+ * relevantes (MAX_DA_CASA), na tela ela aparece marcada e pode ser desligada por agente.
+ */
+export const PREFIXO_DA_CASA = "biblioteca:";
+
+export function ehDaCasa(fonteUrl: string | null | undefined): boolean {
+  return typeof fonteUrl === "string" && fonteUrl.indexOf(PREFIXO_DA_CASA) === 0;
+}

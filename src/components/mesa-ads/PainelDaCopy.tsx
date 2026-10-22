@@ -12,13 +12,11 @@ import {
   chamarAds,
   chavesAds,
   CTAS_DO_META,
-  ESTRUTURAS_DE_COPY,
   formatoDe,
   LIMITE_DESCRICAO,
   LIMITE_TEXTO_VISIVEL,
   LIMITE_TITULO,
   mudarCriativo,
-  notaCurta,
   parteDeTexto,
   rotuloDoCta,
   TAMANHOS_ADS,
@@ -39,6 +37,7 @@ import LogosReais from "./LogosReais";
 import { Andamento, useAndamento } from "./Comuns";
 import { SeletorDoModeloDaCopy, useModeloDaCopy } from "./ModeloDaCopy";
 import PacoteDaCopy from "./PacoteDaCopy";
+import VariacoesDaCopy, { type VariacaoDoRefino } from "./VariacoesDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 import { superficie } from "@/components/sistema/estilos";
 import { campanhaDoCriativo } from "./campanhaDaMesaApi";
@@ -60,10 +59,12 @@ import { campanhaDoCriativo } from "./campanhaDaMesaApi";
  * trocar TUDO ("muda todo o conteúdo", "refaz tudo") vira a troca no lugar de
  * todas as variações, com Confirmar e Desfazer (TrocaDeConteudo). Abaixo, as
  * marcas reais, as fontes e os logos reais (LogosReais).
+ *
+ * 22/10/2026 (dono: "os criativos são pra vender a ideia"): as variações saem
+ * lado a lado (VariacoesDaCopy) com o ângulo nomeado, a nota do Jev como
+ * aviso, edição no próprio cartão, "Usar esta" e "Mais ousada" / "Mais segura"
+ * em um clique.
  */
-
-/** Variação que o refino devolve: a copy, a estrutura, se é a melhor e o porquê. */
-type VariacaoDoRefino = CopyDoAnuncio & { melhor?: boolean; porque?: string; o_que_mudou?: string };
 
 /** Seletor da Fidelidade à referência (Idêntico, Próximo, Criativo). */
 export function SeletorDeFidelidade({ valor, onMudar }: { valor: FidelidadeAds; onMudar: (f: FidelidadeAds) => void }) {
@@ -353,31 +354,20 @@ export default function PainelDaCopy({
               Desfazer a última troca de conteúdo
             </button>
           )}
-          {variacoes.length > 0 && (
-            <ul className="mt-2 space-y-2" aria-label="Variações de copy">
-              {variacoes.map((v, i) => (
-                <li key={i} className={`rounded-md border bg-background p-2.5 ${v.melhor ? "border-primary/50" : "border-border"}`}>
-                  {(v.melhor || v.framework || rotuloDoAnguloDeVenda(v.angulo_de_venda)) && (
-                    <p className="mb-1 flex min-w-0 flex-wrap items-center text-[11px]">
-                      {v.melhor && <span className="mr-1.5 rounded-full bg-primary px-1.5 py-px font-medium text-primary-foreground">Melhor</span>}
-                      {rotuloDoAnguloDeVenda(v.angulo_de_venda) && <span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-px font-medium text-primary" data-angulo-da-variacao={v.angulo_de_venda}>{rotuloDoAnguloDeVenda(v.angulo_de_venda)}</span>}
-                      {v.framework && <span className="text-muted-foreground">{ESTRUTURAS_DE_COPY[v.framework] || v.framework}</span>}
-                      {v.jev && notaCurta(v.jev.clareza) ? <span className="ml-1.5 text-muted-foreground">{`· clareza ${notaCurta(v.jev.clareza)}`}</span> : null}
-                    </p>
-                  )}
-                  <p className="whitespace-pre-wrap text-[13px] leading-snug [overflow-wrap:anywhere]">{v.texto_principal}</p>
-                  {v.titulo && <p className="mt-1 text-[12px] font-semibold">{v.titulo}</p>}
-                  {v.porque && <p className="mt-1 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{v.porque}</p>}
-                  <div className="mt-1.5 flex items-center">
-                    <span className="flex-1 text-[11px] text-muted-foreground">{rotuloDoCta(v.cta_meta)}</span>
-                    <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => setCopy((c) => ({ ...c, ...limpaParcial(v) }))}>
-                      Usar esta
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <VariacoesDaCopy
+            variacoes={variacoes}
+            criativoId={criativo.id}
+            modelo={modelo}
+            onMudar={(i, campos) => setVariacoes((l) => l.map((x, k) => (k === i ? { ...x, ...campos } : x)))}
+            onUsar={(v) => {
+              setCopy((c) => ({ ...c, ...limpaParcial(v) }));
+              toast.info("Variação no formulário", { description: "Confira e salve a copy." });
+            }}
+            onNovas={(i, novas, avisos) => {
+              setVariacoes((l) => l.slice(0, i + 1).concat(novas, l.slice(i + 1)));
+              if (avisos.length) toast.info("Conferência da copy", { description: avisos[0] });
+            }}
+          />
         </div>
       </section>
 

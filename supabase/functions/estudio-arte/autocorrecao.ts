@@ -44,6 +44,13 @@ export type VerificacaoParaDecidir = {
   politica?: NotaDaConferencia;
   clareza?: NotaDaConferencia;
   erro?: string;
+  /**
+   * 22/10/2026 (modulos/inventario-da-referencia.ts): elementos da referência
+   * (balão, caixa, selo, lista) que saíram sem o texto do mapa, e textos da
+   * referência que apareceram na arte. Erro objetivo: corrige sozinho.
+   */
+  elementos_vazios?: { tipo: string; rotulo?: string; posicao: string; texto: string }[];
+  textos_copiados?: { tipo: string; rotulo?: string; posicao: string; texto_original: string; substituir: string | null }[];
 };
 
 export type DecisaoDeAutocorrecao = {
@@ -149,7 +156,32 @@ export function decidirAutocorrecao(
     }
   }
 
-  // Até aqui, erro objetivo (texto e logo): é o que corrige sozinho.
+  // 2b) Elementos da referência: vazio ganha o texto do mapa; o texto da referência sai (ou vira o texto novo).
+  const vazios = (v.elementos_vazios ?? []).filter((x) => x && x.texto);
+  const copiados = (v.textos_copiados ?? []).filter((x) => x && x.texto_original);
+  if (vazios.length) {
+    motivos.push(`Elemento vazio: ${vazios.map((x) => `${x.rotulo || x.tipo} ${x.posicao}`).join("; ")}`);
+    passos.push(
+      [
+        ...vazios.map((x) => `Escreva dentro do ${x.rotulo || x.tipo} (${x.posicao}) o texto "${x.texto.replace(/\n/g, " / ")}", inteiro e legível, na fonte e nas cores dos outros textos.`),
+        "Nenhum balão, caixa, selo, lista ou rótulo fica vazio. Mantenha a forma, o lugar e o tamanho de cada elemento.",
+      ].join(" "),
+    );
+  }
+  if (copiados.length) {
+    motivos.push(`Texto copiado da referência: ${lista(copiados.map((x) => x.texto_original))}`);
+    passos.push(
+      copiados
+        .map((x) =>
+          x.substituir
+            ? `Troque o texto "${x.texto_original}" (${x.rotulo || x.tipo}, ${x.posicao}) por "${x.substituir.replace(/\n/g, " / ")}".`
+            : `Apague o ${x.rotulo || x.tipo} (${x.posicao}) inteiro, forma e texto "${x.texto_original}", e continue o fundo no lugar.`
+        )
+        .join(" "),
+    );
+  }
+
+  // Até aqui, erro objetivo (texto, logo e elementos da referência): é o que corrige sozinho.
   const objetivos = passos.length;
 
   // 3) Identidade da marca.

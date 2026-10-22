@@ -339,6 +339,10 @@ export type NotasDaCopy = {
   generico?: boolean | null;
   tom?: number | null;
   alerta_politica?: boolean | null;
+  /** 22/10/2026: vende a ideia, especificidade do nicho e prova real (Score do Jev, 0 a 10). */
+  vende?: number | null;
+  nicho?: number | null;
+  prova_real?: number | null;
 };
 
 const PESOS_DA_COPY: [keyof NotasDaCopy | "especifica", number][] = [
@@ -346,6 +350,10 @@ const PESOS_DA_COPY: [keyof NotasDaCopy | "especifica", number][] = [
   ["parada", 0.25],
   ["especifica", 0.25],
   ["tom", 0.15],
+  // 22/10/2026 (dono: "os criativos são pra vender a ideia"): vender pesa mais que tudo; os pesos de antes ficam na mesma proporção entre si.
+  ["vende", 0.45],
+  ["nicho", 0.2],
+  ["prova_real", 0.15],
 ];
 
 /** Nota composta de 0 a 10 (só com as notas que existem); null sem nenhuma nota. */
@@ -445,6 +453,9 @@ export function porqueDaCopy(n: NotasDaCopy | null | undefined, framework: strin
   if (typeof n.parada === "number") partes.push(`parada ${virgula(n.parada)}`);
   if (typeof n.prob_generico === "number") partes.push(n.prob_generico >= 0.6 ? "genérica" : "específica");
   if (typeof n.tom === "number") partes.push(`tom ${virgula(n.tom)}`);
+  if (typeof n.vende === "number") partes.push(`vende ${virgula(n.vende)}`);
+  if (typeof n.nicho === "number") partes.push(`nicho ${virgula(n.nicho)}`);
+  if (typeof n.prova_real === "number") partes.push(`prova ${virgula(n.prova_real)}`);
   const cabeca = total > 1
     ? (posicao === 1 ? `Melhor de ${total} pela conferência do Jev` : `${posicao}ª de ${total} pela conferência do Jev`)
     : "Conferida pelo Jev";

@@ -57,7 +57,8 @@ import {
   vaultOverview,
 } from './aceleriq-operators-services.ts';
 import { agentConversationsTool, agentHandoffTool } from './mcp-agentes-das-mesas.ts';
-import { browserActTool, browserSessionTool } from './mcp-navegador.ts';
+import { browserActTool, browserSessionTool } from '../mcp-server/modulos/mcp-navegador.ts';
+import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modulos/painel-inteiro.ts';
 import {
   CLASSES_DO_LEAD,
   ETAPAS_DO_FUNIL,
@@ -380,6 +381,9 @@ export interface ToolDefinition {
   // Ação que pode passar de 150 s (IA ou entrega de arquivo na mesa): o
   // servidor responde com fôlego para a plataforma não derrubar com 504.
   longRunning?: boolean;
+  // MCP 2.17: prazo próprio (ms) e cache curto por credencial (s), lidos pelo despachante.
+  prazoMs?: number;
+  cacheSeg?: number;
   handler: (input: unknown, ctx: AuthContext) => Promise<unknown>;
 }
 
@@ -3073,7 +3077,7 @@ import {
   searchFileContent, searchContentSchema,
   updateFileMetadata, updateMetadataSchema,
   FileError,
-} from './mcp-files-services.ts';
+} from '../mcp-server/modulos/mcp-files-services.ts';
 
 const FILES_WRITE: readonly ToolScope[] = ['files:write'];
 const FILES_ARCHIVE: readonly ToolScope[] = ['files:archive'];
@@ -3816,6 +3820,7 @@ const operatorDigestTool = makeRead(
  * isso em vez de deixar o agente adivinhar.
  */
 const MAPA_DO_PAINEL = [
+  { area: 'Guia e panoramas (2.17)', rota: '/', para: 'Mapa completo com as ferramentas de cada area (Mes, Stories, Hype, Templates, Estudio, Mesa Site, Laboratorio, base dos agentes, membros) e o retrato numa chamada.', pelo_mcp: 'aceleriq_guia, aceleriq_panorama_do_cliente, aceleriq_panorama_da_casa, aceleriq_mcp_saude' },
   { area: 'Esteira', rota: '/ciclo', para: 'Acoes da semana a partir do dossie geral, historico e fatos, separadas entre social e trafego.', pelo_mcp: 'aceleriq_get_client_dossier, aceleriq_get_client_context' },
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
   { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
@@ -4696,6 +4701,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
     updateMetadataTool, createVersionTool, archiveTool, restoreTool,
   ] : []),
   getContentTool, searchContentTool, processingStatusTool,
+  // MCP 2.17: o painel inteiro (panoramas, Mês, Estúdio, Site, Laboratório, base, membros, guia).
+  ...FERRAMENTAS_DO_PAINEL_INTEIRO,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so
@@ -4711,6 +4718,7 @@ export const TOOLS: readonly ToolDefinition[] = RAW_TOOLS.map((t) => {
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
   TOOLS.map(t => [t.name, t]),
 );
+ligarCatalogo(() => TOOLS);
 
 export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   if (tool.scopes.length === 0) return true;

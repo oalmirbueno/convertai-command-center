@@ -72,6 +72,8 @@ import { lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { escolhaDoModelo, MODELO_LEGADO, MODELO_PADRAO_DA_CENTRAL } from "../_shared/modelo-da-central.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// 23/10 (COPY-V): a skill "copy viral do nicho" (contexto forte, ganchos de story do banco e guia da casa).
+import { prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import {
   conhecimentoDosStories,
@@ -418,7 +420,7 @@ async function painel(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
 // ------------------------------------------------------------------ dados para o agente
 
 async function dadosDoCliente(c: Contexto, pedido: string, userId: string): Promise<{ texto: string; nome: string }> {
-  const [perfil, ctx, dossie, completo, hype, regras, base] = await Promise.all([
+  const [perfil, ctx, dossie, completo, hype, regras, base, copyViral] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", c.clientId).maybeSingle(),
     lerContextoDaMarca(servico(), c.clientId, c.marca).catch((e) => (registrarFalha("mesa-stories: contexto da marca não lido", e), {})),
     lerDossieDaMarca(servico(), c.clientId, c.marca, 1500).catch((e) => (registrarFalha("mesa-stories: dossiê não lido", e), null)),
@@ -435,6 +437,8 @@ async function dadosDoCliente(c: Contexto, pedido: string, userId: string): Prom
       referencia: { tipo: REF_CONVERSA, id: c.clientId },
       criadoPor: userId,
     }),
+    prepararCopyViral(servico(), { clientId: c.clientId, formato: "story", n: 10, semente: pedido.slice(0, 80) })
+      .then((x) => x.bloco, (e) => (registrarFalha("mesa-stories: copy viral não lida", e), "")),
   ]);
   const p = (perfil.data || {}) as { company_name?: string | null; full_name?: string | null };
   const nome = limpar((c.marca && !c.marca.principal ? c.marca.nome : "") || p.company_name || p.full_name || "Cliente", 120);
@@ -449,6 +453,7 @@ async function dadosDoCliente(c: Contexto, pedido: string, userId: string): Prom
     hype ? `HYPE DA SEMANA (${hype.semana}): ${limpar(hype.resumo, 600)}\n${itensDoHype}` : "",
     blocoDasRegras(regras),
     base.bloco || "",
+    copyViral || "",
   ].filter(Boolean).join("\n\n");
   return { texto, nome };
 }

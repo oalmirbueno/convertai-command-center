@@ -19,8 +19,9 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { cobrarJev, type ReferenciaUso, type Tarefa } from "./ia-motor.ts";
 import { jevPerguntar, notaScore, type PerguntaJev } from "./jev.ts";
 import { deveSair, pesoDaFicha, type ResultadoDaFicha } from "./resultado-das-fichas.ts";
+import { ehDaCasa } from "./agentes-com-base.ts";
 
-export { AGENTES_COM_BASE, agenteComBase, CHAVES_COM_BASE } from "./agentes-com-base.ts";
+export { AGENTES_COM_BASE, agenteComBase, CHAVES_COM_BASE, ehDaCasa } from "./agentes-com-base.ts";
 
 export interface FichaDaBase {
   id: string;
@@ -29,6 +30,8 @@ export interface FichaDaBase {
   quando_usar: string;
   exemplo: string;
   client_id: string | null;
+  /** 23/10: "biblioteca:..." marca o documento da Biblioteca da casa. */
+  fonte_url?: string | null;
   /** 17/10: o resultado gravado pela rotina da base (aprovações e múltiplo dos posts). */
   aprovadas?: number;
   ajustadas?: number;
@@ -52,6 +55,14 @@ export const TETO_DA_BASE = 6_000;
 const MAX_FICHAS_AVALIADAS = 40;
 /** Nota mínima (0 a 3) para entrar quando há seleção. */
 const NOTA_MINIMA = 1;
+/**
+ * 23/10 (Biblioteca da casa): por pedido entram no máximo MAX_DA_CASA documentos da casa, os mais relevantes,
+ * e eles nunca passam de PARTE_DA_CASA do teto (o resto fica para o que o dono ensinou e o que veio dos resultados).
+ */
+export const MAX_DA_CASA = 3;
+export const PARTE_DA_CASA = 0.5;
+/** Quantos documentos da casa o Jev avalia por pedido (o resto das 40 vagas fica com as outras fichas). */
+const CASA_AVALIADA = 15;
 
 export const CABECALHO_DA_BASE =
   "BASE DO AGENTE (técnicas que o dono ensinou e que a pesquisa trouxe; aplique as que servem a este pedido, sempre a serviço de vender para o cliente, sem citar a base nem copiar exemplos ao pé da letra):";
@@ -80,13 +91,21 @@ export function ordemPorPalavras(fichas: FichaDaBase[], pedido: string): FichaDa
   return fichas.map((f, i) => ({ f, i, p: pontos(f) })).sort((a, b) => b.p - a.p || a.i - b.i).map((x) => x.f);
 }
 
-/** Enche o bloco até o teto, na ordem dada. */
-export function encherAteOTeto(fichas: FichaDaBase[], teto: number): FichaDaBase[] {
+/** Enche o bloco até o teto, na ordem dada (com no máximo `maxDaCasa` documentos da casa, dentro da parte deles). */
+export function encherAteOTeto(fichas: FichaDaBase[], teto: number, maxDaCasa = MAX_DA_CASA): FichaDaBase[] {
   const escolhidas: FichaDaBase[] = [];
+  const tetoDaCasa = Math.floor(teto * PARTE_DA_CASA);
   let total = CABECALHO_DA_BASE.length;
+  let casa = 0;
+  let casaTotal = 0;
   for (const f of fichas) {
     const t = textoDaFicha(f).length + 1;
     if (total + t > teto) continue;
+    if (ehDaCasa(f.fonte_url)) {
+      if (casa >= maxDaCasa || casaTotal + t > tetoDaCasa) continue;
+      casa += 1;
+      casaTotal += t;
+    }
     escolhidas.push(f);
     total += t;
   }
@@ -112,7 +131,7 @@ export async function lerFichasDoAgente(
 ): Promise<FichaDaBase[]> {
   let q = db
     .from("agente_base_fichas")
-    .select("id, titulo, tecnica, quando_usar, exemplo, client_id, aprovadas, ajustadas, reprovadas, posts, multiplo, anuncios, eficiencia")
+    .select("id, titulo, tecnica, quando_usar, exemplo, client_id, fonte_url, aprovadas, ajustadas, reprovadas, posts, multiplo, anuncios, eficiencia")
     .eq("agente", agente)
     .eq("ativa", true);
   q = clientId ? q.or(`client_id.is.null,client_id.eq.${clientId}`) : q.is("client_id", null);
@@ -173,7 +192,9 @@ async function ordemPeloJev(
   fichas: FichaDaBase[],
   e: { agente: string; clientId: string | null; pedido: string; tarefa: Tarefa; referencia?: ReferenciaUso; criadoPor?: string | null },
 ): Promise<FichaDaBase[]> {
-  const avaliadas = fichas.slice(0, MAX_FICHAS_AVALIADAS);
+  // 23/10: os documentos da casa sempre passam pelo Jev (até CASA_AVALIADA); as outras fichas ficam com o resto das vagas.
+  const daCasa = fichas.filter((f) => ehDaCasa(f.fonte_url)).slice(0, CASA_AVALIADA);
+  const avaliadas = [...fichas.filter((f) => !ehDaCasa(f.fonte_url)).slice(0, MAX_FICHAS_AVALIADAS - daCasa.length), ...daCasa];
   const reserva = ordemPorPalavras(fichas, e.pedido);
   const questions: Record<string, PerguntaJev> = {};
   avaliadas.forEach((_, i) => {

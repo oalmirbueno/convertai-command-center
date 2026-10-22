@@ -13,7 +13,7 @@ const clientApprovalSurfaces = {
 
 const fileApprovalActions = read("src/lib/fileApprovalActions.ts");
 const mcpFilesService = read(
-  "supabase/functions/_shared/mcp-files-services.ts",
+  "supabase/functions/mcp-server/modulos/mcp-files-services.ts",
 );
 const apiGateway = read("supabase/functions/api-gateway/index.ts");
 const fileUrls = read("src/lib/fileUrls.ts");

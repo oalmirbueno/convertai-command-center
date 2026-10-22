@@ -503,6 +503,69 @@ export const SKILLS_MARKETINGSKILLS: Record<string, SkillMapeada> = {
  */
 export const SKILLS_SUPERPOWERS: Record<string, SkillDoSuperpowers> = SKILLS_DO_SUPERPOWERS;
 
+// ------------------------------------------------------------------ habilidades de texto (frente COPY-V, 23/10/2026)
+
+export type HabilidadeDeTexto = {
+  id: string;
+  nome: string;
+  /** O que a habilidade põe no pedido ou faz na saída. */
+  faz: string;
+  /** De onde vem o conteúdo (tabela do banco ou módulo versionado). */
+  base: string;
+  /** Onde entra no código: o teste cobra que os trechos existem em cada arquivo. */
+  ligacoes: LigacaoDoMetodo[];
+};
+
+const COPY_VIRAL = "supabase/functions/estudio-arte/modulos/copy-viral-servidor.ts";
+
+/**
+ * Skills do método do texto (pedido do dono em 23/10: "adicionar skills; encher
+ * de exemplos de hooks vencedores"). A "copy viral do nicho" junta contexto
+ * forte, de 8 a 15 ganchos do banco ganchos_vencedores e o guia da casa em
+ * toda escrita (temas, pautas, lâminas, legenda e story); o Jev escolhe a
+ * versão mais forte e o humanizer e o corte do que não tem fonte fecham.
+ */
+export const HABILIDADES_DE_TEXTO: readonly HabilidadeDeTexto[] = [
+  {
+    id: "copy_viral_do_nicho",
+    nome: "Copy viral do nicho",
+    faz: "Contexto forte (nicho, público, dor, oferta, o que o cliente ensinou, hype, mundo real), de 8 a 15 ganchos vencedores do nicho como exemplo de fórmula e o guia da casa no pedido ao modelo.",
+    base: "tabela ganchos_vencedores (seed em 20261023100000_motor_de_copy_viral.sql) e GUIA_DA_COPY em estudio-arte/modulos/copy-viral.ts",
+    ligacoes: [
+      { arquivo: "supabase/functions/estudio-arte/index.ts", trechos: ["copy_viral_do_nicho: copyViral.bloco,", 'prepararCopyViral(db as never, { clientId, formato: "lamina_capa"'] },
+      { arquivo: "supabase/functions/agente-calendario/index.ts", trechos: ['prepararCopyViral(servico, { clientId, formato: "lamina_capa"', "${ctx.copyViral ? `\\n\\n${ctx.copyViral}` : \"\"}"] },
+      { arquivo: "supabase/functions/mesa-stories/index.ts", trechos: ['prepararCopyViral(servico(), { clientId: c.clientId, formato: "story"'] },
+    ],
+  },
+  {
+    id: "jev_viral",
+    nome: "Jev escolhe a versão mais forte",
+    faz: "Na mesma chamada da conferência da casa, 5 notas Score por versão (gancho que para o dedo, clareza, nicho, utilidade e vontade de salvar ou compartilhar); alerta por último, nota combinada na frente.",
+    base: "perguntasDaViralidade e PESOS_VIRAIS em estudio-arte/modulos/copy-viral.ts",
+    ligacoes: [
+      { arquivo: "supabase/functions/estudio-arte/index.ts", trechos: ["const conf = await escolherComViralidade({"] },
+      { arquivo: COPY_VIRAL, trechos: ["questions: { ...args.questions, ...perguntasDaViralidade(n) },"] },
+    ],
+  },
+  {
+    id: "humanizer_e_verdade",
+    nome: "Humanizer e nada inventado",
+    faz: "Na versão escolhida e nas outras: corta clichê de IA, pergunta-ponte, sinceridade encenada, travessão e emoji demais; tira número, depoimento e prova sem fonte e a chave {assim} sem dado.",
+    base: "humanizar e cortarNaoComprovado em estudio-arte/modulos/copy-viral.ts",
+    ligacoes: [{ arquivo: COPY_VIRAL, trechos: ["const passadas = conf.textos.map((t) => passadaFinal(t, p.fontes));"] }],
+  },
+  {
+    id: "modelo_da_copy",
+    nome: "Modelo da copy",
+    faz: "Quem escreve a copy: o escolhido na tela, o lembrado do cliente (mesa_cliente_config.modelo_copy_id) ou o marcado \"copy\" no catálogo (Claude Opus 5.5).",
+    base: "modeloDaCopy em estudio-arte/modulos/copy-viral-servidor.ts",
+    ligacoes: [
+      { arquivo: "supabase/functions/estudio-arte/index.ts", trechos: ["modeloDaCopy(servico(), t.client_id, corpo.modelo_copy_id)"] },
+      { arquivo: "supabase/functions/agente-calendario/index.ts", trechos: ["const daCopy = await modeloDaCopy(servico, clientId, corpo.modelo_copy_id)"] },
+    ],
+  },
+];
+
 // ------------------------------------------------------------------ superpoderes de cada agente
 
 export type LigacaoDoMetodo = { arquivo: string; trechos: string[] };
@@ -660,6 +723,10 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "estudio-arte/index.ts#prepararItem/escolherCapa": "revisoes",
   "estudio-arte/index.ts#conversar": "revisoes",
   "estudio-arte/index.ts#lerCardsDaReferencia/lerCardsDoPost": "leituras",
+  // 22/10/2026: o inventário dos elementos com texto da referência (visão, extração) e o texto novo de cada
+  // elemento (segunda passada curta sobre o texto da lâmina, que já levou o método na direção).
+  "estudio-arte/index.ts#lerInventarioPorVisao": "leituras",
+  "estudio-arte/index.ts#escreverPreenchimento": "revisoes",
   // 22/10/2026: a referência da campanha lida uma vez por visão vira o padrão visual dela (extração).
   "estudio-arte/modulos/padrao-da-campanha-acao.ts#lerPadraoDaCampanha": "leituras",
   "editor-video/index.ts#agentePesquisar/respostaComFolego": "leituras",

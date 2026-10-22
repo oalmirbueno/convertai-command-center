@@ -28,7 +28,7 @@ import { type Diaria, somarMetricas } from "../mesa-ads/calculos.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { evolucaoDoCliente } from "./evolucao.ts";
-import { type AgenteComBase, agenteComBase, AGENTES_COM_BASE } from "../_shared/agentes-com-base.ts";
+import { type AgenteComBase, agenteComBase, AGENTES_COM_BASE, ehDaCasa, PREFIXO_DA_CASA } from "../_shared/agentes-com-base.ts";
 import { type DesfechoDaPeca, desfechoDoAds, desfechoDoEstudio, deveSair, resultadosDasFichas, type UsoParaResultado } from "../_shared/resultado-das-fichas.ts";
 import { basesDoPerfil, DESTAQUE_A_PARTIR_DE, type MedidaDoMultiplo, multiploDoPost, type PostParaMultiplo } from "../_shared/multiplo-do-post.ts";
 
@@ -380,6 +380,27 @@ async function apagarFonte(_ch: Chamador, corpo: Record<string, unknown>) {
   const { error } = await servico().from("agente_base_fontes").delete().eq("id", id);
   if (error) throw new ErroHttp(503, "banco_indisponivel", "A fonte não foi apagada.");
   return json({ ok: true });
+}
+
+/**
+ * 23/10 (Biblioteca da casa): liga ou desliga de uma vez os documentos da casa de um agente. Desligar marca
+ * arquivada_por "casa_desligada"; religar só volta essas (a ficha da casa que o dono desligou sozinha continua desligada).
+ */
+export async function ligarBibliotecaDaCasa(db: SupabaseClient, agente: string, ligada: boolean): Promise<number> {
+  const agora = new Date().toISOString();
+  const base = db.from("agente_base_fichas")
+    .update(ligada ? { ativa: true, arquivada_por: null, atualizado_em: agora } : { ativa: false, arquivada_por: "casa_desligada", atualizado_em: agora })
+    .eq("agente", agente).like("fonte_url", `${PREFIXO_DA_CASA}%`);
+  const { data, error } = await (ligada ? base.eq("arquivada_por", "casa_desligada") : base.eq("ativa", true)).select("id");
+  if (error) throw new ErroHttp(503, "banco_indisponivel", "A Biblioteca da casa não mudou.");
+  return (data || []).length;
+}
+
+async function bibliotecaDaCasa(_ch: Chamador, corpo: Record<string, unknown>) {
+  const agente = agenteComBase(String(corpo.agente ?? ""));
+  if (!agente) throw new ErroHttp(400, "agente_invalido", "Agente não encontrado.");
+  if (typeof corpo.ligada !== "boolean") throw new ErroHttp(400, "pedido_invalido", "Diga se a Biblioteca da casa fica ligada ou desligada.");
+  return json({ ok: true, ligada: corpo.ligada, fichas: await ligarBibliotecaDaCasa(servico(), agente.chave, corpo.ligada) });
 }
 
 /** O cron: até 2 agentes sem pesquisa há 6 dias ou mais, na carteira da agência. */
@@ -800,10 +821,17 @@ export function parecidas(a: string, b: string): number {
  * pares parecidos do mesmo agente e do mesmo cliente, a repetida que o Jev confirmar (fica a mais usada, ou a mais velha).
  */
 export async function faxinaDaBase(pagador: string | null): Promise<{ semUso: number; repetidas: number }> {
-  const { data: velhas } = await servico().from("agente_base_fichas").update({ ativa: false, arquivada_por: "sem_uso", atualizado_em: new Date().toISOString() })
-    .eq("ativa", true).eq("usos", 0).lt("criado_em", diasAtras(DIAS_SEM_USO)).select("id");
-  const { data } = await servico().from("agente_base_fichas").select("id, agente, client_id, titulo, tecnica, usos, criado_em").eq("ativa", true).limit(5000);
-  const fichas = (data || []) as Array<{ id: string; agente: string; client_id: string | null; titulo: string; tecnica: string; usos: number; criado_em: string }>;
+  // 23/10: a Biblioteca da casa fica fora da faxina (quem liga e desliga é a chave dela na tela).
+  const { data: semUso } = await servico().from("agente_base_fichas").select("id, fonte_url")
+    .eq("ativa", true).eq("usos", 0).lt("criado_em", diasAtras(DIAS_SEM_USO)).limit(5000);
+  const velhas: Array<{ id: string }> = [];
+  for (const ids of emPedacos(((semUso || []) as Array<{ id: string; fonte_url: string | null }>).filter((f) => !ehDaCasa(f.fonte_url)).map((f) => f.id))) {
+    const { data: arquivadas } = await servico().from("agente_base_fichas").update({ ativa: false, arquivada_por: "sem_uso", atualizado_em: new Date().toISOString() }).in("id", ids).select("id");
+    velhas.push(...((arquivadas || []) as Array<{ id: string }>));
+  }
+  const { data } = await servico().from("agente_base_fichas").select("id, agente, client_id, titulo, tecnica, usos, criado_em, fonte_url").eq("ativa", true).limit(5000);
+  const fichas = ((data || []) as Array<{ id: string; agente: string; client_id: string | null; titulo: string; tecnica: string; usos: number; criado_em: string; fonte_url: string | null }>)
+    .filter((f) => !ehDaCasa(f.fonte_url));
   const pares: Array<[typeof fichas[number], typeof fichas[number], number]> = [];
   const porGrupo = new Map<string, typeof fichas>();
   for (const f of fichas) porGrupo.set(`${f.agente}|${f.client_id || ""}`, [...(porGrupo.get(`${f.agente}|${f.client_id || ""}`) || []), f]);
@@ -841,7 +869,7 @@ export async function faxinaDaBase(pagador: string | null): Promise<{ semUso: nu
       console.error("[base-dos-agentes] Jev da faxina falhou", err instanceof Error ? err.message : err);
     }
   }
-  return { semUso: (velhas || []).length, repetidas };
+  return { semUso: velhas.length, repetidas };
 }
 
 /**
@@ -939,6 +967,7 @@ async function resumoDaSemana(): Promise<ResumoDaSemana> {
   const novas = { pesquisa: 0, materiais: 0, numeros: 0, concorrentes: 0 };
   for (const f of (fichas || []) as Array<{ fonte_id: string | null }>) {
     const fonte = f.fonte_id ? fontes.get(f.fonte_id) : undefined;
+    if (fonte?.nome.indexOf("Biblioteca da casa") === 0) continue;
     if (fonte?.tipo === "pesquisa") novas.pesquisa += 1;
     else if (fonte?.nome.indexOf("Números do Instagram") === 0) novas.numeros += 1;
     else if (fonte?.nome.indexOf("Concorrentes e referências") === 0) novas.concorrentes += 1;
@@ -992,6 +1021,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   editar_ficha: editarFicha,
   apagar_ficha: apagarFicha,
   apagar_fonte: apagarFonte,
+  biblioteca_da_casa: bibliotecaDaCasa,
   aprender_com_resultados: aprenderAgora,
   resumo_da_semana: resumoParaATela,
   faxina: async () => json({ ok: true, ...(await faxinaDaBase(await carteiraDaAgencia())) }),

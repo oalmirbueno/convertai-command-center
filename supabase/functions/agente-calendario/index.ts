@@ -6,6 +6,8 @@ import { concluirPeriodoSemItens } from "./modulos/pedido-vazio-do-periodo.ts";
 import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQueVale, type SinaisDoNicho } from "./modulos/hype-no-conteudo.ts";
 import { assuntosDoNicho, assuntoValido, CACHE_DAS_NOTICIAS_MS, CacheCurto, datasParaOJev, filtrarPorRecencia, julgarNoticias, LIMITE_DE_NOTICIAS, lerRssDeNoticias, NIVEIS_DA_DATA, ordenarPeloCabe, perguntasDoCabe, recenciaValida, ROTULO_DO_NIVEL_DA_DATA, urlDoGoogleNoticias, type Noticia } from "./modulos/trending-noticias.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
+// 23/10 (COPY-V): a skill "copy viral do nicho" (contexto forte, ganchos do banco e guia da casa) e o modelo da copy.
+import { modeloDaCopy, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
 import { ehHype, encaixarNaAgenda, type Ocupacao, regraDoCliente, type RegraDoDia } from "../_shared/agenda-inteligente.ts";
 import { resumoDoRecibo } from "./resultado-da-agenda.ts";
@@ -1079,6 +1081,8 @@ type Contexto = {
   hype?: HypeQueVale | null;
   /** 17/10: perfis de referência e concorrentes do Instagram (padrão, posts que funcionaram, o que o concorrente postou agora). */
   perfis?: PerfilNoPrompt[] | null;
+  /** 23/10 (COPY-V): o bloco da skill "copy viral do nicho" (contexto forte, ganchos do banco e guia); vazio quando não leu. */
+  copyViral?: string | null;
 };
 
 /**
@@ -1292,6 +1296,9 @@ async function montarContexto(
   ).then(({ data }) => regraDoCliente(data), () => regraDoCliente(null));
   // 17/10: referências e concorrentes do Instagram da marca aberta (só leitura do banco; nunca lança).
   const perfisP = lerPerfisParaOPrompt(servico, clientId, marca ? { id: marca.id, principal: marca.principal } : null);
+  // 23/10 (COPY-V): temas, pautas, lâminas e legendas do Mês com contexto forte e os ganchos vencedores do nicho (nunca lança).
+  const copyViralP = prepararCopyViral(servico, { clientId, formato: "lamina_capa", n: 12, semente: `${inicio}:${opcoes.pedido ?? ""}` })
+    .then((c) => c.bloco || null, (e) => (registrarFalha("agente-calendario: copy viral não lida", e), null));
   const [
     perfil,
     conta,
@@ -1458,6 +1465,7 @@ async function montarContexto(
     contextoCompleto: await completoP,
     hype: await hypeP,
     perfis: await perfisP,
+    copyViral: await copyViralP,
   };
 }
 
@@ -1504,7 +1512,7 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
   const hype = opcoes.semHype ? "" : blocoDoHype(ctx.hype);
   // 17/10: referências e concorrentes em toda geração (antecipar, responder, ocupar ou liderar; misturar, nunca copiar).
   const perfis = blocoDosPerfis(ctx.perfis, "conteudo", { enxuto });
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}${perfis ? `\n\n${perfis}` : ""}${hype ? `\n\n${hype}` : ""}`;
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}${perfis ? `\n\n${perfis}` : ""}${hype ? `\n\n${hype}` : ""}${ctx.copyViral ? `\n\n${ctx.copyViral}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */
@@ -1655,6 +1663,24 @@ async function resolverModelo(
   const explicito = typeof raciocinio === "string" && raciocinio.trim() ? raciocinio.trim() : null;
   const r = explicito ?? raciocinioPadrao(modelo.raciocinio ?? [], opcoes.pesquisaWeb === true, opcoes.preferido);
   return { modelo, raciocinio: r || undefined, raciocinioExplicito: explicito !== null };
+}
+
+/**
+ * 23/10 (COPY-V): o modelo de quem ESCREVE o conteúdo (detalhar, pedido livre e
+ * conteúdos da campanha): o "Modelo da copy" (o pedido em modelo_copy_id, o
+ * lembrado do cliente ou o marcado "copy" no catálogo, o melhor para copy),
+ * com o raciocínio próprio (raciocinio_copy) ou o padrão dele. Sem nenhum, o
+ * modelo e o raciocínio de antes. Temas, plano e conversa seguem no estrategista.
+ */
+async function modeloDaEscrita(
+  servico: SupabaseClient,
+  clientId: string,
+  corpo: Record<string, unknown>,
+  antes: { modelo: unknown; raciocinio: unknown },
+): Promise<{ modelo: ModeloIa; raciocinio: string | undefined; raciocinioExplicito: boolean }> {
+  const daCopy = await modeloDaCopy(servico, clientId, corpo.modelo_copy_id).catch((e) => (registrarFalha("agente-calendario: modelo da copy não lido", e, { client_id: clientId }), null));
+  if (daCopy) return await resolverModelo(daCopy.id, typeof corpo.raciocinio_copy === "string" ? corpo.raciocinio_copy : undefined);
+  return await resolverModelo(antes.modelo, antes.raciocinio);
 }
 
 /**
@@ -2323,10 +2349,11 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
 
   const uteis = diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
   const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id));
-  const { modelo, raciocinio } = await resolverModelo(
-    corpo.modelo_id ?? p.parametros.modelo,
-    corpo.raciocinio ?? p.parametros.raciocinio,
-  );
+  // 23/10 (COPY-V): quem escreve os conteúdos é o "Modelo da copy"; sem ele, o do estrategista, como antes.
+  const { modelo, raciocinio } = await modeloDaEscrita(servico, p.client_id, corpo, {
+    modelo: corpo.modelo_id ?? p.parametros.modelo,
+    raciocinio: corpo.raciocinio ?? p.parametros.raciocinio,
+  });
   tempo.marcar("contexto");
 
   // Datas calculadas no codigo, em ordem de fase: so segunda a sexta.
@@ -4111,7 +4138,8 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
     campanha ? fotosDaCampanha(servico, campanha) : Promise.resolve([]),
   ]);
-  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+  // 23/10 (COPY-V): o pedido livre escreve conteúdo: "Modelo da copy" quando houver.
+  const { modelo, raciocinio } = await modeloDaEscrita(servico, clientId, corpo, { modelo: corpo.modelo_id, raciocinio: corpo.raciocinio ?? "medium" });
 
   const [{ data: historico }, regras] = await Promise.all([
     servico
@@ -4645,7 +4673,8 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
     fotosDaCampanha(servico, c),
     projetoSocialDoCliente(servico, c.client_id, marcaDaChamada(servico, c.client_id, corpo)),
   ]);
-  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio);
+  // 23/10 (COPY-V): os conteúdos da campanha pelo "Modelo da copy" quando houver.
+  const { modelo, raciocinio } = await modeloDaEscrita(servico, c.client_id, corpo, { modelo: corpo.modelo_id, raciocinio: corpo.raciocinio });
   tempo.marcar("contexto");
 
   // Arco da história; a escolha da equipe troca tipo, framework e formato.

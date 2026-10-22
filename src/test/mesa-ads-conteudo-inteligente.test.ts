@@ -82,8 +82,9 @@ describe("copy de resposta direta", () => {
 
   it("variações em ângulos de venda diferentes; sem urgência real, sem ângulo de urgência", () => {
     const a = angulosParaVariacoes(5, { temProva: true, temUrgencia: false });
-    expect(a).toEqual(["dor", "desejo", "prova", "objecao", "dor"]);
-    expect(angulosParaVariacoes(3, { temProva: false, temUrgencia: true })).toEqual(["dor", "desejo", "objecao"]);
+    // 22/10/2026: contrário e identidade entram na roda (3 a 5 variações em ângulos distintos).
+    expect(a).toEqual(["dor", "desejo", "prova", "contrario", "objecao"]);
+    expect(angulosParaVariacoes(3, { temProva: false, temUrgencia: true })).toEqual(["dor", "desejo", "contrario"]);
     expect(anguloDeVenda("Objeção")).toBe("objecao");
     expect(ANGULOS_DE_VENDA.urgencia.rotulo).toBe("Urgência");
   });

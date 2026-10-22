@@ -100,14 +100,14 @@ function enderecoDoProjeto(): { url: string; anon: string } {
   return { url: url.replace(/\/+$/, ''), anon };
 }
 
-async function conferirCliente(clientId: string, ctx: AuthContext) {
+export async function conferirCliente(clientId: string, ctx: AuthContext) {
   if (!isUuid(clientId)) throw new Error('client_id must be a UUID');
   assertClientAccess(ctx, clientId);
   await exigirClienteExistente(db(), clientId);
 }
 
 /** Cliente dono de uma linha (campanha, proposta, trabalho): para conferir a fronteira antes de sair. */
-async function clienteDaLinha(tabela: string, id: string, rotulo: string): Promise<string> {
+export async function clienteDaLinha(tabela: string, id: string, rotulo: string): Promise<string> {
   if (!isUuid(id)) throw new Error(`${rotulo} must be a UUID`);
   const { data, error } = await db().from(tabela).select('client_id').eq('id', id).maybeSingle();
   if (error) throw falha('leitura', `${tabela}: ${error.message}`);
@@ -181,7 +181,7 @@ export async function rpcComoPessoa(nome: RpcDaPonte, args: Record<string, unkno
  * 24 h, não refaz a ação (a trilha de auditoria guarda a chamada e o id do
  * resultado). Quem repete recebe o aviso e o id, sem nada novo na mesa.
  */
-async function umaVez(
+export async function umaVez(
   ferramenta: string,
   ctx: AuthContext,
   idempotencyKey: string,

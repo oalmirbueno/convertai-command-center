@@ -56,6 +56,7 @@ import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from ".
 import { useFiltroDaMarca, useMesa } from "./MesaContexto";
 import { filtrarPorMarca, projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
+import { SeletorDoModeloDaCopyDoConteudo, useModeloDaCopyDoConteudo } from "./ModeloDaCopyDoConteudo";
 import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
@@ -303,6 +304,8 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
   const [objetivo, setObjetivo] = useState("");
   const [oferta, setOferta] = useState("");
   const [modeloId, setModeloId] = useState("");
+  // 23/10 (COPY-V): quem escreve os conteúdos (detalhar) é o "Modelo da copy", lembrado por cliente.
+  const modeloDaCopy = useModeloDaCopyDoConteudo();
   const [raciocinio, setRaciocinio] = useState("");
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
   const [projetoId, setProjetoId] = useState("");
@@ -474,6 +477,7 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" />
         <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
+        <SeletorDoModeloDaCopyDoConteudo estado={modeloDaCopy} />
       </div>
       <MesEscolhaEditorial valor={escolha} onChange={setEscolha} />
       {planoDoPeriodo && (
@@ -618,13 +622,13 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
               <BotaoComCusto
                 rotulo={`Detalhar escolhidos (${escolhidos.size})`}
                 titulo="Detalhar os temas escolhidos"
-                descricao="O estrategista escreve cada publicação: data, formato, gancho, copy e o roteiro de cada card."
-                partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.detalhar.entrada, tokensSaida: itensPrevistos * TAMANHOS.detalhar.saidaPorItem + saidaPorRaciocinio(raciocinio) }]}
+                descricao="O modelo da copy escreve cada publicação: data, formato, gancho, copy e o roteiro de cada card, com os ganchos vencedores do nicho."
+                partes={() => [{ modeloId: modeloDaCopy.modeloId || modeloId, tipo: "texto", tokensEntrada: TAMANHOS.detalhar.entrada, tokensSaida: itensPrevistos * TAMANHOS.detalhar.saidaPorItem + saidaPorRaciocinio(raciocinio) }]}
                 executar={async () => {
                   setAcompanhando({ id: proposta.id, desde: Date.now(), etapa: "detalhe" });
                   try {
                     await chamarFuncao("agente-calendario", { acao: "escolher_temas", proposta_id: proposta.id, temas: Array.from(escolhidos) });
-                    const corpoDoDetalhar = { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined };
+                    const corpoDoDetalhar = { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined, ...modeloDaCopy.corpo };
                     const d = await chamarFuncao<any>("agente-calendario", corpoDoDetalhar);
                     // Se o modelo pulou algum tema, pede só os que faltam mais uma vez (não é correção: é o resto).
                     return d && Array.isArray(d.faltam) && d.faltam.length ? await chamarFuncao<any>("agente-calendario", corpoDoDetalhar) : d;

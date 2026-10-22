@@ -299,14 +299,14 @@ describe("melhor copy: escrever a mais e o Jev escolher (sem laço)", () => {
     const p = corpoDe(indexAds, "criativosProduzir");
     expect(p.match(/chamarTexto\(/g) || []).toHaveLength(1);
     expect(p).toMatch(/const escrever = a\.variacoes \+ extras;/);
-    expect(p).toMatch(/\{ parada: true \}/);
+    expect(p).toMatch(/\{ parada: true(, venda: \{ nicho: venda\.nicho, fatos: fatos\.linhas \})? \}/);
     expect(p).toMatch(/escolherMelhores\(conferencia\.notas, a\.variacoes\)/);
     expect(p).toMatch(/porque_do_estilo: /);
     expect(p).toMatch(/escolha: \{ posicao: i \+ 1, de: escritas, nota: notaDaCopy\(nota\), porque: porqueDaCopy\(/);
     expect(p).toMatch(/copyQueConverteParaOPrompt\(\{ comLayout: true \}\)/);
     expect(indexAds).toMatch(/const MAX_COPIES_A_MAIS = 2;/);
     const v = corpoDe(indexAds, "copyVariar");
-    expect(v).toMatch(/\{ parada: true \}/);
+    expect(v).toMatch(/\{ parada: true(, venda: \{ nicho: venda\.nicho, fatos: fatos\.linhas \})? \}/);
     expect(v).toMatch(/melhor: i === 0 && copies\.length > 1/);
     const c = corpoDe(indexAds, "conferirCopiesComJev");
     expect(c).toMatch(/criteria: NIVEIS_PARADA/);
