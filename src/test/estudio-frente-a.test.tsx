@@ -277,7 +277,9 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
 
   it("o ajuste mantém a logo gerada e anexa a mesma logo do kit; a versão antiga com logo colada fica protegida no contínuo", () => {
     const a = corpoDe("ajustarCard");
-    expect(a).toContain('regrasDeRender(base, cardAjustado, legendas, levaLogo(base, ordem) ? "manter" : false, false, naEmenda),');
+    // 22/10: o card do ajuste leva também os textos dos elementos da referência gravados na versão (88260e83,
+    // Motor de copy); a regra da logo (manter quando a lâmina leva logo) não mudou.
+    expect(a).toContain('regrasDeRender(base, { ...cardAjustado, texto_exato: comTextoDosElementos(cardAjustado.texto_exato, preenchimentoGravado((atualVersao as { preenchimento_da_referencia?: unknown }).preenchimento_da_referencia)) }, legendas, levaLogo(base, ordem) ? "manter" : false, false, naEmenda),');
     expect(a).toContain("const logo = escolherLogoDoKit(await logosDoKit(base.client_id, kit, escolhaDaLamina(base, card, daVersao)), base, { logo: card.logo ?? daVersao ?? undefined }, null);");
     expect(a).toContain("const protegidas: Area[] = marcaDaVersao.logo_no_codigo ? [c] : [];");
     expect(a).not.toContain("logosDaMarca");

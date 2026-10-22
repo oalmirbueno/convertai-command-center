@@ -762,7 +762,9 @@ describe("tela da Mesa Vídeos (geração)", () => {
     montar(h(MesaVideos));
     const nav = await screen.findByRole("navigation", { name: "Etapas da Mesa Vídeos" });
     expect(nav.textContent).toContain("Criar vídeo");
-    expect(await screen.findByRole("textbox", { name: "Descreva seu vídeo" })).toBeTruthy();
+    // 22/10: a bancada do Criar vem do GeradorLivre carregado sob demanda (lazy); sozinho leva de 3 a 4 s para
+    // compilar no teste e, com a suíte em paralelo, passava dos 5 s padrão. Só a espera cresce: o campo continua exigido.
+    expect(await screen.findByRole("textbox", { name: "Descreva seu vídeo" }, { timeout: 15000 })).toBeTruthy();
     // 16/10/2026: o seletor "Planejamento" virou etapas em ícone na mesma linha (Etapas soIcone).
     for (const nome of ["Materiais", "Modelos prontos", "Identidade do vídeo", "Roteiro"]) expect(nav.querySelector(`button[title^="${nome}"]`)).toBeTruthy();
     fireEvent.click(nav.querySelector('button[data-etapa="base"]') as HTMLElement);
@@ -774,7 +776,7 @@ describe("tela da Mesa Vídeos (geração)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Mesa aberta: Mesa Vídeos/ }));
     const troca = await screen.findByRole("navigation", { name: "Trocar de mesa" });
     expect(troca.querySelectorAll("[data-item-de-mesa], a").length).toBeGreaterThanOrEqual(7);
-  }, 20000);
+  }, 40000);
 
   it("endereço antigo de edição abre a Mesa Edição no Organizar", async () => {
     function Onde() {

@@ -212,7 +212,11 @@ describe("geração: o que falhou no caminho e mudou a arte vira aviso na versã
     const g = f.slice(f.indexOf("async function gravarVersao("), f.indexOf("// ------------------------------------------------------------ ajustar card"));
     expect(g).toContain("avisos_da_geracao: avisos");
     expect(g).toContain('aviso_da_acao: avisos.join(" ")');
-    expect(f.split("avisos: avisosDaGeracao,").length - 1).toBe(5);
+    // 22/10: o preenchimento dos elementos da referência (preenchimentoNaGeracao, 88260e83 Motor de copy) também
+    // recebe a lista de avisos; as 5 versões do gerar continuam passando os avisos junto com as regras.
+    expect(f.split("avisos: avisosDaGeracao, regras: regrasDaGeracao,").length - 1).toBe(5);
+    expect(f.split("avisos: avisosDaGeracao,").length - 1).toBe(6);
+    expect(f.slice(f.indexOf("await preenchimentoNaGeracao(t, card, {"), f.indexOf("const preenchimentoDaReferencia = doPreenchimento.preenchimento;"))).toContain("avisos: avisosDaGeracao,");
     expect(f).toContain("avisos: avisosDoAjuste,");
   });
 

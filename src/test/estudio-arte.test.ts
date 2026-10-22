@@ -88,7 +88,18 @@ describe("estudio-arte: uma lamina por chamada", () => {
   it("o gerador so e chamado em gerar (replicar referencia, foto composta, foto real ou panorama, normal, um por vez) e em ajustar, fora de laco", () => {
     // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada); + 1 do modo recorte (25/09).
     // A tela dupla (modo "continuar") saiu em 25/09: com o panorama ela nunca rodava.
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(7);
+    // 22/10: + 1 na foto do Template (gerarFoto do acoesDaGeracaoDoTemplate, c9d38b61 de 21/10): uma foto por
+    // ação template_imagem, depois da confirmação do custo e fora de laço (modulos/template-geracao.ts).
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(8);
+    const doTemplate = fonte.slice(fonte.indexOf("...acoesDaGeracaoDoTemplate<Chamador, Trabalho>({"), fonte.indexOf("preparar_fundo: prepararFundo,"));
+    expect(doTemplate.match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
+    expect(doTemplate).not.toMatch(/\bfor \(|\bwhile \(|\.map\([^)]*chamarImagem/);
+    const imagemDoTemplate = ler("supabase/functions/estudio-arte/modulos/template-geracao.ts");
+    const acaoImagem = imagemDoTemplate.slice(imagemDoTemplate.indexOf("async function imagem("), imagemDoTemplate.indexOf("async function lamina("));
+    expect(acaoImagem.match(/d\.gerarFoto\(/g) ?? []).toHaveLength(1);
+    expect(acaoImagem.indexOf('pedirConfirmacao(d, await d.estimarImagem(t, proporcao), "Gerar a foto")')).toBeLessThan(acaoImagem.indexOf("d.gerarFoto("));
+    expect(acaoImagem.slice(0, acaoImagem.indexOf("d.gerarFoto("))).not.toMatch(/\bfor \(|\bwhile \(/);
+    expect(acaoImagem).toContain("custo_usd: arred(num(atual.custo_usd) + custo)");
     expect(corpoDe("garantirFundoContinuo").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     const g = corpoDe("gerarCard");
     // 5 modos desde 25/09: replicar, foto composta, foto real ou panorama, recorte (pessoa ou produto sem fundo) e normal.
@@ -164,7 +175,9 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(c).toContain("alvo = versaoAtual(t, ordem);");
     expect(c).toContain("c.ordem === ordem && c.versao === versao");
     // Frente R3: o termo decorativo que a versão escreveu na arte entra no texto esperado.
-    expect(c).toContain("await verificar(ch, t, { ...card, texto_exato: textoEsperadoNaConferencia(card.texto_exato, alvo as { termo_decorativo?: unknown }) }, alvo.storage_path, kit, fontes)");
+    // 22/10: os textos dos elementos da referência (balões, caixas, listas) gravados na versão também são texto
+    // esperado (88260e83, Motor de copy); o termo decorativo continua entrando.
+    expect(c).toContain("await verificar(ch, t, { ...card, texto_exato: comTextoDosElementos(textoEsperadoNaConferencia(card.texto_exato, alvo as { termo_decorativo?: unknown }), preenchimentoDaVersao) }, alvo.storage_path, kit, fontes)");
     expect(c).not.toContain("chamarImagem(");
   });
 

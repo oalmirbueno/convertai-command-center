@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { textoDoErro } from "@/lib/mesa/api";
-import { botao, juntar, SeletorCompacto, texto } from "@/components/sistema";
+import { AjudaRecolhida, botao, juntar, SeletorCompacto, texto } from "@/components/sistema";
 import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
@@ -174,7 +174,13 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
           </div>
         </div>
       )}
-      {!roteiro && caminho === "roteiro" && <p className={juntar(texto.auxiliar, "mt-1")}>Sem roteiro ainda: gere pelo agente da campanha ou pelo botão, ou escolha Gravar ou Gerar.</p>}
+      {/* 22/10: só o estado na tela; o como fazer vai para o "?" (docs/design/SISTEMA.md, seção 5). */}
+      {!roteiro && caminho === "roteiro" && (
+        <p className={juntar(texto.auxiliar, "mt-1 flex items-center")}>
+          Sem roteiro ainda.
+          <AjudaRecolhida className="ml-1" rotulo="Como ter o roteiro">Gere pelo agente da campanha ou pelo botão, ou escolha Gravar ou Gerar.</AjudaRecolhida>
+        </p>
+      )}
       <SeletorCompacto
         opcoes={CAMINHOS_DO_VIDEO}
         valor={caminho}
