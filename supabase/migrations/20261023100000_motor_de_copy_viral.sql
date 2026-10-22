@@ -385,6 +385,13 @@ revoke all on function public.definir_modelo_da_copy(uuid, text) from public, an
 grant execute on function public.definir_modelo_da_copy(uuid, text) to authenticated, service_role;
 
 -- 3) O melhor para copy: Claude Opus 5.5 (escrita em português; já é o padrão de proposta, site e documento).
+-- O papel 'copy' entra na lista de papéis aceitos (o CHECK só conhecia os papéis antigos).
+alter table public.ia_modelos drop constraint if exists ia_modelos_padrao_para_check;
+alter table public.ia_modelos add constraint ia_modelos_padrao_para_check check (padrao_para <@ array[
+  'estrategista', 'diretor_arte', 'imagem', 'leitura', 'contexto', 'estrategista_rapido', 'proposta', 'contrato',
+  'briefing', 'conselho', 'identidade', 'naming', 'site', 'motion', 'documento', 'copy'
+]::text[]);
+
 update public.ia_modelos
 set padrao_para = array_append(coalesce(padrao_para, array[]::text[]), 'copy')
 where id = 'openrouter:anthropic/claude-opus-5.5'
