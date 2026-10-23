@@ -2489,6 +2489,14 @@
       "remote_name": "modelos_por_escopo",
       "remote_statements_sha256": "3307bf749d8170cf3b0ce107591e579cd95414af74e0c67e28d259d3e97ac5b5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261023150000",
+      "path": "supabase/migrations/20261023150000_lamina_de_video_do_carrossel.sql",
+      "local_sha256": "e1816933bc960a5f8b37f388899e0a76cc41bf77519fd361a5eaacbd5adba7b2",
+      "remote_name": "lamina_de_video_do_carrossel",
+      "remote_statements_sha256": "4a2cc9900396a2db82cadf45cfc3b4d6e485320fa530e699cacaedc41185ac0b",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
