@@ -17,7 +17,7 @@ export interface PedidoDoWorker {
   cenario_id?: string | null;
   /** Mesa Edição (02/10): tratar vídeo (tirar a legenda gravada, melhorar a qualidade). */
   tratamento_id?: string | null;
-  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas" | "cenario" | "tratamento";
+  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas" | "cenario" | "tratamento" | "lamina_video";
   projeto: Record<string, unknown> | null;
   revisao: number | null;
   entrada: Record<string, unknown>;

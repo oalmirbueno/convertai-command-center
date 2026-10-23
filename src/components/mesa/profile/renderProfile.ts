@@ -1,4 +1,5 @@
 import type { TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
+import { desenharCarrossel, type MidiaCarregada, type ResultadoDoCarrossel } from "./renderCarrossel";
 
 /**
  * Template do Estúdio (21/10/2026, dono: "simular um post do Instagram e do X
@@ -30,7 +31,7 @@ const AZUL_DO_X = "#1d9bf0";
 const AZUL_DO_IG = "#0095f6";
 
 /** Tempo padrão de cada rede quando a equipe não escreve um. */
-export const TEMPO_PADRAO = { twitter: "2h", instagram: "Há 2 horas", story: "2 h" } as const;
+export const TEMPO_PADRAO = { twitter: "2h", instagram: "Há 2 horas", story: "2 h", carrossel: "2h" } as const;
 
 type Medir = (s: string) => number;
 
@@ -99,13 +100,15 @@ function cortar(ctx: CanvasRenderingContext2D, texto: string, max: number): stri
 }
 
 export interface RetanguloProfile { x: number; y: number; largura: number; altura: number }
-export interface ResultadoProfile { imagem: RetanguloProfile | null }
+export interface ResultadoProfile { imagem: RetanguloProfile | null; carrossel?: ResultadoDoCarrossel }
 export interface RecursosProfile {
   avatar?: HTMLImageElement | null;
   imagem?: HTMLImageElement | null;
   imagemExata?: boolean;
   /** Lâmina no conjunto: pontinhos e "1/5" do carrossel, barras do Story, linha do fio do X. */
   posicao?: { atual: number; total: number };
+  /** Carrossel estilo X: a mídia do bloco (imagem ou o quadro atual do vídeo). */
+  midia?: MidiaCarregada | null;
 }
 
 /** Preserva a foto inteira; a composição não regenera nem recorta. */
@@ -475,6 +478,11 @@ export function desenharProfile(canvas: HTMLCanvasElement, template: TemplatePro
   canvas.width = LARGURA_PROFILE; canvas.height = ALTURAS_PROFILE[formato];
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Seu navegador não disponibilizou a prévia do template.");
   const margem = Math.max(0, template.espacamento ?? 48);
+  if (template.estilo === "carrossel") {
+    // Carrossel estilo post do X (22/10): a lâmina inteira é o post, com o bloco de mídia (renderCarrossel.ts).
+    const carrossel = desenharCarrossel(ctx, canvas.width, canvas.height, template, { avatar: recursos.avatar, midia: recursos.midia, posicao: recursos.posicao });
+    return { imagem: carrossel.bloco, carrossel };
+  }
   ctx.fillStyle = template.cor_fundo || "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
   let r: { imagem: RetanguloProfile | null; area: RetanguloProfile | null };
   if (template.estilo === "story") {

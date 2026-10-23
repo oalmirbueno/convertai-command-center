@@ -20,6 +20,7 @@ import { avisosDa, avisosDaEntrada, conferirSaida, detectarConteudo, falhasDa, t
 import { trabalharBatidas, trabalharCenaHf } from "./hyperframes.ts";
 import { trabalharCenario } from "./cenario.ts";
 import { trabalharTratamento } from "./tratamento.ts";
+import { trabalharLaminaVideo } from "./laminaVideo.ts";
 
 export const PASTA_DO_WORKER = path.dirname(fileURLToPath(import.meta.url));
 export const RAIZ_DO_REPO = path.resolve(PASTA_DO_WORKER, "..", "..");
@@ -423,6 +424,14 @@ export async function umPedido(amb: Ambiente, worker: string, versao: string): P
       if (!ok) return { id: p.id, tipo: p.tipo, estado: "parado", detalhe: "O pedido não era mais deste worker na hora de concluir." };
       log(`pronto: ${r.saida || "partes preparadas"}`);
       return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: r.saida || "partes preparadas" };
+    }
+    if (p.tipo === "lamina_video") {
+      // 22/10: lâmina de vídeo do carrossel estilo X (PNG da lâmina + vídeo no bloco, por ffmpeg).
+      const r = await trabalharLaminaVideo({ armazem: amb.armazem, log: amb.log }, p, pasta, relator(amb, p));
+      const ok = await amb.fila.concluir(p.id, amb.token, r.saida, r.arquivoId, r.resultado);
+      if (!ok) return { id: p.id, tipo: p.tipo, estado: "parado", detalhe: "O pedido não era mais deste worker na hora de concluir." };
+      log(`pronto: ${r.saida}`);
+      return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: r.saida };
     }
     if (p.tipo === "onda") {
       const resultado = await trabalharOnda(amb, p, pasta);

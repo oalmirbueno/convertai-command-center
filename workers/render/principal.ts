@@ -32,7 +32,8 @@ import { finalParaOWorkspace, portaDoSupabase } from "../../supabase/functions/m
 
 // Frente TCN (01/10): "+tcn-1" = sabe a troca de cenário (o banco só entrega o tipo "cenario" a quem tem "tcn-").
 // Mesa Edição (02/10): "+trt-1" = sabe tratar vídeo (tirar legenda, melhorar qualidade; o banco só entrega o tipo "tratamento" a quem tem "trt-").
-export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mtr-1+tcn-1+trt-1+mov-1";
+// 22/10: "+lam-1" = sabe montar a lâmina de vídeo do carrossel estilo X (o banco só entrega "lamina_video" a quem tem "lam-").
+export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mtr-1+tcn-1+trt-1+mov-1+lam-1";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null; sairOciosoS: number | null } {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").trim();

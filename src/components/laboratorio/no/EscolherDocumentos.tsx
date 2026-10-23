@@ -48,28 +48,37 @@ export default function EscolherDocumentos({
   jaEscolhidos,
   onFechar,
   onEscolher,
+  titulo = "Documentos do Workspace",
+  aceitar,
+  soDoCliente = false,
+  umSo = false,
 }: {
   aberta: boolean;
   clienteId: string | null | undefined;
   jaEscolhidos: string[];
   onFechar: () => void;
   onEscolher: (arquivos: ArquivoDoNo[]) => void;
+  /** 22/10 (Template carrossel): a mesma biblioteca para escolher imagem ou vídeo do Workspace do cliente. */
+  titulo?: string;
+  aceitar?: (n: NoDoWorkspace) => boolean;
+  soDoCliente?: boolean;
+  umSo?: boolean;
 }) {
   const [doCliente, setDoCliente] = useState(true);
-  const usarCliente = !!clienteId && doCliente;
+  const usarCliente = !!clienteId && (doCliente || soDoCliente);
   const arvore = useArvoreDoWorkspace(clienteId || "", aberta && usarCliente);
   const global = useWorkspaceGlobal(aberta && !usarCliente);
   const q = usarCliente ? arvore : global;
   const [marcados, setMarcados] = useState<Record<string, NoDoWorkspace>>({});
 
   const nos = useMemo(() => q.data || [], [q.data]);
-  const arquivos = useMemo(() => nos.filter((n) => n.kind === "file" && !!n.storage_path), [nos]);
+  const arquivos = useMemo(() => nos.filter((n) => n.kind === "file" && !!n.storage_path && (!aceitar || aceitar(n))), [nos, aceitar]);
   const pastas = useMemo(() => pastasDoWorkspace(nos), [nos]);
   const total = Object.keys(marcados).length;
 
   const alternar = (n: NoDoWorkspace) =>
     setMarcados((m) => {
-      const novo = { ...m };
+      const novo = umSo ? (m[n.id] ? { ...m } : {}) : { ...m };
       if (novo[n.id]) delete novo[n.id];
       else novo[n.id] = n;
       return novo;
@@ -91,11 +100,11 @@ export default function EscolherDocumentos({
         setMarcados({});
         onFechar();
       }}
-      titulo="Documentos do Workspace"
+      titulo={titulo}
       icone={<FileText className="h-4 w-4" />}
       largura="lg"
       abaixoDoTitulo={
-        clienteId ? (
+        clienteId && !soDoCliente ? (
           <div className="flex min-w-0 items-center" role="group" aria-label="De onde">
             <button type="button" className={juntar(botao.barra, "mr-1", usarCliente && "bg-muted text-foreground")} aria-pressed={usarCliente} onClick={() => setDoCliente(true)}>
               Do cliente
@@ -112,7 +121,7 @@ export default function EscolherDocumentos({
             Cancelar
           </button>
           <button type="button" className={botao.primario} disabled={!total} onClick={confirmar} data-anexar-documentos="">
-            {total ? `Anexar ${total}` : "Anexar"}
+            {umSo ? "Usar" : total ? `Anexar ${total}` : "Anexar"}
           </button>
         </>
       }

@@ -11,10 +11,61 @@ export interface NumerosDoPost {
   comentarios?: number;
 }
 
+/**
+ * Carrossel estilo post do X (22/10/2026): a lâmina inteira é o post (foto redonda, nome, selo, @,
+ * texto com trechos em negrito) e um BLOCO DE MÍDIA desenhado por código. A mídia entra inteira
+ * no bloco: foto, vídeo, gráfico ou card de manchete; nada é colado por cima de arte gerada.
+ */
+export type TipoDoBloco = "imagem" | "video" | "grafico" | "manchete" | "nenhum";
+export type OrigemDaMidia = "internet" | "gerada" | "enviada" | "workspace" | "acervo" | "cliente";
+export interface CreditoDaMidia { fonte: string; autor: string | null; licenca: string; url: string }
+export interface MidiaDoBloco {
+  /** "mesa": pasta do cliente no bucket mesa; "workspace": arquivo do Workspace do cliente. */
+  bucket: "mesa" | "workspace";
+  caminho: string;
+  origem: OrigemDaMidia;
+  duracao_s?: number;
+  credito?: CreditoDaMidia;
+}
+export interface GraficoDoBloco {
+  tipo: "barras" | "linha" | "pizza" | "tabela";
+  titulo?: string;
+  unidade?: string;
+  /** Barras, linha e pizza. */
+  dados: Array<{ rotulo: string; valor: number }>;
+  /** Tabela: cabeçalho e linhas. */
+  colunas?: string[];
+  linhas?: string[][];
+  /** De onde vêm os números (sempre de uma fonte real; o código não inventa). */
+  fonte?: string;
+}
+export interface MancheteDoBloco { veiculo: string; titulo: string; linha_fina?: string; data?: string; url?: string; cor?: string }
+export interface BlocoDaLamina {
+  tipo: TipoDoBloco;
+  /** Onde o bloco fica: abaixo do texto, acima (logo depois do perfil) ou no meio dos parágrafos. */
+  posicao: "abaixo" | "acima" | "meio";
+  /** Altura em % do espaço livre e largura em % da coluna do texto. */
+  altura: number;
+  largura: number;
+  sangrar: boolean;
+  cantos: number;
+  borda: boolean;
+  sombra: boolean;
+  /** "inteira" mostra a mídia toda (padrão); "preencher" cobre o bloco a partir do ponto focal. */
+  enquadramento: "inteira" | "preencher";
+  foco_x: number;
+  foco_y: number;
+  midia?: MidiaDoBloco;
+  grafico?: GraficoDoBloco;
+  manchete?: MancheteDoBloco;
+  /** Gravar o ícone de som desligado na peça (o Instagram já mostra o dele nas lâminas de vídeo). */
+  som_na_peca?: boolean;
+}
+
 export interface TemplateProfile {
   versao: 1;
-  /** "twitter" é o post do X (nome antigo mantido); "story" é o Story 9:16 do Instagram. */
-  estilo: "twitter" | "instagram" | "story";
+  /** "twitter" é o post do X (nome antigo mantido); "story" é o Story 9:16; "carrossel" é a lâmina inteira estilo post do X. */
+  estilo: "twitter" | "instagram" | "story" | "carrossel";
   nome: string;
   username: string;
   /** Escolha visual explícita; nunca significa confirmação oficial da conta. */
@@ -49,6 +100,11 @@ export interface TemplateProfile {
   midia?: number;
   ocultar_numeros?: boolean;
   ocultar_tempo?: boolean;
+  /** Carrossel (22/10): o bloco de mídia, a seta de próxima, o peso do texto e o rodapé levemente cinza. */
+  bloco?: BlocoDaLamina;
+  seta?: boolean;
+  peso_texto?: "regular" | "medio";
+  rodape_cinza?: boolean;
 }
 
 export interface VersaoDoTemplate {
@@ -119,7 +175,7 @@ function campo(v: unknown, max: number, obrigatorio: boolean, erro: Erro): strin
 /** Metadados permitem só campos conhecidos e caminhos do bucket mesa do cliente. */
 export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Erro): TemplateProfile {
   const o = objeto(v);
-  if (o.versao !== 1 || (o.estilo !== "twitter" && o.estilo !== "instagram" && o.estilo !== "story")) throw erro(400, "template_invalido", "Escolha um template válido: post do X, post do Instagram ou Story.");
+  if (o.versao !== 1 || (o.estilo !== "twitter" && o.estilo !== "instagram" && o.estilo !== "story" && o.estilo !== "carrossel")) throw erro(400, "template_invalido", "Escolha um template válido: post do X, carrossel estilo X, post do Instagram ou Story.");
   if (o.verificado !== undefined && typeof o.verificado !== "boolean") throw erro(400, "selo_template_invalido", "A opção de selo do template deve ser explícita.");
   const username = campo(o.username, 31, true, erro).replace(/^@/, "");
   if (!/^[a-zA-Z0-9_.]{1,30}$/.test(username)) throw erro(400, "perfil_template_invalido", "Use o @perfil do Instagram, sem endereço ou espaços.");
@@ -156,7 +212,119 @@ export function normalizarTemplateProfile(v: unknown, clientId: string, erro: Er
     t.destaque = { x: destaque.x, y: destaque.y, rotulo };
   }
   normalizarSimulacao(o, t, erro);
+  if (t.estilo === "carrossel") normalizarCarrossel(o, t, clientId, erro);
   return t;
+}
+
+/** Caminho de mídia do cliente: bucket mesa na pasta dele ou o Workspace dele (client/<id>/). */
+export function caminhoDaMidiaDoCliente(bucket: unknown, caminho: unknown, clientId: string): boolean {
+  if (typeof caminho !== "string" || caminho.length > 500 || /[\\%?#:]/.test(caminho) || caminho.split("/").some((s) => !s || s === "." || s === "..")) return false;
+  if (bucket === "mesa") return caminho.startsWith(`${clientId}/`);
+  if (bucket === "workspace") return caminho.startsWith(`client/${clientId}/`);
+  return false;
+}
+
+const TIPOS_DO_BLOCO = ["imagem", "video", "grafico", "manchete", "nenhum"];
+const ORIGENS_DA_MIDIA = ["internet", "gerada", "enviada", "workspace", "acervo", "cliente"];
+const TIPOS_DO_GRAFICO = ["barras", "linha", "pizza", "tabela"];
+
+/** Bloco de mídia do carrossel: só campos conhecidos, números dentro da faixa e mídia do próprio cliente. */
+function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, clientId: string, erro: Erro) {
+  const linha = (v: unknown, max: number, obrigatorio = false): string => {
+    if ((v === undefined || v === null || v === "") && !obrigatorio) return "";
+    if (typeof v !== "string" || v.length > max || /[\r\t<>]/.test(v)) throw erro(400, "bloco_template_invalido", "Um texto do bloco de mídia está inválido ou longo demais.");
+    const s = v.trim();
+    if (obrigatorio && !s) throw erro(400, "bloco_template_invalido", "Preencha o título do bloco de mídia.");
+    return s;
+  };
+  const sim = (v: unknown) => {
+    if (v === undefined || v === null) return false;
+    if (typeof v !== "boolean") throw erro(400, "opcao_template_invalida", "Uma opção do template precisa ser sim ou não.");
+    return v;
+  };
+  t.seta = o.seta === undefined ? true : sim(o.seta);
+  if (sim(o.rodape_cinza)) t.rodape_cinza = true;
+  if (o.peso_texto !== undefined && o.peso_texto !== null) {
+    if (o.peso_texto !== "regular" && o.peso_texto !== "medio") throw erro(400, "peso_template_invalido", "Escolha o peso regular ou médio do texto.");
+    t.peso_texto = o.peso_texto;
+  }
+  const b = objeto(o.bloco);
+  const tipo = b.tipo === undefined ? "nenhum" : b.tipo;
+  if (typeof tipo !== "string" || TIPOS_DO_BLOCO.indexOf(tipo) < 0) throw erro(400, "bloco_template_invalido", "Escolha o tipo do bloco: imagem, vídeo, gráfico, manchete ou nenhum.");
+  const posicao = b.posicao === undefined ? "abaixo" : b.posicao;
+  if (posicao !== "abaixo" && posicao !== "acima" && posicao !== "meio") throw erro(400, "bloco_template_invalido", "Escolha o lugar do bloco: acima, no meio ou abaixo do texto.");
+  const enquadramento = b.enquadramento === undefined ? "inteira" : b.enquadramento;
+  if (enquadramento !== "inteira" && enquadramento !== "preencher") throw erro(400, "bloco_template_invalido", "Escolha o enquadramento: mídia inteira ou preencher.");
+  const foco = (v: unknown) => {
+    if (v === undefined || v === null) return 0.5;
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1) throw erro(400, "bloco_template_invalido", "O ponto focal precisa ficar dentro da mídia.");
+    return Math.round(v * 1000) / 1000;
+  };
+  const bloco: BlocoDaLamina = {
+    tipo: tipo as TipoDoBloco, posicao,
+    altura: faixa(b.altura, 100, 20, 100, erro), largura: faixa(b.largura, 100, 40, 100, erro),
+    sangrar: sim(b.sangrar), cantos: faixa(b.cantos, 18, 0, 48, erro), borda: sim(b.borda), sombra: sim(b.sombra),
+    enquadramento, foco_x: foco(b.foco_x), foco_y: foco(b.foco_y),
+  };
+  if (sim(b.som_na_peca)) bloco.som_na_peca = true;
+  if (tipo === "imagem" || tipo === "video") {
+    const m = objeto(b.midia);
+    if (!caminhoDaMidiaDoCliente(m.bucket, m.caminho, clientId)) throw erro(400, "midia_template_invalida", "A mídia do bloco precisa ser deste cliente (pasta do cliente ou Workspace dele).");
+    if (typeof m.origem !== "string" || ORIGENS_DA_MIDIA.indexOf(m.origem) < 0) throw erro(400, "midia_template_invalida", "Informe de onde veio a mídia do bloco.");
+    const midia: MidiaDoBloco = { bucket: m.bucket as "mesa" | "workspace", caminho: m.caminho as string, origem: m.origem as OrigemDaMidia };
+    if (tipo === "video" && !/\.(mp4|mov|webm|m4v|mkv)$/i.test(midia.caminho)) throw erro(400, "midia_template_invalida", "O bloco de vídeo precisa de um arquivo de vídeo (MP4, MOV ou WebM).");
+    if (tipo === "imagem" && !/\.(png|jpe?g|webp)$/i.test(midia.caminho)) throw erro(400, "midia_template_invalida", "O bloco de imagem precisa de um PNG, JPG ou WebP.");
+    if (m.duracao_s !== undefined && m.duracao_s !== null) {
+      if (typeof m.duracao_s !== "number" || !Number.isFinite(m.duracao_s) || m.duracao_s <= 0 || m.duracao_s > 3600) throw erro(400, "midia_template_invalida", "Duração do vídeo inválida.");
+      midia.duracao_s = Math.round(m.duracao_s * 100) / 100;
+    }
+    if (m.credito !== undefined && m.credito !== null) {
+      const c = objeto(m.credito);
+      midia.credito = { fonte: linha(c.fonte, 60, true), autor: linha(c.autor, 160) || null, licenca: linha(c.licenca, 120, true), url: linha(c.url, 600, true) };
+    }
+    bloco.midia = midia;
+  }
+  if (tipo === "grafico") {
+    const g = objeto(b.grafico);
+    if (typeof g.tipo !== "string" || TIPOS_DO_GRAFICO.indexOf(g.tipo) < 0) throw erro(400, "grafico_template_invalido", "Escolha barras, linha, pizza ou tabela.");
+    const dados = (Array.isArray(g.dados) ? g.dados : []).map(objeto);
+    if (dados.length > 12) throw erro(400, "grafico_template_invalido", "Use até 12 números no gráfico.");
+    const grafico: GraficoDoBloco = {
+      tipo: g.tipo as GraficoDoBloco["tipo"],
+      dados: dados.map((d) => {
+        if (typeof d.valor !== "number" || !Number.isFinite(d.valor) || Math.abs(d.valor) > 1e12) throw erro(400, "grafico_template_invalido", "Cada número do gráfico precisa ser um valor válido.");
+        return { rotulo: linha(d.rotulo, 40, true), valor: d.valor };
+      }),
+    };
+    if (g.tipo === "pizza" && grafico.dados.some((d) => d.valor < 0)) throw erro(400, "grafico_template_invalido", "A pizza não aceita valor negativo.");
+    if (g.tipo === "tabela") {
+      const colunas = (Array.isArray(g.colunas) ? g.colunas : []).map((c) => linha(c, 40, true));
+      const linhas = (Array.isArray(g.linhas) ? g.linhas : []).map((l) => (Array.isArray(l) ? l : []).map((c) => linha(c, 40)));
+      if (colunas.length < 1 || colunas.length > 5 || linhas.length < 1 || linhas.length > 8 || linhas.some((l) => l.length !== colunas.length)) throw erro(400, "grafico_template_invalido", "A tabela precisa de 1 a 5 colunas e 1 a 8 linhas completas.");
+      grafico.colunas = colunas; grafico.linhas = linhas;
+    } else if (grafico.dados.length < 2) throw erro(400, "grafico_template_invalido", "O gráfico precisa de pelo menos dois números.");
+    const titulo = linha(g.titulo, 90); if (titulo) grafico.titulo = titulo;
+    const unidade = linha(g.unidade, 12); if (unidade) grafico.unidade = unidade;
+    const fonte = linha(g.fonte, 160); if (fonte) grafico.fonte = fonte;
+    bloco.grafico = grafico;
+  }
+  if (tipo === "manchete") {
+    const n = objeto(b.manchete);
+    const manchete: MancheteDoBloco = { veiculo: linha(n.veiculo, 40, true), titulo: linha(n.titulo, 220, true) };
+    const fina = linha(n.linha_fina, 320); if (fina) manchete.linha_fina = fina;
+    const data = linha(n.data, 40); if (data) manchete.data = data;
+    const url = linha(n.url, 600);
+    if (url) {
+      if (!/^https:\/\/[^\s]+$/i.test(url)) throw erro(400, "manchete_template_invalida", "O link da notícia precisa começar com https://.");
+      manchete.url = url;
+    }
+    if (n.cor !== undefined && n.cor !== null && n.cor !== "") {
+      if (typeof n.cor !== "string" || !/^#[0-9a-f]{6}$/i.test(n.cor)) throw erro(400, "manchete_template_invalida", "Use uma cor hexadecimal para o veículo.");
+      manchete.cor = n.cor.toLowerCase();
+    }
+    bloco.manchete = manchete;
+  }
+  t.bloco = bloco;
 }
 
 const CHAVES_DOS_NUMEROS = ["respostas", "reposts", "curtidas", "visualizacoes", "comentarios"] as const;

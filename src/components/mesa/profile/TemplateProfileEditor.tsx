@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as IconeDeImagem, Loader2, Minus, Plus, Sparkles, Upload } from "lucide-react";
+import { Download, Image as IconeDeImagem, Loader2, Minus, Plus, Sparkles, Upload, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,19 +8,23 @@ import { Textarea } from "@/components/ui/textarea";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { supabase } from "@/integrations/supabase/client";
-import { chamarFuncao, padraoPara, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { chamarFuncao, ErroDaMesa, padraoPara, textoDoErro } from "@/lib/mesa/api";
 import { useMarcaDaMesa, useMesa, useUrlDaMesa } from "../MesaContexto";
 import { chamarInstagram, normalizarPainel } from "../instagram/instagramApi";
 import { useAcervo } from "../SeletorDoAcervo";
 import { BotaoComCusto } from "../Custo";
 import ImagensReaisDoDiretor from "../ImagensReaisDoDiretor";
 import { formatoDoTrabalho, gravarTrabalhoNoCache, useEstadoGuardado, type TrabalhoGravado } from "../estudioUtil";
-import { publicarBaseDoTemplate, useRascunhoCompartilhado } from "./rascunhoDoTemplate";
+import { esquecerRascunhos, lerRascunhoGuardado, publicarBaseDoTemplate, useRascunhoCompartilhado } from "./rascunhoDoTemplate";
+import PainelDoCarrossel from "./PainelDoCarrossel";
+import { blocoInicialDaLamina, carregarMidiaDoBloco, midiaParaCarregar, pendenciaDoBloco, type CardDoCarrossel } from "./blocoDaLamina";
+import { textoSemMarcas, type ResultadoDoCarrossel } from "./renderCarrossel";
 import type { CardDaDirecao, CardGerado, Trabalho } from "../useItensDoMes";
 import { carregarImagemProfile, desenharProfile, TEMPO_PADRAO, type FormatoProfile, type RetanguloProfile } from "./renderProfile";
 import { chaveDaFonteProfile, fontesDoProfile, pontoNaImagemProfile, referenciaDaFonteProfile, resolverFonteProfile, ROTULO_DO_GRUPO, type CardComFontes, type FonteProfile, type GrupoDaFonte } from "./fontesDoProfile";
 import { NumeroOpcional, Segmentado } from "./controlesDoTemplate";
-import type { NumerosDoPost, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
+import { partesDaFotoDoTemplate, partesDoTextoDoTemplate } from "./partesDoTemplate";
+import type { BlocoDaLamina, NumerosDoPost, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
 import { limiteDoTexto } from "../../../../supabase/functions/estudio-arte/modulos/limites-do-post";
 
 /**
@@ -51,11 +55,8 @@ const ORIGENS: Array<{ valor: Origem; rotulo: string }> = [
 const proporcaoDaFoto = (t: Pick<TemplateProfile, "estilo" | "proporcao">): "16:9" | "1:1" | "4:5" | "9:16" =>
   t.estilo === "story" ? "9:16" : t.estilo === "instagram" ? (t.proporcao === "1:1" ? "1:1" : "4:5") : t.proporcao === "1:1" ? "1:1" : "16:9";
 
-/** Partes da estimativa: uma chamada do redator do Estúdio; uma foto do gerador do trabalho. */
-export const partesDoTextoDoTemplate = (diretorId: string | null | undefined): ParteDaEstimativa[] => [{ modeloId: diretorId, tipo: "texto", tokensEntrada: 9_000, tokensSaida: 3_000 }];
-export const partesDaFotoDoTemplate = (modeloImagemId: string | null | undefined, qualidade: string | null | undefined, vezes = 1): ParteDaEstimativa[] => [
-  { modeloId: modeloImagemId, tipo: "imagem", imagens: 1, qualidade: (qualidade === "baixa" || qualidade === "alta" ? qualidade : "media"), tokensEntrada: 1_500, vezes },
-];
+/** Partes da estimativa (moram em partesDoTemplate.ts; o painel do carrossel usa as mesmas). */
+export { partesDaFotoDoTemplate, partesDoTextoDoTemplate };
 
 /** O painel remonta por cliente/marca/trabalho/lâmina: consultas pendentes nunca mostram o perfil anterior. */
 export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqueadoDeFora, onMudou, onAbrirFotos, parte = "tudo", moldura, modoTemplate, onModoTemplate }: {
@@ -75,7 +76,10 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const livre = mesa.carteira === "laboratorio";
   const salvo = metadados(ultimaVersao(trabalho, card.ordem));
   const chave = `mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:${card.ordem}`;
-  const [ajustes, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, { ...PADRAO, ...salvo, nome: salvo?.nome ?? null, username: salvo?.username ?? null, texto: salvo?.texto ?? card.texto_exato ?? "", texto_base: card.texto_exato || "" });
+  // Carrossel estilo X (22/10): lâmina com sugestão do gerador e sem versão abre direto no modelo novo, com o bloco sugerido.
+  const cardDoCarrossel = card as CardDoCarrossel;
+  const estiloInicial = salvo?.estilo || (cardDoCarrossel.carrossel ? "carrossel" : PADRAO.estilo);
+  const [ajustes, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, { ...PADRAO, ...salvo, estilo: estiloInicial, nome: salvo?.nome ?? null, username: salvo?.username ?? null, texto: salvo?.texto ?? card.texto_exato ?? "", texto_base: card.texto_exato || "", ...(estiloInicial === "carrossel" ? { bloco: blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId), seta: salvo?.seta ?? true } : {}) });
   const [origem, setOrigem] = useEstadoGuardado<Origem>(`mesa:template:origem:${trabalho.id}`, "gerar");
   const [contaId, setContaId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false), [pronto, setPronto] = useState(false), [erro, setErro] = useState("");
@@ -105,7 +109,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const fontes = fontesDoProfile(card as CardComFontes, acervo.data || [], mesa.clientId);
   const preferida = ajustes.sem_imagem ? undefined : resolverFonteProfile(fontes, ajustes);
   const fonte = ajustes.sem_imagem ? undefined : preferida || fontes[0];
-  const fonteMudou = !ajustes.sem_imagem && (!preferida && !!(ajustes.imagem_acervo_id || ajustes.imagem_caminho) || !!ajustes.destaque && !ajustes.imagem_acervo_id && !ajustes.imagem_caminho);
+  const fonteMudou = ajustes.estilo !== "carrossel" && !ajustes.sem_imagem && (!preferida && !!(ajustes.imagem_acervo_id || ajustes.imagem_caminho) || !!ajustes.destaque && !ajustes.imagem_acervo_id && !ajustes.imagem_caminho);
   const foto = useUrlDaMesa(fonte?.caminho, fonte?.bucket);
   const avatarGuardado = useUrlDaMesa(ajustes.foto_caminho);
   const nome = ajustes.nome ?? (!livre ? perfil.data?.perfil.nome : "") ?? "";
@@ -115,8 +119,9 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const textoDesatualizado = ajustes.texto_base !== textoDaLamina;
   // Post do X: um texto só, o da lâmina (o mesmo campo de conteúdo do Estúdio). Rascunho de texto só nos antigos.
   const ehX = ajustes.estilo === "twitter";
-  const textoDoPost = ehX ? textoDaLamina : ajustes.texto;
-  const conflitoDeTexto = !ehX && textoDesatualizado && !ehInstagram && ajustes.texto !== ajustes.texto_base;
+  const ehCarrossel = ajustes.estilo === "carrossel";
+  const textoDoPost = ehX || ehCarrossel ? textoDaLamina : ajustes.texto;
+  const conflitoDeTexto = !ehX && !ehCarrossel && textoDesatualizado && !ehInstagram && ajustes.texto !== ajustes.texto_base;
   // Só quando o texto da lâmina chega diferente (abertura ou mudança de fora); o Gerar já põe o texto novo antes.
   const ultimoTextoDaLamina = useRef<string | null>(null);
   useEffect(() => {
@@ -135,15 +140,27 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   }, [contaId, contaSalvaId, perfil.data?.conta_id]);
   const formato = formatoDoTrabalho(trabalho.direcao as { formato?: unknown }) as FormatoProfile;
   const { texto_base: _base, sem_imagem: _sem, ...semRascunho } = ajustes;
-  const template: TemplateProfile = { ...semRascunho, texto: textoDoPost, nome, username, ...referenciaDaFonteProfile(fonte) };
+  const bloco: BlocoDaLamina | undefined = ehCarrossel ? (ajustes.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId)) : undefined;
+  const template: TemplateProfile = ehCarrossel
+    ? { ...semRascunho, texto: textoDoPost, nome, username, bloco, imagem_caminho: undefined, imagem_acervo_id: undefined }
+    : { ...semRascunho, texto: textoDoPost, nome, username, ...referenciaDaFonteProfile(fonte) };
+  if (ehCarrossel) { delete template.imagem_caminho; delete template.imagem_acervo_id; delete template.destaque; }
   if (fonteMudou || !fonte) delete template.destaque;
+  const midiaDoBloco = ehCarrossel ? midiaParaCarregar(bloco) : null;
+  const urlDaMidia = useUrlDaMesa(midiaDoBloco?.caminho, midiaDoBloco?.bucket);
+  const [desenhoDoBloco, setDesenhoDoBloco] = useState<ResultadoDoCarrossel | null>(null);
   const assinatura = JSON.stringify(template);
   const posicao = posicaoDe(card.ordem);
-  const fotosPendentes = (!!fonte && !foto.data) || (!!ajustes.foto_caminho && !avatarGuardado.data) || (!!card.imagens_ids?.length && acervo.isPending);
-  const erroDasFontes = foto.isError || avatarGuardado.isError || acervo.isError;
+  const fotosPendentes = ehCarrossel
+    ? (!!midiaDoBloco && !urlDaMidia.data && !urlDaMidia.isError) || (!!ajustes.foto_caminho && !avatarGuardado.data)
+    : (!!fonte && !foto.data) || (!!ajustes.foto_caminho && !avatarGuardado.data) || (!!card.imagens_ids?.length && acervo.isPending);
+  const erroDasFontes = ehCarrossel ? urlDaMidia.isError || avatarGuardado.isError : foto.isError || avatarGuardado.isError || acervo.isError;
   const rotuloValido = !!rotulo.trim() && rotulo.trim().length <= 60 && !/[\r\n\t<>]/.test(rotulo);
-  const limite = limiteDoTexto(ajustes.estilo, textoDoPost);
+  const limite = ehCarrossel
+    ? { usado: Array.from(textoSemMarcas(textoDoPost)).length, limite: 0, passou: false, texto: `${Array.from(textoSemMarcas(textoDoPost)).length} caracteres` }
+    : limiteDoTexto(ajustes.estilo === "carrossel" ? "twitter" : ajustes.estilo, textoDoPost);
   const faltaImagemDoIG = ehInstagram && !fonte;
+  const pendenciaDoCarrossel = ehCarrossel ? pendenciaDoBloco(bloco) : "";
   const escolherFonte = (escolhida: FonteProfile | undefined) => {
     setMarcando(false);
     setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(escolhida), destaque: undefined, sem_imagem: !escolhida }));
@@ -162,15 +179,19 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (fotosPendentes || erroDasFontes || !quadro) return;
     const dados = JSON.parse(assinatura) as TemplateProfile;
     if (!dados.nome.trim() || !/^[a-zA-Z0-9_.]{1,30}$/.test(dados.username) || !dados.texto.trim()) return;
-    void Promise.all([avatarUrl ? carregarImagemProfile(avatarUrl) : null, foto.data ? carregarImagemProfile(foto.data) : null]).then(([avatar, imagem]) => {
+    const midiaUrl = dados.estilo === "carrossel" ? urlDaMidia.data : null;
+    const tipoDaMidia = dados.bloco?.tipo === "video" ? "video" : "imagem";
+    void Promise.all([avatarUrl ? carregarImagemProfile(avatarUrl) : null, dados.estilo !== "carrossel" && foto.data ? carregarImagemProfile(foto.data) : null, midiaUrl ? carregarMidiaDoBloco(midiaUrl, tipoDaMidia) : null]).then(([avatar, imagem, midia]) => {
       if (!atual || !quadro) return;
-      imagemNaPrevia.current = desenharProfile(quadro, dados, formato, { avatar, imagem, imagemExata: fonte?.exata, posicao })?.imagem || null;
+      const r = desenharProfile(quadro, dados, formato, { avatar, imagem, imagemExata: fonte?.exata, posicao, midia });
+      imagemNaPrevia.current = r?.imagem || null;
+      setDesenhoDoBloco(r?.carrossel || null);
       // Também verifica CORS na prévia: nunca habilita Guardar para um canvas contaminado.
       quadro.toDataURL("image/png"); setPronto(true);
     }).catch((e: unknown) => { if (atual) setErro(textoDoErro(e)); });
     return () => { atual = false; };
     // posicao é derivada de cards (atual/total), entra pela assinatura do conjunto.
-  }, [assinatura, formato, avatarUrl, foto.data, fotosPendentes, erroDasFontes, fonte?.exata, quadro, posicao.atual, posicao.total]);
+  }, [assinatura, formato, avatarUrl, foto.data, urlDaMidia.data, fotosPendentes, erroDasFontes, fonte?.exata, quadro, posicao.atual, posicao.total]);
 
   const mudar = <K extends keyof Ajustes>(k: K, valor: Ajustes[K]) => setAjustes((a) => ({ ...a, [k]: valor }));
   const mudarNumero = (k: keyof NumerosDoPost, v: number | undefined) => setAjustes((a) => {
@@ -180,6 +201,11 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   });
   const trocarRede = (rede: Rede) => setAjustes((a) => {
     if (a.estilo === rede) return a;
+    // Carrossel X (22/10): lâmina inteira estilo post do X, fundo branco ou preto, com o bloco de mídia.
+    if (rede === "carrossel" || a.estilo === "carrossel") {
+      const tema = rede === "carrossel" ? (a.tema === "claro" ? "claro" : "escuro") : a.tema === "escuro" ? "escuro" : "claro";
+      return { ...a, estilo: rede, texto: a.texto_base, tema, cor_fundo: tema === "claro" ? "#ffffff" : "#000000", destaque: undefined, ...(rede === "carrossel" ? { bloco: a.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId), seta: a.seta ?? true } : {}) };
+    }
     const legenda = (trabalho.legenda || "").trim();
     // A legenda do post entra no Instagram só se a equipe não tinha mexido no texto da lâmina (e volta ao sair).
     const texto = rede === "instagram" && legenda && a.texto === a.texto_base ? legenda : a.estilo === "instagram" && legenda && a.texto === legenda ? a.texto_base : a.texto;
@@ -200,6 +226,32 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         const disponiveis = fontesDoProfile(c as CardComFontes, acervo.data || [], mesa.clientId);
         const salvoDoCard = metadados(ultimaVersao(trabalho, c.ordem));
         const esta = c.ordem === card.ordem;
+        if (template.estilo === "carrossel") {
+          // Carrossel X: o bloco de cada lâmina vem do rascunho dela, da versão guardada ou da sugestão do gerador.
+          const chaveDela = `mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:${c.ordem}`;
+          const blocoDela = esta ? template.bloco : lerRascunhoGuardado<Ajustes>(chaveDela)?.bloco || blocoInicialDaLamina(c as CardDoCarrossel, salvoDoCard, mesa.clientId);
+          const falta = pendenciaDoBloco(blocoDela);
+          if (falta) throw new Error(`Lâmina ${c.ordem}: ${falta.toLowerCase()}.`);
+          const cfgC: TemplateProfile = { ...template, texto: esta ? template.texto : c.texto_exato || "", bloco: blocoDela };
+          const m = midiaParaCarregar(blocoDela);
+          const url = m ? await supabase.storage.from(m.bucket).createSignedUrl(m.caminho, 3600) : null;
+          if (url?.error) throw url.error;
+          const [avatarC, midiaC] = await Promise.all([avatarUrl ? carregarImagemProfile(avatarUrl) : null, url?.data?.signedUrl ? carregarMidiaDoBloco(url.data.signedUrl, blocoDela?.tipo === "video" ? "video" : "imagem") : null]);
+          const telaC = document.createElement("canvas");
+          const desenho = desenharProfile(telaC, cfgC, formato, { avatar: avatarC, midia: midiaC, posicao: posicaoDe(c.ordem) });
+          const pngC = telaC.toDataURL("image/png").split(",")[1];
+          const versaoC = ultimaVersao(trabalho, c.ordem)?.versao || 0;
+          const chaveDoPedidoC = JSON.stringify([c.ordem, versaoC, c.texto_exato || "", cfgC, formato]);
+          let pedidoC = tentativas.current.get(chaveDoPedidoC);
+          if (!pedidoC) { pedidoC = crypto.randomUUID(); tentativas.current.set(chaveDoPedidoC, pedidoC); }
+          const rC = await chamarFuncao<{ trabalho: TrabalhoGravado; versao: number }>("estudio-arte", { acao: "salvar_template", trabalho_id: trabalho.id, ordem: c.ordem, versao_esperada: versaoC, texto_base: esta ? baseDaAberta : c.texto_exato || "", pedido_id: pedidoC, png_base64: pngC, template: cfgC });
+          gravarTrabalhoNoCache(cache, mesa.clientId, rC.trabalho);
+          // Lâmina de vídeo: o MP4 com a moldura e o vídeo inteiro no bloco sai pela fila de render.
+          if (blocoDela?.tipo === "video" && desenho.carrossel?.bloco) await pedirVideoDaLamina(c.ordem, rC.versao, desenho.carrossel);
+          if (vivo.current && esta) setAjustes((a) => ({ ...a, texto_base: cfgC.texto }));
+          feitas++;
+          continue;
+        }
         const escolha = esta ? template : salvoDoCard;
         const f = esta && ajustes.sem_imagem ? undefined : resolverFonteProfile(disponiveis, escolha);
         if (!f && (escolha?.imagem_acervo_id || escolha?.imagem_caminho)) throw new Error(`A imagem guardada saiu da lâmina ${c.ordem}. Escolha novamente em seu Template.`);
@@ -230,6 +282,41 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
       if (vivo.current) setErro(`${feitas ? `${feitas} lâmina(s) já guardada(s). ` : ""}${textoDoErro(e)}`);
     } finally { onMudou(); if (vivo.current) { setOcupado(false); setAndamento(""); } }
   };
+
+  // ---------------------------------------------------------------- MP4 da lâmina de vídeo (fila de render)
+
+  const [videoDaLamina, setVideoDaLamina] = useState<{ estado: string; url: string | null; erro: string | null } | null>(null);
+  const pedirVideoDaLamina = async (ordem: number, versao: number, desenho: ResultadoDoCarrossel) => {
+    const b = desenho.bloco!;
+    try {
+      const r = await chamarFuncao<{ pedido: { estado: string } }>("estudio-arte", {
+        acao: "template_video_pedir", trabalho_id: trabalho.id, ordem, versao, uid: crypto.randomUUID(),
+        retangulo: { x: b.x, y: b.y, largura: b.largura, altura: b.altura, raio: b.raio }, cor_do_bloco: desenho.fundoDoBloco,
+      });
+      if (ordem === card.ordem && vivo.current) setVideoDaLamina({ estado: r.pedido.estado, url: null, erro: null });
+      void cache.invalidateQueries({ queryKey: ["mesa", "template-video", trabalho.id, ordem] });
+    } catch (e) {
+      const semFila = e instanceof ErroDaMesa && e.codigo === "banco_sem_fila";
+      toast.warning(`Lâmina ${ordem}: o MP4 não entrou na fila`, { description: semFila ? "A fila da lâmina de vídeo ainda não foi ativada no banco. A lâmina ficou guardada em PNG." : textoDoErro(e) });
+    }
+  };
+  const ehLaminaDeVideo = ehCarrossel && bloco?.tipo === "video";
+  const temVersaoComVideo = !!ultimaVersao(trabalho, card.ordem)?.template_profile?.bloco && ultimaVersao(trabalho, card.ordem)?.template_profile?.bloco?.tipo === "video";
+  const consultarVideo = useQuery({
+    queryKey: ["mesa", "template-video", trabalho.id, card.ordem],
+    enabled: parte !== "painel" && temVersaoComVideo,
+    retry: false,
+    refetchInterval: (q) => {
+      const estado = (q.state.data as { pedido?: { estado?: string } } | undefined)?.pedido?.estado;
+      return estado === "fila" || estado === "rodando" ? 15_000 : false;
+    },
+    queryFn: async () => {
+      const r = await chamarFuncao<{ trabalho: TrabalhoGravado; pedido: { estado: string; erro_mensagem: string | null } | null; url: string | null }>("estudio-arte", { acao: "template_video_estado", trabalho_id: trabalho.id, ordem: card.ordem });
+      if (r.pedido?.estado === "pronto") gravarTrabalhoNoCache(cache, mesa.clientId, r.trabalho);
+      return r;
+    },
+  });
+  const estadoDoVideo = videoDaLamina && (!consultarVideo.data?.pedido || consultarVideo.data.pedido.estado === "pronto" && !consultarVideo.data.url) ? videoDaLamina : consultarVideo.data?.pedido ? { estado: consultarVideo.data.pedido.estado, url: consultarVideo.data.url, erro: consultarVideo.data.pedido.erro_mensagem } : null;
 
   const enviarAvatar = async (arquivo: File) => {
     setErro("");
@@ -289,8 +376,8 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // ---------------------------------------------------------------- partes da tela
 
   const travado = ocupado || bloqueado;
-  const pendencia = !nome.trim() || !username ? "Preencha nome e @ do perfil na ferramenta Template" : limite.passou ? limite.texto : fonteMudou ? "A imagem guardada saiu desta lâmina" : faltaImagemDoIG ? "O post do Instagram precisa de uma foto" : "";
-  const podeGuardar = pronto && !travado && !conflitoDeTexto && !fonteMudou && !faltaImagemDoIG;
+  const pendencia = !nome.trim() || !username ? "Preencha nome e @ do perfil na ferramenta Template" : limite.passou ? limite.texto : fonteMudou ? "A imagem guardada saiu desta lâmina" : faltaImagemDoIG ? "O post do Instagram precisa de uma foto" : pendenciaDoCarrossel;
+  const podeGuardar = pronto && !travado && !conflitoDeTexto && !fonteMudou && !faltaImagemDoIG && !pendenciaDoCarrossel;
 
   /**
    * Rodada 4 (dono: "o Estúdio ali dá pra deixar o mesmo padrão com o templates; ele recriou e não
@@ -300,10 +387,14 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
    */
   const faixa = <div className="mb-2 min-w-0 space-y-1.5" data-faixa-do-template="">
     <div className="flex min-h-7 min-w-0 items-center">
-      <p className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate", pendencia && "text-warning")} role="status" data-limite-do-texto="">{andamento || pendencia || `Post do X · ${limite.texto}`}</p>
+      <p className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate", pendencia && "text-warning")} role="status" data-limite-do-texto="">{andamento || pendencia || `${ehCarrossel ? `Carrossel X${ehLaminaDeVideo ? " · lâmina de vídeo" : ""}` : "Post do X"} · ${limite.texto}`}</p>
       <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2.5 text-[12px]" disabled={!podeGuardar} onClick={() => void salvar(false)} title="Guarda o post como nova versão da lâmina (sem custo)">{ocupado && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}Guardar nova versão</Button>
     </div>
-    {!ehX && <div role="status" className={juntar(texto.auxiliar, "flex flex-wrap items-center")}><span className="mb-1 mr-2">Template antigo ({ajustes.estilo === "instagram" ? "Instagram" : "Story"}): abre como foi guardado. Os novos são do X.</span><Button size="sm" variant="outline" className="mb-1" disabled={travado} onClick={() => trocarRede("twitter")}>Passar para post do X</Button></div>}
+    {ehCarrossel && estadoDoVideo && <div role="status" className={juntar(texto.auxiliar, "flex flex-wrap items-center")} data-mp4-da-lamina={estadoDoVideo.estado}>
+      <span className="mr-2">{estadoDoVideo.estado === "pronto" ? "MP4 da lâmina pronto" : estadoDoVideo.estado === "erro" ? `O MP4 falhou${estadoDoVideo.erro ? `: ${estadoDoVideo.erro}` : ""}` : estadoDoVideo.estado === "cancelado" ? "O MP4 foi cancelado" : "MP4 da lâmina na fila de render"}</span>
+      {estadoDoVideo.url && <a href={estadoDoVideo.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center underline"><Download className="mr-1 h-3.5 w-3.5" />Baixar MP4</a>}
+    </div>}
+    {!ehX && !ehCarrossel && <div role="status" className={juntar(texto.auxiliar, "flex flex-wrap items-center")}><span className="mb-1 mr-2">Template antigo ({ajustes.estilo === "instagram" ? "Instagram" : "Story"}): abre como foi guardado. Os novos são do X.</span><Button size="sm" variant="outline" className="mb-1" disabled={travado} onClick={() => trocarRede("twitter")}>Passar para post do X</Button></div>}
     {(erro || erroDasFontes) && <p role="alert" className="text-[12px] text-destructive">{erro || "Não foi possível ler as fotos selecionadas. Confira a ferramenta Fotos."}</p>}
     {conflitoDeTexto && <div role="status" className="space-y-2 text-[12px]"><p>O texto da lâmina mudou desde que você abriu este rascunho.</p><div className="flex flex-wrap"><Button size="sm" variant="outline" className="mb-1 mr-2" onClick={() => setAjustes((a) => ({ ...a, texto: textoDaLamina, texto_base: textoDaLamina }))}>Usar texto atual da lâmina</Button><Button size="sm" variant="ghost" className="mb-1" onClick={() => setAjustes((a) => ({ ...a, texto_base: textoDaLamina }))}>Manter minha edição</Button></div></div>}
     {fonteMudou && <div role="status" className={texto.auxiliar}>A imagem guardada saiu desta lâmina. <Button size="sm" variant="outline" onClick={() => escolherFonte(fonte || fontes[0])}>Usar imagem atual</Button></div>}
@@ -311,7 +402,9 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   </div>;
 
   /** O post do X dentro do quadro da lâmina grande (o mesmo PNG que será guardado). */
-  const conteudo = () => <>
+  const blocoNaTela = ehLaminaDeVideo && pronto ? desenhoDoBloco?.bloco || null : null;
+  const alturaDoQuadro = quadro?.height || 1350;
+  const conteudo = () => <div className="relative h-full w-full" data-quadro-do-template="">
     <canvas ref={setQuadro} aria-label="Prévia do template Profile" className={juntar("block h-full w-full", marcando && "cursor-crosshair", !pronto && "hidden")} onClick={(e) => {
       if (!marcando || ocupado || bloqueado || !pronto || !rotuloValido || fonteMudou) return;
       const q = e.currentTarget, limites = q.getBoundingClientRect(), estilo = getComputedStyle(q);
@@ -322,8 +415,12 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
       if (!ponto) { setErro("Clique dentro da imagem real, fora das margens do template."); return; }
       setAjustes((a) => ({ ...a, ...referenciaDaFonteProfile(fonte), destaque: { ...ponto, rotulo: rotulo.trim() } })); setMarcando(false);
     }} />
+    {/* Lâmina de vídeo: o vídeo toca no lugar exato do bloco (o mesmo retângulo do MP4); o som fica desligado, como no Instagram. */}
+    {blocoNaTela && urlDaMidia.data && <video aria-label="Vídeo do bloco" src={urlDaMidia.data} muted loop autoPlay playsInline className="pointer-events-none absolute" data-video-do-bloco=""
+      style={{ left: `${(blocoNaTela.x / 1080) * 100}%`, top: `${(blocoNaTela.y / alturaDoQuadro) * 100}%`, width: `${(blocoNaTela.largura / 1080) * 100}%`, height: `${(blocoNaTela.altura / alturaDoQuadro) * 100}%`, borderRadius: `${(blocoNaTela.raio / blocoNaTela.largura) * 100}% / ${(blocoNaTela.raio / blocoNaTela.altura) * 100}%`, objectFit: bloco?.enquadramento === "preencher" ? "cover" : "contain", objectPosition: `${Math.round((bloco?.foco_x ?? 0.5) * 100)}% ${Math.round((bloco?.foco_y ?? 0.5) * 100)}%` }} />}
+    {ehLaminaDeVideo && pronto && <span className="pointer-events-none absolute bottom-[3%] right-[3%] inline-flex h-7 w-7 items-center justify-center rounded-full bg-foreground/70 text-background" title="Lâmina de vídeo (som desligado, como no Instagram)" data-lamina-de-video=""><VolumeX className="h-3.5 w-3.5" aria-hidden="true" /></span>}
     {!pronto && <p role="status" className={juntar(texto.auxiliar, "flex h-full items-center justify-center p-4 text-center")}>{fotosPendentes ? "Carregando fotos…" : erro || erroDasFontes ? "Prévia indisponível" : "Preencha nome e @ na ferramenta Template."}</p>}
-  </>;
+  </div>;
   const centro = moldura ? moldura({ faixa, conteudo }) : <div className="min-w-0" data-previa-do-template="">{faixa}<div className="relative mx-auto w-full max-w-[540px]" style={{ paddingTop: "125%" }}><div className="absolute inset-0">{conteudo()}</div></div></div>;
 
   const destaqueDaImagem = fonte ? <div className="min-w-0 space-y-2">
@@ -348,7 +445,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
       <label className="mb-1 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={ajustes.verificado} disabled={travado} onChange={(e) => mudar("verificado", e.target.checked)} />Exibir selo no layout</label>
       <AjudaRecolhida className="mb-1 ml-1" rotulo="Quando usar o selo">Marque só quando o perfil do cliente tem verificação de verdade. O selo é desenho do template, não confirmação da rede.</AjudaRecolhida>
     </div>
-    <div className="border-t border-border pt-3">
+    {!ehCarrossel && <div className="border-t border-border pt-3">
       <button type="button" aria-expanded={gerarAberto} onClick={() => setGerarAberto((v) => !v)} className={juntar(botao.discreto, "-ml-3.5")}><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Gerar conteúdo com IA</button>
       {gerarAberto && <div className="mt-2 space-y-3">
         <label className={juntar("block", texto.rotulo)}>Tema (opcional)<Input aria-label="Tema do conteúdo" value={tema} maxLength={600} disabled={travado} onChange={(e) => setTema(e.target.value)} placeholder="Sem tema, vale a pauta da lâmina" className="mt-1" /></label>
@@ -368,7 +465,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         </div>
         {avisosDoGerar.map((a) => <p key={a} role="status" className={juntar(texto.auxiliar, "text-warning")}>{a}</p>)}
       </div>}
-    </div>
+    </div>}
   </div>;
 
   const grupos: GrupoDaFonte[] = ["gerada", "internet", "cliente"];
@@ -461,10 +558,28 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // ferramentas do painel; sem abas próprias. Primeiro o desenho do post, depois a imagem, o perfil e o Gerar.
   const secao = (titulo: string, corpo: JSX.Element, primeira = false) => <section className={juntar("min-w-0 space-y-3", !primeira && "border-t border-border pt-4")} aria-label={titulo}><p className={juntar(texto.corpo, "font-semibold")}>{titulo}</p>{corpo}</section>;
   const peca = <div className="space-y-3">
-    {onModoTemplate && <Segmentado<"arte" | "x"> rotulo="No centro do Estúdio" opcoes={[{ valor: "arte", rotulo: "Arte da lâmina" }, { valor: "x", rotulo: "Post do X" }]} valor={modoTemplate ? "x" : "arte"} onEscolher={(v) => onModoTemplate(v === "x")} />}
+    {onModoTemplate && <Segmentado<"arte" | "x"> rotulo="No centro do Estúdio" opcoes={[{ valor: "arte", rotulo: "Arte da lâmina" }, { valor: "x", rotulo: ehCarrossel ? "Carrossel X" : "Post do X" }]} valor={modoTemplate ? "x" : "arte"} onEscolher={(v) => onModoTemplate(v === "x")} />}
+    {(ehX || ehCarrossel) && <Segmentado<"twitter" | "carrossel"> rotulo="Modelo do template" opcoes={[{ valor: "twitter", rotulo: "Post com ações", dica: "O post do X dentro da lâmina, com as ações" }, { valor: "carrossel", rotulo: "Carrossel X", dica: "A lâmina inteira estilo post do X, com bloco de mídia" }]} valor={ehCarrossel ? "carrossel" : "twitter"} onEscolher={(v) => trocarRede(v)} desativado={travado} />}
     {cardsOrdenados.length > 1 && <Button size="sm" variant="outline" disabled={!podeGuardar} onClick={() => void salvar(true)}>Montar todas as lâminas</Button>}
     {!ehX && <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : "Texto do Story"}<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={2200} rows={5} disabled={travado} onChange={(e) => mudar("texto", e.target.value)} className="mt-1" /></label>}
   </div>;
+  const mudarBloco = (patch: Partial<BlocoDaLamina>) => setAjustes((a) => ({ ...a, bloco: { ...(a.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId)), ...patch } }));
+  const aoGerarCarrossel = (novo: TrabalhoGravado) => {
+    // As lâminas abrem com o texto novo e a mídia sugerida: os rascunhos antigos do trabalho saem.
+    esquecerRascunhos(`mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:`);
+    const doCard = ((novo as unknown as Trabalho).direcao?.cards || []).find((c) => c.ordem === card.ordem) as CardDoCarrossel | undefined;
+    setAjustes((a) => ({ ...a, estilo: "carrossel", texto: doCard?.texto_exato || a.texto, texto_base: doCard?.texto_exato || a.texto_base, bloco: doCard ? blocoInicialDaLamina(doCard, undefined, mesa.clientId) : a.bloco }));
+  };
+  if (ehCarrossel && parte !== "centro") {
+    const painelDoCarrossel = <div className="min-w-0 space-y-4" data-ferramenta-template="" data-modelo-carrossel="">
+      <PainelDoCarrossel trabalho={trabalho} card={card} cards={cardsOrdenados} fontes={fontes} bloco={bloco!} travado={travado}
+        ajustes={{ tema: ajustes.tema, cor_fundo: ajustes.cor_fundo, tamanho_texto: ajustes.tamanho_texto, peso_texto: ajustes.peso_texto, seta: ajustes.seta, rodape_cinza: ajustes.rodape_cinza }}
+        onBloco={mudarBloco} onAjuste={(k, v) => setAjustes((a) => ({ ...a, [k]: v }))} onMudou={onMudou} onGerado={aoGerarCarrossel} onAbrirFotos={onAbrirFotos} modeloSeletor={peca} />
+      {secao("Perfil", conteudoDoPerfil)}
+    </div>;
+    if (parte === "painel") return <div aria-label="Ajustes do template" className="min-w-0">{painelDoCarrossel}</div>;
+    return <div className="grid min-w-0 gap-6" aria-label="Template Profile">{centro}{painelDoCarrossel}</div>;
+  }
   const painel = <div className="min-w-0 space-y-4" data-ferramenta-template="">
     {secao("Post do X", peca, true)}
     {secao("Aparência do post", conteudoDaAparencia)}

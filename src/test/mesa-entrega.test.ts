@@ -123,9 +123,10 @@ describe("custo do Jev na carteira", () => {
     // + a fidelidade do gancho à referência (02/10) e o mundo real e a pessoa pública na direção (17/10).
     // 18/10: + a capa escolhida pelo Jev (37b5256c) e as referências do Workspace que servem ao pedido
     // (d2a4c32b). Os módulos recebem um `julgar` de fora; a pergunta e a cobrança ficam juntas no index.ts.
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(16);
+    // 22/10: + a mídia de cada lâmina do carrossel estilo X (Choice, um pedido para todas, template_carrossel).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(17);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(14);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(15);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(16);
     // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
     for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {
       expect(ler(`supabase/functions/estudio-arte/modulos/${m}.ts`)).not.toMatch(/jevPerguntar\(/);

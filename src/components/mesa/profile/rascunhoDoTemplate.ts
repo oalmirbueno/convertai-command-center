@@ -87,3 +87,29 @@ export function useBaseDoTemplate(trabalhoId: string): BaseDoTemplate | null {
   }, [trabalhoId]);
   return useSyncExternalStore(assinar, () => bases.get(trabalhoId) || null, () => null);
 }
+
+/**
+ * Carrossel estilo X (22/10): depois do "Gerar o carrossel", os rascunhos das lâminas são esquecidos para
+ * cada uma abrir com o texto novo e a mídia sugerida (o valor inicial volta a valer). Avisa quem está aberto.
+ */
+export function esquecerRascunhos(prefixo: string) {
+  const chaves: string[] = [];
+  try {
+    for (let i = 0; i < window.sessionStorage.length; i++) {
+      const k = window.sessionStorage.key(i);
+      if (k && k.indexOf(prefixo) === 0) chaves.push(k);
+    }
+    chaves.forEach((k) => window.sessionStorage.removeItem(k));
+  } catch { /* sem sessionStorage: só a memória */ }
+  for (const k of Array.from(cache.keys())) if (k.indexOf(prefixo) === 0) { cache.delete(k); if (chaves.indexOf(k) < 0) chaves.push(k); }
+  chaves.forEach((k) => ouvintes.get(k)?.forEach((f) => f()));
+}
+
+/** O rascunho guardado de outra lâmina (fora de componente), ou null; usado ao montar todas as lâminas. */
+export function lerRascunhoGuardado<T>(chave: string): T | null {
+  const guardado = cache.get(chave);
+  if (guardado) return guardado.valor as T;
+  const texto = bruto(chave);
+  if (texto === null) return null;
+  try { return JSON.parse(texto) as T; } catch { return null; }
+}

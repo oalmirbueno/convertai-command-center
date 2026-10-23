@@ -317,7 +317,11 @@ export const VARIANTES_DAS_FUNCOES: VariantesDeTeste = {
     .map((nome) => ({ o: `({ esquema: ${nome} })` })),
   // 20/10: o "Gerar com IA" do nó (no_preencher) monta o esquema pelos campos do tipo (texto, escolha e lista).
   // 21/10: o Template escreve o post (X, Instagram, Story) com o esquema do módulo template-geracao.
-  "estudio-arte/index.ts": [{ e: { arquivo: "estudio-arte/modulos/template-geracao.ts", expressao: "({ esquema: ESQUEMA_CONTEUDO_DO_TEMPLATE })" } }],
+  // 22/10: o carrossel estilo X usa o mesmo redator (escreverTexto) com o esquema do módulo template-carrossel.
+  "estudio-arte/index.ts": [
+    { e: { arquivo: "estudio-arte/modulos/template-geracao.ts", expressao: "({ esquema: ESQUEMA_CONTEUDO_DO_TEMPLATE })" } },
+    { e: { arquivo: "estudio-arte/modulos/template-carrossel.ts", expressao: "({ esquema: ESQUEMA_DO_CARROSSEL_X })" } },
+  ],
   "laboratorio/inteligencia.ts": [
     { t: `({ esquema: esquemaDoPreenchimento("copy", ["titulo", "formato", "instrucao"]) })` },
     { t: `({ esquema: esquemaDoPreenchimento("contexto", ["titulo", "texto"]) })` },

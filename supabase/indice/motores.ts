@@ -712,6 +712,7 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   // 20/10: o "Gerar com IA" do nó (no_preencher) também preenche campos pelo esquema do tipo, como o executar.
   "laboratorio/inteligencia.ts#texto": "laboratorio.v1",
   // 21/10: o texto do Template (post do X, legenda do Instagram, Story) usa a base do refino, como o refinar.
+  // 22/10: a mesma chamada escreve o carrossel estilo X (template_carrossel), agora numa função só do index.
   "estudio-arte/index.ts#escreverTexto": "revisoes",
   // 17/10: chamadas novas de outras frentes, cada uma com o porquê.
   "agente-calendario/index.ts#corrigirTutoriais": "revisoes",

@@ -598,6 +598,8 @@ import { linhaDoTomParaAPeca, tomDaCampanha } from "../agente-calendario/modulos
 import { acoesDoPadraoDaCampanha } from "./modulos/padrao-da-campanha-acao.ts";
 // 21/10: Template com "Gerar" (texto do post e foto sem texto), custo antes por 409 confirmar_custo.
 import { acoesDaGeracaoDoTemplate, TAMANHO_DA_FOTO } from "./modulos/template-geracao.ts";
+import { acoesDoCarrossel, type PedidoDeRender } from "./modulos/template-carrossel.ts";
+import { TIPO_DA_LAMINA_EM_VIDEO } from "./modulos/lamina-em-video.ts";
 import { estimarComModelo as estimarPeloCatalogo } from "../_shared/ia-motor.ts";
 import { acoesDasFontesReais, type FonteRealDoDiretor } from "./modulos/fontes-reais-do-diretor.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
@@ -11357,6 +11359,76 @@ async function processarFila(ch: Chamador, _corpo: Record<string, unknown>) {
   return json({ processando: item.id, ordem: item.ordem, etapa: item.etapa }, 202);
 }
 
+/**
+ * O redator do Template (21/10; carrossel estilo X em 22/10): modelo do diretor de arte, a base do refino, a voz,
+ * o contexto e o cérebro do cliente e o motor de copy da casa. Um pedido, sem laço de correção.
+ */
+async function escreverTexto(ch: Chamador, t: Trabalho, e: { sistema: string; pedido: Record<string, unknown>; esquema: Record<string, unknown>; rede: "twitter" | "instagram" | "story" }): Promise<{ json: unknown; custoUsd: number; saldoUsd?: number | null }> {
+  const [redator, contexto, cerebro, marcaDoTexto] = await Promise.all([
+    modeloDoPapel("diretor_arte"),
+    lerContextoConsolidado(servico(), t.client_id).catch(nuloComLog("estudio-arte: contexto do cliente não lido no template", { trabalho_id: t.id })),
+    resumoDoCerebro(servico(), t.client_id, ["copy", "arte", "campanha"], { limite: 14, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }),
+    marcaDe(t.client_id, t),
+  ]);
+  const voz = await vozDaMarca(servico(), t.client_id, marcaDoTexto ?? null);
+  const r = await chamarTexto({
+    clientId: t.client_id,
+    tarefa: "estudio",
+    agente: "diretor_arte",
+    modeloId: redator.id,
+    raciocinio: raciocinioPara(redator, ["low", "medium"]),
+    sistema: `${e.sistema}\n\n${baseDoRefino()}`,
+    mensagens: [{
+      papel: "usuario",
+      conteudo: JSON.stringify({
+        ...e.pedido,
+        marca: { nome: marcaDoTexto ? texto(marcaDoTexto.nome, 120) : null, contexto: contexto ? contextoComMarca(contexto, marcaDoTexto) : null },
+        cerebro_do_cliente: cerebro.texto || null,
+        motor_de_copy: blocoDoMotor({ canal: e.rede === "instagram" ? "legenda" : "lamina", objetivo: objetivoDaCopy((t.direcao as { objetivo?: unknown }).objetivo ?? ""), variacoes: 1, regras: voz.regras }),
+      }),
+    }],
+    esquemaJson: e.esquema as typeof ESQUEMA_REFINO,
+    maxTokensSaida: 4_000,
+    timeoutMs: 300_000,
+    referencia: { tipo: "estudio_trabalho", id: t.id },
+    criadoPor: ch.userId,
+  });
+  return { json: r.json, custoUsd: r.custoUsd, saldoUsd: r.saldoUsd };
+}
+
+/** Hosts dos bancos de vídeo com licença comercial (o vídeo real só vem deles, nunca de link da tela). */
+const HOSTS_DOS_VIDEOS_REAIS = /^(videos\.pexels\.com|player\.vimeo\.com|[a-z0-9-]+\.pexels\.com|upload\.wikimedia\.org)$/i;
+
+/** Baixa o vídeo real escolhido (só dos hosts dos bancos, com teto de tamanho e redirecionamento conferido). */
+async function baixarVideoReal(inicial: string, limite: number): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  let url: URL | null = null;
+  try { url = new URL(inicial); } catch { return null; }
+  for (let salto = 0; url && salto < 4; salto++) {
+    if (url.protocol !== "https:" || !HOSTS_DOS_VIDEOS_REAIS.test(url.hostname)) return null;
+    let res: Response;
+    try {
+      res = await fetch(url, { redirect: "manual", headers: { "User-Agent": "AceleriqEstudio/1.0 (https://aceleriq.com.br)", Accept: "video/mp4,video/webm,video/*" }, signal: AbortSignal.timeout(120_000) });
+    } catch {
+      return null;
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const destino = res.headers.get("location");
+      await res.body?.cancel().catch(() => {});
+      try { url = destino ? new URL(destino, url) : null; } catch { url = null; }
+      continue;
+    }
+    const tipo = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    const tamanho = Number(res.headers.get("content-length") || 0);
+    if (!res.ok || (tipo !== "video/mp4" && tipo !== "video/webm") || tamanho > limite) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    const bytes = await lerComTeto(res, limite, false);
+    return bytes ? { bytes, mime: tipo } : null;
+  }
+  return null;
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   preparar,
   configurar,
@@ -11420,38 +11492,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       tokensEntrada: 1_500,
       tamanho: TAMANHO_DA_FOTO[proporcao],
     }),
-    escreverTexto: async (ch, t, e) => {
-      const [redator, contexto, cerebro, marcaDoTexto] = await Promise.all([
-        modeloDoPapel("diretor_arte"),
-        lerContextoConsolidado(servico(), t.client_id).catch(nuloComLog("estudio-arte: contexto do cliente não lido no template", { trabalho_id: t.id })),
-        resumoDoCerebro(servico(), t.client_id, ["copy", "arte", "campanha"], { limite: 14, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }),
-        marcaDe(t.client_id, t),
-      ]);
-      const voz = await vozDaMarca(servico(), t.client_id, marcaDoTexto ?? null);
-      const r = await chamarTexto({
-        clientId: t.client_id,
-        tarefa: "estudio",
-        agente: "diretor_arte",
-        modeloId: redator.id,
-        raciocinio: raciocinioPara(redator, ["low", "medium"]),
-        sistema: `${e.sistema}\n\n${baseDoRefino()}`,
-        mensagens: [{
-          papel: "usuario",
-          conteudo: JSON.stringify({
-            ...e.pedido,
-            marca: { nome: marcaDoTexto ? texto(marcaDoTexto.nome, 120) : null, contexto: contexto ? contextoComMarca(contexto, marcaDoTexto) : null },
-            cerebro_do_cliente: cerebro.texto || null,
-            motor_de_copy: blocoDoMotor({ canal: e.rede === "instagram" ? "legenda" : "lamina", objetivo: objetivoDaCopy((t.direcao as { objetivo?: unknown }).objetivo ?? ""), variacoes: 1, regras: voz.regras }),
-          }),
-        }],
-        esquemaJson: e.esquema as typeof ESQUEMA_REFINO,
-        maxTokensSaida: 4_000,
-        timeoutMs: 300_000,
-        referencia: { tipo: "estudio_trabalho", id: t.id },
-        criadoPor: ch.userId,
-      });
-      return { json: r.json, custoUsd: r.custoUsd, saldoUsd: r.saldoUsd };
-    },
+    escreverTexto,
     gerarFoto: async (ch, t, e) => {
       const img = await chamarImagem({
         clientId: t.client_id,
@@ -11482,6 +11523,71 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       const x = t as unknown as TrabalhoParaAcoes;
       const r = operacao === "tirar" ? tirarLaminaDoTrabalho(x, ordem) : operacao === "duplicar" ? duplicarLaminaDoTrabalho(x, ordem) : adicionarLaminaNoTrabalho(x, ordem, novoTexto);
       return r.patch as unknown as Record<string, unknown>;
+    },
+  }),
+  // 22/10: carrossel estilo post do X. Copy de todas as lâminas pelo mesmo redator do Template, o Jev escolhe a
+  // mídia de cada uma, vídeos reais com licença comercial e a lâmina de vídeo em MP4 pela fila de render.
+  ...acoesDoCarrossel<Chamador, Trabalho>({
+    erro: (status, codigo, mensagem, detalhes) => new ErroEstudio(status, codigo, mensagem, detalhes),
+    json,
+    trabalhoComAcesso,
+    mutarTrabalho,
+    ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
+    atualizarTexto: (t, ordem, novoTexto) => ({
+      ...t.direcao,
+      cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: novoTexto, blocos: blocosDoTexto(novoTexto, c.funcao) } : c),
+    }),
+    estimarTexto: async () => estimarPeloCatalogo(await modeloDoPapel("diretor_arte"), { tokensEntrada: 9_000, tokensSaida: 3_000 }),
+    escreverTexto,
+    perguntarJev: async (t, state, questions) => {
+      const res = await jevPerguntar({ state, questions: questions as unknown as Record<string, PerguntaJev> });
+      const cobrado = await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id } }).catch(() => null);
+      return { answers: res.answers, custoUsd: cobrado?.custoUsd ?? 0 };
+    },
+    jsonDoCommons,
+    jsonDoPexels: async (url) => {
+      const chave = (await chaveDoCofre("PEXELS_API_KEY").catch(() => "")).trim();
+      if (!chave) throw new ErroEstudio(503, "pexels_sem_chave", "Sem a chave do Pexels.");
+      if (!url.startsWith("https://api.pexels.com/videos/")) throw new Error("pexels_url");
+      const res = await fetch(url, { headers: { Authorization: chave, Accept: "application/json" }, signal: AbortSignal.timeout(12_000), redirect: "error" });
+      if (!res.ok) { await res.body?.cancel().catch(() => {}); throw new Error(`pexels_${res.status}`); }
+      const bytes = await lerComTeto(res, 2 * 1024 * 1024, false);
+      if (!bytes) throw new Error("pexels_grande");
+      return JSON.parse(new TextDecoder().decode(bytes));
+    },
+    baixarVideo: baixarVideoReal,
+    guardarVideo: async (t, bytes, mime) => {
+      const ext = mime === "video/webm" ? "webm" : "mp4";
+      const caminho = `${t.client_id}/estudio/template/videos/fontes/${crypto.randomUUID()}.${ext}`;
+      const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: false });
+      if (error) throw new ErroEstudio(503, "video_real_nao_guardado", "Não foi possível guardar este vídeo. Tente novamente.");
+      return caminho;
+    },
+    descartarUpload: async (caminho) => { await servico().storage.from("mesa").remove([caminho]); },
+    pedirRender: async (t, linha) => {
+      const campos = "id, estado, etapa, progresso, saida_path, erro_mensagem, entrada, criado_em";
+      const ins = await servico().from("render_pedidos").insert({ client_id: t.client_id, estudio_trabalho_id: t.id, tipo: TIPO_DA_LAMINA_EM_VIDEO, uid: linha.uid, entrada: linha.entrada, criado_por: linha.criadoPor }).select(campos).single();
+      if (!ins.error && ins.data) return { pedido: ins.data as unknown as PedidoDeRender, ja_existia: false };
+      const e = ins.error as { code?: string; message?: string } | null;
+      if (e && (e.code === "42703" || e.code === "23514" || e.code === "42P01" || /estudio_trabalho_id|tipo_check|schema cache/i.test(e.message || ""))) throw new ErroEstudio(503, "banco_sem_fila", "A fila da lâmina de vídeo ainda não foi ativada no banco (migration 20261022200000). A lâmina segue em PNG.");
+      if (!e || e.code !== "23505") throw new ErroEstudio(503, "banco_indisponivel", "Não foi possível pôr o vídeo na fila agora.");
+      const ativo = await servico().from("render_pedidos").select(campos).eq("estudio_trabalho_id", t.id).eq("tipo", TIPO_DA_LAMINA_EM_VIDEO).eq("entrada->>ordem", String(linha.entrada.ordem)).in("estado", ["fila", "rodando"]).order("criado_em", { ascending: false }).limit(1).maybeSingle();
+      if (ativo.data) return { pedido: ativo.data as unknown as PedidoDeRender, ja_existia: true };
+      const mesmo = await servico().from("render_pedidos").select(campos).eq("client_id", t.client_id).eq("uid", linha.uid).maybeSingle();
+      if (mesmo.data) return { pedido: mesmo.data as unknown as PedidoDeRender, ja_existia: true };
+      throw new ErroEstudio(409, "pedido_em_conflito", "Já há um vídeo desta lâmina na fila. Consulte o andamento.");
+    },
+    pedidosDaLamina: async (t, ordem) => {
+      const { data, error } = await servico().from("render_pedidos").select("id, estado, etapa, progresso, saida_path, erro_mensagem, entrada, criado_em").eq("estudio_trabalho_id", t.id).eq("tipo", TIPO_DA_LAMINA_EM_VIDEO).eq("entrada->>ordem", String(ordem)).order("criado_em", { ascending: false }).limit(5);
+      if (error) {
+        if (/estudio_trabalho_id|schema cache|does not exist/i.test(error.message || "")) return [];
+        throw new ErroEstudio(503, "banco_indisponivel", "Não foi possível ler a fila agora.");
+      }
+      return (data || []) as unknown as PedidoDeRender[];
+    },
+    linkAssinado: async (caminho) => {
+      const { data } = await servico().storage.from("mesa").createSignedUrl(caminho, 3600);
+      return data?.signedUrl ?? null;
     },
   }),
   preparar_fundo: prepararFundo,
@@ -11582,6 +11688,9 @@ const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "
 // 21/10: o texto e a foto gerados no Template também passam de 150 s.
 ACOES_LONGAS.add("template_conteudo");
 ACOES_LONGAS.add("template_imagem");
+// 22/10: o carrossel estilo X (texto de todas as lâminas e o Jev) e o vídeo real baixado também passam de 150 s.
+ACOES_LONGAS.add("template_carrossel");
+ACOES_LONGAS.add("template_video_aplicar");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

@@ -388,7 +388,9 @@ describe("correções da revisão (MOV)", () => {
   const voz = ler("supabase/functions/mesa-motion/voz.ts");
 
   it("worker antigo: a função recusa a peça nova, o acabamento e a mixagem com narração com a frase certa", () => {
-    expect(ler("workers/render/principal.ts")).toMatch(/VERSAO_DO_WORKER = "[^"]*\+mov-1"/);
+    // 22/10: "+lam-1" (lâmina de vídeo do carrossel) vem depois do mov-1, que segue dentro dos 40 caracteres guardados.
+    expect(ler("workers/render/principal.ts")).toMatch(/VERSAO_DO_WORKER = "[^"]*\+mov-1(\+[a-z]+-\d+)*"/);
+    expect(workerConheceMov(/VERSAO_DO_WORKER = "([^"]*)"/.exec(ler("workers/render/principal.ts"))![1].slice(0, 40))).toBe(true);
     expect(workerConheceMov("edt-1.0+mot-1.0+mov-1")).toBe(true);
     expect(workerConheceMov("edt-1.0+mot-1.0+mov-2")).toBe(true);
     expect(workerConheceMov("edt-1.0+mot-1.0")).toBe(false);
