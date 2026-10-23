@@ -1058,7 +1058,7 @@ export default function AbaMes({
 
       <Dialog open={agenteAberto} onOpenChange={setAgenteAberto}>
         <DialogContent
-          className="flex h-[92vh] w-[calc(100vw-16px)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:h-[86vh] sm:w-[calc(100vw-48px)]"
+          className="flex h-[92vh] w-[calc(100vw-16px)] max-w-[1440px] flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:w-[calc(100vw-48px)]"
           onInteractOutside={(e) => {
             // Clicar no aviso (ex.: Desfazer) não fecha o agente.
             const alvo = e.target as HTMLElement | null;

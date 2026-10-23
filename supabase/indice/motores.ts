@@ -718,6 +718,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "agente-calendario/index.ts#corrigirTutoriais": "revisoes",
   "agente-calendario/index.ts#planejarMes": "revisoes",
   "agente-calendario/index.ts#ajustarCriacao": "revisoes",
+  // 23/10: o roteiro curto do vídeo da peça (2 versões, o Jev escolhe) e os termos da busca de referência livre.
+  "agente-calendario/index.ts#escreverMidiaDaPeca": "revisoes",
   "mesa-ads/index.ts#chamarReescrita": "revisoes",
   "estudio-arte/index.ts#prepararItem/revisarConteudo": "revisoes",
   // 17/10: o redator das capas alternativas (o Jev escolhe a melhor antes de qualquer imagem).
@@ -823,6 +825,8 @@ export const METODO_DOS_MOTORES: Record<string, string[]> = {
   "mesa_publicidade.agente": ["publicidade.agente"],
   "mesa_roteiros.roteirista": ["roteiros.roteirista"],
   "mesa_roteiros.anuncio": ["roteiros.roteirista"],
+  "mesa_roteiros.reescrita": ["roteiros.roteirista"],
+  "mesa_roteiros.cenas": ["roteiros.roteirista"],
   "mesa_roteiros.agente": ["roteiros.agente"],
   "estilo.agente": ["estilo.agente"],
   "perfis.plano": ["perfis.plano"],
@@ -1062,6 +1066,26 @@ export const MOTORES: readonly Motor[] = [
     bases: ["mesa-roteiros: SISTEMA_ROTEIRISTA e SISTEMA_DO_ANUNCIO (modulos/roteiro-de-anuncio.ts: estruturas de anúncio em vídeo e escolha do Jev)"],
     montar: (objetivo) => conhecimentoRoteiros(objetivo),
     promete: ["papeis_do_roteiro", "roteiro_de_video", "direcao_de_gravacao", "cta_principios", "anti_generico"],
+  },
+  // Frente B (23/10): o agente ao lado do roteiro da peça reescreve pelo pedido (reescrever_roteiro, versão nova
+  // com Desfazer) e o Gerar da peça tem as cenas da IA de vídeo em 2 versões; os dois com os ganchos do nicho.
+  {
+    id: "mesa_roteiros.reescrita",
+    nome: "Mesa Roteiros: roteiro reescrito pelo pedido ao agente (reescrever_roteiro)",
+    funcao: "mesa-roteiros",
+    ligacao: { arquivo: ROTEIROS, trechos: ["mensagens: [{ papel: \"usuario\", conteudo: `${instrucaoDaReescrita(pedido, duracao)}", "esquemaJson: ESQUEMA_DO_ROTEIRO,"] },
+    bases: ["mesa-roteiros: SISTEMA_ROTEIRISTA e a instrução da reescrita (modulos/roteiro-da-peca.ts), com o motor de copy viral (ganchos_vencedores)"],
+    montar: (objetivo) => conhecimentoRoteiros(objetivo),
+    promete: ["papeis_do_roteiro", "roteiro_de_video", "direcao_de_gravacao", "anti_generico"],
+  },
+  {
+    id: "mesa_roteiros.cenas",
+    nome: "Mesa Roteiros: cenas da peça de vídeo para a IA de vídeo, em 2 versões (peca_cenas_gerar)",
+    funcao: "mesa-roteiros",
+    ligacao: { arquivo: ROTEIROS, trechos: ["${instrucaoDasCenas({ trilha, duracaoS })}", "esquemaJson: ESQUEMA_DAS_CENAS_VIRAIS,"] },
+    bases: ["mesa-roteiros: SISTEMA_ROTEIRISTA e a instrução das cenas (modulos/roteiro-da-peca.ts), com o motor de copy viral; o Jev escolhe pelas notas virais"],
+    montar: (objetivo) => conhecimentoRoteiros(objetivo),
+    promete: ["papeis_do_roteiro", "roteiro_de_video", "anti_generico"],
   },
   {
     id: "mesa_roteiros.agente",

@@ -612,15 +612,18 @@ export function escolherModeloDaCopy<M extends ModeloDoCatalogo>(catalogo: M[], 
   return { modelo: null, motivo: "nenhum" };
 }
 
-/** 23/10 (dono): três seletores, cada um no seu escopo (copy do conteúdo, refinar copy e estrategista). */
-export type EscopoDoModelo = "copy" | "refino" | "estrategista";
+/**
+ * 23/10 (dono): três seletores, cada um no seu escopo (copy do conteúdo, refinar copy e estrategista).
+ * 23/10 (frente B): o quarto, "roteiro" (o motor e o agente de roteiro da peça de vídeo), com o padrão de hoje do roteirista (o estrategista).
+ */
+export type EscopoDoModelo = "copy" | "refino" | "estrategista" | "roteiro";
 
 /**
  * O modelo de cada escopo na tela: copy e refino seguem o melhor para copy;
- * o estrategista, o escolhido ou o padrão de hoje (marcado "estrategista").
+ * o estrategista e o roteiro, o escolhido ou o padrão de hoje (marcado "estrategista").
  */
 export function escolherModeloDoEscopo<M extends ModeloDoCatalogo>(catalogo: M[], escolhidoId: string | null | undefined, escopo: EscopoDoModelo): EscolhaDoModeloDaCopy<M> {
-  if (escopo !== "estrategista") return escolherModeloDaCopy(catalogo, escolhidoId);
+  if (escopo !== "estrategista" && escopo !== "roteiro") return escolherModeloDaCopy(catalogo, escolhidoId);
   const lista = (catalogo || []).filter(usavel);
   const id = String(escolhidoId || "").trim();
   const m = id ? lista.filter((x) => x.id === id)[0] : undefined;

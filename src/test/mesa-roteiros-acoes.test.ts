@@ -159,7 +159,8 @@ describe("a função mesa-roteiros segue o contrato", () => {
   });
 
   it("Jev só como aviso: uma conferência por geração, sem laço de correção", () => {
-    expect(fonte.match(/avisoDoJev\(/g)!.length).toBe(2); // a definição e a chamada única em escreverRoteiro
+    // A definição e uma chamada por geração: escreverRoteiro e (frente B, 23/10) a reescrita pedida ao agente.
+    expect(fonte.match(/avisoDoJev\(/g)!.length).toBe(3);
     expect(fonte).toContain("O Jev é aviso");
     expect(fonte).not.toMatch(/while\s*\(.*aviso|for\s*\(.*tentativa/i);
   });

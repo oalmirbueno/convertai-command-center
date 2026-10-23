@@ -7,7 +7,9 @@ import { blocoDoHype, blocoDoNichoAgora, contarSinais, hypesQueValem, type HypeQ
 import { assuntosDoNicho, assuntoValido, CACHE_DAS_NOTICIAS_MS, CacheCurto, datasParaOJev, filtrarPorRecencia, julgarNoticias, LIMITE_DE_NOTICIAS, lerRssDeNoticias, NIVEIS_DA_DATA, ordenarPeloCabe, perguntasDoCabe, recenciaValida, ROTULO_DO_NIVEL_DA_DATA, urlDoGoogleNoticias, type Noticia } from "./modulos/trending-noticias.ts";
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 // 23/10 (COPY-V): a skill "copy viral do nicho" (contexto forte, ganchos do banco e guia da casa) e o modelo da copy.
-import { modeloDaCopy, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
+import { escolherComViralidade, modeloDaCopy, nichosEmTexto, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
+import { gravarMidia, planejarMidia, type DepsDaMidia, type PlanoDaMidia } from "./modulos/midia-da-peca.ts";
+import { itensDoOpenverse, urlDoOpenverse } from "../mesa-foto/calculos.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
 import { ehHype, encaixarNaAgenda, type Ocupacao, regraDoCliente, type RegraDoDia } from "../_shared/agenda-inteligente.ts";
 import { resumoDoRecibo } from "./resultado-da-agenda.ts";
@@ -226,6 +228,8 @@ import {
   type ItemDoAjuste,
   pedidoPontual,
 } from "./modulos/cadencia-do-mes.ts";
+import { ESQUEMA_DA_MIDIA_DA_PECA, GANCHO_NO_VIDEO_DA_PAUTA, tipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
+import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, trocasParaMisturar } from "./modulos/mistura-do-nicho.ts";
 import {
   acaoDeAtualizarPublico,
   blocoDaDecisaoDoPublico,
@@ -1558,6 +1562,7 @@ REGRAS DESTA EXECUÇÃO NO PAINEL:
 ${CAPACIDADES_DO_MES}
 - Formatos permitidos: carrossel, post estático, foto e vídeo rápido. Respeite o formato pedido.
 ${ORIENTACAO_VIDEO_DA_PAUTA}
+${GANCHO_NO_VIDEO_DA_PAUTA}
 - Publicações só de segunda a sexta, dentro do período.
 - Evite repetir temas que já estão na agenda do período ou nos títulos recentes.
 - Siga a memória do estrategista (preferências, aprendizados e o que evitar).
@@ -2011,11 +2016,19 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     frameworks: escolha.frameworks,
   };
 
+  const misturaP = misturaDoCliente(servico, clientId, { referencia: { tipo: REF_TIPO, id: idPedido ?? clientId }, criadoPor: chamador.userId });
   const ctx = await montarContexto(servico, clientId, inicio, fim, marcaDaProposta);
   tempo.marcar("contexto");
   // 02/10: a cadência pedida (tela ou plano combinado do mês) vira a grade de datas e formatos do detalhar.
-  const cadenciaDoMes = normalizarCadencia(corpo.cadencia) ?? cadenciaDasFontes([{ texto: blocoDoPlano(ctx, inicio), fonte: "plano" }]);
-  if (cadenciaDoMes) parametros.cadencia = cadenciaDoMes;
+  // 23/10 (dono: "diversificar e mesclar, não ficar somente carrossel e arte"): sem a mistura pedida, a do nicho
+  // (o Jev escolhe o perfil do negócio; o código faz os números e a grade) vale para o mês inteiro.
+  const cadenciaPedida = normalizarCadencia(corpo.cadencia) ?? cadenciaDasFontes([{ texto: blocoDoPlano(ctx, inicio), fonte: "plano" }]);
+  const misturaDoNicho = await misturaP;
+  const cadenciaDoMes = cadenciaPedida
+    ? comMisturaDoNicho(cadenciaPedida, misturaDoNicho.perfil, misturaDoNicho.formatoDoPerfil)
+    : cadenciaDoNicho(frequencia, inicio, fim, misturaDoNicho.perfil, misturaDoNicho.formatoDoPerfil);
+  parametros.cadencia = cadenciaDoMes;
+  parametros.mistura = { perfil: misturaDoNicho.perfil.id, fonte: misturaDoNicho.fonte };
 
   // A proposta e a conversa nascem antes das chamadas: o uso de IA ja fica
   // ligado a proposta e a tela acompanha os temas chegando (status temas).
@@ -2057,8 +2070,9 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     + (parametros.objetivo ? ` Objetivo principal: ${parametros.objetivo}.` : "")
     + (parametros.oferta ? ` Oferta principal: ${parametros.oferta}.` : "")
     + (parametros.regiao ? ` Região: ${parametros.regiao}.` : "")
-    + (cadenciaDoMes && cadenciaDoMes.mix && cadenciaDoMes.mix.foto
-      ? ` Cadência pedida: ${fraseDaCadencia(cadenciaDoMes)}; proponha temas de foto real (formato_sugerido foto) e de arte nessa proporção.`
+    + (cadenciaDoMes && cadenciaDoMes.mix
+      ? ` Cadência do mês: ${fraseDaCadencia(cadenciaDoMes)}; proponha temas em cada formato nessa proporção (formato_sugerido foto, video, carrossel ou estatico).
+${blocoDaMistura(misturaDoNicho.perfil, cadenciaDoMes.mix)}`
       : "")
     + `
 ${REGRAS_DE_CONTEUDO_DO_MES}
@@ -5085,6 +5099,34 @@ const cacheDasNoticias = new CacheCurto<Noticia[]>(CACHE_DAS_NOTICIAS_MS);
 const cacheDasNotasDoHype = new CacheCurto<Record<string, { nota: number | null; nivel: string | null }>>(6 * 3_600_000, 300);
 
 /** Leve: quem é o cliente para o nicho (cadastro, contexto da marca e o "em alta no nicho" da leitura mais recente). */
+/**
+ * 23/10: o perfil de mistura de formatos do cliente (mistura-do-nicho.ts). O Jev escolhe pelo negócio, segmento,
+ * oferta e público (Choice, cobrado na carteira); sem ele, a regra por palavras. Nunca lança.
+ */
+async function misturaDoCliente(
+  servico: SupabaseClient,
+  clientId: string,
+  cobranca: { referencia: { tipo: string; id: string }; criadoPor: string },
+): Promise<{ perfil: PerfilDeMistura; fonte: "jev" | "regra"; formatoDoPerfil: string; custo: number }> {
+  const [n, formatoDoPerfil] = await Promise.all([
+    nichoDoCliente(servico, clientId).catch(() => null),
+    lerFormatoDoPerfil(servico, clientId),
+  ]);
+  const textos = [n?.segmento, n?.negocio, n?.produtos, n?.nome];
+  if (!n || !textos.some((t) => t && String(t).trim())) return { perfil: perfilPorRegra(...textos), fonte: "regra", formatoDoPerfil, custo: 0 };
+  try {
+    const r = await jevPerguntar({
+      state: { cliente: { nome: n.nome, segmento: n.segmento, negocio: n.negocio, produtos: n.produtos, publico: n.publico } },
+      questions: { perfil: perguntaDaMistura() },
+    }, { timeoutMs: JEV_DO_PEDIDO_MS });
+    const cobrado = await cobrarJev(r, { clientId, tarefa: "calendario", referencia: cobranca.referencia, criadoPor: cobranca.criadoPor }).catch(() => null);
+    return { ...perfilDaResposta(r.answers.perfil, ...textos), formatoDoPerfil, custo: cobrado?.custoUsd ?? 0 };
+  } catch (e) {
+    console.error("[agente-calendario] mistura do nicho sem Jev", { codigo: e instanceof JevErro ? e.codigo : "jev_falhou" });
+    return { perfil: perfilPorRegra(...textos), fonte: "regra", formatoDoPerfil, custo: 0 };
+  }
+}
+
 async function nichoDoCliente(servico: SupabaseClient, clientId: string) {
   const [perfil, kit, org, hypes] = await Promise.all([
     servico.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle(),
@@ -6892,6 +6934,8 @@ export const ESQUEMA_PLANEJAMENTO = {
             cards: { type: "array", items: obj({ ordem: S("integer"), texto: S("string", { description: DESCRICAO_DO_TEXTO_DA_LAMINA }) }) },
           }),
         },
+        // 23/10: a mídia da peça pensada pelo nicho (fotos do Workspace, referência livre, roteiro do vídeo).
+        midia: { type: "array", items: obj({ ref: S("string"), tipo: S("string"), pedido: S("string") }) },
       }),
       type: ["object", "null"],
     },
@@ -7604,6 +7648,8 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const arquivos = normalizarArquivos(corpo.arquivos);
 
   const marcaP = marcaDaChamada(servico, clientId, corpo);
+  // 23/10: o perfil de mistura do nicho (Jev) corre junto com as leituras.
+  const misturaP = misturaDoCliente(servico, clientId, { referencia: { tipo: REF_AGENTE_DO_MES, id: clientId }, criadoPor: chamador.userId });
   const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim, await marcaP);
   const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
 
@@ -7702,6 +7748,8 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
     : "\nAinda não existe proposta aberta do estrategista para este mês.\n";
 
   const previas = await previasP;
+  const mistura = await misturaP;
+  const leituraDaMistura = misturaDoMes(pecasDaAgenda.filter((p) => String(p.due_date || "").slice(0, 7) === mes));
   const tarefa = `${previas.bloco ? `
 ${previas.bloco}
 ` : ""}
@@ -7714,10 +7762,12 @@ ${blocoDasRegras(regras)}
 ${blocoDaDecisaoDoPublico(decisaoDoPublico)}MENSAGEM DA EQUIPE (inteira, sem corte):
 ${mensagem}
 ${pedeMudanca ? `
-A MENSAGEM PEDE PARA MUDAR CONTEÚDOS QUE JÁ ESTÃO NA AGENDA: responda com acoes_na_agenda (editar_textos, refazer, datas ou formatos) nas peças que casam; não crie conteúdo novo no lugar e não diga que não consegue mudar o painel (a lista com Confirmar é a mudança). Peça repetida ou parecida é aviso, nunca motivo para não fazer.
+A MENSAGEM PEDE PARA MUDAR CONTEÚDOS QUE JÁ ESTÃO NA AGENDA: responda com acoes_na_agenda (editar_textos, refazer, datas, formatos ou midia) nas peças que casam; não crie conteúdo novo no lugar e não diga que não consegue mudar o painel (a lista com Confirmar é a mudança). Peça repetida ou parecida é aviso, nunca motivo para não fazer.
 ` : ""}${blocoDoAlvo(alvoDoPedido)}${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}${notaDoSistema(imagens.aviso)}
 ${REGRAS_DO_AGENTE_DO_MES}
 ${ORIENTACAO_DA_REVISAO}
+${blocoDaMistura(mistura.perfil, null)}${leituraDaMistura.repetitivo ? `
+A AGENDA DE ${mes} ESTÁ REPETITIVA: ${leituraDaMistura.frase}. Quando a equipe pedir conteúdos, revisão ou o mês, proponha na resposta trocar algumas peças por vídeo ou foto (mudar_formato e midia), sem esperar ela pedir o formato.` : ""}
 
 TAREFA: você é o estrategista planejando e executando o mês junto com a equipe. Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda, o plano combinado, o MCP e os arquivos.
 - Nunca invente dado, resultado, data ou evento. Traga números reais quando existirem e diga quando um dado não existe.
@@ -7840,7 +7890,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   // agente não mexeu nela) e peça repetida vira aviso no cartão, nunca motivo para não fazer.
   const acaoNaAgenda = juntarAlvoNaAcao(normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas), alvoDoPedido, pecasDaAgenda, mensagem);
   if (acaoNaAgenda && !julgamento.contrato.outrosMeses) {
-    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos"] as const) {
+    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos", "midia"] as const) {
       (acaoNaAgenda as any)[k] = acaoNaAgenda[k].filter(i => i.data?.slice(0, 7) === mes);
     }
   }
@@ -7855,7 +7905,9 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   const cadenciaLida = cadenciaDoPlanejamento(mensagem, anteriores, [doMes, blocoDoPlano(ctx, inicio)], (r.plano_do_mes ?? null) as Record<string, unknown> | null);
   // Pedido pontual ("1 post no dia 30, só esse"): nenhuma cadência completa o mês (nem a lida do próprio pedido,
   // que entendia "1 post" como "1 por semana"). Frequência dita ("3 por semana", "o mês todo") não é pontual.
-  const cadencia = cadenciaLida && pedidoPontual(mensagem) ? null : cadenciaLida;
+  const cadenciaSemNicho = cadenciaLida && pedidoPontual(mensagem) ? null : cadenciaLida;
+  // 23/10: cadência sem formatos ditos ("3 por semana") ganha a mistura do nicho; a mistura pedida sempre vale.
+  const cadencia = cadenciaSemNicho && !julgamento.contrato.formatos.length ? comMisturaDoNicho(cadenciaSemNicho, mistura.perfil, mistura.formatoDoPerfil) : cadenciaSemNicho;
   let conferencia: ConferenciaDoMes | null = null;
   let custoDoAjuste = 0;
   const avisosDoAjuste: string[] = [];
@@ -8621,7 +8673,7 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   if (!escolhida.ok) throw new ErroHttp(400, "escolha_invalida", escolhida.motivo);
   const acao = escolhida.acao;
   if (typeof acao.mes === "string" && acao.outros_meses === false) {
-    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos"] as const) {
+    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos", "midia"] as const) {
       (acao as any)[k] = (acao[k] || []).filter(i => i.data?.slice(0, 7) === acao.mes);
     }
   }
@@ -8703,6 +8755,23 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
 
   // Reescrever textos (sem gerar do zero): título, tema, gancho, lâminas, copy, CTA e público.
   const formatosFalhos = new Set(formatos.filter((r) => !r.ok).map((r) => r.task_id));
+  // 23/10: a mídia de cada peça pensada pelo nicho, depois do formato (a peça que não mudou de formato fica de fora).
+  const midias: Array<ResultadoDaAcao & { resumo?: string; custo_usd?: number }> = [];
+  let custoDaMidia = 0;
+  for (const it of (Array.isArray((acao as { midia?: unknown }).midia) ? (acao as { midia: Array<{ task_id: string; titulo: string; tipo: string; pedido?: string }> }).midia : [])) {
+    if (formatosFalhos.has(it.task_id)) {
+      midias.push({ task_id: it.task_id, titulo: it.titulo, ok: false, motivo: "O formato desta peça não mudou, então a mídia não foi pensada." });
+      continue;
+    }
+    try {
+      await tarefaDoCliente(servico, it.task_id, m.client_id);
+      const r = await pensarEGravarMidia(servico, chamador, m.client_id, it.task_id, it.tipo, it.pedido || (acao as { pedido?: string }).pedido || null);
+      custoDaMidia += r.custo;
+      midias.push({ task_id: it.task_id, titulo: it.titulo, ok: true, passos: r.passos, resumo: r.plano.midia.resumo, custo_usd: r.custo });
+    } catch (e) {
+      midias.push({ task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível pensar a mídia." });
+    }
+  }
   const textos = await reescreverTextos(servico, m.client_id, (Array.isArray(acao.editar_textos) ? acao.editar_textos : []).filter((e) => !formatosFalhos.has(e.task_id)));
 
   const campanhas: ResultadoDaCampanha[] = [];
@@ -8733,8 +8802,9 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   const trocados = formatos.filter((r) => r.ok).length;
   const editadas = campanhas.filter((r) => r.ok).length;
   const reescritos = textos.filter((r) => r.ok).length;
-  const total = resultados.length + refeitos.length + mudancas.length + formatos.length + campanhas.length + textos.length;
-  const falhas = total - apagados - refeitosOk - movidos - trocados - editadas - reescritos;
+  const pensadas = midias.filter((r) => r.ok).length;
+  const total = resultados.length + refeitos.length + mudancas.length + formatos.length + campanhas.length + textos.length + midias.length;
+  const falhas = total - apagados - refeitosOk - movidos - trocados - editadas - reescritos - pensadas;
   const anexo = await gravar({
     ...acao,
     executada_em: new Date().toISOString(),
@@ -8745,6 +8815,7 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     formatos,
     campanhas_editadas: campanhas,
     textos,
+    midias,
   });
   const partes: string[] = [];
   if (apagados) partes.push(`${apagados} ${apagados === 1 ? "peça apagada" : "peças apagadas"}`);
@@ -8753,6 +8824,7 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   if (trocados) partes.push(`${trocados} ${trocados === 1 ? "formato mudado" : "formatos mudados"}`);
   if (editadas) partes.push(`${editadas} ${editadas === 1 ? "campanha editada" : "campanhas editadas"}`);
   if (reescritos) partes.push(`${reescritos} ${reescritos === 1 ? "peça reescrita" : "peças reescritas"}`);
+  if (pensadas) partes.push(`mídia pensada em ${pensadas} ${pensadas === 1 ? "peça" : "peças"}`);
   if (falhas) partes.push(`${falhas} não ${falhas === 1 ? "pôde ser feita" : "puderam ser feitas"} (motivo na lista)`);
   // Prova do que mudou (relido do banco): até 3 títulos, antes e depois.
   const provas = textos
@@ -8768,7 +8840,7 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     input: { client_id: m.client_id, mensagem_id: m.id, apagar: apagar.length, refazer: refazer.length, mudar_data: mudancas.length, mudar_formato: formatos.length, editar_campanhas: campanhas.length, editar_textos: textos.length },
     success: falhas === 0, statusCode: 200, durationMs: 0, resultRef: m.id,
   });
-  return json({ anexo, apagados, refeitos: refeitosOk, movidos, formatos: trocados, campanhas: editadas, textos: reescritos, falhas });
+  return json({ anexo, apagados, refeitos: refeitosOk, movidos, formatos: trocados, campanhas: editadas, textos: reescritos, midias: pensadas, falhas, custo_usd: Math.round(custoDaMidia * 1e6) / 1e6 });
 }
 
 /** desfazer_acao_agenda { mensagem_id }: devolve o que foi apagado ou refeito, as datas, os formatos e as campanhas de antes. */
@@ -8787,6 +8859,15 @@ async function desfazerAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
     }
   }
   voltaram += await desfazerTextos(servico, m.client_id, (Array.isArray(acao.textos) ? acao.textos : []) as ResultadoDoTexto[]);
+  // 23/10: a mídia pensada sai antes do formato voltar (os recibos ficam na ordem inversa da execução).
+  for (const r of lista((acao as { midias?: unknown }).midias).filter((x) => x.ok && x.passos?.length).reverse()) {
+    try {
+      await desfazerPassosDoFormato(servico, r.passos!, m.client_id);
+      voltaram++;
+    } catch {
+      // segue com as outras
+    }
+  }
   for (const r of lista(acao.formatos).filter((x) => x.ok && x.de).reverse()) {
     if (r.passos?.length) {
       await tarefaDoCliente(servico, r.task_id, m.client_id);
@@ -9030,6 +9111,173 @@ const selo = acoesDoSelo({
   somarCusto: somarCustoDaCampanha,
 });
 
+
+// ------------------------------------------------------------------ mídia da peça e mistura do mês (23/10)
+
+/** O modelo rápido escreve o roteiro do vídeo (2 versões) e os termos da busca livre. Sem método: tarefa curta e fechada. */
+async function escreverMidiaDaPeca(chamador: Chamador, clientId: string, taskId: string, pedido: string): Promise<{ json: unknown; custoUsd: number }> {
+  const { modelo, raciocinio } = await resolverModeloRapido(undefined);
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: "Você é o roteirista de vídeos curtos e o diretor de mídia do Instagram deste cliente. Responda só o JSON pedido, em português do Brasil (busca_en em inglês), sem travessão.",
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio,
+    esquemaJson: ESQUEMA_DA_MIDIA_DA_PECA,
+    referencia: { tipo: "tarefa", id: taskId },
+    criadoPor: chamador.userId,
+  });
+  return { json: s.json, custoUsd: s.custoUsd };
+}
+
+/** Openverse (o mesmo da Mesa Foto): só licença comercial e de modificação, fotografia. Nunca lança. */
+async function referenciasLivres(termos: string) {
+  if (termos.length < 3) return [];
+  try {
+    const r = await fetch(urlDoOpenverse(termos, "modificacao", 1, { categoria: "photograph", porPagina: 10 }), {
+      headers: { "User-Agent": "AceleriqPainel/1.0 (mesa)", Accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!r.ok) {
+      await r.body?.cancel().catch(() => {});
+      return [];
+    }
+    return itensDoOpenverse(await r.json().catch(() => null)).map((i) => ({
+      titulo: i.titulo,
+      imagem_url: i.imagem_url,
+      miniatura_url: i.miniatura_url,
+      fonte_url: i.fonte_url,
+      licenca: i.licenca_rotulo || i.licenca,
+      autor: i.autor,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function depsDaMidia(servico: SupabaseClient, chamador: Chamador, clientId: string, taskId: string, custo: { usd: number }): DepsDaMidia {
+  const referencia = { tipo: "tarefa", id: taskId };
+  return {
+    db: servico,
+    julgar: async (state, questions) => {
+      const r = await jevPerguntar({ state, questions: questions as Record<string, PerguntaJev> });
+      const c = await cobrarJev(r, { clientId, tarefa: "calendario", referencia, criadoPor: chamador.userId }).catch(() => null);
+      custo.usd += c?.custoUsd ?? 0;
+      return r.answers;
+    },
+    escrever: (pedido) => escreverMidiaDaPeca(chamador, clientId, taskId, pedido),
+    prepararViral: async () => {
+      const v = await prepararCopyViral(servico, { clientId, formato: "reels_abertura", versoes: 2, n: 10, semente: taskId });
+      return { bloco: v.bloco, nicho: [nichosEmTexto(v.nichos), v.contexto.nicho].filter(Boolean).join(" | ").slice(0, 900), publico: v.contexto.publico ?? null };
+    },
+    escolherViral: async (textos, nicho, publico) => {
+      const conf = await escolherComViralidade({
+        textos, canal: "roteiro", objetivo: "descoberta", nicho, publico, fontes: textos, cortar: false, semHashtags: true,
+        cobranca: { clientId, tarefa: "calendario", referencia, criadoPor: chamador.userId },
+      });
+      custo.usd += Number((conf as { custo_usd?: number }).custo_usd) || 0;
+      return conf.ordem;
+    },
+    buscarWeb: referenciasLivres,
+  };
+}
+
+/** Pensa e grava a mídia de uma peça (travas da agenda antes). Devolve o plano, o recibo e o custo. */
+async function pensarEGravarMidia(servico: SupabaseClient, chamador: Chamador, clientId: string, taskId: string, tipo: unknown, pedido: unknown): Promise<{ plano: PlanoDaMidia; passos: PassoDoFormato[]; custo: number }> {
+  const trava = await travaDaPeca(servico, clientId, taskId);
+  if (trava) throw new Error(trava);
+  const custo = { usd: 0 };
+  const plano = await planejarMidia(depsDaMidia(servico, chamador, clientId, taskId, custo), { clientId, taskId, tipo: tipoDeMidia(tipo), pedido: typeof pedido === "string" ? pedido : null });
+  const passos = await gravarMidia(servico, clientId, taskId, plano);
+  return { plano, passos, custo: Math.round((custo.usd + plano.custo) * 1e6) / 1e6 };
+}
+
+/**
+ * midia_da_peca { client_id, task_id, tipo?, pedido? }: o "Pensar a mídia" da pauta (clique da equipe, custo
+ * mostrado antes na tela). Fotos do Workspace pelo Jev, referência livre quando falta, roteiro do vídeo com gancho.
+ */
+async function midiaDaPeca(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const taskId = String(corpo.task_id ?? "");
+  if (!UUID.test(taskId)) throw new ErroHttp(400, "task_invalida", "task_id precisa ser um UUID.");
+  await tarefaDoCliente(servico, taskId, clientId);
+  try {
+    const r = await pensarEGravarMidia(servico, chamador, clientId, taskId, corpo.tipo, corpo.pedido);
+    return json({ midia: r.plano.midia, avisos: r.plano.avisos, custo_usd: r.custo });
+  } catch (e) {
+    if (e instanceof ErroHttp || e instanceof IaMotorErro) throw e;
+    throw new ErroHttp(409, "midia_nao_pensada", e instanceof Error ? e.message : "Não foi possível pensar a mídia desta peça.");
+  }
+}
+
+/**
+ * sugerir_mistura { client_id, mes }: proativo (dono: "ele já dá a sugestão para eu aprovar"). Lê a agenda do
+ * mês; repetitiva num formato só, o Jev diz o perfil do nicho e quanto cada tema rende como vídeo e como foto,
+ * o código escolhe as trocas e a sugestão entra na conversa do agente como cartão com Confirmar e Desfazer
+ * (mudar o formato e pensar a mídia). Nada muda sem o Confirmar.
+ */
+async function sugerirMistura(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const mes = mesDoPedido(corpo.mes);
+  if (!mes) throw new ErroHttp(400, "mes_invalido", "Informe o mês (AAAA-MM).");
+  const hoje = hojeSaoPaulo();
+  const marca = await marcaDaChamada(servico, clientId, corpo);
+  const [acoesCtx, conversaId] = await Promise.all([
+    pecasDaAgendaParaAcoes(servico, clientId, marca, mes, { desde: mes, meses: 0, max: 120, detalhe: true }),
+    conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+  ]);
+  const doMes = acoesCtx.pecas.filter((p) => String(p.due_date || "").slice(0, 7) === mes);
+  const leitura = misturaDoMes(doMes);
+  if (!leitura.repetitivo) return json({ sugestao: null, leitura });
+  // Só peças sem arte feita nem post: a troca de formato não perde produção.
+  const ids = doMes.map((p) => p.id);
+  const [trabalhos, posts] = await Promise.all([
+    servico.from("estudio_trabalhos").select("task_id, status, cards, entrega_status").eq("client_id", clientId).in("task_id", ids),
+    servico.from("editorial_post_internal").select("task_id").in("task_id", ids),
+  ]);
+  const comProducao = new Set<string>([
+    ...((trabalhos.data || []) as Array<{ task_id: string; status: string; cards: unknown[] | null; entrega_status: string | null }>)
+      .filter((w) => w.entrega_status || ["gerando", "pronto", "entregue"].includes(w.status) || (Array.isArray(w.cards) && w.cards.length)).map((w) => w.task_id),
+    ...((posts.data || []) as Array<{ task_id: string }>).map((x) => x.task_id),
+  ]);
+  const livres = doMes.filter((p) => !comProducao.has(p.id));
+  const mistura = await misturaDoCliente(servico, clientId, { referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId });
+  // A leitura repetitiva vale para o mês inteiro; as trocas saem só das peças livres (sem produção).
+  const candidatas = livres.slice(0, 16);
+  let notas: Record<string, { score?: number }> | null = null;
+  if (candidatas.length) {
+    try {
+      const n = await nichoDoCliente(servico, clientId);
+      const r = await jevPerguntar({
+        state: { cliente: { nome: n.nome, segmento: n.segmento, negocio: n.negocio }, pecas: candidatas.map((p) => `${p.title}${p.detalhe ? `. ${String(p.detalhe).slice(0, 300)}` : ""}`) },
+        questions: perguntasDasTrocas(candidatas.length, mistura.perfil),
+      });
+      await cobrarJev(r, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId }).catch(() => null);
+      notas = r.answers as Record<string, { score?: number }>;
+    } catch {
+      notas = null;
+    }
+  }
+  const trocas = trocasParaMisturar(candidatas, mistura.perfil, hoje, notas, 4, leitura);
+  if (!trocas.length) return json({ sugestao: null, leitura, motivo: "As peças do formato repetido já têm arte feita ou já passaram." });
+  const refDe = new Map(acoesCtx.pecas.map((p) => [p.id, p.ref]));
+  const fala = falaDaSugestao(leitura, trocas, mistura.perfil);
+  const acao = normalizarAcoesNaAgenda({
+    resumo: fala,
+    midia: trocas.map((t) => ({ ref: refDe.get(t.id), tipo: t.para, pedido: t.para === "video" ? `Vídeo curto do nicho: ${mistura.perfil.video}.` : `Foto real: ${mistura.perfil.foto}.` })),
+  }, acoesCtx.pecas, acoesCtx.campanhas);
+  if (!acao) return json({ sugestao: null, leitura });
+  const anexo = { ...acao, mes, outros_meses: false, pedido: fala, origem: "mistura_do_nicho" };
+  const { data: msg, error } = await servico.from("agente_mensagens").insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: fala, anexos: [anexo] }).select("id").single();
+  if (error || !msg) throw new ErroHttp(503, "sugestao_nao_guardada", "Não foi possível guardar a sugestão. Tente de novo.");
+  return json({ sugestao: { mensagem_id: (msg as { id: string }).id, fala, trocas: trocas.length }, leitura, perfil: mistura.perfil.id, fonte: mistura.fonte });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   itens_mcp: itensMcp,
   ativar_item_mcp: ativarItemMcp,
@@ -9078,10 +9326,12 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_conteudos: campanhaConteudos,
   campanha_trilha: trilhaDaCampanha.campanhaTrilha,
   campanha_narracao: narracaoDaCampanha.campanhaNarracao,
+  midia_da_peca: midiaDaPeca,
+  sugerir_mistura: sugerirMistura,
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", "midia_da_peca", "sugerir_mistura", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 

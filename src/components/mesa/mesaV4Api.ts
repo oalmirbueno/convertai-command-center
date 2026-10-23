@@ -700,6 +700,15 @@ export const partesDoConteudoRapido = (catalogo: ModeloIa[]): ParteDaEstimativa[
   { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: 14000, tokensSaida: saidaPorRaciocinio("low") + TAMANHOS.detalhar.saidaPorItem },
 ];
 
+/**
+ * 23/10: pensar a mídia de N peças (o roteiro do vídeo com 2 versões pelo modelo rápido e as notas do Jev
+ * nas fotos e nas versões). Nenhuma imagem ou vídeo é gerado aqui.
+ */
+export const partesDaMidia = (catalogo: ModeloIa[], pecas: number): ParteDaEstimativa[] => [
+  { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: 7000, tokensSaida: saidaPorRaciocinio("low") + 1500, vezes: Math.max(1, pecas) },
+  { modeloId: null, tipo: "texto", fixoUsd: 0.0015, vezes: Math.max(1, pecas) },
+];
+
 /** Busca de hypes: pesquisa na web e a nota do Jev (centavos). */
 export const partesDosHypes = (catalogo: ModeloIa[]): ParteDaEstimativa[] => [
   { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada, tokensSaida: saidaPorRaciocinio("medium"), buscasWeb: TAMANHOS.proporTemas.buscasWeb },

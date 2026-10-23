@@ -25,7 +25,8 @@
  */
 import type { PerguntaJev, RespostaJev } from "../_shared/jev.ts";
 import type { AcaoNaAgenda, ItemDaAcao, PecaComApelido } from "./acoes-agenda.ts";
-import { nomeDoFormato } from "./acoes-agenda.ts";
+import { nomeDoFormato, normalizarAcoesNaAgenda } from "./acoes-agenda.ts";
+import { midiaDoPedido } from "./modulos/midia-da-peca-regras.ts";
 
 /** Minúsculas, sem acento, aspas retas, pontuação vira espaço. */
 export function normalizarTexto(t: unknown): string {
@@ -400,8 +401,8 @@ function datasCurtas(l: PecaComApelido[]): string {
   return l.map((p) => (p.due_date ? `${p.due_date.slice(8, 10)}/${p.due_date.slice(5, 7)}` : "sem data")).join(", ");
 }
 
-type Listas = Pick<AcaoNaAgenda, "apagar" | "refazer" | "mudar_data" | "mudar_formato" | "editar_textos">;
-const LISTAS: Array<keyof Listas> = ["editar_textos", "refazer", "mudar_data", "mudar_formato", "apagar"];
+type Listas = Pick<AcaoNaAgenda, "apagar" | "refazer" | "mudar_data" | "mudar_formato" | "editar_textos" | "midia">;
+const LISTAS: Array<keyof Listas> = ["editar_textos", "refazer", "mudar_data", "mudar_formato", "apagar", "midia"];
 
 /**
  * Junta a peça citada à ação que o agente devolveu:
@@ -420,12 +421,21 @@ export function juntarAlvoNaAcao(
 ): AcaoComAlvo | null {
   let saida: AcaoComAlvo | null = acao ? { ...acao } : null;
   const vazia = (): AcaoComAlvo => ({
-    tipo: "acao_agenda", resumo: "", apagar: [], mudar_data: [], mudar_formato: [], refazer: [], editar_campanhas: [], editar_textos: [], ignorados: [],
+    tipo: "acao_agenda", resumo: "", apagar: [], mudar_data: [], mudar_formato: [], refazer: [], editar_campanhas: [], editar_textos: [], midia: [], ignorados: [],
   });
 
   if (alvo.tipo === "um") {
     const tocada = saida && LISTAS.some((k) => (saida![k] as ItemDaAcao[]).some((i) => i.task_id === alvo.peca.id));
-    if (!tocada) {
+    // 23/10: pedido de mídia ("põe foto real", "faz um vídeo") na peça citada vira pensar a mídia, não refazer.
+    const tipoDaMidia = midiaDoPedido(mensagem);
+    if (!tocada && tipoDaMidia) {
+      saida = saida || vazia();
+      const n = normalizarAcoesNaAgenda({ midia: [{ ref: "a1", tipo: tipoDaMidia, pedido: umaLinha(mensagem, 800) }] }, [{ ...alvo.peca, ref: "a1" }]);
+      saida.midia = (saida.midia || []).concat(n ? n.midia : []);
+      saida.mudar_formato = saida.mudar_formato.concat(n ? n.mudar_formato : []);
+      saida.resumo = umaLinha(`${saida.resumo ? `${saida.resumo} ` : ""}Penso a mídia de "${umaLinha(alvo.peca.title, 100)}" (${alvo.peca.due_date ?? "sem data"}) pelo nicho: ${tipoDaMidia === "video" ? "vídeo com roteiro e gancho" : "fotos reais do Workspace"}.`, 600);
+      saida.alvo_por = "jev";
+    } else if (!tocada) {
       saida = saida || vazia();
       saida.refazer = saida.refazer.concat([itemDaPeca(alvo.peca)]);
       saida.resumo = umaLinha(`${saida.resumo ? `${saida.resumo} ` : ""}Troco "${umaLinha(alvo.peca.title, 100)}" (${alvo.peca.due_date ?? "sem data"}) por um conteúdo novo na mesma data e formato, seguindo o seu pedido.`, 600);

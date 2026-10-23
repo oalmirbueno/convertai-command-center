@@ -18,6 +18,13 @@
  * - anuncio_gerar { client_id, ads_criativo_id, modo: completo|fala, formato: 9:16|4:5|16:9, duracao_s: 15|30|45, estrutura?, web?, pedido? }
  *   -> { roteiro, versao, escolha, referencias, vinculo, aviso_jev, custo_usd, saldo_usd } (23/10, Mesa Ads > Gravar:
  *   2 versões numa chamada, o Jev escolhe; fica ligado ao criativo e à oferta; modulos/roteiro-de-anuncio.ts)
+ * - peca_gerar { os campos do gerar } -> { roteiro, versao, escolha, alternativa, aviso_jev, custo_usd, saldo_usd } (frente B, 23/10:
+ *   o Gravar da peça de vídeo; 2 versões numa chamada com os ganchos vencedores do nicho, o Jev escolhe pelas notas
+ *   virais e a outra fica no histórico; modulos/roteiro-da-peca.ts)
+ * - peca_cenas_gerar { client_id, campanha_id, tema_id, modelo_id? } -> { roteiro_video, escolha, custo_usd } (frente B: as cenas
+ *   do Gerar, 2 versões e o Jev escolhe; não grava, a tela salva na peça pelo editar_item da série)
+ * - estimar com acao_alvo peca | cenas | reescrever (frente B). O modelo do roteiro: o pedido, o lembrado do cliente
+ *   (escopo "roteiro", migration 20261023180000) ou o do estrategista.
  * - biblioteca_salvar { client_id, escopo: agencia|cliente, ficha, id? } -> { modelo } (modelo próprio, sem IA)
  * - biblioteca_arquivar { id, arquivar } -> { modelo } (apagar é arquivar)
  * - biblioteca_extrair { client_id, texto, nicho?, modelo_id? } -> { ficha, custo_usd, saldo_usd } (Preencher com IA; não grava)
@@ -39,6 +46,8 @@
  * Agente da mesa (contrato comum das ações confirmadas):
  * - agente_conversar { client_id, mensagem, conversa_id?, roteiro_id?, nova_conversa? } -> { conversa_id, mensagem_id, resposta, sugestoes, anexos, custo_usd, saldo_usd }
  * - agente_historico { client_id } -> { conversa_id, mensagens } (sem IA)
+ *   Frente B: escopo "peca" com roteiro_id = o agente ao lado do roteiro da peça (conversa própria do roteiro;
+ *   o pedido de mudança vira reescrever_roteiro, versão nova com Desfazer).
  * Ideias com o agente (02/10; modulos/ideias-de-tema.ts e modulos/sinais-do-mundo.ts):
  * - ideias_conversar { client_id, mensagem?, conversa_id?, nova_conversa?, web?, hashtags?, modelo_id? }
  *   -> { conversa_id, mensagem_id, resposta, ideias, preencher, fontes, ranking, custo_usd, saldo_usd }
@@ -210,8 +219,29 @@ import {
   SISTEMA_DO_ANUNCIO,
   TAMANHO_DO_ANUNCIO,
 } from "./modulos/roteiro-de-anuncio.ts";
-import { lerGanchos, nichosEmTexto, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
-import { blocoDosGanchos } from "../estudio-arte/modulos/copy-viral.ts";
+import { lerGanchos, modeloDoEscopo, nichosEmTexto, type PreparoDaCopyViral, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
+import { blocoDosGanchos, lerViralidade, perguntasDaViralidade } from "../estudio-arte/modulos/copy-viral.ts";
+// Frente B (23/10): a peça de vídeo com a pegada viral (Gravar em 2 versões, cenas do Gerar e o agente que reescreve).
+import {
+  duracaoDoPedido,
+  type EscolhaDaPeca,
+  escolherPelaViralidade,
+  ESQUEMA_DAS_CENAS_VIRAIS,
+  ESQUEMA_DAS_DUAS_VERSOES,
+  estadoDaEscolhaViral,
+  falaDasCenas,
+  falaDoRoteiro,
+  INSTRUCAO_DAS_DUAS_VERSOES,
+  instrucaoDaReescrita,
+  instrucaoDasCenas,
+  roteiroReescrito,
+  SISTEMA_DO_AGENTE_DA_PECA,
+  TAMANHO_DA_REESCRITA,
+  TAMANHO_DAS_CENAS,
+  TAMANHO_DAS_DUAS_VERSOES,
+  versoesDaSaida,
+} from "./modulos/roteiro-da-peca.ts";
+import { normalizarRoteiroDeVideo, type RoteiroDeVideo } from "../agente-calendario/modulos/roteiro-de-video.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
@@ -400,9 +430,17 @@ async function nomeDoCliente(clientId: string): Promise<string> {
 
 const raciocinioPara = (m: ModeloIa) => ["medium", "low", "high"].find((r) => (m.raciocinio ?? []).includes(r));
 
-/** O modelo que o dono escolheu para o estrategista (ou o pedido pela tela). */
-async function modeloDeTexto(pedido?: unknown): Promise<ModeloIa> {
+/**
+ * O modelo do roteiro: o pedido pela tela; senão (frente B, 23/10) o lembrado para o cliente no escopo
+ * "roteiro" (mesa_cliente_config.modelo_roteiro_id); senão o que o dono escolheu para o estrategista.
+ * Sem a migration ou sem escolha, segue o padrão de hoje (modeloDoEscopo nunca lança).
+ */
+async function modeloDeTexto(pedido?: unknown, clientId?: string | null): Promise<ModeloIa> {
   if (typeof pedido === "string" && pedido.trim()) return await carregarModelo(pedido.trim(), "texto");
+  if (clientId) {
+    const lembrado = await modeloDoEscopo(servico(), clientId, "roteiro");
+    if (lembrado) return lembrado;
+  }
   const m = await modeloPadrao("estrategista");
   if (!m) throw new ErroHttp(409, "sem_modelo", "O catálogo não tem modelo padrão ativo para o estrategista.");
   return m;
@@ -784,9 +822,57 @@ type PedidoDeRoteiro = {
   /** Frente ROT: objetivo da base (Autoridade, Produto...) e o modelo escolhido pela equipe, se houver. */
   objetivoBase?: ObjetivoDaBase | null;
   modeloBaseId?: string | null;
+  /** Frente B (23/10): duas versões numa chamada; o Jev escolhe pelas notas virais e a outra fica no histórico. */
+  duasVersoes?: boolean;
 };
 
-type Gerado = Gravado & { custo_usd: number; saldo_usd: number; aviso_jev: AvisoDoJev | null; reserva_usada?: string; base: BaseDoRoteiroGuardada | null };
+type Gerado = Gravado & {
+  custo_usd: number;
+  saldo_usd: number;
+  aviso_jev: AvisoDoJev | null;
+  reserva_usada?: string;
+  base: BaseDoRoteiroGuardada | null;
+  /** Frente B: a escolha do Jev entre as duas versões (null: uma versão só). */
+  escolha?: EscolhaDaPeca | null;
+  /** Frente B: o número da versão que não foi escolhida (fica no histórico para comparar ou restaurar). */
+  alternativa?: number | null;
+};
+
+/** A ficha viral do nicho para o roteiro (ganchos vencedores de abertura de Reels e o guia da casa). Nunca lança. */
+function viralDoRoteiro(clientId: string, versoes: number, semente: string): Promise<PreparoDaCopyViral | null> {
+  return prepararCopyViral(servico(), { clientId, formato: "reels_abertura", versoes, n: 10, semente })
+    .catch((e) => (registrarFalha("mesa-roteiros: copy viral do roteiro não lida (segue sem os ganchos do nicho)", e, { client_id: clientId }), null));
+}
+
+/**
+ * O Jev escolhe entre as versões pelas 5 notas virais (uma chamada). Fora do ar: a primeira sem aviso da
+ * conferência da casa, pela regra. Nunca lança.
+ */
+async function escolhaViralDoJev(
+  p: { clientId: string; userId: string; referencia: { tipo: string; id: string } },
+  textos: string[],
+  alertas: boolean[],
+  formulas: string[],
+  viral: PreparoDaCopyViral | null,
+): Promise<{ escolha: EscolhaDaPeca; custo: number }> {
+  let respostas: Record<string, { score?: number }> | null = null;
+  let custo = 0;
+  if (textos.length > 1) {
+    try {
+      const res = await jevPerguntar({
+        state: estadoDaEscolhaViral(textos, { nicho: viral ? nichosEmTexto(viral.nichos) : "", publico: viral && viral.contexto.publico ? String(viral.contexto.publico) : null }),
+        questions: perguntasDaViralidade(textos.length),
+      });
+      const cobrado = await cobrarJev(res, { clientId: p.clientId, tarefa: TAREFA, referencia: p.referencia, criadoPor: p.userId })
+        .catch((e) => (registrarFalha("mesa-roteiros: custo do Jev da escolha viral não registrado", e), null));
+      if (cobrado) custo = cobrado.custoUsd;
+      respostas = res.answers as Record<string, { score?: number }>;
+    } catch (e) {
+      registrarFalha("mesa-roteiros: Jev da escolha viral fora do ar (vale a regra)", e, { client_id: p.clientId, codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
+    }
+  }
+  return { escolha: escolherPelaViralidade(lerViralidade(respostas, textos.length), alertas, formulas), custo };
+}
 
 async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado> {
   const peca = p.taskId ? await lerPeca(p.clientId, p.taskId) : null;
@@ -802,9 +888,9 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
       tema: p.tema, pedido: p.pedido, peca, ctx: c, userId: ch.userId, refId: p.linha ? p.linha.id : p.taskId || p.clientId,
     }));
   const refDoRoteiro = { tipo: REF_ROTEIRO, id: p.linha ? p.linha.id : p.taskId || p.clientId };
-  const [ctx, modelo, regras, sp, escolha, baseDoRoteirista] = await Promise.all([
+  const [ctx, modelo, regras, sp, escolha, baseDoRoteirista, viral] = await Promise.all([
     ctxP,
-    modeloDeTexto(p.modeloId),
+    modeloDeTexto(p.modeloId, p.clientId),
     // Frente AG2: as regras que a equipe ensinou valem na geração (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId: p.clientId, mesa: "roteiro" }),
     // Frente SPP: o código escolhe o método (gerar ou ajustar o tom). Nunca lança.
@@ -819,6 +905,8 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
       referencia: refDoRoteiro,
       criadoPor: ch.userId,
     }),
+    // Frente B (23/10): os ganchos vencedores do nicho e o guia da casa em toda geração (o tom só reescreve a forma).
+    p.tom ? Promise.resolve(null) : viralDoRoteiro(p.clientId, p.duasVersoes ? 2 : 1, `${refDoRoteiro.id}:${p.tema || ""}`),
   ]);
   const atual = atualDaLinha;
   const modo = modoDoTipo(p.tipo);
@@ -840,39 +928,70 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     : escolha
     ? `Escreva o roteiro desta peça com o que está em DADOS, seguindo bloco a bloco o MODELO DA BASE "${escolha.modelo.nome}" (estrutura_da_base): cada bloco do roteiro tem a função do bloco do modelo, na mesma ordem.`
     : "Escreva o roteiro desta peça com o que está em DADOS.";
+  const duas = !!p.duasVersoes && !p.tom;
   const saida = await chamarTexto({
     clientId: p.clientId,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (escolha ? `\n\n${blocoDaBaseParaORoteirista(escolha)}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (escolha ? `\n\n${blocoDaBaseParaORoteirista(escolha)}` : "") + (viral ? `\n\n${viral.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
     mensagens: [{
       papel: "usuario",
       // Frente CPY: o motor de copy da casa (voz, CTA, fatos, promessa, clichê e tamanho da fala); a estrutura é a do modelo da base ou a do modo.
-      conteudo: `${instrucao}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, ...pedidoDaEquipe, motor_de_copy: blocoDoMotor({ canal: "roteiro", objetivo: objetivoDaCopy(p.objetivo || (peca ? peca.titulo : "")), estruturaPedida: escolha ? `a do modelo da base ${escolha.modelo.nome}` : `a do modo ${modo.rotulo}` }) })}`,
+      conteudo: `${duas ? `${INSTRUCAO_DAS_DUAS_VERSOES}\n` : ""}${instrucao}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, ...pedidoDaEquipe, motor_de_copy: blocoDoMotor({ canal: "roteiro", objetivo: objetivoDaCopy(p.objetivo || (peca ? peca.titulo : "")), estruturaPedida: escolha ? `a do modelo da base ${escolha.modelo.nome}` : `a do modo ${modo.rotulo}` }) })}`,
     }],
-    esquemaJson: ESQUEMA_DO_ROTEIRO,
-    maxTokensSaida: 7_000,
+    esquemaJson: duas ? ESQUEMA_DAS_DUAS_VERSOES : ESQUEMA_DO_ROTEIRO,
+    maxTokensSaida: duas ? 12_000 : 7_000,
     metodo: sp,
     referencia: refDoRoteiro,
     criadoPor: ch.userId,
   });
   const titulo = peca ? peca.titulo : p.tema || "Roteiro avulso";
-  const pelaCasa = roteiroPeloMotorDeCopy(normalizarRoteiro({ ...(saida.json as Record<string, unknown>), tipo: p.tipo }, { titulo, tipo: p.tipo, duracao_s: p.duracaoS }));
-  const roteiro = pelaCasa.roteiro;
   // Frente ROT: o roteiro diz qual modelo da base seguiu (a escolha é do código, não do texto do modelo de IA).
   const base = escolha ? baseParaGuardar(escolha) : anterior;
+  const brutas = duas ? versoesDaSaida(saida.json) : [{ bruto: (saida.json || {}) as Record<string, unknown>, formula: "" }];
+  const candidatas = brutas
+    .map((v) => ({ ...roteiroPeloMotorDeCopy(normalizarRoteiro({ ...v.bruto, tipo: p.tipo }, { titulo, tipo: p.tipo, duracao_s: p.duracaoS })), formula: v.formula }))
+    .filter((c) => !duas || c.roteiro.blocos.length > 0);
+  if (!candidatas.length) throw new ErroHttp(502, "roteiro_vazio", "O modelo não devolveu o roteiro. Tente de novo.", { custo_usd: saida.custoUsd });
+  // Frente B: duas versões, o Jev escolhe pelas notas virais (sem laço de correção); a outra vai para o histórico.
+  const refJev = p.linha ? p.linha.id : p.taskId || p.clientId;
+  const viralDoJev = candidatas.length > 1
+    ? await escolhaViralDoJev({ clientId: p.clientId, userId: ch.userId, referencia: { tipo: REF_ROTEIRO, id: refJev } }, candidatas.map((c) => falaDoRoteiro(c.roteiro)), candidatas.map((c) => c.frases.length > 0), candidatas.map((c) => c.formula), viral)
+    : null;
+  const indice = viralDoJev ? viralDoJev.escolha.indice : 0;
+  const vencedora = candidatas[indice] || candidatas[0];
+  const roteiro = vencedora.roteiro;
   if (base) roteiro.base = base;
   // Frente CPY: as frases da conferência em código entram mesmo quando o Jev falha (sem chave, fora do ar ou 402).
-  const aviso = avisoComAsFrasesDaCasa(await avisoDoJev(p.clientId, roteiro, ctx.oferta, ch.userId, p.linha ? p.linha.id : p.taskId || p.clientId), pelaCasa.frases);
+  const aviso = avisoComAsFrasesDaCasa(await avisoDoJev(p.clientId, roteiro, ctx.oferta, ch.userId, refJev), vencedora.frases);
+  let linhaBase = p.linha;
+  let alternativa: number | null = null;
+  const outra = viralDoJev ? candidatas[indice === 0 ? 1 : 0] : null;
+  if (outra) {
+    if (base) outra.roteiro.base = base;
+    const k = candidatas.indexOf(outra);
+    const guardada = await guardarVersao(
+      ch,
+      { clientId: p.clientId, linha: linhaBase, taskId: p.taskId, propostaId: ctx.propostaId, campanhaId: ctx.campanhaId },
+      outra.roteiro,
+      { origem: p.origem, nota: `Versão ${k + 1} (o Jev escolheu a outra)${outra.formula ? `: gancho de ${outra.formula}` : ""}`, custo_usd: 0, modelo_id: saida.modeloId, aviso: avisoComAsFrasesDaCasa(null, outra.frases) },
+    ).catch((e) => (registrarFalha("mesa-roteiros: a versão não escolhida não ficou no histórico", e, { client_id: p.clientId }), null));
+    if (guardada && guardada.linha) {
+      linhaBase = guardada.linha;
+      alternativa = guardada.versao.numero;
+    }
+  }
+  const custo = Math.round((saida.custoUsd + (viralDoJev ? viralDoJev.custo : 0)) * 1e6) / 1e6;
+  const nota = p.tom ? `Tom: ${p.tom}` : viralDoJev ? `Escolhida pelo Jev. ${viralDoJev.escolha.porque}` : p.pedido ? `Pedido: ${p.pedido}` : "Gerado pela mesa";
   const gravado = await guardarVersao(
     ch,
-    { clientId: p.clientId, linha: p.linha, taskId: p.taskId, propostaId: ctx.propostaId, campanhaId: ctx.campanhaId },
+    { clientId: p.clientId, linha: linhaBase, taskId: p.taskId, propostaId: ctx.propostaId, campanhaId: ctx.campanhaId },
     roteiro,
-    { origem: p.origem, nota: p.tom ? `Tom: ${p.tom}` : p.pedido ? `Pedido: ${p.pedido}` : "Gerado pela mesa", custo_usd: saida.custoUsd, modelo_id: saida.modeloId, aviso },
+    { origem: p.origem, nota, custo_usd: custo, modelo_id: saida.modeloId, aviso },
   );
-  const out: Gerado = { ...gravado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, aviso_jev: aviso, base: base || null };
+  const out: Gerado = { ...gravado, custo_usd: custo, saldo_usd: saida.saldoUsd, aviso_jev: aviso, base: base || null, escolha: viralDoJev ? viralDoJev.escolha : null, alternativa };
   if (saida.reservaUsada) out.reserva_usada = saida.reservaUsada;
   return out;
 }
@@ -882,8 +1001,8 @@ async function refazerGancho(ch: Chamador, linha: LinhaDoRoteiro, pedido: string
   if (bloqueio) throw new ErroHttp(409, "roteiro_travado", bloqueio);
   const atual = versaoPorNumero(linha.versoes, linha.versao_atual);
   if (!atual) throw new ErroHttp(409, "roteiro_sem_versao", "Este roteiro ainda não tem versão.");
-  const [modelo, regras, sp, baseDoRoteirista] = await Promise.all([
-    modeloDeTexto(modeloId),
+  const [modelo, regras, sp, baseDoRoteirista, viral] = await Promise.all([
+    modeloDeTexto(modeloId, linha.client_id),
     regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "roteiro" }),
     superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "ajustar" }),
     // Base do agente: as fichas de gancho que servem a este roteiro (nunca lança).
@@ -895,6 +1014,8 @@ async function refazerGancho(ch: Chamador, linha: LinhaDoRoteiro, pedido: string
       referencia: { tipo: REF_ROTEIRO, id: linha.id },
       criadoPor: ch.userId,
     }),
+    // Frente B (23/10): os ganchos novos saem das fórmulas vencedoras do nicho (nunca lança).
+    viralDoRoteiro(linha.client_id, 1, `${linha.id}:gancho:${linha.versao_atual}`),
   ]);
   const saida = await chamarTexto({
     clientId: linha.client_id,
@@ -902,7 +1023,7 @@ async function refazerGancho(ch: Chamador, linha: LinhaDoRoteiro, pedido: string
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (viral ? `\n\n${viral.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
     mensagens: [{
       papel: "usuario",
       conteudo: `Refaça só os ganchos do roteiro: 3 novos, de mecanismos diferentes dos atuais e entre si, que o desenvolvimento do roteiro cumpra. Responda só com ganchos e gancho_escolhido.${pedido ? `\nPedido da equipe: ${pedido}` : ""}\n\nDADOS:\n${JSON.stringify({ roteiro_atual: atual.conteudo })}`,
@@ -925,15 +1046,137 @@ async function refazerGancho(ch: Chamador, linha: LinhaDoRoteiro, pedido: string
   return { ...gravado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd };
 }
 
+/**
+ * Frente B (23/10): o pedido livre ao agente vira o roteiro reescrito ("encurta o gancho", "troca a cena 2",
+ * "deixa mais engraçado", "faz versão de 15 s"). Uma chamada ao roteirista com o roteiro atual, o pedido e os
+ * ganchos do nicho; grava como versão nova (o Desfazer volta a anterior). Sem laço: o aviso do Jev é aviso.
+ */
+async function reescreverRoteiro(ch: Chamador, linha: LinhaDoRoteiro, pedido: string, modeloId: unknown, origem: OrigemDaVersao) {
+  const bloqueio = motivoParaNaoEditar(linha.status, !!linha.arquivado_em);
+  if (bloqueio) throw new ErroHttp(409, "roteiro_travado", bloqueio);
+  const atual = versaoPorNumero(linha.versoes, linha.versao_atual);
+  if (!atual) throw new ErroHttp(409, "roteiro_sem_versao", "Este roteiro ainda não tem versão.");
+  const duracao = duracaoDoPedido(pedido);
+  const ref = { tipo: REF_ROTEIRO, id: linha.id };
+  const [modelo, regras, sp, baseDoRoteirista, viral] = await Promise.all([
+    modeloDeTexto(modeloId, linha.client_id),
+    regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "roteiro" }),
+    superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "ajustar" }),
+    baseDoAgente(servico(), { agente: "roteiros.roteirista", clientId: linha.client_id, pedido: `Ajustar o roteiro "${linha.titulo}": ${pedido}`, tarefa: TAREFA, referencia: ref, criadoPor: ch.userId }),
+    viralDoRoteiro(linha.client_id, 1, `${linha.id}:reescrita:${linha.versao_atual}`),
+  ]);
+  const saida = await chamarTexto({
+    clientId: linha.client_id,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: modelo.id,
+    raciocinio: raciocinioPara(modelo),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (viral ? `\n\n${viral.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
+    mensagens: [{ papel: "usuario", conteudo: `${instrucaoDaReescrita(pedido, duracao)}\n\nDADOS:\n${JSON.stringify({ roteiro_atual: atual.conteudo, pedido_da_equipe: pedido })}` }],
+    esquemaJson: ESQUEMA_DO_ROTEIRO,
+    maxTokensSaida: 7_000,
+    metodo: sp,
+    referencia: ref,
+    criadoPor: ch.userId,
+  });
+  const pelaCasa = roteiroPeloMotorDeCopy(normalizarRoteiro({ ...(saida.json as Record<string, unknown>), tipo: linha.tipo }, { titulo: atual.conteudo.titulo, tipo: linha.tipo, duracao_s: duracao || atual.conteudo.duracao_alvo_s }));
+  if (!pelaCasa.roteiro.blocos.length) throw new ErroHttp(502, "roteiro_vazio", "O modelo não devolveu o roteiro. Tente de novo.", { custo_usd: saida.custoUsd });
+  const novo = roteiroReescrito(pelaCasa.roteiro, atual.conteudo, duracao);
+  const aviso = avisoComAsFrasesDaCasa(await avisoDoJev(linha.client_id, novo, null, ch.userId, linha.id), pelaCasa.frases);
+  const gravado = await guardarVersao(ch, { clientId: linha.client_id, linha, taskId: linha.task_id, propostaId: linha.proposta_id, campanhaId: linha.campanha_id }, novo, {
+    origem,
+    nota: `Pedido ao agente: ${pedido}`,
+    custo_usd: saida.custoUsd,
+    modelo_id: saida.modeloId,
+    aviso,
+  });
+  return { ...gravado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd };
+}
+
+// ------------------------------------------------------------------ cenas da peça para a IA de vídeo (Gerar)
+
+/**
+ * peca_cenas_gerar { client_id, campanha_id, tema_id, modelo_id? } -> { roteiro_video, escolha, custo_usd, saldo_usd }
+ * Frente B (23/10): o roteiro de cenas do caminho Gerar com os ganchos vencedores do nicho, em duas versões
+ * numa chamada; o Jev escolhe pelas notas virais. Não grava: a tela salva na peça pelo editar_item da série
+ * (o mesmo caminho do Salvar), que também refaz a direção do vídeo.
+ */
+async function pecaCenasGerar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const campanhaId = idDe(corpo.campanha_id, "campanha_id");
+  const temaId = limpo(corpo.tema_id, 80);
+  if (!temaId) throw new ErroHttp(400, "tema_obrigatorio", "Diga qual peça (tema_id) da campanha.");
+  const { data: camp, error: erroCamp } = await servico().from("mesa_campanhas").select("id, nome, objetivo, briefing, proposta_id").eq("id", campanhaId).eq("client_id", clientId).maybeSingle();
+  if (erroCamp) throw new ErroHttp(503, "campanha_indisponivel", "Não foi possível ler a campanha agora.");
+  const c = camp as { id: string; nome: string; objetivo: string | null; briefing: Record<string, unknown> | null; proposta_id: string | null } | null;
+  if (!c) throw new ErroHttp(404, "campanha_inexistente", "Esta campanha não é deste cliente.");
+  if (!c.proposta_id) throw new ErroHttp(409, "campanha_sem_serie", "A campanha ainda não tem a série de conteúdos.");
+  const { data: prop } = await servico().from("calendario_propostas").select("id, itens").eq("id", c.proposta_id).eq("client_id", clientId).maybeSingle();
+  const item = prop ? itemDaPecaNaSerie((prop as { itens: unknown }).itens, { temaId }) : null;
+  if (!item) throw new ErroHttp(404, "peca_inexistente", "Esta peça não está mais na série.");
+  if (item.formato !== "video") throw new ErroHttp(409, "peca_nao_e_video", "Só as peças de vídeo têm roteiro de cenas.");
+  const b = (c.briefing && typeof c.briefing === "object" ? c.briefing : {}) as Record<string, unknown>;
+  const trilhaB = (b.trilha && typeof b.trilha === "object" ? b.trilha : {}) as Record<string, unknown>;
+  const trilha = typeof trilhaB.titulo === "string" && trilhaB.titulo.trim() ? trilhaB.titulo.trim().slice(0, 160) : null;
+  const anterior = normalizarRoteiroDeVideo(item.roteiro_video);
+  const duracaoS = anterior && anterior.duracao ? Math.max(15, Math.min(60, anterior.duracao)) : 25;
+  const ref = { tipo: REF_ROTEIRO, id: campanhaId };
+  const pedidoDaBase = `Roteiro de cenas do Reels "${limpo(item.tema, 200)}" da campanha ${c.nome}`;
+  const [ctx, modelo, regras, sp, baseDoRoteirista, viral] = await Promise.all([
+    contextoDaPeca(clientId, null, { campanhaId, temaId, tipo: "fala_camera", marcaId: corpo.marca_id }),
+    modeloDeTexto(corpo.modelo_id, clientId),
+    regrasDaMesa(servico(), { clientId, mesa: "roteiro" }),
+    superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "gerar" }),
+    baseDoAgente(servico(), { agente: "roteiros.roteirista", clientId, pedido: pedidoDaBase, teto: 2_500, tarefa: TAREFA, referencia: ref, criadoPor: ch.userId }),
+    viralDoRoteiro(clientId, 2, `${campanhaId}:${temaId}`),
+  ]);
+  const saida = await chamarTexto({
+    clientId,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: modelo.id,
+    raciocinio: raciocinioPara(modelo),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (viral ? `\n\n${viral.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
+    mensagens: [{ papel: "usuario", conteudo: `${instrucaoDasCenas({ trilha, duracaoS })}\n\nDADOS:\n${JSON.stringify(ctx.dados)}` }],
+    esquemaJson: ESQUEMA_DAS_CENAS_VIRAIS,
+    maxTokensSaida: 5_000,
+    metodo: sp,
+    referencia: ref,
+    criadoPor: ch.userId,
+  });
+  const agora = new Date().toISOString();
+  const versoes = versoesDaSaida(saida.json)
+    .map((v) => ({ roteiro: normalizarRoteiroDeVideo({ ...v.bruto, ...(trilha ? { trilha } : {}), gerado_em: agora }), formula: v.formula }))
+    .filter((v): v is { roteiro: RoteiroDeVideo; formula: string } => !!v.roteiro);
+  if (!versoes.length) throw new ErroHttp(502, "roteiro_vazio", "O modelo não devolveu as cenas. Tente de novo.", { custo_usd: saida.custoUsd });
+  const jev = await escolhaViralDoJev({ clientId, userId: ch.userId, referencia: ref }, versoes.map((v) => falaDasCenas(v.roteiro)), versoes.map(() => false), versoes.map((v) => v.formula), viral);
+  const vencedora = versoes[jev.escolha.indice] || versoes[0];
+  return json({
+    roteiro_video: vencedora.roteiro,
+    escolha: jev.escolha,
+    custo_usd: Math.round((saida.custoUsd + jev.custo) * 1e6) / 1e6,
+    saldo_usd: saida.saldoUsd,
+    reserva_usada: saida.reservaUsada,
+  });
+}
+
 // ------------------------------------------------------------------ ações de roteiro
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const modelo = await modeloDeTexto(corpo.modelo_id);
+  const modelo = await modeloDeTexto(corpo.modelo_id, clientId);
   const alvo = String(corpo.acao_alvo || "gerar");
   const quantidade = Math.max(1, Math.min(20, Number(corpo.quantidade) || 1));
-  const unidade = alvo === "conversa"
+  // Frente B (23/10): peca (Gravar em 2 versões), cenas (Gerar em 2 versões) e reescrever (pedido ao agente).
+  const unidade = alvo === "peca"
+    ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DAS_DUAS_VERSOES.entrada, tokensSaida: TAMANHO_DAS_DUAS_VERSOES.saida })
+    : alvo === "cenas"
+    ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DAS_CENAS.entrada, tokensSaida: TAMANHO_DAS_CENAS.saida })
+    : alvo === "reescrever"
+    ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DA_REESCRITA.entrada, tokensSaida: TAMANHO_DA_REESCRITA.saida })
+    : alvo === "conversa"
     ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DA_CONVERSA.entrada, tokensSaida: TAMANHO_DA_CONVERSA.saida })
     : alvo === "extrair"
     ? estimarComModelo(modelo, TAMANHO_DA_EXTRACAO)
@@ -950,7 +1193,12 @@ function lerTipo(v: unknown): TipoDeRoteiro {
   return v;
 }
 
-async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
+/**
+ * gerar (e peca_gerar, frente B 23/10: o Gravar da peça de vídeo). peca_gerar escreve duas versões numa
+ * chamada com os ganchos vencedores do nicho; o Jev escolhe pelas notas virais, a outra fica no histórico
+ * e a resposta leva { escolha, alternativa }.
+ */
+async function gerar(ch: Chamador, corpo: Record<string, unknown>, opcoes: { duasVersoes?: boolean } = {}) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const tipo = lerTipo(corpo.tipo);
@@ -981,8 +1229,20 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente ROT: "agora eu preciso de autoridade" (objetivo) ou o modelo escolhido na biblioteca.
     objetivoBase: objetivoDoTexto(corpo.objetivo_base),
     modeloBaseId: lerIdDaBase(corpo.modelo_base_id),
+    duasVersoes: !!opcoes.duasVersoes,
   });
-  return json({ roteiro: r.linha, versao: r.versao, aviso_jev: r.aviso_jev, base: r.base, custo_usd: r.custo_usd, saldo_usd: r.saldo_usd, aviso_banco: r.aviso_banco || null, reserva_usada: r.reserva_usada });
+  return json({
+    roteiro: r.linha,
+    versao: r.versao,
+    aviso_jev: r.aviso_jev,
+    base: r.base,
+    escolha: r.escolha || null,
+    alternativa: r.alternativa || null,
+    custo_usd: r.custo_usd,
+    saldo_usd: r.saldo_usd,
+    aviso_banco: r.aviso_banco || null,
+    reserva_usada: r.reserva_usada,
+  });
 }
 
 // ------------------------------------------------------------------ roteiro de anúncio em vídeo (Mesa Ads > Gravar)
@@ -1044,7 +1304,7 @@ async function anuncioGerar(ch: Chamador, corpo: Record<string, unknown>) {
   const [existente, ctx, modelo, regras, sp, baseVideo, baseRoteiro, viral] = await Promise.all([
     roteiroDoCriativo(clientId, criativo.id),
     contextoDaPeca(clientId, null, { tipo: par[0].tipo, marcaId: corpo.marca_id }),
-    modeloDeTexto(corpo.modelo_id),
+    modeloDeTexto(corpo.modelo_id, clientId),
     regrasDaMesa(servico(), { clientId, mesa: "roteiro" }),
     superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "gerar" }),
     baseDoAgente(servico(), { agente: "ads.video", clientId, pedido: pedidoDaBase, teto: 2_500, tarefa: TAREFA, referencia: ref, criadoPor: ch.userId }),
@@ -1589,7 +1849,7 @@ async function bibliotecaExtrair(ch: Chamador, corpo: Record<string, unknown>) {
   if (exemplo.length < 80) throw new ErroHttp(400, "exemplo_curto", "Cole pelo menos um roteiro de exemplo (umas 3 frases).");
   const nicho = limpo(corpo.nicho, 200);
   const [modelo, sp] = await Promise.all([
-    modeloDeTexto(corpo.modelo_id),
+    modeloDeTexto(corpo.modelo_id, clientId),
     // Frente SPP: o método da casa (aceite e prova) também na ficha. Nunca lança.
     superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "gerar" }),
   ]);
@@ -1659,21 +1919,30 @@ async function listasParaOAgente(
   return { roteiros, pecas, totalDePecas: typeof tar.count === "number" ? tar.count : pecas.length };
 }
 
-async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean): Promise<string> {
+/**
+ * Frente B (23/10): o agente ao lado do roteiro da peça de vídeo tem a conversa daquele roteiro
+ * (referencia_tipo roteiro_da_peca, referencia_id = o roteiro), separada da conversa da Mesa Roteiros.
+ */
+const REF_DA_PECA = "roteiro_da_peca";
+
+async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean, roteiroDaPeca: string | null = null): Promise<string> {
+  const tipo = roteiroDaPeca ? REF_DA_PECA : REF_CONVERSA;
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
-    if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, referencia_id, arquivada_em").eq("id", id).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; referencia_id: string | null; arquivada_em: string | null } | null;
+    if (!c || c.client_id !== clientId || c.referencia_tipo !== tipo || (roteiroDaPeca && c.referencia_id !== roteiroDaPeca)) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
     // Conversa arquivada (Histórico, "nova conversa") nunca continua: cai na ativa ou numa nova.
     if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
-    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
+    let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", tipo);
+    if (roteiroDaPeca) q = q.eq("referencia_id", roteiroDaPeca);
+    const { data } = await q.is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     const achada = ((data as { id: string }[] | null) ?? [])[0];
     if (achada) return achada.id;
   }
-  const { data: nova, error } = await servico().from("agente_conversas").insert({ client_id: clientId, agente: AGENTE, referencia_tipo: REF_CONVERSA, referencia_id: null, criado_por: ch.userId }).select("id").single();
+  const { data: nova, error } = await servico().from("agente_conversas").insert({ client_id: clientId, agente: AGENTE, referencia_tipo: tipo, referencia_id: roteiroDaPeca, criado_por: ch.userId }).select("id").single();
   if (error || !nova) throw new ErroHttp(503, "conversa_nao_criada", "Não foi possível abrir a conversa com o agente de roteiros.");
   return (nova as { id: string }).id;
 }
@@ -1683,10 +1952,13 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   await garantirAcesso(ch, clientId);
   const mensagem = limpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
-  const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
   const lido = corpo.roteiro_id ? await lerLinha(ch, corpo.roteiro_id).catch((e) => (registrarFalha("mesa-roteiros: lerLinha falhou", e), null)) : null;
   // Frente AG2: roteiro de outro cliente (URL velha depois de trocar de cliente) não entra na conversa.
   const aberto = lido && lido.client_id === clientId ? lido : null;
+  // Frente B (23/10): escopo "peca" = o agente ao lado do roteiro da peça (conversa própria, foco em mudar este roteiro).
+  const naPeca = corpo.escopo === "peca";
+  if (naPeca && !aberto) throw new ErroHttp(404, "roteiro_inexistente", "Gere o roteiro da peça antes de conversar com o agente sobre ele.");
+  const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true, naPeca && aberto ? aberto.id : null);
   const hojeDoPedido = new Date().toISOString().slice(0, 10);
   const janela = janelaDasPecas(mensagem, hojeDoPedido);
   const historicoP = servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO);
@@ -1718,7 +1990,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     cobrar: cobrarDoNucleo,
   }));
   const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp, proprios, previas, baseDoRoteirista] = await Promise.all([
-    modeloDeTexto(corpo.modelo_id),
+    modeloDeTexto(corpo.modelo_id, clientId),
     historicoP,
     listasP,
     nomeDoCliente(clientId),
@@ -1755,7 +2027,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   // O roteiro aberto vem primeiro na lista: "este roteiro" vira r1.
   const roteirosOrdenados = aberto ? [...listas.roteiros.filter((r) => r.id === aberto.id), ...listas.roteiros.filter((r) => r.id !== aberto.id)] : listas.roteiros;
   // Núcleo comum: a instrução e as leituras prévias (com os pedidos ao Hermes) fecham o sistema; a base do agente vem por último.
-  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""}`;
+  const extras = `${naPeca ? `\n\n${SISTEMA_DO_AGENTE_DA_PECA}\n\n` : ""}${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}${baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA,
@@ -1777,9 +2049,12 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente AG2: o que o pedido ensinou vira regra (o Jev decide se vale para sempre); roda junto com a ação.
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "roteiro", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: marcaDaConversa, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
   let acao = normalizarAcoesDosRoteiros(j.acoes, roteirosOrdenados, listas.pecas, clientId, custoDaGeracao(modelo), undefined, comentarios);
+  // Frente B (23/10): o Confirmar usa o modelo desta conversa (o do seletor), o mesmo do custo no cartão.
+  if (acao) acao = { ...acao, contexto: { ...(acao.contexto || {}), modelo_id: modelo.id } };
   // "Faz e me leva" (27/09): o cartão leva o caminho; com o pedido de ir junto, abre sozinho ao terminar.
+  // Na peça (frente B) o roteiro muda ali mesmo: sem "Ir para" a outra tela.
   let levar = pedeParaLevar(mensagem);
-  if (acao) acao = comCaminho(acao, caminhoDosRoteiros(clientId, acao, { abrirSozinho: levar }));
+  if (acao && !naPeca) acao = comCaminho(acao, caminhoDosRoteiros(clientId, acao, { abrirSozinho: levar }));
   // "Ele já vai fazendo" (regra 6): editar texto, aprovar, marcar gravado, arquivar, desarquivar e resolver
   // comentário não custam e têm Desfazer; pedido claro vai direto. IA e PDF pedem Confirmar.
   if (acao && podeExecutarDireto(acao, regrasDosRoteiros(), { pedidoClaro: true }).direto) {
@@ -1796,7 +2071,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       });
       const feita: AcaoDoAgente = acao;
       acao = { ...feita, caminho: null };
-      acao = comCaminho(acao, caminhoDosRoteiros(clientId, feita, { abrirSozinho: levar }));
+      if (!naPeca) acao = comCaminho(acao, caminhoDosRoteiros(clientId, feita, { abrirSozinho: levar }));
     }
   }
   // Frente AG2: resposta que promete sem trazer a lista não fica no ar como se algo fosse acontecer.
@@ -1837,11 +2112,17 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
 }
 
-/** agente_historico { client_id } -> { conversa_id, mensagens }: a última conversa, sem IA. */
+/**
+ * agente_historico { client_id, escopo?, roteiro_id? } -> { conversa_id, mensagens }: a última conversa, sem IA.
+ * Frente B (23/10): escopo "peca" com roteiro_id lê a conversa do roteiro da peça.
+ */
 async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const { data, error: erroDaConversa } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
+  const roteiroDaPeca = corpo.escopo === "peca" ? idDe(corpo.roteiro_id, "roteiro_id") : null;
+  let consulta = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", roteiroDaPeca ? REF_DA_PECA : REF_CONVERSA);
+  if (roteiroDaPeca) consulta = consulta.eq("referencia_id", roteiroDaPeca);
+  const { data, error: erroDaConversa } = await consulta.is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
   // Frente AG2: histórico que não foi lido vira erro na tela (antes voltava vazio, como se não houvesse conversa).
   if (erroDaConversa) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   const conversa = ((data as { id: string }[] | null) ?? [])[0];
@@ -1942,9 +2223,17 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
     await atualizarLinha(linha.id, { arquivado_em: new Date().toISOString(), arquivado_por: ch.userId });
     return { desfazer: { tipo: "desarquivar", roteiro_id: linha.id }, custo: 0 };
   }
+  // Frente B (23/10): o modelo escolhido no seletor do agente quando a proposta nasceu (o cartão mostrou o custo dele).
+  const modeloDaProposta = _acao && _acao.contexto && typeof _acao.contexto.modelo_id === "string" ? _acao.contexto.modelo_id : undefined;
+  if (item.operacao === "reescrever_roteiro") {
+    const pedido = String(item.para || "").trim();
+    if (!pedido) throw new Error("Diga o que mudar no roteiro.");
+    const r = await reescreverRoteiro(ch, linha, pedido, modeloDaProposta, "agente");
+    return { desfazer: { tipo: "voltar_versao", roteiro_id: linha.id, versao_anterior: linha.versao_atual, versao_nova: r.versao.numero, status_anterior: linha.status }, aviso: `versão ${r.versao.numero}`, custo: r.custo_usd };
+  }
   if (item.operacao === "refazer_gancho") {
     const pedido = item.para && item.para !== "sem pedido extra" ? String(item.para) : "";
-    const r = await refazerGancho(ch, linha, pedido, undefined, "agente");
+    const r = await refazerGancho(ch, linha, pedido, modeloDaProposta, "agente");
     return { desfazer: { tipo: "voltar_versao", roteiro_id: linha.id, versao_anterior: linha.versao_atual, versao_nova: r.versao.numero, status_anterior: linha.status }, custo: r.custo_usd };
   }
   if (item.operacao === "mudar_tom") {
@@ -1953,7 +2242,7 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
     const atual = versaoPorNumero(linha.versoes, linha.versao_atual);
     const r = await escreverRoteiro(ch, {
       clientId, linha, taskId: linha.task_id, tipo: linha.tipo, duracaoS: atual ? atual.conteudo.duracao_alvo_s : modoDoTipo(linha.tipo).duracao_padrao_s,
-      objetivo: atual ? atual.conteudo.objetivo : "", pedido: "", tema: linha.titulo, modeloId: undefined, modeloRoteiroId: null, campanhaId: linha.campanha_id, origem: "agente", tom: String(item.para || ""),
+      objetivo: atual ? atual.conteudo.objetivo : "", pedido: "", tema: linha.titulo, modeloId: modeloDaProposta, modeloRoteiroId: null, campanhaId: linha.campanha_id, origem: "agente", tom: String(item.para || ""),
     });
     return { desfazer: { tipo: "voltar_versao", roteiro_id: linha.id, versao_anterior: linha.versao_atual, versao_nova: r.versao.numero, status_anterior: linha.status }, custo: r.custo_usd };
   }
@@ -2151,7 +2440,7 @@ async function ideiasConversar(ch: Chamador, corpo: Record<string, unknown>) {
     cobrar: cobrarDoNucleo,
   }));
   const [modelo, historico, ctx, proprios, regras, sp, sinais, previas] = await Promise.all([
-    modeloDeTexto(corpo.modelo_id),
+    modeloDeTexto(corpo.modelo_id, clientId),
     historicoP,
     contextoDaPeca(clientId, null, { tipo: "fala_camera", marcaId: marcaDaConversa }).catch((e) => (registrarFalha("mesa-roteiros: contexto das ideias não lido", e), null)),
     lerProprios(clientId),
@@ -2289,6 +2578,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   gerar,
   // 23/10: roteiro de anúncio em vídeo para gravar, pedido pela Mesa Ads (Estúdio > Vídeo > Gravar).
   anuncio_gerar: anuncioGerar,
+  // Frente B (23/10): a peça de vídeo. Gravar: 2 versões com os ganchos do nicho e o Jev escolhe. Gerar: as cenas da IA de vídeo.
+  peca_gerar: (ch, corpo) => gerar(ch, corpo, { duasVersoes: true }),
+  peca_cenas_gerar: pecaCenasGerar,
   gancho_refazer: ganchoRefazer,
   tom_mudar: tomMudar,
   roteiro_criar: roteiroCriar,
@@ -2323,6 +2615,9 @@ const ACOES_LONGAS_DA_BASE = new Set(["biblioteca_extrair"]);
 /** 23/10: o roteiro de anúncio (2 versões, busca na web e Jev) também passa de 150 s. */
 const ACOES_LONGAS_DO_ANUNCIO = new Set(["anuncio_gerar"]);
 
+/** Frente B (23/10): a peça de vídeo (2 versões, Jev e base) também passa de 150 s. */
+const ACOES_LONGAS_DA_PECA = new Set(["peca_gerar", "peca_cenas_gerar"]);
+
 /** Ações que podem passar de 150 s (IA, envio de arquivo): a resposta começa na hora. */
 const ACOES_LONGAS = new Set(["gerar", "gancho_refazer", "tom_mudar", "agente_conversar", "ideias_conversar", "executar_acao_agente", "pdf_compartilhar"]);
 
@@ -2345,7 +2640,7 @@ Deno.serve(async (req) => {
         return respostaDeErro(err);
       }
     };
-    return ACOES_LONGAS.has(acao) || ACOES_LONGAS_DA_BASE.has(acao) || ACOES_LONGAS_DO_ANUNCIO.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
+    return ACOES_LONGAS.has(acao) || ACOES_LONGAS_DA_BASE.has(acao) || ACOES_LONGAS_DA_PECA.has(acao) || ACOES_LONGAS_DO_ANUNCIO.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
   } catch (err) {
     return respostaDeErro(err);
   }

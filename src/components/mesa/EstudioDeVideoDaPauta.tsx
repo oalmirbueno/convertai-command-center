@@ -4,6 +4,7 @@ import TrilhaDoVideoDaPauta from "./TrilhaDoVideoDaPauta";
 import { resultadosDeVideoDaPauta } from "./resultadosDeVideoDaPauta";
 import { ESTILOS_DE_VIDEO_DA_PAUTA } from "../../../supabase/functions/_shared/video-da-pauta";
 import EntregaDoVideoDaPauta from "./EntregaDoVideoDaPauta";
+import MidiaDaPauta from "./MidiaDaPauta";
 import { useEffect, useState } from "react";
 import { useMesa } from "./MesaContexto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -44,6 +45,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const agenda = fonteDoArquivo(arte?.capa);
   const tema = BASES.find((b) => b.id === base) || BASES[0];
   return <div className="flex min-h-0 flex-1 flex-col" data-video-da-pauta={item.id}>
+    <MidiaDaPauta item={{ ...item, modo_estudio: "video" }} />
     <BancadaDaPauta tipo="video" titulo={item.title}
       ativa={aba} onAba={setAba} abas={[
         { id: "gerar", nome: "Gerar vídeo", icone: PenLine },
@@ -58,7 +60,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
         <div className="mt-3 sm:max-h-52 sm:overflow-y-auto"><GeracoesRecentes arquivos={arquivos} taskId={item.id} pedidosIds={ids} /></div>
       </>}
       ferramentas={<div className="space-y-4">
-      <PainelDaBancada id="gerar"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div><GeradorLivre key={`${item.id}:${base}`} escopo={chave(`video:${base}`)} pauta={item} direcaoInicial={item.video} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} /></PainelDaBancada>
+      <PainelDaBancada id="gerar"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div><GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={item.video} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} /></PainelDaBancada>
       <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para adicionar a trilha.</p>}</PainelDaBancada>
       <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : <p className="text-[13px]">A legenda fica disponível quando o vídeo estiver pronto.</p>}</PainelDaBancada>
       <PainelDaBancada id="entrega">{atual ? <EntregaDoVideoDaPauta key={atual.id} item={item} arquivo={atual} /> : <p role="status" className="text-[13px]">{arte ? 'Este vídeo já está na Agenda.' : 'Escolha um resultado na prancheta para preparar a legenda e enviar para aprovação.'}</p>}</PainelDaBancada>

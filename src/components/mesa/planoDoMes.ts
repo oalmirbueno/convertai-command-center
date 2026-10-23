@@ -425,6 +425,17 @@ export interface EdicaoDeTextoNaAgenda extends ItemDaAcaoNaAgenda {
   campos: { titulo?: string; tema?: string; gancho?: string; copy?: string; cta?: string; publico?: string; cards?: { ordem: number; texto: string }[] };
 }
 
+/** 23/10: pensar a mídia da peça (fotos do Workspace, referência livre, roteiro do vídeo com gancho). */
+export interface PedidoDeMidiaNaAgenda extends ItemDaAcaoNaAgenda {
+  tipo: "foto" | "video";
+  pedido?: string;
+}
+
+export interface ResultadoDaMidiaNaAgenda extends ResultadoDaAcaoNaAgenda {
+  resumo?: string;
+  custo_usd?: number;
+}
+
 export interface AcaoNaAgenda {
   tipo: "acao_agenda";
   resumo: string;
@@ -439,6 +450,11 @@ export interface AcaoNaAgenda {
   editar_campanhas: EdicaoDeCampanha[];
   /** Título, tema, gancho, lâminas, copy, CTA e público novos, sem gerar do zero (sem custo). */
   editar_textos: EdicaoDeTextoNaAgenda[];
+  /** Mídia pensada pelo nicho (o formato muda junto quando precisa). */
+  midia: PedidoDeMidiaNaAgenda[];
+  midias?: ResultadoDaMidiaNaAgenda[];
+  /** "mistura_do_nicho": a sugestão proativa do Mês (formatos repetidos). */
+  origem?: string;
   ignorados?: string[];
   textos?: ResultadoDaAcaoNaAgenda[];
   executada_em?: string;
@@ -457,7 +473,7 @@ export interface AcaoNaAgenda {
   avisos?: string[];
 }
 
-const LISTAS_DE_PECAS = ["apagar", "mudar_data", "mudar_formato", "refazer", "editar_textos"] as const;
+const LISTAS_DE_PECAS = ["apagar", "mudar_data", "mudar_formato", "refazer", "editar_textos", "midia"] as const;
 
 /**
  * A ação com a escolha do "Qual delas?" aplicada: as outras opções saem de
@@ -487,6 +503,7 @@ export function acaoNaAgendaDaMensagem(anexos: unknown[] | null | undefined): Ac
         refazer: Array.isArray(o.refazer) ? (o.refazer as ItemDaAcaoNaAgenda[]) : [],
         editar_campanhas: Array.isArray(o.editar_campanhas) ? (o.editar_campanhas as EdicaoDeCampanha[]) : [],
         editar_textos: Array.isArray(o.editar_textos) ? (o.editar_textos as EdicaoDeTextoNaAgenda[]) : [],
+        midia: Array.isArray(o.midia) ? (o.midia as PedidoDeMidiaNaAgenda[]) : [],
       };
     }
   }
@@ -502,6 +519,14 @@ export const executarAcaoNaAgenda = (mensagemId: string, descartar = false, esco
         ? { acao: "executar_acao_agenda", mensagem_id: mensagemId, escolha }
         : { acao: "executar_acao_agenda", mensagem_id: mensagemId },
   );
+
+/** 23/10: a sugestão proativa de misturar formatos do mês (vira cartão com Confirmar na conversa do agente). */
+export const sugerirMistura = (clientId: string, mes: string) =>
+  chamarFuncao<{ sugestao: { mensagem_id: string; fala: string; trocas: number } | null; motivo?: string }>("agente-calendario", { acao: "sugerir_mistura", client_id: clientId, mes: mes.slice(0, 7) });
+
+/** 23/10: pensar a mídia de uma peça (o "Pensar a mídia" da pauta no Estúdio). */
+export const pensarMidiaDaPeca = (clientId: string, taskId: string, tipo?: "foto" | "video" | null, pedido?: string | null) =>
+  chamarFuncao<{ midia: unknown; avisos?: string[]; custo_usd?: number }>("agente-calendario", { acao: "midia_da_peca", client_id: clientId, task_id: taskId, ...(tipo ? { tipo } : {}), ...(pedido ? { pedido } : {}) });
 
 export const desfazerAcaoNaAgenda = (mensagemId: string) =>
   chamarFuncao<any>("agente-calendario", { acao: "desfazer_acao_agenda", mensagem_id: mensagemId });

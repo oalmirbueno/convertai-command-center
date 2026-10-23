@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CalendarPlus, FilePlus2, Flame, Lightbulb, Megaphone, MessagesSquare, Newspaper, Sparkles, Zap } from "lucide-react";
+import { CalendarDays, CalendarPlus, FilePlus2, Flame, Layers, Lightbulb, Loader2, Megaphone, MessagesSquare, Newspaper, Sparkles, Zap } from "lucide-react";
+import { toast } from "sonner";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +15,8 @@ import { guardarSementeDaCampanha } from "./sementeDaCampanha";
 import { chaves, hojeIso, lerHypes, segundaDaSemanaIso } from "./mesaV4Api";
 import { dadosDoTrendy } from "./trendy";
 import { nichoCurto, resumoDoMes, ROTULO_DA_FONTE, sugestoesDoMes, type SugestaoDoMes } from "./oQueFazerAgora";
-import { nomeDoMes } from "./planoDoMes";
+import { nomeDoMes, sugerirMistura } from "./planoDoMes";
+import { textoDoErro } from "@/lib/mesa/api";
 
 /** O segmento do cadastro comercial (sem acesso ou sem cadastro: nulo, e o nicho vem do contexto da marca). */
 function useSegmento(clientId: string) {
@@ -43,6 +45,7 @@ const ICONE_DA_ACAO = {
   "abrir-em-alta": <Newspaper className="h-4 w-4" aria-hidden="true" />,
   "abrir-semana": <Flame className="h-4 w-4" aria-hidden="true" />,
   agente: <Sparkles className="h-4 w-4" aria-hidden="true" />,
+  mistura: <Layers className="h-4 w-4" aria-hidden="true" />,
 };
 
 /**
@@ -101,12 +104,30 @@ export default function TopoDoMes({
     emAltaNoNicho,
     leituraDaSemana: !!leitura && leitura.semana === segundaDaSemanaIso(hoje),
     datasComPost: itens ? itens.map((i) => i.due_date) : null,
+    pecas: itens ? itens.map((i) => ({ title: i.title, delivery_type: i.delivery_type, due_date: i.due_date })) : null,
   });
   const resumo = resumoDoMes({ posts: itens ? itens.length : null, datas: principais.length, emAlta: emAltaNoNicho });
   const nome = nomeDoMes(mes);
 
+  const [misturando, setMisturando] = useState(false);
+  // A sugestão proativa vira cartão com Confirmar e Desfazer na conversa do agente (nada muda antes).
+  const misturar = async () => {
+    setMisturando(true);
+    try {
+      const r = await sugerirMistura(clientId, mes);
+      await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+      if (r.sugestao) onAgente();
+      else toast.message(r.motivo || "O mês já está misturado.");
+    } catch (e) {
+      toast.error(textoDoErro(e) || "Não foi possível montar a sugestão agora.");
+    } finally {
+      setMisturando(false);
+    }
+  };
+
   const agir = (s: SugestaoDoMes) => {
-    if (s.acao === "campanha" && s.data) {
+    if (s.acao === "mistura") void misturar();
+    else if (s.acao === "campanha" && s.data) {
       const nota = notas && notas.notas ? notas.notas[s.data.id] : null;
       guardarSementeDaCampanha(clientId, sementeDaSelecao([juntadoDaData(s.data, nota || null)], ""));
       onCriarCampanha();
@@ -153,8 +174,8 @@ export default function TopoDoMes({
                   <p className={juntar(texto.corpo, "line-clamp-2 sm:line-clamp-1")} title={s.texto}>{s.texto}</p>
                   <p className={texto.auxiliar}>de {ROTULO_DA_FONTE[s.fonte]}</p>
                 </div>
-                <button type="button" className={juntar(botao.icone, "ml-2 text-primary")} onClick={() => agir(s)} aria-label={s.rotuloDaAcao} title={s.rotuloDaAcao}>
-                  {ICONE_DA_ACAO[s.acao]}
+                <button type="button" className={juntar(botao.icone, "ml-2 text-primary")} onClick={() => agir(s)} aria-label={s.rotuloDaAcao} title={s.rotuloDaAcao} disabled={s.acao === "mistura" && misturando}>
+                  {s.acao === "mistura" && misturando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : ICONE_DA_ACAO[s.acao]}
                 </button>
               </li>
             ))}

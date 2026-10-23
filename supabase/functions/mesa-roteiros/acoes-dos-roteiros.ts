@@ -8,6 +8,8 @@
  * - "mude o tom"                 -> mudar_tom (roteiro; para = o tom pedido)
  * - "gere os roteiros das 4 peças de vídeo da semana" -> gerar_roteiro (peça p1..; para = tipo)
  * - "arquive este roteiro"       -> arquivar_roteiro (roteiro)
+ * - "encurta o gancho", "troca a cena 2", "mais engraçado", "versão de 15 s" -> reescrever_roteiro
+ *   (roteiro; para = o pedido em uma frase). Frente B, 23/10: o agente ao lado do roteiro da peça.
  * As três primeiras usam IA: o custo estimado vai no cartão antes de confirmar.
  * Todas têm Desfazer: a IA deixa a versão anterior como atual de novo (a nova
  * fica no histórico) ou arquiva o roteiro criado; arquivar volta a desarquivar.
@@ -29,13 +31,14 @@ import {
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { ehTipoDeRoteiro, modoDoTipo, ROTULO_DO_FORMATO, ROTULO_DO_STATUS, type StatusDoRoteiro, type TipoDeRoteiro } from "../_shared/roteiro-modelo.ts";
 import { DESCRICOES_DE_EDICAO, idDoComentario, lerIdDoComentario, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
+import { pedidoDaReescrita } from "./modulos/roteiro-da-peca.ts";
 // Frente AG2 (29/09): "esse roteiro", "a segunda peça", "todos da semana" (só o tipo; a chamada ao Jev fica no index).
 import type { ItemReferivel } from "../_shared/conversa-das-mesas.ts";
 
 // Frente AG (26/09): as de edição sem IA (editar_texto, aprovar_roteiro, marcar_gravado) moram em acoes-de-edicao.ts.
-export const OPERACOES_DOS_ROTEIROS = ["refazer_gancho", "mudar_tom", "gerar_roteiro", "arquivar_roteiro", "gerar_pdf", ...OPERACOES_DE_EDICAO];
+export const OPERACOES_DOS_ROTEIROS = ["refazer_gancho", "mudar_tom", "reescrever_roteiro", "gerar_roteiro", "arquivar_roteiro", "gerar_pdf", ...OPERACOES_DE_EDICAO];
 /** Operações que chamam o roteirista (custam IA). */
-export const OPERACOES_COM_IA = ["refazer_gancho", "mudar_tom", "gerar_roteiro"];
+export const OPERACOES_COM_IA = ["refazer_gancho", "mudar_tom", "reescrever_roteiro", "gerar_roteiro"];
 
 export const ESQUEMA_DAS_ACOES_DOS_ROTEIROS = esquemaDasAcoes(OPERACOES_DOS_ROTEIROS);
 
@@ -222,6 +225,13 @@ export function regrasDosRoteiros(): Record<string, RegraDaOperacao<AlvoDosRotei
       para: (bruto) => umaLinha(bruto, 300) || "sem pedido extra",
       trava: (alvo) => travaDoRoteiro(alvo),
     },
+    // Frente B (23/10): o pedido livre vira o roteiro reescrito (versão nova, Desfazer volta a anterior).
+    reescrever_roteiro: {
+      rotulo: "reescrever",
+      alvos: ["r"],
+      para: (bruto) => pedidoDaReescrita(bruto),
+      trava: (alvo) => travaDoRoteiro(alvo),
+    },
     mudar_tom: {
       rotulo: "mudar o tom de",
       alvos: ["r"],
@@ -268,6 +278,7 @@ export function regrasDosRoteiros(): Record<string, RegraDaOperacao<AlvoDosRotei
 export const DESCRICOES_DOS_ROTEIROS: Record<string, string> = {
   refazer_gancho: "três ganchos novos, de mecanismos diferentes, para o roteiro (ref r..). para: o que a equipe pediu (ex.: 'mais direto'), ou vazio.",
   mudar_tom: "reescreve as falas do roteiro (ref r..) no tom pedido, mantendo fatos, estrutura e tempos. para: o tom (ex.: 'mais leve e próximo').",
+  reescrever_roteiro: "reescreve o roteiro (ref r..) pelo pedido livre da equipe e grava como versão nova: encurtar ou trocar o gancho, trocar ou tirar uma cena (cena 2 = segundo bloco), deixar mais engraçado, versão de 15 s, juntar blocos. para: o pedido em uma frase, com o número da cena e a duração quando houver (ex.: 'troca a cena 2 por um antes e depois', 'versão de 15 s').",
   gerar_roteiro: "gera o roteiro de uma peça de vídeo da agenda (ref p..), sempre seguindo um modelo da biblioteca Roteiros validados. para: fala_camera, tutorial, ugc ou cinema (vazio: fala_camera); com objetivo ou modelo pedido, junte com @ (fala_camera@autoridade, fala_camera@produto, fala_camera@presenca_de_marca, fala_camera@venda, fala_camera@conexao, fala_camera@engajamento ou fala_camera@id_do_modelo). Pedido de 'peças da semana' vale para as peças com data nos próximos 7 dias.",
   arquivar_roteiro: "arquiva o roteiro (ref r..). Dá para desarquivar. para vazio.",
   gerar_pdf: "gera UM PDF de gravação com os roteiros aprovados ou gravados pedidos (ref r.., um item por roteiro, até 12) e manda para Arquivos com a revisão da agência. Não aprova nada. para vazio.",

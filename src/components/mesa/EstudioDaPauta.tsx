@@ -25,7 +25,7 @@ export default function EstudioDaPauta({ item, trabalho, roteiro, arte, foco, on
     </div>;
   return <ControlesDaPauta.Provider value={controles}><section className="flex min-h-0 min-w-0 flex-1 flex-col" data-modo-da-pauta={modo}>
     <Suspense fallback={<p role="status">Abrindo ferramentas…</p>}>
-      {item.planejamento ? <PautaPlanejada key={item.id} item={item} onPronta={onPautaPronta}>{(pronta) => modo === "fotos" ? <Fotos key={pronta.id} item={pronta} roteiro={roteiro} arte={arte} /> : <Video key={pronta.id} item={pronta} arte={arte} />}</PautaPlanejada> : modo === "arte" ? children : modo === "fotos" ? <Fotos key={item.id} item={item} roteiro={roteiro} arte={arte} /> : <Video key={item.id} item={item} arte={arte} />}
+      {item.planejamento ? <PautaPlanejada key={item.id} item={item} onPronta={onPautaPronta}>{(pronta) => modo === "fotos" ? <Fotos key={pronta.id} item={pronta} roteiro={roteiro} arte={arte} /> : <Video key={pronta.id} item={pronta} arte={arte} />}</PautaPlanejada> : modo === "arte" ? children : modo === "fotos" ? <Fotos key={`${item.id}:${item.midia?.gerada_em || ""}`} item={item} roteiro={roteiro} arte={arte} /> : <Video key={`${item.id}:${item.midia?.gerada_em || ""}`} item={item} arte={arte} />}
     </Suspense>
   </section></ControlesDaPauta.Provider>;
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ExternalLink, FileDown, FileText, Loader2, Wand2 } from "lucide-react";
+import { ExternalLink, FileDown, FileText, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { padraoPara, parteDaConferenciaDoJev, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { botao, juntar, superficie, texto } from "@/components/sistema";
@@ -12,12 +12,15 @@ import { useMesa } from "./MesaContexto";
 import type { Campanha, ItemProposto } from "./mesaV4Api";
 import { linhaDaCampanha } from "./CampanhaLinhaDoTempo";
 import { indiceDaFase } from "./areasDaCampanha";
-import { atualizarNoCache, estimarGeracao, gerarRoteiro, useRoteiros, type PedidoDeGeracao, type RespostaDoRoteiro } from "@/components/mesa-roteiros/roteirosApi";
+import { atualizarNoCache, estimarDaPeca, gerarRoteiroDaPeca, useRoteiros, type PedidoDeGeracao, type RespostaDaPeca } from "@/components/mesa-roteiros/roteirosApi";
+import AgenteDoRoteiroDaPeca from "@/components/mesa-roteiros/AgenteDoRoteiroDaPeca";
+import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
+import { CONFERENCIAS_DO_JEV_DA_PECA, TAMANHO_DAS_DUAS_VERSOES } from "../../../supabase/functions/mesa-roteiros/modulos/roteiro-da-peca";
 import { SeloDoStatus } from "@/components/mesa-roteiros/Comuns";
 import {
   modoDoTipo,
+  motivoParaNaoEditar,
   normalizarRoteiro,
-  TAMANHO_DA_GERACAO,
   versaoPorNumero,
   type LinhaDoRoteiro,
   type Roteiro,
@@ -53,6 +56,12 @@ import { normalizarRoteiroDeVideo, type RoteiroDeVideo } from "../../../supabase
  *
  * Custo antes: a ação estimar do motor (sem IA) devolve o valor e o modelo; o botão mostra esse valor mais
  * a conferência do Jev, e a geração usa o mesmo modelo.
+ *
+ * Frente B (23/10/2026, dono: "no Gravar eu pego o roteiro certinho do assunto e do tema e posso baixar; e
+ * tem o agente de roteiro para eu editar, melhorar, dar ideias"): Gerar roteiro pede peca_gerar (2 versões
+ * com os ganchos vencedores do nicho; o Jev escolhe pelas notas virais e a outra fica no histórico), o
+ * seletor é o do escopo "roteiro" (lembrado por cliente), PDF e Word são botões só ícone, e o agente de
+ * roteiro (AgenteDoRoteiroDaPeca) fica ao lado do roteiro: pedido de mudança vira versão nova com Desfazer.
  */
 
 export interface PropsDoGravarVideo {
@@ -246,9 +255,27 @@ export function RoteiroParaGravar({ roteiro: r }: { roteiro: Roteiro }) {
   );
 }
 
+
+/** "Escolhida pelo Jev. Versão 2 (gancho de erro), viral 78 contra 64." da versão atual, quando houve escolha. */
+export function escolhaDaVersao(linha: LinhaDoRoteiro | null): { porque: string; outra: number | null } | null {
+  if (!linha) return null;
+  const v = versaoPorNumero(linha.versoes, linha.versao_atual);
+  const nota = v && v.nota ? v.nota : "";
+  if (nota.indexOf("Escolhida pelo Jev.") !== 0) return null;
+  const outra = linha.versoes.filter((x) => x.numero < linha.versao_atual && (x.nota || "").indexOf("(o Jev escolheu a outra)") >= 0).map((x) => x.numero).pop();
+  return { porque: nota.slice("Escolhida pelo Jev.".length).trim(), outra: outra == null ? null : outra };
+}
+
+/** O nome do arquivo Word (sem acento, só letras, números e hífen). */
+export function nomeDoWord(titulo: string): string {
+  const base = String(titulo || "video").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return `roteiro-${base || "video"}`;
+}
+
 export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, item, aoAtualizar }: PropsDoGravarVideo) {
   const mesa = useMesa();
   const qc = useQueryClient();
+  const modelo = useModeloDoEscopo("roteiro");
   const [tipo, setTipo] = useState<TipoDeRoteiro>("fala_camera");
   // Banco sem a tabela: o roteiro volta sem guardar e fica só nesta tela.
   const [solto, setSolto] = useState<Roteiro | null>(null);
@@ -259,20 +286,36 @@ export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, 
   const linha = roteiros.data ? roteiroDaPecaDaCampanha(roteiros.data.lista, { campanhaId: campanha.id, propostaId: serie, item }) : null;
   const versao = linha ? versaoPorNumero(linha.versoes, linha.versao_atual) : null;
   const roteiro = versao ? versao.conteudo : solto;
+  const travado = linha ? motivoParaNaoEditar(linha.status, !!linha.arquivado_em) : null;
+  // Frente B (23/10): o preço das duas versões com o modelo do roteiro (o escolhido ou o padrão), antes de gerar.
   const estimativa = useQuery({
-    queryKey: ["mesa-roteiros", "estimar", "gerar", clientId],
-    enabled: !!clientId && !roteiro,
+    queryKey: ["mesa-roteiros", "estimar", "peca", clientId, modelo.modeloId],
+    enabled: !!clientId,
     staleTime: 5 * 60_000,
     retry: false,
-    queryFn: () => estimarGeracao(clientId),
+    queryFn: () => estimarDaPeca(clientId, "peca", modelo.modeloId || null),
   });
   const padrao = padraoPara(mesa.catalogo, "estrategista");
-  const modeloId = estimativa.data && estimativa.data.modelo_id ? estimativa.data.modelo_id : padrao ? padrao.id : "";
+  const modeloId = estimativa.data && estimativa.data.modelo_id ? estimativa.data.modelo_id : modelo.modeloId || (padrao ? padrao.id : "");
+  const jev = (): ParteDaEstimativa[] => Array.from({ length: CONFERENCIAS_DO_JEV_DA_PECA }, () => parteDaConferenciaDoJev());
   const partes = (): ParteDaEstimativa[] => {
-    if (estimativa.data && typeof estimativa.data.estimativa_usd === "number") return [{ modeloId, tipo: "texto", fixoUsd: estimativa.data.estimativa_usd }, parteDaConferenciaDoJev()];
-    // O motor não respondeu a estimativa: a mesma conta da Mesa Roteiros, pelo catálogo.
-    return modeloId ? [{ modeloId, tipo: "texto", tokensEntrada: TAMANHO_DA_GERACAO.entrada, tokensSaida: TAMANHO_DA_GERACAO.saida }, parteDaConferenciaDoJev()] : [];
+    if (estimativa.data && typeof estimativa.data.estimativa_usd === "number") return [{ modeloId, tipo: "texto", fixoUsd: estimativa.data.estimativa_usd } as ParteDaEstimativa].concat(jev());
+    // O motor não respondeu a estimativa: a mesma conta do servidor, pelo catálogo.
+    return modeloId ? [{ modeloId, tipo: "texto", tokensEntrada: TAMANHO_DAS_DUAS_VERSOES.entrada, tokensSaida: TAMANHO_DAS_DUAS_VERSOES.saida } as ParteDaEstimativa].concat(jev()) : [];
   };
+  const aoGerar = (data: RespostaDaPeca) => {
+    if (data && data.roteiro) {
+      atualizarNoCache(qc, clientId, data.roteiro);
+      setRecolhido(false);
+      aoAtualizar?.(data.roteiro);
+    } else if (data && data.versao) {
+      toast.warning("Roteiro gerado sem guardar", { description: data.aviso_banco || "O banco ainda não guarda roteiros." });
+      setSolto(normalizarRoteiro(data.versao.conteudo));
+      aoAtualizar?.(null);
+    }
+  };
+  const gerarDuas = (roteiroId: string | null) =>
+    gerarRoteiroDaPeca({ ...corpoDoRoteiroDaPeca({ clientId, campanha, item, tipo: roteiro ? roteiro.tipo : tipo, modeloId }), ...(roteiroId ? { roteiro_id: roteiroId } : {}) });
 
   const nomeDoCliente = mesa.clientName || "Cliente";
   const baixarPdf = async () => {
@@ -295,7 +338,7 @@ export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, 
     try {
       const { baixarDocumentoDoLab, docxDoProjeto } = await import("@/lib/laboratorio/exportar");
       const markdown = textoDoRoteiro(roteiro);
-      const nome = `roteiro-${String(roteiro.titulo || item.tema || "video").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "video"}`;
+      const nome = nomeDoWord(roteiro.titulo || item.tema || "video");
       const blob = await docxDoProjeto({ nome, titulo: roteiro.titulo || "Roteiro", markdown, json: "", totalNos: 0, totalExecucoes: 0, pendencias: [] });
       baixarDocumentoDoLab(blob, `${nome}.docx`);
     } catch (e) {
@@ -307,7 +350,9 @@ export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, 
 
   const tema = item.tema || "o vídeo";
   const estado = linha ? "pronto" : solto ? "solto" : "falta";
-  const resumo = roteiro ? `${modoDoTipo(roteiro.tipo).rotulo} · ${roteiro.duracao_alvo_s} s · ${roteiro.blocos.length} blocos` : null;
+  const resumo = roteiro ? `${modoDoTipo(roteiro.tipo).rotulo} · ${roteiro.duracao_alvo_s} s · ${roteiro.blocos.length} blocos${linha ? ` · v${linha.versao_atual}` : ""}` : null;
+  const escolha = escolhaDaVersao(linha);
+  const desabilitado = roteiros.isLoading || estimativa.isLoading || !modeloId;
 
   return (
     <div className="min-w-0" data-gravar-video={item.tema_id || ""} data-estado-do-roteiro-para-gravar={estado}>
@@ -326,14 +371,25 @@ export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, 
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </Link>
             )}
-            <button type="button" className={botao.barra} onClick={() => void baixarPdf()} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em PDF`} title="Baixar roteiro (PDF)">
-              {baixando === "pdf" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <FileDown className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-              PDF
+            <button type="button" className={botao.icone} onClick={() => void baixarPdf()} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em PDF`} title="Baixar o roteiro em PDF">
+              {baixando === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileDown className="h-4 w-4" aria-hidden="true" />}
             </button>
-            <button type="button" className={botao.barra} onClick={() => void baixarWord()} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em Word`} title="Baixar (Word)">
-              {baixando === "docx" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <FileText className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-              Word
+            <button type="button" className={botao.icone} onClick={() => void baixarWord()} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em Word`} title="Baixar o roteiro em Word">
+              {baixando === "docx" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
             </button>
+            {linha && !travado && (
+              <BotaoComCusto
+                rotulo={<RefreshCw className="h-4 w-4" aria-label="Gerar de novo" />}
+                titulo="Roteiro para gravar"
+                descricao="Gerar de novo: 2 versões novas com os ganchos do nicho, o Jev escolhe; a atual fica no histórico"
+                disabled={desabilitado}
+                partes={partes}
+                executar={() => gerarDuas(linha.id)}
+                aoConcluir={aoGerar}
+                variant="ghost"
+                className="h-8 px-2"
+              />
+            )}
           </>
         ) : (
           <>
@@ -347,28 +403,46 @@ export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, 
                 </>
               }
               titulo="Roteiro para gravar"
-              descricao="Roteiro completo pelo motor de roteiros, com a campanha: ganchos, falas com tempo, direção de gravação, texto na tela, b-roll, CTA e legenda"
-              disabled={roteiros.isLoading || estimativa.isLoading || !modeloId}
+              descricao="2 versões completas pelo motor de roteiros com os ganchos virais do nicho e a campanha; o Jev escolhe a mais forte"
+              disabled={desabilitado}
               partes={partes}
-              executar={() => gerarRoteiro(corpoDoRoteiroDaPeca({ clientId, campanha, item, tipo, modeloId }))}
-              aoConcluir={(data: RespostaDoRoteiro) => {
-                if (data && data.roteiro) {
-                  atualizarNoCache(qc, clientId, data.roteiro);
-                  aoAtualizar?.(data.roteiro);
-                } else if (data && data.versao) {
-                  toast.warning("Roteiro gerado sem guardar", { description: data.aviso_banco || "O banco ainda não guarda roteiros." });
-                  setSolto(normalizarRoteiro(data.versao.conteudo));
-                  aoAtualizar?.(null);
-                }
-              }}
+              executar={() => gerarDuas(null)}
+              aoConcluir={aoGerar}
               variant="ghost"
               className="h-8 px-2"
             />
           </>
         )}
       </div>
+      {!roteiro && (
+        <div className="mt-2 min-w-0 max-w-md" data-modelo-do-gravar="">
+          <SeletorDoModeloDoEscopo estado={modelo} />
+        </div>
+      )}
       {roteiros.isError && !roteiro && <p className={juntar(texto.auxiliar, "mt-1 text-destructive")}>Roteiros não lidos: {textoDoErro(roteiros.error)}</p>}
-      {roteiro && !recolhido && <RoteiroParaGravar roteiro={roteiro} />}
+      {estimativa.isError && !roteiro && <p className={juntar(texto.auxiliar, "mt-1 text-warning")}>Sem a estimativa do servidor: o preço vem do catálogo.</p>}
+      {roteiro && !recolhido && (
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+          <div className="min-w-0">
+            {escolha && (
+              <p className={juntar(texto.auxiliar, "flex min-w-0 items-start [overflow-wrap:anywhere]")} data-escolha-do-jev="">
+                <Sparkles className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0">
+                  Jev: {escolha.porque}
+                  {escolha.outra ? ` A outra é a v${escolha.outra}, no histórico.` : ""}
+                </span>
+              </p>
+            )}
+            {travado && <p className={juntar(texto.auxiliar, "mt-1")}>{travado}</p>}
+            <RoteiroParaGravar roteiro={roteiro} />
+          </div>
+          {linha && (
+            <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <AgenteDoRoteiroDaPeca roteiroId={linha.id} titulo={tema} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
