@@ -174,7 +174,8 @@ describe("troca de cenário: guardas", () => {
   });
 
   it("worker sobe a versão e trata o tipo cenario", () => {
-    expect(ler("workers/render/principal.ts")).toMatch(/VERSAO_DO_WORKER = "edt-1\.0\+mot-1\.0\+mtr-1\+tcn-1(\+trt-1)?\+mov-1"/);
+    // 22/10: + lam-1, a lâmina de vídeo do Carrossel X.
+    expect(ler("workers/render/principal.ts")).toMatch(/VERSAO_DO_WORKER = "edt-1\.0\+mot-1\.0\+mtr-1\+tcn-1(\+trt-1)?\+mov-1(\+lam-1)?"/);
     expect(ler("workers/render/trabalho.ts")).toMatch(/p\.tipo === "cenario"/);
   });
 

@@ -215,8 +215,12 @@ describe("geração: o que falhou no caminho e mudou a arte vira aviso na versã
     // 22/10: o preenchimento dos elementos da referência (preenchimentoNaGeracao, 88260e83 Motor de copy) também
     // recebe a lista de avisos; as 5 versões do gerar continuam passando os avisos junto com as regras.
     expect(f.split("avisos: avisosDaGeracao, regras: regrasDaGeracao,").length - 1).toBe(5);
-    expect(f.split("avisos: avisosDaGeracao,").length - 1).toBe(6);
-    expect(f.slice(f.indexOf("await preenchimentoNaGeracao(t, card, {"), f.indexOf("const preenchimentoDaReferencia = doPreenchimento.preenchimento;"))).toContain("avisos: avisosDaGeracao,");
+    // 23/10 (0b364175, Estúdio mais rápido): o preenchimento roda em paralelo com a lista própria e os avisos dele
+    // entram nos da geração logo depois, então continuam chegando à versão.
+    expect(f.split("avisos: avisosDaGeracao,").length - 1).toBe(5);
+    const doPreenchimento = f.slice(f.indexOf("preenchimentoNaGeracao(t, card, {"), f.indexOf("const preenchimentoDaReferencia = doPreenchimento.preenchimento;"));
+    expect(doPreenchimento).toContain("avisos: avisosDoPreenchimento,");
+    expect(doPreenchimento).toContain("avisosDaGeracao.push(...avisosDoPreenchimento);");
     expect(f).toContain("avisos: avisosDoAjuste,");
   });
 
