@@ -11619,7 +11619,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       const ins = await servico().from("render_pedidos").insert({ client_id: t.client_id, estudio_trabalho_id: t.id, tipo: TIPO_DA_LAMINA_EM_VIDEO, uid: linha.uid, entrada: linha.entrada, criado_por: linha.criadoPor }).select(campos).single();
       if (!ins.error && ins.data) return { pedido: ins.data as unknown as PedidoDeRender, ja_existia: false };
       const e = ins.error as { code?: string; message?: string } | null;
-      if (e && (e.code === "42703" || e.code === "23514" || e.code === "42P01" || /estudio_trabalho_id|tipo_check|schema cache/i.test(e.message || ""))) throw new ErroEstudio(503, "banco_sem_fila", "A fila da lâmina de vídeo ainda não foi ativada no banco (migration 20261022200000). A lâmina segue em PNG.");
+      if (e && (e.code === "42703" || e.code === "23514" || e.code === "42P01" || /estudio_trabalho_id|tipo_check|schema cache/i.test(e.message || ""))) throw new ErroEstudio(503, "banco_sem_fila", "A fila da lâmina de vídeo ainda não foi ativada no banco (migration 20261023150000). A lâmina segue em PNG.");
       if (!e || e.code !== "23505") throw new ErroEstudio(503, "banco_indisponivel", "Não foi possível pôr o vídeo na fila agora.");
       const ativo = await servico().from("render_pedidos").select(campos).eq("estudio_trabalho_id", t.id).eq("tipo", TIPO_DA_LAMINA_EM_VIDEO).eq("entrada->>ordem", String(linha.entrada.ordem)).in("estado", ["fila", "rodando"]).order("criado_em", { ascending: false }).limit(1).maybeSingle();
       if (ativo.data) return { pedido: ativo.data as unknown as PedidoDeRender, ja_existia: true };
