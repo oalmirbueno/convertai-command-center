@@ -1,4 +1,5 @@
 import type { BlocoDaLamina, GraficoDoBloco, MancheteDoBloco, PerfilDoBloco, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
+import { partesDaLinha } from "../../../../supabase/functions/estudio-arte/modulos/destaques-do-texto";
 
 /**
  * Carrossel estilo post do X (22/10/2026, referências de Rafael Milagre e Thiago Concer).
@@ -100,12 +101,11 @@ export interface Pedaco { texto: string; negrito: boolean }
 /** Uma linha pronta para desenhar: pedaços na ordem, e o espaço antes dela (parágrafo). */
 export interface LinhaRica { pedacos: Pedaco[]; paragrafo: boolean }
 
-/** "**trecho**" vira negrito; asteriscos sem par ficam como texto. */
-export function pedacosDoTexto(linha: string): Pedaco[] {
-  const partes = linha.split("**");
-  if (partes.length % 2 === 0) return [{ texto: linha, negrito: false }];
-  return partes.map((texto, i) => ({ texto, negrito: i % 2 === 1 })).filter((p) => p.texto);
-}
+/**
+ * "**trecho**" vira negrito (24/10: a mesma leitura do campo de texto, em destaques-do-texto.ts): o "**" sem
+ * par sai e negritos vizinhos separados só por espaço viram um. Nenhum asterisco de marca sobra na lâmina.
+ */
+export const pedacosDoTexto = (linha: string): Pedaco[] => partesDaLinha(linha);
 
 /** Texto sem as marcas de negrito (para contar e para a legenda). */
 export const textoSemMarcas = (t: string) => t.replace(/\*\*/g, "");
@@ -393,7 +393,11 @@ function planoDoPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, w: numbe
  * publicações, seguidores e seguindo, nome, bio e o botão Seguir azul) ou do X (capa, foto sobre a capa,
  * Seguir preto, nome, @, bio e os números de seguindo e seguidores).
  */
-function desenharPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, r: { x: number; y: number; largura: number; altura: number }, raio: number, s: number, img: HTMLImageElement | null | undefined, cor: PaletaDoCarrossel, escuro: boolean) {
+function desenharPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, r: { x: number; y: number; largura: number; altura: number }, raio: number, s: number, img: HTMLImageElement | null | undefined, corDaLamina: PaletaDoCarrossel, escuroDaLamina: boolean) {
+  // 24/10: a cor própria do card (o texto, a capa e os cinzas acompanham o contraste dela) e a do Seguir.
+  const cor = p.cor_fundo && hexValido(p.cor_fundo) ? { ...paletaDoFundo(p.cor_fundo), cartao: p.cor_fundo } : corDaLamina;
+  const escuro = p.cor_fundo && hexValido(p.cor_fundo) ? fundoEscuro(p.cor_fundo) : escuroDaLamina;
+  const botao = p.cor_botao && hexValido(p.cor_botao) ? p.cor_botao : null;
   const pl = planoDoPerfil(ctx, p, r.largura, s);
   const h = Math.min(pl.altura, r.altura);
   const y0 = r.y + Math.max(0, (r.altura - pl.altura) / 2);
@@ -404,13 +408,14 @@ function desenharPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, r: { x:
   let y: number;
   if (p.estilo === "x") {
     // Capa em faixa, a foto sobre a capa e o Seguir preto (ou branco no escuro) à direita.
-    ctx.fillStyle = escuro ? "#2f3336" : "#cfd9de"; ctx.fillRect(r.x, y0, r.largura, pl.topo);
+    ctx.fillStyle = botao || (escuro ? "#2f3336" : "#cfd9de"); ctx.globalAlpha = botao ? 0.85 : 1; ctx.fillRect(r.x, y0, r.largura, pl.topo); ctx.globalAlpha = 1;
     const ay = y0 + pl.topo - pl.avatar / 2;
     ctx.save(); ctx.beginPath(); ctx.arc(x + pl.avatar / 2, ay + pl.avatar / 2, pl.avatar / 2 + 5 * s, 0, Math.PI * 2); ctx.fillStyle = cor.cartao; ctx.fill(); ctx.restore();
     avatar(ctx, img, p.nome, x, ay, pl.avatar, cor.borda, cor.texto);
     const bw = 170 * s, bh = 58 * s, bx = r.x + r.largura - pl.pad - bw, by = y0 + pl.topo + 16 * s;
-    ctx.fillStyle = escuro ? "#eff3f4" : "#0f1419"; caixa(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
-    ctx.fillStyle = escuro ? "#0f1419" : "#ffffff"; ctx.font = fonte(700, 26 * s); ctx.textAlign = "center";
+    const fundoDoSeguir = botao || (escuro ? "#eff3f4" : "#0f1419");
+    ctx.fillStyle = fundoDoSeguir; caixa(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = fundoEscuro(fundoDoSeguir) ? "#ffffff" : "#0f1419"; ctx.font = fonte(700, 26 * s); ctx.textAlign = "center";
     ctx.fillText("Seguir", bx + bw / 2, by + (bh - 26 * s) / 2); ctx.textAlign = "left";
     y = ay + pl.avatar + 18 * s;
     ctx.font = fonte(800, 32 * s); ctx.fillStyle = cor.texto;
@@ -462,10 +467,11 @@ function desenharPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, r: { x:
     // Seguir (azul) e Mensagem (cinza), lado a lado, como no app.
     y += 18 * s;
     const gap = 14 * s, bw = (r.largura - pl.pad * 2 - gap) / 2, bh = 64 * s;
-    ctx.fillStyle = "#0095f6"; caixa(ctx, x, y, bw, bh, 14 * s); ctx.fill();
-    ctx.fillStyle = escuro ? "#363636" : "#efefef"; caixa(ctx, x + bw + gap, y, bw, bh, 14 * s); ctx.fill();
+    const fundoDoSeguir = botao || "#0095f6";
+    ctx.fillStyle = fundoDoSeguir; caixa(ctx, x, y, bw, bh, 14 * s); ctx.fill();
+    ctx.fillStyle = cor.fundoMidia; caixa(ctx, x + bw + gap, y, bw, bh, 14 * s); ctx.fill();
     ctx.font = fonte(700, 26 * s); ctx.textAlign = "center";
-    ctx.fillStyle = "#ffffff"; ctx.fillText("Seguir", x + bw / 2, y + (bh - 26 * s) / 2);
+    ctx.fillStyle = fundoEscuro(fundoDoSeguir) ? "#ffffff" : "#0f1419"; ctx.fillText("Seguir", x + bw / 2, y + (bh - 26 * s) / 2);
     ctx.fillStyle = cor.texto; ctx.fillText("Mensagem", x + bw + gap + bw / 2, y + (bh - 26 * s) / 2);
     ctx.textAlign = "left";
   }

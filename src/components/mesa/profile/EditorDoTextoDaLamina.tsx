@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bold, Check, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { chamarFuncao, ErroDaMesa, textoDoErro, usd } from "@/lib/mesa/api";
 import { useMesa } from "../MesaContexto";
 import { gravarTrabalhoNoCache, type TrabalhoGravado } from "../estudioUtil";
 import type { CardDaDirecao, Trabalho } from "../useItensDoMes";
-import { alternarNegrito, trechosEmNegrito } from "../../../../supabase/functions/estudio-arte/modulos/destaques-do-texto";
+import { alternarNegrito, normalizarNegrito, trechosEmNegrito } from "../../../../supabase/functions/estudio-arte/modulos/destaques-do-texto";
 
 /**
  * O texto da lâmina dentro do Template (23/10, dono: "quebrar linhas e aparece na lâmina, selecionar a
@@ -18,25 +18,27 @@ import { alternarNegrito, trechosEmNegrito } from "../../../../supabase/function
  * vira parágrafo); o B e o Ctrl+B põem ou tiram o negrito do trecho selecionado (**trecho**). Salvar grava o
  * texto da lâmina, o mesmo da ferramenta Lâmina, sem custo. "Destacar" pede ao Jev as palavras mais fortes
  * (custo antes).
+ * 24/10 (dono: "quebrei linha e não respondeu na hora"): o campo é controlado pelo rascunho da lâmina
+ * (`valor`/`onMudar`), então a prévia e a miniatura mudam a cada tecla, Enter incluído, sem guardar.
  */
-export default function EditorDoTextoDaLamina({ trabalho, card, total, travado, onMudou }: {
+export default function EditorDoTextoDaLamina({ trabalho, card, total, travado, onMudou, valor: valorDeFora, onMudar }: {
   trabalho: Trabalho; card: CardDaDirecao; total: number; travado: boolean; onMudou: () => void;
+  /** O texto em edição (rascunho); sem ele, o guardado. */
+  valor?: string;
+  /** Cada tecla vai para o rascunho; null descarta a edição. */
+  onMudar?: (texto: string | null) => void;
 }) {
   const mesa = useMesa(), cache = useQueryClient();
   const salvo = card.texto_exato || "";
-  const [valor, setValor] = useState(salvo);
+  // Sem o rascunho de fora (uso isolado), o campo guarda o próprio estado.
+  const [valorLocal, setValorLocal] = useState(salvo);
+  const valor = onMudar ? (valorDeFora ?? salvo) : valorLocal;
+  const setValor = (v: string) => { if (onMudar) onMudar(v === salvo ? null : v); else setValorLocal(v); };
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [custo, setCusto] = useState<{ todas: boolean; usd: number } | null>(null);
   const [destacando, setDestacando] = useState(false);
   const campo = useRef<HTMLTextAreaElement>(null);
-  // O texto que chega de fora (gerador, ferramenta Lâmina, Destacar) entra no campo se não há edição pendente.
-  const ultimoSalvo = useRef(salvo);
-  useEffect(() => {
-    if (ultimoSalvo.current === salvo) return;
-    setValor((v) => (v === ultimoSalvo.current ? salvo : v));
-    ultimoSalvo.current = salvo;
-  }, [salvo]);
   const mudou = valor.trim() !== salvo.trim();
 
   const negrito = () => {
@@ -51,9 +53,11 @@ export default function EditorDoTextoDaLamina({ trabalho, card, total, travado, 
     if (!valor.trim() || !mudou) return;
     setSalvando(true); setErro("");
     try {
-      const r = await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, card: { ordem: card.ordem, texto_exato: valor.replace(/\r/g, "") } });
+      // Negrito limpo: vizinhos juntos e nenhum ** sobrando.
+      const texto = normalizarNegrito(valor.replace(/\r/g, ""));
+      const r = await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, card: { ordem: card.ordem, texto_exato: texto } });
       if (r && r.trabalho) gravarTrabalhoNoCache(cache, mesa.clientId, r.trabalho);
-      ultimoSalvo.current = valor.replace(/\r/g, "").trim();
+      if (onMudar) onMudar(null); else setValorLocal(texto.trim());
       onMudou();
     } catch (e) { setErro(textoDoErro(e)); } finally { setSalvando(false); }
   };

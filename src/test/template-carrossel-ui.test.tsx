@@ -49,7 +49,7 @@ vi.mock("@/components/laboratorio/no/EscolherDocumentos", () => ({
     </div>
   ),
 }));
-import TemplateProfileEditor from "@/components/mesa/profile/TemplateProfileEditor";
+import TemplateProfileEditor, { modeloDoTrabalho } from "@/components/mesa/profile/TemplateProfileEditor";
 import { desenharProfile } from "@/components/mesa/profile/renderProfile";
 import { chaveDoRascunho, gravarRascunho } from "@/components/mesa/profile/rascunhoDoTemplate";
 
@@ -326,5 +326,76 @@ describe("Carrossel X: texto com quebra e negrito, aplicar a todas, selo, perfil
     fireEvent.click(screen.getByRole("button", { name: "Preencher a lâmina com IA" }));
     await waitFor(() => expect(chamadas("template_carrossel")).toHaveLength(1));
     expect(chamadas("template_carrossel")[0]).toMatchObject({ so_esta: true, gravar_legenda: false, ordem: 1 });
+  });
+});
+
+describe("correções de 24/10: um modelo para o carrossel, texto ao vivo e cor do perfil", () => {
+  const rascunhoDa = (ordem: number) => JSON.parse(sessionStorage.getItem(chaveDoRascunho("cliente-a", null, "trabalho-a", ordem)) || "null") as Record<string, unknown> | null;
+  it("escolher o Carrossel X vale para todas as lâminas: a lâmina 2 abre no mesmo modelo, mesmo com rascunho antigo", async () => {
+    // A lâmina 2 foi aberta antes, no Post do X (rascunho antigo).
+    const antes = montar(trabalho, 1);
+    await waitFor(() => expect(ultimoTemplate().estilo).toBe("twitter"));
+    antes.unmount();
+    const um = montar(trabalho, 0);
+    fireEvent.click(screen.getByRole("button", { name: "Carrossel X" }));
+    await waitFor(() => expect(ultimoTemplate().estilo).toBe("carrossel"));
+    expect(rascunhoDa(2)).toMatchObject({ estilo: "carrossel" });
+    um.unmount();
+    montar(trabalho, 1);
+    await waitFor(() => expect(ultimoTemplate()).toMatchObject({ estilo: "carrossel", texto: "O motivo fala de gestão." }));
+    expect(screen.getByRole("button", { name: "Carrossel X" })).toHaveAttribute("aria-pressed", "true");
+  });
+  it("sem escolha na sessão, vale o modelo da versão mais nova entre todas as lâminas", async () => {
+    const tp = (estilo: "twitter" | "carrossel") => ({ versao: 1, estilo, nome: "Padaria", username: "padaria", verificado: false, texto: "x", tamanho_texto: 34, cor_fundo: "#ffffff", tema: "claro", tamanho_foto: 88, espacamento: 48, arredondamento: 24 });
+    const comVersoes = { ...trabalho, cards: [
+      { ordem: 1, versao: 2, storage_path: "a.png", criado_em: "2026-10-23T10:00:00Z", template_profile: tp("carrossel") },
+      { ordem: 2, versao: 1, storage_path: "b.png", criado_em: "2026-10-22T10:00:00Z", template_profile: tp("twitter") },
+    ] } as unknown as Trabalho;
+    expect(modeloDoTrabalho(comVersoes)).toBe("carrossel");
+    montar(comVersoes, 1);
+    await waitFor(() => expect(ultimoTemplate().estilo).toBe("carrossel"));
+  });
+  it("Post do X: o texto da lâmina muda a prévia a cada tecla, Enter incluído, sem guardar; Desfazer volta", async () => {
+    montar();
+    await waitFor(() => expect(ultimoTemplate().estilo).toBe("twitter"));
+    const campo = screen.getByLabelText("Texto da lâmina no template");
+    fireEvent.change(campo, { target: { value: "A Meta **desistiu** disso\nNova linha" } });
+    await waitFor(() => expect(ultimoTemplate().texto).toBe("A Meta **desistiu** disso\nNova linha"));
+    expect(chamadas("configurar")).toHaveLength(0);
+    expect(rascunhoDa(1)).toMatchObject({ texto_editado: "A Meta **desistiu** disso\nNova linha" });
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer" }));
+    await waitFor(() => expect(ultimoTemplate().texto).toBe("A Meta **desistiu** disso →"));
+    expect(rascunhoDa(1)?.texto_editado).toBeUndefined();
+  });
+  it("Carrossel X: sem o campo solto de Texto do Story; o texto da lâmina vale ao vivo e salvar limpa a edição", async () => {
+    await abrirCarrossel();
+    expect(screen.queryByLabelText("Texto do template")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
+    fireEvent.change(screen.getByLabelText("Texto da lâmina no template"), { target: { value: "Primeira\n\nSegunda" } });
+    await waitFor(() => expect(ultimoTemplate().texto).toBe("Primeira\n\nSegunda"));
+    estado.chamar.mockResolvedValue({ trabalho: { ...trabalho, direcao: { ...trabalho.direcao, cards: [{ ordem: 1, texto_exato: "Primeira\n\nSegunda" }, trabalho.direcao.cards![1]] } } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar texto" }));
+    await waitFor(() => expect(chamadas("configurar")[0]).toMatchObject({ card: { ordem: 1, texto_exato: "Primeira\n\nSegunda" } }));
+    await waitFor(() => expect(rascunhoDa(1)?.texto_editado).toBeUndefined());
+  });
+  it("salvar junta negritos vizinhos e tira o ** que sobra", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
+    fireEvent.change(screen.getByLabelText("Texto da lâmina no template"), { target: { value: "**Separe** **atestados** e laudos **" } });
+    estado.chamar.mockResolvedValue({ trabalho });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar texto" }));
+    await waitFor(() => expect(chamadas("configurar")[0]).toMatchObject({ card: { texto_exato: "**Separe atestados** e laudos" } }));
+  });
+  it("o card do perfil ganha a cor do card e a do Seguir (com o padrão de volta)", async () => {
+    montar(trabalho, 1);
+    fireEvent.click(screen.getByRole("button", { name: "Carrossel X" }));
+    await waitFor(() => expect(ultimoTemplate().estilo).toBe("carrossel"));
+    fireEvent.click(screen.getByRole("button", { name: "Pôr o perfil com o Seguir" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cor do card #000000" }));
+    await waitFor(() => expect(ultimoTemplate().bloco?.perfil).toMatchObject({ cor_fundo: "#000000" }));
+    fireEvent.change(screen.getByLabelText("Cor do botão Seguir livre"), { target: { value: "#7A1F3D" } });
+    await waitFor(() => expect(ultimoTemplate().bloco?.perfil).toMatchObject({ cor_botao: "#7a1f3d" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Cor do card" })).getByRole("button", { name: "Padrão" }));
+    await waitFor(() => expect(ultimoTemplate().bloco?.perfil?.cor_fundo).toBeUndefined());
   });
 });

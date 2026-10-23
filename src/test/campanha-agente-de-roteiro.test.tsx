@@ -235,3 +235,76 @@ describe("agente de roteiro na peça de vídeo (tela)", () => {
     expect(chamadas("editar_item")[1].campos.roteiro_video.gancho).toBe("Gancho ajustado");
   });
 });
+
+// ------------------------------------------------------------------ peças de vídeo sem o agente (23/10)
+
+import { normalizarVideoPronto } from "../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
+
+describe("vídeo pronto da peça (regra pura)", () => {
+  it("aceita só vídeo do cliente (mesa) ou do Workspace, sem subir pasta", () => {
+    expect(normalizarVideoPronto({ bucket: "mesa", caminho: `${CLIENTE}/video/brutos/a.mp4`, nome: "a.mp4" }, CLIENTE)).toMatchObject({ bucket: "mesa", nome: "a.mp4" });
+    expect(normalizarVideoPronto({ bucket: "mesa", caminho: "outro-cliente/video/a.mp4" }, CLIENTE)).toBeUndefined();
+    expect(normalizarVideoPronto({ bucket: "workspace", caminho: "pasta/../x.mp4" })).toBeUndefined();
+    expect(normalizarVideoPronto({ bucket: "workspace", caminho: "pasta/foto.png" })).toBeUndefined();
+    expect(normalizarVideoPronto({ bucket: "s3", caminho: "a.mp4" })).toBeUndefined();
+  });
+});
+
+describe("Vídeos e Reels sem depender do agente (tela)", () => {
+  const semVideo = { ...proposta, itens: [] as unknown[] };
+  const comPronto = { ...proposta, itens: [{ ...pecaDeVideo, video_pronto: { bucket: "mesa", caminho: `${CLIENTE}/video/brutos/reels.mp4`, nome: "reels.mp4", em: "x" } }] };
+
+  function montarCom(p: unknown) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(chaves.proposta(PROPOSTA_ID), p);
+    render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: h(CampanhaVideos, { campanha }) })))));
+  }
+
+  beforeEach(() => {
+    mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
+      if (body.acao === "campanha_peca_de_video") {
+        if (body.operacao === "criar") return { data: { proposta: { ...proposta, itens: [{ ...pecaDeVideo, tema_id: "c2", tema: body.tema }] }, tema_id: "c2", custo_usd: 0 }, error: null };
+        if (body.operacao === "tirar") return { data: { proposta: { ...proposta, itens: [] }, tema_id: body.tema_id, custo_usd: 0 }, error: null };
+        return { data: { proposta: { ...proposta, itens: [{ ...pecaDeVideo, ...(body.video ? { video_pronto: body.video } : {}) }] }, tema_id: body.tema_id, custo_usd: 0 }, error: null };
+      }
+      if (body.acao === "editar_item") return { data: { proposta: { ...proposta, itens: [{ ...pecaDeVideo, ...body.campos }] }, avisos: [], custo_usd: 0 }, error: null };
+      return { data: {}, error: null };
+    });
+  });
+
+  it("campanha sem vídeo: o agente e o Novo vídeo aparecem; Só a peça cria sem custo; o agente pede a peça nova", async () => {
+    montarCom(semVideo);
+    expect(await screen.findByRole("region", { name: "Novo vídeo na campanha" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: /Agente de roteiro de Novo vídeo/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Nome do vídeo novo"), { target: { value: "Bastidor da bancada" } });
+    fireEvent.click(screen.getByRole("button", { name: /Só a peça/ }));
+    await waitFor(() => expect(chamadas("campanha_peca_de_video").length).toBe(1));
+    expect(chamadas("campanha_peca_de_video")[0]).toMatchObject({ operacao: "criar", campanha_id: CAMPANHA_ID, tema: "Bastidor da bancada", video: null });
+    expect(await screen.findByText("Bastidor da bancada")).toBeTruthy();
+  });
+
+  it("peça com vídeo pronto: mostra o vídeo, tira o vídeo, edita o nome e apaga com confirmação", async () => {
+    montarCom(comPronto);
+    expect(await screen.findByText(/Vídeo pronto: reels\.mp4/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Tirar o vídeo da peça" }));
+    await waitFor(() => expect(chamadas("campanha_peca_de_video")[0]).toMatchObject({ operacao: "anexar", tema_id: "v1", video: null }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Editar a peça/ }));
+    fireEvent.change(screen.getByLabelText(/Nome da peça/), { target: { value: "Reels novo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(chamadas("editar_item")[0]).toMatchObject({ tema_id: "v1", campos: { tema: "Reels novo" } }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Apagar a peça/ }));
+    expect(chamadas("campanha_peca_de_video").filter((b) => b.operacao === "tirar").length).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar: apagar a peça/ }));
+    await waitFor(() => expect(chamadas("campanha_peca_de_video").filter((b) => b.operacao === "tirar").length).toBe(1));
+  });
+
+  it("o agente sem peça manda tema_id novo", async () => {
+    mock.invoke.mockImplementation(async (_f: string, { body }: any) => ({ data: body.acao === "campanha_roteiro_agente" ? { opcoes: null, proposta: semVideo, custo_usd: 0 } : {}, error: null }));
+    montarCom(semVideo);
+    const agente = await screen.findByRole("region", { name: /Agente de roteiro de Novo vídeo/ });
+    await confirmarCusto(within(agente).getByRole("button", { name: /Criar roteiro/ }), "campanha_roteiro_agente");
+    await waitFor(() => expect(chamadas("campanha_roteiro_agente")[0]).toMatchObject({ operacao: "criar", tema_id: "novo" }));
+  });
+});

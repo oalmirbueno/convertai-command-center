@@ -9,7 +9,7 @@ import type { BlocoDaLamina, TemplateProfile } from "../../../../supabase/functi
 
 /** O que a lâmina leva do próprio rascunho (o resto, perfil e foto, vem da lâmina aberta). */
 const CAMPOS_DA_LAMINA = ["tema", "cor_fundo", "tamanho_texto", "peso_texto", "seta", "rodape_cinza", "verificado", "espacamento", "tamanho_foto", "arredondamento", "escala", "midia", "proporcao", "ocultar_numeros", "ocultar_tempo", "fio"] as const;
-type RascunhoDaLamina = Partial<TemplateProfile> & { sem_imagem?: boolean };
+type RascunhoDaLamina = Partial<TemplateProfile> & { sem_imagem?: boolean; texto_editado?: string };
 
 /**
  * O desenho da lâmina na prancheta: o rascunho dela (fundo, tamanho, selo e o bloco de mídia escolhido, mesmo
@@ -59,7 +59,9 @@ export default function MiniaturaDoPostX({ trabalhoId, clientId, card, versao, p
   const foto = useUrlDaMesa(carrossel ? midia?.caminho : fonte?.caminho, carrossel ? midia?.bucket : fonte?.bucket);
   const tela = useRef<HTMLCanvasElement>(null);
   const [falhou, setFalhou] = useState(false);
-  const texto = (card.texto_exato || "").trim();
+  // O texto em edição (24/10) já aparece: no X e no Carrossel X o da lâmina; no Instagram e no Story, o do template.
+  const estiloDaBase = base?.template.estilo;
+  const texto = ((estiloDaBase === "instagram" || estiloDaBase === "story" ? rascunho?.texto : rascunho?.texto_editado) ?? card.texto_exato ?? "").trim();
   const assinatura = base ? JSON.stringify([base, proprio, texto, carrossel ? bloco : fonte?.caminho || null, posicao]) : "";
 
   useEffect(() => {

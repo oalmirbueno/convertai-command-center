@@ -180,3 +180,12 @@ describe("normalizador: perfil (Siga) e número grande", () => {
     expect(t.bloco?.grafico).toMatchObject({ tipo: "numero", dados: [{ valor: 40 }] });
   });
 });
+
+describe("cor do card do perfil no normalizador (24/10)", () => {
+  const base = { versao: 1, estilo: "carrossel", nome: "Thainá", username: "thaina", texto: "Siga →", cor_fundo: "#ffffff" };
+  it("aceita a cor do card e do Seguir em hexadecimal e recusa o resto", () => {
+    const t = normalizarTemplateProfile({ ...base, bloco: { tipo: "perfil", perfil: { estilo: "x", nome: "Thainá", username: "thaina", cor_fundo: "#15202B", cor_botao: "#ffd400" } } }, CLIENTE, erro);
+    expect(t.bloco?.perfil).toMatchObject({ cor_fundo: "#15202b", cor_botao: "#ffd400" });
+    expect(() => normalizarTemplateProfile({ ...base, bloco: { tipo: "perfil", perfil: { estilo: "x", nome: "T", username: "t", cor_fundo: "red" } } }, CLIENTE, erro)).toThrow("hexadecimal");
+  });
+});

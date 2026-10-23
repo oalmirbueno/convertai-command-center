@@ -43,6 +43,8 @@ export interface PropsDoAgenteDeRoteiro {
   aoEscolher: (r: RoteiroDeVideo) => Promise<void>;
   /** O ajuste do agente: a peça mostra como edição (salvar ou desfazer). */
   aoAjustar: (r: RoteiroDeVideo) => void;
+  /** Campanha sem a peça (tema_id "novo"): o servidor cria a peça de vídeo com as versões. */
+  aoCriar?: () => void;
 }
 
 function Opcao({ ativo, onClick, children, rotulo }: { ativo: boolean; onClick: () => void; children: ReactNode; rotulo?: string }) {
@@ -59,7 +61,7 @@ function Opcao({ ativo, onClick, children, rotulo }: { ativo: boolean; onClick: 
   );
 }
 
-export default function AgenteDeRoteiro({ campanha, item, roteiro, aoEscolher, aoAjustar }: PropsDoAgenteDeRoteiro) {
+export default function AgenteDeRoteiro({ campanha, item, roteiro, aoEscolher, aoAjustar, aoCriar }: PropsDoAgenteDeRoteiro) {
   const { clientId, catalogo } = useMesa();
   const qc = useQueryClient();
   const modeloDaCopy = useModeloDoEscopo("copy");
@@ -143,6 +145,7 @@ export default function AgenteDeRoteiro({ campanha, item, roteiro, aoEscolher, a
             const res = await criarRoteiroComAgente({ campanhaId: campanha.id, temaId, ideia: ideia.trim(), duracao, estilo, criatividade, corpoDoModelo: modeloDaCopy.corpoEscolhido });
             aplicarRespostaDaCampanha(qc, clientId, res);
             setVerVersoes(true);
+            if (aoCriar) aoCriar();
             setAberta(null);
             return res;
           }}
@@ -249,7 +252,7 @@ export default function AgenteDeRoteiro({ campanha, item, roteiro, aoEscolher, a
     <section className={juntar(superficie.poco, "min-w-0 space-y-3 p-3")} aria-label={`Agente de roteiro de ${tema}`} data-agente-de-roteiro-da-peca={temaId}>
       <div className="flex min-w-0 items-center gap-2">
         <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-        <span className="min-w-0 flex-1 text-[13px] font-medium">Agente de roteiro</span>
+        <span className="min-w-0 flex-1 text-[13px] font-medium">{temaId === "novo" ? "Novo vídeo com o agente de roteiro" : "Agente de roteiro"}</span>
         <AjudaRecolhida rotulo="Como o agente funciona">
           Dê a ideia, a duração, o estilo e a criatividade. O agente escreve duas versões completas, com cenas, câmera, fala, texto na tela, som, trilha e CTA, e o Jev marca a recomendada. Escolha uma em Usar esta. Depois, converse com ele para ajustar: as sugestões viram pedido num toque.
         </AjudaRecolhida>

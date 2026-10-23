@@ -231,3 +231,32 @@ export function faltasDoRoteiro(r: RoteiroDeVideo | null): string[] {
   if (!r.cta) faltas.push("CTA");
   return faltas;
 }
+
+/**
+ * 23/10/2026 (dono: "eu consigo adicionar vídeo por ali mesmo e ele já entra automático na campanha"): o vídeo
+ * pronto da peça, enviado do computador (bucket mesa, pasta do cliente) ou escolhido no Workspace.
+ */
+export interface VideoProntoDaPeca {
+  bucket: "mesa" | "workspace";
+  caminho: string;
+  nome: string;
+  duracao_s?: number;
+  em: string;
+}
+
+/** O vídeo pronto da peça, ou undefined quando não é válido (só caminho dentro da pasta do cliente). */
+export function normalizarVideoPronto(v: unknown, clientId?: string): VideoProntoDaPeca | undefined {
+  const o = obj(v);
+  if (!o || (o.bucket !== "mesa" && o.bucket !== "workspace") || typeof o.caminho !== "string") return undefined;
+  const caminho = o.caminho.trim().replace(/^\/+/, "").slice(0, 400);
+  if (!caminho || caminho.indexOf("..") >= 0 || !/\.(mp4|mov|m4v|webm)$/i.test(caminho)) return undefined;
+  if (clientId && o.bucket === "mesa" && caminho.indexOf(`${clientId}/`) !== 0) return undefined;
+  const duracao = Number(o.duracao_s);
+  return {
+    bucket: o.bucket,
+    caminho,
+    nome: curto(o.nome, 160) || caminho.split("/").pop() || "vídeo",
+    ...(duracao > 0 ? { duracao_s: Math.round(duracao * 10) / 10 } : {}),
+    em: curto(o.em, 40),
+  };
+}

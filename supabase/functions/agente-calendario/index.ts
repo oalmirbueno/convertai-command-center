@@ -155,9 +155,9 @@ import { normalizarPadrao, type PadraoDaCampanha } from "../_shared/padrao-da-ca
 import { blocoDoTomDaCampanha, nichoRegulado, ofertaInformada, tomDaCampanha } from "./modulos/tom-da-campanha.ts";
 import { blocoDoEsquema, esquemaDaCampanha } from "./modulos/esquemas-de-campanha.ts";
 // 22/10/2026: a linha do tempo da campanha (fases e datas em código; o modelo só escreve o conteúdo).
-import { blocoDaLinhaDoTempo, calcularLinhaDoTempo, faseDaEtapa, type LinhaDoTempo, normalizarLinhaDoTempo, vagasDasPecas, type VagaDaPeca } from "./modulos/linha-do-tempo.ts";
+import { blocoDaLinhaDoTempo, calcularLinhaDoTempo, faseDaEtapa, faseNaData, type LinhaDoTempo, normalizarLinhaDoTempo, vagasDasPecas, type VagaDaPeca } from "./modulos/linha-do-tempo.ts";
 import { type ConteudoDaPonta, conteudoDasPontas, ESQUEMA_DAS_PONTAS, itensDaReorganizacao, reorganizarPecas } from "./modulos/reorganizar-campanha.ts";
-import { direcaoDoRoteiro as direcaoDoRoteiroDeVideo, ESQUEMA_DO_ROTEIRO_DE_VIDEO, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "./modulos/roteiro-de-video.ts";
+import { direcaoDoRoteiro as direcaoDoRoteiroDeVideo, ESQUEMA_DO_ROTEIRO_DE_VIDEO, normalizarRoteiroDeVideo, normalizarVideoPronto, type RoteiroDeVideo, type VideoProntoDaPeca } from "./modulos/roteiro-de-video.ts";
 import {
   ajusteDaResposta,
   ESQUEMA_DAS_VERSOES_DO_ROTEIRO,
@@ -520,6 +520,8 @@ type Item = {
   roteiro_video?: RoteiroDeVideo | null;
   /** 23/10/2026: as versões do agente de roteiro, para a pessoa escolher ali mesmo (mesmo saindo da tela). */
   roteiro_opcoes?: OpcoesDoRoteiro | null;
+  /** 23/10/2026: o vídeo pronto da peça (enviado na campanha ou escolhido no Workspace). */
+  video_pronto?: VideoProntoDaPeca | null;
   /** Título do item (peça de foto: o tema, como a Mesa Foto lê). */
   titulo?: string;
 };
@@ -755,6 +757,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     ...(formato === "video" ? { mesa: "video" as const, video: normalizarVideoDaPauta(o.video) } : {}),
     ...(formato === "video" && normalizarRoteiroDeVideo(o.roteiro_video) ? { roteiro_video: normalizarRoteiroDeVideo(o.roteiro_video) } : {}),
     ...(formato === "video" && normalizarOpcoesDoRoteiro(o.roteiro_opcoes) ? { roteiro_opcoes: normalizarOpcoesDoRoteiro(o.roteiro_opcoes) } : {}),
+    ...(formato === "video" && normalizarVideoPronto(o.video_pronto) ? { video_pronto: normalizarVideoPronto(o.video_pronto) } : {}),
     ...(formato === "foto"
       ? { mesa: "foto" as const, titulo: texto(o.tema, 200), foto: normalizarDirecaoDeFoto(o.foto, { tema: texto(o.tema, 200), objetivo: texto(o.resumo, 300) }) }
       : {}),
@@ -6257,11 +6260,28 @@ async function campanhaRoteiroAgente(servico: SupabaseClient, chamador: Chamador
   await exigirAcessoAoCliente(chamador, c.client_id);
   if (!c.proposta_id) throw new ErroHttp(400, "campanha_sem_serie", "A campanha ainda não tem a série de conteúdos.");
   const proposta = await carregarProposta(servico, c.proposta_id);
-  const temaId = texto(corpo.tema_id, 40);
-  const item = proposta.itens.filter((i) => i.tema_id === temaId)[0];
+  const operacao = corpo.operacao === "ajustar" ? "ajustar" : "criar";
+  const b = (c.briefing ?? {}) as Record<string, unknown>;
+  const linha = normalizarLinhaDoTempo(b.linha_do_tempo);
+  // 23/10/2026 (dono: "tem que aparecer já ali no Vídeos e Reels"): campanha sem peça de vídeo ganha uma
+  // aqui, no criar (tema_id "novo"): no dia de hoje se cai na campanha (senão o primeiro dia), na fase da data.
+  const pecaNova = operacao === "criar" && (!corpo.tema_id || corpo.tema_id === "novo");
+  let item: Item | undefined;
+  if (pecaNova) {
+    const seq = Math.max(proposta.itens.length, ...proposta.itens.map((i) => Number(String(i.tema_id).replace(/^c/, "")) || 0));
+    const hoje = hojeSaoPaulo();
+    const ini = c.periodo_inicio ?? hoje;
+    const fim = c.periodo_fim ?? ini;
+    const pedida = texto(corpo.data, 10);
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(pedida) && pedida >= ini && pedida <= fim ? pedida : hoje >= ini && hoje <= fim ? hoje : ini;
+    const fase = linha ? faseNaData(linha, data) : null;
+    item = normalizarItem({ tema_id: `c${seq + 1}`, data, formato: "video", ...(fase ? { etapa: fase.etapa } : {}), tema: texto(corpo.ideia, 120) || "Reels da campanha", gancho: "", cta: "", cards: [] }, diasUteisDaProposta(proposta), data);
+  } else {
+    item = proposta.itens.filter((i) => i.tema_id === texto(corpo.tema_id, 40))[0];
+  }
   if (!item) throw new ErroHttp(404, "peca_inexistente", "Esta peça não está mais na série.");
   if (item.formato !== "video") throw new ErroHttp(400, "peca_nao_e_video", "Só as peças de vídeo têm roteiro de vídeo.");
-  const operacao = corpo.operacao === "ajustar" ? "ajustar" : "criar";
+  const temaId = item.tema_id;
   const duracao = normalizarDuracaoPedida(corpo.duracao_s);
   const criatividade = normalizarCriatividade(corpo.criatividade);
   const estilo = normalizarEstilo(corpo.estilo);
@@ -6274,9 +6294,7 @@ async function campanhaRoteiroAgente(servico: SupabaseClient, chamador: Chamador
     if (!antes) throw new ErroHttp(409, "sem_roteiro", "Ainda não há roteiro para ajustar. Peça ao agente para criar um.");
     if (!pedido) throw new ErroHttp(400, "sem_pedido", "Diga ao agente o que mudar.");
   }
-  const b = (c.briefing ?? {}) as Record<string, unknown>;
   const trilha = trilhaDoBriefing(b.trilha);
-  const linha = normalizarLinhaDoTempo(b.linha_do_tempo);
   const [ctx, ganchos] = await Promise.all([
     montarContexto(servico, c.client_id, c.periodo_inicio ?? hojeSaoPaulo(), c.periodo_fim ?? hojeSaoPaulo(), marcaDaChamada(servico, c.client_id, corpo)),
     // Os ganchos vencedores do nicho para abertura de Reels (nunca lança).
@@ -6338,10 +6356,71 @@ async function campanhaRoteiroAgente(servico: SupabaseClient, chamador: Chamador
     }
   }
   const opcoes: OpcoesDoRoteiro = { versoes, recomendada, porque, ideia, duracao, estilo, criatividade, em: new Date().toISOString() };
-  const itens = proposta.itens.map((i) => (i.tema_id === temaId ? { ...i, roteiro_opcoes: opcoes } : i));
+  let itens: Item[];
+  if (pecaNova) {
+    // A peça nova leva o nome e o gancho da versão recomendada (a pessoa ainda escolhe a versão).
+    const v = versoes[recomendada];
+    const nova: Item = { ...(item as Item), tema: v.titulo || item.tema, gancho: v.gancho || item.gancho, cta: v.cta || item.cta, roteiro_opcoes: opcoes };
+    itens = proposta.itens.concat([nova]).sort((x, y) => String(x.data).localeCompare(String(y.data)));
+  } else {
+    itens = proposta.itens.map((i) => (i.tema_id === temaId ? { ...i, roteiro_opcoes: opcoes } : i));
+  }
   const salva = await salvarProposta(servico, proposta, { itens });
   await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
-  return json({ opcoes, proposta: salva, custo_usd: custo, saldo_usd: s.saldoUsd });
+  return json({ opcoes, tema_id: temaId, proposta: salva, custo_usd: custo, saldo_usd: s.saldoUsd });
+}
+
+/**
+ * campanha_peca_de_video (23/10/2026, dono: "não precisa ter vídeo, eu consigo adicionar vídeo por ali mesmo e
+ * ele já entra automático na campanha e vice-versa, e posso apagar também e editar"). Sem IA e sem custo.
+ * { operacao: "criar", campanha_id, tema, data?, video? } -> a peça de vídeo nova na série (com o vídeo, se veio).
+ * { operacao: "anexar", campanha_id, tema_id, video | null } -> põe, troca ou tira o vídeo pronto da peça.
+ * { operacao: "tirar", campanha_id, tema_id } -> a peça sai da série (na agenda, só pela Agenda).
+ * Editar tema, gancho, CTA e data segue no editar_item.
+ */
+async function campanhaPecaDeVideo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  if (!c.proposta_id) throw new ErroHttp(400, "campanha_sem_serie", "A campanha ainda não tem a série de conteúdos.");
+  const proposta = await carregarProposta(servico, c.proposta_id);
+  const operacao = corpo.operacao === "anexar" || corpo.operacao === "tirar" ? corpo.operacao : "criar";
+  const video = corpo.video == null ? null : normalizarVideoPronto({ ...(corpo.video as Record<string, unknown>), em: new Date().toISOString() }, c.client_id);
+  if (corpo.video != null && !video) throw new ErroHttp(400, "video_invalido", "Use um vídeo MP4, MOV ou WebM do cliente.");
+  let itens: Item[];
+  let temaId = texto(corpo.tema_id, 40);
+  if (operacao === "criar") {
+    const b = (c.briefing ?? {}) as Record<string, unknown>;
+    const linha = normalizarLinhaDoTempo(b.linha_do_tempo);
+    const seq = Math.max(proposta.itens.length, ...proposta.itens.map((i) => Number(String(i.tema_id).replace(/^c/, "")) || 0));
+    const hoje = hojeSaoPaulo();
+    const ini = c.periodo_inicio ?? hoje;
+    const fim = c.periodo_fim ?? ini;
+    const pedida = texto(corpo.data, 10);
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(pedida) && pedida >= ini && pedida <= fim ? pedida : hoje >= ini && hoje <= fim ? hoje : ini;
+    const fase = linha ? faseNaData(linha, data) : null;
+    const tema = texto(corpo.tema, 120) || (video ? video.nome.replace(/\.[a-z0-9]+$/i, "") : "") || "Vídeo da campanha";
+    const nova = normalizarItem({ tema_id: `c${seq + 1}`, data, formato: "video", ...(fase ? { etapa: fase.etapa } : {}), tema, gancho: "", cta: "", cards: [], ...(video ? { video_pronto: video } : {}) }, diasUteisDaProposta(proposta), data);
+    temaId = nova.tema_id;
+    itens = proposta.itens.concat([nova]).sort((x, y) => String(x.data).localeCompare(String(y.data)));
+  } else {
+    const item = proposta.itens.filter((i) => i.tema_id === temaId)[0];
+    if (!item) throw new ErroHttp(404, "peca_inexistente", "Esta peça não está mais na série.");
+    if (item.formato !== "video") throw new ErroHttp(400, "peca_nao_e_video", "Esta peça não é de vídeo.");
+    if (operacao === "tirar") {
+      if (item.task_id) throw new ErroHttp(409, "item_na_agenda", "Esta peça já está na Agenda: apague pela Agenda do mês.");
+      itens = proposta.itens.filter((i) => i.tema_id !== temaId);
+    } else {
+      itens = proposta.itens.map((i) => {
+        if (i.tema_id !== temaId) return i;
+        const novo: Item = { ...i };
+        if (video) novo.video_pronto = video;
+        else delete novo.video_pronto;
+        return novo;
+      });
+    }
+  }
+  const salva = await salvarProposta(servico, proposta, { itens });
+  return json({ proposta: salva, tema_id: temaId, custo_usd: 0 });
 }
 
 /**
@@ -9066,6 +9145,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_reorganizar: campanhaReorganizar,
   campanha_roteiro_video: campanhaRoteiroVideo,
   campanha_roteiro_agente: campanhaRoteiroAgente,
+  campanha_peca_de_video: campanhaPecaDeVideo,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,

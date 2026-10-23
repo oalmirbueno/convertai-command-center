@@ -8,20 +8,48 @@
 /** O texto lido como letras com a marca de negrito de cada uma (as quebras de linha ficam como "\n"). */
 export interface TextoMarcado { letras: string[]; negrito: boolean[] }
 
-/** Lê "**trecho**" por linha, como o desenho da lâmina: linha com asteriscos sem par fica como está. */
+/**
+ * Os trechos de uma linha, como o desenho de toda lâmina lê (24/10): "**" sem par é marca sobrando e sai
+ * (o último da linha), e dois negritos separados só por espaço viram um ("**Separe** **atestados**").
+ */
+export function partesDaLinha(linha: string): Array<{ texto: string; negrito: boolean }> {
+  const partes = linha.split("**");
+  if (partes.length % 2 === 0) { const ultima = partes.pop() as string; partes[partes.length - 1] += ultima; }
+  const brutas = partes.map((texto, i) => ({ texto, negrito: i % 2 === 1 })).filter((x) => x.texto);
+  const saida: Array<{ texto: string; negrito: boolean }> = [];
+  for (let i = 0; i < brutas.length; i++) {
+    const p = brutas[i], antes = saida[saida.length - 1], depois = brutas[i + 1];
+    if (!p.negrito && /^\s+$/.test(p.texto) && antes && antes.negrito && depois && depois.negrito) { antes.texto += p.texto + depois.texto; i++; continue; }
+    if (antes && antes.negrito === p.negrito) antes.texto += p.texto; else saida.push({ ...p });
+  }
+  return saida;
+}
+
+/** Lê "**trecho**" por linha, pelas mesmas regras do desenho (partesDaLinha). */
 export function lerNegrito(texto: string): TextoMarcado {
   const letras: string[] = [], negrito: boolean[] = [];
   texto.replace(/\r/g, "").split("\n").forEach((linha, i) => {
     if (i > 0) { letras.push("\n"); negrito.push(false); }
-    const partes = linha.split("**");
-    if (partes.length % 2 === 0) { for (const c of Array.from(linha)) { letras.push(c); negrito.push(false); } return; }
-    partes.forEach((p, k) => { for (const c of Array.from(p)) { letras.push(c); negrito.push(k % 2 === 1); } });
+    for (const p of partesDaLinha(linha)) for (const c of Array.from(p.texto)) { letras.push(c); negrito.push(p.negrito); }
   });
   return { letras, negrito };
 }
 
+/** O texto com o negrito limpo: vizinhos juntos, sem espaço dentro das pontas e sem "**" sobrando. */
+export const normalizarNegrito = (texto: string) => escreverNegrito(lerNegrito(texto)).replace(/[ \t]+(\n|$)/g, "$1").trim();
+
 /** Escreve de volta: trechos em negrito sem espaço nas pontas (o espaço fica fora dos asteriscos). */
 export function escreverNegrito(m: TextoMarcado): string {
+  // Espaço entre dois negritos da mesma linha entra no negrito: um par de asteriscos só.
+  const negrito = m.negrito.slice();
+  for (let i = 0; i < m.letras.length; i++) {
+    if (negrito[i] || !/^[ \t]$/.test(m.letras[i])) continue;
+    let a = i - 1, b = i + 1;
+    while (a >= 0 && /^[ \t]$/.test(m.letras[a])) a--;
+    while (b < m.letras.length && /^[ \t]$/.test(m.letras[b])) b++;
+    if (a >= 0 && b < m.letras.length && negrito[a] && negrito[b] && m.letras[a] !== "\n" && m.letras[b] !== "\n") negrito[i] = true;
+  }
+  m = { letras: m.letras, negrito };
   let saida = "";
   let i = 0;
   while (i < m.letras.length) {
@@ -47,12 +75,12 @@ function mapaParaLetras(texto: string): number[] {
   let letra = 0;
   texto.replace(/\r/g, "").split("\n").forEach((linha, i) => {
     if (i > 0) { mapa.push(letra); letra++; }
-    const marcas = linha.split("**").length % 2 === 1;
+    // Todo "**" é marca (o que sobra sem par também sai na leitura).
     // Por letra (emoji ocupa duas posições no campo e uma letra).
     const cps = Array.from(linha);
     let k = 0;
     while (k < cps.length) {
-      if (marcas && cps[k] === "*" && cps[k + 1] === "*") { mapa.push(letra, letra); k += 2; continue; }
+      if (cps[k] === "*" && cps[k + 1] === "*") { mapa.push(letra, letra); k += 2; continue; }
       for (let u = 0; u < cps[k].length; u++) mapa.push(letra);
       letra++; k++;
     }

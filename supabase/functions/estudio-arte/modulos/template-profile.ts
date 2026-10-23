@@ -55,6 +55,9 @@ export interface PerfilDoBloco {
   seguidores?: number;
   seguindo?: number;
   verificado?: boolean;
+  /** 24/10: a cor do card e a do botão Seguir (o texto ajusta o contraste sozinho). */
+  cor_fundo?: string;
+  cor_botao?: string;
 }
 export interface BlocoDaLamina {
   tipo: TipoDoBloco;
@@ -364,6 +367,12 @@ function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, cli
       perfil[k] = v;
     }
     if (sim(f.verificado)) perfil.verificado = true;
+    for (const k of ["cor_fundo", "cor_botao"] as const) {
+      const v = f[k];
+      if (v === undefined || v === null || v === "") continue;
+      if (typeof v !== "string" || !/^#[0-9a-f]{6}$/i.test(v)) throw erro(400, "perfil_template_invalido", "Use uma cor hexadecimal no card do perfil.");
+      perfil[k] = v.toLowerCase();
+    }
     bloco.perfil = perfil;
   }
   t.bloco = bloco;

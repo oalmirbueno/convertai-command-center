@@ -17,6 +17,7 @@ import ImagensReaisDoDiretor from "../ImagensReaisDoDiretor";
 import { formatoDoTrabalho, gravarTrabalhoNoCache, useEstadoGuardado, type TrabalhoGravado } from "../estudioUtil";
 import { chaveDoRascunho, esquecerRascunhos, gravarRascunho, lerRascunhoGuardado, publicarBaseDoTemplate, useRascunhoCompartilhado } from "./rascunhoDoTemplate";
 import PainelDoCarrossel from "./PainelDoCarrossel";
+import EditorDoTextoDaLamina from "./EditorDoTextoDaLamina";
 import { blocoInicialDaLamina, carregarMidiaDoBloco, midiaParaCarregar, pendenciaDoBloco, type CardDoCarrossel } from "./blocoDaLamina";
 import { FUNDOS_PRONTOS, textoSemMarcas, type ResultadoDoCarrossel } from "./renderCarrossel";
 import type { CardDaDirecao, CardGerado, Trabalho } from "../useItensDoMes";
@@ -40,7 +41,20 @@ const ultimaVersao = (trabalho: Trabalho, ordem: number): CardGerado | undefined
 const metadados = (versao: CardGerado | undefined): TemplateProfile | undefined => versao?.template_profile;
 type Rede = TemplateProfile["estilo"];
 type Origem = "gerar" | "internet" | "cliente";
-type Ajustes = Omit<TemplateProfile, "nome" | "username"> & { nome: string | null; username: string | null; texto_base: string; sem_imagem?: boolean };
+/** texto_editado (24/10): o texto da lâmina em edição, ainda não salvo; a prévia e a miniatura já mostram. */
+type Ajustes = Omit<TemplateProfile, "nome" | "username"> & { nome: string | null; username: string | null; texto_base: string; sem_imagem?: boolean; texto_editado?: string };
+
+/**
+ * O modelo da peça vem do carrossel inteiro, nunca de uma lâmina só (24/10, dono: "está misturando os
+ * templates"): a escolha guardada na sessão; sem ela, o da versão mais nova entre todas as lâminas; sem
+ * versão, o carrossel quando o gerador sugeriu mídia, ou o post do X.
+ */
+export function modeloDoTrabalho(trabalho: Pick<Trabalho, "cards" | "direcao">): TemplateProfile["estilo"] {
+  const versoes = (trabalho.cards || []).filter((v) => v.template_profile && v.template_profile.estilo);
+  const maisNova = versoes.sort((a, b) => String(b.criado_em || "").localeCompare(String(a.criado_em || "")) || b.versao - a.versao)[0];
+  if (maisNova && maisNova.template_profile) return maisNova.template_profile.estilo;
+  return (trabalho.direcao.cards || []).some((c) => (c as CardDoCarrossel).carrossel) ? "carrossel" : "twitter";
+}
 
 const PADRAO: Omit<TemplateProfile, "nome" | "username" | "texto"> = {
   versao: 1, estilo: "twitter", verificado: false, tema: "claro", cor_fundo: "#ffffff", tamanho_texto: 34, tamanho_foto: 88, espacamento: 48, arredondamento: 24,
@@ -97,8 +111,32 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     const estilo = s0?.estilo || ((c as CardDoCarrossel).carrossel ? "carrossel" : PADRAO.estilo);
     return { ...PADRAO, ...s0, estilo, nome: s0?.nome ?? null, username: s0?.username ?? null, texto: s0?.texto ?? c.texto_exato ?? "", texto_base: c.texto_exato || "", ...(estilo === "carrossel" ? { bloco: blocoInicialDaLamina(c as CardDoCarrossel, s0, mesa.clientId), seta: s0?.seta ?? true } : {}) };
   };
-  const estiloInicial = salvo?.estilo || (cardDoCarrossel.carrossel ? "carrossel" : PADRAO.estilo);
-  const [ajustes, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, inicialDe(card));
+  // Um modelo para o trabalho inteiro (24/10): a lâmina que chega com outro modelo é convertida ao abrir.
+  const chaveDoModelo = `${chaveDe(0).slice(0, -1)}modelo`;
+  const [modeloEscolhido, setModeloEscolhido] = useRascunhoCompartilhado<Rede | null>(chaveDoModelo, null);
+  const modelo: Rede = modeloEscolhido || modeloDoTrabalho(trabalho);
+  const [ajustesGuardados, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, inicialDe(card));
+  /** O rascunho de uma lâmina convertido para o modelo (mesma regra de antes da troca, agora para todas). */
+  function paraOModelo(a: Ajustes, rede: Rede, c: CardDaDirecao): Ajustes {
+    if (a.estilo === rede) return a;
+    // Carrossel X (22/10): lâmina inteira estilo post do X, fundo branco ou preto, com o bloco de mídia.
+    if (rede === "carrossel" || a.estilo === "carrossel") {
+      const tema = rede === "carrossel" ? (a.tema === "claro" ? "claro" : "escuro") : a.tema === "escuro" ? "escuro" : "claro";
+      return { ...a, estilo: rede, texto: a.texto_base, tema, cor_fundo: tema === "claro" ? "#ffffff" : "#000000", destaque: undefined, ...(rede === "carrossel" ? { bloco: a.bloco || blocoInicialDaLamina(c as CardDoCarrossel, metadados(ultimaVersao(trabalho, c.ordem)), mesa.clientId), seta: a.seta ?? true } : {}) };
+    }
+    const legenda = (trabalho.legenda || "").trim();
+    // A legenda do post entra no Instagram só se a equipe não tinha mexido no texto da lâmina (e volta ao sair).
+    const texto = rede === "instagram" && legenda && a.texto === a.texto_base ? legenda : a.estilo === "instagram" && legenda && a.texto === legenda ? a.texto_base : a.texto;
+    const tema = rede !== "twitter" && a.tema === "dim" ? "escuro" : a.tema;
+    const proporcao = rede === "instagram" ? (a.proporcao === "1:1" ? "1:1" : "4:5") : rede === "twitter" ? (a.proporcao === "1:1" ? "1:1" : "16:9") : undefined;
+    return { ...a, estilo: rede, texto, tema, proporcao, cor_fundo: tema !== a.tema ? FUNDO_DO_TEMA[tema] : a.cor_fundo, destaque: undefined };
+  }
+  // A lâmina sempre aparece no modelo do trabalho; o rascunho dela é acertado logo depois (sem piscar).
+  const ajustes = ajustesGuardados.estilo === modelo ? ajustesGuardados : paraOModelo(ajustesGuardados, modelo, card);
+  useEffect(() => {
+    if (ajustesGuardados.estilo !== modelo) setAjustes((a) => paraOModelo(a, modelo, card));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelo, ajustesGuardados.estilo, chave]);
   const [origem, setOrigem] = useEstadoGuardado<Origem>(`mesa:template:origem:${trabalho.id}`, "gerar");
   const [contaId, setContaId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false), [pronto, setPronto] = useState(false), [erro, setErro] = useState("");
@@ -132,10 +170,16 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const foto = useUrlDaMesa(fonte?.caminho, fonte?.bucket);
   const avatarGuardado = useUrlDaMesa(ajustes.foto_caminho);
   const nome = ajustes.nome ?? (!livre ? perfil.data?.perfil.nome : "") ?? "";
-  const textoDaLamina = card.texto_exato || "";
+  const textoSalvoDaLamina = card.texto_exato || "";
+  // O texto em edição (cada tecla, Enter incluído) já vale na prévia e na miniatura, antes de salvar.
+  const textoDaLamina = ajustes.texto_editado ?? textoSalvoDaLamina;
+  useEffect(() => {
+    // Salvo (aqui, no Guardar ou na ferramenta Lâmina): a edição pendente igual ao guardado sai do rascunho.
+    if (ajustesGuardados.texto_editado !== undefined && ajustesGuardados.texto_editado.trim() === textoSalvoDaLamina.trim()) setAjustes((a) => { const { texto_editado: _t, ...resto } = a; return resto; });
+  }, [ajustesGuardados.texto_editado, textoSalvoDaLamina, setAjustes]);
   const ehInstagram = ajustes.estilo === "instagram";
   // A legenda do Instagram não reescreve a lâmina: a base muda sozinha; no X e no Story, só sem edição da equipe.
-  const textoDesatualizado = ajustes.texto_base !== textoDaLamina;
+  const textoDesatualizado = ajustes.texto_base !== textoSalvoDaLamina;
   // Post do X: um texto só, o da lâmina (o mesmo campo de conteúdo do Estúdio). Rascunho de texto só nos antigos.
   const ehX = ajustes.estilo === "twitter";
   const ehCarrossel = ajustes.estilo === "carrossel";
@@ -144,11 +188,11 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // Só quando o texto da lâmina chega diferente (abertura ou mudança de fora); o Gerar já põe o texto novo antes.
   const ultimoTextoDaLamina = useRef<string | null>(null);
   useEffect(() => {
-    if (ultimoTextoDaLamina.current === textoDaLamina) return;
-    ultimoTextoDaLamina.current = textoDaLamina;
+    if (ultimoTextoDaLamina.current === textoSalvoDaLamina) return;
+    ultimoTextoDaLamina.current = textoSalvoDaLamina;
     if (!textoDesatualizado || conflitoDeTexto) return;
-    setAjustes((a) => ({ ...a, texto: a.estilo === "instagram" ? a.texto : textoDaLamina, texto_base: textoDaLamina }));
-  }, [textoDesatualizado, conflitoDeTexto, textoDaLamina, setAjustes]);
+    setAjustes((a) => ({ ...a, texto: a.estilo === "instagram" ? a.texto : textoSalvoDaLamina, texto_base: textoSalvoDaLamina }));
+  }, [textoDesatualizado, conflitoDeTexto, textoSalvoDaLamina, setAjustes]);
   const username = (ajustes.username ?? (!livre ? perfil.data?.perfil.username : "") ?? "").replace(/^@/, "");
   const perfilConfere = !!username && perfil.data?.perfil.username.toLowerCase() === username.toLowerCase();
   const avatarUrl = ajustes.foto_caminho ? avatarGuardado.data : !livre && perfilConfere ? perfil.data?.perfil.foto_url : null;
@@ -158,7 +202,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (!contaId && contaSalvaId && contaSalvaId !== perfil.data?.conta_id) setContaId(contaSalvaId);
   }, [contaId, contaSalvaId, perfil.data?.conta_id]);
   const formato = formatoDoTrabalho(trabalho.direcao as { formato?: unknown }) as FormatoProfile;
-  const { texto_base: _base, sem_imagem: _sem, ...semRascunho } = ajustes;
+  const { texto_base: _base, sem_imagem: _sem, texto_editado: _editado, ...semRascunho } = ajustes;
   const bloco: BlocoDaLamina | undefined = ehCarrossel ? (ajustes.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId)) : undefined;
   const template: TemplateProfile = ehCarrossel
     ? { ...semRascunho, texto: textoDoPost, nome, username, bloco, imagem_caminho: undefined, imagem_acervo_id: undefined }
@@ -177,7 +221,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const rotuloValido = !!rotulo.trim() && rotulo.trim().length <= 60 && !/[\r\n\t<>]/.test(rotulo);
   const limite = ehCarrossel
     ? { usado: Array.from(textoSemMarcas(textoDoPost)).length, limite: 0, passou: false, texto: `${Array.from(textoSemMarcas(textoDoPost)).length} caracteres` }
-    : limiteDoTexto(ajustes.estilo === "carrossel" ? "twitter" : ajustes.estilo, textoDoPost);
+    : limiteDoTexto(ajustes.estilo === "carrossel" ? "twitter" : ajustes.estilo, textoSemMarcas(textoDoPost));
   const faltaImagemDoIG = ehInstagram && !fonte;
   const pendenciaDoCarrossel = ehCarrossel ? pendenciaDoBloco(bloco) : "";
   const escolherFonte = (escolhida: FonteProfile | undefined) => {
@@ -234,21 +278,21 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     if (v === undefined) delete numeros[k]; else numeros[k] = v;
     return { ...a, numeros: Object.keys(numeros).length ? numeros : undefined };
   });
-  const trocarRede = (rede: Rede) => setAjustes((a) => {
-    if (a.estilo === rede) return a;
-    // Carrossel X (22/10): lâmina inteira estilo post do X, fundo branco ou preto, com o bloco de mídia.
-    if (rede === "carrossel" || a.estilo === "carrossel") {
-      const tema = rede === "carrossel" ? (a.tema === "claro" ? "claro" : "escuro") : a.tema === "escuro" ? "escuro" : "claro";
-      return { ...a, estilo: rede, texto: a.texto_base, tema, cor_fundo: tema === "claro" ? "#ffffff" : "#000000", destaque: undefined, ...(rede === "carrossel" ? { bloco: a.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId), seta: a.seta ?? true } : {}) };
+  /**
+   * Trocar o modelo vale para o carrossel inteiro (24/10): a escolha fica no trabalho, o rascunho de cada lâmina
+   * já aberta é convertido e as que nunca abriram são convertidas ao abrir. O Montar todas usa o mesmo modelo.
+   */
+  const trocarRede = (rede: Rede) => {
+    setModeloEscolhido(rede);
+    setAjustes((a) => paraOModelo(a, rede, card));
+    for (const c of cardsOrdenados) {
+      if (c.ordem === card.ordem) continue;
+      const dela = lerRascunhoGuardado<Ajustes>(chaveDe(c.ordem));
+      if (dela && dela.estilo !== rede) gravarRascunho<Ajustes>(chaveDe(c.ordem), paraOModelo(dela, rede, c));
     }
-    const legenda = (trabalho.legenda || "").trim();
-    // A legenda do post entra no Instagram só se a equipe não tinha mexido no texto da lâmina (e volta ao sair).
-    const texto = rede === "instagram" && legenda && a.texto === a.texto_base ? legenda : a.estilo === "instagram" && legenda && a.texto === legenda ? a.texto_base : a.texto;
-    const tema = rede !== "twitter" && a.tema === "dim" ? "escuro" : a.tema;
-    const proporcao = rede === "instagram" ? (a.proporcao === "1:1" ? "1:1" : "4:5") : rede === "twitter" ? (a.proporcao === "1:1" ? "1:1" : "16:9") : undefined;
-    return { ...a, estilo: rede, texto, tema, proporcao, cor_fundo: tema !== a.tema ? FUNDO_DO_TEMA[tema] : a.cor_fundo, destaque: undefined };
-  });
+  };
 
+  const rascunhoDoCardDoLote = (ordem: number) => lerRascunhoGuardado<Ajustes>(chaveDe(ordem));
   const salvar = async (todasAsLaminas: boolean) => {
     if (!pronto || ocupado || bloqueado || conflitoDeTexto || fonteMudou || faltaImagemDoIG) return;
     setOcupado(true); setErro(""); let feitas = 0;
@@ -268,7 +312,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
           const falta = pendenciaDoBloco(blocoDela);
           if (falta) throw new Error(`Lâmina ${c.ordem}: ${falta.toLowerCase()}.`);
           // A aparência é a do rascunho de cada lâmina (fundo, tamanho, selo); sem rascunho, a da lâmina aberta.
-          const cfgC: TemplateProfile = { ...template, ...(rascunhoDela ? aparenciaDe(rascunhoDela) : {}), texto: esta ? template.texto : c.texto_exato || "", bloco: blocoDela };
+          const cfgC: TemplateProfile = { ...template, ...(rascunhoDela ? aparenciaDe(rascunhoDela) : {}), texto: esta ? template.texto : rascunhoDela?.texto_editado ?? c.texto_exato ?? "", bloco: blocoDela };
           const m = midiaParaCarregar(blocoDela);
           const url = m ? await supabase.storage.from(m.bucket).createSignedUrl(m.caminho, 3600) : null;
           if (url?.error) throw url.error;
@@ -294,7 +338,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         if (c.imagens_ids?.length && !f && !c.fotos_livres?.length && !(esta && ajustes.sem_imagem)) throw new Error(`Escolha uma foto em Fotos para a lâmina ${c.ordem}.`);
         if (template.estilo === "instagram" && !f) throw new Error(`A lâmina ${c.ordem} está sem imagem. O post do Instagram precisa de uma foto em cada lâmina.`);
         // No Instagram o texto é a legenda do post, a mesma em todas as lâminas do carrossel.
-        const textoDoCard = esta || template.estilo === "instagram" ? template.texto : c.texto_exato || "";
+        const textoDoCard = esta || template.estilo === "instagram" ? template.texto : rascunhoDoCardDoLote(c.ordem)?.texto_editado ?? c.texto_exato ?? "";
         const rascunhoDoCard = esta ? null : lerRascunhoGuardado<Ajustes>(chaveDe(c.ordem));
         const cfg: TemplateProfile = { ...template, ...(rascunhoDoCard ? aparenciaDe(rascunhoDoCard) : {}), ...referenciaDaFonteProfile(f), texto: textoDoCard };
         // Cada ponto pertence à sua própria fonte autorizada, inclusive ao montar o lote.
@@ -608,17 +652,24 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   // Rodada 3 (dono: "ser exatamente o Estúdio"): a ferramenta Template é uma seção aberta, como as outras
   // ferramentas do painel; sem abas próprias. Primeiro o desenho do post, depois a imagem, o perfil e o Gerar.
   const secao = (titulo: string, corpo: JSX.Element, primeira = false) => <section className={juntar("min-w-0 space-y-3", !primeira && "border-t border-border pt-4")} aria-label={titulo}><p className={juntar(texto.corpo, "font-semibold")}>{titulo}</p>{corpo}</section>;
+  // O texto da lâmina, controlado pelo rascunho: cada tecla (Enter incluído) já redesenha a prévia e a miniatura.
+  const editorDeTexto = <EditorDoTextoDaLamina trabalho={trabalho} card={card} total={cardsOrdenados.length} travado={travado} onMudou={onMudou}
+    valor={ajustes.texto_editado} onMudar={(t) => setAjustes((a) => { if (t === null) { const { texto_editado: _t, ...resto } = a; return resto; } return { ...a, texto_editado: t }; })} />;
   const peca = <div className="space-y-3">
     {onModoTemplate && <Segmentado<"arte" | "x"> rotulo="No centro do Estúdio" opcoes={[{ valor: "arte", rotulo: "Arte da lâmina" }, { valor: "x", rotulo: ehCarrossel ? "Carrossel X" : "Post do X" }]} valor={modoTemplate ? "x" : "arte"} onEscolher={(v) => onModoTemplate(v === "x")} />}
     {(ehX || ehCarrossel) && <Segmentado<"twitter" | "carrossel"> rotulo="Modelo do template" opcoes={[{ valor: "twitter", rotulo: "Post com ações", dica: "O post do X dentro da lâmina, com as ações" }, { valor: "carrossel", rotulo: "Carrossel X", dica: "A lâmina inteira estilo post do X, com bloco de mídia" }]} valor={ehCarrossel ? "carrossel" : "twitter"} onEscolher={(v) => trocarRede(v)} desativado={travado} />}
     {cardsOrdenados.length > 1 && <Button size="sm" variant="outline" disabled={!podeGuardar} onClick={() => void salvar(true)}>Montar todas as lâminas</Button>}
-    {!ehX && <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : "Texto do Story"}<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={2200} rows={5} disabled={travado} onChange={(e) => mudar("texto", e.target.value)} className="mt-1" /></label>}
+    {/* 24/10: o campo próprio só no Instagram e no Story; no X e no Carrossel X o texto é o da lâmina (editor ao vivo). */}
+    {!ehX && !ehCarrossel && <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : "Texto do Story"}<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={2200} rows={5} disabled={travado} onChange={(e) => mudar("texto", e.target.value)} className="mt-1" /></label>}
+    {ehX && editorDeTexto}
   </div>;
   const mudarBloco = (patch: Partial<BlocoDaLamina>) => setAjustes((a) => ({ ...a, bloco: { ...(a.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId)), ...patch } }));
   const aoGerarCarrossel = (novo: TrabalhoGravado, soEsta = false) => {
     // As lâminas abrem com o texto novo e a mídia sugerida: os rascunhos antigos do trabalho saem
     // (só esta lâmina, quando o pedido foi "Preencher esta lâmina").
     if (!soEsta) esquecerRascunhos(`mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:`);
+    // O gerador faz um carrossel: o modelo do trabalho passa a ser o Carrossel X.
+    setModeloEscolhido("carrossel");
     const doCard = ((novo as unknown as Trabalho).direcao?.cards || []).find((c) => c.ordem === card.ordem) as CardDoCarrossel | undefined;
     setAjustes((a) => ({ ...a, estilo: "carrossel", texto: doCard?.texto_exato || a.texto, texto_base: doCard?.texto_exato || a.texto_base, bloco: doCard ? blocoInicialDaLamina(doCard, undefined, mesa.clientId) : a.bloco }));
   };
@@ -627,7 +678,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
       <PainelDoCarrossel trabalho={trabalho} card={card} cards={cardsOrdenados} fontes={fontes} bloco={bloco!} travado={travado}
         ajustes={{ tema: ajustes.tema, cor_fundo: ajustes.cor_fundo, tamanho_texto: ajustes.tamanho_texto, peso_texto: ajustes.peso_texto, seta: ajustes.seta, rodape_cinza: ajustes.rodape_cinza }}
         onBloco={mudarBloco} onAjuste={(k, v) => setAjustes((a) => ({ ...a, [k]: v }))} onMudou={onMudou} onGerado={aoGerarCarrossel} onAbrirFotos={onAbrirFotos} modeloSeletor={peca} coresDaMarca={coresDaMarca}
-        perfilDeRedes={!livre && perfil.data && perfil.data.perfil.username ? perfil.data.perfil : null} verificado={!!ajustes.verificado}
+        perfilDeRedes={!livre && perfil.data && perfil.data.perfil.username ? perfil.data.perfil : null} verificado={!!ajustes.verificado} editorDeTexto={editorDeTexto}
         onAplicarATodas={cardsOrdenados.length > 1 ? (campos) => { aplicarATodas(aparenciaDe(Object.fromEntries(campos.map((k) => [k, ajustes[k]])) as Partial<TemplateProfile>)); toast.success(`Aplicado nas ${cardsOrdenados.length} lâminas`, { description: "Confira as miniaturas e use Montar todas as lâminas para guardar." }); } : undefined} />
       {secao("Perfil", conteudoDoPerfil)}
     </div>;

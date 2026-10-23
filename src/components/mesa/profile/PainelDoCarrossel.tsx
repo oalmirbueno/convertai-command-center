@@ -90,7 +90,7 @@ const secao = (titulo: string, corpo: ReactNode, ajuda?: ReactNode) => (
   </section>
 );
 
-export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco, ajustes, travado, onBloco, onAjuste, onMudou, onGerado, onAbrirFotos, modeloSeletor, coresDaMarca = [], onAplicarATodas, perfilDeRedes = null, verificado = false }: {
+export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco, ajustes, travado, onBloco, onAjuste, onMudou, onGerado, onAbrirFotos, modeloSeletor, coresDaMarca = [], onAplicarATodas, perfilDeRedes = null, verificado = false, editorDeTexto }: {
   trabalho: Trabalho;
   card: CardDaDirecao;
   cards: CardDaDirecao[];
@@ -112,6 +112,8 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   /** 23/10: o perfil lido em Redes (null: sem dados, preenchimento à mão) e se o selo está ligado. */
   perfilDeRedes?: PerfilDeRedes | null;
   verificado?: boolean;
+  /** 24/10: o editor do texto da lâmina ligado ao rascunho (a prévia muda a cada tecla). */
+  editorDeTexto?: ReactNode;
 }) {
   const mesa = useMesa(), cache = useQueryClient();
   const [fonte, setFonte] = useState<Fonte>("internet");
@@ -421,6 +423,22 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   const usarPerfilDeRedes = (estilo: PerfilDoBloco["estilo"] = perfilAtual.estilo) => { if (perfilDeRedes) onBloco({ tipo: "perfil", perfil: perfilDoBlocoDeRedes(perfilDeRedes, estilo, verificado), cantos: 24, borda: true }); };
   const ehUltima = cards.length > 1 && cards[cards.length - 1]?.ordem === card.ordem;
   const numeroOuVazio = (v: string) => { const n = Math.floor(Number(v.replace(/\D/g, ""))); return v.trim() && Number.isFinite(n) ? n : undefined; };
+  /** 24/10 (dono: "opção de mudar a cor"): a cor do card e a do Seguir, com as da marca, uma livre e o padrão. */
+  const coresDoPerfil = (campo: "cor_fundo" | "cor_botao", rotulo: string) => {
+    const atual = (perfilAtual[campo] || "").toLowerCase();
+    const opcoes = Array.from(new Set([...coresDaMarca.map((c) => c.toLowerCase()), ...(campo === "cor_fundo" ? ["#ffffff", "#000000", "#15202b", "#f5f1e8"] : ["#0095f6", "#1d9bf0", "#000000"])])).filter((c) => /^#[0-9a-f]{6}$/.test(c)).slice(0, 10);
+    return (
+      <div className="min-w-0" data-cores-do-perfil={campo}>
+        <p className={juntar(texto.rotulo, "mb-1.5")}>{rotulo}</p>
+        <div role="group" aria-label={rotulo} className="flex flex-wrap items-center">
+          <button type="button" aria-pressed={!atual} disabled={travado} onClick={() => mudarPerfil({ [campo]: undefined })} className={juntar("toque-compacto mb-1.5 mr-1.5 h-8 rounded-full border px-3 text-[12px]", !atual ? "border-primary text-primary" : "border-border text-muted-foreground")}>Padrão</button>
+          {opcoes.map((c) => <button key={c} type="button" aria-label={`${rotulo} ${c}`} title={c} aria-pressed={atual === c} disabled={travado} onClick={() => mudarPerfil({ [campo]: c })}
+            className={juntar("toque-compacto mb-1.5 mr-1.5 h-8 w-8 rounded-full border transition-shadow", atual === c ? "border-primary ring-2 ring-primary" : "border-border")} style={{ backgroundColor: c }} />)}
+          <label className="mb-1.5 inline-flex items-center text-[12px] text-muted-foreground">Livre<input aria-label={`${rotulo} livre`} type="color" className="ml-1.5 h-8 w-10 cursor-pointer rounded-md border border-border bg-transparent" value={atual || (campo === "cor_fundo" ? "#ffffff" : "#0095f6")} disabled={travado} onChange={(e) => mudarPerfil({ [campo]: e.target.value.toLowerCase() })} /></label>
+        </div>
+      </div>
+    );
+  };
   const editorDoPerfil = (
     <div className="space-y-3" data-editor-do-perfil="">
       <Segmentado<PerfilDoBloco["estilo"]> rotulo="Jeito do perfil" opcoes={[{ valor: "instagram", rotulo: "Instagram" }, { valor: "x", rotulo: "X" }]} valor={perfilAtual.estilo} onEscolher={(v) => mudarPerfil({ estilo: v })} desativado={travado} />
@@ -432,6 +450,8 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
         <label className={juntar("block min-w-0", texto.rotulo)}>Bio<Textarea aria-label="Bio no perfil" value={perfilAtual.bio || ""} maxLength={300} rows={3} disabled={travado} onChange={(e) => mudarPerfil({ bio: e.target.value || undefined })} className="mt-1" /></label>
         <label className={juntar("block min-w-0", texto.rotulo)}>Link<Input aria-label="Link no perfil" value={perfilAtual.site || ""} maxLength={80} disabled={travado} onChange={(e) => mudarPerfil({ site: e.target.value || undefined })} className="mt-1" /></label>
       </div>
+      {coresDoPerfil("cor_fundo", "Cor do card")}
+      {coresDoPerfil("cor_botao", "Cor do botão Seguir")}
       <div className="grid min-w-0 grid-cols-3 gap-2">
         {(["posts", "seguidores", "seguindo"] as const).map((k) => <label key={k} className={juntar("block min-w-0", texto.rotulo)}>{k === "posts" ? "Posts" : k === "seguidores" ? "Seguidores" : "Seguindo"}<Input aria-label={`${k} no perfil`} inputMode="numeric" value={typeof perfilAtual[k] === "number" ? String(perfilAtual[k]) : ""} disabled={travado} onChange={(e) => mudarPerfil({ [k]: numeroOuVazio(e.target.value) })} className="mt-1" /></label>)}
       </div>
@@ -528,7 +548,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   );
   const textoDaLamina = (
     <div className="space-y-4">
-      <EditorDoTextoDaLamina trabalho={trabalho} card={card} total={cards.length} travado={travado} onMudou={onMudou} />
+      {editorDeTexto || <EditorDoTextoDaLamina trabalho={trabalho} card={card} total={cards.length} travado={travado} onMudou={onMudou} />}
       <div className="grid min-w-0 gap-3 border-t border-border pt-4">
         <Regua rotulo="Tamanho do texto" valor={ajustes.tamanho_texto} min={24} max={56} desativado={travado} onMudar={(v) => onAjuste("tamanho_texto", v)} />
       </div>

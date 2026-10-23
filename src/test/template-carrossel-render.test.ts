@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { desenharProfile } from "@/components/mesa/profile/renderProfile";
 import { CORES_DO_CARROSSEL, enquadrar, FUNDOS_PRONTOS, fundoEscuro, linhasRicas, luminancia, paletaDoFundo, pedacosDoTexto, textoDoCredito } from "@/components/mesa/profile/renderCarrossel";
 import type { TemplateProfile } from "../../supabase/functions/estudio-arte/modulos/template-profile";
+import { normalizarNegrito } from "../../supabase/functions/estudio-arte/modulos/destaques-do-texto";
 
 /** Carrossel estilo post do X (22/10): a lâmina inteira, o bloco de mídia e o texto com negrito. */
 const base: TemplateProfile = {
@@ -13,7 +14,7 @@ const base: TemplateProfile = {
 function quadro() {
   const ctx = {
     font: "", fillStyle: "", strokeStyle: "", globalAlpha: 1, lineWidth: 1, textAlign: "left", textBaseline: "alphabetic",
-    save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(),
+    save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), arcTo: vi.fn(), arc: vi.fn(), lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), stroke: vi.fn(), fill: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), drawImage: vi.fn(), translate: vi.fn(), scale: vi.fn(), rect: vi.fn(), quadraticCurveTo: vi.fn(), bezierCurveTo: vi.fn(),
     createLinearGradient: () => ({ addColorStop: vi.fn() }),
     measureText: (s: string) => ({ width: Array.from(s).length * (parseFloat(ctx.font.match(/(\d+)px/)?.[1] || "36")) * 0.5 }),
   };
@@ -25,7 +26,8 @@ const textos = (ctx: ReturnType<typeof quadro>["ctx"]) => ctx.fillText.mock.call
 describe("texto com negrito por trecho", () => {
   it("separa os trechos marcados e mantém asterisco sem par como texto", () => {
     expect(pedacosDoTexto("A **IA** faz")).toEqual([{ texto: "A ", negrito: false }, { texto: "IA", negrito: true }, { texto: " faz", negrito: false }]);
-    expect(pedacosDoTexto("5 * 3 = 15 **x")).toEqual([{ texto: "5 * 3 = 15 **x", negrito: false }]);
+    // 24/10: o "**" sem par é marca sobrando e sai (o asterisco sozinho continua).
+    expect(pedacosDoTexto("5 * 3 = 15 **x")).toEqual([{ texto: "5 * 3 = 15 x", negrito: false }]);
   });
   it("quebra palavra a palavra e marca o parágrafo depois da linha vazia", () => {
     const linhas = linhasRicas("um dois **três quatro**\n\ncinco", 9, (s) => Array.from(s).length);
@@ -175,5 +177,49 @@ describe("arte do estilo X (23/10): perfil, número grande, cabeçalho e quebras
       return Math.max(...fontes.map((f) => Number((/(\d+)px/.exec(f) || [])[1] || 0)));
     };
     expect(fonteDe("stories_9x16")).toBeGreaterThan(fonteDe("quadrado_1x1"));
+  });
+});
+
+describe("correções de 24/10: negrito em todo modelo e cor do card do perfil", () => {
+  const comFontes = () => {
+    const q = quadro();
+    const escritos: Array<[string, string]> = [];
+    q.ctx.fillText = vi.fn((s: string) => { escritos.push([String(s), String(q.ctx.font)]); });
+    return { ...q, escritos };
+  };
+  it("Post do X: **trecho** sai em negrito, vizinhos juntos, sem asterisco na peça", () => {
+    const { canvas, escritos } = comFontes();
+    desenharProfile(canvas, { ...base, estilo: "twitter", texto: "**Separe** **atestados** e laudos **" }, "feed_4x5");
+    const textos = escritos.map(([s]) => s);
+    expect(textos.some((s) => s.indexOf("**") >= 0)).toBe(false);
+    expect(escritos.find(([s]) => s === "Separe atestados")?.[1]).toMatch(/^700 /);
+    expect(escritos.find(([s]) => s.indexOf("e laudos") >= 0)?.[1]).toMatch(/^400 /);
+  });
+  it("Story: negrito no texto, quebras respeitadas; legenda do Instagram sem as marcas", () => {
+    const st = comFontes();
+    desenharProfile(st.canvas, { ...base, estilo: "story", texto: "Linha **forte**\nOutra" }, "stories_9x16");
+    expect(st.escritos.find(([s]) => s === "forte")?.[1]).toMatch(/^700 /);
+    expect(st.escritos.map(([s]) => s)).toContain("Outra");
+    const ig = comFontes();
+    desenharProfile(ig.canvas, { ...base, estilo: "instagram", texto: "Legenda **com** marca" }, "feed_4x5", { imagem: { naturalWidth: 800, naturalHeight: 1000 } as HTMLImageElement });
+    expect(ig.escritos.some(([s]) => s.indexOf("**") >= 0)).toBe(false);
+  });
+  it("pedaços: o ** sem par sai e negritos vizinhos viram um (mesma leitura do campo)", () => {
+    expect(pedacosDoTexto("**Separe** **atestados** e")).toEqual([{ texto: "Separe atestados", negrito: true }, { texto: " e", negrito: false }]);
+    expect(normalizarNegrito("**a**  **b** c **")).toBe("**a  b** c");
+  });
+  it("card do perfil: cor própria com o texto no contraste e o Seguir na cor escolhida", () => {
+    const { canvas, ctx } = quadro();
+    const pintados: string[] = [];
+    const fill = ctx.fill;
+    ctx.fill = vi.fn(() => { pintados.push(String(ctx.fillStyle)); fill(); });
+    const cores: Array<[string, string]> = [];
+    ctx.fillText = vi.fn((s: string) => { cores.push([String(s), String(ctx.fillStyle)]); });
+    const bloco = { posicao: "abaixo" as const, altura: 100, largura: 100, sangrar: false, cantos: 24, borda: true, sombra: false, enquadramento: "inteira" as const, foco_x: 0.5, foco_y: 0.5, tipo: "perfil" as const,
+      perfil: { estilo: "instagram" as const, nome: "Thainá Rosa", username: "thaina.adv", seguidores: 3400, cor_fundo: "#15202b", cor_botao: "#ffd400" } };
+    desenharProfile(canvas, { ...base, texto: "Siga →", bloco }, "feed_4x5");
+    expect(cores.find(([s]) => s === "Thainá Rosa")?.[1]).toBe("#f7f9f9");
+    expect(pintados).toContain("#ffd400");
+    expect(cores.find(([s]) => s === "Seguir")?.[1]).toBe("#0f1419");
   });
 });

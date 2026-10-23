@@ -1,5 +1,5 @@
 import type { TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
-import { desenharCarrossel, type MidiaCarregada, type ResultadoDoCarrossel } from "./renderCarrossel";
+import { desenharCarrossel, linhasRicas, textoSemMarcas, type MidiaCarregada, type Pedaco, type ResultadoDoCarrossel } from "./renderCarrossel";
 
 /**
  * Template do Estúdio (21/10/2026, dono: "simular um post do Instagram e do X
@@ -57,6 +57,26 @@ function quebrar(texto: string, larguraDa: (linha: number) => number, medir: Med
     linhas.push(linha);
   }
   return linhas;
+}
+
+/**
+ * Linhas com negrito para o post do X e o Story (24/10, dono: "aparece com os asteriscos"): "**trecho**" sai
+ * em negrito pela mesma leitura do Carrossel X; linha vazia continua uma linha em branco, como no app.
+ */
+export function linhasComNegrito(texto: string, largura: number, medir: (s: string, negrito: boolean) => number): Pedaco[][] {
+  const saida: Pedaco[][] = [];
+  for (const l of linhasRicas(texto, largura, medir)) { if (l.paragrafo) saida.push([]); saida.push(l.pedacos); }
+  return saida;
+}
+
+/** Escreve uma linha de pedaços (negrito no peso forte), à esquerda ou centrada em x. */
+function escreverPedacos(ctx: CanvasRenderingContext2D, pedacos: Pedaco[], x: number, y: number, px: number, peso: number, centro = false) {
+  const larguraDe = (p: Pedaco) => { ctx.font = fonte(p.negrito ? 700 : peso, px); return ctx.measureText(p.texto).width; };
+  const antes = ctx.textAlign;
+  let cx = centro ? x - pedacos.reduce((a, p) => a + larguraDe(p), 0) / 2 : x;
+  ctx.textAlign = "left";
+  for (const p of pedacos) { ctx.font = fonte(p.negrito ? 700 : peso, px); ctx.fillText(p.texto, cx, y); cx += ctx.measureText(p.texto).width; }
+  ctx.textAlign = antes;
 }
 
 export function carregarImagemProfile(url: string): Promise<HTMLImageElement> {
@@ -188,8 +208,7 @@ const NAO_CABE = "O texto não cabe neste formato. Reduza o tamanho, escolha um 
 function planoDoX(ctx: CanvasRenderingContext2D, t: TemplateProfile, W: number, temImagem: boolean) {
   const s = t.tamanho_texto / 15, pad = 16 * s, A = t.tamanho_foto, gap = 8 * s;
   const colX = pad + A + gap, cw = W - colX - pad;
-  ctx.font = fonte(400, 15 * s);
-  const linhas = linhasProfile(t.texto, cw, (x) => ctx.measureText(x).width);
+  const linhas = linhasComNegrito(t.texto, cw, (x, negrito) => { ctx.font = fonte(negrito ? 700 : 400, 15 * s); return ctx.measureText(x).width; });
   const lh = 20 * s, topo = 12 * s, cab = 20 * s, textoTopo = 2 * s, fim = 12 * s;
   // Largura da mídia ajustável à mão (40 a 100% da coluna do texto), alinhada à esquerda como no X.
   const midiaW = cw * Math.max(40, Math.min(100, t.midia ?? 100)) / 100;
@@ -230,7 +249,7 @@ function pintarX(ctx: CanvasRenderingContext2D, t: TemplateProfile, x: number, y
   // Texto do post, com as quebras do autor.
   ctx.font = fonte(400, 15 * s); ctx.fillStyle = cor.texto; ctx.textBaseline = "top";
   let cy = ay + p.cab + p.textoTopo;
-  for (const linha of p.linhas) { ctx.fillText(linha, cx, cy + (p.lh - 15 * s * 1.18) / 2); cy += p.lh; }
+  for (const linha of p.linhas) { escreverPedacos(ctx, linha, cx, cy + (p.lh - 15 * s * 1.18) / 2, 15 * s, 400); cy += p.lh; }
   let imagem: RetanguloProfile | null = null, area: RetanguloProfile | null = null;
   if (rec.imagem && p.midiaH) {
     cy += 12 * s;
@@ -288,7 +307,8 @@ function planoDoIG(ctx: CanvasRenderingContext2D, t: TemplateProfile, W: number)
   const midiaH = W * razaoDaMidia(t);
   const acoes = 46 * s, lh = 18 * s;
   const medir = (x: string, negrito: boolean) => { ctx.font = fonte(negrito ? 600 : 400, 14 * s); return ctx.measureText(x).width; };
-  const legenda = linhasDaLegenda(t.username, t.texto, W - 2 * pad, medir, !!t.legenda_completa);
+  // A legenda do Instagram não tem negrito no app: as marcas saem e o texto fica normal.
+  const legenda = linhasDaLegenda(t.username, textoSemMarcas(t.texto), W - 2 * pad, medir, !!t.legenda_completa);
   const n = t.numeros || {};
   const curtidas = t.curtido_por || (typeof n.curtidas === "number" && n.curtidas > 0) ? lh + 4 * s : 0;
   const comentarios = typeof n.comentarios === "number" && n.comentarios > 0 ? lh + 4 * s : 0;
@@ -419,8 +439,7 @@ function pintarStory(ctx: CanvasRenderingContext2D, t: TemplateProfile, q: Retan
   // Meio: o texto (fora da foto) e a foto inteira; sem foto, o Story de texto no fundo escolhido.
   const topo = ay + A + 12 * s, baixo = ry - 12 * s, mx = q.x + 8 * s, mw = q.largura - 16 * s;
   const px = Math.round(t.tamanho_texto * 1.15), lh = px * 1.28;
-  ctx.font = fonte(600, px);
-  const linhas = t.texto.trim() ? linhasProfile(t.texto, mw - 40 * s, (x) => ctx.measureText(x).width) : [];
+  const linhas = t.texto.trim() ? linhasComNegrito(t.texto, mw - 40 * s, (x, negrito) => { ctx.font = fonte(negrito ? 800 : 600, px); return ctx.measureText(x).width; }) : [];
   const alturaDoTexto = linhas.length * lh;
   let imagem: RetanguloProfile | null = null, area: RetanguloProfile | null = null;
   ctx.textAlign = "center"; ctx.textBaseline = "top";
@@ -428,7 +447,7 @@ function pintarStory(ctx: CanvasRenderingContext2D, t: TemplateProfile, q: Retan
     const reservado = alturaDoTexto ? alturaDoTexto + 20 * s : 0;
     if (reservado > (baixo - topo) * 0.45) { ctx.restore(); throw new Error(NAO_CABE); }
     ctx.fillStyle = "#ffffff";
-    linhas.forEach((l, i) => ctx.fillText(l, q.x + q.largura / 2, topo + i * lh));
+    linhas.forEach((l, i) => escreverPedacos(ctx, l, q.x + q.largura / 2, topo + i * lh, px, 600, true));
     area = { x: mx, y: topo + reservado, largura: mw, altura: baixo - topo - reservado };
     imagem = fotoInteira(ctx, rec.imagem, area.x, area.y, area.largura, area.altura, 8 * s, "#000000");
   } else {
@@ -436,7 +455,7 @@ function pintarStory(ctx: CanvasRenderingContext2D, t: TemplateProfile, q: Retan
     ctx.fillStyle = t.cor_fundo; caixa(ctx, mx, topo, mw, baixo - topo, 8 * s); ctx.fill();
     ctx.fillStyle = corDoTextoSobre(t.cor_fundo);
     const inicio = topo + (baixo - topo - alturaDoTexto) / 2;
-    linhas.forEach((l, i) => ctx.fillText(l, q.x + q.largura / 2, inicio + i * lh));
+    linhas.forEach((l, i) => escreverPedacos(ctx, l, q.x + q.largura / 2, inicio + i * lh, px, 600, true));
   }
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
   ctx.restore();

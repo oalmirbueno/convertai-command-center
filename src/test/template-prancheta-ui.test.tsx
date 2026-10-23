@@ -75,3 +75,17 @@ describe("miniatura acompanha o rascunho da lâmina (23/10: o meio mostrava a im
     await waitFor(() => expect(estado.desenhar.mock.calls[estado.desenhar.mock.calls.length - 1][1]).toMatchObject({ cor_fundo: "#15202b" }));
   });
 });
+
+describe("miniatura com o texto em edição (24/10: quebrei linha e não respondeu na hora)", () => {
+  beforeEach(() => { sessionStorage.clear(); });
+  it("o texto da lâmina ainda não salvo (com Enter) já aparece na miniatura, e o modelo é o da lâmina aberta", async () => {
+    publicarBaseDoTemplate("t-4", { template: { ...base, estilo: "carrossel" as const, seta: true }, avatarUrl: null, formato: "feed_4x5" });
+    // Rascunho antigo da lâmina 2 no Post do X: a miniatura segue o modelo da lâmina aberta (Carrossel X).
+    sessionStorage.setItem(chaveDoRascunho("cliente", null, "t-4", 2), JSON.stringify({ ...base, estilo: "twitter", texto_editado: "Linha nova\nOutra linha" }));
+    render(<MiniaturaDoPostX trabalhoId="t-4" clientId="cliente" card={cards[1]} posicao={{ atual: 2, total: 2 }} />);
+    await waitFor(() => expect(estado.desenhar).toHaveBeenCalled());
+    expect(estado.desenhar.mock.calls[estado.desenhar.mock.calls.length - 1][1]).toMatchObject({ estilo: "carrossel", texto: "Linha nova\nOutra linha" });
+    act(() => gravarRascunho(chaveDoRascunho("cliente", null, "t-4", 2), { ...base, texto_editado: "Linha nova\nOutra linha\nTerceira" }));
+    await waitFor(() => expect(estado.desenhar.mock.calls[estado.desenhar.mock.calls.length - 1][1]).toMatchObject({ texto: "Linha nova\nOutra linha\nTerceira" }));
+  });
+});
