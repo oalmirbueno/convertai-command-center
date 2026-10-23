@@ -11,7 +11,7 @@ import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { chaves, editarItemDaProposta, lerProposta, type Campanha, type ItemProposto } from "./mesaV4Api";
-import { normalizarBriefing } from "./campanhasApi";
+import { aplicarRespostaDaCampanha, normalizarBriefing } from "./campanhasApi";
 import { linhaDaCampanha } from "./CampanhaLinhaDoTempo";
 import { porFase } from "./areasDaCampanha";
 import { useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
