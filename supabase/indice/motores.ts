@@ -906,7 +906,9 @@ export const MOTORES: readonly Motor[] = [
     nome: "Mês: estrategista (escrever e ajustar o mês)",
     funcao: "agente-calendario",
     ligacao: { arquivo: CALENDARIO, trechos: ['mes: conhecimentoCalendarioPara("mes").texto', 'sistema: sistemaDoCalendario(ctx, "mes")'] },
-    bases: ["prompt do banco (agente_prompts) com BASE_DO_ESTRATEGISTA", "conhecimento-conteudo.ts: tipos e frameworks", "REGRAS_DE_SAIDA (depois)"],
+    // 24/10: a troca da peça (trocarPecaOpcoes: 3 substitutas do mesmo dia em ESQUEMA_DA_TROCA, o Jev recomenda)
+    // usa o mesmo sistema do Mês e o método da geração (metodoDaGeracao).
+    bases: ["prompt do banco (agente_prompts) com BASE_DO_ESTRATEGISTA", "conhecimento-conteudo.ts: tipos e frameworks", "REGRAS_DE_SAIDA (depois)", "trocar_peca_opcoes: modulos/troca-da-peca.ts (pedidoDaTroca) e ESQUEMA_DA_TROCA"],
     montar: () => conhecimentoCalendarioPara("mes"),
     promete: ["calendario_editorial", "formulas_de_titulo", "cta_principios", "voz_de_marca", "anti_generico", "ganchos_por_tipo", "carrossel_de_retencao", "checklist_salva_e_envia", "revisao_em_sete_passadas"],
   },

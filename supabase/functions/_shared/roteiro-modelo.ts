@@ -92,6 +92,12 @@ export type Roteiro = {
    * delas não muda: jsonCanonico ignora chave indefinida).
    */
   base?: BaseDoRoteiro;
+  /**
+   * 23/10/2026 (agente de roteiro unificado da peça de vídeo): até 3 ideias do roteirista para deixar ESTA
+   * versão mais forte; cada uma vira pedido ao agente num toque. Só existe quando há (o hash das versões
+   * antigas não muda).
+   */
+  sugestoes?: string[];
 };
 
 /** Frente ROT: qual modelo da base o roteiro usou e como foi escolhido. */
@@ -394,6 +400,8 @@ export function normalizarRoteiro(bruto: unknown, padrao: { titulo?: string; tip
   };
   // Frente ROT: a chave só entra quando há base (versão antiga continua com o mesmo hash).
   if (base) r.base = base;
+  const sugestoes = listaDeTextos(o.sugestoes, 3, 200);
+  if (sugestoes.length) r.sugestoes = sugestoes;
   return r;
 }
 

@@ -336,24 +336,22 @@ describe("stories da campanha", () => {
 });
 
 describe("vídeos e Reels da campanha", () => {
-  it("gera o roteiro com custo, edita e salva por editar_item; abrir fora da agenda vai à Mesa Vídeos com o roteiro", async () => {
+  // 23/10 (agente unificado): o roteiro da peça fica à vista com UM agente ao lado; o roteiro antigo do item
+  // aparece (migração na leitura) e as cenas de IA do item vão para a Mesa Vídeos.
+  it("mostra a peça por fase com o roteiro do item e um só agente ao lado; abrir fora da agenda vai à Mesa Vídeos com as cenas", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    qc.setQueryData(chaves.proposta(PROPOSTA_ID), proposta);
+    const cenas = { gancho: "Ele travou", cenas: [{ ordem: 1, descricao: "PC fumaçando", fala: "Seu PC tá assombrado? Exorcismo por R$ 89", texto_na_tela: "Exorcismo R$ 89", segundos: 5 }], duracao: 5, trilha: "Suspense leve", cta: "Chame no WhatsApp" };
+    const comCenas = { ...proposta, itens: [itens[0], itens[1], { ...itens[2], roteiro_video: cenas }] };
+    qc.setQueryData(chaves.proposta(PROPOSTA_ID), comCenas);
+    mock.tabelas.calendario_propostas = [comCenas];
     montar(h(CampanhaVideos, { campanha }), qc);
     const regiao = await screen.findByRole("region", { name: /Vídeos: Prova e produtos/ });
     expect(within(regiao).getByText("Reels do PC assombrado")).toBeTruthy();
-    await confirmarCusto(within(regiao).getByRole("button", { name: /Gerar o roteiro/ }), "peca_cenas_gerar");
-    await waitFor(() => expect(chamadas("peca_cenas_gerar")[0]).toEqual(expect.objectContaining({ acao: "peca_cenas_gerar", client_id: CLIENTE, campanha_id: CAMPANHA_ID, tema_id: "c3" })));
-    // A escolhida vai para a peça pelo editar_item (o mesmo caminho do Salvar).
-    await waitFor(() => expect(chamadas("editar_item").length).toBe(1));
-    expect(chamadas("editar_item")[0].campos.roteiro_video.gancho).toBe("Ele travou");
-    const fala = await screen.findByLabelText("Fala da cena 1");
-    fireEvent.change(fala, { target: { value: "Seu PC tá assombrado? Exorcismo por R$ 89" } });
-    fireEvent.click(screen.getByRole("button", { name: "Salvar o roteiro" }));
-    await waitFor(() => expect(chamadas("editar_item").length).toBe(2));
-    expect(chamadas("editar_item")[1].campos.roteiro_video.cenas[0].fala).toBe("Seu PC tá assombrado? Exorcismo por R$ 89");
-    // Salvo: sai do modo de edição e mostra o que está gravado.
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Salvar o roteiro" })).toBeNull());
+    expect(await within(regiao).findByText("Seu PC tá assombrado? Exorcismo por R$ 89")).toBeTruthy();
+    expect(within(regiao).getAllByRole("region", { name: /Agente de roteiro/ })).toHaveLength(1);
+    // Nada de agente antigo nem de editor solto de cenas fora do Gerar.
+    expect(chamadas("campanha_roteiro_agente")).toHaveLength(0);
+    expect(within(regiao).queryByRole("button", { name: "Salvar o roteiro" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Abrir Reels do PC assombrado no estúdio de vídeo/ }));
     expect(screen.getByTestId("onde").textContent).toBe(`/mesa-videos?client=${CLIENTE}&etapa=gerar&modo=livre`);
     // O rascunho vai para a rota da Mesa Vídeos (o estado da tela é por rota).
@@ -517,14 +515,16 @@ describe("reorganizar: a fase é a da data e a 1ª peça é sempre introdução 
 });
 
 describe("peça de vídeo da campanha: gravar ou gerar (22/10)", () => {
-  it("Roteiro por padrão; Gravar e Gerar abrem cada caminho na própria peça", async () => {
+  // 23/10 (agente unificado): o roteiro fica sempre à vista e o seletor só escolhe o caminho; Gravar por padrão.
+  it("Gravar por padrão; Gerar abre o caminho na própria peça; o seletor não tem mais a aba Roteiro", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(chaves.proposta(PROPOSTA_ID), proposta);
     montar(h(CampanhaVideos, { campanha }), qc);
     const regiao = await screen.findByRole("region", { name: /Vídeos: Prova e produtos/ });
-    expect(within(regiao).queryByTestId("gravar-video")).toBeNull();
-    fireEvent.click(within(regiao).getByRole("tab", { name: /Gravar/ }));
+    expect(within(regiao).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Gravar", "Gerar"]);
+    expect(within(regiao).getByRole("tab", { name: /Gravar/ }).getAttribute("aria-selected")).toBe("true");
     expect((await within(regiao).findByTestId("gravar-video")).textContent).toBe("Gravar Reels do PC assombrado");
+    expect(within(regiao).getByRole("region", { name: /Agente de roteiro de Reels do PC assombrado/ })).toBeTruthy();
     fireEvent.click(within(regiao).getByRole("tab", { name: /Gerar/ }));
     expect((await within(regiao).findByTestId("gerar-video")).textContent).toBe("Gerar Reels do PC assombrado");
     expect(within(regiao).queryByTestId("gravar-video")).toBeNull();

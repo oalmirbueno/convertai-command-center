@@ -293,6 +293,10 @@ export interface PedidoDeGeracao {
    */
   campanha_id?: string | null;
   tema_id?: string | null;
+  /** Agente unificado da peça (23/10): a ideia da equipe, o estilo e a criatividade do criar (peca_gerar). */
+  ideia?: string;
+  estilo?: string;
+  criatividade?: string;
 }
 
 export const gerarRoteiro = (p: PedidoDeGeracao) => chamarRoteiros("gerar", p as unknown as Record<string, unknown>);
@@ -333,10 +337,23 @@ export const gerarRoteiroDaPeca = (p: PedidoDeGeracao) => chamarRoteiros<Respost
 /** O que se estima na peça: peca (Gravar), cenas (Gerar), reescrever (pedido ao agente) e conversa. */
 export type AlvoDaPeca = "peca" | "cenas" | "reescrever" | "conversa";
 
-/** Preço antes, pelo motor (sem IA), com o modelo que a geração vai usar. */
-export const estimarDaPeca = (clientId: string, alvo: AlvoDaPeca, modeloId?: string | null) =>
-  chamarRoteiros<{ estimativa_usd: number; modelo_id: string }>("estimar", { client_id: clientId, acao_alvo: alvo, ...(modeloId ? { modelo_id: modeloId } : {}) });
+/** Preço antes, pelo motor (sem IA), com o modelo que a geração vai usar (peca: a duração muda o tamanho). */
+export const estimarDaPeca = (clientId: string, alvo: AlvoDaPeca, modeloId?: string | null, duracaoS?: number) =>
+  chamarRoteiros<{ estimativa_usd: number; modelo_id: string }>("estimar", { client_id: clientId, acao_alvo: alvo, ...(modeloId ? { modelo_id: modeloId } : {}), ...(duracaoS ? { duracao_s: duracaoS } : {}) });
 
-/** Gerar: as cenas da IA de vídeo em duas versões com os ganchos do nicho (não grava; quem chama salva na peça). */
-export const gerarCenasDaPeca = (p: { client_id: string; campanha_id: string; tema_id: string; modelo_id?: string | null }) =>
+/**
+ * Gerar: as cenas da IA de vídeo em duas versões com os ganchos do nicho (não grava; quem chama salva na peça).
+ * Agente unificado (23/10): com roteiro_id, as cenas saem do roteiro da peça.
+ */
+export const gerarCenasDaPeca = (p: { client_id: string; campanha_id: string; tema_id: string; modelo_id?: string | null; roteiro_id?: string | null }) =>
   chamarFuncao<{ roteiro_video: unknown; escolha: EscolhaDaPeca | null; custo_usd: number; saldo_usd?: number }>("mesa-roteiros", { acao: "peca_cenas_gerar", ...p });
+
+/**
+ * Agente unificado (23/10): o roteiro que só morava no item (o agente antigo da aba Roteiro, o "Gerar o roteiro")
+ * passa para a tabela, sem IA e sem custo; usar = a opção do agente antigo escolhida. Já na tabela: o mesmo roteiro.
+ */
+export const importarRoteiroDaPeca = (p: { client_id: string; campanha_id: string; tema_id: string; usar?: number | null }) =>
+  chamarRoteiros<RespostaDoRoteiro & { importado?: boolean }>("peca_importar", p as unknown as Record<string, unknown>);
+
+/** Usar uma versão guardada (a outra do Jev, uma anterior): vira a versão atual, sem custo. */
+export const restaurarVersao = (roteiroId: string, versao: number) => chamarRoteiros("versao_restaurar", { roteiro_id: roteiroId, versao });

@@ -223,6 +223,8 @@ import { lerGanchos, modeloDoEscopo, nichosEmTexto, type PreparoDaCopyViral, pre
 import { blocoDosGanchos, lerViralidade, perguntasDaViralidade } from "../estudio-arte/modulos/copy-viral.ts";
 // Frente B (23/10): a peça de vídeo com a pegada viral (Gravar em 2 versões, cenas do Gerar e o agente que reescreve).
 import {
+  dadosDaDirecaoCriativa,
+  type DirecaoCriativaDaPeca,
   duracaoDoPedido,
   type EscolhaDaPeca,
   escolherPelaViralidade,
@@ -234,11 +236,14 @@ import {
   INSTRUCAO_DAS_DUAS_VERSOES,
   instrucaoDaReescrita,
   instrucaoDasCenas,
+  lerDirecaoCriativa,
+  linhaDaPeca,
   roteiroReescrito,
   SISTEMA_DO_AGENTE_DA_PECA,
   TAMANHO_DA_REESCRITA,
   TAMANHO_DAS_CENAS,
-  TAMANHO_DAS_DUAS_VERSOES,
+  tamanhoDasDuasVersoes,
+  versoesAntigasDaPeca,
   versoesDaSaida,
 } from "./modulos/roteiro-da-peca.ts";
 import { normalizarRoteiroDeVideo, type RoteiroDeVideo } from "../agente-calendario/modulos/roteiro-de-video.ts";
@@ -824,6 +829,8 @@ type PedidoDeRoteiro = {
   modeloBaseId?: string | null;
   /** Frente B (23/10): duas versões numa chamada; o Jev escolhe pelas notas virais e a outra fica no histórico. */
   duasVersoes?: boolean;
+  /** Agente unificado da peça (23/10): a ideia da equipe, o estilo e a criatividade do criar. */
+  direcaoCriativa?: DirecaoCriativaDaPeca | null;
 };
 
 type Gerado = Gravado & {
@@ -919,6 +926,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     objetivo: p.objetivo || (escolha ? `${ROTULO_DO_OBJETIVO[p.objetivoBase || escolha.modelo.objetivo]} (pela base)` : null),
     tema: p.tema || (peca ? peca.titulo : null),
     pedido_da_equipe: p.pedido || null,
+    direcao_criativa: p.direcaoCriativa && !p.tom ? dadosDaDirecaoCriativa(p.direcaoCriativa, p.duracaoS) : null,
     mudar_tom_para: p.tom || null,
     roteiro_atual: p.tom && atual ? atual.conteudo : null,
     comentarios_abertos_da_equipe: abertos.length ? abertos : null,
@@ -942,7 +950,8 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
       conteudo: `${duas ? `${INSTRUCAO_DAS_DUAS_VERSOES}\n` : ""}${instrucao}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, ...pedidoDaEquipe, motor_de_copy: blocoDoMotor({ canal: "roteiro", objetivo: objetivoDaCopy(p.objetivo || (peca ? peca.titulo : "")), estruturaPedida: escolha ? `a do modelo da base ${escolha.modelo.nome}` : `a do modo ${modo.rotulo}` }) })}`,
     }],
     esquemaJson: duas ? ESQUEMA_DAS_DUAS_VERSOES : ESQUEMA_DO_ROTEIRO,
-    maxTokensSaida: duas ? 12_000 : 7_000,
+    // Agente unificado (23/10): roteiro de até 5 min nas duas versões; a saída cresce com a duração.
+    maxTokensSaida: duas ? Math.max(12_000, tamanhoDasDuasVersoes(p.duracaoS).saida + 3_000) : 7_000,
     metodo: sp,
     referencia: refDoRoteiro,
     criadoPor: ch.userId,
@@ -1120,7 +1129,13 @@ async function pecaCenasGerar(ch: Chamador, corpo: Record<string, unknown>) {
   const trilhaB = (b.trilha && typeof b.trilha === "object" ? b.trilha : {}) as Record<string, unknown>;
   const trilha = typeof trilhaB.titulo === "string" && trilhaB.titulo.trim() ? trilhaB.titulo.trim().slice(0, 160) : null;
   const anterior = normalizarRoteiroDeVideo(item.roteiro_video);
-  const duracaoS = anterior && anterior.duracao ? Math.max(15, Math.min(60, anterior.duracao)) : 25;
+  // Agente unificado (23/10): com o roteiro da peça (tabela roteiros), as cenas saem dele, na duração dele.
+  const daPeca = corpo.roteiro_id ? await lerLinha(ch, corpo.roteiro_id) : null;
+  if (daPeca && daPeca.client_id !== clientId) throw new ErroHttp(409, "roteiro_de_outro_cliente", "Este roteiro é de outro cliente.");
+  const conteudoDaPeca = daPeca ? (versaoPorNumero(daPeca.versoes, daPeca.versao_atual) || { conteudo: null }).conteudo : null;
+  const duracaoS = conteudoDaPeca
+    ? Math.max(10, Math.min(300, conteudoDaPeca.duracao_alvo_s))
+    : anterior && anterior.duracao ? Math.max(15, Math.min(60, anterior.duracao)) : 25;
   const ref = { tipo: REF_ROTEIRO, id: campanhaId };
   const pedidoDaBase = `Roteiro de cenas do Reels "${limpo(item.tema, 200)}" da campanha ${c.nome}`;
   const [ctx, modelo, regras, sp, baseDoRoteirista, viral] = await Promise.all([
@@ -1138,9 +1153,9 @@ async function pecaCenasGerar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (viral ? `\n\n${viral.bloco}` : "") + (baseDoRoteirista.bloco ? `\n\n${baseDoRoteirista.bloco}` : ""),
-    mensagens: [{ papel: "usuario", conteudo: `${instrucaoDasCenas({ trilha, duracaoS })}\n\nDADOS:\n${JSON.stringify(ctx.dados)}` }],
+    mensagens: [{ papel: "usuario", conteudo: `${instrucaoDasCenas({ trilha, duracaoS })}\n\nDADOS:\n${JSON.stringify(conteudoDaPeca ? { ...ctx.dados, roteiro_da_peca: conteudoDaPeca } : ctx.dados)}` }],
     esquemaJson: ESQUEMA_DAS_CENAS_VIRAIS,
-    maxTokensSaida: 5_000,
+    maxTokensSaida: Math.min(12_000, 5_000 + Math.max(0, duracaoS - 60) * 25),
     metodo: sp,
     referencia: ref,
     criadoPor: ch.userId,
@@ -1161,6 +1176,66 @@ async function pecaCenasGerar(ch: Chamador, corpo: Record<string, unknown>) {
   });
 }
 
+// ------------------------------------------------------------------ o roteiro da peça na tabela (agente unificado, 23/10)
+
+/**
+ * O roteiro desta peça da campanha: o que já está na tabela (pela tarefa, ou pela campanha e o tema) ou, quando
+ * só o item guarda roteiro (o agente antigo da aba Roteiro e o "Gerar o roteiro"), a migração: as versões do
+ * item entram na tabela, sem IA e sem custo (as opções antes e o roteiro do item como versão atual). usar: a
+ * opção do agente antigo que a pessoa escolheu vira a versão atual. Sem nada, linha null.
+ */
+async function importarDaPeca(ch: Chamador, clientId: string, campanhaId: string, temaId: string, usar: number | null): Promise<{ linha: LinhaDoRoteiro | null; importado: boolean; aviso_banco?: string }> {
+  if (!temaId) throw new ErroHttp(400, "tema_obrigatorio", "Diga qual peça (tema_id) da campanha.");
+  const { data: camp, error: erroCamp } = await servico().from("mesa_campanhas").select("id, proposta_id").eq("id", campanhaId).eq("client_id", clientId).maybeSingle();
+  if (erroCamp) throw new ErroHttp(503, "campanha_indisponivel", "Não foi possível ler a campanha agora.");
+  const c = camp as { id: string; proposta_id: string | null } | null;
+  if (!c) throw new ErroHttp(404, "campanha_inexistente", "Esta campanha não é deste cliente.");
+  const serie = c.proposta_id && UUID.test(c.proposta_id) ? c.proposta_id : null;
+  const { data: prop } = serie ? await servico().from("calendario_propostas").select("id, itens").eq("id", serie).eq("client_id", clientId).maybeSingle() : { data: null };
+  const item = prop ? itemDaPecaNaSerie((prop as { itens: unknown }).itens, { temaId }) : null;
+  if (!item) throw new ErroHttp(404, "peca_inexistente", "Esta peça não está mais na série.");
+  const taskId = typeof item.task_id === "string" && UUID.test(item.task_id) ? item.task_id : null;
+  const tema = limpo(item.tema, 300);
+  const filtro = [`campanha_id.eq.${campanhaId}`, serie ? `proposta_id.eq.${serie}` : "", taskId ? `task_id.eq.${taskId}` : ""].filter(Boolean).join(",");
+  const { data: lista, error } = await servico().from(TABELA).select(CAMPOS).eq("client_id", clientId).is("arquivado_em", null).or(filtro).order("atualizado_em", { ascending: false }).limit(100);
+  if (error) {
+    if (semTabela(error)) return { linha: null, importado: false, aviso_banco: AVISO_BANCO };
+    throw new ErroHttp(503, "roteiro_indisponivel", "Não foi possível ler os roteiros agora.");
+  }
+  const linhas = ((lista as unknown[] | null) ?? []).map(normalizarLinhaDoRoteiro).filter((l): l is LinhaDoRoteiro => !!l);
+  const antigas = versoesAntigasDaPeca(item);
+  const escolhida = usar == null ? null : antigas.filter((v) => v.opcao === usar)[0] || null;
+  let linha = linhaDaPeca(linhas, { taskId, campanhaId, propostaId: serie, tema });
+  const base = { clientId, taskId, propostaId: serie, campanhaId };
+  if (linha) {
+    if (!escolhida) return { linha, importado: false };
+    const g = await guardarVersao(ch, { ...base, linha }, escolhida.conteudo, { origem: "edicao", nota: `Escolhida na peça: ${escolhida.nota}` });
+    return { linha: g.linha, importado: true, aviso_banco: g.aviso_banco };
+  }
+  if (!antigas.length) return { linha: null, importado: false };
+  const ordem = escolhida ? antigas.filter((v) => v !== escolhida).concat([escolhida]) : antigas;
+  for (const v of ordem) {
+    const g = await guardarVersao(ch, { ...base, linha }, v.conteudo, { origem: v.origem, nota: v === escolhida ? `Escolhida na peça: ${v.nota}` : v.nota });
+    if (g.aviso_banco) return { linha: null, importado: false, aviso_banco: g.aviso_banco };
+    linha = g.linha;
+  }
+  return { linha, importado: true };
+}
+
+/**
+ * peca_importar { client_id, campanha_id, tema_id, usar? } -> { roteiro, importado, custo_usd: 0 }
+ * O agente unificado precisa do roteiro na tabela para conversar, versionar e desfazer: a peça que só tinha o
+ * roteiro no item passa para a tabela na primeira ação (sem IA). Já na tabela: devolve o mesmo.
+ */
+async function pecaImportar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const usar = corpo.usar == null || corpo.usar === "" ? null : Math.round(Number(corpo.usar));
+  const r = await importarDaPeca(ch, clientId, idDe(corpo.campanha_id, "campanha_id"), limpo(corpo.tema_id, 80), usar != null && isFinite(usar) && usar >= 0 ? usar : null);
+  if (r.aviso_banco) throw new ErroHttp(503, "banco_sem_roteiros", r.aviso_banco);
+  return json({ roteiro: r.linha, importado: r.importado, custo_usd: 0 });
+}
+
 // ------------------------------------------------------------------ ações de roteiro
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -1170,8 +1245,9 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const alvo = String(corpo.acao_alvo || "gerar");
   const quantidade = Math.max(1, Math.min(20, Number(corpo.quantidade) || 1));
   // Frente B (23/10): peca (Gravar em 2 versões), cenas (Gerar em 2 versões) e reescrever (pedido ao agente).
+  const tamanhoDaPeca = tamanhoDasDuasVersoes(Number(corpo.duracao_s) || 30);
   const unidade = alvo === "peca"
-    ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DAS_DUAS_VERSOES.entrada, tokensSaida: TAMANHO_DAS_DUAS_VERSOES.saida })
+    ? estimarComModelo(modelo, { tokensEntrada: tamanhoDaPeca.entrada, tokensSaida: tamanhoDaPeca.saida })
     : alvo === "cenas"
     ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DAS_CENAS.entrada, tokensSaida: TAMANHO_DAS_CENAS.saida })
     : alvo === "reescrever"
@@ -1208,12 +1284,22 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>, opcoes: { dua
     const bloqueio = motivoParaNaoEditar(linha.status, !!linha.arquivado_em);
     if (bloqueio) throw new ErroHttp(409, "roteiro_travado", bloqueio);
   }
-  const taskId = linha ? linha.task_id : idOuNulo(corpo.task_id, "task_id");
+  // Agente unificado da peça (23/10): sem roteiro_id, o roteiro que a peça já tem (o da tabela ou o antigo do
+  // item, que entra no histórico antes) recebe as versões novas; nada do que a peça tinha se perde.
+  let daPeca = linha;
+  if (!daPeca && opcoes.duasVersoes && corpo.campanha_id && corpo.tema_id) {
+    daPeca = (await importarDaPeca(ch, clientId, idDe(corpo.campanha_id, "campanha_id"), limpo(corpo.tema_id, 80), null)).linha;
+    if (daPeca) {
+      const bloqueio = motivoParaNaoEditar(daPeca.status, !!daPeca.arquivado_em);
+      if (bloqueio) throw new ErroHttp(409, "roteiro_travado", bloqueio);
+    }
+  }
+  const taskId = daPeca ? daPeca.task_id : idOuNulo(corpo.task_id, "task_id");
   const tema = limpo(corpo.tema, 300);
-  if (!taskId && !linha && !tema) throw new ErroHttp(400, "tema_obrigatorio", "Roteiro avulso precisa de um tema.");
+  if (!taskId && !daPeca && !tema) throw new ErroHttp(400, "tema_obrigatorio", "Roteiro avulso precisa de um tema.");
   const r = await escreverRoteiro(ch, {
     clientId,
-    linha,
+    linha: daPeca,
     taskId,
     tipo,
     duracaoS: Math.max(10, Math.min(300, Number(corpo.duracao_s) || modoDoTipo(tipo).duracao_padrao_s)),
@@ -1230,6 +1316,7 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>, opcoes: { dua
     objetivoBase: objetivoDoTexto(corpo.objetivo_base),
     modeloBaseId: lerIdDaBase(corpo.modelo_base_id),
     duasVersoes: !!opcoes.duasVersoes,
+    direcaoCriativa: opcoes.duasVersoes ? lerDirecaoCriativa(corpo) : null,
   });
   return json({
     roteiro: r.linha,
@@ -2057,7 +2144,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (acao && !naPeca) acao = comCaminho(acao, caminhoDosRoteiros(clientId, acao, { abrirSozinho: levar }));
   // "Ele já vai fazendo" (regra 6): editar texto, aprovar, marcar gravado, arquivar, desarquivar e resolver
   // comentário não custam e têm Desfazer; pedido claro vai direto. IA e PDF pedem Confirmar.
-  if (acao && podeExecutarDireto(acao, regrasDosRoteiros(), { pedidoClaro: true }).direto) {
+  // Agente unificado da peça (23/10): ao lado do roteiro da peça, nada muda sem o Confirmar (nem troca de texto).
+  if (acao && !naPeca && podeExecutarDireto(acao, regrasDosRoteiros(), { pedidoClaro: true }).direto) {
     const ordem = await ehOrdemClara(mensagem, { agente: "roteirista da Mesa Roteiros", resumo: acao.resumo });
     levar = ordem.levar;
     if (ordem.clara) {
@@ -2581,6 +2669,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   // Frente B (23/10): a peça de vídeo. Gravar: 2 versões com os ganchos do nicho e o Jev escolhe. Gerar: as cenas da IA de vídeo.
   peca_gerar: (ch, corpo) => gerar(ch, corpo, { duasVersoes: true }),
   peca_cenas_gerar: pecaCenasGerar,
+  // Agente unificado (23/10): o roteiro antigo do item entra na tabela (sem IA) na primeira ação da peça.
+  peca_importar: pecaImportar,
   gancho_refazer: ganchoRefazer,
   tom_mudar: tomMudar,
   roteiro_criar: roteiroCriar,

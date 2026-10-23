@@ -3,7 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CalendarRange } from "lucide-react";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
+import { parteDaConferenciaDoJev } from "@/lib/mesa/api";
 import { BotaoComCusto } from "./Custo";
+import EscolhaDeFormatos from "./EscolhaDeFormatos";
+import type { OpcaoDoMes } from "../../../supabase/functions/agente-calendario/modulos/escolha-do-mes";
 import type { PedidoEmAndamento } from "./AgenteDoMes";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { chaves, hojeIso, partesDoPedido, pedidoLivre } from "./mesaV4Api";
@@ -37,15 +40,17 @@ function FormularioDoPeriodo({ aberto, onAbertoChange, mes, onPedidoInicio, onPe
   const [inicio, setInicio] = useState(() => inicioPadraoDoPeriodo(mes, hojeIso()));
   const [dias, setDias] = useState<DiasDoPeriodo>(7);
   const [tipos, setTipos] = useState<TipoDoPeriodo[]>(() => [...TIPOS_INICIAIS_DO_PERIODO]);
+  // 24/10: os formatos do período (vazio: a mistura do nicho). Stories e vídeo para gravar ou com IA entram aqui.
+  const [formatos, setFormatos] = useState<OpcaoDoMes[]>([]);
   const [rodando, setRodando] = useState(false);
   let erro = "";
   let intervalo: ReturnType<typeof intervaloDoCalendario> | null = null;
   try {
     intervalo = intervaloDoCalendario(mes, inicio, dias);
-    pedidoDoCalendario({ clientId, mes, inicio, dias, tema, tipos });
+    pedidoDoCalendario({ clientId, mes, inicio, dias, tema, tipos, formatos });
   } catch (e) { erro = e instanceof Error ? e.message : "Confira o período e os tipos escolhidos."; }
   const executar = async () => {
-    const pedido = pedidoDoCalendario({ clientId, mes, inicio, dias, tema, tipos });
+    const pedido = pedidoDoCalendario({ clientId, mes, inicio, dias, tema, tipos, formatos });
     setRodando(true);
     onAbertoChange(false);
     onPedidoInicio({ mensagem: pedido.mensagem, desde: Date.now() });
@@ -66,7 +71,7 @@ function FormularioDoPeriodo({ aberto, onAbertoChange, mes, onPedidoInicio, onPe
     icone={<CalendarRange className="h-4 w-4" />}
     descricao={`Proposta para ${clientName}, revisada com o Agente do mês antes de gravar.`}
     largura="md"
-    rodape={<div className="flex min-w-0 flex-wrap items-center justify-end"><button type="button" className={juntar(botao.discreto, "mr-2")} onClick={() => onAbertoChange(false)} disabled={rodando}>Cancelar</button><BotaoComCusto rotulo="Gerar proposta" titulo="Proposta de calendário preparada" descricao="Prepara uma proposta no período escolhido, para revisar antes de gravar na agenda." partes={() => partesDoPedido(catalogo, 0)} executar={executar} disabled={!!erro || rodando} /></div>}
+    rodape={<div className="flex min-w-0 flex-wrap items-center justify-end"><button type="button" className={juntar(botao.discreto, "mr-2")} onClick={() => onAbertoChange(false)} disabled={rodando}>Cancelar</button><BotaoComCusto rotulo="Gerar proposta" titulo="Proposta de calendário preparada" descricao="Prepara uma proposta no período escolhido, para revisar antes de gravar na agenda." partes={() => (formatos.length ? partesDoPedido(catalogo, 0).concat([parteDaConferenciaDoJev()]) : partesDoPedido(catalogo, 0))} executar={executar} disabled={!!erro || rodando} /></div>}
   >
     <fieldset disabled={rodando} className="space-y-4">
       <label className="block space-y-1"><span className={texto.rotulo}>Nicho ou tema (opcional)</span><input className={campo} aria-label="Nicho ou tema do calendário" value={tema} maxLength={500} onChange={(e) => setTema(e.target.value)} placeholder="Usar o contexto real do cliente" /></label>
@@ -74,6 +79,7 @@ function FormularioDoPeriodo({ aberto, onAbertoChange, mes, onPedidoInicio, onPe
         <label className="block space-y-1"><span className={texto.rotulo}>Início</span><input className={campo} aria-label="Início do calendário" type="date" min={minimo} max={fimDoMesDoPeriodo(mes)} value={inicio} onChange={(e) => setInicio(e.target.value)} /></label>
         <label className="block space-y-1"><span className={texto.rotulo}>Período</span><select aria-label="Período do calendário" className={campo} value={dias} onChange={(e) => setDias(Number(e.target.value) as DiasDoPeriodo)}>{PERIODOS_DO_CALENDARIO.map((d) => <option key={d} value={d}>{d} dias</option>)}</select></label>
       </div>
+      <EscolhaDeFormatos valor={formatos} onMudar={setFormatos} vazio="Pelo nicho do cliente (nenhum escolhido)" />
       {intervalo && <p role="status" className={texto.auxiliar}>De {dataBr(intervalo.inicio)} até {dataBr(intervalo.fim)}.{intervalo.limitadoAoMes ? ` Período ajustado para ${intervalo.dias} dias até o fim do mês selecionado.` : ""}</p>}
       <fieldset className="space-y-2"><legend className={texto.rotulo}>Tipos de conteúdo</legend><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{TIPOS_DO_PERIODO.map((t) => <label key={t.valor} className="flex min-w-0 items-center text-[12px]"><input className="mr-2 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]" type="checkbox" checked={tipos.includes(t.valor)} onChange={(e) => setTipos((anteriores) => e.target.checked ? [...anteriores, t.valor] : anteriores.filter((v) => v !== t.valor))} />{t.rotulo}</label>)}</div></fieldset>
     </fieldset>

@@ -13,6 +13,7 @@ import { MAX_ANEXOS, type ItemProposto } from "./mesaV4Api";
 // 02/10: peça de foto (Mesa Foto) e a conferência da cadência pedida, do mesmo módulo do servidor.
 import { resumoDaDirecaoDeFoto, type DirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
 import type { CadenciaDoMes, ConferenciaDoMes } from "../../../supabase/functions/agente-calendario/modulos/cadencia-do-mes";
+import type { OpcaoDoMes } from "../../../supabase/functions/agente-calendario/modulos/escolha-do-mes";
 
 /**
  * Aba Mês, versão 6 (24/09): o agente do mês planeja o mês conversando e a
@@ -471,6 +472,22 @@ export interface AcaoNaAgenda {
   escolhida?: string;
   /** Peça repetida na agenda e afins: só aviso, nunca trava a mudança. */
   avisos?: string[];
+  /** 24/10: trocar a peça por outra do mesmo dia (o cartão abre as 3 opções; o Jev recomenda). */
+  trocar?: PedidoDeTrocaNaAgenda[];
+  /** 24/10: peças que ficam de fora do refazer, com o motivo (arte pronta, post vinculado, publicação...). */
+  protegidas?: PecaProtegidaNaAgenda[];
+}
+
+export interface PedidoDeTrocaNaAgenda extends ItemDaAcaoNaAgenda {
+  opcao: OpcaoDoMes | null;
+  pedido?: string;
+}
+
+export interface PecaProtegidaNaAgenda {
+  task_id: string;
+  titulo: string;
+  data: string | null;
+  motivo: string;
 }
 
 const LISTAS_DE_PECAS = ["apagar", "mudar_data", "mudar_formato", "refazer", "editar_textos", "midia"] as const;
@@ -504,6 +521,8 @@ export function acaoNaAgendaDaMensagem(anexos: unknown[] | null | undefined): Ac
         editar_campanhas: Array.isArray(o.editar_campanhas) ? (o.editar_campanhas as EdicaoDeCampanha[]) : [],
         editar_textos: Array.isArray(o.editar_textos) ? (o.editar_textos as EdicaoDeTextoNaAgenda[]) : [],
         midia: Array.isArray(o.midia) ? (o.midia as PedidoDeMidiaNaAgenda[]) : [],
+        trocar: Array.isArray(o.trocar) ? (o.trocar as PedidoDeTrocaNaAgenda[]) : [],
+        protegidas: Array.isArray(o.protegidas) ? (o.protegidas as PecaProtegidaNaAgenda[]) : [],
       };
     }
   }
@@ -530,6 +549,61 @@ export const pensarMidiaDaPeca = (clientId: string, taskId: string, tipo?: "foto
 
 export const desfazerAcaoNaAgenda = (mensagemId: string) =>
   chamarFuncao<any>("agente-calendario", { acao: "desfazer_acao_agenda", mensagem_id: mensagemId });
+
+// ------------------------------------------------------------------ trocar peças (24/10)
+
+/** Uma substituta proposta para a peça (o resumo que a tela mostra). */
+export interface OpcaoDaTroca {
+  opcao: OpcaoDoMes;
+  rotulo: string;
+  tema: string;
+  gancho: string;
+  resumo: string;
+  cta: string;
+  laminas: number;
+  por_que: string;
+}
+
+export interface RespostaDaTroca {
+  mensagem_id: string;
+  opcoes: OpcaoDaTroca[];
+  recomendada: number;
+  notas: Array<number | null>;
+  fonte_da_recomendacao: "jev" | "ordem";
+  custo_usd?: number;
+}
+
+/** As 3 substitutas do mesmo dia; o Jev recomenda uma. Nada muda até trocarPecaAplicar. */
+export const trocarPecaOpcoes = (p: { clientId: string; taskId: string; opcao?: OpcaoDoMes | null; pedido?: string; marcaId?: string | null }) =>
+  chamarFuncao<RespostaDaTroca>("agente-calendario", {
+    acao: "trocar_peca_opcoes",
+    client_id: p.clientId,
+    task_id: p.taskId,
+    ...(p.opcao ? { opcao: p.opcao } : {}),
+    ...(p.pedido && p.pedido.trim() ? { pedido: p.pedido.trim().slice(0, 600) } : {}),
+    ...(p.marcaId ? { marca_id: p.marcaId } : {}),
+  });
+
+export const trocarPecaAplicar = (mensagemId: string, opcao: number) =>
+  chamarFuncao<{ anexo: unknown; task_id: string; titulo: string; opcao: OpcaoDoMes }>("agente-calendario", { acao: "trocar_peca_aplicar", mensagem_id: mensagemId, opcao });
+
+export const trocarPecaDescartar = (mensagemId: string) =>
+  chamarFuncao<{ anexo: unknown }>("agente-calendario", { acao: "trocar_peca_aplicar", mensagem_id: mensagemId, descartar: true });
+
+export const trocarPecaDesfazer = (mensagemId: string) =>
+  chamarFuncao<{ anexo: unknown; task_id: string }>("agente-calendario", { acao: "trocar_peca_desfazer", mensagem_id: mensagemId });
+
+/** Trocar várias: a lista do refazer (semana ou mês, só as não feitas) com as protegidas; sem custo. */
+export const proporRefazerEsteira = (p: { clientId: string; mes: string; semana?: string | null; soNaoFeitas: boolean; orientacao?: string; marcaId?: string | null }) =>
+  chamarFuncao<{ mensagem_id: string; acao: unknown; refazer: number; protegidas: PecaProtegidaNaAgenda[] }>("agente-calendario", {
+    acao: "propor_refazer_esteira",
+    client_id: p.clientId,
+    mes: p.mes.slice(0, 7),
+    ...(p.semana ? { semana: p.semana } : {}),
+    so_nao_feitas: p.soNaoFeitas,
+    ...(p.orientacao && p.orientacao.trim() ? { orientacao: p.orientacao.trim().slice(0, 1200) } : {}),
+    ...(p.marcaId ? { marca_id: p.marcaId } : {}),
+  });
 
 /**
  * Texto do pedido livre que gera de novo as peças refeitas (mesmas datas e

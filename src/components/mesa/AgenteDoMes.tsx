@@ -2,7 +2,7 @@ import { resumoDoRecibo } from "../../../supabase/functions/agente-calendario/re
 import { caminhosDeImagemDosAnexos } from "@/lib/mesa/imagensDosAnexos";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarRange, Camera, Check, ChevronDown, Clapperboard, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
+import { AlertTriangle, CalendarRange, Camera, Check, ChevronDown, Clapperboard, Eye, FileText, Loader2, Lock, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Shuffle, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +21,9 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import { BlocoDaProposta } from "./ConteudosPropostos";
 import SemanasDoMes from "./SemanasDoMes";
+import TrocarPeca from "./TrocarPeca";
+import EscolhaDeFormatos from "./EscolhaDeFormatos";
+import { ROTULO_DA_OPCAO, type OpcaoDoMes } from "../../../supabase/functions/agente-calendario/modulos/escolha-do-mes";
 import { Cronometro } from "./Cronometro";
 import { Ditado } from "./Ditado";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
@@ -293,13 +296,15 @@ function camposDaCampanha(c: EdicaoDeCampanha["campos"]): string {
  * confirmar; depois, dá para desfazer. Refazer tira da agenda e gera de novo
  * pelo pedido livre: o custo aparece no botão antes de confirmar.
  */
-export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string; acao: AcaoNaAgenda }) {
+export function CartaoDaAcaoNaAgenda({ mensagemId, acao, semMoldura = false }: { mensagemId: string; acao: AcaoNaAgenda; semMoldura?: boolean }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [fazendo, setFazendo] = useState<"confirmar" | "descartar" | "desfazer" | null>(null);
   const [guardada, setAtual] = useState<AcaoNaAgenda>(acao);
   const [lote, setLote] = useState<{ feito: number; total: number } | null>(null);
+  // 24/10: "troca o do dia 12 por um vídeo": cada peça abre as 3 opções (o Jev recomenda) na janela da troca.
+  const [trocando, setTrocando] = useState<{ task_id: string; titulo: string; data: string | null; opcao: OpcaoDoMes | null; pedido?: string } | null>(null);
   // "Qual delas?" (frente AM): com peças iguais ou parecidas, a equipe escolhe uma e só ela muda.
   const [escolha, setEscolha] = useState<string | null>(acao.escolhida || null);
   const opcoes = guardada.escolher_um && guardada.escolher_um.opcoes.length > 1 ? guardada.escolher_um.opcoes : null;
@@ -320,6 +325,8 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
     return r && !r.ok ? r.motivo || "Não foi possível." : null;
   };
   const refazendo = atual.refazer.length > 0;
+  const trocar = atual.trocar || [];
+  const protegidas = atual.protegidas || [];
 
   const depois = (tipo: "confirmar" | "descartar" | "desfazer", data: any) => {
     if (data && data.anexo) setAtual(acaoNaAgendaDaMensagem([data.anexo]) || atual);
@@ -466,10 +473,10 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
   };
 
   return (
-    <section className={juntar(superficie.painel, "mr-6 min-w-0 border-destructive/30 p-3.5")} data-acao-agenda={estado}>
+    <section className={semMoldura ? "min-w-0" : juntar(superficie.painel, "mr-6 min-w-0 border-destructive/30 p-3.5")} data-acao-agenda={estado}>
       <p className="flex items-center text-[12px] font-semibold">
         <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
-        Mudança na agenda gravada · {total} {total === 1 ? "item" : "itens"}
+        Mudança na agenda gravada · {total + trocar.length} {total + trocar.length === 1 ? "item" : "itens"}
       </p>
       {atual.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
       {(atual.avisos || []).map((a) => (
@@ -511,6 +518,22 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         {atual.mudar_data.map((i) => linha(i, "muda"))}
         {formatosSoltos.map((i) => linha(i, "formato"))}
         {midia.map((i) => linhaDaMidia(i))}
+        {trocar.map((i) => (
+          <li key={`x-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug" data-troca-da-peca={i.opcao || "livre"}>
+            <Shuffle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+            <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+              <span className="text-muted-foreground">Trocar: </span>
+              <span className="font-medium">{i.titulo}</span>
+              <span className="text-muted-foreground"> · {i.data ? diaCurto(i.data) : "sem data"} · {i.opcao ? `por ${ROTULO_DA_OPCAO[i.opcao]}` : "formato livre"}</span>
+              {i.pedido && <span className="block text-[12px] text-muted-foreground">{i.pedido}</span>}
+            </span>
+            {estado === "aberta" && (
+              <button type="button" className={juntar(botao.icone, "ml-1 text-primary")} onClick={() => setTrocando(i)} aria-label={`Ver as opções para trocar ${i.titulo}`} title="Ver as 3 opções (o Jev recomenda uma)">
+                <Eye className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </li>
+        ))}
         {textos.map((i) => linhaDoTexto(i))}
         {atual.editar_campanhas.map((c) => {
           const r = campanhasFeitas.find((x) => x.campanha_id === c.campanha_id);
@@ -527,13 +550,47 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           );
         })}
       </ul>
+      {protegidas.length > 0 && (
+        <div className="mt-2 min-w-0" data-protegidas={protegidas.length}>
+          <p className="text-[12px] font-medium text-muted-foreground">Ficam como estão ({protegidas.length})</p>
+          <ul className="mt-0.5">
+            {protegidas.map((x) => (
+              <li key={`p-${x.task_id}`} className="flex min-w-0 items-start py-0.5 text-[12px] leading-snug text-muted-foreground" data-protegida={x.task_id}>
+                <Lock className="mr-1.5 mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  <span className="text-foreground">{x.titulo}</span> · {x.data ? diaCurto(x.data) : "sem data"} · {x.motivo}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {trocando && (
+        <TrocarPeca
+          key={trocando.task_id}
+          aberta={!!trocando}
+          onMudar={(v) => !v && setTrocando(null)}
+          peca={{ id: trocando.task_id, title: trocando.titulo, due_date: trocando.data }}
+          opcaoInicial={trocando.opcao}
+          pedidoInicial={trocando.pedido || ""}
+        />
+      )}
       {lote && lote.total > 1 && (
         <p className="mt-1.5 text-[12px] text-muted-foreground tabular-nums" aria-live="polite">
           {lote.feito < lote.total ? `Refazendo lote ${lote.feito + 1} de ${lote.total}` : `${lote.total} lotes refeitos`}
         </p>
       )}
       <div className="mt-2.5 flex flex-wrap items-center">
-        {estado === "aberta" && (
+        {estado === "aberta" && total === 0 && (
+          <>
+            <span className="mb-1 mr-2 text-[12px] text-muted-foreground">{trocar.length ? "Abra as opções de cada peça para escolher a substituta." : "Nenhuma peça pode ser refeita agora."}</span>
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" onClick={() => void agir("descartar")} disabled={!!fazendo}>
+              {fazendo === "descartar" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Fechar a lista
+            </Button>
+          </>
+        )}
+        {estado === "aberta" && total > 0 && (
           <>
             {refazendo ? (
               <BotaoComCusto
@@ -735,6 +792,8 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
   const avisarErro = useAvisarErro();
   const [atual, setAtual] = useState<GeracaoDeConteudos>(geracao);
   const [cancelando, setCancelando] = useState(false);
+  // 24/10: os formatos do mês escolhidos aqui (Stories e vídeo para gravar ou com IA); vazio, o nicho.
+  const [formatos, setFormatos] = useState<OpcaoDoMes[]>([]);
   const andamento = useAndamentoDaGeracao(clientId);
   const padrao = padraoPara(catalogo, "estrategista");
   const modeloId = padrao ? padrao.id : "";
@@ -749,7 +808,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
     if (data && data.anexo) setAtual({ ...atual, ...(data.anexo as GeracaoDeConteudos) });
     const rodada = iniciarGeracaoPeloAgente(
       { clientId, queryClient, atualizarCusto: mesa.atualizarCusto },
-      { meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio, projetoId: atual.project_id, cadencia: atual.cadencia ?? null },
+      { meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio, projetoId: atual.project_id, cadencia: atual.cadencia ?? null, formatos },
     );
     if (!rodada) throw new Error("Já há uma geração de meses em andamento para este cliente. Espere terminar.");
     void rodada.then((r) => {
@@ -783,6 +842,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
         {estimativa.total === 1 ? "publicação" : "publicações"}
         {atual.projeto_nome ? ` · projeto ${atual.projeto_nome}` : ""}. Segue o plano combinado de cada mês.
       </p>
+      {estado === "aberta" && <EscolhaDeFormatos className="mt-2" valor={formatos} onMudar={setFormatos} desabilitado={cancelando} vazio="Pelo nicho do cliente (nenhum escolhido)" />}
       <div className="mt-2.5 flex flex-wrap items-center">
         {estado === "aberta" && (
           <>

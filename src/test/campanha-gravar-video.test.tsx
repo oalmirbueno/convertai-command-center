@@ -7,10 +7,10 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Campanhas, vídeo para GRAVAR (22/10/2026): a peça de vídeo da campanha gera o roteiro pelo motor de
- * roteiros (mesa-roteiros, gerar) com a campanha, mostra o roteiro para ler e baixa o documento em PDF ou
- * Word. Reabrir acha o roteiro já feito sem gerar de novo. Banco e função simulados.
- * No fim, o contrato do servidor: o contexto da campanha (briefing, fase e o que a peça já tem na série).
+ * Campanhas, vídeo para GRAVAR (22/10/2026; agente unificado em 23/10): o roteiro é o da peça (tabela
+ * roteiros, o mesmo do agente e do Gerar); o Gravar mostra o que é de gravar (direção, B-roll, pendências),
+ * abre no Roteiros e baixa o documento em PDF ou Word, também do roteiro antigo do item. Banco e função
+ * simulados. No fim, o contrato do servidor: o contexto da campanha (briefing, fase e o que a peça já tem).
  */
 
 const mock = vi.hoisted(() => ({
@@ -54,7 +54,10 @@ vi.mock("@/lib/laboratorio/exportar", () => ({
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
-import GravarVideoDaCampanha, { corpoDoRoteiroDaPeca, roteiroDaPecaDaCampanha, textoDoRoteiro } from "@/components/mesa/GravarVideoDaCampanha";
+import GravarVideoDaCampanha from "@/components/mesa/GravarVideoDaCampanha";
+import { corpoDoRoteiroDaPeca, roteiroDaPecaDaCampanha, textoDoRoteiro } from "@/components/mesa/roteiroDaPeca";
+import { roteiroDaPecaAntiga } from "../../supabase/functions/mesa-roteiros/modulos/roteiro-da-peca";
+import { normalizarRoteiroDeVideo } from "../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 import type { Campanha, ItemProposto } from "@/components/mesa/mesaV4Api";
 import { normalizarLinhaDoRoteiro, normalizarRoteiro } from "../../supabase/functions/_shared/roteiro-modelo";
 import { campanhaParaORoteiro, faseDaPecaNaLinha, itemDaPecaNaSerie } from "../../supabase/functions/mesa-roteiros/modulos/campanha-da-peca";
@@ -166,7 +169,7 @@ beforeEach(() => {
   });
 });
 
-function montar(aoAtualizar = vi.fn()) {
+function montar(props: { linha: unknown; roteiro: unknown }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const mesa = {
     clientId: CLIENTE, clientName: "Cliente Teste", userId: "u-1", isAdmin: true, podeRecarregar: true, saldoUsd: 50,
@@ -174,48 +177,26 @@ function montar(aoAtualizar = vi.fn()) {
     catalogoCarregando: false, atualizarCusto: vi.fn(), abrirRecarga: vi.fn(), abrirChaves: vi.fn(), abrirModelos: vi.fn(),
   } as unknown as MesaValor;
   render(
-    h(QueryClientProvider, { client: qc }, h(MemoryRouter, null, h(TooltipProvider, null, h(MesaProvider, { valor: mesa, children: h(GravarVideoDaCampanha, { clientId: CLIENTE, campanha, propostaId: PROPOSTA, item, aoAtualizar }) })))),
+    h(QueryClientProvider, { client: qc }, h(MemoryRouter, null, h(TooltipProvider, null, h(MesaProvider, { valor: mesa, children: h(GravarVideoDaCampanha, { clientId: CLIENTE, item, ...(props as any) }) })))),
   );
-  return { qc, aoAtualizar };
+  return { qc };
 }
 
 describe("vídeo da campanha para gravar (tela)", () => {
-  // 23/10 (frente B): o Gravar pede 2 versões ao motor (peca_gerar) e o Jev escolhe; o custo inclui as 3 conferências.
-  it("gera pelo motor de roteiros com a campanha, o tipo escolhido e o custo do estimar antes", async () => {
-    respostas.peca_gerar = { roteiro: linhaGravada(), versao: { numero: 1 }, custo_usd: 0.05, saldo_usd: 10 };
-    const { aoAtualizar } = montar();
-    await waitFor(() => expect(chamadasDe("estimar")).toHaveLength(1));
-    expect(chamadasDe("estimar")[0]).toEqual(expect.objectContaining({ client_id: CLIENTE, acao_alvo: "peca" }));
-    fireEvent.click(screen.getByRole("tab", { name: "UGC" }));
-    const gerar = await screen.findByRole("button", { name: /Gerar roteiro/ });
-    // O preço do motor aparece antes (estimativa das 2 versões mais as conferências do Jev).
-    await waitFor(() => expect(gerar.textContent).toMatch(/US\$ 0,0515/));
-    await waitFor(() => expect(gerar).not.toBeDisabled());
-    fireEvent.click(gerar);
-    await waitFor(() => expect(chamadasDe("peca_gerar")).toHaveLength(1));
-    const corpo = chamadasDe("peca_gerar")[0];
-    expect(corpo).toEqual(expect.objectContaining({ client_id: CLIENTE, campanha_id: CAMPANHA, tema_id: "t-video-1", tema: "Bastidor do kit de inverno", tipo: "ugc", duracao_s: 11, modelo_id: MODELO }));
-    expect(corpo.pedido).toMatch(/Black Friday da loja/);
-    expect(corpo.pedido).toMatch(/Fase da linha do tempo/);
-    expect(corpo.pedido).toMatch(/Mão abrindo a caixa \| fala: Olha o que vem aqui/);
-    expect(corpo.pedido).toMatch(/CTA: Chama no direct/);
-    // O roteiro aparece para ler.
-    expect(await screen.findByText("Olha o que vem no kit de inverno")).toBeTruthy();
-    expect(screen.getByText("Abri o kit de inverno na sua frente")).toBeTruthy();
-    expect(screen.getByText("Peito para cima")).toBeTruthy();
-    expect(screen.getByText("#inverno #curitiba")).toBeTruthy();
+  it("mostra o que é de gravar do roteiro da peça, abre no Roteiros e baixa em PDF e Word sem gerar nada", async () => {
+    const linha = normalizarLinhaDoRoteiro(linhaGravada())!;
+    montar({ linha, roteiro: linha.versoes[0].conteudo });
+    expect(await screen.findByText("Peito para cima")).toBeTruthy();
+    expect(screen.getByText("Olhar na lente")).toBeTruthy();
+    expect(screen.getByText("Cliente experimentando")).toBeTruthy();
     expect(screen.getByText("Confirmar o preço final")).toBeTruthy();
-    expect(aoAtualizar).toHaveBeenCalledWith(expect.objectContaining({ id: ROTEIRO }));
     const abrir = screen.getByRole("link", { name: /no Roteiros/ });
     expect(abrir.getAttribute("href")).toBe(`/mesa-roteiros?client=${CLIENTE}&etapa=roteiro&roteiro=${ROTEIRO}`);
-  });
-
-  it("reabre o roteiro já feito sem gerar de novo e baixa em PDF e Word", async () => {
-    mock.tabelas.roteiros = [linhaGravada()];
-    montar();
-    expect(await screen.findByText("Olha o que vem no kit de inverno")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Gerar roteiro/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /em PDF/ }));
+    // Só ícone, com o nome no title.
+    const pdf = screen.getByRole("button", { name: /em PDF/ });
+    expect(pdf.textContent).toBe("");
+    expect(pdf.getAttribute("title")).toBe("Baixar o roteiro em PDF");
+    fireEvent.click(pdf);
     await waitFor(() => expect(mock.baixarBytes).toHaveBeenCalledTimes(1));
     expect(mock.montarPdf).toHaveBeenCalledWith("Cliente Teste", [expect.objectContaining({ versao: 1 })]);
     expect(mock.baixarBytes).toHaveBeenCalledWith(expect.any(Uint8Array), "roteiros-cliente-teste.pdf");
@@ -226,7 +207,21 @@ describe("vídeo da campanha para gravar (tela)", () => {
     expect(doc.markdown).toMatch(/## Ganchos/);
     expect(doc.markdown).toMatch(/Fala: São três peças por um preço só/);
     expect(mock.baixarDoc).toHaveBeenCalledWith(expect.any(Blob), "roteiro-bastidor-do-kit-de-inverno.docx");
-    expect(chamadasDe("peca_gerar")).toHaveLength(0);
+    expect(mock.invoke).not.toHaveBeenCalled();
+  });
+
+  it("o roteiro antigo do item também baixa (PDF solto) e, sem roteiro, manda criar com o agente", async () => {
+    const antigo = roteiroDaPecaAntiga(normalizarRoteiroDeVideo((item as any).roteiro_video)!, "Bastidor do kit de inverno");
+    montar({ linha: null, roteiro: antigo });
+    expect(screen.queryByRole("link", { name: /no Roteiros/ })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: /em PDF/ }));
+    await waitFor(() => expect(mock.baixarBytes).toHaveBeenCalledTimes(1));
+    expect(mock.montarPdf.mock.calls[0][1][0].roteiro.blocos[0].fala).toBe("Olha o que vem aqui");
+  });
+
+  it("sem roteiro: o Gravar aponta para o agente", () => {
+    montar({ linha: null, roteiro: null });
+    expect(screen.getByText(/Sem roteiro para gravar: crie com o agente acima\./)).toBeTruthy();
   });
 
   it("acha o roteiro da peça: pela tarefa da agenda e, fora dela, pela campanha e o tema; arquivado não conta", () => {
@@ -240,9 +235,14 @@ describe("vídeo da campanha para gravar (tela)", () => {
     expect(roteiroDaPecaDaCampanha([arquivado], { campanhaId: CAMPANHA, item })).toBeNull();
   });
 
-  it("sem roteiro da série, a duração é 30 s e a peça da agenda leva a tarefa", () => {
-    const c = corpoDoRoteiroDaPeca({ clientId: CLIENTE, campanha, item: { ...item, roteiro_video: undefined, task_id: "tarefa-9" } as ItemProposto, tipo: "fala_camera" });
+  it("sem roteiro da série, a duração é 30 s e a peça da agenda leva a tarefa; o estilo diz o tipo e a ideia vai junto", () => {
+    const c = corpoDoRoteiroDaPeca({ clientId: CLIENTE, campanha, item: { ...item, roteiro_video: undefined, task_id: "tarefa-9" } as ItemProposto });
     expect(c).toEqual(expect.objectContaining({ duracao_s: 30, task_id: "tarefa-9", campanha_id: CAMPANHA, tipo: "fala_camera" }));
+    const comDirecao = corpoDoRoteiroDaPeca({ clientId: CLIENTE, campanha, item, roteiroId: ROTEIRO, direcao: { ideia: " PC com poeira ", duracao: 180, estilo: "cinematografico", criatividade: "ousada" } });
+    expect(comDirecao).toEqual(expect.objectContaining({ duracao_s: 180, tipo: "cinema", ideia: "PC com poeira", estilo: "cinematografico", criatividade: "ousada", roteiro_id: ROTEIRO }));
+    expect(comDirecao.pedido).toMatch(/Black Friday da loja/);
+    expect(comDirecao.pedido).toMatch(/Fase da linha do tempo/);
+    expect(comDirecao.pedido).toMatch(/Mão abrindo a caixa \| fala: Olha o que vem aqui/);
     expect(textoDoRoteiro(normalizarRoteiro(CONTEUDO))).toMatch(/## Confirmar antes de gravar\n- Confirmar o preço final/);
   });
 });

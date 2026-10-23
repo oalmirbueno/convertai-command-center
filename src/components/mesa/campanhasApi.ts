@@ -713,3 +713,18 @@ export async function subirFotoDoProduto(clientId: string, campanhaId: string, a
   if (error) throw error;
   return caminho;
 }
+
+/**
+ * campanha_peca_de_video (sem custo; 23/10/2026, veio de agenteDeRoteiroApi.ts, que saiu com o agente antigo):
+ * criar a peça de vídeo, pôr ou tirar o vídeo pronto, tirar a peça da série.
+ */
+export const pecaDeVideoDaCampanha = (corpo: { campanhaId: string; operacao: "criar" | "anexar" | "tirar"; temaId?: string; tema?: string; data?: string; video?: Record<string, unknown> | null }) =>
+  chamarFuncao<{ proposta: unknown; tema_id: string; custo_usd: number }>("agente-calendario", {
+    acao: "campanha_peca_de_video",
+    operacao: corpo.operacao,
+    campanha_id: corpo.campanhaId,
+    ...(corpo.temaId ? { tema_id: corpo.temaId } : {}),
+    ...(corpo.tema ? { tema: corpo.tema } : {}),
+    ...(corpo.data ? { data: corpo.data } : {}),
+    ...(corpo.video !== undefined ? { video: corpo.video } : {}),
+  });

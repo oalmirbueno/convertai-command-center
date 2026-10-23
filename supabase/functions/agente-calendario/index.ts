@@ -229,7 +229,10 @@ import {
   pedidoPontual,
 } from "./modulos/cadencia-do-mes.ts";
 import { ESQUEMA_DA_MIDIA_DA_PECA, GANCHO_NO_VIDEO_DA_PAUTA, tipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
-import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, trocasParaMisturar } from "./modulos/mistura-do-nicho.ts";
+import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaMistura, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, semanasDoPeriodo, trocasParaMisturar } from "./modulos/mistura-do-nicho.ts";
+// 24/10: a escolha de formatos da preparação (Stories e os dois caminhos do vídeo) e a troca de peças.
+import { blocoDaEscolha, cadenciaComEscolha, caminhoDoNicho, caminhoDoVideo, caminhosDosVideos, descricaoDosStories, formatoDaOpcao, formatosNaEscolha, fraseDosStories, IDS_DAS_OPCOES, mixDaEscolha, normalizarEscolha, opcaoDoItem, opcaoDoTexto, ROTULO_DA_OPCAO, ROTULO_DO_CAMINHO, storiesDoPlano, tituloDosStories, type CaminhoDoVideo, type OpcaoDoMes, type StoryPlanejado } from "./modulos/escolha-do-mes.ts";
+import { entregaDaOpcao, escopoDaEsteira, formatosDasOpcoes, fraseDaTrocaFeita, OPCOES_POR_TROCA, passosDaTroca, pedidoDaTroca, perguntasDaTroca, protecaoDaPeca, recomendadaDaTroca, trabalhoLivre, type PecaDaEsteira, type SituacaoDaPeca } from "./modulos/troca-da-peca.ts";
 import {
   acaoDeAtualizarPublico,
   blocoDaDecisaoDoPublico,
@@ -528,6 +531,10 @@ type Item = {
   video_pronto?: VideoProntoDaPeca | null;
   /** Título do item (peça de foto: o tema, como a Mesa Foto lê). */
   titulo?: string;
+  /** 24/10: o caminho do vídeo (gravar com roteiro ou gerar com IA); a peça abre nele. */
+  caminho_video?: CaminhoDoVideo | null;
+  /** 24/10: a peça virou a sequência de Stories do dia (troca); a tarefa é "story" e abre na aba Stories. */
+  stories?: boolean;
 };
 
 type Proposta = {
@@ -759,6 +766,8 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     ...(normalizarEvolucao(o.evolucao) ? { evolucao: normalizarEvolucao(o.evolucao)! } : {}),
     // 02/10: peça de foto vai para a Mesa Foto com a direção do contrato (e o título, como os outros itens).
     ...(formato === "video" ? { mesa: "video" as const, video: normalizarVideoDaPauta(o.video) } : {}),
+    // 24/10: o caminho do vídeo (gravar com roteiro ou gerar com IA), quando o item já nasce com ele.
+    ...(formato === "video" && caminhoDoVideo(o.caminho_video) ? { caminho_video: caminhoDoVideo(o.caminho_video) } : {}),
     ...(formato === "video" && normalizarRoteiroDeVideo(o.roteiro_video) ? { roteiro_video: normalizarRoteiroDeVideo(o.roteiro_video) } : {}),
     ...(formato === "video" && normalizarOpcoesDoRoteiro(o.roteiro_opcoes) ? { roteiro_opcoes: normalizarOpcoesDoRoteiro(o.roteiro_opcoes) } : {}),
     ...(formato === "video" && normalizarVideoPronto(o.video_pronto) ? { video_pronto: normalizarVideoPronto(o.video_pronto) } : {}),
@@ -777,6 +786,7 @@ export function itemNoFormato(item: Item, formato: Formato): Item {
   const novo: Item = { ...item, formato };
   if (formato === "video") { novo.mesa = "video"; novo.video = normalizarVideoDaPauta(item.video); novo.cards = []; novo.carrossel_infinito = false; delete novo.foto; return novo; }
   delete novo.video;
+  delete novo.caminho_video;
   if (novo.mesa === "video") novo.mesa = null;
   if (formato === "foto") {
     novo.mesa = "foto";
@@ -2027,11 +2037,18 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
   // (o Jev escolhe o perfil do negócio; o código faz os números e a grade) vale para o mês inteiro.
   const cadenciaPedida = normalizarCadencia(corpo.cadencia) ?? cadenciaDasFontes([{ texto: blocoDoPlano(ctx, inicio), fonte: "plano" }]);
   const misturaDoNicho = await misturaP;
-  const cadenciaDoMes = cadenciaPedida
+  const cadenciaDoNichoOuPedida = cadenciaPedida
     ? comMisturaDoNicho(cadenciaPedida, misturaDoNicho.perfil, misturaDoNicho.formatoDoPerfil)
     : cadenciaDoNicho(frequencia, inicio, fim, misturaDoNicho.perfil, misturaDoNicho.formatoDoPerfil);
+  // 24/10 (dono: "só entram Story e vídeos com roteiro ou IA para selecionar quando eu for preparar"): os formatos
+  // escolhidos na preparação mandam sobre o nicho e o plano; o nicho só dá o peso de cada um.
+  const formatosEscolhidos = normalizarEscolha(corpo.formatos);
+  const cadenciaDoMes = formatosEscolhidos.length
+    ? cadenciaComEscolha(cadenciaDoNichoOuPedida, misturaDoNicho.perfil, formatosEscolhidos, misturaDoNicho.formatoDoPerfil)
+    : cadenciaDoNichoOuPedida;
   parametros.cadencia = cadenciaDoMes;
   parametros.mistura = { perfil: misturaDoNicho.perfil.id, fonte: misturaDoNicho.fonte };
+  if (formatosEscolhidos.length) parametros.escolha = formatosEscolhidos;
 
   // A proposta e a conversa nascem antes das chamadas: o uso de IA ja fica
   // ligado a proposta e a tela acompanha os temas chegando (status temas).
@@ -2077,6 +2094,7 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
       ? ` Cadência do mês: ${fraseDaCadencia(cadenciaDoMes)}; proponha temas em cada formato nessa proporção (formato_sugerido foto, video, carrossel ou estatico).
 ${blocoDaMistura(misturaDoNicho.perfil, cadenciaDoMes.mix)}`
       : "")
+    + (formatosEscolhidos.length ? `\n${blocoDaEscolha(formatosEscolhidos)}` : "")
     + `
 ${REGRAS_DE_CONTEUDO_DO_MES}
 ${ORIENTACAO_VIDEO_DA_PAUTA}`;
@@ -2415,6 +2433,17 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
       formatoDoTema.set(id, formatoParaVaga(t ? t.formato_sugerido : null, v));
     });
   }
+  // 24/10: cada vídeo nasce com o caminho (gravar com roteiro ou gerar com IA): a divisão escolhida na preparação
+  // ou, com o perfil do nicho guardado, o caminho do nicho. Proposta antiga sem nada disso fica como era.
+  const perfilGuardado = (p.parametros.mistura as { perfil?: unknown } | undefined)?.perfil;
+  const caminhoDoTema = new Map<string, CaminhoDoVideo>();
+  if ((cadencia && cadencia.videos) || typeof perfilGuardado === "string") {
+    const deVideo = ordenados.filter((t) => (formatoDoTema.get(t.id) ?? t.formato_sugerido) === "video")
+      .sort((a, b) => String(dataDoTema.get(a.id) || "").localeCompare(String(dataDoTema.get(b.id) || "")));
+    const caminhos = caminhosDosVideos(deVideo.length, cadencia ? cadencia.videos : null, perfilDaMistura(typeof perfilGuardado === "string" ? perfilGuardado : null));
+    deVideo.forEach((t, k) => caminhoDoTema.set(t.id, caminhos[k]));
+  }
+  const escolhaDoPlano = normalizarEscolha(cadencia ? cadencia.escolha : null);
 
   const jaFeitos = new Map(p.itens.filter((i) => escolhidos.some((t) => t.id === i.tema_id)).map((i) => [i.tema_id, i]));
   const pendentes = ordenados.filter((t) => !jaFeitos.has(t.id));
@@ -2434,7 +2463,7 @@ TODOS OS TEMAS ESCOLHIDOS (para não repetir estrutura nem gancho entre eles):
 ${ordenados.map((t) => `${t.id}. ${t.tema} (fase ${t.fase}, ${ROTULO_OBJETIVO[t.objetivo]}${t.tipo_editorial || t.framework ? `, ${rotuloEditorial(t.tipo_editorial ?? "", t.framework ?? "")}` : ""})`).join("\n")}
 
 TEMAS DESCARTADOS PELA EQUIPE (não usar):
-${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "- nenhum"}`;
+${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "- nenhum"}${escolhaDoPlano.length ? `\n\n${blocoDaEscolha(escolhaDoPlano)}` : ""}`;
 
   const usos: string[] = [];
   let custo = 0;
@@ -2454,7 +2483,7 @@ ${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "-
     const pedido = `${base}
 
 TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do calendário, no formato e na data indicados.
-${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato ${formatoDoTema.get(t.id) ?? `sugerido ${t.formato_sugerido}`} | data ${dataDoTema.get(t.id)} | tipo_editorial ${t.tipo_editorial || AGENTE_ESCOLHE} | framework ${t.framework || AGENTE_ESCOLHE} | por que: ${t.por_que}\n  Estrutura: ${estruturaDoConteudo(t.tipo_editorial ?? "", t.framework ?? "", t.formato_sugerido)}`).join("\n")}
+${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato ${formatoDoTema.get(t.id) ?? `sugerido ${t.formato_sugerido}`}${caminhoDoTema.get(t.id) ? ` (${ROTULO_DO_CAMINHO[caminhoDoTema.get(t.id)!]})` : ""} | data ${dataDoTema.get(t.id)} | tipo_editorial ${t.tipo_editorial || AGENTE_ESCOLHE} | framework ${t.framework || AGENTE_ESCOLHE} | por que: ${t.por_que}\n  Estrutura: ${estruturaDoConteudo(t.tipo_editorial ?? "", t.framework ?? "", t.formato_sugerido)}`).join("\n")}
 Regras dos itens:
 ${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: o indicado no tema: carrossel, estatico, foto ou video (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
@@ -2496,6 +2525,7 @@ ${ORIENTACAO_VIDEO_DA_PAUTA}`;
       const formatoDaGrade = formatoDoTema.get(t.id);
       const item = formatoDaGrade && lido.formato !== formatoDaGrade ? itemNoFormato(lido, formatoDaGrade) : lido;
       item.tema_id = t.id;
+      if (item.formato === "video" && caminhoDoTema.get(t.id)) item.caminho_video = caminhoDoTema.get(t.id);
       if (!item.tema) item.tema = t.tema;
       if (!item.tipo_editorial) item.tipo_editorial = t.tipo_editorial ?? "";
       if (!item.framework) item.framework = t.framework ?? "";
@@ -2735,6 +2765,8 @@ export function descricaoDoItem(item: Item, propostaId: string, indice: number, 
   if (item.instrucao_arte) linhas.push("", `Instrução de arte da equipe: ${item.instrucao_arte}`);
   if (campanha && campanha.linhas.length) linhas.push("", ...campanha.linhas);
   // 02/10: peça de foto leva a direção para a Mesa Foto (assunto, ângulos, cenário, luz, pessoa, quantidade).
+  // 24/10: o caminho do vídeo vai junto (o Estúdio abre a peça nele).
+  if (item.formato === "video" && item.caminho_video) linhas.push("", `Caminho do vídeo: ${ROTULO_DO_CAMINHO[item.caminho_video]}`);
   if (item.formato === "video" && item.video) linhas.push("", `Estilo de vídeo: ${item.video.estilo}`, `Direção do vídeo: ${item.video.prompt}`, `Narração: ${item.video.narracao}`, `Referências: ${item.video.referencias.join(", ")}`);
   if (item.formato === "foto" && item.foto) linhas.push("", "Direção da foto (Mesa Foto):", ...linhasDaDirecaoDeFoto(item.foto));
   if (item.formato !== "foto" || item.cards.length) linhas.push("", item.formato === "foto" ? "Fotos do post:" : "Roteiro dos cards:");
@@ -2762,6 +2794,89 @@ const tituloNormal = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 export function itensComTaskId(itens: Item[], resultado: Array<{ indice: number; task_id: string | null }>): Item[] {
   const porIndice = new Map(resultado.map((r) => [r.indice, r.task_id]));
   return itens.map((item, i) => ({ ...item, task_id: porIndice.get(i) ?? item.task_id ?? null }));
+}
+
+/**
+ * 24/10: vídeo sem caminho ganha o da divisão escolhida na preparação ou, com o perfil do nicho guardado na
+ * proposta, o do nicho (gravar com roteiro ou gerar com IA). Proposta antiga sem nada disso fica como era.
+ */
+export function marcarCaminhosDosVideos(itens: Item[], parametros: Record<string, unknown>): void {
+  const cad = normalizarCadencia(parametros.cadencia);
+  const perfilId = (parametros.mistura as { perfil?: unknown } | undefined)?.perfil;
+  if (!(cad && cad.videos) && typeof perfilId !== "string") return;
+  const sem = itens.filter((i) => i.formato === "video" && !i.caminho_video).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  const caminhos = caminhosDosVideos(sem.length, cad ? cad.videos : null, perfilDaMistura(typeof perfilId === "string" ? perfilId : null));
+  sem.forEach((i, k) => (i.caminho_video = caminhos[k]));
+}
+
+/** Os Stories planejados guardados na proposta (ou, sem lista, os da cadência sobre os itens gravados). */
+export function storiesDaProposta(parametros: Record<string, unknown>, itens: Array<Pick<Item, "data" | "tema" | "tema_id" | "task_id">>): StoryPlanejado[] {
+  const lista = Array.isArray(parametros.stories_planejados) ? (parametros.stories_planejados as Array<Record<string, unknown>>) : [];
+  const lidos = lista
+    .map((x) => ({ tema_id: texto(x && x.tema_id, 12), data: texto(x && x.data, 10), tema: texto(x && x.tema, 180), base: texto(x && x.base, 40) || null }))
+    .filter((x) => /^s\d{1,3}$/.test(x.tema_id) && DATA.test(x.data) && x.tema);
+  if (lidos.length) return lidos;
+  const cad = normalizarCadencia(parametros.cadencia);
+  return cad && cad.stories ? storiesDoPlano(itens.filter((i) => !!i.task_id), cad.stories) : [];
+}
+
+/**
+ * 24/10: os Stories do mês entram na agenda junto com os posts: uma tarefa "Stories: tema" (entrega story) no
+ * dia do post que puxa. A peça abre na aba Stories já com o tema (o gerador é o da aba Stories). Idempotente pela
+ * chave do story; o que já entrou fica em parametros.stories_gravados.
+ */
+async function gravarStoriesDoPlano(
+  servico: SupabaseClient,
+  chamador: Chamador,
+  p: Proposta,
+  projectId: string,
+  itens: Item[],
+  dataScope: WriteCtx["dataScope"],
+): Promise<{ gravados: Record<string, string>; criados: number; erros: number }> {
+  const ja = p.parametros.stories_gravados && typeof p.parametros.stories_gravados === "object" ? { ...(p.parametros.stories_gravados as Record<string, string>) } : {};
+  const plano = storiesDaProposta(p.parametros, itens);
+  let criados = 0;
+  let erros = 0;
+  for (const st of plano) {
+    if (ja[st.tema_id]) continue;
+    const base = st.base ? itens.find((i) => i.tema_id === st.base) || null : null;
+    // O story vai junto com o post que puxa: post ainda fora da agenda, story espera.
+    if (st.base && (!base || !base.task_id)) continue;
+    const data = base ? base.data : st.data;
+    const idempotencyKey = `mesa-cal:${p.id}:${st.tema_id}`;
+    const correlationId = crypto.randomUUID();
+    const ctx: WriteCtx = { keyId: PRINCIPAL_MESA, origin: "mesa:agente-calendario", correlationId, dataScope, resultRefHolder: {} };
+    const entrada = {
+      client_id: p.client_id,
+      project_id: projectId,
+      title: tituloDosStories(st.tema),
+      description: descricaoDosStories({ tema: st.tema, data }, p.id),
+      format: "story" as const,
+      due_date: data,
+      priority: "medium" as const,
+      idempotency_key: idempotencyKey,
+    };
+    const inicio = Date.now();
+    try {
+      const r = await createEditorialItem(createEditorialItemSchema.parse(entrada), ctx);
+      ja[st.tema_id] = String((r.record as Record<string, unknown>).id);
+      if (!r.replayed) criados++;
+      await auditLog({
+        correlationId, toolName: "aceleriq_create_editorial_item", origin: "mesa:agente-calendario",
+        keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+        input: { ...entrada, description: "[stories da proposta]", proposta_id: p.id, pedido_por: chamador.userId },
+        success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: ja[st.tema_id],
+      });
+    } catch (err) {
+      if (err instanceof WriteError && err.code === "conflict") {
+        ja[st.tema_id] = await deterministicEditorialTaskId(PRINCIPAL_MESA, idempotencyKey);
+      } else {
+        erros++;
+        registrarFalha("agente-calendario: stories do plano não entraram na agenda", err, { proposta_id: p.id, story: st.tema_id });
+      }
+    }
+  }
+  return { gravados: ja, criados, erros };
 }
 
 /**
@@ -2802,6 +2917,8 @@ async function gravarItens(
 ): Promise<{ status: number; corpo: Record<string, unknown> }> {
   const tempo = relogio();
   const uteis = diasUteisDaProposta(p);
+  // 24/10: vídeo sem caminho ganha o seu antes de entrar na agenda (a descrição e o Estúdio leem).
+  marcarCaminhosDosVideos(p.itens, p.parametros);
   const alvo = temaIds && temaIds.length ? new Set(temaIds) : null;
   const indices = p.itens.map((_, i) => i).filter((i) => !alvo || alvo.has(p.itens[i].tema_id));
   if (!indices.length) throw new ErroHttp(400, "nenhum_item_escolhido", "Escolha ao menos um conteúdo desta proposta.");
@@ -2949,10 +3066,15 @@ async function gravarItens(
   // Gravada só quando todo item tem tarefa; com seleção, o resto espera na proposta.
   const faltamNaAgenda = itensComTarefa.filter((i) => !i.task_id).length;
   const completa = faltamNaAgenda === 0;
+  // 24/10: os Stories planejados na preparação entram com os posts que puxam (nunca derrubam a gravação).
+  const stories = await gravarStoriesDoPlano(servico, chamador, p, projectId, itensComTarefa, dataScope)
+    .catch((e) => (registrarFalha("agente-calendario: stories do plano falharam", e, { proposta_id: p.id }), null));
+  const comStories = stories && Object.keys(stories.gravados).length ? { parametros: { ...p.parametros, stories_gravados: stories.gravados } } : {};
   const atualizada = await salvarProposta(servico, p, {
     task_ids: todos,
     itens: itensComTarefa,
     project_id: projectId,
+    ...comStories,
     ...(completa ? { status: "gravada", gravada_em: p.gravada_em ?? new Date().toISOString() } : {}),
   });
 
@@ -2998,7 +3120,7 @@ async function gravarItens(
   const tempos = tempo.tempos();
   console.log("[agente-calendario] gravar", { proposta_id: p.id, itens: indices.length, criados, tempos_ms: tempos });
 
-  return { status: 200, corpo: { proposta: atualizada, itens: resultado, direcoes_prontas: direcoes, posts_de_fotos: postsDeFotos, formato_do_perfil: mesasDoPlano.perfil, faltam_na_agenda: faltamNaAgenda, tempos_ms: tempos } };
+  return { status: 200, corpo: { proposta: atualizada, itens: resultado, direcoes_prontas: direcoes, posts_de_fotos: postsDeFotos, formato_do_perfil: mesasDoPlano.perfil, faltam_na_agenda: faltamNaAgenda, stories_na_agenda: stories ? Object.keys(stories.gravados).length : 0, tempos_ms: tempos } };
 }
 
 /** Memoria do estrategista: o que a equipe escolheu e o que descartou. Uma vez por proposta. */
@@ -4166,6 +4288,10 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
   if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
   const escolhaDoPedido = lerEscolhaEditorial(corpo);
+  // 24/10: os formatos escolhidos no Novo calendário (Stories e os dois caminhos do vídeo) mandam sobre o nicho.
+  // O lote do "Criar conteúdos" já vem com o formato de cada linha e não passa por aqui.
+  const formatosEscolhidos = lerPecasDoLote(corpo.pecas).length ? [] : normalizarEscolha(corpo.formatos);
+  const misturaDoPedidoP = formatosEscolhidos.length ? misturaDoCliente(servico, clientId, { referencia: { tipo: REF_AGENTE_DO_MES, id: clientId }, criadoPor: chamador.userId }) : null;
 
   const [ctx, anexos, projectId, conversaId, fotosDaCamp] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo), { pedido: mensagem }),
@@ -4194,7 +4320,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
 ${blocoDasRegras(regras)}
 ${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas e tom; quando a campanha tiver imagens, a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
 PEDIDO DA EQUIPE: ${mensagem}
-${blocoDosArquivos(arquivosDoPedido.lidos)}${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}${notaDoSistema(anexos.aviso)}
+${formatosEscolhidos.length ? `${blocoDaEscolha(formatosEscolhidos)}\n` : ""}${blocoDosArquivos(arquivosDoPedido.lidos)}${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}${notaDoSistema(anexos.aviso)}
 
 TAREFA: faça exatamente o que o pedido diz.
 - Quantidade: a pedida (se não disser, 1 conteúdo).
@@ -4263,6 +4389,25 @@ ${REGRAS_DOS_ITENS}`;
   // exatamente (o modelo escreve o conteúdo; a cadência conferida não muda no caminho).
   const pecasDoLote = lerPecasDoLote(corpo.pecas);
   if (pecasDoLote.length) itens.splice(0, itens.length, ...aplicarPecasDoLote(itens, pecasDoLote, uteis));
+  // 24/10: com formatos escolhidos, cada item fica num formato escolhido (o código confere a mistura, o nicho dá o
+  // peso), cada vídeo nasce com o caminho (gravar ou IA) e os Stories do dia são planejados nos dias dos posts.
+  let cadenciaDoPedido: CadenciaDoMes | null = null;
+  let storiesPlanejados: StoryPlanejado[] = [];
+  let misturaDoPedido: Awaited<ReturnType<typeof misturaDoCliente>> | null = null;
+  if (misturaDoPedidoP) {
+    misturaDoPedido = await misturaDoPedidoP;
+    const semanas = Math.max(1, semanasDoPeriodo(itens[0].data, itens[itens.length - 1].data));
+    const porSemana = Math.max(1, Math.min(5, Math.round(itens.length / semanas)));
+    cadenciaDoPedido = cadenciaComEscolha({ por_semana: porSemana, mix: null, dias: [], fonte: "preparacao" }, misturaDoPedido.perfil, formatosEscolhidos, misturaDoPedido.formatoDoPerfil);
+    const alvo = formatosNaEscolha(itens.map((i) => i.formato), cadenciaDoPedido.mix);
+    alvo.forEach((f, k) => {
+      if (itens[k].formato !== f) itens[k] = itemNoFormato(itens[k], f);
+    });
+    const videos = itens.filter((i) => i.formato === "video");
+    const caminhos = caminhosDosVideos(videos.length, cadenciaDoPedido.videos, misturaDoPedido.perfil);
+    videos.forEach((v, k) => (v.caminho_video = caminhos[k]));
+    storiesPlanejados = cadenciaDoPedido.stories ? storiesDoPlano(itens, cadenciaDoPedido.stories) : [];
+  }
   // 02/10: título com cara de tutorial volta para o modelo rápido reescrever (uma vez).
   const semTutorial = await corrigirTutoriais(chamador, clientId, itens, { tipo: REF_AGENTE_DO_MES, id: conversaId });
   if (semTutorial.reescritos) itens.splice(0, itens.length, ...semTutorial.itens);
@@ -4286,7 +4431,14 @@ ${REGRAS_DOS_ITENS}`;
       project_id: projectId,
       periodo_inicio: itens[0].data,
       periodo_fim: itens[itens.length - 1].data,
-      parametros: { origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id, ...(corpo.data_fim !== undefined ? { periodo_pedido: { inicio, fim } } : {}), ...(corpo.criacao_ref ? { criacao_ref: String(corpo.criacao_ref) } : {}) },
+      parametros: {
+        origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id,
+        ...(corpo.data_fim !== undefined ? { periodo_pedido: { inicio, fim } } : {}),
+        ...(corpo.criacao_ref ? { criacao_ref: String(corpo.criacao_ref) } : {}),
+        // 24/10: a escolha da preparação, a cadência dela e os Stories planejados (entram na agenda ao gravar).
+        ...(cadenciaDoPedido && misturaDoPedido ? { escolha: formatosEscolhidos, cadencia: cadenciaDoPedido, mistura: { perfil: misturaDoPedido.perfil.id, fonte: misturaDoPedido.fonte } } : {}),
+        ...(storiesPlanejados.length ? { stories_planejados: storiesPlanejados } : {}),
+      },
       status: "pronta",
       diagnostico: null,
       temas: [],
@@ -4300,7 +4452,7 @@ ${REGRAS_DOS_ITENS}`;
   if (error || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "O agente preparou os conteúdos, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
 
   // Imagem anexada que ficou de fora: a equipe lê o aviso na resposta.
-  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso, avisoDaChecagem(checagem), ...[...new Set(avisosDaAgenda)].slice(0, 2)]);
+  const resposta = respostaComAvisos(texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`, [anexos.aviso, avisoDaChecagem(checagem), ...[...new Set(avisosDaAgenda)].slice(0, 2), fraseDosStories(storiesPlanejados.length) || null]);
   // Frente AG1: só o que a equipe digitou ensina (o refazer e o criar em lotes do próprio painel não).
   const aprendizado = corpo.rotear === true
     ? await aprenderComOPedido(servico, {
@@ -4324,7 +4476,7 @@ ${REGRAS_DOS_ITENS}`;
     },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: anexosDoAgente },
   ]);
-  return json({ proposta, resposta, aprendizado: aprendizado.anexo, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo + semTutorial.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ proposta, resposta, aprendizado: aprendizado.anexo, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo + semTutorial.custo + (misturaDoPedido ? misturaDoPedido.custo : 0)) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null, stories_planejados: storiesPlanejados.length });
 }
 
 // ------------------------------------------------ conteúdo rápido (25/09)
@@ -7015,6 +7167,8 @@ export const ESQUEMA_PLANEJAMENTO = {
         },
         // 23/10: a mídia da peça pensada pelo nicho (fotos do Workspace, referência livre, roteiro do vídeo).
         midia: { type: "array", items: obj({ ref: S("string"), tipo: S("string"), pedido: S("string") }) },
+        // 24/10: trocar a peça por outra do mesmo dia (o painel gera 3 opções, o Jev recomenda, a equipe escolhe).
+        trocar: { type: "array", items: obj({ ref: S("string"), formato: S("string"), pedido: S("string") }) },
       }),
       type: ["object", "null"],
     },
@@ -7969,8 +8123,17 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   // agente não mexeu nela) e peça repetida vira aviso no cartão, nunca motivo para não fazer.
   const acaoNaAgenda = juntarAlvoNaAcao(normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas), alvoDoPedido, pecasDaAgenda, mensagem);
   if (acaoNaAgenda && !julgamento.contrato.outrosMeses) {
-    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos", "midia"] as const) {
-      (acaoNaAgenda as any)[k] = acaoNaAgenda[k].filter(i => i.data?.slice(0, 7) === mes);
+    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos", "midia", "trocar"] as const) {
+      (acaoNaAgenda as any)[k] = (acaoNaAgenda[k] || []).filter(i => i.data?.slice(0, 7) === mes);
+    }
+  }
+  // 24/10 (dono: "não gostei dessa semana, refaz"): o refazer do agente segue a proteção estrita; peças com arte
+  // pronta, post vinculado, publicação, aprovação ou pedido do cliente ficam, e o cartão mostra quais e por quê.
+  if (acaoNaAgenda && acaoNaAgenda.refazer.length) {
+    const sep = await separarProtegidasDoRefazer(servico, clientId, acaoNaAgenda.refazer).catch((e) => (registrarFalha("agente-calendario: proteção do refazer não conferida", e), null));
+    if (sep) {
+      acaoNaAgenda.refazer = sep.livres as typeof acaoNaAgenda.refazer;
+      Object.assign(acaoNaAgenda, { protegidas: sep.protegidas, protecao_estrita: true });
     }
   }
   // Gerar meses inteiros: só a proposta com o projeto; a tela mostra o custo e roda o gerador de meses.
@@ -8761,9 +8924,16 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
 
 
   const apagar = Array.isArray(acao.apagar) ? acao.apagar : [];
-  const refazer = Array.isArray(acao.refazer) ? acao.refazer : [];
+  const refazerPedido = Array.isArray(acao.refazer) ? acao.refazer : [];
+  // 24/10: com proteção estrita (Trocar várias e o refazer do agente), a peça que ganhou arte, post ou publicação
+  // depois da lista não sai: volta com o motivo e o resto segue.
+  const separadas = (acao as { protecao_estrita?: boolean }).protecao_estrita
+    ? await separarProtegidasDoRefazer(servico, m.client_id, refazerPedido)
+    : { livres: refazerPedido, protegidas: [] as Array<{ task_id: string; titulo: string; motivo: string }> };
+  const refazer = separadas.livres as typeof refazerPedido;
   const resultados = await arquivarPecas(servico, chamador, m.client_id, apagar);
-  const refeitos = await arquivarPecas(servico, chamador, m.client_id, refazer);
+  const refeitos = (await arquivarPecas(servico, chamador, m.client_id, refazer))
+    .concat(separadas.protegidas.map((x) => ({ task_id: x.task_id, titulo: x.titulo, ok: false, motivo: `Ficou protegida: ${x.motivo}` })));
 
   const mudancas: ResultadoDaAcao[] = [];
   for (const it of Array.isArray(acao.mudar_data) ? acao.mudar_data : []) {
@@ -9357,6 +9527,377 @@ async function sugerirMistura(servico: SupabaseClient, chamador: Chamador, corpo
   return json({ sugestao: { mensagem_id: (msg as { id: string }).id, fala, trocas: trocas.length }, leitura, perfil: mistura.perfil.id, fonte: mistura.fonte });
 }
 
+// ------------------------------------------------------------ trocar peças (24/10)
+
+/** As substitutas: o item do Mês com a opção (formato e caminho do vídeo, ou Stories) e o porquê. */
+export const ESQUEMA_DA_TROCA = {
+  nome: "troca_da_peca",
+  schema: obj({
+    resposta: S("string"),
+    opcoes: { type: "array", items: obj({ ...ESQUEMA_ITEM.properties, opcao: S("string", { enum: [...IDS_DAS_OPCOES] }), por_que: S("string") }) },
+  }),
+};
+
+type SituacaoComTarefa = SituacaoDaPeca & { id: string };
+
+/**
+ * A situação de cada peça para trocar ou refazer: pedido do cliente, post da Agenda e publicação, entrega e arte
+ * no Estúdio e o estado da tarefa. Falha de leitura para tudo (nada muda sem conferir).
+ */
+async function situacaoDasPecas(servico: SupabaseClient, clientId: string, ids: string[]): Promise<Map<string, SituacaoComTarefa>> {
+  const mapa = new Map<string, SituacaoComTarefa>();
+  for (let k = 0; k < ids.length; k += 80) {
+    const lote = ids.slice(k, k + 80);
+    const [tarefas, vinculos, trabalhos] = await Promise.all([
+      servico.from("tasks").select("id, status, source").in("id", lote),
+      servico.from("editorial_post_internal").select("task_id, post_id").in("task_id", lote),
+      servico.from("estudio_trabalhos").select("task_id, status, cards, entrega_status").eq("client_id", clientId).in("task_id", lote),
+    ]);
+    if (tarefas.error || vinculos.error || trabalhos.error) throw new ErroHttp(503, "situacao_indisponivel", "Não foi possível conferir as peças agora. Nada mudou.");
+    const postPorTarefa = new Map(((vinculos.data ?? []) as Array<{ task_id: string; post_id: string }>).map((v) => [v.task_id, v.post_id]));
+    const postIds = [...new Set(postPorTarefa.values())];
+    const publicacoes = new Map<string, string>();
+    if (postIds.length) {
+      const { data, error } = await servico.from("editorial_publications").select("post_id, status").in("post_id", postIds).in("status", ["scheduled", "published"]);
+      if (error) throw new ErroHttp(503, "situacao_indisponivel", "Não foi possível conferir as publicações agora. Nada mudou.");
+      for (const x of (data ?? []) as Array<{ post_id: string; status: string }>) if (publicacoes.get(x.post_id) !== "published") publicacoes.set(x.post_id, x.status);
+    }
+    const porTarefa = new Map<string, Array<{ status: string; cards: unknown; entrega_status: string | null }>>();
+    for (const w of (trabalhos.data ?? []) as Array<{ task_id: string; status: string; cards: unknown; entrega_status: string | null }>) {
+      porTarefa.set(w.task_id, (porTarefa.get(w.task_id) || []).concat([w]));
+    }
+    for (const t of (tarefas.data ?? []) as Array<{ id: string; status: string | null; source: string | null }>) {
+      const ws = porTarefa.get(t.id) || [];
+      const post = postPorTarefa.get(t.id) || null;
+      const entrega = ws.map((w) => w.entrega_status).filter((e): e is string => !!e);
+      mapa.set(t.id, {
+        id: t.id,
+        dePedido: !!requestIdFromTaskSource(t.source),
+        publicacao: post ? publicacoes.get(post) || null : null,
+        temPost: !!post,
+        entrega: entrega.indexOf("aprovado") >= 0 ? "aprovado" : entrega.indexOf("agendado") >= 0 ? "agendado" : entrega[0] || null,
+        artePronta: ws.some((w) => ["gerando", "pronto", "entregue"].includes(w.status) || !!w.entrega_status || (Array.isArray(w.cards) && w.cards.length > 0)),
+        emProducao: ["doing", "review", "in_progress", "in_review"].includes(String(t.status || "")),
+        status: t.status,
+      });
+    }
+  }
+  return mapa;
+}
+
+/** Anexo troca_peca de uma mensagem do agente do Mês, com o acesso conferido. */
+async function trocaDaMensagem(servico: SupabaseClient, chamador: Chamador, mensagemId: unknown) {
+  const id = String(mensagemId ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data: msg, error } = await servico.from("agente_mensagens").select("id, client_id, conversa_id, anexos").eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(500, "mensagem_indisponivel", "Não foi possível ler a troca.");
+  if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Troca não encontrada.");
+  const m = msg as { id: string; client_id: string; conversa_id: string; anexos: unknown };
+  await exigirAcessoAoCliente(chamador, m.client_id);
+  let anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
+  const i = anexos.findIndex((a) => a && a.tipo === "troca_peca");
+  if (i < 0) throw new ErroHttp(404, "troca_inexistente", "Esta mensagem não tem troca.");
+  const troca = anexos[i] as Record<string, any>;
+  const gravar = async (novo: Record<string, unknown>) => {
+    const lista = anexos.slice();
+    lista[i] = novo;
+    anexos = await gravarAnexosConfirmados(servico, m, anexos, lista);
+    return anexos[i];
+  };
+  return { m, troca, gravar };
+}
+
+/** O resumo de uma opção para a tela e para o Jev. */
+function resumoDaOpcao(o: { opcao: OpcaoDoMes; item: Item; por_que: string }) {
+  return {
+    opcao: o.opcao,
+    rotulo: ROTULO_DA_OPCAO[o.opcao],
+    tema: o.item.tema,
+    gancho: o.item.gancho,
+    resumo: o.item.resumo,
+    cta: o.item.cta,
+    laminas: o.item.cards.length,
+    por_que: o.por_que,
+  };
+}
+
+/**
+ * trocar_peca_opcoes { client_id, task_id, opcao?, pedido?, marca_id? }: o "Trocar" da peça. 3 substitutas do mesmo
+ * dia numa chamada só (outro tema e/ou formato; com opcao, todas nela), o Jev dá a nota de cada uma e recomenda a
+ * melhor. Nada muda aqui: a escolha fica guardada numa mensagem do agente do Mês e só trocar_peca_aplicar troca.
+ * Peça protegida (arte pronta, post vinculado, publicação, aprovação, pedido do cliente) não troca.
+ */
+async function trocarPecaOpcoes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const t = await tarefaDoCliente(servico, corpo.task_id, clientId);
+  if (t.deleted_at) throw new ErroHttp(409, "peca_fora_da_agenda", "Esta peça não está mais na agenda.");
+  const situacao = (await situacaoDasPecas(servico, clientId, [t.id])).get(t.id);
+  const motivo = situacao ? protecaoDaPeca(situacao) : null;
+  if (motivo) throw new ErroHttp(409, "peca_protegida", `Esta peça fica como está: ${motivo}`, { motivo });
+  const pedidoDaEquipe = texto(corpo.pedido, 600);
+  const opcaoPedida = corpo.opcao ? opcaoDoTexto(corpo.opcao) : null;
+  const data = t.due_date ? t.due_date.slice(0, 10) : hojeSaoPaulo();
+  const mes = data.slice(0, 7);
+  const marca = marcaDaChamada(servico, clientId, corpo);
+  const [{ data: props }, conversaId, ctx, acoesCtx, mistura] = await Promise.all([
+    servico.from("calendario_propostas").select("id, itens, parametros").eq("client_id", clientId).contains("task_ids", [t.id]).order("criado_em", { ascending: false }).limit(1),
+    conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+    montarContexto(servico, clientId, data, data, marca, { pedido: pedidoDaEquipe || t.title }),
+    marca.then((mc) => pecasDaAgendaParaAcoes(servico, clientId, mc, mes, { desde: mes, meses: 0, max: 120 })).catch(() => null),
+    misturaDoCliente(servico, clientId, { referencia: { tipo: REF_AGENTE_DO_MES, id: clientId }, criadoPor: chamador.userId }),
+  ]);
+  const proposta = ((props ?? []) as Array<{ id: string; itens: Item[] }>)[0] || null;
+  const itemAtual = proposta && Array.isArray(proposta.itens) ? proposta.itens.find((i) => i && i.task_id === t.id) || null : null;
+  const atual = itemAtual ? opcaoDoItem(itemAtual, mistura.perfil) : String(t.title || "").indexOf("Stories: ") === 0 ? "stories" : "carrossel";
+  const formatos = formatosDasOpcoes(atual, opcaoPedida, [caminhoDoNicho(mistura.perfil) === "gravar" ? "video_gravar" : "video_ia", "foto"]);
+  const doMes = (acoesCtx ? acoesCtx.pecas : []).filter((x) => x.id !== t.id && String(x.due_date || "").slice(0, 7) === mes).map((x) => x.title);
+  const { modelo, raciocinio } = await modeloDaEscrita(servico, clientId, corpo, { modelo: corpo.modelo_id, raciocinio: corpo.raciocinio ?? "low" });
+  const tarefa = pedidoDaTroca({
+    atual: { titulo: String(t.title || "").replace(/^Peça de foto: /, ""), data, opcao: atual, gancho: itemAtual ? itemAtual.gancho : null, resumo: itemAtual ? itemAtual.resumo : null },
+    formatos,
+    pedido: pedidoDaEquipe,
+    doMes,
+  });
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: sistemaDoCalendario(ctx, "mes"),
+    metodo: await metodoDaGeracao(servico),
+    mensagens: [{ papel: "usuario", conteudo: `${contextoEmTexto(ctx, { inicio: data, fim: data, parametros: {} }, { enxuto: true })}\n\nTAREFA: ${tarefa}\n${REGRAS_DOS_ITENS}\n${ORIENTACAO_VIDEO_DA_PAUTA}` }],
+    raciocinio,
+    esquemaJson: ESQUEMA_DA_TROCA,
+    referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId },
+    criadoPor: chamador.userId,
+  });
+  const brutos = Array.isArray((s.json as Record<string, unknown>)?.opcoes) ? ((s.json as { opcoes: unknown[] }).opcoes) : [];
+  // A opção de cada vaga é a pedida (código); o conteúdo é o do modelo. Stories ficam sem lâminas.
+  const opcoes = brutos.slice(0, OPCOES_POR_TROCA).map((bruto, k) => {
+    const o = (bruto ?? {}) as Record<string, unknown>;
+    const opcao = formatos[k] || opcaoDoTexto(o.opcao) || atual;
+    const destino = formatoDaOpcao(opcao);
+    const lido = normalizarItem(o, [data], data);
+    let item: Item = destino.formato === "stories" ? { ...lido, formato: "estatico", cards: [], carrossel_infinito: false, stories: true } : lido.formato === destino.formato ? lido : itemNoFormato(lido, destino.formato);
+    if (destino.caminho) item = { ...item, caminho_video: destino.caminho };
+    item.tema_id = itemAtual ? itemAtual.tema_id : `t${k + 1}`;
+    item.data = data;
+    return { opcao, item, por_que: texto(o.por_que, 300) };
+  }).filter((o) => o.item.tema);
+  if (!opcoes.length) throw new ErroHttp(502, "troca_sem_opcoes", "O agente não devolveu substitutas. Tente de novo.", { uso_id: s.usoId });
+
+  // O Jev dá a nota de cada opção numa pergunta só; a recomendada é a de maior nota (sem laço).
+  let notas: Record<string, { score?: number }> | null = null;
+  let custoJev = 0;
+  try {
+    const n = await nichoDoCliente(servico, clientId);
+    const r = await jevPerguntar({
+      state: {
+        cliente: { nome: n.nome, segmento: n.segmento, negocio: n.negocio, publico: n.publico },
+        atual: `${t.title} (${ROTULO_DA_OPCAO[atual]}, ${data})`,
+        opcoes: opcoes.map((o) => `${ROTULO_DA_OPCAO[o.opcao]}: ${o.item.tema}. Gancho: ${o.item.gancho}. ${o.item.resumo}`.slice(0, 700)),
+      },
+      questions: perguntasDaTroca(opcoes.length),
+    }, { timeoutMs: JEV_DO_PEDIDO_MS });
+    const cobrado = await cobrarJev(r, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId }).catch(() => null);
+    custoJev = cobrado?.custoUsd ?? 0;
+    notas = r.answers as Record<string, { score?: number }>;
+  } catch (e) {
+    console.error("[agente-calendario] troca sem o Jev", { codigo: e instanceof JevErro ? e.codigo : "jev_falhou" });
+  }
+  const recomendada = recomendadaDaTroca(notas, opcoes.length);
+  const anexo = {
+    tipo: "troca_peca",
+    task_id: t.id,
+    titulo: t.title,
+    data,
+    atual,
+    pedido: pedidoDaEquipe || null,
+    opcoes,
+    recomendada: recomendada.indice,
+    notas: recomendada.notas,
+    fonte_da_recomendacao: recomendada.fonte,
+  };
+  const fala = `Trocar "${String(t.title).slice(0, 90)}": ${opcoes.length} opções para ${data.slice(8, 10)}/${data.slice(5, 7)}. ${recomendada.fonte === "jev" ? `O Jev recomenda a ${recomendada.indice + 1}` : "Escolha uma"}; nada muda antes de confirmar.`;
+  const { data: msg, error } = await servico.from("agente_mensagens").insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: fala, anexos: [anexo], uso_id: s.usoId }).select("id").single();
+  if (error || !msg) throw new ErroHttp(503, "troca_nao_guardada", "As opções saíram, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
+  return json({
+    mensagem_id: (msg as { id: string }).id,
+    opcoes: opcoes.map(resumoDaOpcao),
+    recomendada: recomendada.indice,
+    notas: recomendada.notas,
+    fonte_da_recomendacao: recomendada.fonte,
+    custo_usd: Math.round((s.custoUsd + custoJev + mistura.custo) * 1e6) / 1e6,
+    saldo_usd: s.saldoUsd,
+  });
+}
+
+/**
+ * trocar_peca_aplicar { mensagem_id, opcao, descartar? }: a equipe escolheu. Relê a peça (a proteção vale de novo),
+ * troca o item do roteiro, a direção ainda sem arte no Estúdio e a tarefa (título, descrição e entrega), tudo com
+ * recibo para o Desfazer. Peça sem roteiro gravado ganha um roteiro espelho (o Estúdio lê dali).
+ */
+async function trocarPecaAplicar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, troca, gravar } = await trocaDaMensagem(servico, chamador, corpo.mensagem_id);
+  if (troca.executada_em) throw new ErroHttp(409, "troca_ja_feita", "Esta troca já foi feita.");
+  if (troca.descartada_em) throw new ErroHttp(409, "troca_descartada", "Esta troca foi descartada. Peça novas opções.");
+  if (corpo.descartar === true) return json({ anexo: await gravar({ ...troca, descartada_em: new Date().toISOString() }) });
+  const opcoes = Array.isArray(troca.opcoes) ? (troca.opcoes as Array<{ opcao: OpcaoDoMes; item: Item; por_que: string }>) : [];
+  const k = Math.round(Number(corpo.opcao));
+  if (!Number.isFinite(k) || k < 0 || k >= opcoes.length) throw new ErroHttp(400, "opcao_invalida", "Escolha uma das opções.");
+  const escolhida = opcoes[k];
+  const t = await tarefaDoCliente(servico, troca.task_id, m.client_id);
+  if (t.deleted_at) throw new ErroHttp(409, "peca_fora_da_agenda", "Esta peça não está mais na agenda.");
+  const situacao = (await situacaoDasPecas(servico, m.client_id, [t.id])).get(t.id);
+  const motivo = situacao ? protecaoDaPeca(situacao) : null;
+  if (motivo) throw new ErroHttp(409, "peca_protegida", `Esta peça fica como está: ${motivo}`, { motivo });
+  const leituras = await Promise.all([
+    servico.from("tasks").select("delivery_type, title, description").eq("id", t.id).single(),
+    servico.from("calendario_propostas").select("id, itens").eq("client_id", m.client_id).contains("task_ids", [t.id]).order("criado_em", { ascending: false }).limit(1),
+    servico.from("estudio_trabalhos").select("id, direcao, status, cards, entrega_status").eq("client_id", m.client_id).eq("task_id", t.id),
+  ]);
+  if (leituras.some((r) => r.error)) throw new ErroHttp(503, "troca_nao_conferida", "Não foi possível conferir a peça. Nada mudou.");
+  const antes = leituras[0].data as { delivery_type: string; title: string; description: string | null };
+  const p = ((leituras[1].data ?? []) as Array<{ id: string; itens: Item[] }>)[0] || null;
+  const trabalhos = (leituras[2].data || []) as Array<{ id: string; direcao: Record<string, unknown> | null; status: string; cards: unknown[] | null; entrega_status: string | null }>;
+  const indice = p ? p.itens.findIndex((i) => i && i.task_id === t.id) : -1;
+  const itemAntes = p && indice >= 0 ? p.itens[indice] : null;
+  const destino = formatoDaOpcao(escolhida.opcao);
+  const data = t.due_date ? t.due_date.slice(0, 10) : escolhida.item.data;
+  const novo: Item = {
+    ...escolhida.item,
+    tema_id: itemAntes ? itemAntes.tema_id : escolhida.item.tema_id,
+    data,
+    task_id: t.id,
+    ...(itemAntes && itemAntes.campanha_id ? { campanha_id: itemAntes.campanha_id } : {}),
+  };
+  const ehStories = destino.formato === "stories";
+  const tema = String(novo.tema || "").replace(/^Peça de foto: /, "");
+  const title = ehStories ? tituloDosStories(tema) : novo.formato === "foto" ? tituloDaPecaDeFoto(tema) : tema.slice(0, 200);
+  const deliveryType = ehStories ? "story" : novo.formato === "foto" ? entregaDaPecaDeFoto(novo.foto) : entregaDaOpcao(escolhida.opcao);
+
+  let espelhoId: string | null = null;
+  if (!p || indice < 0) {
+    // Peça sem roteiro gravado: um roteiro espelho para o Estúdio achar o conteúdo novo.
+    const { data: espelho, error } = await servico.from("calendario_propostas").insert({
+      client_id: m.client_id, project_id: t.project_id, periodo_inicio: data, periodo_fim: data,
+      parametros: { origem: "troca_gravada", mensagem_id: m.id }, status: "gravada", diagnostico: null, temas: [], itens: [novo], task_ids: [t.id],
+      criado_por: chamador.userId, gravada_em: new Date().toISOString(),
+    }).select("id").single();
+    if (error || !espelho) throw new ErroHttp(503, "troca_nao_gravada", "Não foi possível guardar o roteiro novo. Nada mudou.");
+    espelhoId = (espelho as { id: string }).id;
+  }
+  // A direção ainda sem arte volta a rascunho com o conteúdo novo (a arte feita protege a peça antes daqui).
+  let direcao: Record<string, unknown> | null = null;
+  if (trabalhos.some(trabalhoLivre)) {
+    const campos = camposDoFormato(antes, { formato_para: ehStories ? "static" : novo.formato === "video" ? "reel" : novo.formato === "foto" ? "foto" : novo.formato === "estatico" ? "static" : "carousel", foto: novo.foto, video: novo.video }, novo as unknown as Record<string, unknown>);
+    direcao = campos.direcao;
+    if (!ehStories && (novo.formato === "carrossel" || novo.formato === "estatico") && novo.cards.length) {
+      const marca = await resolverMarca(servico, m.client_id, { task_id: t.id }).then((r) => lerMarcaParaDirecaoDaMarca(servico, m.client_id, r));
+      direcao = direcaoDoRoteiro(novo.cards, marca, { postUnico: novo.formato === "estatico", carrosselInfinito: false, conceito: tema, levaLogo: (ordem, total) => ordem === 1 || ordem === total }) as unknown as Record<string, unknown>;
+    }
+  }
+  const description = ehStories
+    ? `${descricaoDosStories({ tema, data }, p ? p.id : espelhoId || "troca")}\n\nResumo: ${novo.resumo}`.slice(0, LIMITE_DESCRICAO)
+    : descricaoDoItem(novo, p ? p.id : espelhoId || "troca", p && indice >= 0 ? indice : 0);
+  const passos = passosDaTroca({
+    taskId: t.id,
+    tarefa: antes,
+    depois: { delivery_type: deliveryType, title, description },
+    proposta: p && indice >= 0 ? { id: p.id, itens: p.itens as unknown as Array<Record<string, unknown>> } : null,
+    novoItem: novo as unknown as Record<string, unknown>,
+    trabalhos,
+    direcao,
+  }) as PassoDoFormato[];
+  let feitos: PassoDoFormato[];
+  try {
+    feitos = await gravarPassosDoFormato(servico, passos, m.client_id);
+  } catch (e) {
+    if (espelhoId) await servico.from("calendario_propostas").delete().eq("id", espelhoId).eq("client_id", m.client_id);
+    throw new ErroHttp(409, "troca_nao_aplicada", e instanceof Error ? e.message : "Não foi possível trocar a peça.");
+  }
+  const anexo = await gravar({ ...troca, executada_em: new Date().toISOString(), executada_por: chamador.userId, escolhida: k, passos: feitos, espelho_id: espelhoId, titulo_novo: title });
+  await registrarMensagens(servico, m.conversa_id, m.client_id, [{ papel: "sistema", conteudo: fraseDaTrocaFeita(String(antes.title || ""), title, escolhida.opcao) }]);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_trocar_peca", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+    input: { client_id: m.client_id, mensagem_id: m.id, task_id: t.id, opcao: escolhida.opcao }, success: true, statusCode: 200, durationMs: 0, resultRef: t.id,
+  });
+  return json({ anexo, task_id: t.id, titulo: title, opcao: escolhida.opcao });
+}
+
+/** trocar_peca_desfazer { mensagem_id }: volta a peça de antes (tarefa, roteiro e direção) pelo recibo. */
+async function trocarPecaDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, troca, gravar } = await trocaDaMensagem(servico, chamador, corpo.mensagem_id);
+  if (!troca.executada_em) throw new ErroHttp(409, "troca_nao_feita", "Esta troca ainda não foi feita.");
+  if (troca.desfeita_em) throw new ErroHttp(409, "troca_ja_desfeita", "Esta troca já foi desfeita.");
+  const passos = Array.isArray(troca.passos) ? (troca.passos as PassoDoFormato[]) : [];
+  try {
+    await desfazerPassosDoFormato(servico, passos, m.client_id);
+  } catch (e) {
+    throw new ErroHttp(409, "troca_nao_desfeita", e instanceof Error ? e.message : "Não foi possível desfazer a troca.");
+  }
+  if (typeof troca.espelho_id === "string" && UUID.test(troca.espelho_id)) await servico.from("calendario_propostas").delete().eq("id", troca.espelho_id).eq("client_id", m.client_id);
+  const anexo = await gravar({ ...troca, desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId });
+  await registrarMensagens(servico, m.conversa_id, m.client_id, [{ papel: "sistema", conteudo: `Troca desfeita: "${String(troca.titulo || "").slice(0, 80)}" voltou como estava.` }]);
+  return json({ anexo, task_id: troca.task_id });
+}
+
+/**
+ * propor_refazer_esteira { client_id, mes, semana?, so_nao_feitas?, orientacao? }: o "Trocar várias". Monta pelo
+ * código (sem IA) a lista do refazer da semana ou do mês, de hoje em diante; as protegidas (arte pronta, post
+ * vinculado, publicação, aprovação, pedido do cliente e, com "só as não feitas", as em produção) ficam de fora com
+ * o motivo. Vira o cartão do agente do Mês: Confirmar e refazer (custo antes) e Desfazer.
+ */
+async function proporRefazerEsteira(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const mes = mesDoPedido(corpo.mes);
+  if (!mes) throw new ErroHttp(400, "mes_invalido", "Informe o mês (AAAA-MM).");
+  const semana = typeof corpo.semana === "string" && DATA.test(corpo.semana) ? corpo.semana : null;
+  const soNaoFeitas = corpo.so_nao_feitas === true;
+  const marca = await marcaDaChamada(servico, clientId, corpo);
+  const [acoesCtx, conversaId] = await Promise.all([
+    pecasDaAgendaParaAcoes(servico, clientId, marca, mes, { desde: mes, meses: 0, max: 150 }),
+    conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+  ]);
+  const doMes = acoesCtx.pecas.filter((x) => String(x.due_date || "").slice(0, 7) === mes);
+  const situacoes = await situacaoDasPecas(servico, clientId, doMes.map((x) => x.id));
+  const pecas: PecaDaEsteira[] = doMes.map((x) => ({ ...(situacoes.get(x.id) || {}), id: x.id, title: x.title, due_date: x.due_date, delivery_type: x.delivery_type }));
+  const escopo = escopoDaEsteira(pecas, { mes, semana, soNaoFeitas, hoje: hojeSaoPaulo() });
+  const orientacao = texto(corpo.orientacao, 1200);
+  const onde = semana ? `da semana de ${semana.slice(8, 10)}/${semana.slice(5, 7)}` : `de ${mes.slice(5, 7)}/${mes.slice(0, 4)}`;
+  const resumo = escopo.refazer.length
+    ? `Refazer ${escopo.refazer.length} ${escopo.refazer.length === 1 ? "peça" : "peças"} ${onde}${soNaoFeitas ? " (só as não feitas)" : ""}, nas mesmas datas e formatos, com temas novos.${escopo.protegidas.length ? ` ${escopo.protegidas.length} ${escopo.protegidas.length === 1 ? "fica protegida" : "ficam protegidas"}.` : ""}`
+    : `Nenhuma peça ${onde} pode ser refeita agora${escopo.protegidas.length ? `: ${escopo.protegidas.length} ${escopo.protegidas.length === 1 ? "está protegida" : "estão protegidas"}` : ""}.`;
+  const refDe = new Map(acoesCtx.pecas.map((x) => [x.id, x.ref]));
+  const acao = normalizarAcoesNaAgenda({ resumo, refazer: escopo.refazer.map((x) => refDe.get(x.id)).filter(Boolean) }, acoesCtx.pecas, acoesCtx.campanhas);
+  const anexo = {
+    ...(acao || { tipo: "acao_agenda", resumo, apagar: [], mudar_data: [], mudar_formato: [], refazer: [], editar_campanhas: [], editar_textos: [], midia: [], ignorados: [] }),
+    mes, outros_meses: false, pedido: orientacao || resumo, origem: "trocar_varias", protecao_estrita: true, protegidas: escopo.protegidas,
+  };
+  const { data: msg, error } = await servico.from("agente_mensagens").insert({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resumo, anexos: [anexo] }).select("id").single();
+  if (error || !msg) throw new ErroHttp(503, "lista_nao_guardada", "Não foi possível guardar a lista. Tente de novo.");
+  return json({ mensagem_id: (msg as { id: string }).id, acao: anexo, refazer: escopo.refazer.length, protegidas: escopo.protegidas });
+}
+
+/** 24/10: refazer com proteção estrita: a peça que ganhou arte ou post depois da lista sai do refazer, com o motivo. */
+async function separarProtegidasDoRefazer(servico: SupabaseClient, clientId: string, itens: Array<{ task_id: string; titulo: string; data: string | null }>) {
+  if (!itens.length) return { livres: itens, protegidas: [] as Array<{ task_id: string; titulo: string; data: string | null; motivo: string }> };
+  const situacoes = await situacaoDasPecas(servico, clientId, itens.map((i) => i.task_id));
+  const livres: typeof itens = [];
+  const protegidas: Array<{ task_id: string; titulo: string; data: string | null; motivo: string }> = [];
+  for (const i of itens) {
+    const s = situacoes.get(i.task_id);
+    const motivo = s ? protecaoDaPeca(s) : null;
+    if (motivo) protegidas.push({ task_id: i.task_id, titulo: i.titulo, data: i.data, motivo });
+    else livres.push(i);
+  }
+  return { livres, protegidas };
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   itens_mcp: itensMcp,
   ativar_item_mcp: ativarItemMcp,
@@ -9408,10 +9949,15 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_narracao: narracaoDaCampanha.campanhaNarracao,
   midia_da_peca: midiaDaPeca,
   sugerir_mistura: sugerirMistura,
+  // 24/10: trocar uma peça (3 opções, o Jev recomenda; Confirmar e Desfazer) e trocar várias (refazer com proteção).
+  trocar_peca_opcoes: trocarPecaOpcoes,
+  trocar_peca_aplicar: trocarPecaAplicar,
+  trocar_peca_desfazer: trocarPecaDesfazer,
+  propor_refazer_esteira: proporRefazerEsteira,
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", "midia_da_peca", "sugerir_mistura", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", "midia_da_peca", "sugerir_mistura", "trocar_peca_opcoes", "trocar_peca_aplicar", "propor_refazer_esteira", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 

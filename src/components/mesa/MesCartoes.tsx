@@ -1,4 +1,4 @@
-import { Camera, Check, CheckCircle2, Clock, FileText, Images, Palette, Video } from "lucide-react";
+import { Camera, Check, CheckCircle2, Clock, FileText, Images, Palette, Smartphone, Video } from "lucide-react";
 import { EditorialFileThumbnail, seloDaArteDoEstudio } from "@/components/editorial/EditorialCalendarViews";
 import type { ArteDoEstudioNaAgenda } from "@/hooks/useEditorialCalendar";
 import { editorialVisualStage, EDITORIAL_VISUAL_STAGE_LABELS, type EditorialVisualStage } from "@/lib/editorial";
@@ -47,7 +47,9 @@ export function IconeDoFormato({ tipo, className = "h-3 w-3" }: { tipo: string |
   const t = String(tipo || "");
   if (t === "photo" || t === "photos" || t === "photo_carousel") return <Camera className={className} aria-hidden />;
   if (t === "carousel") return <Images className={className} aria-hidden />;
-  if (t === "reel" || t === "video" || t === "short" || t === "story") return <Video className={className} aria-hidden />;
+  // 24/10: Stories com ícone próprio (a peça abre na aba Stories).
+  if (t === "story") return <Smartphone className={className} aria-hidden />;
+  if (t === "reel" || t === "video" || t === "short") return <Video className={className} aria-hidden />;
   return <FileText className={className} aria-hidden />;
 }
 

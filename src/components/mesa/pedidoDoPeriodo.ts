@@ -1,4 +1,5 @@
 import type { CorpoDoPedido } from "./mesaV4Api";
+import { normalizarEscolha, ROTULO_DA_OPCAO, type OpcaoDoMes } from "../../../supabase/functions/agente-calendario/modulos/escolha-do-mes";
 
 export const TIPOS_DO_PERIODO = [
   { valor: "educativo", rotulo: "Educativo" },
@@ -57,21 +58,25 @@ export function intervaloDoCalendario(mes: string, inicio: string, dias: number)
   return { inicio, fim, dias: diasReais, limitadoAoMes: diasReais < dias };
 }
 
-export function pedidoDoCalendario(p: { clientId: string; mes: string; inicio: string; dias: number; tema: string; tipos: readonly string[] }): CorpoDoPedido {
+export function pedidoDoCalendario(p: { clientId: string; mes: string; inicio: string; dias: number; tema: string; tipos: readonly string[]; formatos?: readonly OpcaoDoMes[] }): CorpoDoPedido {
   if (!p.clientId) throw new Error("Escolha o cliente antes de planejar o calendário.");
   if (typeof p.tema !== "string" || p.tema.length > 500) throw new Error("Use um tema com até 500 caracteres.");
   const tipos = [...new Set(p.tipos)];
   if (!tipos.length || tipos.some((v) => !TIPOS_DO_PERIODO.some((t) => t.valor === v))) throw new Error("Escolha pelo menos um tipo de conteúdo válido.");
   const periodo = intervaloDoCalendario(p.mes, p.inicio, p.dias);
   const rotulos = TIPOS_DO_PERIODO.filter((t) => tipos.includes(t.valor)).map((t) => t.rotulo);
+  // 24/10: os formatos escolhidos (Stories e os dois caminhos do vídeo) mandam sobre a mistura do nicho.
+  const formatos = normalizarEscolha(p.formatos || []);
+  if (formatos.length && formatos.every((f) => f === "stories")) throw new Error("Escolha também um formato de post (carrossel, estático, foto ou vídeo); os Stories acompanham os posts.");
   const mensagem = [
     `Prepare uma NOVA PROPOSTA de calendário editorial de ${periodo.inicio} até ${periodo.fim}, inclusive, somente no mês ${p.mes.slice(0, 7)}.`,
     p.tema.trim() ? `Nicho/tema solicitado: ${p.tema.trim()}.` : "Use o nicho, o público e o contexto real do cliente e da marca aberta.",
     `Tipos de conteúdo: ${rotulos.join(", ")}. Varie entre os tipos escolhidos quando fizer sentido para o cliente.`,
+    formatos.length ? `Formatos escolhidos: ${formatos.map((f) => ROTULO_DA_OPCAO[f]).join(", ")}. Use só estes formatos.` : "Formatos: a mistura do nicho do cliente.",
     "Escolha a quantidade de conteúdos pela frequência e pelo plano real do cliente, no máximo 12 nesta proposta, distribuídos nos dias úteis livres deste período. Não force um post por dia.",
     "Leia a agenda existente, o plano combinado do mês, as campanhas e as referências reais. Complemente as lacunas; preserve integralmente pautas, datas, arquivos e aprovações que já existem.",
     "Entregue somente a proposta para revisão na conversa do Agente do mês. Não grave tarefas na agenda, não altere nem substitua conteúdos existentes, não aprove, agende ou publique. A equipe escolherá os itens e confirmará a gravação pelo fluxo atual.",
     "Cada data proposta deve ficar entre o início e o fim informados. Se não houver espaço na frequência contratada, explique a limitação na proposta.",
   ].join("\n");
-  return { clientId: p.clientId, mes: p.mes.slice(0, 7), dataInicio: periodo.inicio, dataFim: periodo.fim, mensagem };
+  return { clientId: p.clientId, mes: p.mes.slice(0, 7), dataInicio: periodo.inicio, dataFim: periodo.fim, mensagem, ...(formatos.length ? { formatos } : {}) };
 }

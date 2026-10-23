@@ -8,7 +8,8 @@ import { gerarCenasDaPeca, type EscolhaDaPeca } from "./roteirosApi";
  * As cenas do caminho Gerar da peça de vídeo com a pegada viral (frente B, 23/10/2026). A mesa-roteiros
  * escreve duas versões com os ganchos vencedores do nicho e o Jev escolhe (peca_cenas_gerar, não grava);
  * aqui a escolhida vai para a peça pelo editar_item da série, o mesmo caminho do "Salvar o roteiro" (que
- * também refaz a direção do vídeo). Quem liga: o "Gerar o roteiro" do CampanhaVideos e do Gerar.
+ * também refaz a direção do vídeo). Quem liga: o passo "Roteiro e cenas" do Gerar da peça. Agente unificado
+ * (23/10): com o roteiro da peça (roteiroId, tabela roteiros), as cenas saem dele.
  */
 
 /** O preço antes, pelo catálogo: as duas versões com o modelo do roteiro e a escolha do Jev. */
@@ -28,8 +29,8 @@ export interface CenasGeradas {
   erro_ao_salvar: string | null;
 }
 
-export async function gerarEGuardarCenasDaPeca(p: { clientId: string; campanhaId: string; propostaId: string; temaId: string; modeloId?: string | null }): Promise<CenasGeradas> {
-  const r = await gerarCenasDaPeca({ client_id: p.clientId, campanha_id: p.campanhaId, tema_id: p.temaId, modelo_id: p.modeloId || null });
+export async function gerarEGuardarCenasDaPeca(p: { clientId: string; campanhaId: string; propostaId: string; temaId: string; modeloId?: string | null; roteiroId?: string | null }): Promise<CenasGeradas> {
+  const r = await gerarCenasDaPeca({ client_id: p.clientId, campanha_id: p.campanhaId, tema_id: p.temaId, modelo_id: p.modeloId || null, ...(p.roteiroId ? { roteiro_id: p.roteiroId } : {}) });
   const roteiro = normalizarRoteiroDeVideo(r && r.roteiro_video);
   if (!roteiro) throw new Error("As cenas não voltaram do motor. Tente de novo.");
   const custo = Number(r && r.custo_usd) || 0;

@@ -36,6 +36,12 @@ export type CadenciaDoMes = {
   dias: number[];
   /** De onde veio (pedido, plano ou modelo). */
   fonte: string;
+  /** 24/10: Stories por semana escolhidos na preparação (fora do feed; escolha-do-mes.ts). */
+  stories?: number;
+  /** 24/10: vídeos por semana em cada caminho (gravar com roteiro ou gerar com IA). */
+  videos?: { gravar: number; ia: number };
+  /** 24/10: os formatos escolhidos pela equipe na preparação (mandam sobre o nicho). */
+  escolha?: string[];
 };
 
 export const MAX_POR_SEMANA = 5;
@@ -164,7 +170,21 @@ export function normalizarCadencia(bruto: unknown): CadenciaDoMes | null {
     if (soma + arte === base.por_semana) base.mix = { ...base.mix, arte };
   }
   const dias = (Array.isArray(o.dias) ? o.dias : []).map(Number).filter((d) => d >= 1 && d <= 5);
-  return { ...base, dias: Array.from(new Set(dias)).sort() };
+  // 24/10: a escolha da preparação (Stories, caminhos do vídeo e os formatos escolhidos) segue junto.
+  const extras: Pick<CadenciaDoMes, "stories" | "videos" | "escolha"> = {};
+  const stories = Math.round(Number(o.stories));
+  if (Number.isFinite(stories) && stories > 0) extras.stories = Math.min(MAX_POR_SEMANA, stories);
+  const v = o.videos && typeof o.videos === "object" ? (o.videos as Record<string, unknown>) : null;
+  if (v) {
+    const gravar = Math.max(0, Math.min(MAX_POR_SEMANA, Math.round(Number(v.gravar)) || 0));
+    const ia = Math.max(0, Math.min(MAX_POR_SEMANA, Math.round(Number(v.ia)) || 0));
+    if (gravar + ia > 0) extras.videos = { gravar, ia };
+  }
+  if (Array.isArray(o.escolha)) {
+    const escolha = o.escolha.map((x) => String(x)).filter((x) => /^(carrossel|estatico|foto|video_gravar|video_ia|stories)$/.test(x));
+    if (escolha.length) extras.escolha = Array.from(new Set(escolha));
+  }
+  return { ...base, dias: Array.from(new Set(dias)).sort(), ...extras };
 }
 
 /**

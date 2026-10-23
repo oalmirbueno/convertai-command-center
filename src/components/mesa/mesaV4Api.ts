@@ -8,6 +8,7 @@ import {
   chamarFuncao,
   extensao,
   padraoPara,
+  parteDaConferenciaDoJev,
   saidaPorRaciocinio,
   TAMANHOS,
   type ModeloIa,
@@ -476,6 +477,8 @@ export interface CorpoDoPedido {
   rotear?: boolean;
   /** 17/10: o hype que originou o pedido; o servidor grava o gancho exato em cada conteúdo. */
   hype?: { tipo?: string | null; titulo: string } | null;
+  /** 24/10: os formatos escolhidos na preparação (carrossel, estatico, foto, video_gravar, video_ia, stories). */
+  formatos?: string[];
 }
 
 export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
@@ -488,6 +491,7 @@ export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
   if (p.rotear) corpo.rotear = true;
   if (p.pecas && p.pecas.length) corpo.pecas = p.pecas.slice(0, 12);
   if (p.hype && p.hype.titulo) corpo.hype = { tipo: p.hype.tipo === "nicho" ? "nicho" : "hype", titulo: p.hype.titulo };
+  if (p.formatos && p.formatos.length) corpo.formatos = p.formatos.slice(0, 6);
   return corpo;
 }
 
@@ -707,6 +711,16 @@ export const partesDoConteudoRapido = (catalogo: ModeloIa[]): ParteDaEstimativa[
 export const partesDaMidia = (catalogo: ModeloIa[], pecas: number): ParteDaEstimativa[] => [
   { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: 7000, tokensSaida: saidaPorRaciocinio("low") + 1500, vezes: Math.max(1, pecas) },
   { modeloId: null, tipo: "texto", fixoUsd: 0.0015, vezes: Math.max(1, pecas) },
+];
+
+/**
+ * 24/10: trocar uma peça: as 3 substitutas do mesmo dia numa chamada (contexto enxuto, raciocínio baixo), a nota
+ * do Jev de cada uma (uma pergunta) e o perfil do nicho (outra). Nada é gerado de imagem ou vídeo.
+ */
+export const partesDaTroca = (catalogo: ModeloIa[]): ParteDaEstimativa[] => [
+  { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: 16000, tokensSaida: saidaPorRaciocinio("low") + 3 * TAMANHOS.detalhar.saidaPorItem },
+  parteDaConferenciaDoJev(),
+  parteDaConferenciaDoJev(),
 ];
 
 /** Busca de hypes: pesquisa na web e a nota do Jev (centavos). */

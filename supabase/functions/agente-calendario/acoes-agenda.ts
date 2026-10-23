@@ -1,6 +1,7 @@
 import { formatoDoMes, normalizarDirecaoDeFoto, type DirecaoDeFoto } from "./modulos/peca-de-foto.ts";
 import { normalizarVideoDaPauta, type DirecaoDeVideoDaPauta } from "../_shared/video-da-pauta.ts";
 import { ENTREGA_DA_MIDIA, pecaJaE, tipoDeMidia, type TipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
+import { opcaoDoTexto, type OpcaoDoMes } from "./modulos/escolha-do-mes.ts";
 /**
  * Ações do agente do mês sobre a agenda já gravada (dono, 25/09: "se eu pedir
  * para o agente, ele confirma comigo, vai lá e apaga tudo certinho").
@@ -144,6 +145,8 @@ export type CamposDeTexto = {
 export type EdicaoDeTexto = ItemDaAcao & { campos: CamposDeTexto };
 /** 23/10: pensar a mídia da peça (fotos do Workspace pelo Jev, referência livre, roteiro do vídeo com gancho). */
 export type PedidoDeMidia = ItemDaAcao & { tipo: TipoDeMidia; pedido: string };
+/** 24/10: trocar a peça por outra do mesmo dia (3 opções, o Jev recomenda, a equipe escolhe no cartão). */
+export type PedidoDeTroca = ItemDaAcao & { opcao: OpcaoDoMes | null; pedido: string };
 export type AcaoNaAgenda = {
   tipo: "acao_agenda";
   resumo: string;
@@ -157,6 +160,12 @@ export type AcaoNaAgenda = {
   editar_textos: EdicaoDeTexto[];
   /** Mídia pensada pelo nicho (combina com mudar o formato; o painel muda sozinho quando a peça não é foto ou vídeo). */
   midia: PedidoDeMidia[];
+  /** 24/10: peças para trocar (o cartão abre as 3 opções de cada uma; nada muda no Confirmar da lista). */
+  trocar?: PedidoDeTroca[];
+  /** 24/10: peças que ficaram fora do refazer por proteção (arte pronta, post, publicação, aprovação, pedido do cliente). */
+  protegidas?: Array<{ task_id: string; titulo: string; data: string | null; motivo: string }>;
+  /** 24/10: o refazer confere a proteção de novo ao confirmar. */
+  protecao_estrita?: boolean;
   ignorados: string[];
 };
 
@@ -297,6 +306,19 @@ export function normalizarAcoesNaAgenda(bruto: unknown, pecas: PecaComApelido[],
       formatos.push({ ...item(p), formato_de: atual, formato_para: para, formato_para_nome: para === "foto" ? "Fotos" : nomeDoFormato(para), ...(para === "foto" ? { foto: normalizarDirecaoDeFoto(null, { tema: p.title }) } : { video: normalizarVideoDaPauta(null) }) });
     }
   }
+  // 24/10: "troca o do dia 12 por um vídeo": a peça não muda aqui; o cartão abre as opções (mesmo dia, Jev recomenda).
+  const trocar: PedidoDeTroca[] = [];
+  for (const b of (Array.isArray(o.trocar) ? o.trocar : []).slice(0, 20)) {
+    const m = (b ?? {}) as Record<string, unknown>;
+    const ref = texto(m.ref, 12).toLowerCase();
+    const p = porRef.get(ref);
+    if (!p || usados.has(ref) || mexidos.has(`x:${ref}`)) {
+      if (ref) ignorados.push(ref);
+      continue;
+    }
+    mexidos.add(`x:${ref}`);
+    trocar.push({ ...item(p), opcao: opcaoDoTexto(m.formato), pedido: texto(m.pedido, 600) });
+  }
   const porRefC = new Map(campanhas.map((c) => [c.ref.toLowerCase(), c]));
   const edicoes: EdicaoDeCampanha[] = [];
   const campanhasUsadas = new Set<string>();
@@ -331,7 +353,7 @@ export function normalizarAcoesNaAgenda(bruto: unknown, pecas: PecaComApelido[],
     edicoes.push({ campanha_id: c.id, nome_atual: c.nome, campos });
   }
 
-  if (!apagar.length && !mudar.length && !formatos.length && !refazer.length && !edicoes.length && !textos.length && !midia.length) return null;
+  if (!apagar.length && !mudar.length && !formatos.length && !refazer.length && !edicoes.length && !textos.length && !midia.length && !trocar.length) return null;
   const partes: string[] = [];
   if (apagar.length) partes.push(`apagar ${apagar.length} ${apagar.length === 1 ? "peça" : "peças"}`);
   if (refazer.length) partes.push(`refazer ${refazer.length} ${refazer.length === 1 ? "peça" : "peças"}`);
@@ -340,6 +362,7 @@ export function normalizarAcoesNaAgenda(bruto: unknown, pecas: PecaComApelido[],
   if (textos.length) partes.push(`reescrever os textos de ${textos.length} ${textos.length === 1 ? "peça" : "peças"}`);
   if (edicoes.length) partes.push(`editar ${edicoes.length} ${edicoes.length === 1 ? "campanha" : "campanhas"}`);
   if (midia.length) partes.push(`pensar a mídia de ${midia.length} ${midia.length === 1 ? "peça" : "peças"}`);
+  if (trocar.length) partes.push(`trocar ${trocar.length} ${trocar.length === 1 ? "peça" : "peças"} (você escolhe entre 3 opções)`);
   return {
     tipo: "acao_agenda",
     resumo: texto(o.resumo, 600) || `Vou ${partes.join(" e ")}.`,
@@ -350,6 +373,7 @@ export function normalizarAcoesNaAgenda(bruto: unknown, pecas: PecaComApelido[],
     editar_campanhas: edicoes,
     editar_textos: textos,
     midia,
+    trocar,
     ignorados,
   };
 }
@@ -467,5 +491,5 @@ export function diasDaPropostaLivre(p: { periodo_inicio: string; periodo_fim: st
 }
 
 /** Texto da regra no prompt do agente do mês. */
-export const REGRA_DAS_ACOES_NA_AGENDA = `- acoes_na_agenda: só quando a equipe PEDIR para mexer em peças que JÁ ESTÃO na agenda gravada ou nas campanhas ("mude", "troque", "corrija", "atualize", "substitua", "reescreva", "apague", "mude a data"). Peça citada pelo título, pelo texto ou pelo assunto: ache-a na AGENDA GRAVADA e prepare a troca NELA (editar_textos ou refazer); nunca responda com conteúdo novo no lugar nem diga que não consegue mudar o painel, porque a lista com Confirmar é a mudança. Peça repetida ou parecida na agenda é só aviso, nunca motivo para não fazer. apagar: apelidos das peças que saem (apagar, limpar, tirar). refazer: apelidos das peças que saem e são geradas de novo na mesma data e formato ("refaça", "gere de novo", "troque por outro", "revise"), TODAS as que casam com o pedido, até ${MAX_REFAZER_NA_LISTA} (o painel refaz em lotes de ${MAX_REFAZER_POR_PEDIDO}, um atrás do outro; nunca diga que o resto fica para depois). editar_textos: { ref, titulo, tema, gancho, copy, cta, publico, cards: [{ ordem, texto }] } para REESCREVER peças que já estão boas na estrutura mas erram no texto (público errado, falar com agência em vez do cliente final, tom, CTA): mais barato e fiel que refazer; vazio no campo que não muda; cards só com as lâminas que mudam, seguindo a regra de menos texto. Pedido amplo ("revise todos os meses", "tudo que fala com agência") vale para TODAS as peças que casam, lendo público, gancho, lâminas e legenda de cada uma: use editar_textos quando a peça só precisa de texto novo e refazer quando o tema inteiro não serve. mudar_data: { ref, data AAAA-MM-DD } para cada peça que muda de dia. mudar_formato: { ref, formato } com formato carrossel, estatico, foto, reels, story ou video; para foto envie foto com direção; para video envie video com estilo e prompt. Fotos e vídeos não devem continuar como carrossel de arte. midia: { ref, tipo (foto ou video), pedido } quando a equipe pedir a mídia da peça ("põe foto real", "usa as fotos do Workspace", "troca a imagem", "faz um vídeo de inspiração de cozinha", "vídeo com IA", "Reels com gancho"): o painel escolhe as fotos do acervo do cliente que servem (sem nenhuma boa, busca referência livre com licença) e, no vídeo, escreve o roteiro curto com gancho viral e a imagem de partida; se a peça não está no formato, ele muda o formato junto (não precisa mudar_formato). pedido: o que a equipe quer daquela mídia, nas palavras dela. Também use midia, sem a equipe pedir o formato, quando a agenda estiver repetitiva num formato só. editar_campanhas: { ref (apelido c1, c2...), nome, status (planejada, gravada ou encerrada), periodo_inicio, periodo_fim } com vazio no que não muda. "Apague os conteúdos da campanha X" = apagar das peças com "campanha: X". resumo: 1 a 2 frases dizendo o que vai acontecer. Use SÓ apelidos das listas AGENDA GRAVADA e CAMPANHAS; nunca invente apelido. Pedido amplo ("apague tudo de outubro", "limpe a agenda") vale para todas as peças que casam com o pedido; na dúvida sobre quais peças, pergunte na resposta e devolva null. Nada é feito agora: a equipe vê a lista e confirma. Na resposta, diga que a lista está pronta para confirmar. Sem pedido desse tipo, null.
+export const REGRA_DAS_ACOES_NA_AGENDA = `- acoes_na_agenda: só quando a equipe PEDIR para mexer em peças que JÁ ESTÃO na agenda gravada ou nas campanhas ("mude", "troque", "corrija", "atualize", "substitua", "reescreva", "apague", "mude a data"). Peça citada pelo título, pelo texto ou pelo assunto: ache-a na AGENDA GRAVADA e prepare a troca NELA (editar_textos ou refazer); nunca responda com conteúdo novo no lugar nem diga que não consegue mudar o painel, porque a lista com Confirmar é a mudança. Peça repetida ou parecida na agenda é só aviso, nunca motivo para não fazer. apagar: apelidos das peças que saem (apagar, limpar, tirar). refazer: apelidos das peças que saem e são geradas de novo na mesma data e formato ("refaça", "gere de novo", "troque por outro", "revise"), TODAS as que casam com o pedido, até ${MAX_REFAZER_NA_LISTA} (o painel refaz em lotes de ${MAX_REFAZER_POR_PEDIDO}, um atrás do outro; nunca diga que o resto fica para depois). editar_textos: { ref, titulo, tema, gancho, copy, cta, publico, cards: [{ ordem, texto }] } para REESCREVER peças que já estão boas na estrutura mas erram no texto (público errado, falar com agência em vez do cliente final, tom, CTA): mais barato e fiel que refazer; vazio no campo que não muda; cards só com as lâminas que mudam, seguindo a regra de menos texto. Pedido amplo ("revise todos os meses", "tudo que fala com agência") vale para TODAS as peças que casam, lendo público, gancho, lâminas e legenda de cada uma: use editar_textos quando a peça só precisa de texto novo e refazer quando o tema inteiro não serve. mudar_data: { ref, data AAAA-MM-DD } para cada peça que muda de dia. mudar_formato: { ref, formato } com formato carrossel, estatico, foto, reels, story ou video; para foto envie foto com direção; para video envie video com estilo e prompt. Fotos e vídeos não devem continuar como carrossel de arte. midia: { ref, tipo (foto ou video), pedido } quando a equipe pedir a mídia da peça ("põe foto real", "usa as fotos do Workspace", "troca a imagem", "faz um vídeo de inspiração de cozinha", "vídeo com IA", "Reels com gancho"): o painel escolhe as fotos do acervo do cliente que servem (sem nenhuma boa, busca referência livre com licença) e, no vídeo, escreve o roteiro curto com gancho viral e a imagem de partida; se a peça não está no formato, ele muda o formato junto (não precisa mudar_formato). pedido: o que a equipe quer daquela mídia, nas palavras dela. Também use midia, sem a equipe pedir o formato, quando a agenda estiver repetitiva num formato só. trocar: { ref, formato, pedido } quando a equipe pedir para TROCAR uma peça por outra no mesmo dia ("troca o do dia 12 por um vídeo", "não gostei desse, me dá outras opções", "troca por Stories"): formato é carrossel, estatico, foto, video_gravar (vídeo com roteiro para a pessoa gravar), video_ia (vídeo gerado com IA), stories ou vazio (o painel varia); "vídeo" sem dizer o caminho: video_gravar quando o nicho é de pessoa falando, senão video_ia. pedido: o que a equipe quer, nas palavras dela. O painel gera 3 opções, o Jev recomenda uma e a equipe escolhe no cartão; não use refazer nem mudar_formato para a mesma peça. "Não gostei dessa semana, refaz": refazer de TODAS as peças da semana; as protegidas (arte pronta, post vinculado, publicação, aprovação) o painel deixa de fora e mostra. editar_campanhas: { ref (apelido c1, c2...), nome, status (planejada, gravada ou encerrada), periodo_inicio, periodo_fim } com vazio no que não muda. "Apague os conteúdos da campanha X" = apagar das peças com "campanha: X". resumo: 1 a 2 frases dizendo o que vai acontecer. Use SÓ apelidos das listas AGENDA GRAVADA e CAMPANHAS; nunca invente apelido. Pedido amplo ("apague tudo de outubro", "limpe a agenda") vale para todas as peças que casam com o pedido; na dúvida sobre quais peças, pergunte na resposta e devolva null. Nada é feito agora: a equipe vê a lista e confirma. Na resposta, diga que a lista está pronta para confirmar. Sem pedido desse tipo, null.
 - gerar_conteudos: só quando a equipe PEDIR para criar ou gerar os conteúdos de um mês inteiro ou de vários ("crie todos os conteúdos de outubro", "preencha os próximos 3 meses"). meses: lista AAAA-MM; frequencia_semanal: a do plano combinado, ou a que a equipe pediu. resumo: 1 frase. A equipe vê o custo e confirma; o gerador de meses segue o plano combinado de cada mês. Sem pedido desse tipo, null.`;

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CalendarDays, CalendarPlus, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock, Eraser, List, Loader2, Palette, WandSparkles, X } from "lucide-react";
+import { CalendarDays, CalendarPlus, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock, Eraser, List, ListRestart, Loader2, Palette, Shuffle, Smartphone, WandSparkles, X } from "lucide-react";
+import { prepararStoriesDaPeca } from "./storiesDaPeca";
 import { Button } from "@/components/ui/button";
 import type { ArteDoEstudioNaAgenda } from "@/hooks/useEditorialCalendar";
 import {
@@ -70,6 +71,11 @@ import {
  */
 
 const abreNoEstudio = (tipo: string) => ehFormatoDeArte(tipo) || FORMATOS_DE_VIDEO_NO_ESTUDIO.includes(tipo) || ["photo", "photos", "photo_carousel"].includes(tipo);
+
+// 24/10: trocar uma peça (3 opções, o Jev recomenda) e trocar várias (refazer com as protegidas à vista).
+const TrocarPeca = lazy(() => import("./TrocarPeca"));
+const TrocarVarias = lazy(() => import("./TrocarVarias"));
+
 
 const MAX_COMPLETAR = 12;
 /** Quantas entradas cada dia mostra na grade do mês antes do "+N". */
@@ -302,6 +308,8 @@ function ItemSelecionado({
   onAbrir,
   onApagar,
   onAgendou,
+  onTrocar,
+  onStories,
 }: {
   item: ItemDaAgenda;
   selo: Selo;
@@ -316,6 +324,10 @@ function ItemSelecionado({
   onAgendou?: () => void;
   /** Apaga da agenda (com desfazer); o servidor recusa o aprovado, agendado ou publicado. */
   onApagar?: (confirmarArte: boolean) => Promise<ResultadoDoApagar>;
+  /** 24/10: trocar a peça por outra do mesmo dia (3 opções, o Jev recomenda). */
+  onTrocar?: () => void;
+  /** 24/10: a peça de Stories abre na aba Stories já com o tema. */
+  onStories?: (() => void) | null;
 }) {
   const [aberto, setAberto] = useState(abertoDeInicio);
   const doEstudio = abreNoEstudio(item.delivery_type);
@@ -340,6 +352,16 @@ function ItemSelecionado({
               <Palette className="h-4 w-4" />
             </button>
           )}
+          {onStories && (
+            <button type="button" className={botao.icone} onClick={onStories} aria-label="Abrir nos Stories" title="Abrir nos Stories (já com o tema)">
+              <Smartphone className="h-4 w-4" />
+            </button>
+          )}
+          {onTrocar && (
+            <button type="button" className={botao.icone} onClick={onTrocar} aria-label="Trocar a peça" title="Trocar (3 opções do mesmo dia, o Jev recomenda)">
+              <Shuffle className="h-4 w-4" />
+            </button>
+          )}
           <button type="button" className={botao.icone} onClick={onTirar} aria-label="Tirar da seleção" title="Tirar da seleção">
             <X className="h-4 w-4" />
           </button>
@@ -362,7 +384,7 @@ function ItemSelecionado({
             </p>
           )}
           <div className="flex min-w-0 items-center">
-            {!doEstudio && <p className="mr-2 min-w-0 text-[11px] text-muted-foreground">Formato fora do estúdio.</p>}
+            {!doEstudio && !onStories && <p className="mr-2 min-w-0 text-[11px] text-muted-foreground">Formato fora do estúdio.</p>}
             {onApagar && (
               <span className="ml-auto inline-flex min-w-0 items-center">
                 <BotaoDeApagar onApagar={onApagar} pergunta="Apagar este conteúdo da agenda?" rotulo="Apagar da agenda" />
@@ -416,6 +438,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   };
 
   const [selecionados, mudarSelecao] = useSelecaoGuardada(clientId, mes);
+  const [trocando, setTrocando] = useState<ItemDaAgenda | null>(null);
+  const [trocandoVarias, setTrocandoVarias] = useState(false);
   const [diasAbertos, setDiasAbertos] = useState<Record<string, boolean>>({});
   // Semana escolhida dentro do mês (-1 = a última, ao voltar do mês seguinte).
   const [semanaEscolhida, setSemanaEscolhida] = useState<{ mes: string; indice: number } | null>(null);
@@ -541,6 +565,22 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   };
 
   const unicoDoEstudio = escolhidos.length === 1 && abreNoEstudio(escolhidos[0].delivery_type) ? escolhidos[0] : null;
+  const abrirNosStories = (item: ItemDaAgenda) => {
+    prepararStoriesDaPeca(clientId, item, hoje);
+    const next = new URLSearchParams(params);
+    next.set("aba", "stories");
+    next.delete("task");
+    setParams(next, { replace: false });
+  };
+  // A segunda-feira da semana aberta (Trocar várias começa nela quando a vista é a semana).
+  const segundaDaSemanaAberta = (() => {
+    const dias = (semanas[indiceDaSemana] || []).filter((d): d is string => !!d);
+    if (!dias.length) return null;
+    const d = new Date(`${dias[0]}T12:00:00Z`);
+    const dia = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() - (dia === 0 ? 6 : dia - 1));
+    return d.toISOString().slice(0, 10);
+  })();
 
   /** Cartões de um dia: itens primeiro, depois os posts soltos. */
   const entradasDoDia = (dia: string, tamanho: TamanhoDoCartao, limitar: boolean) => {
@@ -801,6 +841,11 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
           </span>
           {/* 17/10: raio-x do mês (formatos, pilares e o que pega o momento), aberto só no clique. */}
           {dados && !vazio && <RaioXDoMes itens={itensDaMesa} />}
+          {dados && !vazio && (
+            <button type="button" className={juntar(botao.icone, "mr-1")} onClick={() => setTrocandoVarias(true)} aria-label="Trocar várias" title="Trocar várias (refazer a semana, o mês ou só as não feitas)">
+              <ListRestart className="h-4 w-4" />
+            </button>
+          )}
           {/* Um conteúdo marcado: agendar (se ainda não tem post) e abrir no Estúdio direto daqui. */}
           {escolhidos.length === 1 && (
             <span className="mr-1 flex shrink-0 items-center" data-acoes-do-marcado="">
@@ -815,6 +860,14 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   <Palette className="h-4 w-4" />
                 </button>
               )}
+              {escolhidos[0].delivery_type === "story" && (
+                <button type="button" className={botao.icone} onClick={() => abrirNosStories(escolhidos[0])} aria-label={`Abrir nos Stories: ${escolhidos[0].title}`} title="Abrir nos Stories (já com o tema)">
+                  <Smartphone className="h-4 w-4" />
+                </button>
+              )}
+              <button type="button" className={botao.icone} onClick={() => setTrocando(escolhidos[0])} aria-label={`Trocar: ${escolhidos[0].title}`} title="Trocar (3 opções do mesmo dia, o Jev recomenda)">
+                <Shuffle className="h-4 w-4" />
+              </button>
             </span>
           )}
           {escolhidos.length > 0 && (
@@ -950,6 +1003,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   abertoDeInicio={escolhidos.length === 1}
                   onTirar={() => alternar(i.id)}
                   onAbrir={abreNoEstudio(i.delivery_type) ? () => abrirNoEstudio(i) : null}
+                  onStories={i.delivery_type === "story" ? () => abrirNosStories(i) : null}
+                  onTrocar={() => setTrocando(i)}
                   onApagar={async (confirmarArte) => {
                     const r = await apagarConteudo.daAgenda(i.id, i.title, confirmarArte);
                     if (r.ok) mudarSelecao((s) => s.filter((x) => x !== i.id));
@@ -964,6 +1019,10 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
       </div>
       </>
       )}
+      <Suspense fallback={null}>
+        {trocando && <TrocarPeca key={trocando.id} aberta={!!trocando} onMudar={(v) => !v && setTrocando(null)} peca={trocando} />}
+        {trocandoVarias && <TrocarVarias aberta={trocandoVarias} onMudar={setTrocandoVarias} mes={mes} semana={vista === "semana" ? segundaDaSemanaAberta : null} />}
+      </Suspense>
     </section>
   );
 }

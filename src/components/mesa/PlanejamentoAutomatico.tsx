@@ -30,6 +30,9 @@ import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, type EscolhaEdito
 import { useKitDaMesa } from "./kitDaMesa";
 import { chavesDoPlano, lerPlanosCombinados } from "./planoDoMes";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
+// 24/10: a escolha de formatos da preparação (Stories e vídeo para gravar ou com IA).
+import EscolhaDeFormatos from "./EscolhaDeFormatos";
+import type { OpcaoDoMes } from "../../../supabase/functions/agente-calendario/modulos/escolha-do-mes";
 // 02/10: a cadência pedida (por semana, mistura e dias) vira a grade de datas e formatos do mês.
 import { gradeDoMes, type CadenciaDoMes } from "../../../supabase/functions/agente-calendario/modulos/cadencia-do-mes";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
@@ -73,6 +76,8 @@ interface ConfigDoPlano {
   escolha?: EscolhaEditorial;
   /** 02/10: a cadência pedida no agente do Mês (o servidor monta a grade de datas e formatos). */
   cadencia?: CadenciaDoMes | null;
+  /** 24/10: os formatos escolhidos na preparação (Stories e os dois caminhos do vídeo); vazio, o nicho. */
+  formatos?: OpcaoDoMes[];
 }
 
 interface Execucao {
@@ -251,6 +256,7 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
         periodo_fim: periodo.fim,
         frequencia: estado.alvo,
         ...(cfg.cadencia ? { cadencia: cfg.cadencia } : {}),
+        ...(cfg.formatos && cfg.formatos.length ? { formatos: cfg.formatos } : {}),
         objetivo: cfg.objetivo,
         oferta: cfg.oferta,
         modelo_id: cfg.modeloId,
@@ -516,6 +522,8 @@ export interface GeracaoPeloAgente {
   projetoId: string;
   /** 02/10: a cadência pedida no agente do Mês. */
   cadencia?: CadenciaDoMes | null;
+  /** 24/10: os formatos escolhidos no cartão do agente (vazio: o nicho). */
+  formatos?: OpcaoDoMes[];
 }
 
 /** Publicações de cada mês e a estimativa de custo (temas e detalhe de cada mês). */
@@ -548,6 +556,7 @@ export function iniciarGeracaoPeloAgente(
       projetoId: g.projetoId,
       escolha: escolhaLivre(),
       cadencia: g.cadencia ?? null,
+      formatos: g.formatos && g.formatos.length ? g.formatos.slice() : undefined,
     },
     rodando: false,
     parar: false,
@@ -585,6 +594,8 @@ export default function PlanejamentoAutomatico() {
     return dezembro >= proximo ? dezembro : proximo;
   });
   const [frequencia, setFrequencia] = useState("3");
+  // 24/10: vazio, a mistura do nicho; com escolha, só os formatos escolhidos (a escolha manda sobre o nicho).
+  const [formatos, setFormatos] = useState<OpcaoDoMes[]>([]);
   const [objetivo, setObjetivo] = useState("");
   const [oferta, setOferta] = useState("");
   const [modeloId, setModeloId] = useState("");
@@ -676,6 +687,7 @@ export default function PlanejamentoAutomatico() {
         raciocinio: raciocinio || undefined,
         projetoId,
         escolha,
+        formatos: formatos.length ? formatos.slice() : undefined,
       },
       rodando: false,
       parar: false,
@@ -736,6 +748,7 @@ export default function PlanejamentoAutomatico() {
             <Input type="number" min={1} max={14} value={frequencia} onChange={(e) => setFrequencia(e.target.value)} className="h-9" disabled={rodando} />
           </Campo>
         </div>
+        <EscolhaDeFormatos valor={formatos} onMudar={setFormatos} desabilitado={rodando} vazio="Pelo nicho do cliente (nenhum escolhido)" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Campo rotulo="Objetivo principal">
             <Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="Ex.: pedidos pelo WhatsApp" className="h-9" disabled={rodando} />

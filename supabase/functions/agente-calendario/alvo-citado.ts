@@ -425,7 +425,8 @@ export function juntarAlvoNaAcao(
   });
 
   if (alvo.tipo === "um") {
-    const tocada = saida && LISTAS.some((k) => (saida![k] as ItemDaAcao[]).some((i) => i.task_id === alvo.peca.id));
+    // 24/10: a troca com opções (trocar) também conta como peça tocada.
+    const tocada = saida && (LISTAS.some((k) => (saida![k] as ItemDaAcao[]).some((i) => i.task_id === alvo.peca.id)) || (saida.trocar || []).some((i) => i.task_id === alvo.peca.id));
     // 23/10: pedido de mídia ("põe foto real", "faz um vídeo") na peça citada vira pensar a mídia, não refazer.
     const tipoDaMidia = midiaDoPedido(mensagem);
     if (!tocada && tipoDaMidia) {

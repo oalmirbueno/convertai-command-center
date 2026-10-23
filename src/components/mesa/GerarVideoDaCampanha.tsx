@@ -4,7 +4,9 @@
  * Rota 2 enxuta, um passo por vez, com o custo antes de cada um:
  *   1. Roteiro: o roteiro_video da peça, cada cena editável (o que aparece, fala, texto na tela, segundos);
  *      sem roteiro, "Gerar o roteiro" (frente B, 23/10: mesa-roteiros peca_cenas_gerar, 2 versões com os
- *      ganchos virais do nicho e o Jev escolhe; a escolhida vai para a peça pelo editar_item).
+ *      ganchos virais do nicho e o Jev escolhe; a escolhida vai para a peça pelo editar_item). Agente
+ *      unificado (23/10): com o roteiro da peça (roteiroId, tabela roteiros), "Cenas pelo roteiro" transforma
+ *      ESSE roteiro em cenas de IA, e "Refazer as cenas pelo roteiro" acompanha o roteiro mudado.
  *   2. Cenas: cada cena vira um vídeo 9:16 pela Mesa Vídeos (gerar_video, modo texto, Seedance 2.0 Mini
  *      por padrão; sem áudio do motor quando o roteiro tem fala), o 409 confirmar_custo de todas as cenas
  *      somado antes; a fila é conferida até cada cena ficar pronta; dá para refazer uma cena.
@@ -17,7 +19,8 @@
  * não perde nada.
  *
  * Interface (quem liga é o CampanhaVideos, junto do caminho Gravar):
- *   <GerarVideoDaCampanha clientId campanha propostaId item aoAtualizar? />
+ *   <GerarVideoDaCampanha clientId campanha propostaId item roteiroId? aoAtualizar? />
+ *   - roteiroId: o roteiro da peça na tabela roteiros (o mesmo do Gravar); as cenas saem dele;
  *   - clientId: o cliente aberto na Mesa (precisa estar dentro do MesaProvider);
  *   - campanha: a campanha (Campanha de mesaV4Api; briefing.trilha é a trilha usada);
  *   - propostaId: a série da campanha (campanha.proposta_id); a resposta de cada passo atualiza o cache
@@ -58,6 +61,8 @@ export interface PropsDoGerarVideo {
   campanha: Campanha;
   propostaId: string;
   item: ItemProposto;
+  /** Agente unificado (23/10): o roteiro da peça na tabela roteiros; as cenas de IA saem dele. */
+  roteiroId?: string | null;
   aoAtualizar?: (r: RespostaDaPeca) => void;
 }
 
@@ -137,7 +142,7 @@ function AudioDoMesa({ caminho, rotulo }: { caminho: string; rotulo: string }) {
 
 const cenaVazia = (ordem: number): CenaDoRoteiro => ({ ordem, descricao: "", fala: "", texto_na_tela: "", segundos: 4 });
 
-function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campanha: Campanha; propostaId: string; item: ItemProposto; roteiro: RoteiroDeVideo | null; aplicar: (r: RespostaDaPeca) => void }) {
+function PassoRoteiro({ campanha, propostaId, item, roteiro, roteiroId, aplicar }: { campanha: Campanha; propostaId: string; item: ItemProposto; roteiro: RoteiroDeVideo | null; roteiroId: string | null; aplicar: (r: RespostaDaPeca) => void }) {
   const { clientId, catalogo } = useMesa();
   const modelo = useModeloDoEscopo("roteiro");
   const [rascunho, setRascunho] = useState<RoteiroDeVideo | null>(null);
@@ -145,27 +150,32 @@ function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campan
   // Frente B (23/10): o porquê do Jev entre as duas versões de cenas (some ao sair do passo).
   const [porque, setPorque] = useState<string | null>(null);
   const r = rascunho || roteiro;
+  const gerarCenas = async () => {
+    const res = await gerarEGuardarCenasDaPeca({ clientId, campanhaId: campanha.id, propostaId, temaId: item.tema_id || "", modeloId: modelo.modeloId || null, roteiroId });
+    setPorque(res.escolha && res.escolha.porque ? res.escolha.porque : null);
+    if (res.item) {
+      setRascunho(null);
+      aplicar({ item: res.item, proposta: res.proposta });
+    } else {
+      // Gerado e não salvo: as cenas ficam na tela com o Salvar (sem gerar de novo).
+      setRascunho(res.roteiro);
+      toast.warning("Cenas geradas, mas não salvas na peça", { description: `${res.erro_ao_salvar || ""} Clique em Salvar o roteiro.`.trim() });
+    }
+    return res;
+  };
   if (!r) {
     return (
       <div className="min-w-0" data-passo-do-gerar="roteiro">
         <div className="flex min-w-0 flex-wrap items-center">
-          <span className={juntar(texto.auxiliar, "mr-3")}>Sem roteiro ainda.</span>
+          <span className={juntar(texto.auxiliar, "mr-3")}>{roteiroId ? "O roteiro da peça ainda não virou cenas." : "Sem roteiro ainda."}</span>
           <BotaoComCusto
-            rotulo="Gerar o roteiro"
+            rotulo={roteiroId ? "Cenas pelo roteiro" : "Gerar o roteiro"}
             titulo="Roteiro do vídeo"
-            descricao="2 versões de cenas com os ganchos virais do nicho e a fase da campanha; o Jev escolhe a mais forte"
+            descricao={roteiroId
+              ? "O roteiro da peça vira cenas para a IA de vídeo (o mesmo gancho, as mesmas falas e o CTA), em 2 versões de forma; o Jev escolhe"
+              : "2 versões de cenas com os ganchos virais do nicho e a fase da campanha; o Jev escolhe a mais forte"}
             partes={() => partesDasCenasDaPeca(catalogo, modelo.modeloId)}
-            executar={async () => {
-              const res = await gerarEGuardarCenasDaPeca({ clientId, campanhaId: campanha.id, propostaId, temaId: item.tema_id || "", modeloId: modelo.modeloId || null });
-              setPorque(res.escolha && res.escolha.porque ? res.escolha.porque : null);
-              if (res.item) aplicar({ item: res.item, proposta: res.proposta });
-              else {
-                // Gerado e não salvo: as cenas ficam na tela com o Salvar (sem gerar de novo).
-                setRascunho(res.roteiro);
-                toast.warning("Cenas geradas, mas não salvas na peça", { description: `${res.erro_ao_salvar || ""} Clique em Salvar o roteiro.`.trim() });
-              }
-              return res;
-            }}
+            executar={gerarCenas}
             className="h-8 px-2"
           />
         </div>
@@ -231,6 +241,17 @@ function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campan
           <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
         <span className={juntar(texto.auxiliar, "ml-2 mr-auto tabular-nums")}>{r.cenas.length} cenas · {total} s</span>
+        {roteiroId && !rascunho && (
+          <BotaoComCusto
+            rotulo={<RotateCcw className="h-4 w-4" aria-label="Refazer as cenas pelo roteiro" />}
+            titulo="Cenas pelo roteiro"
+            descricao="Refaz as cenas a partir do roteiro atual da peça (2 versões de forma; o Jev escolhe). As cenas em vídeo que mudarem pedem refazer."
+            partes={() => partesDasCenasDaPeca(catalogo, modelo.modeloId)}
+            executar={gerarCenas}
+            variant="ghost"
+            className="mr-1 h-8 px-2"
+          />
+        )}
         {rascunho && (
           <>
             <button type="button" className={juntar(botao.discreto, "mr-1")} onClick={() => setRascunho(null)} disabled={salvando}>
@@ -602,7 +623,7 @@ function PassoMontar({ campanha, item, roteiro, estados, trilha, aplicar }: { ca
 
 // ------------------------------------------------------------------ o componente
 
-export default function GerarVideoDaCampanha({ clientId, campanha, propostaId, item, aoAtualizar }: PropsDoGerarVideo) {
+export default function GerarVideoDaCampanha({ clientId, campanha, propostaId, item, roteiroId, aoAtualizar }: PropsDoGerarVideo) {
   const qc = useQueryClient();
   const temaId = item.tema_id || "";
   // O item que voltou do servidor vale até o pai mandar outro (a série relida).
@@ -680,7 +701,7 @@ export default function GerarVideoDaCampanha({ clientId, campanha, propostaId, i
         }}
         itens={PASSOS.map((p) => ({ valor: p.valor, rotulo: p.rotulo, feita: feitas[p.valor], fechada: !roteiro && p.valor !== "roteiro" }))}
       />
-      {aberto === "roteiro" && <PassoRoteiro key={temaId} campanha={campanha} propostaId={propostaId} item={atual} roteiro={roteiro} aplicar={aplicar} />}
+      {aberto === "roteiro" && <PassoRoteiro key={temaId} campanha={campanha} propostaId={propostaId} item={atual} roteiro={roteiro} roteiroId={roteiroId || null} aplicar={aplicar} />}
       {roteiro && aberto === "cenas" && <PassoCenas campanha={campanha} item={atual} roteiro={roteiro} estados={estados} aplicar={aplicar} />}
       {roteiro && aberto === "narracao" && <PassoNarracao campanha={campanha} item={atual} roteiro={roteiro} aplicar={aplicar} />}
       {roteiro && aberto === "trilha" && <PassoTrilha campanha={campanha} trilha={trilhaDaCampanha} usar={usarTrilha} setUsar={setUsarTrilha} />}

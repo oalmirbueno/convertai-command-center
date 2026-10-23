@@ -5,14 +5,12 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Agente de roteiro da peça de vídeo da campanha (23/10/2026, dono: "o agente onde eu dou a ideia do roteiro
- * e ele já faz, quantos minutos e tudo, ele fica para selecionar ali dentro mesmo ... completo com cenas ...
- * até dar sugestão, participar junto com ultra criatividade"):
- * - regras puras: duração pedida presa à lista, cenas reescaladas para somar o tempo, até 24 cenas de 30 s,
- *   câmera e som por cena, a escolha do Jev e as versões guardadas na peça;
- * - o documento (PDF e Word) cobre todas as cenas, mesmo no roteiro longo;
- * - a tela: ideia, duração, estilo e criatividade vão no pedido; as duas versões aparecem com a recomendada;
- *   "Usar esta" grava a escolhida; a sugestão vira pedido e o ajuste volta como edição para salvar.
+ * Regras puras do agente de roteiro da peça de vídeo (23/10/2026, dono: "o agente onde eu dou a ideia do
+ * roteiro e ele já faz, quantos minutos e tudo ... completo com cenas ... até dar sugestão, participar junto
+ * com ultra criatividade"): duração pedida presa à lista, cenas reescaladas para somar o tempo, até 24 cenas
+ * de 30 s, câmera e som por cena, a escolha do Jev e as versões guardadas na peça.
+ * Agente unificado (23/10): a tela é uma só (RoteiroDaPecaDeVideo, testada em peca-de-video-roteiro); estas
+ * regras seguem valendo para o roteiro antigo do item, que a peça lê e leva para a tabela sem perder nada.
  */
 
 const mock = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -20,7 +18,7 @@ const mock = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => {
   const consulta = () => {
     const b: any = {};
-    for (const m of ["select", "eq", "neq", "in", "order", "limit"]) b[m] = () => b;
+    for (const m of ["select", "eq", "neq", "in", "is", "or", "order", "limit", "contains"]) b[m] = () => b;
     b.maybeSingle = () => Promise.resolve({ data: null, error: null });
     b.then = (ok: any, erro: any) => Promise.resolve({ data: [], error: null }).then(ok, erro);
     return b;
@@ -34,21 +32,21 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
 vi.mock("@/components/mesa-videos/videosApi", async (original) => {
   const real = (await original()) as Record<string, unknown>;
   return { ...real, usePedidos: () => ({ data: { itens: [], disponivel: true } }) };
 });
-vi.mock("@/components/mesa/GravarVideoDaCampanha", () => ({ default: () => h("div", null, "Gravar"), textoDoRoteiro: () => "" }));
+vi.mock("@/components/mesa/GravarVideoDaCampanha", () => ({ default: () => h("div", null, "Gravar") }));
 vi.mock("@/components/mesa/GerarVideoDaCampanha", () => ({ default: () => h("div", null, "Gerar") }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import CampanhaVideos from "@/components/mesa/CampanhaVideos";
-import { roteiroDoDocumento } from "@/components/mesa/documentoDoRoteiroDeVideo";
 import { chaves, type Campanha, type ItemProposto } from "@/components/mesa/mesaV4Api";
 import type { ModeloIa } from "@/lib/mesa/api";
-import { MAX_CENAS, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
+import { roteiroDaPecaAntiga } from "../../supabase/functions/mesa-roteiros/modulos/roteiro-da-peca";
+import { MAX_CENAS, normalizarRoteiroDeVideo, normalizarVideoPronto, type RoteiroDeVideo } from "../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 import {
   ajustarDuracao,
   ajusteDaResposta,
@@ -61,9 +59,6 @@ import {
   versoesDaResposta,
 } from "../../supabase/functions/agente-calendario/modulos/agente-de-roteiro";
 
-const CLIENTE = "11111111-1111-1111-1111-111111111111";
-const CAMPANHA_ID = "d7140376-0000-4000-8000-000000000002";
-const PROPOSTA_ID = "22222222-2222-4222-8222-222222222223";
 
 const cena = (n: number, extra: Record<string, unknown> = {}) => ({ descricao: `Cena ${n} acontece`, plano: "close lento", fala: `Fala ${n}`, texto_na_tela: `Tela ${n}`, som: "trilha sobe", segundos: 5, ...extra });
 
@@ -132,18 +127,25 @@ describe("agente de roteiro (regras puras)", () => {
 
   it("o documento cobre todas as cenas mesmo no roteiro longo (blocos de até 14)", () => {
     const r = normalizarRoteiroDeVideo({ titulo: "Longo", gancho: "G", cenas: Array.from({ length: 24 }, (_, i) => cena(i + 1)), trilha: "Trilha X", cta: "Chame" }) as RoteiroDeVideo;
-    const d = roteiroDoDocumento(r, "Tema");
+    const d = roteiroDaPecaAntiga(r, "Tema");
     expect(d.blocos.length).toBeLessThanOrEqual(14);
     expect(d.blocos.reduce((s, b) => s + b.segundos, 0)).toBe(120);
     expect(d.blocos[0].funcao).toBe("Cenas 1 a 2");
     expect(d.blocos[0].visual).toContain("Câmera: close lento");
-    expect(d.titulo).toBe("Longo");
+    expect(d.blocos[0].broll).toContain("Som: trilha sobe");
+    // O título é o tema (é por ele que a peça acha o roteiro); o nome antigo fica embaixo.
+    expect(d.titulo).toBe("Tema");
+    expect(d.subtitulo).toBe("Longo");
     expect(d.duracao_alvo_s).toBe(120);
+    expect(d.broll).toEqual(["Trilha: Trilha X"]);
   });
 });
 
-// ------------------------------------------------------------------ tela
+// ------------------------------------------------------------------ peças de vídeo sem depender do agente (23/10)
 
+const CLIENTE = "11111111-1111-1111-1111-111111111111";
+const CAMPANHA_ID = "d7140376-0000-4000-8000-000000000002";
+const PROPOSTA_ID = "22222222-2222-4222-8222-222222222223";
 const catalogo: ModeloIa[] = [
   {
     id: "openai:gpt-texto", provedor: "openai", modelo_api: "gpt-texto", tipo: "texto", rotulo: "Texto",
@@ -155,90 +157,10 @@ const valorDaMesa = (): MesaValor => ({
   clientId: CLIENTE, clientName: "Cliente sintético", userId: "u-1", isAdmin: true, podeRecarregar: true, saldoUsd: 50,
   catalogo, catalogoCarregando: false, atualizarCusto: vi.fn(), abrirRecarga: vi.fn(), abrirChaves: vi.fn(), abrirModelos: vi.fn(),
 });
-
 const campanha = { id: CAMPANHA_ID, client_id: CLIENTE, nome: "Halloween do PC", proposta_id: PROPOSTA_ID, briefing: {} } as unknown as Campanha;
 const pecaDeVideo: ItemProposto = { tema_id: "v1", data: "2026-10-27", formato: "video", etapa: "sustentação", tema: "Reels do PC assombrado", gancho: "Travou", cards: [] } as unknown as ItemProposto;
 const proposta = { id: PROPOSTA_ID, client_id: CLIENTE, itens: [pecaDeVideo] };
-
-const versao = (titulo: string, sugestoes: string[] = []) => ({ titulo, conceito: `Conceito ${titulo}`, gancho: `Gancho ${titulo}`, cenas: [cena(1), cena(2), cena(3)], duracao: 15, trilha: "Suspense", cta: "Chame no WhatsApp", sugestoes });
-
 const chamadas = (acao: string) => mock.invoke.mock.calls.filter((c) => c[1] && c[1].body && c[1].body.acao === acao).map((c) => c[1].body);
-const confirmarCusto = async (botao: HTMLElement, acao: string, antes = 0) => {
-  fireEvent.click(botao);
-  await new Promise((r) => setTimeout(r, 450));
-  if (chamadas(acao).length <= antes) fireEvent.click(botao);
-};
-
-beforeEach(() => {
-  mock.invoke.mockReset();
-  mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
-    if (body.acao === "campanha_roteiro_agente" && body.operacao === "criar") {
-      const opcoes = { versoes: [versao("Poeira viva"), versao("Floresta no gabinete", ["Abra com o som da ventoinha"])], recomendada: 1, porque: "O Jev recomenda (80% de confiança).", ideia: body.ideia, duracao: body.duracao_s, estilo: body.estilo, criatividade: body.criatividade, em: "x" };
-      return { data: { opcoes, proposta: { ...proposta, itens: [{ ...pecaDeVideo, roteiro_opcoes: opcoes }] }, custo_usd: 0.02 }, error: null };
-    }
-    if (body.acao === "campanha_roteiro_agente" && body.operacao === "ajustar") {
-      return { data: { roteiro: { ...body.roteiro, gancho: "Gancho ajustado", sugestoes: ["Feche com o técnico rindo"] }, resposta: "Abri com a ventoinha e encurtei a fala.", custo_usd: 0.01 }, error: null };
-    }
-    if (body.acao === "editar_item") {
-      const item = { ...pecaDeVideo, ...body.campos };
-      return { data: { proposta: { ...proposta, itens: [item] }, item, avisos: [], custo_usd: 0 }, error: null };
-    }
-    return { data: {}, error: null };
-  });
-});
-
-function montar() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(chaves.proposta(PROPOSTA_ID), proposta);
-  render(h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: h(CampanhaVideos, { campanha }) })))));
-  return qc;
-}
-
-describe("agente de roteiro na peça de vídeo (tela)", () => {
-  it("cria duas versões com a ideia, a duração e o estilo; usa a escolhida; a sugestão vira ajuste para salvar", async () => {
-    montar();
-    const agente = await screen.findByRole("region", { name: /Agente de roteiro de Reels do PC assombrado/ });
-    fireEvent.change(within(agente).getByLabelText(/Ideia do roteiro/), { target: { value: "O técnico abre um PC e acha uma floresta de poeira" } });
-    fireEvent.click(within(agente).getByRole("button", { name: "1 min" }));
-    fireEvent.click(within(agente).getByRole("button", { name: "Humor" }));
-    expect(within(agente).getByRole("button", { name: /Ultra/ }).getAttribute("aria-pressed")).toBe("true");
-    await confirmarCusto(within(agente).getByRole("button", { name: /Criar roteiro/ }), "campanha_roteiro_agente");
-    await waitFor(() => expect(chamadas("campanha_roteiro_agente").length).toBe(1));
-    expect(chamadas("campanha_roteiro_agente")[0]).toMatchObject({ operacao: "criar", campanha_id: CAMPANHA_ID, tema_id: "v1", ideia: "O técnico abre um PC e acha uma floresta de poeira", duracao_s: 60, estilo: "humor", criatividade: "ultra" });
-
-    const lista = await screen.findByRole("list", { name: /Versões do agente/ });
-    const itens = within(lista).getAllByRole("listitem").filter((li) => li.getAttribute("data-versao"));
-    expect(itens.length).toBe(2);
-    expect(itens[1].getAttribute("data-recomendada")).toBe("sim");
-    expect(within(itens[1]).getByText("Recomendada")).toBeTruthy();
-    fireEvent.click(within(itens[0]).getByRole("button", { name: /Ver as cenas da versão 1/ }));
-    expect(within(itens[0]).getAllByText("Câmera: close lento").length).toBe(3);
-
-    fireEvent.click(screen.getByRole("button", { name: "Usar a versão 2" }));
-    await waitFor(() => expect(chamadas("editar_item").length).toBe(1));
-    expect(chamadas("editar_item")[0].campos.roteiro_video).toMatchObject({ titulo: "Floresta no gabinete", gancho: "Gancho Floresta no gabinete" });
-
-    // Com o roteiro escolhido: a conversa com o agente e as sugestões dele.
-    const sugestao = await screen.findByRole("button", { name: /Abra com o som da ventoinha/ });
-    fireEvent.click(sugestao);
-    const pedido = screen.getByLabelText(/Pedido ao agente/) as HTMLInputElement;
-    expect(pedido.value).toBe("Abra com o som da ventoinha");
-    await confirmarCusto(screen.getByRole("button", { name: /Ajustar/ }), "campanha_roteiro_agente", 1);
-    await waitFor(() => expect(chamadas("campanha_roteiro_agente").length).toBe(2));
-    expect(chamadas("campanha_roteiro_agente")[1]).toMatchObject({ operacao: "ajustar", pedido: "Abra com o som da ventoinha" });
-    expect(chamadas("campanha_roteiro_agente")[1].roteiro.titulo).toBe("Floresta no gabinete");
-    // O ajuste volta como edição: aparece a resposta e o salvar (sem custo).
-    expect(await screen.findByText("Abri com a ventoinha e encurtei a fala.")).toBeTruthy();
-    expect((screen.getByLabelText("Gancho de Reels do PC assombrado") as HTMLInputElement).value).toBe("Gancho ajustado");
-    fireEvent.click(screen.getByRole("button", { name: "Salvar o roteiro" }));
-    await waitFor(() => expect(chamadas("editar_item").length).toBe(2));
-    expect(chamadas("editar_item")[1].campos.roteiro_video.gancho).toBe("Gancho ajustado");
-  });
-});
-
-// ------------------------------------------------------------------ peças de vídeo sem o agente (23/10)
-
-import { normalizarVideoPronto } from "../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 
 describe("vídeo pronto da peça (regra pura)", () => {
   it("aceita só vídeo do cliente (mesa) ou do Workspace, sem subir pasta", () => {
@@ -261,6 +183,7 @@ describe("Vídeos e Reels sem depender do agente (tela)", () => {
   }
 
   beforeEach(() => {
+    mock.invoke.mockReset();
     mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
       if (body.acao === "campanha_peca_de_video") {
         if (body.operacao === "criar") return { data: { proposta: { ...proposta, itens: [{ ...pecaDeVideo, tema_id: "c2", tema: body.tema }] }, tema_id: "c2", custo_usd: 0 }, error: null };
@@ -272,15 +195,27 @@ describe("Vídeos e Reels sem depender do agente (tela)", () => {
     });
   });
 
-  it("campanha sem vídeo: o agente e o Novo vídeo aparecem; Só a peça cria sem custo; o agente pede a peça nova", async () => {
+  it("campanha sem vídeo: o Novo vídeo aparece; Só a peça cria sem custo; não há agente antigo", async () => {
     montarCom(semVideo);
     expect(await screen.findByRole("region", { name: "Novo vídeo na campanha" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: /Agente de roteiro de Novo vídeo/ })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: /Agente de roteiro de Novo vídeo/ })).toBeNull();
     fireEvent.change(screen.getByLabelText("Nome do vídeo novo"), { target: { value: "Bastidor da bancada" } });
     fireEvent.click(screen.getByRole("button", { name: /Só a peça/ }));
     await waitFor(() => expect(chamadas("campanha_peca_de_video").length).toBe(1));
     expect(chamadas("campanha_peca_de_video")[0]).toMatchObject({ operacao: "criar", campanha_id: CAMPANHA_ID, tema: "Bastidor da bancada", video: null });
     expect(await screen.findByText("Bastidor da bancada")).toBeTruthy();
+  });
+
+  it("Roteiro com o agente: cria a peça (sem custo) e o agente de roteiro unificado aparece nela, pronto para criar", async () => {
+    montarCom(semVideo);
+    fireEvent.change(await screen.findByLabelText("Nome do vídeo novo"), { target: { value: "Bastidor da bancada" } });
+    fireEvent.click(screen.getByRole("button", { name: /Roteiro com o agente/ }));
+    await waitFor(() => expect(chamadas("campanha_peca_de_video")[0]).toMatchObject({ operacao: "criar", tema: "Bastidor da bancada", video: null }));
+    const agente = await screen.findByRole("region", { name: /Agente de roteiro de Bastidor da bancada/ });
+    expect(within(agente).getByLabelText(/Ideia do roteiro/)).toBeTruthy();
+    expect(within(agente).getByRole("button", { name: /Criar roteiro/ })).toBeTruthy();
+    expect(screen.getAllByRole("region", { name: /Agente de roteiro/ })).toHaveLength(1);
+    expect(chamadas("campanha_roteiro_agente")).toHaveLength(0);
   });
 
   it("peça com vídeo pronto: mostra o vídeo, tira o vídeo, edita o nome e apaga com confirmação", async () => {
@@ -298,13 +233,5 @@ describe("Vídeos e Reels sem depender do agente (tela)", () => {
     expect(chamadas("campanha_peca_de_video").filter((b) => b.operacao === "tirar").length).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: /Confirmar: apagar a peça/ }));
     await waitFor(() => expect(chamadas("campanha_peca_de_video").filter((b) => b.operacao === "tirar").length).toBe(1));
-  });
-
-  it("o agente sem peça manda tema_id novo", async () => {
-    mock.invoke.mockImplementation(async (_f: string, { body }: any) => ({ data: body.acao === "campanha_roteiro_agente" ? { opcoes: null, proposta: semVideo, custo_usd: 0 } : {}, error: null }));
-    montarCom(semVideo);
-    const agente = await screen.findByRole("region", { name: /Agente de roteiro de Novo vídeo/ });
-    await confirmarCusto(within(agente).getByRole("button", { name: /Criar roteiro/ }), "campanha_roteiro_agente");
-    await waitFor(() => expect(chamadas("campanha_roteiro_agente")[0]).toMatchObject({ operacao: "criar", tema_id: "novo" }));
   });
 });

@@ -1,174 +1,37 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ExternalLink, FileDown, FileText, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { ExternalLink, FileDown, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { padraoPara, parteDaConferenciaDoJev, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
-import { botao, juntar, superficie, texto } from "@/components/sistema";
-import SeletorCompacto from "@/components/sistema/SeletorCompacto";
-import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
-import { BotaoComCusto } from "./Custo";
+import { textoDoErro } from "@/lib/mesa/api";
+import { botao, juntar, texto } from "@/components/sistema";
 import { useMesa } from "./MesaContexto";
-import type { Campanha, ItemProposto } from "./mesaV4Api";
-import { linhaDaCampanha } from "./CampanhaLinhaDoTempo";
-import { indiceDaFase } from "./areasDaCampanha";
-import { atualizarNoCache, estimarDaPeca, gerarRoteiroDaPeca, useRoteiros, type PedidoDeGeracao, type RespostaDaPeca } from "@/components/mesa-roteiros/roteirosApi";
-import AgenteDoRoteiroDaPeca from "@/components/mesa-roteiros/AgenteDoRoteiroDaPeca";
-import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
-import { CONFERENCIAS_DO_JEV_DA_PECA, TAMANHO_DAS_DUAS_VERSOES } from "../../../supabase/functions/mesa-roteiros/modulos/roteiro-da-peca";
-import { SeloDoStatus } from "@/components/mesa-roteiros/Comuns";
-import {
-  modoDoTipo,
-  motivoParaNaoEditar,
-  normalizarRoteiro,
-  versaoPorNumero,
-  type LinhaDoRoteiro,
-  type Roteiro,
-  type TipoDeRoteiro,
-} from "../../../supabase/functions/_shared/roteiro-modelo";
-import { normalizarRoteiroDeVideo, type RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
+import type { ItemProposto } from "./mesaV4Api";
+import type { LinhaDoRoteiro, Roteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
+import { baixarRoteiro } from "./roteiroDaPeca";
 
 /**
- * Vídeo da campanha, caminho GRAVAR (22/10/2026, dono: "no vídeo, gerar ou gravar: ele monta o roteiro, já
- * puxa para gerar o roteiro e já vem com o documento do roteiro para baixar com base no tema da campanha,
- * usando o motor de roteiros que já tem"). A pessoa vai gravar: o motor de roteiros (mesa-roteiros, ação
- * gerar) escreve o roteiro completo da peça com a campanha (briefing, fase da linha do tempo e o que a peça
- * já tem na série), a tela mostra o roteiro para ler e o documento sai em PDF ou Word.
+ * Vídeo da campanha, caminho GRAVAR (22/10/2026; agente unificado em 23/10, dono: "no Gravar, pega o roteiro
+ * certinho do tema e baixa"). O roteiro é o mesmo da peça (RoteiroDaPecaDeVideo, tabela roteiros, sempre à
+ * vista acima com o agente ao lado); aqui fica o que é de gravar: o PDF e o Word para baixar, o Roteiros
+ * para aprovar e marcar gravado, a direção de gravação, o B-roll e o que confirmar antes de gravar.
  *
  * Interface (CampanhaVideos.tsx liga este componente em cada peça de vídeo):
- *
- *   <GravarVideoDaCampanha clientId={clientId} campanha={campanha} propostaId={campanha.proposta_id} item={peca} aoAtualizar={(linha) => ...} />
- *
- * - clientId: o cliente da Mesa.
- * - campanha: a campanha (mesaV4Api.Campanha). Usa id, nome, objetivo e o briefing (linha do tempo).
- * - propostaId (opcional): a série da campanha; sem ele, campanha.proposta_id. Ajuda a achar o roteiro já feito.
- * - item: a peça de vídeo da série (ItemProposto): tema_id, tema, data, etapa, task_id, gancho, resumo, cta e
- *   roteiro_video (o roteiro curto do agente da campanha, quando houver).
- * - aoAtualizar (opcional): chamado com a linha do roteiro gravada depois de gerar.
- *
- * Precisa estar dentro do MesaProvider (o BotaoComCusto lê saldo e catálogo), do QueryClientProvider e de um
- * Router (o link "Abrir no Roteiros").
- *
- * Ligação peça e roteiro: a tabela roteiros guarda task_id, proposta_id e campanha_id. Peça na agenda:
- * o roteiro é o da tarefa (um por tarefa). Fora da agenda: o roteiro da campanha (ou da série) com o
- * título igual ao tema da peça (o servidor dá ao roteiro avulso o título do tema). Reabrir acha o roteiro
- * na lista do cliente e não gera de novo.
- *
- * Custo antes: a ação estimar do motor (sem IA) devolve o valor e o modelo; o botão mostra esse valor mais
- * a conferência do Jev, e a geração usa o mesmo modelo.
- *
- * Frente B (23/10/2026, dono: "no Gravar eu pego o roteiro certinho do assunto e do tema e posso baixar; e
- * tem o agente de roteiro para eu editar, melhorar, dar ideias"): Gerar roteiro pede peca_gerar (2 versões
- * com os ganchos vencedores do nicho; o Jev escolhe pelas notas virais e a outra fica no histórico), o
- * seletor é o do escopo "roteiro" (lembrado por cliente), PDF e Word são botões só ícone, e o agente de
- * roteiro (AgenteDoRoteiroDaPeca) fica ao lado do roteiro: pedido de mudança vira versão nova com Desfazer.
+ *   <GravarVideoDaCampanha clientId={clientId} item={peca} linha={linhaOuNull} roteiro={roteiroOuNull} />
+ * - linha: o roteiro na tabela (null: a peça só tem o roteiro antigo do item, que também baixa).
+ * - roteiro: o conteúdo à vista (a versão atual ou o do item).
  */
 
 export interface PropsDoGravarVideo {
   clientId: string;
-  campanha: Campanha;
-  propostaId?: string | null;
   item: ItemProposto;
-  aoAtualizar?: (linha: LinhaDoRoteiro | null) => void;
-}
-
-const TIPOS_PARA_GRAVAR: { valor: TipoDeRoteiro; rotulo: string }[] = [
-  { valor: "fala_camera", rotulo: "Fala para a câmera" },
-  { valor: "ugc", rotulo: "UGC" },
-  { valor: "tutorial", rotulo: "Tutorial" },
-];
-
-const roteiroDaSerie = (item: ItemProposto): RoteiroDeVideo | null => normalizarRoteiroDeVideo((item as ItemProposto & { roteiro_video?: unknown }).roteiro_video);
-
-/** O roteiro já feito desta peça: o da tarefa da agenda; fora dela, o da campanha (ou da série) com o título do tema. */
-export function roteiroDaPecaDaCampanha(lista: LinhaDoRoteiro[], p: { campanhaId: string; propostaId?: string | null; item: ItemProposto }): LinhaDoRoteiro | null {
-  const vivos = lista.filter((r) => !r.arquivado_em);
-  if (p.item.task_id) {
-    const daTarefa = vivos.filter((r) => r.task_id === p.item.task_id)[0];
-    if (daTarefa) return daTarefa;
-  }
-  const tema = String(p.item.tema || "").trim();
-  if (!tema) return null;
-  return vivos.filter((r) => r.titulo.trim() === tema && (r.campanha_id === p.campanhaId || (!!p.propostaId && r.proposta_id === p.propostaId)))[0] || null;
-}
-
-/** O pedido ao roteirista com o que a peça já tem: fase, gancho, resumo, cenas e CTA do roteiro da série. */
-export function pedidoDaPecaDaCampanha(campanha: Campanha, item: ItemProposto): string {
-  const linha = linhaDaCampanha(campanha);
-  const k = linha ? indiceDaFase(linha.fases, item) : -1;
-  const fase = linha && k >= 0 ? linha.fases[k] : null;
-  const rv = roteiroDaSerie(item);
-  const cenas = rv
-    ? rv.cenas.map((c, i) => `${i + 1}) ${c.descricao}${c.fala ? ` | fala: ${c.fala}` : ""}${c.texto_na_tela ? ` | na tela: ${c.texto_na_tela}` : ""} (${c.segundos} s)`).join("; ")
-    : "";
-  const cta = (rv && rv.cta) || item.cta || "";
-  return [
-    `Peça de vídeo da campanha "${campanha.nome}" para a pessoa gravar.`,
-    fase ? `Fase da linha do tempo: ${fase.nome} (${fase.inicio} a ${fase.fim}), ${fase.papel}.` : item.etapa ? `Fase: ${item.etapa}.` : "",
-    item.gancho ? `Gancho da série: ${item.gancho}` : "",
-    item.resumo ? `Resumo da peça: ${item.resumo}` : "",
-    rv && rv.gancho && rv.gancho !== item.gancho ? `Gancho do roteiro da série: ${rv.gancho}` : "",
-    cenas ? `Cenas do roteiro da série: ${cenas}` : "",
-    cta ? `CTA: ${cta}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n")
-    .slice(0, 2000);
-}
-
-/** O corpo da ação gerar do motor de roteiros para esta peça. */
-export function corpoDoRoteiroDaPeca(p: { clientId: string; campanha: Campanha; item: ItemProposto; tipo: TipoDeRoteiro; modeloId?: string | null }): PedidoDeGeracao {
-  const rv = roteiroDaSerie(p.item);
-  return {
-    client_id: p.clientId,
-    task_id: p.item.task_id || null,
-    tipo: p.tipo,
-    duracao_s: rv && rv.duracao ? rv.duracao : 30,
-    objetivo: String(p.item.objetivo || p.campanha.objetivo || "").slice(0, 300) || undefined,
-    pedido: pedidoDaPecaDaCampanha(p.campanha, p.item),
-    tema: String(p.item.tema || p.item.titulo || "Vídeo da campanha").slice(0, 300),
-    modelo_id: p.modeloId || null,
-    campanha_id: p.campanha.id,
-    tema_id: p.item.tema_id || null,
-  };
-}
-
-/** O roteiro em texto com títulos (# e ##), para o documento Word. */
-export function textoDoRoteiro(r: Roteiro): string {
-  const linhas: string[] = [`# ${r.titulo || "Roteiro"}`];
-  if (r.subtitulo) linhas.push(r.subtitulo);
-  linhas.push(`${modoDoTipo(r.tipo).rotulo} · ${r.duracao_alvo_s} s${r.objetivo ? ` · ${r.objetivo}` : ""}`, "");
-  if (r.ganchos.length) {
-    linhas.push("## Ganchos");
-    r.ganchos.forEach((g, i) => linhas.push(`${i + 1}. ${g.texto}${i === r.gancho_escolhido ? " (escolhido)" : ""}`));
-    linhas.push("");
-  }
-  linhas.push("## Roteiro");
-  r.blocos.forEach((b, i) => {
-    linhas.push(`### ${i + 1}. ${b.funcao || "Bloco"} (${b.segundos} s)`);
-    if (b.fala) linhas.push(`Fala: ${b.fala}`);
-    if (b.visual) linhas.push(`Visual: ${b.visual}`);
-    if (b.texto_na_tela) linhas.push(`Texto na tela: ${b.texto_na_tela}`);
-    if (b.broll) linhas.push(`B-roll: ${b.broll}`);
-  });
-  linhas.push("");
-  const d = r.direcao;
-  const direcao = ([["Enquadramento", d.enquadramento], ["Ambiente", d.ambiente], ["Figurino", d.figurino], ["Objetos", d.objetos], ["Luz", d.luz], ["Câmera", d.camera]] as const).filter(([, v]) => !!v);
-  if (direcao.length || d.orientacoes.length) {
-    linhas.push("## Direção de gravação", ...direcao.map(([k, v]) => `${k}: ${v}`), ...d.orientacoes.map((o) => `- ${o}`), "");
-  }
-  if (r.broll.length) linhas.push("## B-roll", ...r.broll.map((b) => `- ${b}`), "");
-  if (r.cta) linhas.push("## CTA", r.cta, "");
-  if (r.legenda) linhas.push("## Legenda", ...r.legenda.split("\n"), "");
-  if (r.hashtags.length) linhas.push("## Hashtags", r.hashtags.join(" "), "");
-  if (r.pendencias.length) linhas.push("## Confirmar antes de gravar", ...r.pendencias.map((p) => `- ${p}`), "");
-  return linhas.join("\n");
+  linha: LinhaDoRoteiro | null;
+  roteiro: Roteiro | null;
 }
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
   if (!valor) return null;
   return (
-    <p className={juntar(texto.corpo, "min-w-0 whitespace-pre-line")}>
+    <p className={juntar(texto.corpo, "min-w-0 whitespace-pre-line [overflow-wrap:anywhere]")}>
       <span className={texto.rotulo}>{rotulo}: </span>
       {valor}
     </p>
@@ -182,49 +45,21 @@ function Lista({ titulo, itens }: { titulo: string; itens: string[] }) {
       <h4 className={juntar(texto.rotulo, "mb-1 truncate")}>{titulo}</h4>
       <ul className="min-w-0 list-disc space-y-0.5 pl-5">
         {itens.map((x, i) => (
-          <li key={i} className={texto.corpo}>{x}</li>
+          <li key={i} className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>{x}</li>
         ))}
       </ul>
     </section>
   );
 }
 
-/** O roteiro para ler antes de gravar: ganchos, blocos (fala, visual, texto na tela e b-roll), direção, CTA, legenda e hashtags. */
-export function RoteiroParaGravar({ roteiro: r }: { roteiro: Roteiro }) {
+/** O que é de gravar: direção (enquadramento, ambiente, figurino, objetos, luz e câmera), B-roll e pendências. */
+export function DirecaoParaGravar({ roteiro: r }: { roteiro: Roteiro }) {
   const d = r.direcao;
+  const temDirecao = !!(d.enquadramento || d.ambiente || d.figurino || d.objetos || d.luz || d.camera || d.orientacoes.length > 0);
+  if (!temDirecao && !r.broll.length && !r.pendencias.length) return <p className={texto.auxiliar}>Sem direção de gravação neste roteiro: peça ao agente.</p>;
   return (
-    <div className="mt-2 min-w-0 space-y-3" data-roteiro-para-gravar="">
-      {r.ganchos.length > 0 && (
-        <section className="min-w-0" aria-label="Ganchos">
-          <h4 className={juntar(texto.rotulo, "mb-1 truncate")}>Ganchos</h4>
-          <ol className="min-w-0 space-y-1">
-            {r.ganchos.map((g, i) => (
-              <li key={i} className={juntar(texto.corpo, "min-w-0")} data-gancho-escolhido={i === r.gancho_escolhido ? "" : undefined}>
-                <span className="mr-1 text-muted-foreground">{i + 1}.</span>
-                {g.texto}
-                {i === r.gancho_escolhido && <span className={juntar(texto.etiqueta, "ml-2 text-primary")}>escolhido</span>}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-      <section className="min-w-0" aria-label="Blocos do roteiro">
-        <h4 className={juntar(texto.rotulo, "mb-1 truncate")}>Roteiro</h4>
-        <ol className="min-w-0 space-y-2">
-          {r.blocos.map((b, i) => (
-            <li key={b.id || i} className={juntar(superficie.poco, "min-w-0 space-y-0.5 p-2")} data-bloco={i + 1}>
-              <p className={juntar(texto.etiqueta, "truncate text-muted-foreground")}>
-                {i + 1}. {b.funcao || "Bloco"} · {b.segundos} s
-              </p>
-              <Campo rotulo="Fala" valor={b.fala} />
-              <Campo rotulo="Visual" valor={b.visual} />
-              <Campo rotulo="Texto na tela" valor={b.texto_na_tela} />
-              <Campo rotulo="B-roll" valor={b.broll} />
-            </li>
-          ))}
-        </ol>
-      </section>
-      {(d.enquadramento || d.ambiente || d.figurino || d.objetos || d.luz || d.camera || d.orientacoes.length > 0) && (
+    <div className="min-w-0 space-y-3" data-direcao-para-gravar="">
+      {temDirecao && (
         <section className="min-w-0 space-y-0.5" aria-label="Direção de gravação">
           <h4 className={juntar(texto.rotulo, "mb-1 truncate")}>Direção de gravação</h4>
           <Campo rotulo="Enquadramento" valor={d.enquadramento} />
@@ -236,213 +71,56 @@ export function RoteiroParaGravar({ roteiro: r }: { roteiro: Roteiro }) {
           {d.orientacoes.length > 0 && (
             <ul className="min-w-0 list-disc space-y-0.5 pl-5">
               {d.orientacoes.map((o, i) => (
-                <li key={i} className={texto.corpo}>{o}</li>
+                <li key={i} className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>{o}</li>
               ))}
             </ul>
           )}
         </section>
       )}
       <Lista titulo="B-roll" itens={r.broll} />
-      {(r.cta || r.legenda || r.hashtags.length > 0) && (
-        <section className="min-w-0 space-y-0.5" aria-label="CTA e legenda">
-          <Campo rotulo="CTA" valor={r.cta} />
-          <Campo rotulo="Legenda" valor={r.legenda} />
-          <Campo rotulo="Hashtags" valor={r.hashtags.join(" ")} />
-        </section>
-      )}
       <Lista titulo="Confirmar antes de gravar" itens={r.pendencias} />
     </div>
   );
 }
 
-
-/** "Escolhida pelo Jev. Versão 2 (gancho de erro), viral 78 contra 64." da versão atual, quando houve escolha. */
-export function escolhaDaVersao(linha: LinhaDoRoteiro | null): { porque: string; outra: number | null } | null {
-  if (!linha) return null;
-  const v = versaoPorNumero(linha.versoes, linha.versao_atual);
-  const nota = v && v.nota ? v.nota : "";
-  if (nota.indexOf("Escolhida pelo Jev.") !== 0) return null;
-  const outra = linha.versoes.filter((x) => x.numero < linha.versao_atual && (x.nota || "").indexOf("(o Jev escolheu a outra)") >= 0).map((x) => x.numero).pop();
-  return { porque: nota.slice("Escolhida pelo Jev.".length).trim(), outra: outra == null ? null : outra };
-}
-
-/** O nome do arquivo Word (sem acento, só letras, números e hífen). */
-export function nomeDoWord(titulo: string): string {
-  const base = String(titulo || "video").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
-  return `roteiro-${base || "video"}`;
-}
-
-export default function GravarVideoDaCampanha({ clientId, campanha, propostaId, item, aoAtualizar }: PropsDoGravarVideo) {
+export default function GravarVideoDaCampanha({ clientId, item, linha, roteiro }: PropsDoGravarVideo) {
   const mesa = useMesa();
-  const qc = useQueryClient();
-  const modelo = useModeloDoEscopo("roteiro");
-  const [tipo, setTipo] = useState<TipoDeRoteiro>("fala_camera");
-  // Banco sem a tabela: o roteiro volta sem guardar e fica só nesta tela.
-  const [solto, setSolto] = useState<Roteiro | null>(null);
   const [baixando, setBaixando] = useState<"pdf" | "docx" | null>(null);
-  const [recolhido, setRecolhido] = useRecolhido(`campanha-gravar:${clientId}:${item.tema_id || item.tema || ""}`, false);
-  const roteiros = useRoteiros(clientId);
-  const serie = propostaId || campanha.proposta_id || null;
-  const linha = roteiros.data ? roteiroDaPecaDaCampanha(roteiros.data.lista, { campanhaId: campanha.id, propostaId: serie, item }) : null;
-  const versao = linha ? versaoPorNumero(linha.versoes, linha.versao_atual) : null;
-  const roteiro = versao ? versao.conteudo : solto;
-  const travado = linha ? motivoParaNaoEditar(linha.status, !!linha.arquivado_em) : null;
-  // Frente B (23/10): o preço das duas versões com o modelo do roteiro (o escolhido ou o padrão), antes de gerar.
-  const estimativa = useQuery({
-    queryKey: ["mesa-roteiros", "estimar", "peca", clientId, modelo.modeloId],
-    enabled: !!clientId,
-    staleTime: 5 * 60_000,
-    retry: false,
-    queryFn: () => estimarDaPeca(clientId, "peca", modelo.modeloId || null),
-  });
-  const padrao = padraoPara(mesa.catalogo, "estrategista");
-  const modeloId = estimativa.data && estimativa.data.modelo_id ? estimativa.data.modelo_id : modelo.modeloId || (padrao ? padrao.id : "");
-  const jev = (): ParteDaEstimativa[] => Array.from({ length: CONFERENCIAS_DO_JEV_DA_PECA }, () => parteDaConferenciaDoJev());
-  const partes = (): ParteDaEstimativa[] => {
-    if (estimativa.data && typeof estimativa.data.estimativa_usd === "number") return [{ modeloId, tipo: "texto", fixoUsd: estimativa.data.estimativa_usd } as ParteDaEstimativa].concat(jev());
-    // O motor não respondeu a estimativa: a mesma conta do servidor, pelo catálogo.
-    return modeloId ? [{ modeloId, tipo: "texto", tokensEntrada: TAMANHO_DAS_DUAS_VERSOES.entrada, tokensSaida: TAMANHO_DAS_DUAS_VERSOES.saida } as ParteDaEstimativa].concat(jev()) : [];
-  };
-  const aoGerar = (data: RespostaDaPeca) => {
-    if (data && data.roteiro) {
-      atualizarNoCache(qc, clientId, data.roteiro);
-      setRecolhido(false);
-      aoAtualizar?.(data.roteiro);
-    } else if (data && data.versao) {
-      toast.warning("Roteiro gerado sem guardar", { description: data.aviso_banco || "O banco ainda não guarda roteiros." });
-      setSolto(normalizarRoteiro(data.versao.conteudo));
-      aoAtualizar?.(null);
-    }
-  };
-  const gerarDuas = (roteiroId: string | null) =>
-    gerarRoteiroDaPeca({ ...corpoDoRoteiroDaPeca({ clientId, campanha, item, tipo: roteiro ? roteiro.tipo : tipo, modeloId }), ...(roteiroId ? { roteiro_id: roteiroId } : {}) });
-
-  const nomeDoCliente = mesa.clientName || "Cliente";
-  const baixarPdf = async () => {
-    if (!roteiro) return;
-    setBaixando("pdf");
-    try {
-      const { baixarBytes, itemDoPdf, itemSolto, montarPdf } = await import("@/components/mesa-roteiros/pdfNoNavegador");
-      const doc = (linha && itemDoPdf(linha, false)) || itemSolto(roteiro);
-      const { bytes, nome } = montarPdf(nomeDoCliente, [doc]);
-      baixarBytes(bytes, nome);
-    } catch (e) {
-      toast.error("PDF não gerado", { description: textoDoErro(e) });
-    } finally {
-      setBaixando(null);
-    }
-  };
-  const baixarWord = async () => {
-    if (!roteiro) return;
-    setBaixando("docx");
-    try {
-      const { baixarDocumentoDoLab, docxDoProjeto } = await import("@/lib/laboratorio/exportar");
-      const markdown = textoDoRoteiro(roteiro);
-      const nome = nomeDoWord(roteiro.titulo || item.tema || "video");
-      const blob = await docxDoProjeto({ nome, titulo: roteiro.titulo || "Roteiro", markdown, json: "", totalNos: 0, totalExecucoes: 0, pendencias: [] });
-      baixarDocumentoDoLab(blob, `${nome}.docx`);
-    } catch (e) {
-      toast.error("Word não gerado", { description: textoDoErro(e) });
-    } finally {
-      setBaixando(null);
-    }
-  };
-
   const tema = item.tema || "o vídeo";
-  const estado = linha ? "pronto" : solto ? "solto" : "falta";
-  const resumo = roteiro ? `${modoDoTipo(roteiro.tipo).rotulo} · ${roteiro.duracao_alvo_s} s · ${roteiro.blocos.length} blocos${linha ? ` · v${linha.versao_atual}` : ""}` : null;
-  const escolha = escolhaDaVersao(linha);
-  const desabilitado = roteiros.isLoading || estimativa.isLoading || !modeloId;
-
+  const baixar = async (tipo: "pdf" | "docx") => {
+    if (!roteiro) return;
+    setBaixando(tipo);
+    try {
+      await baixarRoteiro(tipo, { roteiro, linha, cliente: mesa.clientName || "Cliente", tema: item.tema || "" });
+    } catch (e) {
+      toast.error(tipo === "pdf" ? "PDF não gerado" : "Word não gerado", { description: textoDoErro(e) });
+    } finally {
+      setBaixando(null);
+    }
+  };
+  if (!roteiro) return <p className={texto.auxiliar} data-gravar-video={item.tema_id || ""}>Sem roteiro para gravar: crie com o agente acima.</p>;
   return (
-    <div className="min-w-0" data-gravar-video={item.tema_id || ""} data-estado-do-roteiro-para-gravar={estado}>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        {roteiro ? (
-          <>
-            <TituloRecolhivel titulo="Roteiro para gravar" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} className="mr-auto" />
-            {linha && <SeloDoStatus status={linha.status} />}
-            {linha && (
-              <Link
-                to={`/mesa-roteiros?client=${clientId}&etapa=roteiro&roteiro=${linha.id}`}
-                className={juntar(botao.icone, "text-primary hover:text-primary")}
-                aria-label={`Abrir o roteiro de ${tema} no Roteiros`}
-                title="Abrir no Roteiros (editar, aprovar, versões)"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            )}
-            <button type="button" className={botao.icone} onClick={() => void baixarPdf()} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em PDF`} title="Baixar o roteiro em PDF">
-              {baixando === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileDown className="h-4 w-4" aria-hidden="true" />}
-            </button>
-            <button type="button" className={botao.icone} onClick={() => void baixarWord()} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em Word`} title="Baixar o roteiro em Word">
-              {baixando === "docx" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
-            </button>
-            {linha && !travado && (
-              <BotaoComCusto
-                rotulo={<RefreshCw className="h-4 w-4" aria-label="Gerar de novo" />}
-                titulo="Roteiro para gravar"
-                descricao="Gerar de novo: 2 versões novas com os ganchos do nicho, o Jev escolhe; a atual fica no histórico"
-                disabled={desabilitado}
-                partes={partes}
-                executar={() => gerarDuas(linha.id)}
-                aoConcluir={aoGerar}
-                variant="ghost"
-                className="h-8 px-2"
-              />
-            )}
-          </>
-        ) : (
-          <>
-            <span className={juntar(texto.rotulo, "mr-auto truncate")}>Roteiro para gravar</span>
-            <SeletorCompacto rotulo="Tipo do roteiro" opcoes={TIPOS_PARA_GRAVAR} valor={tipo} onEscolher={(v) => setTipo(v as TipoDeRoteiro)} />
-            <BotaoComCusto
-              rotulo={
-                <>
-                  <Wand2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                  Gerar roteiro
-                </>
-              }
-              titulo="Roteiro para gravar"
-              descricao="2 versões completas pelo motor de roteiros com os ganchos virais do nicho e a campanha; o Jev escolhe a mais forte"
-              disabled={desabilitado}
-              partes={partes}
-              executar={() => gerarDuas(null)}
-              aoConcluir={aoGerar}
-              variant="ghost"
-              className="h-8 px-2"
-            />
-          </>
+    <div className="min-w-0 space-y-3" data-gravar-video={item.tema_id || ""} data-estado-do-roteiro-para-gravar={linha ? "pronto" : "item"}>
+      <div className="flex min-w-0 items-center">
+        <span className={juntar(texto.rotulo, "mr-auto truncate")}>Para gravar</span>
+        {linha && (
+          <Link
+            to={`/mesa-roteiros?client=${clientId}&etapa=roteiro&roteiro=${linha.id}`}
+            className={juntar(botao.icone, "text-primary hover:text-primary")}
+            aria-label={`Abrir o roteiro de ${tema} no Roteiros`}
+            title="Abrir no Roteiros (aprovar, marcar gravado, comentários)"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </Link>
         )}
+        <button type="button" className={botao.icone} onClick={() => void baixar("pdf")} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em PDF`} title="Baixar o roteiro em PDF">
+          {baixando === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileDown className="h-4 w-4" aria-hidden="true" />}
+        </button>
+        <button type="button" className={botao.icone} onClick={() => void baixar("docx")} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${tema} em Word`} title="Baixar o roteiro em Word">
+          {baixando === "docx" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
+        </button>
       </div>
-      {!roteiro && (
-        <div className="mt-2 min-w-0 max-w-md" data-modelo-do-gravar="">
-          <SeletorDoModeloDoEscopo estado={modelo} />
-        </div>
-      )}
-      {roteiros.isError && !roteiro && <p className={juntar(texto.auxiliar, "mt-1 text-destructive")}>Roteiros não lidos: {textoDoErro(roteiros.error)}</p>}
-      {estimativa.isError && !roteiro && <p className={juntar(texto.auxiliar, "mt-1 text-warning")}>Sem a estimativa do servidor: o preço vem do catálogo.</p>}
-      {roteiro && !recolhido && (
-        <div className="mt-2 grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
-          <div className="min-w-0">
-            {escolha && (
-              <p className={juntar(texto.auxiliar, "flex min-w-0 items-start [overflow-wrap:anywhere]")} data-escolha-do-jev="">
-                <Sparkles className="mr-1.5 mt-0.5 h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
-                <span className="min-w-0">
-                  Jev: {escolha.porque}
-                  {escolha.outra ? ` A outra é a v${escolha.outra}, no histórico.` : ""}
-                </span>
-              </p>
-            )}
-            {travado && <p className={juntar(texto.auxiliar, "mt-1")}>{travado}</p>}
-            <RoteiroParaGravar roteiro={roteiro} />
-          </div>
-          {linha && (
-            <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-              <AgenteDoRoteiroDaPeca roteiroId={linha.id} titulo={tema} />
-            </div>
-          )}
-        </div>
-      )}
+      <DirecaoParaGravar roteiro={roteiro} />
     </div>
   );
 }
