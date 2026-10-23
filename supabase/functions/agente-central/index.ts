@@ -76,7 +76,7 @@ const SISTEMA_PREPARAR = `Você é o agente da Central da Aceleriq, agência de 
 
 Antes de perguntar, confronte a lacuna com as RESPOSTAS JÁ REGISTRADAS e o estado real. Uma resposta pode resolver várias frentes: incorpore suas consequências em pendências, próximos passos e lacunas. Não repita perguntas nem paráfrases de algo respondido. Por_que deve explicar o bloqueio concreto e por que as fontes não o resolvem. Perguntas devem mencionar a decisão e o período. Não volte a perguntar se nada mudou. Nunca pergunte algo genérico ("como está o cliente?"). Não invente pesquisa externa ou execução: distinga proposta de ação comprovada.
 
-Regras: use só os fatos; nada inventado. Português do Brasil, sem travessão (use vírgula ou ponto). Conteúdo (Instagram, posts) e anúncios são frentes separadas. "o_que_andou" só com evidência. "proximos" nasce do dossiê ou de um fato, com QUAL peça, QUAL campanha, QUAL decisão. "lacunas" é o que falta no painel para conduzir com firmeza (até 4).
+Regras: use só os fatos; nada inventado. Português do Brasil, sem travessão (use vírgula ou ponto). Conteúdo (Instagram, posts) e anúncios são frentes separadas. "o_que_andou" só com evidência. "proximos" nasce do dossiê ou de um fato, com QUAL peça, QUAL campanha, QUAL decisão. "lacunas" é o que falta no painel para conduzir com firmeza (até 4). "onde_estamos" é a leitura de um estrategista, não um resumo de tarefas: o que está funcionando ou não neste negócio agora, com o número e a causa que os fatos mostram, e o que isso pede; nada de frase que serviria a qualquer cliente. Não repita a leitura da semana anterior: diga o que mudou nela.
 
 Quando houver versões conflitantes, compare datas, fontes e escopo: decisão explícita mais recente prevalece sobre resumo antigo ou ritual gerado pela IA. Não confunda pendência histórica com bloqueio atual. Pergunte sobre uma contradição somente se ela realmente continuar sem solução, citando as duas versões.
 
@@ -468,7 +468,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   let ritualErro: string | null = null;
   const escrito = RITUAL_BRIEF[ritual]
     ? await escreverRitual({
-      ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto,
+      ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto, diaPrioritario: contexto.diaPrioritario,
       estado: estadoAplicar ? estadoRealComoTexto(estadoAplicar, { ritual }) : "",
       clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
       jaDito: contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })),
@@ -541,7 +541,7 @@ async function acaoReescrever(db: SupabaseClient, uid: string, clientId: string,
   ].filter(Boolean).join("\n\n");
   let ritualErro: string | null = null;
   const escrito = await escreverRitual({
-    ritual, clientName: n.nome, contactName: n.contato, facts: recortarDossie(fatos, LIMITE_FATOS), continuidade: contexto.texto,
+    ritual, clientName: n.nome, contactName: n.contato, facts: recortarDossie(fatos, LIMITE_FATOS), continuidade: contexto.texto, diaPrioritario: contexto.diaPrioritario,
     estado: estado ? estadoRealComoTexto(estado, { ritual }) : "", clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
     jaDito: contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })),
   }).catch((e) => {

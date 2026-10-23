@@ -209,6 +209,7 @@ Deno.serve(async (req) => {
         const escrito = await escreverRitual({
           ritual, clientName, contactName, facts,
           continuidade: contexto?.texto,
+          diaPrioritario: contexto?.diaPrioritario,
           estado: estadoTexto,
           promessas: julgados ? promessasComoTexto(julgados.promessas) : "",
           textoAtual, passoAtual,

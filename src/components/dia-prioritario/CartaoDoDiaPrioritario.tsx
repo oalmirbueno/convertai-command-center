@@ -40,14 +40,45 @@ export function ComoFuncionaODia({ aberta, onFechar, dia }: { aberta: boolean; o
   );
 }
 
-/** `recorrente`: o cliente tem contrato mensal vigente. Sem isso e sem dia confirmado, o cartão não aparece (avulso não recebe o benefício). */
-export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora }: { clientId: string | null | undefined; recorrente: boolean; agora?: Date }) {
+/**
+ * `recorrente`: o cliente tem contrato mensal vigente. Sem isso e sem dia confirmado, o cartão não aparece (avulso não recebe o benefício).
+ * `compacto` (23/10/2026, dono: "tem cliente que não está aparecendo o Dia Prioritário"): no celular o cartão ficava
+ * recolhido em "Mais detalhes" e o cliente nunca via o próprio dia. Agora, recolhido, ele vira uma linha só, sempre à vista.
+ */
+export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora, compacto = false }: { clientId: string | null | undefined; recorrente: boolean; agora?: Date; compacto?: boolean }) {
   const { data, isLoading, isError } = useDiaDoCliente(clientId);
   const [comoFunciona, setComoFunciona] = useState(false);
   if (!clientId || isLoading || isError) return null;
   const dia = diaVisivelAoCliente(data);
   if (!dia && !recorrente) return null;
   const hoje = dia ? ehHoje(dia, agora ?? new Date()) : false;
+
+  if (compacto) {
+    return (
+      <section
+        aria-label="Seu Dia Prioritário"
+        data-dia-prioritario={dia ? String(dia) : "sem-dia"}
+        data-hoje={hoje ? "sim" : undefined}
+        data-compacto=""
+        className={juntar("flex min-w-0 items-center rounded-lg border px-3 py-2", hoje ? "border-primary/50 bg-primary/[0.08]" : "border-primary/25 bg-primary/[0.04]")}
+      >
+        <CalendarHeart className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <p className="min-w-0 flex-1 text-[13px] leading-5 text-foreground">
+          {hoje ? (
+            <strong className="font-semibold text-primary">Hoje é seu Dia Prioritário!</strong>
+          ) : dia ? (
+            <>Seu Dia Prioritário: toda <strong className="font-semibold text-primary">{nomeDoDia(dia)}</strong></>
+          ) : (
+            "Seu Dia Prioritário está sendo organizado."
+          )}
+        </p>
+        <button type="button" onClick={() => setComoFunciona(true)} className={juntar("ml-2 h-9 shrink-0 rounded-md px-2 text-[12px] font-medium text-primary", foco)}>
+          Como funciona
+        </button>
+        <ComoFuncionaODia aberta={comoFunciona} onFechar={() => setComoFunciona(false)} dia={dia} />
+      </section>
+    );
+  }
 
   return (
     <section

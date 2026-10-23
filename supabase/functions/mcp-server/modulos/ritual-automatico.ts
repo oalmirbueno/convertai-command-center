@@ -88,6 +88,7 @@ export async function ritualRedigirPorAutomacao(
   const escrito = await escreverRitual({
     ritual: input.ritual, clientName, contactName, facts,
     continuidade: contexto?.texto,
+    diaPrioritario: contexto?.diaPrioritario,
     estado: estadoTexto,
     promessas: julgados ? promessasComoTexto(julgados.promessas) : '',
     clientId: input.client_id,

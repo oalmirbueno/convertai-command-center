@@ -361,10 +361,12 @@ export default function ClientJourneyDashboard({
       </FadeUp>
 
       {/* 1b · Dia Prioritário (12/10/2026): o dia fixo de atenção estratégica; sem dia confirmado, estado neutro */}
-      {/* No celular (16/10/2026) ele fica em "Mais detalhes": a tela abre no que é para agora. */}
-      {!recolhidoNoCelular && (
-        <CartaoDoDiaPrioritario clientId={clientId} recorrente={!!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile })} />
-      )}
+      {/* 23/10/2026: no celular recolhido ele vira uma linha, sempre à vista (antes sumia em "Mais detalhes" e o cliente não via o dia). */}
+      <CartaoDoDiaPrioritario
+        clientId={clientId}
+        recorrente={!!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile })}
+        compacto={recolhidoNoCelular}
+      />
 
       {/* 2 · Avisos importantes: atraso e renovação chegando */}
       {overdueBills.length > 0 && (

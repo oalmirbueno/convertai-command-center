@@ -88,7 +88,7 @@ vi.mock("@/components/client/dashboardHelpers", async () => {
     useClientDashboardData: () => ({ loadingProjects: false, errorProjects: false, refetchProjects: vi.fn(), data: painel }),
   };
 });
-vi.mock("@/components/dia-prioritario/CartaoDoDiaPrioritario", () => ({ default: () => <div>Seu Dia Prioritário</div> }));
+vi.mock("@/components/dia-prioritario/CartaoDoDiaPrioritario", () => ({ default: ({ compacto }: { compacto?: boolean }) => <div>{compacto ? "Dia Prioritário em uma linha" : "Seu Dia Prioritário"}</div> }));
 vi.mock("@/components/shared/ProjectJournal", () => ({ default: () => <div>Diário</div> }));
 
 import ClientRequests from "@/pages/ClientRequests";
@@ -119,8 +119,9 @@ describe("Portal no celular: Início como aplicativo", () => {
     expect(screen.getByRole("heading", { name: "Olá, Marina" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Aprovar agora/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Onde estamos/ })).toBeInTheDocument();
-    // Recolhido: nem a faixa de números nem as entregas nem o Dia Prioritário.
+    // Recolhido: nem a faixa de números nem as entregas; o Dia Prioritário fica numa linha (23/10: antes sumia).
     expect(screen.queryByText("Entregas recentes")).not.toBeInTheDocument();
+    expect(screen.getByText("Dia Prioritário em uma linha")).toBeInTheDocument();
     expect(screen.queryByText("Seu Dia Prioritário")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Mais detalhes/ }));
     expect(await screen.findByText("Entregas recentes")).toBeInTheDocument();

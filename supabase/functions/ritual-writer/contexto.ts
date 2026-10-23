@@ -15,6 +15,7 @@
  */
 
 import { lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
+import { blocoDoDiaPrioritario } from "./modulos/angulo-e-dia.ts";
 import { blocoDoMetodoParaPrompt, faseDoCliente, type FaseAcelera } from "../_shared/metodo-acelera.ts";
 import {
   extrairMemoriaDoRitual,
@@ -45,6 +46,8 @@ export interface ContextoDoRitual {
   desde: string | null;
   contagem: { rituais: number; movimentos: number; aprovacoes: number; tarefasAtrasadas: number; pedidos: number; agenda: number; cerebro: number };
   avisos: string[];
+  /** 23/10: o Dia Prioritário confirmado, já em texto para o escritor (vazio sem dia confirmado). */
+  diaPrioritario: string;
 }
 
 export interface OpcoesDoContexto {
@@ -210,7 +213,7 @@ export async function lerContextoDoRitual(db: BancoDoRitual, clientId: string, o
   const desde28 = new Date(agora.getTime() - 28 * DIA).toISOString().slice(0, 10);
   const em7 = new Date(agora.getTime() + 7 * DIA).toISOString();
 
-  const [perfil, reports, diario, projetos, aprovacoes, pedidos, agenda, cicloRituais, ig, ads, vendas] = await Promise.all([
+  const [perfil, reports, diario, projetos, aprovacoes, pedidos, agenda, cicloRituais, ig, ads, vendas, diaDoCliente] = await Promise.all([
     seguro("perfil", () => db.from("profiles").select("id, created_at, onboarding_done, services_config").eq("id", clientId).maybeSingle()
       .then((r: Resposta) => ({ data: r.data ? [r.data] : [], error: r.error }))),
     seguro("rituais", () => db.from("reports").select("id, title, summary, next_steps, status, created_at, metrics")
@@ -231,6 +234,9 @@ export async function lerContextoDoRitual(db: BancoDoRitual, clientId: string, o
       .eq("client_id", clientId).gte("week_start", desde28).order("week_start", { ascending: false })),
     seguro("anuncios", () => db.from("ads_campaign_daily").select("day, spend, actions").eq("client_id", clientId).gte("day", desde14)),
     seguro("vendas", () => db.from("ads_sales").select("sold_at, quantity, value").eq("client_id", clientId).gte("sold_at", desde14)),
+    // 23/10: o Dia Prioritário do cliente (só o confirmado chega à mensagem; modulos/angulo-e-dia.ts).
+    seguro("dia prioritário", () => db.from("cliente_dia_prioritario").select("dia, situacao").eq("client_id", clientId).maybeSingle()
+      .then((r: Resposta) => ({ data: r.data ? [r.data] : [], error: r.error }))),
   ]);
 
   const anteriores = juntarRituais(reports, diario, opcoes.excluirReportId);
@@ -321,6 +327,7 @@ export async function lerContextoDoRitual(db: BancoDoRitual, clientId: string, o
       cerebro: cerebroUsados,
     },
     avisos: avisos.slice(0, 12),
+    diaPrioritario: blocoDoDiaPrioritario(diaDoCliente[0] as { dia?: unknown; situacao?: unknown } | undefined, agora),
   };
 }
 

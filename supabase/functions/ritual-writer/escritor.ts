@@ -17,6 +17,7 @@ import { jevPerguntar, notaScore, type PerguntaJev, probabilidadeNoul } from "..
 import { BRIEF_POR_RITUAL, blocoDeComunicacao, expressoesDeRobo, semTravessao, TOM_DE_GENTE } from "../_shared/comunicacao-com-cliente.ts";
 import { type EscolhaDoModelo, escreverComModeloDaCentral, type TextoEscrito } from "../_shared/modelo-da-central.ts";
 import { aberturaDoRitual, type ResultadoDaRepeticao, type RitualParaComparar, verificarRepeticao } from "./memoria.ts";
+import { angulosDasVersoes, formulasDeMolde, instrucaoDoAngulo } from "./modulos/angulo-e-dia.ts";
 // Frente SPP (revisão 30/09): o método da casa (prova) também no escritor dos rituais (agente rituais.escritor).
 import type { MetodoInjetado } from "../_shared/superpoderes-catalogo.ts";
 
@@ -64,24 +65,23 @@ REGRAS ABSOLUTAS:
 12. NÚMEROS E VENDAS: no máximo UM número por mensagem da semana, o que mais mudou, com a comparação e o que ele significa na prática. Número que já foi dito numa mensagem anterior e não mudou NÃO volta (o "custo de R$ 2 por contato" toda semana cansa). Venda registrada é o resultado mais importante: quando houver, é ela o número da mensagem.
 13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê", "o que mudou desde o último ritual" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
 14. FRENTES SEPARADAS: conteúdo (Instagram, posts, artes) e tráfego pago (campanhas, leads, verba) são frentes diferentes; cada uma tem seu próprio bloco ou frase, e nunca repita a mesma ação nas duas.
-15. NOME E PESSOA: a mensagem é para uma pessoa com nome. Abra com o primeiro nome da pessoa de contato ("Boa tarde, Priscila.") e cite o nome do negócio uma vez, de forma natural, no corpo. Nunca escreva "cliente", "prezado" ou "olá, tudo bem?" genérico.
+15. NOME E PESSOA: a mensagem é para uma pessoa com nome. Abra com o primeiro nome da pessoa de contato ("Boa tarde, Priscila.") e cite o nome do negócio uma vez, de forma natural, no corpo. Sem nome de contato, cumprimente sem nome ("Boa tarde!"): nunca trate o nome do negócio como se fosse a pessoa ("Boa tarde, Casa dos Assados."). Nunca escreva "cliente", "prezado" ou "olá, tudo bem?" genérico.
 16. LINGUAGEM SIMPLES, SEM TERMO TÉCNICO: escreva como se explicasse para um dono de negócio que não é do marketing. Troque sempre: "tráfego pago" por "anúncios"; "leads" por "pessoas interessadas" ou "contatos"; "conversão" por "pedidos", "orçamentos" ou "mensagens"; "alcance" por "pessoas que viram"; "impressões" por "vezes que o anúncio apareceu"; "criativos" por "artes" ou "vídeos dos anúncios"; "copy" por "texto"; "CPC/CTR/CPM/ROAS/CPA/KPI" por o que o número significa em reais ou em pessoas; "funil" por "caminho até a compra"; "landing page" por "página"; "briefing" por "orientação"; "otimizar" por "ajustar". Todo número vem com o que ele significa na prática ("R$ 55 investidos trouxeram 2 conversas no WhatsApp: cada conversa custou cerca de R$ 28").
-17. AVANÇO SEMPRE VISÍVEL: toda mensagem precisa deixar claro o que andou desde a última vez. Quando os fatos trouxerem a ÚLTIMA MENSAGEM ENVIADA ou as PROMESSAS DO ÚLTIMO RITUAL, o bloco de avanço começa retomando o que foi prometido e mostrando o que virou realidade ("Na segunda a gente combinou X; X já está no ar"). Sem mensagem anterior, mostre o avanço em relação ao começo da semana. Avanço é sempre concreto e com nome; nunca "seguimos trabalhando".
+17. AVANÇO SEMPRE VISÍVEL: toda mensagem precisa deixar claro o que andou desde a última vez, com nome ("o carrossel da vista dos quartos está no ar desde terça"). O que foi prometido e virou realidade entra como fato, sem a retomada burocrática ("Na segunda combinamos...", "Como combinamos..."): ele lembra do que foi combinado, você só mostra que aconteceu. Avanço é sempre concreto; nunca "seguimos trabalhando".
 18. NADA DE REPETIÇÃO: o bloco JÁ DITO traz as últimas mensagens deste cliente (título, abertura e números citados). É proibido repetir a abertura (a frase depois do cumprimento), frases, a mesma sequência de títulos de blocos ou um assunto já contado como se fosse novo. O que já foi dito só volta como continuação, dizendo o que mudou desde então. Se um assunto não teve fato novo, ele não entra de novo. Uma mensagem de segunda nunca repete a de sexta; a de sexta nunca repete a de segunda.
-19. PROGRESSÃO DA SEMANA: segunda PLANEJA (parte do fechamento da sexta e diz o plano novo), quarta ACOMPANHA (parte do plano da segunda e diz o que já saiu do papel), sexta FECHA (parte do que a segunda prometeu e prova o que virou realidade). Siga a PROGRESSÃO DA SEMANA dos fatos.
+19. PROGRESSÃO DA SEMANA: segunda PLANEJA (o plano novo, a partir do que a sexta fechou), quarta ACOMPANHA (o que do plano já saiu do papel), sexta FECHA (o que virou realidade na semana). A progressão aparece nos fatos que você escolhe, não numa frase de retomada ("na segunda combinamos"). Siga a PROGRESSÃO DA SEMANA dos fatos.
 20. MÉTODO: quando os fatos trouxerem a fase do MÉTODO ACELERA, a condução da mensagem segue o que aquela fase pede e o que o ritual de hoje conduz nela. Diga o próximo degrau do negócio dele, não o mesmo passo de sempre.
 21. ESTADO REAL MANDA: o bloco ESTADO REAL DO CLIENTE foi lido agora no banco e é a fonte da verdade do que está sendo feito. Quando ele e os fatos do painel ou o dossiê discordarem, vale o ESTADO REAL. Todo número que você citar sai dele ou dos fatos, com o período (datas) que ele traz.
 22. CAMPANHA DA MESA NÃO É ANÚNCIO: "campanha" na área de Campanhas da Mesa é um tema ou oferta de comunicação. Só fale dela como anúncio se o canal dela disser "paga" ou "orgânica e com anúncio". Anúncio pago é SÓ o que está no bloco ANÚNCIOS PAGOS. Nunca atribua a uma campanha de conteúdo número de anúncio, e nunca diga que um anúncio está no ar sem ele estar lá.
 23. PROMESSA EM ANDAMENTO: o que o bloco de promessas marca como EM ANDAMENTO não volta como novidade nem como promessa nova. Para o cliente, diga com naturalidade que segue em andamento (uma frase, sem prazo inventado); o reforço interno já foi para a equipe. O que está CUMPRIDA entra como entregue, com o dia.
 24. METAS: quando houver META BATIDA E AINDA NÃO COMEMORADA, reconheça em uma frase de gente ("batemos os 1.000 seguidores, parabéns, a gente chegou lá junto") e anuncie a próxima meta cadastrada com quanto falta. Meta já comemorada não se comemora de novo. Sem meta cadastrada, não invente meta.
-25. COMO ESTÁ INDO: diga, com o número, se a semana (ou o mês) foi melhor ou pior que a anterior em cada frente e o que vamos fazer por causa disso. Previsão só a que vem calculada no ESTADO REAL.
+25. COMO ESTÁ INDO, COM O PORQUÊ: quando um número mudou de verdade, diga o que mudou, o PORQUÊ (a causa que os fatos mostram: verba acabou, campanha pausada, peça nova, feriado, mudança de público) e a ação ESPECÍFICA que a gente faz (qual anúncio, qual texto, qual verba), nunca o genérico "vamos ajustar os anúncios". Sem causa nos fatos, diga o que a gente vai testar para descobrir. Não comente frente que não mudou. Previsão só a que vem calculada no ESTADO REAL.
+26. SEM MOLDE E SEM BASTIDOR: cada mensagem tem a cara DESTE negócio nesta semana. É proibido o esqueleto que se repete entre clientes e semanas: "Na segunda combinamos...", "Como combinamos...", "A semana foi pior/melhor", "Nos anúncios, de X a Y, foram N contatos contra M", "Até sexta, a gente...". Também são proibidos termos de bastidor que o dono não entende ou não precisa saber: "conferência", "validade", "data útil", "consolidar", "estruturar a forma de", "registrar a análise", "segue em preparação". Diga o que ELE ganha, não como a agência se organiza por dentro.
+27. CONTEXTO DO NEGÓCIO: use o que os fatos dizem do negócio (o que ele vende, para quem, a época do ano, a pergunta que o público faz) para explicar POR QUE cada coisa importa para ele. Uma mensagem sem nenhum porquê ligado ao negócio dele está errada.
 
-ESTRUTURA DA SEMANA (até 6 linhas, sem títulos de bloco):
-Linha 1: cumprimento com o primeiro nome e o fato novo mais importante, dito de um jeito que não esteja no bloco JÁ DITO.
-Linhas 2 e 3: o que andou desde a última mensagem, com nome e para que serve.
-Linha 4 (só se houver número novo): o número que mais mudou e o que ele significa.
-Linha 5: o próximo passo; se algo depender dele, o pedido com prazo e ganho.
-Última linha: "Tudo no painel: aceleriq.online".
+COMO MONTAR A MENSAGEM DA SEMANA (até 6 linhas, sem títulos de bloco; não é um formulário):
+Abra com o cumprimento e, logo em seguida, o ÂNGULO DESTA MENSAGEM que vem no fim do pedido. Depois, só o que tem fato novo: o que andou (com nome e para que serve), no máximo um número com o porquê, e o próximo passo concreto (se algo depender dele, o pedido com prazo e ganho). A ordem desses pedaços muda de uma mensagem para outra; nenhuma mensagem segue a mesma sequência da anterior.
+Termine com "Tudo no painel: aceleriq.online".
 No balanço do mês e no marco de 90 dias vale a estrutura em blocos com títulos curtos, até 14 linhas.
 SEM NOVIDADE: se nada mudou desde a última mensagem enviada, escreva só 2 ou 3 linhas (cumprimento, o que segue em andamento numa frase, o próximo passo), devolva "sem_novidade": true e ponha em "alertas" que não houve fato novo desde a última mensagem. Nunca encha a mensagem para parecer movimento.
 
@@ -161,6 +161,10 @@ export function normalizarTarefas(raw: unknown): TarefaSugerida[] {
 
 export interface PedidoDoRitual {
   ritual: string;
+  /** 23/10: o Dia Prioritário confirmado do cliente, já em texto (modulos/angulo-e-dia.ts). */
+  diaPrioritario?: string;
+  /** 23/10: relógio do giro dos ângulos (testes); padrão, agora. */
+  agora?: Date;
   clientName: string;
   contactName: string;
   facts: string;
@@ -210,10 +214,11 @@ export interface RitualEscrito {
 export function montarPedidoAoEscritor(p: PedidoDoRitual): string {
   const partes = [
     `TIPO DE MENSAGEM: ${RITUAL_BRIEF[p.ritual]}`,
-    `NEGÓCIO: ${p.clientName}\nPESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${p.contactName || "não informado; use o nome do negócio"}`,
+    `NEGÓCIO: ${p.clientName}\nPESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${p.contactName || "não informado: cumprimente sem nome (\"Boa tarde!\"), nunca chame o negócio de pessoa"}`,
     blocoDeComunicacao(p.ritual),
     TOM_DE_GENTE,
     p.estado || "",
+    p.diaPrioritario || "",
     p.promessas || "",
     blocoDoJaDito(p.jaDito ?? []),
     p.continuidade ? `MEMÓRIA E CONTINUIDADE (lido agora no servidor; manda sobre o que é dito nos fatos quando os dois falam do mesmo ritual):\n${p.continuidade}` : "",
@@ -285,9 +290,11 @@ export function linhasDoTexto(body: string): number {
 /** O aviso para a equipe quando o escritor diz que nada mudou desde a última mensagem enviada. */
 export const SEM_NOVIDADE = "Nada novo desde a última mensagem enviada: a mensagem saiu curta. Avalie se vale mandar hoje.";
 
-/** Duas versões em paralelo: a segunda começa por outro ângulo, para a escolha ter alternativa de verdade. */
+/**
+ * Duas versões em paralelo, cada uma com um ângulo de abertura escolhido pelo código (23/10: gira por
+ * cliente, semana e ritual, modulos/angulo-e-dia.ts), para a escolha ter alternativa de verdade.
+ */
 export const VERSOES_DO_RITUAL = 2;
-const ANGULO_DA_VERSAO_B = "VERSÃO B: comece por outro ângulo que não o óbvio (pelo próximo passo ou pelo número que mais mudou) e use palavras diferentes das mensagens do bloco JÁ DITO.";
 
 export interface EscolhaDaVersao {
   versoes: number;
@@ -315,6 +322,8 @@ export function pontosDaVersao(
   let pontos = 0;
   pontos -= r.indice * 6 + r.frases_repetidas.length + (r.abertura_repetida ? 2 : 0);
   pontos -= excessoLinhas * 0.75 + excessoChars / 200;
+  // 23/10: cada fórmula de molde ou termo de bastidor tira ponto (as mensagens de 21/10 saíram todas iguais).
+  pontos -= formulasDeMolde(body).length * 1.5;
   if (jev.novidade !== null) pontos += jev.novidade * 2;
   if (jev.clareza !== null) pontos += jev.clareza;
   return Math.round(pontos * 100) / 100;
@@ -397,7 +406,10 @@ export async function escreverRitual(
     return escrever({ clientId: "", sistema: SYSTEM_PROMPT, usuario: texto, escolha: { modelo: "legado:gpt-4.1", raciocinio: "medium" }, temperatura, metodo: p.metodo ?? null });
   };
   const quantas = p.textoAtual || !p.clientId ? 1 : VERSOES_DO_RITUAL;
-  const saidas = await Promise.all(Array.from({ length: quantas }, (_, i) => umaVersao(i === 0 ? "" : ANGULO_DA_VERSAO_B).catch(() => null)));
+  // 23/10: no aprimorar vale o texto atual; nas versões novas, um ângulo de abertura para cada uma.
+  const angulos = p.clientId ? angulosDasVersoes(p.clientId, p.ritual, p.agora ?? new Date()) : null;
+  const extraDa = (i: number) => (p.textoAtual || !angulos ? "" : instrucaoDoAngulo(angulos[i === 0 ? 0 : 1], i === 0 ? "A" : "B"));
+  const saidas = await Promise.all(Array.from({ length: quantas }, (_, i) => umaVersao(extraDa(i)).catch(() => null)));
   const candidatas: Array<{ lido: NonNullable<ReturnType<typeof lerRespostaDoEscritor>>; saida: TextoEscrito }> = [];
   for (const saida of saidas) {
     if (!saida) continue;
@@ -434,7 +446,7 @@ export async function escreverRitual(
     raciocinio: saida.raciocinio,
     reserva: saida.reserva,
     custo_usd: saida.custoUsd,
-    robo: expressoesDeRobo(lido.body),
+    robo: [...expressoesDeRobo(lido.body), ...formulasDeMolde(lido.body)],
     usage: saida.usage ?? null,
     uso_id: saida.usoId ?? null,
     escolha_da_versao: escolhaDaVersao,
