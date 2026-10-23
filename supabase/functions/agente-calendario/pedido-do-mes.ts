@@ -34,6 +34,8 @@ export function formatosAusentes(formatos: readonly string[], acao: any, criacao
   const presentes = new Set<string>([
     ...(acao?.mudar_formato || []).map((x: any) => formatoDoMes(x.formato_para ?? x.formato)),
     ...(criacao?.itens || []).map((x: any) => formatoDoMes(x.formato)),
+    // 23/10: a mídia pensada na peça já no formato (foto real numa peça de foto, roteiro num vídeo) também conta.
+    ...(acao?.midia || []).map((x: any) => formatoDoMes(x.tipo)),
   ]);
   return formatos.filter(f => !presentes.has(f));
 }

@@ -109,7 +109,8 @@ describe("custo do Jev na carteira", () => {
     // 22/10: + as perguntas da campanha (datas do hype, conferência, introdução e reorganização) e do pedido do Mês;
     // 23/10: + a versão recomendada do agente de roteiro da peça de vídeo (Choice).
     // conferido: cada uma das 15 tem a sua cobrança na linha seguinte.
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(15);
+    // + Mês 23/10: perfil de mistura pelo nicho, nota das fotos e da mídia de cada peça, sugestão de mistura.
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(18);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
     // + frente R2 (26/09): conferir_rosto (Noul "outra pessoa?", só aviso, uma vez por versão:
     // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
@@ -129,7 +130,7 @@ describe("custo do Jev na carteira", () => {
     // no gerador do carrossel com o custo já confirmado; template_videos_buscar e template_destaques usam a
     // mesma perguntarJev do carrossel, já cobrada).
     expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(18);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(15);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(18);
     expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(17);
     // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
     for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {

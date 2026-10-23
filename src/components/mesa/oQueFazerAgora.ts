@@ -6,9 +6,10 @@
  * Puro (sem rede), para testar.
  */
 import { diasEntre, seloDaData, somarDiasIso, segundaDe, type DataDoHype } from "./datasDoHype";
+import { misturaDoMes } from "../../../supabase/functions/agente-calendario/modulos/mistura-do-nicho";
 
 export type FonteDaSugestao = "datas" | "em-alta" | "semana" | "calendario";
-export type AcaoDaSugestao = "campanha" | "abrir-em-alta" | "abrir-semana" | "agente";
+export type AcaoDaSugestao = "campanha" | "abrir-em-alta" | "abrir-semana" | "agente" | "mistura";
 
 export interface SugestaoDoMes {
   chave: string;
@@ -70,8 +71,17 @@ export function sugestoesDoMes(e: {
   emAltaNoNicho: number;
   leituraDaSemana: boolean;
   datasComPost: Array<string | null> | null;
+  /** 23/10: as peças do mês (título e formato) para ver se ficou num formato só. */
+  pecas?: Array<{ title: string; delivery_type: string | null; due_date?: string | null }> | null;
 }): SugestaoDoMes[] {
   const saida: SugestaoDoMes[] = [];
+  // 23/10 (dono: "diversificar e mesclar; ele já dá a sugestão para eu aprovar"): mês repetitivo vem primeiro.
+  if (e.pecas && e.mes.slice(0, 7) >= e.hoje.slice(0, 7)) {
+    const leitura = misturaDoMes(e.pecas);
+    if (leitura.repetitivo) {
+      saida.push({ chave: "mistura", texto: `Mês repetitivo: ${leitura.frase}. Misturar com vídeo e foto pelo nicho`, fonte: "calendario", acao: "mistura", rotuloDaAcao: "Sugerir a mistura de formatos (você confirma)" });
+    }
+  }
   const dat = sugestaoDasDatas(e.principais, e.hoje);
   if (dat) saida.push(dat);
   if (e.noticiasQueServem && e.noticiasQueServem > 0) {

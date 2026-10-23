@@ -2,7 +2,7 @@ import { resumoDoRecibo } from "../../../supabase/functions/agente-calendario/re
 import { caminhosDeImagemDosAnexos } from "@/lib/mesa/imagensDosAnexos";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarRange, Check, ChevronDown, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
+import { AlertTriangle, CalendarRange, Camera, Check, ChevronDown, Clapperboard, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +36,7 @@ import {
   lerHypes,
   lerPropostas,
   partesDoPedido as partesDoPedidoLivre,
+  partesDaMidia,
   pedidoLivre,
   periodoCurto,
   type MensagemDoAgente,
@@ -307,8 +308,11 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
   const estado = atual.desfeita_em ? "desfeita" : atual.executada_em ? "feita" : atual.descartada_em ? "descartada" : "aberta";
   const faltaEscolher = !!opcoes && estado === "aberta" && !escolhida;
   const textos = atual.editar_textos || [];
-  const total = atual.apagar.length + atual.mudar_data.length + atual.mudar_formato.length + atual.refazer.length + atual.editar_campanhas.length + textos.length;
-  const todos = (atual.resultados || []).concat(atual.mudancas || [], atual.formatos || [], atual.refeitos || [], atual.textos || []);
+  const midia = atual.midia || [];
+  // A troca de formato que vem junto com a mídia (o painel muda sozinho) não conta duas vezes.
+  const formatosSoltos = atual.mudar_formato.filter((f) => !midia.some((m) => m.task_id === f.task_id));
+  const total = atual.apagar.length + atual.mudar_data.length + formatosSoltos.length + atual.refazer.length + atual.editar_campanhas.length + textos.length + midia.length;
+  const todos = (atual.resultados || []).concat(atual.mudancas || [], atual.formatos || [], atual.refeitos || [], atual.textos || [], atual.midias || []);
   const campanhasFeitas = atual.campanhas_editadas || [];
   const falhas = todos.filter((r) => !r.ok).length + campanhasFeitas.filter((r) => !r.ok).length;
   const motivoDe = (taskId: string, lista?: typeof todos) => {
@@ -329,6 +333,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           data.formatos ? `${data.formatos} ${data.formatos === 1 ? "formato mudado" : "formatos mudados"}` : "",
           data.campanhas ? `${data.campanhas} ${data.campanhas === 1 ? "campanha editada" : "campanhas editadas"}` : "",
           data.textos ? `${data.textos} ${data.textos === 1 ? "peça reescrita" : "peças reescritas"}` : "",
+          data.midias ? `mídia pensada em ${data.midias} ${data.midias === 1 ? "peça" : "peças"}` : "",
         ].filter(Boolean);
         (data.falhas ? toast.warning : toast.success)(partes.join(" e ") || "Nada mudou", {
           description: data.falhas ? `${data.falhas} não ${data.falhas === 1 ? "pôde ser feita" : "puderam ser feitas"}. O motivo está na lista.` : "Dá para desfazer no cartão.",
@@ -415,6 +420,31 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
     );
   };
 
+  // 23/10: a mídia pensada pelo nicho (fotos do Workspace, referência livre, roteiro com gancho), com o formato junto.
+  const linhaDaMidia = (i: AcaoNaAgenda["midia"][number]) => {
+    const feito = (atual.midias || []).find((r) => r.task_id === i.task_id) || null;
+    const formato = atual.mudar_formato.find((f) => f.task_id === i.task_id);
+    const Icone = i.tipo === "video" ? Clapperboard : Camera;
+    return (
+      <li key={`m-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug" data-midia-da-peca={i.tipo}>
+        <Icone className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="text-muted-foreground">{i.tipo === "video" ? "Vídeo com roteiro: " : "Foto real: "}</span>
+          <span className="font-medium">{i.titulo}</span>
+          <span className="text-muted-foreground"> · {i.data ? diaCurto(i.data) : "sem data"}{formato ? ` · ${formato.formato} para ${formato.formato_para_nome || formato.formato_para || ""}` : ""}</span>
+          {i.pedido && !feito && <span className="block text-[12px] text-muted-foreground">{i.pedido}</span>}
+          {feito && feito.ok && feito.resumo && (
+            <span className="block text-[12px] text-foreground" data-prova>
+              <Check className="mr-1 inline h-3 w-3 text-success" />
+              {feito.resumo}
+            </span>
+          )}
+          {feito && !feito.ok && <span className="block text-[12px] text-destructive">{feito.motivo || "Não foi possível."}</span>}
+        </span>
+      </li>
+    );
+  };
+
   const linha = (i: AcaoNaAgenda["apagar"][number], sinal: "sai" | "muda" | "formato" | "refaz") => {
     const motivo = motivoDe(i.task_id, sinal === "sai" ? atual.resultados : sinal === "muda" ? atual.mudancas : sinal === "formato" ? atual.formatos : atual.refeitos);
     const quando =
@@ -479,7 +509,8 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
         {atual.apagar.map((i) => linha(i, "sai"))}
         {atual.refazer.map((i) => linha(i, "refaz"))}
         {atual.mudar_data.map((i) => linha(i, "muda"))}
-        {atual.mudar_formato.map((i) => linha(i, "formato"))}
+        {formatosSoltos.map((i) => linha(i, "formato"))}
+        {midia.map((i) => linhaDaMidia(i))}
         {textos.map((i) => linhaDoTexto(i))}
         {atual.editar_campanhas.map((c) => {
           const r = campanhasFeitas.find((x) => x.campanha_id === c.campanha_id);
@@ -522,6 +553,26 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
                 disabled={!!fazendo || faltaEscolher}
                 className="mb-1 mr-1.5 h-8"
               />
+            ) : midia.length ? (
+              <BotaoComCusto
+                rotulo={`Confirmar${midia.length ? ` e pensar ${midia.length} ${midia.length === 1 ? "mídia" : "mídias"}` : ""}`}
+                titulo="Confirmar e pensar a mídia"
+                descricao="Muda o formato quando precisa, escolhe as fotos do Workspace e escreve o roteiro com gancho de cada vídeo. Nenhuma imagem ou vídeo é gerado aqui."
+                partes={() => partesDaMidia(catalogo, midia.filter((m) => m.tipo === "video").length || 1)}
+                executar={async () => {
+                  setFazendo("confirmar");
+                  try {
+                    const data = await executarAcaoNaAgenda(mensagemId, false, escolhida);
+                    depois("confirmar", data);
+                    return data;
+                  } finally {
+                    setFazendo(null);
+                  }
+                }}
+                fecharAoConfirmar
+                disabled={!!fazendo || faltaEscolher}
+                className="mb-1 mr-1.5 h-8"
+              />
             ) : (
               <Button type="button" size="sm" variant="destructive" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")} disabled={!!fazendo || faltaEscolher}>
                 {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
@@ -537,7 +588,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
               Cancelar
             </Button>
             <span className="mb-1 ml-auto text-[11px] text-muted-foreground">
-              {refazendo ? "A arte já feita fica guardada no Estúdio, e dá para desfazer." : "Sem custo. A arte já feita fica guardada no Estúdio, e dá para desfazer."}
+              {refazendo || midia.length ? "A arte já feita fica guardada no Estúdio, e dá para desfazer." : "Sem custo. A arte já feita fica guardada no Estúdio, e dá para desfazer."}
             </span>
           </>
         )}

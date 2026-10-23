@@ -2505,6 +2505,14 @@
       "remote_name": "carrossel_com_video",
       "remote_statements_sha256": "01d90ebd51e1bfc73ea3f70e37622b004a3064a6afe49ae982061a897395bbf1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261023180000",
+      "path": "supabase/migrations/20261023180000_modelo_do_roteiro.sql",
+      "local_sha256": "f06f1b08615bc905ab2ba8ad7a6beafc97d1797769380937f0b19c176b0f0a3c",
+      "remote_name": "modelo_do_roteiro",
+      "remote_statements_sha256": "d8f9a97e06fd15ff9be6d7f3ef2e7eb4233897adf56556b6e3f3f5682befacfa",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

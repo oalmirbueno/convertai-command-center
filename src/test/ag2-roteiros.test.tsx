@@ -233,8 +233,9 @@ describe("a função mesa-roteiros", () => {
     expect(conversa).toContain("anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras)");
     expect(f).toContain("...CAMPOS_DO_APRENDIZADO,");
     expect(f).toContain('required: ["resposta", "sugestoes", "acoes", "regra_aprendida", "regras_seguidas"]');
-    // Obedecer na geração (escrever e refazer gancho): o bloco vai no sistema do roteirista.
-    expect(f.match(/sistema: `\$\{SISTEMA_ROTEIRISTA\}\\n\\n\$\{CONHECIMENTO_DO_ROTEIRO\}` \+ \(regras\.bloco \?/g)).toHaveLength(2);
+    // Obedecer na geração (escrever, refazer gancho e, frente B 23/10, reescrever pelo agente e cenas da peça):
+    // o bloco vai no sistema do roteirista em todas as quatro.
+    expect(f.match(/sistema: `\$\{SISTEMA_ROTEIRISTA\}\\n\\n\$\{CONHECIMENTO_DO_ROTEIRO\}` \+ \(regras\.bloco \?/g)).toHaveLength(4);
     // Ajustes sem conversa: pedido do gancho e tom forçam o Jev; comentário só quando soa como regra.
     expect(f).toContain("const aprendendo = aprenderDoAjuste(linha.client_id, ch.userId, pedido);");
     expect(f).toContain("aprenderDoAjuste(linha.client_id, ch.userId, `Mudar o tom do roteiro para: ${tom}`)");

@@ -18,6 +18,8 @@ import { SeletorDeModelo } from "./Seletores";
  *   detalhar e os conteúdos do Mês. Padrão: o melhor para copy (Opus 5.5);
  * - refino: o refinar copy. Padrão: o melhor para copy;
  * - estrategista: temas, plano e conversa do Mês. Padrão: o de hoje.
+ * - roteiro (frente B, 23/10): o motor e o agente de roteiro da peça de vídeo
+ *   (mesa-roteiros, modelo_roteiro_id). Padrão: o do estrategista, como hoje.
  * A legenda não usa nenhum deles (fica no modelo do diretor). Sem a migration
  * publicada, a escolha vale só nesta sessão.
  */
@@ -26,6 +28,7 @@ export const ROTULO_DO_ESCOPO: Record<EscopoDoModelo, string> = {
   copy: "Modelo da copy do conteúdo",
   refino: "Modelo do refinar copy",
   estrategista: "Modelo do estrategista",
+  roteiro: "Modelo do roteiro",
 };
 
 /** O campo que vai na chamada de cada escopo (o servidor também lê o lembrado). */
@@ -33,12 +36,14 @@ export const CAMPO_DO_ESCOPO: Record<EscopoDoModelo, string> = {
   copy: "modelo_copy_id",
   refino: "modelo_refino_id",
   estrategista: "modelo_id",
+  roteiro: "modelo_id",
 };
 
 const COLUNA_DO_ESCOPO: Record<EscopoDoModelo, string> = {
   copy: "modelo_copy_id",
   refino: "modelo_refino_id",
   estrategista: "modelo_estrategista_id",
+  roteiro: "modelo_roteiro_id",
 };
 
 export const chaveDoModeloDoEscopo = (clientId: string, escopo: EscopoDoModelo) => ["mesa", "modelo-do-escopo", escopo, clientId];
@@ -131,7 +136,7 @@ export function SeletorDoModeloDoEscopo({
           : doLugar
             ? `Padrão (${padraoDoLugar!.rotulo})${doPadrao ? `: ${doPadrao}` : ""}.`
             : padrao
-              ? estado.escopo === "estrategista" ? `Padrão: ${doPadrao}.` : `Padrão: o melhor para copy, ${doPadrao}.`
+              ? estado.escopo === "estrategista" || estado.escopo === "roteiro" ? `Padrão: ${doPadrao}.` : `Padrão: o melhor para copy, ${doPadrao}.`
               : "Sem modelo padrão no catálogo."}
         {motivo === "escolhido" && padrao && modelo && padrao.id !== modelo.id && (
           <button type="button" className="ml-1 underline underline-offset-2" onClick={() => trocar("")}>

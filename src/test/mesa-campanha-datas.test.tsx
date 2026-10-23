@@ -146,6 +146,10 @@ beforeEach(() => {
       const item = { ...itens[2], ...body.campos };
       return { data: { proposta: { ...proposta, itens: [itens[0], itens[1], item] }, item, avisos: [], custo_usd: 0 }, error: null };
     }
+    // 23/10 (frente B): as cenas com os ganchos do nicho vêm da mesa-roteiros e a tela salva na peça pelo editar_item.
+    if (body.acao === "peca_cenas_gerar") {
+      return { data: { roteiro_video: { gancho: "Ele travou", cenas: [{ ordem: 1, descricao: "PC fumaçando", fala: "Seu PC está assombrado?", texto_na_tela: "Exorcismo R$ 89", segundos: 5 }], duracao: 5, trilha: "Suspense leve", cta: "Chame no WhatsApp" }, escolha: { indice: 0, como: "jev", porque: "Versão 1.", notas: [], formulas: [] }, custo_usd: 0.01 }, error: null };
+    }
     if (body.acao === "campanha_roteiro_video") {
       const item = { ...itens[2], roteiro_video: { gancho: "Ele travou", cenas: [{ ordem: 1, descricao: "PC fumaçando", fala: "Seu PC está assombrado?", texto_na_tela: "Exorcismo R$ 89", segundos: 5 }], duracao: 5, trilha: "Suspense leve", cta: "Chame no WhatsApp" } };
       return { data: { proposta: { ...proposta, itens: [itens[0], itens[1], item] }, item, custo_usd: 0.01 }, error: null };
@@ -338,13 +342,16 @@ describe("vídeos e Reels da campanha", () => {
     montar(h(CampanhaVideos, { campanha }), qc);
     const regiao = await screen.findByRole("region", { name: /Vídeos: Prova e produtos/ });
     expect(within(regiao).getByText("Reels do PC assombrado")).toBeTruthy();
-    await confirmarCusto(within(regiao).getByRole("button", { name: /Gerar o roteiro/ }), "campanha_roteiro_video");
-    await waitFor(() => expect(chamadas("campanha_roteiro_video")[0]).toEqual({ acao: "campanha_roteiro_video", campanha_id: CAMPANHA_ID, tema_id: "c3" }));
+    await confirmarCusto(within(regiao).getByRole("button", { name: /Gerar o roteiro/ }), "peca_cenas_gerar");
+    await waitFor(() => expect(chamadas("peca_cenas_gerar")[0]).toEqual(expect.objectContaining({ acao: "peca_cenas_gerar", client_id: CLIENTE, campanha_id: CAMPANHA_ID, tema_id: "c3" })));
+    // A escolhida vai para a peça pelo editar_item (o mesmo caminho do Salvar).
+    await waitFor(() => expect(chamadas("editar_item").length).toBe(1));
+    expect(chamadas("editar_item")[0].campos.roteiro_video.gancho).toBe("Ele travou");
     const fala = await screen.findByLabelText("Fala da cena 1");
     fireEvent.change(fala, { target: { value: "Seu PC tá assombrado? Exorcismo por R$ 89" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar o roteiro" }));
-    await waitFor(() => expect(chamadas("editar_item").length).toBe(1));
-    expect(chamadas("editar_item")[0].campos.roteiro_video.cenas[0].fala).toBe("Seu PC tá assombrado? Exorcismo por R$ 89");
+    await waitFor(() => expect(chamadas("editar_item").length).toBe(2));
+    expect(chamadas("editar_item")[1].campos.roteiro_video.cenas[0].fala).toBe("Seu PC tá assombrado? Exorcismo por R$ 89");
     // Salvo: sai do modo de edição e mostra o que está gravado.
     await waitFor(() => expect(screen.queryByRole("button", { name: "Salvar o roteiro" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: /Abrir Reels do PC assombrado no estúdio de vídeo/ }));

@@ -248,12 +248,14 @@ export async function escolherComViralidade(p: PedidoDaEscolhaViral): Promise<Re
  * 23/10 (dono): três seletores, cada um no seu escopo e lembrado por cliente em coluna própria:
  * a copy do conteúdo (lâminas, peça, detalhar e conteúdos do Mês), o refinar copy e o estrategista.
  */
-export type EscopoDoModelo = "copy" | "refino" | "estrategista";
+export type EscopoDoModelo = "copy" | "refino" | "estrategista" | "roteiro";
 
 export const COLUNA_DO_ESCOPO: Record<EscopoDoModelo, string> = {
   copy: "modelo_copy_id",
   refino: "modelo_refino_id",
   estrategista: "modelo_estrategista_id",
+  // 23/10 (frente B): o motor e o agente de roteiro (migration 20261023180000).
+  roteiro: "modelo_roteiro_id",
 };
 
 /** O id guardado para o cliente no escopo (mesa_cliente_config); sem coluna ou sem linha, null. */
@@ -290,7 +292,7 @@ export async function modeloDoEscopo(db: Banco, clientId: string, escopo: Escopo
       registrarFalha("copy-viral: modelo escolhido não carregou (segue o padrão)", e, { client_id: clientId, modelo_id: id, escopo });
     }
   }
-  if (escopo === "estrategista" || opcoes.semPadrao) return null;
+  if (escopo === "estrategista" || escopo === "roteiro" || opcoes.semPadrao) return null;
   return await modeloPadrao(PAPEL_DA_COPY).catch(() => null);
 }
 

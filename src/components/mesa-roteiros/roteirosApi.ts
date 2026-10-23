@@ -16,6 +16,7 @@ import {
   type VersaoDoRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { normalizarFichaPropria, type FichaDoModelo } from "../../../supabase/functions/mesa-roteiros/modulos/roteiros-validados";
+import type { EscolhaDaPeca } from "../../../supabase/functions/mesa-roteiros/modulos/roteiro-da-peca";
 
 /**
  * Mesa Roteiros: a ponte da tela com a função mesa-roteiros e as tabelas
@@ -313,3 +314,29 @@ export function atualizarNoCache(qc: QueryClient, clientId: string, linha: Linha
   }
   void qc.invalidateQueries({ queryKey: CHAVES.roteiros(clientId) });
 }
+
+// ------------------------------------------------------------------ frente B (23/10): a peça de vídeo
+
+/** O que o Jev decidiu entre as duas versões (modulos/roteiro-da-peca.ts). */
+export type { EscolhaDaPeca };
+
+export interface RespostaDaPeca extends RespostaDoRoteiro {
+  /** A escolha do Jev entre as duas versões (null: uma versão só). */
+  escolha?: EscolhaDaPeca | null;
+  /** O número da versão que não foi escolhida (fica no histórico). */
+  alternativa?: number | null;
+}
+
+/** Gravar: o roteiro da peça em duas versões com os ganchos do nicho; o Jev escolhe (peca_gerar). */
+export const gerarRoteiroDaPeca = (p: PedidoDeGeracao) => chamarRoteiros<RespostaDaPeca>("peca_gerar", p as unknown as Record<string, unknown>);
+
+/** O que se estima na peça: peca (Gravar), cenas (Gerar), reescrever (pedido ao agente) e conversa. */
+export type AlvoDaPeca = "peca" | "cenas" | "reescrever" | "conversa";
+
+/** Preço antes, pelo motor (sem IA), com o modelo que a geração vai usar. */
+export const estimarDaPeca = (clientId: string, alvo: AlvoDaPeca, modeloId?: string | null) =>
+  chamarRoteiros<{ estimativa_usd: number; modelo_id: string }>("estimar", { client_id: clientId, acao_alvo: alvo, ...(modeloId ? { modelo_id: modeloId } : {}) });
+
+/** Gerar: as cenas da IA de vídeo em duas versões com os ganchos do nicho (não grava; quem chama salva na peça). */
+export const gerarCenasDaPeca = (p: { client_id: string; campanha_id: string; tema_id: string; modelo_id?: string | null }) =>
+  chamarFuncao<{ roteiro_video: unknown; escolha: EscolhaDaPeca | null; custo_usd: number; saldo_usd?: number }>("mesa-roteiros", { acao: "peca_cenas_gerar", ...p });

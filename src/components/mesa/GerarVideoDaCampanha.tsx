@@ -3,7 +3,8 @@
  * vídeo coloque a opção de narração e trilhas com ElevenLabs para juntar no vídeo, e roteiros e cenas").
  * Rota 2 enxuta, um passo por vez, com o custo antes de cada um:
  *   1. Roteiro: o roteiro_video da peça, cada cena editável (o que aparece, fala, texto na tela, segundos);
- *      sem roteiro, "Gerar o roteiro" (campanha_roteiro_video).
+ *      sem roteiro, "Gerar o roteiro" (frente B, 23/10: mesa-roteiros peca_cenas_gerar, 2 versões com os
+ *      ganchos virais do nicho e o Jev escolhe; a escolhida vai para a peça pelo editar_item).
  *   2. Cenas: cada cena vira um vídeo 9:16 pela Mesa Vídeos (gerar_video, modo texto, Seedance 2.0 Mini
  *      por padrão; sem áudio do motor quando o roteiro tem fala), o 409 confirmar_custo de todas as cenas
  *      somado antes; a fila é conferida até cada cena ficar pronta; dá para refazer uma cena.
@@ -35,8 +36,9 @@ import { ErroDaMesa, textoDoErro, usd } from "@/lib/mesa/api";
 import { BotaoComCusto } from "./Custo";
 import { useMesa, useUrlDaMesa } from "./MesaContexto";
 import { chaves, editarItemDaProposta, type Campanha, type ItemProposto } from "./mesaV4Api";
-import { aplicarRespostaDaCampanha } from "./campanhasApi";
-import { abrirParteDaCampanha, gerarRoteiroDeVideo, partesDoRoteiroDeVideo } from "./passosDaCampanha";
+import { abrirParteDaCampanha } from "./passosDaCampanha";
+import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
+import { gerarEGuardarCenasDaPeca, partesDasCenasDaPeca } from "@/components/mesa-roteiros/cenasDaPeca";
 import { chaveDaTrilha, lerTrilhaDaCampanha, trilhaSugeridaDaCampanha, type EstadoDaTrilha } from "./trilhaDaCampanhaApi";
 import { chaveDasVozes, gerarNarracaoDaPeca, lerVozesDaNarracao, registrarNaPeca, type RespostaDaPeca } from "./narracaoDaCampanhaApi";
 import { projetoDoVideoDaCampanha, type ClipeDaCena } from "./montagemDoVideoDaCampanha";
@@ -137,27 +139,39 @@ const cenaVazia = (ordem: number): CenaDoRoteiro => ({ ordem, descricao: "", fal
 
 function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campanha: Campanha; propostaId: string; item: ItemProposto; roteiro: RoteiroDeVideo | null; aplicar: (r: RespostaDaPeca) => void }) {
   const { clientId, catalogo } = useMesa();
-  const qc = useQueryClient();
+  const modelo = useModeloDoEscopo("roteiro");
   const [rascunho, setRascunho] = useState<RoteiroDeVideo | null>(null);
   const [salvando, setSalvando] = useState(false);
+  // Frente B (23/10): o porquê do Jev entre as duas versões de cenas (some ao sair do passo).
+  const [porque, setPorque] = useState<string | null>(null);
   const r = rascunho || roteiro;
   if (!r) {
     return (
-      <div className="flex min-w-0 flex-wrap items-center" data-passo-do-gerar="roteiro">
-        <span className={juntar(texto.auxiliar, "mr-3")}>Sem roteiro ainda.</span>
-        <BotaoComCusto
-          rotulo="Gerar o roteiro"
-          titulo="Roteiro do vídeo"
-          descricao="Gancho, cenas, falas, texto na tela e CTA pela fase da campanha"
-          partes={() => partesDoRoteiroDeVideo(catalogo)}
-          executar={async () => {
-            const res = await gerarRoteiroDeVideo(campanha.id, item.tema_id || "");
-            aplicarRespostaDaCampanha(qc, clientId, res);
-            aplicar({ item: res.item, proposta: res.proposta });
-            return res;
-          }}
-          className="h-8 px-2"
-        />
+      <div className="min-w-0" data-passo-do-gerar="roteiro">
+        <div className="flex min-w-0 flex-wrap items-center">
+          <span className={juntar(texto.auxiliar, "mr-3")}>Sem roteiro ainda.</span>
+          <BotaoComCusto
+            rotulo="Gerar o roteiro"
+            titulo="Roteiro do vídeo"
+            descricao="2 versões de cenas com os ganchos virais do nicho e a fase da campanha; o Jev escolhe a mais forte"
+            partes={() => partesDasCenasDaPeca(catalogo, modelo.modeloId)}
+            executar={async () => {
+              const res = await gerarEGuardarCenasDaPeca({ clientId, campanhaId: campanha.id, propostaId, temaId: item.tema_id || "", modeloId: modelo.modeloId || null });
+              setPorque(res.escolha && res.escolha.porque ? res.escolha.porque : null);
+              if (res.item) aplicar({ item: res.item, proposta: res.proposta });
+              else {
+                // Gerado e não salvo: as cenas ficam na tela com o Salvar (sem gerar de novo).
+                setRascunho(res.roteiro);
+                toast.warning("Cenas geradas, mas não salvas na peça", { description: `${res.erro_ao_salvar || ""} Clique em Salvar o roteiro.`.trim() });
+              }
+              return res;
+            }}
+            className="h-8 px-2"
+          />
+        </div>
+        <div className="mt-2 min-w-0 max-w-md">
+          <SeletorDoModeloDoEscopo estado={modelo} />
+        </div>
       </div>
     );
   }
@@ -180,6 +194,7 @@ function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campan
   const total = r.cenas.reduce((s, c) => s + (Number(c.segundos) || 0), 0);
   return (
     <div className="min-w-0 space-y-3" data-passo-do-gerar="roteiro">
+      {porque && <p className={juntar(texto.auxiliar, "[overflow-wrap:anywhere]")} data-escolha-do-jev="">Jev: {porque}</p>}
       <label className={juntar(texto.rotulo, "block")}>
         Gancho
         <input className={juntar(campo, "mt-1")} value={r.gancho} onChange={(e) => mudar({ gancho: e.target.value })} aria-label="Gancho do vídeo" />

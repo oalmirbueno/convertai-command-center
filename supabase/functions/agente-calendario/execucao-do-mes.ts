@@ -11,7 +11,8 @@ export const CAPACIDADES_DO_MES = `CAPACIDADES ATUAIS DO PAINEL (substituem limi
 - Em todo pedido operacional, devolva ações executáveis: criar_conteudos, gerar_conteudos, acoes_na_agenda ou mudancas. Não responda apenas com uma promessa ou um plano textual. Se faltar uma informação essencial, faça uma pergunta objetiva e diga que nada foi alterado.`;
 
 export function podeAplicarDireto(a: any): boolean {
-  return !!a && !(a.apagar?.length || a.refazer?.length || a.escolher_um) &&
+  // 23/10: pensar a mídia gasta (roteiro e Jev): sempre com o Confirmar do cartão.
+  return !!a && !(a.apagar?.length || a.refazer?.length || a.escolher_um || a.midia?.length) &&
     !!(a.mudar_data?.length || a.mudar_formato?.length || a.editar_textos?.length || a.editar_campanhas?.length);
 }
 

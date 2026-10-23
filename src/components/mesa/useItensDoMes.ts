@@ -12,6 +12,7 @@ import { mediaKindFromFile } from "@/lib/fileUrls";
 import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
 import { laminasLongasDoRoteiro } from "../../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
 import { ganchoDaDescricao, momentoDoGancho, type MomentoDoGancho } from "./momentoDoGancho";
+import type { MidiaDaPeca } from "../../../supabase/functions/agente-calendario/modulos/midia-da-peca-regras";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
@@ -24,6 +25,8 @@ export interface ItemDoMes {
   project_id: string;
   modo_estudio?: ModoDaPauta;
   video?: DirecaoDeVideoDaPauta;
+  /** 23/10: a mídia pensada pelo nicho (fotos do Workspace, referência livre, roteiro com gancho). */
+  midia?: MidiaDaPeca | null;
   /** 17/10: conteúdo nascido de um hype ou de um assunto em alta no nicho (o foguinho na esteira). */
   momento?: MomentoDoGancho | null;
   /** O gancho inteiro ("Hype: título"), para o title do foguinho. */
@@ -223,6 +226,7 @@ export interface InfoDoRoteiro {
   modo_estudio?: ModoDaPauta;
   direcao_foto?: Record<string, unknown>;
   video?: DirecaoDeVideoDaPauta;
+  midia?: MidiaDaPeca | null;
   /** Lâminas detalhadas no roteiro; 0 = só o tema, a direção sai do diretor. */
   laminas: number;
   /** Contínuo pedido pelo estrategista (null = não disse). */
@@ -517,6 +521,7 @@ async function lerRoteiros(clientId: string, taskIds: string[]): Promise<Record<
       const cards = doItem && Array.isArray(doItem.cards) ? (doItem.cards as unknown[]) : [];
       const continuo = doItem && typeof doItem.carrossel_infinito === "boolean" ? (doItem.carrossel_infinito as boolean) : null;
       roteiros[id] = { laminas: cards.length, continuo, longas: laminasLongasDoRoteiro(cards).length };
+      if (doItem && doItem.midia && typeof doItem.midia === "object" && !Array.isArray(doItem.midia)) roteiros[id].midia = doItem.midia as MidiaDaPeca;
       if (doItem?.formato === "foto" || doItem?.mesa === "foto") {
         roteiros[id].modo_estudio = "fotos";
         if (doItem.foto && typeof doItem.foto === "object" && !Array.isArray(doItem.foto)) roteiros[id].direcao_foto = doItem.foto as Record<string, unknown>;
@@ -555,7 +560,7 @@ export async function lerDetalhesDosItens(clientId: string, itens: ItemDoMes[], 
   dados.artes = await lerArtesDaAgenda(ids, dados.trabalhos, incluirVideos).catch(() => ({} as Record<string, ArteNaAgenda>));
   dados.itens = itens.map((item) => {
     const modo = dados.artes[item.id]?.capa?.tipo_midia === "video" ? "video" : roteiros[item.id]?.modo_estudio;
-    return modo ? { ...item, modo_estudio: modo, ...(roteiros[item.id]?.video ? { video: roteiros[item.id].video } : {}) } : item;
+    return modo ? { ...item, modo_estudio: modo, ...(roteiros[item.id]?.video ? { video: roteiros[item.id].video } : {}), ...(roteiros[item.id]?.midia ? { midia: roteiros[item.id].midia } : {}) } : item;
   });
 
   // Estado da publicação na Agenda (agendado, publicado, falhou) dos posts

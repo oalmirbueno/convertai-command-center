@@ -11,10 +11,11 @@ import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { chaves, editarItemDaProposta, lerProposta, type Campanha, type ItemProposto } from "./mesaV4Api";
-import { aplicarRespostaDaCampanha, normalizarBriefing } from "./campanhasApi";
+import { normalizarBriefing } from "./campanhasApi";
 import { linhaDaCampanha } from "./CampanhaLinhaDoTempo";
 import { porFase } from "./areasDaCampanha";
-import { gerarRoteiroDeVideo, partesDoRoteiroDeVideo } from "./passosDaCampanha";
+import { useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
+import { gerarEGuardarCenasDaPeca, partesDasCenasDaPeca } from "@/components/mesa-roteiros/cenasDaPeca";
 import { usePedidos } from "@/components/mesa-videos/videosApi";
 import { ROTULO_DO_ESTADO_DO_PEDIDO } from "../../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
 import { direcaoDoRoteiro, faltasDoRoteiro, MAX_CENAS, MAX_SEGUNDOS_DA_CENA, normalizarRoteiroDeVideo, type CenaDoRoteiro, type RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
@@ -59,6 +60,7 @@ export function rascunhoDaMesaDeVideos(item: ItemProposto, r: RoteiroDeVideo | n
 
 function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNoEstudio }: { campanha: Campanha; propostaId: string; item: ItemProposto; trilhaDaCampanha: string; onAbrirNoEstudio?: (taskId: string, mes: string) => void }) {
   const { clientId, catalogo, clientName } = useMesa();
+  const modelo = useModeloDoEscopo("roteiro");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const salvo = normalizarRoteiroDeVideo((item as ItemProposto & { roteiro_video?: unknown }).roteiro_video);
@@ -179,12 +181,16 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
           <BotaoComCusto
             rotulo="Gerar o roteiro"
             titulo="Roteiro do vídeo"
-            descricao="Escreve o roteiro deste Reels (gancho, cenas, falas, texto na tela e CTA) pela fase da campanha"
-            partes={() => partesDoRoteiroDeVideo(catalogo)}
+            descricao="2 versões do roteiro deste Reels (gancho, cenas, falas, texto na tela e CTA) com os ganchos virais do nicho e a fase da campanha; o Jev escolhe"
+            partes={() => partesDasCenasDaPeca(catalogo, modelo.modeloId)}
             executar={async () => {
-              const res = await gerarRoteiroDeVideo(campanha.id, item.tema_id || "");
-              aplicarRespostaDaCampanha(qc, clientId, res);
-              if (res && res.proposta) qc.setQueryData(chaves.proposta(propostaId), res.proposta);
+              // Frente B (23/10): as cenas com os ganchos do nicho pela mesa-roteiros, salvas na peça pelo editar_item.
+              const res = await gerarEGuardarCenasDaPeca({ clientId, campanhaId: campanha.id, propostaId, temaId: item.tema_id || "", modeloId: modelo.modeloId || null });
+              if (res.proposta) qc.setQueryData(chaves.proposta(propostaId), res.proposta);
+              else {
+                setR(res.roteiro);
+                toast.warning("Roteiro gerado, mas não salvo na peça", { description: `${res.erro_ao_salvar || ""} Clique em Salvar.`.trim() });
+              }
               return res;
             }}
             variant="ghost"

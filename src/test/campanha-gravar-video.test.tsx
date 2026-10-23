@@ -160,7 +160,7 @@ beforeEach(() => {
   mock.invoke.mockImplementation(async (_nome: string, opcoes: any) => {
     const acao = opcoes && opcoes.body ? opcoes.body.acao : "";
     // O servidor guarda o roteiro gerado: a releitura da lista já o traz.
-    if (acao === "gerar" && respostas.gerar) mock.tabelas.roteiros = [linhaGravada()];
+    if (acao === "peca_gerar" && respostas.peca_gerar) mock.tabelas.roteiros = [linhaGravada()];
     if (respostas[acao] !== undefined) return { data: respostas[acao], error: null };
     return { data: { ok: true, custo_usd: 0 }, error: null };
   });
@@ -180,19 +180,20 @@ function montar(aoAtualizar = vi.fn()) {
 }
 
 describe("vídeo da campanha para gravar (tela)", () => {
+  // 23/10 (frente B): o Gravar pede 2 versões ao motor (peca_gerar) e o Jev escolhe; o custo inclui as 3 conferências.
   it("gera pelo motor de roteiros com a campanha, o tipo escolhido e o custo do estimar antes", async () => {
-    respostas.gerar = { roteiro: linhaGravada(), versao: { numero: 1 }, custo_usd: 0.05, saldo_usd: 10 };
+    respostas.peca_gerar = { roteiro: linhaGravada(), versao: { numero: 1 }, custo_usd: 0.05, saldo_usd: 10 };
     const { aoAtualizar } = montar();
     await waitFor(() => expect(chamadasDe("estimar")).toHaveLength(1));
-    expect(chamadasDe("estimar")[0]).toEqual(expect.objectContaining({ client_id: CLIENTE, acao_alvo: "gerar" }));
+    expect(chamadasDe("estimar")[0]).toEqual(expect.objectContaining({ client_id: CLIENTE, acao_alvo: "peca" }));
     fireEvent.click(screen.getByRole("tab", { name: "UGC" }));
     const gerar = await screen.findByRole("button", { name: /Gerar roteiro/ });
-    // O preço do motor aparece antes (estimativa mais a conferência do Jev).
-    await waitFor(() => expect(gerar.textContent).toMatch(/US\$ 0,0505/));
+    // O preço do motor aparece antes (estimativa das 2 versões mais as conferências do Jev).
+    await waitFor(() => expect(gerar.textContent).toMatch(/US\$ 0,0515/));
     await waitFor(() => expect(gerar).not.toBeDisabled());
     fireEvent.click(gerar);
-    await waitFor(() => expect(chamadasDe("gerar")).toHaveLength(1));
-    const corpo = chamadasDe("gerar")[0];
+    await waitFor(() => expect(chamadasDe("peca_gerar")).toHaveLength(1));
+    const corpo = chamadasDe("peca_gerar")[0];
     expect(corpo).toEqual(expect.objectContaining({ client_id: CLIENTE, campanha_id: CAMPANHA, tema_id: "t-video-1", tema: "Bastidor do kit de inverno", tipo: "ugc", duracao_s: 11, modelo_id: MODELO }));
     expect(corpo.pedido).toMatch(/Black Friday da loja/);
     expect(corpo.pedido).toMatch(/Fase da linha do tempo/);
@@ -225,7 +226,7 @@ describe("vídeo da campanha para gravar (tela)", () => {
     expect(doc.markdown).toMatch(/## Ganchos/);
     expect(doc.markdown).toMatch(/Fala: São três peças por um preço só/);
     expect(mock.baixarDoc).toHaveBeenCalledWith(expect.any(Blob), "roteiro-bastidor-do-kit-de-inverno.docx");
-    expect(chamadasDe("gerar")).toHaveLength(0);
+    expect(chamadasDe("peca_gerar")).toHaveLength(0);
   });
 
   it("acha o roteiro da peça: pela tarefa da agenda e, fora dela, pela campanha e o tema; arquivado não conta", () => {
