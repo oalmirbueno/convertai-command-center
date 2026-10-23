@@ -15,6 +15,9 @@
  * modelo da biblioteca. A equipe escolhe (modelo_base_id) ou o Jev escolhe entre os candidatos do
  * objetivo (objetivo_base: autoridade, produto, presenca_de_marca, venda, conexao, engajamento) com o
  * contexto da marca; sem o Jev, a regra do objetivo. O roteiro guarda a base usada (conteudo.base).
+ * - anuncio_gerar { client_id, ads_criativo_id, modo: completo|fala, formato: 9:16|4:5|16:9, duracao_s: 15|30|45, estrutura?, web?, pedido? }
+ *   -> { roteiro, versao, escolha, referencias, vinculo, aviso_jev, custo_usd, saldo_usd } (23/10, Mesa Ads > Gravar:
+ *   2 versões numa chamada, o Jev escolhe; fica ligado ao criativo e à oferta; modulos/roteiro-de-anuncio.ts)
  * - biblioteca_salvar { client_id, escopo: agencia|cliente, ficha, id? } -> { modelo } (modelo próprio, sem IA)
  * - biblioteca_arquivar { id, arquivar } -> { modelo } (apagar é arquivar)
  * - biblioteca_extrair { client_id, texto, nicho?, modelo_id? } -> { ficha, custo_usd, saldo_usd } (Preencher com IA; não grava)
@@ -189,6 +192,26 @@ import {
 import { lerSinaisDoMundo } from "./modulos/sinais-do-mundo.ts";
 // 22/10/2026: a campanha no roteiro da peça (briefing, fase da linha do tempo e o que a peça já tem na série).
 import { campanhaParaORoteiro, itemDaPecaNaSerie } from "./modulos/campanha-da-peca.ts";
+// 23/10: roteiro de anúncio em vídeo para gravar (Mesa Ads > Estúdio > Vídeo > Gravar), ligado ao criativo e à oferta.
+import {
+  blocoDasEstruturas,
+  BUSCAS_WEB_DO_ANUNCIO,
+  escolherVersao,
+  ESQUEMA_DO_ROTEIRO_DE_ANUNCIO,
+  estadoDaEscolha,
+  estruturaPorId,
+  estruturasDasVersoes,
+  fontesDaWeb,
+  INSTRUCAO_DO_MODO,
+  lerPedidoDoAnuncio,
+  notasDasVersoes,
+  perguntasDaEscolha,
+  ROTULO_DO_MODO,
+  SISTEMA_DO_ANUNCIO,
+  TAMANHO_DO_ANUNCIO,
+} from "./modulos/roteiro-de-anuncio.ts";
+import { lerGanchos, nichosEmTexto, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
+import { blocoDosGanchos } from "../estudio-arte/modulos/copy-viral.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
@@ -916,6 +939,8 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
     ? estimarComModelo(modelo, TAMANHO_DA_EXTRACAO)
     : alvo === "gancho"
     ? estimarComModelo(modelo, { tokensEntrada: 6_000, tokensSaida: 2_500 })
+    : alvo === "anuncio"
+    ? estimarComModelo(modelo, { ...TAMANHO_DO_ANUNCIO[corpo.modo === "fala" ? "fala" : "completo"], buscasWeb: corpo.web === false ? 0 : BUSCAS_WEB_DO_ANUNCIO })
     : custoDaGeracao(modelo);
   return json({ estimativa_usd: Math.round(unidade * quantidade * 1e6) / 1e6, modelo_id: modelo.id, custo_usd: 0 });
 }
@@ -958,6 +983,199 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloBaseId: lerIdDaBase(corpo.modelo_base_id),
   });
   return json({ roteiro: r.linha, versao: r.versao, aviso_jev: r.aviso_jev, base: r.base, custo_usd: r.custo_usd, saldo_usd: r.saldo_usd, aviso_banco: r.aviso_banco || null, reserva_usada: r.reserva_usada });
+}
+
+// ------------------------------------------------------------------ roteiro de anúncio em vídeo (Mesa Ads > Gravar)
+
+const REF_ANUNCIO = "ads_criativo";
+const AVISO_DO_VINCULO = "O roteiro ficou guardado na Mesa Roteiros, mas o vínculo com o criativo espera a migração 20261023130000 (roteiros.ads_criativo_id). A tela lembra o roteiro neste navegador.";
+const curtoDe = (v: unknown, n: number) => (v == null ? "" : (typeof v === "string" ? v : JSON.stringify(v)).replace(/\s+/g, " ").trim().slice(0, n));
+
+/** O roteiro vivo deste criativo (null: nenhum, sem a coluna ou travado para edição). */
+async function roteiroDoCriativo(clientId: string, criativoId: string): Promise<{ linha: LinhaDoRoteiro | null; coluna: boolean }> {
+  const { data, error } = await servico().from(TABELA).select(CAMPOS).eq("client_id", clientId).eq("ads_criativo_id", criativoId).is("arquivado_em", null).order("atualizado_em", { ascending: false }).limit(1);
+  if (error) {
+    registrarFalha("mesa-roteiros: roteiro do criativo não lido (migração do vínculo pendente?)", error, { criativo_id: criativoId });
+    return { linha: null, coluna: false };
+  }
+  const linha = normalizarLinhaDoRoteiro(((data as unknown[] | null) ?? [])[0]);
+  return { linha: linha && !motivoParaNaoEditar(linha.status, !!linha.arquivado_em) ? linha : null, coluna: true };
+}
+
+/**
+ * anuncio_gerar { client_id, ads_criativo_id, modo: completo|fala, formato: 9:16|4:5|16:9, duracao_s: 15|30|45, estrutura?, web?, pedido?, modelo_id? }
+ * -> { roteiro, versao, escolha, referencias, aviso_jev, vinculo, custo_usd, saldo_usd, aviso_banco? }
+ *
+ * O roteirista da casa escreve 2 versões numa chamada, com o contexto do anúncio (criativo, ângulo, oferta,
+ * público e nicho), a base dos agentes (ads.video e roteiros.roteirista), o motor de copy viral (ganchos_vencedores
+ * nos formatos "anuncio" e "reels_abertura") e, quando ligada, a busca na web (só as páginas citadas viram fonte).
+ * O Jev (Score: gancho, clareza, venda e nicho por versão) escolhe; sem laço de correção. Fica ligado ao criativo e à oferta.
+ */
+async function anuncioGerar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const p = lerPedidoDoAnuncio(corpo);
+  if ("erro" in p) throw new ErroHttp(400, "pedido_invalido", p.erro);
+  const { data: cri, error: erroCri } = await servico().from("ads_criativos").select("id, client_id, plano_id, angulo_id, nome, formato, copy").eq("id", p.criativoId).eq("client_id", clientId).maybeSingle();
+  if (erroCri) throw new ErroHttp(503, "criativo_indisponivel", "Não foi possível ler o criativo agora.");
+  if (!cri) throw new ErroHttp(404, "criativo_inexistente", "Este criativo não é deste cliente.");
+  const criativo = cri as { id: string; plano_id: string | null; angulo_id: string | null; nome: string | null; copy: Record<string, unknown> | null };
+  const copy = (criativo.copy && typeof criativo.copy === "object" ? criativo.copy : {}) as Record<string, unknown>;
+  // Ângulo e oferta do plano (estrutura.oferta_id), lidos do banco: a tela não manda fato.
+  type PlanoLido = { nome: string | null; angulos: unknown; estrutura: Record<string, unknown> | null };
+  const plano: PlanoLido | null = criativo.plano_id
+    ? ((await servico().from("ads_planos").select("nome, angulos, estrutura").eq("id", criativo.plano_id).eq("client_id", clientId).maybeSingle()).data as PlanoLido | null)
+    : null;
+  const angulo = plano && Array.isArray(plano.angulos)
+    ? ((plano.angulos as Array<Record<string, unknown>>).filter((a) => a && a.id === criativo.angulo_id)[0] || null)
+    : null;
+  const ofertaId = plano && plano.estrutura && typeof plano.estrutura.oferta_id === "string" && UUID.test(plano.estrutura.oferta_id) ? plano.estrutura.oferta_id : null;
+  let oferta: Record<string, unknown> | null = null;
+  if (ofertaId) {
+    const { data } = await servico().from("ads_ofertas").select("id, nome, oferta").eq("id", ofertaId).eq("client_id", clientId).maybeSingle();
+    const o = data as { nome?: string; oferta?: Record<string, unknown> | null } | null;
+    if (o) oferta = { nome: o.nome, ...(o.oferta && typeof o.oferta === "object" ? o.oferta : {}) };
+  }
+  const textoDoAngulo = [angulo && angulo.nome, angulo && angulo.mecanismo, angulo && angulo.situacao, copy.angulo_de_venda, p.pedido].map((x) => curtoDe(x, 300)).join(" ");
+  const par = estruturasDasVersoes(p, textoDoAngulo);
+  const ofertaEmTexto = oferta ? [oferta.nome, oferta.promessa, oferta.mecanismo, oferta.cta].map((x) => curtoDe(x, 200)).filter(Boolean).join(". ") : curtoDe(copy.texto_principal, 400);
+  const pedidoDaBase = `Roteiro de anúncio em vídeo para gravar (${ROTULO_DO_MODO[p.modo]}, ${p.duracaoS}s, ${p.formato}). ${curtoDe(copy.titulo || criativo.nome, 120)}. ${curtoDe(angulo && angulo.nome, 120)}`;
+  const ref = { tipo: REF_ANUNCIO, id: criativo.id };
+  const [existente, ctx, modelo, regras, sp, baseVideo, baseRoteiro, viral] = await Promise.all([
+    roteiroDoCriativo(clientId, criativo.id),
+    contextoDaPeca(clientId, null, { tipo: par[0].tipo, marcaId: corpo.marca_id }),
+    modeloDeTexto(corpo.modelo_id),
+    regrasDaMesa(servico(), { clientId, mesa: "roteiro" }),
+    superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "gerar" }),
+    baseDoAgente(servico(), { agente: "ads.video", clientId, pedido: pedidoDaBase, teto: 2_500, tarefa: TAREFA, referencia: ref, criadoPor: ch.userId }),
+    baseDoAgente(servico(), { agente: "roteiros.roteirista", clientId, pedido: pedidoDaBase, teto: 2_500, tarefa: TAREFA, referencia: ref, criadoPor: ch.userId }),
+    prepararCopyViral(servico(), {
+      clientId,
+      formato: "anuncio",
+      versoes: 2,
+      n: 10,
+      semente: criativo.id,
+      contexto: { oferta: ofertaEmTexto || undefined, publico: curtoDe(oferta && oferta.para_quem, 400) || undefined },
+    }).catch((e) => (registrarFalha("mesa-roteiros: copy viral do anúncio não lida", e, { client_id: clientId }), null)),
+  ]);
+  // A abertura dos 3 primeiros segundos: os ganchos de abertura de Reels do mesmo nicho (nunca lança).
+  const aberturas = viral ? await lerGanchos(servico(), { nichos: viral.nichos, formato: "reels_abertura", n: 8, semente: criativo.id }) : [];
+  const dadosDoAnuncio = {
+    criativo: { nome: criativo.nome, titulo: copy.titulo ?? null, texto_principal: curtoDe(copy.texto_principal, 900) || null, cta: copy.cta_meta ?? null, angulo_de_venda: copy.angulo_de_venda ?? null },
+    angulo: angulo
+      ? { nome: angulo.nome, objetivo: angulo.objetivo, mecanismo: angulo.mecanismo, situacao: angulo.situacao, gancho_verbal: angulo.gancho_verbal, gancho_visual: angulo.gancho_visual, prova: angulo.prova, hipotese: angulo.hipotese }
+      : null,
+    plano: plano ? plano.nome : null,
+    oferta,
+    formato: p.formato,
+    duracao_alvo_s: p.duracaoS,
+    modo: ROTULO_DO_MODO[p.modo],
+    pedido_da_equipe: p.pedido || null,
+  };
+  const sistema = [
+    `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}`,
+    SISTEMA_DO_ANUNCIO,
+    blocoDasEstruturas(par),
+    INSTRUCAO_DO_MODO[p.modo],
+    viral ? viral.bloco : "",
+    blocoDosGanchos(aberturas) ? `PARA A ABERTURA DOS 3 PRIMEIROS SEGUNDOS:\n${blocoDosGanchos(aberturas)}` : "",
+    regras.bloco || "",
+    baseVideo.bloco ? `BASE DO AGENTE DE ANÚNCIOS EM VÍDEO:\n${baseVideo.bloco}` : "",
+    baseRoteiro.bloco || "",
+  ].filter(Boolean).join("\n\n");
+  const pedir = (web: boolean) =>
+    chamarTexto({
+      clientId,
+      tarefa: TAREFA,
+      agente: AGENTE,
+      modeloId: modelo.id,
+      raciocinio: raciocinioPara(modelo),
+      sistema,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Escreva as 2 versões do roteiro deste anúncio em vídeo com o que está em DADOS.${web ? " Use a busca na web para ver anúncios em vídeo que estão rodando neste nicho (biblioteca de anúncios, cases), só como referência de estrutura." : ""}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, anuncio: dadosDoAnuncio })}`,
+      }],
+      esquemaJson: ESQUEMA_DO_ROTEIRO_DE_ANUNCIO,
+      maxTokensSaida: p.modo === "fala" ? 4_000 : 9_000,
+      pesquisaWeb: web,
+      metodo: sp,
+      referencia: ref,
+      criadoPor: ch.userId,
+    });
+  let webUsada = p.web;
+  let saida: Awaited<ReturnType<typeof chamarTexto>>;
+  try {
+    saida = await pedir(webUsada);
+  } catch (e) {
+    // A busca na web é a parte que mais falha por modelo: sem ela, uma vez, e a tela diz que ficou de fora.
+    if (!webUsada || !(e instanceof IaMotorErro) || ERROS_QUE_DESLIGAM_A_BUSCA.indexOf(e.codigo) < 0) throw e;
+    registrarFalha("mesa-roteiros: anúncio sem a busca na web", e, { client_id: clientId, modelo: modelo.id });
+    webUsada = false;
+    saida = await pedir(false);
+  }
+  const brutas = ((saida.json || {}) as { versoes?: unknown[] }).versoes;
+  const titulo = `Anúncio · ${curtoDe(copy.titulo || criativo.nome || "Criativo", 100)}`;
+  const versoes = (Array.isArray(brutas) ? brutas.slice(0, 2) : []).map((b, i) => {
+    const o = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+    const estrutura = estruturaPorId(o.estrutura_id) || par[i] || par[0];
+    const casa = roteiroPeloMotorDeCopy(normalizarRoteiro({ ...o, tipo: estrutura.tipo, formato: p.formato, duracao_alvo_s: p.duracaoS }, { titulo, tipo: estrutura.tipo, duracao_s: p.duracaoS, formato: p.formato }));
+    casa.roteiro.formato = p.formato;
+    casa.roteiro.duracao_alvo_s = p.duracaoS;
+    return { estrutura, roteiro: casa.roteiro, frases: casa.frases };
+  }).filter((v) => v.roteiro.blocos.length);
+  if (!versoes.length) throw new ErroHttp(502, "roteiro_vazio", "O modelo não devolveu o roteiro. Tente de novo.", { custo_usd: saida.custoUsd });
+  // O Jev escolhe entre as versões (uma chamada, Score por dimensão e por versão). Fora do ar: a versão 1, pela regra.
+  let respostas: Record<string, { score?: number }> | null = null;
+  if (versoes.length > 1) {
+    try {
+      const res = await jevPerguntar({
+        state: estadoDaEscolha(versoes.map((v) => ({ ...v.roteiro, estrutura: v.estrutura.nome })), { oferta: ofertaEmTexto, publico: curtoDe(oferta && oferta.para_quem, 600) || curtoDe((ctx.dados.contexto as Record<string, unknown> | undefined)?.publico, 600), nicho: viral ? nichosEmTexto(viral.nichos) : "", cta: curtoDe(copy.cta_meta, 80) }),
+        questions: perguntasDaEscolha(versoes.length),
+      });
+      await cobrarJev(res, { clientId, tarefa: TAREFA, referencia: ref, criadoPor: ch.userId });
+      respostas = res.answers as Record<string, { score?: number }>;
+    } catch (e) {
+      registrarFalha("mesa-roteiros: Jev da escolha do anúncio fora do ar (fica a versão 1)", e, { client_id: clientId, codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
+    }
+  }
+  const escolha = escolherVersao(notasDasVersoes(respostas, versoes.length));
+  const vencedora = versoes[escolha.indice];
+  const referencias = webUsada ? fontesDaWeb(saida.fontes) : [];
+  const roteiro = vencedora.roteiro;
+  roteiro.subtitulo = roteiro.subtitulo || vencedora.estrutura.nome;
+  roteiro.fontes = roteiro.fontes.concat(referencias.map((r) => `Web: ${r.titulo} (${r.url})`.slice(0, 200))).slice(0, 12);
+  const nv = escolha.notas[escolha.indice];
+  const aviso = avisoComAsFrasesDaCasa(nv && nv.nota != null ? avisoDasRespostasDoJev(nv.gancho == null ? null : nv.gancho - 1, nv.clareza == null ? null : nv.clareza - 1, null) : null, vencedora.frases);
+  const gravado = await guardarVersao(
+    ch,
+    { clientId, linha: existente.linha, taskId: null, propostaId: null, campanhaId: null },
+    roteiro,
+    { origem: "ia", nota: `Anúncio em vídeo (${ROTULO_DO_MODO[p.modo]}): ${vencedora.estrutura.nome}. ${escolha.porque}`, custo_usd: saida.custoUsd, modelo_id: saida.modeloId, aviso },
+  );
+  // O vínculo com o criativo e a oferta (coluna da migração 20261023130000; sem ela, a tela lembra o id).
+  let vinculado = !!(gravado.linha && existente.linha);
+  let avisoDoVinculo: string | null = null;
+  if (gravado.linha && !existente.linha) {
+    if (existente.coluna) {
+      const { error } = await servico().from(TABELA).update({ ads_criativo_id: criativo.id, ads_oferta_id: ofertaId }).eq("id", gravado.linha.id).eq("client_id", clientId);
+      if (error) registrarFalha("mesa-roteiros: vínculo do roteiro com o criativo não gravado", error, { roteiro_id: gravado.linha.id });
+      vinculado = !error;
+    }
+    if (!vinculado) avisoDoVinculo = AVISO_DO_VINCULO;
+  }
+  return json({
+    roteiro: gravado.linha,
+    versao: gravado.versao,
+    escolha: { ...escolha, estrutura: vencedora.estrutura.id, estruturas: versoes.map((v) => v.estrutura.id) },
+    modo: p.modo,
+    referencias,
+    web: { pedida: p.web, usada: webUsada },
+    aviso_jev: aviso,
+    vinculo: { ads_criativo_id: criativo.id, ads_oferta_id: ofertaId, gravado: vinculado, aviso: avisoDoVinculo },
+    custo_usd: saida.custoUsd,
+    saldo_usd: saida.saldoUsd,
+    aviso_banco: gravado.aviso_banco || null,
+  });
 }
 
 /**
@@ -2069,6 +2287,8 @@ async function ideiasHistorico(ch: Chamador, corpo: Record<string, unknown>) {
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   estimar,
   gerar,
+  // 23/10: roteiro de anúncio em vídeo para gravar, pedido pela Mesa Ads (Estúdio > Vídeo > Gravar).
+  anuncio_gerar: anuncioGerar,
   gancho_refazer: ganchoRefazer,
   tom_mudar: tomMudar,
   roteiro_criar: roteiroCriar,
@@ -2100,6 +2320,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 /** Frente ROT: ler um roteiro de exemplo e montar a ficha também usa IA. */
 const ACOES_LONGAS_DA_BASE = new Set(["biblioteca_extrair"]);
 
+/** 23/10: o roteiro de anúncio (2 versões, busca na web e Jev) também passa de 150 s. */
+const ACOES_LONGAS_DO_ANUNCIO = new Set(["anuncio_gerar"]);
+
 /** Ações que podem passar de 150 s (IA, envio de arquivo): a resposta começa na hora. */
 const ACOES_LONGAS = new Set(["gerar", "gancho_refazer", "tom_mudar", "agente_conversar", "ideias_conversar", "executar_acao_agente", "pdf_compartilhar"]);
 
@@ -2122,7 +2345,7 @@ Deno.serve(async (req) => {
         return respostaDeErro(err);
       }
     };
-    return ACOES_LONGAS.has(acao) || ACOES_LONGAS_DA_BASE.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
+    return ACOES_LONGAS.has(acao) || ACOES_LONGAS_DA_BASE.has(acao) || ACOES_LONGAS_DO_ANUNCIO.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
   } catch (err) {
     return respostaDeErro(err);
   }

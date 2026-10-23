@@ -164,15 +164,15 @@ describe("motor de copy ligado nas mesas", () => {
     expect(puro).not.toMatch(/from "npm:|Deno\./);
   });
 
-  it("Estúdio: legenda em 4 variações conferidas (12/10), a melhor no campo e as outras na resposta", () => {
+  it("Estúdio: legenda em 3 variações conferidas (12/10; 3 desde 23/10), a melhor no campo e as outras na resposta", () => {
     const e = fonte("supabase/functions/estudio-arte/index.ts");
-    expect(e).toContain("const VARIACOES_DA_LEGENDA = 4;");
+    expect(e).toContain("const VARIACOES_DA_LEGENDA = 3;");
     expect(e).toContain('motor_de_copy: blocoDoMotor({ canal: "legenda", objetivo: objetivoDoPost, variacoes: VARIACOES_DA_LEGENDA, partirDoPrevisto: temLegendaPrevista, regras: voz.regras })');
     expect(e).toContain("contexto_completo_da_marca: voz.bloco || null");
     // 23/10 (COPY-V): a conferência da casa vai junto das 5 notas virais do Jev (escolherComViralidade chama conferirCopies).
     expect(e).toContain("const conf = await escolherComViralidade({");
     expect(e).toContain("porque: [porqueDaEscolha(conf.conferencias[conf.ordem[0]], escritas.length), conf.porque_viral]");
-    expect(fonte("supabase/functions/estudio-arte/modulos/copy-viral-servidor.ts")).toContain("const conf = await conferirCopies({ ...p, jev: comViral });");
+    expect(fonte("supabase/functions/estudio-arte/modulos/copy-viral-servidor.ts")).toContain("const conf = await conferirCopies(p.semViral ? p : { ...p, jev: comViral });");
     // O refino também vem conferido e em ordem, sem cortar no teto do canal.
     expect(e).toContain("cortar: false,");
     expect(e).toContain("estruturaPedida: framework ? framework.nome : null");

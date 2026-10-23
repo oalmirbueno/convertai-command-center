@@ -4,81 +4,146 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { nomeDoModelo, precoDoModelo, type ModeloIa } from "@/lib/mesa/api";
-import { escolherModeloDaCopy } from "../../../supabase/functions/estudio-arte/modulos/copy-viral";
+import { escolherModeloDoEscopo, type EscopoDoModelo } from "../../../supabase/functions/estudio-arte/modulos/copy-viral";
 import { SeletorDeModelo } from "./Seletores";
 
 /**
- * Modelo da copy dos conteúdos (frente COPY-V, 23/10/2026; dono: "poder também
- * escolher o modelo de preparação do conteúdo e colocar um modelo mais
- * inteligente e melhor para copy"). Um seletor só, no Mês e no Estúdio, com o
- * preço de cada modelo. Sem escolha vale "o melhor para copy" (o marcado
- * "copy" no catálogo: Claude Opus 5.5). A escolha fica lembrada por cliente no
- * banco (mesa_cliente_config.modelo_copy_id, pela RPC definir_modelo_da_copy),
- * e o servidor lê a mesma escolha em toda escrita de texto, mesmo sem a tela
- * mandar o id. Sem a migration publicada, a escolha vale só nesta sessão.
+ * Seletores de modelo por escopo (23/10/2026; dono: "o seletor tem que ser no
+ * gerar a copy do conteúdo e não da legenda; adicione um seletor no motor que
+ * faz a copy do conteúdo, no refinar copy e no estrategista"). Três escopos,
+ * cada um com o seu seletor, o preço de cada modelo e a escolha lembrada por
+ * cliente em coluna própria (mesa_cliente_config.modelo_copy_id,
+ * modelo_refino_id e modelo_estrategista_id, pela RPC definir_modelo_do_cliente):
+ * - copy: o texto das lâminas e da peça (direção do Estúdio e arte rápida) e o
+ *   detalhar e os conteúdos do Mês. Padrão: o melhor para copy (Opus 5.5);
+ * - refino: o refinar copy. Padrão: o melhor para copy;
+ * - estrategista: temas, plano e conversa do Mês. Padrão: o de hoje.
+ * A legenda não usa nenhum deles (fica no modelo do diretor). Sem a migration
+ * publicada, a escolha vale só nesta sessão.
  */
 
-export const chaveDoModeloDaCopy = (clientId: string) => ["mesa", "modelo-da-copy", clientId];
+export const ROTULO_DO_ESCOPO: Record<EscopoDoModelo, string> = {
+  copy: "Modelo da copy do conteúdo",
+  refino: "Modelo do refinar copy",
+  estrategista: "Modelo do estrategista",
+};
 
-async function lerModeloGuardado(clientId: string): Promise<string> {
-  const { data, error } = await (supabase as any).from("mesa_cliente_config").select("modelo_copy_id").eq("client_id", clientId).maybeSingle();
+/** O campo que vai na chamada de cada escopo (o servidor também lê o lembrado). */
+export const CAMPO_DO_ESCOPO: Record<EscopoDoModelo, string> = {
+  copy: "modelo_copy_id",
+  refino: "modelo_refino_id",
+  estrategista: "modelo_id",
+};
+
+const COLUNA_DO_ESCOPO: Record<EscopoDoModelo, string> = {
+  copy: "modelo_copy_id",
+  refino: "modelo_refino_id",
+  estrategista: "modelo_estrategista_id",
+};
+
+export const chaveDoModeloDoEscopo = (clientId: string, escopo: EscopoDoModelo) => ["mesa", "modelo-do-escopo", escopo, clientId];
+
+async function lerModeloGuardado(clientId: string, escopo: EscopoDoModelo): Promise<string> {
+  const coluna = COLUNA_DO_ESCOPO[escopo];
+  const { data, error } = await (supabase as any).from("mesa_cliente_config").select(coluna).eq("client_id", clientId).maybeSingle();
   // Coluna ainda não publicada: sem escolha guardada (vale o padrão).
-  if (error) return "";
-  return data && typeof data.modelo_copy_id === "string" ? data.modelo_copy_id : "";
+  if (error || !data) return "";
+  return typeof data[coluna] === "string" ? data[coluna] : "";
 }
 
-export function useModeloDaCopyDoConteudo() {
+export function useModeloDoEscopo(escopo: EscopoDoModelo) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const guardado = useQuery({ queryKey: chaveDoModeloDaCopy(clientId), queryFn: () => lerModeloGuardado(clientId), enabled: !!clientId, staleTime: 60_000 });
+  const guardado = useQuery({ queryKey: chaveDoModeloDoEscopo(clientId, escopo), queryFn: () => lerModeloGuardado(clientId, escopo), enabled: !!clientId, staleTime: 60_000 });
   const [daSessao, setDaSessao] = useState<string | null>(null);
   const escolhidoId = daSessao != null ? daSessao : guardado.data || "";
-  const escolha = escolherModeloDaCopy<ModeloIa>(catalogo, escolhidoId);
-  const padrao = escolherModeloDaCopy<ModeloIa>(catalogo, "");
+  const escolha = escolherModeloDoEscopo<ModeloIa>(catalogo, escolhidoId, escopo);
+  const padrao = escolherModeloDoEscopo<ModeloIa>(catalogo, "", escopo);
 
   const trocar = async (id: string) => {
     setDaSessao(id);
-    const { error } = await (supabase as any).rpc("definir_modelo_da_copy", { _client_id: clientId, _modelo_id: id || null });
+    const { error } = await (supabase as any).rpc("definir_modelo_do_cliente", { _client_id: clientId, _escopo: escopo, _modelo_id: id || null });
     if (error) {
-      toast.warning("A escolha vale só nesta sessão", { description: "O modelo da copy ainda não pode ser lembrado para este cliente (banco sem a atualização)." });
+      toast.warning("A escolha vale só nesta sessão", { description: "O modelo ainda não pode ser lembrado para este cliente (banco sem a atualização)." });
       return;
     }
     setDaSessao(null);
-    await queryClient.invalidateQueries({ queryKey: chaveDoModeloDaCopy(clientId) });
+    await queryClient.invalidateQueries({ queryKey: chaveDoModeloDoEscopo(clientId, escopo) });
   };
 
   return {
+    escopo,
     modelo: escolha.modelo,
     modeloId: escolha.modelo ? escolha.modelo.id : "",
     motivo: escolha.motivo,
     padrao: padrao.modelo,
+    /** O id guardado para o cliente (vazio: sem escolha). */
+    guardadoId: guardado.data || "",
     /** Para mandar na chamada (o servidor também lê o lembrado). */
-    corpo: escolha.modelo ? { modelo_copy_id: escolha.modelo.id } : {},
+    corpo: escolha.modelo ? { [CAMPO_DO_ESCOPO[escopo]]: escolha.modelo.id } : {},
+    /** Há escolha explícita (da tela ou lembrada do cliente). */
+    escolhido: escolha.motivo === "escolhido",
+    /** Só a escolha explícita (a direção do Estúdio sem escolha segue no diretor de arte). */
+    corpoEscolhido: escolha.motivo === "escolhido" && escolha.modelo ? { [CAMPO_DO_ESCOPO[escopo]]: escolha.modelo.id } : {},
     trocar,
   };
 }
 
-export type EstadoDoModeloDaCopy = ReturnType<typeof useModeloDaCopyDoConteudo>;
+export type EstadoDoModeloDoEscopo = ReturnType<typeof useModeloDoEscopo>;
 
-/** O seletor com o preço e a linha do padrão. */
-export function SeletorDoModeloDaCopyDoConteudo({ estado }: { estado: EstadoDoModeloDaCopy }) {
+/** Compatível com a rodada anterior: o escopo da copy do conteúdo. */
+export const useModeloDaCopyDoConteudo = () => useModeloDoEscopo("copy");
+export type EstadoDoModeloDaCopy = EstadoDoModeloDoEscopo;
+
+/**
+ * O seletor com o preço e a linha do padrão. `valor`/`aoTrocar` deixam a tela
+ * controlar o valor (o estrategista do Mês segue o modelo gravado na proposta).
+ */
+export function SeletorDoModeloDoEscopo({
+  estado,
+  valor,
+  aoTrocar,
+  padraoDoLugar,
+}: {
+  estado: EstadoDoModeloDoEscopo;
+  valor?: string;
+  aoTrocar?: (id: string) => void;
+  /** 23/10: o padrão deste lugar quando não há escolha (a direção do Estúdio: o diretor de arte). */
+  padraoDoLugar?: { rotulo: string; modelo: ModeloIa | null };
+}) {
   const { catalogo } = useMesa();
-  const { modelo, motivo, padrao } = estado;
+  const { motivo } = estado;
+  const doLugar = padraoDoLugar && motivo !== "escolhido";
+  const padrao = padraoDoLugar ? padraoDoLugar.modelo : estado.padrao;
+  const modelo = doLugar ? padraoDoLugar!.modelo : estado.modelo;
+  const atual = valor != null ? valor : modelo ? modelo.id : "";
+  const trocar = (id: string) => {
+    if (aoTrocar) aoTrocar(id);
+    void estado.trocar(id);
+  };
+  const doPadrao = padrao ? `${nomeDoModelo(padrao)} (${precoDoModelo(padrao)})` : "";
   return (
-    <div className="min-w-0">
-      <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modelo ? modelo.id : ""} onChange={(id) => void estado.trocar(id)} rotulo="Modelo da copy" />
+    <div className="min-w-0" data-escopo-do-modelo={estado.escopo}>
+      <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={atual} onChange={trocar} rotulo={ROTULO_DO_ESCOPO[estado.escopo]} />
       <p className="mt-1 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
         {motivo === "escolhido"
-          ? `Escolhido para este cliente: ${modelo ? `${nomeDoModelo(modelo)} (${precoDoModelo(modelo)})` : ""}.`
-          : padrao
-            ? `Padrão: o melhor para copy, ${nomeDoModelo(padrao)} (${precoDoModelo(padrao)}).`
-            : "Sem modelo marcado para copy: escreve o modelo do estrategista."}
+          ? `Lembrado para este cliente${modelo ? `: ${nomeDoModelo(modelo)} (${precoDoModelo(modelo)})` : ""}.`
+          : doLugar
+            ? `Padrão (${padraoDoLugar!.rotulo})${doPadrao ? `: ${doPadrao}` : ""}.`
+            : padrao
+              ? estado.escopo === "estrategista" ? `Padrão: ${doPadrao}.` : `Padrão: o melhor para copy, ${doPadrao}.`
+              : "Sem modelo padrão no catálogo."}
         {motivo === "escolhido" && padrao && modelo && padrao.id !== modelo.id && (
-          <button type="button" className="ml-1 underline underline-offset-2" onClick={() => void estado.trocar("")}>
+          <button type="button" className="ml-1 underline underline-offset-2" onClick={() => trocar("")}>
             Voltar ao padrão
           </button>
         )}
       </p>
     </div>
   );
+}
+
+/** Compatível com a rodada anterior. */
+export function SeletorDoModeloDaCopyDoConteudo({ estado }: { estado: EstadoDoModeloDoEscopo }) {
+  return <SeletorDoModeloDoEscopo estado={estado} />;
 }

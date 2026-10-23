@@ -253,7 +253,9 @@ describe("o mapa chega ao gerador e ao diretor", () => {
     const ler = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8").replace(/\r\n/g, "\n");
     const estudio = ler("supabase/functions/estudio-arte/index.ts");
     const gerar = estudio.slice(estudio.indexOf("async function gerarCard("), estudio.indexOf("async function gravarVersao("));
-    expect(gerar).toContain("const doPreenchimento = await preenchimentoNaGeracao(t, card, {");
+    // 23/10 (velocidade): o preenchimento roda junto com o molde e a logo (emParalelo), com o mesmo resultado.
+    expect(gerar).toContain("const [[anexoLogo, moldes], doPreenchimento] = await emParalelo(");
+    expect(gerar).toContain("    preenchimentoNaGeracao(t, card, {");
     expect(gerar).toContain("semLinhaDosVagos(replica.prompt, preenchimentoDaReferencia)");
     expect(gerar).toContain("replica.textoExato = comTextoDosElementos(replica.textoExato, preenchimentoDaReferencia);");
     expect(gerar).toContain('replicar ? "" : blocoDoPreenchimentoAqui,');

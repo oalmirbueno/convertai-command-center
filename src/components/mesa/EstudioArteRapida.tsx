@@ -21,6 +21,7 @@ import { campanhaDaMarcaNaTela } from "@/lib/mesa/marcas";
 import { EDITORIAL_DEFAULT_TIME_ZONE } from "@/lib/editorialDate";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
+import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
 import { useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import { Ditado } from "./Ditado";
 import { SeloDoItem } from "./EstudioLista";
@@ -382,9 +383,13 @@ function PedidoDaArteRapida({
   const imagem = padraoPara(catalogo, "imagem");
   const vistas = Math.min(MAX_IMAGENS_VISTAS_PELO_DIRETOR, arquivos.filter((a) => a.papel !== "logo").length);
   const geraJunto = gerarLogo && peca !== "carrossel";
+  // 23/10 (dono): a copy do conteúdo (texto exato e blocos da direção) pelo modelo escolhido, lembrado por cliente.
+  // Sem escolha explícita e na arte livre (sem marca), segue o diretor de arte.
+  const modeloDaCopy = useModeloDoEscopo("copy");
+  const escritorDaDirecao = !semMarca && modeloDaCopy.escolhido && modeloDaCopy.modelo ? modeloDaCopy.modelo : diretor;
   const partes = (): ParteDaEstimativa[] => {
     const p: ParteDaEstimativa[] = [
-      { modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada + vistas * TAMANHOS.imagemAnexos.entrada, tokensSaida: TAMANHOS.preparar.saida },
+      { modeloId: escritorDaDirecao ? escritorDaDirecao.id : null, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada + vistas * TAMANHOS.imagemAnexos.entrada, tokensSaida: TAMANHOS.preparar.saida },
     ];
     if (geraJunto && imagem) {
       p.push({ modeloId: imagem.id, tipo: "imagem", imagens: 1, qualidade: "media", tokensEntrada: TAMANHOS.imagemAnexos.entrada });
@@ -416,6 +421,7 @@ function PedidoDaArteRapida({
       fidelidade: comReferencia ? fidelidade : null,
     });
     // 19/10: o Estúdio livre marca a origem; a Mesa segue com o corpo de sempre.
+    if (!semMarca) Object.assign(corpoDoPedido, modeloDaCopy.corpoEscolhido);
     const r = await prepararArteRapida(origem === "laboratorio" ? { ...corpoDoPedido, origem, ...(semMarca ? { sem_marca: true, campanha_id: null, marca_id: null } : {}) } : corpoDoPedido);
     const t = r && r.trabalho ? (r.trabalho as Trabalho) : null;
     // A arte única já entra na fila de geração (o preço dela estava no botão); o carrossel espera o "Gerar".
@@ -461,7 +467,7 @@ function PedidoDaArteRapida({
   const corpo = (
     <div className="min-w-0 space-y-5">
       {semMarca ? (
-        <p className="text-[12px] text-muted-foreground" data-arte-sem-marca="">Livre: sem marca de cliente (sem logo, campanha nem identidade). Para usar a marca de um cliente, escolha o cliente no topo.</p>
+        <p className="text-[12px] text-muted-foreground" data-arte-sem-marca="">Livre, sem marca de cliente. Para usar uma marca, escolha o cliente no topo.</p>
       ) : (
         <EscolhaDaCampanha campanhas={lista} valor={campanha} onValor={escolherCampanha} carregando={campanhas.isLoading} emUso={emUso} />
       )}
@@ -703,6 +709,8 @@ function PedidoDaArteRapida({
   );
 
   const acao = (
+    <>
+    {!semMarca && <div className="mb-3 max-w-md"><SeletorDoModeloDoEscopo estado={modeloDaCopy} padraoDoLugar={{ rotulo: "diretor de arte", modelo: diretor }} /></div>}
     <div className="flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center sm:justify-end">
       <p className="mt-2 text-[12px] leading-snug text-muted-foreground sm:mr-3 sm:mt-0">
         {geraJunto ? "Direção e arte em seguida." : "Direção pronta para você conferir e gerar."} Foto real entra como está.
@@ -719,6 +727,7 @@ function PedidoDaArteRapida({
         className="h-10 w-full sm:w-auto"
       />
     </div>
+    </>
   );
 
   const cabecalho = (

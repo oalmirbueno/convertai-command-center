@@ -611,3 +611,20 @@ export function escolherModeloDaCopy<M extends ModeloDoCatalogo>(catalogo: M[], 
   if (estrategista) return { modelo: estrategista, motivo: "estrategista" };
   return { modelo: null, motivo: "nenhum" };
 }
+
+/** 23/10 (dono): três seletores, cada um no seu escopo (copy do conteúdo, refinar copy e estrategista). */
+export type EscopoDoModelo = "copy" | "refino" | "estrategista";
+
+/**
+ * O modelo de cada escopo na tela: copy e refino seguem o melhor para copy;
+ * o estrategista, o escolhido ou o padrão de hoje (marcado "estrategista").
+ */
+export function escolherModeloDoEscopo<M extends ModeloDoCatalogo>(catalogo: M[], escolhidoId: string | null | undefined, escopo: EscopoDoModelo): EscolhaDoModeloDaCopy<M> {
+  if (escopo !== "estrategista") return escolherModeloDaCopy(catalogo, escolhidoId);
+  const lista = (catalogo || []).filter(usavel);
+  const id = String(escolhidoId || "").trim();
+  const m = id ? lista.filter((x) => x.id === id)[0] : undefined;
+  if (m) return { modelo: m, motivo: "escolhido" };
+  const padrao = lista.filter((x) => Array.isArray(x.padrao_para) && x.padrao_para.indexOf("estrategista") >= 0)[0];
+  return padrao ? { modelo: padrao, motivo: "estrategista" } : { modelo: null, motivo: "nenhum" };
+}

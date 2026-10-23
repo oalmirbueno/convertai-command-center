@@ -556,11 +556,11 @@ export const HABILIDADES_DE_TEXTO: readonly HabilidadeDeTexto[] = [
   },
   {
     id: "modelo_da_copy",
-    nome: "Modelo da copy",
-    faz: "Quem escreve a copy: o escolhido na tela, o lembrado do cliente (mesa_cliente_config.modelo_copy_id) ou o marcado \"copy\" no catálogo (Claude Opus 5.5).",
-    base: "modeloDaCopy em estudio-arte/modulos/copy-viral-servidor.ts",
+    nome: "Modelos por escopo (copy do conteúdo, refinar copy e estrategista)",
+    faz: "Três seletores lembrados por cliente (mesa_cliente_config.modelo_copy_id, modelo_refino_id e modelo_estrategista_id): a copy do conteúdo escreve a direção do Estúdio e o detalhar do Mês, o refinar copy o refino; padrão das duas: o marcado \"copy\" (Claude Opus 5.5). A legenda fica no modelo do diretor.",
+    base: "modeloDoEscopo em estudio-arte/modulos/copy-viral-servidor.ts",
     ligacoes: [
-      { arquivo: "supabase/functions/estudio-arte/index.ts", trechos: ["modeloDaCopy(servico(), t.client_id, corpo.modelo_copy_id)"] },
+      { arquivo: "supabase/functions/estudio-arte/index.ts", trechos: ["await modeloDaCopyEscolhido(db as never, clientId, corpo.modelo_copy_id)", "modeloDoRefino(servico(), t.client_id, corpo.modelo_refino_id)"] },
       { arquivo: "supabase/functions/agente-calendario/index.ts", trechos: ["const daCopy = await modeloDaCopy(servico, clientId, corpo.modelo_copy_id)"] },
     ],
   },
@@ -822,6 +822,7 @@ export const METODO_DOS_MOTORES: Record<string, string[]> = {
   "mesa_publicidade.diretor": ["publicidade.diretor"],
   "mesa_publicidade.agente": ["publicidade.agente"],
   "mesa_roteiros.roteirista": ["roteiros.roteirista"],
+  "mesa_roteiros.anuncio": ["roteiros.roteirista"],
   "mesa_roteiros.agente": ["roteiros.agente"],
   "estilo.agente": ["estilo.agente"],
   "perfis.plano": ["perfis.plano"],
@@ -1050,6 +1051,17 @@ export const MOTORES: readonly Motor[] = [
       "papeis_do_roteiro", "modos_do_roteiro", "inteligencia_editorial", "tecnicas_editoriais", "direcao_de_gravacao",
       "roteiro_de_video", "cta_principios", "voz_de_marca", "anti_generico",
     ],
+  },
+  // 23/10: o roteiro de anúncio em vídeo para gravar (Mesa Ads > Estúdio > Vídeo > Gravar), pela Mesa Roteiros:
+  // 2 versões numa chamada (roteiro-de-anuncio.ts), motor de copy viral e base ads.video; o Jev escolhe.
+  {
+    id: "mesa_roteiros.anuncio",
+    nome: "Mesa Roteiros: roteiro de anúncio em vídeo para gravar (anuncio_gerar)",
+    funcao: "mesa-roteiros",
+    ligacao: { arquivo: ROTEIROS, trechos: ["`${SISTEMA_ROTEIRISTA}\\n\\n${CONHECIMENTO_DO_ROTEIRO}`,", "SISTEMA_DO_ANUNCIO,", "esquemaJson: ESQUEMA_DO_ROTEIRO_DE_ANUNCIO,"] },
+    bases: ["mesa-roteiros: SISTEMA_ROTEIRISTA e SISTEMA_DO_ANUNCIO (modulos/roteiro-de-anuncio.ts: estruturas de anúncio em vídeo e escolha do Jev)"],
+    montar: (objetivo) => conhecimentoRoteiros(objetivo),
+    promete: ["papeis_do_roteiro", "roteiro_de_video", "direcao_de_gravacao", "cta_principios", "anti_generico"],
   },
   {
     id: "mesa_roteiros.agente",

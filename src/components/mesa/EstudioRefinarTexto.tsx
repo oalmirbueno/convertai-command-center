@@ -8,6 +8,7 @@ import { BotaoComCusto } from "./Custo";
 import { NotaDaCopy } from "@/components/sistema/OpcoesDaCopy";
 import { FRAMEWORKS } from "./MesConhecimento";
 import { corpoDoRefinar, OBJETIVOS_DO_REFINO } from "./estudioUtil";
+import { SeletorDoModeloDoEscopo, type EstadoDoModeloDoEscopo } from "./ModeloDaCopyDoConteudo";
 
 /**
  * Refinar texto (dono, 26/09: "uma área no texto para refinar a copy,
@@ -40,6 +41,7 @@ export default function EstudioRefinarTexto({
   bloqueado = false,
   onAplicar,
   onConcluido,
+  modelo,
 }: {
   trabalhoId: string;
   alvo: "lamina" | "legenda";
@@ -52,6 +54,8 @@ export default function EstudioRefinarTexto({
   onAplicar: (texto: string) => Promise<void> | void;
   /** Depois de gastar: atualiza o custo da tela. */
   onConcluido?: () => void;
+  /** 23/10: o seletor do refinar copy (lembrado por cliente); sem ele, o servidor usa o lembrado ou o padrão. */
+  modelo?: EstadoDoModeloDoEscopo;
 }) {
   const [aberto, setAberto] = useState(false);
   const [objetivos, setObjetivos] = useState<string[]>(["mais_forte"]);
@@ -136,6 +140,7 @@ export default function EstudioRefinarTexto({
             className="h-8 text-[12px]"
             aria-label="Pedido para o redator"
           />
+          {modelo && <SeletorDoModeloDoEscopo estado={modelo} />}
           <div className="flex justify-end">
             <BotaoComCusto
               rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"}</span></>}
@@ -146,7 +151,7 @@ export default function EstudioRefinarTexto({
               className="h-8 gap-1 px-2.5 text-[12px]"
               disabled={bloqueado || vazio || !objetivos.length}
               partes={partes}
-              executar={() => chamarFuncao<any>("estudio-arte", corpoDoRefinar(trabalhoId, { alvo, ordem, texto, objetivos, framework, pedido }))}
+              executar={() => chamarFuncao<any>("estudio-arte", { ...corpoDoRefinar(trabalhoId, { alvo, ordem, texto, objetivos, framework, pedido }), ...(modelo ? modelo.corpo : {}) })}
               aoConcluir={(data) => {
                 const lista = data && Array.isArray(data.opcoes) ? (data.opcoes as OpcaoRefinada[]).filter((o) => o && typeof o.texto === "string" && o.texto.trim()) : [];
                 setOpcoes(lista);

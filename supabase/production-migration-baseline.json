@@ -2473,6 +2473,22 @@
       "remote_name": "biblioteca_da_casa",
       "remote_statements_sha256": "60a9fa11ae24ade9d0fd71b9a9ce0ff14d23c08fb3ee813f45798edd821c1ef2",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261023130000",
+      "path": "supabase/migrations/20261023130000_roteiros_do_anuncio.sql",
+      "local_sha256": "655391f9c886e58203ea6080ba45b0972e2a5583a712ebcf460bc19e1e58d020",
+      "remote_name": "roteiros_do_anuncio",
+      "remote_statements_sha256": "43bc619eeedbcf37d9d94b1c95df434d7f9485406ab619bd5af70bc285873039",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261023140000",
+      "path": "supabase/migrations/20261023140000_modelos_por_escopo.sql",
+      "local_sha256": "00a084b306b52c7138d07f3b947ffc5ea30980ec3355969aacb2c4dfca993aad",
+      "remote_name": "modelos_por_escopo",
+      "remote_statements_sha256": "3307bf749d8170cf3b0ce107591e579cd95414af74e0c67e28d259d3e97ac5b5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
