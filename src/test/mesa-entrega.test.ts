@@ -129,7 +129,7 @@ describe("custo do Jev na carteira", () => {
     // no gerador do carrossel com o custo já confirmado; template_videos_buscar e template_destaques usam a
     // mesma perguntarJev do carrossel, já cobrada).
     expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(18);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(14);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(15);
     expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(17);
     // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
     for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {
