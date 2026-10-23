@@ -29,7 +29,7 @@ describe("Template Profile no Estúdio compartilhado", () => {
   it("preenche o perfil real sem inferir selo e salva nova versão sem pedir imagem IA", async () => {
     montar();
     await waitFor(() => expect(screen.getByLabelText("Nome de exibição do template")).toHaveValue("Loja A"));
-    expect(screen.getByLabelText("Exibir selo no layout")).not.toBeChecked();
+    expect(screen.getByLabelText("Exibir selo em todas as lâminas")).not.toBeChecked();
     await waitFor(() => expect(screen.getByRole("button", { name: "Guardar nova versão" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Guardar nova versão" }));
     await waitFor(() => expect(estado.chamar).toHaveBeenCalledOnce());
