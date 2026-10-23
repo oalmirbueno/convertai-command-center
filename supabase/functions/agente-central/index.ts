@@ -42,6 +42,9 @@ import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marc
 import { lerContextoDoRitual } from "../ritual-writer/contexto.ts";
 import { conferirRepeticao, escreverRitual, extractJson, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
 import { extrairMemoriaDoRitual } from "../ritual-writer/memoria.ts";
+// 23/10: o pedido do dono na conversa do ritual edita a mensagem atual (não refaz).
+import { ajustarRitual } from "../ritual-writer/modulos/ajuste.ts";
+import { jevPerguntar, type ResultadoJev } from "../_shared/jev.ts";
 import {
   clienteEntraNoAgente,
   comporDossie,
@@ -146,6 +149,13 @@ function comAnexoDoMetodo(anexos: unknown[], anexo: AnexoDoMetodo | null): unkno
 /** O ritual escrito pela reserva (sem linha em ia_usos) ainda conta no "Uso em 30 dias". */
 function registrarMetodoDoRitual(metodo: MetodoInjetado | null, escrito: { uso_id?: string | null } | null, clientId: string) {
   if (metodo && escrito && !escrito.uso_id) void registrarMetodoSemUso(servicoDoMetodo(), { metodo, clientId });
+}
+
+/** 23/10: a pergunta ao Jev do ajuste do ritual é cobrada da carteira do cliente, como as outras. */
+async function cobrarJevDaCentral(r: ResultadoJev, clientId: string, uid: string) {
+  // Import dinâmico, como no escritor: o ia-motor lê o ambiente do Deno.
+  const { cobrarJev } = await import("../_shared/ia-motor.ts");
+  return await cobrarJev(r, { clientId, tarefa: "conversa", criadoPor: uid });
 }
 
 type Dossie = { id: string; version: number; content: string; summary: string | null; metadata: Record<string, unknown> } | null;
@@ -540,6 +550,39 @@ async function acaoReescrever(db: SupabaseClient, uid: string, clientId: string,
     `DOSSIÊ GERAL ATUAL v${dossie?.version ?? "?"}:\n${recortarDossie(dossie?.content ?? "", LIMITE_DOSSIE_FATOS)}`,
   ].filter(Boolean).join("\n\n");
   let ritualErro: string | null = null;
+
+  // 23/10 (dono: "em vez dele complementar, ele refaz toda a mensagem"): com pedido e mensagem atual é
+  // EDIÇÃO sobre o texto atual (modulos/ajuste.ts): só o pedido muda, o resto volta igual, e o que sumir
+  // sem pedido vira aviso. Sem pedido continua "outra versão" (composição nova com os mesmos fatos).
+  if (instrucao && anterior) {
+    const estadoTexto = estado ? estadoRealComoTexto(estado, { ritual, limite: 5000 }) : "";
+    const ajustado = await ajustarRitual({
+      ritual, anterior, instrucao, clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
+      clientName: n.nome, contactName: n.contato,
+      fatos: [estadoTexto, recortarDossie(dossie?.content ?? "", 3000)].filter(Boolean).join("\n\n"),
+    }, escreverComModeloDaCentral, jevPerguntar, (r) => cobrarJevDaCentral(r, clientId, uid)).catch((e) => {
+      ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
+      return null;
+    });
+    registrarMetodoDoRitual(metodoDoRitual, ajustado, clientId);
+    if (!ajustado && !ritualErro) ritualErro = "o modelo não devolveu a mensagem ajustada; a versão atual ficou como estava";
+    if (ritualErro) console.error("agente-central: ritual não ajustado", { clientId, ritual, erro: ritualErro });
+    return json({
+      client_id: clientId,
+      modo: "ajuste",
+      ritual: ajustado
+        ? {
+          tipo: ritual, title: ajustado.title, body: ajustado.body, next_steps: ajustado.next_steps, alertas: ajustado.alertas,
+          tarefas_sugeridas: [], model: ajustado.model, repeticao: null, memoria: extrairMemoriaDoRitual(ajustado.body, ajustado.next_steps),
+          fase: contexto.fase,
+          ajuste: { mudancas: ajustado.mudancas, tiradas: ajustado.tiradas, perdidas: ajustado.perdidas },
+        }
+        : null,
+      ritual_erro: ritualErro,
+      aprendizado: anexosDoAprendizado(await aprendizado, null),
+    });
+  }
+
   const escrito = await escreverRitual({
     ritual, clientName: n.nome, contactName: n.contato, facts: recortarDossie(fatos, LIMITE_FATOS), continuidade: contexto.texto, diaPrioritario: contexto.diaPrioritario,
     estado: estado ? estadoRealComoTexto(estado, { ritual }) : "", clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,

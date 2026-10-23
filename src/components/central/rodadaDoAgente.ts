@@ -25,6 +25,25 @@ export interface ItemDaRodada {
   aprendizado?: unknown[];
   /** Frente AG3: canal em que o ritual saiu ("portal" ou "grupo", o "Enviei no grupo"). */
   canal?: "portal" | "grupo" | null;
+  /** 23/10: as versões antes de cada ajuste ou reescrita (a mais recente no fim), para o Desfazer. */
+  versoesAnteriores?: VersaoAnterior[];
+}
+
+/** O que o Desfazer devolve: o texto e o rascunho como estavam. */
+export interface VersaoAnterior {
+  ritual: NonNullable<Aplicado["ritual"]>;
+  reportId: string | null;
+  publicado: boolean;
+  canal?: "portal" | "grupo" | null;
+  tarefasCriadas: number[];
+}
+
+/** Guarda a versão atual antes de trocar (no máximo 5, a mais recente no fim). */
+export function comVersaoGuardada(item: ItemDaRodada): VersaoAnterior[] {
+  const lista = item.versoesAnteriores ?? [];
+  const r = item.aplicado?.ritual;
+  if (!r) return lista;
+  return [...lista, { ritual: r, reportId: item.reportId, publicado: item.publicado, canal: item.canal ?? null, tarefasCriadas: item.tarefasCriadas }].slice(-5);
 }
 
 export interface Rodada {

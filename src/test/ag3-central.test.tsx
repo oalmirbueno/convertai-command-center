@@ -67,20 +67,28 @@ describe("ritual pronto: ações sem sair do agente", () => {
     expect(screen.queryByRole("button", { name: /Enviei no grupo/ })).not.toBeInTheDocument();
   });
 
-  it("Reescrever com instrução pede outra versão (com a anterior) e ela nasce rascunho", async () => {
+  // 23/10: com pedido escrito o botão é "Ajustar a mensagem" (o servidor edita a mensagem atual, modulos/ajuste.ts)
+  // e o Desfazer volta a versão anterior.
+  it("Ajustar com pedido manda a mensagem atual, a nova nasce rascunho e o Desfazer volta a anterior", async () => {
     window.localStorage.setItem(CHAVE_LOCAL, JSON.stringify(rodada([item({ publicado: true, canal: "portal" })])));
     mock.reescrever.mockResolvedValue({ ritual: ritual("Versão nova, curta."), ritual_erro: null, aprendizado: [] });
     mock.publicar.mockResolvedValue({ reportId: "rep-2", publicado: false, avisos: [] });
     montar();
     fireEvent.click(screen.getByRole("button", { name: /Atualizar todos/ }));
     await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: /Reescrever/ }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Como reescrever o ritual de Verzelo" }), { target: { value: "Mais curto." } });
-    fireEvent.click(screen.getByRole("button", { name: /Escrever de novo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ajustar$/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "O que ajustar no ritual de Verzelo" }), { target: { value: "Mais curto." } });
+    fireEvent.click(screen.getByRole("button", { name: /Ajustar a mensagem/ }));
     await waitFor(() => expect(mock.reescrever).toHaveBeenCalledWith({ clientId: "a", ritual: "meio_semana", instrucao: "Mais curto.", anterior: "Oi, Verzelo." }));
     await screen.findByText("Versão nova, curta.");
     await waitFor(() => expect(mock.publicar).toHaveBeenCalledWith(expect.objectContaining({ clientId: "a", publicar: false })));
     expect(screen.getByText("Rascunho na fila da Central")).toBeInTheDocument();
+    // Desfazer: a anterior já tinha saído, então volta como rascunho novo com o texto de antes.
+    mock.publicar.mockResolvedValue({ reportId: "rep-3", publicado: false, avisos: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Desfazer: voltar a versão anterior" }));
+    await screen.findByText("Oi, Verzelo.");
+    expect(screen.queryByText("Versão nova, curta.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Desfazer: voltar a versão anterior" })).not.toBeInTheDocument();
   });
 });
 

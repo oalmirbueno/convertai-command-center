@@ -20,6 +20,8 @@ import { RITUAL_DA_CENTRAL, atualizarAvancosDoDossie, marcarRitual } from "@/lib
 import { addDays, localIso, mondayOf } from "@/lib/cycleWeek";
 import { avisosDoRitual, resumoDaRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
 import { corpoDoModelo, escolhaGuardada } from "./modeloDaCentral";
+// 23/10: o texto que sai para o cliente passa pelo acabamento (saudação do envio, https, painel).
+import { textoNaHoraDoEnvio } from "../../../supabase/functions/ritual-writer/modulos/acabamento";
 
 export interface ClienteDoAgente {
   id: string;
@@ -67,6 +69,8 @@ export interface RitualDoAgente {
   model: string | null;
   repeticao: unknown;
   fase: string | null;
+  /** 23/10: quando a versão veio de um pedido na conversa (edição sobre o texto atual). */
+  ajuste?: { mudancas: string[]; tiradas: string[]; perdidas: string[] } | null;
 }
 
 export interface Aplicado {
@@ -88,6 +92,8 @@ export interface Aplicado {
 }
 
 export interface Reescrito {
+  /** 23/10: "ajuste" = o pedido editou a mensagem atual; "nova" (ou ausente) = outra versão. */
+  modo?: "ajuste" | "nova";
   ritual: RitualDoAgente | null;
   ritual_erro: string | null;
   aprendizado?: unknown[];
@@ -254,7 +260,9 @@ async function publicarRascunho(p: {
   id: string; clientId: string; projectId: string; ritual: RitualDoAgente; titulo: string; proximo: string;
   userId: string; canal: "portal" | "grupo"; avisos: string[]; metrics: Record<string, unknown> | null;
 }): Promise<{ reportId: string; publicado: boolean; avisos: string[] }> {
-  const { id, clientId, projectId, ritual, titulo, proximo, userId, canal, avisos } = p;
+  const { id, clientId, projectId, titulo, proximo, userId, canal, avisos } = p;
+  // 23/10: o que sai para o cliente leva a saudação do horário do envio, https e a linha do painel.
+  const ritual = { ...p.ritual, body: textoNaHoraDoEnvio(p.ritual.body, p.ritual.tipo) };
   let metrics = p.metrics;
   if (!metrics) {
     const { data: atual } = await supabase.from("reports").select("metrics").eq("id", id).maybeSingle();

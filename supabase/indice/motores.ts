@@ -662,6 +662,9 @@ const LIGACOES_DOS_SUPERPODERES: Record<string, { ligacao: LigacaoDoMetodo; mais
     mais: [
       { arquivo: F("ritual-writer", "escritor.ts"), trechos: ["criadoPor: p.criadoPor ?? null, metodo: p.metodo ?? null });", "temperatura, metodo: p.metodo ?? null });"] },
       { arquivo: F("agente-central"), trechos: ['superpoderesPara(db, { agente: "rituais.escritor" })', "escolha, metodo: metodoDoRitual,", "registrarMetodoDoRitual(metodoDoRitual, escrito, clientId);"] },
+      // 23/10: o ajuste pela conversa (ritual-writer/modulos/ajuste.ts, edição sobre a mensagem atual) leva o
+      // mesmo método do escritor: o agente da Central passa e o ajuste repassa ao modelo (o teste novo confere).
+      { arquivo: F("agente-central"), trechos: ["ritual, anterior, instrucao, clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,", "registrarMetodoDoRitual(metodoDoRitual, ajustado, clientId);"] },
     ],
   },
   // Revisão 30/09: a cadeia antiga e a reserva não geram linha em ia_usos; o método conta pelo registro sem uso.

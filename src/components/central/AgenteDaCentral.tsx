@@ -3,7 +3,7 @@ import { assinaturaDasRespostas, criarVagas, type Vagas } from "./filaDaCentral"
 import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Bot, CheckCircle2, ChevronDown, ClipboardCopy, ExternalLink, ListPlus, Loader2, MessageCircle, PenLine, RefreshCw, Send, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, ClipboardCopy, ExternalLink, ListPlus, Loader2, MessageCircle, PenLine, RefreshCw, Send, Undo2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -19,8 +19,10 @@ import {
   type Aplicado, type ClienteDoAgente,
 } from "./agenteCentralApi";
 import { avisoDeRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
+// 23/10: na hora de copiar, a saudação vale o horário do envio (e o https e o painel continuam garantidos).
+import { textoNaHoraDoEnvio } from "../../../supabase/functions/ritual-writer/modulos/acabamento";
 import {
-  etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, rodadaRetomada, seloDaRodada,
+  comVersaoGuardada, etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, rodadaRetomada, seloDaRodada,
   type EtapaDoAgente, type ItemDaRodada, type Rodada, type Rodando, type Situacao,
 } from "./rodadaDoAgente";
 
@@ -245,19 +247,26 @@ function SugestoesRecentes() {
  * agente. "Reescrever" pede outra versão (com instrução opcional, que também
  * ensina o agente); "Publicar no portal" e "Enviei no grupo" registram o envio
  * do rascunho (Ciclo, diário e dossiê); "Abrir a ficha" leva ao cliente.
+ *
+ * 23/10 (dono: "o que eu ajustar, ele complementa, não refaz tudo"): com pedido
+ * escrito o botão é "Ajustar a mensagem" e edita a mensagem atual (o resto volta
+ * igual); vazio, "Escrever de novo" pede outra versão. "Desfazer" volta a anterior.
  */
-function AcoesDoRitual({ item, ritual, ocupado, onReescrever, onEnviar }: {
+function AcoesDoRitual({ item, ritual, ocupado, onReescrever, onEnviar, onDesfazer }: {
   item: ItemDaRodada;
   ritual: string;
   ocupado: boolean;
   onReescrever: (instrucao: string) => Promise<void>;
   onEnviar: (canal: "portal" | "grupo") => Promise<void>;
+  onDesfazer: () => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
   const [instrucao, setInstrucao] = useState("");
-  const [fazendo, setFazendo] = useState<"reescrever" | "portal" | "grupo" | null>(null);
+  const [fazendo, setFazendo] = useState<"reescrever" | "portal" | "grupo" | "desfazer" | null>(null);
   const travado = ocupado || fazendo !== null;
-  const rodar = async (qual: "reescrever" | "portal" | "grupo") => {
+  const podeDesfazer = (item.versoesAnteriores?.length ?? 0) > 0;
+  const comPedido = instrucao.trim().length > 0;
+  const rodar = async (qual: "reescrever" | "portal" | "grupo" | "desfazer") => {
     if (travado) return;
     setFazendo(qual);
     try {
@@ -266,6 +275,8 @@ function AcoesDoRitual({ item, ritual, ocupado, onReescrever, onEnviar }: {
         // A instrução só some quando a nova versão chegou (se falhar, fica para tentar de novo).
         setInstrucao("");
         setAberto(false);
+      } else if (qual === "desfazer") {
+        await onDesfazer();
       } else {
         await onEnviar(qual);
       }
@@ -279,8 +290,13 @@ function AcoesDoRitual({ item, ritual, ocupado, onReescrever, onEnviar }: {
     <div className="mt-2" data-acoes-do-ritual={ritual}>
       <div className="flex min-w-0 flex-wrap items-center">
         <button type="button" onClick={() => setAberto((v) => !v)} disabled={travado} aria-expanded={aberto} className={juntar(botao.secundario, "mb-1 mr-1.5 h-8 px-2.5 text-[12px]")}>
-          {fazendo === "reescrever" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PenLine className="mr-1 h-3.5 w-3.5" />} Reescrever
+          {fazendo === "reescrever" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PenLine className="mr-1 h-3.5 w-3.5" />} Ajustar
         </button>
+        {podeDesfazer && (
+          <button type="button" onClick={() => void rodar("desfazer")} disabled={travado} aria-label="Desfazer: voltar a versão anterior" title="Desfazer: voltar a versão anterior" className={juntar(botao.icone, "mb-1 mr-1.5 h-8 w-8")}>
+            {fazendo === "desfazer" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />}
+          </button>
+        )}
         {!item.publicado && item.reportId && (
           <>
             <button type="button" onClick={() => void rodar("portal")} disabled={travado} className={juntar(botao.secundario, "mb-1 mr-1.5 h-8 px-2.5 text-[12px]")}>
@@ -301,13 +317,13 @@ function AcoesDoRitual({ item, ritual, ocupado, onReescrever, onEnviar }: {
             value={instrucao}
             onChange={(e) => setInstrucao(e.target.value)}
             rows={2}
-            aria-label={`Como reescrever o ritual de ${item.cliente.nome}`}
-            placeholder="O que mudar (opcional). Ex.: mais curto, sem falar de verba."
+            aria-label={`O que ajustar no ritual de ${item.cliente.nome}`}
+            placeholder="O que ajustar. Ex.: acrescenta que o vídeo sai sexta; tira a parte da verba. Vazio: outra versão."
             className={juntar(campoTexto, conversa.campo, "min-h-[56px]")}
           />
           <div className="mt-1 flex justify-end">
             <button type="button" onClick={() => void rodar("reescrever")} disabled={travado} className={juntar(botao.primario, "h-8 px-3 text-[12px]")}>
-              {fazendo === "reescrever" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />} Escrever de novo
+              {fazendo === "reescrever" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : comPedido ? <PenLine className="mr-1 h-3.5 w-3.5" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />} {comPedido ? "Ajustar a mensagem" : "Escrever de novo"}
             </button>
           </div>
         </div>
@@ -573,6 +589,8 @@ export default function AgenteDaCentral() {
     const novoRitual = rr.ritual;
     atualizarItem(item.cliente.id, (i) => ({
       ...i,
+      // 23/10: a versão de antes fica guardada para o Desfazer.
+      versoesAnteriores: comVersaoGuardada(i),
       aplicado: i.aplicado ? { ...i.aplicado, ritual: novoRitual } : i.aplicado,
       // O que já saiu fica como está; a versão nova nasce rascunho, para publicar ou enviar de novo.
       reportId: null, publicado: false, canal: null, tarefasCriadas: [],
@@ -582,7 +600,38 @@ export default function AgenteDaCentral() {
       const pub = await salvarEPublicarRitual({ clientId: item.cliente.id, ritual: novoRitual, publicar: false, userId: user.id });
       atualizarItem(item.cliente.id, (i) => ({ ...i, reportId: pub.reportId }));
     }
-    toast.success(`Ritual de ${item.cliente.nome} reescrito. Ficou como rascunho: publique ou marque como enviado.`);
+    if (rr.modo === "ajuste") {
+      const perdidas = novoRitual.ajuste?.perdidas ?? [];
+      if (perdidas.length) toast.warning(`${item.cliente.nome}: ${perdidas.length} trecho(s) sumiram sem você pedir. Confira; o Desfazer volta a versão anterior.`);
+      else toast.success(`Mensagem de ${item.cliente.nome} ajustada: só o que você pediu mudou. Ficou como rascunho.`);
+    } else {
+      toast.success(`Ritual de ${item.cliente.nome} reescrito. Ficou como rascunho: publique ou marque como enviado.`);
+    }
+  };
+
+  // 23/10: Desfazer volta a versão anterior (o texto e o rascunho como estavam).
+  const desfazerDoItem = async (item: ItemDaRodada) => {
+    const lista = item.versoesAnteriores ?? [];
+    const volta = lista[lista.length - 1];
+    if (!volta) return;
+    // Rascunho anterior ainda não enviado continua no banco com o texto de antes: volta a ser o da tela.
+    // Se ele já tinha saído (ou não havia rascunho), nasce um rascunho novo com o texto de antes.
+    const reaberto = !!volta.reportId && !volta.publicado;
+    let reportId = reaberto ? volta.reportId : null;
+    if (!reaberto && user) {
+      const pub = await salvarEPublicarRitual({ clientId: item.cliente.id, ritual: volta.ritual, publicar: false, userId: user.id });
+      reportId = pub.reportId;
+    }
+    atualizarItem(item.cliente.id, (i) => ({
+      ...i,
+      versoesAnteriores: (i.versoesAnteriores ?? []).slice(0, -1),
+      aplicado: i.aplicado ? { ...i.aplicado, ritual: volta.ritual } : i.aplicado,
+      reportId,
+      publicado: false,
+      canal: null,
+      tarefasCriadas: reaberto ? volta.tarefasCriadas : [],
+    }));
+    toast.success(`Mensagem de ${item.cliente.nome} voltou à versão anterior.`);
   };
 
   // Frente AG3: "Publicar no portal" ou "Enviei no grupo" de um rascunho do agente.
@@ -597,7 +646,7 @@ export default function AgenteDaCentral() {
   };
 
   const copiarTodos = async () => {
-    const texto = prontos.map((i) => `${i.cliente.nome}\n\n${i.aplicado!.ritual!.body}`).join("\n\n----------\n\n");
+    const texto = prontos.map((i) => `${i.cliente.nome}\n\n${textoNaHoraDoEnvio(i.aplicado!.ritual!.body, i.aplicado!.ritual!.tipo)}`).join("\n\n----------\n\n");
     if (await copiar(texto)) toast.success("Todos os rituais copiados.");
     else toast.error("Não consegui copiar.");
   };
@@ -851,7 +900,7 @@ export default function AgenteDaCentral() {
                   {i.aplicado?.dossie_versao != null && <span className="text-[12px] text-muted-foreground">dossiê v{i.aplicado.dossie_versao}</span>}
                   <button
                     type="button"
-                    onClick={() => void copiar(r.body).then((ok) => (ok ? toast.success(`Ritual de ${i.cliente.nome} copiado.`) : toast.error("Não consegui copiar.")))}
+                    onClick={() => void copiar(textoNaHoraDoEnvio(r.body, r.tipo)).then((ok) => (ok ? toast.success(`Ritual de ${i.cliente.nome} copiado.`) : toast.error("Não consegui copiar.")))}
                     className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")}
                   >
                     <ClipboardCopy className="mr-1 h-3.5 w-3.5" /> Copiar
@@ -860,6 +909,8 @@ export default function AgenteDaCentral() {
                 {r.title && <p className="mt-1.5 text-[13px] font-medium text-foreground">{r.title}</p>}
                 {aviso && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[12px] text-warning">{aviso}</p>}
                 {i.aplicado?.dossie_aviso && <p className="mt-1 text-[12px] text-warning">{i.aplicado.dossie_aviso}</p>}
+                {/* 23/10: o que o ajuste tirou sem o pedido pedir (a versão anterior está no Desfazer). */}
+                {r.ajuste && r.ajuste.perdidas.length > 0 && r.alertas[0] && <p className="mt-1 rounded-md bg-warning/10 px-2 py-1 text-[12px] text-warning">{r.alertas[0]}</p>}
                 <p className="mt-1.5 whitespace-pre-line text-[14px] leading-relaxed text-foreground/90">{r.body}</p>
                 <AcoesDoRitual
                   item={i}
@@ -867,6 +918,7 @@ export default function AgenteDaCentral() {
                   ocupado={!!ocupados[i.cliente.id]}
                   onReescrever={(instrucao) => reescreverDoItem(i, instrucao)}
                   onEnviar={(canal) => enviarDoItem(i, canal)}
+                  onDesfazer={() => desfazerDoItem(i)}
                 />
                 <AprendizadoDoAgente
                   anexos={i.aprendizado}

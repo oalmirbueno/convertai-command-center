@@ -72,6 +72,8 @@ import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, CalendarDays, Camera, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, LayoutGrid, Lightbulb, Loader2, Maximize2, Megaphone, Minimize2, NotebookPen, Package, Play, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+// 23/10: copiar e publicar o ritual com a saudação do horário do envio, https e a linha do painel.
+import { textoNaHoraDoEnvio } from "../../supabase/functions/ritual-writer/modulos/acabamento";
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
@@ -2001,7 +2003,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     setRascunhoEmVoo(String(report.id));
     try {
       const edits = draftEdits[report.id];
-      const textoFinal = edits?.summary || report.summary || "";
+      // 23/10: a saudação vale o horário do envio; https e a linha do painel garantidos (acabamento.ts).
+      const textoFinal = textoNaHoraDoEnvio(edits?.summary || report.summary || "", (report.metrics as any)?.ritual_type);
       const proximoPasso = completarProximoPasso(edits?.next_steps || report.next_steps, textoFinal);
       const payload: any = {
         status: "published",
@@ -2612,7 +2615,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               </div>
                             )}
                             <div className="-ml-1.5 flex items-center">
-                              <button type="button" onClick={() => (contextoPronto ? copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada. É só colar no WhatsApp.") : avisarContextoCarregando())} aria-label="Copiar mensagem do grupo" title="Copiar mensagem do grupo" className={botao.icone}>
+                              <button type="button" onClick={() => (contextoPronto ? copyText(textoNaHoraDoEnvio(buildGroupMessage(row.client)), "Mensagem do grupo copiada. É só colar no WhatsApp.") : avisarContextoCarregando())} aria-label="Copiar mensagem do grupo" title="Copiar mensagem do grupo" className={botao.icone}>
                                 <Send className="h-4 w-4" aria-hidden="true" />
                               </button>
                               <button type="button" onClick={() => { setGenClientId(row.client.id); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }} aria-label="Gerar ritual deste cliente" title="Gerar ritual deste cliente" className={botao.icone}>
@@ -2820,7 +2823,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         const chaveIA = `${client.id}:${aberto.moment}`;
                         const escrita = aiMoment[chaveIA] ?? null;
                         const textoDoPainel = buildGroupMessage(client, aberto.moment);
-                        const textoParaCopiar = escrita ? escrita.body : textoDoPainel;
+                        // 23/10: o que vai para o grupo sai com a saudação do horário, o momento da semana, https e o painel.
+                        const textoParaCopiar = textoNaHoraDoEnvio(escrita ? escrita.body : textoDoPainel, ({ abertura: "rota_semana", meio: "meio_semana", fechamento: "prova_movimento" } as const)[aberto.moment]);
                         const avisos = [
                           ...(d?.substituto ? ["Sem dossiê geral: a leitura usa o de projeto. Escreva o dossiê geral deste cliente para a mensagem ficar certa."] : []),
                           ...(escrita ? escrita.alertas : []),
@@ -3168,10 +3172,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           podeRejeitar: false,
                           acaoPrincipal: isAdmin
                             ? { rotulo: "Enviei no grupo", icone: <CheckCircle2 className="h-4 w-4" />, aoClicar: () => { if (rascunhoEmVoo === null) void publishDraft(r, "grupo"); } }
-                            : { rotulo: "Copiar", icone: <Send className="h-4 w-4" />, aoClicar: () => copyText(edits.summary || r.summary || "", "Mensagem copiada. É só colar no grupo.") },
+                            : { rotulo: "Copiar", icone: <Send className="h-4 w-4" />, aoClicar: () => copyText(textoNaHoraDoEnvio(edits.summary || r.summary || "", (r.metrics as any)?.ritual_type), "Mensagem copiada. É só colar no grupo.") },
                           extras: (
                             <>
-                              {isAdmin && <button type="button" onClick={() => copyText(edits.summary || r.summary || "", "Mensagem copiada. É só colar no grupo.")} aria-label="Copiar para o grupo" title="Copiar para o grupo" className={juntar(botao.icone, "h-11 w-11")}><Send className="h-4 w-4" aria-hidden="true" /></button>}
+                              {isAdmin && <button type="button" onClick={() => copyText(textoNaHoraDoEnvio(edits.summary || r.summary || "", (r.metrics as any)?.ritual_type), "Mensagem copiada. É só colar no grupo.")} aria-label="Copiar para o grupo" title="Copiar para o grupo" className={juntar(botao.icone, "h-11 w-11")}><Send className="h-4 w-4" aria-hidden="true" /></button>}
                               <button type="button" onClick={() => void aprimorarRascunho(r)} disabled={aprimorando !== null} aria-label="Aprimorar com IA" title="Aprimorar com IA: relê os fatos de agora e completa o que falta" className={juntar(botao.icone, "h-11 w-11")}>
                                 <Sparkles className={`h-4 w-4 ${aprimorando === r.id ? "animate-pulse text-primary" : ""}`} aria-hidden="true" />
                               </button>

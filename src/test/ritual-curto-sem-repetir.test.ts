@@ -11,6 +11,7 @@ import {
   SEM_NOVIDADE,
   SYSTEM_PROMPT,
 } from "../../supabase/functions/ritual-writer/escritor";
+import { acabamentoDoRitual } from "../../supabase/functions/ritual-writer/modulos/acabamento";
 
 // 19/10 (o dono): "ele está burro, sempre repete a mesma coisa, é muito textão, os clientes já estão de saco
 // cheio dessas mensagens". Em 30 dias, 83 de 89 rituais saíram pela reserva, com 1.300 a 2.400 caracteres,
@@ -34,7 +35,11 @@ const resposta = (body: string, extra: Record<string, unknown> = {}) => ({
   reserva: null,
 });
 
-const pedido = { ritual: "prova_movimento", clientName: "Mirante", contactName: "Simone", facts: "fatos", clientId: "c1", jaDito: anteriores };
+// 23/10: relógio fixo (sexta, 15:30 em São Paulo) porque a saudação sai do horário; o texto escolhido passa
+// pelo acabamento (https, saudação, "fechamento da semana" e a linha do painel) antes da escolha.
+const agora = new Date("2026-10-23T18:30:00Z");
+const pedido = { ritual: "prova_movimento", clientName: "Mirante", contactName: "Simone", facts: "fatos", clientId: "c1", jaDito: anteriores, agora };
+const acabado = (b: string) => acabamentoDoRitual(b, { ritual: "prova_movimento", agora, contato: "Simone", negocio: "Mirante" }).texto;
 
 describe("ritual curto e sem repetir", () => {
   it("o roteiro pede até 6 linhas na semana e o bloco JÁ DITO entra antes dos fatos", () => {
@@ -73,7 +78,7 @@ describe("ritual curto e sem repetir", () => {
     const r = await escreverRitual(pedido, escrever as never, julgar);
     expect(escrever).toHaveBeenCalledTimes(2);
     expect(String(escrever.mock.calls[1][0].usuario)).toContain("VERSÃO B");
-    expect(r?.body).toBe(NOVA);
+    expect(r?.body).toBe(acabado(NOVA));
     expect(r?.escolha_da_versao).toMatchObject({ versoes: 2, escolhida: 1, jev: false });
   });
 
@@ -82,8 +87,9 @@ describe("ritual curto e sem repetir", () => {
     const escrever = vi.fn().mockResolvedValueOnce(resposta(NOVA)).mockResolvedValueOnce(resposta(outra));
     const julgar = vi.fn(async () => [{ novidade: 1, clareza: 1 }, { novidade: 3, clareza: 3 }]);
     const r = await escreverRitual(pedido, escrever as never, julgar);
-    expect(julgar).toHaveBeenCalledWith([NOVA, outra], anteriores, { clientId: "c1", criadoPor: null });
-    expect(r?.body).toBe(outra);
+    // 23/10: o Jev julga o texto já acabado e recebe os fatos (para conferir a fidelidade).
+    expect(julgar).toHaveBeenCalledWith([acabado(NOVA), acabado(outra)], anteriores, { clientId: "c1", criadoPor: null }, "fatos");
+    expect(r?.body).toBe(acabado(outra));
     expect(r?.escolha_da_versao?.jev).toBe(true);
   });
 
@@ -93,7 +99,7 @@ describe("ritual curto e sem repetir", () => {
     expect(escrever).toHaveBeenCalledTimes(1);
     const metade = vi.fn().mockRejectedValueOnce(new Error("fora")).mockResolvedValueOnce(resposta(NOVA));
     const r = await escreverRitual(pedido, metade as never, vi.fn(async () => null));
-    expect(r?.body).toBe(NOVA);
+    expect(r?.body).toBe(acabado(NOVA));
     expect(r?.escolha_da_versao).toBeNull();
   });
 
@@ -105,7 +111,8 @@ describe("ritual curto e sem repetir", () => {
     expect(r?.alertas[0]).toBe(SEM_NOVIDADE);
     const longa = Array.from({ length: 12 }, (_, i) => `Linha ${i}.`).join("\n");
     const r2 = await escreverRitual({ ...pedido, textoAtual: "x" }, vi.fn().mockResolvedValue(resposta(longa)) as never, vi.fn());
-    expect(r2?.alertas.join(" ")).toContain("A mensagem saiu com 12 linhas (o combinado é até 6)");
+    // 23/10: a linha do painel entra pelo acabamento: 12 linhas da IA + 1.
+    expect(r2?.alertas.join(" ")).toContain("A mensagem saiu com 13 linhas (o combinado é até 6)");
   });
 });
 

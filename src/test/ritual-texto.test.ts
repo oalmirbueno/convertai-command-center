@@ -114,7 +114,8 @@ describe("a Central encurta o caminho e o Hermes fica com a revisão formal", ()
   });
 
   it("a IA fala com a pessoa pelo nome, em linguagem simples, e sempre mostra o avanço", () => {
-    expect(escritor).toContain("15. NOME E PESSOA");
+    // 23/10: a regra 15 ganhou a saudação do horário e o momento da semana (modulos/acabamento.ts garante).
+    expect(escritor).toContain("15. NOME, SAUDAÇÃO E MOMENTO");
     expect(escritor).toContain("16. LINGUAGEM SIMPLES, SEM TERMO TÉCNICO");
     expect(escritor).toContain("17. AVANÇO SEMPRE VISÍVEL");
     expect(escritor).toContain("PESSOA DE CONTATO (abra a mensagem com este primeiro nome)");

@@ -65,6 +65,10 @@ export const FORMULAS_DE_MOLDE: ReadonlyArray<[RegExp, string]> = [
   [/\bconsolid(ar|a|amos|ando)\b/i, "\"consolidar\" (jargão)"],
   [/\bestrutura(r|ndo|mos) a forma\b|\bregistrar a an[áa]lise\b/i, "frase de bastidor"],
   [/\bsegue em (prepara[çc][ãa]o|defini[çc][ãa]o)\b|\best[áa] em prepara[çc][ãa]o\b/i, "\"segue em preparação\" (sem conteúdo)"],
+  // 23/10: nas mensagens de sexta, "segue em andamento" apareceu em 9 de 12 clientes, às vezes duas vezes.
+  [/\bseguem? em andamento\b/i, "\"segue em andamento\" (frase que só registra)"],
+  // 23/10: limitação dos dados contada ao cliente ("os dados disponíveis não separam os contatos de 22 e 23/10").
+  [/\bos dados (dispon[íi]veis )?n[ãa]o (separam|mostram|trazem)\b/i, "limitação dos dados contada ao cliente (bastidor)"],
 ];
 
 export function formulasDeMolde(texto: string): string[] {

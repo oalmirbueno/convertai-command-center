@@ -18,6 +18,9 @@ import { BRIEF_POR_RITUAL, blocoDeComunicacao, expressoesDeRobo, semTravessao, T
 import { type EscolhaDoModelo, escreverComModeloDaCentral, type TextoEscrito } from "../_shared/modelo-da-central.ts";
 import { aberturaDoRitual, type ResultadoDaRepeticao, type RitualParaComparar, verificarRepeticao } from "./memoria.ts";
 import { angulosDasVersoes, formulasDeMolde, instrucaoDoAngulo } from "./modulos/angulo-e-dia.ts";
+// 23/10 (dono: "https em todo link, bom dia/boa tarde pelo horário, início/meio/fechamento da semana, tudo no painel"):
+// regras fixas aplicadas por código depois da IA, em toda versão, antes da escolha.
+import { acabamentoDoRitual, momentoDaSemana, NOME_DO_MOMENTO, saudacaoPelaHora } from "./modulos/acabamento.ts";
 // Frente SPP (revisão 30/09): o método da casa (prova) também no escritor dos rituais (agente rituais.escritor).
 import type { MetodoInjetado } from "../_shared/superpoderes-catalogo.ts";
 
@@ -51,6 +54,7 @@ A pessoa que lê precisa terminar a mensagem sentindo que o dinheiro dela está 
 REGRAS ABSOLUTAS:
 1. Use SOMENTE os fatos fornecidos. Nunca invente entrega, número, data ou resultado. Fato que não está na lista não existe.
 1B. NUNCA afirme que uma frente "ainda não começou", "está parada" ou "vai iniciar" sem que os fatos digam isso explicitamente. O painel registra parte da operação, não toda: ausência de registro NÃO é prova de ausência de trabalho. Quando os fatos disserem que não há registro do estado de algo, trate como acompanhamento ("como estão as campanhas", "me confirma se seguimos assim") e nunca como diagnóstico. Dizer a um cliente que já roda campanhas que ele "ainda vai iniciar" destrói a confiança na mensagem inteira.
+1A. DIAGNÓSTICO SÓ COM FATO: toda afirmação (entrega, número, data, resultado, decisão) precisa estar nos blocos do pedido. Limitação dos dados ("os dados não separam os dias", "sem registro", "não temos o número") é assunto INTERNO: vai para "alertas", nunca para o cliente.
 1C. Material com data que já passou (data comemorativa, campanha de dia certo) NÃO pode ser cobrado como aprovação pendente. Não lamente e não culpe ninguém: apenas leve o assunto para frente, propondo a próxima data ou o replanejamento daquele conteúdo.
 2. Toda ação citada precisa vir com o PORQUÊ e o OBJETIVO. Nunca escreva o que foi feito sem dizer para que serve. Quando o objetivo do cliente estiver nos fatos, amarre o trabalho a ele explicitamente.
 3. CURTO E SÓ O QUE MUDOU (19/10, o dono: "muito textão, sempre repete, os clientes estão de saco cheio"): conte só o que andou DESDE A ÚLTIMA MENSAGEM ENVIADA. Frente sem fato novo não entra; não é preciso citar todas as frentes em toda mensagem.
@@ -62,10 +66,10 @@ REGRAS ABSOLUTAS:
 9. Trate por "você" e chame a agência de "a gente".
 10. FORMATO DE WHATSAPP, pronto para colar no grupo, lido em 20 segundos no celular. Nas mensagens da semana (segunda, quarta, sexta): de 3 a 6 linhas no total, até 600 caracteres, uma ideia por linha, linhas separadas por linha em branco, SEM títulos de bloco e sem listas longas. No balanço do mês e no marco de 90 dias: até 14 linhas, com títulos curtos em negrito de WhatsApp (*assim*) e os números do período. Sem markdown de cabeçalho (#), sem emoji, sem tabela.
 11. O título tem no máximo 60 caracteres e nomeia o fato novo desta mensagem. Nunca genérico, e nunca parecido com um título do bloco JÁ DITO (nada de "Semana fecha com anúncios em alta" de novo).
-12. NÚMEROS E VENDAS: no máximo UM número por mensagem da semana, o que mais mudou, com a comparação e o que ele significa na prática. Número que já foi dito numa mensagem anterior e não mudou NÃO volta (o "custo de R$ 2 por contato" toda semana cansa). Venda registrada é o resultado mais importante: quando houver, é ela o número da mensagem.
+12. NÚMEROS E VENDAS: no máximo UM número por mensagem da semana, o que mais mudou, com a comparação e o que ele significa na prática. Prefira o número que mostra avanço. Número que caiu nunca abre a mensagem e nunca vem com percentual de queda ("caiu 45%", "63% menos"): se ele importa, diga o que a gente já está fazendo por causa dele. Número que já foi dito numa mensagem anterior e não mudou NÃO volta (o "custo de R$ 2 por contato" toda semana cansa). Venda registrada é o resultado mais importante: quando houver, é ela o número da mensagem.
 13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê", "o que mudou desde o último ritual" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
 14. FRENTES SEPARADAS: conteúdo (Instagram, posts, artes) e tráfego pago (campanhas, leads, verba) são frentes diferentes; cada uma tem seu próprio bloco ou frase, e nunca repita a mesma ação nas duas.
-15. NOME E PESSOA: a mensagem é para uma pessoa com nome. Abra com o primeiro nome da pessoa de contato ("Boa tarde, Priscila.") e cite o nome do negócio uma vez, de forma natural, no corpo. Sem nome de contato, cumprimente sem nome ("Boa tarde!"): nunca trate o nome do negócio como se fosse a pessoa ("Boa tarde, Casa dos Assados."). Nunca escreva "cliente", "prezado" ou "olá, tudo bem?" genérico.
+15. NOME, SAUDAÇÃO E MOMENTO: a mensagem é para uma pessoa com nome. Abra com a SAUDAÇÃO DE AGORA que vem no pedido e o primeiro nome da pessoa de contato ("Boa tarde, Priscila."), e na mesma linha diga o MOMENTO DA SEMANA que vem no pedido (início, meio ou fechamento da semana) com palavras suas ("Fechando a semana com boas notícias da Stop.") e cite o nome do negócio uma vez, de forma natural, no corpo. Sem nome de contato, cumprimente sem nome ("Boa tarde!"): nunca trate o nome do negócio como se fosse a pessoa ("Boa tarde, Casa dos Assados."). Nunca escreva "cliente", "prezado" ou "olá, tudo bem?" genérico.
 16. LINGUAGEM SIMPLES, SEM TERMO TÉCNICO: escreva como se explicasse para um dono de negócio que não é do marketing. Troque sempre: "tráfego pago" por "anúncios"; "leads" por "pessoas interessadas" ou "contatos"; "conversão" por "pedidos", "orçamentos" ou "mensagens"; "alcance" por "pessoas que viram"; "impressões" por "vezes que o anúncio apareceu"; "criativos" por "artes" ou "vídeos dos anúncios"; "copy" por "texto"; "CPC/CTR/CPM/ROAS/CPA/KPI" por o que o número significa em reais ou em pessoas; "funil" por "caminho até a compra"; "landing page" por "página"; "briefing" por "orientação"; "otimizar" por "ajustar". Todo número vem com o que ele significa na prática ("R$ 55 investidos trouxeram 2 conversas no WhatsApp: cada conversa custou cerca de R$ 28").
 17. AVANÇO SEMPRE VISÍVEL: toda mensagem precisa deixar claro o que andou desde a última vez, com nome ("o carrossel da vista dos quartos está no ar desde terça"). O que foi prometido e virou realidade entra como fato, sem a retomada burocrática ("Na segunda combinamos...", "Como combinamos..."): ele lembra do que foi combinado, você só mostra que aconteceu. Avanço é sempre concreto; nunca "seguimos trabalhando".
 18. NADA DE REPETIÇÃO: o bloco JÁ DITO traz as últimas mensagens deste cliente (título, abertura e números citados). É proibido repetir a abertura (a frase depois do cumprimento), frases, a mesma sequência de títulos de blocos ou um assunto já contado como se fosse novo. O que já foi dito só volta como continuação, dizendo o que mudou desde então. Se um assunto não teve fato novo, ele não entra de novo. Uma mensagem de segunda nunca repete a de sexta; a de sexta nunca repete a de segunda.
@@ -73,15 +77,21 @@ REGRAS ABSOLUTAS:
 20. MÉTODO: quando os fatos trouxerem a fase do MÉTODO ACELERA, a condução da mensagem segue o que aquela fase pede e o que o ritual de hoje conduz nela. Diga o próximo degrau do negócio dele, não o mesmo passo de sempre.
 21. ESTADO REAL MANDA: o bloco ESTADO REAL DO CLIENTE foi lido agora no banco e é a fonte da verdade do que está sendo feito. Quando ele e os fatos do painel ou o dossiê discordarem, vale o ESTADO REAL. Todo número que você citar sai dele ou dos fatos, com o período (datas) que ele traz.
 22. CAMPANHA DA MESA NÃO É ANÚNCIO: "campanha" na área de Campanhas da Mesa é um tema ou oferta de comunicação. Só fale dela como anúncio se o canal dela disser "paga" ou "orgânica e com anúncio". Anúncio pago é SÓ o que está no bloco ANÚNCIOS PAGOS. Nunca atribua a uma campanha de conteúdo número de anúncio, e nunca diga que um anúncio está no ar sem ele estar lá.
-23. PROMESSA EM ANDAMENTO: o que o bloco de promessas marca como EM ANDAMENTO não volta como novidade nem como promessa nova. Para o cliente, diga com naturalidade que segue em andamento (uma frase, sem prazo inventado); o reforço interno já foi para a equipe. O que está CUMPRIDA entra como entregue, com o dia.
+23. PROMESSA EM ANDAMENTO: o que o bloco de promessas marca como EM ANDAMENTO não volta como novidade nem como promessa nova. Para o cliente, diga numa frase o que está sendo feito nela agora, sem prazo inventado e sem a muleta "segue em andamento"; o reforço interno já foi para a equipe. O que está CUMPRIDA entra como entregue, com o dia.
 24. METAS: quando houver META BATIDA E AINDA NÃO COMEMORADA, reconheça em uma frase de gente ("batemos os 1.000 seguidores, parabéns, a gente chegou lá junto") e anuncie a próxima meta cadastrada com quanto falta. Meta já comemorada não se comemora de novo. Sem meta cadastrada, não invente meta.
 25. COMO ESTÁ INDO, COM O PORQUÊ: quando um número mudou de verdade, diga o que mudou, o PORQUÊ (a causa que os fatos mostram: verba acabou, campanha pausada, peça nova, feriado, mudança de público) e a ação ESPECÍFICA que a gente faz (qual anúncio, qual texto, qual verba), nunca o genérico "vamos ajustar os anúncios". Sem causa nos fatos, diga o que a gente vai testar para descobrir. Não comente frente que não mudou. Previsão só a que vem calculada no ESTADO REAL.
 26. SEM MOLDE E SEM BASTIDOR: cada mensagem tem a cara DESTE negócio nesta semana. É proibido o esqueleto que se repete entre clientes e semanas: "Na segunda combinamos...", "Como combinamos...", "A semana foi pior/melhor", "Nos anúncios, de X a Y, foram N contatos contra M", "Até sexta, a gente...". Também são proibidos termos de bastidor que o dono não entende ou não precisa saber: "conferência", "validade", "data útil", "consolidar", "estruturar a forma de", "registrar a análise", "segue em preparação". Diga o que ELE ganha, não como a agência se organiza por dentro.
 27. CONTEXTO DO NEGÓCIO: use o que os fatos dizem do negócio (o que ele vende, para quem, a época do ano, a pergunta que o público faz) para explicar POR QUE cada coisa importa para ele. Uma mensagem sem nenhum porquê ligado ao negócio dele está errada.
+28. POSITIVO E MOTIVADOR, SEM INFLAR (23/10, o dono: "trazer sempre de forma positiva; motivar o cliente a continuar, mostrar que o negócio está avançando"): a mensagem mostra que o negócio dele está andando e que a próxima etapa já está à vista. Cada frase é conversa de gente, não relatório: nada de frase que só existe para registrar ("segue em andamento", "a gente segue acompanhando"). Positivo é escolher o que andou e o que vem, nunca inventar.
 
-COMO MONTAR A MENSAGEM DA SEMANA (até 6 linhas, sem títulos de bloco; não é um formulário):
-Abra com o cumprimento e, logo em seguida, o ÂNGULO DESTA MENSAGEM que vem no fim do pedido. Depois, só o que tem fato novo: o que andou (com nome e para que serve), no máximo um número com o porquê, e o próximo passo concreto (se algo depender dele, o pedido com prazo e ganho). A ordem desses pedaços muda de uma mensagem para outra; nenhuma mensagem segue a mesma sequência da anterior.
-Termine com "Tudo no painel: aceleriq.online".
+COMO MONTAR A MENSAGEM DA SEMANA (o resumo de segunda, quarta e sexta; até 6 linhas, sem títulos de bloco; não é um formulário):
+1. Saudação de agora + nome + o momento da semana, numa frase só, já puxando o ÂNGULO DESTA MENSAGEM que vem no fim do pedido.
+2. ONDE ESTAMOS: um diagnóstico de uma frase do ponto em que o negócio está (o que a gente está construindo com ele agora e por quê), tirado do ESTADO REAL, da fase do método e dos fatos.
+3. O QUE AVANÇOU: os principais pontos desde a última mensagem (um ou dois, com nome e para que servem; no máximo um número).
+4. O QUE VEM À FRENTE: o próximo passo concreto e o degrau seguinte (olhe mais à frente: data que chega, sazonalidade, o que a próxima peça destrava).
+5. O QUE PRECISAMOS DE VOCÊ (só se houver): um pedido gentil, com prazo e o ganho.
+A ordem de 2 a 5 pode mudar para seguir o ângulo; o que não tem fato fica de fora.
+Não escreva link nem "tudo no painel": o sistema fecha a mensagem com o link do painel.
 No balanço do mês e no marco de 90 dias vale a estrutura em blocos com títulos curtos, até 14 linhas.
 SEM NOVIDADE: se nada mudou desde a última mensagem enviada, escreva só 2 ou 3 linhas (cumprimento, o que segue em andamento numa frase, o próximo passo), devolva "sem_novidade": true e ponha em "alertas" que não houve fato novo desde a última mensagem. Nunca encha a mensagem para parecer movimento.
 
@@ -93,7 +103,7 @@ PRÓXIMO PASSO SEPARADO: além do texto, devolva em "next_steps" UMA frase objet
 
 TAREFAS SUGERIDAS PARA A EQUIPE (nunca vão para o cliente): em "tarefas_sugeridas" liste de 0 a 5 tarefas internas que a equipe precisa executar para CUMPRIR o que esta mensagem promete. Cada uma nasce de uma frase do texto (em "promessa", o trecho que ela cumpre) e de um fato; nada genérico ("postar nas redes", "acompanhar métricas"). Diga QUAL peça, QUAL campanha, QUAL decisão. "frente" é social, trafego ou geral; "prazo_dias" é em quantos dias precisa estar feito (1 a 14). Não repita uma tarefa que os fatos já mostram como aberta. Elas são sugestão: a equipe aprova antes de virar tarefa.
 
-QUANDO HOUVER "TEXTO ATUAL": a tarefa é APRIMORAR E COMPLEMENTAR, não recomeçar. Mantenha o que está certo e no tom, corrija o que os fatos contradizem, complete com os fatos que faltaram (números, vendas, frentes sem menção), separe o que estiver misturado entre conteúdo e tráfego, tire o que repete mensagens anteriores, e devolva o texto inteiro já pronto.
+QUANDO HOUVER "TEXTO ATUAL": a tarefa é APRIMORAR E COMPLEMENTAR, não recomeçar. O texto atual é a base: frase que está certa volta igual. Mantenha o que está certo e no tom, corrija o que os fatos contradizem, complete com os fatos que faltaram (números, vendas, frentes sem menção), separe o que estiver misturado entre conteúdo e tráfego, tire o que repete mensagens anteriores, e devolva o texto inteiro já pronto.
 
 Responda SOMENTE com JSON válido: {"title":"...","body":"...","next_steps":"...","sem_novidade":false,"alertas":["..."],"tarefas_sugeridas":[{"titulo":"...","passo":"...","frente":"social|trafego|geral","prazo_dias":3,"promessa":"..."}]}`;
 
@@ -210,10 +220,18 @@ export interface RitualEscrito {
   escolha_da_versao?: EscolhaDaVersao | null;
 }
 
+/** 23/10: a saudação do horário e o momento da semana (o código confere depois, em modulos/acabamento.ts). */
+export function blocoDoMomento(ritual: string, agora: Date): string {
+  const momento = momentoDaSemana(ritual, agora);
+  return `SAUDAÇÃO DE AGORA: ${saudacaoPelaHora(agora)}` +
+    (momento ? `\nMOMENTO DA SEMANA: ${NOME_DO_MOMENTO[momento]} (diga isso na primeira frase, com palavras suas)` : "");
+}
+
 /** A mensagem de usuário que o escritor recebe, na ordem que decide o texto. */
 export function montarPedidoAoEscritor(p: PedidoDoRitual): string {
   const partes = [
     `TIPO DE MENSAGEM: ${RITUAL_BRIEF[p.ritual]}`,
+    blocoDoMomento(p.ritual, p.agora ?? new Date()),
     `NEGÓCIO: ${p.clientName}\nPESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${p.contactName || "não informado: cumprimente sem nome (\"Boa tarde!\"), nunca chame o negócio de pessoa"}`,
     blocoDeComunicacao(p.ritual),
     TOM_DE_GENTE,
@@ -306,9 +324,18 @@ export interface EscolhaDaVersao {
 export interface NotaDaVersao {
   novidade: number | null;
   clareza: number | null;
+  /** 23/10: tom positivo e motivador (0 a 3). */
+  positivo?: number | null;
+  /** 23/10: soa como gente conversando, não relatório (0 a 3). */
+  naturalidade?: number | null;
+  /** 23/10: probabilidade (Noul) de afirmar algo que não está nos fatos. */
+  inventa?: number | null;
 }
 
-/** Nota de uma versão: a regra conta repetição e tamanho; o Jev (0 a 3) mede novidade e clareza quando respondeu. */
+/**
+ * Nota de uma versão: a regra conta repetição e tamanho; o Jev (0 a 3) mede novidade, clareza, tom positivo e
+ * naturalidade, e a fidelidade aos fatos (Noul) tira ponto de quem afirma o que os fatos não trazem.
+ */
 export function pontosDaVersao(
   body: string,
   ritual: string,
@@ -326,6 +353,9 @@ export function pontosDaVersao(
   pontos -= formulasDeMolde(body).length * 1.5;
   if (jev.novidade !== null) pontos += jev.novidade * 2;
   if (jev.clareza !== null) pontos += jev.clareza;
+  if (jev.positivo != null) pontos += jev.positivo;
+  if (jev.naturalidade != null) pontos += jev.naturalidade;
+  if (jev.inventa != null) pontos -= jev.inventa * 6;
   return Math.round(pontos * 100) / 100;
 }
 
@@ -336,17 +366,33 @@ const NIVEIS_DE_NOVIDADE = [
   "Só traz o que mudou desde a última mensagem, sem repetir abertura, frase ou número",
 ];
 const NIVEIS_DE_CLAREZA = [
-  "Longa ou confusa: um dono de negócio leigo não entende o que andou nem qual é o próximo passo",
+  "Longa ou confusa: um dono de negócio leigo não entende onde estamos, o que andou nem qual é o próximo passo",
   "Dá para entender com esforço: texto comprido, com termo técnico ou com assunto demais",
   "Clara, mas poderia ser mais curta ou mais direta",
-  "Curta e clara: em 20 segundos no celular o dono entende o que andou e o próximo passo",
+  "Curta e clara: em 20 segundos no celular o dono entende onde estamos, o que andou e o que vem a seguir",
+];
+const NIVEIS_DE_POSITIVO = [
+  "Negativa ou de cobrança: fala de queda, falta, atraso ou do que não aconteceu",
+  "Neutra, de relatório: informa sem mostrar que o negócio está andando",
+  "Positiva, mas morna: mostra avanço sem dar vontade de seguir",
+  "Positiva e motivadora sem exagero: o dono sente que o negócio está avançando e que a próxima etapa vale a pena",
+];
+const NIVEIS_DE_NATURALIDADE = [
+  "Parece formulário ou robô: frases de molde, termos de bastidor, frases que só registram",
+  "Mistura conversa com frases de relatório ou de molde",
+  "Natural na maior parte, com uma ou outra frase dura",
+  "Soa como o gestor de contas conversando com o dono pelo WhatsApp, do começo ao fim",
 ];
 
-/** O Jev dá novidade e clareza de cada versão numa chamada só (Score, 4 níveis). Falha: null e vale a regra. */
+/**
+ * O Jev julga cada versão numa chamada só: novidade, clareza, tom positivo e naturalidade (Score, 4 níveis)
+ * e se ela afirma algo que não está nos fatos (Noul). Falha: null e vale a regra.
+ */
 export async function notasDoJev(
   versoes: string[],
   anteriores: readonly RitualParaComparar[],
   cobrar: { clientId?: string; criadoPor?: string | null },
+  fatos = "",
 ): Promise<NotaDaVersao[] | null> {
   const questions: Record<string, PerguntaJev> = {};
   versoes.forEach((_, i) => {
@@ -360,25 +406,74 @@ export async function notasDoJev(
       instructions: `Quanto a mensagem em \`versoes[${i}]\` é curta e clara para o dono de um negócio, que não é de marketing, ler no celular?`,
       criteria: NIVEIS_DE_CLAREZA,
     };
+    questions[`positivo_${i}`] = {
+      type: "score",
+      instructions: `Quanto a mensagem em \`versoes[${i}]\` é positiva e motiva o dono a continuar com a agência, sem inflar nem mentir?`,
+      criteria: NIVEIS_DE_POSITIVO,
+    };
+    questions[`natural_${i}`] = {
+      type: "score",
+      instructions: `Quanto a mensagem em \`versoes[${i}]\` soa como uma pessoa conversando no WhatsApp, e não como relatório ou molde?`,
+      criteria: NIVEIS_DE_NATURALIDADE,
+    };
+    if (fatos) {
+      questions[`inventa_${i}`] = {
+        type: "noul",
+        instructions: {
+          pergunta: `A mensagem em \`versoes[${i}]\` afirma como fato algo concreto e conferível que NÃO está em \`fatos\` nem decorre diretamente deles?`,
+          conta: "número, valor, data, peça publicada ou entregue, resultado alcançado, decisão já tomada, prazo prometido",
+          nao_conta: "saudação, momento da semana, link do painel, o porquê ou o benefício de uma ação, intenção ou próximo passo descrito de forma geral, convite ao cliente, paráfrase de um fato que está em fatos",
+        },
+        criteria: {
+          true: "Sim: há pelo menos uma afirmação concreta e conferível que os fatos não sustentam (inventada ou trocada).",
+          false: "Não: toda afirmação concreta da mensagem está nos fatos ou é paráfrase deles.",
+        },
+      };
+    }
   });
   try {
     const r = await jevPerguntar({
       state: {
         mensagens_anteriores: anteriores.slice(0, 4).map((a) => ({ data: String(a.quando ?? "").slice(0, 10), texto: String(a.texto ?? "").slice(0, 1500) })),
         versoes: versoes.map((v) => v.slice(0, 2500)),
+        ...(fatos ? { fatos: fatos.slice(0, 18000) } : {}),
       },
       questions,
-    }, { timeoutMs: 10_000 });
+    }, { timeoutMs: 12_000 });
     if (cobrar.clientId) {
       // Import dinâmico: o ia-motor lê o ambiente do Deno e o Vitest não carrega.
       const { cobrarJev } = await import("../_shared/ia-motor.ts");
       await cobrarJev(r, { clientId: cobrar.clientId, tarefa: "conversa", criadoPor: cobrar.criadoPor ?? null }).catch(() => null);
     }
-    return versoes.map((_, i) => ({ novidade: notaScore(r.answers[`novidade_${i}`]), clareza: notaScore(r.answers[`clareza_${i}`]) }));
+    return versoes.map((_, i) => ({
+      novidade: notaScore(r.answers[`novidade_${i}`]),
+      clareza: notaScore(r.answers[`clareza_${i}`]),
+      positivo: notaScore(r.answers[`positivo_${i}`]),
+      naturalidade: notaScore(r.answers[`natural_${i}`]),
+      inventa: fatos ? probabilidadeNoul(r.answers[`inventa_${i}`]) : null,
+    }));
   } catch (e) {
     console.warn(`[ritual] Jev da escolha indisponível, vale a regra: ${e instanceof Error ? e.message : String(e)}`);
     return null;
   }
+}
+
+/** Os fatos que o Jev usa para conferir a fidelidade: o que o escritor recebeu. */
+export function fatosParaConferir(p: PedidoDoRitual): string {
+  // Cada bloco com teto próprio (o corte único jogava fora os fatos do painel, que vêm por último).
+  const fatos = String(p.facts ?? "");
+  const fatosNoTeto = fatos.length > 9000 ? `${fatos.slice(0, 3000)}\n[...]\n${fatos.slice(-6000)}` : fatos;
+  return [
+    String(p.estado ?? "").slice(0, 5000), p.promessas, p.diaPrioritario, String(p.continuidade ?? "").slice(0, 2500), fatosNoTeto,
+    p.textoAtual ? `TEXTO ATUAL (revisado pela equipe):\n${p.textoAtual.slice(0, 1500)}` : "",
+  ].filter(Boolean).join("\n\n");
+}
+
+/** O aviso quando o Jev leu afirmação fora dos fatos (nunca corrige: a equipe confere antes de enviar). */
+export function avisoDeFidelidade(inventa: number | null | undefined): string | null {
+  // 0,7: medido em 23/10 com mensagens reais (abaixo disso o aviso aparecia em quase toda mensagem fiel).
+  if (inventa == null || inventa < 0.7) return null;
+  return `O Jev leu algo que pode não estar nos fatos do painel (${Math.round(inventa * 100)}%). Confira números, datas e entregas antes de enviar.`;
 }
 
 /**
@@ -389,13 +484,18 @@ export async function notasDoJev(
  * pontos (menos repetição contra o JÁ DITO, dentro do tamanho e, com o Jev,
  * mais novidade e clareza). Sem laço de correção: nenhuma versão é reescrita.
  * No aprimorar (texto atual) e sem cliente, uma versão só.
+ *
+ * 23/10: cada versão passa pelo acabamento (https, saudação pelo horário, momento da semana, linha do
+ * painel) ANTES da escolha; o Jev escolhe também por tom positivo e naturalidade e confere a fidelidade aos
+ * fatos (com uma versão só, a mesma chamada vira só o aviso de fidelidade).
  */
 export async function escreverRitual(
   p: PedidoDoRitual,
   escrever: typeof escreverComModeloDaCentral = escreverComModeloDaCentral,
   julgar: typeof notasDoJev = notasDoJev,
 ): Promise<RitualEscrito | null> {
-  const usuario = montarPedidoAoEscritor(p);
+  const agora = p.agora ?? new Date();
+  const usuario = montarPedidoAoEscritor({ ...p, agora });
   const temperatura = p.textoAtual ? 0.35 : 0.55;
   const umaVersao = (extra: string): Promise<TextoEscrito | null> => {
     const texto = extra ? `${usuario}\n\n${extra}` : usuario;
@@ -407,7 +507,7 @@ export async function escreverRitual(
   };
   const quantas = p.textoAtual || !p.clientId ? 1 : VERSOES_DO_RITUAL;
   // 23/10: no aprimorar vale o texto atual; nas versões novas, um ângulo de abertura para cada uma.
-  const angulos = p.clientId ? angulosDasVersoes(p.clientId, p.ritual, p.agora ?? new Date()) : null;
+  const angulos = p.clientId ? angulosDasVersoes(p.clientId, p.ritual, agora) : null;
   const extraDa = (i: number) => (p.textoAtual || !angulos ? "" : instrucaoDoAngulo(angulos[i === 0 ? 0 : 1], i === 0 ? "A" : "B"));
   const saidas = await Promise.all(Array.from({ length: quantas }, (_, i) => umaVersao(extraDa(i)).catch(() => null)));
   const candidatas: Array<{ lido: NonNullable<ReturnType<typeof lerRespostaDoEscritor>>; saida: TextoEscrito }> = [];
@@ -415,7 +515,10 @@ export async function escreverRitual(
     if (!saida) continue;
     try {
       const lido = lerRespostaDoEscritor(saida.texto, p.passoAtual);
-      if (lido) candidatas.push({ lido, saida });
+      if (!lido) continue;
+      // Regras fixas por código: https, saudação pelo horário, momento da semana e linha do painel.
+      const acabado = acabamentoDoRitual(lido.body, { ritual: p.ritual, agora, contato: p.contactName, negocio: p.clientName });
+      candidatas.push({ lido: { ...lido, body: acabado.texto }, saida });
     } catch {
       // JSON inválido: essa versão não entra na escolha.
     }
@@ -428,8 +531,11 @@ export async function escreverRitual(
   const anteriores = p.jaDito ?? [];
   let escolhida = 0;
   let escolhaDaVersao: EscolhaDaVersao | null = null;
+  // Com duas versões, o Jev escolhe; com uma (aprimorar), a mesma chamada só confere a fidelidade aos fatos.
+  const notas = candidatas.length > 1 || p.clientId
+    ? await julgar(candidatas.map((c) => c.lido.body), anteriores, { clientId: p.clientId, criadoPor: p.criadoPor ?? null }, fatosParaConferir(p))
+    : null;
   if (candidatas.length > 1) {
-    const notas = await julgar(candidatas.map((c) => c.lido.body), anteriores, { clientId: p.clientId, criadoPor: p.criadoPor ?? null });
     const pontos = candidatas.map((c, i) => pontosDaVersao(c.lido.body, p.ritual, anteriores, notas?.[i]));
     escolhida = pontos.indexOf(Math.max(...pontos));
     escolhaDaVersao = { versoes: candidatas.length, escolhida, pontos, jev: !!notas };
@@ -438,9 +544,10 @@ export async function escreverRitual(
   const lim = limiteDoRitual(p.ritual);
   const linhas = linhasDoTexto(lido.body);
   const longa = linhas > lim.linhas + 2 ? [`A mensagem saiu com ${linhas} linhas (o combinado é até ${lim.linhas}). Vale cortar antes de enviar.`] : [];
+  const fidelidade = avisoDeFidelidade(notas?.[escolhida]?.inventa);
   return {
     ...lido,
-    alertas: [...(lido.sem_novidade ? [SEM_NOVIDADE] : []), ...lido.alertas, ...longa].slice(0, 5),
+    alertas: [...(lido.sem_novidade ? [SEM_NOVIDADE] : []), ...(fidelidade ? [fidelidade] : []), ...lido.alertas, ...longa].slice(0, 5),
     model: saida.modelo,
     modelo_rotulo: saida.rotulo,
     raciocinio: saida.raciocinio,
