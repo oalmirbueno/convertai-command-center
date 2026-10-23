@@ -45,7 +45,7 @@ import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { chamarEditorVideo } from "@/lib/editor/api";
 import { pedirRender, rotuloDoPedido, uidDoClique, useFilaDeRender } from "@/lib/editor/render";
 import { atende, duracaoNoMotor, type MotorDeVideo } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
-import { normalizarRoteiroDeVideo, type CenaDoRoteiro, type RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
+import { MAX_CENAS, MAX_SEGUNDOS_DA_CENA, normalizarRoteiroDeVideo, type CenaDoRoteiro, type RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 import { assinaturaDaCena, duracoesDasCenas, falasDaNarracao, pedidoDaNarracao, situacaoDaNarracao } from "../../../supabase/functions/agente-calendario/modulos/narracao-da-campanha-regras";
 import { MODELO_DE_VOZ_PADRAO, MODELOS_DE_VOZ } from "../../../supabase/functions/mesa-motion/modulos/narracao";
 
@@ -192,9 +192,9 @@ function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campan
               <input
                 type="number"
                 min={1}
-                max={20}
+                max={MAX_SEGUNDOS_DA_CENA}
                 value={c.segundos}
-                onChange={(e) => mudarCena(k, { segundos: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })}
+                onChange={(e) => mudarCena(k, { segundos: Math.max(1, Math.min(MAX_SEGUNDOS_DA_CENA, Number(e.target.value) || 1)) })}
                 className={juntar(campo, "h-8 w-16 px-2")}
                 aria-label={`Segundos da cena ${k + 1}`}
               />
@@ -212,7 +212,7 @@ function PassoRoteiro({ campanha, propostaId, item, roteiro, aplicar }: { campan
         ))}
       </ol>
       <div className="flex min-w-0 items-center">
-        <button type="button" className={botao.icone} onClick={() => mudar({ cenas: r.cenas.concat([cenaVazia(r.cenas.length + 1)]).slice(0, 8) })} disabled={r.cenas.length >= 8} aria-label="Acrescentar cena" title="Acrescentar cena">
+        <button type="button" className={botao.icone} onClick={() => mudar({ cenas: r.cenas.concat([cenaVazia(r.cenas.length + 1)]).slice(0, MAX_CENAS) })} disabled={r.cenas.length >= MAX_CENAS} aria-label="Acrescentar cena" title="Acrescentar cena">
           <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
         <span className={juntar(texto.auxiliar, "ml-2 mr-auto tabular-nums")}>{r.cenas.length} cenas · {total} s</span>

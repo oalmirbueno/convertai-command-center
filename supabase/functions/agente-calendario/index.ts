@@ -158,6 +158,22 @@ import { blocoDoEsquema, esquemaDaCampanha } from "./modulos/esquemas-de-campanh
 import { blocoDaLinhaDoTempo, calcularLinhaDoTempo, faseDaEtapa, type LinhaDoTempo, normalizarLinhaDoTempo, vagasDasPecas, type VagaDaPeca } from "./modulos/linha-do-tempo.ts";
 import { type ConteudoDaPonta, conteudoDasPontas, ESQUEMA_DAS_PONTAS, itensDaReorganizacao, reorganizarPecas } from "./modulos/reorganizar-campanha.ts";
 import { direcaoDoRoteiro as direcaoDoRoteiroDeVideo, ESQUEMA_DO_ROTEIRO_DE_VIDEO, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "./modulos/roteiro-de-video.ts";
+import {
+  ajusteDaResposta,
+  ESQUEMA_DAS_VERSOES_DO_ROTEIRO,
+  ESQUEMA_DO_AJUSTE_DO_ROTEIRO,
+  estadoDaEscolhaDoRoteiro,
+  lerEscolhaDoRoteiro,
+  normalizarCriatividade,
+  normalizarDuracaoPedida,
+  normalizarEstilo,
+  normalizarOpcoesDoRoteiro,
+  type OpcoesDoRoteiro,
+  perguntaDaEscolhaDoRoteiro,
+  tarefaDoAgenteDeRoteiro,
+  tarefaDoAjusteDoRoteiro,
+  versoesDaResposta,
+} from "./modulos/agente-de-roteiro.ts";
 import { blocoDoMercado, ESQUEMA_DO_MERCADO, mercadoComFonte, type MercadoDaCampanha, normalizarMercado } from "./modulos/mercado-da-campanha.ts";
 import { aplicarMudanca as aplicarMudancaDaCampanha, ESQUEMA_DA_MUDANCA, type ItemDaMudanca, type ItemDaSerie, itensDaMudanca, itensEscolhidos, pecasComApelido as pecasDaCampanhaComApelido, REGRAS_DA_MUDANCA, type VersaoDaCampanha, versoesDaCampanha } from "./modulos/mudanca-da-campanha.ts";
 // 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
@@ -502,6 +518,8 @@ type Item = {
   video?: DirecaoDeVideoDaPauta | null;
   /** 22/10/2026: o roteiro da peça de vídeo da campanha (gancho, cenas, falas, texto na tela, duração e trilha). */
   roteiro_video?: RoteiroDeVideo | null;
+  /** 23/10/2026: as versões do agente de roteiro, para a pessoa escolher ali mesmo (mesmo saindo da tela). */
+  roteiro_opcoes?: OpcoesDoRoteiro | null;
   /** Título do item (peça de foto: o tema, como a Mesa Foto lê). */
   titulo?: string;
 };
@@ -736,6 +754,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     // 02/10: peça de foto vai para a Mesa Foto com a direção do contrato (e o título, como os outros itens).
     ...(formato === "video" ? { mesa: "video" as const, video: normalizarVideoDaPauta(o.video) } : {}),
     ...(formato === "video" && normalizarRoteiroDeVideo(o.roteiro_video) ? { roteiro_video: normalizarRoteiroDeVideo(o.roteiro_video) } : {}),
+    ...(formato === "video" && normalizarOpcoesDoRoteiro(o.roteiro_opcoes) ? { roteiro_opcoes: normalizarOpcoesDoRoteiro(o.roteiro_opcoes) } : {}),
     ...(formato === "foto"
       ? { mesa: "foto" as const, titulo: texto(o.tema, 200), foto: normalizarDirecaoDeFoto(o.foto, { tema: texto(o.tema, 200), objetivo: texto(o.resumo, 300) }) }
       : {}),
@@ -6205,7 +6224,7 @@ ${blocoDaLinhaDoTempo(linha)}
 PEÇA DE VÍDEO (Reels 9:16): ${JSON.stringify({ data: item.data, etapa: item.etapa, tema: item.tema, gancho: item.gancho, cta: item.cta, direcao: item.video })}
 ${trilha ? `TRILHA DA CAMPANHA (já escolhida): ${trilha.titulo} (${trilha.duracao}s). Use-a como trilha.` : "Sem trilha escolhida: sugira o clima da trilha em poucas palavras."}
 
-TAREFA: o roteiro do Reels desta peça, no papel da fase dela. gancho (o que prende nos 2 primeiros segundos), cenas (3 a 6, cada uma com descricao do que aparece, fala exata ou vazia, texto_na_tela curto ou vazio e segundos), trilha e cta (ação direta). Total de 15 a 30 segundos. Só o que dá para gravar ou gerar com as fotos reais do cliente; nada de promessa que o briefing não sustenta. Sem travessão.`,
+TAREFA: o roteiro do Reels desta peça, no papel da fase dela. titulo (até 6 palavras), conceito (a ideia criativa em uma frase), gancho (o que prende nos 2 primeiros segundos), cenas (3 a 6, cada uma com descricao do que aparece, plano com enquadramento e movimento de câmera, fala exata ou vazia, texto_na_tela curto ou vazio, som da cena e segundos), trilha, cta (ação direta) e sugestoes (3 ideias curtas para deixar o roteiro mais forte). Total de 15 a 30 segundos. Só o que dá para gravar ou gerar com as fotos reais do cliente; nada de promessa que o briefing não sustenta. Sem travessão.`,
     }],
     raciocinio,
     esquemaJson: ESQUEMA_DO_ROTEIRO_DE_VIDEO,
@@ -6219,6 +6238,110 @@ TAREFA: o roteiro do Reels desta peça, no papel da fase dela. gancho (o que pre
   const salva = await salvarProposta(servico, proposta, { itens });
   await somarCustoDaCampanha(servico, c.id, c.client_id, s.custoUsd);
   return json({ proposta: salva, item: novo, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
+}
+
+/**
+ * campanha_roteiro_agente (23/10/2026, dono: "o agente onde eu dou a ideia do roteiro e ele já faz, quantos
+ * minutos e tudo, ele fica para selecionar ali dentro mesmo ... completo com cenas ... até dar sugestão,
+ * participar junto com ultra criatividade"). Regras e textos em modulos/agente-de-roteiro.ts.
+ *
+ * { operacao: "criar", campanha_id, tema_id, ideia, duracao_s, estilo, criatividade }
+ *   -> { opcoes, proposta, custo_usd }: duas versões completas pelo modelo da copy, o Jev recomenda uma (Choice,
+ *   cobrado) e as versões ficam na peça (roteiro_opcoes) até a pessoa escolher; nada vira o roteiro sozinho.
+ * { operacao: "ajustar", campanha_id, tema_id, roteiro, pedido, duracao_s?, criatividade? }
+ *   -> { roteiro, resposta, custo_usd }: o roteiro aberto (com o que a pessoa editou) ajustado pelo pedido;
+ *   não grava: a tela mostra como edição e a pessoa salva (sem custo) ou desfaz.
+ */
+async function campanhaRoteiroAgente(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  if (!c.proposta_id) throw new ErroHttp(400, "campanha_sem_serie", "A campanha ainda não tem a série de conteúdos.");
+  const proposta = await carregarProposta(servico, c.proposta_id);
+  const temaId = texto(corpo.tema_id, 40);
+  const item = proposta.itens.filter((i) => i.tema_id === temaId)[0];
+  if (!item) throw new ErroHttp(404, "peca_inexistente", "Esta peça não está mais na série.");
+  if (item.formato !== "video") throw new ErroHttp(400, "peca_nao_e_video", "Só as peças de vídeo têm roteiro de vídeo.");
+  const operacao = corpo.operacao === "ajustar" ? "ajustar" : "criar";
+  const duracao = normalizarDuracaoPedida(corpo.duracao_s);
+  const criatividade = normalizarCriatividade(corpo.criatividade);
+  const estilo = normalizarEstilo(corpo.estilo);
+  const ideia = texto(corpo.ideia, 1200);
+  let antes: RoteiroDeVideo | null = null;
+  let pedido = "";
+  if (operacao === "ajustar") {
+    antes = normalizarRoteiroDeVideo(corpo.roteiro) ?? item.roteiro_video ?? null;
+    pedido = texto(corpo.pedido, 600);
+    if (!antes) throw new ErroHttp(409, "sem_roteiro", "Ainda não há roteiro para ajustar. Peça ao agente para criar um.");
+    if (!pedido) throw new ErroHttp(400, "sem_pedido", "Diga ao agente o que mudar.");
+  }
+  const b = (c.briefing ?? {}) as Record<string, unknown>;
+  const trilha = trilhaDoBriefing(b.trilha);
+  const linha = normalizarLinhaDoTempo(b.linha_do_tempo);
+  const [ctx, ganchos] = await Promise.all([
+    montarContexto(servico, c.client_id, c.periodo_inicio ?? hojeSaoPaulo(), c.periodo_fim ?? hojeSaoPaulo(), marcaDaChamada(servico, c.client_id, corpo)),
+    // Os ganchos vencedores do nicho para abertura de Reels (nunca lança).
+    prepararCopyViral(servico, { clientId: c.client_id, formato: "reels_abertura", n: 10, semente: `${c.id}:${temaId}:${ideia || pedido}` })
+      .then((x) => x.bloco || "", (e) => (registrarFalha("agente-calendario: ganchos do roteiro não lidos", e), "")),
+  ]);
+  const { modelo, raciocinio } = await modeloDaEscrita(servico, c.client_id, corpo, { modelo: corpo.modelo_id, raciocinio: "low" });
+  const contexto = [
+    `CAMPANHA (JSON): ${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, briefing: normalizarBriefing(c.briefing) })}`,
+    blocoComercialDaCampanha(c, ctx),
+    blocoDaLinhaDoTempo(linha),
+    `PEÇA DE VÍDEO (Reels 9:16): ${JSON.stringify({ data: item.data, etapa: item.etapa, tema: item.tema, gancho: item.gancho, cta: item.cta, direcao: item.video })}`,
+    ganchos,
+  ].filter(Boolean).join("\n\n");
+  const tarefa = operacao === "criar"
+    ? tarefaDoAgenteDeRoteiro({ ideia, duracao, estilo, criatividade, trilha: trilha ? trilha.titulo : undefined })
+    : tarefaDoAjusteDoRoteiro({ roteiro: antes as RoteiroDeVideo, pedido, duracao, criatividade });
+  const s = await chamarTexto({
+    clientId: c.client_id,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: sistemaDoCalendario(ctx, "campanha"),
+    metodo: await metodoDaGeracao(servico),
+    mensagens: [{ papel: "usuario", conteudo: `${contexto}\n\n${tarefa}` }],
+    raciocinio,
+    maxTokensSaida: operacao === "criar" ? 14_000 : 8_000,
+    esquemaJson: operacao === "criar" ? ESQUEMA_DAS_VERSOES_DO_ROTEIRO : ESQUEMA_DO_AJUSTE_DO_ROTEIRO,
+    referencia: { tipo: REF_CAMPANHA, id: c.id },
+    criadoPor: chamador.userId,
+  });
+  let custo = s.custoUsd;
+  if (operacao === "ajustar") {
+    const a = ajusteDaResposta(s.json, { duracao, antes: antes as RoteiroDeVideo });
+    if (!a) throw new ErroHttp(502, "roteiro_vazio", "O roteiro ajustado não voltou. Tente de novo.", { uso_id: s.usoId });
+    if (trilha) a.roteiro.trilha = trilha.titulo;
+    await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
+    return json({ roteiro: a.roteiro, resposta: a.resposta, custo_usd: custo, saldo_usd: s.saldoUsd });
+  }
+  const versoes = versoesDaResposta(s.json, { duracao, ideia, trilha: trilha ? trilha.titulo : undefined });
+  if (!versoes.length) throw new ErroHttp(502, "roteiro_vazio", "O roteiro não voltou. Tente de novo.", { uso_id: s.usoId });
+  // O Jev recomenda uma versão (Choice, cobrado). Falha do Jev não derruba: a primeira fica recomendada.
+  let recomendada = 0;
+  let porque = "";
+  if (versoes.length > 1) {
+    try {
+      const r = await jevPerguntar({
+        state: estadoDaEscolhaDoRoteiro({ campanha: { nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, fase: item.etapa ?? null, tema_da_peca: item.tema }, ideia, versoes }),
+        questions: perguntaDaEscolhaDoRoteiro(versoes.length) as unknown as Record<string, PerguntaJev>,
+      });
+      const cobrado = await cobrarJev(r, { clientId: c.client_id, tarefa: "calendario", referencia: { tipo: REF_CAMPANHA, id: c.id }, criadoPor: chamador.userId }).catch(() => null);
+      custo += cobrado?.custoUsd ?? 0;
+      const e = lerEscolhaDoRoteiro(r.answers.melhor, versoes.length);
+      recomendada = e.indice;
+      porque = e.confianca != null ? `O Jev recomenda (${Math.round(e.confianca * 100)}% de confiança).` : "O Jev recomenda.";
+    } catch (err) {
+      console.error("[agente-calendario] jev do roteiro falhou", { codigo: err instanceof JevErro ? err.codigo : "jev_falhou" });
+    }
+  }
+  const opcoes: OpcoesDoRoteiro = { versoes, recomendada, porque, ideia, duracao, estilo, criatividade, em: new Date().toISOString() };
+  const itens = proposta.itens.map((i) => (i.tema_id === temaId ? { ...i, roteiro_opcoes: opcoes } : i));
+  const salva = await salvarProposta(servico, proposta, { itens });
+  await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
+  return json({ opcoes, proposta: salva, custo_usd: custo, saldo_usd: s.saldoUsd });
 }
 
 /**
@@ -8942,6 +9065,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_reescrever_comercial: campanhaReescreverComercial,
   campanha_reorganizar: campanhaReorganizar,
   campanha_roteiro_video: campanhaRoteiroVideo,
+  campanha_roteiro_agente: campanhaRoteiroAgente,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,
@@ -8957,7 +9081,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_trilha", "campanha_narracao", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 

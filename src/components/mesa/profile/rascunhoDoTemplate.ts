@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 /**
  * Rascunho do Template dividido entre o centro do Estúdio (o post grande) e o
@@ -112,4 +112,33 @@ export function lerRascunhoGuardado<T>(chave: string): T | null {
   const texto = bruto(chave);
   if (texto === null) return null;
   try { return JSON.parse(texto) as T; } catch { return null; }
+}
+
+/** A chave do rascunho de uma lâmina no Template (a mesma no centro, no painel e na miniatura). */
+export const chaveDoRascunho = (clientId: string, marcaId: string | null | undefined, trabalhoId: string, ordem: number) => `mesa:profile:v1:${clientId}:${marcaId || "-"}:${trabalhoId}:${ordem}`;
+
+/** Grava o rascunho de outra lâmina (o "Aplicar a todas" e o selo) e avisa quem está aberto nela. */
+export function gravarRascunho<T>(chave: string, valor: T) {
+  let texto: string | null = null;
+  try { texto = JSON.stringify(valor); window.sessionStorage.setItem(chave, texto); } catch { texto = null; }
+  cache.set(chave, { bruto: texto ?? bruto(chave), valor });
+  ouvintes.get(chave)?.forEach((f) => f());
+}
+
+/**
+ * 23/10: o rascunho de uma lâmina só para LER e acompanhar ao vivo (a miniatura da prancheta), sem gravar o
+ * inicial como o useRascunhoCompartilhado faz. Sem rascunho, null.
+ */
+export function useRascunhoSoLeitura<T>(chave: string): T | null {
+  const assinar = useCallback((avisar: () => void) => {
+    let lista = ouvintes.get(chave);
+    if (!lista) { lista = new Set(); ouvintes.set(chave, lista); }
+    lista.add(avisar);
+    return () => { lista!.delete(avisar); };
+  }, [chave]);
+  const texto = useSyncExternalStore(assinar, () => { const g = cache.get(chave); return g ? g.bruto ?? JSON.stringify(g.valor) : bruto(chave); }, () => null);
+  return useMemo(() => {
+    if (!texto) return null;
+    try { return JSON.parse(texto) as T; } catch { return null; }
+  }, [texto]);
 }

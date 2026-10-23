@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Trabalho } from "@/components/mesa/useItensDoMes";
@@ -35,7 +35,12 @@ vi.mock("@/components/mesa/Custo", () => ({
 vi.mock("@/components/mesa/EstudioFotos", () => ({ subirFoto: (...a: unknown[]) => estado.subirFoto(...a) }));
 vi.mock("@/components/mesa-videos/videosApi", () => ({ subirVideos: (...a: unknown[]) => estado.subirVideos(...a), useArquivosDeVideo: () => ({ data: { arquivos: [] } }), chamarMesaVideos: vi.fn() }));
 vi.mock("@/components/mesa/hypeETrending", () => ({ buscarTrending: vi.fn(async () => ({ itens: [] })) }));
-vi.mock("@/components/mesa/ImagensReaisDoDiretor", () => ({ default: () => <p>Busca de imagens reais</p> }));
+// A busca de imagens reais devolve uma foto de matéria (23/10): veículo no crédito e crédito escrito na lâmina.
+vi.mock("@/components/mesa/ImagensReaisDoDiretor", () => ({
+  default: (p: { consultaInicial?: string; onAplicada?: (f: Record<string, unknown>) => void }) => (
+    <button type="button" data-consulta={p.consultaInicial || ""} onClick={() => p.onAplicada?.({ nome: "Carro bate recorde", caminho: "cliente-a/estudio/fontes-reais/n.jpg", fonte_url: "https://forbes.com.br/x", licenca: "Imagem da matéria (direitos do veículo)", autor: "Forbes Brasil", banco: "noticias" })}>Usar a foto da matéria</button>
+  ),
+}));
 // A biblioteca do Workspace (a mesma das Mesas) devolve um arquivo do cliente.
 vi.mock("@/components/laboratorio/no/EscolherDocumentos", () => ({
   default: (p: { titulo: string; onEscolher: (l: Array<{ id: string; nome: string; url: string; tipo: string; path: string }>) => void }) => (
@@ -46,14 +51,15 @@ vi.mock("@/components/laboratorio/no/EscolherDocumentos", () => ({
 }));
 import TemplateProfileEditor from "@/components/mesa/profile/TemplateProfileEditor";
 import { desenharProfile } from "@/components/mesa/profile/renderProfile";
+import { chaveDoRascunho, gravarRascunho } from "@/components/mesa/profile/rascunhoDoTemplate";
 
 const trabalho: Trabalho = {
   id: "trabalho-a", task_id: null, status: "dirigido", modelo_imagem_id: "gerador-x", qualidade: "alta", cards: [], legenda: null, file_ids: [], custo_usd: 0, conversa_id: null, atualizado_em: "2026-10-22",
   direcao: { conceito: "Meta desistiu de medir IA", cards: [{ ordem: 1, texto_exato: "A Meta **desistiu** disso →" }, { ordem: 2, texto_exato: "O motivo fala de gestão." }] } as Trabalho["direcao"],
 };
-function montar(t: Trabalho = trabalho) {
+function montar(t: Trabalho = trabalho, indice = 0) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const props = { trabalho: t, card: t.direcao.cards![0], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
+  const props = { trabalho: t, card: t.direcao.cards![indice], bloqueado: false, onMudou: vi.fn(), onAbrirFotos: vi.fn() };
   return render(<QueryClientProvider client={cache}><TemplateProfileEditor {...props} /></QueryClientProvider>);
 }
 const desenho = vi.mocked(desenharProfile);
@@ -94,8 +100,11 @@ describe("Carrossel X: modelo novo ao lado do post do X", () => {
     fireEvent.change(screen.getByLabelText("Veículo da manchete"), { target: { value: "g1" } });
     fireEvent.change(screen.getByLabelText("Título da manchete"), { target: { value: "Carros elétricos crescem" } });
     await waitFor(() => expect(ultimoTemplate().bloco).toMatchObject({ tipo: "manchete", manchete: { veiculo: "g1", titulo: "Carros elétricos crescem" } }));
+    // Texto e Fundo ficam nas partes da lâmina (23/10).
+    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
     fireEvent.click(screen.getByLabelText("Aumentar tamanho do texto"));
-    fireEvent.click(screen.getByRole("button", { name: "Escuro" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fundo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fundo Preto" }));
     await waitFor(() => expect(ultimoTemplate()).toMatchObject({ tema: "escuro", cor_fundo: "#000000", tamanho_texto: 36 }));
   });
 
@@ -172,5 +181,150 @@ describe("Carrossel X: modelo novo ao lado do post do X", () => {
     // Achou mídia real: nada de imagem por IA.
     expect(chamadas("template_imagem")).toHaveLength(0);
     await waitFor(() => expect(ultimoTemplate().bloco?.tipo).toBe("video"));
+  });
+});
+
+describe("Carrossel X: fundo, busca de notícias e ajustes por parte (23/10)", () => {
+  it("a lâmina abre em Mídia, Fundo e Texto; o fundo pronto ou livre muda a cor e o tema acompanha o contraste", async () => {
+    await abrirCarrossel();
+    expect(screen.getByText("Lâmina 1 de 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mídia" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Fundo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fundo Dim do X" }));
+    await waitFor(() => expect(ultimoTemplate()).toMatchObject({ cor_fundo: "#15202b", tema: "dim" }));
+    fireEvent.change(screen.getByLabelText("Cor de fundo da lâmina"), { target: { value: "#7a1f3d" } });
+    await waitFor(() => expect(ultimoTemplate()).toMatchObject({ cor_fundo: "#7a1f3d", tema: "escuro" }));
+    expect(document.querySelector("[data-contraste-do-texto]")).toHaveTextContent("Texto claro");
+    fireEvent.click(screen.getByRole("button", { name: "Fundo Papel" }));
+    await waitFor(() => expect(ultimoTemplate()).toMatchObject({ cor_fundo: "#f5f1e8", tema: "claro" }));
+    // Tamanho pronto do bloco e cantos em pílulas, com o ajuste fino recolhido.
+    fireEvent.click(screen.getByRole("button", { name: "Mídia" }));
+    fireEvent.click(screen.getByRole("button", { name: "Imagem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Médio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redondos" }));
+    await waitFor(() => expect(ultimoTemplate().bloco).toMatchObject({ altura: 75, cantos: 36 }));
+  });
+  it("foto de matéria entra no bloco com o veículo no crédito e o crédito escrito na lâmina", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Imagem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar a foto da matéria" }));
+    await waitFor(() => expect(ultimoTemplate().bloco).toMatchObject({
+      tipo: "imagem", credito_visivel: true,
+      midia: { bucket: "mesa", caminho: "cliente-a/estudio/fontes-reais/n.jpg", origem: "internet", credito: { fonte: "Notícia · Forbes Brasil", autor: null, url: "https://forbes.com.br/x" } },
+    }));
+    expect(document.querySelector("[data-credito-na-lamina]")).toHaveTextContent("Foto: Forbes Brasil");
+    fireEvent.click(screen.getByLabelText("Crédito embaixo do bloco"));
+    await waitFor(() => expect(ultimoTemplate().bloco?.credito_visivel).toBeUndefined());
+  });
+  it("o gerador pede as buscas com o Jev escolhendo a melhor mídia (Tudo, ordenado)", async () => {
+    await abrirCarrossel();
+    const gerado = { ...trabalho, direcao: { cards: [{ ordem: 1, texto_exato: "Capa", carrossel: { midia: "foto_real", busca: "carro elétrico", confianca: 0.8, por: "jev" } }, { ordem: 2, texto_exato: "Fim", carrossel: { midia: "so_texto", busca: "", confianca: 0.9, por: "jev" } }] } };
+    estado.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => {
+      if (corpo.acao === "template_carrossel") return { trabalho: gerado, laminas: gerado.direcao.cards.map((c) => ({ ordem: c.ordem, texto: c.texto_exato, sugestao: c.carrossel })), avisos: [], custo_usd: 0.03 };
+      if (corpo.acao === "imagens_reais_buscar") return { resultados: [{ arquivo: "noticia:x|ONUT.a1b2" }], custo_usd: 0.001 };
+      if (corpo.acao === "imagem_real_aplicar") return { trabalho: gerado };
+      return {};
+    });
+    fireEvent.change(screen.getByLabelText("Assunto do carrossel"), { target: { value: "Carro elétrico bate recorde" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gerar o carrossel inteiro" }));
+    await waitFor(() => expect(chamadas("imagem_real_aplicar")).toHaveLength(1));
+    expect(chamadas("imagens_reais_buscar")[0]).toMatchObject({ ordem: 1, consulta: "carro elétrico", banco: "todos", ordenar: "jev" });
+    expect(chamadas("imagem_real_aplicar")[0]).toMatchObject({ arquivo: "noticia:x|ONUT.a1b2" });
+  });
+});
+
+describe("Carrossel X: texto com quebra e negrito, aplicar a todas, selo, perfil e IA (23/10)", () => {
+  const rascunhoDa = (ordem: number) => JSON.parse(sessionStorage.getItem(chaveDoRascunho("cliente-a", null, "trabalho-a", ordem)) || "null") as Record<string, unknown> | null;
+  it("o texto da lâmina aceita Enter e o B/Ctrl+B no trecho; salvar grava o texto da lâmina com as quebras", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
+    const campo = screen.getByLabelText("Texto da lâmina no template") as HTMLTextAreaElement;
+    expect(campo.value).toBe("A Meta **desistiu** disso →");
+    fireEvent.change(campo, { target: { value: "A Meta desistiu disso\n\nE agora →" } });
+    campo.setSelectionRange(2, 6);
+    fireEvent.keyDown(campo, { key: "b", ctrlKey: true });
+    await waitFor(() => expect(campo.value).toBe("A **Meta** desistiu disso\n\nE agora →"));
+    expect(document.querySelector("[data-destaques-do-texto='1']")).toHaveTextContent("Meta");
+    estado.chamar.mockResolvedValue({ trabalho });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar texto" }));
+    await waitFor(() => expect(chamadas("configurar")).toHaveLength(1));
+    expect(chamadas("configurar")[0]).toMatchObject({ trabalho_id: "trabalho-a", card: { ordem: 1, texto_exato: "A **Meta** desistiu disso\n\nE agora →" } });
+  });
+  it("Destacar as melhores palavras: custo antes e o Jev pelo servidor", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
+    const { ErroDaMesa } = await import("@/lib/mesa/api");
+    estado.chamar.mockImplementation(async (_f: string, corpo: { acao: string; confirmado?: boolean }) => {
+      if (corpo.acao === "template_destaques" && !corpo.confirmado) throw Object.assign(new ErroDaMesa("custo"), { codigo: "confirmar_custo", detalhes: { custo_estimado_usd: 0.004 } });
+      if (corpo.acao === "template_destaques") return { trabalho, laminas: [{ ordem: 1, destaques: ["desistiu"] }], custo_usd: 0.003 };
+      return {};
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Destacar as melhores palavras" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar US$ 0.004" }));
+    await waitFor(() => expect(chamadas("template_destaques").filter((c) => c.confirmado)).toHaveLength(1));
+    expect(chamadas("template_destaques")[1]).toMatchObject({ ordem: 1, todas: false, confirmado: true });
+  });
+  it("Aplicar a todas leva o fundo e o tamanho para o rascunho das outras lâminas; o selo vale para todas", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Fundo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fundo Preto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar o fundo a todas as lâminas" }));
+    await waitFor(() => expect(rascunhoDa(2)).toMatchObject({ cor_fundo: "#000000", tema: "escuro", estilo: "carrossel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Texto" }));
+    fireEvent.click(screen.getByLabelText("Aumentar tamanho do texto"));
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar o tamanho e o estilo do texto a todas as lâminas" }));
+    await waitFor(() => expect(rascunhoDa(2)).toMatchObject({ tamanho_texto: 36, cor_fundo: "#000000" }));
+    fireEvent.click(screen.getByLabelText("Exibir selo em todas as lâminas"));
+    await waitFor(() => expect(rascunhoDa(2)).toMatchObject({ verificado: true }));
+    expect(ultimoTemplate().verificado).toBe(true);
+  });
+  it("Montar todas usa a aparência do rascunho de cada lâmina", async () => {
+    await abrirCarrossel();
+    act(() => gravarRascunho(chaveDoRascunho("cliente-a", null, "trabalho-a", 2), { ...(rascunhoDa(2) || {}), estilo: "carrossel", cor_fundo: "#7a1f3d", tema: "escuro", tamanho_texto: 40, texto_base: "O motivo fala de gestão.", bloco: { tipo: "nenhum", posicao: "abaixo", altura: 100, largura: 100, sangrar: false, cantos: 18, borda: false, sombra: false, enquadramento: "inteira", foco_x: 0.5, foco_y: 0.5 } }));
+    estado.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "salvar_template" ? { trabalho, versao: 1 } : {}));
+    fireEvent.click(screen.getByRole("button", { name: "Montar todas as lâminas" }));
+    await waitFor(() => expect(chamadas("salvar_template")).toHaveLength(2));
+    expect(chamadas("salvar_template")[0].template).toMatchObject({ cor_fundo: "#ffffff" });
+    expect(chamadas("salvar_template")[1].template).toMatchObject({ cor_fundo: "#7a1f3d", tamanho_texto: 40, texto: "O motivo fala de gestão." });
+  });
+  it("último card: um clique põe o print do perfil com os dados de Redes, editável", async () => {
+    montar(trabalho, 1);
+    fireEvent.click(screen.getByRole("button", { name: "Carrossel X" }));
+    await waitFor(() => expect(ultimoTemplate().estilo).toBe("carrossel"));
+    expect(document.querySelector("[data-chamada-siga]")).toHaveTextContent("Pronto com os dados de Redes");
+    fireEvent.click(screen.getByRole("button", { name: "Pôr o perfil com o Seguir" }));
+    await waitFor(() => expect(ultimoTemplate().bloco).toMatchObject({ tipo: "perfil", perfil: { estilo: "instagram", nome: "Padaria", username: "padaria" } }));
+    fireEvent.change(screen.getByLabelText("Bio no perfil"), { target: { value: "Pão quentinho às 7h" } });
+    fireEvent.click(screen.getByRole("button", { name: "X" }));
+    await waitFor(() => expect(ultimoTemplate().bloco?.perfil).toMatchObject({ estilo: "x", bio: "Pão quentinho às 7h" }));
+  });
+  it("a primeira lâmina não oferece a chamada Siga", async () => {
+    await abrirCarrossel();
+    expect(document.querySelector("[data-chamada-siga]")).toBeNull();
+  });
+  it("gráfico pela IA preenche com dado real; sem dado real, avisa e deixa o modelo", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Gráfico" }));
+    const { ErroDaMesa } = await import("@/lib/mesa/api");
+    estado.chamar.mockImplementationOnce(async () => ({ grafico: { tipo: "barras", titulo: "Pedidos", unidade: "%", fonte: "Folha", dados: [{ rotulo: "Negados", valor: 40 }, { rotulo: "Revistos", valor: 25 }] }, fonte: { nome: "Folha" }, custo_usd: 0.02 }));
+    fireEvent.click(screen.getByRole("button", { name: "Gráfico pela IA" }));
+    await waitFor(() => expect(ultimoTemplate().bloco?.grafico).toMatchObject({ fonte: "Folha", dados: [{ valor: 40 }, { valor: 25 }] }));
+    expect(chamadas("template_bloco_ia")[0]).toMatchObject({ tipo: "grafico", ordem: 1, confirmado: true });
+    expect(document.querySelector("[data-aviso-da-ia]")).toHaveTextContent("fonte: Folha");
+    estado.chamar.mockImplementationOnce(async () => { throw Object.assign(new ErroDaMesa("Não achei números reais para este gráfico."), { codigo: "sem_dado_real", detalhes: { custo_usd: 0.01 } }); });
+    fireEvent.click(screen.getByRole("button", { name: "Gráfico pela IA" }));
+    await waitFor(() => expect(document.querySelector("[data-aviso-da-ia]")).toHaveTextContent("Não achei números reais"));
+    expect(ultimoTemplate().bloco?.grafico).toMatchObject({ fonte: "Folha" });
+  });
+  it("manchete pela IA e preencher a lâmina inteira com IA", async () => {
+    await abrirCarrossel();
+    fireEvent.click(screen.getByRole("button", { name: "Manchete" }));
+    estado.chamar.mockImplementationOnce(async () => ({ manchete: { veiculo: "Folha", titulo: "INSS nega 40%", url: "https://folha.uol.com.br/x", data: "22/10/2026" }, fonte: { veiculo: "Folha" }, custo_usd: 0.002 }));
+    fireEvent.click(screen.getByRole("button", { name: "Manchete pela IA" }));
+    await waitFor(() => expect(ultimoTemplate().bloco).toMatchObject({ tipo: "manchete", manchete: { veiculo: "Folha", titulo: "INSS nega 40%", data: "22/10/2026" } }));
+    estado.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "template_carrossel" ? { trabalho, laminas: [{ ordem: 1, texto: "Novo", sugestao: { midia: "so_texto", busca: "", confianca: 0.9, por: "jev" } }], avisos: [], custo_usd: 0.02 } : {}));
+    fireEvent.click(screen.getByRole("button", { name: "Preencher a lâmina com IA" }));
+    await waitFor(() => expect(chamadas("template_carrossel")).toHaveLength(1));
+    expect(chamadas("template_carrossel")[0]).toMatchObject({ so_esta: true, gravar_legenda: false, ordem: 1 });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { desenharProfile } from "@/components/mesa/profile/renderProfile";
-import { enquadrar, linhasRicas, pedacosDoTexto } from "@/components/mesa/profile/renderCarrossel";
+import { CORES_DO_CARROSSEL, enquadrar, FUNDOS_PRONTOS, fundoEscuro, linhasRicas, luminancia, paletaDoFundo, pedacosDoTexto, textoDoCredito } from "@/components/mesa/profile/renderCarrossel";
 import type { TemplateProfile } from "../../supabase/functions/estudio-arte/modulos/template-profile";
 
 /** Carrossel estilo post do X (22/10): a lâmina inteira, o bloco de mídia e o texto com negrito. */
@@ -92,5 +92,88 @@ describe("lâmina do carrossel", () => {
   it("recusa texto que não cabe em vez de cortar", () => {
     const { canvas } = quadro();
     expect(() => desenharProfile(canvas, { ...base, texto: "conteúdo muito longo ".repeat(120), tamanho_texto: 56 }, "quadrado_1x1")).toThrow("não cabe");
+  });
+});
+
+describe("fundo da lâmina (23/10): qualquer cor, com o texto no contraste certo", () => {
+  it("a paleta sai do fundo: branco e preto são os do X; cor da marca escura pede texto claro e a clara, escuro", () => {
+    expect(paletaDoFundo("#ffffff")).toEqual(CORES_DO_CARROSSEL.claro);
+    expect(paletaDoFundo("#000000")).toEqual(CORES_DO_CARROSSEL.escuro);
+    expect(paletaDoFundo("#7a1f3d").texto).toBe("#f7f9f9");
+    expect(paletaDoFundo("#f5f1e8").texto).toBe("#0f1419");
+    expect(paletaDoFundo("#ffd400").texto).toBe("#0f1419");
+    expect(fundoEscuro("#15202b")).toBe(true);
+    expect(fundoEscuro("#ffd400")).toBe(false);
+    expect(luminancia("#ffffff")).toBeCloseTo(1);
+    expect(FUNDOS_PRONTOS.map((f) => f.cor)).toEqual(["#ffffff", "#000000", "#15202b", "#f5f1e8"]);
+  });
+  it("pinta o fundo escolhido e escreve o nome e o texto em cor clara sobre a cor escura da marca", () => {
+    const { canvas, ctx } = quadro();
+    const cores: Array<[string, string]> = [];
+    ctx.fillText = vi.fn((s: string) => { cores.push([String(s), String(ctx.fillStyle)]); });
+    desenharProfile(canvas, { ...base, tema: "claro", cor_fundo: "#7a1f3d" }, "feed_4x5");
+    expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 1080, 1350);
+    expect(cores.find(([s]) => s === "Rafael Exemplo")?.[1]).toBe("#f7f9f9");
+    expect(cores.find(([s]) => s === "3 dias de trabalho")?.[1]).toBe("#f7f9f9");
+  });
+  it("o crédito da mídia sai embaixo do bloco só quando pedido, com o veículo da matéria", () => {
+    const foto = { naturalWidth: 1600, naturalHeight: 900 } as HTMLImageElement;
+    const bloco = { tipo: "imagem" as const, posicao: "abaixo" as const, altura: 100, largura: 100, sangrar: false, cantos: 18, borda: false, sombra: false, enquadramento: "inteira" as const, foco_x: 0.5, foco_y: 0.5,
+      midia: { bucket: "mesa" as const, caminho: "c/a.jpg", origem: "internet" as const, credito: { fonte: "Notícia · Forbes Brasil", autor: null, licenca: "Imagem da matéria", url: "https://forbes.com.br/x" } } };
+    expect(textoDoCredito({ ...bloco, credito_visivel: true })).toBe("Foto: Forbes Brasil");
+    expect(textoDoCredito({ ...bloco, midia: { ...bloco.midia, credito: { ...bloco.midia.credito, fonte: "Pexels", autor: "Bia" } }, credito_visivel: true })).toBe("Foto: Pexels · Bia");
+    const sem = quadro();
+    desenharProfile(sem.canvas, { ...base, bloco }, "feed_4x5", { midia: { fonte: foto, largura: 1600, altura: 900 } });
+    expect(textos(sem.ctx)).not.toContain("Foto: Forbes Brasil");
+    const com = quadro();
+    desenharProfile(com.canvas, { ...base, bloco: { ...bloco, credito_visivel: true } }, "feed_4x5", { midia: { fonte: foto, largura: 1600, altura: 900 } });
+    expect(textos(com.ctx)).toContain("Foto: Forbes Brasil");
+  });
+});
+
+describe("arte do estilo X (23/10): perfil, número grande, cabeçalho e quebras", () => {
+  const blocoBase = { posicao: "abaixo" as const, altura: 100, largura: 100, sangrar: false, cantos: 24, borda: true, sombra: false, enquadramento: "inteira" as const, foco_x: 0.5, foco_y: 0.5 };
+  it("o print do perfil no jeito do Instagram: números, nome, bio e o Seguir; no X, Seguindo e Seguidores", () => {
+    const ig = quadro();
+    desenharProfile(ig.canvas, { ...base, texto: "Siga para mais →", bloco: { ...blocoBase, tipo: "perfil", perfil: { estilo: "instagram", nome: "Thainá Rosa", username: "thaina.adv", bio: "Advogada previdenciária", posts: 120, seguidores: 34500, seguindo: 210 } } }, "feed_4x5");
+    const t = textos(ig.ctx);
+    expect(t).toEqual(expect.arrayContaining(["120", "34,5 mil", "210", "publicações", "seguidores", "seguindo", "Thainá Rosa", "Advogada previdenciária", "Seguir", "Mensagem"]));
+    const x = quadro();
+    desenharProfile(x.canvas, { ...base, texto: "Siga →", bloco: { ...blocoBase, tipo: "perfil", perfil: { estilo: "x", nome: "Thainá Rosa", username: "thaina.adv", seguidores: 1200, seguindo: 80 } } }, "feed_4x5");
+    expect(textos(x.ctx)).toEqual(expect.arrayContaining(["Seguir", "@thaina.adv", "80", " Seguindo", "1,2 mil", " Seguidores"]));
+  });
+  it("número grande: o valor com a unidade e o rótulo embaixo", () => {
+    const g = quadro();
+    desenharProfile(g.canvas, { ...base, bloco: { ...blocoBase, tipo: "grafico", grafico: { tipo: "numero", unidade: "%", dados: [{ rotulo: "dos pedidos negados", valor: 40 }] } } }, "feed_4x5");
+    expect(textos(g.ctx)).toEqual(expect.arrayContaining(["40%", "dos pedidos negados"]));
+  });
+  it("nome e @ formam um bloco centrado na altura da foto; o selo tem oito lobos", () => {
+    const { canvas, ctx } = quadro();
+    desenharProfile(canvas, base, "feed_4x5");
+    const yNome = ctx.fillText.mock.calls.find((c) => c[0] === "Rafael Exemplo")![2] as number;
+    const yArroba = ctx.fillText.mock.calls.find((c) => c[0] === "@rafael.exemplo")![2] as number;
+    const foto = ctx.arc.mock.calls[0] as number[];
+    const centro = foto[1];
+    // O meio entre as duas linhas fica perto do centro da foto (dentro de 20 px).
+    expect(Math.abs((yNome - 34 * 0.8 + yArroba) / 2 - centro)).toBeLessThan(20);
+    expect(yArroba).toBeGreaterThan(yNome);
+    expect(ctx.arc.mock.calls.length).toBeGreaterThanOrEqual(9);
+  });
+  it("quebra de linha e parágrafo saem como linhas separadas na lâmina", () => {
+    const { canvas, ctx } = quadro();
+    desenharProfile(canvas, { ...base, texto: "Primeira linha\nSegunda linha\n\nNovo parágrafo" }, "feed_4x5");
+    const ys = ["Primeira linha", "Segunda linha", "Novo parágrafo"].map((s) => ctx.fillText.mock.calls.find((c) => c[0] === s)![2] as number);
+    expect(ys[1]).toBeGreaterThan(ys[0]);
+    expect(ys[2] - ys[1]).toBeGreaterThan(ys[1] - ys[0]);
+  });
+  it("o texto acompanha o quadro: maior no 9:16 que no 1:1, com o mesmo tamanho escolhido", () => {
+    const fonteDe = (formato: "quadrado_1x1" | "stories_9x16") => {
+      const { canvas, ctx } = quadro();
+      const fontes: string[] = [];
+      ctx.fillText = vi.fn(() => { fontes.push(ctx.font); });
+      desenharProfile(canvas, { ...base, texto: "Texto curto" }, formato);
+      return Math.max(...fontes.map((f) => Number((/(\d+)px/.exec(f) || [])[1] || 0)));
+    };
+    expect(fonteDe("stories_9x16")).toBeGreaterThan(fonteDe("quadrado_1x1"));
   });
 });

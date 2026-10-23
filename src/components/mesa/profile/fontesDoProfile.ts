@@ -32,15 +32,17 @@ export function resolverFonteProfile(fontes: FonteProfile[], referencia?: Refere
 type CardComFontes = Omit<CardDaDirecao, "vitrine_de_logos"> & {
   vitrine_de_logos?: Array<{ caminho: string; nome?: string; url_origem?: string }>;
   vitrine_tipo?: string;
-  fontes_reais?: Array<{ caminho: string; nome: string; fonte_url: string; licenca: string; autor: string | null; tipo: "imagem" | "logo" }>;
+  fontes_reais?: Array<{ caminho: string; nome: string; fonte_url: string; licenca: string; autor: string | null; tipo: "imagem" | "logo"; banco?: "wikimedia" | "openverse" | "noticias" | "pexels" }>;
   /** Fotos do post feitas pelo gerador da casa no Template (sem texto dentro). */
   imagens_do_template?: Array<{ caminho: string; descricao?: string; proporcao?: string; criado_em?: string }>;
 };
 export type { CardComFontes };
 /** Banco de onde veio a imagem real pesquisada, pelo endereço da página da licença. */
-function origemDaPesquisa(url: string, tipo: "imagem" | "logo"): string {
+function origemDaPesquisa(url: string, tipo: "imagem" | "logo", f?: { banco?: string; autor?: string | null }): string {
   const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
-  const banco = /wikimedia\.org$|wikipedia\.org$/.test(host) ? "Wikimedia" : /openverse\.org$/.test(host) ? "Openverse" : host.replace(/^www\./, "");
+  // 23/10: foto de matéria mostra o veículo ("Notícia · Forbes Brasil"); Pexels pelo nome.
+  if (f && f.banco === "noticias") return `Notícia · ${f.autor || host.replace(/^www\./, "")}`;
+  const banco = f && f.banco === "pexels" || /pexels\.com$/.test(host) ? "Pexels" : /wikimedia\.org$|wikipedia\.org$/.test(host) ? "Wikimedia" : /openverse\.org$/.test(host) ? "Openverse" : host.replace(/^www\./, "");
   if (tipo === "logo") return banco ? `Logo real · ${banco}` : "Logo real da pesquisa";
   return banco ? `Imagem real · ${banco}` : "Imagem real da pesquisa";
 }
@@ -65,7 +67,7 @@ export function fontesDoProfile(card: CardComFontes, acervo: ImagemDoAcervo[], c
   const tipo = card.vitrine_tipo || "";
   const origem = tipo.startsWith("pagina_real") ? "Captura real da pesquisa" : tipo === "marca_real" ? "Logo real da pesquisa" : tipo === "pessoa_real" ? "Foto real da pesquisa" : "Imagem real da direção";
   (card.vitrine_de_logos || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome || "Imagem real", origem, url: urlDaFonteProfile(f.url_origem) || urlDaFonteProfile(f.nome), exata: true, grupo: "internet" }));
-  (card.fontes_reais || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome, origem: origemDaPesquisa(f.fonte_url, f.tipo), url: urlDaFonteProfile(f.fonte_url), licenca: f.licenca || undefined, autor: f.autor || undefined, exata: true, grupo: "internet" }));
+  (card.fontes_reais || []).forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.nome, origem: origemDaPesquisa(f.fonte_url, f.tipo, f), url: urlDaFonteProfile(f.fonte_url), licenca: f.licenca || undefined, autor: f.autor || undefined, exata: true, grupo: "internet" }));
   // As geradas por último na lista, mas a mais nova primeiro entre elas.
   [...(card.imagens_do_template || [])].reverse().forEach((f) => adicionar({ caminho: f.caminho, bucket: "mesa", nome: f.descricao ? f.descricao.slice(0, 80) : "Foto gerada", origem: "Foto sem texto", exata: false, grupo: "gerada" }));
   return saida;

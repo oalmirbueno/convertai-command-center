@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   acoesDoCarrossel,
   ESQUEMA_DO_CARROSSEL_X,
+  itensDaBuscaNoArquivo,
+  licencaDoArquivo,
+  videoDoArquivo,
   lerCarrosselGerado,
   midiaPorRegra,
   perguntasDaMidia,
@@ -12,6 +15,9 @@ import {
 } from "../../supabase/functions/estudio-arte/modulos/template-carrossel";
 import type { TrabalhoDaGeracao } from "../../supabase/functions/estudio-arte/modulos/template-geracao";
 import { normalizarTemplateProfile } from "../../supabase/functions/estudio-arte/modulos/template-profile";
+import {
+  acoesDasFontesReais, LICENCA_DA_NOTICIA, lerArquivoDaNoticia, metasDaMateria, noticiasDoRss, resultadoDoPexels, type DepsDasFontesReais,
+} from "../../supabase/functions/estudio-arte/modulos/fontes-reais-do-diretor";
 
 /** Carrossel estilo post do X (22/10): regras puras do servidor (gerador, Jev, vídeos reais, MP4 da lâmina). */
 const CLIENTE = "11111111-1111-4111-8111-111111111111";
@@ -189,3 +195,131 @@ describe("normalizador do carrossel no salvar_template", () => {
 
 function base() { return { versao: 1, estilo: "carrossel", nome: "Cliente", username: "cliente", texto: "Texto", cor_fundo: "#ffffff" }; }
 function template_ok() { return normalizarTemplateProfile({ ...base(), bloco: { tipo: "imagem", midia: { bucket: "mesa", caminho: `${CLIENTE}/estudio/a.jpg`, origem: "internet", credito: { fonte: "Wikimedia", autor: "X", licenca: "CC BY 4.0", url: "https://commons.wikimedia.org/a" } } } }, CLIENTE, erro); }
+
+// ------------------------------------------------------------------ 23/10: notícias, Pexels, Internet Archive e o Jev
+
+const RSS = `<?xml version="1.0"?><rss><channel><title>x</title>
+<item><title>Carro el&#233;trico bate recorde</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=https%3a%2f%2fforbes.com.br%2fmotors%2fcarro%2f&amp;c=1</link><pubDate>Fri, 23 Oct 2026 01:00:00 GMT</pubDate><News:Source>Forbes Brasil</News:Source><News:Image>http://www.bing.com/th?id=ONUT.abc123&amp;pid=News</News:Image></item>
+<item><title>Sem imagem</title><link>https://g1.globo.com/a</link><News:Source>g1</News:Source></item>
+<item><title>Link interno</title><link>http://www.bing.com/news/apiclick.aspx?url=http%3a%2f%2f127.0.0.1%2fx</link><News:Image>http://www.bing.com/th?id=OVP.zzz9&amp;pid=News</News:Image></item>
+</channel></rss>`;
+const MATERIA = `<html><head><meta content="https://forbes.com.br/wp/carro-1200.jpg" property="og:image"><meta property="og:site_name" content="Forbes Brasil"><meta property="og:title" content="Carro elétrico bate recorde &amp; vende"></head></html>`;
+const FOTO_PEXELS = { id: 77, url: "https://www.pexels.com/photo/77/", photographer: "Bia", alt: "Carro carregando", src: { large2x: "https://images.pexels.com/77-l.jpg", medium: "https://images.pexels.com/77-m.jpg" } };
+const TEXTO_DA_LAMINA = "Carro **elétrico** bate recorde no Brasil";
+
+type TrabalhoDaBusca = { id: string; client_id: string; status: string; tipo: string; entrega_status: null; direcao: { cards: Array<{ ordem: number; texto_exato: string }> }; cards: Array<{ ordem: number; versao: number }> };
+function fontesReais(o: { semTexto?: boolean; semPexels?: boolean; jev?: string; ogFalha?: boolean } = {}) {
+  let atual: TrabalhoDaBusca = { id: TRABALHO, client_id: CLIENTE, status: "dirigido", tipo: "social", entrega_status: null, direcao: { cards: [{ ordem: 1, texto_exato: TEXTO_DA_LAMINA }] }, cards: [] };
+  const textoDaWeb = vi.fn(async (url: URL) => (url.hostname === "www.bing.com" ? { url, texto: RSS } : { url, texto: MATERIA }));
+  const jsonDoPexels = vi.fn(async (url: string) => (url.includes("/search") ? { photos: [FOTO_PEXELS] } : FOTO_PEXELS));
+  const perguntarJev = vi.fn(async (..._a: unknown[]) => ({ answers: { melhor: { choice: o.jev || "r2", confidence: 0.83 } }, custoUsd: 0.0012 }));
+  const baixar = vi.fn(async (url: URL, _limite: number, _permitir: (u: URL) => boolean) => (o.ogFalha && url.hostname === "forbes.com.br" ? null : { url, bytes: new Uint8Array([1]) }));
+  const deps: DepsDasFontesReais<typeof ch, TrabalhoDaBusca> = {
+    erro, json: (b) => new Response(JSON.stringify(b)), trabalhoComAcesso: vi.fn(async () => structuredClone(atual)),
+    mutarTrabalho: vi.fn(async (_id, mudar) => { atual = { ...atual, ...mudar(structuredClone(atual)) } as TrabalhoDaBusca; return structuredClone(atual); }),
+    jsonDoCommons: vi.fn(async () => ({ query: { search: [] } })), jsonDoOpenverse: vi.fn(async () => ({ results: [] })),
+    ...(o.semTexto ? {} : { textoDaWeb }), ...(o.semPexels ? {} : { jsonDoPexels }), perguntarJev,
+    buscarImagem: baixar, validarImagem: () => "image/jpeg", guardarImagem: vi.fn(async () => `${CLIENTE}/estudio/fontes-reais/n.jpg`),
+    descartarUpload: vi.fn(async () => undefined), ehPostDeFotos: () => false,
+  };
+  return { acoes: acoesDasFontesReais(deps), textoDaWeb, jsonDoPexels, perguntarJev, baixar, ler: () => atual };
+}
+const usar = (arquivo: string) => ({ trabalho_id: TRABALHO, ordem: 1, texto_base: TEXTO_DA_LAMINA, versao_esperada: 0, arquivo });
+
+describe("imagens de notícias (Bing Notícias e a og:image da matéria)", () => {
+  it("lê o RSS: matéria fora do embrulho do Bing, veículo, data e miniatura; recusa sem imagem e endereço interno", () => {
+    const r = noticiasDoRss(RSS);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ nome: "Carro elétrico bate recorde", autor: "Forbes Brasil", data: "2026-10-23", banco: "noticias", fonte_url: "https://forbes.com.br/motors/carro/", licenca: LICENCA_DA_NOTICIA });
+    expect(r[0].url).toContain("id=ONUT.abc123");
+    expect(lerArquivoDaNoticia(r[0].arquivo)).toMatchObject({ imagemId: "ONUT.abc123" });
+    expect(lerArquivoDaNoticia("noticia:http%3A%2F%2F10.0.0.1%2Fx|ONUT.a1b2")).toBeNull();
+  });
+  it("as metas da matéria valem em qualquer ordem de atributos e com entidades", () => {
+    const m = metasDaMateria(MATERIA, new URL("https://forbes.com.br/motors/carro/"));
+    expect(m).toEqual({ imagem: new URL("https://forbes.com.br/wp/carro-1200.jpg"), veiculo: "Forbes Brasil", titulo: "Carro elétrico bate recorde & vende" });
+  });
+  it("usar a notícia relê a matéria: a og:image entra com o veículo no crédito; se falhar, a miniatura do Bing", async () => {
+    const c = fontesReais();
+    const arquivo = noticiasDoRss(RSS)[0].arquivo;
+    const r = await json(await c.acoes.imagem_real_aplicar(ch, usar(arquivo)));
+    expect(c.baixar.mock.calls[0][0].href).toBe("https://forbes.com.br/wp/carro-1200.jpg");
+    expect(r.fonte).toMatchObject({ banco: "noticias", autor: "Forbes Brasil", nome: "Carro elétrico bate recorde & vende", fonte_url: "https://forbes.com.br/motors/carro/", licenca: LICENCA_DA_NOTICIA });
+    const f = fontesReais({ ogFalha: true });
+    await f.acoes.imagem_real_aplicar(ch, usar(arquivo));
+    expect(f.baixar.mock.calls.map((x) => x[0].hostname)).toEqual(["forbes.com.br", "www.bing.com"]);
+  });
+  it("busca só de notícias avisa do uso editorial; sem o leitor da web, 501", async () => {
+    const r = await json(await fontesReais().acoes.imagens_reais_buscar(ch, { trabalho_id: TRABALHO, ordem: 1, consulta: "carro elétrico", banco: "noticias" }));
+    expect(r.resultados).toHaveLength(1);
+    expect(r.avisos.join(" ")).toContain("crédito");
+    await expect(fontesReais({ semTexto: true }).acoes.imagens_reais_buscar(ch, { trabalho_id: TRABALHO, ordem: 1, consulta: "carro", banco: "noticias" })).rejects.toMatchObject({ status: 501 });
+  });
+});
+
+describe("Tudo: notícias, Pexels, Wikimedia e Openverse juntos; o Jev escolhe a melhor (cobrado)", () => {
+  it("intercala os bancos e, com ordenar jev, põe a escolhida primeiro e devolve o custo", async () => {
+    const c = fontesReais({ jev: "r2" });
+    const r = await json(await c.acoes.imagens_reais_buscar(ch, { trabalho_id: TRABALHO, ordem: 1, consulta: "carro elétrico", banco: "todos", ordenar: "jev" }));
+    expect(c.perguntarJev).toHaveBeenCalledTimes(1);
+    const [, estado, perguntas] = c.perguntarJev.mock.calls[0] as unknown as [unknown, { lamina: { texto: string } }, { melhor: { type: string; criteria: Record<string, string> } }];
+    expect(estado.lamina.texto).toBe("Carro elétrico bate recorde no Brasil");
+    expect(perguntas.melhor.type).toBe("choice");
+    expect(Object.keys(perguntas.melhor.criteria)).toEqual(["r1", "r2"]);
+    expect(r.resultados.map((x: { banco: string }) => x.banco)).toEqual(["pexels", "noticias"]);
+    expect(r).toMatchObject({ melhor: { indice: 0, confianca: 0.83, por: "jev" }, custo_usd: 0.0012 });
+  });
+  it("sem ordenar, nada de Jev nem custo; sem chave do Pexels, avisa e segue", async () => {
+    const c = fontesReais({ semPexels: true });
+    const r = await json(await c.acoes.imagens_reais_buscar(ch, { trabalho_id: TRABALHO, ordem: 1, consulta: "carro elétrico", banco: "todos" }));
+    expect(c.perguntarJev).not.toHaveBeenCalled();
+    expect(r.custo_usd).toBe(0);
+    expect(r.resultados.map((x: { banco: string }) => x.banco)).toEqual(["noticias"]);
+    expect(r.avisos.join(" ")).toContain("Pexels");
+  });
+  it("Pexels Fotos: relido na API ao usar, com o fotógrafo no crédito", async () => {
+    expect(resultadoDoPexels(FOTO_PEXELS)).toMatchObject({ arquivo: "pexels:77", autor: "Bia", url: "https://images.pexels.com/77-l.jpg", banco: "pexels" });
+    const c = fontesReais();
+    const r = await json(await c.acoes.imagem_real_aplicar(ch, usar("pexels:77")));
+    expect(c.jsonDoPexels).toHaveBeenCalledWith("https://api.pexels.com/v1/photos/77");
+    expect(r.fonte).toMatchObject({ banco: "pexels", autor: "Bia", fonte_url: "https://www.pexels.com/photo/77/" });
+  });
+});
+
+describe("vídeos do Internet Archive e o Jev na busca de vídeo", () => {
+  const busca = { response: { docs: [{ identifier: "carro-eletrico", title: "Carro elétrico", creator: "TV Cultura", licenseurl: "https://creativecommons.org/licenses/by/4.0/" }, { identifier: "nc", title: "NC", licenseurl: "https://creativecommons.org/licenses/by-nc/4.0/" }] } };
+  const item = { metadata: { mediatype: "movies", title: "Carro elétrico", creator: "TV Cultura", licenseurl: "https://creativecommons.org/licenses/by/4.0/" }, files: [
+    { name: "carro.mp4", format: "h.264", size: "90000000", height: "1080" },
+    { name: "carro_512kb.mp4", format: "512Kb MPEG4", size: "20000000", height: "480", length: "41.5" },
+    { name: "carro_64kb.mp4", size: "5000000", height: "120" },
+  ] };
+  it("licença: domínio público e CC sem NC; o MP4 até 60 MB e 720 px", () => {
+    expect(licencaDoArquivo("http://creativecommons.org/licenses/publicdomain/")).toBe("Domínio público");
+    expect(licencaDoArquivo("https://creativecommons.org/licenses/by-nc-sa/4.0/")).toBeNull();
+    expect(itensDaBuscaNoArquivo(busca).map((i) => i.id)).toEqual(["carro-eletrico"]);
+    expect(videoDoArquivo("carro-eletrico", item)).toMatchObject({ banco: "arquivo", url: "https://archive.org/download/carro-eletrico/carro_512kb.mp4", licenca: "CC BY 4.0", autor: "TV Cultura", duracao_s: 41.5, altura: 480 });
+  });
+  it("sem chave do Pexels a busca segue no Commons e no Archive; o Jev escolhe e o aplicar relê o item", async () => {
+    const c = cenario();
+    const jsonDoArquivo = vi.fn(async (url: string) => (url.includes("advancedsearch") ? busca : item));
+    c.jev.mockResolvedValueOnce({ answers: { melhor: { choice: "v2", confidence: 0.9 } } as never, custoUsd: 0.001 });
+    const acoes = acoesDoCarrossel({ ...c.deps, jsonDoPexels: null, jsonDoArquivo });
+    const r = await json(await acoes.template_videos_buscar(ch, { trabalho_id: TRABALHO, ordem: 1, consulta: "carro elétrico", ordenar: "jev" }));
+    expect(r.resultados.map((v: { banco: string }) => v.banco)).toEqual(["arquivo", "wikimedia"]);
+    expect(r).toMatchObject({ melhor: { indice: 0, por: "jev" }, custo_usd: 0.001 });
+    await acoes.template_video_aplicar(ch, { trabalho_id: TRABALHO, ordem: 1, banco: "arquivo", id: "carro-eletrico" });
+    expect(c.deps.baixarVideo).toHaveBeenCalledWith("https://archive.org/download/carro-eletrico/carro_512kb.mp4", expect.any(Number));
+    await expect(acoes.template_video_aplicar(ch, { trabalho_id: TRABALHO, ordem: 1, banco: "arquivo", id: "../x" })).rejects.toMatchObject({ codigo: "video_real_indisponivel" });
+  });
+  it("o custo do gerador conta um Jev por lâmina para escolher a mídia achada", async () => {
+    const c = cenario();
+    await expect(c.acoes.template_carrossel(ch, { trabalho_id: TRABALHO, ordem: 1, assunto: "Meta" })).rejects.toMatchObject({ detalhes: { custo_estimado_usd: 0.036 } });
+  });
+});
+
+describe("cor de fundo da lâmina e crédito", () => {
+  it("o crédito escrito na lâmina passa pelo normalizador", () => {
+    const t = normalizarTemplateProfile({ ...base(), cor_fundo: "#7a1f3d", bloco: { tipo: "imagem", credito_visivel: true, midia: { bucket: "mesa", caminho: `${CLIENTE}/estudio/a.jpg`, origem: "internet", credito: { fonte: "Notícia · Forbes Brasil", autor: null, licenca: LICENCA_DA_NOTICIA, url: "https://forbes.com.br/x" } } } }, CLIENTE, erro);
+    expect(t).toMatchObject({ cor_fundo: "#7a1f3d", bloco: { credito_visivel: true } });
+  });
+});

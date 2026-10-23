@@ -1,12 +1,12 @@
 import { lazy, Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Camera, Check, Clapperboard, ExternalLink, FileText, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Camera, Check, Clapperboard, ExternalLink, FileDown, FileText, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { textoDoErro } from "@/lib/mesa/api";
-import { AjudaRecolhida, botao, juntar, SeletorCompacto, texto } from "@/components/sistema";
+import { botao, juntar, SeletorCompacto, texto } from "@/components/sistema";
 import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
@@ -17,7 +17,10 @@ import { porFase } from "./areasDaCampanha";
 import { gerarRoteiroDeVideo, partesDoRoteiroDeVideo } from "./passosDaCampanha";
 import { usePedidos } from "@/components/mesa-videos/videosApi";
 import { ROTULO_DO_ESTADO_DO_PEDIDO } from "../../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
-import { direcaoDoRoteiro, faltasDoRoteiro, normalizarRoteiroDeVideo, type CenaDoRoteiro, type RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
+import { direcaoDoRoteiro, faltasDoRoteiro, MAX_CENAS, MAX_SEGUNDOS_DA_CENA, normalizarRoteiroDeVideo, type CenaDoRoteiro, type RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
+import { rotuloDaDuracao } from "../../../supabase/functions/agente-calendario/modulos/agente-de-roteiro";
+import AgenteDeRoteiro from "./AgenteDeRoteiro";
+import { nomeDoArquivoDoRoteiro, roteiroDoDocumento } from "./documentoDoRoteiroDeVideo";
 
 /**
  * Vídeos e Reels da campanha (22/10/2026, dono: "roteiros de vídeos ali mesmo, tudo de forma intuitiva e
@@ -52,7 +55,7 @@ export function rascunhoDaMesaDeVideos(item: ItemProposto, r: RoteiroDeVideo | n
 }
 
 function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNoEstudio }: { campanha: Campanha; propostaId: string; item: ItemProposto; trilhaDaCampanha: string; onAbrirNoEstudio?: (taskId: string, mes: string) => void }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId, catalogo, clientName } = useMesa();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const salvo = normalizarRoteiroDeVideo((item as ItemProposto & { roteiro_video?: unknown }).roteiro_video);
@@ -65,19 +68,45 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
   const roteiro = r || salvo;
   const mudar = (m: Partial<RoteiroDeVideo>) => setR((x) => ({ ...((x || salvo || { gancho: "", cenas: [cenaVazia(1)], duracao: 4, trilha: trilhaDaCampanha, cta: item.cta || "" }) as RoteiroDeVideo), ...m }));
   const mudarCena = (k: number, m: Partial<CenaDoRoteiro>) => mudar({ cenas: (roteiro ? roteiro.cenas : []).map((c, i) => (i === k ? { ...c, ...m } : c)) });
+  const gravar = async (novo: RoteiroDeVideo) => {
+    const data = await editarItemDaProposta(propostaId, item.tema_id || "", { roteiro_video: novo });
+    if (data && data.proposta) qc.setQueryData(chaves.proposta(propostaId), data.proposta);
+    else void qc.invalidateQueries({ queryKey: chaves.proposta(propostaId) });
+    setR(null);
+  };
   const salvar = async () => {
     if (!r) return;
     setSalvando(true);
     try {
-      const data = await editarItemDaProposta(propostaId, item.tema_id || "", { roteiro_video: r });
-      if (data && data.proposta) qc.setQueryData(chaves.proposta(propostaId), data.proposta);
-      else void qc.invalidateQueries({ queryKey: chaves.proposta(propostaId) });
-      setR(null);
+      await gravar(r);
       toast.success("Roteiro salvo", { description: "A direção do vídeo acompanhou o roteiro." });
     } catch (e) {
       toast.error("Roteiro não salvo", { description: textoDoErro(e) });
     } finally {
       setSalvando(false);
+    }
+  };
+  // 23/10/2026: o roteiro em PDF ou Word, no mesmo documento da Mesa Roteiros.
+  const [baixando, setBaixando] = useState<"pdf" | "docx" | null>(null);
+  const baixar = async (tipo: "pdf" | "docx") => {
+    if (!roteiro) return;
+    setBaixando(tipo);
+    try {
+      const doc = roteiroDoDocumento(roteiro, item.tema || "");
+      if (tipo === "pdf") {
+        const { baixarBytes, itemSolto, montarPdf } = await import("@/components/mesa-roteiros/pdfNoNavegador");
+        const { bytes, nome } = montarPdf(clientName || "Cliente", [itemSolto(doc)]);
+        baixarBytes(bytes, nome);
+      } else {
+        const [{ baixarDocumentoDoLab, docxDoProjeto }, { textoDoRoteiro }] = await Promise.all([import("@/lib/laboratorio/exportar"), import("./GravarVideoDaCampanha")]);
+        const nome = nomeDoArquivoDoRoteiro(doc.titulo);
+        const blob = await docxDoProjeto({ nome, titulo: doc.titulo, markdown: textoDoRoteiro(doc), json: "", totalNos: 0, totalExecucoes: 0, pendencias: [] });
+        baixarDocumentoDoLab(blob, `${nome}.docx`);
+      }
+    } catch (e) {
+      toast.error(tipo === "pdf" ? "PDF não gerado" : "Word não gerado", { description: textoDoErro(e) });
+    } finally {
+      setBaixando(null);
     }
   };
   const abrir = () => {
@@ -99,7 +128,7 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
           <span className="block truncate text-[13px] font-medium">{item.tema || "Vídeo"}</span>
           <span className="block truncate text-[11px] text-muted-foreground">
             {String(item.data || "").slice(8, 10)}/{String(item.data || "").slice(5, 7)} · {item.task_id ? "na agenda" : "fora da agenda"}
-            {roteiro ? ` · ${total}s` : ""}
+            {roteiro ? ` · ${rotuloDaDuracao(total)}` : ""}
             {doVideo.length ? ` · vídeo: ${ROTULO_DO_ESTADO_DO_PEDIDO[doVideo[0].estado] || doVideo[0].estado}` : ""}
           </span>
         </span>
@@ -125,6 +154,13 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
       </div>
       {roteiro && (
         <div className="mt-2 min-w-0 space-y-2">
+          {(roteiro.titulo || roteiro.conceito) && (
+            <p className="min-w-0 text-[12px] leading-4" data-conceito-do-roteiro="">
+              {roteiro.titulo && <span className="font-medium">{roteiro.titulo}</span>}
+              {roteiro.titulo && roteiro.conceito ? ": " : ""}
+              {roteiro.conceito && <span className="text-muted-foreground">{roteiro.conceito}</span>}
+            </p>
+          )}
           <label className="block text-[11px] font-medium text-muted-foreground">
             Gancho
             <Input value={roteiro.gancho} onChange={(e) => mudar({ gancho: e.target.value })} className="mt-1 h-8 text-[13px]" aria-label={`Gancho de ${item.tema}`} />
@@ -134,7 +170,7 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
               <li key={k} className="min-w-0 rounded-md bg-muted/50 p-2" data-cena={k + 1}>
                 <div className="flex min-w-0 items-center">
                   <span className="mr-2 text-[11px] font-medium text-muted-foreground">Cena {k + 1}</span>
-                  <Input type="number" min={1} max={20} value={c.segundos} onChange={(e) => mudarCena(k, { segundos: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })} className="h-7 w-16 text-[12px]" aria-label={`Segundos da cena ${k + 1}`} />
+                  <Input type="number" min={1} max={MAX_SEGUNDOS_DA_CENA} value={c.segundos} onChange={(e) => mudarCena(k, { segundos: Math.max(1, Math.min(MAX_SEGUNDOS_DA_CENA, Number(e.target.value) || 1)) })} className="h-7 w-16 text-[12px]" aria-label={`Segundos da cena ${k + 1}`} />
                   <span className="ml-1 text-[11px] text-muted-foreground">s</span>
                   <button type="button" className={juntar(botao.icone, "ml-auto h-7 w-7")} onClick={() => mudar({ cenas: roteiro.cenas.filter((_x, i) => i !== k) })} disabled={roteiro.cenas.length <= 1} aria-label={`Tirar a cena ${k + 1}`} title={`Tirar a cena ${k + 1}`}>
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -144,6 +180,8 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
                 <div className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2">
                   <Input value={c.fala} onChange={(e) => mudarCena(k, { fala: e.target.value })} placeholder="Fala" className="h-8 text-[12px]" aria-label={`Fala da cena ${k + 1}`} />
                   <Input value={c.texto_na_tela} onChange={(e) => mudarCena(k, { texto_na_tela: e.target.value })} placeholder="Texto na tela" className="h-8 text-[12px]" aria-label={`Texto na tela da cena ${k + 1}`} />
+                  <Input value={c.plano || ""} onChange={(e) => mudarCena(k, { plano: e.target.value })} placeholder="Câmera (plano e movimento)" className="h-8 text-[12px]" aria-label={`Câmera da cena ${k + 1}`} />
+                  <Input value={c.som || ""} onChange={(e) => mudarCena(k, { som: e.target.value })} placeholder="Som (efeito, trilha, silêncio)" className="h-8 text-[12px]" aria-label={`Som da cena ${k + 1}`} />
                 </div>
               </li>
             ))}
@@ -159,8 +197,15 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
             </label>
           </div>
           <div className="flex min-w-0 items-center">
-            <button type="button" className={juntar(botao.icone, "mr-auto")} onClick={() => mudar({ cenas: roteiro.cenas.concat([cenaVazia(roteiro.cenas.length + 1)]).slice(0, 8) })} disabled={roteiro.cenas.length >= 8} aria-label="Acrescentar cena" title="Acrescentar cena">
+            <button type="button" className={botao.icone} onClick={() => mudar({ cenas: roteiro.cenas.concat([cenaVazia(roteiro.cenas.length + 1)]).slice(0, MAX_CENAS) })} disabled={roteiro.cenas.length >= MAX_CENAS} aria-label="Acrescentar cena" title="Acrescentar cena">
               <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" className={juntar(botao.barra, "mr-auto")} onClick={() => void baixar("pdf")} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${item.tema || "o vídeo"} em PDF`} title="Baixar o roteiro (PDF)">
+              {baixando === "pdf" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <FileDown className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
+              PDF
+            </button>
+            <button type="button" className={juntar(botao.barra, "mr-2")} onClick={() => void baixar("docx")} disabled={baixando !== null} aria-label={`Baixar o roteiro de ${item.tema || "o vídeo"} em Word`} title="Baixar o roteiro (Word)">
+              Word
             </button>
             {faltas.length > 0 && <span className="mr-2 text-[11px] text-warning">Falta: {faltas.join(", ")}</span>}
             {editando && (
@@ -174,12 +219,21 @@ function RoteiroDaPeca({ campanha, propostaId, item, trilhaDaCampanha, onAbrirNo
           </div>
         </div>
       )}
-      {/* 22/10: só o estado na tela; o como fazer vai para o "?" (docs/design/SISTEMA.md, seção 5). */}
-      {!roteiro && caminho === "roteiro" && (
-        <p className={juntar(texto.auxiliar, "mt-1 flex items-center")}>
-          Sem roteiro ainda.
-          <AjudaRecolhida className="ml-1" rotulo="Como ter o roteiro">Gere pelo agente da campanha ou pelo botão, ou escolha Gravar ou Gerar.</AjudaRecolhida>
-        </p>
+      {/* 23/10/2026: o agente de roteiro mora na própria peça (ideia, duração, versões e conversa). */}
+      {caminho === "roteiro" && (
+        <div className="mt-3 min-w-0">
+          <AgenteDeRoteiro
+            campanha={campanha}
+            propostaId={propostaId}
+            item={item}
+            roteiro={roteiro}
+            aoEscolher={async (v) => {
+              await gravar(v);
+              toast.success("Roteiro escolhido", { description: "Ficou salvo na peça; ajuste à vontade." });
+            }}
+            aoAjustar={(v) => setR(v)}
+          />
+        </div>
       )}
       <SeletorCompacto
         opcoes={CAMINHOS_DO_VIDEO}

@@ -2497,6 +2497,14 @@
       "remote_name": "lamina_de_video_do_carrossel",
       "remote_statements_sha256": "4a2cc9900396a2db82cadf45cfc3b4d6e485320fa530e699cacaedc41185ac0b",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261023160000",
+      "path": "supabase/migrations/20261023160000_carrossel_com_video.sql",
+      "local_sha256": "259395bb47c970bc3385ea933f7ffaeeba03d3e20a42ad6c0bba179dde879f8f",
+      "remote_name": "carrossel_com_video",
+      "remote_statements_sha256": "01d90ebd51e1bfc73ea3f70e37622b004a3064a6afe49ae982061a897395bbf1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -16,10 +16,10 @@ describe("fontes reais no Diretor", () => {
     fireEvent.click(screen.getByText(/Imagens reais · lâmina/));
     expect(api).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Buscar na Wikimedia" }));
-    await screen.findByRole("button", { name: "Usar na lâmina" });
+    await screen.findByRole("button", { name: /Usar na lâmina/ });
     expect(api).toHaveBeenCalledOnce();
-    expect(screen.getByRole("link", { name: "Conferir fonte e licença" })).toHaveAttribute("href", fonte.fonte_url);
-    fireEvent.click(screen.getByRole("button", { name: "Usar na lâmina" }));
+    expect(screen.getByRole("link", { name: /Conferir fonte e licença/ })).toHaveAttribute("href", fonte.fonte_url);
+    fireEvent.click(screen.getByRole("button", { name: /Usar na lâmina/ }));
     await waitFor(() => expect(atualizar).toHaveBeenCalledOnce());
     expect(api.mock.calls[1][1]).toMatchObject({ acao: "imagem_real_aplicar", trabalho_id: "trabalho", ordem: 1, arquivo: fonte.arquivo, versao_esperada: 3, texto_base: "Google Analytics" });
     expect(screen.getByRole("status")).toHaveTextContent("Selecione a imagem no Template");
@@ -41,5 +41,32 @@ describe("fontes reais no Diretor", () => {
     expect(screen.getByRole("button", { name: "Buscar na Wikimedia" })).toBeDisabled();
     expect(screen.getByLabelText("Link da imagem real")).toBeDisabled();
     expect(api).not.toHaveBeenCalled();
+  });
+});
+
+describe("busca de imagens reais em grade, com notícias e Tudo (23/10)", () => {
+  it("no Template abre em Tudo; os achados mostram banco, veículo e data, e a imagem usada volta com a origem", async () => {
+    const noticia = { arquivo: "noticia:https%3A%2F%2Fforbes.com.br%2Fx|ONUT.a1b2", nome: "Carro bate recorde", url: "https://www.bing.com/th?id=ONUT.a1b2", miniatura_url: "https://www.bing.com/th?id=ONUT.a1b2&w=480", fonte_url: "https://forbes.com.br/x", licenca: "Imagem da matéria", autor: "Forbes Brasil", banco: "noticias", data: "2026-10-23" };
+    const usada = { nome: "Carro bate recorde", caminho: "cliente/estudio/fontes-reais/n.jpg", fonte_url: "https://forbes.com.br/x", licenca: "Imagem da matéria", autor: "Forbes Brasil", banco: "noticias" };
+    api.mockResolvedValueOnce({ resultados: [noticia, { ...fonte, banco: "wikimedia" }], melhor: { indice: 0 }, avisos: ["Fotos de matérias são do veículo: use com o crédito."] }).mockResolvedValueOnce({ fonte: usada });
+    const aplicada = vi.fn();
+    render(<ImagensReaisDoDiretor embutido trabalho={trabalho} ordem={1} bloqueado={false} onAtualizar={vi.fn()} onAplicada={aplicada} consultaInicial="carro elétrico" />);
+    expect(screen.getByRole("button", { name: "Tudo" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Notícias" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Assunto das imagens reais")).toHaveValue("carro elétrico");
+    fireEvent.click(screen.getByRole("button", { name: "Buscar em todos" }));
+    await screen.findByRole("list", { name: "Imagens encontradas" });
+    expect(api.mock.calls[0][1]).toMatchObject({ acao: "imagens_reais_buscar", banco: "todos", consulta: "carro elétrico" });
+    expect(screen.getByText("Notícia · Forbes Brasil · 23/10")).toBeInTheDocument();
+    expect(screen.getByText("Melhor")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usar na lâmina: Carro bate recorde" }));
+    await waitFor(() => expect(aplicada).toHaveBeenCalledWith(usada));
+    expect(api.mock.calls[1][1]).toMatchObject({ acao: "imagem_real_aplicar", arquivo: noticia.arquivo });
+  });
+  it("logo não oferece notícias nem Pexels", () => {
+    render(<ImagensReaisDoDiretor embutido trabalho={trabalho} ordem={1} bloqueado={false} onAtualizar={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Tipo de imagem real"), { target: { value: "logo" } });
+    expect(screen.queryByRole("button", { name: "Notícias" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pexels" })).not.toBeInTheDocument();
   });
 });

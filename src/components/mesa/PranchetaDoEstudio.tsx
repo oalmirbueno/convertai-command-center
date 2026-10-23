@@ -134,6 +134,11 @@ type Props = {
   acoes?: (card: CardDaDirecao, versao: CardGerado | undefined) => ReactNode;
   /** Template · X (21/10): o desenho do card no lugar da arte (o post do X da lâmina), com os mesmos controles. */
   miniatura?: (card: CardDaDirecao, versao: CardGerado | undefined) => ReactNode;
+  /**
+   * 23/10: o estado sob a lâmina sem versão guardada, no lugar do "sem arte" (no Template, a lâmina já pode
+   * ter mídia escolhida antes de guardar).
+   */
+  estadoSemVersao?: (card: CardDaDirecao) => ReactNode;
   /** Versão sob a lâmina, clicável (abre as versões na ferramenta Lâmina). */
   onVersoes?: (ordem: number) => void;
   /** Ícone de ajuste sob a lâmina com arte (abre o ajuste na ferramenta Lâmina). */
@@ -303,6 +308,7 @@ function Lamina({
   ultima,
   acoes,
   miniatura,
+  estadoSemVersao,
 }: {
   card: CardDaDirecao;
   total: number;
@@ -323,6 +329,7 @@ function Lamina({
   ultima: boolean;
   acoes?: ReactNode;
   miniatura?: ReactNode;
+  estadoSemVersao?: ReactNode;
 }) {
   const id = String(card.ordem);
   const arrasto = useDraggable({ id, disabled: !arrastavel });
@@ -349,7 +356,7 @@ function Lamina({
           type="button"
           onClick={onSelecionar}
           onDoubleClick={() => { if (versao && onAmpliar) onAmpliar(); }}
-          aria-label={`Lâmina ${card.ordem}, ${funcao}${versao ? "" : ", sem arte"}`}
+          aria-label={`Lâmina ${card.ordem}, ${funcao}${versao ? "" : estadoSemVersao ? ", ainda não guardada" : ", sem arte"}`}
           aria-pressed={ativo}
           title={versao ? "Clique para escolher; duplo clique para ver grande" : "Clique para escolher"}
           style={{ height: altura }}
@@ -398,7 +405,7 @@ function Lamina({
               v{versao.versao}
             </button>
           ) : (
-            !versao && <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">sem arte</span>
+            !versao && (estadoSemVersao || <span className="ml-1 shrink-0 text-[11px] text-muted-foreground">sem arte</span>)
           )}
           {arrastavel && (
             <span
@@ -449,6 +456,7 @@ export default function PranchetaDoEstudio({
   onReordenar,
   acoes,
   miniatura,
+  estadoSemVersao,
   onVersoes,
   onAjustar,
 }: Props) {
@@ -496,6 +504,7 @@ export default function PranchetaDoEstudio({
           ultima={i === cards.length - 1}
           acoes={acoes ? acoes(c, ultimas.get(c.ordem)) : undefined}
           miniatura={miniatura ? miniatura(c, ultimas.get(c.ordem)) : undefined}
+          estadoSemVersao={estadoSemVersao && !ultimas.get(c.ordem) ? estadoSemVersao(c) : undefined}
         />
       ))}
     </ul>

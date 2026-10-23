@@ -16,7 +16,7 @@ export interface NumerosDoPost {
  * texto com trechos em negrito) e um BLOCO DE MÍDIA desenhado por código. A mídia entra inteira
  * no bloco: foto, vídeo, gráfico ou card de manchete; nada é colado por cima de arte gerada.
  */
-export type TipoDoBloco = "imagem" | "video" | "grafico" | "manchete" | "nenhum";
+export type TipoDoBloco = "imagem" | "video" | "grafico" | "manchete" | "perfil" | "nenhum";
 export type OrigemDaMidia = "internet" | "gerada" | "enviada" | "workspace" | "acervo" | "cliente";
 export interface CreditoDaMidia { fonte: string; autor: string | null; licenca: string; url: string }
 export interface MidiaDoBloco {
@@ -28,7 +28,8 @@ export interface MidiaDoBloco {
   credito?: CreditoDaMidia;
 }
 export interface GraficoDoBloco {
-  tipo: "barras" | "linha" | "pizza" | "tabela";
+  /** "numero" (23/10): um número grande com o rótulo embaixo. */
+  tipo: "barras" | "linha" | "pizza" | "tabela" | "numero";
   titulo?: string;
   unidade?: string;
   /** Barras, linha e pizza. */
@@ -40,6 +41,21 @@ export interface GraficoDoBloco {
   fonte?: string;
 }
 export interface MancheteDoBloco { veiculo: string; titulo: string; linha_fina?: string; data?: string; url?: string; cor?: string }
+/**
+ * O "print" do perfil na última lâmina (23/10, dono: "no último card, o print do perfil com a bio e o seguir"):
+ * desenhado por código com os dados de Redes, no jeito do Instagram ou do X. A foto é a do perfil do template.
+ */
+export interface PerfilDoBloco {
+  estilo: "instagram" | "x";
+  nome: string;
+  username: string;
+  bio?: string;
+  site?: string;
+  posts?: number;
+  seguidores?: number;
+  seguindo?: number;
+  verificado?: boolean;
+}
 export interface BlocoDaLamina {
   tipo: TipoDoBloco;
   /** Onde o bloco fica: abaixo do texto, acima (logo depois do perfil) ou no meio dos parágrafos. */
@@ -58,8 +74,11 @@ export interface BlocoDaLamina {
   midia?: MidiaDoBloco;
   grafico?: GraficoDoBloco;
   manchete?: MancheteDoBloco;
+  perfil?: PerfilDoBloco;
   /** Gravar o ícone de som desligado na peça (o Instagram já mostra o dele nas lâminas de vídeo). */
   som_na_peca?: boolean;
+  /** 23/10: o crédito da mídia (fonte e autor) escrito embaixo do bloco, como nas matérias. */
+  credito_visivel?: boolean;
 }
 
 export interface TemplateProfile {
@@ -224,9 +243,9 @@ export function caminhoDaMidiaDoCliente(bucket: unknown, caminho: unknown, clien
   return false;
 }
 
-const TIPOS_DO_BLOCO = ["imagem", "video", "grafico", "manchete", "nenhum"];
+const TIPOS_DO_BLOCO = ["imagem", "video", "grafico", "manchete", "perfil", "nenhum"];
 const ORIGENS_DA_MIDIA = ["internet", "gerada", "enviada", "workspace", "acervo", "cliente"];
-const TIPOS_DO_GRAFICO = ["barras", "linha", "pizza", "tabela"];
+const TIPOS_DO_GRAFICO = ["barras", "linha", "pizza", "tabela", "numero"];
 
 /** Bloco de mídia do carrossel: só campos conhecidos, números dentro da faixa e mídia do próprio cliente. */
 function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, clientId: string, erro: Erro) {
@@ -250,7 +269,7 @@ function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, cli
   }
   const b = objeto(o.bloco);
   const tipo = b.tipo === undefined ? "nenhum" : b.tipo;
-  if (typeof tipo !== "string" || TIPOS_DO_BLOCO.indexOf(tipo) < 0) throw erro(400, "bloco_template_invalido", "Escolha o tipo do bloco: imagem, vídeo, gráfico, manchete ou nenhum.");
+  if (typeof tipo !== "string" || TIPOS_DO_BLOCO.indexOf(tipo) < 0) throw erro(400, "bloco_template_invalido", "Escolha o tipo do bloco: imagem, vídeo, gráfico, manchete, perfil ou nenhum.");
   const posicao = b.posicao === undefined ? "abaixo" : b.posicao;
   if (posicao !== "abaixo" && posicao !== "acima" && posicao !== "meio") throw erro(400, "bloco_template_invalido", "Escolha o lugar do bloco: acima, no meio ou abaixo do texto.");
   const enquadramento = b.enquadramento === undefined ? "inteira" : b.enquadramento;
@@ -267,6 +286,7 @@ function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, cli
     enquadramento, foco_x: foco(b.foco_x), foco_y: foco(b.foco_y),
   };
   if (sim(b.som_na_peca)) bloco.som_na_peca = true;
+  if (sim(b.credito_visivel)) bloco.credito_visivel = true;
   if (tipo === "imagem" || tipo === "video") {
     const m = objeto(b.midia);
     if (!caminhoDaMidiaDoCliente(m.bucket, m.caminho, clientId)) throw erro(400, "midia_template_invalida", "A mídia do bloco precisa ser deste cliente (pasta do cliente ou Workspace dele).");
@@ -286,7 +306,7 @@ function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, cli
   }
   if (tipo === "grafico") {
     const g = objeto(b.grafico);
-    if (typeof g.tipo !== "string" || TIPOS_DO_GRAFICO.indexOf(g.tipo) < 0) throw erro(400, "grafico_template_invalido", "Escolha barras, linha, pizza ou tabela.");
+    if (typeof g.tipo !== "string" || TIPOS_DO_GRAFICO.indexOf(g.tipo) < 0) throw erro(400, "grafico_template_invalido", "Escolha barras, linha, pizza, número grande ou tabela.");
     const dados = (Array.isArray(g.dados) ? g.dados : []).map(objeto);
     if (dados.length > 12) throw erro(400, "grafico_template_invalido", "Use até 12 números no gráfico.");
     const grafico: GraficoDoBloco = {
@@ -302,6 +322,9 @@ function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, cli
       const linhas = (Array.isArray(g.linhas) ? g.linhas : []).map((l) => (Array.isArray(l) ? l : []).map((c) => linha(c, 40)));
       if (colunas.length < 1 || colunas.length > 5 || linhas.length < 1 || linhas.length > 8 || linhas.some((l) => l.length !== colunas.length)) throw erro(400, "grafico_template_invalido", "A tabela precisa de 1 a 5 colunas e 1 a 8 linhas completas.");
       grafico.colunas = colunas; grafico.linhas = linhas;
+    } else if (g.tipo === "numero") {
+      if (grafico.dados.length < 1) throw erro(400, "grafico_template_invalido", "O número grande precisa de um valor.");
+      grafico.dados = grafico.dados.slice(0, 1);
     } else if (grafico.dados.length < 2) throw erro(400, "grafico_template_invalido", "O gráfico precisa de pelo menos dois números.");
     const titulo = linha(g.titulo, 90); if (titulo) grafico.titulo = titulo;
     const unidade = linha(g.unidade, 12); if (unidade) grafico.unidade = unidade;
@@ -323,6 +346,25 @@ function normalizarCarrossel(o: Record<string, unknown>, t: TemplateProfile, cli
       manchete.cor = n.cor.toLowerCase();
     }
     bloco.manchete = manchete;
+  }
+  if (tipo === "perfil") {
+    const f = objeto(b.perfil);
+    if (f.estilo !== "instagram" && f.estilo !== "x") throw erro(400, "perfil_template_invalido", "Escolha o perfil no jeito do Instagram ou do X.");
+    const usuario = linha(f.username, 31, true).replace(/^@/, "");
+    if (!/^[a-zA-Z0-9_.]{1,30}$/.test(usuario)) throw erro(400, "perfil_template_invalido", "O @ do perfil só aceita letras, números, ponto e sublinhado.");
+    const perfil: PerfilDoBloco = { estilo: f.estilo, nome: linha(f.nome, 80, true), username: usuario };
+    const bioBruta = f.bio === undefined || f.bio === null ? "" : f.bio;
+    if (typeof bioBruta !== "string" || bioBruta.length > 300 || /[\t<>]/.test(bioBruta)) throw erro(400, "perfil_template_invalido", "A bio do perfil está inválida ou longa demais.");
+    if (bioBruta.trim()) perfil.bio = bioBruta.replace(/\r/g, "").trim();
+    const site = linha(f.site, 80); if (site) perfil.site = site;
+    for (const k of ["posts", "seguidores", "seguindo"] as const) {
+      const v = f[k];
+      if (v === undefined || v === null || v === "") continue;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 9_999_999_999) throw erro(400, "perfil_template_invalido", "Os números do perfil precisam ser inteiros.");
+      perfil[k] = v;
+    }
+    if (sim(f.verificado)) perfil.verificado = true;
+    bloco.perfil = perfil;
   }
   t.bloco = bloco;
 }

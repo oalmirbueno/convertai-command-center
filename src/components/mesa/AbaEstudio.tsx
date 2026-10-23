@@ -209,6 +209,7 @@ const EstudioDaPauta = lazy(() => import("./EstudioDaPauta"));
 const TemplateProfileEditor = lazy(() => import("./profile/TemplateProfileEditor"));
 // 21/10 (rodada 3): no modo Template, o card da prancheta mostra o post do X da lâmina (mesmos controles).
 const MiniaturaDoPostX = lazy(() => import("./profile/MiniaturaDoPostX"));
+const EstadoDaLaminaNoTemplate = lazy(() => import("./profile/MiniaturaDoPostX").then((m) => ({ default: m.EstadoDaLaminaNoTemplate })));
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
@@ -1648,6 +1649,9 @@ export function DetalheDoItem({
         <Suspense fallback={null}>
           <MiniaturaDoPostX trabalhoId={trabalho.id} clientId={clientId} card={c} versao={v} posicao={{ atual: cardsDaDirecao.findIndex((x) => x.ordem === c.ordem) + 1, total: cardsDaDirecao.length }} />
         </Suspense>
+      ) : undefined}
+      estadoSemVersao={emTemplate && trabalho ? (c) => (
+        <Suspense fallback={null}><EstadoDaLaminaNoTemplate trabalhoId={trabalho.id} clientId={clientId} card={c} /></Suspense>
       ) : undefined}
     />
   );

@@ -15,10 +15,10 @@ import { useAcervo } from "../SeletorDoAcervo";
 import { BotaoComCusto } from "../Custo";
 import ImagensReaisDoDiretor from "../ImagensReaisDoDiretor";
 import { formatoDoTrabalho, gravarTrabalhoNoCache, useEstadoGuardado, type TrabalhoGravado } from "../estudioUtil";
-import { esquecerRascunhos, lerRascunhoGuardado, publicarBaseDoTemplate, useRascunhoCompartilhado } from "./rascunhoDoTemplate";
+import { chaveDoRascunho, esquecerRascunhos, gravarRascunho, lerRascunhoGuardado, publicarBaseDoTemplate, useRascunhoCompartilhado } from "./rascunhoDoTemplate";
 import PainelDoCarrossel from "./PainelDoCarrossel";
 import { blocoInicialDaLamina, carregarMidiaDoBloco, midiaParaCarregar, pendenciaDoBloco, type CardDoCarrossel } from "./blocoDaLamina";
-import { textoSemMarcas, type ResultadoDoCarrossel } from "./renderCarrossel";
+import { FUNDOS_PRONTOS, textoSemMarcas, type ResultadoDoCarrossel } from "./renderCarrossel";
 import type { CardDaDirecao, CardGerado, Trabalho } from "../useItensDoMes";
 import { carregarImagemProfile, desenharProfile, TEMPO_PADRAO, type FormatoProfile, type RetanguloProfile } from "./renderProfile";
 import { chaveDaFonteProfile, fontesDoProfile, pontoNaImagemProfile, referenciaDaFonteProfile, resolverFonteProfile, ROTULO_DO_GRUPO, type CardComFontes, type FonteProfile, type GrupoDaFonte } from "./fontesDoProfile";
@@ -55,6 +55,18 @@ const ORIGENS: Array<{ valor: Origem; rotulo: string }> = [
 const proporcaoDaFoto = (t: Pick<TemplateProfile, "estilo" | "proporcao">): "16:9" | "1:1" | "4:5" | "9:16" =>
   t.estilo === "story" ? "9:16" : t.estilo === "instagram" ? (t.proporcao === "1:1" ? "1:1" : "4:5") : t.proporcao === "1:1" ? "1:1" : "16:9";
 
+/**
+ * A aparência que cada lâmina guarda no próprio rascunho (23/10): o "Aplicar a todas" copia estes campos para
+ * as outras lâminas, e o Montar todas usa os de cada uma (a lâmina nunca aberta herda os da lâmina aberta).
+ */
+export const CAMPOS_DA_APARENCIA = ["tema", "cor_fundo", "tamanho_texto", "peso_texto", "seta", "rodape_cinza", "verificado", "espacamento"] as const;
+export type CampoDaAparencia = (typeof CAMPOS_DA_APARENCIA)[number];
+const aparenciaDe = (a: Partial<TemplateProfile>): Partial<TemplateProfile> => {
+  const r: Partial<TemplateProfile> = {};
+  for (const k of CAMPOS_DA_APARENCIA) if (a[k] !== undefined) (r as Record<string, unknown>)[k] = a[k];
+  return r;
+};
+
 /** Partes da estimativa (moram em partesDoTemplate.ts; o painel do carrossel usa as mesmas). */
 export { partesDaFotoDoTemplate, partesDoTextoDoTemplate };
 
@@ -75,11 +87,18 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const bloqueado = bloqueadoDeFora || ["aguardando_agencia", "aguardando_cliente", "aprovado", "agendado"].includes(trabalho.entrega_status || "");
   const livre = mesa.carteira === "laboratorio";
   const salvo = metadados(ultimaVersao(trabalho, card.ordem));
-  const chave = `mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:${card.ordem}`;
+  const chaveDe = (ordem: number) => chaveDoRascunho(mesa.clientId, marca?.id, trabalho.id, ordem);
+  const chave = chaveDe(card.ordem);
   // Carrossel estilo X (22/10): lâmina com sugestão do gerador e sem versão abre direto no modelo novo, com o bloco sugerido.
   const cardDoCarrossel = card as CardDoCarrossel;
+  /** O rascunho inicial de uma lâmina: a versão guardada dela, ou a sugestão do gerador, ou o padrão. */
+  const inicialDe = (c: CardDaDirecao): Ajustes => {
+    const s0 = metadados(ultimaVersao(trabalho, c.ordem));
+    const estilo = s0?.estilo || ((c as CardDoCarrossel).carrossel ? "carrossel" : PADRAO.estilo);
+    return { ...PADRAO, ...s0, estilo, nome: s0?.nome ?? null, username: s0?.username ?? null, texto: s0?.texto ?? c.texto_exato ?? "", texto_base: c.texto_exato || "", ...(estilo === "carrossel" ? { bloco: blocoInicialDaLamina(c as CardDoCarrossel, s0, mesa.clientId), seta: s0?.seta ?? true } : {}) };
+  };
   const estiloInicial = salvo?.estilo || (cardDoCarrossel.carrossel ? "carrossel" : PADRAO.estilo);
-  const [ajustes, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, { ...PADRAO, ...salvo, estilo: estiloInicial, nome: salvo?.nome ?? null, username: salvo?.username ?? null, texto: salvo?.texto ?? card.texto_exato ?? "", texto_base: card.texto_exato || "", ...(estiloInicial === "carrossel" ? { bloco: blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId), seta: salvo?.seta ?? true } : {}) });
+  const [ajustes, setAjustes] = useRascunhoCompartilhado<Ajustes>(chave, inicialDe(card));
   const [origem, setOrigem] = useEstadoGuardado<Origem>(`mesa:template:origem:${trabalho.id}`, "gerar");
   const [contaId, setContaId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false), [pronto, setPronto] = useState(false), [erro, setErro] = useState("");
@@ -194,6 +213,22 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   }, [assinatura, formato, avatarUrl, foto.data, urlDaMidia.data, fotosPendentes, erroDasFontes, fonte?.exata, quadro, posicao.atual, posicao.total]);
 
   const mudar = <K extends keyof Ajustes>(k: K, valor: Ajustes[K]) => setAjustes((a) => ({ ...a, [k]: valor }));
+  /**
+   * "Aplicar a todas as lâminas" (23/10, dono: "se eu selecionei um tamanho de texto posso aplicar para todas"):
+   * os campos de aparência vão para o rascunho de cada lâmina (a que nunca abriu ganha o rascunho inicial dela
+   * com eles). A prévia e as miniaturas mudam na hora; nada é guardado sem o Guardar ou o Montar todas.
+   */
+  const aplicarATodas = (patch: Partial<Pick<TemplateProfile, CampoDaAparencia>>) => {
+    for (const c of cardsOrdenados) {
+      if (c.ordem === card.ordem) { setAjustes((a) => ({ ...a, ...patch })); continue; }
+      const antes = lerRascunhoGuardado<Ajustes>(chaveDe(c.ordem)) || inicialDe(c);
+      // O modelo segue o da lâmina aberta (carrossel com o bloco da lâmina), para ela abrir igual às outras.
+      const doModelo = ajustes.estilo === "carrossel" && antes.estilo !== "carrossel" ? { estilo: "carrossel" as const, bloco: antes.bloco || blocoInicialDaLamina(c as CardDoCarrossel, metadados(ultimaVersao(trabalho, c.ordem)), mesa.clientId), seta: antes.seta ?? true } : {};
+      gravarRascunho<Ajustes>(chaveDe(c.ordem), { ...antes, ...doModelo, ...patch });
+    }
+  };
+  /** O selo é do perfil: marcar ou tirar vale para todas as lâminas de uma vez. */
+  const mudarSelo = (v: boolean) => aplicarATodas({ verificado: v });
   const mudarNumero = (k: keyof NumerosDoPost, v: number | undefined) => setAjustes((a) => {
     const numeros = { ...(a.numeros || {}) };
     if (v === undefined) delete numeros[k]; else numeros[k] = v;
@@ -228,11 +263,12 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         const esta = c.ordem === card.ordem;
         if (template.estilo === "carrossel") {
           // Carrossel X: o bloco de cada lâmina vem do rascunho dela, da versão guardada ou da sugestão do gerador.
-          const chaveDela = `mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:${c.ordem}`;
-          const blocoDela = esta ? template.bloco : lerRascunhoGuardado<Ajustes>(chaveDela)?.bloco || blocoInicialDaLamina(c as CardDoCarrossel, salvoDoCard, mesa.clientId);
+          const rascunhoDela = esta ? null : lerRascunhoGuardado<Ajustes>(chaveDe(c.ordem));
+          const blocoDela = esta ? template.bloco : rascunhoDela?.bloco || blocoInicialDaLamina(c as CardDoCarrossel, salvoDoCard, mesa.clientId);
           const falta = pendenciaDoBloco(blocoDela);
           if (falta) throw new Error(`Lâmina ${c.ordem}: ${falta.toLowerCase()}.`);
-          const cfgC: TemplateProfile = { ...template, texto: esta ? template.texto : c.texto_exato || "", bloco: blocoDela };
+          // A aparência é a do rascunho de cada lâmina (fundo, tamanho, selo); sem rascunho, a da lâmina aberta.
+          const cfgC: TemplateProfile = { ...template, ...(rascunhoDela ? aparenciaDe(rascunhoDela) : {}), texto: esta ? template.texto : c.texto_exato || "", bloco: blocoDela };
           const m = midiaParaCarregar(blocoDela);
           const url = m ? await supabase.storage.from(m.bucket).createSignedUrl(m.caminho, 3600) : null;
           if (url?.error) throw url.error;
@@ -259,7 +295,8 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
         if (template.estilo === "instagram" && !f) throw new Error(`A lâmina ${c.ordem} está sem imagem. O post do Instagram precisa de uma foto em cada lâmina.`);
         // No Instagram o texto é a legenda do post, a mesma em todas as lâminas do carrossel.
         const textoDoCard = esta || template.estilo === "instagram" ? template.texto : c.texto_exato || "";
-        const cfg: TemplateProfile = { ...template, ...referenciaDaFonteProfile(f), texto: textoDoCard };
+        const rascunhoDoCard = esta ? null : lerRascunhoGuardado<Ajustes>(chaveDe(c.ordem));
+        const cfg: TemplateProfile = { ...template, ...(rascunhoDoCard ? aparenciaDe(rascunhoDoCard) : {}), ...referenciaDaFonteProfile(f), texto: textoDoCard };
         // Cada ponto pertence à sua própria fonte autorizada, inclusive ao montar o lote.
         if (!esta) cfg.destaque = f && (salvoDoCard?.imagem_acervo_id || salvoDoCard?.imagem_caminho) ? salvoDoCard.destaque : undefined;
         const imagemUrl = f ? await supabase.storage.from(f.bucket).createSignedUrl(f.caminho, 3600) : null;
@@ -442,7 +479,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     <div className="flex flex-wrap items-center">
       <Button size="sm" variant="outline" className="mb-1 mr-2" disabled={travado} onClick={() => upload.current?.click()}><Upload className="mr-1 h-3.5 w-3.5" />Foto do perfil</Button>
       {ajustes.foto_caminho && <Button size="sm" variant="ghost" className="mb-1 mr-2" disabled={travado} onClick={() => setAjustes((a) => ({ ...a, foto_caminho: undefined }))}>{livre ? "Usar iniciais" : "Usar foto de Redes"}</Button>}
-      <label className="mb-1 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={ajustes.verificado} disabled={travado} onChange={(e) => mudar("verificado", e.target.checked)} />Exibir selo no layout</label>
+      <label className="mb-1 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={ajustes.verificado} disabled={travado} onChange={(e) => mudarSelo(e.target.checked)} />Exibir selo em todas as lâminas</label>
       <AjudaRecolhida className="mb-1 ml-1" rotulo="Quando usar o selo">Marque só quando o perfil do cliente tem verificação de verdade. O selo é desenho do template, não confirmação da rede.</AjudaRecolhida>
     </div>
     {!ehCarrossel && <div className="border-t border-border pt-3">
@@ -504,7 +541,7 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
   const numeros = ajustes.numeros || {};
   // Cores da marca: a paleta da marca aberta e a do kit lido em Redes, sem repetir; a cor livre fica no seletor.
   const coresDaMarca = Array.from(new Set([...(marca?.paleta || []).map((c) => (c.hex || "").toLowerCase()), ...(perfil.data?.kit?.paleta || []).map((c) => (c.hex || "").toLowerCase())].filter((h) => /^#[0-9a-f]{6}$/.test(h)))).slice(0, 8);
-  const fundos = Array.from(new Set(["#ffffff", "#000000", "#15202b", ...coresDaMarca]));
+  const fundos = Array.from(new Set([...FUNDOS_PRONTOS.map((f) => f.cor as string), ...coresDaMarca]));
   type CampoNumerico = "tamanho_texto" | "tamanho_foto" | "midia" | "escala" | "espacamento" | "arredondamento";
   const regua = (c: { campo: CampoNumerico; rotulo: string; min: number; max: number; padrao: number; sufixo?: string }) => {
     const valor = (ajustes[c.campo] as number | undefined) ?? c.padrao;
@@ -517,40 +554,54 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
       <input aria-label={c.rotulo} type="range" min={c.min} max={c.max} value={valor} disabled={travado} onChange={(e) => setAjustes((a) => ({ ...a, [c.campo]: Number(e.target.value) }))} className="mt-1 w-full accent-primary" />
     </div>;
   };
-  const conteudoDaAparencia = <div className="space-y-4">
-    {ajustes.estilo !== "story" && <Segmentado rotulo="Tema do post" opcoes={temas} valor={ajustes.tema === "dim" && !ehX ? "escuro" : ajustes.tema} onEscolher={(t) => setAjustes((a) => ({ ...a, tema: t, cor_fundo: FUNDO_DO_TEMA[t] }))} desativado={travado} />}
-    <div className="min-w-0">
-      <p className={juntar(texto.rotulo, "mb-1.5")}>Cor de fundo da arte</p>
-      <div role="group" aria-label="Cores de fundo" className="flex flex-wrap items-center">
-        {fundos.map((cor) => <button key={cor} type="button" aria-label={`Fundo ${cor}${coresDaMarca.indexOf(cor) >= 0 ? " (cor da marca)" : ""}`} title={coresDaMarca.indexOf(cor) >= 0 ? `Cor da marca ${cor}` : cor} aria-pressed={ajustes.cor_fundo.toLowerCase() === cor} disabled={travado} onClick={() => mudar("cor_fundo", cor)} className={juntar("toque-compacto mb-1.5 mr-1.5 h-7 w-7 rounded-full border transition-shadow", ajustes.cor_fundo.toLowerCase() === cor ? "border-primary ring-2 ring-primary" : "border-border")} style={{ backgroundColor: cor }} />)}
-        <label className="mb-1.5 inline-flex items-center text-[12px] text-muted-foreground">Livre<input aria-label="Cor de fundo do template" type="color" className="ml-1.5 h-7 w-9 cursor-pointer rounded-md border border-border bg-transparent" value={ajustes.cor_fundo} disabled={travado} onChange={(e) => mudar("cor_fundo", e.target.value)} /></label>
+  // 23/10 (dono: "ajustes mais intuitivos, tanto do Instagram quanto do X"): a aparência em três partes à
+  // vista, Fundo, Texto e perfil, e Mídia, cada uma com o que muda nela.
+  const subtitulo = (t: string) => <p className={juntar(texto.rotulo, "font-semibold text-foreground")}>{t}</p>;
+  const conteudoDaAparencia = <div className="space-y-5">
+    <div className="space-y-3" data-aparencia="fundo">
+      {subtitulo("Fundo")}
+      {ajustes.estilo !== "story" && <Segmentado rotulo="Tema do post" opcoes={temas} valor={ajustes.tema === "dim" && !ehX ? "escuro" : ajustes.tema} onEscolher={(t) => setAjustes((a) => ({ ...a, tema: t, cor_fundo: FUNDO_DO_TEMA[t] }))} desativado={travado} />}
+      <div className="min-w-0">
+        <p className={juntar(texto.rotulo, "mb-1.5")}>Cor de fundo da arte</p>
+        <div role="group" aria-label="Cores de fundo" className="flex flex-wrap items-center">
+          {fundos.map((cor) => <button key={cor} type="button" aria-label={`Fundo ${cor}${coresDaMarca.indexOf(cor) >= 0 ? " (cor da marca)" : ""}`} title={coresDaMarca.indexOf(cor) >= 0 ? `Cor da marca ${cor}` : FUNDOS_PRONTOS.find((f) => f.cor === cor)?.rotulo || cor} aria-pressed={ajustes.cor_fundo.toLowerCase() === cor} disabled={travado} onClick={() => mudar("cor_fundo", cor)} className={juntar("toque-compacto mb-1.5 mr-1.5 h-8 w-8 rounded-full border transition-shadow", ajustes.cor_fundo.toLowerCase() === cor ? "border-primary ring-2 ring-primary" : "border-border")} style={{ backgroundColor: cor }} />)}
+          <label className="mb-1.5 inline-flex items-center text-[12px] text-muted-foreground">Livre<input aria-label="Cor de fundo do template" type="color" className="ml-1.5 h-8 w-10 cursor-pointer rounded-md border border-border bg-transparent" value={ajustes.cor_fundo} disabled={travado} onChange={(e) => mudar("cor_fundo", e.target.value)} /></label>
+        </div>
+        {coresDaMarca.length === 0 && <p className={texto.auxiliar}>Sem paleta da marca: use a cor livre.</p>}
       </div>
-      {coresDaMarca.length === 0 && <p className={texto.auxiliar}>Sem paleta da marca: use a cor livre.</p>}
+      <div className="grid min-w-0 gap-3">
+        {regua({ campo: "escala", rotulo: "Escala do post", min: 50, max: 150, padrao: 100, sufixo: "%" })}
+        {regua({ campo: "espacamento", rotulo: "Respiro em volta", min: 16, max: 96, padrao: 48 })}
+        {regua({ campo: "arredondamento", rotulo: "Cantos do post", min: 0, max: 48, padrao: 24 })}
+      </div>
     </div>
-    <div className="grid min-w-0 gap-3">
-      {regua({ campo: "tamanho_texto", rotulo: "Tamanho do texto", min: 24, max: 56, padrao: 34 })}
-      {ajustes.estilo !== "story" && regua({ campo: "tamanho_foto", rotulo: "Tamanho do avatar", min: 40, max: 120, padrao: 88 })}
-      {ehX && regua({ campo: "midia", rotulo: "Tamanho da mídia", min: 40, max: 100, padrao: 100, sufixo: "%" })}
-      {regua({ campo: "escala", rotulo: "Escala do post", min: 50, max: 150, padrao: 100, sufixo: "%" })}
-      {regua({ campo: "espacamento", rotulo: "Respiro em volta", min: 16, max: 96, padrao: 48 })}
-      {regua({ campo: "arredondamento", rotulo: "Cantos do post", min: 0, max: 48, padrao: 24 })}
+    <div className="space-y-3 border-t border-border pt-4" data-aparencia="texto">
+      {subtitulo("Texto e perfil")}
+      <div className="grid min-w-0 gap-3">
+        {regua({ campo: "tamanho_texto", rotulo: "Tamanho do texto", min: 24, max: 56, padrao: 34 })}
+        {ajustes.estilo !== "story" && regua({ campo: "tamanho_foto", rotulo: "Tamanho do avatar", min: 40, max: 120, padrao: 88 })}
+      </div>
+      <div className="flex flex-wrap">
+        <label className="mb-1 mr-4 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={!ajustes.ocultar_numeros} disabled={travado} onChange={(e) => mudar("ocultar_numeros", e.target.checked ? undefined : true)} />Mostrar números</label>
+        <label className="mb-1 mr-4 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={ajustes.verificado} disabled={travado} onChange={(e) => mudarSelo(e.target.checked)} />Mostrar selo</label>
+        <label className="mb-1 mr-4 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={!ajustes.ocultar_tempo} disabled={travado} onChange={(e) => mudar("ocultar_tempo", e.target.checked ? undefined : true)} />Mostrar tempo</label>
+        {ehX && cardsOrdenados.length > 1 && <label className="mb-1 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={!!ajustes.fio} disabled={travado} onChange={(e) => mudar("fio", e.target.checked || undefined)} />Linha do fio</label>}
+      </div>
+      <div className="grid min-w-0 gap-3">
+        {!ajustes.ocultar_tempo && <label className={juntar("block min-w-0", texto.rotulo)}>Tempo<Input aria-label="Tempo do post" value={ajustes.tempo || ""} maxLength={24} disabled={travado} placeholder={TEMPO_PADRAO[ajustes.estilo]} onChange={(e) => mudar("tempo", e.target.value || undefined)} className="mt-1" /></label>}
+        {ehInstagram && <label className={juntar("block min-w-0", texto.rotulo)}>Local<Input aria-label="Local do post" value={ajustes.local || ""} maxLength={60} disabled={travado} placeholder="Opcional" onChange={(e) => mudar("local", e.target.value || undefined)} className="mt-1" /></label>}
+      </div>
+      {ehX && !ajustes.ocultar_numeros && <div className="grid min-w-0 grid-cols-2 gap-3">
+        <NumeroOpcional rotulo="Respostas" valor={numeros.respostas} onMudar={(v) => mudarNumero("respostas", v)} desativado={travado} />
+        <NumeroOpcional rotulo="Reposts" valor={numeros.reposts} onMudar={(v) => mudarNumero("reposts", v)} desativado={travado} />
+        <NumeroOpcional rotulo="Curtidas" valor={numeros.curtidas} onMudar={(v) => mudarNumero("curtidas", v)} desativado={travado} />
+        <NumeroOpcional rotulo="Visualizações" valor={numeros.visualizacoes} onMudar={(v) => mudarNumero("visualizacoes", v)} desativado={travado} />
+      </div>}
     </div>
-    <div className="flex flex-wrap border-t border-border pt-3">
-      <label className="mb-1 mr-4 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={!ajustes.ocultar_numeros} disabled={travado} onChange={(e) => mudar("ocultar_numeros", e.target.checked ? undefined : true)} />Mostrar números</label>
-      <label className="mb-1 mr-4 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={ajustes.verificado} disabled={travado} onChange={(e) => mudar("verificado", e.target.checked)} />Mostrar selo</label>
-      <label className="mb-1 mr-4 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={!ajustes.ocultar_tempo} disabled={travado} onChange={(e) => mudar("ocultar_tempo", e.target.checked ? undefined : true)} />Mostrar tempo</label>
-      {ehX && cardsOrdenados.length > 1 && <label className="mb-1 inline-flex items-center text-[12px]"><input type="checkbox" className="mr-1.5" checked={!!ajustes.fio} disabled={travado} onChange={(e) => mudar("fio", e.target.checked || undefined)} />Linha do fio</label>}
-    </div>
-    {ajustes.estilo !== "story" && <Segmentado rotulo="Proporção da mídia" opcoes={ehX ? [{ valor: "16:9", rotulo: "16:9" }, { valor: "1:1", rotulo: "1:1" }] : [{ valor: "4:5", rotulo: "4:5" }, { valor: "1:1", rotulo: "1:1" }]} valor={ajustes.proporcao || (ehX ? "16:9" : "4:5")} onEscolher={(p) => mudar("proporcao", p as TemplateProfile["proporcao"])} desativado={travado} />}
-    <div className="grid min-w-0 gap-3">
-      {!ajustes.ocultar_tempo && <label className={juntar("block min-w-0", texto.rotulo)}>Tempo<Input aria-label="Tempo do post" value={ajustes.tempo || ""} maxLength={24} disabled={travado} placeholder={TEMPO_PADRAO[ajustes.estilo]} onChange={(e) => mudar("tempo", e.target.value || undefined)} className="mt-1" /></label>}
-      {ehInstagram && <label className={juntar("block min-w-0", texto.rotulo)}>Local<Input aria-label="Local do post" value={ajustes.local || ""} maxLength={60} disabled={travado} placeholder="Opcional" onChange={(e) => mudar("local", e.target.value || undefined)} className="mt-1" /></label>}
-    </div>
-    {ehX && !ajustes.ocultar_numeros && <div className="grid min-w-0 grid-cols-2 gap-3">
-      <NumeroOpcional rotulo="Respostas" valor={numeros.respostas} onMudar={(v) => mudarNumero("respostas", v)} desativado={travado} />
-      <NumeroOpcional rotulo="Reposts" valor={numeros.reposts} onMudar={(v) => mudarNumero("reposts", v)} desativado={travado} />
-      <NumeroOpcional rotulo="Curtidas" valor={numeros.curtidas} onMudar={(v) => mudarNumero("curtidas", v)} desativado={travado} />
-      <NumeroOpcional rotulo="Visualizações" valor={numeros.visualizacoes} onMudar={(v) => mudarNumero("visualizacoes", v)} desativado={travado} />
+    {ajustes.estilo !== "story" && <div className="space-y-3 border-t border-border pt-4" data-aparencia="midia">
+      {subtitulo("Mídia")}
+      <Segmentado rotulo="Proporção da mídia" opcoes={ehX ? [{ valor: "16:9", rotulo: "16:9" }, { valor: "1:1", rotulo: "1:1" }] : [{ valor: "4:5", rotulo: "4:5" }, { valor: "1:1", rotulo: "1:1" }]} valor={ajustes.proporcao || (ehX ? "16:9" : "4:5")} onEscolher={(p) => mudar("proporcao", p as TemplateProfile["proporcao"])} desativado={travado} />
+      {ehX && <div className="grid min-w-0 gap-3">{regua({ campo: "midia", rotulo: "Tamanho da mídia", min: 40, max: 100, padrao: 100, sufixo: "%" })}</div>}
     </div>}
   </div>;
 
@@ -564,9 +615,10 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     {!ehX && <label className={juntar("block", texto.rotulo)}>{ehInstagram ? "Legenda do post" : "Texto do Story"}<Textarea aria-label="Texto do template" value={ajustes.texto} maxLength={2200} rows={5} disabled={travado} onChange={(e) => mudar("texto", e.target.value)} className="mt-1" /></label>}
   </div>;
   const mudarBloco = (patch: Partial<BlocoDaLamina>) => setAjustes((a) => ({ ...a, bloco: { ...(a.bloco || blocoInicialDaLamina(cardDoCarrossel, salvo, mesa.clientId)), ...patch } }));
-  const aoGerarCarrossel = (novo: TrabalhoGravado) => {
-    // As lâminas abrem com o texto novo e a mídia sugerida: os rascunhos antigos do trabalho saem.
-    esquecerRascunhos(`mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:`);
+  const aoGerarCarrossel = (novo: TrabalhoGravado, soEsta = false) => {
+    // As lâminas abrem com o texto novo e a mídia sugerida: os rascunhos antigos do trabalho saem
+    // (só esta lâmina, quando o pedido foi "Preencher esta lâmina").
+    if (!soEsta) esquecerRascunhos(`mesa:profile:v1:${mesa.clientId}:${marca?.id || "-"}:${trabalho.id}:`);
     const doCard = ((novo as unknown as Trabalho).direcao?.cards || []).find((c) => c.ordem === card.ordem) as CardDoCarrossel | undefined;
     setAjustes((a) => ({ ...a, estilo: "carrossel", texto: doCard?.texto_exato || a.texto, texto_base: doCard?.texto_exato || a.texto_base, bloco: doCard ? blocoInicialDaLamina(doCard, undefined, mesa.clientId) : a.bloco }));
   };
@@ -574,7 +626,9 @@ export default function TemplateProfileEditor({ trabalho, card, bloqueado: bloqu
     const painelDoCarrossel = <div className="min-w-0 space-y-4" data-ferramenta-template="" data-modelo-carrossel="">
       <PainelDoCarrossel trabalho={trabalho} card={card} cards={cardsOrdenados} fontes={fontes} bloco={bloco!} travado={travado}
         ajustes={{ tema: ajustes.tema, cor_fundo: ajustes.cor_fundo, tamanho_texto: ajustes.tamanho_texto, peso_texto: ajustes.peso_texto, seta: ajustes.seta, rodape_cinza: ajustes.rodape_cinza }}
-        onBloco={mudarBloco} onAjuste={(k, v) => setAjustes((a) => ({ ...a, [k]: v }))} onMudou={onMudou} onGerado={aoGerarCarrossel} onAbrirFotos={onAbrirFotos} modeloSeletor={peca} />
+        onBloco={mudarBloco} onAjuste={(k, v) => setAjustes((a) => ({ ...a, [k]: v }))} onMudou={onMudou} onGerado={aoGerarCarrossel} onAbrirFotos={onAbrirFotos} modeloSeletor={peca} coresDaMarca={coresDaMarca}
+        perfilDeRedes={!livre && perfil.data && perfil.data.perfil.username ? perfil.data.perfil : null} verificado={!!ajustes.verificado}
+        onAplicarATodas={cardsOrdenados.length > 1 ? (campos) => { aplicarATodas(aparenciaDe(Object.fromEntries(campos.map((k) => [k, ajustes[k]])) as Partial<TemplateProfile>)); toast.success(`Aplicado nas ${cardsOrdenados.length} lâminas`, { description: "Confira as miniaturas e use Montar todas as lâminas para guardar." }); } : undefined} />
       {secao("Perfil", conteudoDoPerfil)}
     </div>;
     if (parte === "painel") return <div aria-label="Ajustes do template" className="min-w-0">{painelDoCarrossel}</div>;

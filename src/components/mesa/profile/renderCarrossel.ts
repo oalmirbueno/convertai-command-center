@@ -1,4 +1,4 @@
-import type { BlocoDaLamina, GraficoDoBloco, MancheteDoBloco, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
+import type { BlocoDaLamina, GraficoDoBloco, MancheteDoBloco, PerfilDoBloco, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
 
 /**
  * Carrossel estilo post do X (22/10/2026, referências de Rafael Milagre e Thiago Concer).
@@ -20,6 +20,61 @@ export const CORES_DO_CARROSSEL = {
   claro: { texto: "#0f1419", cinza: "#536471", borda: "#e1e8ed", cartao: "#ffffff", fundoMidia: "#f2f4f5", grade: "#e6ecf0", rodape: "#eef0f2" },
   escuro: { texto: "#e7e9ea", cinza: "#8b98a5", borda: "#2f3336", cartao: "#16181c", fundoMidia: "#16181c", grade: "#2f3336", rodape: "#0b0b0b" },
 } as const;
+
+export type PaletaDoCarrossel = { [K in keyof (typeof CORES_DO_CARROSSEL)["claro"]]: string };
+
+/** Fundos prontos da lâmina (23/10): branco, preto, o "dim" azul do X e um papel claro. */
+export const FUNDOS_PRONTOS = [
+  { cor: "#ffffff", rotulo: "Branco" },
+  { cor: "#000000", rotulo: "Preto" },
+  { cor: "#15202b", rotulo: "Dim do X" },
+  { cor: "#f5f1e8", rotulo: "Papel" },
+] as const;
+
+const hexValido = (h: unknown): h is string => typeof h === "string" && /^#[0-9a-f]{6}$/i.test(h);
+const canais = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const hex = (c: number[]) => `#${c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
+const misturar = (a: string, b: string, p: number) => { const x = canais(a), y = canais(b); return hex(x.map((v, i) => v + (y[i] - v) * p)); };
+
+/** Luminância relativa (WCAG) de uma cor #rrggbb, de 0 (preto) a 1 (branco). */
+export function luminancia(h: string): number {
+  if (!hexValido(h)) return 1;
+  const [r, g, b] = canais(h).map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Fundo escuro pede texto claro: a escolha que dá mais contraste (WCAG) com o fundo. */
+export const fundoEscuro = (h: string) => (luminancia(h) + 0.05) / 0.05 < 1.05 / (luminancia(h) + 0.05);
+
+/**
+ * As cores da lâmina a partir do fundo escolhido (23/10, dono: "poder trocar a cor de fundo"). Branco e
+ * preto usam as cores reais do X; qualquer outra cor (a da marca, o dim, a livre) ganha texto claro ou
+ * escuro pelo contraste e os cinzas, a borda e o fundo do bloco misturados com ela.
+ */
+export function paletaDoFundo(fundo: string): PaletaDoCarrossel {
+  const f = (hexValido(fundo) ? fundo : "#ffffff").toLowerCase();
+  if (f === "#ffffff") return { ...CORES_DO_CARROSSEL.claro };
+  if (f === "#000000") return { ...CORES_DO_CARROSSEL.escuro };
+  const escuro = fundoEscuro(f);
+  const tinta = escuro ? "#f7f9f9" : "#0f1419";
+  return {
+    texto: tinta,
+    cinza: misturar(f, tinta, escuro ? 0.62 : 0.68),
+    borda: misturar(f, tinta, escuro ? 0.22 : 0.14),
+    cartao: escuro ? misturar(f, "#ffffff", 0.07) : misturar(f, "#ffffff", 0.6),
+    fundoMidia: escuro ? misturar(f, "#ffffff", 0.06) : misturar(f, "#000000", 0.05),
+    grade: misturar(f, tinta, escuro ? 0.2 : 0.12),
+    rodape: misturar(f, escuro ? "#000000" : tinta, escuro ? 0.35 : 0.06),
+  };
+}
+
+/** O texto do crédito embaixo do bloco ("Foto: Forbes Brasil · Ana Souza"). */
+export function textoDoCredito(b: Pick<BlocoDaLamina, "tipo" | "midia" | "credito_visivel">): string {
+  const c = b.credito_visivel && (b.tipo === "imagem" || b.tipo === "video") ? b.midia?.credito : undefined;
+  if (!c) return "";
+  const fonte = c.fonte.replace(/^Notícia · /, "");
+  return `${b.tipo === "video" ? "Vídeo" : "Foto"}: ${[fonte, c.autor && c.autor !== fonte ? c.autor : ""].filter(Boolean).join(" · ")}`.slice(0, 120);
+}
 
 export interface RetanguloDoBloco { x: number; y: number; largura: number; altura: number; raio: number }
 /** Uma mídia já carregada: imagem ou o quadro atual de um vídeo. */
@@ -123,17 +178,22 @@ function cortar(ctx: CanvasRenderingContext2D, texto: string, max: number): stri
   return `${letras.join("")}…`;
 }
 
+/**
+ * Selo de verificado do X (23/10, dono: "verificado nítido"): oito lobos redondos unidos em volta de um
+ * círculo (o contorno ondulado do selo real), cheio de azul, e o visto branco com traço proporcional.
+ */
 function selo(ctx: CanvasRenderingContext2D, cx: number, cy: number, raio: number) {
   ctx.save(); ctx.fillStyle = AZUL; ctx.beginPath();
-  const pontas = 24;
-  for (let i = 0; i <= pontas; i++) {
-    const a = (i / pontas) * Math.PI * 2 - Math.PI / 2, r = i % 2 === 0 ? raio : raio * 0.86;
-    const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  const lobo = raio * 0.36, distancia = raio - lobo;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const lx = cx + Math.cos(a) * distancia, ly = cy + Math.sin(a) * distancia;
+    ctx.moveTo(lx + lobo, ly); ctx.arc(lx, ly, lobo, 0, Math.PI * 2);
   }
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = raio * 0.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.beginPath(); ctx.moveTo(cx - raio * 0.4, cy + raio * 0.02); ctx.lineTo(cx - raio * 0.1, cy + raio * 0.32); ctx.lineTo(cx + raio * 0.42, cy - raio * 0.3); ctx.stroke();
+  ctx.moveTo(cx + distancia, cy); ctx.arc(cx, cy, distancia, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = raio * 0.19; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(cx - raio * 0.36, cy + raio * 0.02); ctx.lineTo(cx - raio * 0.1, cy + raio * 0.28); ctx.lineTo(cx + raio * 0.38, cy - raio * 0.26); ctx.stroke();
   ctx.restore();
 }
 
@@ -204,7 +264,7 @@ function desenharManchete(ctx: CanvasRenderingContext2D, m: MancheteDoBloco, r: 
   ctx.restore();
 }
 
-function desenharGrafico(ctx: CanvasRenderingContext2D, g: GraficoDoBloco, r: { x: number; y: number; largura: number; altura: number }, s: number, cor: (typeof CORES_DO_CARROSSEL)["claro"] | (typeof CORES_DO_CARROSSEL)["escuro"]) {
+function desenharGrafico(ctx: CanvasRenderingContext2D, g: GraficoDoBloco, r: { x: number; y: number; largura: number; altura: number }, s: number, cor: PaletaDoCarrossel) {
   const pad = 24 * s;
   let topo = r.y + pad;
   ctx.textBaseline = "top";
@@ -213,6 +273,22 @@ function desenharGrafico(ctx: CanvasRenderingContext2D, g: GraficoDoBloco, r: { 
   const area = { x: r.x + pad, y: topo, largura: r.largura - pad * 2, altura: r.y + r.altura - pad - rodape - topo };
   if (g.fonte) { ctx.fillStyle = cor.cinza; ctx.font = fonte(400, 18 * s); ctx.fillText(cortar(ctx, `Fonte: ${g.fonte}`, area.largura), area.x, r.y + r.altura - pad - 20 * s); }
   if (area.altura < 60 * s) { ctx.textBaseline = "alphabetic"; return; }
+  if (g.tipo === "numero") {
+    // Número grande (23/10): o valor no centro, em azul, e o rótulo embaixo.
+    const d = g.dados[0];
+    if (!d) { ctx.textBaseline = "alphabetic"; return; }
+    const valor = numeroCurto(d.valor, g.unidade);
+    let tam = Math.min(area.altura * 0.55, 220 * s);
+    ctx.font = fonte(800, tam);
+    while (tam > 40 * s && ctx.measureText(valor).width > area.largura) { tam -= 8 * s; ctx.font = fonte(800, tam); }
+    ctx.textAlign = "center"; ctx.fillStyle = CORES_DO_GRAFICO[0];
+    const yValor = area.y + (area.altura - tam - 44 * s) / 2;
+    ctx.fillText(valor, area.x + area.largura / 2, yValor);
+    ctx.font = fonte(500, 26 * s); ctx.fillStyle = cor.cinza;
+    ctx.fillText(cortar(ctx, d.rotulo, area.largura), area.x + area.largura / 2, yValor + tam + 14 * s);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    return;
+  }
   if (g.tipo === "tabela") {
     const colunas = g.colunas || [], linhas = g.linhas || [];
     const n = linhas.length + 1, lh = Math.min(64 * s, area.altura / n), cw = area.largura / Math.max(1, colunas.length);
@@ -292,6 +368,111 @@ function desenharGrafico(ctx: CanvasRenderingContext2D, g: GraficoDoBloco, r: { 
   ctx.textBaseline = "alphabetic";
 }
 
+// ------------------------------------------------------------------ "print" do perfil (23/10)
+
+const numeroDoPerfil = (v: number, estilo: PerfilDoBloco["estilo"]) => {
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1).replace(".", ",").replace(",0", "")} mi`;
+  if (v >= 1e4) return `${(v / 1e3).toFixed(1).replace(".", ",").replace(",0", "")} mil`;
+  return estilo === "x" && v >= 1000 ? `${(v / 1e3).toFixed(1).replace(".", ",").replace(",0", "")} mil` : v.toLocaleString("pt-BR");
+};
+
+/** Altura natural do card do perfil numa largura (as linhas da bio decidem). */
+function planoDoPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, w: number, s: number) {
+  const pad = 30 * s;
+  ctx.font = fonte(400, 24 * s);
+  const bio = p.bio ? linhasRicas(p.bio, w - pad * 2, (x) => ctx.measureText(x).width).slice(0, 5) : [];
+  const avatar = (p.estilo === "x" ? 120 : 150) * s;
+  const topo = p.estilo === "x" ? 110 * s : pad;
+  const cabeca = p.estilo === "x" ? topo + avatar * 0.5 + 18 * s + 38 * s + 32 * s : pad + avatar + 22 * s + 34 * s;
+  const altura = cabeca + (bio.length ? 10 * s + bio.length * 32 * s : 0) + (p.site ? 34 * s : 0) + (p.estilo === "x" ? 46 * s : 18 * s + 64 * s) + pad;
+  return { pad, bio, avatar, topo, altura };
+}
+
+/**
+ * O "print" do perfil desenhado por código com os dados de Redes: no jeito do Instagram (foto com o anel,
+ * publicações, seguidores e seguindo, nome, bio e o botão Seguir azul) ou do X (capa, foto sobre a capa,
+ * Seguir preto, nome, @, bio e os números de seguindo e seguidores).
+ */
+function desenharPerfil(ctx: CanvasRenderingContext2D, p: PerfilDoBloco, r: { x: number; y: number; largura: number; altura: number }, raio: number, s: number, img: HTMLImageElement | null | undefined, cor: PaletaDoCarrossel, escuro: boolean) {
+  const pl = planoDoPerfil(ctx, p, r.largura, s);
+  const h = Math.min(pl.altura, r.altura);
+  const y0 = r.y + Math.max(0, (r.altura - pl.altura) / 2);
+  ctx.save(); caixa(ctx, r.x, y0, r.largura, h, raio); ctx.clip();
+  ctx.fillStyle = cor.cartao; ctx.fillRect(r.x, y0, r.largura, h);
+  const x = r.x + pl.pad;
+  ctx.textBaseline = "top";
+  let y: number;
+  if (p.estilo === "x") {
+    // Capa em faixa, a foto sobre a capa e o Seguir preto (ou branco no escuro) à direita.
+    ctx.fillStyle = escuro ? "#2f3336" : "#cfd9de"; ctx.fillRect(r.x, y0, r.largura, pl.topo);
+    const ay = y0 + pl.topo - pl.avatar / 2;
+    ctx.save(); ctx.beginPath(); ctx.arc(x + pl.avatar / 2, ay + pl.avatar / 2, pl.avatar / 2 + 5 * s, 0, Math.PI * 2); ctx.fillStyle = cor.cartao; ctx.fill(); ctx.restore();
+    avatar(ctx, img, p.nome, x, ay, pl.avatar, cor.borda, cor.texto);
+    const bw = 170 * s, bh = 58 * s, bx = r.x + r.largura - pl.pad - bw, by = y0 + pl.topo + 16 * s;
+    ctx.fillStyle = escuro ? "#eff3f4" : "#0f1419"; caixa(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = escuro ? "#0f1419" : "#ffffff"; ctx.font = fonte(700, 26 * s); ctx.textAlign = "center";
+    ctx.fillText("Seguir", bx + bw / 2, by + (bh - 26 * s) / 2); ctx.textAlign = "left";
+    y = ay + pl.avatar + 18 * s;
+    ctx.font = fonte(800, 32 * s); ctx.fillStyle = cor.texto;
+    const nome = cortar(ctx, p.nome, r.largura - pl.pad * 2 - (p.verificado ? 40 * s : 0));
+    ctx.fillText(nome, x, y);
+    if (p.verificado) selo(ctx, x + ctx.measureText(nome).width + 22 * s, y + 16 * s, 15 * s);
+    y += 38 * s;
+    ctx.font = fonte(400, 24 * s); ctx.fillStyle = cor.cinza; ctx.fillText(cortar(ctx, `@${p.username}`, r.largura - pl.pad * 2), x, y);
+    y += 32 * s;
+  } else {
+    // Instagram: foto com o anel, os três números ao lado, o nome e a bio embaixo.
+    const ay = y0 + pl.pad;
+    const g = ctx.createLinearGradient(x, ay + pl.avatar, x + pl.avatar, ay);
+    if (g) { g.addColorStop(0, "#feda75"); g.addColorStop(0.35, "#fa7e1e"); g.addColorStop(0.65, "#d62976"); g.addColorStop(1, "#962fbf"); }
+    ctx.save(); ctx.beginPath(); ctx.arc(x + pl.avatar / 2, ay + pl.avatar / 2, pl.avatar / 2, 0, Math.PI * 2); ctx.fillStyle = g || "#d62976"; ctx.fill();
+    ctx.beginPath(); ctx.arc(x + pl.avatar / 2, ay + pl.avatar / 2, pl.avatar / 2 - 6 * s, 0, Math.PI * 2); ctx.fillStyle = cor.cartao; ctx.fill(); ctx.restore();
+    avatar(ctx, img, p.nome, x + 11 * s, ay + 11 * s, pl.avatar - 22 * s, cor.borda, cor.texto);
+    const numeros: Array<[number | undefined, string]> = [[p.posts, "publicações"], [p.seguidores, "seguidores"], [p.seguindo, "seguindo"]];
+    const colX = x + pl.avatar + 30 * s, colW = (r.x + r.largura - pl.pad - colX) / 3;
+    numeros.forEach(([v, rotulo], i) => {
+      const cx = colX + colW * (i + 0.5);
+      ctx.textAlign = "center";
+      ctx.font = fonte(700, 32 * s); ctx.fillStyle = cor.texto; ctx.fillText(typeof v === "number" ? numeroDoPerfil(v, "instagram") : "—", cx, ay + pl.avatar / 2 - 34 * s);
+      ctx.font = fonte(400, 22 * s); ctx.fillStyle = cor.cinza; ctx.fillText(rotulo, cx, ay + pl.avatar / 2 + 6 * s);
+    });
+    ctx.textAlign = "left";
+    y = ay + pl.avatar + 22 * s;
+    ctx.font = fonte(700, 28 * s); ctx.fillStyle = cor.texto;
+    const nome = cortar(ctx, p.nome, r.largura - pl.pad * 2 - (p.verificado ? 36 * s : 0));
+    ctx.fillText(nome, x, y);
+    if (p.verificado) selo(ctx, x + ctx.measureText(nome).width + 20 * s, y + 14 * s, 13 * s);
+    y += 34 * s;
+  }
+  if (pl.bio.length) {
+    y += 10 * s; ctx.fillStyle = cor.texto; ctx.font = fonte(400, 24 * s);
+    for (const l of pl.bio) { ctx.fillText(l.pedacos.map((x2) => x2.texto).join(""), x, y); y += 32 * s; }
+  }
+  if (p.site) { ctx.fillStyle = p.estilo === "x" ? AZUL : (escuro ? "#e0f1ff" : "#00376b"); ctx.font = fonte(600, 22 * s); ctx.fillText(cortar(ctx, p.site, r.largura - pl.pad * 2), x, y + 4 * s); y += 34 * s; }
+  if (p.estilo === "x") {
+    y += 10 * s;
+    const partes: Array<[number | undefined, string]> = [[p.seguindo, " Seguindo"], [p.seguidores, " Seguidores"]];
+    let cx = x;
+    for (const [v, rotulo] of partes) {
+      if (typeof v !== "number") continue;
+      ctx.font = fonte(700, 24 * s); ctx.fillStyle = cor.texto; const n = numeroDoPerfil(v, "x"); ctx.fillText(n, cx, y); cx += ctx.measureText(n).width;
+      ctx.font = fonte(400, 24 * s); ctx.fillStyle = cor.cinza; ctx.fillText(rotulo, cx, y); cx += ctx.measureText(rotulo).width + 28 * s;
+    }
+  } else {
+    // Seguir (azul) e Mensagem (cinza), lado a lado, como no app.
+    y += 18 * s;
+    const gap = 14 * s, bw = (r.largura - pl.pad * 2 - gap) / 2, bh = 64 * s;
+    ctx.fillStyle = "#0095f6"; caixa(ctx, x, y, bw, bh, 14 * s); ctx.fill();
+    ctx.fillStyle = escuro ? "#363636" : "#efefef"; caixa(ctx, x + bw + gap, y, bw, bh, 14 * s); ctx.fill();
+    ctx.font = fonte(700, 26 * s); ctx.textAlign = "center";
+    ctx.fillStyle = "#ffffff"; ctx.fillText("Seguir", x + bw / 2, y + (bh - 26 * s) / 2);
+    ctx.fillStyle = cor.texto; ctx.fillText("Mensagem", x + bw + gap + bw / 2, y + (bh - 26 * s) / 2);
+    ctx.textAlign = "left";
+  }
+  ctx.textBaseline = "alphabetic";
+  ctx.restore();
+}
+
 // ------------------------------------------------------------------ seta e som
 
 function seta(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, cor: string) {
@@ -316,15 +497,16 @@ export function desenharSomDesligado(ctx: CanvasRenderingContext2D, cx: number, 
 export const BLOCO_PADRAO: BlocoDaLamina = { tipo: "nenhum", posicao: "abaixo", altura: 100, largura: 100, sangrar: false, cantos: 18, borda: false, sombra: false, enquadramento: "inteira", foco_x: 0.5, foco_y: 0.5 };
 
 const temMidia = (b: BlocoDaLamina, rec: RecursosDoCarrossel) => (b.tipo === "imagem" || b.tipo === "video") && !!rec.midia;
-const temBloco = (b: BlocoDaLamina, rec: RecursosDoCarrossel) => temMidia(b, rec) || (b.tipo === "grafico" && !!b.grafico) || (b.tipo === "manchete" && !!b.manchete);
+const temBloco = (b: BlocoDaLamina, rec: RecursosDoCarrossel) => temMidia(b, rec) || (b.tipo === "grafico" && !!b.grafico) || (b.tipo === "manchete" && !!b.manchete) || (b.tipo === "perfil" && !!b.perfil);
 
 /** Desenha a lâmina inteira no canvas já dimensionado (largura × altura do formato). */
 export function desenharCarrossel(ctx: CanvasRenderingContext2D, W: number, H: number, t: TemplateProfile, rec: RecursosDoCarrossel = {}): ResultadoDoCarrossel {
-  const escuro = t.tema === "escuro" || t.tema === "dim";
-  const cor = CORES_DO_CARROSSEL[escuro ? "escuro" : "claro"];
+  // O fundo manda nas cores (texto claro em fundo escuro e o contrário); sem fundo, vale o tema.
+  const fundo = hexValido(t.cor_fundo) ? t.cor_fundo.toLowerCase() : t.tema === "claro" ? "#ffffff" : t.tema === "dim" ? "#15202b" : "#000000";
+  const escuro = fundoEscuro(fundo);
+  const cor = paletaDoFundo(fundo);
   const b = { ...BLOCO_PADRAO, ...(t.bloco || {}) };
   const s = W / 1080;
-  const fundo = t.cor_fundo || (escuro ? "#000000" : "#ffffff");
   ctx.fillStyle = fundo; ctx.fillRect(0, 0, W, H);
   if (t.rodape_cinza) {
     const g = ctx.createLinearGradient(0, H * 0.72, 0, H);
@@ -334,8 +516,10 @@ export function desenharCarrossel(ctx: CanvasRenderingContext2D, W: number, H: n
   const colX = margem, colW = W - margem * 2 - (t.seta !== false ? 40 * s : 0);
   // Cabeçalho: foto redonda, nome em negrito com o selo e o @ cinza embaixo.
   const A = Math.max(64, Math.min(140, t.tamanho_foto * 1.2)) * s;
-  const tamNome = 34 * s * Math.max(0.85, Math.min(1.3, t.tamanho_texto / 34));
-  const px = t.tamanho_texto * 1.15 * s, lh = px * 1.34, gapPar = px * 0.75;
+  // Texto proporcional ao quadro (23/10): o mesmo tamanho escolhido cresce no 9:16 e encolhe no 1:1.
+  const st = s * Math.max(0.92, Math.min(1.15, Math.sqrt(H / W / 1.25)));
+  const tamNome = 34 * st * Math.max(0.85, Math.min(1.3, t.tamanho_texto / 34));
+  const px = t.tamanho_texto * 1.15 * st, lh = px * 1.34, gapPar = px * 0.75;
   const pesoBase = t.peso_texto === "medio" ? 500 : 400;
   const medir = (x: string, negrito: boolean) => { ctx.font = fonte(negrito ? 700 : pesoBase, px); return ctx.measureText(x).width; };
   const linhas = linhasRicas(t.texto, colW, medir);
@@ -347,7 +531,9 @@ export function desenharCarrossel(ctx: CanvasRenderingContext2D, W: number, H: n
   const cab = A, gapCab = 30 * s, gapBloco = 34 * s;
   const textoH = alturaDasLinhas(antes) + alturaDasLinhas(depois);
   const comBloco = temBloco(b, rec);
-  const fixo = cab + gapCab + textoH + (comBloco ? gapBloco + (depois.length && antes.length ? gapBloco : 0) : 0);
+  const credito = comBloco && temMidia(b, rec) ? textoDoCredito(b) : "";
+  const pxCredito = 20 * s, alturaDoCredito = credito ? pxCredito + 12 * s : 0;
+  const fixo = cab + gapCab + textoH + (comBloco ? gapBloco + (depois.length && antes.length ? gapBloco : 0) + alturaDoCredito : 0);
   const topoMin = margem * 0.9, baixoMin = margem * 0.9;
   const livre = H - topoMin - baixoMin - fixo;
   if (livre < (comBloco ? 160 * s : 0)) throw new Error(NAO_CABE_CARROSSEL);
@@ -359,25 +545,30 @@ export function desenharCarrossel(ctx: CanvasRenderingContext2D, W: number, H: n
     const teto = livre * (b.altura / 100);
     if (temMidia(b, rec) && b.enquadramento === "inteira") alturaDoBloco = Math.min(teto, largura * (rec.midia!.altura / rec.midia!.largura));
     else if (b.tipo === "manchete" && b.manchete) alturaDoBloco = Math.min(teto, planoDaManchete(ctx, b.manchete, largura, s).altura);
+    else if (b.tipo === "perfil" && b.perfil) alturaDoBloco = Math.min(teto, planoDoPerfil(ctx, b.perfil, largura, s).altura);
     else if (b.tipo === "grafico" && b.grafico) alturaDoBloco = Math.min(teto, Math.max(260 * s, largura * 0.62));
     else alturaDoBloco = teto;
     alturaDoBloco = Math.max(120 * s, alturaDoBloco);
   }
   const total = fixo + alturaDoBloco;
   // Só texto: o post fica no meio da lâmina (como as lâminas de texto grande); com bloco, começa no alto.
-  let y = comBloco && !(sangra && b.posicao === "abaixo") ? Math.max(topoMin, (H - total) / 2 - (H - total) * 0.15) : Math.max(topoMin, (H - total) / 2);
+  // O post fica no centro ótico (um pouco acima do meio): a sobra se divide em cima e embaixo, sem o vazio grande no pé.
+  let y = Math.max(topoMin, (H - total) * 0.46);
   if (sangra && b.posicao === "abaixo") y = topoMin;
   const nomeX = colX + A + 22 * s;
   avatar(ctx, rec.avatar, t.nome, colX, y, A, cor.borda, cor.texto);
+  // Nome e @ como um bloco de duas linhas centrado na altura da foto (23/10: "nome e @ alinhados").
+  const tamArroba = tamNome * 0.82, entreLinhas = tamNome * 0.22;
+  const topoDoNome = y + (A - (tamNome + entreLinhas + tamArroba)) / 2;
   ctx.textBaseline = "alphabetic";
   ctx.font = fonte(700, tamNome); ctx.fillStyle = cor.texto;
-  const espacoDoSelo = t.verificado ? tamNome * 0.95 : 0;
+  const espacoDoSelo = t.verificado ? tamNome * 1.05 : 0;
   const nome = cortar(ctx, t.nome, W - margem - nomeX - espacoDoSelo);
-  const yNome = y + A / 2 - 4 * s;
+  const yNome = topoDoNome + tamNome * 0.8;
   ctx.fillText(nome, nomeX, yNome);
-  if (t.verificado) selo(ctx, nomeX + ctx.measureText(nome).width + tamNome * 0.55, yNome - tamNome * 0.34, tamNome * 0.4);
-  ctx.font = fonte(400, tamNome * 0.82); ctx.fillStyle = cor.cinza;
-  ctx.fillText(cortar(ctx, `@${t.username}`, W - margem - nomeX), nomeX, yNome + tamNome * 1.12);
+  if (t.verificado) selo(ctx, nomeX + ctx.measureText(nome).width + tamNome * 0.56, yNome - tamNome * 0.33, tamNome * 0.42);
+  ctx.font = fonte(400, tamArroba); ctx.fillStyle = cor.cinza;
+  ctx.fillText(cortar(ctx, `@${t.username}`, W - margem - nomeX), nomeX, topoDoNome + tamNome + entreLinhas + tamArroba * 0.8);
   y += cab + gapCab;
   const escrever = (ls: LinhaRica[]) => {
     ctx.textBaseline = "top"; ctx.fillStyle = cor.texto;
@@ -401,7 +592,7 @@ export function desenharCarrossel(ctx: CanvasRenderingContext2D, W: number, H: n
       ctx.fillStyle = cor.cartao; caixa(ctx, area.x, area.y, area.largura, area.altura, raio); ctx.fill(); ctx.restore();
     }
     ctx.save(); caixa(ctx, area.x, area.y, area.largura, area.altura, raio); ctx.clip();
-    ctx.fillStyle = b.tipo === "grafico" || b.tipo === "manchete" ? cor.cartao : cor.fundoMidia; ctx.fillRect(area.x, area.y, area.largura, area.altura);
+    ctx.fillStyle = b.tipo === "grafico" || b.tipo === "manchete" || b.tipo === "perfil" ? cor.cartao : cor.fundoMidia; ctx.fillRect(area.x, area.y, area.largura, area.altura);
     let midiaRet: RetanguloDoBloco | null = null;
     if (temMidia(b, rec)) {
       const m = rec.midia!;
@@ -410,10 +601,18 @@ export function desenharCarrossel(ctx: CanvasRenderingContext2D, W: number, H: n
       midiaRet = b.enquadramento === "inteira" ? { ...q, raio } : { ...area };
     } else if (b.tipo === "grafico" && b.grafico) desenharGrafico(ctx, b.grafico, area, s, cor);
     else if (b.tipo === "manchete" && b.manchete) desenharManchete(ctx, b.manchete, area, raio, s, escuro);
+    else if (b.tipo === "perfil" && b.perfil) desenharPerfil(ctx, b.perfil, area, raio, s, rec.avatar, cor, escuro);
     ctx.restore();
     if (b.borda && !sangra) { ctx.strokeStyle = cor.borda; ctx.lineWidth = Math.max(1, 2 * s); caixa(ctx, area.x, area.y, area.largura, area.altura, raio); ctx.stroke(); }
     resultado = { bloco: midiaRet, area, fundoDoBloco: cor.fundoMidia };
     y += altura;
+    if (credito) {
+      // Crédito da mídia embaixo do bloco, pequeno e cinza, como a legenda de foto de uma matéria.
+      ctx.font = fonte(400, pxCredito); ctx.fillStyle = cor.cinza; ctx.textBaseline = "top";
+      ctx.fillText(cortar(ctx, credito, sangra ? W - margem * 2 : largura), sangra ? margem : colX, y + 10 * s);
+      ctx.textBaseline = "alphabetic";
+      y += alturaDoCredito;
+    }
     if (depois.length) { y += gapBloco; escrever(depois); }
   } else escrever(depois);
   const pos = rec.posicao;

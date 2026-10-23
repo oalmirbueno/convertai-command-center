@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Film, FolderOpen, Image as IconeDeImagem, Loader2, Minus, Newspaper, Plus, Search, Sparkles, Upload, X } from "lucide-react";
+import { BarChart3, Check, Film, FolderOpen, Image as IconeDeImagem, Loader2, Minus, Newspaper, PaintBucket, Plus, Search, Sparkles, Type, Upload, UserRound, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { chamarFuncao, ErroDaMesa, padraoPara, textoDoErro, usd } from "@/lib/me
 import EscolherDocumentos from "@/components/laboratorio/no/EscolherDocumentos";
 import { useMesa } from "../MesaContexto";
 import { BotaoComCusto } from "../Custo";
-import ImagensReaisDoDiretor from "../ImagensReaisDoDiretor";
+import ImagensReaisDoDiretor, { type FonteAplicada } from "../ImagensReaisDoDiretor";
 import { subirFoto } from "../EstudioFotos";
 import { chamarMesaVideos, subirVideos, useArquivosDeVideo } from "@/components/mesa-videos/videosApi";
 import { buscarTrending, type Noticia } from "../hypeETrending";
@@ -20,18 +20,48 @@ import type { CardDaDirecao, Trabalho } from "../useItensDoMes";
 import { Segmentado } from "./controlesDoTemplate";
 import { partesDaFotoDoTemplate, partesDoTextoDoTemplate } from "./partesDoTemplate";
 import { chaveDaFonteProfile, ROTULO_DO_GRUPO, type FonteProfile } from "./fontesDoProfile";
-import { ehImagem, ehVideo, midiaDaFonte, midiaDoVideoReal, ROTULO_DO_TIPO, type CardDoCarrossel } from "./blocoDaLamina";
-import type { BlocoDaLamina, GraficoDoBloco, MidiaDoBloco, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
+import { ehImagem, ehVideo, midiaDaFonte, midiaDaFonteAplicada, midiaDoVideoReal, ROTULO_DO_TIPO, type CardDoCarrossel } from "./blocoDaLamina";
+import { FUNDOS_PRONTOS, fundoEscuro, textoDoCredito } from "./renderCarrossel";
+import EditorDoTextoDaLamina from "./EditorDoTextoDaLamina";
+import type { CampoDaAparencia } from "./TemplateProfileEditor";
+import type { BlocoDaLamina, GraficoDoBloco, MancheteDoBloco, MidiaDoBloco, PerfilDoBloco, TemplateProfile } from "../../../../supabase/functions/estudio-arte/modulos/template-profile";
 import type { SugestaoDoCarrossel, VideoGuardado, VideoReal } from "../../../../supabase/functions/estudio-arte/modulos/template-carrossel";
 
 /**
  * Painel do carrossel estilo post do X (22/10/2026), no lugar da Aparência e da Imagem quando o modelo
- * é "Carrossel X". Ordem: gerar o carrossel inteiro, o bloco de mídia (de onde vem), os ajustes do
- * bloco e o texto da lâmina. A mídia entra INTEIRA no bloco; o desenho é sempre o da prévia.
+ * é "Carrossel X". Em cima, o gerador do carrossel inteiro; embaixo, a lâmina aberta em três partes
+ * (23/10, dono: "configurações e ajustes mais intuitivos"): Mídia (o bloco, de onde vem e o tamanho),
+ * Fundo (a cor da lâmina; o texto ajusta o contraste sozinho) e Texto. A mídia entra INTEIRA no bloco;
+ * o desenho é sempre o da prévia.
  */
 
 type Ajustes = Pick<TemplateProfile, "tema" | "cor_fundo" | "tamanho_texto" | "peso_texto" | "seta" | "rodape_cinza">;
-const TIPOS: Array<BlocoDaLamina["tipo"]> = ["imagem", "video", "grafico", "manchete", "nenhum"];
+const TIPOS: Array<BlocoDaLamina["tipo"]> = ["imagem", "video", "grafico", "manchete", "perfil", "nenhum"];
+const ICONE_DO_TIPO: Record<BlocoDaLamina["tipo"], ReactNode> = {
+  imagem: <IconeDeImagem className="h-3.5 w-3.5" />, video: <Film className="h-3.5 w-3.5" />, grafico: <BarChart3 className="h-3.5 w-3.5" />,
+  manchete: <Newspaper className="h-3.5 w-3.5" />, perfil: <UserRound className="h-3.5 w-3.5" />, nenhum: <Type className="h-3.5 w-3.5" />,
+};
+type Parte = "midia" | "fundo" | "texto";
+/** O tema que acompanha o fundo: o "dim" do X fica dim; o resto, claro ou escuro pelo contraste. */
+export const temaDoFundo = (cor: string): TemplateProfile["tema"] => (cor.toLowerCase() === "#15202b" ? "dim" : fundoEscuro(cor) ? "escuro" : "claro");
+const BANCO_DO_VIDEO: Record<VideoReal["banco"], string> = { pexels: "Pexels", wikimedia: "Wikimedia", arquivo: "Internet Archive" };
+/** Tamanhos prontos do bloco (altura em % do espaço livre). */
+const TAMANHOS_DO_BLOCO = [{ valor: "50", rotulo: "Pequeno" }, { valor: "75", rotulo: "Médio" }, { valor: "100", rotulo: "Grande" }];
+/** O perfil lido em Redes (painel do Instagram do cliente), para o "print" do perfil na última lâmina. */
+export interface PerfilDeRedes { nome: string; username: string; bio?: string; site?: string; seguidores?: number | null; seguindo?: number | null; posts?: number | null }
+/** O bloco do perfil montado com os dados reais de Redes (o texto continua editável no painel). */
+export function perfilDoBlocoDeRedes(p: PerfilDeRedes, estilo: PerfilDoBloco["estilo"], verificado: boolean): PerfilDoBloco {
+  const n = (v: number | null | undefined) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined);
+  const bloco: PerfilDoBloco = { estilo, nome: p.nome.slice(0, 80), username: p.username.replace(/^@/, "").slice(0, 30) };
+  if (p.bio && p.bio.trim()) bloco.bio = p.bio.replace(/[<>\t]/g, "").trim().slice(0, 300);
+  if (p.site && p.site.trim()) bloco.site = p.site.replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 80);
+  if (n(p.posts) !== undefined) bloco.posts = n(p.posts);
+  if (n(p.seguidores) !== undefined) bloco.seguidores = n(p.seguidores);
+  if (n(p.seguindo) !== undefined) bloco.seguindo = n(p.seguindo);
+  if (verificado) bloco.verificado = true;
+  return bloco;
+}
+const CANTOS_DO_BLOCO = [{ valor: "0", rotulo: "Retos" }, { valor: "18", rotulo: "Suaves" }, { valor: "36", rotulo: "Redondos" }];
 type Fonte = "internet" | "gerar" | "enviar" | "workspace";
 const ROTULO_DA_FONTE: Record<Fonte, string> = { internet: "Internet", gerar: "Gerar com IA", enviar: "Enviar", workspace: "Workspace" };
 
@@ -60,7 +90,7 @@ const secao = (titulo: string, corpo: ReactNode, ajuda?: ReactNode) => (
   </section>
 );
 
-export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco, ajustes, travado, onBloco, onAjuste, onMudou, onGerado, onAbrirFotos, modeloSeletor }: {
+export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco, ajustes, travado, onBloco, onAjuste, onMudou, onGerado, onAbrirFotos, modeloSeletor, coresDaMarca = [], onAplicarATodas, perfilDeRedes = null, verificado = false }: {
   trabalho: Trabalho;
   card: CardDaDirecao;
   cards: CardDaDirecao[];
@@ -71,13 +101,21 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   onBloco: (patch: Partial<BlocoDaLamina>) => void;
   onAjuste: <K extends keyof Ajustes>(k: K, v: Ajustes[K]) => void;
   onMudou: () => void;
-  /** Depois do gerador: o trabalho novo (texto e sugestão de mídia em cada lâmina). */
-  onGerado: (t: TrabalhoGravado) => void;
+  /** Depois do gerador: o trabalho novo (texto e sugestão de mídia em cada lâmina); `soEsta`: só a lâmina aberta. */
+  onGerado: (t: TrabalhoGravado, soEsta?: boolean) => void;
   onAbrirFotos: () => void;
   modeloSeletor: ReactNode;
+  /** Paleta da marca do cliente (23/10): vira fundo da lâmina com um toque. */
+  coresDaMarca?: string[];
+  /** 23/10: copia os campos da aparência desta lâmina para todas (só com mais de uma lâmina). */
+  onAplicarATodas?: (campos: CampoDaAparencia[]) => void;
+  /** 23/10: o perfil lido em Redes (null: sem dados, preenchimento à mão) e se o selo está ligado. */
+  perfilDeRedes?: PerfilDeRedes | null;
+  verificado?: boolean;
 }) {
   const mesa = useMesa(), cache = useQueryClient();
   const [fonte, setFonte] = useState<Fonte>("internet");
+  const [parte, setParte] = useState<Parte>("midia");
   const [workspaceAberto, setWorkspaceAberto] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
@@ -85,7 +123,12 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   const cardC = card as CardDoCarrossel;
   const sugestao = cardC.carrossel as SugestaoDoCarrossel | undefined;
 
-  const usarMidia = (midia: MidiaDoBloco, tipo: "imagem" | "video") => { setErro(""); onBloco({ tipo, midia }); };
+  const usarMidia = (midia: MidiaDoBloco, tipo: "imagem" | "video", extra: Partial<BlocoDaLamina> = {}) => { setErro(""); onBloco({ tipo, midia, ...extra }); };
+  /** A imagem da busca entra com o crédito; foto de matéria já sai com o crédito escrito na lâmina. */
+  const usarImagemDaBusca = (f: FonteAplicada) => {
+    const m = midiaDaFonteAplicada(f);
+    if (m) usarMidia(m.midia, "imagem", m.creditoNaLamina ? { credito_visivel: true } : {});
+  };
 
   // ---------------------------------------------------------------- enviar do computador (o upload das Mesas)
   const enviar = async (arquivo: File) => {
@@ -112,13 +155,14 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   // ---------------------------------------------------------------- vídeos reais (Pexels e Wikimedia)
   const [consultaDoVideo, setConsultaDoVideo] = useState(sugestao?.busca || "");
   const [videos, setVideos] = useState<VideoReal[]>([]);
+  const [melhorVideo, setMelhorVideo] = useState<number | null>(null);
   const [avisosDoVideo, setAvisosDoVideo] = useState<string[]>([]);
   const [buscandoVideo, setBuscandoVideo] = useState(false);
   const buscarVideos = async () => {
     setBuscandoVideo(true); setErro("");
     try {
-      const r = await chamarFuncao<{ resultados: VideoReal[]; avisos?: string[] }>("estudio-arte", { acao: "template_videos_buscar", trabalho_id: trabalho.id, ordem: card.ordem, consulta: consultaDoVideo.trim() });
-      setVideos(r.resultados); setAvisosDoVideo(r.avisos || []);
+      const r = await chamarFuncao<{ resultados: VideoReal[]; avisos?: string[]; melhor?: { indice: number } | null }>("estudio-arte", { acao: "template_videos_buscar", trabalho_id: trabalho.id, ordem: card.ordem, consulta: consultaDoVideo.trim() });
+      setVideos(r.resultados); setAvisosDoVideo(r.avisos || []); setMelhorVideo(r.melhor ? r.melhor.indice : null);
     } catch (e) { setErro(textoDoErro(e)); } finally { setBuscandoVideo(false); }
   };
   const aplicarVideo = async (v: VideoReal) => {
@@ -193,12 +237,12 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
   const [avisosDoGerador, setAvisosDoGerador] = useState<string[]>([]);
   const diretor = padraoPara(mesa.catalogo || [], "diretor_arte");
   const comFoto = permitirIA && !!trabalho.modelo_imagem_id;
-  const gerarCarrossel = async () => {
+  const gerarCarrossel = async (soEsta = false) => {
     const avisos: string[] = [];
-    setAndamento("Escrevendo as lâminas e escolhendo as mídias");
+    setAndamento(soEsta ? `Escrevendo a lâmina ${card.ordem} e escolhendo a mídia` : "Escrevendo as lâminas e escolhendo as mídias");
     try {
       const r = await chamarFuncao<{ trabalho: TrabalhoGravado; laminas: Array<{ ordem: number; texto: string; sugestao: SugestaoDoCarrossel }>; avisos?: string[]; custo_usd: number }>("estudio-arte", {
-        acao: "template_carrossel", trabalho_id: trabalho.id, ordem: card.ordem, assunto: assunto.trim() || undefined, gravar_legenda: !trabalho.legenda, confirmado: true,
+        acao: "template_carrossel", trabalho_id: trabalho.id, ordem: card.ordem, assunto: assunto.trim() || undefined, gravar_legenda: !soEsta && !trabalho.legenda, confirmado: true, ...(soEsta ? { so_esta: true } : {}),
         ...(noticiaDaBase ? { noticia: { titulo: noticiaDaBase.titulo, fonte: noticiaDaBase.fonte, link: noticiaDaBase.link, data: noticiaDaBase.data } } : {}),
       });
       avisos.push(...(r.avisos || []));
@@ -213,17 +257,19 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
         try {
           let achou = false;
           if (s.midia === "video_real") {
-            const b = await chamarFuncao<{ resultados: VideoReal[] }>("estudio-arte", { acao: "template_videos_buscar", trabalho_id: trabalho.id, ordem: l.ordem, consulta: s.busca });
+            // O Jev põe primeiro o vídeo que mais combina com a lâmina (custo já no teto do gerador).
+            const b = await chamarFuncao<{ resultados: VideoReal[]; custo_usd?: number }>("estudio-arte", { acao: "template_videos_buscar", trabalho_id: trabalho.id, ordem: l.ordem, consulta: s.busca, ordenar: "jev" });
+            custo += Number(b.custo_usd) || 0;
             if (b.resultados[0]) {
               const a = await chamarFuncao<{ trabalho: TrabalhoGravado }>("estudio-arte", { acao: "template_video_aplicar", trabalho_id: trabalho.id, ordem: l.ordem, banco: b.resultados[0].banco, id: b.resultados[0].id });
               atual = a.trabalho; achou = true;
             }
           }
           if (s.midia === "foto_real" || (s.midia === "video_real" && !achou)) {
-            for (const banco of ["wikimedia", "openverse"]) {
-              if (achou) break;
-              const b = await chamarFuncao<{ resultados: Array<{ arquivo: string }> }>("estudio-arte", { acao: "imagens_reais_buscar", trabalho_id: trabalho.id, ordem: l.ordem, consulta: s.busca, tipo: "imagem", ...(banco === "openverse" ? { banco } : {}) }).catch(() => ({ resultados: [] }));
-              if (!b.resultados[0]) continue;
+            // Notícias, Pexels, Wikimedia e Openverse juntos; o Jev escolhe a melhor para a lâmina.
+            const b = await chamarFuncao<{ resultados: Array<{ arquivo: string }>; custo_usd?: number }>("estudio-arte", { acao: "imagens_reais_buscar", trabalho_id: trabalho.id, ordem: l.ordem, consulta: s.busca, tipo: "imagem", banco: "todos", ordenar: "jev" }).catch(() => ({ resultados: [] as Array<{ arquivo: string }>, custo_usd: 0 }));
+            custo += Number(b.custo_usd) || 0;
+            if (b.resultados[0]) {
               const lido = atual as unknown as Trabalho;
               const versao = Math.max(0, ...(lido.cards || []).filter((v) => v.ordem === l.ordem).map((v) => v.versao));
               const textoBase = lido.direcao?.cards?.find((c) => c.ordem === l.ordem)?.texto_exato || "";
@@ -241,9 +287,9 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
           gravarTrabalhoNoCache(cache, mesa.clientId, atual);
         } catch (e) { avisos.push(`Lâmina ${l.ordem}: ${textoDoErro(e)}`); }
       }
-      onGerado(atual);
+      onGerado(atual, soEsta);
       setAvisosDoGerador(avisos);
-      toast.success(`Carrossel gerado (${r.laminas.length} lâminas)`, { description: `Custo ${usd(custo)}. Confira cada lâmina e use Montar todas as lâminas.` });
+      toast.success(soEsta ? `Lâmina ${card.ordem} preenchida` : `Carrossel gerado (${r.laminas.length} lâminas)`, { description: `Custo ${usd(custo)}. Confira ${soEsta ? "a lâmina" : "cada lâmina e use Montar todas as lâminas"}.` });
       return { custo_usd: custo };
     } finally { setAndamento(""); onMudou(); }
   };
@@ -258,7 +304,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
     <div className="space-y-3">
       <Segmentado<Fonte> rotulo="De onde vem" opcoes={(Object.keys(ROTULO_DA_FONTE) as Fonte[]).map((v) => ({ valor: v, rotulo: ROTULO_DA_FONTE[v] }))} valor={fonte} onEscolher={setFonte} desativado={travado} />
       {fonte === "internet" && !ehVideoNoBloco && (
-        <ImagensReaisDoDiretor embutido trabalho={trabalho} ordem={card.ordem} bloqueado={travado} onAtualizar={onMudou} onAplicada={(f) => { if (f.caminho) usarMidia({ bucket: "mesa", caminho: f.caminho, origem: "internet" }, "imagem"); }} />
+        <ImagensReaisDoDiretor embutido trabalho={trabalho} ordem={card.ordem} bloqueado={travado} onAtualizar={onMudou} consultaInicial={sugestao?.busca} onAplicada={usarImagemDaBusca} />
       )}
       {fonte === "internet" && ehVideoNoBloco && (
         <div className="space-y-2" data-busca-de-video="">
@@ -267,20 +313,23 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
             <Button size="sm" variant="outline" className="ml-2 shrink-0" disabled={travado || buscandoVideo || consultaDoVideo.trim().length < 2} onClick={() => void buscarVideos()}>{buscandoVideo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1 h-3.5 w-3.5" />}Buscar vídeo</Button>
           </div>
           {avisosDoVideo.map((a) => <p key={a} className={texto.auxiliar}>{a}</p>)}
-          {videos.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2" aria-label="Vídeos encontrados">
-            {videos.map((v) => <li key={`${v.banco}:${v.id}`} className="min-w-0">
-              <button type="button" className="block w-full min-w-0 text-left" disabled={travado || buscandoVideo} onClick={() => void aplicarVideo(v)} title={`Usar ${v.nome}`}>
-                <span className="relative block w-full overflow-hidden rounded-md border border-border bg-secondary" style={{ paddingBottom: "56.25%" }}>
-                  {v.poster_url && <img src={v.poster_url} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />}
+          {videos.length > 0 && <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Vídeos encontrados">
+            {videos.map((v, i) => <li key={`${v.banco}:${v.id}`} className="min-w-0" data-banco-do-video={v.banco}>
+              <button type="button" className="group block w-full min-w-0 text-left" disabled={travado || buscandoVideo} onClick={() => void aplicarVideo(v)} title={`Usar ${v.nome}`} aria-label={`Usar o vídeo ${v.nome}`}>
+                <span className="relative block w-full overflow-hidden rounded-md border border-border bg-secondary transition-colors group-hover:border-primary" style={{ paddingBottom: "56.25%" }}>
+                  {v.poster_url && <img src={v.poster_url} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />}
+                  <span className="absolute bottom-1 right-1 inline-flex items-center rounded-full bg-foreground/70 px-1.5 py-0.5 text-[11px] text-background"><Film className="mr-1 h-3 w-3" aria-hidden="true" />{v.duracao_s ? `${Math.round(v.duracao_s)} s` : "vídeo"}</span>
+                  {melhorVideo === i && <span className="absolute left-1 top-1 inline-flex items-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-medium text-primary-foreground"><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />Melhor</span>}
                 </span>
-                <span className={juntar(texto.auxiliar, "mt-1 block truncate")}>{v.banco === "pexels" ? "Pexels" : "Wikimedia"}{v.duracao_s ? ` · ${Math.round(v.duracao_s)} s` : ""}{v.autor ? ` · ${v.autor}` : ""}</span>
+                <span className="mt-1 block truncate text-[12px]">{v.nome}</span>
+                <span className={juntar(texto.auxiliar, "block truncate")}>{BANCO_DO_VIDEO[v.banco] || "Internet"}{v.autor ? ` · ${v.autor}` : ""}</span>
               </button>
             </li>)}
           </ul>}
           {videosReaisDaLamina.length > 0 && <label className={juntar("block", texto.rotulo)}>Vídeos já trazidos para esta lâmina
             <select aria-label="Vídeos reais da lâmina" className={juntar(campo, "mt-1")} disabled={travado} value={videosReaisDaLamina.find((v) => v.caminho === midiaAtual?.caminho)?.caminho || ""} onChange={(e) => { const v = videosReaisDaLamina.find((x) => x.caminho === e.target.value); if (v) usarMidia(midiaDoVideoReal(v), "video"); }}>
               <option value="">Escolha</option>
-              {videosReaisDaLamina.map((v) => <option key={v.caminho} value={v.caminho}>{v.nome} · {v.banco === "pexels" ? "Pexels" : "Wikimedia"}</option>)}
+              {videosReaisDaLamina.map((v) => <option key={v.caminho} value={v.caminho}>{v.nome} · {BANCO_DO_VIDEO[v.banco] || "Internet"}</option>)}
             </select>
           </label>}
         </div>
@@ -335,9 +384,64 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
     </div>
   );
 
+  // ---------------------------------------------------------------- gráfico e manchete pela IA (23/10, só dado real)
+  const [avisoDaIa, setAvisoDaIa] = useState("");
+  const blocoPorIa = async (tipo: "grafico" | "manchete") => {
+    setAvisoDaIa(""); setErro("");
+    try {
+      const r = await chamarFuncao<{ grafico?: GraficoDoBloco; manchete?: MancheteDoBloco; fonte?: { nome?: string; veiculo?: string; url?: string | null }; custo_usd: number }>("estudio-arte", { acao: "template_bloco_ia", trabalho_id: trabalho.id, ordem: card.ordem, tipo, ...(sugestao?.busca ? { assunto: sugestao.busca } : {}), confirmado: true });
+      if (tipo === "grafico" && r.grafico) onBloco({ tipo: "grafico", grafico: r.grafico });
+      if (tipo === "manchete" && r.manchete) onBloco({ tipo: "manchete", manchete: { ...r.manchete, cor: manchete.cor }, borda: true });
+      const f = r.fonte ? r.fonte.nome || r.fonte.veiculo : "";
+      setAvisoDaIa(f ? `Preenchido com dado real · fonte: ${f}` : "Preenchido com dado real");
+      mesa.atualizarCusto?.();
+      return { custo_usd: Number(r.custo_usd) || 0 };
+    } catch (e) {
+      // Sem dado real: o aviso fica na tela e o modelo segue para preencher à mão (nada inventado).
+      if (e instanceof ErroDaMesa && e.codigo === "sem_dado_real") { setAvisoDaIa(textoDoErro(e)); return { custo_usd: Number((e.detalhes || {}).custo_usd) || 0 }; }
+      throw e;
+    }
+  };
+  const botaoDaIa = (tipo: "grafico" | "manchete") => (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center">
+        <BotaoComCusto rotulo={<><Wand2 className="mr-1.5 h-3.5 w-3.5" />Gerar com IA</>} titulo={tipo === "grafico" ? "Gráfico pela IA" : "Manchete pela IA"}
+          descricao={tipo === "grafico" ? "Números reais do assunto, das lâminas e das notícias, conferidos um a um, com a fonte." : "A notícia real do assunto que fala desta lâmina, escolhida pelo Jev."}
+          partes={() => (tipo === "grafico" ? partesDoTextoDoTemplate(diretor?.id) : [{ modeloId: diretor?.id || null, tipo: "texto", tokensEntrada: 1_500, tokensSaida: 100 }])}
+          executar={() => blocoPorIa(tipo)} sempreConfirmar variant="outline" disabled={travado} />
+        <AjudaRecolhida className="ml-1.5" rotulo="De onde vêm os dados">Só dado real: notícias do assunto, o assunto do carrossel e o texto das lâminas. Sem dado real, nada é inventado e o modelo fica para você preencher.</AjudaRecolhida>
+      </div>
+      {avisoDaIa && <p role="status" className={texto.auxiliar} data-aviso-da-ia="">{avisoDaIa}</p>}
+    </div>
+  );
+
+  // ---------------------------------------------------------------- perfil (a chamada "Siga" na última lâmina)
+  const perfilAtual: PerfilDoBloco = bloco.perfil || (perfilDeRedes ? perfilDoBlocoDeRedes(perfilDeRedes, "instagram", verificado) : { estilo: "instagram", nome: "", username: "" });
+  const mudarPerfil = (patch: Partial<PerfilDoBloco>) => onBloco({ tipo: "perfil", perfil: { ...perfilAtual, ...patch } });
+  const usarPerfilDeRedes = (estilo: PerfilDoBloco["estilo"] = perfilAtual.estilo) => { if (perfilDeRedes) onBloco({ tipo: "perfil", perfil: perfilDoBlocoDeRedes(perfilDeRedes, estilo, verificado), cantos: 24, borda: true }); };
+  const ehUltima = cards.length > 1 && cards[cards.length - 1]?.ordem === card.ordem;
+  const numeroOuVazio = (v: string) => { const n = Math.floor(Number(v.replace(/\D/g, ""))); return v.trim() && Number.isFinite(n) ? n : undefined; };
+  const editorDoPerfil = (
+    <div className="space-y-3" data-editor-do-perfil="">
+      <Segmentado<PerfilDoBloco["estilo"]> rotulo="Jeito do perfil" opcoes={[{ valor: "instagram", rotulo: "Instagram" }, { valor: "x", rotulo: "X" }]} valor={perfilAtual.estilo} onEscolher={(v) => mudarPerfil({ estilo: v })} desativado={travado} />
+      {perfilDeRedes ? <Button size="sm" variant="outline" disabled={travado} onClick={() => usarPerfilDeRedes()}><UserRound className="mr-1.5 h-3.5 w-3.5" />Puxar de Redes (@{perfilDeRedes.username})</Button>
+        : <p role="status" className={juntar(texto.auxiliar, "text-warning")} data-perfil-sem-redes="">Sem os dados de Redes deste cliente: preencha à mão.</p>}
+      <div className="grid min-w-0 gap-3">
+        <label className={juntar("block min-w-0", texto.rotulo)}>Nome<Input aria-label="Nome no perfil" value={perfilAtual.nome} maxLength={80} disabled={travado} onChange={(e) => mudarPerfil({ nome: e.target.value })} className="mt-1" /></label>
+        <label className={juntar("block min-w-0", texto.rotulo)}>@<Input aria-label="@ no perfil" value={perfilAtual.username} maxLength={31} disabled={travado} onChange={(e) => mudarPerfil({ username: e.target.value.replace(/^@/, "") })} className="mt-1" /></label>
+        <label className={juntar("block min-w-0", texto.rotulo)}>Bio<Textarea aria-label="Bio no perfil" value={perfilAtual.bio || ""} maxLength={300} rows={3} disabled={travado} onChange={(e) => mudarPerfil({ bio: e.target.value || undefined })} className="mt-1" /></label>
+        <label className={juntar("block min-w-0", texto.rotulo)}>Link<Input aria-label="Link no perfil" value={perfilAtual.site || ""} maxLength={80} disabled={travado} onChange={(e) => mudarPerfil({ site: e.target.value || undefined })} className="mt-1" /></label>
+      </div>
+      <div className="grid min-w-0 grid-cols-3 gap-2">
+        {(["posts", "seguidores", "seguindo"] as const).map((k) => <label key={k} className={juntar("block min-w-0", texto.rotulo)}>{k === "posts" ? "Posts" : k === "seguidores" ? "Seguidores" : "Seguindo"}<Input aria-label={`${k} no perfil`} inputMode="numeric" value={typeof perfilAtual[k] === "number" ? String(perfilAtual[k]) : ""} disabled={travado} onChange={(e) => mudarPerfil({ [k]: numeroOuVazio(e.target.value) })} className="mt-1" /></label>)}
+      </div>
+    </div>
+  );
+
   const editorDoGrafico = (
     <div className="space-y-3" data-editor-do-grafico="">
-      <Segmentado<GraficoDoBloco["tipo"]> rotulo="Tipo de gráfico" opcoes={[{ valor: "barras", rotulo: "Barras" }, { valor: "linha", rotulo: "Linha" }, { valor: "pizza", rotulo: "Pizza" }, { valor: "tabela", rotulo: "Tabela" }]} valor={grafico.tipo} onEscolher={(t) => mudarGrafico(t === "tabela" ? { tipo: t, colunas: grafico.colunas || ["Item", "Valor"], linhas: grafico.linhas || grafico.dados.map((d) => [d.rotulo, String(d.valor)]) } : { tipo: t })} desativado={travado} />
+      {botaoDaIa("grafico")}
+      <Segmentado<GraficoDoBloco["tipo"]> rotulo="Tipo de gráfico" opcoes={[{ valor: "barras", rotulo: "Barras" }, { valor: "linha", rotulo: "Linha" }, { valor: "pizza", rotulo: "Pizza" }, { valor: "numero", rotulo: "Número grande" }, { valor: "tabela", rotulo: "Tabela" }]} valor={grafico.tipo} onEscolher={(t) => mudarGrafico(t === "tabela" ? { tipo: t, colunas: grafico.colunas || ["Item", "Valor"], linhas: grafico.linhas || grafico.dados.map((d) => [d.rotulo, String(d.valor)]) } : { tipo: t })} desativado={travado} />
       <div className="grid min-w-0 gap-3">
         <label className={juntar("block min-w-0", texto.rotulo)}>Título do gráfico<Input aria-label="Título do gráfico" value={grafico.titulo || ""} maxLength={90} disabled={travado} onChange={(e) => mudarGrafico({ titulo: e.target.value || undefined })} className="mt-1" /></label>
         <label className={juntar("block min-w-0", texto.rotulo)}>Fonte dos números<Input aria-label="Fonte dos números" value={grafico.fonte || ""} maxLength={160} disabled={travado} placeholder="De onde vieram (obrigatório para publicar)" onChange={(e) => mudarGrafico({ fonte: e.target.value || undefined })} className="mt-1" /></label>
@@ -366,6 +470,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
 
   const editorDaManchete = (
     <div className="space-y-3" data-editor-da-manchete="">
+      {botaoDaIa("manchete")}
       <div className="flex min-w-0 items-center">
         <Input aria-label="Assunto da notícia" value={assuntoDaNoticia} maxLength={120} disabled={travado} onChange={(e) => setAssuntoDaNoticia(e.target.value)} placeholder="Assunto (vazio: o nicho do cliente)" className="min-w-0 flex-1" />
         <Button size="sm" variant="outline" className="ml-2 shrink-0" disabled={travado || buscandoNoticia} onClick={() => void buscarNoticias()}>{buscandoNoticia ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Newspaper className="mr-1 h-3.5 w-3.5" />}Buscar notícia</Button>
@@ -384,20 +489,30 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
     </div>
   );
 
-  const ajustesDoBloco = bloco.tipo === "nenhum" ? <p className={texto.auxiliar}>Lâmina só de texto: aumente o tamanho do texto abaixo.</p> : (
+  const tamanhoPronto = TAMANHOS_DO_BLOCO.find((t) => Number(t.valor) === bloco.altura)?.valor || "";
+  const cantoPronto = CANTOS_DO_BLOCO.find((t) => Number(t.valor) === bloco.cantos)?.valor || "";
+  const temCredito = !!midiaAtual?.credito && (bloco.tipo === "imagem" || bloco.tipo === "video");
+  const ajustesDoBloco = bloco.tipo === "nenhum" ? <p className={texto.auxiliar}>Lâmina só de texto: ajuste o tamanho em Texto.</p> : (
     <div className="space-y-4" data-ajustes-do-bloco="">
       <Segmentado<BlocoDaLamina["posicao"]> rotulo="Lugar do bloco" opcoes={[{ valor: "acima", rotulo: "Acima do texto" }, { valor: "meio", rotulo: "No meio" }, { valor: "abaixo", rotulo: "Abaixo" }]} valor={bloco.posicao} onEscolher={(v) => onBloco({ posicao: v })} desativado={travado} />
-      <div className="grid min-w-0 gap-3">
-        <Regua rotulo="Altura do bloco" valor={bloco.altura} min={20} max={100} sufixo="%" desativado={travado} onMudar={(v) => onBloco({ altura: v })} />
-        <Regua rotulo="Largura do bloco" valor={bloco.largura} min={40} max={100} sufixo="%" desativado={travado || bloco.sangrar} onMudar={(v) => onBloco({ largura: v })} />
-        <Regua rotulo="Cantos do bloco" valor={bloco.cantos} min={0} max={48} desativado={travado || bloco.sangrar} onMudar={(v) => onBloco({ cantos: v })} />
-      </div>
+      <Segmentado<string> rotulo="Tamanho do bloco" opcoes={TAMANHOS_DO_BLOCO} valor={tamanhoPronto} onEscolher={(v) => onBloco({ altura: Number(v), largura: 100 })} desativado={travado} />
+      <Segmentado<string> rotulo="Cantos" opcoes={CANTOS_DO_BLOCO} valor={cantoPronto} onEscolher={(v) => onBloco({ cantos: Number(v) })} desativado={travado || bloco.sangrar} />
       <div className="flex flex-wrap">
         <Marca rotulo="Sangrar até a borda" marcado={bloco.sangrar} desativado={travado} onMudar={(v) => onBloco({ sangrar: v })} />
         <Marca rotulo="Borda fina" marcado={bloco.borda} desativado={travado} onMudar={(v) => onBloco({ borda: v })} />
         <Marca rotulo="Sombra leve" marcado={bloco.sombra} desativado={travado} onMudar={(v) => onBloco({ sombra: v })} />
+        {temCredito && <Marca rotulo="Crédito embaixo do bloco" marcado={!!bloco.credito_visivel} desativado={travado} onMudar={(v) => onBloco({ credito_visivel: v || undefined })} />}
         {ehVideoNoBloco && <Marca rotulo="Ícone de som na peça" marcado={!!bloco.som_na_peca} desativado={travado} onMudar={(v) => onBloco({ som_na_peca: v || undefined })} />}
       </div>
+      {temCredito && bloco.credito_visivel && <p className={texto.auxiliar} data-credito-na-lamina="">Na lâmina: {textoDoCredito(bloco)}</p>}
+      <details className="min-w-0" open={!tamanhoPronto || !cantoPronto || bloco.largura !== 100}>
+        <summary className="cursor-pointer text-[12px] text-muted-foreground">Ajuste fino do bloco</summary>
+        <div className="mt-2 grid min-w-0 gap-3">
+          <Regua rotulo="Altura do bloco" valor={bloco.altura} min={20} max={100} sufixo="%" desativado={travado} onMudar={(v) => onBloco({ altura: v })} />
+          <Regua rotulo="Largura do bloco" valor={bloco.largura} min={40} max={100} sufixo="%" desativado={travado || bloco.sangrar} onMudar={(v) => onBloco({ largura: v })} />
+          <Regua rotulo="Cantos do bloco" valor={bloco.cantos} min={0} max={48} desativado={travado || bloco.sangrar} onMudar={(v) => onBloco({ cantos: v })} />
+        </div>
+      </details>
       {(bloco.tipo === "imagem" || bloco.tipo === "video") && <>
         <Segmentado<BlocoDaLamina["enquadramento"]> rotulo="Enquadramento" opcoes={[{ valor: "inteira", rotulo: "Mídia inteira" }, { valor: "preencher", rotulo: "Preencher o bloco" }]} valor={bloco.enquadramento} onEscolher={(v) => onBloco({ enquadramento: v })} desativado={travado} />
         {bloco.enquadramento === "preencher" && <div className="grid min-w-0 gap-3">
@@ -408,18 +523,50 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
     </div>
   );
 
+  const aplicarATodas = (campos: CampoDaAparencia[], rotulo: string) => onAplicarATodas && (
+    <Button size="sm" variant="outline" disabled={travado} onClick={() => onAplicarATodas(campos)} aria-label={`Aplicar ${rotulo} a todas as lâminas`} title={`Aplicar ${rotulo} a todas as lâminas`}>Aplicar a todas as lâminas</Button>
+  );
   const textoDaLamina = (
     <div className="space-y-4">
-      <div className="flex items-center"><p className={texto.auxiliar}>Texto da ferramenta Lâmina; **trecho** sai em negrito.</p><AjudaRecolhida className="ml-1.5" rotulo="Como pôr negrito">Escreva o texto na ferramenta Lâmina. Dois asteriscos em volta de um trecho (**assim**) deixam esse trecho em negrito na lâmina.</AjudaRecolhida></div>
-      <div className="grid min-w-0 gap-3">
+      <EditorDoTextoDaLamina trabalho={trabalho} card={card} total={cards.length} travado={travado} onMudou={onMudou} />
+      <div className="grid min-w-0 gap-3 border-t border-border pt-4">
         <Regua rotulo="Tamanho do texto" valor={ajustes.tamanho_texto} min={24} max={56} desativado={travado} onMudar={(v) => onAjuste("tamanho_texto", v)} />
       </div>
       <Segmentado<"regular" | "medio"> rotulo="Peso do texto" opcoes={[{ valor: "regular", rotulo: "Regular" }, { valor: "medio", rotulo: "Médio" }]} valor={ajustes.peso_texto || "regular"} onEscolher={(v) => onAjuste("peso_texto", v)} desativado={travado} />
-      <Segmentado<"claro" | "escuro"> rotulo="Tema" opcoes={[{ valor: "claro", rotulo: "Claro" }, { valor: "escuro", rotulo: "Escuro" }]} valor={ajustes.tema === "claro" ? "claro" : "escuro"} onEscolher={(v) => { onAjuste("tema", v); onAjuste("cor_fundo", v === "claro" ? "#ffffff" : "#000000"); }} desativado={travado} />
       <div className="flex flex-wrap">
         <Marca rotulo="Seta de próxima" marcado={ajustes.seta !== false} desativado={travado} onMudar={(v) => onAjuste("seta", v)} />
-        <Marca rotulo="Rodapé levemente cinza" marcado={!!ajustes.rodape_cinza} desativado={travado} onMudar={(v) => onAjuste("rodape_cinza", v || undefined)} />
       </div>
+      {aplicarATodas(["tamanho_texto", "peso_texto", "seta"], "o tamanho e o estilo do texto")}
+    </div>
+  );
+
+  // ---------------------------------------------------------------- fundo da lâmina (23/10)
+  const corAtual = (ajustes.cor_fundo || "#ffffff").toLowerCase();
+  const marcaSemRepetir = coresDaMarca.map((c) => c.toLowerCase()).filter((c, i, l) => /^#[0-9a-f]{6}$/.test(c) && l.indexOf(c) === i && !FUNDOS_PRONTOS.some((f) => f.cor === c)).slice(0, 8);
+  const usarFundo = (cor: string) => { onAjuste("cor_fundo", cor.toLowerCase()); onAjuste("tema", temaDoFundo(cor)); };
+  const amostra = (cor: string, rotulo: string) => (
+    <button key={cor} type="button" aria-label={`Fundo ${rotulo}`} title={`${rotulo} ${cor}`} aria-pressed={corAtual === cor} disabled={travado} onClick={() => usarFundo(cor)}
+      className={juntar("toque-compacto relative mb-1.5 mr-1.5 inline-flex h-9 w-9 items-center justify-center rounded-full border transition-shadow", corAtual === cor ? "border-primary ring-2 ring-primary" : "border-border")} style={{ backgroundColor: cor }}>
+      {corAtual === cor && <Check className="h-4 w-4" style={{ color: fundoEscuro(cor) ? "#ffffff" : "#0f1419" }} aria-hidden="true" />}
+    </button>
+  );
+  const fundoDaLamina = (
+    <div className="space-y-4" data-fundo-da-lamina="">
+      <div className="min-w-0">
+        <p className={juntar(texto.rotulo, "mb-1.5")}>Fundos prontos</p>
+        <div role="group" aria-label="Fundos prontos" className="flex flex-wrap">{FUNDOS_PRONTOS.map((f) => amostra(f.cor, f.rotulo))}</div>
+      </div>
+      <div className="min-w-0">
+        <p className={juntar(texto.rotulo, "mb-1.5")}>Cores da marca</p>
+        {marcaSemRepetir.length ? <div role="group" aria-label="Cores da marca" className="flex flex-wrap">{marcaSemRepetir.map((c) => amostra(c, "da marca"))}</div>
+          : <p className={texto.auxiliar}>Sem paleta da marca: use a cor livre.</p>}
+      </div>
+      <label className="inline-flex items-center text-[12px] text-muted-foreground">Cor livre<input aria-label="Cor de fundo da lâmina" type="color" className="ml-2 h-8 w-10 cursor-pointer rounded-md border border-border bg-transparent" value={corAtual} disabled={travado} onChange={(e) => usarFundo(e.target.value)} /></label>
+      <p className={texto.auxiliar} data-contraste-do-texto="">Texto {fundoEscuro(corAtual) ? "claro" : "escuro"}, pelo contraste com o fundo</p>
+      <div className="flex flex-wrap">
+        <Marca rotulo="Rodapé levemente sombreado" marcado={!!ajustes.rodape_cinza} desativado={travado} onMudar={(v) => onAjuste("rodape_cinza", v || undefined)} />
+      </div>
+      {aplicarATodas(["cor_fundo", "tema", "rodape_cinza"], "o fundo")}
     </div>
   );
 
@@ -435,7 +582,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
           titulo="Gerar o carrossel inteiro"
           descricao={`Texto de todas as lâminas, a mídia escolhida pelo Jev, a busca da mídia real${comFoto ? " e, no máximo, uma imagem por IA por lâmina sem real boa" : ""}. O custo é o teto.`}
           partes={() => [...partesDoTextoDoTemplate(diretor?.id), ...(comFoto ? partesDaFotoDoTemplate(trabalho.modelo_imagem_id, trabalho.qualidade, cards.length) : [])]}
-          executar={gerarCarrossel}
+          executar={() => gerarCarrossel(false)}
           sempreConfirmar
           disabled={travado || !!andamento || (!assunto.trim() && !noticiaDaBase)}
         />
@@ -446,6 +593,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
     </div>
   );
 
+  const posicaoDaLamina = Math.max(1, cards.findIndex((c) => c.ordem === card.ordem) + 1);
   return (
     <div className="min-w-0 space-y-4" data-painel-do-carrossel="">
       <section className="min-w-0 space-y-3" aria-label="Carrossel X">
@@ -453,12 +601,32 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
         {modeloSeletor}
         {gerador}
       </section>
-      {secao("Bloco de mídia", <div className="space-y-3">
-        <Segmentado<BlocoDaLamina["tipo"]> rotulo="Tipo de mídia" opcoes={TIPOS.map((t) => ({ valor: t, rotulo: ROTULO_DO_TIPO[t] }))} valor={bloco.tipo} onEscolher={(t) => onBloco({ tipo: t, ...(t === "imagem" && midiaAtual && !ehImagem(midiaAtual.caminho) ? { midia: undefined } : {}), ...(t === "video" && midiaAtual && !ehVideo(midiaAtual.caminho) ? { midia: undefined } : {}), ...(t === "grafico" && !bloco.grafico ? { grafico } : {}), ...(t === "manchete" && !bloco.manchete ? { manchete: { veiculo: "", titulo: "" }, borda: true } : {}) })} desativado={travado} />
+      <section className="min-w-0 space-y-4 border-t border-border pt-4" aria-label={`Lâmina ${posicaoDaLamina}`} data-ajustes-da-lamina={parte}>
+        <p className={juntar(texto.corpo, "font-semibold")}>Lâmina {posicaoDaLamina} de {cards.length}</p>
+        <Segmentado<Parte> rotulo="Ajustar a lâmina" mostrarRotulo={false} opcoes={[
+          { valor: "midia", rotulo: "Mídia", icone: <IconeDeImagem className="h-3.5 w-3.5" /> },
+          { valor: "fundo", rotulo: "Fundo", icone: <PaintBucket className="h-3.5 w-3.5" /> },
+          { valor: "texto", rotulo: "Texto", icone: <Type className="h-3.5 w-3.5" /> },
+        ]} valor={parte} onEscolher={setParte} />
+        {parte === "fundo" && fundoDaLamina}
+        {parte === "texto" && textoDaLamina}
+      </section>
+      {parte === "midia" && secao("Bloco de mídia", <div className="space-y-3">
+        <Segmentado<BlocoDaLamina["tipo"]> rotulo="Tipo de mídia" opcoes={TIPOS.map((t) => ({ valor: t, rotulo: ROTULO_DO_TIPO[t], icone: ICONE_DO_TIPO[t] }))} valor={bloco.tipo} onEscolher={(t) => onBloco({ tipo: t, ...(t === "imagem" && midiaAtual && !ehImagem(midiaAtual.caminho) ? { midia: undefined } : {}), ...(t === "video" && midiaAtual && !ehVideo(midiaAtual.caminho) ? { midia: undefined } : {}), ...(t === "grafico" && !bloco.grafico ? { grafico } : {}), ...(t === "manchete" && !bloco.manchete ? { manchete: { veiculo: "", titulo: "" }, borda: true } : {}), ...(t === "perfil" && !bloco.perfil ? { perfil: perfilAtual, cantos: 24, borda: true } : {}) })} desativado={travado} />
+        {ehUltima && bloco.tipo !== "perfil" && <div className="flex flex-wrap items-center" data-chamada-siga="">
+          <Button size="sm" variant="outline" className="mb-1 mr-2" disabled={travado} onClick={() => (perfilDeRedes ? usarPerfilDeRedes("instagram") : onBloco({ tipo: "perfil", perfil: perfilAtual, cantos: 24, borda: true }))}><UserRound className="mr-1.5 h-3.5 w-3.5" />Pôr o perfil com o Seguir</Button>
+          <span className={juntar(texto.auxiliar, "mb-1")}>{perfilDeRedes ? "Pronto com os dados de Redes" : "Sem dados de Redes: preencha à mão"}</span>
+        </div>}
         {sugestao && <p className={texto.auxiliar} data-sugestao-da-midia="">Sugestão {sugestao.por === "jev" ? "do Jev" : "do gerador"}: {sugestao.midia.replace("_", " ")}{sugestao.busca ? ` (${sugestao.busca})` : ""}</p>}
         {(bloco.tipo === "imagem" || bloco.tipo === "video") && origens}
         {bloco.tipo === "grafico" && editorDoGrafico}
         {bloco.tipo === "manchete" && editorDaManchete}
+        {bloco.tipo === "perfil" && editorDoPerfil}
+        <div className="flex flex-wrap items-center border-t border-border pt-3">
+          <BotaoComCusto rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />Preencher esta lâmina com IA</>} titulo="Preencher a lâmina com IA" descricao="Reescreve o texto desta lâmina e escolhe a mídia (real primeiro), com as outras como contexto."
+            partes={() => [...partesDoTextoDoTemplate(diretor?.id), ...(comFoto ? partesDaFotoDoTemplate(trabalho.modelo_imagem_id, trabalho.qualidade, 1) : [])]}
+            executar={() => gerarCarrossel(true)} sempreConfirmar variant="ghost" disabled={travado || !!andamento} />
+        </div>
         {midiaAtual && (bloco.tipo === "imagem" || bloco.tipo === "video") && <p className={juntar(texto.auxiliar, "[overflow-wrap:anywhere]")} data-midia-do-bloco={midiaAtual.origem}>
           No bloco: {bloco.tipo === "video" ? "vídeo" : "imagem"} {midiaAtual.origem === "enviada" ? "enviada" : midiaAtual.origem === "workspace" ? "do Workspace" : midiaAtual.origem === "gerada" ? "gerada" : midiaAtual.origem === "internet" ? "da internet" : "do cliente"}
           {credito && <> · {credito.fonte}{credito.autor ? ` · ${credito.autor}` : ""} · {credito.licenca} · <a href={credito.url} target="_blank" rel="noopener noreferrer" className="underline">fonte</a></>}
@@ -466,8 +634,7 @@ export default function PainelDoCarrossel({ trabalho, card, cards, fontes, bloco
         </p>}
         {erro && <p role="alert" className="text-[12px] text-destructive">{erro}</p>}
       </div>)}
-      {secao("Ajustes do bloco", ajustesDoBloco)}
-      {secao("Texto da lâmina", textoDaLamina)}
+      {parte === "midia" && secao("Tamanho e estilo do bloco", ajustesDoBloco)}
     </div>
   );
 }

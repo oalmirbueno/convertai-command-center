@@ -107,8 +107,9 @@ describe("custo do Jev na carteira", () => {
     // no agente do Mês (intenção, qual peça, se está clara e se é uma só, numa pergunta só).
     // + o molde dos posts vencedores no contexto do Mês (12/10).
     // 22/10: + as perguntas da campanha (datas do hype, conferência, introdução e reorganização) e do pedido do Mês;
-    // conferido: cada uma das 14 tem a sua cobrança na linha seguinte.
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(14);
+    // 23/10: + a versão recomendada do agente de roteiro da peça de vídeo (Choice).
+    // conferido: cada uma das 15 tem a sua cobrança na linha seguinte.
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(15);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
     // + frente R2 (26/09): conferir_rosto (Noul "outra pessoa?", só aviso, uma vez por versão:
     // o resultado fica em conferencia_rosto e chamar de novo devolve o guardado, custo 0) e
@@ -124,9 +125,12 @@ describe("custo do Jev na carteira", () => {
     // 18/10: + a capa escolhida pelo Jev (37b5256c) e as referências do Workspace que servem ao pedido
     // (d2a4c32b). Os módulos recebem um `julgar` de fora; a pergunta e a cobrança ficam juntas no index.ts.
     // 22/10: + a mídia de cada lâmina do carrossel estilo X (Choice, um pedido para todas, template_carrossel).
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(17);
+    // 23/10: + a melhor imagem da busca de todos os bancos para a lâmina (Choice, só com ordenar: "jev",
+    // no gerador do carrossel com o custo já confirmado; template_videos_buscar e template_destaques usam a
+    // mesma perguntarJev do carrossel, já cobrada).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(18);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(14);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(16);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(17);
     // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
     for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {
       expect(ler(`supabase/functions/estudio-arte/modulos/${m}.ts`)).not.toMatch(/jevPerguntar\(/);

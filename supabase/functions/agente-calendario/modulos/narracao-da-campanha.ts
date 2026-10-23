@@ -33,7 +33,7 @@ import {
   voiceSettings,
 } from "../../mesa-motion/modulos/narracao.ts";
 import { registrarFalha } from "../../_shared/falha-registrada.ts";
-import { type NarracaoDoRoteiro, normalizarNarracaoDoRoteiro, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "./roteiro-de-video.ts";
+import { MAX_CENAS, type NarracaoDoRoteiro, normalizarNarracaoDoRoteiro, normalizarRoteiroDeVideo, type RoteiroDeVideo } from "./roteiro-de-video.ts";
 import { assinaturaDaCena, falasDaNarracao, pedidoDaNarracao, textoDaNarracao } from "./narracao-da-campanha-regras.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -320,7 +320,7 @@ export function acoesDaNarracao(d: DepsDaNarracao) {
     const pedidas = (Array.isArray(corpo.cenas) ? (corpo.cenas as unknown[]) : corpo.cena ? [corpo.cena] : [])
       .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
       .filter((x): x is Record<string, unknown> => !!x)
-      .slice(0, 8);
+      .slice(0, MAX_CENAS);
     const temMontagem = Object.prototype.hasOwnProperty.call(corpo, "montagem");
     if (!pedidas.length && !temMontagem) throw d.erro(400, "nada_a_registrar", "Diga a cena ou a montagem.");
     const cenas: Array<{ ordem: number; pedidoId: string | null; motor: string }> = [];

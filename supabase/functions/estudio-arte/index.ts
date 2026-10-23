@@ -602,8 +602,9 @@ import { acoesDoPadraoDaCampanha } from "./modulos/padrao-da-campanha-acao.ts";
 import { acoesDaGeracaoDoTemplate, TAMANHO_DA_FOTO } from "./modulos/template-geracao.ts";
 import { acoesDoCarrossel, type PedidoDeRender } from "./modulos/template-carrossel.ts";
 import { TIPO_DA_LAMINA_EM_VIDEO } from "./modulos/lamina-em-video.ts";
+import { laminaComVideo, type PedidoDaLaminaPronto, type VersaoComVideo, videoProntoDaLamina } from "./modulos/lamina-de-video-na-entrega.ts";
 import { estimarComModelo as estimarPeloCatalogo } from "../_shared/ia-motor.ts";
-import { acoesDasFontesReais, type FonteRealDoDiretor } from "./modulos/fontes-reais-do-diretor.ts";
+import { acoesDasFontesReais, noticiasDoRss, urlDaBuscaDeNoticias, urlDaFonteReal, type FonteRealDoDiretor } from "./modulos/fontes-reais-do-diretor.ts";
 // Frente AE (28/09): arte rápida (pedido avulso, fora do plano do mês), pelo mesmo diretor e o mesmo gerador.
 import {
   aplicarArquivosNasLaminas,
@@ -8460,6 +8461,10 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   let paiId: string | null = null;
   // Anti-bug AB2: lâminas abertas nesta chamada para o recorte final (limite de CPU).
   let aberturas = 0;
+  // 23/10: carrossel estilo X com lâmina de vídeo: o MP4 pronto da versão atual entra no lugar do PNG.
+  const pedidosDeVideo = ultimas.some((u) => laminaComVideo(u.versao as unknown as VersaoComVideo)) ? await pedidosProntosDaLamina(t.id) : [];
+  const laminasEmVideo: number[] = [];
+  const videosQueFicaramEmPng: number[] = [];
 
   for (let i = 0; i < total; i++) {
     const { card, versao } = ultimas[i];
@@ -8475,6 +8480,21 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
       fileIds.push(ja.id);
       if (i === 0) paiId = ja.id;
       continue;
+    }
+
+    const videoDaLamina = videoProntoDaLamina(versao as unknown as VersaoComVideo, pedidosDeVideo, t.client_id);
+    if (videoDaLamina) {
+      const noFormato = laminaJaNoFormato((versao as unknown as { tamanho?: unknown }).tamanho, quadroFinal);
+      const idDoVideo: string | null = noFormato
+        ? await entregarLaminaEmVideo(ch, t, { origem: videoDaLamina, chave, paiId, indice: i, total, nomeBase, projetoId, legendaFinal, descricao })
+        : null;
+      if (idDoVideo) {
+        fileIds.push(idDoVideo);
+        if (i === 0) paiId = idDoVideo;
+        laminasEmVideo.push(card.ordem);
+        continue;
+      }
+      videosQueFicaramEmPng.push(card.ordem);
     }
 
     // Anti-bug AB2: fora da proporção e sem o recorte guardado, a lâmina abre aqui (cerca de 0,4 s de CPU).
@@ -8558,10 +8578,75 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
     file_ids: fileIds,
     agenda,
     formatos,
-    aviso: formatos.some((f) => !f.redimensionada)
-      ? "Parte das artes não pôde ser recortada no formato final e foi entregue no tamanho em que foi gerada."
-      : null,
+    laminas_em_video: laminasEmVideo,
+    aviso: [
+      formatos.some((f) => !f.redimensionada) ? "Parte das artes não pôde ser recortada no formato final e foi entregue no tamanho em que foi gerada." : "",
+      videosQueFicaramEmPng.length ? `${videosQueFicaramEmPng.length === 1 ? `A lâmina ${videosQueFicaramEmPng[0]} foi` : `As lâminas ${videosQueFicaramEmPng.join(", ")} foram`} em imagem: o vídeo não pôde ser levado para Arquivos.` : "",
+    ].filter(Boolean).join(" ") || null,
   });
+}
+
+/** 23/10: os MP4 prontos das lâminas de vídeo deste trabalho (falha de leitura: nenhum, a entrega segue em PNG). */
+async function pedidosProntosDaLamina(trabalhoId: string): Promise<PedidoDaLaminaPronto[]> {
+  const { data, error } = await servico()
+    .from("render_pedidos")
+    .select("estado, saida_path, entrada, criado_em")
+    .eq("estudio_trabalho_id", trabalhoId)
+    .eq("tipo", TIPO_DA_LAMINA_EM_VIDEO)
+    .eq("estado", "pronto")
+    .order("criado_em", { ascending: false })
+    .limit(50);
+  if (error) return [];
+  return (data || []) as unknown as PedidoDaLaminaPronto[];
+}
+
+/**
+ * 23/10: a lâmina de vídeo em Arquivos, pelo mesmo caminho da lâmina em PNG (bucket files, create_file_record
+ * com o JWT de quem chamou, sha256 para a publicação automática), em video/mp4. Qualquer falha devolve null e
+ * a lâmina segue em PNG (o que subiu e não foi registrado é apagado).
+ */
+async function entregarLaminaEmVideo(
+  ch: Chamador,
+  t: Trabalho,
+  p: { origem: string; chave: string; paiId: string | null; indice: number; total: number; nomeBase: string; projetoId: string; legendaFinal: string | null; descricao: string },
+): Promise<string | null> {
+  const baixado = await servico().storage.from("mesa").download(p.origem);
+  if (baixado.error || !baixado.data) return null;
+  const bytes = new Uint8Array(await baixado.data.arrayBuffer());
+  if (!bytes.byteLength) return null;
+  const fileId = crypto.randomUUID();
+  const ehCarrossel = p.total > 1;
+  const caminho = `${t.client_id}/${p.paiId ?? fileId}/v1/${p.indice + 1}-${nomeSeguro(p.nomeBase)}.mp4`;
+  const { error: erroUpload } = await ch.doChamador.storage.from("files").upload(caminho, new Blob([bytes], { type: "video/mp4" }), { contentType: "video/mp4", upsert: false });
+  if (erroUpload) return null;
+  const { data: registro, error: erroRegistro } = await ch.doChamador.rpc("create_file_record", {
+    p_file: {
+      id: fileId,
+      client_id: t.client_id,
+      file_name: p.indice === 0 ? p.nomeBase : (ehCarrossel ? `${p.nomeBase} (${p.indice + 1}/${p.total})` : p.nomeBase),
+      file_url: `files://${caminho}`,
+      file_type: ehCarrossel ? "carrossel" : "post",
+      mime_type: "video/mp4",
+      extension: "mp4",
+      storage_bucket: "files",
+      storage_path: caminho,
+      size_bytes: bytes.byteLength,
+      sha256: await sha256Hex(bytes),
+      folder: "materiais",
+      project_id: p.projetoId,
+      status: "ready",
+      version: 1,
+      caption: p.indice === 0 ? p.legendaFinal : null,
+      description: p.indice === 0 ? p.descricao : null,
+      parent_file_id: ehCarrossel && p.indice > 0 ? p.paiId : null,
+      idempotency_key: p.chave,
+    },
+  });
+  if (erroRegistro || !registro) {
+    await ch.doChamador.storage.from("files").remove([caminho]).catch(() => {});
+    return null;
+  }
+  return (registro as { id: string }).id;
 }
 
 /** 19/10: o Workspace global de verdade (servidor, depois da conferência de acesso ao trabalho). */
@@ -11447,7 +11532,38 @@ async function escreverTexto(ch: Chamador, t: Trabalho, e: { sistema: string; pe
 }
 
 /** Hosts dos bancos de vídeo com licença comercial (o vídeo real só vem deles, nunca de link da tela). */
-const HOSTS_DOS_VIDEOS_REAIS = /^(videos\.pexels\.com|player\.vimeo\.com|[a-z0-9-]+\.pexels\.com|upload\.wikimedia\.org)$/i;
+const HOSTS_DOS_VIDEOS_REAIS = /^(videos\.pexels\.com|player\.vimeo\.com|[a-z0-9-]+\.pexels\.com|upload\.wikimedia\.org|archive\.org|[a-z0-9-]+\.us\.archive\.org)$/i;
+
+/** Pexels (Fotos e Vídeos) com a chave do cofre; só as duas APIs públicas do Pexels. */
+async function jsonDoPexels(url: string): Promise<unknown> {
+  const chave = (await chaveDoCofre("PEXELS_API_KEY").catch(() => "")).trim();
+  if (!chave) throw new ErroEstudio(503, "pexels_sem_chave", "Sem a chave do Pexels.");
+  if (!url.startsWith("https://api.pexels.com/videos/") && !url.startsWith("https://api.pexels.com/v1/")) throw new Error("pexels_url");
+  const res = await fetch(url, { headers: { Authorization: chave, Accept: "application/json" }, signal: AbortSignal.timeout(12_000), redirect: "error" });
+  if (!res.ok) { await res.body?.cancel().catch(() => {}); throw new Error(`pexels_${res.status}`); }
+  const bytes = await lerComTeto(res, 2 * 1024 * 1024, false);
+  if (!bytes) throw new Error("pexels_grande");
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+/** Há chave do Pexels no cofre? (Sem ela, as buscas seguem nos bancos livres; a chave nova vale na hora.) */
+const temPexels = () => chaveDoCofre("PEXELS_API_KEY").then((c) => !!(c || "").trim()).catch(() => false);
+
+/** Internet Archive: só a API pública (busca e metadados), JSON com teto. */
+async function jsonDoArquivo(url: string): Promise<unknown> {
+  if (!url.startsWith("https://archive.org/advancedsearch.php?") && !url.startsWith("https://archive.org/metadata/")) throw new Error("arquivo_url");
+  const res = await fetch(url, { headers: { "User-Agent": "AceleriqEstudio/1.0 (https://aceleriq.com.br)", Accept: "application/json" }, signal: AbortSignal.timeout(12_000), redirect: "error" });
+  if (!res.ok) { await res.body?.cancel().catch(() => {}); throw new Error(`arquivo_${res.status}`); }
+  const bytes = await lerComTeto(res, 2 * 1024 * 1024, false);
+  if (!bytes) throw new Error("arquivo_grande");
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+/** Texto de página pública (RSS do Bing Notícias e o começo da matéria), com DNS público em cada salto. */
+async function textoDaWeb(url: URL, limite: number): Promise<{ url: URL; texto: string } | null> {
+  const r = await buscarLinkSeguro(url, limite, "text/html,application/xhtml+xml,application/rss+xml,application/xml;q=0.9,*/*;q=0.5", true, (u) => !!urlDaFonteReal(u.href));
+  return r ? { url: r.url, texto: new TextDecoder().decode(r.bytes) } : null;
+}
 
 /** Baixa o vídeo real escolhido (só dos hosts dos bancos, com teto de tamanho e redirecionamento conferido). */
 async function baixarVideoReal(inicial: string, limite: number): Promise<{ bytes: Uint8Array; mime: string } | null> {
@@ -11487,6 +11603,15 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
     json, trabalhoComAcesso, mutarTrabalho, jsonDoCommons,
     // 21/10: Openverse na busca do Template (mesma leitura JSON com teto; URL fixa da API pública).
     jsonDoOpenverse: jsonDoCommons,
+    // 23/10: notícias (RSS do Bing e a og:image da matéria), Pexels Fotos com a chave e o Jev que escolhe a melhor.
+    textoDaWeb,
+    jsonDoPexels,
+    temPexels,
+    perguntarJev: async (t, state, questions) => {
+      const res = await jevPerguntar({ state, questions: questions as unknown as Record<string, PerguntaJev> });
+      const cobrado = await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id } }).catch(() => null);
+      return { answers: res.answers as Record<string, { choice?: string; confidence?: number }>, custoUsd: cobrado?.custoUsd ?? 0 };
+    },
     buscarImagem: (url, limite, permitir) => buscarLinkSeguro(url, limite, "image/png,image/jpeg,image/webp", false, permitir),
     validarImagem: (bytes, limite) => {
       const mime = mimeDe(bytes);
@@ -11595,15 +11720,13 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       return { answers: res.answers, custoUsd: cobrado?.custoUsd ?? 0 };
     },
     jsonDoCommons,
-    jsonDoPexels: async (url) => {
-      const chave = (await chaveDoCofre("PEXELS_API_KEY").catch(() => "")).trim();
-      if (!chave) throw new ErroEstudio(503, "pexels_sem_chave", "Sem a chave do Pexels.");
-      if (!url.startsWith("https://api.pexels.com/videos/")) throw new Error("pexels_url");
-      const res = await fetch(url, { headers: { Authorization: chave, Accept: "application/json" }, signal: AbortSignal.timeout(12_000), redirect: "error" });
-      if (!res.ok) { await res.body?.cancel().catch(() => {}); throw new Error(`pexels_${res.status}`); }
-      const bytes = await lerComTeto(res, 2 * 1024 * 1024, false);
-      if (!bytes) throw new Error("pexels_grande");
-      return JSON.parse(new TextDecoder().decode(bytes));
+    jsonDoPexels,
+    temPexels,
+    jsonDoArquivo,
+    // 23/10: as notícias reais do assunto para a manchete e o gráfico por IA (o mesmo RSS da busca de imagens).
+    noticiasDoAssunto: async (consulta) => {
+      const r = await textoDaWeb(new URL(urlDaBuscaDeNoticias(consulta)), 400_000);
+      return r ? noticiasDoRss(r.texto).map((n) => ({ titulo: n.nome, fonte: n.autor || new URL(n.fonte_url).hostname.replace(/^www\./, ""), link: n.fonte_url, ...(n.data ? { data: n.data } : {}), ...(n.resumo ? { resumo: n.resumo } : {}) })) : [];
     },
     baixarVideo: baixarVideoReal,
     guardarVideo: async (t, bytes, mime) => {

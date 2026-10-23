@@ -11,16 +11,28 @@
  *   cada lâmina; a busca da mídia real e a imagem por IA (só quando não há real boa) vêm depois,
  *   pela tela, lâmina por lâmina.
  * - template_videos_buscar: vídeos reais com licença de uso comercial (Pexels Videos, com a chave
- *   PEXELS_API_KEY do cofre; Wikimedia Commons, só licenças livres). Sem custo.
+ *   PEXELS_API_KEY do cofre; Wikimedia Commons e, desde 23/10, o Internet Archive, só licenças livres
+ *   e sem "não comercial"). Sem chave do Pexels a busca segue nos outros dois. Sem custo; com
+ *   `ordenar: "jev"` (o gerador, custo já confirmado) o Jev põe o vídeo que mais combina primeiro.
  * - template_video_aplicar: relê o item NA FONTE (licença, autor e arquivo nunca vêm da tela),
  *   baixa e guarda na pasta do cliente, com o crédito. Sem custo.
  * - template_video_pedir / template_video_estado: a lâmina de vídeo em MP4 pela fila de render
  *   (tipo lamina_video, contrato em lamina-em-video.ts); pronta, o MP4 entra na versão da lâmina.
+ * - template_bloco_ia (23/10): o gráfico ou o card de manchete da lâmina preenchido pela IA com dado REAL.
+ *   Manchete: as notícias reais do assunto e o Jev escolhe a que fala da lâmina (ou nenhuma). Gráfico: o
+ *   redator só pode usar números que estão nas fontes (assunto, lâminas, notícias), e o código confere cada
+ *   número no trecho citado; sem dado real, 422 com o aviso e nada é inventado. Custo antes (409).
+ * - template_carrossel com `so_esta: true` (23/10): reescreve só a lâmina aberta (texto e mídia sugerida).
+ * - template_destaques (23/10): o Jev escolhe as palavras mais fortes de cada lâmina entre os candidatos
+ *   que o código separa (números, valores, nomes) e elas viram **negrito**. Custo antes (409).
+ * Na geração, o redator já marca de 1 a 3 trechos; o código corta o excesso e, na lâmina sem destaque,
+ * o Jev escolhe na mesma pergunta da mídia.
  *
  * Não importa Deno/Supabase: os testes usam as mesmas travas.
  */
 import type { TrabalhoDaGeracao, RespostaDoRedator } from "./template-geracao.ts";
 import { normalizarEntradaDaLaminaEmVideo, TIPO_DA_LAMINA_EM_VIDEO } from "./lamina-em-video.ts";
+import { aplicarDestaques, candidatosDeDestaque, limitarDestaques, semNegrito, trechosEmNegrito } from "./destaques-do-texto.ts";
 
 type Erro = (status: number, codigo: string, mensagem: string, detalhes?: Record<string, unknown>) => Error;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,7 +93,7 @@ export function instrucoesDoCarrossel(quantas: number, comNoticia: boolean): str
     "CARROSSEL ESTILO POST DO X (lâmina inteira com o perfil, o texto e um bloco de mídia)",
     "Você é o redator sênior da agência. Escreva, em português do Brasil e na voz da marca do contexto, o texto de cada lâmina de um carrossel do Instagram no formato de post do X.",
     `São ${quantas} lâminas, na ordem pedida. A 1 é o GANCHO que para a rolagem (tensão, número concreto ou contradição). As do meio entregam UMA ideia cada, com prova. A última fecha com um CTA claro (comentar, salvar, chamar no direct ou clicar no link da bio).`,
-    "Frases curtas. No máximo 3 parágrafos curtos por lâmina e 260 caracteres. Use **negrito** (dois asteriscos) em 1 ou 2 trechos que carregam a ideia (o número, o nome, a virada). Termine as lâminas do meio com \" →\" quando puxam a próxima.",
+    "Frases curtas. No máximo 3 parágrafos curtos por lâmina e 260 caracteres, separados por quebra de linha (\\n). Use **negrito** (dois asteriscos) em 1 a 3 trechos CURTOS (até 4 palavras) que carregam a ideia: o número, o nome, a virada. Nunca a frase inteira, nunca o parágrafo inteiro. Termine as lâminas do meio com \" →\" quando puxam a próxima.",
     "Números, nomes, datas e resultados SÓ os que estão no assunto, na notícia ou no contexto. Nunca invente estatística, preço, prazo ou depoimento.",
     "\"busca\": 2 a 5 palavras do que mostrar na mídia daquela lâmina, concretas e pesquisáveis num banco de imagens (ex.: \"carro elétrico carregando\"). Vazio se a lâmina é só texto.",
     "\"dados\": só se a lâmina traz dois ou mais números REAIS comparáveis do contexto; com \"tipo_de_grafico\" (barras para comparar, linha para evolução, pizza para fatias), \"unidade\" (%, R$, mil...) e \"fonte_dos_dados\". Sem números reais: dados vazio e os outros campos vazios.",
@@ -116,7 +128,8 @@ export function lerCarrosselGerado(bruto: unknown, ordens: number[]): { laminas:
       ? { tipo, dados, ...(limpo(l.unidade, 12) ? { unidade: limpo(l.unidade, 12) } : {}), ...(limpo(l.fonte_dos_dados, 160) ? { fonte: limpo(l.fonte_dos_dados, 160) } : {}) }
       : null;
     if (Array.from(texto.replace(/\*\*/g, "")).length > 320) avisos.push(`A lâmina ${ordem} ficou longa para o formato. Encurte antes de guardar.`);
-    laminas.push({ ordem, texto, busca: limpo(l.busca, 80), grafico });
+    // 23/10: destaque bom tem de 1 a 3 trechos curtos; o excesso perde o negrito (o código manda).
+    laminas.push({ ordem, texto: limitarDestaques(texto), busca: limpo(l.busca, 80), grafico });
   }
   return { laminas, legenda: limpo(o.legenda, 2600), avisos };
 }
@@ -126,7 +139,47 @@ export function opcoesDaLamina(l: LaminaGerada, comNoticia: boolean): MidiaDoCar
   return MIDIAS_DO_CARROSSEL.filter((m) => (m !== "grafico" || !!l.grafico) && (m !== "manchete" || comNoticia));
 }
 
-export type PerguntaDeEscolha = { type: "choice"; instructions: unknown; criteria: Record<string, unknown> };
+export type PerguntaDeEscolha = { type: "choice"; instructions: unknown; criteria: Record<string, unknown> } | { type: "noul"; instructions: unknown; criteria: { true: string; false: string } };
+export type RespostaDoJev = { choice?: string; confidence?: number; noul?: number };
+
+/**
+ * Destaques pelo Jev (23/10): uma pergunta Noul por candidato ("este trecho é dos mais fortes da lâmina?"),
+ * todas no mesmo pedido. O código separou os candidatos; o Jev só julga.
+ */
+export function perguntasDeDestaque(laminas: Array<{ ordem: number; texto: string }>): { perguntas: Record<string, PerguntaDeEscolha>; candidatos: Record<string, { ordem: number; trecho: string }> } {
+  const perguntas: Record<string, PerguntaDeEscolha> = {};
+  const candidatos: Record<string, { ordem: number; trecho: string }> = {};
+  laminas.forEach((l) => {
+    candidatosDeDestaque(l.texto).forEach((trecho, k) => {
+      const id = `destaque_${l.ordem}_${k + 1}`;
+      candidatos[id] = { ordem: l.ordem, trecho };
+      perguntas[id] = {
+        type: "noul",
+        instructions: `No texto da lâmina ${l.ordem} (\`destaques.lamina_${l.ordem}\`), o trecho "${trecho}" é um dos 1 ou 2 mais fortes para ficar em negrito num carrossel de Instagram (o número, o nome ou a palavra que carrega a ideia e prende o olho)?`,
+        criteria: { true: "Sim: destacar este trecho faz a ideia da lâmina saltar aos olhos.", false: "Não: é um trecho comum, de ligação ou secundário." },
+      };
+    });
+  });
+  return { perguntas, candidatos };
+}
+
+/** Lê as respostas Noul: por lâmina, até 2 trechos com chance de 55% ou mais (o melhor, se passar de 35%). */
+export function destaquesEscolhidos(respostas: Record<string, RespostaDoJev>, candidatos: Record<string, { ordem: number; trecho: string }>): Record<number, string[]> {
+  const porLamina: Record<number, Array<{ trecho: string; p: number }>> = {};
+  for (const id of Object.keys(candidatos)) {
+    const p = respostas[id] && typeof respostas[id].noul === "number" ? respostas[id].noul as number : null;
+    if (p === null) continue;
+    (porLamina[candidatos[id].ordem] = porLamina[candidatos[id].ordem] || []).push({ trecho: candidatos[id].trecho, p });
+  }
+  const saida: Record<number, string[]> = {};
+  for (const ordem of Object.keys(porLamina)) {
+    const lista = porLamina[Number(ordem)].sort((a, b) => b.p - a.p);
+    const fortes = lista.filter((x) => x.p >= 0.55).slice(0, 2);
+    const escolha = fortes.length ? fortes : lista[0] && lista[0].p >= 0.35 ? [lista[0]] : [];
+    if (escolha.length) saida[Number(ordem)] = escolha.map((x) => x.trecho);
+  }
+  return saida;
+}
 /** Uma pergunta Choice por lâmina, todas sobre o mesmo estado (vão juntas, num pedido só). */
 export function perguntasDaMidia(laminas: LaminaGerada[], comNoticia: boolean): Record<string, PerguntaDeEscolha> {
   const q: Record<string, PerguntaDeEscolha> = {};
@@ -170,7 +223,7 @@ export interface SugestaoDoCarrossel {
 // ------------------------------------------------------------------ vídeos reais
 
 export interface VideoReal {
-  banco: "pexels" | "wikimedia";
+  banco: "pexels" | "wikimedia" | "arquivo";
   id: string;
   nome: string;
   url: string;
@@ -244,6 +297,139 @@ export function videoDoCommons(pagina: unknown): VideoReal | null {
   };
 }
 
+// ------------------------------------------------------------------ Internet Archive (23/10)
+
+/**
+ * Vídeos do Internet Archive (23/10, dono: "melhorar a parte dos vídeos"): domínio público e Creative
+ * Commons sem "NC". A busca traz o item; ao usar, o arquivo MP4 é relido nos metadados do item (o
+ * menor derivado até 60 MB, com a maior altura até 720 px).
+ */
+export const API_DO_ARQUIVO = "https://archive.org/";
+export function urlDaBuscaNoArquivo(consulta: string): string {
+  const qs = new URLSearchParams({ q: `(${consulta}) AND mediatype:movies AND licenseurl:*`, rows: "10", output: "json" });
+  for (const f of ["identifier", "title", "creator", "licenseurl", "runtime"]) qs.append("fl[]", f);
+  return `${API_DO_ARQUIVO}advancedsearch.php?${qs.toString()}`;
+}
+const ID_DO_ARQUIVO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+export const urlDoItemNoArquivo = (id: string) => `${API_DO_ARQUIVO}metadata/${encodeURIComponent(id)}`;
+/** Licença do item: só domínio público e CC sem NC (o resto fica fora). */
+export function licencaDoArquivo(url: unknown): string | null {
+  const u = typeof url === "string" ? url.toLowerCase() : "";
+  if (!u || /-nc|noncommercial/.test(u)) return null;
+  if (/publicdomain\/zero/.test(u)) return "CC0 1.0";
+  if (/publicdomain/.test(u)) return "Domínio público";
+  const m = /creativecommons\.org\/licenses\/([a-z-]+)\/([0-9.]+)/.exec(u);
+  return m ? `CC ${m[1].toUpperCase()} ${m[2]}` : null;
+}
+const textoDoArquivo = (v: unknown, max: number) => semHtml(Array.isArray(v) ? v[0] : v, max);
+/** Os itens da busca que têm licença utilizável (o arquivo sai ao usar). */
+export function itensDaBuscaNoArquivo(bruto: unknown): Array<{ id: string; nome: string; autor: string | null; licenca: string }> {
+  const docs = objeto(objeto(bruto).response).docs;
+  return (Array.isArray(docs) ? docs : []).map(objeto).flatMap((d) => {
+    const id = typeof d.identifier === "string" && ID_DO_ARQUIVO.test(d.identifier) ? d.identifier : "";
+    const licenca = licencaDoArquivo(Array.isArray(d.licenseurl) ? d.licenseurl[0] : d.licenseurl);
+    return id && licenca ? [{ id, nome: textoDoArquivo(d.title, 160) || id, autor: textoDoArquivo(d.creator, 120) || null, licenca }] : [];
+  });
+}
+/** O item do Archive como vídeo real: o MP4 até 60 MB com a maior altura até 720 px. */
+export function videoDoArquivo(id: string, bruto: unknown): VideoReal | null {
+  const o = objeto(bruto);
+  const meta = objeto(o.metadata);
+  if (!ID_DO_ARQUIVO.test(id) || String(meta.mediatype || "") !== "movies") return null;
+  const licenca = licencaDoArquivo(meta.licenseurl);
+  if (!licenca) return null;
+  const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+  const arquivos = (Array.isArray(o.files) ? o.files : []).map(objeto)
+    .filter((f) => typeof f.name === "string" && /^[^/\\?#]{1,200}\.mp4$/i.test(f.name) && (num(f.size) || Infinity) <= MAX_BYTES_VIDEO_REAL && (num(f.height) || 0) <= 720)
+    .sort((a, b) => (num(b.height) || 0) - (num(a.height) || 0));
+  const f = arquivos[0];
+  if (!f) return null;
+  const pagina = `https://archive.org/details/${encodeURIComponent(id)}`;
+  return {
+    banco: "arquivo", id, nome: textoDoArquivo(meta.title, 160) || id,
+    url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(String(f.name))}`,
+    poster_url: `https://archive.org/services/img/${encodeURIComponent(id)}`, pagina_url: pagina,
+    autor: textoDoArquivo(meta.creator, 120) || null, licenca,
+    duracao_s: num(f.length), largura: num(f.width), altura: num(f.height),
+  };
+}
+
+/** Intercala os vídeos dos bancos (um de cada por vez). */
+export function intercalarVideos(listas: VideoReal[][], max: number): VideoReal[] {
+  const saida: VideoReal[] = [];
+  for (let i = 0; saida.length < max && listas.some((l) => l.length > i); i++) {
+    for (const l of listas) if (l[i] && saida.length < max && !saida.some((v) => v.pagina_url === l[i].pagina_url)) saida.push(l[i]);
+  }
+  return saida;
+}
+
+export const NOME_DO_BANCO_DE_VIDEO: Record<VideoReal["banco"], string> = { pexels: "Pexels", wikimedia: "Wikimedia Commons", arquivo: "Internet Archive" };
+
+/** A pergunta do Jev: qual vídeo combina com a lâmina (pelo título, banco e duração). */
+export function perguntaDoMelhorVideo(videos: VideoReal[]): PerguntaDeEscolha {
+  const criteria: Record<string, string> = {};
+  videos.forEach((v, i) => { criteria[`v${i + 1}`] = `Vídeo ${i + 1}: "${v.nome}" (${NOME_DO_BANCO_DE_VIDEO[v.banco]}${v.duracao_s ? `, ${Math.round(v.duracao_s)} s` : ""}).`; });
+  return {
+    type: "choice",
+    instructions: "Escolha o vídeo que melhor mostra o que diz o texto da lâmina (`lamina.texto`) e a busca (`busca`), para tocar sem som num carrossel de Instagram: cena concreta do assunto, com movimento, atual. Prefira clipes curtos; evite palestra, coletiva, slide ou filme antigo quando o texto não fala disso.",
+    criteria,
+  };
+}
+
+// ------------------------------------------------------------------ gráfico e manchete por IA (23/10)
+
+/** Os números escritos num trecho, lidos em português (1.200 = 1200; 3,5 = 3.5; "2 mil" = 2000). */
+export function numerosDoTrecho(trecho: string): number[] {
+  const saida: number[] = [];
+  const re = /(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?(?:\.(\d+))?\s*(mil|mi|milhões|milhão|bi|bilhões|bilhão)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(trecho))) {
+    const inteiro = m[1].replace(/\./g, "");
+    const decimal = m[2] || m[3] || "";
+    let v = Number(decimal ? `${inteiro}.${decimal}` : inteiro);
+    if (!Number.isFinite(v)) continue;
+    saida.push(v);
+    const mult = (m[4] || "").toLowerCase();
+    if (mult) { v *= mult === "mil" ? 1e3 : mult.indexOf("bi") === 0 ? 1e9 : 1e6; saida.push(v); }
+  }
+  return saida;
+}
+const normalizarParaConferir = (t: string) => t.replace(/\*\*/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/** O valor está escrito no trecho, e o trecho está mesmo na fonte citada (nada de número inventado). */
+export function numeroConferido(valor: number, trecho: string, fonte: string): boolean {
+  const tr = normalizarParaConferir(trecho);
+  if (!tr || normalizarParaConferir(fonte).indexOf(tr) < 0) return false;
+  return numerosDoTrecho(trecho).some((n) => Math.abs(n - valor) < 1e-9 * Math.max(1, Math.abs(valor)));
+}
+
+export const ESQUEMA_DO_GRAFICO_POR_IA = {
+  nome: "grafico_da_lamina",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["tipo", "titulo", "unidade", "fonte", "dados"],
+    properties: {
+      tipo: { type: "string", enum: ["barras", "linha", "pizza", "numero", ""] },
+      titulo: { type: "string" },
+      unidade: { type: "string" },
+      fonte: { type: "integer" },
+      dados: { type: "array", items: { type: "object", additionalProperties: false, required: ["rotulo", "valor", "trecho"], properties: { rotulo: { type: "string" }, valor: { type: "number" }, trecho: { type: "string" } } } },
+    },
+  },
+};
+
+export function instrucoesDoGraficoPorIa(): string {
+  return [
+    "GRÁFICO DA LÂMINA (carrossel estilo post do X)",
+    "Monte o gráfico que prova a ideia da lâmina usando SÓ números que estão escritos nas FONTES do pedido.",
+    "\"fonte\": o número da fonte (o campo \"id\") de onde vêm os números. \"dados\": cada valor com o \"trecho\" EXATO da fonte onde ele aparece (copie o trecho, sem mudar nada).",
+    "\"tipo\": barras para comparar, linha para evolução no tempo, pizza para fatias de um todo, numero para UM número de impacto. \"titulo\": até 60 caracteres. \"unidade\": %, R$, mil, x ou vazio.",
+    "Se as fontes não têm números que sirvam, responda tipo vazio e dados vazio. Nunca calcule, estime ou invente número.",
+    "Responda só o JSON pedido.",
+  ].join("\n");
+}
+
 export interface VideoGuardado { caminho: string; nome: string; banco: VideoReal["banco"]; pagina_url: string; autor: string | null; licenca: string; duracao_s: number | null; largura: number | null; altura: number | null }
 export const MAX_VIDEOS_REAIS = 6;
 export const MAX_BYTES_VIDEO_REAL = 60 * 1024 * 1024;
@@ -261,10 +447,16 @@ export interface DepsDoCarrossel<C extends { userId: string }, T extends Trabalh
   atualizarTexto: (t: T, ordem: number, texto: string) => T["direcao"];
   estimarTexto: (t: T) => Promise<number>;
   escreverTexto: (ch: C, t: T, e: { sistema: string; pedido: Record<string, unknown>; esquema: Record<string, unknown>; rede: "twitter" }) => Promise<RespostaDoRedator>;
-  perguntarJev: (t: T, state: unknown, questions: Record<string, PerguntaDeEscolha>) => Promise<{ answers: Record<string, { choice?: string; confidence?: number }>; custoUsd: number }>;
+  perguntarJev: (t: T, state: unknown, questions: Record<string, PerguntaDeEscolha>) => Promise<{ answers: Record<string, RespostaDoJev>; custoUsd: number }>;
   /** Leitura JSON das APIs públicas (Commons) e do Pexels com a chave; null quando não há chave do Pexels. */
   jsonDoCommons: (url: string) => Promise<unknown>;
+  /** 23/10: notícias reais do assunto (Bing Notícias), com o resumo de cada uma; ausente, sem manchete por IA. */
+  noticiasDoAssunto?: (consulta: string) => Promise<Array<NoticiaDaBase & { resumo?: string }>>;
+  /** 23/10: leitura JSON da API pública do Internet Archive (busca e metadados do item); ausente, fica de fora. */
+  jsonDoArquivo?: (url: string) => Promise<unknown>;
   jsonDoPexels: ((url: string) => Promise<unknown>) | null;
+  /** 23/10: há a chave do Pexels? Sem esta função, vale a presença de jsonDoPexels. */
+  temPexels?: () => Promise<boolean>;
   baixarVideo: (url: string, limite: number) => Promise<{ bytes: Uint8Array; mime: string } | null>;
   guardarVideo: (t: T, bytes: Uint8Array, mime: string) => Promise<string>;
   descartarUpload?: (caminho: string) => Promise<void>;
@@ -305,11 +497,14 @@ export function acoesDoCarrossel<C extends { userId: string }, T extends Trabalh
     const noticia = lerNoticia(corpo.noticia, d.erro);
     const t = await d.trabalhoComAcesso(ch, id);
     abrir(t, ordem, d);
-    const ordens = t.direcao.cards.map((c) => c.ordem).sort((a, b) => a - b);
+    // 23/10: "Preencher esta lâmina com IA" reescreve só a lâmina aberta; as outras vão como contexto.
+    const soEsta = corpo.so_esta === true;
+    const ordens = soEsta ? [ordem] : t.direcao.cards.map((c) => c.ordem).sort((a, b) => a - b);
     const conceito = limpo((t.direcao as { conceito?: unknown }).conceito, 800);
     if (!assunto && !noticia && !conceito) throw d.erro(400, "assunto_vazio", "Escreva o assunto do carrossel ou escolha uma notícia.");
     if (corpo.confirmado !== true) {
-      const custo = await d.estimarTexto(t) + 0.002;
+      // Texto, a escolha da mídia (um Jev) e, por lâmina, o Jev que escolhe a melhor mídia achada.
+      const custo = await d.estimarTexto(t) + 0.002 + 0.001 * ordens.length;
       throw d.erro(409, "confirmar_custo", `Gerar o carrossel custa cerca de ${usd(custo)} (texto e escolha das mídias). As imagens por IA, quando precisar, aparecem antes.`, { precisa_confirmar: true, custo_estimado_usd: arred(custo) });
     }
     const pedido = {
@@ -329,16 +524,22 @@ export function acoesDoCarrossel<C extends { userId: string }, T extends Trabalh
     // O Jev escolhe a mídia de cada lâmina (um pedido para todas); sem o Jev, uma regra explícita.
     const sugestoes: Record<number, SugestaoDoCarrossel> = {};
     const avisos = [...lido.avisos];
-    let respostas: Record<string, { choice?: string; confidence?: number }> | null = null;
+    let respostas: Record<string, RespostaDoJev> | null = null;
+    // Lâmina que voltou sem negrito: o Jev escolhe o destaque na mesma pergunta da mídia (um pedido só).
+    const semDestaque = lido.laminas.filter((l) => !trechosEmNegrito(l.texto).length);
+    const destaque = perguntasDeDestaque(semDestaque);
     try {
       const estado = {
         assunto: assunto || conceito || null,
         noticia: noticia ? { titulo: noticia.titulo, veiculo: noticia.fonte } : null,
         laminas: lido.laminas.map((l, i) => ({ posicao: `${i + 1} de ${lido.laminas.length}`, texto: l.texto.replace(/\*\*/g, ""), o_que_mostrar: l.busca || null, numeros_reais: l.grafico ? l.grafico.dados : [] })),
+        destaques: Object.fromEntries(semDestaque.map((l) => [`lamina_${l.ordem}`, semNegrito(l.texto)])),
       };
-      const res = await d.perguntarJev(t, estado, perguntasDaMidia(lido.laminas, !!noticia));
+      const res = await d.perguntarJev(t, estado, { ...perguntasDaMidia(lido.laminas, !!noticia), ...destaque.perguntas });
       respostas = res.answers;
       custo = arred(custo + num(res.custoUsd));
+      const escolhidos = destaquesEscolhidos(res.answers, destaque.candidatos);
+      lido.laminas.forEach((l) => { if (escolhidos[l.ordem]) l.texto = aplicarDestaques(l.texto, escolhidos[l.ordem]); });
     } catch {
       avisos.push("O Jev não respondeu: a mídia de cada lâmina saiu por uma regra simples. Troque à vontade no bloco.");
     }
@@ -353,7 +554,7 @@ export function acoesDoCarrossel<C extends { userId: string }, T extends Trabalh
         ...(noticia && midia === "manchete" ? { manchete: { veiculo: noticia.fonte, titulo: noticia.titulo, url: noticia.link, ...(noticia.data ? { data: noticia.data } : {}) } } : {}),
       };
     });
-    const gravarLegenda = corpo.gravar_legenda === true && !!lido.legenda;
+    const gravarLegenda = !soEsta && corpo.gravar_legenda === true && !!lido.legenda;
     let recusa: unknown = null;
     const gravado = await d.mutarTrabalho(t.id, (atual) => {
       recusa = null;
@@ -377,26 +578,51 @@ export function acoesDoCarrossel<C extends { userId: string }, T extends Trabalh
     const t = await d.trabalhoComAcesso(ch, id);
     abrir(t, ordem, d);
     const avisos: string[] = [];
-    const resultados: VideoReal[] = [];
-    if (d.jsonDoPexels) {
-      try {
+    const comPexels = !!d.jsonDoPexels && (d.temPexels ? await d.temPexels().catch(() => false) : true);
+    // Os três bancos em paralelo; o que não responder fica de fora com aviso.
+    const [pexels, commons, arquivo] = await Promise.allSettled([
+      comPexels ? (async () => {
         const qs = new URLSearchParams({ query: consulta, per_page: "8", size: "medium" });
-        const r = objeto(await d.jsonDoPexels(`${API_DO_PEXELS_VIDEOS}search?${qs.toString()}`));
-        (Array.isArray(r.videos) ? r.videos : []).map(videoDoPexels).forEach((v) => { if (v) resultados.push(v); });
-      } catch { avisos.push("O Pexels não respondeu agora; seguem os da Wikimedia."); }
-    } else avisos.push("Sem a chave do Pexels no cofre (PEXELS_API_KEY): só vídeos da Wikimedia. Cadastre em Configurações › Chaves e custos.");
-    try {
-      const r = objeto(objeto(await d.jsonDoCommons(urlDaBuscaDeVideosNoCommons(consulta))).query);
-      const paginas = Object.values(objeto(r.pages));
-      paginas.map(videoDoCommons).forEach((v) => { if (v) resultados.push(v); });
-    } catch { avisos.push("A Wikimedia não respondeu agora."); }
+        const r = objeto(await d.jsonDoPexels!(`${API_DO_PEXELS_VIDEOS}search?${qs.toString()}`));
+        return (Array.isArray(r.videos) ? r.videos : []).map(videoDoPexels).filter((v): v is VideoReal => !!v);
+      })() : Promise.resolve([] as VideoReal[]),
+      (async () => {
+        const r = objeto(objeto(await d.jsonDoCommons(urlDaBuscaDeVideosNoCommons(consulta))).query);
+        return Object.values(objeto(r.pages)).map(videoDoCommons).filter((v): v is VideoReal => !!v);
+      })(),
+      d.jsonDoArquivo ? (async () => {
+        const itens = itensDaBuscaNoArquivo(await d.jsonDoArquivo!(urlDaBuscaNoArquivo(consulta))).slice(0, 6);
+        const lidos = await Promise.allSettled(itens.map(async (i) => videoDoArquivo(i.id, await d.jsonDoArquivo!(urlDoItemNoArquivo(i.id)))));
+        return lidos.flatMap((x) => (x.status === "fulfilled" && x.value ? [x.value] : []));
+      })() : Promise.resolve([] as VideoReal[]),
+    ]);
+    if (!comPexels) avisos.push("Sem a chave do Pexels (PEXELS_API_KEY): vídeos da Wikimedia e do Internet Archive.");
+    else if (pexels.status === "rejected") avisos.push("O Pexels não respondeu agora.");
+    if (commons.status === "rejected") avisos.push("A Wikimedia não respondeu agora.");
+    if (arquivo.status === "rejected") avisos.push("O Internet Archive não respondeu agora.");
+    let resultados = intercalarVideos([pexels, commons, arquivo].map((p) => (p.status === "fulfilled" ? p.value : [])), 12);
+    let custo = 0;
+    let melhor: { indice: number; confianca: number | null; por: "jev" } | null = null;
+    if (corpo.ordenar === "jev" && resultados.length > 1) {
+      try {
+        const card = t.direcao.cards.find((c) => c.ordem === ordem);
+        const res = await d.perguntarJev(t, { lamina: { texto: limpo(card?.texto_exato, 1200).replace(/\*\*/g, "") }, busca: consulta }, { melhor: perguntaDoMelhorVideo(resultados) });
+        custo = arred(num(res.custoUsd));
+        const r = res.answers.melhor;
+        const i = r && typeof r.choice === "string" && /^v\d{1,2}$/.test(r.choice) ? Number(r.choice.slice(1)) - 1 : -1;
+        if (i >= 0 && i < resultados.length) {
+          resultados = [resultados[i], ...resultados.filter((_, k) => k !== i)];
+          melhor = { indice: 0, confianca: typeof r?.confidence === "number" ? Math.round(r.confidence * 100) / 100 : null, por: "jev" };
+        }
+      } catch { avisos.push("O Jev não respondeu: a ordem é a dos bancos."); }
+    }
     avisos.push("Só licenças de uso comercial. O crédito (autor, fonte e licença) fica guardado com o vídeo.");
-    return d.json({ consulta, resultados: resultados.slice(0, 12), avisos, custo_usd: 0 });
+    return d.json({ consulta, resultados, melhor, avisos, custo_usd: custo });
   }
 
   async function aplicarVideo(ch: C, corpo: Record<string, unknown>): Promise<Response> {
     const { id, ordem } = ids(corpo, d.erro);
-    const banco = corpo.banco === "pexels" || corpo.banco === "wikimedia" ? corpo.banco : null;
+    const banco = corpo.banco === "pexels" || corpo.banco === "wikimedia" || corpo.banco === "arquivo" ? corpo.banco : null;
     const idDaFonte = limpo(corpo.id, 300);
     if (!banco || !idDaFonte) throw d.erro(400, "video_real_invalido", "Escolha um vídeo da busca.");
     const t = await d.trabalhoComAcesso(ch, id);
@@ -407,6 +633,9 @@ export function acoesDoCarrossel<C extends { userId: string }, T extends Trabalh
       if (banco === "pexels") {
         if (!d.jsonDoPexels || !/^\d{1,12}$/.test(idDaFonte)) throw new Error("sem pexels");
         item = videoDoPexels(await d.jsonDoPexels(`${API_DO_PEXELS_VIDEOS}videos/${idDaFonte}`));
+      } else if (banco === "arquivo") {
+        if (!d.jsonDoArquivo || !ID_DO_ARQUIVO.test(idDaFonte)) throw new Error("sem arquivo");
+        item = videoDoArquivo(idDaFonte, await d.jsonDoArquivo(urlDoItemNoArquivo(idDaFonte)));
       } else {
         if (!/^File:[^\n<>[\]{}|#]{1,240}$/i.test(idDaFonte)) throw new Error("título inválido");
         const paginas = Object.values(objeto(objeto(objeto(await d.jsonDoCommons(urlDoVideoNoCommons(idDaFonte))).query).pages));
@@ -487,7 +716,109 @@ export function acoesDoCarrossel<C extends { userId: string }, T extends Trabalh
     return d.json({ trabalho, pedido: ultimo, url, custo_usd: 0 });
   }
 
+  /**
+   * O Jev destaca as palavras mais fortes (23/10, dono: "a IA já melhora e destaca as melhores palavras"): da
+   * lâmina aberta ou de todas. O negrito antigo sai e entram de 1 a 2 trechos por lâmina, entre os candidatos
+   * que o código separou. Custo antes (409); a pergunta ao Jev é cobrada.
+   */
+  async function destacar(ch: C, corpo: Record<string, unknown>): Promise<Response> {
+    const { id, ordem } = ids(corpo, d.erro);
+    const t = await d.trabalhoComAcesso(ch, id);
+    abrir(t, ordem, d);
+    const alvo = (corpo.todas === true ? t.direcao.cards : t.direcao.cards.filter((c) => c.ordem === ordem))
+      .map((c) => ({ ordem: c.ordem, texto: limpo(c.texto_exato, 1200) })).filter((c) => c.texto);
+    const { perguntas, candidatos } = perguntasDeDestaque(alvo.map((c) => ({ ordem: c.ordem, texto: semNegrito(c.texto) })));
+    if (!Object.keys(perguntas).length) throw d.erro(422, "sem_candidatos", "Não há números, nomes ou palavras fortes para destacar nestas lâminas. Marque à mão com o B.");
+    if (corpo.confirmado !== true) {
+      const custo = arred(0.0005 * Object.keys(perguntas).length + 0.001);
+      throw d.erro(409, "confirmar_custo", `Destacar as palavras custa cerca de ${usd(custo)} (o Jev julga ${Object.keys(perguntas).length} trechos).`, { precisa_confirmar: true, custo_estimado_usd: custo });
+    }
+    const res = await d.perguntarJev(t, { destaques: Object.fromEntries(alvo.map((c) => [`lamina_${c.ordem}`, semNegrito(c.texto)])) }, perguntas);
+    const custo = arred(num(res.custoUsd));
+    const escolhidos = destaquesEscolhidos(res.answers, candidatos);
+    const novos = alvo.map((c) => ({ ordem: c.ordem, texto: escolhidos[c.ordem] ? aplicarDestaques(semNegrito(c.texto), escolhidos[c.ordem]) : c.texto }));
+    let recusa: unknown = null;
+    const gravado = await d.mutarTrabalho(t.id, (atual) => {
+      recusa = null;
+      try { abrir(atual, ordem, d); } catch (e) { recusa = e; return { custo_usd: arred(num(atual.custo_usd) + custo) }; }
+      let direcao = atual.direcao;
+      for (const n of novos) {
+        const antes = direcao.cards.find((c) => c.ordem === n.ordem);
+        // Só troca o texto que não mudou enquanto o Jev julgava.
+        if (!antes || limpo(antes.texto_exato, 1200) !== alvo.find((a) => a.ordem === n.ordem)!.texto || n.texto === antes.texto_exato) continue;
+        direcao = d.atualizarTexto({ ...atual, direcao } as T, n.ordem, n.texto);
+      }
+      return { direcao, custo_usd: arred(num(atual.custo_usd) + custo) };
+    });
+    if (recusa) throw recusa;
+    return d.json({ trabalho: gravado, laminas: novos.map((n) => ({ ...n, destaques: escolhidos[n.ordem] || [] })), custo_usd: custo });
+  }
+
+  /** O gráfico ou a manchete da lâmina pela IA, só com dado real; devolve o bloco para a tela (o rascunho). */
+  async function blocoPorIa(ch: C, corpo: Record<string, unknown>): Promise<Response> {
+    const { id, ordem } = ids(corpo, d.erro);
+    const tipo = corpo.tipo === "grafico" || corpo.tipo === "manchete" ? corpo.tipo : null;
+    if (!tipo) throw d.erro(400, "tipo_bloco_ia_invalido", "Peça um gráfico ou uma manchete.");
+    if (corpo.assunto !== undefined && (typeof corpo.assunto !== "string" || corpo.assunto.length > 300)) throw d.erro(400, "assunto_invalido", "Escreva o assunto com até 300 caracteres.");
+    const t = await d.trabalhoComAcesso(ch, id);
+    const card = abrir(t, ordem, d) as { texto_exato?: string; carrossel?: SugestaoDoCarrossel };
+    const conceito = limpo((t.direcao as { conceito?: unknown }).conceito, 800);
+    const textoDaLamina = limpo(card.texto_exato, 1200).replace(/\*\*/g, "");
+    const consulta = (limpo(corpo.assunto, 300) || (card.carrossel && card.carrossel.busca) || textoDaLamina.split("\n")[0] || conceito).slice(0, 120);
+    if (!consulta) throw d.erro(400, "assunto_vazio", "Escreva o assunto da lâmina.");
+    if (corpo.confirmado !== true) {
+      const custo = arred(tipo === "grafico" ? await d.estimarTexto(t) + 0.001 : 0.002);
+      throw d.erro(409, "confirmar_custo", `Preencher ${tipo === "grafico" ? "o gráfico" : "a manchete"} com IA custa cerca de ${usd(custo)}.`, { precisa_confirmar: true, custo_estimado_usd: custo });
+    }
+    let noticias: Array<NoticiaDaBase & { resumo?: string }> = [];
+    if (d.noticiasDoAssunto) { try { noticias = (await d.noticiasDoAssunto(consulta)).slice(0, 8); } catch { noticias = []; } }
+    let custo = 0;
+    const somar = async () => { if (custo) await d.mutarTrabalho(t.id, (atual) => ({ custo_usd: arred(num(atual.custo_usd) + custo) })); };
+    if (tipo === "manchete") {
+      if (!noticias.length) throw d.erro(422, "sem_dado_real", "Não achei notícia real deste assunto agora. Preencha a manchete à mão ou mude o assunto.", { avisos: ["Sem notícia real: nada foi inventado."] });
+      const criteria: Record<string, string> = { nenhuma: "Nenhuma destas notícias fala do assunto da lâmina." };
+      noticias.forEach((n, i) => { criteria[`n${i + 1}`] = `"${n.titulo}" (${n.fonte}${n.data ? `, ${n.data}` : ""}).`; });
+      const res = await d.perguntarJev(t, { lamina: { texto: textoDaLamina }, assunto: consulta }, { noticia: { type: "choice", instructions: "Escolha a notícia real que prova ou dá contexto ao que diz o texto da lâmina (`lamina.texto`), para virar o card de manchete do carrossel. Prefira a mais recente e de veículo conhecido. Se nenhuma fala do mesmo assunto, escolha nenhuma.", criteria } });
+      custo = arred(num(res.custoUsd));
+      await somar();
+      const escolha = res.answers.noticia && res.answers.noticia.choice;
+      const i = typeof escolha === "string" && /^n\d{1,2}$/.test(escolha) ? Number(escolha.slice(1)) - 1 : -1;
+      if (i < 0 || !noticias[i]) throw d.erro(422, "sem_dado_real", "Nenhuma notícia real achada fala desta lâmina. Preencha a manchete à mão ou mude o assunto.", { custo_usd: custo });
+      const n = noticias[i];
+      const data = n.data && /^\d{4}-\d{2}-\d{2}/.test(n.data) ? `${n.data.slice(8, 10)}/${n.data.slice(5, 7)}/${n.data.slice(0, 4)}` : undefined;
+      return d.json({ manchete: { veiculo: n.fonte.slice(0, 40), titulo: n.titulo.slice(0, 220), url: n.link, ...(data ? { data } : {}), ...(n.resumo ? { linha_fina: n.resumo.slice(0, 200) } : {}) }, fonte: { veiculo: n.fonte, url: n.link }, confianca: res.answers.noticia && typeof res.answers.noticia.confidence === "number" ? Math.round(res.answers.noticia.confidence * 100) / 100 : null, custo_usd: custo });
+    }
+    // Gráfico: as fontes numeradas (o assunto, as lâminas e as notícias) e o número conferido no trecho.
+    const fontes: Array<{ id: number; nome: string; texto: string }> = [];
+    if (conceito) fontes.push({ id: fontes.length + 1, nome: "Assunto do carrossel", texto: conceito });
+    t.direcao.cards.forEach((c) => { const tx = limpo(c.texto_exato, 1200).replace(/\*\*/g, ""); if (tx) fontes.push({ id: fontes.length + 1, nome: `Lâmina ${c.ordem}`, texto: tx }); });
+    noticias.forEach((n) => fontes.push({ id: fontes.length + 1, nome: n.fonte, texto: `${n.titulo}. ${n.resumo || ""}`.trim() }));
+    const r = await d.escreverTexto(ch, t, { sistema: instrucoesDoGraficoPorIa(), pedido: { lamina: { ordem, texto: textoDaLamina }, assunto: consulta, fontes }, esquema: ESQUEMA_DO_GRAFICO_POR_IA, rede: "twitter" });
+    custo = arred(num(r.custoUsd));
+    await somar();
+    const o = objeto(r.json);
+    const fonte = fontes.find((f) => f.id === o.fonte);
+    const tipoDoGrafico = o.tipo === "barras" || o.tipo === "linha" || o.tipo === "pizza" || o.tipo === "numero" ? o.tipo : null;
+    const dados = (Array.isArray(o.dados) ? o.dados : []).map(objeto)
+      .filter((x) => typeof x.valor === "number" && Number.isFinite(x.valor) && limpo(x.rotulo, 40) && fonte && numeroConferido(x.valor as number, limpo(x.trecho, 400), fonte.texto))
+      .slice(0, 8).map((x) => ({ rotulo: limpo(x.rotulo, 40), valor: x.valor as number }));
+    const minimo = tipoDoGrafico === "numero" ? 1 : 2;
+    if (!tipoDoGrafico || !fonte || dados.length < minimo || (tipoDoGrafico === "pizza" && dados.some((x) => x.valor < 0))) {
+      throw d.erro(422, "sem_dado_real", "Não achei números reais para este gráfico nas fontes (assunto, lâminas e notícias). Preencha à mão com a fonte dos números.", { custo_usd: custo, avisos: ["Sem dado real: nada foi inventado."] });
+    }
+    const grafico = {
+      tipo: tipoDoGrafico, dados: tipoDoGrafico === "numero" ? dados.slice(0, 1) : dados,
+      ...(limpo(o.titulo, 90) ? { titulo: limpo(o.titulo, 90) } : {}),
+      ...(limpo(o.unidade, 12) ? { unidade: limpo(o.unidade, 12) } : {}),
+      fonte: fonte.nome.slice(0, 160),
+    };
+    const noticia = noticias.find((n) => n.fonte === fonte.nome);
+    return d.json({ grafico, fonte: { nome: fonte.nome, url: noticia ? noticia.link : null }, descartados: (Array.isArray(o.dados) ? o.dados.length : 0) - dados.length, custo_usd: custo });
+  }
+
   return {
+    template_bloco_ia: blocoPorIa,
+    template_destaques: destacar,
     template_carrossel: gerar,
     template_videos_buscar: buscarVideos,
     template_video_aplicar: aplicarVideo,
