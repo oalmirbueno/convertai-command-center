@@ -5,7 +5,7 @@
  *   deno test -A scripts/lancar-pautas_test.ts
  */
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { blocosDoRoteiro, chaveDaPeca, descricaoDaPeca, LIMITES, lerPeca } from "./lancar-pautas.ts";
+import { blocosDoRoteiro, chaveDaPeca, descricaoDaPeca, itemDaProposta, LIMITES, lerPeca } from "./lancar-pautas.ts";
 
 const carrossel = {
   data: "2026-10-31",
@@ -71,4 +71,16 @@ Deno.test("reel: roteiro com cenas vira blocos; descrição longa encurta o rote
   assert(d.length <= LIMITES.descricao);
   assertStringIncludes(d, "Caminho do vídeo: Gravar com roteiro");
   assertStringIncludes(d, "Texto cortado para caber na Agenda");
+});
+
+Deno.test("espelho da proposta: carrossel com capa e lâminas; reel no caminho gravar", () => {
+  const c = lerPeca(carrossel, 0).peca!;
+  const ic = itemDaProposta(c, "t1") as { formato: string; cards: Array<{ ordem: number; funcao: string; texto: string }>; task_id: string; copy: string };
+  assertEquals(ic.formato, "carrossel");
+  assertEquals(ic.cards.map((x) => x.funcao), ["capa", "fato", "cta"]);
+  assertEquals(ic.cards[0].texto, "3\n3 SEGUNDOS\nÉ o tempo do seu perfil");
+  assertEquals(ic.copy, "Legenda.\n\n#aceleriq #marketing");
+  const r = lerPeca({ ...carrossel, formato: "reel", roteiro: "Fala." }, 0).peca!;
+  const ir = itemDaProposta(r, "t2") as { formato: string; caminho_video: string; mesa: string };
+  assertEquals([ir.formato, ir.caminho_video, ir.mesa], ["video", "gravar", "video"]);
 });

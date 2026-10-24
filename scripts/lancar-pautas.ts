@@ -451,7 +451,70 @@ async function lancarUma(
     return { titulo: p.titulo, data: p.data, situacao: conflito ? "ja_lancada_com_outro_texto" : "erro", erro: msg.slice(0, 300) };
   }
   const extra = p.formato === "carrossel" ? await criarDirecao(db, p, taskId, e) : await criarRoteiro(db, p, taskId, e);
-  return { titulo: p.titulo, data: p.data, formato: p.formato, task_id: taskId, situacao, ...extra };
+  const espelho = await gravarEspelho(db, p, taskId, e);
+  return { titulo: p.titulo, data: p.data, formato: p.formato, task_id: taskId, situacao, ...extra, ...espelho };
+}
+
+/** O item da peça no formato da proposta do Mês (Item de agente-calendario), já com a tarefa. */
+export function itemDaProposta(p: Peca, taskId: string): Record<string, unknown> {
+  const cards = p.formato === "carrossel"
+    ? [
+      { ordem: 1, funcao: "capa", texto: [p.capa.numero, p.capa.palavra_gigante, p.capa.frase].filter(Boolean).join("\n"), ilustracao: p.capa.visual, estilo: "" },
+      ...p.laminas.map((l, k) => ({ ordem: k + 2, funcao: /cta|chamada/i.test(l.papel) ? "cta" : l.papel, texto: textoDaLamina(l), ilustracao: l.visual, estilo: "" })),
+    ]
+    : [];
+  return {
+    mesa: p.formato === "reel" ? "video" : "arte",
+    tema_id: "l1",
+    data: p.data,
+    formato: p.formato === "reel" ? "video" : "carrossel",
+    pilar: p.serie,
+    fase: "",
+    publico: "",
+    tema: p.titulo,
+    titulo: p.titulo,
+    gancho: p.gancho,
+    resumo: p.gancho,
+    copy: [p.legenda, p.hashtags.join(" ")].filter(Boolean).join("\n\n"),
+    cta: p.cta,
+    objetivo: "",
+    metrica_principal: "",
+    palavra_chave: p.palavra_comentario,
+    termo_regional: null,
+    gancho_do_momento: "",
+    status: "gravado",
+    tipo_conteudo: "principal",
+    carrossel_infinito: false,
+    cards,
+    task_id: taskId,
+    ...(p.formato === "reel" ? { caminho_video: "gravar" } : {}),
+  };
+}
+
+/**
+ * Espelho gravado da peça em calendario_propostas, como o `gravar` faz na gravação por seleção: a Agenda do Mês
+ * e o Estúdio leem dali a legenda, os cards e o caminho do vídeo (o reel abre em "gravar"). Um por peça.
+ */
+async function gravarEspelho(db: SupabaseClient, p: Peca, taskId: string, e: { clienteId: string; projetoId: string; autor: string; chave: string }) {
+  const { data: ja } = await db.from("calendario_propostas").select("id").eq("client_id", e.clienteId).eq("status", "gravada").contains("task_ids", [taskId]).limit(1);
+  const existente = ((ja ?? []) as Array<{ id: string }>)[0];
+  if (existente) return { proposta_id: existente.id, proposta: "ja_tinha" };
+  const { data, error } = await db.from("calendario_propostas").insert({
+    client_id: e.clienteId,
+    project_id: e.projetoId,
+    periodo_inicio: p.data,
+    periodo_fim: p.data,
+    parametros: { origem: "lancador_gravada", lancador: { chave: e.chave, serie: p.serie, hora: p.hora } },
+    status: "gravada",
+    diagnostico: null,
+    temas: [],
+    itens: [itemDaProposta(p, taskId)],
+    task_ids: [taskId],
+    criado_por: e.autor,
+    gravada_em: new Date().toISOString(),
+  }).select("id").single();
+  if (error) return { proposta: "erro", erro_proposta: error.message };
+  return { proposta_id: (data as { id: string }).id, proposta: "gravada" };
 }
 
 /** Direção do Estúdio sem IA, no formato do `gravar` (criarDirecoesDoRoteiro), com cada lâmina exatamente como veio. */
@@ -609,6 +672,9 @@ async function arquivar(
       await db.from("estudio_trabalhos").update({ direcao: { ...(w.direcao || {}), arquivado_em: agora, arquivado_motivo: "Substituída pelas pautas prontas (lançador)" } }).eq("id", w.id);
     }
     await db.from("roteiros").update({ arquivado_em: agora, arquivado_por: e.autor }).eq("task_id", t.id).is("arquivado_em", null);
+    // O espelho que o próprio lançador gravou sai da memória editorial (a proposta fica, descartada).
+    await db.from("calendario_propostas").update({ status: "descartada" }).eq("client_id", e.clienteId).eq("status", "gravada")
+      .contains("task_ids", [t.id]).eq("parametros->>origem", "lancador_gravada");
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: "mesa_apagar_item_da_agenda", origin: "script:lancar-pautas",
       keyId: `${PRINCIPAL}:${e.autor}`, scopes: ["editorial:write"],
