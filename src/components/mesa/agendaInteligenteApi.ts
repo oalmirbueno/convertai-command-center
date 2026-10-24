@@ -24,7 +24,7 @@ export async function lerAgendaDoCliente(
     db.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null).limit(200),
     db.from("editorial_publications").select("post_id, scheduled_at, status").eq("client_id", clientId)
       .gte("scheduled_at", `${desde}T03:00:00Z`).lte("scheduled_at", `${ate}T23:59:59Z`).limit(400),
-    db.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts").eq("client_id", clientId).maybeSingle(),
+    db.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts, postar_fim_de_semana").eq("client_id", clientId).maybeSingle(),
   ]);
   const ids = ((projetos.data ?? []) as Array<{ id: string }>).map((p) => p.id);
   const tarefas = ids.length
@@ -44,13 +44,14 @@ export async function lerAgendaDoCliente(
   return { ocupacao, regra: regraDoCliente(cfg.data) };
 }
 
-/** Salva a regra do dia do cliente (admin ou gestor com acesso). */
+/** Salva a regra do dia do cliente (admin ou gestor com acesso). 24/10: com o fim de semana liberado ou não. */
 export async function salvarRegraDoDia(clientId: string, r: RegraDoDia): Promise<void> {
   const { error } = await (supabase as any).rpc("mesa_config_agenda", {
     _client_id: clientId,
     _posts_por_dia: r.porDia,
     _hypes_por_dia: r.hypesPorDia,
     _horas_entre_posts: r.horasEntre,
+    _postar_fim_de_semana: r.fimDeSemana === true,
   });
   if (error) throw error;
 }

@@ -11,7 +11,7 @@ const ocup = (data: string, hora: string | null, hype = false): Ocupacao => ({ d
 describe("regra do dia", () => {
   it("padrão 1 comum + 1 hype com 3 horas; valores do cliente dentro dos limites", () => {
     expect(regraDoCliente(null)).toEqual(REGRA_PADRAO);
-    expect(regraDoCliente({ posts_por_dia: 2, hypes_por_dia: 0, horas_entre_posts: 4 })).toEqual({ porDia: 2, hypesPorDia: 0, horasEntre: 4 });
+    expect(regraDoCliente({ posts_por_dia: 2, hypes_por_dia: 0, horas_entre_posts: 4 })).toEqual({ porDia: 2, hypesPorDia: 0, horasEntre: 4, fimDeSemana: false });
     expect(regraDoCliente({ posts_por_dia: 50 })).toEqual(REGRA_PADRAO);
   });
   it("dia com post comum não aceita outro comum, mas aceita o hype; fim de semana nunca", () => {
@@ -56,13 +56,46 @@ describe("leva sem empilhar", () => {
   });
 });
 
+describe("fim de semana por cliente (24/10)", () => {
+  const FDS = regraDoCliente({ posts_por_dia: 3, postar_fim_de_semana: true });
+  it("desligado mantém tudo como antes; ligado aceita sábado e domingo", () => {
+    expect(regraDoCliente({ postar_fim_de_semana: "sim" }).fimDeSemana).toBe(false);
+    expect(FDS).toEqual({ porDia: 3, hypesPorDia: 1, horasEntre: 3, fimDeSemana: true });
+    expect(cabeNoDia([], "2026-10-31", false)).toBe(false);
+    expect(cabeNoDia([], "2026-10-31", false, FDS)).toBe(true);
+    expect(cabeNoDia([], "2026-11-01", false, FDS)).toBe(true);
+    expect(avisoDoDia([], "2026-10-31", false, FDS)).toBeNull();
+    expect(avisoDoDia([], "2026-10-31", false)).toContain("fim de semana");
+  });
+  it("próximo espaço e encaixe ficam no sábado só para quem posta no fim de semana", () => {
+    const o = [ocup("2026-10-30", "11:30")];
+    expect(proximoEspaco(o, { desde: "2026-10-30", ate: "2026-11-06", hype: false, horaPreferida: "11:30" })?.data).toBe("2026-11-02");
+    expect(proximoEspaco(o, { desde: "2026-10-30", ate: "2026-11-06", hype: false, horaPreferida: "11:30", regra: FDS })).toEqual({ data: "2026-10-30", hora: "14:30" });
+    const r = encaixarNaAgenda([{ data: "2026-10-31", hype: false }, { data: "2026-11-01", hype: false }], [], { hoje: HOJE, inicio: HOJE, fim: "2026-11-30", horaPreferida: "11:30", regra: FDS });
+    expect(r.map((x) => x.data)).toEqual(["2026-10-31", "2026-11-01"]);
+    const semFds = encaixarNaAgenda([{ data: "2026-10-31", hype: false }], [], { hoje: HOJE, inicio: HOJE, fim: "2026-11-30", horaPreferida: "11:30" });
+    expect(semFds[0].data).toBe("2026-11-02");
+  });
+  it("contrato: Mês, gravar, Entrega e agendador leem a coluna nova", () => {
+    const ler = (p: string) => require("node:fs").readFileSync(p, "utf8") as string;
+    const f = ler("supabase/functions/agente-calendario/index.ts");
+    expect(f).toContain("p._fim_de_semana = await fimDeSemanaDoCliente(servico, p.client_id);");
+    expect(f).toContain("if (ehDiaUtil(d) || (fimDeSemana && DATA.test(d))) dias.push(d);");
+    expect(ler("src/components/mesa/AbaEntrega.tsx")).toContain("data-fim-de-semana-editar");
+    expect(ler("src/components/mesa/agendaInteligenteApi.ts")).toContain("_postar_fim_de_semana: r.fimDeSemana === true");
+    const m = ler("supabase/migrations/20261024150000_fim_de_semana_por_cliente.sql");
+    expect(m).toContain("ADD COLUMN IF NOT EXISTS postar_fim_de_semana boolean NOT NULL DEFAULT false");
+    expect(m).toContain("_quando := public.mesa_proximo_horario_do_cliente(_t.client_id, _task.due_date, _hora, _fuso);");
+  });
+});
+
 describe("contrato: a agenda inteligente nos caminhos que criam e agendam", () => {
   const ler = (p: string) => require("node:fs").readFileSync(p, "utf8") as string;
   it("Mês: planejamento, campanha e pedido livre passam pelo encaixe; data citada fica", () => {
     const f = ler("supabase/functions/agente-calendario/index.ts");
     expect(f).toContain("const datas = datasPelaAgenda(distribuirDatas(ordenados.length, uteis, ctx.datasOcupadas), uteis, ctx);");
     expect(f).toContain("fixa: citadas.has(i.data)");
-    expect(f).toContain('servico.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts")');
+    expect(f).toContain('servico.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts, postar_fim_de_semana")');
     expect(f).toContain("pauta_pronta: obj({");
   });
   it("Estúdio: a hora da publicação fica longe das outras do dia", () => {

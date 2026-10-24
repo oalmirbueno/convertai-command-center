@@ -10,7 +10,8 @@
  * - no máximo `porDia` posts comuns por dia (padrão 1);
  * - no máximo `hypesPorDia` posts de hype a mais no mesmo dia (padrão 1);
  * - entre dois posts do mesmo dia, pelo menos `horasEntre` horas (padrão 3);
- * - só de segunda a sexta (a regra de sempre do painel);
+ * - só de segunda a sexta (a regra de sempre do painel); 24/10: o cliente com
+ *   postar_fim_de_semana = true libera o sábado e o domingo (`fimDeSemana`);
  * - o hype fica dentro da janela dele (no máximo 3 semanas a partir de hoje).
  *
  * Data escolhida pela equipe é respeitada: aqui só sai o aviso e a sugestão
@@ -20,9 +21,9 @@
  * lookbehind, sem classe Unicode e sem grupo nomeado (Safari 11). Sem travessão.
  */
 
-export type RegraDoDia = { porDia: number; hypesPorDia: number; horasEntre: number };
+export type RegraDoDia = { porDia: number; hypesPorDia: number; horasEntre: number; fimDeSemana: boolean };
 
-export const REGRA_PADRAO: RegraDoDia = { porDia: 1, hypesPorDia: 1, horasEntre: 3 };
+export const REGRA_PADRAO: RegraDoDia = { porDia: 1, hypesPorDia: 1, horasEntre: 3, fimDeSemana: false };
 
 /** Janela máxima de um hype a partir de hoje (o que passa disso não é mais hype). */
 export const DIAS_MAXIMOS_DO_HYPE = 21;
@@ -46,6 +47,7 @@ export function regraDoCliente(linha: unknown): RegraDoDia {
     porDia: n(o.posts_por_dia, 1, 5, REGRA_PADRAO.porDia),
     hypesPorDia: n(o.hypes_por_dia, 0, 3, REGRA_PADRAO.hypesPorDia),
     horasEntre: n(o.horas_entre_posts, 1, 12, REGRA_PADRAO.horasEntre),
+    fimDeSemana: o.postar_fim_de_semana === true,
   };
 }
 
@@ -80,9 +82,14 @@ export function doDia(ocupacao: Ocupacao[], data: string): { comuns: number; hyp
   };
 }
 
-/** O dia ainda aceita um post deste tipo? (fim de semana nunca) */
+/** O dia é de postar para esta regra? Segunda a sexta sempre; sábado e domingo só com `fimDeSemana`. */
+export function diaDePostar(data: string, regra: RegraDoDia = REGRA_PADRAO): boolean {
+  return ISO.test(data) && (regra.fimDeSemana === true || diaUtil(data));
+}
+
+/** O dia ainda aceita um post deste tipo? (fim de semana nunca, salvo o cliente que posta no fim de semana) */
 export function cabeNoDia(ocupacao: Ocupacao[], data: string, hype: boolean, regra: RegraDoDia = REGRA_PADRAO): boolean {
-  if (!ISO.test(data) || !diaUtil(data)) return false;
+  if (!diaDePostar(data, regra)) return false;
   const d = doDia(ocupacao, data);
   return hype ? d.hypes < regra.hypesPorDia : d.comuns < regra.porDia;
 }
@@ -166,7 +173,7 @@ export function encaixarNaAgenda(
 /** O aviso de dia cheio (vazio quando cabe). */
 export function avisoDoDia(ocupacao: Ocupacao[], data: string, hype: boolean, regra: RegraDoDia = REGRA_PADRAO): string | null {
   if (!ISO.test(data)) return null;
-  if (!diaUtil(data)) return `${dataBr(data)} cai no fim de semana; o painel publica de segunda a sexta.`;
+  if (!diaDePostar(data, regra)) return `${dataBr(data)} cai no fim de semana; o painel publica de segunda a sexta.`;
   if (cabeNoDia(ocupacao, data, hype, regra)) return null;
   const d = doDia(ocupacao, data);
   return hype

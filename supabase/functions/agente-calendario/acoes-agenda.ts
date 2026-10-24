@@ -456,13 +456,13 @@ const ehDiaUtilIso = (data: string) => {
  * (26/09: 12 peças de novembro caíram em 26/10). Datas citadas que não são dia
  * útil (uma peça de sábado que já estava na agenda) também valem.
  */
-export function janelaDoPedidoLivre(inicio: string, mensagem: string): { fim: string; uteis: string[] } {
+export function janelaDoPedidoLivre(inicio: string, mensagem: string, fimDeSemana = false): { fim: string; uteis: string[] } {
   let fim = somarDiasIso(inicio, 30);
   const teto = somarDiasIso(inicio, 366);
   const citadas = (String(mensagem || "").match(/\b\d{4}-\d{2}-\d{2}\b/g) || []).filter((d) => DATA.test(d) && d >= inicio && d <= teto);
   for (const d of citadas) if (d > fim) fim = d;
   const uteis: string[] = [];
-  for (let d = inicio; d <= fim && uteis.length < 400; d = somarDiasIso(d, 1)) if (ehDiaUtilIso(d)) uteis.push(d);
+  for (let d = inicio; d <= fim && uteis.length < 400; d = somarDiasIso(d, 1)) if (fimDeSemana || ehDiaUtilIso(d)) uteis.push(d);
   for (const d of citadas) if (uteis.indexOf(d) < 0) uteis.push(d);
   uteis.sort();
   return { fim, uteis };
@@ -478,15 +478,15 @@ export function janelaDoPedidoLivre(inicio: string, mensagem: string): { fim: st
  * (ou de hoje) até 30 dias depois de hoje, esticada até a última data que o
  * pedido cita e até o último conteúdo; data citada vale mesmo no fim de semana.
  */
-export function diasDaPropostaLivre(p: { periodo_inicio: string; periodo_fim: string; mensagem?: unknown }, hoje: string): string[] {
+export function diasDaPropostaLivre(p: { periodo_inicio: string; periodo_fim: string; mensagem?: unknown }, hoje: string, fimDeSemana = false): string[] {
   const inicio = DATA.test(p.periodo_inicio) && p.periodo_inicio < hoje ? p.periodo_inicio : hoje;
-  const pedido = janelaDoPedidoLivre(inicio, String(p.mensagem ?? ""));
+  const pedido = janelaDoPedidoLivre(inicio, String(p.mensagem ?? ""), fimDeSemana);
   let fim = pedido.fim;
   const hojeMais30 = somarDiasIso(hoje, 30);
   if (hojeMais30 > fim) fim = hojeMais30;
   if (DATA.test(p.periodo_fim) && p.periodo_fim > fim) fim = p.periodo_fim;
   const dias = pedido.uteis.slice();
-  for (let d = somarDiasIso(pedido.fim, 1); d <= fim && dias.length < 800; d = somarDiasIso(d, 1)) if (ehDiaUtilIso(d)) dias.push(d);
+  for (let d = somarDiasIso(pedido.fim, 1); d <= fim && dias.length < 800; d = somarDiasIso(d, 1)) if (fimDeSemana || ehDiaUtilIso(d)) dias.push(d);
   return dias;
 }
 

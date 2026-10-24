@@ -449,6 +449,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const [porDia, setPorDia] = useState("1");
   const [hypesPorDia, setHypesPorDia] = useState("1");
   const [horasEntre, setHorasEntre] = useState("3");
+  // 24/10 (dono): o cliente pode postar no sábado e no domingo; desligado, segunda a sexta como sempre.
+  const [fimDeSemana, setFimDeSemana] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [trocandoAutomatico, setTrocandoAutomatico] = useState(false);
   const [recolhido, setRecolhido] = useRecolhido(`mesa:entrega:ajustes:${clientId}`, false);
@@ -463,7 +465,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
     queryKey: ["mesa", "regra-do-dia", clientId],
     retry: false,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts").eq("client_id", clientId).maybeSingle();
+      const { data } = await (supabase as any).from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts, postar_fim_de_semana").eq("client_id", clientId).maybeSingle();
       return regraDoCliente(data);
     },
   });
@@ -512,6 +514,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       setPorDia(String(regraDoDia.data.porDia));
       setHypesPorDia(String(regraDoDia.data.hypesPorDia));
       setHorasEntre(String(regraDoDia.data.horasEntre));
+      setFimDeSemana(regraDoDia.data.fimDeSemana === true);
     }
   }, [p, editando, regraDoDia.data]);
 
@@ -535,7 +538,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
         const n = parseInt(v, 10);
         return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
       };
-      await salvarRegraDoDia(clientId, { porDia: limite(porDia, 1, 5, 1), hypesPorDia: limite(hypesPorDia, 0, 3, 1), horasEntre: limite(horasEntre, 1, 12, 3) });
+      await salvarRegraDoDia(clientId, { porDia: limite(porDia, 1, 5, 1), hypesPorDia: limite(hypesPorDia, 0, 3, 1), horasEntre: limite(horasEntre, 1, 12, 3), fimDeSemana });
       void queryClient.invalidateQueries({ queryKey: ["mesa", "regra-do-dia", clientId] });
       void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-inteligente", clientId] });
       toast.success("Ajustes salvos");
@@ -615,8 +618,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
             </p>
             <p className="hidden leading-relaxed sm:block">
               {horarioAutomatico
-                ? `Cada post sai no melhor horário do seu tipo, de segunda a sexta. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
-                : `Horário fixo: ${p?.hora_publicacao || "09:00"}, de segunda a sexta.`}{" "}
+                ? `Cada post sai no melhor horário do seu tipo, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
+                : `Horário fixo: ${p?.hora_publicacao || "09:00"}, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}.`}{" "}
               {p?.agendar_ao_aprovar
                 ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar."
                 : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda."}
@@ -624,7 +627,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
             {regraDoDia.data && (
               <p className="leading-relaxed text-muted-foreground" data-regra-do-dia="">
                 <span className="font-medium text-foreground">Agenda:</span> até {regraDoDia.data.porDia} {regraDoDia.data.porDia === 1 ? "post" : "posts"} por dia
-                {regraDoDia.data.hypesPorDia ? ` + ${regraDoDia.data.hypesPorDia} de hype` : ", sem hype extra"}, {regraDoDia.data.horasEntre} h entre eles; o que passa disso vai para o próximo dia livre.
+                {regraDoDia.data.hypesPorDia ? ` + ${regraDoDia.data.hypesPorDia} de hype` : ", sem hype extra"}, {regraDoDia.data.horasEntre} h entre eles{regraDoDia.data.fimDeSemana ? ", sábado e domingo liberados" : ", de segunda a sexta"}; o que passa disso vai para o próximo dia livre.
               </p>
             )}
             <p className="leading-relaxed text-muted-foreground">
@@ -668,9 +671,13 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
               <Input id="mesa-horas-entre" inputMode="numeric" value={horasEntre} onChange={(e) => setHorasEntre(e.target.value)} />
             </div>
           </div>
+          <label className="flex items-center" data-fim-de-semana-editar="">
+            <Switch checked={fimDeSemana} onCheckedChange={setFimDeSemana} className="mr-2 shrink-0" />
+            <span className="min-w-0">Postar no sábado e no domingo (desligado: só de segunda a sexta)</span>
+          </label>
           <label className="flex items-center">
             <Switch checked={agendar} onCheckedChange={setAgendar} className="mr-2 shrink-0" />
-            <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar (segunda a sexta)</span>
+            <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar ({fimDeSemana ? "todos os dias" : "segunda a sexta"})</span>
           </label>
           {blocoDeHorarios}
           <div className="flex justify-end">

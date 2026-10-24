@@ -555,6 +555,8 @@ type Proposta = {
   gravada_em: string | null;
   /** Tocado pelo gatilho a cada mudança: a sugestão do agente só vale sobre a versão que ela leu. */
   atualizado_em?: string;
+  /** 24/10: o cliente posta no sábado e no domingo (mesa_cliente_config.postar_fim_de_semana); só na memória, nunca gravado. */
+  _fim_de_semana?: boolean;
 };
 
 /**
@@ -594,13 +596,27 @@ function somarDias(data: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Todos os dias de segunda a sexta do periodo, em ordem. */
-export function diasUteisDoPeriodo(inicio: string, fim: string): string[] {
+/**
+ * Todos os dias de segunda a sexta do periodo, em ordem. 24/10: cliente com
+ * postar_fim_de_semana = true ganha também o sábado e o domingo.
+ */
+export function diasUteisDoPeriodo(inicio: string, fim: string, fimDeSemana = false): string[] {
   const dias: string[] = [];
   for (let d = inicio; d <= fim && dias.length < 400; d = somarDias(d, 1)) {
-    if (ehDiaUtil(d)) dias.push(d);
+    if (ehDiaUtil(d) || (fimDeSemana && DATA.test(d))) dias.push(d);
   }
   return dias;
+}
+
+/** 24/10: o cliente posta no fim de semana? (mesa_cliente_config.postar_fim_de_semana; sem linha ou erro, não). */
+export async function fimDeSemanaDoCliente(servico: SupabaseClient, clientId: string): Promise<boolean> {
+  if (!UUID.test(String(clientId || ""))) return false;
+  try {
+    const { data } = await servico.from("mesa_cliente_config").select("postar_fim_de_semana").eq("client_id", clientId).maybeSingle();
+    return (data as { postar_fim_de_semana?: boolean } | null)?.postar_fim_de_semana === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -994,18 +1010,19 @@ async function exigirAcessoAoCliente(chamador: Chamador, clientId: string) {
  * janela transbordava sem motivo (anti-bug 26/09, AB2).
  */
 function diasUteisDaProposta(p: Proposta): string[] {
+  const fds = p._fim_de_semana === true;
   const origem = String((p.parametros ?? {}).origem ?? "");
   const periodo = p.parametros?.periodo_pedido as { inicio?: unknown; fim?: unknown } | null | undefined;
   if (periodo !== undefined) {
     if (!periodo || typeof periodo !== "object" || typeof periodo.inicio !== "string" || periodo.fim === undefined) throw new ErroHttp(400, "periodo_do_pedido_invalido", "O período desta proposta está incompleto. Gere uma nova proposta.");
-    try { return janelaDoPedidoComLimite(periodo.inicio, "", periodo.fim).uteis; }
+    try { return janelaDoPedidoComLimite(periodo.inicio, "", periodo.fim, undefined, fds).uteis; }
     catch (e) {
       if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(400, e.codigo, e.message);
       throw e;
     }
   }
-  if (origem !== "pedido_livre" && origem !== "conteudo_rapido") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
-  return diasDaPropostaLivre({ periodo_inicio: p.periodo_inicio, periodo_fim: p.periodo_fim, mensagem: p.parametros.mensagem }, hojeSaoPaulo());
+  if (origem !== "pedido_livre" && origem !== "conteudo_rapido") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim, fds);
+  return diasDaPropostaLivre({ periodo_inicio: p.periodo_inicio, periodo_fim: p.periodo_fim, mensagem: p.parametros.mensagem }, hojeSaoPaulo(), fds);
 }
 
 async function carregarProposta(servico: SupabaseClient, id: unknown): Promise<Proposta> {
@@ -1019,6 +1036,7 @@ async function carregarProposta(servico: SupabaseClient, id: unknown): Promise<P
   p.itens = Array.isArray(p.itens) ? p.itens : [];
   p.parametros = (p.parametros ?? {}) as Record<string, unknown>;
   p.task_ids = Array.isArray(p.task_ids) ? p.task_ids : [];
+  p._fim_de_semana = await fimDeSemanaDoCliente(servico, p.client_id);
   return p;
 }
 
@@ -1036,7 +1054,9 @@ async function salvarProposta(servico: SupabaseClient, p: Proposta, campos: Reco
     .select("*")
     .single();
   if (error || !data) throw new ErroHttp(500, "proposta_nao_salva", "Não foi possível salvar a proposta.");
-  return data as Proposta;
+  const salva = data as Proposta;
+  salva._fim_de_semana = p._fim_de_semana;
+  return salva;
 }
 
 async function garantirConversa(servico: SupabaseClient, p: Proposta, userId: string): Promise<string> {
@@ -1328,7 +1348,7 @@ async function montarContexto(
   ).then(({ data }) => hypesQueValem(data as { semana: string; resumo: string | null; itens: unknown } | null, { inicio, fim }), (e) => (registrarFalha("agente-calendario: hypes não lidos", e), null));
   // 17/10: a regra do dia do cliente (posts comuns e de hype por dia, horas entre eles); sem linha, a padrão.
   const regraP = Promise.resolve(
-    servico.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts").eq("client_id", clientId).maybeSingle(),
+    servico.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts, postar_fim_de_semana").eq("client_id", clientId).maybeSingle(),
   ).then(({ data }) => regraDoCliente(data), () => regraDoCliente(null));
   // 17/10: referências e concorrentes do Instagram da marca aberta (só leitura do banco; nunca lança).
   const perfisP = lerPerfisParaOPrompt(servico, clientId, marca ? { id: marca.id, principal: marca.principal } : null);
@@ -1991,7 +2011,7 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
   if (diasEntre(inicio, fim) > 31) {
     throw new ErroHttp(400, "periodo_longo", "Planeje até 31 dias por vez. Para vários meses, use Planejar vários meses: o estrategista faz um mês de cada vez.");
   }
-  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const uteis = diasUteisDoPeriodo(inicio, fim, await fimDeSemanaDoCliente(servico, clientId));
   if (uteis.length === 0) throw new ErroHttp(400, "periodo_sem_dia_util", "O período não tem nenhum dia de segunda a sexta.");
   const frequencia = Number(corpo.frequencia);
   if (!Number.isFinite(frequencia) || frequencia < 1 || frequencia > 200) {
@@ -2401,7 +2421,7 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
   const escolhidos = p.temas.filter((t) => t.escolhido);
   if (escolhidos.length === 0) throw new ErroHttp(409, "sem_tema_escolhido", "Escolha os temas antes de detalhar.");
 
-  const uteis = diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
+  const uteis = diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim, p._fim_de_semana === true);
   const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id));
   // 23/10 (COPY-V): quem escreve os conteúdos é o "Modelo da copy"; sem ele, o do estrategista, como antes.
   const { modelo, raciocinio } = await modeloDaEscrita(servico, p.client_id, corpo, {
@@ -3276,7 +3296,7 @@ async function completarItens(servico: SupabaseClient, chamador: Chamador, corpo
   const datas = validas.map((t) => t.due_date).filter((d): d is string => !!d && DATA.test(d)).sort();
   const inicio = datas[0] ?? new Date().toISOString().slice(0, 10);
   const fim = datas[datas.length - 1] ?? inicio;
-  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const uteis = diasUteisDoPeriodo(inicio, fim, await fimDeSemanaDoCliente(servico, clientId));
   const ctx = await montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
@@ -4278,7 +4298,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   if (corpo.data_fim !== undefined && (typeof corpo.data_inicio !== "string" || !DATA.test(corpo.data_inicio))) throw new ErroHttp(400, "periodo_do_pedido_invalido", "Informe o início do período escolhido.");
   const inicio = typeof corpo.data_inicio === "string" && DATA.test(corpo.data_inicio) ? corpo.data_inicio : hojeSaoPaulo();
   let periodoDoPedido: { fim: string; uteis: string[] };
-  try { periodoDoPedido = janelaDoPedidoComLimite(inicio, mensagem, corpo.data_fim, corpo.mes); }
+  try { periodoDoPedido = janelaDoPedidoComLimite(inicio, mensagem, corpo.data_fim, corpo.mes, await fimDeSemanaDoCliente(servico, clientId)); }
   catch (e) {
     if (e instanceof ErroDoPeriodoDoPedido) throw new ErroHttp(400, e.codigo, e.message);
     throw e;
@@ -4487,16 +4507,16 @@ const ESQUEMA_RAPIDO = {
 };
 
 /** Próximo dia útil a partir de `desde` (inclusive) sem item na agenda; sem nenhum livre, o próximo útil. */
-export function proximoDiaLivre(desde: string, ocupados: Set<string>): string {
-  const uteis = diasUteisDoPeriodo(desde, somarDias(desde, 45));
+export function proximoDiaLivre(desde: string, ocupados: Set<string>, fimDeSemana = false): string {
+  const uteis = diasUteisDoPeriodo(desde, somarDias(desde, 45), fimDeSemana);
   return uteis.find((d) => !ocupados.has(d)) ?? uteis[0] ?? desde;
 }
 
 /** A data do conteúdo rápido: a pedida (nunca no passado), "livre" ou hoje; sempre de segunda a sexta. */
-export function dataDoConteudoRapido(pedida: unknown, hoje: string, uteis: string[], ocupados: Set<string>): string {
+export function dataDoConteudoRapido(pedida: unknown, hoje: string, uteis: string[], ocupados: Set<string>, fimDeSemana = false): string {
   const s = String(pedida ?? "hoje").trim();
   if (DATA.test(s)) return normalizarDataUtil(s < hoje ? hoje : s, uteis);
-  if (s === "livre") return proximoDiaLivre(hoje, ocupados);
+  if (s === "livre") return proximoDiaLivre(hoje, ocupados, fimDeSemana);
   return normalizarDataUtil(hoje, uteis);
 }
 
@@ -4535,9 +4555,9 @@ async function conteudoRapido(servico: SupabaseClient, chamador: Chamador, corpo
     resolverModeloRapido(corpo.modelo_id),
   ]);
   tempo.marcar("contexto");
-  const uteis = diasUteisDoPeriodo(hoje, fimJanela);
+  const uteis = diasUteisDoPeriodo(hoje, fimJanela, ctx.regraDoDia.fimDeSemana);
   if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "Não há dia de segunda a sexta na janela.");
-  const data = dataDoConteudoRapido(corpo.data, hoje, uteis, ctx.datasOcupadas);
+  const data = dataDoConteudoRapido(corpo.data, hoje, uteis, ctx.datasOcupadas, ctx.regraDoDia.fimDeSemana);
 
   const pedido = `${contextoEmTexto(ctx, { inicio: data, fim: data, parametros: {} }, { enxuto: true })}
 ${campanha ? `\nCAMPANHA DESTE CONTEÚDO (siga o conceito, a identidade e o briefing; lâmina com foto da campanha começa a ilustracao com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
@@ -4844,7 +4864,7 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
 
   const hoje = hojeSaoPaulo();
   const { inicio, fim } = periodoDosConteudosDaCampanha(c.periodo_inicio, c.periodo_fim, hoje);
-  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const uteis = diasUteisDoPeriodo(inicio, fim, await fimDeSemanaDoCliente(servico, c.client_id));
   if (!uteis.length) {
     throw new ErroHttp(400, "periodo_sem_dia_util", `A campanha vai de ${dataCurta(inicio)} a ${dataCurta(fim)} e não tem dia de segunda a sexta. Aumente o período da campanha.`);
   }
@@ -5507,7 +5527,7 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const inicio = linha.inicio;
   const fim = linha.fim;
   if (diasEntre(inicio, fim) > 62) throw new ErroHttp(400, "periodo_longo", "Campanha de até 2 meses por vez.");
-  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const uteis = diasUteisDoPeriodo(inicio, fim, await fimDeSemanaDoCliente(servico, clientId));
   if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "O período não tem nenhum dia de segunda a sexta.");
   // 21/10/2026: a mistura de formatos escolhida na tela manda na quantidade e no formato de cada conteúdo.
   const formatos = formatosDaCampanha(corpo.formatos);
@@ -5868,7 +5888,7 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch((e) => (registrarFalha("agente-calendario: carregarProposta falhou", e), null)) : null;
   const inicio = c.periodo_inicio ?? hojeSaoPaulo();
   const fim = c.periodo_fim ?? somarDias(inicio, 21);
-  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const uteis = diasUteisDoPeriodo(inicio, fim, await fimDeSemanaDoCliente(servico, c.client_id));
   // Com o que já está na agenda protegido item a item, a conversa pode mudar e acrescentar o resto.
   const podeMudarItens = !!proposta && proposta.status !== "descartada";
 
@@ -6840,7 +6860,7 @@ async function campanhaMudancaConfirmar(servico: SupabaseClient, chamador: Chama
   const mudouALinha = !!linhaNova && JSON.stringify(linhaNova) !== JSON.stringify(normalizarLinhaDoTempo(((c.briefing ?? {}) as Record<string, unknown>).linha_do_tempo));
   const iniDaJanela = mudouALinha && linhaNova ? linhaNova.inicio : c.periodo_inicio ?? hojeSaoPaulo();
   const fimDaJanela = mudouALinha && linhaNova ? linhaNova.fim : c.periodo_fim ?? somarDias(iniDaJanela, 21);
-  const uteis = diasUteisDoPeriodo(iniDaJanela, fimDaJanela);
+  const uteis = diasUteisDoPeriodo(iniDaJanela, fimDaJanela, await fimDeSemanaDoCliente(servico, c.client_id));
   const novasIds = new Set(aplicado.novas.map((n) => n.tema_id));
   const itensFinais = aplicado.itens.map((i) => {
     if (!novasIds.has(i.tema_id)) return i;

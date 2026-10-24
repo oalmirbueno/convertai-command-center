@@ -253,7 +253,7 @@ export async function horaComEspacoNoDia(
     const [pubs, cfg] = await Promise.all([
       db.from("editorial_publications").select("post_id, scheduled_at, status").eq("client_id", e.clientId)
         .gte("scheduled_at", inicio).lte("scheduled_at", fim).limit(50),
-      db.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts").eq("client_id", e.clientId).maybeSingle(),
+      db.from("mesa_cliente_config").select("posts_por_dia, hypes_por_dia, horas_entre_posts, postar_fim_de_semana").eq("client_id", e.clientId).maybeSingle(),
     ]);
     const ocupacao: Ocupacao[] = ((pubs.data ?? []) as Array<{ post_id: string; scheduled_at: string | null; status: string }>)
       .filter((p) => p.scheduled_at && p.post_id !== e.excluirPostId && p.status !== "failed" && p.status !== "cancelled")

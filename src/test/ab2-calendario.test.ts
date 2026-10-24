@@ -107,7 +107,7 @@ describe("B: janelas e tetos que cortavam calados", () => {
   const HOJE = "2026-09-28";
 
   it("diasUteisDaProposta usa a janela do pedido (hoje a +30, datas citadas) e não transborda 30 dias depois do fim", () => {
-    expect(corpoDe("diasUteisDaProposta")).toContain("diasDaPropostaLivre({ periodo_inicio: p.periodo_inicio, periodo_fim: p.periodo_fim, mensagem: p.parametros.mensagem }, hojeSaoPaulo())");
+    expect(corpoDe("diasUteisDaProposta")).toContain("diasDaPropostaLivre({ periodo_inicio: p.periodo_inicio, periodo_fim: p.periodo_fim, mensagem: p.parametros.mensagem }, hojeSaoPaulo(), fds)");
     expect(corpoDe("diasUteisDaProposta")).not.toContain("somarDias(fimBase, 30)");
 
     // Refazer peças de dezembro: a janela acaba na última data citada (antes ia até 18/01) e o sábado citado vale.
