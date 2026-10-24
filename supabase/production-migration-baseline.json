@@ -2513,6 +2513,14 @@
       "remote_name": "modelo_do_roteiro",
       "remote_statements_sha256": "d8f9a97e06fd15ff9be6d7f3ef2e7eb4233897adf56556b6e3f3f5682befacfa",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261024150000",
+      "path": "supabase/migrations/20261024150000_fim_de_semana_por_cliente.sql",
+      "local_sha256": "b106eeceedf88e6e66adc82de51adb385486311eaf3fc4413b488d02545195f5",
+      "remote_name": "fim_de_semana_por_cliente",
+      "remote_statements_sha256": "b435fb56d2e23dc236b2a26079a8c43c4781351d49d7df18cf2adb2cf871a123",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
