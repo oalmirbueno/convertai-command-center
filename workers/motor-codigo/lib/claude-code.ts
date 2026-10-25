@@ -27,7 +27,8 @@
  *
  * As skills entram como plugin (`--plugin-dir`): as da casa (skills-claude/
  * skills, no worker, em português: copy-de-site, prova-honesta, humanizar-texto,
- * clonar-referencia e partir-de-modelo-pronto) e a ui-ux-pro-max (só o
+ * clonar-referencia, partir-de-modelo-pronto, site-de-servico, loja-virtual e
+ * pixel-e-eventos) e a ui-ux-pro-max (só o
  * SKILL.md; a busca roda por `node scripts/uiux.mjs`). O AGENTS.md do modelo e
  * a abertura do Claude Code vão por `--append-system-prompt-file`; o pedido da
  * passada vai pela entrada padrão (sem o limite de 32 mil caracteres da linha

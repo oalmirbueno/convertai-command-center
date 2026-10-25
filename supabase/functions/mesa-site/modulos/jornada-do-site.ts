@@ -59,6 +59,8 @@ export type ObjetivoDoSite = {
 };
 
 export const OBJETIVOS_DO_SITE: ObjetivoDoSite[] = [
+  { id: "servico", rotulo: "Site de serviço", descricao: "serviços, prova, processo e orçamento", tipo: "institucional", modelo: "servico", copy: "contato", acao: "Pedir um orçamento ou agendar pelo WhatsApp." },
+  { id: "loja_virtual", rotulo: "Loja virtual", descricao: "vitrine, carrinho e pagamento", tipo: "loja", modelo: "loja_virtual", copy: "venda", acao: "Pôr no carrinho e finalizar a compra (link de pagamento ou pedido no WhatsApp)." },
   { id: "captar", rotulo: "Captar contatos", descricao: "material em troca do contato", tipo: "landing", modelo: "captura", copy: "contato", acao: "Deixar nome e WhatsApp no formulário curto." },
   { id: "vender", rotulo: "Vender um produto", descricao: "dor, oferta, prova e preço", tipo: "landing", modelo: "vendas", copy: "venda", acao: "Comprar ou pedir pelo WhatsApp." },
   { id: "agendar", rotulo: "Agendar horário", descricao: "serviço e o botão de marcar", tipo: "landing", modelo: null, copy: "contato", acao: "Marcar um horário pelo WhatsApp ou pela agenda." },
@@ -365,6 +367,8 @@ export function instrucaoDaConstrucao(p: PedidoDeConstrucao): string {
  * a cada objetivo. Link na bio não tem modelo pronto: a casa faz do zero.
  */
 export const TIPOS_DO_OBJETIVO: Record<string, string[]> = {
+  servico: ["institucional", "landing"],
+  loja_virtual: ["loja"],
   captar: ["landing"],
   vender: ["landing", "loja"],
   agendar: ["landing", "institucional"],

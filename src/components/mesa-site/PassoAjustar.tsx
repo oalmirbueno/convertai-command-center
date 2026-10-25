@@ -9,6 +9,7 @@ import PreviaEditavel from "./PreviaEditavel";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
 
 const EtapaPublicacao = lazy(() => import("./EtapaPublicacao"));
+const PixelEEventos = lazy(() => import("./PixelEEventos"));
 
 /** Pedidos prontos para o diretor de site (vão para o campo da conversa; enviar e confirmar continuam com a pessoa). */
 export const PEDIDOS_DE_AJUSTE = [
@@ -21,7 +22,8 @@ export const PEDIDOS_DE_AJUSTE = [
 /**
  * Passo 5: ajustar conversando com a IA e publicar. A prévia fica ao centro;
  * cada pedido ao diretor de site (na lateral) vira um cartão com o custo,
- * Confirmar e Desfazer, como no resto da casa. Publicar mora aqui embaixo.
+ * Confirmar e Desfazer, como no resto da casa. Pixel e eventos (25/10) e
+ * Publicar moram aqui embaixo.
  */
 export default function PassoAjustar({ site, onIrPara, onPedirAoDiretor }: { site: LinhaDoSite; onIrPara: (etapa: string) => void; onPedirAoDiretor?: (texto: string) => void }) {
   const { clientId } = useMesa();
@@ -44,6 +46,9 @@ export default function PassoAjustar({ site, onIrPara, onPedirAoDiretor }: { sit
         </Secao>
       )}
       <PreviaEditavel site={site} trabalhos={todos} executor={trabalhosQ.data ? trabalhosQ.data.executor : null} onIrPara={onIrPara} />
+      <Suspense fallback={<Carregando forma="lista" rotulo="Abrindo pixel e eventos" />}>
+        <PixelEEventos site={site} />
+      </Suspense>
       <Suspense fallback={<Carregando forma="lista" rotulo="Abrindo a publicação" />}>
         <EtapaPublicacao site={site} onPedirAoDiretor={onPedirAoDiretor} onIrPara={onIrPara} />
       </Suspense>

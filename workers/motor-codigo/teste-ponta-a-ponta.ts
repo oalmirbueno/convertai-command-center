@@ -9,6 +9,9 @@
  *   ... --motor claude_code [--modelo anthropic/claude-haiku-5.5] [--secoes topo,hero,servicos,rodape]
  *       [--modelo-pronto small-business | --referencia https://exemplo.com --modo fiel|proximo|criativo]
  *       [--objetivo agendar]
+ * MSP (25/10/2026), pixel e eventos: [--pixel 123456789012345] liga no pacote o
+ *   pixel (fictício no teste), o WhatsApp, o aviso de cookies e a medição do
+ *   objetivo (eventos padrão da Meta), como a função monta em pacote-do-site.
  * O pedido leva objetivo, partida e motor no mesmo lugar em que a função
  * motor-codigo grava (motor_trabalhos.pedido); a chave da OpenRouter fica no
  * medidor (o Claude Code recebe um token local).
@@ -26,6 +29,7 @@ import { executarTrabalho } from "./lib/executar.ts";
 import { desligarTodas } from "./lib/previa.ts";
 import { estimarTrabalho, nomeDoProjeto } from "../../supabase/functions/_shared/motor-codigo.ts";
 import { ESQUEMA_DO_CONTEUDO, normalizarOpcoesDeCopy, SECOES_PADRAO } from "../../supabase/functions/_shared/site-metodo.ts";
+import { medicaoDoPacote } from "../../supabase/functions/mesa-site/modulos/medicao-do-site.ts";
 
 const arg = (nome: string, padrao: string) => {
   const i = process.argv.indexOf(`--${nome}`);
@@ -39,6 +43,7 @@ const MODELO_PRONTO = arg("modelo-pronto", "");
 const REFERENCIA = arg("referencia", "");
 const MODO = arg("modo", "proximo");
 const OBJETIVO = arg("objetivo", "");
+const PIXEL = arg("pixel", "");
 const TETO = Number(arg("teto", "0.8"));
 const CLIENTE = "4dd691a7-d481-451f-800b-5e6b6fdc8721";
 const PASTA = process.env.MOTOR_TESTE_PASTA || "C:\\AI\\motor-codigo\\teste-e2e";
@@ -132,6 +137,13 @@ async function principal() {
     secoes,
     regras_da_equipe: ["EVITAR: prometer resultado ou número que o cliente não deu"],
     arquivos: [{ bucket: "mesa", path: logoPath, destino: "public/marca/logo.png" }],
+    // MSP: pixel, WhatsApp, cookies e a medição do objetivo (só com --pixel).
+    ...(PIXEL
+      ? {
+          integracoes: { whatsapp: { numero: "5541999998888", mensagem: "Olá! Vim pelo site.", link: "https://wa.me/5541999998888" }, formulario: null, pixel_meta: PIXEL, ga4: null, mapa: null, cookies: { politica_url: null } },
+          medicao: medicaoDoPacote({ jornada: { objetivo: OBJETIVO || "servico" } }, PIXEL),
+        }
+      : {}),
   };
   // MCC: o contrato da jornada (os mesmos campos que a função grava em motor_trabalhos.pedido).
   const partida = MODELO_PRONTO ? { tipo: "modelo_pronto", modelo_id: MODELO_PRONTO } : REFERENCIA ? { tipo: "referencia", url: REFERENCIA, modo: MODO } : { tipo: "zero" };

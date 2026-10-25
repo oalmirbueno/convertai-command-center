@@ -161,8 +161,8 @@ describe("editor de código: o que se edita e a trava de concorrência", () => {
 });
 
 describe("galeria de modelos de página", () => {
-  it("os cinco modelos pedidos, cada seção da biblioteca, preset que existe e nada some no mapa", () => {
-    expect(MODELOS_DE_PAGINA.map((m) => m.id)).toEqual(["captura", "vendas", "obrigado", "bio", "institucional_curto"]);
+  it("os cinco modelos pedidos (mais serviço e loja virtual, 25/10), cada seção da biblioteca, preset que existe e nada some no mapa", () => {
+    expect(MODELOS_DE_PAGINA.map((m) => m.id)).toEqual(["captura", "vendas", "obrigado", "bio", "institucional_curto", "servico", "loja_virtual"]);
     for (const m of MODELOS_DE_PAGINA) {
       expect(presetDeEstilo(m.preset)).not.toBeNull();
       m.paginas.forEach((p) => p.secoes.forEach((s) => expect(secaoDaBiblioteca(s.tipo)).not.toBeNull()));

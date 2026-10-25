@@ -3,6 +3,7 @@ import { SECOES } from "./secoes";
 import { useRolagemSuave } from "./lib/rolagem";
 import { pacote, paginaPeloCaminho } from "./lib/pacote";
 import { CamadaDeIntegracoes } from "./lib/integracoes";
+import { CamadaDaLoja } from "./lib/loja";
 
 /**
  * Monta a página do endereço: o topo e o rodapé (globais) em volta das seções
@@ -29,6 +30,7 @@ export default function App({ caminho = "/" }: { caminho?: string }) {
       </main>
       {Rodape ? <Rodape /> : null}
       <CamadaDeIntegracoes />
+      <CamadaDaLoja caminho={caminho} />
     </div>
   );
 }

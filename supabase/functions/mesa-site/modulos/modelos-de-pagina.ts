@@ -148,6 +148,102 @@ export const MODELOS_DE_PAGINA: ModeloDePagina[] = [
       },
     ],
   },
+  {
+    id: "servico",
+    nome: "Site de serviço",
+    descricao: "serviços com prova, processo, área de atendimento e orçamento pelo WhatsApp",
+    tipo: "institucional",
+    preset: "saas_limpo",
+    objetivo: "Vender um serviço: mostrar o que faz, provar que entrega e levar ao orçamento ou ao agendamento.",
+    acao: "Pedir um orçamento ou agendar pelo WhatsApp.",
+    globais: ["topo", "rodape"],
+    paginas: [
+      {
+        id: "inicio",
+        slug: "",
+        titulo: "Início",
+        secoes: [
+          { tipo: "hero", nota: "o serviço e o resultado para quem, com a cidade quando é local; botão de orçamento (WhatsApp) e o de agendar" },
+          { tipo: "servicos", nota: "de 3 a 6 serviços, cada um com o resultado e o botão de pedir orçamento daquele serviço" },
+          { tipo: "processo", nota: "do primeiro contato à entrega, em 3 a 5 passos com prazo só se estiver nas fontes" },
+          { tipo: "prova", nota: "garantia, certificações, anos de casa e fotos reais do trabalho; só dado real" },
+          { tipo: "diferenciais", nota: "por que este e não o concorrente, sem superlativo vazio" },
+          { tipo: "faq", nota: "preço, prazo, garantia, área atendida e forma de pagamento" },
+          { tipo: "chamada", nota: "orçamento sem compromisso pelo WhatsApp e o botão de agendar" },
+        ],
+      },
+      {
+        id: "servicos",
+        slug: "servicos",
+        titulo: "Serviços",
+        secoes: [
+          { tipo: "servicos", nota: "cada serviço com o que inclui, para quem é e o botão de orçamento; abrir um serviço conta como ViewContent" },
+          { tipo: "processo", nota: "como o atendimento funciona" },
+          { tipo: "pricing", nota: "faixas de preço só se estiverem nas fontes; senão, sob consulta com o botão de orçamento" },
+          { tipo: "chamada", nota: "pedir orçamento" },
+        ],
+      },
+      {
+        id: "contato",
+        slug: "contato",
+        titulo: "Orçamento",
+        secoes: [
+          { tipo: "contato", nota: "formulário de orçamento, WhatsApp, área de atendimento (bairros ou cidades das fontes), horários e o mapa" },
+          { tipo: "faq", nota: "o que acontece depois do pedido de orçamento" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "loja_virtual",
+    nome: "Loja virtual",
+    descricao: "vitrine por categoria, página do produto, carrinho e pagamento pelo link ou pedido no WhatsApp",
+    tipo: "loja",
+    preset: "editorial_claro",
+    objetivo: "Vender produtos pelo site: vitrine, página do produto, carrinho e checkout (link de pagamento do cliente ou pedido no WhatsApp).",
+    acao: "Pôr no carrinho e finalizar a compra.",
+    globais: ["topo", "rodape"],
+    paginas: [
+      {
+        id: "inicio",
+        slug: "",
+        titulo: "Início",
+        secoes: [
+          { tipo: "hero_dividido", nota: "a promessa da loja e o produto em destaque com foto real; botão para a vitrine" },
+          { tipo: "vitrine", nota: "os destaques da loja pelos componentes de src/lib/loja.tsx (foto, preço do pacote, comprar)" },
+          { tipo: "diferenciais", nota: "entrega, troca, pagamento e atendimento, só o que estiver nas fontes" },
+          { tipo: "prova", nota: "garantia, política de troca e selos reais" },
+          { tipo: "faq", nota: "frete, prazo, troca, pagamento e segurança" },
+          { tipo: "chamada", nota: "voltar para a vitrine ou pedir ajuda no WhatsApp" },
+        ],
+      },
+      {
+        id: "produtos",
+        slug: "produtos",
+        titulo: "Produtos",
+        secoes: [
+          { tipo: "vitrine", nota: "catálogo completo com filtro por categoria; o produto abre na página do produto (DetalheDoProduto) e conta ViewContent" },
+          { tipo: "faq", nota: "dúvidas de compra" },
+        ],
+      },
+      {
+        id: "obrigado",
+        slug: "obrigado",
+        titulo: "Obrigado",
+        secoes: [
+          { tipo: "hero_dividido", nota: "confirma o pedido em uma frase (o gateway volta para cá depois do pagamento; a casca conta a compra); fora do menu" },
+          { tipo: "processo", nota: "próximos passos: confirmação, envio ou retirada" },
+          { tipo: "links", nota: "WhatsApp para dúvidas e o Instagram da loja" },
+        ],
+      },
+      {
+        id: "contato",
+        slug: "contato",
+        titulo: "Contato",
+        secoes: [{ tipo: "contato", nota: "WhatsApp, formulário e endereço de retirada, se houver" }],
+      },
+    ],
+  },
 ];
 
 export const modeloDePagina = (id: unknown): ModeloDePagina | null => MODELOS_DE_PAGINA.find((m) => m.id === id) || null;

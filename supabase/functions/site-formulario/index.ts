@@ -8,6 +8,9 @@
  *        utm_source?, utm_medium?, utm_campaign?, utm_content?, utm_term?, ad_id?, adset_id?, campaign_id?, fbclid? }
  *        quiz? { pontuacao, faixa, respostas }
  *   site_url é a armadilha (campo escondido que gente não vê e robô preenche).
+ *   meta? { consentiu, event_id, fbp, fbc, url } (25/10): só quando o visitante aceitou os
+ *   cookies; com pixel e o servidor ligado na Mesa Site, o Lead vai também pela
+ *   Conversions API com o mesmo event_id (modulos/lead-na-meta.ts).
  *   quiz (19/10, nó `quiz` do Laboratório): pontuação, faixa (até 60) e até 30
  *   respostas de até 200 caracteres; vai para commercial_leads.qualificacao.quiz
  *   e a nota do lead diz a faixa. Sem o campo, nada muda.
@@ -27,6 +30,7 @@ import { CHAVE_DO_FORMULARIO, lerEnvio, origemPermitida } from "../_shared/site-
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerOrigemDoClique } from "../_shared/origem-clique.ts";
 import { lerQuiz } from "./modulos/quiz-do-site.ts";
+import { leadNaMeta, type SiteDoFormulario } from "./modulos/lead-na-meta.ts";
 
 const cors = (origem: string | null) => ({
   "Access-Control-Allow-Origin": origem || "*",
@@ -68,15 +72,20 @@ async function hashDoIp(req: Request): Promise<string> {
   return Array.from(bytes.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Os endereços do site (domínio e publicação) para conferir a origem do navegador. */
-async function hostsDoSite(chave: string): Promise<string[] | null> {
-  const { data, error } = await servico().from("sites").select("publicacao").eq("integracoes->formulario->>chave", chave).is("arquivado_em", null).limit(1);
+/**
+ * Os endereços do site (domínio e publicação) para conferir a origem do
+ * navegador, e o site (cliente, integrações e jornada: o Lead pela
+ * Conversions API lê daqui).
+ */
+async function siteDaChave(chave: string): Promise<{ hosts: string[]; site: SiteDoFormulario } | null> {
+  const { data, error } = await servico().from("sites").select("publicacao, client_id, integracoes, direcao").eq("integracoes->formulario->>chave", chave).is("arquivado_em", null).limit(1);
   if (error) {
     registrarFalha("site-formulario: site não lido", error);
     return null;
   }
-  const linha = ((data as Array<{ publicacao: Record<string, unknown> | null }> | null) ?? [])[0];
+  const linha = ((data as Array<{ publicacao: Record<string, unknown> | null; client_id: string; integracoes: unknown; direcao: unknown }> | null) ?? [])[0];
   if (!linha) return null;
+  const site: SiteDoFormulario = { client_id: linha.client_id, integracoes: linha.integracoes, direcao: linha.direcao };
   const p = linha.publicacao || {};
   const hosts: string[] = [];
   if (typeof p.dominio === "string" && p.dominio) hosts.push(p.dominio);
@@ -87,7 +96,40 @@ async function hostsDoSite(chave: string): Promise<string[] | null> {
       /* endereço antigo sem formato: fica só o domínio */
     }
   }
-  return hosts;
+  return { hosts, site };
+}
+
+const sha256 = async (s: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))).map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/**
+ * O Lead pela Conversions API (só com pixel, servidor ligado e o Aceitar dos
+ * cookies no envio). Roda depois da resposta quando a plataforma deixa
+ * (EdgeRuntime.waitUntil); senão, com no máximo 8 s. Nunca derruba o lead.
+ */
+async function repetirNaMeta(req: Request, site: SiteDoFormulario, corpo: unknown, envio: { nome: string; email: string | null; whatsapp: string | null; pagina: string | null }, origem: string | null) {
+  const tarefa = leadNaMeta(
+    {
+      token: async (clientId) => {
+        const { data, error } = await servico().rpc("ads_token_para_biblioteca", { _client_id: clientId });
+        if (error) return null;
+        return typeof data === "string" && data.trim() ? data.trim() : null;
+      },
+      buscar: (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(8_000) }),
+      sha256,
+    },
+    site,
+    corpo,
+    { nome: envio.nome, email: envio.email, whatsapp: envio.whatsapp },
+    { ip: (req.headers.get("cf-connecting-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0] || "").trim() || null, user_agent: req.headers.get("user-agent"), pagina: envio.pagina, origem },
+  ).then(
+    (r) => {
+      if (!r.enviado && r.motivo) registrarFalha("site-formulario: Lead não foi à Conversions API", new Error(r.motivo), { client_id: site ? site.client_id : null });
+    },
+    (e) => registrarFalha("site-formulario: Conversions API", e),
+  );
+  const er = (globalThis as unknown as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (er && typeof er.waitUntil === "function") er.waitUntil(tarefa);
+  else await tarefa;
 }
 
 Deno.serve(async (req) => {
@@ -106,8 +148,9 @@ Deno.serve(async (req) => {
   try {
     const { envio, motivo } = lerEnvio(corpo);
     if (!envio || !CHAVE_DO_FORMULARIO.test(envio.chave)) return json({ ok: false, codigo: "chave_invalida", mensagem: MENSAGENS.chave_invalida }, 400);
-    const hosts = await hostsDoSite(envio.chave);
-    if (!hosts) return json({ ok: false, codigo: "formulario_desligado", mensagem: MENSAGENS.formulario_desligado }, 404);
+    const doSite = await siteDaChave(envio.chave);
+    if (!doSite) return json({ ok: false, codigo: "formulario_desligado", mensagem: MENSAGENS.formulario_desligado }, 404);
+    const hosts = doSite.hosts;
     if (hosts.length && !origemPermitida(origem, hosts)) return json({ ok: false, codigo: "origem_nao_permitida", mensagem: MENSAGENS.origem_nao_permitida }, 403);
     // Erro de gente (sem nome, sem contato): volta para o campo sem gravar nada.
     const ehSpam = !!motivo && (SILENCIOSOS.indexOf(motivo) >= 0 || SPAM.indexOf(motivo) >= 0);
@@ -151,7 +194,10 @@ Deno.serve(async (req) => {
     const r = (data || {}) as { ok?: boolean; codigo?: string };
     if (motivo && SILENCIOSOS.indexOf(motivo) >= 0) return json({ ok: true, mensagem: "Recebido." });
     if (motivo) return json({ ok: false, codigo: motivo, mensagem: MENSAGENS[motivo] || "Confira os campos e envie de novo." }, 400);
-    if (r.ok) return json({ ok: true, mensagem: "Recebido." });
+    if (r.ok) {
+      await repetirNaMeta(req, doSite.site, corpo, envio, origem);
+      return json({ ok: true, mensagem: "Recebido." });
+    }
     const codigo = String(r.codigo || "recusado");
     return json({ ok: false, codigo, mensagem: MENSAGENS[codigo] || "Não foi possível enviar agora." }, codigo === "limite" ? 429 : codigo === "formulario_desligado" ? 404 : 400);
   } catch (e) {

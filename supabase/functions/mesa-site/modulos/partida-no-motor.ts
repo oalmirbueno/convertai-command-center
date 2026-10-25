@@ -12,6 +12,7 @@
  */
 import { MODOS_DA_REFERENCIA, type MotorDeCodigo, MOTORES_DE_CODIGO, normalizarPartida, objetivoDoSite, type PartidaDoSite } from "./jornada-do-site.ts";
 import { modeloPronto } from "./modelos-prontos.ts";
+import { eventosDoObjetivo } from "./medicao-do-site.ts";
 
 // ------------------------------------------------------------------ o que o worker lê do pedido
 
@@ -70,6 +71,12 @@ export function instrucoesDaPartida(o: ObraDoTrabalho, comSkills = false): strin
   const linhas: string[] = [];
   const objetivo = objetivoDoSite(o.objetivo);
   if (objetivo) linhas.push(`OBJETIVO DO SITE: ${objetivo.rotulo} (${objetivo.descricao}). Próximo passo do visitante: ${objetivo.acao} Toda seção trabalha para isso.`);
+  if (objetivo && objetivo.id === "servico") linhas.push(`SITE DE SERVIÇO: serviços com o resultado, prova real, processo, área de atendimento e o botão de orçamento ou agendamento em toda dobra.${comSkills ? " Use a skill site-de-servico." : ""}`);
+  if (objetivo && objetivo.id === "loja_virtual") linhas.push(`LOJA VIRTUAL: produtos, preços, categorias e checkout vêm de pacote.loja; use os componentes de src/lib/loja.tsx (Vitrine, CartaoDoProduto, BotaoComprar, DetalheDoProduto); o carrinho e a compra já estão na casca.${comSkills ? " Use a skill loja-virtual." : ""}`);
+  if (objetivo) {
+    const eventos = eventosDoObjetivo(objetivo.id, null).filter((e) => e !== "PageView");
+    linhas.push(`MEDIÇÃO: o site mede ${eventos.join(", ")} (pacote.medicao). Quem dispara é a casca, só depois do Aceitar dos cookies: nunca escreva fbq, gtag nem script de rastreio. Na seção: WhatsApp por linkDoWhatsapp (conta Contact sozinho), botão de agendar ou orçamento com data-evento="Schedule", abrir serviço ou produto com data-evento="ViewContent", formulário só pelo <Formulario /> (conta Lead).${comSkills ? " Use a skill pixel-e-eventos." : ""}`);
+  }
   const p = o.partida;
   if (p.tipo === "referencia") {
     const modo = MODOS_DA_REFERENCIA.filter((m) => m.id === p.modo)[0];
