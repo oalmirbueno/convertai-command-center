@@ -1,6 +1,6 @@
 import { memo, useState, type CSSProperties } from "react";
 import { Handle, NodeToolbar, Position, type Node, type NodeProps } from "@xyflow/react";
-import { AlertTriangle, CheckCircle2, Clock, Copy, Hourglass, Loader2, Lock, Maximize2, Minimize2, PanelRightOpen, PauseCircle, Play, Plus, RefreshCw, Trash2, WandSparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Copy, Hourglass, Loader2, Lock, Maximize2, Megaphone, Minimize2, PanelRightOpen, PauseCircle, Play, Plus, RefreshCw, Trash2, WandSparkles } from "lucide-react";
 import { botao, juntar, superficie, texto } from "@/components/sistema";
 import { TIPOS_DE_NO, type NoDoLab } from "@/lib/laboratorio/nos";
 import { noMotorDaCasa, type ExecucaoDoLab, type StatusDaExecucao } from "@/lib/laboratorio/api";
@@ -19,6 +19,7 @@ import { IconeDoNo } from "../icones";
 import { useAcoesDoQuadro } from "./contexto";
 import IntegracaoDeVendas from "./IntegracaoDeVendas";
 import { LARGURA_DO_NO, LARGURA_EXPANDIDA } from "./montar";
+import { seloDaSinc, sincDoNo } from "@/lib/laboratorio/sincronia";
 
 /**
  * O nó do quadro do Laboratório: cartão arredondado com sombra suave, chip do
@@ -134,6 +135,8 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
   const [gerar, setGerar] = useState(false);
   const midia = no.tipo === "midia";
   const podeGerarIA = SEM_GERAR.indexOf(no.tipo) < 0 && !(no.tipo === "area_membros" && (no.dados.plataforma || "painel") === "painel");
+  // 25/10 (ponte com a campanha): o nó que veio da campanha ou que já virou peça dela leva um selo discreto.
+  const selo = seloDaSinc(sincDoNo(no));
 
   const sombra = selected
     ? `0 0 0 2px ${def.cor}, 0 0 0 6px ${def.cor}26, 0 14px 34px -12px ${def.cor}99`
@@ -171,6 +174,12 @@ const CartaoDoNo = memo(function CartaoDoNo({ data, selected }: NodeProps<Node<D
         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold leading-snug" title={`${def.rotulo}: ${def.dica}`}>
           {titulo}
         </span>
+        {selo ? (
+          <span className="mr-1 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/10 px-2 text-[11px] font-medium leading-none text-primary" title={selo.titulo} data-selo-da-campanha={selo.texto}>
+            <Megaphone className="mr-1 h-3 w-3" aria-hidden="true" />
+            {selo.texto}
+          </span>
+        ) : null}
         {data.auto === "aguardando" && !ocupado ? (
           <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-amber-500/15 px-2 text-[11px] font-medium leading-none text-amber-700 dark:text-amber-300" title="Automático: roda sozinho quando as entradas ficarem prontas" data-aguardando-entradas="">
             <Hourglass className="mr-1 h-3 w-3" aria-hidden="true" />

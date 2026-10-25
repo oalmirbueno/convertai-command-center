@@ -45,6 +45,7 @@ import CampanhaTrilha from "./CampanhaTrilha";
 import CampanhaLinhaDoTempo from "./CampanhaLinhaDoTempo";
 import CampanhaStories from "./CampanhaStories";
 import CampanhaVideos from "./CampanhaVideos";
+import { BotaoDoCanvas, useTempoRealDaCampanha } from "./CampanhaCanvas";
 import { trilhaSugeridaDaCampanha } from "./trilhaDaCampanhaApi";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
@@ -185,6 +186,9 @@ export default function CampanhaDetalhe({
     setGaleria(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campanha.id]);
+
+  // 25/10/2026: a tela se atualiza sozinha quando o canvas (ou outra pessoa) mexe na campanha ou na série.
+  useTempoRealDaCampanha(campanha);
 
   const proposta = useQuery({
     queryKey: chaves.proposta(campanha.proposta_id || ""),
@@ -341,6 +345,16 @@ export default function CampanhaDetalhe({
           </p>
         </div>
         <div className="ml-2 flex shrink-0 items-center">
+          <BotaoDoCanvas
+            campanha={campanha}
+            onIr={() => {
+              escolher("visao");
+              window.setTimeout(() => {
+                const el = typeof document !== "undefined" ? document.getElementById(`campanha-canvas-${campanha.id}`) : null;
+                if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start", behavior: "smooth" });
+              }, 60);
+            }}
+          />
           {onDuplicar && (
             <button type="button" className={botao.icone} onClick={onDuplicar} aria-label="Nova campanha a partir desta" title="Nova campanha a partir desta (mesma estrutura, outro tema)">
               <Copy className="h-4 w-4" aria-hidden="true" />

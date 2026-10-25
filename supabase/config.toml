@@ -201,6 +201,10 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.vendas-webhook]
     verify_jwt = false
+  # 25/10/2026: ponte Laboratório e Campanhas. O aviso do banco chega sem JWT (confere x-ponte-segredo);
+  # as ações de tela conferem o JWT dentro da função (is_staff + can_access_client).
+  [functions.ponte-lab-campanha]
+    verify_jwt = false
   [functions.ab-contar]
     verify_jwt = false
   [functions.area-membros]

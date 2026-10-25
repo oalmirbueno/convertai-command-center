@@ -48,6 +48,7 @@ import {
   desligar,
   ligar,
   mudarDados,
+  normalizarCanvas,
   organizar,
   podeLigar,
   removerNo,
@@ -72,6 +73,9 @@ import ProvedorDasPrevias from "./ContextoDasPrevias";
 import { alvosDoPedido, temCartoesSobrepostos } from "@/lib/laboratorio/execucaoDoPedido";
 import { dadosDasMidias } from "./no/MidiaDoNo";
 import { LARGURA_DO_NO } from "./no/montar";
+import FaixaDaCampanha from "./FaixaDaCampanha";
+import { canvasDiferente, mesclarCanvas } from "@/lib/laboratorio/sincronia";
+import { chavesDaPonte } from "@/lib/ponte/ponteApi";
 import "./telaCheiaDoLab.css";
 
 /**
@@ -234,6 +238,8 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
   const refDoTopo = useRef<HTMLDivElement>(null);
 
   const atual = useRef<CanvasDoLab>(canvas);
+  /** O último canvas que o servidor tem (o carregado ou o último salvo): a base da mescla com a ponte. */
+  const base = useRef<CanvasDoLab>(canvas);
   const versao = useRef(1);
   const nomeAtual = useRef("");
   const salvando = useRef<Promise<boolean> | null>(null);
@@ -263,6 +269,7 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     setProjeto(p);
     setCanvas(quadro);
     atual.current = quadro;
+    base.current = p.canvas;
     if (quadro !== p.canvas) setAjustarVista((v) => v + 1);
     versao.current = p.versao;
     setNome(p.nome);
@@ -296,10 +303,27 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     setSalvar({ estado: "salvando", erro: "" });
     const p = (async () => {
       try {
-        const salvo = await salvarProjeto({ id: projetoId, nome: nomeAtual.current, canvas: enviar, versao: versao.current, ...(cliente !== undefined ? { client_id: cliente } : {}) });
+        let enviado = enviar;
+        let salvo: ProjetoDoLab;
+        try {
+          salvo = await salvarProjeto({ id: projetoId, nome: nomeAtual.current, canvas: enviar, versao: versao.current, ...(cliente !== undefined ? { client_id: cliente } : {}) });
+        } catch (e) {
+          if (!ehConflitoDeVersao(e)) throw e;
+          // 25/10 (ponte com a campanha): a outra ponta gravou antes. Mescla uma vez (o que é da pessoa fica, o que
+          // veio da campanha vem do servidor, o novo dos dois lados entra) e salva de novo, sem cair no conflito.
+          const lido = await lerProjeto(projetoId);
+          const mescla = mesclarCanvas(base.current, atual.current, lido.projeto.canvas);
+          atual.current = mescla;
+          setCanvas(mescla);
+          base.current = lido.projeto.canvas;
+          versao.current = lido.projeto.versao;
+          enviado = mescla;
+          salvo = await salvarProjeto({ id: projetoId, nome: nomeAtual.current, canvas: mescla, versao: versao.current, ...(cliente !== undefined ? { client_id: cliente } : {}) });
+        }
         versao.current = salvo.versao;
+        base.current = enviado;
         if (clienteMudou.current === cliente) clienteMudou.current = undefined;
-        setSalvar({ estado: atual.current !== enviar ? "pendente" : "salvo", erro: "" });
+        setSalvar({ estado: atual.current !== enviado ? "pendente" : "salvo", erro: "" });
         void queryClient.invalidateQueries({ queryKey: chaveDosProjetos });
         return true;
       } catch (e) {
@@ -330,6 +354,69 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
     if (salvar.estado === "salvo" && !salvando.current) return;
     await salvarAgora();
   }, [salvar.estado, salvarAgora]);
+
+  /**
+   * O servidor tem um canvas mais novo (a ponte com a campanha escreveu, ou outra aba): sem mudança local, troca
+   * sem piscar (a vista e a seleção ficam); com mudança local, mescla e deixa salvar com a versão nova.
+   */
+  const aplicarRemoto = useCallback((bruto: unknown, versaoRemota: number) => {
+    if (!carregado.current || !(versaoRemota > versao.current)) return;
+    const remoto = normalizarCanvas(bruto);
+    const vista = atual.current.viewport;
+    if (!canvasDiferente(remoto, atual.current)) {
+      versao.current = versaoRemota;
+      base.current = remoto;
+      return;
+    }
+    const temLocal = canvasDiferente(atual.current, base.current);
+    const novo = temLocal ? mesclarCanvas(base.current, atual.current, remoto) : { ...remoto, viewport: vista };
+    versao.current = versaoRemota;
+    base.current = remoto;
+    atual.current = novo;
+    setCanvas(novo);
+    setProjeto((p) => (p ? { ...p, versao: versaoRemota } : p));
+    setSalvar((st) => (temLocal ? { estado: "pendente", erro: "" } : st.estado === "conflito" ? { estado: "salvo", erro: "" } : st));
+  }, []);
+
+  /** A ponte mudou o canvas (ligar, montar, sugestão aceita, sincronizar): relê e aplica pela mesma regra. */
+  const recarregarDaPonte = useCallback(async () => {
+    try {
+      const r = await lerProjeto(projetoId);
+      aplicarRemoto(r.projeto.canvas, r.projeto.versao);
+    } catch {
+      /* o tempo real traz de qualquer jeito */
+    }
+  }, [projetoId, aplicarRemoto]);
+
+  // Tempo real da linha do projeto: a ponte (ou outra aba) gravou um canvas novo, ou a ligação com a campanha mudou.
+  useEffect(() => {
+    const sb = supabase as any;
+    if (!sb || typeof sb.channel !== "function") return;
+    let canal: any = null;
+    try {
+      canal = sb
+        .channel(`lab-projeto:${projetoId}:${Date.now().toString(36)}`)
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "lab_projetos", filter: `id=eq.${projetoId}` }, (msg: any) => {
+          const novo = msg && msg.new;
+          if (!novo) return;
+          const velho = msg.old || {};
+          if (Object.prototype.hasOwnProperty.call(novo, "campanha_id") && novo.campanha_id !== velho.campanha_id) {
+            void queryClient.invalidateQueries({ queryKey: chavesDaPonte.porProjeto(projetoId) });
+          }
+          if (novo.canvas && typeof novo.versao === "number") aplicarRemoto(novo.canvas, novo.versao);
+        })
+        .subscribe();
+    } catch {
+      canal = null;
+    }
+    return () => {
+      try {
+        if (canal) sb.removeChannel(canal);
+      } catch {
+        /* canal já fechado */
+      }
+    };
+  }, [projetoId, aplicarRemoto, queryClient]);
 
   const recarregar = async () => {
     const r = await q.refetch();
@@ -862,6 +949,8 @@ function Editor({ projetoId, clientes, onVoltar, onAbrirOutro, telaCheia, onTela
           ]}
         />
       </div>
+
+      <FaixaDaCampanha projetoId={projetoId} clienteId={clienteDoProjeto} antesDeChamar={garantirSalvo} aoMudarCanvas={() => void recarregarDaPonte()} />
 
       <CanvasStudio
         projetoId={projetoId}

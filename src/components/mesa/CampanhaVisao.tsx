@@ -7,6 +7,7 @@ import { periodoCurto, type Campanha } from "./mesaV4Api";
 import { numerosDaCampanha, resumoDaCampanhaEmHtml, type SituacaoDaPeca } from "./regrasDaCampanha";
 import { PecasPorFase, useAcoesDasPecas } from "./CampanhaPecas";
 import CampanhaAds from "./CampanhaAds";
+import CampanhaCanvas from "./CampanhaCanvas";
 import CampanhaReferenciaPadrao from "./CampanhaReferenciaPadrao";
 import { SeloDoEstado } from "./CampanhaDetalhe";
 
@@ -128,6 +129,9 @@ export default function CampanhaVisao({
       <div className="min-w-0 border-t border-border pt-4">
         <CampanhaAds campanha={campanha} />
       </div>
+
+      {/* 25/10/2026: a campanha no canvas do Laboratório (abrir, sincronizar e as sugestões do canvas). */}
+      <CampanhaCanvas campanha={campanha} />
 
       <PecasPorFase pecas={pecas} acoes={acoes} vazio="Sem peças ainda: gere a campanha completa." />
     </div>

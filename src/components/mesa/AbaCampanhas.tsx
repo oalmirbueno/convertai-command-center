@@ -13,6 +13,7 @@ import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { campanhaDaMarcaNaTela } from "@/lib/mesa/marcas";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 import CampanhaDetalhe, { SeloDoEstado } from "./CampanhaDetalhe";
+import { SeloNoCanvas } from "./CampanhaCanvas";
 import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
 import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
@@ -83,6 +84,7 @@ function ItemDaLista({
             {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
             {conteudos !== null ? ` · ${conteudos} cont.` : ""}
           </span>
+          <SeloNoCanvas campanha={campanha} />
           <SeloDoEstado estado={campanha.status} />
         </span>
         {progresso && (
@@ -163,6 +165,7 @@ function EstadoVazio({
                           {periodoCurto(c.periodo_inicio, c.periodo_fim)}
                           {n !== null ? ` · ${n} conteúdo(s)` : ""}
                         </span>
+                        <SeloNoCanvas campanha={c} />
                         <SeloDoEstado estado={c.status} />
                       </span>
                     </span>
