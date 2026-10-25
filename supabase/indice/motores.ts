@@ -639,7 +639,11 @@ const LIGACOES_DOS_SUPERPODERES: Record<string, { ligacao: LigacaoDoMetodo; mais
   "site.agente": { ligacao: { arquivo: F("mesa-site"), trechos: ['superpoderesPara(servico(), { agente: "site.agente"', "metodo: await spP,"] } },
   "site.geracao": {
     ligacao: { arquivo: F("mesa-site"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "site.geracao"'] },
-    mais: [{ arquivo: F("mesa-site", "estrutura.ts"), trechos: ['metodo: await superpoderesPara(ctx.servico(), { agente: "site.geracao"'] }],
+    mais: [
+      { arquivo: F("mesa-site", "estrutura.ts"), trechos: ['metodo: await superpoderesPara(ctx.servico(), { agente: "site.geracao"'] },
+      // 25/10 (jornada da Mesa Site): a copy da página no motor de copy da casa (2 versões por seção, o Jev escolhe).
+      { arquivo: F("mesa-site", "jornada.ts"), trechos: ['superpoderesPara(db, { agente: "site.geracao"', "    metodo,"] },
+    ],
   },
   "motion.agente": { ligacao: { arquivo: F("mesa-motion"), trechos: ['superpoderesPara(servico(), { agente: "motion.agente"', "metodo: await spP,"] } },
   "motion.geracao": { ligacao: { arquivo: F("mesa-motion"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "motion.geracao"'] } },

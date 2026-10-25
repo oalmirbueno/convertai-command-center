@@ -8,6 +8,8 @@
  * POST { acao, ... }, só equipe com acesso ao cliente.
  * - estimar { client_id, tipo, secoes?, modelo_id? } -> { estimativa_usd, teto_sugerido_usd, passos, saldo_usd, reservado_usd, livre_usd, modelo }
  * - pedir { client_id, site_id, tipo, secoes?, secao?, instrucao?, teto_usd, modelo_id?, alvo_trabalho_id?, conferencia_de? } -> { trabalho, estimativa_usd }
+ *   Jornada (25/10): construir pode levar objetivo, partida { tipo: zero|referencia|modelo_pronto, url?, modo?: fiel|proximo|criativo, modelo_id? },
+ *   motor? (claude_code|opencode) e contexto_do_cliente; vão normalizados para motor_trabalhos.pedido (contrato em mesa-site/modulos/jornada-do-site.ts).
  *   Gravyx (19/10): salvar e descartar (rascunho x versão salva, sem custo) e corrigir (UMA passada sobre a
  *   conferência no navegador, com custo; conferencia_de = o trabalho da conferência; nunca duas vezes).
  * - parar { trabalho_id } -> { trabalho }
@@ -27,6 +29,10 @@ import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { estadoDoRascunho, instrucaoDaCorrecao, podeCorrigir, podeMexerNoRascunho } from "../mesa-site/modulos/obra-do-site.ts";
+// Jornada da Mesa Site (25/10): o contrato da construção (o worker lê os mesmos campos em motor_trabalhos.pedido).
+import { instrucaoDaConstrucao, normalizarContratoDaConstrucao } from "../mesa-site/modulos/jornada-do-site.ts";
+// MCC (25/10): o modelo leve do Claude Code e o motor de copy da casa no pacote do motor.
+import { copyDaCasaParaOMotor, modeloIdDaConstrucao } from "../mesa-site/modulos/motor-da-construcao.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
@@ -130,6 +136,9 @@ async function pedir(ch: Chamador, corpo: Record<string, unknown>) {
     correcao = { conferencia_de: conferenciaDe, problemas: pode.problemas };
     c = { ...c, instrucao: instrucaoDaCorrecao(pode.problemas) };
   }
+  // Jornada: o contrato só vale no construir; sem objetivo e partida válidos, o pedido segue como antes.
+  const contrato = c.tipo === "construir" ? normalizarContratoDaConstrucao(c) : null;
+  if (contrato && !(typeof c.instrucao === "string" && c.instrucao.trim())) c = { ...c, instrucao: instrucaoDaConstrucao(contrato) };
   const marca = await resolverMarca(servico(), clientId, { marca_id: site.marca_id });
   const secoes = Array.isArray(c.secoes) ? (c.secoes as string[]) : undefined;
   // Frente SYNC: o agente do worker também lê as regras ensinadas na Mesa Site e o contexto completo da marca
@@ -147,15 +156,17 @@ async function pedir(ch: Chamador, corpo: Record<string, unknown>) {
     projeto: site.projeto,
     referencia: { tipo: "site", id: site.id },
     pedidoBruto: c,
-    modeloId: typeof c.modelo_id === "string" && c.modelo_id ? c.modelo_id : site.modelo,
+    modeloId: await modeloIdDaConstrucao(servico(), { escolhido: c.modelo_id, doSite: site.modelo, contrato }),
     pacote: {
       ...pacote,
       arquivos,
       regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`),
       contexto_da_marca: contextoDaMarca || null,
+      ...(c.tipo === "construir" || c.tipo === "ajustar" ? { copy_da_casa: await copyDaCasaParaOMotor(servico(), pacote as unknown as Record<string, unknown>, site.id) } : {}),
       ...(correcao ? { correcao } : {}),
     } as unknown as Record<string, unknown>,
     pacoteDe: site.pacote_mudou_em || null,
+    extras: contrato as unknown as Record<string, unknown> | null,
     userId: ch.userId,
   });
   // A trava do "uma vez só" lê o vínculo no resultado desde a fila (o worker repete ao terminar).

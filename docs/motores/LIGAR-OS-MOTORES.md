@@ -121,3 +121,12 @@ O worker escolhe o provedor pelo modelo de cada tarefa e só pega tarefa de prov
 
 As janelas desta página viram um supervisor invisível: `workers/supervisor` (lançador estável, supervisor, ícone na bandeja, cofre DPAPI e atualização sozinha) e `workers/instalador/instalar-motores.ps1` (instalar pelo painel, migrar esta máquina, desinstalar e conferir). Passo a passo, segurança e o comando para migrar esta máquina: `ACELERIQ-MOTORES.md`.
 
+
+## 8. Claude Code no motor de código (frente MCC, 25/10/2026)
+
+- O motor de código passou a ter dois executores: **Claude Code** (padrão) e **OpenCode** (alternativa). A tela escolhe por trabalho (`motor: "claude_code" | "opencode"` no pedido); sem escolha vale `MOTOR_PADRAO` do ambiente ou `claude_code`.
+- O Claude Code é dependência local e de versão fixa (`@anthropic-ai/claude-code` 2.1.310 no `package.json` do worker). Nada global: o `npm ci` do Aceleriq Motores (ou `npm install` em `workers/motor-codigo`) baixa o binário da plataforma. No Windows ele precisa do Git Bash (Git for Windows).
+- Vai sempre pela OpenRouter (`OPENROUTER_API_KEY`, a mesma variável de sempre). A chave fica só no medidor local do worker; o Claude Code recebe um token de uso único.
+- Sem o binário ou sem rota pela OpenRouter, o trabalho segue no OpenCode com aviso na tela.
+- Modelo leve padrão da construção pela jornada: `openrouter:anthropic/claude-haiku-5.5` (precisa estar **ativo** em Modelos de IA; inativo, vale o modelo do site).
+- Prova sem banco: `MOTOR_TESTE_PASTA=... MOTOR_PREVIA=nao node teste-ponta-a-ponta.ts --motor claude_code --modelo-pronto small-business` ou `--referencia https://... --modo proximo`.

@@ -32,7 +32,13 @@ export { problemasDoPedido, trocasDoPedido };
 import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { SKILLS_POR_TRABALHO, temChave, VERSAO_DO_SUPERPOWERS } from "./config-opencode.ts";
-import { escolherRota, idsNoOpenrouter, provedorDoOpencode } from "./rota-do-modelo.ts";
+import { escolherRota, idsNoOpenrouter, motorDoTrabalho, provedorDoOpencode, rotaDoClaudeCode } from "./rota-do-modelo.ts";
+// MCC (25/10/2026): o executor Claude Code (pela OpenRouter, chave só no medidor), a partida (referência ou site pronto) e a autoria.
+import { novoTokenLocal, rodarPassadaClaude, subirClaudeCode, temClaudeCode, VERSAO_DO_CLAUDE_CODE } from "./claude-code.ts";
+import { conferirAutoria, instrucoesDaPartida, obraDoPedido, type ObraDoTrabalho } from "../../../supabase/functions/mesa-site/modulos/partida-no-motor.ts";
+import { capturarReferencia, textoDoSite, textosDaReferencia } from "./referencia.ts";
+import { prepararModeloPronto } from "./modelos-prontos.ts";
+import { paginasProntas } from "../modelo-site/scripts/conferir.mjs";
 import { eventosDasMarcas } from "./marcas-da-resposta.ts";
 
 export { eventosDasMarcas, lerMarcasDaResposta, prontoSemProva } from "./marcas-da-resposta.ts";
@@ -52,6 +58,21 @@ export type ConfigDoWorker = { pastaProjetos: string; prazoPorPassadaMs: number;
 
 
 type Estado = { custo: number; tabela: number; tokensEntrada: number; tokensSaida: number; tokensCache: number };
+
+/**
+ * MCC: a obra do trabalho (objetivo, partida, motor e contexto do cliente) do
+ * pedido; pedido sem jornada (seção pedida pelo agente, ajuste) segue a
+ * partida guardada na jornada do site (pacote.direcao.jornada).
+ */
+export function obraDoTrabalho(pedido: Record<string, unknown>, pacote: Record<string, unknown>): ObraDoTrabalho {
+  const doPedido = obraDoPedido(pedido);
+  if (doPedido.partida.tipo !== "zero" || doPedido.objetivo) return doPedido;
+  const direcao = pacote && typeof pacote.direcao === "object" && pacote.direcao ? (pacote.direcao as Record<string, unknown>) : {};
+  const jornada = direcao.jornada && typeof direcao.jornada === "object" ? (direcao.jornada as Record<string, unknown>) : null;
+  if (!jornada) return doPedido;
+  const daJornada = obraDoPedido({ objetivo: jornada.objetivo, partida: jornada.partida });
+  return { ...daJornada, motor: doPedido.motor, contexto_do_cliente: doPedido.contexto_do_cliente };
+}
 
 export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDoWorker): Promise<{ estado: string; custo: number }> {
   const limitador = criarLimitador();
@@ -88,13 +109,27 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
   let erro: string | null = null;
   const deveParar = async () => (await fila.estado(t.id)) === "parando";
   let commitInicial: string | null = null;
+  // MCC: a obra (objetivo e partida) e o motor deste trabalho.
+  const obra = obraDoTrabalho(pedido as Record<string, unknown>, pacote);
+  let motor = motorDoTrabalho(obra.motor, temClaudeCode());
 
   try {
     await avisar({ tipo: "estado", resumo: "O motor pegou o trabalho" });
     await fase("entendendo", "Entendendo o pedido");
     // Frente MTR: a chave do provedor é conferida ANTES de montar projeto, dependências e prévia.
     // Sem a chave direta e com a do OpenRouter, segue pelo mesmo modelo no OpenRouter (com aviso).
-    if (modelo && TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) {
+    if (modelo && TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0 && motor.motor === "claude_code") {
+      // MCC: o Claude Code vai sempre pela OpenRouter; sem rota, o trabalho segue no OpenCode (com aviso).
+      const alt = provedorDoOpencode(modelo) !== "openrouter" && fila.modeloAlternativo ? await fila.modeloAlternativo(idsNoOpenrouter(modelo)) : null;
+      const rc = rotaDoClaudeCode(modelo, temChave, alt);
+      if (rc.ok && rc.modelo) {
+        if (rc.aviso) await avisar({ tipo: "aviso", resumo: rc.aviso });
+        modelo = rc.modelo;
+      } else motor = { motor: "opencode", aviso: `${rc.motivo || "sem rota para o Claude Code"} O trabalho seguiu no OpenCode.` };
+    }
+    if (motor.aviso && TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) await avisar({ tipo: "aviso", resumo: motor.aviso });
+    if (TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) resultado.motor = motor.motor;
+    if (modelo && TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0 && motor.motor === "opencode") {
       const precisaDeRota = !temChave(provedorDoOpencode(modelo));
       const alternativo = precisaDeRota && fila.modeloAlternativo ? await fila.modeloAlternativo(idsNoOpenrouter(modelo)) : null;
       const rota = escolherRota(modelo, temChave, alternativo);
@@ -223,8 +258,23 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     // Só construir, ajustar e corrigir passam pelo modelo (TIPOS_QUE_GASTAM); o teste amarra SKILLS_POR_TRABALHO a eles.
     if (TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) {
       if (!modelo) throw new Error("trabalho sem modelo");
+      // MCC: o objetivo, a partida e o contexto conferido na jornada vão no pacote.json (o agente lê).
+      if (obra.objetivo || obra.partida.tipo !== "zero") pacote.obra = { objetivo: obra.objetivo, partida: obra.partida };
+      if (obra.contexto_do_cliente) pacote.contexto_do_cliente = obra.contexto_do_cliente;
       const avisos = await escreverPacote(pasta, pacote, fila);
       for (const a of avisos) await avisar({ tipo: "aviso", resumo: a });
+      // MCC: a partida antes da primeira passada (sem gasto com o modelo se falhar).
+      if (obra.partida.tipo === "modelo_pronto") {
+        const mp = prepararModeloPronto(pasta, obra.partida.modelo_id);
+        resultado.partida = { tipo: "modelo_pronto", modelo_id: mp.modelo.id, licenca: mp.modelo.licenca, commit: mp.modelo.commit };
+        await avisar({ tipo: "passo", resumo: `Partindo do site pronto ${mp.modelo.nome} (${mp.modelo.licenca}, ${mp.modelo.autor})${mp.atribuicao ? "; atribuição anotada no ATRIBUICOES.md" : ""}` });
+      } else if (obra.partida.tipo === "referencia" && obra.partida.url) {
+        await fase("entendendo", "Capturando a referência no navegador");
+        const ref = await capturarReferencia(pasta, cfg.pastaProjetos, obra.partida.url);
+        resultado.partida = { tipo: "referencia", url: ref.url, modo: obra.partida.modo || "proximo", secoes: ref.secoes, de_cache: ref.de_cache };
+        await avisar({ tipo: "passo", resumo: `Referência ${ref.de_cache ? "já capturada" : "capturada"}: ${ref.secoes} blocos medidos no computador e no celular (modo ${obra.partida.modo || "proximo"})` });
+        if (ref.aviso) await avisar({ tipo: "aviso", resumo: `Referência: ${ref.aviso}` });
+      }
       const base = await commitar(pasta, "Pacote do cliente");
       if (base.novo) await avisar({ tipo: "commit", resumo: "Pacote do cliente no projeto", dados: { commit: base.commit } });
       // UIM: o design system da base segue a consulta do pacote (refeito quando a Direção muda; some sem consulta).
@@ -236,11 +286,17 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         await fila.atualizar(t.id, { preview_url: pv.url, preview_expira_em: new Date(Date.now() + 60 * 60_000).toISOString() });
         await avisar({ tipo: "previa", resumo: pv.publica ? "Prévia ao vivo aberta" : "Prévia só nesta máquina", dados: { url: pv.url, publica: pv.publica, aviso: pv.aviso } });
       }
-      medidor = modelo.provedor === "openrouter" ? await abrirMedidor() : null;
+      // MCC: no Claude Code, a chave da OpenRouter fica só no medidor (o agente recebe um token local de uso único).
+      const tokenLocal = motor.motor === "claude_code" ? novoTokenLocal() : null;
+      medidor = tokenLocal ? await abrirMedidor({ chave: process.env.OPENROUTER_API_KEY || "", tokenLocal }) : modelo.provedor === "openrouter" ? await abrirMedidor() : null;
       // SPM: o tipo decide as skills liberadas; plugin que não sobe vira aviso e o trabalho segue no nativo.
-      const servidor = await subirOpencode(pasta, modelo, medidor ? medidor.url : null, { tipo: t.tipo, aoFalhar: (msg) => avisar({ tipo: "aviso", resumo: msg }) });
-      await avisar({ tipo: "passo", resumo: `Superpowers ${VERSAO_DO_SUPERPOWERS.tag} no modo ${servidor.modo} (${(SKILLS_POR_TRABALHO[t.tipo] || []).length} skills liberadas)` });
-      if (servidor.limpos.length) await avisar({ tipo: "aviso", resumo: `Configuração do opencode achada no site e apagada antes de subir: ${servidor.limpos.slice(0, 4).join(", ")}` });
+      const servidor = motor.motor === "opencode" ? await subirOpencode(pasta, modelo, medidor ? medidor.url : null, { tipo: t.tipo, aoFalhar: (msg) => avisar({ tipo: "aviso", resumo: msg }) }) : null;
+      const claude = motor.motor === "claude_code" && medidor && tokenLocal ? subirClaudeCode(pasta, medidor, tokenLocal) : null;
+      if (servidor) await avisar({ tipo: "passo", resumo: `Superpowers ${VERSAO_DO_SUPERPOWERS.tag} no modo ${servidor.modo} (${(SKILLS_POR_TRABALHO[t.tipo] || []).length} skills liberadas)` });
+      if (claude) await avisar({ tipo: "passo", resumo: `Claude Code ${VERSAO_DO_CLAUDE_CODE} com ${modelo.modelo_api} pela OpenRouter, preso na pasta do site (skills da casa e base de design)` });
+      const limpos = servidor ? servidor.limpos : claude ? claude.limpos : [];
+      if (limpos.length) await avisar({ tipo: "aviso", resumo: `Configuração de agente achada no site e apagada antes de subir: ${limpos.slice(0, 4).join(", ")}` });
+      const blocoDaPartida = t.tipo === "construir" || t.tipo === "ajustar" ? instrucoesDaPartida(obra, !!claude) : "";
       const custoReal = medidor ? medidor.total : undefined;
       try {
         const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : t.tipo === "corrigir" ? ["correcao"] : [String(pedido.secao || "")];
@@ -271,8 +327,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           const inicioDaPassada = Date.now();
           const texto = t.tipo === "corrigir"
             ? promptDaCorrecao(problemasDaCorrecao, String(pacote.cliente || ""))
-            : ajustarPromptDaBase(promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null), pacote, designSystem.master);
-          const r = await rodarPassada(servidor, {
+            : ajustarPromptDaBase(promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null), pacote, designSystem.master) + (blocoDaPartida ? `\n\n${blocoDaPartida}` : "");
+          const passada: Parameters<typeof rodarPassadaClaude>[1] & { custoReal?: () => number } = {
             titulo: `${t.tipo} ${secao}`,
             pedido: texto,
             modelo,
@@ -283,7 +339,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             aoCusto: (total) => limitador.custo(total),
             deveParar,
             custoReal,
-          });
+          };
+          const r = claude ? await rodarPassadaClaude(claude, passada) : await rodarPassada(servidor!, passada);
           gasto.tabela += r.custo.custo_usd;
           gasto.custo = Math.max(gasto.tabela, medidor ? medidor.total() : 0);
           gasto.tokensEntrada += r.custo.tokens_entrada;
@@ -345,7 +402,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         if (falhas.length) resultado.secoes_desfeitas = falhas;
         if (consultas.length) resultado.base_de_design = totalDaBase(consultas);
       } finally {
-        servidor.fechar();
+        if (servidor) servidor.fechar();
+        if (claude) claude.fechar();
         if (medidor) {
           gasto.custo = Math.max(gasto.tabela, medidor.total());
           resultado.custo_real_usd = medidor.total();
@@ -446,6 +504,16 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           }
           resultado.conferencia = conf;
           await avisar({ tipo: conf.graves ? "aviso" : "passo", resumo: resumoDaConferencia(conf) });
+        }
+        // MCC: o site partiu de uma referência: não pode ter trecho longo dela (direito autoral). Aviso, nunca refaz.
+        if (obra.partida.tipo === "referencia" && obra.partida.url) {
+          const textos = textosDaReferencia(cfg.pastaProjetos, obra.partida.url);
+          if (textos.length) {
+            const htmls = (paginasProntas(join(pasta, "dist")) as string[]).map((c) => readFileSync(c, "utf8"));
+            const autoria = conferirAutoria(textoDoSite(htmls), textos);
+            resultado.autoria = autoria;
+            await avisar(autoria.ok ? { tipo: "passo", resumo: `Autoria conferida: nenhum trecho longo da referência no site (${autoria.conferidos} trechos conferidos)` } : { tipo: "aviso", resumo: `Autoria: o site tem ${autoria.copiados.length} trecho(s) da referência; troque pelo texto do cliente (ex.: "${autoria.copiados[0]}")`.slice(0, 280) });
+          }
         }
       }
       // Prévia na nuvem: toda versão salva e o pedido avulso (rascunho ou versão), depois do build bom.

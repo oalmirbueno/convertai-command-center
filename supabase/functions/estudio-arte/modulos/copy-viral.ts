@@ -615,8 +615,9 @@ export function escolherModeloDaCopy<M extends ModeloDoCatalogo>(catalogo: M[], 
 /**
  * 23/10 (dono): três seletores, cada um no seu escopo (copy do conteúdo, refinar copy e estrategista).
  * 23/10 (frente B): o quarto, "roteiro" (o motor e o agente de roteiro da peça de vídeo), com o padrão de hoje do roteirista (o estrategista).
+ * 25/10 (Mesa Site): o quinto, "site" (a copy da página no motor de copy da Mesa Site), com o padrão da copy.
  */
-export type EscopoDoModelo = "copy" | "refino" | "estrategista" | "roteiro";
+export type EscopoDoModelo = "copy" | "refino" | "estrategista" | "roteiro" | "site";
 
 /**
  * O modelo de cada escopo na tela: copy e refino seguem o melhor para copy;

@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Globe, Plus } from "lucide-react";
+import { ExternalLink, Globe, Plus, SlidersHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -14,7 +15,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
-import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
+import { etapasEmIcone, iconeDaEtapaDaMesa } from "@/components/mesa-foto/IconesDasEtapas";
 import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
@@ -24,6 +25,9 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { ETAPAS_DO_SITE } from "../../supabase/functions/_shared/site-metodo";
+// 25/10/2026: a jornada enxuta (objetivo, partida, conferir, construir, ajustar e publicar); as etapas antigas viram "avançado".
+import { ehPassoDaJornada, PASSOS_DA_JORNADA, passoInicial } from "../../supabase/functions/mesa-site/modulos/jornada-do-site";
+import { jornadaDoSite } from "@/components/mesa-site/jornadaApi";
 import ListaDeSites from "@/components/mesa-site/ListaDeSites";
 import { usePreviaEmCache, useSiteAberto } from "@/components/mesa-site/siteApi";
 import EtapaComBarra from "@/components/mesa-site/BarraDaEtapa";
@@ -65,11 +69,17 @@ const EtapaIntegracoes = lazyComPreCarga("mesa-site/integracoes", carregar.integ
 const EtapaConstrucao = lazyComPreCarga("mesa-site/construcao", carregar.construcao);
 const EtapaRevisao = lazyComPreCarga("mesa-site/revisao", carregar.revisao);
 const EtapaPublicacao = lazyComPreCarga("mesa-site/publicacao", carregar.publicacao);
+const PassoObjetivo = lazyComPreCarga("mesa-site/objetivo", () => import("@/components/mesa-site/PassoObjetivo"));
+const PassoPartida = lazyComPreCarga("mesa-site/partida", () => import("@/components/mesa-site/PassoPartida"));
+const PassoConferir = lazyComPreCarga("mesa-site/conferir", () => import("@/components/mesa-site/PassoConferir"));
+const PassoConstruir = lazyComPreCarga("mesa-site/construir", () => import("@/components/mesa-site/PassoConstruir"));
+const PassoAjustar = lazyComPreCarga("mesa-site/ajustar", () => import("@/components/mesa-site/PassoAjustar"));
 const AgenteDoSite = lazyComPreCarga("mesa-site/agente", () => import("@/components/mesa-site/AgenteDoSite"));
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
-type Etapa = (typeof ETAPAS_DO_SITE)[number]["valor"];
+type Etapa = (typeof ETAPAS_DO_SITE)[number]["valor"] | (typeof PASSOS_DA_JORNADA)[number]["valor"];
+const ehEtapaValida = (v: unknown): v is Etapa => ehPassoDaJornada(v) || ETAPAS_DO_SITE.some((e) => e.valor === v);
 
 const UUID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidOuNulo = (v: string | null) => (v && UUID_VALIDO.test(v) ? v : null);
@@ -79,7 +89,7 @@ function lerOnde(clientId: string): { etapa: string | null; nome: string | null 
   try {
     const v = JSON.parse(window.localStorage.getItem(chaveOnde(clientId)) || "null");
     if (!v || typeof v !== "object") return { etapa: null, nome: null };
-    return { etapa: ETAPAS_DO_SITE.some((e) => e.valor === v.etapa) ? String(v.etapa) : null, nome: typeof v.nome === "string" ? v.nome.slice(0, 120) : null };
+    return { etapa: ehEtapaValida(v.etapa) ? String(v.etapa) : null, nome: typeof v.nome === "string" ? v.nome.slice(0, 120) : null };
   } catch {
     return { etapa: null, nome: null };
   }
@@ -121,7 +131,6 @@ export default function MesaSite() {
 
   const clientIdUrl = params.get("client") || "";
   const etapaUrl = params.get("etapa");
-  const etapa: Etapa = ETAPAS_DO_SITE.some((e) => e.valor === etapaUrl) ? (etapaUrl as Etapa) : "briefing";
   const siteUrl = uuidOuNulo(params.get("site"));
 
   const [recargaAberta, setRecargaAberta] = useState(false);
@@ -147,6 +156,9 @@ export default function MesaSite() {
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
   const marcaId = marca ? marca.id : null;
   const { site, isLoading: sitesCarregando } = useSiteAberto(clientId, marcaId, siteUrl);
+  // Sem etapa no endereço, o site abre no primeiro passo da jornada que falta.
+  const etapa: Etapa = ehEtapaValida(etapaUrl) ? etapaUrl : site ? passoInicial(site) : "objetivo";
+  const naJornada = ehPassoDaJornada(etapa);
   const [rascunhoDoAgente, setRascunhoDoAgente] = useEstadoDaTela<string>(`mesa-site:agente:rascunho:${siteUrl || "sem-site"}`, "");
 
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
@@ -161,7 +173,7 @@ export default function MesaSite() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    mudar({ client: id, etapa: o.etapa || "briefing", site: null, marca: null });
+    mudar({ client: id, etapa: o.etapa, site: null, marca: null });
   };
 
   useEffect(() => {
@@ -228,6 +240,7 @@ export default function MesaSite() {
 
   // UXS 30/09: o que falta por etapa, só pela linha do site (sem chamada nova), com a regra do checklist.
   const pendencias = useMemo(() => (site ? pendenciasDasEtapas(site, ETAPAS_DO_SITE.map((e) => e.valor)) : null), [site]);
+  const jornada = useMemo(() => (site ? jornadaDoSite(site) : { objetivo: null, partida: null, contexto: {} as Record<string, unknown> }), [site]);
 
   return (
     <CascaDaMesa
@@ -243,17 +256,38 @@ export default function MesaSite() {
           <Etapas
             rotulo="Etapas da Mesa Site"
             soIcone
-            itens={etapasEmIcone("site", ETAPAS_DO_SITE.map((e) => ({
-              valor: e.valor,
-              rotulo: e.rotulo,
-              contador: pendencias && pendencias.contador[e.valor] ? pendencias.contador[e.valor] : null,
-              destaque: !!pendencias && pendencias.destaque === e.valor,
-              dica: e.valor === "referencias" ? "Opcional" : pendencias ? pendencias.dica[e.valor] : undefined,
+            itens={etapasEmIcone("site", PASSOS_DA_JORNADA.map((p) => ({
+              valor: p.valor,
+              rotulo: p.rotulo,
+              feita: (p.valor === "objetivo" && !!jornada.objetivo) || (p.valor === "partida" && !!jornada.partida) || (p.valor === "conferir" && Object.keys(jornada.contexto).length > 0),
             })))}
-            valor={etapa}
+            valor={naJornada ? etapa : null}
             onEscolher={irPara}
             depois={
               <>
+                {/* As etapas antigas, com toda a função, ficam no "avançado" (um menu, sem poluir a jornada). */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className={juntar(botao.barra, "ml-1 max-w-[200px]", !naJornada && "bg-muted text-foreground")} aria-label={naJornada ? "Etapas avançadas" : `Etapa avançada: ${(ETAPAS_DO_SITE.find((e) => e.valor === etapa) || { rotulo: etapa }).rotulo}`} title="Etapas avançadas" data-etapas-avancadas="">
+                      <SlidersHorizontal className={juntar("h-3.5 w-3.5 shrink-0", !naJornada && "mr-1")} aria-hidden="true" />
+                      {!naJornada && <span className="truncate">{(ETAPAS_DO_SITE.find((e) => e.valor === etapa) || { rotulo: etapa }).rotulo}</span>}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-60">
+                    {ETAPAS_DO_SITE.map((e) => {
+                      const Icone = iconeDaEtapaDaMesa("site", e.valor);
+                      const falta = pendencias && pendencias.contador[e.valor] ? pendencias.contador[e.valor] : 0;
+                      const item = { dica: e.valor === "referencias" ? "Opcional" : pendencias ? pendencias.dica[e.valor] : undefined };
+                      return (
+                        <DropdownMenuItem key={e.valor} onSelect={() => irPara(e.valor)} title={item.dica} data-etapa-avancada={e.valor}>
+                          <Icone className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <span className={juntar("min-w-0 flex-1 truncate", e.valor === etapa && "font-medium text-primary")}>{e.rotulo}</span>
+                          {falta ? <span className="ml-2 text-[11px] text-muted-foreground">{falta}</span> : null}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <button type="button" className={juntar(botao.barra, "ml-2 max-w-[180px]")} onClick={() => mudar({ site: null })} title="Trocar de site" data-trocar-site="">
                   <Globe className="mr-1 h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{site.nome}</span>
@@ -304,7 +338,7 @@ export default function MesaSite() {
         <MesaProvider valor={valor}>
           {!site && (
             <RegiaoRolavel modo="lg" memoria={`mesa-site:${clientId}:sites`} className="pb-6">
-              {sitesCarregando ? <Carregando forma="lista" rotulo="Lendo os sites" /> : <ListaDeSites marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} icone={<Plus className="h-4 w-4" />} />}
+              {sitesCarregando ? <Carregando forma="lista" rotulo="Lendo os sites" /> : <ListaDeSites marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || null })} icone={<Plus className="h-4 w-4" />} />}
               {!sitesCarregando && <GaleriaDeModelos marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} />}
             </RegiaoRolavel>
           )}
@@ -323,9 +357,14 @@ export default function MesaSite() {
               }
             >
               {/* UXS 30/09: a barra da etapa (Voltar, Salvar, Seguir) fica fora da região que rola, no pé. */}
-              <EtapaComBarra etapa={etapa} onIrPara={irPara}>
+              <EtapaComBarra etapa={etapa} onIrPara={irPara} etapas={naJornada ? PASSOS_DA_JORNADA : ETAPAS_DO_SITE}>
                 <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-site:${site.id}:${etapa}`} className="pb-6 lg:pr-1" data-regiao-da-etapa={etapa}>
                   <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
+                    {etapa === "objetivo" && <PassoObjetivo site={site} onIrPara={irPara} />}
+                    {etapa === "partida" && <PassoPartida site={site} />}
+                    {etapa === "conferir" && <PassoConferir site={site} />}
+                    {etapa === "construir" && <PassoConstruir site={site} onIrPara={irPara} />}
+                    {etapa === "ajustar" && <PassoAjustar site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
                     {etapa === "briefing" && <EtapaBriefing site={site} onIrPara={irPara} />}
                     {etapa === "referencias" && <EtapaReferencias site={site} onIrPara={irPara} />}
                     {etapa === "direcao" && <EtapaDirecao site={site} onIrPara={irPara} />}

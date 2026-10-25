@@ -73,3 +73,37 @@ export function escolherRota(m: ModeloDoMotor, temChave: (provedor: string) => b
     motivo: `O worker não tem a chave ${chave} no ambiente${semRota}. Ponha a chave no ambiente da máquina do motor (docs/motores/LIGAR-OS-MOTORES.md) ou escolha outro modelo na Mesa Site.`,
   };
 }
+
+// ------------------------------------------------------------------ MCC (25/10/2026): o motor do trabalho e a rota do Claude Code
+
+export type MotorDoTrabalho = "claude_code" | "opencode";
+
+/**
+ * Padrão do worker quando a tela não escolhe: MOTOR_PADRAO do ambiente
+ * (claude_code ou opencode) ou, sem ele, o PADRAO_DO_MOTOR abaixo. Medido no
+ * teste de ponta a ponta de 25/10 (modelo pronto e referência pelo Claude
+ * Code com o Haiku 5.5 pela OpenRouter).
+ */
+export const PADRAO_DO_MOTOR: MotorDoTrabalho = "claude_code";
+
+/** O motor do trabalho: o escolhido na tela; senão o padrão; o Claude Code sem binário cai para o opencode (com aviso). */
+export function motorDoTrabalho(escolhido: unknown, temClaude: boolean, padrao: string | undefined = process.env.MOTOR_PADRAO): { motor: MotorDoTrabalho; aviso: string | null } {
+  const base: MotorDoTrabalho = padrao === "opencode" || padrao === "claude_code" ? padrao : PADRAO_DO_MOTOR;
+  const pedido: MotorDoTrabalho = escolhido === "opencode" || escolhido === "claude_code" ? escolhido : base;
+  if (pedido === "claude_code" && !temClaude) return { motor: "opencode", aviso: "O Claude Code não está instalado neste worker (npm install em workers/motor-codigo): o trabalho seguiu no OpenCode." };
+  return { motor: pedido, aviso: null };
+}
+
+/**
+ * O Claude Code fala o protocolo da Anthropic e vai SEMPRE pela OpenRouter
+ * (a chave fica no medidor). Modelo do OpenRouter vai direto; modelo direto da
+ * Anthropic ou da OpenAI vai pelo MESMO modelo no catálogo da OpenRouter
+ * (`alternativo`, achado por idsNoOpenrouter). Sem chave da OpenRouter ou sem
+ * rota: não ok (o worker volta para o opencode com aviso).
+ */
+export function rotaDoClaudeCode(m: ModeloDoMotor, temChave: (provedor: string) => boolean, alternativo: ModeloDoMotor | null): RotaDoModelo {
+  if (!temChave("openrouter")) return { ok: false, modelo: null, aviso: null, chave: "OPENROUTER_API_KEY", motivo: "O Claude Code do motor vai pela OpenRouter e esta máquina não tem OPENROUTER_API_KEY." };
+  if (provedorDoOpencode(m) === "openrouter") return { ok: true, modelo: m, aviso: null, motivo: null, chave: null };
+  if (alternativo && alternativo.provedor === "openrouter") return { ok: true, modelo: alternativo, aviso: `O Claude Code seguiu pela OpenRouter com o mesmo modelo (${alternativo.modelo_api}).`, motivo: null, chave: null };
+  return { ok: false, modelo: null, aviso: null, chave: null, motivo: `O modelo ${m.modelo_api} não tem rota pela OpenRouter no catálogo para o Claude Code.` };
+}

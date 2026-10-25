@@ -248,7 +248,7 @@ export async function escolherComViralidade(p: PedidoDaEscolhaViral): Promise<Re
  * 23/10 (dono): três seletores, cada um no seu escopo e lembrado por cliente em coluna própria:
  * a copy do conteúdo (lâminas, peça, detalhar e conteúdos do Mês), o refinar copy e o estrategista.
  */
-export type EscopoDoModelo = "copy" | "refino" | "estrategista" | "roteiro";
+export type EscopoDoModelo = "copy" | "refino" | "estrategista" | "roteiro" | "site";
 
 export const COLUNA_DO_ESCOPO: Record<EscopoDoModelo, string> = {
   copy: "modelo_copy_id",
@@ -256,6 +256,8 @@ export const COLUNA_DO_ESCOPO: Record<EscopoDoModelo, string> = {
   estrategista: "modelo_estrategista_id",
   // 23/10 (frente B): o motor e o agente de roteiro (migration 20261023180000).
   roteiro: "modelo_roteiro_id",
+  // 25/10 (Mesa Site): a copy da página (migration 20261025120000).
+  site: "modelo_copy_site_id",
 };
 
 /** O id guardado para o cliente no escopo (mesa_cliente_config); sem coluna ou sem linha, null. */

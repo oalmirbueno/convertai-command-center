@@ -16,6 +16,7 @@
     "atualizar-superpowers": "node scripts/atualizar-superpowers.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.310",
     "@opencode-ai/sdk": "1.18.33",
     "@supabase/supabase-js": "2.97.0",
     "opencode-ai": "1.18.33",
