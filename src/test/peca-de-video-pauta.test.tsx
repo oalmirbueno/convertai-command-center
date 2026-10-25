@@ -261,7 +261,8 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
     expect(chamadas("agente-calendario", "pauta_video_pronto")[0]).toEqual(expect.objectContaining({
       client_id: CLIENTE,
       task_id: TAREFA,
-      video: { bucket: "workspace", caminho: `${CLIENTE}/videos/gravacao.mp4`, nome: "gravacao.mp4", duracao_s: 31 },
+      // 25/10: leva também o registro do acervo, para legendar, trilha e entrega acharem o vídeo enviado.
+      video: { bucket: "workspace", caminho: `${CLIENTE}/videos/gravacao.mp4`, nome: "gravacao.mp4", duracao_s: 31, arquivo_id: "arq-1" },
     }));
     expect((await screen.findByText("Pronto")).closest("[data-estado-do-video]")!.getAttribute("data-estado-do-video")).toBe("pronto");
     const player = await screen.findByLabelText("gravacao.mp4");

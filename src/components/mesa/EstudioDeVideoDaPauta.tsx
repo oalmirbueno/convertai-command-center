@@ -2,7 +2,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { PenLine, Type, Send, Music, History, Video } from "lucide-react";
 import GravarDaPauta from "./GravarDaPauta";
 import TrilhaDoVideoDaPauta from "./TrilhaDoVideoDaPauta";
-import { resultadosDeVideoDaPauta } from "./resultadosDeVideoDaPauta";
+import { resultadosDeVideoDaPauta, videoEnviadoDaPeca } from "./resultadosDeVideoDaPauta";
 import { ESTILOS_DE_VIDEO_DA_PAUTA } from "../../../supabase/functions/_shared/video-da-pauta";
 import EntregaDoVideoDaPauta from "./EntregaDoVideoDaPauta";
 import MidiaDaPauta from "./MidiaDaPauta";
@@ -32,7 +32,10 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const pedidosQ = usePedidos(clientId);
   const versoesQ = useVersoes(clientId);
   const pedidos = (pedidosQ.data?.itens || []).filter((p) => p.parametros.task_id === item.id || ids.includes(p.id));
-  const arquivos = resultadosDeVideoDaPauta(clientId, item.id, arquivosQ.data?.arquivos || [], pedidosQ.data?.itens || [], versoesQ.data?.itens || [], ids);
+  const gerados = resultadosDeVideoDaPauta(clientId, item.id, arquivosQ.data?.arquivos || [], pedidosQ.data?.itens || [], versoesQ.data?.itens || [], ids);
+  // 25/10: o vídeo enviado para a peça (Pronto) também libera legendar, trilha e entrega, como as gerações da IA.
+  const enviado = videoEnviadoDaPeca(clientId, item.video_pronto, arquivosQ.data?.arquivos || []);
+  const arquivos = enviado && !gerados.some((a) => a.id === enviado.id) ? [enviado, ...gerados] : gerados;
   useEffect(() => {
     void arquivosQ.refetch(); void pedidosQ.refetch(); void versoesQ.refetch();
   }, [clientId, item.id]);
@@ -47,7 +50,6 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const atual = arquivos.find((a) => a.id === vendo) || arquivos[0];
   const tema = BASES.find((b) => b.id === base) || BASES[0];
   return <div className="flex min-h-0 flex-1 flex-col" data-video-da-pauta={item.id}>
-    <MidiaDaPauta item={{ ...item, modo_estudio: "video" }} />
     <BancadaDaPauta tipo="video" titulo={item.title}
       ativa={aba} onAba={setAba} abas={[
         ...(gravar ? [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }] : []),
@@ -61,8 +63,8 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       acoes={<AjudaRecolhida rotulo="Direção do vídeo">{tema.texto}</AjudaRecolhida>}
       prancheta={<div className="space-y-2"><button type="button" aria-pressed={aba === 'gerar'} className="w-full rounded-lg border border-dashed px-2 py-5 text-[12px]" onClick={() => setAba('gerar')}>+ Gerar vídeo</button>{arquivos.map((a, i) => <button type="button" key={a.id} aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba('entrega'); }} className={`w-full rounded-lg border px-2 py-4 text-left text-[12px] ${atual?.id === a.id ? 'border-primary bg-primary/10' : ''}`}>Vídeo {i + 1}<span className="mt-2 block truncate">{a.nome}</span></button>)}{arte?.capa?.tipo_midia === "video" && <p className="rounded-lg border p-3 text-[12px] text-primary">Vídeo na Agenda</p>}</div>}
       // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
-      // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra.
-      previa={<><PecaDeVideoDaPauta item={item} arte={arte} geracoes={arquivos} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} />
+      // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra. A linha da mídia mora dentro da peça, não solta acima.
+      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={arquivos} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} />
         <div className="mt-3 sm:max-h-52 sm:overflow-y-auto"><GeracoesRecentes arquivos={arquivos} taskId={item.id} pedidosIds={ids} /></div>
       </>}
       ferramentas={<div className="space-y-4">

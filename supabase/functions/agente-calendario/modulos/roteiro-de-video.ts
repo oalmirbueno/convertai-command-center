@@ -241,6 +241,8 @@ export interface VideoProntoDaPeca {
   caminho: string;
   nome: string;
   duracao_s?: number;
+  /** 25/10: o registro do envio no acervo da Mesa Vídeos (legendar, trilha e entrega trabalham por ele). */
+  arquivo_id?: string;
   em: string;
 }
 
@@ -257,6 +259,7 @@ export function normalizarVideoPronto(v: unknown, clientId?: string): VideoPront
     caminho,
     nome: curto(o.nome, 160) || caminho.split("/").pop() || "vídeo",
     ...(duracao > 0 ? { duracao_s: Math.round(duracao * 10) / 10 } : {}),
+    ...(typeof o.arquivo_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(o.arquivo_id) ? { arquivo_id: o.arquivo_id.toLowerCase() } : {}),
     em: curto(o.em, 40),
   };
 }

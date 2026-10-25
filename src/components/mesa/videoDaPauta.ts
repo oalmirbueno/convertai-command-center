@@ -100,16 +100,16 @@ async function arquivoParaOWorkspace(clientId: string, arquivoId: string): Promi
  * da peça. Devolve o que a peça guarda (sempre bucket workspace quando deu para levar).
  */
 export async function levarAoWorkspace(clientId: string, v: VideoEscolhido): Promise<VideoProntoDaPeca> {
-  if (v.bucket === "workspace") return { bucket: "workspace", caminho: v.caminho, nome: v.nome, ...(v.duracao_s ? { duracao_s: v.duracao_s } : {}), em: new Date().toISOString() };
+  if (v.bucket === "workspace") return { bucket: "workspace", caminho: v.caminho, nome: v.nome, ...(v.duracao_s ? { duracao_s: v.duracao_s } : {}), ...(v.arquivo_id ? { arquivo_id: v.arquivo_id } : {}), em: new Date().toISOString() };
   if (!v.arquivo_id) throw new Error("O vídeo subiu, mas o registro no acervo não voltou. Tente enviar de novo.");
   const no = await arquivoParaOWorkspace(clientId, v.arquivo_id);
-  return { bucket: "workspace", caminho: String(no.storage_path), nome: v.nome || no.name, ...(v.duracao_s ? { duracao_s: v.duracao_s } : {}), em: new Date().toISOString() };
+  return { bucket: "workspace", caminho: String(no.storage_path), nome: v.nome || no.name, ...(v.duracao_s ? { duracao_s: v.duracao_s } : {}), arquivo_id: v.arquivo_id, em: new Date().toISOString() };
 }
 
 /** Guarda (ou tira) o vídeo pronto na peça. sem_plano: a pauta não veio do Mês e a tela guarda só aqui. */
 export async function guardarVideoDaPauta(clientId: string, taskId: string, video: VideoProntoDaPeca | null): Promise<{ guardado: boolean }> {
   try {
-    await chamarFuncao("agente-calendario", { acao: "pauta_video_pronto", client_id: clientId, task_id: taskId, video: video ? { bucket: video.bucket, caminho: video.caminho, nome: video.nome, ...(video.duracao_s ? { duracao_s: video.duracao_s } : {}) } : null });
+    await chamarFuncao("agente-calendario", { acao: "pauta_video_pronto", client_id: clientId, task_id: taskId, video: video ? { bucket: video.bucket, caminho: video.caminho, nome: video.nome, ...(video.duracao_s ? { duracao_s: video.duracao_s } : {}), ...(video.arquivo_id ? { arquivo_id: video.arquivo_id } : {}) } : null });
     return { guardado: true };
   } catch (e) {
     const codigo = e && typeof e === "object" ? (e as { codigo?: string; code?: string }).codigo || (e as { code?: string }).code : "";
