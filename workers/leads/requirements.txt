@@ -1,0 +1,4 @@
+# Máquina de leads (worker "leads"): o buscador em Python. Instalar com:
+#   python -m pip install -r requirements.txt
+# Só o Fetcher HTTP do Scrapling (curl_cffi); não precisa de "scrapling install" (navegadores).
+scrapling[fetchers]==0.5

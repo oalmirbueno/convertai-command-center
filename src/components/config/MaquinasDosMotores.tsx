@@ -154,7 +154,7 @@ function LinhaDaMaquina({ m, agora, versaoPublicada, aberta, onAlternar, onRemov
 export function JanelaDeInstalar({ aberta, onFechar, versaoPublicada, codigosAbertos }: { aberta: boolean; onFechar: () => void; versaoPublicada: string | null; codigosAbertos: Array<{ id: string; expira_em: string; nome_sugerido: string | null }> }) {
   const qc = useQueryClient();
   const [nome, setNome] = useState("");
-  const [motores, setMotores] = useState<IdDoMotorNaMaquina[]>([...MOTORES_DA_MAQUINA]);
+  const [motores, setMotores] = useState<IdDoMotorNaMaquina[]>(MOTORES_DA_MAQUINA.filter((m) => m !== "leads"));
   const [codigo, setCodigo] = useState<CodigoGerado | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [baixado, setBaixado] = useState<string | null>(null);

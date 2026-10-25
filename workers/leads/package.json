@@ -1,0 +1,16 @@
+{
+  "name": "aceleriq-maquina-de-leads",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Worker da Máquina de leads: puxa as buscas de leads_buscas, roda o buscar.py (Python com Scrapling: OpenStreetMap e o site da própria empresa, sem disfarce, robots.txt respeitado) e grava os candidatos em leads_candidatos.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "worker": "node principal.ts",
+    "uma-vez": "node principal.ts --uma-vez",
+    "python": "python -m pip install -r requirements.txt",
+    "teste": "node --test testes/regras.test.ts && python testes/test_leads.py"
+  }
+}

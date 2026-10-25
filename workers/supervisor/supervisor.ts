@@ -125,6 +125,7 @@ export class Supervisor {
       render: String(env.RENDER_WORKER_NOME || `${this.hostname}-render`).slice(0, 80),
       codigo: String(env.MOTOR_EXECUTOR || `agencia-${this.hostname}`).slice(0, 80),
       navegador: String(env.COMPUTADOR_EXECUTOR || `${this.hostname}-navegador`).slice(0, 80),
+      leads: String(env.LEADS_EXECUTOR || `${this.hostname}-leads`).slice(0, 80),
     };
   }
 

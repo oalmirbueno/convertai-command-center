@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowRight,
+  Bot,
   Building2,
   CalendarClock,
   ChevronLeft,
@@ -12,11 +13,14 @@ import {
   Download,
   Handshake,
   History,
+  Inbox,
   KanbanSquare,
   LayoutDashboard,
   ListChecks,
   Megaphone,
+  MessageCircle,
   Pencil,
+  Radar,
   Plus,
   Route,
   Sparkles,
@@ -40,6 +44,12 @@ import { FaixaDeNumeros } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
 import OrigemDoLead from "@/components/ads/OrigemDoLead";
+import CaixaDoComercial, { novosNaCaixa, useCaixaDoComercial } from "@/components/comercial/CaixaDoComercial";
+import ConversaDoLead from "@/components/comercial/ConversaDoLead";
+import AgenteDoLead from "@/components/comercial/AgenteDoLead";
+import CampanhasDaMeta from "@/components/comercial/CampanhasDaMeta";
+// 25/10/2026: a Máquina de leads (frente da busca de empresas), aberta só na aba dela.
+const MaquinaDeLeads = lazy(() => import("@/components/comercial/MaquinaDeLeads"));
 import {
   AreaDeTrabalho,
   CabecalhoDePagina,
@@ -88,6 +98,7 @@ import {
   clientesRecorrentesDoMes,
   listarMetas,
   moverLead,
+  nomeDaCampanhaDaMeta,
   previsaoDoMes,
   primeiroDiaDoMes,
   realizadoDoMes,
@@ -119,7 +130,7 @@ import {
  * para cima, só a lista rola (a página não).
  */
 
-type Aba = "visao" | "crm" | "agenda" | "metas" | "campanhas" | "marketing";
+type Aba = "visao" | "caixa" | "crm" | "leads" | "agenda" | "metas" | "campanhas" | "marketing";
 
 /**
  * O que cada aba e, dita na propria tela (no "?" ao lado do título).
@@ -130,6 +141,8 @@ type Aba = "visao" | "crm" | "agenda" | "metas" | "campanhas" | "marketing";
  */
 const TITULO_DA_ABA: Record<Aba, string> = {
   visao: "O departamento num relance: funil, semana, metas e campanhas. Cada linha abre a sua área.",
+  caixa: "Quem o Mercúrio levou adiante: só os que avançaram ou fecharam, com o resumo, os dados e o telefone para você continuar.",
+  leads: "A máquina de leads: busca empresas do nicho na cidade, levanta o contato com prova e põe no CRM o que você escolher.",
   crm: "Empresas, pessoas e negócios. Arraste o cartão para mover de etapa; a ficha da empresa guarda o histórico.",
   agenda: "Sua semana: reuniões, ligações e blocos de trabalho. O que vencer chega no sininho às 8h.",
   metas: "O alvo do mês e quanto já saiu. A receita vem do Financeiro, não é digitada aqui.",
@@ -144,7 +157,9 @@ const TITULO_DA_ABA: Record<Aba, string> = {
  */
 const AREAS: Array<{ valor: Aba; rotulo: string; icone: ReactNode }> = [
   { valor: "visao", rotulo: "Visão geral", icone: <LayoutDashboard className="h-4 w-4" /> },
+  { valor: "caixa", rotulo: "Caixa do comercial", icone: <Inbox className="h-4 w-4" /> },
   { valor: "crm", rotulo: "CRM", icone: <KanbanSquare className="h-4 w-4" /> },
+  { valor: "leads", rotulo: "Máquina de leads", icone: <Radar className="h-4 w-4" /> },
   { valor: "agenda", rotulo: "Agenda", icone: <CalendarClock className="h-4 w-4" /> },
   { valor: "metas", rotulo: "Metas", icone: <Target className="h-4 w-4" /> },
   { valor: "campanhas", rotulo: "Campanhas", icone: <Megaphone className="h-4 w-4" /> },
@@ -196,7 +211,7 @@ function useLarguraMinima(px: number): boolean {
 /** Lista vazia estável (um `[]` novo a cada render refaria as contas do funil). */
 const SEM_EVENTOS: EventoDoLead[] = [];
 
-const ABAS_VALIDAS: Aba[] = ["visao", "crm", "agenda", "metas", "campanhas", "marketing"];
+const ABAS_VALIDAS: Aba[] = ["visao", "caixa", "crm", "leads", "agenda", "metas", "campanhas", "marketing"];
 
 /**
  * Botão do cabeçalho: só o ícone, sem borda, com o nome no aria-label e no
@@ -246,6 +261,11 @@ export default function AdminComercial() {
   const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "visao";
   const setAba = (proxima: Aba) =>
     navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
+  // 25/10/2026: o link do sino abre a Caixa com ?item=<id> destacado.
+  const [busca] = useSearchParams();
+  const itemDaCaixa = busca.get("item");
+  const caixa = useCaixaDoComercial();
+  const novosDaCaixa = novosNaCaixa(caixa.data);
   // O mês escolhido fica guardado enquanto o mês do calendário for o mesmo:
   // sair e voltar mantém; no mês seguinte a tela abre no mês novo.
   const mesDeHoje = primeiroDiaDoMes(new Date());
@@ -410,6 +430,11 @@ export default function AdminComercial() {
     descricao = carregandoCampanhas ? undefined : `${campanhasAtivas} ${campanhasAtivas === 1 ? "ativa" : "ativas"} de ${campanhas.length}`;
   } else if (aba === "marketing") {
     descricao = `${leadsNoMes} ${leadsNoMes === 1 ? "lead novo" : "leads novos"} no mês`;
+  } else if (aba === "caixa") {
+    descricao = caixa.isLoading ? undefined : novosDaCaixa ? `${novosDaCaixa} ${novosDaCaixa === 1 ? "novo" : "novos"} para você` : "nada novo";
+  } else if (aba === "leads") {
+    const daMaquina = leads.filter((l) => l.origin === "maquina_de_leads" || l.origin === "prospeccao").length;
+    descricao = `${daMaquina} ${daMaquina === 1 ? "lead de prospecção" : "leads de prospecção"} no CRM`;
   }
 
   /* ── As ações da área, na linha do título. ── */
@@ -477,7 +502,7 @@ export default function AdminComercial() {
     <Etapas
       soIcone
       rotulo="Áreas do Comercial"
-      itens={AREAS}
+      itens={AREAS.map((a) => (a.valor === "caixa" ? { ...a, contador: novosDaCaixa } : a))}
       valor={aba}
       onEscolher={(v) => setAba(v as Aba)}
       className="min-w-0 flex-1"
@@ -513,6 +538,40 @@ export default function AdminComercial() {
             </button>
           }
         />
+      )}
+
+      {/* 25/10/2026: o que o Mercúrio levou adiante é a primeira coisa do Comercial. */}
+      {aba === "visao" && novosDaCaixa > 0 && (
+        <button
+          type="button"
+          onClick={() => setAba("caixa")}
+          className={juntar("flex w-full min-w-0 items-center rounded-md bg-primary/10 px-3 py-2 text-left text-[13px] font-medium text-primary hover:bg-primary/15", foco)}
+          data-aviso-da-caixa=""
+        >
+          <Inbox className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">
+            {novosDaCaixa} {novosDaCaixa === 1 ? "lead avançou ou fechou" : "leads avançaram ou fecharam"} com o Mercúrio
+          </span>
+          <span className="ml-2 shrink-0">Abrir a Caixa</span>
+        </button>
+      )}
+
+      {aba === "caixa" && <CaixaDoComercial leads={leads} onAbrirLead={setLeadAberto} itemDestacado={itemDaCaixa} />}
+
+      {aba === "leads" && (
+        <Suspense fallback={<Carregando />}>
+          <MaquinaDeLeads
+            aoAbrirLead={(leadId: string) => {
+              const achado = leads.filter((l) => l.id === leadId)[0];
+              if (achado) setLeadAberto(achado);
+              else void recarregar().then(() => {
+                const lista = (queryClient.getQueryData(["comercial-leads"]) as Lead[] | undefined) || [];
+                const depois = lista.filter((l) => l.id === leadId)[0];
+                if (depois) setLeadAberto(depois);
+              });
+            }}
+          />
+        </Suspense>
       )}
 
       {aba === "visao" && (
@@ -1118,7 +1177,7 @@ function Marketing({
 
 /* ───────────────────────────── Editor de lead ───────────────────────────── */
 
-type ParteDoLead = "contato" | "negocio" | "qualificacao" | "notas" | "andamento" | "historia";
+type ParteDoLead = "contato" | "negocio" | "qualificacao" | "notas" | "andamento" | "conversa" | "agente" | "historia";
 
 /** As abas do editor de lead; andamento e história só existem com o lead salvo. */
 const PARTES_DO_LEAD: Array<{ valor: ParteDoLead; rotulo: string; icone: ReactNode; soComLead?: boolean }> = [
@@ -1127,6 +1186,8 @@ const PARTES_DO_LEAD: Array<{ valor: ParteDoLead; rotulo: string; icone: ReactNo
   { valor: "qualificacao", rotulo: "Qualificação", icone: <ListChecks className="h-4 w-4" /> },
   { valor: "notas", rotulo: "Notas", icone: <StickyNote className="h-4 w-4" /> },
   { valor: "andamento", rotulo: "Proposta, etapa e atividades", icone: <Route className="h-4 w-4" />, soComLead: true },
+  { valor: "conversa", rotulo: "Conversa", icone: <MessageCircle className="h-4 w-4" />, soComLead: true },
+  { valor: "agente", rotulo: "Agente", icone: <Bot className="h-4 w-4" />, soComLead: true },
   { valor: "historia", rotulo: "História", icone: <History className="h-4 w-4" />, soComLead: true },
 ];
 
@@ -1309,6 +1370,8 @@ function EditorDeLead({
           {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
           {/* De qual anúncio veio (origem do clique gravada pelo formulário do site). */}
           {lead && <OrigemDoLead lead={lead} />}
+          {/* 25/10/2026: a campanha da Meta ligada sem link de anúncio (ligada pelo agente ou pela campanha). */}
+          {lead && lead.ads_campaign_id && !lead.origem_clique && <CampanhaDaMetaDoLead campaignId={lead.ads_campaign_id} />}
         </DialogHeader>
         <Etapas
           soIcone
@@ -1416,7 +1479,7 @@ function EditorDeLead({
               <select value={form.origin} onChange={(e) => setForm({ ...form, origin: e.target.value })} className={campo}>
                 {ORIGENS.map((o) => (
                   <option key={o} value={o}>
-                    {o}
+                    {o === "maquina_de_leads" ? "máquina de leads" : o}
                   </option>
                 ))}
               </select>
@@ -1531,6 +1594,10 @@ function EditorDeLead({
             </>
           )}
 
+          {lead && parte === "conversa" && <ConversaDoLead leadId={lead.id} nomeDoLead={lead.name} />}
+
+          {lead && parte === "agente" && <AgenteDoLead lead={lead} aoMudar={onSalvo} />}
+
           {lead && parte === "historia" && (
             <>
               <section aria-label="História do lead">
@@ -1565,7 +1632,9 @@ function EditorDeLead({
                         <span className="font-medium text-foreground">
                           {evento.kind === "stage"
                             ? `${rotuloDoEstagio(evento.from_stage || "")} → ${rotuloDoEstagio(evento.to_stage || "")}`
-                            : "Nota"}
+                            : evento.kind === "agente"
+                              ? "Agente"
+                              : "Nota"}
                         </span>
                         {evento.note ? ` · ${evento.note}` : ""}
                         <span className="ml-1.5 text-[12px] tabular-nums opacity-70">
@@ -1647,6 +1716,17 @@ function EditorDeLead({
   );
 }
 
+/** A campanha da Meta do lead, pelo nome (25/10/2026). */
+function CampanhaDaMetaDoLead({ campaignId }: { campaignId: string }) {
+  const { data: nome } = useQuery({ queryKey: ["comercial-campanha-da-meta", campaignId], queryFn: () => nomeDaCampanhaDaMeta(campaignId), staleTime: 300_000 });
+  return (
+    <p className={juntar(texto.auxiliar, "truncate")} data-campanha-da-meta={campaignId}>
+      <Megaphone className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+      Campanha da Meta: {nome || campaignId}
+    </p>
+  );
+}
+
 /**
  * O resumo rápido no topo da janela do lead: temperatura (com o porquê no
  * title), valor, chance, tempo na etapa e o próximo passo com o quando. O
@@ -1695,6 +1775,8 @@ function EditorDeCampanha({
     budget: String(campanha?.budget || ""),
     spent: String(campanha?.spent || ""),
     goal: campanha?.goal || "",
+    meta_campaign_ids: (campanha?.meta_campaign_ids || []) as string[],
+    mercurio_ativo: !!campanha?.mercurio_ativo,
   };
   // Campanha NOVA: o que foi digitado e não salvo volta ao reabrir.
   const [rascunhoNovo, setRascunhoNovo, esquecerRascunhoNovo] = useEstadoDoComercial<typeof base | null>("rascunho:campanha:nova", null, {
@@ -1724,6 +1806,8 @@ function EditorDeCampanha({
       budget: Number(form.budget) || 0,
       spent: Number(form.spent) || 0,
       goal: form.goal,
+      meta_campaign_ids: form.meta_campaign_ids || [],
+      mercurio_ativo: !!form.mercurio_ativo,
     } as never);
     setSalvando(false);
     if (!ok) {
@@ -1778,6 +1862,12 @@ function EditorDeCampanha({
             <input value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="O que esta campanha precisa entregar" className={campo} />
           </CampoDeFormulario>
         </GrupoDeCampos>
+        <CampanhasDaMeta
+          selecionadas={form.meta_campaign_ids || []}
+          aoMudar={(ids) => setForm({ ...form, meta_campaign_ids: ids })}
+          mercurioAtivo={!!form.mercurio_ativo}
+          aoMudarMercurio={(v) => setForm({ ...form, mercurio_ativo: v })}
+        />
         <div className="flex items-center justify-end [&>*+*]:ml-2">
           <button type="button" onClick={onFechar} className={botao.secundario}>
             Cancelar

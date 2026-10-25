@@ -24,7 +24,7 @@ describe("supervisor", () => {
     assert.ok(linha.indexOf(`servico=${h(CHAVE_DE_SERVICO)}`) >= 0, "a chave de serviço do cofre DPAPI desce para o worker");
     const s0 = (banco as ReturnType<typeof bancoFalso>).sinais[0];
     assert.equal(s0.hostname, "PC-TESTE");
-    assert.deepEqual(s0.executores, { render: "PC-TESTE-render", codigo: "agencia-PC-TESTE", navegador: "PC-TESTE-navegador" });
+    assert.deepEqual(s0.executores, { render: "PC-TESTE-render", codigo: "agencia-PC-TESTE", navegador: "PC-TESTE-navegador", leads: "PC-TESTE-leads" });
     assert.equal(t.bandejas[t.bandejas.length - 1].dica, "Tudo ligado: 2 motores");
     await t.s.encerrar(0);
     assert.deepEqual(t.saidas, [0]);

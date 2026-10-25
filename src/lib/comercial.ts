@@ -24,6 +24,8 @@ import { lerOrigemDoClique, type OrigemDoClique } from "../../supabase/functions
  * que acumula fechado vira arquivo, e a coluna de hoje some no meio.
  */
 export { ESTAGIOS, ESTAGIOS_ABERTOS, rotuloDoEstagio, type EstagioId } from "./comercial/estagios";
+// 25/10/2026: a Caixa do comercial, a conversa, os fatos com prova e o Mercúrio.
+export * from "./comercial/mercurio";
 import { ESTAGIOS, ESTAGIOS_ABERTOS, rotuloDoEstagio, type EstagioId } from "./comercial/estagios";
 
 export const ORIGENS = [
@@ -34,6 +36,8 @@ export const ORIGENS = [
   "evento",
   "site",
   "manual",
+  "maquina_de_leads",
+  "checkout",
 ] as const;
 
 export const CANAIS = [
@@ -197,6 +201,11 @@ export interface Lead {
    * gravado pelo formulário do site. Ausente ou null = sem link de anúncio.
    */
   origem_clique?: OrigemDoClique | null;
+  /** 25/10/2026: quem atende (slug do agente, 'mercurio') e desde quando. Nulo = a equipe. */
+  agente_slug?: string | null;
+  agente_desde?: string | null;
+  /** 25/10/2026: a campanha da Meta de onde veio (tirada de origem_clique pelo banco). */
+  ads_campaign_id?: string | null;
 }
 
 export interface Campanha {
@@ -210,6 +219,9 @@ export interface Campanha {
   spent: number;
   goal: string | null;
   notes: string | null;
+  /** 25/10/2026: as campanhas da Meta ligadas e se o Mercúrio atende os leads desta campanha. */
+  meta_campaign_ids?: string[];
+  mercurio_ativo?: boolean;
 }
 
 export interface Meta {
@@ -652,6 +664,11 @@ export async function salvarCampanha(
     spent: numero(campanha.spent),
     goal: campanha.goal?.trim() || null,
     notes: campanha.notes?.trim() || null,
+    // 25/10/2026: as campanhas da Meta ligadas e a chave do Mercúrio (só quando a tela manda).
+    ...(Array.isArray(campanha.meta_campaign_ids)
+      ? { meta_campaign_ids: Array.from(new Set(campanha.meta_campaign_ids.map((x) => String(x).trim()).filter(Boolean))).slice(0, 100) }
+      : {}),
+    ...(typeof campanha.mercurio_ativo === "boolean" ? { mercurio_ativo: campanha.mercurio_ativo } : {}),
   };
   if (campanha.id) {
     const { error } = await supabase

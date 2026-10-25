@@ -77,7 +77,16 @@ import {
   updateOpportunity,
   upsertCommercialContact,
   upsertCommercialOrganization,
+  CANAIS_DA_MENSAGEM,
+  comercialAtribuirAgente,
+  comercialAvisarCaixa,
+  comercialFila,
+  comercialMaquinaBuscar,
+  comercialMaquinaCandidatos,
+  comercialRegistrarFato,
+  comercialRegistrarMensagem,
 } from './aceleriq-commercial-services.ts';
+import { TIPOS_DE_EVIDENCIA, type TipoDeEvidencia } from './comercial-evidencia.ts';
 import {
   getFinanceAdsInvestment,
   getFinanceCapital,
@@ -368,6 +377,13 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_complete_commercial_activity: 'commercial:write',
   aceleriq_upsert_commercial_organization: 'commercial:write',
   aceleriq_upsert_commercial_contact: 'commercial:write',
+  aceleriq_comercial_fila: 'commercial:read',
+  aceleriq_comercial_maquina_candidatos: 'commercial:read',
+  aceleriq_comercial_registrar_mensagem: 'commercial:write',
+  aceleriq_comercial_avisar_caixa: 'commercial:write',
+  aceleriq_comercial_registrar_fato: 'commercial:write',
+  aceleriq_comercial_atribuir_agente: 'commercial:write',
+  aceleriq_comercial_maquina_buscar: 'commercial:write',
   aceleriq_get_workspace_node: 'workspace:read',
 };
 
@@ -4380,13 +4396,15 @@ const CAMPOS_DO_NEGOCIO = {
   notes: z.string().max(4000).nullable().optional(),
   classe: z.enum(CLASSES_DO_LEAD).nullable().optional(),
   qualificacao: z.record(z.string().max(600)).optional(),
+  ads_campaign_id: z.string().max(64).nullable().optional(),
+  agente_slug: z.string().regex(/^[a-z0-9_-]{2,40}$/).nullable().optional(),
 };
 const CAMPOS_DO_NEGOCIO_JSON = {
   name: { type: 'string', description: 'Nome do negocio ou da pessoa.' },
   company: { type: 'string', description: 'Empresa.' },
   email: { type: 'string' },
   whatsapp: { type: 'string' },
-  origin: { type: 'string', description: 'indicacao, instagram, quiz, prospeccao, evento, site ou manual.' },
+  origin: { type: 'string', description: 'indicacao, instagram, quiz, prospeccao, evento, site, manual, checkout ou maquina_de_leads.' },
   campaign_id: { type: ['string', 'null'], description: 'UUID da campanha da casa que trouxe o lead.' },
   monthly_value: { type: 'number', description: 'Mensalidade proposta em reais.' },
   one_off_value: { type: 'number', description: 'Valor avulso proposto em reais.' },
@@ -4399,6 +4417,8 @@ const CAMPOS_DO_NEGOCIO_JSON = {
   notes: { type: ['string', 'null'] },
   classe: { type: ['string', 'null'], description: 'cliente_atual, upsell ou novo_prospect.' },
   qualificacao: { type: 'object', description: 'Respostas de qualificacao, chave: texto. Chaves da tela: aderencia_icp, problema, orcamento, autoridade, urgencia, recorrencia, aprovacao, presenca_digital, oferta, abordagem, concorrencia. Na edicao as respostas somam as que ja existem.' },
+  ads_campaign_id: { type: ['string', 'null'], description: 'Id da campanha da Meta que trouxe o lead (ads_campaigns.campaign_id).' },
+  agente_slug: { type: ['string', 'null'], description: 'Agente comercial que atende o lead (mercurio) ou null.' },
 } as const;
 
 const getOpportunityTool = ferramentaDoCrm(
@@ -4441,8 +4461,8 @@ const moveOpportunityTool = ferramentaDoCrm(
 const addOpportunityNoteTool = ferramentaDoCrm(
   'aceleriq_add_opportunity_note', 'Anotar conversa no negocio',
   'Registra uma nota na historia da oportunidade (o que foi conversado, combinado ou descoberto). Nao altera nenhum campo do negocio.',
-  true, z.object({ opportunity_id: UUID, note: z.string().min(2).max(2000) }).strict(),
-  { type: 'object', properties: { opportunity_id: { type: 'string' }, note: { type: 'string', description: 'O que aconteceu, em texto curto.' } }, required: ['opportunity_id', 'note'], additionalProperties: false },
+  true, z.object({ opportunity_id: UUID, note: z.string().min(2).max(2000), operador: z.string().regex(/^[a-z0-9_-]{2,40}$/).optional() }).strict(),
+  { type: 'object', properties: { opportunity_id: { type: 'string' }, note: { type: 'string', description: 'O que aconteceu, em texto curto.' }, operador: { type: 'string', description: 'Slug do agente que anota (ex.: mercurio): a nota fica marcada como do agente.' } }, required: ['opportunity_id', 'note'], additionalProperties: false },
   addOpportunityNote,
 );
 
@@ -4537,6 +4557,129 @@ const upsertCommercialContactTool = ferramentaDoCrm(
   upsertCommercialContact,
 );
 
+// ─── 25/10/2026 (MCP 2.18): o Mercurio, a Caixa do comercial, os fatos com prova e a Maquina de leads ───
+// O WhatsApp e do Hermes; o painel guarda a fila, a conversa, os fatos e os avisos. Roteiro: docs/comercial/MERCURIO.md.
+
+const OPERADOR = z.string().regex(/^[a-z0-9_-]{2,40}$/).optional();
+const TIPO_DE_EVIDENCIA = z.enum(TIPOS_DE_EVIDENCIA as [TipoDeEvidencia, ...TipoDeEvidencia[]]);
+
+const comercialFilaTool = ferramentaDoCrm(
+  'aceleriq_comercial_fila', 'Fila do agente comercial (Mercurio)',
+  'Os leads que o Mercurio (ou outro agente comercial) atende: dados, etapa, qualificacao, as ultimas 20 mensagens da conversa, os fatos com prova, a proxima acao, a origem e a campanha (interna e da Meta). No topo, a regra do dia: ligado ou nao, horario, teto de primeiros contatos com lead frio e quantos restam hoje, e as orientacoes da equipe. Desligado: fila vazia e o aviso para nao enviar nada. Leia antes de cada rodada de conversa.',
+  false, z.object({ operador: OPERADOR, limit: limite(100, 1).optional() }).strict(),
+  { type: 'object', properties: {
+    operador: { type: 'string', description: 'Slug do agente. Padrao: mercurio.' },
+    limit: { type: 'number', description: 'Maximo de leads (1 a 100). Padrao 30.' },
+  }, additionalProperties: false },
+  comercialFila,
+);
+
+const comercialRegistrarMensagemTool = ferramentaDoCrm(
+  'aceleriq_comercial_registrar_mensagem', 'Registrar mensagem da conversa do lead',
+  'Registra TODA mensagem trocada com o lead (entrada ou saida). Mande id_externo (o id da mensagem no WhatsApp): registrar de novo nao duplica. Saida que e o PRIMEIRO contato com lead frio (prospeccao ou maquina de leads) respeita o horario e o teto do dia; fora disso a ferramenta recusa, e voce NAO deve ter enviado: registre antes de enviar o primeiro contato ou confira com aceleriq_comercial_fila. Lead que pediu para parar fica marcado nao_contatar e toda saida seguinte e recusada (LGPD). A primeira mensagem enviada leva o lead de "novo" para "contato".',
+  true, z.object({
+    lead_id: UUID, direcao: z.enum(['entrada', 'saida']), texto: z.string().min(1).max(8000),
+    canal: z.enum(CANAIS_DA_MENSAGEM).optional(), enviada_em: z.string().min(10).max(40).optional(),
+    id_externo: z.string().max(200).optional(), operador: OPERADOR,
+  }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string', description: 'UUID do lead (opportunity_id).' },
+    direcao: { type: 'string', description: 'entrada (o lead escreveu) ou saida (o agente escreveu).' },
+    texto: { type: 'string', description: 'A mensagem exata.' },
+    canal: { type: 'string', description: 'whatsapp (padrao), instagram, email, telefone, site ou outro.' },
+    enviada_em: { type: 'string', description: 'Quando (ISO 8601). Padrao: agora.' },
+    id_externo: { type: 'string', description: 'Id da mensagem no canal, para nao duplicar.' },
+    operador: { type: 'string', description: 'Slug do agente que escreveu (saida). Padrao: mercurio.' },
+  }, required: ['lead_id', 'direcao', 'texto'], additionalProperties: false },
+  comercialRegistrarMensagem,
+);
+
+const comercialAvisarCaixaTool = ferramentaDoCrm(
+  'aceleriq_comercial_avisar_caixa', 'Avisar a Caixa do comercial (avancou ou fechou)',
+  'Poe o lead na Caixa do comercial e avisa a equipe no sino. SO para quem AVANCOU (pediu proposta, marcou reuniao, quer falar com alguem, mandou dado para fechar) ou FECHOU. Mande o resumo com o contexto, o proximo passo, o telefone (padrao: o WhatsApp do lead) e os dados uteis (plano, valor, prazo combinado, melhor horario). Nao repita: o mesmo tipo para o mesmo lead em 6 horas e recusado.',
+  true, z.object({
+    lead_id: UUID, tipo: z.enum(['avancou', 'fechou']), resumo: z.string().min(5).max(2000),
+    proximo_passo: z.string().max(300).optional(), telefone: z.string().max(40).optional(),
+    dados: z.record(z.unknown()).optional(), operador: OPERADOR,
+  }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string' },
+    tipo: { type: 'string', description: 'avancou ou fechou.' },
+    resumo: { type: 'string', description: 'O que aconteceu e o contexto, em poucas linhas.' },
+    proximo_passo: { type: 'string', description: 'O que a equipe faz agora.' },
+    telefone: { type: 'string', description: 'Telefone para continuar. Padrao: o WhatsApp do lead.' },
+    dados: { type: 'object', description: 'Dados uteis (plano, valor, prazo, horario, decisor).' },
+    operador: { type: 'string', description: 'Slug do agente. Padrao: mercurio.' },
+  }, required: ['lead_id', 'tipo', 'resumo'], additionalProperties: false },
+  comercialAvisarCaixa,
+);
+
+const comercialRegistrarFatoTool = ferramentaDoCrm(
+  'aceleriq_comercial_registrar_fato', 'Registrar fato com prova (lead ou empresa)',
+  'Registra um dado levantado com a PROVA do que voce viu; voce nunca informa certeza, a regua decide. Prova primaria sem contradicao (lead_confirmou_na_conversa, documento_enviado_pelo_lead, cnpj_receita, site_oficial_da_empresa, perfil_oficial_instagram) grava na ficha quando o campo e da ficha (whatsapp, email, company, instagram, phone, address, cnpj, size, site, segment, city, cargo, decisor, orcamento, problema, urgencia...). Prova de apoio (pagina_citada, busca_cita_perfil, diretorio_publico, deducao_do_agente) vira sugestao para a equipe. contradicao segura o fato. Um item por fonte independente; detalhe escrito para a equipe ler.',
+  true, z.object({
+    lead_id: UUID.optional(), organization_id: UUID.optional(),
+    campo: z.string().min(2).max(60), valor: z.string().min(1).max(1000),
+    evidencias: z.array(z.object({ tipo: TIPO_DE_EVIDENCIA, detalhe: z.string().min(3).max(500), fonte_url: z.string().max(500).optional() }).strict()).min(1).max(10),
+    operador: OPERADOR,
+  }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string' }, organization_id: { type: 'string' },
+    campo: { type: 'string', description: 'O dado (ex.: whatsapp, cnpj, cargo, decisor, orcamento).' },
+    valor: { type: 'string' },
+    evidencias: { type: 'array', items: { type: 'object', properties: {
+      tipo: { type: 'string', description: 'lead_confirmou_na_conversa, documento_enviado_pelo_lead, cnpj_receita, site_oficial_da_empresa, perfil_oficial_instagram, pagina_citada, busca_cita_perfil, diretorio_publico, deducao_do_agente ou contradicao.' },
+      detalhe: { type: 'string', description: 'O que viu e onde (ex.: "no rodape do site: CNPJ 12.345.678/0001-90").' },
+      fonte_url: { type: 'string' },
+    }, required: ['tipo', 'detalhe'], additionalProperties: false } },
+    operador: { type: 'string' },
+  }, required: ['campo', 'valor', 'evidencias'], additionalProperties: false },
+  comercialRegistrarFato,
+);
+
+const comercialAtribuirAgenteTool = ferramentaDoCrm(
+  'aceleriq_comercial_atribuir_agente', 'Ligar ou desligar o agente num lead',
+  'Liga (operador: "mercurio") ou desliga (operador: null) o agente comercial num lead, com o motivo na historia. Lead de site de cliente nao e venda da casa: nao ligue o agente nele.',
+  true, z.object({ lead_id: UUID, operador: z.string().regex(/^[a-z0-9_-]{2,40}$/).nullable(), motivo: z.string().min(3).max(500) }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string' },
+    operador: { type: ['string', 'null'], description: 'mercurio para ligar; null para desligar.' },
+    motivo: { type: 'string' },
+  }, required: ['lead_id', 'operador', 'motivo'], additionalProperties: false },
+  comercialAtribuirAgente,
+);
+
+const comercialMaquinaBuscarTool = ferramentaDoCrm(
+  'aceleriq_comercial_maquina_buscar', 'Maquina de leads: nova busca',
+  'Pede uma busca de empresas por nicho e cidade a Maquina de leads (o worker da casa roda: dados publicos abertos e o site oficial de cada empresa, respeitando robots.txt). Busca igual ja na fila e devolvida em vez de duplicar. entregar_ao_mercurio liga o Mercurio nos leads importados dessa busca.',
+  true, z.object({
+    nicho: z.string().min(2).max(120), cidade: z.string().min(2).max(120), uf: z.string().min(2).max(2).optional(),
+    limite: z.number().int().min(1).max(300).optional(), fontes: z.array(z.string().regex(/^[a-z_]{2,20}$/)).max(5).optional(),
+    campanha_id: UUID.nullable().optional(), entregar_ao_mercurio: z.boolean().optional(),
+  }).strict(),
+  { type: 'object', properties: {
+    nicho: { type: 'string', description: 'Ramo (ex.: clinica odontologica, academia, pet shop).' },
+    cidade: { type: 'string' }, uf: { type: 'string', description: 'Sigla do estado.' },
+    limite: { type: 'number', description: 'Quantas empresas (1 a 300). Padrao 50.' },
+    fontes: { type: 'array', items: { type: 'string' }, description: 'Padrao: osm e sites.' },
+    campanha_id: { type: ['string', 'null'], description: 'Campanha da casa a que os leads importados pertencem.' },
+    entregar_ao_mercurio: { type: 'boolean' },
+  }, required: ['nicho', 'cidade'], additionalProperties: false },
+  comercialMaquinaBuscar,
+);
+
+const comercialMaquinaCandidatosTool = ferramentaDoCrm(
+  'aceleriq_comercial_maquina_candidatos', 'Maquina de leads: buscas e candidatos',
+  'Sem busca_id: as 20 buscas mais recentes com a situacao. Com busca_id: os candidatos encontrados (nome, site, telefone, WhatsApp, e-mail, Instagram, fonte, provas e nota), do melhor para o pior. Importar para o CRM e decisao da equipe na tela.',
+  false, z.object({ busca_id: UUID.optional(), situacao: z.enum(['novo', 'importado', 'descartado']).optional(), limit: limite(300, 1).optional() }).strict(),
+  { type: 'object', properties: {
+    busca_id: { type: 'string' },
+    situacao: { type: 'string', description: 'novo, importado ou descartado.' },
+    limit: { type: 'number' },
+  }, additionalProperties: false },
+  comercialMaquinaCandidatos,
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -4614,6 +4757,14 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   listCommercialOrganizationsTool,
   upsertCommercialOrganizationTool,
   upsertCommercialContactTool,
+  // 25/10/2026 (MCP 2.18): Mercurio, Caixa do comercial, fatos com prova e Maquina de leads.
+  comercialFilaTool,
+  comercialRegistrarMensagemTool,
+  comercialAvisarCaixaTool,
+  comercialRegistrarFatoTool,
+  comercialAtribuirAgenteTool,
+  comercialMaquinaBuscarTool,
+  comercialMaquinaCandidatosTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,

@@ -18,13 +18,15 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import os from "node:os";
 import path from "node:path";
 
-export type IdDoMotor = "render" | "codigo" | "navegador";
-export const MOTORES: IdDoMotor[] = ["render", "codigo", "navegador"];
+export type IdDoMotor = "render" | "codigo" | "navegador" | "leads";
+// 25/10/2026: "leads" (Máquina de leads, worker Node que chama o Python com Scrapling).
+export const MOTORES: IdDoMotor[] = ["render", "codigo", "navegador", "leads"];
 
 export const NOME_DO_MOTOR: Record<IdDoMotor, string> = {
   render: "Render (Motion e Edição)",
   codigo: "Motor de código (Site)",
   navegador: "Navegador do agente",
+  leads: "Máquina de leads",
 };
 
 /** Pasta e arquivo de entrada de cada worker dentro de workers/. */
@@ -32,6 +34,7 @@ export const ENTRADA_DO_MOTOR: Record<IdDoMotor, { pasta: string; arquivo: strin
   render: { pasta: "render", arquivo: "principal.ts", args: [] },
   codigo: { pasta: "motor-codigo", arquivo: "worker.ts", args: ["--env-file-if-exists=.env"] },
   navegador: { pasta: "computador", arquivo: "principal.ts", args: [] },
+  leads: { pasta: "leads", arquivo: "principal.ts", args: [] },
 };
 
 export const URL_PADRAO_DO_PROJETO = "https://jjjtkowvxemvituvywvf.supabase.co";

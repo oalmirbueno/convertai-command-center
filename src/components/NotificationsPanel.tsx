@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import { toast } from "sonner";
 import { estadoDosAvisos, pedirPermissaoDeAvisos, type EstadoDoAviso } from "@/lib/avisosDoNavegador";
-import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
+import { categoriaDoAviso, rotuloDoLink, rotuloDoTipoDoAviso } from "@/lib/avisos/rotulos";
 import TesteDeAvisos from "@/components/avisos/TesteDeAvisos";
 import { AjudaRecolhida, JanelaCentral, SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
 
@@ -122,7 +122,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
     try {
       await marcarAreaComoLida(user.id, area);
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success(`Avisos de ${area === "agentes" ? "agentes" : "painel"} marcados como lidos`);
+      toast.success(`Avisos de ${area === "agentes" ? "agentes" : area === "comercial" ? "comercial" : "painel"} marcados como lidos`);
     } catch {
       toast.error("Não consegui marcar agora. Tente de novo.");
     }
@@ -147,7 +147,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
       abaixoDoTitulo={
         // Filtro (segmentado do sistema, sem pílulas verdes) e "marcar todas" na mesma linha.
         <div className="space-y-3">
-          {eEquipe && <SeletorCompacto rotulo="Área das notificações" modo="segmentado" valor={area} onEscolher={v => setArea(v as AreaDosAvisos)} opcoes={[{ valor: "painel", rotulo: "Painel" }, { valor: "agentes", rotulo: "Agentes e execução" }]} />}
+          {eEquipe && <SeletorCompacto rotulo="Área das notificações" modo="segmentado" valor={area} onEscolher={v => setArea(v as AreaDosAvisos)} opcoes={[{ valor: "painel", rotulo: "Painel" }, { valor: "agentes", rotulo: "Agentes e execução" }, { valor: "comercial", rotulo: "Comercial" }]} />}
           <div className="flex min-w-0 items-center">
             <SeletorCompacto
               rotulo="Filtrar notificações"
@@ -219,7 +219,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${bg}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${bg}`} title={rotuloDoTipoDoAviso(n.notification_type) || undefined}>
                           {icon}
                         </div>
                         <div className="flex-1 min-w-0">

@@ -90,7 +90,7 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   { chave: "metricas", nome: "Métricas", rota: "/metricas", comCliente: true, faz: "números do Instagram", palavras: ["metrica", "seguidores", "alcance", "engajamento", "instagram numeros"] },
   { chave: "anuncios", nome: "Anúncios", rota: "/anuncios", comCliente: true, parametroDoCliente: "cliente", faz: "relatório de anúncios", palavras: ["relatorio de anuncio", "resultado dos anuncios"] },
   { chave: "relatorios", nome: "Relatórios", rota: "/relatorios", comCliente: true, faz: "relatórios do cliente", palavras: ["relatorio"] },
-  { chave: "comercial", nome: "Comercial", rota: "/comercial", comCliente: false, faz: "CRM, leads e metas (/comercial/crm)", palavras: ["crm", "lead", "oportunidade", "comercial", "venda", "prospect"] },
+  { chave: "comercial", nome: "Comercial", rota: "/comercial", comCliente: false, faz: "CRM, leads e metas (/comercial/crm); Caixa do comercial com quem avançou ou fechou pelo Mercúrio (/comercial/caixa); Máquina de leads (/comercial/leads)", palavras: ["crm", "lead", "oportunidade", "comercial", "venda", "prospect", "mercúrio", "caixa", "máquina de leads"] },
   {
     chave: "mesa", nome: "Mesa", rota: "/mesa", parametro: "aba", etapas: ["contexto", "instagram", "mes", "campanhas", "estudio", "entrega", "stories"], comCliente: true,
     faz: "kit e contexto da marca, perfis do Instagram, aba Redes (Instagram e Facebook: bio, destaques, grade, ajustes do app), plano do mês, Estúdio de artes, entrega, aba Stories (sequência do dia, stories virais, destaques, agenda de stories)",

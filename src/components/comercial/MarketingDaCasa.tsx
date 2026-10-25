@@ -41,6 +41,8 @@ const ROTULO_DA_ORIGEM: Record<string, string> = {
   evento: "Evento",
   site: "Site",
   manual: "Cadastro manual",
+  maquina_de_leads: "Máquina de leads",
+  checkout: "Checkout",
 };
 
 export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {

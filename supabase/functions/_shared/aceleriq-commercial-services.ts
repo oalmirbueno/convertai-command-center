@@ -14,10 +14,19 @@
 
 import type { AuthContext } from './mcp-auth.ts';
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
+import {
+  avaliarEvidencias,
+  CAMPOS_DO_FATO,
+  ehTipoDeEvidencia,
+  evidenciaPrincipal,
+  normalizarCampoDoFato,
+  pedeParaParar,
+  type Evidencia,
+} from './comercial-evidencia.ts';
 
 export const ETAPAS_DO_FUNIL = ['novo', 'contato', 'diagnostico', 'proposta', 'negociacao', 'ganho', 'perdido'] as const;
 export const CLASSES_DO_LEAD = ['cliente_atual', 'upsell', 'novo_prospect'] as const;
-export const ORIGENS_DO_LEAD = ['indicacao', 'instagram', 'quiz', 'prospeccao', 'evento', 'site', 'manual'] as const;
+export const ORIGENS_DO_LEAD = ['indicacao', 'instagram', 'quiz', 'prospeccao', 'evento', 'site', 'manual', 'checkout', 'maquina_de_leads'] as const;
 export const TIPOS_DE_ATIVIDADE = ['ligacao', 'reuniao', 'whatsapp', 'email', 'proposta', 'tarefa'] as const;
 
 const texto = (v: unknown, max = 2000): string | null => {
@@ -92,6 +101,8 @@ export interface OpportunityInput {
   next_action?: string | null; next_action_at?: string | null; expected_close_date?: string | null;
   owner_id?: string | null; organization_id?: string | null; contact_id?: string | null;
   notes?: string | null; classe?: string | null; qualificacao?: Record<string, unknown>;
+  /** 25/10: a campanha da Meta (id da Meta) e o agente que atende ('mercurio' ou null). */
+  ads_campaign_id?: string | null; agente_slug?: string | null;
 }
 
 function corpoDoLead(input: OpportunityInput): Record<string, unknown> {
@@ -113,6 +124,8 @@ function corpoDoLead(input: OpportunityInput): Record<string, unknown> {
   if (tem('contact_id')) corpo.contact_id = input.contact_id || null;
   if (tem('notes')) corpo.notes = texto(input.notes, 4000);
   if (tem('classe')) corpo.classe = input.classe || null;
+  if (tem('ads_campaign_id')) corpo.ads_campaign_id = texto(input.ads_campaign_id, 64);
+  if (tem('agente_slug')) corpo.agente_slug = texto(input.agente_slug, 40);
   if (tem('qualificacao')) {
     const limpo: Record<string, string> = {};
     for (const [k, v] of Object.entries(input.qualificacao ?? {})) {
@@ -186,13 +199,16 @@ export async function moveOpportunity(input: { opportunity_id: string; stage: st
   return { oportunidade: data, movido: true, de: lead.stage, para, ...(avisos.length > 0 ? { warnings: avisos } : {}) };
 }
 
-export async function addOpportunityNote(input: { opportunity_id: string; note: string }, ctx: AuthContext) {
+export async function addOpportunityNote(input: { opportunity_id: string; note: string; operador?: string }, ctx: AuthContext) {
   soDaCasa(ctx);
   const lead = await exigirLead(input.opportunity_id);
   const nota = texto(input.note, 2000);
   if (!nota || nota.length < 2) throw new Error('note: escreva um pouco mais.');
+  // 25/10: nota de agente (Mercurio e outros) fica marcada com o operador; o MCP nao tem created_by.
+  const operador = texto(input.operador, 40);
   const { data, error } = await comPrazo(db().from('commercial_lead_events')
-    .insert({ lead_id: lead.id, kind: 'nota', note: nota }).select('id, created_at').single());
+    .insert(operador ? { lead_id: lead.id, kind: 'agente', note: `[${operador}] ${nota}`.slice(0, 2000) } : { lead_id: lead.id, kind: 'nota', note: nota })
+    .select('id, created_at').single());
   if (error) throw new Error(`commercial_lead_events: ${error.message}`);
   return { anotado: true, evento: data };
 }
@@ -358,4 +374,332 @@ export async function upsertCommercialContact(input: { contact_id?: string; orga
   const { data, error } = await comPrazo(db().from('commercial_contacts').insert({ is_primary: false, ...corpo }).select('*').single());
   if (error) throw new Error(`commercial_contacts: ${error.message}`);
   return { contato: data, criado: true };
+}
+
+// ===================================================================
+// 25/10/2026: o Mercurio (agente comercial do Hermes), a Caixa do comercial, os fatos com prova e a Maquina de
+// leads. Contrato do banco: migration 20261025100000_comercial_mercurio_e_maquina_de_leads.sql. Roteiro do
+// agente: docs/comercial/MERCURIO.md. O WhatsApp e do Hermes: o painel guarda a conversa, a fila e os avisos.
+// ===================================================================
+
+export const CANAIS_DA_MENSAGEM = ['whatsapp', 'instagram', 'email', 'telefone', 'site', 'outro'] as const;
+/** Lead frio: o primeiro contato conta no teto do dia e respeita o horario. */
+const ORIGENS_FRIAS = ['prospeccao', 'maquina_de_leads'];
+const SLUG = /^[a-z0-9_-]{2,40}$/;
+
+const slugDoOperador = (v: unknown, padrao = 'mercurio') => {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  if (!s) return padrao;
+  if (!SLUG.test(s)) throw new Error('operador: use o slug do agente (ex.: mercurio).');
+  return s;
+};
+
+/** Data (YYYY-MM-DD) e hora (HH:MM) agora em Sao Paulo, e o inicio do dia em ISO. */
+export function agoraEmSaoPaulo(agora = new Date()): { data: string; hora: string; inicioDoDiaIso: string } {
+  const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(agora);
+  const p = (t: string) => (partes.find((x) => x.type === t) || { value: '00' }).value;
+  const hora = `${p('hour') === '24' ? '00' : p('hour')}:${p('minute')}`;
+  const data = `${p('year')}-${p('month')}-${p('day')}`;
+  // Sao Paulo sem horario de verao: UTC-3.
+  return { data, hora, inicioDoDiaIso: new Date(`${data}T00:00:00-03:00`).toISOString() };
+}
+
+export const dentroDoHorario = (hora: string, inicio: string, fim: string) => hora >= String(inicio).slice(0, 5) && hora < String(fim).slice(0, 5);
+
+const naoContatar = (lead: Record<string, unknown>) => {
+  const q = (lead.qualificacao && typeof lead.qualificacao === 'object' ? lead.qualificacao : {}) as Record<string, unknown>;
+  const v = q.nao_contatar;
+  return v === true || v === 'sim' || v === 'true';
+};
+
+async function configDoAgente(slug: string) {
+  const { data, error } = await comPrazo(db().from('commercial_agente_config').select('*').eq('slug', slug).maybeSingle());
+  if (error) throw new Error(`commercial_agente_config: ${error.message}`);
+  return (data as Record<string, unknown> | null) ?? null;
+}
+
+async function primeirosContatosHoje(slug: string, inicioDoDiaIso: string): Promise<number> {
+  const { count, error } = await comPrazo(db().from('commercial_lead_events').select('id', { count: 'exact', head: true })
+    .eq('kind', 'primeiro_contato').eq('note', slug).gte('created_at', inicioDoDiaIso));
+  if (error) throw new Error(`commercial_lead_events: ${error.message}`);
+  return count ?? 0;
+}
+
+export function resumoDaConfig(cfg: Record<string, unknown> | null, feitosHoje: number, agora = agoraEmSaoPaulo()) {
+  const inicio = String((cfg && cfg.horario_inicio) || '09:00').slice(0, 5);
+  const fim = String((cfg && cfg.horario_fim) || '18:00').slice(0, 5);
+  const limite = Number(cfg && cfg.limite_primeiros_contatos_dia) || 0;
+  return {
+    ativo: !!(cfg && cfg.ativo),
+    horario: `${inicio} a ${fim} (Sao Paulo)`,
+    agora: agora.hora,
+    dentro_do_horario: dentroDoHorario(agora.hora, inicio, fim),
+    limite_primeiros_contatos_dia: limite,
+    primeiros_contatos_hoje: feitosHoje,
+    restam_hoje: Math.max(0, limite - feitosHoje),
+    orientacoes: (cfg && cfg.orientacoes) || null,
+  };
+}
+
+/** A fila do agente comercial: os leads que ele atende, com conversa, fatos e a regra do dia. */
+export async function comercialFila(input: { operador?: string; limit?: number }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const slug = slugDoOperador(input.operador);
+  const agora = agoraEmSaoPaulo();
+  const [cfg, feitos] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso)]);
+  const regra = resumoDaConfig(cfg, feitos, agora);
+  if (!regra.ativo) {
+    return { operador: slug, config: regra, itens: [], total: 0, aviso: `O ${slug} esta desligado no painel (Comercial). Nao envie mensagem; so registre o que chegar.` };
+  }
+  const limit = Math.min(Math.max(Number(input.limit) || 30, 1), 100);
+  const { data: leads, error } = await comPrazo(db().from('commercial_leads')
+    .select('id, name, company, email, whatsapp, stage, origin, classe, qualificacao, next_action, next_action_at, notes, campaign_id, ads_campaign_id, organization_id, monthly_value, one_off_value, agente_desde, updated_at, created_at')
+    .eq('agente_slug', slug).is('archived_at', null).not('stage', 'in', '(ganho,perdido)')
+    .order('updated_at', { ascending: false }).limit(limit));
+  if (error) throw new Error(`commercial_leads: ${error.message}`);
+  const lista = (leads ?? []) as Array<Record<string, unknown>>;
+  const ids = lista.map((l) => String(l.id));
+  if (!ids.length) return { operador: slug, config: regra, itens: [], total: 0 };
+  const campanhasInternas = Array.from(new Set(lista.map((l) => l.campaign_id).filter(Boolean))) as string[];
+  const campanhasMeta = Array.from(new Set(lista.map((l) => l.ads_campaign_id).filter(Boolean))) as string[];
+  const [msgs, fatos, internas, meta] = await Promise.all([
+    comPrazo(db().from('commercial_lead_messages').select('lead_id, direcao, canal, texto, enviada_em, operador_slug').in('lead_id', ids).order('enviada_em', { ascending: false }).limit(Math.min(2000, ids.length * 20))),
+    comPrazo(db().from('commercial_facts').select('lead_id, campo, valor, evidencia, situacao, created_at').in('lead_id', ids).neq('situacao', 'descartado').order('created_at', { ascending: false }).limit(500)),
+    campanhasInternas.length ? comPrazo(db().from('commercial_campaigns').select('id, name, channel').in('id', campanhasInternas)) : Promise.resolve({ data: [] }),
+    campanhasMeta.length ? comPrazo(db().from('ads_campaigns').select('campaign_id, name, status').in('campaign_id', campanhasMeta)) : Promise.resolve({ data: [] }),
+  ]);
+  const porLead = new Map<string, Array<Record<string, unknown>>>();
+  for (const m of ((msgs as { data: Array<Record<string, unknown>> | null }).data ?? [])) {
+    const k = String(m.lead_id);
+    const l = porLead.get(k) || [];
+    if (l.length < 20) l.push(m);
+    porLead.set(k, l);
+  }
+  const fatosPorLead = new Map<string, Array<Record<string, unknown>>>();
+  for (const f of ((fatos as { data: Array<Record<string, unknown>> | null }).data ?? [])) {
+    const k = String(f.lead_id);
+    fatosPorLead.set(k, (fatosPorLead.get(k) || []).concat([f]));
+  }
+  const nomeInterna = new Map(((internas as { data: Array<Record<string, unknown>> | null }).data ?? []).map((c) => [String(c.id), c]));
+  const nomeMeta = new Map(((meta as { data: Array<Record<string, unknown>> | null }).data ?? []).map((c) => [String(c.campaign_id), c]));
+  const itens = lista.map((l) => {
+    const conversa = (porLead.get(String(l.id)) || []).slice().reverse();
+    return {
+      lead_id: l.id,
+      nome: l.name,
+      empresa: l.company ?? null,
+      whatsapp: l.whatsapp ?? null,
+      email: l.email ?? null,
+      etapa: l.stage,
+      origem: l.origin,
+      lead_frio: ORIGENS_FRIAS.indexOf(String(l.origin)) >= 0,
+      primeiro_contato_feito: conversa.some((m) => m.direcao === 'saida'),
+      nao_contatar: naoContatar(l),
+      classe: l.classe ?? null,
+      qualificacao: l.qualificacao ?? {},
+      proxima_acao: l.next_action ?? null,
+      proxima_acao_em: l.next_action_at ?? null,
+      valores: { mensal: l.monthly_value, avulso: l.one_off_value },
+      notas: l.notes ?? null,
+      campanha: l.campaign_id ? (nomeInterna.get(String(l.campaign_id)) ?? { id: l.campaign_id }) : null,
+      campanha_meta: l.ads_campaign_id ? (nomeMeta.get(String(l.ads_campaign_id)) ?? { campaign_id: l.ads_campaign_id }) : null,
+      mensagens: conversa,
+      fatos: fatosPorLead.get(String(l.id)) || [],
+      atende_desde: l.agente_desde ?? null,
+    };
+  });
+  return { operador: slug, config: regra, itens, total: itens.length };
+}
+
+/** Registra uma mensagem da conversa do lead (entrada ou saida). Idempotente por id_externo. */
+export async function comercialRegistrarMensagem(input: { lead_id: string; direcao: 'entrada' | 'saida'; texto: string; canal?: string; enviada_em?: string; id_externo?: string; operador?: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const lead = await exigirLead(input.lead_id);
+  if (input.direcao !== 'entrada' && input.direcao !== 'saida') throw new Error('direcao: entrada ou saida.');
+  const corpo = typeof input.texto === 'string' ? input.texto.trim().slice(0, 8000) : '';
+  if (!corpo) throw new Error('texto: a mensagem esta vazia.');
+  const canal = input.canal && (CANAIS_DA_MENSAGEM as readonly string[]).indexOf(input.canal) >= 0 ? input.canal : 'whatsapp';
+  const quando = input.enviada_em ? new Date(input.enviada_em) : new Date();
+  if (!Number.isFinite(quando.getTime())) throw new Error('enviada_em: data invalida (ISO 8601).');
+  const idExterno = texto(input.id_externo, 200);
+  if (idExterno) {
+    const { data: ja } = await comPrazo(db().from('commercial_lead_messages').select('*').eq('lead_id', lead.id).eq('id_externo', idExterno).maybeSingle());
+    if (ja) return { mensagem: ja, registrada: false, duplicada: true };
+  }
+  const slug = input.direcao === 'saida' ? slugDoOperador(input.operador) : null;
+  const avisos: string[] = [];
+  let primeiroContato = false;
+  if (input.direcao === 'saida') {
+    if (naoContatar(lead)) throw new Error('Este lead pediu para nao ser mais contatado (LGPD). Nao envie mensagem; se ele voltar a falar, registre a entrada.');
+    const { count: saidas } = await comPrazo(db().from('commercial_lead_messages').select('id', { count: 'exact', head: true }).eq('lead_id', lead.id).eq('direcao', 'saida'));
+    primeiroContato = (saidas ?? 0) === 0 && ORIGENS_FRIAS.indexOf(String(lead.origin)) >= 0;
+    if (primeiroContato && slug) {
+      const cfg = await configDoAgente(slug);
+      const agora = agoraEmSaoPaulo();
+      const regra = resumoDaConfig(cfg, await primeirosContatosHoje(slug, agora.inicioDoDiaIso), agora);
+      if (!regra.ativo) throw new Error(`O ${slug} esta desligado no painel: primeiro contato com lead frio nao deve sair.`);
+      if (!regra.dentro_do_horario) throw new Error(`Fora do horario do comercial (${regra.horario}; agora ${regra.agora}). Primeiro contato com lead frio so dentro do horario.`);
+      if (regra.restam_hoje <= 0) throw new Error(`Teto do dia atingido: ${regra.primeiros_contatos_hoje} de ${regra.limite_primeiros_contatos_dia} primeiros contatos. Deixe para amanha.`);
+    }
+  }
+  const { data, error } = await comPrazo(db().from('commercial_lead_messages').insert({
+    lead_id: lead.id, direcao: input.direcao, canal, texto: corpo, enviada_em: quando.toISOString(),
+    operador_slug: slug, id_externo: idExterno,
+  }).select('*').single());
+  if (error) {
+    // Corrida no id_externo: devolve a que ja estava.
+    if (idExterno && /duplicate|unique/i.test(error.message)) {
+      const { data: ja } = await comPrazo(db().from('commercial_lead_messages').select('*').eq('lead_id', lead.id).eq('id_externo', idExterno).maybeSingle());
+      if (ja) return { mensagem: ja, registrada: false, duplicada: true };
+    }
+    throw new Error(`commercial_lead_messages: ${error.message}`);
+  }
+  if (primeiroContato && slug) {
+    const { error: e } = await db().from('commercial_lead_events').insert({ lead_id: lead.id, kind: 'primeiro_contato', note: slug });
+    if (e) avisos.push(`commercial_lead_events: ${e.message}`);
+  }
+  // Primeira mensagem enviada tira o lead de "novo".
+  if (input.direcao === 'saida' && lead.stage === 'novo') {
+    const { error: e1 } = await db().from('commercial_leads').update({ stage: 'contato' }).eq('id', lead.id);
+    if (!e1) await db().from('commercial_lead_events').insert({ lead_id: lead.id, kind: 'stage', from_stage: 'novo', to_stage: 'contato', note: `Primeira mensagem enviada (${slug}).` });
+    else avisos.push(`commercial_leads.stage: ${e1.message}`);
+  }
+  let pediuParaParar = false;
+  if (input.direcao === 'entrada' && !naoContatar(lead) && pedeParaParar(corpo)) {
+    pediuParaParar = true;
+    const qual = { ...((lead.qualificacao as Record<string, unknown>) || {}), nao_contatar: 'sim' };
+    const { error: e2 } = await db().from('commercial_leads').update({ qualificacao: qual }).eq('id', lead.id);
+    if (e2) avisos.push(`commercial_leads.qualificacao: ${e2.message}`);
+    await db().from('commercial_lead_events').insert({ lead_id: lead.id, kind: 'agente', note: 'Pediu para nao ser mais contatado: o agente nao envia mais mensagens (LGPD).' });
+  }
+  return {
+    mensagem: data, registrada: true, primeiro_contato: primeiroContato,
+    ...(pediuParaParar ? { pediu_para_parar: true, aviso: 'O lead pediu para parar: nao responda vendendo. No maximo confirme com educacao que nao vai mais mandar mensagem.' } : {}),
+    ...(avisos.length ? { warnings: avisos } : {}),
+  };
+}
+
+/** A Caixa do comercial: o agente avisa so quem avancou ou fechou (o banco avisa no sino). */
+export async function comercialAvisarCaixa(input: { lead_id: string; tipo: 'avancou' | 'fechou'; resumo: string; proximo_passo?: string; telefone?: string; dados?: Record<string, unknown>; operador?: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const lead = await exigirLead(input.lead_id);
+  if (input.tipo !== 'avancou' && input.tipo !== 'fechou') throw new Error('tipo: avancou ou fechou. A Caixa e so para quem avancou ou fechou.');
+  const resumo = texto(input.resumo, 2000);
+  if (!resumo || resumo.length < 5) throw new Error('resumo: conte em poucas linhas o que aconteceu e o contexto.');
+  const desde = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+  const { data: aberto } = await comPrazo(db().from('commercial_handoffs').select('id, created_at').eq('lead_id', lead.id).eq('tipo', input.tipo).eq('situacao', 'nova').gte('created_at', desde).limit(1));
+  if (aberto && aberto.length) throw new Error(`Ja existe um aviso "${input.tipo}" aberto para este lead nas ultimas 6 horas (${aberto[0].id}). Nao repita: atualize a conversa e as notas.`);
+  const dados = input.dados && typeof input.dados === 'object' ? input.dados : {};
+  if (JSON.stringify(dados).length > 8000) throw new Error('dados: grande demais (ate 8 mil caracteres).');
+  const telefone = texto(input.telefone, 40) || (lead.whatsapp as string | null) || null;
+  const { data, error } = await comPrazo(db().from('commercial_handoffs').insert({
+    lead_id: lead.id, tipo: input.tipo, resumo, proximo_passo: texto(input.proximo_passo, 300), telefone, dados,
+    operador_slug: slugDoOperador(input.operador),
+  }).select('*').single());
+  if (error) throw new Error(`commercial_handoffs: ${error.message}`);
+  return { item: data, avisado: true, link: `/comercial/caixa?item=${data.id}`, observacao: 'A equipe foi avisada no sino (Comercial).' };
+}
+
+/** Fato com prova: a regua decide se grava na ficha, vira sugestao ou e descartado. */
+export async function comercialRegistrarFato(input: { lead_id?: string; organization_id?: string; campo: string; valor: string; evidencias: Evidencia[]; operador?: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  if (!input.lead_id && !input.organization_id) throw new Error('Informe lead_id ou organization_id.');
+  const lead = input.lead_id ? await exigirLead(input.lead_id) : null;
+  const orgId = input.organization_id || (lead && (lead.organization_id as string | null)) || null;
+  if (orgId && !isUuid(orgId)) throw new Error('organization_id must be a UUID');
+  const campo = normalizarCampoDoFato(input.campo);
+  if (campo.length < 2) throw new Error('campo: diga qual dado (ex.: whatsapp, cnpj, cargo).');
+  const valor = texto(input.valor, 1000);
+  if (!valor) throw new Error('valor: vazio.');
+  const evidencias = (Array.isArray(input.evidencias) ? input.evidencias : []).slice(0, 10)
+    .filter((e) => e && ehTipoDeEvidencia(e.tipo))
+    .map((e) => ({ tipo: e.tipo, detalhe: String(e.detalhe || '').trim().slice(0, 500), fonte_url: texto(e.fonte_url, 500) }));
+  if (!evidencias.length) throw new Error('evidencias: mande ao menos uma prova (tipo e detalhe). Sem prova, o fato nao entra.');
+  if (evidencias.some((e) => e.detalhe.length < 3)) throw new Error('evidencias.detalhe: escreva o que viu e onde, para a equipe ler.');
+  const aval = avaliarEvidencias(evidencias);
+  const destino = CAMPOS_DO_FATO[campo];
+  let escritoEm: string | null = null;
+  const avisos: string[] = [];
+  if (aval.situacao === 'gravado' && destino) {
+    const v = valor.slice(0, destino.max);
+    if (destino.alvo === 'lead' && lead) {
+      const { error } = await db().from('commercial_leads').update({ [destino.coluna]: v }).eq('id', lead.id);
+      if (error) avisos.push(`commercial_leads: ${error.message}`); else escritoEm = `commercial_leads.${destino.coluna}`;
+    } else if (destino.alvo === 'qualificacao' && lead) {
+      const qual = { ...((lead.qualificacao as Record<string, unknown>) || {}), [destino.coluna]: v };
+      const { error } = await db().from('commercial_leads').update({ qualificacao: qual }).eq('id', lead.id);
+      if (error) avisos.push(`commercial_leads.qualificacao: ${error.message}`); else escritoEm = `commercial_leads.qualificacao.${destino.coluna}`;
+    } else if (destino.alvo === 'empresa' && orgId) {
+      const { error } = await db().from('commercial_organizations').update({ [destino.coluna]: v }).eq('id', orgId);
+      if (error) avisos.push(`commercial_organizations: ${error.message}`); else escritoEm = `commercial_organizations.${destino.coluna}`;
+    } else {
+      avisos.push('Fato forte, mas sem ficha onde gravar (lead sem empresa ligada): ficou so registrado.');
+    }
+  } else if (aval.situacao === 'gravado') {
+    avisos.push(`O campo "${campo}" nao e um campo da ficha: o fato ficou registrado, sem escrever na ficha.`);
+  }
+  const { data, error } = await comPrazo(db().from('commercial_facts').insert({
+    lead_id: lead ? lead.id : null, organization_id: orgId, campo, valor,
+    evidencia: evidenciaPrincipal(evidencias),
+    detalhe: evidencias.map((e) => `${e.tipo}: ${e.detalhe}`).join(' | ').slice(0, 2000),
+    fonte_url: evidencias.map((e) => e.fonte_url).filter(Boolean)[0] || null,
+    situacao: aval.situacao, operador_slug: slugDoOperador(input.operador),
+  }).select('*').single());
+  if (error) throw new Error(`commercial_facts: ${error.message}`);
+  return { fato: data, avaliacao: aval, escrito_em: escritoEm, ...(avisos.length ? { warnings: avisos } : {}) };
+}
+
+/** Liga ou desliga o agente comercial num lead. */
+export async function comercialAtribuirAgente(input: { lead_id: string; operador: string | null; motivo: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const lead = await exigirLead(input.lead_id);
+  const motivo = texto(input.motivo, 500);
+  if (!motivo || motivo.length < 3) throw new Error('motivo: diga em uma linha por que liga ou desliga o agente.');
+  const novo = input.operador === null || input.operador === '' ? null : slugDoOperador(input.operador);
+  if ((lead.agente_slug ?? null) === novo) return { lead_id: lead.id, agente: novo, mudou: false };
+  const { error } = await comPrazo(db().from('commercial_leads').update({ agente_slug: novo }).eq('id', lead.id));
+  if (error) throw new Error(`commercial_leads: ${error.message}`);
+  await db().from('commercial_lead_events').insert({ lead_id: lead.id, kind: 'agente', note: novo ? `${novo} passou a atender: ${motivo}` : `Agente deixou de atender (${lead.agente_slug ?? 'nenhum'}): ${motivo}` });
+  return { lead_id: lead.id, agente: novo, mudou: true };
+}
+
+/** Maquina de leads: pede uma busca (o worker da casa roda) ou devolve a igual que ja esta na fila. */
+export async function comercialMaquinaBuscar(input: { nicho: string; cidade: string; uf?: string; limite?: number; fontes?: string[]; campanha_id?: string | null; entregar_ao_mercurio?: boolean }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const nicho = texto(input.nicho, 120);
+  const cidade = texto(input.cidade, 120);
+  if (!nicho || nicho.length < 2) throw new Error('nicho: diga o ramo (ex.: clinica odontologica).');
+  if (!cidade || cidade.length < 2) throw new Error('cidade: diga a cidade.');
+  const uf = input.uf ? String(input.uf).trim().toUpperCase().slice(0, 2) : null;
+  const limite = Math.min(Math.max(Math.round(Number(input.limite) || 50), 1), 300);
+  const fontes = (Array.isArray(input.fontes) ? input.fontes : ['osm', 'sites']).map((f) => String(f).trim().toLowerCase()).filter((f) => /^[a-z_]{2,20}$/.test(f)).slice(0, 5);
+  if (input.campanha_id && !isUuid(input.campanha_id)) throw new Error('campanha_id must be a UUID');
+  const { data: igual } = await comPrazo(db().from('leads_buscas').select('*').ilike('nicho', nicho).ilike('cidade', cidade).in('situacao', ['na_fila', 'rodando']).limit(1));
+  if (igual && igual.length) return { busca: igual[0], criada: false, duplicada: true, observacao: 'Ja existe uma busca igual na fila.' };
+  const { data, error } = await comPrazo(db().from('leads_buscas').insert({
+    nicho, cidade, uf, limite, fontes: fontes.length ? fontes : ['osm', 'sites'],
+    campanha_id: input.campanha_id || null, entregar_ao_mercurio: input.entregar_ao_mercurio === true,
+  }).select('*').single());
+  if (error) throw new Error(`leads_buscas: ${error.message}`);
+  return { busca: data, criada: true, observacao: 'O worker da casa roda a busca. Acompanhe com aceleriq_comercial_maquina_candidatos.' };
+}
+
+/** Maquina de leads: as buscas recentes ou os candidatos de uma busca. */
+export async function comercialMaquinaCandidatos(input: { busca_id?: string; situacao?: string; limit?: number }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const limit = Math.min(Math.max(Number(input.limit) || 100, 1), 300);
+  if (!input.busca_id) {
+    const { data, error } = await comPrazo(db().from('leads_buscas').select('id, nicho, cidade, uf, situacao, encontrados, limite, erro, entregar_ao_mercurio, created_at, terminado_em').order('created_at', { ascending: false }).limit(20));
+    if (error) throw new Error(`leads_buscas: ${error.message}`);
+    return { buscas: data ?? [], total: (data ?? []).length };
+  }
+  if (!isUuid(input.busca_id)) throw new Error('busca_id must be a UUID');
+  const { data: busca, error: e1 } = await comPrazo(db().from('leads_buscas').select('*').eq('id', input.busca_id).maybeSingle());
+  if (e1) throw new Error(`leads_buscas: ${e1.message}`);
+  if (!busca) throw new Error('Busca nao encontrada.');
+  let qb = db().from('leads_candidatos').select('*').eq('busca_id', input.busca_id).order('nota', { ascending: false, nullsFirst: false }).order('created_at', { ascending: true }).limit(limit);
+  if (input.situacao && ['novo', 'importado', 'descartado'].indexOf(input.situacao) >= 0) qb = qb.eq('situacao', input.situacao);
+  const { data, error } = await comPrazo(qb);
+  if (error) throw new Error(`leads_candidatos: ${error.message}`);
+  return { busca, candidatos: data ?? [], total: (data ?? []).length };
 }

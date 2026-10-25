@@ -14,7 +14,9 @@
 export const ALFABETO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const TAMANHO_DO_CODIGO = 8;
 export const MINUTOS_DO_CODIGO = 10;
-export const MOTORES_VALIDOS = ["render", "codigo", "navegador"] as const;
+export const MOTORES_VALIDOS = ["render", "codigo", "navegador", "leads"] as const;
+/** 25/10/2026: sem escolha, a máquina nova liga os três de sempre; a Máquina de leads (Python) se liga na tela. */
+export const MOTORES_PADRAO = ["render", "codigo", "navegador"];
 
 export type Aleatorio = (n: number) => Uint8Array;
 const aleatorioPadrao: Aleatorio = (n) => crypto.getRandomValues(new Uint8Array(n));
@@ -156,7 +158,7 @@ export function criarTratador(dep: Dependencias): (req: Request) => Promise<Resp
       _hash: await hashDoCodigo(d.segredo, codigo),
       _ator: q.id,
       _nome: limparTexto(corpo.nome),
-      _motores: motores.length ? motores : [...MOTORES_VALIDOS],
+      _motores: motores.length ? motores : [...MOTORES_PADRAO],
       _minutos: MINUTOS_DO_CODIGO,
     });
     if (r.error) {

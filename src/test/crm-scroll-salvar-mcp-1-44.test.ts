@@ -107,7 +107,8 @@ describe("o MCP tem o CRM inteiro na 1.44.0", () => {
 
   it("toda função do serviço recusa credencial restrita a cliente", () => {
     const funcoes = servico.match(/export async function \w+\([^)]*ctx: AuthContext\) \{\n  soDaCasa\(ctx\);/g) ?? [];
-    expect(funcoes.length).toBe(13);
+    // 25/10/2026 (MCP 2.18): + as 7 do Mercurio, da Caixa, dos fatos e da Maquina de leads.
+    expect(funcoes.length).toBe(20);
     expect(servico).toContain("esta credencial e restrita a cliente e nao alcanca o CRM");
   });
 

@@ -2,13 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type AreaDosAvisos = "painel" | "agentes";
+export type AreaDosAvisos = "painel" | "agentes" | "comercial";
+/** 25/10/2026: os tipos da área Comercial (lembretes do CRM e a Caixa do Mercúrio). */
+export const TIPOS_DO_COMERCIAL = ["commercial", "commercial_caixa"];
 // Os mesmos filtros são usados na lista, contagem e marcação em lote.
 export function filtrarArea<T>(query: T, area: AreaDosAvisos): T {
   const q = query as any;
-  return area === "agentes"
-    ? q.or("notification_type.like.operator%,link.like./execucao%")
-    : q.not("notification_type", "like", "operator%").or("link.is.null,link.not.like./execucao%");
+  if (area === "agentes") return q.or("notification_type.like.operator%,link.like./execucao%");
+  if (area === "comercial") return q.or(`notification_type.in.(${TIPOS_DO_COMERCIAL.join(",")}),link.like./comercial%`);
+  // Painel: sem os avisos de agentes e sem os do Comercial (que têm a área própria).
+  return q
+    .not("notification_type", "like", "operator%")
+    .or("link.is.null,link.not.like./execucao%")
+    .not("notification_type", "in", `(${TIPOS_DO_COMERCIAL.join(",")})`)
+    .or("link.is.null,link.not.like./comercial%");
 }
 export function useAvisosPorArea(area: AreaDosAvisos, soNaoLidas: boolean, aberto: boolean) {
   const { user } = useAuth();

@@ -187,6 +187,12 @@ export async function prepararDependencias(
     // O Chromium do navegador do agente (fica em %LOCALAPPDATA%\ms-playwright; já baixado, é instantâneo).
     await r(o.node || process.execPath, [path.join(deps, "node_modules", "playwright-core", "cli.js"), "install", "chromium"], { cwd: pastaDoWorker, registro: o.registro, prazoMs: 20 * 60_000 });
   }
+  if (motor === "leads" && !o.semNpm && existsSync(path.join(pastaDoWorker, "requirements.txt"))) {
+    // 25/10/2026: o buscador da Máquina de leads é Python (Scrapling). pip só instala o que falta.
+    const py = String(process.env.LEADS_PYTHON || (process.platform === "win32" ? "python" : "python3"));
+    const c = await r(py, ["-m", "pip", "install", "--disable-pip-version-check", "--quiet", "-r", "requirements.txt"], { cwd: pastaDoWorker, registro: o.registro, prazoMs: 20 * 60_000 });
+    if (c !== 0) o.registro?.linha(`[supervisor] as dependências Python da Máquina de leads não instalaram (saída ${c}); confira o Python 3.10+`);
+  }
   return { deps, instalou };
 }
 

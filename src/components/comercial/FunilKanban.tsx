@@ -14,7 +14,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDownWideNarrow, ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, Thermometer, ThumbsDown, Trophy } from "lucide-react";
+import { ArrowDownWideNarrow, Bot, ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, Thermometer, ThumbsDown, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -117,6 +117,10 @@ interface Props {
 const estaAtrasado = (agenda: AgendaDoLead) => agenda.atrasadas > 0;
 
 const CLASSES_DO_FILTRO = ["todas", ...CLASSES_DO_LEAD.map((c) => c.id as string), "sem"];
+// 25/10/2026: quem atende o lead (o Mercúrio ou a equipe).
+const QUEM_ATENDE = ["todos", "mercurio", "equipe"];
+export const passaNoFiltroDeQuemAtende = (lead: { agente_slug?: string | null }, quem: string) =>
+  quem === "mercurio" ? lead.agente_slug === "mercurio" : quem === "equipe" ? !lead.agente_slug : true;
 
 /** Lista vazia estável: um `[]` novo a cada render refaria as temperaturas. */
 const SEM_EVENTOS: EventoDoLead[] = [];
@@ -144,6 +148,7 @@ export default function FunilKanban({
   const [classe, setClasse] = useEstadoDoComercial<string>("funil:classe", "todas", { validar: umaDe(CLASSES_DO_FILTRO) });
   // Temperatura: filtrar por faixa e, se pedido, pôr o mais quente no topo.
   const [faixa, setFaixa] = useEstadoDoComercial<string>("funil:temperatura", "todas", { validar: umaDe(FAIXAS_DO_FILTRO) });
+  const [quemAtende, setQuemAtende] = useEstadoDoComercial<string>("funil:quem-atende", "todos", { validar: umaDe(QUEM_ATENDE) });
   const [porTemperatura, setPorTemperatura] = useEstadoDoComercial<boolean>("funil:ordem-temperatura", false, {
     validar: (v) => typeof v === "boolean",
   });
@@ -194,6 +199,7 @@ export default function FunilKanban({
       ) {
         continue;
       }
+      if (!passaNoFiltroDeQuemAtende(lead, quemAtende)) continue;
       const temperatura = temperaturas.get(lead.id);
       if (temperatura && !passaNoFiltroDeTemperatura(temperatura, faixa)) continue;
       mapa.get(lead.stage)!.push(lead);
@@ -221,7 +227,7 @@ export default function FunilKanban({
       });
     }
     return mapa;
-  }, [leads, termo, classe, atividades, agoraIso, temperaturas, faixa, porTemperatura]);
+  }, [leads, termo, classe, atividades, agoraIso, temperaturas, faixa, porTemperatura, quemAtende]);
 
   /**
    * Move na tela primeiro, grava depois.
@@ -323,6 +329,18 @@ export default function FunilKanban({
           opcoes={opcoesDeClasse}
           valor={classe}
           onEscolher={setClasse}
+        />
+        <SeletorCompacto
+          rotulo="Quem atende"
+          modo="lista"
+          icone={<Bot className="h-3.5 w-3.5" />}
+          opcoes={[
+            { valor: "todos", rotulo: "Todos", descricao: "O Mercúrio e a equipe", contador: leads.length },
+            { valor: "mercurio", rotulo: "Atendidos pelo Mercúrio", contador: leads.filter((lead) => lead.agente_slug === "mercurio").length },
+            { valor: "equipe", rotulo: "Só a equipe", contador: leads.filter((lead) => !lead.agente_slug).length },
+          ]}
+          valor={quemAtende}
+          onEscolher={setQuemAtende}
         />
         <SeletorCompacto
           rotulo="Temperatura"
@@ -636,6 +654,12 @@ function Cartao({
             <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground max-sm:text-[14px]">
               {lead.name}
             </p>
+            {lead.agente_slug === "mercurio" && (
+              <span className="ml-1.5 inline-flex shrink-0 items-center rounded bg-primary/10 px-1 text-[11px] font-medium leading-4 text-primary" title="O Mercúrio atende este lead" data-selo-mercurio="">
+                <Bot className="mr-0.5 h-3 w-3" aria-hidden="true" />
+                Mercúrio
+              </span>
+            )}
             <Termometro temperatura={temperatura} className="ml-1.5" />
           </div>
           {lead.company && (

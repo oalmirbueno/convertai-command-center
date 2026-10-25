@@ -7,13 +7,15 @@ import { supabase } from "@/integrations/supabase/client";
  * remove máquina e revoga código pelas RPCs motores_admin_*.
  */
 
-export type IdDoMotorNaMaquina = "render" | "codigo" | "navegador";
-export const MOTORES_DA_MAQUINA: IdDoMotorNaMaquina[] = ["render", "codigo", "navegador"];
-export const NOME_CURTO_DO_MOTOR: Record<IdDoMotorNaMaquina, string> = { render: "Render", codigo: "Código", navegador: "Navegador" };
+export type IdDoMotorNaMaquina = "render" | "codigo" | "navegador" | "leads";
+// 25/10/2026: "leads" é a Máquina de leads (workers/leads, Python com Scrapling).
+export const MOTORES_DA_MAQUINA: IdDoMotorNaMaquina[] = ["render", "codigo", "navegador", "leads"];
+export const NOME_CURTO_DO_MOTOR: Record<IdDoMotorNaMaquina, string> = { render: "Render", codigo: "Código", navegador: "Navegador", leads: "Leads" };
 export const NOME_DO_MOTOR_NA_MAQUINA: Record<IdDoMotorNaMaquina, string> = {
   render: "Render (Motion e Edição)",
   codigo: "Motor de código (Site)",
   navegador: "Navegador do agente",
+  leads: "Máquina de leads",
 };
 
 export interface EstadoDoMotorNaMaquina {

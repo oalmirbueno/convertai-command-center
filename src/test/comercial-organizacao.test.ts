@@ -25,7 +25,8 @@ const migration = ler(
 describe("cada aba é uma área, com nome que diz o que é", () => {
   it("a visão geral é a porta de entrada, e as áreas têm endereço próprio", () => {
     expect(pagina).toContain(
-      'const ABAS_VALIDAS: Aba[] = ["visao", "crm", "agenda", "metas", "campanhas", "marketing"]',
+      // 25/10/2026: + a Caixa do comercial (Mercúrio) e a Máquina de leads.
+      'const ABAS_VALIDAS: Aba[] = ["visao", "caixa", "crm", "leads", "agenda", "metas", "campanhas", "marketing"]',
     );
     expect(pagina).toContain(': "visao";');
   });

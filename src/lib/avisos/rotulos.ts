@@ -42,7 +42,18 @@ const CATEGORIA: Record<string, CategoriaDoAviso> = {
   operator_insumo: "agente",
   operator_executou: "agente",
   commercial: "comercial",
+  commercial_caixa: "comercial",
 };
+
+/** O nome de alguns tipos (aparece no title do ícone do aviso). */
+const ROTULO_DO_TIPO: Record<string, string> = {
+  commercial: "Comercial",
+  commercial_caixa: "Caixa do comercial",
+};
+
+export function rotuloDoTipoDoAviso(tipo: string | null | undefined): string {
+  return (tipo && ROTULO_DO_TIPO[tipo]) || "";
+}
 
 export function categoriaDoAviso(tipo: string | null | undefined): CategoriaDoAviso {
   return (tipo && CATEGORIA[tipo]) || "geral";
@@ -64,6 +75,7 @@ const ROTULOS_DAS_ROTAS: Array<[string, string]> = [
   ["/financeiro", "Ver Financeiro"],
   ["/pedidos", "Ver Pedido"],
   ["/kanban", "Ver Tarefas"],
+  ["/comercial/caixa", "Abrir na Caixa do comercial"],
   ["/comercial", "Abrir o Comercial"],
 ];
 
