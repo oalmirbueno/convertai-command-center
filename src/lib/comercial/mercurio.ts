@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * O comercial com o Mercúrio (25/10/2026). Contrato do banco:
- * supabase/migrations/20261025100000_comercial_mercurio_e_maquina_de_leads.sql.
+ * supabase/migrations/20261025130000_comercial_mercurio_e_maquina_de_leads.sql.
  *
  * - Caixa do comercial (commercial_handoffs): o Mercúrio avisa só quem avançou ou fechou, com o resumo, o
  *   próximo passo, o telefone e os dados. A equipe assume e conclui.

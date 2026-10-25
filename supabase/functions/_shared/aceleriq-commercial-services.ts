@@ -378,7 +378,7 @@ export async function upsertCommercialContact(input: { contact_id?: string; orga
 
 // ===================================================================
 // 25/10/2026: o Mercurio (agente comercial do Hermes), a Caixa do comercial, os fatos com prova e a Maquina de
-// leads. Contrato do banco: migration 20261025100000_comercial_mercurio_e_maquina_de_leads.sql. Roteiro do
+// leads. Contrato do banco: migration 20261025130000_comercial_mercurio_e_maquina_de_leads.sql. Roteiro do
 // agente: docs/comercial/MERCURIO.md. O WhatsApp e do Hermes: o painel guarda a conversa, a fila e os avisos.
 // ===================================================================
 

@@ -79,7 +79,7 @@ describe("as travas do buscador (código)", () => {
   });
   it("o motor leads no supervisor e no banco", () => {
     expect(ler("workers/supervisor/config.ts")).toContain('export const MOTORES: IdDoMotor[] = ["render", "codigo", "navegador", "leads"];');
-    expect(ler("supabase/migrations/20261025110000_motor_de_leads.sql")).toContain("ARRAY['render', 'codigo', 'navegador', 'leads']");
+    expect(ler("supabase/migrations/20261025140000_motor_de_leads.sql")).toContain("ARRAY['render', 'codigo', 'navegador', 'leads']");
   });
 });
 

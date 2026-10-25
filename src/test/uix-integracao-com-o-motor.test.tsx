@@ -95,7 +95,8 @@ describe("uma integração só com o motor", () => {
     // Integração UIM + SPM (30/09): as duas frentes subiram para a v3 com listas diferentes; a união é a v4.
     // SPV (30/09): a v5 leva a ponte da prévia editável no vite.config (só no desenvolvimento) aos projetos que já existem.
     // 20/10: a v6 veio com a Vercel de time no worker (b05e4ebc).
-    expect(casca.versao).toBe(6);
+    // 25/10 (MCC): a v7 leva ao AGENTS.md a partida (referência e site pronto) e a regra de autoria.
+    expect(casca.versao).toBe(7);
     expect(ler("workers/motor-codigo/modelo-site/vite.config.ts")).toContain('apply: "serve"');
     expect(casca.arquivos).toEqual(expect.arrayContaining(["scripts/uiux.mjs", "src/lib/Grafico.tsx", "scripts/seo.mjs", "scripts/prerender.mjs", "src/lib/pacote.ts", ".gitignore", "vite.config.ts"]));
     expect(casca.arquivos.filter((a, i, l) => l.indexOf(a) !== i)).toEqual([]);

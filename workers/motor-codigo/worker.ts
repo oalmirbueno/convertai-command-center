@@ -14,6 +14,8 @@
  * Variáveis (.env ou ambiente do Windows; nunca no código nem no commit):
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   a fila e o Storage (service_role)
  *   OPENROUTER_API_KEY                        modelos pelo OpenRouter (opcional: ANTHROPIC_API_KEY, OPENAI_API_KEY)
+ *   MOTOR_PADRAO         claude_code (padrão) ou opencode: o executor quando a tela não escolhe
+ *   MOTOR_CLAUDE_ESFORCO low|medium|high: esforço do Claude Code (padrão: o do modelo)
  *   MOTOR_PASTA          onde ficam os projetos (padrão C:\AI\motor-codigo\projetos)
  *   UIUX_PYTHON          Python 3.8+ da busca da base de design (opcional: o worker acha sozinho;
  *                        a skill ui-ux-pro-max fica em vendor/ui-ux-pro-max, fora dos projetos)
@@ -47,10 +49,11 @@ import { executarTrabalho } from "./lib/executar.ts";
 import { acharPython } from "./modelo-site/scripts/uiux.mjs";
 import { desligarTodas, limparPrevias, temCloudflared } from "./lib/previa.ts";
 import { temChave } from "./lib/opencode.ts";
+import { temClaudeCode } from "./lib/claude-code.ts";
 import { caminhoDoTsc } from "./lib/tipos.ts";
 import { aoPedirParada, avisarSupervisor, encerrarCanal, esperaQueAcorda } from "../supervisor/canal.ts";
 
-const VERSAO = "motor-codigo 0.3.0 (opencode 1.18.33, superpowers v6.4.2, rascunho e conferência no navegador)";
+const VERSAO = "motor-codigo 0.4.0 (claude code 2.1.310 pela OpenRouter, opencode 1.18.33, superpowers v6.4.2, referência e sites prontos)";
 
 export function configDoAmbiente() {
   return {
@@ -82,6 +85,9 @@ async function capacidades(python: string | null = null) {
     uiux: !!python,
     tunel: await temCloudflared(),
     openrouter: temChave("openrouter"),
+    // MCC (25/10): o Claude Code (local, versão fixa) e o motor padrão deste worker.
+    claude_code: temClaudeCode(),
+    motor_padrao: process.env.MOTOR_PADRAO === "opencode" ? "opencode" : "claude_code",
     anthropic: temChave("anthropic"),
     openai: temChave("openai"),
     vercel: !!(process.env.VERCEL_TOKEN || "").trim(),

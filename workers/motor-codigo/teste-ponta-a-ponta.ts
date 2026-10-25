@@ -5,6 +5,14 @@
  *
  *   node --env-file-if-exists=.env teste-ponta-a-ponta.ts [--modelo deepseek/deepseek-v4-flash] [--teto 0.8]
  *
+ * MCC (25/10/2026), Claude Code e partida:
+ *   ... --motor claude_code [--modelo anthropic/claude-haiku-5.5] [--secoes topo,hero,servicos,rodape]
+ *       [--modelo-pronto small-business | --referencia https://exemplo.com --modo fiel|proximo|criativo]
+ *       [--objetivo agendar]
+ * O pedido leva objetivo, partida e motor no mesmo lugar em que a função
+ * motor-codigo grava (motor_trabalhos.pedido); a chave da OpenRouter fica no
+ * medidor (o Claude Code recebe um token local).
+ *
  * Precisa só de OPENROUTER_API_KEY no ambiente. O kit da marca é o do banco
  * (lido antes, só leitura) gravado em <pasta do teste>/aceleriq-kit.json, fora do git; a logo real é
  * copiada do acervo local. O conteúdo (3 opções, escolhe a primeira) sai do
@@ -24,7 +32,13 @@ const arg = (nome: string, padrao: string) => {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : padrao;
 };
 
-const MODELO_API = arg("modelo", "deepseek/deepseek-v4-flash");
+const MOTOR = arg("motor", "opencode");
+const MODELO_API = arg("modelo", MOTOR === "claude_code" ? "anthropic/claude-haiku-5.5" : "deepseek/deepseek-v4-flash");
+const SECOES_PEDIDAS = arg("secoes", "");
+const MODELO_PRONTO = arg("modelo-pronto", "");
+const REFERENCIA = arg("referencia", "");
+const MODO = arg("modo", "proximo");
+const OBJETIVO = arg("objetivo", "");
 const TETO = Number(arg("teto", "0.8"));
 const CLIENTE = "4dd691a7-d481-451f-800b-5e6b6fdc8721";
 const PASTA = process.env.MOTOR_TESTE_PASTA || "C:\\AI\\motor-codigo\\teste-e2e";
@@ -86,7 +100,7 @@ async function principal() {
   const fila = filaLocal(join(PASTA, "fila"));
   const kit = JSON.parse(readFileSync(process.env.MOTOR_TESTE_KIT || join(PASTA, "aceleriq-kit.json"), "utf8")) as Record<string, unknown>;
   const modelo = await precoDoModelo(MODELO_API);
-  const secoes = ["topo", "hero", "servicos", "processo", "diferenciais", "faq", "chamada", "rodape"].filter((s) => (SECOES_PADRAO as readonly string[]).indexOf(s) >= 0);
+  const secoes = (SECOES_PEDIDAS ? SECOES_PEDIDAS.split(",") : ["topo", "hero", "servicos", "processo", "diferenciais", "faq", "chamada", "rodape"]).map((s) => s.trim()).filter((s) => (SECOES_PADRAO as readonly string[]).indexOf(s) >= 0);
   const est = estimarTrabalho(modelo, "construir", secoes.length);
   console.log(`[teste] modelo ${MODELO_API} (US$ ${modelo.preco_entrada_1m}/${modelo.preco_saida_1m} por 1M; cache ${modelo.preco_cache_1m}); estimativa US$ ${est.estimativa_usd}, teto sugerido US$ ${est.teto_sugerido_usd}, teto usado US$ ${TETO}`);
 
@@ -119,10 +133,14 @@ async function principal() {
     regras_da_equipe: ["EVITAR: prometer resultado ou número que o cliente não deu"],
     arquivos: [{ bucket: "mesa", path: logoPath, destino: "public/marca/logo.png" }],
   };
+  // MCC: o contrato da jornada (os mesmos campos que a função grava em motor_trabalhos.pedido).
+  const partida = MODELO_PRONTO ? { tipo: "modelo_pronto", modelo_id: MODELO_PRONTO } : REFERENCIA ? { tipo: "referencia", url: REFERENCIA, modo: MODO } : { tipo: "zero" };
+  const jornada = { ...(OBJETIVO ? { objetivo: OBJETIVO } : {}), partida, motor: MOTOR };
   const t = {
     id: randomUUID(), client_id: CLIENTE, marca_id: null, mesa: "site", projeto, referencia_tipo: "site", referencia_id: siteId, tipo: "construir", estado: "na_fila",
-    modelo: modelo.id, instrucao: "Construir o site de uma página", pedido: { secoes, secao: null, modelo, pacote }, teto_usd: TETO, estimativa_usd: est.estimativa_usd, custo_usd: 0, criado_por: null,
+    modelo: modelo.id, instrucao: "Construir o site de uma página", pedido: { ...jornada, secoes, secao: null, modelo, pacote }, teto_usd: TETO, estimativa_usd: est.estimativa_usd, custo_usd: 0, criado_por: null,
   };
+  console.log(`[teste] motor ${MOTOR}, partida ${JSON.stringify(partida)}, seções ${secoes.join(", ")}`);
   fila.enfileirar(t);
   const pego = await fila.pegar("teste-local");
   if (!pego) throw new Error("a fila local não devolveu o trabalho");
@@ -133,6 +151,9 @@ async function principal() {
   const relatorio = {
     projeto,
     pasta: join(PASTA, "projetos", projeto),
+    motor: MOTOR,
+    modelo: MODELO_API,
+    partida,
     estado: r.estado,
     minutos: Math.round((Date.now() - inicio) / 6000) / 10,
     custo_motor_usd: r.custo,

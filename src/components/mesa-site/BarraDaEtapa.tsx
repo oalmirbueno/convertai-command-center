@@ -69,15 +69,26 @@ export function useBarraDaEtapa(estado: EstadoDaBarra, acoes: AcoesDaBarra = {})
   );
 }
 
-export default function EtapaComBarra({ etapa, onIrPara, children }: { etapa: string; onIrPara: (etapa: string) => void; children: ReactNode }) {
+export default function EtapaComBarra({
+  etapa,
+  onIrPara,
+  children,
+  etapas = ETAPAS_DO_SITE,
+}: {
+  etapa: string;
+  onIrPara: (etapa: string) => void;
+  children: ReactNode;
+  /** A ordem do Voltar e do Seguir (25/10: os passos da jornada; sem ela, as etapas avançadas). */
+  etapas?: ReadonlyArray<{ valor: string; rotulo: string }>;
+}) {
   const avisarErro = useAvisarErro();
   const [estado, setEstado] = useState<EstadoDaBarra>({});
   const [indo, setIndo] = useState<"seguir" | "salvar" | null>(null);
   const acoes = useRef<AcoesDaBarra>({});
   const registro = useMemo<Registro>(() => ({ mudar: setEstado, acoes }), []);
-  const i = ETAPAS_DO_SITE.findIndex((e) => e.valor === etapa);
-  const anterior = i > 0 ? ETAPAS_DO_SITE[i - 1] : null;
-  const proxima = i >= 0 && i < ETAPAS_DO_SITE.length - 1 ? ETAPAS_DO_SITE[i + 1] : null;
+  const i = etapas.findIndex((e) => e.valor === etapa);
+  const anterior = i > 0 ? etapas[i - 1] : null;
+  const proxima = i >= 0 && i < etapas.length - 1 ? etapas[i + 1] : null;
   const ocupado = !!estado.ocupado || !!indo;
 
   const seguir = async () => {

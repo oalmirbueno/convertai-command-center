@@ -29,6 +29,8 @@
  *             integracoes_salvar { site_id, integracoes } · seo_salvar { site_id, seo }
  *             secao_copy_gerar { site_id, secao, modelo_id?, pedido? } · conteudo_editar { site_id, secao?, campos }
  *             versoes_listar · versao_ler { versao_id } · versao_restaurar { versao_id } · imagens_dos_slots_gerar { site_id, maximo?, qualidade?, modelo_id? }
+ * Jornada (jornada.ts, 25/10): jornada_contexto { site_id } · jornada_salvar { site_id, objetivo?, partida?, contexto? }
+ *             modelos_prontos_listar { site_id, objetivo? } (Jev recomenda) · copy_da_pagina_gerar { site_id, modelo_id? } (2 versões, Jev escolhe)
  * SPV (previa.ts): previa_dados { site_id } · previa_editar { site_id, edicao, confirmar?, instrucao?, teto_usd?, modelo_id? }
  *             previa_desfazer { site_id, edicao_id } · previa_edicoes { site_id } (prévia editável na construção)
  *
@@ -103,6 +105,9 @@ import { type ContextoDaPrevia, rotasDaPrevia } from "./previa.ts";
 // Gravyx (19/10): importar site, editor de código e galeria de modelos.
 import { type ContextoDoCodigo, rotasDoCodigoEModelos } from "./codigo-e-modelos.ts";
 import { lerLinkDoCliente } from "./modulos/leitura-do-link.ts";
+import { copyDaCasaParaOMotor } from "./modulos/motor-da-construcao.ts";
+// Jornada nova (25/10): contexto do cliente, objetivo e partida, galeria de sites prontos e copy da página.
+import { ACOES_LONGAS_DA_JORNADA, rotasDaJornada } from "./jornada.ts";
 import { ACOES_LONGAS_DA_BASE, baseInicialDoSite, estimarDaBase, rotasDaBase } from "./base-de-design.ts";
 import { itensDaBaseDeDesign, regrasDoMapa } from "../_shared/uiux/base-completa.ts";
 import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimentoDaBaseDeDesign, TETO_DO_BLOCO_DO_DIRETOR } from "../_shared/uiux/citar.ts";
@@ -984,7 +989,9 @@ async function pacoteDoMotor(s: LinhaDoSite, anexos: Array<{ bucket: string; pat
   const contextoDaMarca = await CONTEXTO_DO_AGENTE.ler(servico(), s.client_id, ["arte", "copy", "geral"], { marca: marca || s.marca_id, partes: ["estrategia", "briefing", "decisoes", "cerebro"], area: "site", teto: 6000 })
     .catch((e) => (registrarFalha("mesa-site: contexto do motor", e), ""));
   const extras = anexos.map((a, i) => ({ bucket: a.bucket, path: a.path, destino: `referencias/anexo-${i + 1}-${a.nome.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60)}` }));
-  return { ...pacote, arquivos: [...arquivos, ...extras], regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`), contexto_da_marca: contextoDaMarca || null } as unknown as Record<string, unknown>;
+  // MCC (25/10): o guia e os ganchos da casa para o microtexto do agente (a copy das seções segue a do pacote).
+  const copyDaCasa = await copyDaCasaParaOMotor(servico(), pacote as unknown as Record<string, unknown>, s.id);
+  return { ...pacote, arquivos: [...arquivos, ...extras], regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`), contexto_da_marca: contextoDaMarca || null, copy_da_casa: copyDaCasa } as unknown as Record<string, unknown>;
 }
 
 /**
@@ -1208,10 +1215,11 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   ...(rotasDaPrevia(PREVIA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
   ...(rotasDaPublicacao(PUBLICACAO) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
   ...(rotasDoCodigoEModelos(CODIGO) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
+  ...(rotasDaJornada(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
 };
 
 /** IA ou rede: a resposta começa na hora (a plataforma corta em 150 s sem resposta). */
-const ACOES_LONGAS = new Set(["link_ler", "referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", ...ACOES_LONGAS_DA_PUBLICACAO, ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE]);
+const ACOES_LONGAS = new Set(["link_ler", "referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", ...ACOES_LONGAS_DA_PUBLICACAO, ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE, ...ACOES_LONGAS_DA_JORNADA]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

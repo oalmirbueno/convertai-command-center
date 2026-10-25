@@ -139,7 +139,14 @@ O preset do pacote (`estilo.preset_rotulo`) define a estética; a paleta é semp
 | `vidro_aurora` | Vidro e aurora | escuro | camadas de vidro sobre luz difusa, cena presa na rolagem |
 | `produto_em_cena` | Produto em cena | escuro | o produto como herói, luz de estúdio e rolagem presa |
 
+## Partida: referência ou site pronto
+Quando o pedido da passada traz `PARTIDA:`, a seção segue uma referência ou um site pronto:
+- **Referência** (modos fiel, próximo ou criativo): o motor já capturou o site em `referencias/referencia/` (`estrutura.json` e os prints em fatias `computador-N.jpg` e `celular-N.jpg`). Siga a estrutura no modo pedido.
+- **Site pronto** (coleção de código aberto da Mesa Site): a cópia está em `referencias/modelo-pronto/` (HTML, SCSS do tema e LICENSE). Reescreva o bloco em React no método da casa.
+- **Autoria, sempre:** da referência ou do modelo vale a forma (ordem, grade, ritmo, hierarquia, comportamento); texto, logo, nome, fotos, ícones próprios, vídeos e código da referência nunca entram. Todo texto vem do pacote e toda imagem de `public/`. O motor confere no fim se o site levou trecho da referência.
+- `referencias/` é só leitura: não edite nem apague.
+
 ## Estrutura
 - `src/secoes/index.ts`: `SECOES` com o id e o componente de cada seção (a ordem de cada página vem do pacote).
-- Casca da casa (o motor atualiza sozinho, repõe o original se mudar e nega a edição): `AGENTS.md`, `.gitignore`, `index.html`, `vite.config.ts`, `scripts/*`, `src/App.tsx`, `src/main.tsx`, `src/entry-server.tsx`, `src/lib/pacote.ts`, `src/lib/integracoes.tsx`, `src/lib/movimento.ts`, `src/lib/Revelar.tsx`, `src/lib/rolagem.ts`, `src/lib/Grafico.tsx`. Também não se edita o que roda na máquina ou é do motor: `package.json`, `.aceleriq/` (menos `.aceleriq/ux/`, a sua prova de UX), `.git/`, `.opencode/`, `src/marca.css` e `public/marca/`.
+- Casca da casa (o motor atualiza sozinho, repõe o original se mudar e nega a edição): `AGENTS.md`, `.gitignore`, `index.html`, `vite.config.ts`, `scripts/*`, `src/App.tsx`, `src/main.tsx`, `src/entry-server.tsx`, `src/lib/pacote.ts`, `src/lib/integracoes.tsx`, `src/lib/movimento.ts`, `src/lib/Revelar.tsx`, `src/lib/rolagem.ts`, `src/lib/Grafico.tsx`. Também não se edita o que roda na máquina ou é do motor: `package.json`, `.aceleriq/` (menos `.aceleriq/ux/`, a sua prova de UX), `.git/`, `.opencode/`, `.claude/`, `CLAUDE.md`, `referencias/`, `src/marca.css` e `public/marca/`.
 - `src/entry-server.tsx` e `scripts/prerender.mjs`: pré-render para SEO (o HTML de cada página sai pronto).

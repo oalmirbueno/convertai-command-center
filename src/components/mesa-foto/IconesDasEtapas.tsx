@@ -128,6 +128,12 @@ export const ICONES_DAS_ETAPAS: Partial<Record<QualMesa, Record<string, LucideIc
     entrega: PackageCheck,
   },
   site: {
+    // 25/10: os passos da jornada (as etapas abaixo seguem como "avançado").
+    objetivo: Target,
+    partida: Route,
+    conferir: ClipboardCheck,
+    construir: WandSparkles,
+    ajustar: MessagesSquare,
     briefing: ClipboardList,
     referencias: Telescope,
     direcao: Compass,

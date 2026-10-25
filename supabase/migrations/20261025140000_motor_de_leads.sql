@@ -1,5 +1,5 @@
 -- Motor "leads" do Aceleriq Motores e as URLs coladas na Máquina de leads (25/10/2026).
--- Complementa 20261025100000_comercial_mercurio_e_maquina_de_leads.sql. Só amplia e é idempotente.
+-- Complementa 20261025130000_comercial_mercurio_e_maquina_de_leads.sql. Só amplia e é idempotente.
 --
 -- 1) leads_buscas.urls: os sites que a equipe cola (fonte "lista") passam pela mesma leitura do site.
 -- 2) O motor "leads" (worker Node que chama o buscador em Python com Scrapling, workers/leads) passa a ser

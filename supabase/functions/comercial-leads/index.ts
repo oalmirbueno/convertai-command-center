@@ -1,6 +1,6 @@
 /**
- * Máquina de leads (25/10/2026). Contrato: supabase/migrations/20261025100000_comercial_mercurio_e_maquina_de_leads.sql
- * e 20261025110000_motor_de_leads.sql. Quem busca é o worker "leads" desta casa (workers/leads, Python com
+ * Máquina de leads (25/10/2026). Contrato: supabase/migrations/20261025130000_comercial_mercurio_e_maquina_de_leads.sql
+ * e 20261025140000_motor_de_leads.sql. Quem busca é o worker "leads" desta casa (workers/leads, Python com
  * Scrapling: OpenStreetMap e o site da própria empresa, robots.txt respeitado, sem disfarce). Aqui:
  *
  *   listar_buscas {}                                   -> { buscas }

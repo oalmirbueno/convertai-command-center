@@ -113,6 +113,8 @@ export type NovoTrabalho = {
   /** SPV: de quando é o pacote (sites.pacote_mudou_em lido junto): a prévia só troca o pacote de um pedido na fila por um mais novo. */
   pacoteDe?: string | null;
   userId: string;
+  /** MCC (25/10): o contrato da construção da jornada (objetivo, partida, motor, modelo_id, contexto_do_cliente; mesa-site/modulos/jornada-do-site.ts), gravado em pedido.* para o worker. */
+  extras?: Record<string, unknown> | null;
 };
 
 /** Grava o pedido na fila com o teto reservado. Recusa com motivo claro, antes de gravar. */
@@ -154,6 +156,8 @@ export async function criarTrabalho(db: SupabaseClient, n: NovoTrabalho): Promis
     modelo: o.modelo ? o.modelo.id : null,
     instrucao: o.pedido.instrucao,
     pedido: {
+      // Os campos fixos vêm depois e vencem um extra com o mesmo nome.
+      ...(n.extras && typeof n.extras === "object" ? n.extras : {}),
       secoes: o.pedido.secoes,
       secao: o.pedido.secao,
       alvo_trabalho_id: o.pedido.alvo_trabalho_id,

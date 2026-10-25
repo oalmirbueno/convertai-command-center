@@ -52,7 +52,8 @@ export default function ListaDeSites({ marcaId, marcaNome, onAbrir, icone }: { m
       const d = await chamarSite<{ site: LinhaDoSite }>("site_criar", { client_id: clientId, nome: n, tipo, marca_id: marcaId || undefined });
       setNomeDigitado(null);
       void qc.invalidateQueries({ queryKey: CHAVES.sites(clientId, marcaId) });
-      onAbrir(d.site.id, "briefing");
+      // 25/10: o site novo abre na jornada (primeiro o objetivo).
+      onAbrir(d.site.id, "objetivo");
     } catch (e) {
       avisarErro(e, "O site não foi criado");
     } finally {
@@ -71,7 +72,7 @@ export default function ListaDeSites({ marcaId, marcaNome, onAbrir, icone }: { m
 
   const linha = (s: LinhaDoSite) => (
     <li key={s.id} className={lista.linha} data-site={s.id}>
-      <button type="button" className="mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => onAbrir(s.id, s.etapa)}>
+      <button type="button" className="mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => onAbrir(s.id)}>
         <Globe className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="min-w-0 flex-1">
           <span className={juntar(texto.corpo, "block truncate font-medium")}>{s.nome}</span>
@@ -129,7 +130,7 @@ export default function ListaDeSites({ marcaId, marcaNome, onAbrir, icone }: { m
           </div>
         </form>
         {sitesQ.data && sitesQ.data.aviso && <p className={texto.auxiliar}>{sitesQ.data.aviso}</p>}
-        {!vivos.length && !sitesQ.isLoading && <EstadoVazio compacto icone={<Globe className="h-5 w-5" />} titulo="Nenhum site ainda." descricao="Escolha o tipo e comece pelo briefing." />}
+        {!vivos.length && !sitesQ.isLoading && <EstadoVazio compacto icone={<Globe className="h-5 w-5" />} titulo="Nenhum site ainda." descricao="Crie um e escolha o objetivo." />}
         {vivos.length > 0 && <ul className={juntar(lista.aberta, lista.divisoria)}>{vivos.map(linha)}</ul>}
       </Secao>
       {arquivados.length > 0 && (
