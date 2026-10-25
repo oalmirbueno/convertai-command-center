@@ -2545,6 +2545,14 @@
       "remote_name": "motor_de_leads",
       "remote_statements_sha256": "2de409abc4dc86cb6d88e3b3323092434a85389af02dcae8284c9a0250a7b141",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261025160000",
+      "path": "supabase/migrations/20261025160000_ponte_laboratorio_campanhas.sql",
+      "local_sha256": "719267da18dcf682fd333ba4ab800f900562a49ec6f605cb16de98bcd7f80e86",
+      "remote_name": "ponte_laboratorio_campanhas",
+      "remote_statements_sha256": "13ccbf4d33a5bdb0ac8cdf485be45a056c185eb5aa1f8092ad164f79afc12043",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
