@@ -44,7 +44,7 @@ export default function CampanhasDaMeta({
   return (
     <section className="min-w-0 space-y-3 border-t border-border pt-4" aria-label="Campanhas da Meta e Mercúrio">
       <div className="flex min-w-0 items-center">
-        <h3 className={juntar(texto.tituloSecao, "min-w-0 flex-1 text-[14px]")}>Campanhas da Meta ligadas</h3>
+        <h3 className={juntar(texto.tituloSecao, "min-w-0 flex-1")}>Campanhas da Meta ligadas</h3>
         <AjudaRecolhida rotulo="Para que serve ligar a campanha da Meta">
           O lead que chega de um anúncio destas campanhas entra nesta campanha sozinho, e o custo por cliente sai certo.
         </AjudaRecolhida>
@@ -86,7 +86,7 @@ export default function CampanhasDaMeta({
                   {[rotuloDoStatusDaMeta(c.status), c.cliente].filter(Boolean).join(" · ")}
                 </span>
               </span>
-              <button type="button" onClick={() => trocar(c.campaign_id)} className={juntar(botao.secundario, "ml-2 h-7 px-2 text-[12px]")} aria-label={`Ligar ${c.nome}`}>
+              <button type="button" onClick={() => trocar(c.campaign_id)} className={juntar(botao.secundario, "ml-2")} aria-label={`Ligar ${c.nome}`}>
                 Ligar
               </button>
             </li>

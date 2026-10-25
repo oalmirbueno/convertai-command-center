@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, ExternalLink, MessageCircle, Phone, Settings2 } from "lucide-react";
+import { ExternalLink, MessageCircle, Phone, Settings2 } from "lucide-react";
 import { toast } from "sonner";
-import { AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, campo, campoTexto, foco, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, AreaDeTrabalho, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import {
   CONFIG_PADRAO,
   dadosLegiveis,
@@ -64,13 +64,14 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
       id={`caixa-${item.id}`}
       data-item-da-caixa={item.id}
       data-tipo={item.tipo}
-      className={juntar("min-w-0 border-t border-border py-3 first:border-t-0", destacado && "-mx-2 rounded-md bg-primary/5 px-2 ring-1 ring-primary/40")}
+      className={juntar("grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 border-t border-border py-4 first:border-t-0 lg:grid-cols-[minmax(0,1fr)_240px]", destacado && "-mx-3 rounded-md bg-primary/5 px-3 ring-1 ring-primary/40")}
     >
+      <div className="min-w-0">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className={juntar("rounded px-1.5 text-[11px] font-semibold leading-5", item.tipo === "fechou" ? "bg-success/15 text-success" : "bg-primary/15 text-primary")}>
+        <span className={juntar(texto.etiqueta, "rounded px-1.5 leading-5", item.tipo === "fechou" ? "bg-success/15 text-success" : "bg-primary/15 text-primary")}>
           {item.tipo === "fechou" ? "Fechou" : "Avançou"}
         </span>
-        <span className="min-w-0 truncate text-[14px] font-medium text-foreground">
+        <span className={juntar(texto.tituloSecao, "min-w-0 truncate")}>
           {item.lead ? item.lead.company || item.lead.name : "Lead"}
           {item.lead && item.lead.company && item.lead.name !== item.lead.company ? <span className="font-normal text-muted-foreground"> · {item.lead.name}</span> : null}
         </span>
@@ -81,58 +82,60 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
       </div>
       <p className={juntar(texto.corpo, "mt-1 whitespace-pre-line")}>{item.resumo}</p>
       {item.proximo_passo && (
-        <p className="mt-1 text-[13px] leading-5">
+        <p className={juntar(texto.corpo, "mt-1")}>
           <span className="font-medium">Próximo passo:</span> {item.proximo_passo}
         </p>
       )}
       {dados.length > 0 && (
-        <dl className="mt-2 grid min-w-0 grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Dados levantados">
+        <dl className="mt-3 grid min-w-0 grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 2xl:grid-cols-3" aria-label="Dados levantados">
           {dados.map((d) => (
-            <div key={d.chave} className="flex min-w-0 text-[12px] leading-4">
+            <div key={d.chave} className={juntar(texto.auxiliar, "flex min-w-0")}>
               <dt className="mr-1 shrink-0 text-muted-foreground">{d.chave}:</dt>
               <dd className="min-w-0 break-words text-foreground">{d.valor}</dd>
             </div>
           ))}
         </dl>
       )}
-      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1">
+      </div>
+      {/* As ações numa coluna fixa no largo (a mesma largura em todos os itens); em linha no celular. */}
+      <div className="flex min-w-0 flex-wrap content-start items-stretch gap-2 lg:flex-col">
         {whatsapp ? (
-          <a href={whatsapp} target="_blank" rel="noreferrer" className={juntar(botao.primario, "h-8 px-3 text-[12px]")} aria-label={`Continuar no WhatsApp com ${nome || "o lead"}`}>
-            <MessageCircle className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          <a href={whatsapp} target="_blank" rel="noreferrer" className={juntar(botao.primario, "lg:w-full")} aria-label={`Continuar no WhatsApp com ${nome || "o lead"}`}>
+            <MessageCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Continuar no WhatsApp
           </a>
         ) : (
           <span className={texto.auxiliar}>Sem telefone</span>
         )}
         {ligar && (
-          <a href={ligar} className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} aria-label={`Ligar para ${nome || "o lead"}`}>
-            <Phone className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          <a href={ligar} className={juntar(botao.secundario, "lg:w-full")} aria-label={`Ligar para ${nome || "o lead"}`}>
+            <Phone className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {telefone}
           </a>
         )}
         {aoAbrirLead && (
-          <button type="button" onClick={aoAbrirLead} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
-            <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          <button type="button" onClick={aoAbrirLead} className={juntar(botao.secundario, "lg:w-full")}>
+            <ExternalLink className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Abrir o lead
           </button>
         )}
-        <span className="ml-auto flex items-center gap-1">
+        <div className="flex min-w-0 gap-2 lg:w-full">
           {item.situacao === "nova" && (
-            <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.secundario, "h-8 px-3 text-[12px]")}>
+            <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.secundario, "flex-1")}>
               Assumir
             </button>
           )}
           {item.situacao !== "concluida" && (
-            <button type="button" disabled={mudando} onClick={() => void mudar("concluida")} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
+            <button type="button" disabled={mudando} onClick={() => void mudar("concluida")} className={juntar(botao.discreto, "flex-1")}>
               Concluir
             </button>
           )}
           {item.situacao === "concluida" && (
-            <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
+            <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.discreto, "flex-1")}>
               Reabrir
             </button>
           )}
-        </span>
+        </div>
       </div>
     </li>
   );
@@ -159,44 +162,43 @@ function ConfigDoMercurio() {
     }
   };
   return (
-    <details className="group min-w-0 border-t border-border pt-3" data-config-do-mercurio="">
-      <summary className={juntar("flex cursor-pointer list-none items-center rounded-sm", foco)}>
-        <ChevronRight className="mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true" />
+    <section className="min-w-0 p-4" aria-label="Configuração do Mercúrio" data-config-do-mercurio="">
+      <div className="flex min-w-0 items-center">
         <Settings2 className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <span className={juntar(texto.tituloSecao, "text-[14px]")}>Configuração do Mercúrio</span>
-        <span className={juntar(texto.auxiliar, "ml-2")}>{atual.ativo ? "ligado" : "desligado"}</span>
-      </summary>
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex items-center text-[13px]">
+        <h2 className={juntar(texto.tituloSecao, "min-w-0 flex-1")}>Mercúrio</h2>
+        <span className={texto.auxiliar}>{atual.ativo ? "ligado" : "desligado"}</span>
+      </div>
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3">
+        <label className={juntar(texto.corpo, "flex items-center")}>
           <input type="checkbox" className="mr-2" checked={atual.ativo} onChange={(e) => mudar({ ativo: e.target.checked })} />
           O Mercúrio está atendendo
         </label>
-        <label className="block text-[12px] text-muted-foreground">
+        <label className={juntar(texto.rotulo, "block")}>
           Primeiros contatos por dia
           <input type="number" min={0} max={500} value={atual.limite_primeiros_contatos_dia} onChange={(e) => mudar({ limite_primeiros_contatos_dia: Number(e.target.value) || 0 })} className={juntar(campo, "mt-1")} aria-label="Primeiros contatos por dia" />
         </label>
-        <label className="block text-[12px] text-muted-foreground">
+        <label className={juntar(texto.rotulo, "block")}>
           Começa às
           <input type="time" value={atual.horario_inicio} onChange={(e) => mudar({ horario_inicio: e.target.value })} className={juntar(campo, "mt-1")} aria-label="Começa às" />
         </label>
-        <label className="block text-[12px] text-muted-foreground">
+        <label className={juntar(texto.rotulo, "block")}>
           Para às
           <input type="time" value={atual.horario_fim} onChange={(e) => mudar({ horario_fim: e.target.value })} className={juntar(campo, "mt-1")} aria-label="Para às" />
         </label>
-        <label className="block text-[12px] text-muted-foreground sm:col-span-2">
+        <label className={juntar(texto.rotulo, "block")}>
           Orientações para o Mercúrio
           <textarea value={atual.orientacoes || ""} onChange={(e) => mudar({ orientacoes: e.target.value })} rows={3} placeholder="Tom, o que oferecer primeiro, o que nunca prometer" className={juntar(campoTexto, "mt-1 resize-y")} aria-label="Orientações para o Mercúrio" />
         </label>
       </div>
-      <div className="mt-2 flex items-center justify-end">
+      <div className="mt-3 flex items-center justify-end">
         <AjudaRecolhida className="mr-auto" rotulo="Sobre o limite de contatos">
           O limite vale só para o primeiro contato com quem ainda não conversou com a casa, como os leads da máquina de leads. Conversa que já começou não conta.
         </AjudaRecolhida>
-        <button type="button" disabled={salvando || !form} onClick={() => void salvar()} className={juntar(botao.primario, "h-8 px-3 text-[12px]")}>
+        <button type="button" disabled={salvando || !form} onClick={() => void salvar()} className={botao.primario}>
           {salvando ? "Salvando…" : "Salvar"}
         </button>
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -235,7 +237,8 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
   };
 
   return (
-    <section className="min-w-0 space-y-3" aria-label="Caixa do comercial">
+    <AreaDeTrabalho rotuloDoPrincipal="Caixa do comercial" memoriaDaRolagem="comercial:caixa" lateral={<ConfigDoMercurio />} rotuloDaLateral="Mercúrio">
+    <section className="min-w-0 space-y-4" aria-label="Caixa do comercial">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SeletorCompacto
           rotulo="Situação na Caixa"
@@ -253,7 +256,7 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
       ) : caixa.isError ? (
         <EstadoDeErro
           titulo="Não foi possível ler a Caixa."
-          acao={<button type="button" onClick={() => void caixa.refetch()} className={juntar(botao.secundario, "h-8")}>Tentar de novo</button>}
+          acao={<button type="button" onClick={() => void caixa.refetch()} className={botao.secundario}>Tentar de novo</button>}
         />
       ) : visiveis.length === 0 ? (
         <EstadoVazio titulo={filtro === "nova" ? "Nada novo na Caixa." : filtro === "assumida" ? "Nada assumido." : "Nada concluído ainda."} />
@@ -273,7 +276,7 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
           })}
         </ul>
       )}
-      <ConfigDoMercurio />
     </section>
+    </AreaDeTrabalho>
   );
 }

@@ -111,7 +111,7 @@ export default function AgenteDoLead({ lead, aoMudar }: { lead: Lead; aoMudar: (
       </div>
 
       <section className="min-w-0" aria-label="Sugestões do agente">
-        <h3 className={juntar(texto.tituloSecao, "mb-1 text-[14px]")}>Para confirmar {sugestoes.length > 0 ? `(${sugestoes.length})` : ""}</h3>
+        <h3 className={juntar(texto.tituloSecao, "mb-1")}>Para confirmar {sugestoes.length > 0 ? `(${sugestoes.length})` : ""}</h3>
         {fatos.isLoading ? (
           <Carregando linhas={2} />
         ) : sugestoes.length === 0 ? (
@@ -147,7 +147,7 @@ export default function AgenteDoLead({ lead, aoMudar }: { lead: Lead; aoMudar: (
 
       {gravados.length > 0 && (
         <section className="min-w-0" aria-label="O que o agente gravou">
-          <h3 className={juntar(texto.tituloSecao, "mb-1 text-[14px]")}>Gravado com prova</h3>
+          <h3 className={juntar(texto.tituloSecao, "mb-1")}>Gravado com prova</h3>
           <ul className="min-w-0">
             {gravados.map((f) => (
               <LinhaDoFato key={f.id} fato={f} />
@@ -157,7 +157,7 @@ export default function AgenteDoLead({ lead, aoMudar }: { lead: Lead; aoMudar: (
       )}
 
       <section className="min-w-0" aria-label="História do agente">
-        <h3 className={juntar(texto.tituloSecao, "mb-1 text-[14px]")}>O que o agente fez</h3>
+        <h3 className={juntar(texto.tituloSecao, "mb-1")}>O que o agente fez</h3>
         {(historia.data || []).length === 0 ? (
           <p className={texto.auxiliar}>Nada registrado pelo agente ainda.</p>
         ) : (

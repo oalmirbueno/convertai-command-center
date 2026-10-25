@@ -1363,7 +1363,7 @@ function EditorDeLead({
   return (
     <Dialog open onOpenChange={(aberto) => { if (!aberto) void fechar(); }}>
       {/* Sem espaço embaixo: a barra de salvar gruda rente ao pé da janela. */}
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-2xl overflow-y-auto pb-0">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-4xl overflow-y-auto pb-0">
         <DialogHeader>
           <DialogTitle className="truncate pr-6 text-[15px]">{lead ? lead.name : "Novo lead"}</DialogTitle>
           {lead && <p className={texto.auxiliar}>{rotuloDoEstagio(lead.stage)}{lead.company ? ` · ${lead.company}` : ""}</p>}
@@ -1822,7 +1822,7 @@ function EditorDeCampanha({
 
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && onFechar()}>
-      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="truncate pr-6 text-[15px]">{campanha ? campanha.name : "Nova campanha"}</DialogTitle>
         </DialogHeader>

@@ -90,7 +90,7 @@ export default function ConversaDoLead({ leadId, nomeDoLead }: { leadId: string;
         </div>
         <textarea value={textoNovo} onChange={(e) => setTextoNovo(e.target.value)} rows={2} placeholder="Registrar uma mensagem que aconteceu fora do painel" className={juntar(campoTexto, "resize-y")} aria-label="Texto da mensagem" />
         <div className="flex justify-end">
-          <button type="submit" disabled={gravando || !textoNovo.trim()} className={juntar(botao.secundario, "h-8 px-3 text-[12px]")}>
+          <button type="submit" disabled={gravando || !textoNovo.trim()} className={botao.secundario}>
             {gravando ? "Registrando…" : "Registrar mensagem"}
           </button>
         </div>
