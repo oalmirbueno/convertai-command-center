@@ -2529,6 +2529,22 @@
       "remote_name": "modelo_da_copy_do_site",
       "remote_statements_sha256": "4c6bf3693160046365aa35215126cc41019ee3d90e4ece322690b1a90605f2ae",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261025130000",
+      "path": "supabase/migrations/20261025130000_comercial_mercurio_e_maquina_de_leads.sql",
+      "local_sha256": "9191136b503d0f5767dc4d29a933e1f5f5e6ef316ac1687095292d2b1fd8b1f8",
+      "remote_name": "comercial_mercurio_e_maquina_de_leads",
+      "remote_statements_sha256": "fb3c0c65250ebcf4f364a079c02030234e3b05e53dd9d2bbd0a9daaee69f6c8b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261025140000",
+      "path": "supabase/migrations/20261025140000_motor_de_leads.sql",
+      "local_sha256": "a2e1d316ddb40f296bb01faf36a1f14fe218ad20bcc988adcfb74dfc2192637b",
+      "remote_name": "motor_de_leads",
+      "remote_statements_sha256": "2de409abc4dc86cb6d88e3b3323092434a85389af02dcae8284c9a0250a7b141",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
