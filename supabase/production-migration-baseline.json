@@ -2521,6 +2521,14 @@
       "remote_name": "fim_de_semana_por_cliente",
       "remote_statements_sha256": "b435fb56d2e23dc236b2a26079a8c43c4781351d49d7df18cf2adb2cf871a123",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261025120000",
+      "path": "supabase/migrations/20261025120000_modelo_da_copy_do_site.sql",
+      "local_sha256": "842c6f06d808c0ac15b90c55566c2863fe5d3a14459fb978f18be888ca57840f",
+      "remote_name": "modelo_da_copy_do_site",
+      "remote_statements_sha256": "4c6bf3693160046365aa35215126cc41019ee3d90e4ece322690b1a90605f2ae",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
