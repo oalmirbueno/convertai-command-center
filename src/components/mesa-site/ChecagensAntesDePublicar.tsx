@@ -133,6 +133,7 @@ export default function ChecagensAntesDePublicar({
   onResultado,
   conferenciaDoMotor = null,
   trabalhos = [],
+  embutida = false,
 }: {
   site: LinhaDoSite;
   urlDoMotor: string | null;
@@ -142,6 +143,8 @@ export default function ChecagensAntesDePublicar({
   conferenciaDoMotor?: ConferenciaDoMotor | null;
   /** Os trabalhos do site (a trava do "corrigir uma vez só" lê a lista). */
   trabalhos?: TrabalhoDoMotor[];
+  /** 25/10: parte do bloco único de publicar (subtítulo de nível 3, sem recolher à parte). */
+  embutida?: boolean;
 }) {
   const { clientId } = useMesa();
   const qc = useQueryClient();
@@ -251,10 +254,11 @@ export default function ChecagensAntesDePublicar({
 
   return (
     <Secao
-      titulo="Checagens antes de publicar"
+      titulo={embutida ? "Checagens" : "Checagens antes de publicar"}
       descricao={descricao}
+      nivel={embutida ? 3 : 2}
       ajuda="Antes de publicar, a mesa confere a página no celular e no computador, sem IA e sem custo: texto passando da borda ou cortado, link quebrado ou vazio, imagem sem alt (descrição), contraste baixo entre texto e fundo, títulos repetidos e página pesada. Usa o site do motor quando ele responde; senão, a prévia rápida (lá os botões ainda não têm destino de propósito, então o # não conta). Depois de cada build, o motor também abre o site num navegador de verdade (computador 1440x900 e celular 390x844) e mede erro de execução, imagem quebrada, conteúdo vazando para o lado e texto cortado; problema grave dessa conferência trava o Publicar até a equipe marcar publicar mesmo assim. Corrigir o que a conferência achou manda UMA passada ao motor, com o custo antes; depois dela a conferência roda de novo e o que sobrar é decisão da equipe. Ir até o problema abre a página marcada no ponto. Pedir correção ao diretor só preenche o pedido; enviar e o custo continuam com você."
-      recolher="mesa-site:publicacao:checagens"
+      recolher={embutida ? false : "mesa-site:publicacao:checagens"}
       acao={
         <button type="button" className={botao.icone} aria-label="Checar de novo" title="Checar de novo (sem custo)" disabled={checando || (!montada && !motorPublico)} onClick={() => void checar()} data-checar-de-novo="">
           {checando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -293,6 +297,11 @@ export default function ChecagensAntesDePublicar({
                   {p.aparelho ? ` · ${p.aparelho}` : ""}
                 </span>
               </span>
+              {onPedirAoDiretor && (
+                <button type="button" className={juntar(botao.icone, "ml-1")} aria-label="Pedir a correção deste ao diretor" title="Pedir a correção deste ao diretor de site (você revisa e confirma o custo)" onClick={() => onPedirAoDiretor(pedidoDasChecagens([p]))} data-pedir-correcao-do-problema={p.id}>
+                  <MessageSquarePlus className="h-4 w-4" />
+                </button>
+              )}
               {p.caminho && (
                 <button type="button" className={juntar(botao.icone, "ml-1")} aria-label="Ir até o problema" title="Ir até o problema" onClick={() => { setAchou(null); setAberto(p); }} data-ir-ate-problema="">
                   <Crosshair className="h-4 w-4" />

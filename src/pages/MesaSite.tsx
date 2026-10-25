@@ -34,6 +34,7 @@ import EtapaComBarra from "@/components/mesa-site/BarraDaEtapa";
 import { pendenciasDasEtapas } from "@/components/mesa-site/estadoDoSite";
 // Gravyx (19/10): galeria de modelos e importar site (embaixo da lista) e o editor de código (ícone ao lado do nome).
 import GaleriaDeModelos from "@/components/mesa-site/GaleriaDeModelos";
+import BibliotecaDeSitesProntos from "@/components/mesa-site/BibliotecaDeSitesProntos";
 import BotaoDoCodigo from "@/components/mesa-site/BotaoDoCodigo";
 
 /**
@@ -337,10 +338,14 @@ export default function MesaSite() {
       {valor && (
         <MesaProvider valor={valor}>
           {!site && (
-            <RegiaoRolavel modo="lg" memoria={`mesa-site:${clientId}:sites`} className="pb-6">
+            // 25/10 (dono: "não roda o scroll"): a tela inicial rola com a página. A RegiaoRolavel daqui
+            // (overflow-y-auto + overscroll-contain sem altura fixa, porque não há AreaDeTrabalho) engolia a
+            // roda do mouse no computador e a lista nunca rolava. Largura das mesas, sem coluna central.
+            <div className="min-w-0 space-y-8 pb-6" data-inicio-da-mesa-site="">
               {sitesCarregando ? <Carregando forma="lista" rotulo="Lendo os sites" /> : <ListaDeSites marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || null })} icone={<Plus className="h-4 w-4" />} />}
+              {!sitesCarregando && <BibliotecaDeSitesProntos marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "conferir" })} />}
               {!sitesCarregando && <GaleriaDeModelos marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} />}
-            </RegiaoRolavel>
+            </div>
           )}
           {site && (
             <AreaDeTrabalho
@@ -358,7 +363,9 @@ export default function MesaSite() {
             >
               {/* UXS 30/09: a barra da etapa (Voltar, Salvar, Seguir) fica fora da região que rola, no pé. */}
               <EtapaComBarra etapa={etapa} onIrPara={irPara} etapas={naJornada ? PASSOS_DA_JORNADA : ETAPAS_DO_SITE}>
-                <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-site:${site.id}:${etapa}`} className="pb-6 lg:pr-1" data-regiao-da-etapa={etapa}>
+                {/* 25/10: lg:pr-2 cobre o -mx-2 das listas abertas na borda direita (a lista de seções da prévia passava
+                    4 px e a região ganhava uma rolagem lateral no pé); lateral nunca rola nesta região. */}
+                <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-site:${site.id}:${etapa}`} className="pb-6 lg:overflow-x-hidden lg:pr-2" data-regiao-da-etapa={etapa}>
                   <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
                     {etapa === "objetivo" && <PassoObjetivo site={site} onIrPara={irPara} />}
                     {etapa === "partida" && <PassoPartida site={site} />}
@@ -373,7 +380,7 @@ export default function MesaSite() {
                     {etapa === "integracoes" && <EtapaIntegracoes site={site} onIrPara={irPara} />}
                     {etapa === "construcao" && <EtapaConstrucao site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
                     {etapa === "revisao" && <EtapaRevisao site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
-                    {etapa === "publicacao" && <EtapaPublicacao site={site} onPedirAoDiretor={pedirAoDiretor} />}
+                    {etapa === "publicacao" && <EtapaPublicacao site={site} onPedirAoDiretor={pedirAoDiretor} onIrPara={irPara} />}
                   </Suspense>
                 </RegiaoRolavel>
               </EtapaComBarra>

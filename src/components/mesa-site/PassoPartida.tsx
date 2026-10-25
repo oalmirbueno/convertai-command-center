@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, LayoutTemplate, Link as LinkIcone, Sparkles, Star } from "lucide-react";
+import { LayoutTemplate, Link as LinkIcone, Sparkles } from "lucide-react";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import Secao from "@/components/sistema/Secao";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, espaco, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
 import { MODOS_DA_REFERENCIA, type ModoDaReferencia, objetivoDoSite, type PartidaDoSite, type TipoDePartida, urlPublicaDaReferencia } from "../../../supabase/functions/mesa-site/modulos/jornada-do-site";
 import { type LinhaDoSite, useSalvarSite } from "./siteApi";
 import { jornadaDoSite, useModelosProntos } from "./jornadaApi";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
-import { opcaoDaGrade } from "./PassoObjetivo";
+import { gradeDeOpcoes, opcaoDaGrade } from "./PassoObjetivo";
+import GaleriaDeSitesProntos from "./GaleriaDeSitesProntos";
 
 const PARTIDAS: Array<{ id: TipoDePartida; rotulo: string; descricao: string; Icone: typeof Sparkles }> = [
   { id: "zero", rotulo: "Do zero", descricao: "o motor cria pelo método da casa", Icone: Sparkles },
@@ -74,9 +75,9 @@ export default function PassoPartida({ site }: { site: LinhaDoSite }) {
   const modoAtual = MODOS_DA_REFERENCIA.find((m) => m.id === modo) || MODOS_DA_REFERENCIA[1];
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[960px] space-y-6" data-passo-partida="">
+    <div className={espaco.pagina} data-passo-partida="">
       <Secao titulo="Por onde começar?" descricao={objetivo ? objetivo.rotulo : "Sem objetivo"} ajuda="Do zero, o motor monta o mapa do objetivo pelo método da casa. De uma referência, ele segue o site que o cliente admira no modo escolhido. De um site pronto, ele parte de um repositório aberto da galeria. Em todos, o texto, as imagens e a marca são do cliente." recolher={false}>
-        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3" data-partidas="">
+        <ul className={gradeDeOpcoes} data-partidas="">
           {PARTIDAS.map((p) => (
             <li key={p.id} className="min-w-0">
               <button type="button" className={opcaoDaGrade(tipo === p.id)} aria-pressed={tipo === p.id} onClick={() => setTipo(p.id)} data-partida={p.id}>
@@ -136,46 +137,7 @@ export default function PassoPartida({ site }: { site: LinhaDoSite }) {
             />
           )}
           {prontos.data && !lista.length && <EstadoVazio compacto icone={<LayoutTemplate className="h-5 w-5" />} titulo="Nenhum site pronto para este objetivo." descricao="Comece do zero ou de uma referência." />}
-          {visiveis.length > 0 && (
-            <ul className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-galeria-de-prontos="">
-              {visiveis.map((m) => {
-                const escolhido = modeloId === m.id;
-                return (
-                  <li key={m.id} className="min-w-0" data-modelo-pronto={m.id}>
-                    <button type="button" className={juntar(opcaoDaGrade(escolhido), "flex-col items-stretch p-2")} aria-pressed={escolhido} onClick={() => setModeloId(m.id)} title={m.descricao}>
-                      <span className="block h-[132px] w-full overflow-hidden rounded-md bg-muted/50">
-                        {m.miniatura ? <img src={m.miniatura} alt="" loading="lazy" width={400} height={264} className="h-full w-full object-cover object-top" /> : null}
-                      </span>
-                      <span className="mt-2 flex min-w-0 items-center">
-                        <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{m.nome}</span>
-                        {recomendado === m.id && (
-                          <span className={juntar(etiqueta, "ml-1 shrink-0 bg-primary/10 text-primary")} title="Recomendado pelo Jev para este cliente" data-recomendado="">
-                            <Star className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
-                            Jev
-                          </span>
-                        )}
-                      </span>
-                      <span className={juntar(texto.auxiliar, "block truncate")}>{m.descricao}</span>
-                      <span className={juntar(texto.auxiliar, "mt-1 block truncate")} data-licenca={m.licenca}>
-                        Licença {m.licenca}
-                        {m.autor ? ` · ${m.autor}` : ""}
-                      </span>
-                    </button>
-                    <span className="mt-1 flex min-w-0 items-center">
-                      {m.previa_url && (
-                        <a href={m.previa_url} target="_blank" rel="noopener noreferrer" className={botao.icone} aria-label={`Ver ${m.nome} no ar`} title="Ver o modelo no ar">
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                        </a>
-                      )}
-                      <a href={m.repositorio} target="_blank" rel="noopener noreferrer" className={juntar(texto.auxiliar, "ml-1 min-w-0 truncate underline-offset-2 hover:underline")} title={`${m.repositorio} (commit ${m.commit.slice(0, 7)})`}>
-                        Repositório
-                      </a>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {visiveis.length > 0 && <GaleriaDeSitesProntos modelos={visiveis} escolhido={modeloId} recomendado={recomendado} onEscolher={setModeloId} data-galeria-de-prontos="" />}
         </Secao>
       )}
     </div>

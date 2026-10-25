@@ -308,3 +308,70 @@ describe("jornada: tela", () => {
     await waitFor(() => expect(corpos("mesa-site", "desfazer_acao_agente").length).toBe(1));
   });
 });
+
+// ---------------------------------------------------------------------------- 25/10: tela inicial e publicar
+
+import BibliotecaDeSitesProntos, { jornadaDoPronto } from "@/components/mesa-site/BibliotecaDeSitesProntos";
+import EtapaPublicacao from "@/components/mesa-site/EtapaPublicacao";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+describe("tela inicial e publicar (25/10, prints do dono)", () => {
+  const ler = (r: string) => readFileSync(resolve(__dirname, "../..", r), "utf8");
+
+  it("a tela inicial rola com a página e fica na largura das mesas; os passos não têm coluna estreita", () => {
+    const pagina = ler("src/pages/MesaSite.tsx");
+    const inicio = pagina.slice(pagina.indexOf("{!site && ("), pagina.indexOf("{site && ("));
+    // A RegiaoRolavel sem altura fixa (overflow-y-auto + overscroll-contain) engolia a roda do mouse.
+    expect(inicio).not.toMatch(/<RegiaoRolavel/);
+    expect(inicio).toContain("<BibliotecaDeSitesProntos");
+    // A região da etapa não pode ganhar rolagem lateral (a lista -mx-2 da prévia passava 4 px).
+    expect(pagina).toMatch(/data-regiao-da-etapa=\{etapa\}/);
+    expect(pagina).toMatch(/className="pb-6 lg:overflow-x-hidden lg:pr-2" data-regiao-da-etapa/);
+    for (const f of ["ListaDeSites", "GaleriaDeModelos", "PassoObjetivo", "PassoPartida", "PassoConferir", "PassoConstruir", "PassoAjustar"]) {
+      expect(ler(`src/components/mesa-site/${f}.tsx`)).not.toMatch(/max-w-\[(8|9)\d\dpx\]/);
+    }
+  });
+
+  it("a biblioteca mostra os 12 sites prontos com miniatura real e 'Usar este site' cria o site já com a partida", async () => {
+    rota("mesa-site", "sites_listar", () => ({ sites: [] }));
+    rota("mesa-site", "site_criar", (b) => ({ site: site({ id: "44444444-4444-4444-8444-444444444444", nome: b.nome, tipo: b.tipo }) }));
+    rota("mesa-site", "jornada_salvar", () => ({ site: site() }));
+    const onAbrir = vi.fn();
+    montar(h(BibliotecaDeSitesProntos, { marcaId: null, onAbrir }));
+    const cartoes = document.querySelectorAll("[data-modelo-pronto]");
+    expect(cartoes.length).toBe(MODELOS_PRONTOS.length);
+    expect(MODELOS_PRONTOS.length).toBe(12);
+    expect(document.querySelectorAll('[data-miniatura="real"] img').length).toBe(12);
+    // Imagem que não abre vira o ícone com o nome (nada de buraco).
+    fireEvent.error(document.querySelector('[data-modelo-pronto="agency"] img')!);
+    expect(document.querySelector('[data-modelo-pronto="agency"] [data-miniatura]')!.getAttribute("data-miniatura")).toBe("sem-imagem");
+    fireEvent.click(document.querySelector('[data-usar-pronto="agency"]')!);
+    await waitFor(() => expect(onAbrir).toHaveBeenCalledWith("44444444-4444-4444-8444-444444444444", "conferir"));
+    expect(corpos("mesa-site", "site_criar")[0]).toMatchObject({ tipo: "portfolio", client_id: CLIENTE });
+    expect(corpos("mesa-site", "jornada_salvar")[0]).toEqual({ acao: "jornada_salvar", ...jornadaDoPronto(MODELOS_PRONTOS.find((m) => m.id === "agency")!, "44444444-4444-4444-8444-444444444444") });
+    expect(corpos("mesa-site", "jornada_salvar")[0].partida).toEqual({ tipo: "modelo_pronto", modelo_id: "agency" });
+  });
+
+  it("publicar é um bloco só: estado em cima, endereço padrão ou domínio próprio, e 'Sem domínio' não se repete", async () => {
+    rota("mesa-site", "publicacao_estado", () => ({ vercel_ligada: true, faltas: [], dominio: null, registrador: "registro_br", cartao: null, estado: "sem_dominio", deploy_url: null, zip: null }));
+    rota("mesa-site", "versoes_listar", () => ({ versoes: [], aviso: null }));
+    rota("mesa-site", "previa_dados", () => {
+      throw new Error("fora do ar");
+    });
+    const estados: string[] = [];
+    const { container } = montar(h(EtapaComBarra, { etapa: "ajustar", onIrPara: vi.fn(), etapas: PASSOS_DA_JORNADA, children: h(EtapaPublicacao, { site: site() }) }));
+    await waitFor(() => expect(container.querySelector("[data-estado-da-publicacao]")).not.toBeNull());
+    estados.push(container.textContent || "");
+    expect(container.querySelector("[data-estado-da-publicacao]")!.textContent).toMatch(/Pronto para publicar/);
+    expect(container.querySelector('[data-endereco-do-site="padrao"]')).not.toBeNull();
+    expect((container.textContent || "").match(/Sem domínio/g)).toBeNull();
+    // Domínio próprio: o campo e o registrador aparecem no mesmo bloco.
+    fireEvent.click(within(container.querySelector("[data-endereco-do-site]") as HTMLElement).getByText("Domínio próprio"));
+    expect(container.querySelector("[data-dominio-proprio]")).not.toBeNull();
+    expect(screen.getByLabelText("Domínio do cliente")).toBeTruthy();
+    // Checagens, endereço e no ar moram no mesmo Secao "Publicar" (sem as três seções soltas de antes).
+    expect(container.querySelectorAll("h2").length).toBeGreaterThan(0);
+    expect(Array.from(container.querySelectorAll("h2")).map((x) => x.textContent)).not.toContain("Domínio");
+  });
+});

@@ -8,6 +8,7 @@ import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { rotuloDoTipo, secaoDaBiblioteca } from "../../../supabase/functions/_shared/site-biblioteca";
 import { esqueletoDoModelo, MODELOS_DE_PAGINA, nomeDoSiteDoModelo, type ModeloDePagina } from "../../../supabase/functions/mesa-site/modulos/modelos-de-pagina";
 import { CHAVES, chamarSite, type LinhaDoSite, useSites } from "./siteApi";
+import { gradeDeCartoes } from "./GaleriaDeSitesProntos";
 
 const ImportarSite = lazy(() => import("./ImportarSite"));
 
@@ -16,10 +17,13 @@ const alturaDaFaixa = (tipo: string) => (tipo === "hero" || tipo === "hero_divid
 
 function Esqueleto({ m }: { m: ModeloDePagina }) {
   return (
-    <div className="flex h-[112px] min-w-0 flex-col justify-start overflow-hidden rounded-md bg-muted/50 p-2" aria-hidden="true">
-      {esqueletoDoModelo(m).map((s, i) => (
-        <span key={`${s.tipo}-${i}`} className={juntar("mb-1 block w-full shrink-0 rounded-sm", alturaDaFaixa(s.tipo), s.tipo === "hero" || s.tipo === "hero_dividido" ? "bg-primary/25" : "bg-muted-foreground/15")} />
-      ))}
+    // Mesma proporção (16:10) da miniatura dos sites prontos: os cartões das duas galerias têm o mesmo tamanho.
+    <div className="relative w-full min-w-0 overflow-hidden rounded-md bg-muted/50" style={{ paddingTop: "62.5%" }} aria-hidden="true">
+      <div className="absolute inset-0 flex flex-col justify-start overflow-hidden p-2">
+        {esqueletoDoModelo(m).map((s, i) => (
+          <span key={`${s.tipo}-${i}`} className={juntar("mb-1 block w-full shrink-0 rounded-sm", alturaDaFaixa(s.tipo), s.tipo === "hero" || s.tipo === "hero_dividido" ? "bg-primary/25" : "bg-muted-foreground/15")} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -55,12 +59,14 @@ export default function GaleriaDeModelos({ marcaId, marcaNome, onAbrir }: { marc
   };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[880px] pt-6" data-galeria-de-modelos="">
+    <div className="min-w-0" data-galeria-de-modelos="">
       <Secao
         titulo="Modelos de página"
         descricao={`${MODELOS_DE_PAGINA.length} modelos`}
         ajuda="Cada modelo traz o mapa de seções, o estilo de partida e o objetivo da página. Usar modelo cria um site novo com a marca aberta (cores, fontes, logo e contexto dela, nunca de outra) e abre no Briefing; o motor constrói pelo método da casa. Pixel, Analytics e WhatsApp vêm das Integrações do cliente. O ícone de importar traz um site que já existe (zip, pasta ou HTML)."
-        recolher="mesa-site:sites:modelos"
+        // 25/10: os modelos esquemáticos ficam recolhidos embaixo dos sites prontos (chave nova: todos começam recolhidos).
+        recolher="mesa-site:sites:modelos-de-pagina"
+        recolhidaDeInicio
         acao={
           <button
             type="button"
@@ -77,7 +83,7 @@ export default function GaleriaDeModelos({ marcaId, marcaNome, onAbrir }: { marc
           </button>
         }
       >
-        <ul className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-modelos="">
+        <ul className={gradeDeCartoes} data-modelos="">
           {MODELOS_DE_PAGINA.map((m) => (
             <li key={m.id} className="flex min-w-0 flex-col" data-modelo={m.id}>
               <Esqueleto m={m} />

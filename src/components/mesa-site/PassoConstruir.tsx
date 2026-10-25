@@ -7,7 +7,7 @@ import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "@/components/mesa/Mo
 import Secao from "@/components/sistema/Secao";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
+import { botao, campo, espaco, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { nomeDoModelo, usd } from "@/lib/mesa/api";
 import { ehAberto, ROTULO_DO_TIPO, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { mapaDoSite, secoesDoMapa, tipoDoUid } from "../../../supabase/functions/_shared/site-biblioteca";
@@ -174,7 +174,7 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
   });
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[960px] space-y-6" data-passo-construir="">
+    <div className={espaco.pagina} data-passo-construir="">
       <p className={juntar(texto.auxiliar, "flex min-w-0 flex-wrap items-center")} data-resumo-da-jornada="">
         <button type="button" className="mr-3 underline-offset-2 hover:underline" onClick={() => onIrPara("objetivo")}>
           {objetivo ? objetivo.rotulo : "Sem objetivo"}
@@ -187,6 +187,8 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
         </button>
       </p>
 
+      {/* 25/10: no desktop largo, a copy (a lista longa) e o Construir ficam lado a lado, sem coluna estreita. */}
+      <div className={juntar(espaco.colunas, "desk:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]")}>
       <Secao
         titulo="Copy da página"
         descricao={copy ? (doMotorDeCopy ? `${secoesComTexto.length} seções · o Jev escolheu` : "Copy escolhida") : "Ainda sem copy"}
@@ -239,7 +241,7 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
         <div className="mt-3 min-w-0" data-modelo-da-copy="">
           <TituloRecolhivel titulo="Modelo da copy" recolhido={modeloDaCopyRecolhido} onAlternar={() => setModeloDaCopyRecolhido(!modeloDaCopyRecolhido)} resumo={modeloDaCopy.modelo ? nomeDoModelo(modeloDaCopy.modelo) : "padrão"} />
           {!modeloDaCopyRecolhido && (
-            <div className="mt-2 max-w-[420px]">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
               <SeletorDoModeloDoEscopo estado={modeloDaCopy} />
             </div>
           )}
@@ -269,7 +271,7 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
         <div className="mt-3 min-w-0" data-avancado-da-construcao="">
           <TituloRecolhivel titulo="Avançado" recolhido={avancadoRecolhido} onAlternar={() => setAvancadoRecolhido(!avancadoRecolhido)} resumo={[motor ? ROTULO_DO_MOTOR[motor] : "motor padrão", modelo ? "modelo escolhido" : "modelo padrão"].join(" · ")} />
           {!avancadoRecolhido && (
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-[200px_minmax(0,1fr)]">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2 desk:grid-cols-1">
               <label className="block min-w-0">
                 <span className={juntar(texto.rotulo, "mb-1 block")}>Motor</span>
                 <select value={motor} onChange={(e) => setMotor(e.target.value as MotorDeCodigo | "")} className={campo} data-seletor-de-motor="">
@@ -286,6 +288,7 @@ export default function PassoConstruir({ site, onIrPara }: { site: LinhaDoSite; 
           )}
         </div>
       </Secao>
+      </div>
     </div>
   );
 }

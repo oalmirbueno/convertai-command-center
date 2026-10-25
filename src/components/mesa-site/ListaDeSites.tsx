@@ -94,7 +94,7 @@ export default function ListaDeSites({ marcaId, marcaNome, onAbrir, icone }: { m
   );
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[880px] space-y-6 pt-2" data-lista-de-sites="">
+    <div className="min-w-0 space-y-6" data-lista-de-sites="">
       <Secao
         titulo="Sites"
         descricao={sitesQ.data && sitesQ.data.indisponivel ? "Banco sem a Mesa Site" : `${vivos.length} ${vivos.length === 1 ? "site" : "sites"}`}

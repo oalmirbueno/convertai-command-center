@@ -122,7 +122,7 @@ export default function EtapaComBarra({
   return (
     <ContextoDaBarra.Provider value={registro}>
       {children}
-      <BarraDeAcoes className="shrink-0 border-t border-border pt-3" inicio={linha ? <span className="block truncate" data-estado-da-etapa="">{linha}</span> : null}>
+      <BarraDeAcoes className="shrink-0 border-t border-border pt-3 lg:pr-2" inicio={linha ? <span className="block truncate" data-estado-da-etapa="">{linha}</span> : null}>
         {anterior && (
           <button type="button" className={botao.icone} onClick={() => onIrPara(anterior.valor)} aria-label={`Voltar: ${anterior.rotulo}`} title={`Voltar: ${anterior.rotulo}`} data-voltar-etapa={anterior.valor}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />

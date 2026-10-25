@@ -3,7 +3,7 @@ import { BriefcaseBusiness, Building2, CalendarCheck, Link2, Loader2, Magnet, Sh
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
-import { juntar, texto } from "@/components/sistema/estilos";
+import { espaco, juntar, texto } from "@/components/sistema/estilos";
 import { OBJETIVOS_DO_SITE } from "../../../supabase/functions/mesa-site/modulos/jornada-do-site";
 import { type LinhaDoSite, useSalvarSite } from "./siteApi";
 import { jornadaDoSite } from "./jornadaApi";
@@ -19,6 +19,12 @@ export const ICONE_DO_OBJETIVO: Record<string, ComponentType<{ className?: strin
   cardapio: UtensilsCrossed,
   bio: Link2,
 };
+
+/**
+ * Grade das opções dos passos (objetivo e partida), 25/10: a mesma em todos, na largura das mesas
+ * (1, 2, 3 e 4 colunas), para o cartão ter o mesmo tamanho de um passo para o outro.
+ */
+export const gradeDeOpcoes = "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 desk:grid-cols-4";
 
 /** Opção em grade (item que é uma coisa): borda fina, a escolhida com a cor da marca. */
 export const opcaoDaGrade = (escolhida: boolean) =>
@@ -55,14 +61,14 @@ export default function PassoObjetivo({ site, onIrPara }: { site: LinhaDoSite; o
   };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[960px]" data-passo-objetivo="">
+    <div className={espaco.pagina} data-passo-objetivo="">
       <Secao
         titulo="Qual o objetivo do site?"
         descricao={atual ? "Escolhido" : "Um clique e segue"}
         ajuda="O objetivo define o tipo de site, o mapa de seções que converte para ele (gancho, dor, oferta, prova, objeções e chamada) e o próximo passo do visitante. Marca, contexto, contatos e copy aprovada vêm do cliente sozinhos. Com seção já construída, o mapa fica como está."
         recolher={false}
       >
-        <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-objetivos="">
+        <ul className={gradeDeOpcoes} data-objetivos="">
           {OBJETIVOS_DO_SITE.map((o) => {
             const Icone = ICONE_DO_OBJETIVO[o.id] || Building2;
             const escolhido = atual === o.id;

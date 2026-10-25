@@ -139,7 +139,7 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
   return (
     <Secao
       titulo="Versões"
-      descricao={`${doCodigo.length} do código · ${plano.data ? plano.data.versoes.length : 0} do plano`}
+      descricao={`${doCodigo.length} do código · ${plano.data && Array.isArray(plano.data.versoes) ? plano.data.versoes.length : 0} do plano`}
       ajuda="Código: o motor escreve num rascunho; Salvar versão o transforma em versão salva e sobe a prévia dela na nuvem (Vercel da agência: a nuvem ao lado da versão abre um link que não depende desta máquina nem do túnel; o botão de cima sobe a prévia do estado atual, rascunho incluído, sem custo de modelo), com a origem (edição, importação ou restauração), os modelos usados e de qual versão veio. Cada trabalho terminado continua com o seu commit, com o que mudou e o zip daquela versão; voltar cria um trabalho que desfaz o que veio depois, sem custo de modelo. Plano: o que o site decidiu antes de cada mudança (mapa, estilo, copy, imagens, integrações e SEO), guardado no banco (site_versoes); o olho mostra a prévia daquela versão, comparar mostra o que muda e voltar guarda o atual como versão antes."
       recolher="mesa-site:construcao:versoes"
       acao={
@@ -217,9 +217,9 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
       </div>
       {plano.data && plano.data.aviso && <p className={texto.auxiliar}>{plano.data.aviso}</p>}
       {plano.isLoading && <p className={texto.auxiliar}>Lendo as versões</p>}
-      {plano.data && !plano.data.versoes.length && !plano.data.aviso && <EstadoVazio compacto titulo="Nenhuma versão do plano ainda." />}
+      {plano.data && !(Array.isArray(plano.data.versoes) && plano.data.versoes.length) && !plano.data.aviso && <EstadoVazio compacto titulo="Nenhuma versão do plano ainda." />}
       <ul className={juntar(lista.aberta, lista.divisoria)} data-versoes-do-plano="">
-        {(plano.data ? plano.data.versoes : []).map((v) => {
+        {(plano.data && Array.isArray(plano.data.versoes) ? plano.data.versoes : []).map((v) => {
           const chave = `plano:${v.id}`;
           const aqui = aberta === chave;
           const dif = aqui && comparada.data ? diferencasEntreVersoes(comparada.data.versao.dados || {}, atual) : [];

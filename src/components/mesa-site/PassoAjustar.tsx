@@ -3,7 +3,7 @@ import { MessagesSquare } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import Secao from "@/components/sistema/Secao";
 import { Carregando } from "@/components/sistema/Estados";
-import { botao, juntar } from "@/components/sistema/estilos";
+import { botao, espaco, juntar } from "@/components/sistema/estilos";
 import { comAEdicaoDaPrevia, type LinhaDoSite, useTrabalhos } from "./siteApi";
 import PreviaEditavel from "./PreviaEditavel";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
@@ -30,7 +30,7 @@ export default function PassoAjustar({ site, onIrPara, onPedirAoDiretor }: { sit
   useBarraDaEtapa({ estado: "Peça ajustes ao diretor de site ou publique" });
 
   return (
-    <div className="min-w-0 space-y-6" data-passo-ajustar="">
+    <div className={espaco.pagina} data-passo-ajustar="">
       {onPedirAoDiretor && (
         <Secao titulo="Ajustar conversando" descricao="Diretor de site ao lado" ajuda="Escreva o que mudar ao diretor de site (na lateral; no celular, no botão de baixo). Ele monta a lista com o custo; nada muda até você confirmar, e cada cartão tem Desfazer." recolher={`mesa-site:jornada:ajustar:${site.id}`}>
           <div className="flex min-w-0 flex-wrap items-center" data-pedidos-de-ajuste="">
@@ -45,7 +45,7 @@ export default function PassoAjustar({ site, onIrPara, onPedirAoDiretor }: { sit
       )}
       <PreviaEditavel site={site} trabalhos={todos} executor={trabalhosQ.data ? trabalhosQ.data.executor : null} onIrPara={onIrPara} />
       <Suspense fallback={<Carregando forma="lista" rotulo="Abrindo a publicação" />}>
-        <EtapaPublicacao site={site} onPedirAoDiretor={onPedirAoDiretor} />
+        <EtapaPublicacao site={site} onPedirAoDiretor={onPedirAoDiretor} onIrPara={onIrPara} />
       </Suspense>
     </div>
   );

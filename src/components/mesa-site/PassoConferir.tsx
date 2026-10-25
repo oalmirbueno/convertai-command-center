@@ -5,7 +5,7 @@ import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import Secao from "@/components/sistema/Secao";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
-import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, espaco, juntar, texto } from "@/components/sistema/estilos";
 import { CAMPOS_DO_CONTEXTO, camposPreenchidos, type ContextoDoCliente } from "../../../supabase/functions/mesa-site/modulos/jornada-do-site";
 import { type LinhaDoSite, useSalvarSite } from "./siteApi";
 import { CHAVES_DA_JORNADA, ROTULO_DA_ORIGEM, useContextoDoCliente } from "./jornadaApi";
@@ -90,7 +90,7 @@ export default function PassoConferir({ site }: { site: LinhaDoSite }) {
   const origem = q.data.origem || {};
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[960px] space-y-6" data-passo-conferir="">
+    <div className={espaco.pagina} data-passo-conferir="">
       <Secao titulo="Marca" descricao={c.marca.nome || "Sem nome"} ajuda="Logo, cores e fontes vêm do kit da marca aberta (Mesa do cliente). Para trocar, edite o kit: o site lê de lá na construção." recolher={false} data-marca-conferida="">
         <div className="flex min-w-0 flex-wrap items-center">
           <span className={juntar(texto.corpo, "mb-2 mr-4 inline-flex items-center")} title={c.marca.logo ? "Logo no kit" : "Sem logo no kit"}>
@@ -111,7 +111,7 @@ export default function PassoConferir({ site }: { site: LinhaDoSite }) {
         ajuda="Veio do contexto da marca, da estratégia aprovada, do dossiê, do Instagram, do cadastro e dos dados do site. Campo vazio fica vazio no site (o motor nunca inventa). O que você muda aqui vale só para este site."
         recolher={false}
       >
-        <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2" data-campos-do-contexto="">
+        <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2 desk:grid-cols-3" data-campos-do-contexto="">
           {CAMPOS_DO_CONTEXTO.map((f) => {
             const de = origem[f.chave] ? `Veio de: ${ROTULO_DA_ORIGEM[origem[f.chave]] || origem[f.chave]}` : "Sem dado no painel";
             const valor = valores[f.chave] || "";
