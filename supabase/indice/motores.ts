@@ -764,7 +764,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "estudio-arte/index.ts#conferirRosto": "estudio.conferencias",
   "estudio-arte/index.ts#depsDaAdaptacao/escreverCena": "estudio.gerador",
   "estudio-arte/index.ts#depsDaAdaptacao/lerPorVisao": "leituras",
-  "estudio-arte/index.ts#legenda": "estudio.legenda",
+  // 24/10: a legenda do Estúdio virou escreverLegendaDoPost (o trabalho e o vídeo da pauta, legenda_do_video, usam a mesma chamada).
+  "estudio-arte/index.ts#escreverLegendaDoPost": "estudio.legenda",
   "estudio-arte/index.ts#leituraDaLogo": "leituras",
   "estudio-arte/index.ts#lerPrancha": "leituras",
   "estudio-arte/index.ts#lerUmaReferencia": "leituras",
@@ -900,7 +901,8 @@ export const MOTORES: readonly Motor[] = [
     nome: "Estúdio: legenda final",
     funcao: "estudio-arte",
     ligacao: { arquivo: ESTUDIO, trechos: ['const CONHECIMENTO_DA_LEGENDA = conhecimentoEstudioPara("legenda").texto;', "sistema: `${CONHECIMENTO_DA_LEGENDA}"] },
-    bases: ["estudio-arte: INSTRUCOES_LEGENDA"],
+    // 24/10: legenda_do_video (Reels da peça de vídeo do Mês) usa a mesma chamada, com o roteiro da tarefa no lugar da direção.
+    bases: ["estudio-arte: INSTRUCOES_LEGENDA", "legenda_do_video: roteiro da tarefa (tabela roteiros) como conceito e cards"],
     montar: () => conhecimentoEstudioPara("legenda"),
     promete: ["formulas_de_titulo", "cta_principios", "anti_generico", "revisao_em_sete_passadas"],
   },

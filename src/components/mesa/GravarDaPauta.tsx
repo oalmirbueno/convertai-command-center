@@ -1,6 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Video } from "lucide-react";
-import { juntar, texto } from "@/components/sistema/estilos";
+import { texto } from "@/components/sistema/estilos";
 import { useMesa } from "./MesaContexto";
 import type { ItemDoMes } from "./useItensDoMes";
 import type { ItemProposto } from "./mesaV4Api";
@@ -17,6 +16,8 @@ const GravarVideoDaCampanha = lazy(() => import("./GravarVideoDaCampanha"));
  * seletor de modelo (escopo "roteiro"), criar com ideia, duração, estilo e criatividade (2 versões, o Jev
  * escolhe), conversa que muda o roteiro com Confirmar e Desfazer, versões. A ligação é pela tarefa da agenda
  * (roteiros.task_id). Embaixo, o que é de gravar (PDF, Word e a direção de gravação).
+ * 24/10 (print do dono): o painel lateral é estreito, então roteiro e agente vão empilhados (o agente embaixo,
+ * recolhível); o roteiro completo, o vídeo e só o texto ficam no miolo da peça (PecaDeVideoDaPauta).
  */
 
 export function pedidoDoRoteiroDaPauta(item: Pick<ItemDoMes, "title" | "midia">): string {
@@ -39,12 +40,10 @@ export default function GravarDaPauta({ item }: { item: ItemDoMes }) {
   const peca = itemDaPauta(item);
   const estado = useRoteiroDaPeca({ clientId, campanha: null, propostaId: null, item: peca });
   return (
-    <div className="min-w-0 space-y-4" data-gravar-da-pauta={estado.linha ? "com-roteiro" : "sem-roteiro"}>
-      <div className="flex min-w-0 items-center">
-        <Video className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-        <span className={juntar(texto.rotulo, "mr-auto truncate")}>Gravar com roteiro</span>
-      </div>
+    <div className="w-full min-w-0 space-y-4" data-gravar-da-pauta={estado.linha ? "com-roteiro" : "sem-roteiro"}>
+      {/* 24/10: o painel lateral já tem o título "Gravar com roteiro"; aqui o roteiro e o agente embaixo (estreito). */}
       <RoteiroDaPecaDeVideo
+        empilhado
         campanha={null}
         item={peca}
         estado={estado}

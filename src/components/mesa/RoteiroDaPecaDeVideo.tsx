@@ -51,6 +51,12 @@ export interface PropsDoRoteiroDaPeca {
   item: ItemProposto;
   estado: EstadoDoRoteiroDaPeca;
   montarCorpo?: MontarCorpoDoCriar;
+  /**
+   * 24/10/2026 (print do dono: roteiro espremido numa coluna de 1 letra no painel lateral "Gravar com roteiro"):
+   * painel estreito. Uma coluna só: o roteiro (falas, o completo fica no miolo da peça) e o agente embaixo,
+   * recolhível, sem rolagem própria. Sem este campo, roteiro e agente lado a lado em tela larga.
+   */
+  empilhado?: boolean;
 }
 
 function Opcao({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: ReactNode }) {
@@ -220,7 +226,7 @@ function CriarRoteiro({ campanha, item, estado, roteiroId, montarCorpo, aoCancel
   );
 }
 
-export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCorpo }: PropsDoRoteiroDaPeca) {
+export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCorpo, empilhado = false }: PropsDoRoteiroDaPeca) {
   const { clientId } = useMesa();
   const qc = useQueryClient();
   const { linha, versao, roteiro, antigas } = estado;
@@ -231,6 +237,7 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
   const [aberta, setAberta] = useState<number | null>(null);
   const [usando, setUsando] = useState<number | null>(null);
   const [recolhido, setRecolhido] = useRecolhido(`campanha-roteiro:${clientId}:${temaId || tema}`, false);
+  const [agenteRecolhido, setAgenteRecolhido] = useRecolhido(`roteiro-agente:${clientId}:${item.task_id || temaId || tema}`, false);
   const travado = linha ? motivoParaNaoEditar(linha.status, !!linha.arquivado_em) : null;
   const escolha = escolhaDaVersao(linha);
   const doItem = !linha && antigas.length > 0;
@@ -297,13 +304,18 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
   const resumo = roteiro ? `${modoDoTipo(roteiro.tipo).rotulo} · ${rotuloDaDuracao(roteiro.duracao_alvo_s)} · ${roteiro.blocos.length} blocos${versao ? ` · v${versao.numero}` : ""}` : null;
 
   return (
-    <div className="mt-2 grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]" data-roteiro-da-peca={temaId} data-fonte-do-roteiro={linha ? "tabela" : doItem ? "item" : "nenhum"}>
-      <section className="min-w-0" aria-label={`Roteiro de ${tema}`}>
+    <div
+      className={juntar("mt-2 min-w-0", empilhado ? "flex flex-col gap-5" : "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]")}
+      data-roteiro-da-peca={temaId}
+      data-fonte-do-roteiro={linha ? "tabela" : doItem ? "item" : "nenhum"}
+      data-disposicao={empilhado ? "empilhado" : "lado-a-lado"}
+    >
+      <section className="w-full min-w-0" aria-label={`Roteiro de ${tema}`} data-bloco-do-roteiro="">
         {roteiro ? (
           <>
-            <div className="flex min-w-0 items-center gap-2">
-              <TituloRecolhivel titulo="Roteiro" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} className="mr-auto" />
-              {linha && <SeloDoStatus status={linha.status} />}
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <TituloRecolhivel titulo="Roteiro" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} className="mr-auto min-w-0 flex-1" />
+              {linha && <span className="shrink-0"><SeloDoStatus status={linha.status} /></span>}
               {listaDeVersoes.length > 1 && (
                 <button
                   type="button"
@@ -369,7 +381,7 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
             )}
             {!recolhido && (
               <div className="mt-2 min-w-0">
-                <TextoDoRoteiro roteiro={roteiro} />
+                <TextoDoRoteiro roteiro={roteiro} compacto={empilhado} />
               </div>
             )}
           </>
@@ -389,8 +401,9 @@ export default function RoteiroDaPecaDeVideo({ campanha, item, estado, montarCor
           </>
         )}
       </section>
-      <div className="min-w-0 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+      <div className={juntar("w-full min-w-0 border-t border-border pt-4", empilhado ? "" : "lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0")} data-lugar-do-agente={empilhado ? "abaixo" : "ao-lado"}>
         <AgenteDoRoteiroDaPeca
+          {...(empilhado ? { recolhido: agenteRecolhido, aoRecolher: setAgenteRecolhido, semRolagemPropria: true } : {})}
           roteiroId={linha ? linha.id : null}
           titulo={tema}
           sugestoes={roteiro && roteiro.sugestoes ? roteiro.sugestoes : []}

@@ -94,6 +94,9 @@ export function SeloDoItem({ tom, children, className = "", comTexto = false }: 
 
 export const formatoDoItem = (i: ItemDoMes) => modoDaPauta(i) === "fotos" ? "Fotos" : TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type;
 
+/** A peça de vídeo está pronta: o vídeo final guardado na peça ou o vídeo do post da Agenda. */
+export const videoPronto = (i: ItemDoMes, arte: ArteNaAgenda | null | undefined): boolean => !!(i.video_pronto && i.video_pronto.caminho) || !!(arte && arte.capa && arte.capa.tipo_midia === "video");
+
 export const DICA_DO_ROTEIRO = "Roteiro do estrategista: a direção sai dele, sem custo de IA";
 
 export interface FontesDaLista {
@@ -304,7 +307,14 @@ function CartaoDoItem({
               <Flame className={`h-3 w-3 ${item.momento === "nicho" ? "text-primary" : "text-warning"}`} aria-label={item.momento === "nicho" ? "Em alta no nicho" : "Hype"} />
             </span>
           )}
-          <SeloDoItem tom={situacao.tom} className="ml-1.5 shrink-0">{situacao.rotulo}</SeloDoItem>
+          {/* 24/10 (dono): a peça de vídeo mostra A fazer / Pronto (pronto = vídeo final na peça ou no post da Agenda). */}
+          {modoDaPauta(item, t) === "video" ? (
+            <span data-estado-do-video={videoPronto(item, arte) ? "pronto" : "a_fazer"} className="ml-1.5 shrink-0">
+              <SeloDoItem tom={videoPronto(item, arte) ? "ok" : "neutro"} comTexto>{videoPronto(item, arte) ? "Pronto" : "A fazer"}</SeloDoItem>
+            </span>
+          ) : (
+            <SeloDoItem tom={situacao.tom} className="ml-1.5 shrink-0">{situacao.rotulo}</SeloDoItem>
+          )}
           {/* Frente AE-2: a pauta parecida é um ícone (o texto fica no título), não mais um selo a mais. */}
           {parecidaCom.length > 0 && (
             <span

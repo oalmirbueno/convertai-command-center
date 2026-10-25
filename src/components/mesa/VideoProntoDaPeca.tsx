@@ -13,7 +13,8 @@ import type { VideoProntoDaPeca } from "../../../supabase/functions/agente-calen
  * escolher no Workspace do cliente. A peça guarda o caminho (ação campanha_peca_de_video).
  */
 
-export type VideoEscolhido = Omit<VideoProntoDaPeca, "em">;
+/** arquivo_id: o registro do envio no acervo da Mesa Vídeos (a peça do Mês leva ao Workspace por ele). */
+export type VideoEscolhido = Omit<VideoProntoDaPeca, "em"> & { arquivo_id?: string };
 
 const EH_VIDEO = /\.(mp4|mov|m4v|webm)$/i;
 
@@ -34,7 +35,7 @@ export function TrazerVideo({ clientId, rotulo, disabled, aoEscolher }: { client
       const r = await subirVideos(clientId, [arquivo], () => undefined);
       const a = r.registrados[0];
       if (!a) throw new Error((r.recusados[0] && r.recusados[0].motivo) || r.aviso || "O vídeo não subiu.");
-      await aoEscolher({ bucket: "mesa", caminho: a.storage_path, nome: arquivo.name, ...(a.duracao_s ? { duracao_s: a.duracao_s } : {}) });
+      await aoEscolher({ bucket: "mesa", caminho: a.storage_path, nome: arquivo.name, arquivo_id: a.id, ...(a.duracao_s ? { duracao_s: a.duracao_s } : {}) });
     } catch (e) {
       setErro(textoDoErro(e));
     } finally {

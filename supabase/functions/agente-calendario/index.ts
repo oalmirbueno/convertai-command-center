@@ -6638,6 +6638,51 @@ async function campanhaPecaDeVideo(servico: SupabaseClient, chamador: Chamador, 
 }
 
 /**
+ * pauta_video_pronto { client_id, task_id, video | null } (24/10/2026, dono: "quando está com vídeo, ele pode ter
+ * Por fazer e Pronto ... depois que o vídeo estiver pronto, já aparece ali para eu ver todo o vídeo"). Sem IA e
+ * sem custo. O vídeo pronto da peça de vídeo do Mês fica no item do plano (o mesmo campo video_pronto da peça
+ * da campanha): põe, troca ou tira. Pauta sem plano gravado (criada à mão na Agenda) responde 404 sem_plano:
+ * a tela guarda a escolha e a Agenda passa a valer quando o post é criado.
+ */
+async function pautaVideoPronto(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const t = await tarefaDoCliente(servico, corpo.task_id, clientId);
+  if (t.deleted_at) throw new ErroHttp(409, "peca_fora_da_agenda", "Esta peça não está mais na agenda.");
+  const video = corpo.video == null ? null : normalizarVideoPronto({ ...(corpo.video as Record<string, unknown>), em: new Date().toISOString() }, clientId);
+  if (corpo.video != null && !video) throw new ErroHttp(400, "video_invalido", "Use um vídeo MP4, MOV ou WebM do cliente.");
+  if (video && video.bucket === "workspace") {
+    // O vídeo do Workspace precisa ser deste cliente (o caminho vem da tela).
+    const { data: no } = await servico.from("workspace_nodes").select("id").eq("client_id", clientId).eq("storage_path", video.caminho).limit(1);
+    if (!no || !(no as unknown[]).length) throw new ErroHttp(403, "video_de_outro_cliente", "Este vídeo não está no Workspace do cliente.");
+  }
+  const { data: props, error } = await servico
+    .from("calendario_propostas")
+    .select("id")
+    .eq("client_id", clientId)
+    .contains("task_ids", [t.id])
+    .in("status", ["pronta", "gravada"])
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  if (error) throw new ErroHttp(500, "proposta_indisponivel", "Não foi possível ler o plano desta peça.");
+  const id = ((props ?? []) as Array<{ id: string }>)[0]?.id;
+  if (!id) throw new ErroHttp(404, "sem_plano", "Esta peça não nasceu de um plano do Mês: o vídeo fica ligado pela Agenda.");
+  const proposta = await carregarProposta(servico, id);
+  let achou = false;
+  const itens = proposta.itens.map((i) => {
+    if (!i || i.task_id !== t.id) return i;
+    achou = true;
+    const novo: Item = { ...i };
+    if (video) novo.video_pronto = video;
+    else delete novo.video_pronto;
+    return novo;
+  });
+  if (!achou) throw new ErroHttp(404, "sem_plano", "Esta peça não está no plano do Mês: o vídeo fica ligado pela Agenda.");
+  await salvarProposta(servico, proposta, { itens });
+  return json({ task_id: t.id, video_pronto: video, custo_usd: 0 });
+}
+
+/**
  * 22/10/2026: a situação da campanha para o agente responder e agir (peças por estado, stories, trilha e o
  * anúncio vinculado nos últimos 7 dias). Só leitura; o que falhar fica de fora.
  */
@@ -9955,6 +10000,8 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_roteiro_video: campanhaRoteiroVideo,
   campanha_roteiro_agente: campanhaRoteiroAgente,
   campanha_peca_de_video: campanhaPecaDeVideo,
+  // 24/10: o vídeo pronto da peça de vídeo do Mês (A fazer / Pronto), sem IA.
+  pauta_video_pronto: pautaVideoPronto,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,

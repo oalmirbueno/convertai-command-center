@@ -59,7 +59,8 @@ const montar = (escopo: "copy" | "refino" | "estrategista") =>
 
 describe("a legenda fica no modelo do diretor, sem seletor e mais rápida", () => {
   it("o servidor da legenda não usa o modelo da copy, escreve 3 variações e o Jev sem as notas virais", () => {
-    const legenda = trecho(ler("supabase/functions/estudio-arte/index.ts"), "async function legenda(");
+    // 24/10: o corpo da legenda virou escreverLegendaDoPost (o trabalho e o vídeo da pauta usam o mesmo motor).
+    const legenda = trecho(ler("supabase/functions/estudio-arte/index.ts"), "async function escreverLegendaDoPost(");
     expect(legenda).not.toMatch(/modeloDaCopy|modeloDoRefino|modelo_copy_id/);
     expect(legenda).toContain("const escritorDaLegenda = diretor;");
     expect(legenda).toContain("semViral: true,");

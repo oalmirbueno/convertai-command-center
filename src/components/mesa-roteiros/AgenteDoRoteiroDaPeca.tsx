@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Lightbulb, Loader2, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, ChevronDown, Lightbulb, Loader2, RotateCcw, Send } from "lucide-react";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDoModeloDoEscopo, useModeloDoEscopo } from "@/components/mesa/ModeloDaCopyDoConteudo";
@@ -59,9 +59,16 @@ export interface PropsDoAgenteDoRoteiroDaPeca {
   formulario?: ReactNode;
   garantirRoteiro?: () => Promise<string>;
   aoMudarRoteiro?: () => void;
+  /**
+   * 24/10 (painel estreito, Gravar com roteiro da pauta): o agente recolhe pelo título e a conversa cresce com a
+   * página (sem rolagem dentro da rolagem do painel). Sem estes campos, como sempre.
+   */
+  recolhido?: boolean;
+  aoRecolher?: (recolhido: boolean) => void;
+  semRolagemPropria?: boolean;
 }
 
-export default function AgenteDoRoteiroDaPeca({ roteiroId, titulo, sugestoes, acoes, formulario, garantirRoteiro, aoMudarRoteiro }: PropsDoAgenteDoRoteiroDaPeca) {
+export default function AgenteDoRoteiroDaPeca({ roteiroId, titulo, sugestoes, acoes, formulario, garantirRoteiro, aoMudarRoteiro, recolhido = false, aoRecolher, semRolagemPropria = false }: PropsDoAgenteDoRoteiroDaPeca) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -194,15 +201,30 @@ export default function AgenteDoRoteiroDaPeca({ roteiroId, titulo, sugestoes, ac
 
   return (
     <section className="min-w-0" aria-label={`Agente de roteiro${titulo ? ` de ${titulo}` : ""}`} data-agente-do-roteiro-da-peca={roteiroId || ""}>
-      <div className="flex min-w-0 items-center">
-        <h4 className={juntar(texto.rotulo, "mr-auto truncate")}>Agente de roteiro</h4>
-        {acoes}
-        {!formulario && mensagens.length > 0 && (
+      <div className="flex min-w-0 items-center gap-1">
+        {aoRecolher ? (
+          <button
+            type="button"
+            className="relative -left-1 mr-auto flex min-w-0 items-center rounded-md px-1 py-0.5 text-left hover:bg-muted"
+            onClick={() => aoRecolher(!recolhido)}
+            aria-expanded={!recolhido}
+            title={recolhido ? "Abrir o agente de roteiro" : "Recolher o agente de roteiro"}
+          >
+            <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", recolhido ? "-rotate-90" : "")} aria-hidden="true" />
+            <h4 className={juntar(texto.rotulo, "truncate")}>Agente de roteiro</h4>
+          </button>
+        ) : (
+          <h4 className={juntar(texto.rotulo, "mr-auto truncate")}>Agente de roteiro</h4>
+        )}
+        {!recolhido && acoes}
+        {!recolhido && !formulario && mensagens.length > 0 && (
           <button type="button" className={botao.icone} onClick={novaConversa} disabled={enviando} aria-label="Nova conversa sobre este roteiro" title="Nova conversa">
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
+      {!recolhido && (
+      <>
       <div className="mt-2 min-w-0">
         <SeletorDoModeloDoEscopo estado={modelo} />
       </div>
@@ -210,7 +232,7 @@ export default function AgenteDoRoteiroDaPeca({ roteiroId, titulo, sugestoes, ac
         <div className="mt-3 min-w-0">{formulario}</div>
       ) : (
         <>
-          <div ref={lista} className={juntar("mt-3 min-w-0 space-y-2", rolagem.lista)} aria-label="Conversa com o agente de roteiro" aria-live="polite">
+          <div ref={lista} className={juntar("mt-3 min-w-0 space-y-2", semRolagemPropria ? "" : rolagem.lista)} aria-label="Conversa com o agente de roteiro" aria-live="polite">
             {!lida && <p className={conversa.apoio}>Lendo a conversa…</p>}
             {lida && !mensagens.length && <p className={conversa.apoio}>Peça uma mudança ou ideias. Eu reescrevo o roteiro; você confirma e pode desfazer.</p>}
             {mensagens.map((m, i) => {
@@ -306,6 +328,8 @@ export default function AgenteDoRoteiroDaPeca({ roteiroId, titulo, sugestoes, ac
           </div>
           {custo !== null && <p className={juntar(texto.auxiliar, "mt-1")}>Conversa ~{usd(custo)}; mudar o roteiro mostra o custo no cartão.</p>}
         </>
+      )}
+      </>
       )}
     </section>
   );

@@ -13,6 +13,7 @@ import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
 import { laminasLongasDoRoteiro } from "../../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
 import { ganchoDaDescricao, momentoDoGancho, type MomentoDoGancho } from "./momentoDoGancho";
 import type { MidiaDaPeca } from "../../../supabase/functions/agente-calendario/modulos/midia-da-peca-regras";
+import { normalizarVideoPronto, type VideoProntoDaPeca } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
@@ -31,6 +32,8 @@ export interface ItemDoMes {
   momento?: MomentoDoGancho | null;
   /** 24/10: o caminho do vídeo escolhido na preparação (gravar com roteiro ou gerar com IA); a peça abre nele. */
   caminho_video?: "gravar" | "ia" | null;
+  /** 24/10: o vídeo pronto da peça de vídeo (enviado ou escolhido no Workspace): a peça fica Pronta. */
+  video_pronto?: VideoProntoDaPeca | null;
   /** O gancho inteiro ("Hype: título"), para o title do foguinho. */
   gancho?: string | null;
 }
@@ -231,6 +234,8 @@ export interface InfoDoRoteiro {
   midia?: MidiaDaPeca | null;
   /** 24/10: o caminho do vídeo (gravar com roteiro ou gerar com IA). */
   caminho_video?: "gravar" | "ia" | null;
+  /** 24/10: o vídeo pronto da peça de vídeo (item do plano, pauta_video_pronto). */
+  video_pronto?: VideoProntoDaPeca | null;
   /** Lâminas detalhadas no roteiro; 0 = só o tema, a direção sai do diretor. */
   laminas: number;
   /** Contínuo pedido pelo estrategista (null = não disse). */
@@ -533,6 +538,8 @@ async function lerRoteiros(clientId: string, taskIds: string[]): Promise<Record<
         roteiros[id].modo_estudio = "video";
         roteiros[id].video = normalizarVideoDaPauta(doItem.video);
         if (doItem.caminho_video === "gravar" || doItem.caminho_video === "ia") roteiros[id].caminho_video = doItem.caminho_video;
+        const pronto = normalizarVideoPronto(doItem.video_pronto);
+        if (pronto) roteiros[id].video_pronto = pronto;
       }
     }
   }
@@ -568,7 +575,7 @@ export async function lerDetalhesDosItens(clientId: string, itens: ItemDoMes[], 
   dados.artes = await lerArtesDaAgenda(ids, dados.trabalhos, incluirVideos).catch(() => ({} as Record<string, ArteNaAgenda>));
   dados.itens = itens.map((item) => {
     const modo = dados.artes[item.id]?.capa?.tipo_midia === "video" ? "video" : roteiros[item.id]?.modo_estudio;
-    return modo ? { ...item, modo_estudio: modo, ...(roteiros[item.id]?.video ? { video: roteiros[item.id].video } : {}), ...(roteiros[item.id]?.midia ? { midia: roteiros[item.id].midia } : {}), ...(roteiros[item.id]?.caminho_video ? { caminho_video: roteiros[item.id].caminho_video } : {}) } : item;
+    return modo ? { ...item, modo_estudio: modo, ...(roteiros[item.id]?.video ? { video: roteiros[item.id].video } : {}), ...(roteiros[item.id]?.midia ? { midia: roteiros[item.id].midia } : {}), ...(roteiros[item.id]?.caminho_video ? { caminho_video: roteiros[item.id].caminho_video } : {}), ...(roteiros[item.id]?.video_pronto ? { video_pronto: roteiros[item.id].video_pronto } : {}) } : item;
   });
 
   // Estado da publicação na Agenda (agendado, publicado, falhou) dos posts

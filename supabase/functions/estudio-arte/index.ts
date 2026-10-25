@@ -8160,7 +8160,7 @@ function limparHashtag(h: unknown): string | null {
  * o Jev dá a nota de relevância (Score) e o tamanho estimado (Choice: nicho, média ou ampla) de cada
  * candidata; o código monta 2 a 3 de nicho, 1 a 2 médias e no máximo 1 ampla (misturaDeHashtags).
  */
-async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Record<string, unknown>, criadoPor: string): Promise<string[]> {
+async function escolherHashtags(t: Pick<PecaDaLegenda, "client_id" | "id" | "referencia">, candidatas: string[], contexto: Record<string, unknown>, criadoPor: string): Promise<string[]> {
   if (candidatas.length <= 3) return candidatas;
   try {
     const questions: Record<string, PerguntaJev> = {};
@@ -8180,7 +8180,7 @@ async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Rec
       state: { ...contexto, hashtags: Object.fromEntries(candidatas.map((h, i) => [`h${i}`, h])) },
       questions,
     });
-    await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor });
+    await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: t.referencia, criadoPor });
     const tamanho = (i: number): TamanhoDaHashtag => {
       const r = res.answers[`t${i}`] as { choice?: string } | undefined;
       return r && (r.choice === "nicho" || r.choice === "media" || r.choice === "ampla") ? r.choice : tamanhoEstimado(candidatas[i]);
@@ -8193,6 +8193,18 @@ async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Rec
   }
 }
 
+/**
+ * A peça que a legenda descreve. No Estúdio é o trabalho (direção e cards); no vídeo da pauta (24/10/2026) é o
+ * roteiro do vídeo pronto (conceito e falas), sem trabalho: a mesma legenda da casa, cobrada na tarefa.
+ */
+type PecaDaLegenda = {
+  id: string;
+  client_id: string;
+  direcao: { conceito: string; cards: { ordem: number; funcao?: string; texto_exato?: string }[] };
+  referencia: { tipo: string; id: string };
+  alvoDaMarca: AlvoDaMarca;
+};
+
 async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   if (ehAds(t)) {
@@ -8200,6 +8212,70 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Frente AE: a arte rápida ainda sem item escreve a legenda pelo pedido (item sintético).
   const item = t.task_id ? await lerItemDaAgenda(t.task_id) : itemDaArteRapida(t);
+  const e = await escreverLegendaDoPost(ch, { id: t.id, client_id: t.client_id, direcao: t.direcao, referencia: { tipo: "estudio_trabalho", id: t.id }, alvoDaMarca: t }, item);
+  const gravado = await mutarTrabalho(t.id, (x) => ({ legenda: e.legenda, hashtags: e.hashtags, custo_usd: arred(num(x.custo_usd) + e.custo_usd) }));
+  return json({
+    trabalho_id: t.id,
+    ...e,
+    legenda: gravado.legenda,
+    hashtags: (gravado as Trabalho & { hashtags?: string[] }).hashtags ?? e.hashtags,
+  });
+}
+
+/**
+ * legenda_do_video { client_id, task_id } (24/10/2026, dono: "quando eu gravar o vídeo e estiver pronto, já
+ * subir, já gerar legenda e já agendar para publicar"): a legenda do post de Reels da peça de vídeo do Mês pelo
+ * MESMO motor da legenda do Estúdio (diretor, motor de copy, conferência do Jev e hashtags), com o roteiro da
+ * tarefa como base (tabela roteiros, versão atual). Não grava nada: a tela leva a legenda ao post da Agenda.
+ */
+async function legendaDoVideo(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  const taskId = texto(corpo.task_id, 64);
+  const item = await lerItemDaAgenda(taskId);
+  if (item.clientId !== clientId) throw new ErroEstudio(409, "item_de_outro_cliente", "O item da agenda não pertence a este cliente.");
+  const { data: linhas } = await servico()
+    .from("roteiros")
+    .select("titulo, versao_atual, versoes, arquivado_em, atualizado_em")
+    .eq("client_id", clientId)
+    .eq("task_id", taskId)
+    .order("atualizado_em", { ascending: false })
+    .limit(5);
+  const roteiro = roteiroParaALegenda(((linhas as Record<string, unknown>[] | null) ?? []).find((l) => !l.arquivado_em) ?? null);
+  const conceito = roteiro ? roteiro.conceito : texto(item.tarefa.title, 300);
+  const e = await escreverLegendaDoPost(
+    ch,
+    { id: taskId, client_id: clientId, direcao: { conceito, cards: roteiro ? roteiro.cards : [] }, referencia: { tipo: "tarefa", id: taskId }, alvoDaMarca: { task_id: taskId } },
+    item,
+  );
+  return json({ task_id: taskId, com_roteiro: !!roteiro, ...e });
+}
+
+/** O roteiro da tarefa na forma que a legenda lê: o conceito (título, gancho e CTA) e as falas como cards. */
+function roteiroParaALegenda(linha: Record<string, unknown> | null): { conceito: string; cards: { ordem: number; funcao: string; texto_exato: string }[] } | null {
+  if (!linha || !Array.isArray(linha.versoes)) return null;
+  const versoes = linha.versoes as { numero?: unknown; conteudo?: Record<string, unknown> }[];
+  const atual = versoes.find((v) => Number(v && v.numero) === Number(linha.versao_atual)) ?? versoes[versoes.length - 1];
+  const c = atual && atual.conteudo && typeof atual.conteudo === "object" ? atual.conteudo : null;
+  if (!c) return null;
+  const ganchos = Array.isArray(c.ganchos) ? (c.ganchos as { texto?: unknown }[]) : [];
+  const gancho = ganchos[Number(c.gancho_escolhido) || 0] ?? ganchos[0];
+  const blocos = Array.isArray(c.blocos) ? (c.blocos as Record<string, unknown>[]) : [];
+  const cards = blocos
+    .map((b, i) => ({ ordem: i + 1, funcao: texto(b && b.funcao, 80) || "Bloco", texto_exato: texto(b && (b.fala || b.texto_na_tela), 600) }))
+    .filter((x) => x.texto_exato)
+    .slice(0, 24);
+  const conceito = [
+    texto(c.titulo || linha.titulo, 200),
+    gancho && gancho.texto ? `Gancho: ${texto(gancho.texto, 300)}` : "",
+    c.cta ? `CTA: ${texto(c.cta, 300)}` : "",
+    "Post de Reels: a legenda acompanha o vídeo gravado com este roteiro.",
+  ].filter(Boolean).join(" | ");
+  return { conceito, cards };
+}
+
+/** A legenda da casa para uma peça (o corpo do antigo `legenda`, sem gravar): devolve o que a tela mostra. */
+async function escreverLegendaDoPost(ch: Chamador, t: PecaDaLegenda, item: ItemDaAgenda) {
   const [prompt, diretor, contexto, recentes, perfil, marcaDaLegenda] = await Promise.all([
     promptDoDiretor(t.client_id),
     modeloDoPapel("diretor_arte"),
@@ -8214,7 +8290,7 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
       .order("created_at", { ascending: false })
       .limit(5),
     servico().from("profiles").select("company_name, full_name").eq("id", t.client_id).maybeSingle(),
-    marcaDe(t.client_id, t),
+    marcaDe(t.client_id, t.alvoDaMarca),
   ]);
   // 23/10 (dono): a legenda fica no modelo do diretor (GPT-6 Luna), sem o seletor da copy; o modelo da copy é do conteúdo.
   const escritorDaLegenda = diretor;
@@ -8275,7 +8351,7 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     maxTokensSaida: 10_000,
     // Chamada longa (diretor com a base de conhecimento inteira): 5 min antes de desistir.
     timeoutMs: 300_000,
-    referencia: { tipo: "estudio_trabalho", id: t.id },
+    referencia: t.referencia,
     criadoPor: ch.userId,
   });
   const bruto = (r.json ?? {}) as { legenda?: string; variacoes?: Array<{ framework?: unknown; legenda?: unknown }>; hashtags_candidatas?: unknown[] };
@@ -8309,7 +8385,7 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     fontes: [fatosDoItem, voz.bloco, marca.contexto, t.direcao.cards.map((c) => c.texto_exato).join(" ")],
     // Legenda mais rápida (23/10): o Jev só com a conferência da casa; humanizer e corte do que não tem fonte continuam.
     semViral: true,
-    cobranca: { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId },
+    cobranca: { clientId: t.client_id, tarefa: "estudio", referencia: t.referencia, criadoPor: ch.userId },
   });
   const opcoes = conf.ordem.map((i) => ({
     legenda: conf.finais[i] || conf.textos[i],
@@ -8329,11 +8405,9 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     ch.userId,
   );
   const custoTotal = arred(r.custoUsd + conf.custo_usd);
-  const gravado = await mutarTrabalho(t.id, (x) => ({ legenda: final, hashtags, custo_usd: arred(num(x.custo_usd) + custoTotal) }));
-  return json({
-    trabalho_id: t.id,
-    legenda: gravado.legenda,
-    hashtags: (gravado as Trabalho & { hashtags?: string[] }).hashtags ?? hashtags,
+  return {
+    legenda: final,
+    hashtags,
     // Frente CPY: as outras variações (a tela oferece trocar) e o porquê da escolhida.
     opcoes,
     porque: [porqueDaEscolha(conf.conferencias[conf.ordem[0]], escritas.length), conf.porque_viral].filter(Boolean).join(" "),
@@ -8345,7 +8419,7 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     custo_usd: custoTotal,
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
-  });
+  };
 }
 
 /** Legenda que vai ao ar: o texto e, numa linha própria no fim, as hashtags. */
@@ -11771,6 +11845,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   ajustar_texto: ajustarTextoDaLamina,
   corrigir_card: corrigirCard,
   legenda,
+  // 24/10: a legenda do Reels da peça de vídeo do Mês (mesmo motor, roteiro da tarefa como base, sem gravar).
+  legenda_do_video: legendaDoVideo,
   entregar,
   // Frente EA: entrega na Agenda e data de publicação confirmada pelo dono.
   agenda_sincronizar: agendaSincronizar,
@@ -11857,7 +11933,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 for (const acao of ACOES_SO_DA_MESA) if (ACOES[acao]) ACOES[acao] = soDaMesa(ACOES[acao]);
 
 /** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega, a conversa com o diretor e o refino do texto. */
-const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto", "campanha_padrao"]);
+const ACOES_LONGAS = new Set(["preparar", "rapida_preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "ajustar_texto", "corrigir_card", "legenda", "legenda_do_video", "entregar", "conversar", "refinar_texto", "rostos_marcar", "conferir_rosto", "campanha_padrao"]);
 // 21/10: o texto e a foto gerados no Template também passam de 150 s.
 ACOES_LONGAS.add("template_conteudo");
 ACOES_LONGAS.add("template_imagem");

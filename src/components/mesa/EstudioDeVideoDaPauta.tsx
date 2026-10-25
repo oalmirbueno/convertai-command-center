@@ -6,6 +6,7 @@ import { resultadosDeVideoDaPauta } from "./resultadosDeVideoDaPauta";
 import { ESTILOS_DE_VIDEO_DA_PAUTA } from "../../../supabase/functions/_shared/video-da-pauta";
 import EntregaDoVideoDaPauta from "./EntregaDoVideoDaPauta";
 import MidiaDaPauta from "./MidiaDaPauta";
+import PecaDeVideoDaPauta from "./PecaDeVideoDaPauta";
 import { useEffect, useState } from "react";
 import { useMesa } from "./MesaContexto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -14,8 +15,7 @@ import GeracoesRecentes from "@/components/mesa-videos/GeracoesRecentes";
 import { useArquivosDeVideo, usePedidos, useVersoes } from "@/components/mesa-videos/videosApi";
 import { LinhaDoFinal } from "@/components/mesa-edicao/Finais";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
-import BancadaDaPauta, { PreviaDaPauta, PainelDaBancada } from "./BancadaDaPauta";
-import { fonteDoArquivo } from "./useItensDoMes";
+import BancadaDaPauta, { PainelDaBancada } from "./BancadaDaPauta";
 import type { ItemDoMes, ArteNaAgenda } from "./useItensDoMes";
 
 const BASES = ESTILOS_DE_VIDEO_DA_PAUTA;
@@ -45,7 +45,6 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   }, [pedidos.map((p) => `${p.id}:${p.estado}`).join(",")]);
   const [vendo, setVendo] = useState<string | null>(null);
   const atual = arquivos.find((a) => a.id === vendo) || arquivos[0];
-  const agenda = fonteDoArquivo(arte?.capa);
   const tema = BASES.find((b) => b.id === base) || BASES[0];
   return <div className="flex min-h-0 flex-1 flex-col" data-video-da-pauta={item.id}>
     <MidiaDaPauta item={{ ...item, modo_estudio: "video" }} />
@@ -61,7 +60,9 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       ]}
       acoes={<AjudaRecolhida rotulo="Direção do vídeo">{tema.texto}</AjudaRecolhida>}
       prancheta={<div className="space-y-2"><button type="button" aria-pressed={aba === 'gerar'} className="w-full rounded-lg border border-dashed px-2 py-5 text-[12px]" onClick={() => setAba('gerar')}>+ Gerar vídeo</button>{arquivos.map((a, i) => <button type="button" key={a.id} aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba('entrega'); }} className={`w-full rounded-lg border px-2 py-4 text-left text-[12px] ${atual?.id === a.id ? 'border-primary bg-primary/10' : ''}`}>Vídeo {i + 1}<span className="mt-2 block truncate">{a.nome}</span></button>)}{arte?.capa?.tipo_midia === "video" && <p className="rounded-lg border p-3 text-[12px] text-primary">Vídeo na Agenda</p>}</div>}
-      previa={<><p className="mb-3 text-[13px] font-semibold">{atual?.nome || tema.nome}</p>{atual ? <PreviaDaPauta key={atual.id} caminho={atual.storage_path} bucket={atual.storage_bucket} nome={atual.nome} video /> : agenda.caminho && arte?.capa?.tipo_midia === 'video' ? <PreviaDaPauta caminho={agenda.caminho} bucket={agenda.bucket} nome={item.title} video /> : <div className="flex min-h-[400px] flex-1 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center"><p className="text-[13px] font-medium">{tema.nome}</p><p className="mt-3 max-w-md text-[13px] text-muted-foreground">{tema.texto}</p><p className="mt-3 text-[12px] text-primary">A direção já está preparada. Confira as fotos e gere nas ferramentas ao lado.</p></div>}
+      // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
+      // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra.
+      previa={<><PecaDeVideoDaPauta item={item} arte={arte} geracoes={arquivos} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} />
         <div className="mt-3 sm:max-h-52 sm:overflow-y-auto"><GeracoesRecentes arquivos={arquivos} taskId={item.id} pedidosIds={ids} /></div>
       </>}
       ferramentas={<div className="space-y-4">
