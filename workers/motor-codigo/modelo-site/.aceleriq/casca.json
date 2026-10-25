@@ -1,5 +1,5 @@
 {
-  "versao": 7,
+  "versao": 8,
   "arquivos": [
     "AGENTS.md",
     ".gitignore",
@@ -17,6 +17,7 @@
     "src/lib/movimento.ts",
     "src/lib/Revelar.tsx",
     "src/lib/rolagem.ts",
-    "src/lib/Grafico.tsx"
+    "src/lib/Grafico.tsx",
+    "src/lib/loja.tsx"
   ]
 }

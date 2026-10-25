@@ -55,7 +55,8 @@ export function montarPagina(base, conteudo, pacote, pagina) {
     `<meta property="og:locale" content="pt_BR" />`,
     `<meta property="og:site_name" content="${esc(pacote.cliente || d.titulo)}" />`,
     `<meta name="twitter:card" content="${d.og ? "summary_large_image" : "summary"}" />`,
-    d.indexar ? "" : `<meta name="robots" content="noindex, nofollow" />`,
+    // A página de obrigado da loja (volta do pagamento) nunca vai ao Google.
+    d.indexar && pagina.slug !== "obrigado" ? "" : `<meta name="robots" content="noindex, nofollow" />`,
     // O schema do negócio vai só na página inicial (é o mesmo negócio em todas).
     !pagina.slug && d.seo.schema ? `<script type="application/ld+json">${JSON.stringify(d.seo.schema).replace(/</g, "\\u003c")}</script>` : "",
   ].filter(Boolean);
@@ -76,6 +77,6 @@ export function montarPagina(base, conteudo, pacote, pagina) {
 export function sitemapDoPacote(pacote, hoje) {
   const d = dadosDoSite(pacote);
   if (!d.url || !d.indexar) return null;
-  const linhas = paginasDoPacote(pacote).map((p) => `  <url><loc>${esc(`${d.url}/${p.slug ? `${p.slug}/` : ""}`)}</loc><lastmod>${hoje}</lastmod></url>`);
+  const linhas = paginasDoPacote(pacote).filter((p) => p.slug !== "obrigado").map((p) => `  <url><loc>${esc(`${d.url}/${p.slug ? `${p.slug}/` : ""}`)}</loc><lastmod>${hoje}</lastmod></url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${linhas.join("\n")}\n</urlset>\n`;
 }

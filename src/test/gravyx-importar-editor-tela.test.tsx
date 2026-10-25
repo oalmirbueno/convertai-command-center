@@ -56,13 +56,13 @@ beforeEach(() => {
 });
 
 describe("galeria de modelos", () => {
-  it("lista os cinco modelos e Usar modelo cria o site do modelo com nome livre e abre no Briefing", async () => {
+  it("lista os modelos (cinco, mais serviço e loja virtual) e Usar modelo cria o site do modelo com nome livre e abre no Briefing", async () => {
     const onAbrir = vi.fn();
     const { container } = montar(h(GaleriaDeModelos, { marcaId: null, onAbrir }));
     // 25/10: os modelos esquemáticos ficam recolhidos embaixo dos sites prontos; a seta abre.
     expect(container.querySelectorAll("[data-modelo]").length).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: /Modelos de página/ }));
-    expect(container.querySelectorAll("[data-modelo]").length).toBe(5);
+    expect(container.querySelectorAll("[data-modelo]").length).toBe(7);
     await waitFor(() => expect(corpos("sites_listar").length).toBe(1));
     await new Promise((r) => setTimeout(r, 20));
     fireEvent.click(container.querySelector('[data-usar-modelo="vendas"]')!);

@@ -407,6 +407,9 @@ export type PacoteDoSite = {
   globais?: string[];
   estilo?: (EstiloDoSite & { preset_rotulo?: string | null; preset_descricao?: string | null; modo?: "claro" | "escuro" | null; motion_instrucoes?: string[] }) | null;
   integracoes?: Record<string, unknown> | null;
+  /** Pixel/eventos e loja (mesa-site/modulos/medicao-do-site.ts). */
+  medicao?: Record<string, unknown> | null;
+  loja?: Record<string, unknown> | null;
   seo?: Record<string, unknown> | null;
   regras_da_equipe?: string[];
   /** UXM: a base UI UX Pro Max escolhida para o site (estilo, padrão, variantes, apoio da paleta, regras de UX, gráfico). */

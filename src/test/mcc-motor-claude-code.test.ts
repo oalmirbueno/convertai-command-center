@@ -224,11 +224,11 @@ describe("Claude Code preso na pasta do site", () => {
     }
   });
 
-  it("o plugin da casa: 5 skills em português, nome igual à pasta, no worker e fora do modelo do site", () => {
+  it("o plugin da casa: 8 skills em português, nome igual à pasta, no worker e fora do modelo do site", () => {
     const plugin = JSON.parse(readFileSync(join(PLUGIN_DA_CASA, ".claude-plugin", "plugin.json"), "utf8"));
     expect(plugin.name).toBe("casa-aceleriq");
     const skills = readdirSync(join(PLUGIN_DA_CASA, "skills"));
-    expect(skills.sort()).toEqual(["clonar-referencia", "copy-de-site", "humanizar-texto", "partir-de-modelo-pronto", "prova-honesta"]);
+    expect(skills.sort()).toEqual(["clonar-referencia", "copy-de-site", "humanizar-texto", "loja-virtual", "partir-de-modelo-pronto", "pixel-e-eventos", "prova-honesta", "site-de-servico"]);
     expect(PLUGIN_DA_CASA.split("\\").join("/")).toMatch(/workers\/motor-codigo\/skills-claude$/);
     expect(existsSync(join(raiz, "workers/motor-codigo/modelo-site/.claude"))).toBe(false);
     for (const s of skills) {

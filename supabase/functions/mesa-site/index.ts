@@ -108,6 +108,7 @@ import { lerLinkDoCliente } from "./modulos/leitura-do-link.ts";
 import { copyDaCasaParaOMotor } from "./modulos/motor-da-construcao.ts";
 // Jornada nova (25/10): contexto do cliente, objetivo e partida, galeria de sites prontos e copy da página.
 import { ACOES_LONGAS_DA_JORNADA, rotasDaJornada } from "./jornada.ts";
+import { ACOES_LONGAS_DA_MEDICAO, rotasDaMedicao } from "./medicao.ts";
 import { ACOES_LONGAS_DA_BASE, baseInicialDoSite, estimarDaBase, rotasDaBase } from "./base-de-design.ts";
 import { itensDaBaseDeDesign, regrasDoMapa } from "../_shared/uiux/base-completa.ts";
 import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimentoDaBaseDeDesign, TETO_DO_BLOCO_DO_DIRETOR } from "../_shared/uiux/citar.ts";
@@ -1216,10 +1217,11 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   ...(rotasDaPublicacao(PUBLICACAO) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
   ...(rotasDoCodigoEModelos(CODIGO) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
   ...(rotasDaJornada(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
+  ...(rotasDaMedicao(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
 };
 
 /** IA ou rede: a resposta começa na hora (a plataforma corta em 150 s sem resposta). */
-const ACOES_LONGAS = new Set(["link_ler", "referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", ...ACOES_LONGAS_DA_PUBLICACAO, ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE, ...ACOES_LONGAS_DA_JORNADA]);
+const ACOES_LONGAS = new Set(["link_ler", "referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", ...ACOES_LONGAS_DA_PUBLICACAO, ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE, ...ACOES_LONGAS_DA_JORNADA, ...ACOES_LONGAS_DA_MEDICAO]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

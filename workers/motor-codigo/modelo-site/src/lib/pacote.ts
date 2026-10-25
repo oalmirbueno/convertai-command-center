@@ -37,6 +37,12 @@ export type Integracoes = {
   mapa: { endereco: string; embed: string } | null;
   cookies: { politica_url: string | null } | null;
 };
+/** Eventos padrão da Meta que o site mede (o painel escolhe pelo objetivo: mesa-site/modulos/medicao-do-site.ts). */
+export type EventoDaMeta = "PageView" | "ViewContent" | "Lead" | "Contact" | "Schedule" | "CompleteRegistration" | "AddToCart" | "InitiateCheckout" | "AddPaymentInfo" | "Purchase";
+export type Medicao = { eventos: EventoDaMeta[]; eventos_automaticos: boolean; capi: boolean; moeda: string };
+export type ProdutoDaLoja = { id: string; nome: string; preco: number | null; categoria: string; descricao: string; link_pagamento: string | null; disponivel: boolean };
+/** Loja virtual: checkout "whatsapp" (carrinho vira mensagem) ou "link" (cada produto leva ao link de pagamento do gateway). */
+export type Loja = { checkout: "whatsapp" | "link"; moeda: string; produtos: ProdutoDaLoja[]; categorias: string[] };
 export type Pacote = {
   cliente: string;
   marca: { nome: string; negocio?: string; publico?: string; oferta?: string; tom?: string; diferenciais?: string[] };
@@ -52,6 +58,10 @@ export type Pacote = {
   paginas?: PaginaDoSite[];
   globais?: string[];
   integracoes?: Integracoes | null;
+  /** Pixel e eventos (25/10). Pacote antigo não tem: o site mede só PageView e Lead. */
+  medicao?: Medicao | null;
+  /** Loja virtual (25/10): só no objetivo Loja virtual. */
+  loja?: Loja | null;
   seo?: { titulo?: string; descricao?: string; url?: string | null; og_imagem?: string | null; indexar?: boolean; robots?: string; schema?: Record<string, unknown> | null } | null;
   /** URL css2 do Google Fonts montada no painel (o pré-render põe o <link> com display=swap). */
   fontes_url?: string | null;
@@ -76,6 +86,9 @@ export const fotosReais = (secao?: string) => (secao ? pacote.fotos_reais.filter
 
 /** As páginas do site (uma só no pacote antigo). */
 export const paginas = (): PaginaDoSite[] => (pacote.paginas && pacote.paginas.length ? pacote.paginas : []);
+
+/** As páginas do menu do topo e do rodapé: todas menos a de obrigado (ela só abre na volta do pagamento). */
+export const paginasDoMenu = (): PaginaDoSite[] => paginas().filter((p) => p.slug !== "obrigado");
 
 /** Endereço de uma página ("/" na inicial, "/sobre/" nas outras). */
 export const caminhoDa = (p: Pick<PaginaDoSite, "slug">) => (p.slug ? `/${p.slug}/` : "/");

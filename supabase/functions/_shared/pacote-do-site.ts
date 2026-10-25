@@ -13,6 +13,7 @@ import { coresValidas, type DnaDoSite, estiloDoPacote, type OpcaoDeCopy, type Pa
 import { fontesComAjustes, mapaDoSite, normalizarEstilo, secoesDoMapa } from "./site-biblioteca.ts";
 import { integracoesDoPacote, normalizarIntegracoes, normalizarSeo, robotsTxt, schemaDoNegocio, urlDoSite } from "./site-lancamento.ts";
 import { variantesDoMapa } from "./site-variantes.ts";
+import { lojaDoPacote, medicaoDoPacote } from "../mesa-site/modulos/medicao-do-site.ts";
 import { lerBaseDeDesign, lerSerieReal } from "./uiux/consultas.ts";
 import { BASE_COMPLETA, apoioDoProduto, pacoteDaBaseDeDesign } from "./uiux/base-completa.ts";
 import { coresDoSite } from "./uiux/apoio-da-paleta.ts";
@@ -185,6 +186,8 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
     globais: mapa.globais,
     estilo,
     integracoes: integracoesDoPacote(integracoes, base ? `${base}/functions/v1/site-formulario` : null),
+    medicao: medicaoDoPacote(site.direcao, integracoes.pixel_meta.id),
+    loja: lojaDoPacote(site.direcao),
     seo: {
       titulo: seo.titulo || (copy ? copy.seo.titulo : "") || nomeDoCliente,
       descricao: seo.descricao || (copy ? copy.seo.descricao : ""),

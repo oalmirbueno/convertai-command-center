@@ -5,9 +5,11 @@
  *   o que o painel já sabe do cliente (marca, contexto, estratégia, dossiê,
  *   Instagram, cadastro, dados do site), pela regra da marca (a outra marca
  *   nunca herda), com o que a equipe editou por cima. Sem IA, sem custo.
- * jornada_salvar { site_id, objetivo?, partida?, contexto? } -> { site }:
+ * jornada_salvar { site_id, objetivo?, partida?, contexto?, medicao?, loja? } -> { site }:
  *   grava a jornada em direcao.jornada. O objetivo, com o site ainda sem
- *   seção construída, troca o tipo e o mapa pelo do objetivo.
+ *   seção construída, troca o tipo e o mapa pelo do objetivo. medicao
+ *   (eventos automáticos, Conversions API, código de teste) e loja (checkout
+ *   e produtos) vão ao pacote do site (modulos/medicao-do-site.ts).
  * modelos_prontos_listar { site_id, objetivo? } -> { modelos, do_nicho, recomendado, porque }:
  *   a galeria de sites prontos filtrada pelo objetivo e pelo nicho; o Jev
  *   recomenda um (Choice, cobrado na carteira do cliente).
@@ -37,6 +39,7 @@ import type { ChamadorDaEstrutura, ContextoDaEstrutura } from "./estrutura.ts";
 import { guardarVersao } from "./versoes.ts";
 import { camposDoModelo, modeloDePagina } from "./modulos/modelos-de-pagina.ts";
 import { MODELOS_PRONTOS } from "./modulos/modelos-prontos.ts";
+import { normalizarLoja, normalizarMedicao } from "./modulos/medicao-do-site.ts";
 import {
   type ContextoDoCliente,
   contextoDasFontes,
@@ -157,6 +160,15 @@ async function jornadaSalvar(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutura, 
       if (k in limpo && k !== "marca" && k !== "dossie") editado[k] = (limpo as unknown as Record<string, unknown>)[k];
     });
     jornada.contexto = { ...obj(jornada.contexto), ...editado };
+  }
+  // Pixel e loja (25/10): a casca do site lê do pacote; mudar pede "Aplicar no site" (sem gastar modelo).
+  if (c.medicao !== undefined) {
+    jornada.medicao = normalizarMedicao({ ...normalizarMedicao(jornada.medicao), ...obj(c.medicao) });
+    campos.pacote_mudou_em = new Date().toISOString();
+  }
+  if (c.loja !== undefined) {
+    jornada.loja = normalizarLoja(c.loja);
+    campos.pacote_mudou_em = new Date().toISOString();
   }
   jornada.atualizada_em = new Date().toISOString();
   campos.direcao = { ...direcao, jornada };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { pacote } from "./pacote";
+import { pacote, type EventoDaMeta } from "./pacote";
 
 /**
  * Integrações da casa (Mesa Site SIT2): WhatsApp flutuante, aviso de cookies
@@ -11,6 +11,16 @@ import { pacote } from "./pacote";
  * Nada roda no servidor: o estado de consentimento é lido depois de montar
  * (a página pré-renderizada hidrata igual).
  *
+ * Pixel e eventos (25/10/2026): os eventos padrão da Meta do objetivo
+ * (pacote.medicao.eventos) saem daqui, sempre depois do Aceitar: o
+ * formulário conta Lead (com correspondência avançada: o pixel faz o hash),
+ * todo link de WhatsApp, telefone e e-mail conta Contact, e qualquer elemento
+ * com data-evento="Schedule" (ou "ViewContent", com data-evento-nome)
+ * conta o seu evento no clique. Cada evento leva um eventID; com a
+ * Conversions API ligada, o formulário manda o mesmo id ao servidor, que
+ * repete o Lead (a Meta deduplica). Os eventos automáticos da Meta ficam
+ * desligados (autoConfig) quando a equipe não ligou, para não contar em dobro.
+ *
  * Origem do clique (19/10/2026): os parâmetros do link de entrada (utm_* e os
  * ids da Meta, como utm_content={{ad.id}}) ficam guardados na visita e vão
  * no formulário em campos ocultos. Assim o lead chega ao CRM dizendo de qual
@@ -19,6 +29,9 @@ import { pacote } from "./pacote";
  */
 
 const integracoes = pacote.integracoes || null;
+const medicao = pacote.medicao || null;
+/** Os eventos que o site mede (pacote antigo: Contact e Lead). */
+const EVENTOS_DO_SITE: EventoDaMeta[] = medicao && medicao.eventos.length ? medicao.eventos : ["PageView", "Contact", "Lead"];
 const CHAVE_DO_CONSENTIMENTO = "aceleriq-consentimento";
 const EVENTO_DE_PREFERENCIAS = "aceleriq:preferencias-de-cookies";
 
@@ -115,6 +128,8 @@ function carregarRastreio() {
     s.async = true;
     s.src = "https://connect.facebook.net/en_US/fbevents.js";
     document.head.appendChild(s);
+    // Eventos automáticos e enriquecimento por IA da Meta: desligados quando a equipe não ligou (os eventos daqui já contam).
+    if (!(medicao && medicao.eventos_automaticos)) w.fbq!("set", "autoConfig", false, integracoes.pixel_meta);
     w.fbq!("init", integracoes.pixel_meta);
     w.fbq!("track", "PageView");
   }
@@ -134,11 +149,108 @@ function carregarRastreio() {
   }
 }
 
-/** Conta um lead nos rastreios ligados (só se o visitante aceitou). */
-function contarLead() {
+/** O nome do evento no GA4 (recomendados do Google). */
+const NO_GA4: Partial<Record<EventoDaMeta, string>> = {
+  ViewContent: "view_item",
+  Lead: "generate_lead",
+  Contact: "contact",
+  Schedule: "schedule",
+  CompleteRegistration: "sign_up",
+  AddToCart: "add_to_cart",
+  InitiateCheckout: "begin_checkout",
+  AddPaymentInfo: "add_payment_info",
+  Purchase: "purchase",
+};
+
+/** Id do evento (o mesmo vai ao servidor na Conversions API: a Meta deduplica pelo par evento e id). */
+export const novoIdDoEvento = (evento: string) => `${evento.toLowerCase()}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+/** O visitante aceitou os cookies (sem isso nenhum evento sai: LGPD). */
+export const aceitouCookies = () => lerConsentimento() === "aceito";
+
+/**
+ * Dispara um evento padrão da Meta (e o par no GA4), só depois do Aceitar e
+ * só se o evento é do objetivo do site. Devolve o eventID (ou null quando não
+ * disparou). Nas seções, prefira data-evento ou os componentes da casa.
+ */
+export function rastrear(evento: EventoDaMeta, dados?: Record<string, unknown>, id?: string): string | null {
+  if (typeof window === "undefined" || !aceitouCookies() || EVENTOS_DO_SITE.indexOf(evento) < 0) return null;
+  carregarRastreio();
   const w = window as Janela;
-  if (w.fbq) w.fbq("track", "Lead");
+  const eventID = id || novoIdDoEvento(evento);
+  if (w.fbq) w.fbq("track", evento, dados || {}, { eventID });
+  const ga = NO_GA4[evento];
+  if (w.gtag && ga) {
+    const d = dados || {};
+    w.gtag("event", ga, { value: d.value, currency: d.currency, items: Array.isArray(d.contents) ? d.contents : undefined });
+  }
+  return eventID;
+}
+
+const lerCookie = (nome: string) => {
+  try {
+    const m = document.cookie.match(new RegExp(`(?:^|; )${nome}=([^;]*)`));
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** _fbc do cookie ou, sem ele, montado do fbclid do link (formato da Meta: fb.1.<ms>.<fbclid>). */
+function fbcDaVisita(): string | null {
+  const c = lerCookie("_fbc");
+  if (c) return c;
+  const o = origemDaVisita();
+  return o.fbclid ? `fb.1.${Date.now()}.${o.fbclid}` : null;
+}
+
+/** O que vai ao servidor para repetir o Lead na Conversions API (só com o Aceitar e o servidor ligado). */
+function metaDoEnvio(eventID: string): Record<string, unknown> | null {
+  if (!aceitouCookies() || !integracoes || !integracoes.pixel_meta || !medicao || !medicao.capi) return null;
+  return { consentiu: true, event_id: eventID, fbp: lerCookie("_fbp"), fbc: fbcDaVisita(), url: window.location.href.split("#")[0] };
+}
+
+/** Conta um lead nos rastreios ligados (só se o visitante aceitou), com correspondência avançada (o pixel faz o hash). */
+function contarLead(pessoa: { email?: string; whatsapp?: string; nome?: string }, eventID: string) {
+  if (!aceitouCookies()) return;
+  carregarRastreio();
+  const w = window as Janela;
+  if (w.fbq && integracoes && integracoes.pixel_meta) {
+    const am: Record<string, string> = {};
+    const em = String(pessoa.email || "").trim().toLowerCase();
+    let ph = String(pessoa.whatsapp || "").replace(/\D/g, "");
+    if (ph.length === 10 || ph.length === 11) ph = `55${ph}`;
+    const fn = String(pessoa.nome || "").trim().split(/\s+/)[0].toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(em)) am.em = em;
+    if (ph.length >= 12) am.ph = ph;
+    if (fn) am.fn = fn;
+    if (Object.keys(am).length) w.fbq("init", integracoes.pixel_meta, am);
+    w.fbq("track", "Lead", {}, { eventID });
+  }
   if (w.gtag) w.gtag("event", "generate_lead");
+}
+
+/** Contato, agendamento e conteúdo no clique: data-evento no elemento; links de WhatsApp, telefone e e-mail contam Contact. */
+function ouvirCliques(e: MouseEvent) {
+  const alvo = e.target instanceof Element ? e.target.closest("[data-evento], a[href]") : null;
+  if (!alvo) return;
+  const marcado = alvo.getAttribute("data-evento");
+  if (marcado) {
+    const nome = alvo.getAttribute("data-evento-nome");
+    const valor = Number(alvo.getAttribute("data-evento-valor"));
+    const dados: Record<string, unknown> = {};
+    if (nome) dados.content_name = nome;
+    if (isFinite(valor) && valor > 0) {
+      dados.value = valor;
+      dados.currency = (medicao && medicao.moeda) || "BRL";
+    }
+    rastrear(marcado as EventoDaMeta, dados);
+    return;
+  }
+  const href = alvo.getAttribute("href") || "";
+  if (/^https:\/\/(wa\.me|api\.whatsapp\.com)\//i.test(href)) rastrear("Contact", { content_name: "whatsapp" });
+  else if (/^tel:/i.test(href)) rastrear("Contact", { content_name: "telefone" });
+  else if (/^mailto:/i.test(href)) rastrear("Contact", { content_name: "email" });
 }
 
 function useConsentimento(): [Consentimento, (v: "aceito" | "recusado") => void, boolean] {
@@ -178,7 +290,7 @@ function AvisoDeCookies() {
   if (!montado || !integracoes || !integracoes.cookies || (consentimento && !reaberto)) return null;
   const politica = integracoes.cookies.politica_url;
   return (
-    <div role="dialog" aria-live="polite" aria-label="Aviso de cookies" className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-xl rounded-xl border border-texto/10 bg-superficie p-4 text-sm text-texto shadow-lg sm:inset-x-6">
+    <div role="dialog" aria-live="polite" aria-label="Aviso de cookies" className="fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-xl rounded-xl border border-texto/10 bg-superficie p-4 text-sm text-texto shadow-lg sm:inset-x-6">
       <p className="leading-relaxed">
         Usamos cookies para medir as visitas e melhorar os anúncios. Você escolhe.{" "}
         {politica ? (
@@ -223,6 +335,8 @@ export function CamadaDeIntegracoes() {
   // Guarda a origem logo na entrada: o formulário pode estar em outra página.
   useEffect(() => {
     origemDaVisita();
+    document.addEventListener("click", ouvirCliques, true);
+    return () => document.removeEventListener("click", ouvirCliques, true);
   }, []);
   return (
     <>
@@ -255,6 +369,10 @@ export function Formulario({ className, rotuloDoBotao = "Enviar" }: { className?
     const dados = new FormData(e.currentTarget);
     const corpo: Record<string, unknown> = { chave: f.chave, pagina: window.location.pathname, iniciado_em: inicio.current, site_url: String(dados.get("site_url") || "") };
     f.campos.forEach((c) => (corpo[c] = String(dados.get(c) || "")));
+    // O mesmo id vai no fbq e no servidor (Conversions API), só com o Aceitar.
+    const eventID = novoIdDoEvento("Lead");
+    const meta = metaDoEnvio(eventID);
+    if (meta) corpo.meta = meta;
     // A origem do clique (campos ocultos): só o que veio no link.
     CAMPOS_DA_ORIGEM.forEach((c) => {
       const v = String(dados.get(c) || "");
@@ -267,7 +385,7 @@ export function Formulario({ className, rotuloDoBotao = "Enviar" }: { className?
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; mensagem?: string };
       if (!r.ok || !j.ok) throw new Error(j.mensagem || "Não foi possível enviar agora.");
       setEstado("enviado");
-      contarLead();
+      contarLead({ email: String(corpo.email || ""), whatsapp: String(corpo.whatsapp || ""), nome: String(corpo.nome || "") }, eventID);
     } catch (x) {
       setEstado("erro");
       setErro(x instanceof Error ? x.message : "Não foi possível enviar agora.");

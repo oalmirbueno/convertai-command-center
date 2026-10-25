@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { BriefcaseBusiness, Building2, CalendarCheck, Link2, Loader2, Magnet, ShoppingBag, Ticket, UtensilsCrossed } from "lucide-react";
+import { BriefcaseBusiness, Building2, CalendarCheck, Link2, Loader2, Magnet, ShoppingBag, Store, Ticket, UtensilsCrossed, Wrench } from "lucide-react";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -10,6 +10,8 @@ import { jornadaDoSite } from "./jornadaApi";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
 
 export const ICONE_DO_OBJETIVO: Record<string, ComponentType<{ className?: string }>> = {
+  servico: Wrench,
+  loja_virtual: Store,
   captar: Magnet,
   vender: ShoppingBag,
   agendar: CalendarCheck,

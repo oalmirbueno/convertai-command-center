@@ -9,8 +9,12 @@ import type { AvisoDeQa } from "../../../supabase/functions/_shared/site-metodo"
 import type { TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { CHAVES, chamarSite, type LinhaDoSite, montadoDepoisDasMudancas, secoesConstruidas } from "./siteApi";
 import { estadoDaLinha } from "./estadoDoSite";
+import { normalizarIntegracoes } from "../../../supabase/functions/_shared/site-lancamento";
+import { mapaDoSite } from "../../../supabase/functions/_shared/site-biblioteca";
+import { itensDaMedicao } from "../../../supabase/functions/mesa-site/modulos/medicao-do-site";
+import { jornadaDoSite } from "./jornadaApi";
 
-const ROTULO_DA_ETAPA: Record<string, string> = { briefing: "Briefing", direcao: "Direção", conteudo: "Conteúdo", imagens: "Imagens", integracoes: "Integrações e SEO", construcao: "Construção", revisao: "Revisão", publicacao: "Publicação" };
+const ROTULO_DA_ETAPA: Record<string, string> = { conferir: "Conferir o cliente", ajustar: "Pixel e eventos", briefing: "Briefing", direcao: "Direção", conteudo: "Conteúdo", imagens: "Imagens", integracoes: "Integrações e SEO", construcao: "Construção", revisao: "Revisão", publicacao: "Publicação" };
 
 /** O checklist do site (puro sobre o que a tela já tem; a montagem da linha é a mesma da barra das etapas). UXM: `pendenciasDeUx` (críticas e altas) vira um item não obrigatório. */
 export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor[], pendenciasDeUx?: number | null): ItemDoChecklist[] {
@@ -20,6 +24,19 @@ export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor
     const ultimo = trabalhos.find((t) => t.estado === "feito" && (Array.isArray(t.resultado.qa) || !!t.resultado.build)) || null;
     const qa = ultimo && Array.isArray(ultimo.resultado.qa) ? (ultimo.resultado.qa as AvisoDeQa[]) : [];
     const build = ultimo ? (ultimo.resultado.build as { ok?: boolean } | undefined) : undefined;
+    // 25/10: pixel, eventos e loja do objetivo (o pixel é aviso; a loja sem jeito de comprar é obrigatória).
+    const j = jornadaDoSite(site);
+    const int = normalizarIntegracoes(site.integracoes || {});
+    const medicao = itensDaMedicao({
+      objetivo: j.objetivo,
+      pixel: int.pixel_meta.id,
+      cookiesLigado: int.cookies.ligado,
+      whatsappLigado: int.whatsapp.ligado,
+      formularioLigado: int.formulario.ligado,
+      medicao: j.medicao,
+      loja: j.objetivo === "loja_virtual" ? j.loja : null,
+      temPaginaDeObrigado: mapaDoSite(site).paginas.some((p) => p.slug === "obrigado"),
+    });
     return checklistDeLancamento(
       estadoDaLinha(site, {
         construidas: secoesConstruidas(trabalhos),
@@ -31,7 +48,7 @@ export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor
         construidoDepoisDasMudancas: montadoDepoisDasMudancas(site, trabalhos),
         pendenciasDeUx: pendenciasDeUx === undefined ? null : pendenciasDeUx,
       }),
-    );
+    ).concat(medicao);
   }, [site, trabalhos, publicacao.data, kit.data, pendenciasDeUx]);
 }
 

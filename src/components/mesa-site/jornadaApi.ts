@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ModeloPronto } from "../../../supabase/functions/mesa-site/modulos/modelos-prontos";
 import { type ContextoDoCliente, type PartidaDoSite, passoInicial } from "../../../supabase/functions/mesa-site/modulos/jornada-do-site";
+import { type EventoDaMeta, type LojaDoSite, type MedicaoDoSite, normalizarLoja, normalizarMedicao, type PixelDaConta } from "../../../supabase/functions/mesa-site/modulos/medicao-do-site";
 import { chamarSite, type LinhaDoSite } from "./siteApi";
 
 /**
@@ -9,7 +10,7 @@ import { chamarSite, type LinhaDoSite } from "./siteApi";
  * e o que a jornada já guardou no site (direcao.jornada).
  */
 
-export type JornadaDoSite = { objetivo: string | null; partida: PartidaDoSite | null; contexto: Record<string, unknown> };
+export type JornadaDoSite = { objetivo: string | null; partida: PartidaDoSite | null; contexto: Record<string, unknown>; medicao: MedicaoDoSite; loja: LojaDoSite };
 
 export function jornadaDoSite(site: Pick<LinhaDoSite, "direcao">): JornadaDoSite {
   const j = site.direcao && typeof site.direcao.jornada === "object" && site.direcao.jornada ? (site.direcao.jornada as Record<string, any>) : {};
@@ -17,6 +18,8 @@ export function jornadaDoSite(site: Pick<LinhaDoSite, "direcao">): JornadaDoSite
     objetivo: typeof j.objetivo === "string" ? j.objetivo : null,
     partida: j.partida && typeof j.partida === "object" ? (j.partida as PartidaDoSite) : null,
     contexto: j.contexto && typeof j.contexto === "object" ? j.contexto : {},
+    medicao: normalizarMedicao(j.medicao),
+    loja: normalizarLoja(j.loja),
   };
 }
 
@@ -25,7 +28,32 @@ export { passoInicial };
 export const CHAVES_DA_JORNADA = {
   contexto: (siteId: string) => ["mesa-site", "jornada", "contexto", siteId],
   prontos: (siteId: string, objetivo: string | null) => ["mesa-site", "jornada", "prontos", siteId, objetivo || "todos"],
+  medicao: (siteId: string) => ["mesa-site", "jornada", "medicao", siteId],
 };
+
+export type RespostaDaMedicao = {
+  pixel: string | null;
+  pixels: PixelDaConta[];
+  sugerido: string | null;
+  tem_conta: boolean;
+  tem_token: boolean;
+  motivo: string | null;
+  capi: { possivel: boolean; motivo: string };
+  eventos: EventoDaMeta[];
+  medicao: MedicaoDoSite;
+  passos: string[];
+  url: string | null;
+};
+
+/** Pixels da conta de anúncios, eventos do objetivo e se a Conversions API pode ligar (sem IA, sem custo). */
+export function useMedicao(siteId: string, ativo = true) {
+  return useQuery({
+    queryKey: CHAVES_DA_JORNADA.medicao(siteId),
+    enabled: ativo,
+    staleTime: 5 * 60_000,
+    queryFn: () => chamarSite<RespostaDaMedicao>("medicao_estado", { site_id: siteId }),
+  });
+}
 
 export type RespostaDoContexto = { contexto: ContextoDoCliente; do_cliente: ContextoDoCliente; origem: Record<string, string>; editado: Record<string, unknown>; nichos: string[] };
 

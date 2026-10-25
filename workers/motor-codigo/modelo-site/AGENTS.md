@@ -7,7 +7,8 @@ Você é o agente de código da Mesa Site da Aceleriq. Este projeto é o site de
   - `tipo` (institucional, landing, portfolio, loja, bio), `paginas` (id, slug, título e os ids das seções de cada página) e `globais` (topo e rodapé, que aparecem em todas as páginas);
   - `mapa` (o mesmo mapa com o tipo de cada seção da biblioteca abaixo);
   - `estilo` (o preset de estilo, claro ou escuro, e as instruções dos presets de movimento);
-  - `integracoes` (WhatsApp, formulário, pixel, GA4, mapa, cookies) e `seo` (título, descrição, endereço, imagem de compartilhamento, schema).
+  - `integracoes` (WhatsApp, formulário, pixel, GA4, mapa, cookies) e `seo` (título, descrição, endereço, imagem de compartilhamento, schema);
+  - `medicao` (os eventos padrão da Meta que o site mede pelo objetivo) e, na loja virtual, `loja` (checkout, produtos com preço, categoria e link de pagamento).
 - `public/marca/`: a logo real. `public/imagens/`: imagens geradas e fotos reais. `referencias/`: anexos que a equipe mandou para esta passada.
 - O pedido da passada: UMA seção por vez, pela fórmula de 6 blocos (o quê, estrutura, estilo/DNA, movimento, stack, referência de nível).
 
@@ -37,7 +38,7 @@ As skills do Superpowers liberadas para este trabalho estão na ferramenta `skil
 ## Páginas (sites novos)
 - O id da seção é o que está em `pacote.paginas[].secoes` (na página inicial é o tipo, ex. `hero`; nas outras, `<página>-<tipo>`, ex. `sobre-equipe`). O componente é `src/secoes/<Id em PascalCase>.tsx` e o registro em `src/secoes/index.ts` usa exatamente esse id.
 - `src/App.tsx` monta a página do endereço: o topo (`topo`) e o rodapé (`rodape`) em volta das seções da página. Não ponha o topo ou o rodapé dentro de outra seção.
-- Links entre páginas: `caminhoDa(pagina)` de `src/lib/pacote.ts` (ex.: `/sobre/`). O menu do topo lista `paginas()` na ordem.
+- Links entre páginas: `caminhoDa(pagina)` de `src/lib/pacote.ts` (ex.: `/sobre/`). O menu do topo e o rodapé listam `paginasDoMenu()` na ordem (a página `obrigado` da loja fica fora do menu).
 - O pré-render faz um HTML por página, o `sitemap.xml`, o `robots.txt` e o schema do negócio. Não mexa em `scripts/`.
 
 ## Inteligência de design (skill ui-ux-pro-max)
@@ -64,7 +65,13 @@ Você tem a skill `ui-ux-pro-max`: base de estilos, cores, tipografia, padrões 
   - `<Mapa />`: o mapa do Google do endereço do pacote; só carrega com o clique ou o consentimento (LGPD).
   - `linkDoWhatsapp(texto)`: link do WhatsApp com a mensagem (produto da vitrine, CTA). O botão flutuante e o aviso de cookies já ficam no App.
   - `abrirPreferenciasDeCookies()`: o rodapé tem um botão "Preferências de cookies" quando `pacote.integracoes.cookies` existe.
-- Pixel da Meta e GA4 carregam sozinhos depois do "Aceitar" do aviso de cookies. Nunca ponha script de rastreio no HTML nem em seção.
+- Pixel da Meta e GA4 carregam sozinhos depois do "Aceitar" do aviso de cookies. Nunca ponha script de rastreio no HTML nem em seção, e nunca chame `fbq` ou `gtag` direto.
+- **Eventos (pacote.medicao):** a casca dispara os eventos padrão da Meta do objetivo, só depois do Aceitar e com o eventID que a Conversions API usa. O formulário conta `Lead`; todo link de WhatsApp (`linkDoWhatsapp`), `tel:` e `mailto:` conta `Contact` sozinho. Para o resto, marque o elemento:
+  - botão de agendar ou pedir orçamento: `data-evento="Schedule"`;
+  - abrir um serviço ou ver detalhes: `data-evento="ViewContent" data-evento-nome="<nome do serviço>"`;
+  - inscrição concluída (evento): `data-evento="CompleteRegistration"`.
+  Evento fora de `pacote.medicao.eventos` não sai (a casca filtra). Se precisar disparar por código, use `rastrear(evento, dados)` de `src/lib/integracoes.tsx`.
+- `src/lib/loja.tsx` (só quando `pacote.loja` existe): `<Vitrine />` (filtro por categoria e grade), `<CartaoDoProduto produto imagem />`, `<BotaoComprar produto />`, `produtosDaLoja(categoria)`, `categoriasDaLoja()`, `precoDoProduto(p)` e `linkDoProduto(p)` (abre a página do produto, que conta `ViewContent`). O carrinho, o checkout (link de pagamento do gateway ou pedido no WhatsApp) e a compra na volta para `/obrigado/` (`Purchase` com valor e moeda) já estão na casca: não refaça carrinho, preço nem checkout. Foto de produto só de `public/` (ligue com `imagemDoProduto`).
 
 ## Stack e bibliotecas (e só estas)
 - Vite + React + TypeScript + Tailwind (v4, `@import "tailwindcss"` em `src/tema.css`).
@@ -148,5 +155,5 @@ Quando o pedido da passada traz `PARTIDA:`, a seção segue uma referência ou u
 
 ## Estrutura
 - `src/secoes/index.ts`: `SECOES` com o id e o componente de cada seção (a ordem de cada página vem do pacote).
-- Casca da casa (o motor atualiza sozinho, repõe o original se mudar e nega a edição): `AGENTS.md`, `.gitignore`, `index.html`, `vite.config.ts`, `scripts/*`, `src/App.tsx`, `src/main.tsx`, `src/entry-server.tsx`, `src/lib/pacote.ts`, `src/lib/integracoes.tsx`, `src/lib/movimento.ts`, `src/lib/Revelar.tsx`, `src/lib/rolagem.ts`, `src/lib/Grafico.tsx`. Também não se edita o que roda na máquina ou é do motor: `package.json`, `.aceleriq/` (menos `.aceleriq/ux/`, a sua prova de UX), `.git/`, `.opencode/`, `.claude/`, `CLAUDE.md`, `referencias/`, `src/marca.css` e `public/marca/`.
+- Casca da casa (o motor atualiza sozinho, repõe o original se mudar e nega a edição): `AGENTS.md`, `.gitignore`, `index.html`, `vite.config.ts`, `scripts/*`, `src/App.tsx`, `src/main.tsx`, `src/entry-server.tsx`, `src/lib/pacote.ts`, `src/lib/integracoes.tsx`, `src/lib/loja.tsx`, `src/lib/movimento.ts`, `src/lib/Revelar.tsx`, `src/lib/rolagem.ts`, `src/lib/Grafico.tsx`. Também não se edita o que roda na máquina ou é do motor: `package.json`, `.aceleriq/` (menos `.aceleriq/ux/`, a sua prova de UX), `.git/`, `.opencode/`, `.claude/`, `CLAUDE.md`, `referencias/`, `src/marca.css` e `public/marca/`.
 - `src/entry-server.tsx` e `scripts/prerender.mjs`: pré-render para SEO (o HTML de cada página sai pronto).

@@ -10,6 +10,8 @@ import { CAMPOS_DO_CONTEXTO, camposPreenchidos, type ContextoDoCliente } from ".
 import { type LinhaDoSite, useSalvarSite } from "./siteApi";
 import { CHAVES_DA_JORNADA, ROTULO_DA_ORIGEM, useContextoDoCliente } from "./jornadaApi";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
+import { jornadaDoSite } from "./jornadaApi";
+import ProdutosDaLoja from "./ProdutosDaLoja";
 
 type Valores = Record<string, string>;
 
@@ -133,6 +135,8 @@ export default function PassoConferir({ site }: { site: LinhaDoSite }) {
           })}
         </div>
       </Secao>
+
+      {jornadaDoSite(site).objetivo === "loja_virtual" && <ProdutosDaLoja site={site} produtosDoCliente={c.produtos} />}
 
       {c.dossie && (
         <div className="min-w-0" data-dossie="">
