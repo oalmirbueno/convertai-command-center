@@ -4654,7 +4654,7 @@ const comercialMaquinaBuscarTool = ferramentaDoCrm(
   'Pede uma busca de empresas por nicho e cidade a Maquina de leads (o worker da casa roda: dados publicos abertos e o site oficial de cada empresa, respeitando robots.txt). Busca igual ja na fila e devolvida em vez de duplicar. entregar_ao_mercurio liga o Mercurio nos leads importados dessa busca.',
   true, z.object({
     nicho: z.string().min(2).max(120), cidade: z.string().min(2).max(120), uf: z.string().min(2).max(2).optional(),
-    limite: z.number().int().min(1).max(300).optional(), fontes: z.array(z.string().regex(/^[a-z_]{2,20}$/)).max(5).optional(),
+    limite: limite(300), fontes: z.array(z.string().regex(/^[a-z_]{2,20}$/)).max(5).optional(),
     campanha_id: UUID.nullable().optional(), entregar_ao_mercurio: z.boolean().optional(),
   }).strict(),
   { type: 'object', properties: {
