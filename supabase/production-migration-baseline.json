@@ -2643,19 +2643,19 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261026210000",
-      "path": "supabase/migrations/20261026210000_post_aprovado_fica_pronto.sql",
-      "local_sha256": "090d608302217711a8608f7732eebb489e22a2c58ad5f751faa8a4428f61c328",
-      "remote_name": "post_aprovado_fica_pronto",
-      "remote_statements_sha256": "7cf38f05102dfc761ce633f6841e457cbbc1aaf6ddab8a96850b681b893c0e7e",
-      "remote_hash_mode": "supabase_cli_split"
-    },
-    {
       "version": "20261026200500",
       "path": "supabase/migrations/20261026200500_ego_horario_comercial.sql",
       "local_sha256": "0ee547d465f2df918a80c9cbae980d4a4c5b9fdc9d7431654b97a412abc484f2",
       "remote_name": "ego_horario_comercial",
       "remote_statements_sha256": "b6db6813df3b067bf90788ccf84bfd208aaec599af7b222cbc126ddacfe4f481",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026210000",
+      "path": "supabase/migrations/20261026210000_post_aprovado_fica_pronto.sql",
+      "local_sha256": "090d608302217711a8608f7732eebb489e22a2c58ad5f751faa8a4428f61c328",
+      "remote_name": "post_aprovado_fica_pronto",
+      "remote_statements_sha256": "7cf38f05102dfc761ce633f6841e457cbbc1aaf6ddab8a96850b681b893c0e7e",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
