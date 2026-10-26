@@ -78,7 +78,7 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
   const enviar = async () => {
     const ok = await confirmar({
       title: proposta.status === "rascunho" ? "Gerar o link e marcar como enviada?" : "Atualizar o envio?",
-      description: `Proposta ${proposta.numero}, ${textoDoTotal(proposta.totais)}, válida até ${dataCurta(proposta.validade_ate)}. Nada vai ao cliente sem você mandar o link.`,
+      description: `Proposta ${proposta.numero}, ${textoDoTotal(proposta.totais, proposta.moeda)}, válida até ${dataCurta(proposta.validade_ate)}. Nada vai ao cliente sem você mandar o link.`,
       confirmLabel: "Confirmar envio",
     });
     if (!ok) return;
@@ -120,7 +120,7 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
           <span className="inline-flex items-center">
             <SeloDaProposta status={proposta.status_efetivo} />
             <span className="ml-2">
-              {textoDoTotal(proposta.totais)} · até {dataCurta(proposta.validade_ate) || "sem data"}
+              {textoDoTotal(proposta.totais, proposta.moeda)} · até {dataCurta(proposta.validade_ate) || "sem data"}
             </span>
           </span>
         }

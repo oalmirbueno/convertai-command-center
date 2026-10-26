@@ -135,7 +135,7 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
       <Secao
         titulo="Antes de enviar"
         recolher={false}
-        descricao={`${textoDoTotal(proposta.totais)} · até ${dataCurta(proposta.validade_ate) || "sem data"}${bloqueiam ? ` · ${bloqueiam} bloqueiam o envio` : proposta.pendencias.length ? " · só avisos" : ""}`}
+        descricao={`${textoDoTotal(proposta.totais, proposta.moeda)} · até ${dataCurta(proposta.validade_ate) || "sem data"}${bloqueiam ? ` · ${bloqueiam} bloqueiam o envio` : proposta.pendencias.length ? " · só avisos" : ""}`}
         ajuda="O que falta para a proposta sair. O que bloqueia impede o Enviar; o resto é aviso. Resolver leva ao lugar que conserta (preço e validade na Conversa, o texto no Rascunho, as provas na Biblioteca)."
       >
         {proposta.pendencias.length ? (

@@ -24,6 +24,7 @@ import {
   comBloco,
   dataCurta,
   diaValido,
+  dinheiro,
   normalizarConteudo,
   normalizarItens,
   reais,
@@ -35,6 +36,7 @@ import {
   type Bloco,
   type ConteudoDaProposta,
   type ItemDaProposta,
+  type MoedaDaProposta,
   type TipoDeBloco,
   type Totais,
 } from "./proposta-modelo.ts";
@@ -508,15 +510,16 @@ export function valorDaOpcao(op: OpcaoDePagamento, t: Totais): { total_unico: nu
 }
 
 /** Frase da opção: "À vista com 5% de desconto: R$ 4.275,00". */
-export function textoDaOpcao(op: OpcaoDePagamento, t: Totais): string {
+export function textoDaOpcao(op: OpcaoDePagamento, t: Totais, moeda: MoedaDaProposta = "BRL"): string {
   const v = valorDaOpcao(op, t);
-  const mensal = t.mensal > 0 ? ` + ${reais(t.mensal)} por mês` : "";
-  if (op.tipo === "a_vista") return `À vista${op.desconto_pct > 0 ? ` com ${op.desconto_pct}% de desconto` : ""}: ${reais(v.total_unico)}${mensal}`;
+  const $ = (n: number) => dinheiro(n, moeda);
+  const mensal = t.mensal > 0 ? ` + ${$(t.mensal)} por mês` : "";
+  if (op.tipo === "a_vista") return `À vista${op.desconto_pct > 0 ? ` com ${op.desconto_pct}% de desconto` : ""}: ${$(v.total_unico)}${mensal}`;
   if (op.tipo === "parcelado") {
-    const entrada = v.entrada > 0 ? `entrada de ${reais(v.entrada)} + ` : "";
-    return `Parcelado: ${entrada}${v.parcelas}x de ${reais(v.parcela)}${op.desconto_pct > 0 ? ` (${op.desconto_pct}% de desconto)` : ""}${mensal}`;
+    const entrada = v.entrada > 0 ? `entrada de ${$(v.entrada)} + ` : "";
+    return `Parcelado: ${entrada}${v.parcelas}x de ${$(v.parcela)}${op.desconto_pct > 0 ? ` (${op.desconto_pct}% de desconto)` : ""}${mensal}`;
   }
-  return t.mensal > 0 ? `Mensal: ${reais(t.mensal)} por mês${t.unico > 0 ? `, com ${reais(v.total_unico)} na implantação` : ""}` : `Mensal: ${reais(v.total_unico)}`;
+  return t.mensal > 0 ? `Mensal: ${$(t.mensal)} por mês${t.unico > 0 ? `, com ${$(v.total_unico)} na implantação` : ""}` : `Mensal: ${$(v.total_unico)}`;
 }
 
 export const ROTULO_DO_PAGAMENTO: Record<TipoDePagamento, string> = { a_vista: "À vista", parcelado: "Parcelado", mensal: "Mensal" };

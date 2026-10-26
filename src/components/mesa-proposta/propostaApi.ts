@@ -11,8 +11,10 @@ import {
   pendenciasDaProposta,
   statusEfetivo,
   totaisDosItens,
+  moedaDoConteudo,
   type ConteudoDaProposta,
   type ItemDaProposta,
+  type MoedaDaProposta,
   type ModeloDeProposta,
   type Pendencia,
   type StatusDaProposta,
@@ -74,6 +76,8 @@ export interface Proposta {
   conteudo: ConteudoDaProposta;
   itens: ItemDaProposta[];
   totais: Totais;
+  /** Moeda dos valores (do bloco de investimento; real quando não há). */
+  moeda: MoedaDaProposta;
   validade_ate: string | null;
   contexto: { notas?: string; transcricao?: string; materiais?: Material[]; perguntas?: string[]; conferencia?: ConferenciaDoDado[]; revisao?: { em?: string; avisos?: string[]; notas?: Record<string, number | null> } | null };
   pendencias: Pendencia[];
@@ -134,6 +138,7 @@ export function normalizarProposta(d: unknown): Proposta | null {
     conteudo,
     itens,
     totais: totaisDosItens(itens),
+    moeda: moedaDoConteudo(conteudo),
     validade_ate: validade,
     contexto,
     pendencias: pendenciasDaProposta({ conteudo, itens, validade_ate: validade, contexto }, hoje),
