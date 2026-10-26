@@ -39,6 +39,18 @@ export default function OAuthConsent() {
    * consentimento. Este ref prende a busca a uma vez por id.
    */
   const buscado = useRef<string | null>(null);
+  /**
+   * A resposta da busca só é descartada se a TELA saiu, nunca porque o efeito
+   * rodou de novo. Com um `active` local, o evento de sessão reexecutava o
+   * efeito, a limpeza marcava a busca em voo como velha, a trava acima
+   * impedia buscar de novo, e o 200 do servidor era jogado fora: carregando
+   * para sempre (26/10, conexão do Claude Code).
+   */
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => { montado.current = false; };
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -53,7 +65,6 @@ export default function OAuthConsent() {
     }
     if (buscado.current === authorizationId) return;
     buscado.current = authorizationId;
-    let active = true;
     (async () => {
       try {
         // beta helper — chamamos via any porque ainda não está tipado no SDK
@@ -63,7 +74,7 @@ export default function OAuthConsent() {
           return;
         }
         const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
-        if (!active) return;
+        if (!montado.current) return;
         if (error) {
           setError(error.message || "Falha ao obter detalhes da autorização.");
           return;
@@ -78,7 +89,6 @@ export default function OAuthConsent() {
         setError(e?.message ?? "Erro inesperado.");
       }
     })();
-    return () => { active = false; };
   }, [authorizationId, user, authLoading]);
 
   async function decide(approve: boolean) {

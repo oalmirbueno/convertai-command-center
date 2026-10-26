@@ -40,6 +40,17 @@ describe("o consentimento busca a autorização uma vez só", () => {
   });
 });
 
+describe("a resposta da busca não se perde quando o efeito roda de novo", () => {
+  it("só descarta se a tela saiu, não na limpeza do efeito", () => {
+    // 26/10: a trava impedia buscar de novo e a limpeza do efeito marcava a
+    // busca em voo como velha. O servidor respondia 200 e a tela ficava em
+    // "Buscando o pedido de conexão..." para sempre.
+    expect(pagina).not.toContain("let active = true;");
+    expect(pagina).not.toContain("return () => { active = false; };");
+    expect(pagina).toContain("if (!montado.current) return;");
+  });
+});
+
 describe("a tela de erro diz o que fazer", () => {
   it("explica que o pedido vale uma vez e manda recomeçar pelo aplicativo", () => {
     // Antes era um beco sem saída: só a mensagem crua do servidor, e quem
