@@ -202,3 +202,171 @@ export function pcDisponivel(executores: ExecutorVisto[], agora: number, rodando
 export function tetoDePassosDoPc(passos: number): number {
   return Math.min(60, Math.max(4, passos * 2 + 2));
 }
+
+// ------------------------------------------------------------------ horário comercial do Ego (26/10/2026)
+//
+// Pedido do dono: "Todos os agentes rodam das 9h às 18h. Eles podem usar o Ego das 9h até as 18h. Quando
+// passa esse horário eles não usam o Ego, mas fazem as coisas em nuvem e já deixam preparado." Fora da
+// janela, o MCP aceita o pedido como agendado (executar_a_partir_de = próxima abertura) e o worker só
+// anuncia o caso pc_ego dentro dela; a pegada no banco também não entrega pedido antes da hora.
+// Configurável pelas variáveis EGO_HORARIO ("09:00-18:00"), EGO_DIAS ("1-5"; 0 = domingo, 6 = sábado)
+// e EGO_FUSO ("America/Sao_Paulo"), lidas no MCP (secrets da função) e no worker (variáveis da máquina).
+
+export interface JanelaDoEgo {
+  /** Minuto do dia em que abre (9h = 540). */
+  inicio_min: number;
+  /** Minuto do dia em que fecha (18h = 1080); a janela é [inicio, fim). */
+  fim_min: number;
+  /** Dias da semana com Ego (0 = domingo … 6 = sábado). */
+  dias: number[];
+  fuso: string;
+}
+
+export const JANELA_PADRAO_DO_EGO: JanelaDoEgo = { inicio_min: 9 * 60, fim_min: 18 * 60, dias: [1, 2, 3, 4, 5], fuso: "America/Sao_Paulo" };
+export const CODIGO_FORA_DO_HORARIO = "fora_do_horario_do_ego";
+/** Prioridade do pedido agendado: menor roda antes ao abrir a janela. */
+export const PRIORIDADES_DO_PC = { alta: 1, normal: 2, baixa: 3 } as const;
+export type PrioridadeDoPc = keyof typeof PRIORIDADES_DO_PC;
+
+const hhmm = (s: string): number | null => {
+  const m = /^(\d{1,2})(?::(\d{2}))?$/.exec(s.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mi = Number(m[2] || 0);
+  return h <= 24 && mi < 60 && h * 60 + mi <= 1440 ? h * 60 + mi : null;
+};
+
+function fusoValido(fuso: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: fuso });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Lê a janela das variáveis; valor inválido fica no padrão (9h–18h, seg–sex, São Paulo). */
+export function lerJanelaDoEgo(ler: (nome: string) => string | undefined | null): JanelaDoEgo {
+  const j: JanelaDoEgo = { ...JANELA_PADRAO_DO_EGO, dias: JANELA_PADRAO_DO_EGO.dias.slice() };
+  const pegar = (n: string) => {
+    try {
+      return String(ler(n) ?? "").trim();
+    } catch {
+      return "";
+    }
+  };
+  const horario = pegar("EGO_HORARIO");
+  const partes = horario.split(/\s*[-–a]\s*/);
+  if (partes.length === 2) {
+    const ini = hhmm(partes[0]);
+    const fim = hhmm(partes[1]);
+    if (ini !== null && fim !== null && fim > ini) {
+      j.inicio_min = ini;
+      j.fim_min = fim;
+    }
+  }
+  const dias = pegar("EGO_DIAS");
+  if (dias) {
+    const lista: number[] = [];
+    for (const pedaco of dias.split(",")) {
+      const m = /^\s*([0-6])\s*(?:-\s*([0-6]))?\s*$/.exec(pedaco);
+      if (!m) {
+        lista.length = 0;
+        break;
+      }
+      const a = Number(m[1]);
+      const b = m[2] === undefined ? a : Number(m[2]);
+      for (let d = a; d <= b; d++) if (lista.indexOf(d) < 0) lista.push(d);
+    }
+    if (lista.length) j.dias = lista.sort();
+  }
+  const fuso = pegar("EGO_FUSO");
+  if (fuso && fusoValido(fuso)) j.fuso = fuso;
+  return j;
+}
+
+interface PartesLocais {
+  ano: number;
+  mes: number;
+  dia: number;
+  minuto_do_dia: number;
+  dia_da_semana: number;
+}
+
+const formatadores = new Map<string, Intl.DateTimeFormat>();
+function partesLocais(ms: number, fuso: string): PartesLocais {
+  let f = formatadores.get(fuso);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", { timeZone: fuso, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    formatadores.set(fuso, f);
+  }
+  const p: Record<string, number> = {};
+  for (const x of f.formatToParts(new Date(ms))) if (x.type !== "literal") p[x.type] = Number(x.value);
+  const hora = p.hour === 24 ? 0 : p.hour;
+  return { ano: p.year, mes: p.month, dia: p.day, minuto_do_dia: hora * 60 + p.minute, dia_da_semana: new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay() };
+}
+
+/** Diferença (min) entre a hora local do fuso e o UTC naquele instante. */
+function deslocamentoMin(ms: number, fuso: string): number {
+  const l = partesLocais(ms, fuso);
+  const comoUtc = Date.UTC(l.ano, l.mes - 1, l.dia, 0, l.minuto_do_dia);
+  return Math.round((comoUtc - Math.floor(ms / 60000) * 60000) / 60000);
+}
+
+/** Instante UTC (ms) de uma hora local do fuso (ano, mês 1–12, dia, minuto do dia). */
+function instanteLocal(ano: number, mes: number, dia: number, minuto: number, fuso: string): number {
+  const ingenuo = Date.UTC(ano, mes - 1, dia, 0, minuto);
+  let ms = ingenuo - deslocamentoMin(ingenuo, fuso) * 60000;
+  ms = ingenuo - deslocamentoMin(ms, fuso) * 60000;
+  return ms;
+}
+
+/** O Ego pode ser usado neste instante? */
+export function dentroDaJanelaDoEgo(ms: number, j: JanelaDoEgo = JANELA_PADRAO_DO_EGO): boolean {
+  const l = partesLocais(ms, j.fuso);
+  return j.dias.indexOf(l.dia_da_semana) >= 0 && l.minuto_do_dia >= j.inicio_min && l.minuto_do_dia < j.fim_min;
+}
+
+/** Quando a janela abre de novo (ms). Dentro da janela, devolve o próprio instante. */
+export function proximaAberturaDoEgo(ms: number, j: JanelaDoEgo = JANELA_PADRAO_DO_EGO): number {
+  if (dentroDaJanelaDoEgo(ms, j)) return ms;
+  const l = partesLocais(ms, j.fuso);
+  for (let k = 0; k <= 14; k++) {
+    const d = new Date(Date.UTC(l.ano, l.mes - 1, l.dia + k));
+    if (j.dias.indexOf(d.getUTCDay()) < 0) continue;
+    const abre = instanteLocal(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), j.inicio_min, j.fuso);
+    if (abre > ms) return abre;
+  }
+  // Janela sem nenhum dia (não acontece com a leitura acima): amanhã no mesmo horário.
+  return ms + 86_400_000;
+}
+
+/** Quando fecha a janela do dia (local) daquele instante (ms). */
+export function fimDaJanelaDoDia(ms: number, j: JanelaDoEgo = JANELA_PADRAO_DO_EGO): number {
+  const l = partesLocais(ms, j.fuso);
+  return instanteLocal(l.ano, l.mes, l.dia, j.fim_min, j.fuso);
+}
+
+const DIAS_CURTOS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const dois = (n: number) => String(n).padStart(2, "0");
+const horaDoMinuto = (m: number) => `${dois(Math.floor(m / 60))}:${dois(m % 60)}`;
+
+/** "seg 27/10 às 09:00" no fuso da janela. */
+export function rotuloLocal(ms: number, j: JanelaDoEgo = JANELA_PADRAO_DO_EGO): string {
+  const l = partesLocais(ms, j.fuso);
+  return `${DIAS_CURTOS[l.dia_da_semana]} ${dois(l.dia)}/${dois(l.mes)} às ${horaDoMinuto(l.minuto_do_dia)}`;
+}
+
+/** "09:00–18:00, seg a sex (America/Sao_Paulo)". */
+export function descreverJanelaDoEgo(j: JanelaDoEgo = JANELA_PADRAO_DO_EGO): string {
+  const dias = j.dias.join(",") === "1,2,3,4,5" ? "seg a sex" : j.dias.map((d) => DIAS_CURTOS[d]).join(", ");
+  return `${horaDoMinuto(j.inicio_min)}–${horaDoMinuto(j.fim_min)}, ${dias} (${j.fuso})`;
+}
+
+/** Mensagem do pedido aceito fora da janela. */
+export function mensagemAgendado(abreMs: number, j: JanelaDoEgo = JANELA_PADRAO_DO_EGO): string {
+  return `Fora do horário do Ego (${descreverJanelaDoEgo(j)}). O pedido ficou agendado e roda ${rotuloLocal(abreMs, j)}, por ordem de prioridade; o resultado fica guardado no painel. Não repita nem fique consultando: siga com o trabalho de nuvem (leitura pelo painel e MCP, análise, rascunho, proposta com aprovação) e leia o resultado depois desse horário.`;
+}
+
+export const MENSAGEM_AGENDADO_NAO_RODOU =
+  "O pedido agendado para o horário do Ego não rodou: o PC do dono não ficou ligado com o navegador da agência na janela. Não peça de novo sozinho: registre ao dono no painel (aceleriq_operator_request_approval ou insumo) o que precisa e por quê, ou encerre a tarefa com o motivo.";

@@ -17,6 +17,7 @@ import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
 const resposta: { data: unknown; error: { message: string; code?: string } | null } = { data: null, error: null };
 const rpc = vi.fn(async () => resposta);
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: (...a: unknown[]) => (rpc as any)(...a) } }));
+vi.mock("@/components/admin/LogoDoCliente", async (orig) => ({ ...(await orig<any>()), useIdentidadesDosClientes: () => ({ data: new Map() }) }));
 
 import Hoje from "@/pages/Hoje";
 
@@ -46,24 +47,35 @@ function montar() {
 afterEach(() => { cleanup(); resposta.data = null; resposta.error = null; rpc.mockClear(); });
 
 describe("tela Hoje", () => {
-  it("com dados: precisa de você primeiro, cada linha com uma ação direta e o nome Cliente · Área · assunto", async () => {
+  it("com dados: números do dia no topo e cada coisa num cartão da grade, com uma ação (o cartão é o link)", async () => {
     resposta.data = RESUMO;
     montar();
     await waitFor(() => expect(document.querySelectorAll("[data-pedido-do-dia]").length).toBe(2));
     expect(rpc).toHaveBeenCalledWith("resumo_do_dia");
+    // Topo: os quatro números do dia, Precisa de você primeiro.
+    const numeros = document.querySelector("[data-numeros-do-dia]")!;
+    expect(numeros.textContent).toMatch(/^Precisa de você2/);
+    // Precisa de você: cartões em grade (não lista de linhas), nome Cliente · Área · assunto.
+    const grade = screen.getByRole("list", { name: "Precisa de você" });
+    expect(grade.className).toContain("grid");
     const pedidos = Array.from(document.querySelectorAll("[data-pedido-do-dia]"));
-    expect(pedidos[0].textContent).toContain("Preserva Eco · Tráfego · Arquivar anúncio com erro");
+    const link = pedidos[0].querySelector("a")!;
+    expect(link.getAttribute("aria-label")).toBe("Aprovar: Preserva Eco · Tráfego · Arquivar anúncio com erro");
+    expect(pedidos[0].textContent).toContain("Arquivar anúncio com erro");
     expect(pedidos[0].textContent).not.toContain("ACE-275");
-    expect(pedidos[0].querySelector("a")!.getAttribute("href")).toBe("/execucao?aprovacao=ap-1");
+    expect(pedidos[0].querySelectorAll("a").length).toBe(1);
+    expect(link.getAttribute("href")).toBe("/execucao?aprovacao=ap-1");
     expect(pedidos[1].querySelector("a")!.getAttribute("href")).toBe("/central/mensagens");
-    // Cliente sem post abre a pauta dele na Mesa.
+    // Cliente sem post: cartão com os dias em destaque, a barra do mês e a pauta na Mesa.
     const risco = document.querySelector('[data-risco="c3"]')!;
-    expect(risco.textContent).toContain("Terra Flor · 9 dias sem post");
+    expect(risco.textContent).toContain("Terra Flor");
+    expect(risco.textContent).toContain("9dias sem post");
+    expect(risco.querySelector("[data-barra-do-mes]")!.getAttribute("data-barra-do-mes")).toBe("40");
     expect(risco.querySelector("a")!.getAttribute("href")).toBe("/mesa?client=c3");
     expect(risco.textContent).toContain("preparar 6 posts até 26/10");
-    // Dá para fazer campanha: uma linha enxuta que abre a aba Campanhas da Mesa.
+    // Dá para fazer campanha: abre a aba Campanhas da Mesa.
     const campanha = document.querySelector('[data-campanha-do-dia="c4"]')!;
-    expect(campanha.textContent).toContain("Stop Informática · Black Friday");
+    expect(campanha.textContent).toContain("Black Friday");
     expect(campanha.querySelector("a")!.getAttribute("href")).toBe("/mesa?client=c4&aba=campanhas");
     expect(campanha.querySelector("a")!.getAttribute("title")).toBe("Abrir Campanhas");
     // Anúncios: urgente antes de info; a mudança abre a prova.
@@ -71,9 +83,9 @@ describe("tela Hoje", () => {
     const mudanca = document.querySelector("[data-mudanca-do-dia]")!;
     expect(mudanca.textContent).toContain("R$ 30/dia → R$ 45/dia");
     expect(mudanca.querySelector("a")!.getAttribute("href")).toBe("https://exemplo.com/print.png");
-    // Feito ontem com prova.
+    // Feito ontem com prova, compacto.
     const feito = document.querySelector("[data-feito]")!;
-    expect(feito.textContent).toContain("Softy Móveis · Conteúdo · Carrossel de outubro");
+    expect(feito.querySelector("a")!.getAttribute("aria-label")).toBe("Ver a prova: Softy Móveis · Conteúdo · Carrossel de outubro");
     expect(feito.querySelector("a")!.getAttribute("target")).toBe("_blank");
   });
 

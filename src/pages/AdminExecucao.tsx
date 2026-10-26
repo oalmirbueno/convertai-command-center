@@ -3,8 +3,8 @@ import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
 import { nomeDaTarefaDoBanco, type NomeDaTarefa } from "@/lib/nomeDaTarefa";
 import { ultimasAcoesReais } from "@/lib/funcionandoDeVerdade";
 import FuncionandoDeVerdade from "@/components/execucao/FuncionandoDeVerdade";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, replaceEqualDeep, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
+import ListaPaginada from "@/components/execucao/ListaPaginada";
+import TarefaDaExecucao from "@/components/execucao/TarefaDaExecucao";
 import type { PedidoAoHermes } from "@/components/execucao/CentralDeAutonomia";
 import Departamentos from "@/components/execucao/Departamentos";
 import Escritorio from "@/components/execucao/Escritorio";
@@ -231,8 +233,44 @@ const STATUS_ROTULO: Record<string, string> = {
 /** Onde as áreas recolhidas ficam guardadas entre visitas. */
 const AREAS_FECHADAS = "aceleriq-execucao-areas-fechadas";
 
-const dataCurta = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+/*
+ * Padrões ESTÁVEIS das leituras (26/10). `data: x = []` cria uma lista nova a cada desenho
+ * enquanto a leitura não chega, e todo useMemo que depende dela recalcula sem motivo.
+ */
+const SEM_LINHAS: any[] = [];
+const SEM_OPERADORES: Operador[] = [];
+const SEM_VINCULOS: Vinculo[] = [];
+const SEM_DISPONIVEIS: Array<Record<string, any>> = [];
+const SEM_NOMES = new Map<string, string>();
+const SEM_TAREFAS = new Map<string, any>();
+
+/**
+ * Compartilhamento estrutural para o mapa de tarefas: a tarefa igual à anterior volta como o
+ * MESMO objeto, e o mapa inteiro volta igual quando nada mudou (a tela não redesenha à toa).
+ */
+function mesmoMapaDeTarefas(antes: unknown, depois: unknown): unknown {
+  if (!(antes instanceof Map) || !(depois instanceof Map)) return depois;
+  let igual = antes.size === depois.size;
+  const proximo = new Map<string, unknown>();
+  for (const [id, linha] of depois) {
+    const anterior = antes.get(id);
+    const mantida = anterior === undefined ? linha : replaceEqualDeep(anterior, linha);
+    if (mantida !== anterior) igual = false;
+    proximo.set(id, mantida);
+  }
+  return igual ? antes : proximo;
+}
+/** Ids por leitura de tarefas (a URL do PostgREST fica curta). */
+const LOTE_DE_IDS = 120;
+const NUMEROS_ZERADOS = { fila: 0, andamento: 0, feitas: 0, bloqueadas: 0, revisao: 0, aguardando: 0, comEvidencia: 0, aprovacoes: 0, total: 0 };
+
+/* 26/10: um formatador só (toLocaleString com opções monta um novo a cada cartão desenhado). */
+const FORMATO_CURTO = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const dataCurta = (iso?: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : FORMATO_CURTO.format(d);
+};
 
 export default function AdminExecucao() {
   const { profile } = useAuth();
@@ -284,6 +322,9 @@ export default function AdminExecucao() {
   const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string; contextoInicial?: { cliente: { id: string; nome: string }; pedido: string }; textoInicial?: string; aba?: string } | null>(null);
   const [responsavelAberto, setResponsavelAberto] = useState<
     { taskId: string; titulo?: string; atual?: string | null } | null>(null);
+  /* Estáveis (26/10): as listas memorizadas recebem sempre a mesma função e não redesenham à toa. */
+  const abrirDiario = useCallback((linkId: string, titulo?: string) => setDiarioAberto({ linkId, titulo }), []);
+  const fecharTarefa = useCallback(() => setTarefaAberta(null), []);
   // Os filtros do centro de comando: 606 tarefas abertas nao cabem numa
   // lista sem recorte. Busca e livre; cliente e prazo sao os dois cortes
   // que o dono realmente usa para decidir onde olhar primeiro.
@@ -297,6 +338,19 @@ export default function AdminExecucao() {
   const [mostrarEncerradas, setMostrarEncerradas] = useEstadoDaTela<boolean>("execucao:encerradas", false, { validar: (v) => typeof v === "boolean" });
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 26/10 (dono: "a execução está muito pesada"): a Central e a Performance têm as próprias
+   * leituras; enquanto uma delas está aberta, o quadro (vínculos, execuções, tarefas) não fica
+   * relendo a cada 10 s por trás. Volta a ler ao trocar de aba (o dado velho já está na tela).
+   */
+  const quadroEmPausa = aba === "central" || aba === "performance";
+  const estavaEmPausa = useRef(quadroEmPausa);
+  useEffect(() => {
+    if (estavaEmPausa.current && !quadroEmPausa) {
+      for (const chave of ["operador-vinculos", "operador-runs", "execucao-pedidos"]) void queryClient.invalidateQueries({ queryKey: [chave] });
+    }
+    estavaEmPausa.current = quadroEmPausa;
+  }, [quadroEmPausa, queryClient]);
   /** Onde a barra da Central entra, na linha do título (fica null fora da Central). */
   const [barraDaCentral, setBarraDaCentral] = useState<HTMLDivElement | null>(null);
 
@@ -322,7 +376,7 @@ export default function AdminExecucao() {
     retry: 2,
   });
 
-  const { data: operadores = [] } = useQuery({
+  const { data: operadores = SEM_OPERADORES } = useQuery({
     queryKey: ["operadores-internos"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -338,7 +392,7 @@ export default function AdminExecucao() {
     enabled: flag === "on",
   });
 
-  const { data: vinculos = [], dataUpdatedAt, error: erroVinculos, isLoading: carregandoVinculos } = useQuery({
+  const { data: vinculos = SEM_VINCULOS, dataUpdatedAt, error: erroVinculos, isLoading: carregandoVinculos } = useQuery({
     queryKey: ["operador-vinculos", vinculoAlvo],
     queryFn: async () => {
       // Consultar e atualizar a tela não alteram execuções nem ordens.
@@ -353,19 +407,19 @@ export default function AdminExecucao() {
       return (data || []) as Vinculo[];
     },
     enabled: flag === "on",
-    refetchInterval: 10_000,
+    refetchInterval: quadroEmPausa ? false : 15_000,
   });
 
-  const { data: pedidos = [] } = useQuery({
+  const { data: pedidos = SEM_LINHAS } = useQuery({
     queryKey: ["execucao-pedidos"], enabled: flag === "on",
     queryFn: async () => {
       const { data, error } = await (supabase as any).from("operator_approvals").select("id,task_link_id,client:profiles!operator_approvals_client_id_fkey(company_name,full_name)").in("status", ["pendente", "adiado"]).limit(100);
       if (error) throw error;
       return data || [];
-    }, refetchInterval: 15_000,
+    }, refetchInterval: quadroEmPausa ? false : 30_000,
   });
 
-  const { data: runs = [], error: erroRuns } = useQuery({
+  const { data: runs = SEM_LINHAS, error: erroRuns } = useQuery({
     queryKey: ["operador-runs", runAlvo],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -381,12 +435,24 @@ export default function AdminExecucao() {
       return contextoDasExecucoes(data || []);
     },
     enabled: flag === "on",
-    refetchInterval: 10_000,
+    refetchInterval: quadroEmPausa ? false : 20_000,
   });
 
+  /*
+   * 26/10 (dono: "quando eu clico em algumas coisas, está bem bugado"): o link da notificação vale
+   * UMA vez. Antes estes efeitos rodavam de novo a cada releitura: a tela voltava sozinha para a
+   * visão do link, apagava a busca e os filtros e reabria o perfil do agente que a pessoa fechou.
+   */
+  const alvosTratados = useRef<{ run?: string; agente?: string; vinculo?: string }>({});
   useEffect(() => {
-    if (runAlvo && !vinculoAlvo) { setVisao("execucoes"); setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); }
-    if (agenteAlvo) { const op = operadores.find(o => o.id === agenteAlvo || o.slug === agenteAlvo); if (op) setAgenteAberto(op); }
+    if (runAlvo && !vinculoAlvo && alvosTratados.current.run !== runAlvo) {
+      alvosTratados.current.run = runAlvo;
+      setVisao("execucoes"); setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas");
+    }
+    if (agenteAlvo && alvosTratados.current.agente !== agenteAlvo) {
+      const op = operadores.find(o => o.id === agenteAlvo || o.slug === agenteAlvo);
+      if (op) { alvosTratados.current.agente = agenteAlvo; setAgenteAberto(op); }
+    }
   }, [runAlvo, vinculoAlvo, agenteAlvo, operadores]);
 
   // Os dois campos: um vinculo criado pelo painel_task_id tem tarefa, e
@@ -399,26 +465,40 @@ export default function AdminExecucao() {
     )] as string[]).sort(),
     [vinculos],
   );
-  const { data: tarefas = new Map(), isSuccess: tarefasProntas } = useQuery({
+  /*
+   * 26/10 (dono: "pesa, trava"): o Map não ganha o compartilhamento estrutural do React Query,
+   * e a cada 30 s todas as tarefas viravam objetos novos (a tela inteira redesenhava). Agora a
+   * tarefa que não mudou mantém o mesmo objeto (mesmoMapaDeTarefas). Os ids vão em lotes: 300
+   * ids numa URL só passavam de 11 mil caracteres. E a chave nova (chegou um vínculo) mantém o
+   * mapa anterior na tela enquanto lê, em vez de apagar nomes e clientes de todos os cartões.
+   */
+  const { data: tarefas = SEM_TAREFAS, isSuccess: tarefasProntas, isPlaceholderData: tarefasEmTroca } = useQuery({
     queryKey: ["operador-tarefas", taskIds.join(",")],
     queryFn: async () => {
-      if (taskIds.length === 0) return new Map();
+      if (taskIds.length === 0) return new Map<string, any>();
       // FK nomeada: projects aponta para profiles por client_id E por
       // created_by, e sem escolher o caminho a consulta inteira e recusada.
-      const { data, error } = await (supabase as any)
-        .from("tasks")
-        .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, description, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
-        .in("id", taskIds);
-      // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
-      // sem projeto nem cliente, como se o dado nao existisse.
-      if (error) throw new Error(error.message);
+      const lotes: string[][] = [];
+      for (let i = 0; i < taskIds.length; i += LOTE_DE_IDS) lotes.push(taskIds.slice(i, i + LOTE_DE_IDS));
+      const respostas = await Promise.all(lotes.map(async (lote) => {
+        const { data, error } = await (supabase as any)
+          .from("tasks")
+          .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, description, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+          .in("id", lote);
+        // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
+        // sem projeto nem cliente, como se o dado nao existisse.
+        if (error) throw new Error(error.message);
+        return (data || []) as any[];
+      }));
       const mapa = new Map<string, any>();
-      for (const t of data || []) mapa.set(String(t.id), t);
+      for (const linhas of respostas) for (const t of linhas) mapa.set(String(t.id), t);
       return mapa;
     },
     enabled: flag === "on" && taskIds.length > 0,
+    placeholderData: keepPreviousData,
+    structuralSharing: mesmoMapaDeTarefas as never,
     // 19/10 (dono: "mais rápido"): título e descrição mudam pouco e são a leitura mais pesada da tela.
-    refetchInterval: 30_000,
+    refetchInterval: quadroEmPausa ? false : 30_000,
     refetchOnWindowFocus: true,
   });
 
@@ -427,7 +507,7 @@ export default function AdminExecucao() {
     for (const t of tarefas.values()) if (t?.assigned_to) ids.add(String(t.assigned_to));
     return [...ids].sort();
   }, [tarefas]);
-  const { data: humanos = new Map() } = useQuery({
+  const { data: humanos = SEM_NOMES } = useQuery({
     queryKey: ["operador-humanos", humanIds.join(",")],
     queryFn: async () => {
       if (humanIds.length === 0) return new Map();
@@ -447,7 +527,7 @@ export default function AdminExecucao() {
    * existem esperando, e QUAIS. É o que liga esta área ao Kanban de
    * verdade em vez de deixá-la como um painel que só sabe falar de si.
    */
-  const { data: disponiveis = [] } = useQuery({
+  const { data: disponiveis = SEM_DISPONIVEIS } = useQuery({
     queryKey: ["operador-tarefas-disponiveis"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -463,7 +543,7 @@ export default function AdminExecucao() {
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: flag === "on",
-    refetchInterval: 60_000,
+    refetchInterval: quadroEmPausa ? false : 60_000,
   });
 
   const opDe = (id: string) => operadores.find((o) => o.id === id);
@@ -477,8 +557,12 @@ export default function AdminExecucao() {
   /** Os números do quadro, uma vez só: cabeçalho, cartões e vazios usam. */
   // A tarefa concluída/arquivada pode ainda ter um vínculo aguardando insumo.
   // Preservamos seu estado histórico sem apresentá-lo como trabalho ativo.
-  const encerrado = (v: Vinculo) => vinculoEncerrado(v, tarefas, tarefasProntas);
-  const vinculosAtivos = useMemo(() => vinculos.filter((v) => !encerrado(v)), [vinculos, tarefas, tarefasProntas, taskIds]);
+  const encerrado = (v: Vinculo) => {
+    // Enquanto a chave nova lê, o mapa é o anterior: vínculo novo (tarefa ainda não lida) não está encerrado.
+    if (tarefasEmTroca && !tarefas.has(String(v.kanban_task_id || (v as any).painel_task_id || ""))) return false;
+    return vinculoEncerrado(v, tarefas, tarefasProntas);
+  };
+  const vinculosAtivos = useMemo(() => vinculos.filter((v) => !encerrado(v)), [vinculos, tarefas, tarefasProntas, tarefasEmTroca, taskIds]);
   const totalEncerradas = vinculos.length - vinculosAtivos.length;
   const diasParado = (v: Vinculo) => Math.floor((Date.now() - new Date(v.updated_at).getTime()) / 86_400_000);
   const ultimoRunDosAgentes = useMemo(() => {
@@ -509,21 +593,34 @@ export default function AdminExecucao() {
     };
   }, [vinculosAtivos, disponiveis, tarefas, hoje]);
 
-  const numerosDoOperador = (operatorId: string) => {
-    const meus = vinculosAtivos.filter((v) => v.operator_id === operatorId);
-    return {
-      fila: meus.filter((v) => ["queued", "in_progress"].includes(v.status)).length,
-      andamento: meus.filter((v) => v.status === "in_progress").length,
-      feitas: meus.filter((v) => v.status === "done").length,
-      bloqueadas: meus.filter((v) => v.status === "blocked").length,
-      revisao: meus.filter((v) => v.status === "review").length,
-      aguardando: meus.filter((v) => v.status === "awaiting_input").length,
-      // Evidência é o que separa "feito" de "disse que fez".
-      comEvidencia: meus.filter((v) => Boolean(v.last_evidence)).length,
-      aprovacoes: meus.filter((v) => precisaDecisao(v)).length,
-      total: meus.length,
-    };
-  };
+  /*
+   * 26/10: os números de cada agente calculados uma vez por releitura. Antes cada chamada refiltrava os 300
+   * vínculos nove vezes, e as Áreas chamavam isso por agente, por área, a cada desenho.
+   */
+  const numerosPorOperador = useMemo(() => {
+    const grupos = new Map<string, Vinculo[]>();
+    for (const v of vinculosAtivos) {
+      const lista = grupos.get(v.operator_id);
+      if (lista) lista.push(v); else grupos.set(v.operator_id, [v]);
+    }
+    const mapa = new Map<string, typeof NUMEROS_ZERADOS>();
+    for (const [operatorId, meus] of grupos) {
+      mapa.set(operatorId, {
+        fila: meus.filter((v) => ["queued", "in_progress"].includes(v.status)).length,
+        andamento: meus.filter((v) => v.status === "in_progress").length,
+        feitas: meus.filter((v) => v.status === "done").length,
+        bloqueadas: meus.filter((v) => v.status === "blocked").length,
+        revisao: meus.filter((v) => v.status === "review").length,
+        aguardando: meus.filter((v) => v.status === "awaiting_input").length,
+        // Evidência é o que separa "feito" de "disse que fez".
+        comEvidencia: meus.filter((v) => Boolean(v.last_evidence)).length,
+        aprovacoes: meus.filter((v) => precisaDecisao(v)).length,
+        total: meus.length,
+      });
+    }
+    return mapa;
+  }, [vinculosAtivos]);
+  const numerosDoOperador = (operatorId: string) => numerosPorOperador.get(operatorId) ?? NUMEROS_ZERADOS;
 
   // A notificacao de aprovacao/proposta cai direto no painel certo, e
   // ?aba=diario abre a conversa do vinculo — o deep-link do MCP e este.
@@ -540,9 +637,10 @@ export default function AdminExecucao() {
 
   // A notificação abre direto o vínculo: rola até ele e destaca.
   useEffect(() => {
-    if (!vinculoAlvo || vinculos.length === 0) return;
+    if (!vinculoAlvo || vinculos.length === 0 || alvosTratados.current.vinculo === vinculoAlvo) return;
     const alvo = vinculos.find((v) => v.id === vinculoAlvo);
     if (!alvo) return;
+    alvosTratados.current.vinculo = vinculoAlvo;
     setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); setMostrarEncerradas(true);
     if (["queued", "in_progress"].includes(alvo.status)) setVisao("quadro");
     if (alvo.status !== "in_progress" && alvo.status !== "queued") {
@@ -592,6 +690,8 @@ export default function AdminExecucao() {
     });
   }, [vinculos, vinculosAtivos, mostrarEncerradas, visao, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
 
+  const idsVisiveis = useMemo(() => new Set(vinculosVisiveis.map((v) => v.id)), [vinculosVisiveis]);
+
   const contagemDaVisao = useMemo(() => {
     const base = vinculosVisiveis;
     const conta = (fn: (v: Vinculo) => boolean) => base.filter(fn).length;
@@ -612,8 +712,16 @@ export default function AdminExecucao() {
     } as Record<string, number>;
   }, [vinculosVisiveis, operadores, runs]);
 
+  /* 26/10: a busca nas execuções serializava as 200 a cada desenho (e duas vezes); agora uma vez por mudança. */
+  const runsQueBatemNaBusca = useMemo(() => {
+    const termo = busca.trim().toLocaleLowerCase();
+    if (!termo) return runs;
+    const nomes = new Map(operadores.map((o) => [o.id, o.display_name]));
+    return runs.filter((r) => JSON.stringify([r.detail, nomes.get(r.operator_id)]).toLocaleLowerCase().includes(termo));
+  }, [runs, busca, operadores]);
+  const runsSemVinculo = useMemo(() => runsQueBatemNaBusca.filter((r) => !r.task_link_id), [runsQueBatemNaBusca]);
   const contagemDasAbas = contagensDasAbas(vinculosVisiveis, operadores.length);
-  contagemDasAbas.trabalho += !filtroCliente && filtroPrazo === "todas" ? runs.filter(r => !r.task_link_id && (!busca.trim() || JSON.stringify([r.detail, opDe(r.operator_id)?.display_name]).toLocaleLowerCase().includes(busca.trim().toLocaleLowerCase()))).length : 0;
+  contagemDasAbas.trabalho += !filtroCliente && filtroPrazo === "todas" ? runsSemVinculo.length : 0;
 
   const pedidosVisiveis = pedidos.filter((p: any) => !filtroCliente || (p.client?.company_name || p.client?.full_name) === filtroCliente);
   contagemDasAbas.decisoes = new Set([
@@ -1498,14 +1606,25 @@ export default function AdminExecucao() {
     })
     .map((x) => x.v);
 
+  /*
+   * 26/10 (dono: "Trabalho pesa, trava"; "quando eu clico em algumas coisas, está bem bugado"):
+   * Cartao e ListaDeCartoes nascem dentro da tela, e usados como <Cartao /> viravam um TIPO novo a
+   * cada desenho. A cada releitura (10 s) o React desmontava e remontava os 300 cartões (42 mil
+   * desmontagens em 30 s, medido), o "ver mais" aberto fechava sozinho e o clique que caía no meio
+   * da troca se perdia. Agora são chamados como função (o React só compara o que mudou) e a lista
+   * desenha um lote por vez (ListaPaginada, com "Mostrar mais").
+   */
   const ListaDeCartoes = ({ lista, rotulo, pilha = false }: { lista: Vinculo[]; rotulo: string; pilha?: boolean }) => (
-    <ul className={pilha ? "space-y-2" : "grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"} aria-label={rotulo}>
-      {lista.map((v) => (
-        <li key={v.id} className="min-w-0">
-          <Cartao v={v} />
-        </li>
-      ))}
-    </ul>
+    <ListaPaginada
+      itens={lista}
+      rotulo={rotulo}
+      passo={pilha ? 25 : 48}
+      chave={(v) => v.id}
+      className={pilha ? "space-y-2" : "grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"}
+      classeDoItem="min-w-0"
+      garantir={vinculoAlvo ? (v) => v.id === vinculoAlvo : undefined}
+      desenhar={(v) => Cartao({ v })}
+    />
   );
 
   /* O que pede a sua atencao, em frases e na ordem de urgencia. Seis
@@ -1790,15 +1909,11 @@ export default function AdminExecucao() {
     />
   ) : visao === "atividade" ? (
     <div className="space-y-5">
-      <ListaDeCartoes lista={vinculosVisiveis} rotulo="Tarefas dos agentes" />
-      {!filtroCliente && filtroPrazo === "todas" && <section><h3 className="mb-3 text-[15px] font-semibold">Execuções sem tarefa vinculada</h3><ExecucoesRecentes runs={runs.filter(r => !r.task_link_id && (!busca.trim() || JSON.stringify([r.detail, opDe(r.operator_id)?.display_name]).toLocaleLowerCase().includes(busca.trim().toLocaleLowerCase())))} agentes={operadores} vinculos={vinculos} tarefas={tarefas} destaque={runAlvo} aoConversar={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} /></section>}
+      {ListaDeCartoes({ lista: vinculosVisiveis, rotulo: "Tarefas dos agentes" })}
+      {!filtroCliente && filtroPrazo === "todas" && <section><h3 className="mb-3 text-[15px] font-semibold">Execuções sem tarefa vinculada</h3><ExecucoesRecentes runs={runsSemVinculo} agentes={operadores} vinculos={vinculos} tarefas={tarefas} destaque={runAlvo} aoConversar={abrirDiario} /></section>}
     </div>
   ) : visao === "execucoes" ? (
-    <ExecucoesRecentes runs={runs.filter(r => {
-      const v = vinculos.find(v => v.id === r.task_link_id);
-      if (filtroCliente || filtroPrazo !== "todas") return !!v && vinculosVisiveis.some(x => x.id === v.id);
-      return !busca.trim() || JSON.stringify([r.detail, opDe(r.operator_id)?.display_name]).toLocaleLowerCase().includes(busca.trim().toLocaleLowerCase());
-    })} agentes={operadores} vinculos={vinculos} tarefas={tarefas} destaque={runAlvo} aoConversar={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
+    <ExecucoesRecentes runs={filtroCliente || filtroPrazo !== "todas" ? runs.filter(r => idsVisiveis.has(String(r.task_link_id))) : runsQueBatemNaBusca} agentes={operadores} vinculos={vinculos} tarefas={tarefas} destaque={runAlvo} aoConversar={abrirDiario} />
   ) : visao === "relatorios" ? (
     <RelatorioVisual vinculos={vinculosAtivos} runs={runs} agentes={operadores} tarefas={tarefas} aoAbrir={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
   ) : visao === "fila" ? (
@@ -1814,7 +1929,7 @@ export default function AdminExecucao() {
                 descricao={numeros.semOperador.length > 0 ? `Há ${numeros.semOperador.length} esperando alguém.` : undefined}
               />
             ) : (
-              <ListaDeCartoes lista={doOperador} rotulo={`Fila de ${o.display_name}`} />
+              ListaDeCartoes({ lista: doOperador, rotulo: `Fila de ${o.display_name}` })
             )}
           </Secao>
         );
@@ -1933,7 +2048,7 @@ export default function AdminExecucao() {
     <div className="space-y-3">
       {aba === "decisoes" && (visao === "awaiting_input" || visao === "blocked" || visao === "review")
         ? <MesaDeDecisao rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} itens={itensDosVinculos(filtrados)} onDecidir={decidirVinculo} />
-        : <ListaDeCartoes lista={filtrados} rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} />}
+        : ListaDeCartoes({ lista: filtrados, rotulo: VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos" })}
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (
         <div className="flex items-center text-[12px] text-warning">
           <XCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -1966,7 +2081,7 @@ export default function AdminExecucao() {
               <EstadoVazio compacto titulo="Vazia" />
             ) : (
               <RegiaoRolavel modo="lg" rotulo={`Coluna ${c.titulo}`} memoria={`execucao:quadro:${c.id}`}>
-                <ListaDeCartoes pilha lista={daColuna} rotulo={c.titulo} />
+                {ListaDeCartoes({ pilha: true, lista: daColuna, rotulo: c.titulo })}
               </RegiaoRolavel>
             )}
           </section>
@@ -2248,11 +2363,19 @@ export default function AdminExecucao() {
       {/* O card do Kanban, aqui dentro: contexto, entrega e histórico sem
           sair da Execução. */}
       {tarefaAberta && (
-        <TaskDetailDrawer
-          task={tarefaAberta}
-          teamMembers={equipe as any[]}
-          projects={projetos as any[]}
-          onClose={() => setTarefaAberta(null)}
+        // 26/10: a janela abre com a tarefa INTEIRA (a linha do quadro não traz prioridade nem área).
+        <TarefaDaExecucao
+          key={String(tarefaAberta.id)}
+          tarefa={tarefaAberta}
+          aoFechar={fecharTarefa}
+          desenhar={(completa) => (
+            <TaskDetailDrawer
+              task={completa}
+              teamMembers={equipe as any[]}
+              projects={projetos as any[]}
+              onClose={fecharTarefa}
+            />
+          )}
         />
       )}
 

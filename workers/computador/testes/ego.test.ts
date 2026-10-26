@@ -11,6 +11,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   CASO_DO_PC,
+  lerJanelaDoEgo,
   MENSAGEM_PC_INDISPONIVEL,
   normalizarPedidoDoPc,
   pcDisponivel,
@@ -42,9 +43,26 @@ describe("escolha do motor", () => {
     assert.equal(modoDoEgo({ COMPUTADOR_EGO: "desligado" }), "desligado");
   });
   it("o worker só anuncia o caso do PC com o Ego ligado", () => {
-    const base = { comModelo: false, modelo: null, openai: null };
+    const base = { comModelo: false, modelo: null, openai: null, agora: () => Date.parse("2026-10-26T15:00:00Z") };
     assert.equal(casosDoWorker({ ...base, ego: null }).indexOf(CASO_DO_PC), -1);
     assert.ok(casosDoWorker({ ...base, ego: egoFalso(() => saidaVazia()) }).indexOf(CASO_DO_PC) >= 0);
+  });
+  it("horário comercial: anuncia o caso do PC das 8h58 às 17h59 em dia útil; à noite e no fim de semana não", () => {
+    const ego = egoFalso(() => saidaVazia());
+    const casos = (iso: string) => casosDoWorker({ comModelo: false, modelo: null, openai: null, ego, agora: () => Date.parse(iso) });
+    assert.equal(casos("2026-10-26T11:57:00Z").indexOf(CASO_DO_PC), -1); // seg 08h57
+    assert.ok(casos("2026-10-26T11:58:30Z").indexOf(CASO_DO_PC) >= 0); // seg 08h58 (o banco só entrega às 9h)
+    assert.ok(casos("2026-10-26T20:59:00Z").indexOf(CASO_DO_PC) >= 0); // seg 17h59
+    assert.equal(casos("2026-10-26T21:00:00Z").indexOf(CASO_DO_PC), -1); // seg 18h
+    assert.equal(casos("2026-10-27T02:00:00Z").indexOf(CASO_DO_PC), -1); // seg 23h
+    assert.equal(casos("2026-10-31T13:00:00Z").indexOf(CASO_DO_PC), -1); // sáb 10h
+    // O resto do navegador segue de noite.
+    assert.ok(casos("2026-10-27T02:00:00Z").indexOf("conferir_post") >= 0);
+  });
+  it("horário configurável no worker (EGO_DIAS com sábado)", () => {
+    const ego = egoFalso(() => saidaVazia());
+    const janela = lerJanelaDoEgo((n) => (n === "EGO_DIAS" ? "1-6" : undefined));
+    assert.ok(casosDoWorker({ comModelo: false, modelo: null, openai: null, ego, janela, agora: () => Date.parse("2026-10-31T13:00:00Z") }).indexOf(CASO_DO_PC) >= 0);
   });
 });
 

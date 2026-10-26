@@ -53,6 +53,10 @@ export interface ClienteEmRisco {
   diasSemPost: number | null;
   falta: string | null;
   sugestao: string | null;
+  /** Quanto do mês já está pronto no calendário (0 a 100), quando o servidor manda. */
+  pctMes: number | null;
+  /** Há quantos dias o cliente está em risco. */
+  emRiscoHaDias: number | null;
   /** Caminho do painel que o servidor sugere (ex.: a pauta certa). */
   link: string | null;
 }
@@ -166,6 +170,8 @@ export function normalizarResumo(cru: unknown): ResumoDoDia {
       diasSemPost: num(c.dias_sem_post),
       falta: txt(c.falta),
       sugestao: txt(c.sugestao),
+      pctMes: num(c.pct_mes),
+      emRiscoHaDias: num(c.em_risco_ha_dias),
       link: txt(c.link),
     };
   }).filter((c) => c.clientId);

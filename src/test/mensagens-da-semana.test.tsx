@@ -41,6 +41,8 @@ vi.mock("@/hooks/useCentralReviews", () => ({
 }));
 vi.mock("@/components/central/agenteCentralApi", () => ({ salvarEPublicarRitual: publicar, reescreverRitual: reescrever }));
 
+vi.mock("@/components/admin/LogoDoCliente", async (orig) => ({ ...(await orig<any>()), useIdentidadesDosClientes: () => ({ data: new Map() }) }));
+
 import MensagensDaSemana from "@/pages/MensagensDaSemana";
 
 function montar() {
@@ -62,9 +64,14 @@ afterEach(() => cleanup());
 const decisoes = () => rpc.mock.calls.filter((c) => c[0] === "central_review_decide").map((c) => c[1] as Record<string, unknown>);
 
 describe("Mensagens da semana", () => {
-  it("lista as prontas de todos os clientes com o prazo", () => {
+  it("cartões em grade com a prévia em balão de WhatsApp, o prazo e uma ação principal", () => {
     montar();
     expect(document.querySelectorAll('[data-mensagem="pronta"]').length).toBe(2);
+    expect(screen.getByRole("list", { name: "Para aprovar" }).className).toContain("grid");
+    const cartao = document.querySelector('[data-mensagem="pronta"]') as HTMLElement;
+    expect(cartao.querySelector('[data-balao="whatsapp"]')!.textContent).toContain("Bom dia! A semana começa com o novo anúncio.");
+    expect(cartao.querySelectorAll("button").length).toBe(3);
+    expect(cartao.querySelector("textarea")).toBeNull();
     expect(screen.getByText("Casa dos Assados")).toBeTruthy();
     expect(screen.getByText("Stop")).toBeTruthy();
     expect(document.querySelector("[data-prazo]")!.textContent).toMatch(/^vence/);
@@ -84,8 +91,11 @@ describe("Mensagens da semana", () => {
     salvar.mockResolvedValue({ ...relatorio("r1", "c1", "Texto novo"), review_version: 2 });
     preparar.mockResolvedValue(pedido("a1b", "r1", "c1", { payload_version: 2 }));
     montar();
-    fireEvent.change(screen.getByLabelText(/Texto da mensagem para Casa dos Assados/), { target: { value: "Texto novo" } });
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: /Aprovar e enviar/ })[0]); });
+    // A edição abre numa janela no centro.
+    fireEvent.click(screen.getByRole("button", { name: "Editar a mensagem de Casa dos Assados" }));
+    fireEvent.change(await screen.findByLabelText(/Texto da mensagem para Casa dos Assados/), { target: { value: "Texto novo" } });
+    expect(document.querySelector("[data-edicao] [data-balao]")!.textContent).toContain("Texto novo");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Aprovar e enviar a mensagem de Casa dos Assados" })); });
     await waitFor(() => expect(decisoes()).toHaveLength(1));
     expect(salvar.mock.calls[0][1]).toMatchObject({ summary: "Texto novo" });
     expect(preparar.mock.calls[0][2]).toEqual({ channel: "whatsapp", recipient: "Grupo Casa" });
@@ -119,6 +129,15 @@ describe("Mensagens da semana", () => {
     await waitFor(() => expect(decisoes()).toHaveLength(1));
     expect(decisoes()[0]).toMatchObject({ _approval_id: "a1", _decision: "rejeitado" });
     expect(String(decisoes()[0]._comment)).toContain("Pulada");
+  });
+
+  it("situação por cor: vencida em vermelho, aprovada em verde (recolhida)", () => {
+    estado.approvals = [pedido("a1", "r1", "c1", { valid_until: ha1h }), pedido("a2", "r2", "c2", { status: "aprovado" })];
+    montar();
+    const vencida = document.querySelector('[data-mensagem="venceu"] [data-prazo]') as HTMLElement;
+    expect(vencida.className).toContain("text-destructive");
+    expect(vencida.textContent).toMatch(/^venceu/);
+    expect(screen.getByText("Aprovadas, o Hermes envia")).toBeTruthy();
   });
 
   it("pedido vencido vira 'venceu' e o prazo diz quando", () => {

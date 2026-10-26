@@ -26,6 +26,9 @@
  * (caso pc_ego, MCP aceleriq_navegador_do_pc) no Ego do dono, com os logins dele. COMPUTADOR_EGO=desligado
  * desliga, so_pc deixa o resto no Chromium, logado (padrão) também confere posts das redes no Ego.
  * EGO_BROWSER_BIN troca o caminho do ego-browser.exe; COMPUTADOR_EGO_TEMPO_S, o tempo máximo (240 s).
+ * Horário comercial (26/10, cus-1.4): o Ego só é usado na janela (padrão 09:00-18:00, seg a sex, São Paulo;
+ * EGO_HORARIO, EGO_DIAS "1-5", EGO_FUSO). Fora dela o worker não anuncia nem pega pc_ego e confere post
+ * no Chromium; os pedidos agendados pelo MCP rodam por prioridade quando a janela abre.
  */
 
 import os from "node:os";
@@ -36,8 +39,9 @@ import { abrirNavegador } from "./navegador.ts";
 import { motorDoEgo } from "./ego.ts";
 import { clienteAnthropic, clienteOpenAI, modeloDoComputador, semSegredo } from "./modelo.ts";
 import { type Ambiente, casosDoWorker, pegarERodar, provedoresDoWorker } from "./trabalho.ts";
+import { descreverJanelaDoEgo, lerJanelaDoEgo } from "../../supabase/functions/computador-do-agente/modulos/navegador-do-pc.ts";
 
-export const VERSAO_DO_WORKER = "cus-1.3";
+export const VERSAO_DO_WORKER = "cus-1.4";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv) {
   const url = String(env.SUPABASE_URL || "").trim();
@@ -89,6 +93,7 @@ async function principal() {
     versao: VERSAO_DO_WORKER,
     log: (m) => console.log(m),
     ego: motorDoEgo(process.env, (m) => console.log(m)),
+    janela: lerJanelaDoEgo((n) => process.env[n]),
   };
   const provedores = provedoresDoWorker(amb);
   console.log(
@@ -96,7 +101,7 @@ async function principal() {
       (provedores.length ? ` · computer use: ${provedores.join(" e ")} (padrão ${cfg.qualModelo.api})` : "") +
       (cfg.comModelo && !provedores.length ? " · computer use pedido sem ANTHROPIC_API_KEY nem OPENAI_API_KEY: fica desligado" : "") +
       (!cfg.comModelo ? " · computer use desligado (COMPUTADOR_COM_MODELO_LIGADO diferente de 1)" : "") +
-      (amb.ego ? ` · navegador do PC: Ego ${amb.ego.versao || ""} (${amb.ego.modo})` : " · navegador do PC desligado (sem Ego Lite ou COMPUTADOR_EGO=desligado)"),
+      (amb.ego ? ` · navegador do PC: Ego ${amb.ego.versao || ""} (${amb.ego.modo}), horário ${descreverJanelaDoEgo(amb.janela)}` :" · navegador do PC desligado (sem Ego Lite ou COMPUTADOR_EGO=desligado)"),
   );
   const umaVez = process.argv.indexOf("--uma-vez") >= 0;
   let parar = false;

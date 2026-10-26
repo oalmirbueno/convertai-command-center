@@ -47,7 +47,15 @@ import {
   type RespostaDaOpenAI,
   sistemaDoCaso,
 } from "./modelo.ts";
-import { CASO_DO_PC, MENSAGEM_PC_INDISPONIVEL, normalizarPedidoDoPc, type PassoDoPc } from "../../supabase/functions/computador-do-agente/modulos/navegador-do-pc.ts";
+import {
+  CASO_DO_PC,
+  dentroDaJanelaDoEgo,
+  JANELA_PADRAO_DO_EGO,
+  type JanelaDoEgo,
+  MENSAGEM_PC_INDISPONIVEL,
+  normalizarPedidoDoPc,
+  type PassoDoPc,
+} from "../../supabase/functions/computador-do-agente/modulos/navegador-do-pc.ts";
 import { type MotorDoEgo, motorDoPedido, type SaidaDoEgo } from "./ego.ts";
 
 /** Altura máxima da captura de página inteira (px): página infinita não vira PNG gigante. */
@@ -74,6 +82,20 @@ export interface Ambiente {
   log?: (msg: string) => void;
   /** Navegador do PC: o Ego Lite do dono, com os logins dele (null = desligado ou não instalado). */
   ego?: MotorDoEgo | null;
+  /** Horário comercial do Ego (padrão 9h–18h, seg a sex, São Paulo; EGO_HORARIO, EGO_DIAS, EGO_FUSO). */
+  janela?: JanelaDoEgo;
+  /** Relógio (testes); padrão Date.now. */
+  agora?: () => number;
+}
+
+/** Folga antes de abrir: o worker volta a anunciar o caso do PC 2 min antes (o banco só entrega na hora). */
+export const FOLGA_DE_ABERTURA_MS = 120_000;
+
+/** O Ego pode ser usado agora? Fora da janela o worker não anuncia nem pega o caso do PC e não usa o Ego. */
+export function egoNaJanela(amb: Pick<Ambiente, "janela" | "agora">, comFolga = false): boolean {
+  const agora = amb.agora ? amb.agora() : Date.now();
+  const j = amb.janela || JANELA_PADRAO_DO_EGO;
+  return dentroDaJanelaDoEgo(agora, j) || (comFolga && dentroDaJanelaDoEgo(agora + FOLGA_DE_ABERTURA_MS, j));
 }
 
 /** Provedores de computer use que este worker pode usar agora (variável ligada e chave na máquina). */
@@ -86,11 +108,12 @@ export function provedoresDoWorker(amb: Pick<Ambiente, "comModelo" | "modelo" | 
 }
 
 /** Os casos que este worker aceita pegar agora. */
-export function casosDoWorker(amb: Pick<Ambiente, "comModelo" | "modelo" | "openai" | "ego">): string[] {
+export function casosDoWorker(amb: Pick<Ambiente, "comModelo" | "modelo" | "openai" | "ego" | "janela" | "agora">): string[] {
   const comModelo = provedoresDoWorker(amb).length > 0;
   const casos: string[] = CASOS_DO_NAVEGADOR.filter((c) => casoLigado(c, comModelo));
-  // O executor anuncia o caso do PC só com o Ego instalado e ligado: é assim que o MCP sabe se o PC está disponível.
-  if (amb.ego) casos.push(CASO_DO_PC);
+  // O executor anuncia o caso do PC só com o Ego instalado e ligado (é assim que o MCP sabe se o PC está
+  // disponível) e só no horário comercial: fora dele os pedidos ficam agendados e o Ego não é usado.
+  if (amb.ego && egoNaJanela(amb, true)) casos.push(CASO_DO_PC);
   return casos;
 }
 
@@ -628,7 +651,8 @@ export interface Saida {
 export async function umaTarefa(amb: Ambiente, t: TarefaDoNavegador, token: string): Promise<Saida> {
   const log = amb.log || (() => undefined);
   if (t.caso === CASO_DO_PC) return await umaTarefaNoPc(amb, t, token);
-  if (t.caso === "conferir_post" && amb.ego && motorDoPedido(t, amb.ego.modo) === "ego" && !motivoParaNaoRodar(t, amb)) return await conferirPostNoEgo(amb, t, token);
+  // Fora do horário comercial a conferência de post vai no Chromium descartável (o Ego fica para a janela).
+  if (t.caso === "conferir_post" && amb.ego && egoNaJanela(amb) && motorDoPedido(t, amb.ego.modo) === "ego" && !motivoParaNaoRodar(t, amb)) return await conferirPostNoEgo(amb, t, token);
   const recusa = motivoParaNaoRodar(t, amb);
   if (recusa) {
     await amb.fila.concluir(t.id, token, "falhou", { recusada: true }, recusa);
