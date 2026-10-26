@@ -79,6 +79,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.materiais-classificar]
     verify_jwt = true
+  [functions.acervo-ler-fotos]
+    verify_jwt = true
   [functions.ia-gateway]
     verify_jwt = true
   [functions.estudio-arte]

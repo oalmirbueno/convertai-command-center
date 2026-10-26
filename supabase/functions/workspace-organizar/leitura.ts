@@ -132,8 +132,8 @@ export function pedidoDoLote(lote: ItemParaLer[]): string {
   return `Leia as ${lote.length} imagens anexadas, na ordem. Elas estão na ordem em que foram enviadas; imagens enviadas juntas muitas vezes são lâminas do mesmo carrossel (quando forem, use o mesmo texto em serie). ${linhas.join(" ")}`;
 }
 
-export type ResultadoDaLeituraDoWorkspace = {
-  leituras: Array<{ id: string; leitura: Leitura }>;
+export type ResultadoDaLeituraDoWorkspace<L = Leitura> = {
+  leituras: Array<{ id: string; leitura: L }>;
   falhas: Array<{ id: string; motivo: string }>;
   custo: number;
   /** Ficaram sem tentar (tempo ou parada): a tela manda de novo. */
@@ -141,7 +141,12 @@ export type ResultadoDaLeituraDoWorkspace = {
   erroQueParou?: unknown;
 };
 
-export type DependenciasDaLeitura = {
+export type DependenciasDaLeitura<L = Leitura> = {
+  /**
+   * 26/10: outro leitor com outro esquema (as fotos do acervo, acervo-ler-fotos) usa os mesmos lotes,
+   * a mesma recusa uma a uma e o mesmo prazo. Sem ele, a leitura do organizador (normalizarLeitura).
+   */
+  normalizar?: (bruta: unknown) => L | null;
   lerLote: (lote: ItemParaLer[]) => Promise<{ leituras: unknown[]; custo: number }>;
   erroQueParaTudo: (e: unknown) => boolean;
   recusouImagem: (e: unknown) => boolean;
@@ -156,12 +161,13 @@ export type DependenciasDaLeitura = {
  * Lê os arquivos já abertos (cópia leve conferida). Nunca lança: toda falha
  * vira motivo. Imagem com defeito é recusada aqui, antes de gastar.
  */
-export async function lerArquivos(itens: ItemParaLer[], d: DependenciasDaLeitura): Promise<ResultadoDaLeituraDoWorkspace> {
+export async function lerArquivos<L = Leitura>(itens: ItemParaLer[], d: DependenciasDaLeitura<L>): Promise<ResultadoDaLeituraDoWorkspace<L>> {
   const agora = d.agora ?? (() => Date.now());
   const inicio = agora();
   const prazo = d.prazoMs ?? PRAZO_DA_LEITURA_MS;
   const log = d.log ?? ((m: string, dados: Record<string, unknown>) => console.error(m, dados));
-  const r: ResultadoDaLeituraDoWorkspace = { leituras: [], falhas: [], custo: 0, restantes: [] };
+  const r: ResultadoDaLeituraDoWorkspace<L> = { leituras: [], falhas: [], custo: 0, restantes: [] };
+  const normalizar = d.normalizar ?? (normalizarLeitura as unknown as (bruta: unknown) => L | null);
   const tentados = new Set<string>();
   let parou = false;
 
@@ -207,15 +213,16 @@ export async function lerArquivos(itens: ItemParaLer[], d: DependenciasDaLeitura
       if (Number.isFinite(i) && !porIndice.has(i)) porIndice.set(i, l);
     }
     lote.forEach((it, i) => {
-      const leitura = normalizarLeitura(porIndice.get(i + 1));
+      const leitura = normalizar(porIndice.get(i + 1));
       if (!leitura) {
         r.falhas.push({ id: it.id, motivo: "o leitor não devolveu a leitura desta imagem" });
         return;
       }
-      // Quadro de vídeo nunca vira lâmina, foto de antes/depois ou documento: é vídeo.
-      if (it.video && ["reel", "story", "video", "referencia"].indexOf(leitura.tipo) < 0) {
+      // Quadro de vídeo nunca vira lâmina, foto de antes/depois ou documento: é vídeo (só no leitor do organizador).
+      const doOrganizador = d.normalizar ? null : (leitura as unknown as Leitura);
+      if (doOrganizador && it.video && ["reel", "story", "video", "referencia"].indexOf(doOrganizador.tipo) < 0) {
         const vertical = !!it.largura && !!it.altura && it.altura > it.largura;
-        leitura.tipo = vertical && (!it.duracao || it.duracao <= 90) ? "reel" : "video";
+        doOrganizador.tipo = vertical && (!it.duracao || it.duracao <= 90) ? "reel" : "video";
       }
       r.leituras.push({ id: it.id, leitura });
     });
