@@ -27,7 +27,7 @@ const DIREITOS: OpcaoDaVariavel[] = [
   { valor: "licenca", rotulo: "Licença de uso" },
 ];
 
-const direitosDe = (s: ServicoDoContrato, rotulo: string): VariavelDoModelo => ({
+export const direitosDe = (s: ServicoDoContrato, rotulo: string): VariavelDoModelo => ({
   nome: variavelDeDireitos(s),
   rotulo: `Direitos autorais (${rotulo})`,
   tipo: "escolha",
@@ -43,13 +43,13 @@ const PROJETO: VariavelDoModelo[] = [
   { nome: "condicoes_pagamento", rotulo: "Condições de pagamento", tipo: "texto", obrigatoria: true, padrao: "50% na assinatura e 50% na entrega final", grupo: "quadro" },
 ];
 
-const MENSAL: VariavelDoModelo[] = [
+export const MENSAL: VariavelDoModelo[] = [
   { nome: "valor_mensal", rotulo: "Valor mensal", tipo: "moeda", obrigatoria: true, grupo: "quadro" },
   { nome: "vencimento_dia", rotulo: "Dia do vencimento", tipo: "inteiro", obrigatoria: true, grupo: "quadro" },
   { nome: "vigencia_meses", rotulo: "Vigência (meses)", tipo: "inteiro", obrigatoria: true, grupo: "quadro" },
 ];
 
-const direitosDoBloco = (s: ServicoDoContrato, cessao: string, licenca: string): ClausulaDoModelo[] => [
+export const direitosDoBloco = (s: ServicoDoContrato, cessao: string, licenca: string): ClausulaDoModelo[] => [
   { chave: "direitos_cessao", titulo: "Direitos autorais", texto: cessao, quando: { variavel: variavelDeDireitos(s), igual: "cessao" } },
   { chave: "direitos_licenca", titulo: "Direitos autorais", texto: licenca, quando: { variavel: variavelDeDireitos(s), igual: "licenca" } },
 ];
@@ -295,7 +295,7 @@ export const CONDICOES_GERAIS_V1: ModeloDeContrato = {
 
 // ------------------------------------------------------------------ blocos por serviço
 
-const bloco = (servico: ServicoDoContrato, nome: string, variaveis: VariavelDoModelo[], clausulas: ClausulaDoModelo[]): ModeloDeContrato => ({
+export const bloco = (servico: ServicoDoContrato, nome: string, variaveis: VariavelDoModelo[], clausulas: ClausulaDoModelo[]): ModeloDeContrato => ({
   chave: `bloco_${servico}`,
   tipo: "bloco",
   servico,

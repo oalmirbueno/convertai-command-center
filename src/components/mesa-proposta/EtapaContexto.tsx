@@ -17,6 +17,7 @@ import { botao, campo, campoTexto, foco, juntar, lista, rolagem, texto } from "@
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   dataCurta,
+  dinheiro,
   lerValor,
   normalizarItens,
   reais,
@@ -497,7 +498,7 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
       titulo="O que vai oferecer"
       id="proposta-investimento"
       divisoria
-      descricao={`${pacotes.ativo && resumo.length ? resumo.map((p) => `${p.nome} ${textoDoTotal(p.totais)}`).join(" · ") : textoDoTotal(totais)}${mudou ? " · não salvo" : ""}`}
+      descricao={`${pacotes.ativo && resumo.length ? resumo.map((p) => `${p.nome} ${textoDoTotal(p.totais, proposta.moeda)}`).join(" · ") : textoDoTotal(totais, proposta.moeda)}${mudou ? " · não salvo" : ""}`}
       ajuda="Os itens e o preço da proposta: da biblioteca da agência, do plano do Financeiro, de um serviço ou livre. O preço sai só daqui (a IA nunca inventa valor). A validade é até quando o cliente pode aceitar. Em Mais opções de preço: 3 pacotes (cada item entra a partir de um nível: o Essencial tem o básico, o Recomendado soma o dele e o Completo tem tudo), horas por item com a margem na linha da hora técnica e a Calculadora (prévia e Desfazer), as formas de pagamento que o cliente escolhe no aceite e o lead do Comercial."
       acao={
         <AdicionarItem
@@ -530,7 +531,7 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
             // No celular, a linha resumo abre os campos (cada campo existe uma vez só no DOM).
             let lado = 0;
             const proximoLado = () => (lado++ % 2 === 0 ? "col-start-1" : "col-start-2");
-            const resumoDoItem = [i.nome.trim() || `Item ${n + 1}`, valor !== null ? reais(valor) : "sem valor", i.recorrencia === "mensal" ? "Mensal" : "Única", pacotes.ativo ? pacotes.nomes[nivelDe(i.id)] || ROTULO_DO_NIVEL[nivelDe(i.id)] : ""].filter(Boolean).join(" · ");
+            const resumoDoItem = [i.nome.trim() || `Item ${n + 1}`, valor !== null ? dinheiro(valor, proposta.moeda) : "sem valor", i.recorrencia === "mensal" ? "Mensal" : "Única", pacotes.ativo ? pacotes.nomes[nivelDe(i.id)] || ROTULO_DO_NIVEL[nivelDe(i.id)] : ""].filter(Boolean).join(" · ");
             return (
               <li
                 key={i.id}
@@ -620,7 +621,7 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
         <div className="min-w-0" data-pacotes="">
           <GrupoDeCampos colunas={3}>
             {NIVEIS_DO_PACOTE.map((n) => (
-              <CampoDeFormulario key={n} rotulo={`Pacote ${ROTULO_DO_NIVEL[n]}`} apoio={resumo.length ? textoDoTotal((resumo.find((p) => p.nivel === n) || resumo[0]).totais) : undefined}>
+              <CampoDeFormulario key={n} rotulo={`Pacote ${ROTULO_DO_NIVEL[n]}`} apoio={resumo.length ? textoDoTotal((resumo.find((p) => p.nivel === n) || resumo[0]).totais, proposta.moeda) : undefined}>
                 <input value={pacotes.nomes[n]} onChange={(e) => setPacotes({ ...pacotes, nomes: { ...pacotes.nomes, [n]: e.target.value } })} maxLength={40} className={campo} />
               </CampoDeFormulario>
             ))}

@@ -29,7 +29,7 @@
 
 // ------------------------------------------------------------------ serviços
 
-export const SERVICOS_DO_CONTRATO = ["social", "site", "marca", "naming", "trafego", "video", "design", "mensalista"] as const;
+export const SERVICOS_DO_CONTRATO = ["social", "site", "marca", "naming", "trafego", "video", "design", "mensalista", "exterior"] as const;
 export type ServicoDoContrato = (typeof SERVICOS_DO_CONTRATO)[number];
 
 export const ROTULO_DO_SERVICO: Record<ServicoDoContrato, string> = {
@@ -41,6 +41,7 @@ export const ROTULO_DO_SERVICO: Record<ServicoDoContrato, string> = {
   video: "Vídeo e motion",
   design: "Design pontual",
   mensalista: "Mensalista (fee mensal)",
+  exterior: "Cliente no exterior (dólar ou euro)",
 };
 
 /** O que cada serviço é, numa frase (vai para o Jev escolher os blocos e para a tela). */
@@ -53,10 +54,11 @@ export const DESCRICAO_DO_SERVICO: Record<ServicoDoContrato, string> = {
   video: "produção de vídeos, reels roteirizados, motion design, animação ou captação e edição de vídeo",
   design: "design de peças pontuais: cartão, folder, banner, apresentação, cardápio, embalagem ou arte avulsa",
   mensalista: "pacote mensal de design ou horas de criação sob demanda (fee mensal), sem ser gestão de redes",
+  exterior: "cliente que mora fora do Brasil (Estados Unidos, Portugal, Paraguai ou outro país), com entrada de diagnóstico e site em 48 horas e serviço mensal cobrados em dólar ou euro, contrato bilíngue",
 };
 
 /** Serviços cobrados por mês (valor mensal, vencimento e vigência). Os outros são projeto (valor total). */
-export const SERVICOS_RECORRENTES: ServicoDoContrato[] = ["social", "trafego", "mensalista"];
+export const SERVICOS_RECORRENTES: ServicoDoContrato[] = ["social", "trafego", "mensalista", "exterior"];
 
 export function ehServico(v: unknown): v is ServicoDoContrato {
   return typeof v === "string" && (SERVICOS_DO_CONTRATO as readonly string[]).indexOf(v) >= 0;
@@ -82,6 +84,7 @@ export const DIREITOS_PADRAO: Record<ServicoDoContrato, RegraDeDireitos> = {
   video: "cessao",
   design: "cessao",
   mensalista: "cessao",
+  exterior: "cessao",
 };
 
 export const ROTULO_DOS_DIREITOS: Record<RegraDeDireitos, string> = {
@@ -337,9 +340,40 @@ export function moedaBr(valor: number): string {
   return `R$ ${numeroBr(valor, 2)}`;
 }
 
+/** Moeda em que os valores do contrato são escritos. Real, salvo o serviço "exterior" com dólar ou euro. */
+export type MoedaDoContrato = "BRL" | "USD" | "EUR";
+export const SIMBOLO_DA_MOEDA: Record<MoedaDoContrato, string> = { BRL: "R$", USD: "US$", EUR: "€" };
+const NOMES_DA_MOEDA: Record<MoedaDoContrato, { um: string; varios: string; centavo: string; centavos: string }> = {
+  BRL: { um: "real", varios: "reais", centavo: "centavo", centavos: "centavos" },
+  USD: { um: "dólar americano", varios: "dólares americanos", centavo: "centavo", centavos: "centavos" },
+  EUR: { um: "euro", varios: "euros", centavo: "cêntimo", centavos: "cêntimos" },
+};
+export const ehMoedaDoContrato = (v: unknown): v is MoedaDoContrato => v === "BRL" || v === "USD" || v === "EUR";
+
+/** "US$ 497,00", "€ 447,00" ou "R$ 8.000,00". */
+export function moedaNoContrato(valor: number, moeda: MoedaDoContrato): string {
+  return moeda === "BRL" ? moedaBr(valor) : `${SIMBOLO_DA_MOEDA[moeda]} ${numeroBr(valor, 2)}`;
+}
+
+/** Por extenso na moeda do contrato: "quatrocentos e noventa e sete dólares americanos". */
+export function extensoNaMoeda(valor: number, moeda: MoedaDoContrato): string {
+  if (moeda === "BRL") return extensoEmReais(valor);
+  const nomes = NOMES_DA_MOEDA[moeda];
+  const v = Math.round(Math.abs(Number(valor) || 0) * 100);
+  const inteiro = Math.floor(v / 100);
+  const cent = v % 100;
+  const partes: string[] = [];
+  if (inteiro) {
+    const redondo = inteiro >= 1_000_000 && inteiro % 1_000_000 === 0;
+    partes.push(`${extensoInteiro(inteiro)}${redondo ? " de" : ""} ${inteiro === 1 ? nomes.um : nomes.varios}`);
+  }
+  if (cent) partes.push(`${extensoInteiro(cent)} ${cent === 1 ? nomes.centavo : nomes.centavos}`);
+  return partes.length ? partes.join(" e ") : `zero ${nomes.um}`;
+}
+
 /** Lê "8000", "8.000,50", "R$ 8.000", "8000.5". Null quando não é um valor. */
 export function lerMoeda(bruto: unknown): number | null {
-  let s = String(bruto == null ? "" : bruto).replace(/R\$|\s/gi, "").trim();
+  let s = String(bruto == null ? "" : bruto).replace(/US\$|R\$|€|\bUSD\b|\bEUR\b|\s/gi, "").trim();
   if (!s) return null;
   if (s.indexOf(",") >= 0) s = s.replace(/\./g, "").replace(",", ".");
   else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, "");
@@ -415,13 +449,13 @@ export function valorInvalido(v: VariavelDoModelo, bruto: unknown): string | nul
 }
 
 /** Valor como entra no texto do contrato. */
-export function formatarValor(v: VariavelDoModelo, bruto: unknown): string {
+export function formatarValor(v: VariavelDoModelo, bruto: unknown, moeda: MoedaDoContrato = "BRL"): string {
   const s = txt(bruto);
   if (!s) return "";
   switch (v.tipo) {
     case "moeda": {
       const n = lerMoeda(s);
-      return n === null ? s : `${moedaBr(n)} (${extensoEmReais(n)})`;
+      return n === null ? s : `${moedaNoContrato(n, moeda)} (${extensoNaMoeda(n, moeda)})`;
     }
     case "inteiro": {
       const n = lerInteiro(s);
@@ -598,6 +632,12 @@ export function anotarFalta(ctx: Contexto, nome: string, onde: string, motivo: "
   ctx.faltando.push({ nome, rotulo: v ? v.rotulo : nome.replace(/_/g, " "), motivo, detalhe, onde });
 }
 
+/** Moeda do contrato: a do serviço "exterior" (variável ext_moeda) quando ele está no contrato; senão real. */
+function moedaDoCtx(ctx: Contexto): MoedaDoContrato {
+  const m = ctx.porNome.ext_moeda ? txt(ctx.valores.ext_moeda).toUpperCase() : "";
+  return ehMoedaDoContrato(m) ? m : "BRL";
+}
+
 /** Troca as {{variáveis}}. O que falta vira "[falta: rótulo]" (só aparece na prévia; não congela). */
 export function preencher(texto: string, ctx: Contexto, onde: string): string {
   return String(texto || "").replace(new RegExp(MARCA.source, "g"), (_m, nome: string) => {
@@ -619,7 +659,7 @@ export function preencher(texto: string, ctx: Contexto, onde: string): string {
         anotarFalta(ctx, nome, onde, "invalida", erro);
         return `[corrigir: ${v.rotulo}]`;
       }
-      return formatarValor(v, bruto);
+      return formatarValor(v, bruto, moedaDoCtx(ctx));
     }
     return txt(bruto);
   });
@@ -648,13 +688,15 @@ function quadroResumo(e: EntradaDaMontagem, ctx: Contexto, servicos: ServicoDoCo
   const p = (t: string) => preencher(t, ctx, "quadro-resumo");
   if (txt(e.qualificacao)) linhas.push(l("Contratada", `${txt(e.qualificacao)}.`));
   else linhas.push(l("Contratada", `${txt(a.razao_social)}${a.nome_fantasia && a.nome_fantasia !== a.razao_social ? ` (${a.nome_fantasia})` : ""}, CNPJ ${txt(a.cnpj)}, com sede em ${txt(a.endereco)}, ${txt(a.cidade)}/${txt(a.uf)}, representada por ${txt(a.representante)}${a.representante_cpf ? `, CPF ${a.representante_cpf}` : ""}.`));
-  const doc = tipoDoDocumento(v.cliente_documento || "") === "cpf" ? "CPF" : tipoDoDocumento(v.cliente_documento || "") === "cnpj" ? "CNPJ" : "CPF/CNPJ";
+  const noExterior = servicos.indexOf("exterior") >= 0;
+  const doc = tipoDoDocumento(v.cliente_documento || "") === "cpf" ? "CPF" : tipoDoDocumento(v.cliente_documento || "") === "cnpj" ? "CNPJ" : noExterior ? "documento" : "CPF/CNPJ";
   const rep = txt(v.cliente_representante) ? `, representada por ${txt(v.cliente_representante)}` : "";
   linhas.push(l("Contratante", `${p("{{cliente_nome}}")}, ${doc} ${p("{{cliente_documento}}")}, com endereço em ${p("{{cliente_endereco}}")}${rep}. E-mail do canal oficial: ${p("{{cliente_email}}")}.`));
   linhas.push(l("Serviços", servicos.map((s, i) => `${ROTULO_DO_SERVICO[s]} (Anexo ${LETRAS[i]})`).join("; ") + "."));
   const recorrentes = servicos.filter((s) => SERVICOS_RECORRENTES.indexOf(s) >= 0);
   const projetos = servicos.filter((s) => SERVICOS_RECORRENTES.indexOf(s) < 0);
   const valor: string[] = [];
+  if (noExterior) valor.push(p("Entrada: {{ext_valor_entrada}}, paga antes do início."));
   if (projetos.length) valor.push(p("Projeto: {{valor_total}}, pago assim: {{condicoes_pagamento}}."));
   if (recorrentes.length) valor.push(p("Mensal: {{valor_mensal}} por mês, com vencimento no dia {{vencimento_dia}} de cada mês."));
   linhas.push(l("Valor", valor.join(" ")));

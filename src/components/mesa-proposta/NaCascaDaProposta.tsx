@@ -50,7 +50,7 @@ export function SeletorDaProposta({
   const opcao = (p: (typeof lista)[number], arquivada: boolean): OpcaoCompacta => ({
     valor: p.id,
     rotulo: compacto ? `Nº ${p.numero}` : `Nº ${p.numero} · ${status(p.status_efetivo)}`,
-    descricao: arquivada ? "Arquivada" : `${compacto ? `${status(p.status_efetivo)} · ` : ""}${p.titulo} · ${textoDoTotal(p.totais)}`,
+    descricao: arquivada ? "Arquivada" : `${compacto ? `${status(p.status_efetivo)} · ` : ""}${p.titulo} · ${textoDoTotal(p.totais, p.moeda)}`,
   });
   const opcoes = vivas.map((p) => opcao(p, false));
   if (aberta && aberta.arquivada_em) opcoes.push(opcao(aberta, true));

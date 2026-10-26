@@ -131,7 +131,7 @@ export default function EtapaAcompanhar({ proposta, onAbrir }: { proposta: Propo
           <span className="inline-flex items-center">
             <SeloDaProposta status={status} />
             <span className="ml-2">
-              {textoDoTotal(proposta.totais)} · até {dataCurta(proposta.validade_ate) || "sem data"}
+              {textoDoTotal(proposta.totais, proposta.moeda)} · até {dataCurta(proposta.validade_ate) || "sem data"}
             </span>
           </span>
         }

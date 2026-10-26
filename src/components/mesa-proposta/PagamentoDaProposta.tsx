@@ -116,7 +116,7 @@ export default function PagamentoDaProposta({ proposta, embutido = false }: { pr
                 </CampoDeFormulario>
               </div>
             )}
-            {op && totaisDaBase.itens > 0 && <p className={juntar(texto.auxiliar, "mt-1 tabular-nums")}>{textoDaOpcao(op, totaisDaBase)}</p>}
+            {op && totaisDaBase.itens > 0 && <p className={juntar(texto.auxiliar, "mt-1 tabular-nums")}>{textoDaOpcao(op, totaisDaBase, proposta.moeda)}</p>}
           </li>
         );
       })}

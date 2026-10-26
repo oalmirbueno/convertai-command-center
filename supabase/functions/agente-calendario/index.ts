@@ -1602,7 +1602,7 @@ ${GANCHO_NO_VIDEO_DA_PAUTA}
 - Siga a memória do estrategista (preferências, aprendizados e o que evitar).
 - Siga o cérebro do cliente (cerebro_do_cliente): o que evitar, ajustes pedidos, reprovações com motivo e o que performou; regra do dono vale sobre sugestão sua.
 - Português do Brasil, sem travessões.
-- Todo tema e todo conteúdo declara tipo_editorial e framework (ids da base de técnica) e o roteiro segue a estrutura do framework.
+- Cada tema e conteúdo declara tipo_editorial e framework (ids da base de técnica); o roteiro segue o framework.
 - O CONTEXTO VINDO DO MCP (itens ativos) é contexto do cliente: siga.
 ${REGRA_DE_MENOS_TEXTO}
 ${DIVERSIDADE_NO_PLANO}
