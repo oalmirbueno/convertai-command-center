@@ -33,6 +33,8 @@ class Nichos(unittest.TestCase):
         self.assertEqual(nicho_do_texto("clínica odontológica")["rotulo"], "Dentista")
         self.assertEqual(nicho_do_texto("academia de crossfit")["rotulo"], "Academia")
         self.assertIsNone(nicho_do_texto("fábrica de foguetes"))
+        # Pontuação conta como espaço: o texto da campanha vem com vírgula e parêntese.
+        self.assertEqual(nicho_do_texto("loja de comércio (eletrônicos, perfumaria)")["rotulo"], "Informática")
 
     def test_consulta_tem_etiqueta_e_nome_com_acento(self):
         q = consulta_overpass("pet shop", 3600297514, 20)

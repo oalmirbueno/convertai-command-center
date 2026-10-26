@@ -59,7 +59,8 @@ def sem_acento(texto):
 
 def nicho_do_texto(texto):
     """O nicho conhecido mais parecido com o texto (sinônimo inteiro), ou None."""
-    alvo = sem_acento(texto)
+    # Pontuação vira espaço: "loja (eletronicos, perfumaria)" casa "eletronicos".
+    alvo = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", sem_acento(texto))).strip()
     if not alvo:
         return None
     melhor = None
