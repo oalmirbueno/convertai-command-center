@@ -4,9 +4,9 @@ import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import {
   blocosParaMostrar,
   dataCurta,
+  dinheiro,
   dominio,
   FUNDO_DO_BLOCO,
-  reais,
   totaisDosItens,
   type Bloco,
   type ConteudoDaProposta,
@@ -197,6 +197,7 @@ function Investimento({ x, itens, pacotes, pagamento, pacoteEscolhido }: { x: Da
   const opcoes = normalizarPagamento(pagamento).opcoes;
   const base = resumo.length ? (resumo.find((p) => (pacoteEscolhido ? p.nivel === pacoteEscolhido : p.destaque)) || resumo[1]) : null;
   const totaisBase = base ? base.totais : totaisDosItens(itens);
+  const moeda = x.moeda || "BRL";
   const pagamentoTexto = (
     <div>
       <span className="pd-meta-rotulo">Pagamento</span>
@@ -204,7 +205,7 @@ function Investimento({ x, itens, pacotes, pagamento, pacoteEscolhido }: { x: Da
         <ul className="pd-opcoes">
           {opcoes.map((op) => (
             <li key={op.id}>
-              {textoDaOpcao(op, totaisBase)}
+              {textoDaOpcao(op, totaisBase, moeda)}
               {op.observacao ? <span className="pd-item-texto">{op.observacao}</span> : null}
             </li>
           ))}
@@ -227,8 +228,8 @@ function Investimento({ x, itens, pacotes, pagamento, pacoteEscolhido }: { x: Da
               {p.destaque ? <span className="pd-selo">Recomendado</span> : null}
               <span className="pd-item-titulo">{p.nome}</span>
               {p.descricao ? <span className="pd-item-texto">{p.descricao}</span> : null}
-              {p.totais.unico > 0 ? <span className="pd-valor-pacote">{reais(p.totais.unico)}</span> : null}
-              {p.totais.mensal > 0 ? <span className={p.totais.unico > 0 ? "pd-valor-mensal-pacote" : "pd-valor-pacote"}>{`${reais(p.totais.mensal)} por mês`}</span> : null}
+              {p.totais.unico > 0 ? <span className="pd-valor-pacote">{dinheiro(p.totais.unico, moeda)}</span> : null}
+              {p.totais.mensal > 0 ? <span className={p.totais.unico > 0 ? "pd-valor-mensal-pacote" : "pd-valor-pacote"}>{`${dinheiro(p.totais.mensal, moeda)} por mês`}</span> : null}
               <span className="pd-pequeno">{p.itens.length} {p.itens.length === 1 ? "item" : "itens"}</span>
             </div>
           ))}
@@ -278,8 +279,8 @@ function Investimento({ x, itens, pacotes, pagamento, pacoteEscolhido }: { x: Da
       <div className="pd-total">
         <div>
           <span className="pd-meta-rotulo">Investimento</span>
-          {t.unico > 0 ? <span className="pd-valor">{reais(t.unico)}</span> : null}
-          {t.mensal > 0 ? <span className={t.unico > 0 ? "pd-valor-mensal" : "pd-valor"}>{`${reais(t.mensal)} por mês`}</span> : null}
+          {t.unico > 0 ? <span className="pd-valor">{dinheiro(t.unico, moeda)}</span> : null}
+          {t.mensal > 0 ? <span className={t.unico > 0 ? "pd-valor-mensal" : "pd-valor"}>{`${dinheiro(t.mensal, moeda)} por mês`}</span> : null}
           {!t.itens ? <span className="pd-valor-mensal">A definir</span> : null}
           {unicos.length || mensais.length ? (
             <p className="pd-incluido">

@@ -32,6 +32,7 @@ export type FotoParaLer = {
   storage_bucket: string;
   storage_path: string;
   categoria?: string | null;
+  pasta?: string | null;
   tags?: string[] | null;
   descricao?: string | null;
   ativa?: boolean | null;
@@ -73,14 +74,34 @@ export function precisaDeLeitura(f: FotoParaLer): boolean {
   return EXTENSAO_LIDA.test(caminho) || !TEM_EXTENSAO.test(caminho);
 }
 
+const PASTA_DE_FOTO_REAL = /foto|real|imagens|quarto|vista|trabalho|obra|loja|mesa foto \/ originais/;
+const PASTA_DE_ARTE = /^arquivos \/|^execu|criativo|entrega|material/;
+const CATEGORIA_DE_FOTO = ["pessoa", "produto", "ambiente", "detalhe", "antes_depois"];
+
 /**
- * As fotos da rodada, por cliente: na ordem que vieram (a mais nova antes),
- * até `limite` no total, só de quem tem saldo para pagar a leitura.
+ * 26/10 (dono): foto real primeiro. 0 = pasta ou categoria de foto real
+ * ("Fotos De trabalhos Reais", "Imagens Quartos Reais"), 2 = arte, card ou
+ * pasta de criativos e entregas, 1 = o resto.
+ */
+export function prioridadeDaFoto(f: FotoParaLer): number {
+  const pasta = semAcento(String(f.pasta || "").toLowerCase());
+  const categoria = String(f.categoria || "");
+  if (categoria === "arte") return 2;
+  if (CATEGORIA_DE_FOTO.indexOf(categoria) >= 0 || PASTA_DE_FOTO_REAL.test(pasta)) return 0;
+  if (PASTA_DE_ARTE.test(pasta)) return 2;
+  return 1;
+}
+
+/**
+ * As fotos da rodada, por cliente: foto real primeiro (prioridadeDaFoto) e,
+ * dentro da mesma prioridade, na ordem que vieram (a mais nova antes), até
+ * `limite` no total, só de quem tem saldo para pagar a leitura.
  */
 export function fotosDaRodada(fotos: FotoParaLer[], limite: number, temSaldo: (clientId: string) => boolean): Map<string, FotoParaLer[]> {
   const saida = new Map<string, FotoParaLer[]>();
   let n = 0;
-  for (const f of fotos) {
+  const ordem = fotos.map((f, i) => ({ f, i, p: prioridadeDaFoto(f) })).sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.f);
+  for (const f of ordem) {
     if (n >= limite) break;
     if (!precisaDeLeitura(f) || !temSaldo(f.client_id)) continue;
     saida.set(f.client_id, [...(saida.get(f.client_id) || []), f]);
@@ -151,7 +172,9 @@ export function normalizarLeituraDoAcervo(bruta: unknown): LeituraDoAcervo | nul
   const b = bruta as Record<string, unknown>;
   const descricao = umaLinha(b.descricao, 240);
   if (descricao.length < 8) return null;
-  const categoria = (CATEGORIAS_DO_ACERVO as readonly string[]).indexOf(String(b.categoria)) >= 0 ? String(b.categoria) as CategoriaDoAcervo : "outro";
+  const lida = (CATEGORIAS_DO_ACERVO as readonly string[]).indexOf(String(b.categoria)) >= 0 ? String(b.categoria) as CategoriaDoAcervo : "outro";
+  // 26/10 (dono): arte fica sempre na categoria arte. Card ou print com gente ou "antes e depois" não vira foto.
+  const categoria: CategoriaDoAcervo = b.real !== true && lida !== "logo" ? "arte" as CategoriaDoAcervo : lida;
   const pessoas = b.pessoas === "uma" || b.pessoas === "varias" ? b.pessoas : "nenhuma";
   const antesDepois = b.antes_depois === "antes" || b.antes_depois === "depois" || b.antes_depois === "lado_a_lado" ? b.antes_depois : "nao";
   return {

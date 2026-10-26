@@ -189,7 +189,8 @@ describe("Calendário e campanhas: marketing por momento e cérebro", () => {
     // Frente O: as três frentes do propor_temas usam "temas" e a pesquisa do mês usa "diagnostico".
     // AB2 (26/09): as três conversas (planejar_mes, conversar e campanha_conversar) levam o mapa do painel ("conversa").
     // Frente AP (27/09): + trocar_angulo (refaz uma pauta com outro ângulo, momento "mes").
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(6);
+    // 23/10 (903cf50a): + trocar_peca_opcoes (Trocar uma peça do Mês, momento "mes").
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(7);
     // conversar usa o sistema direto; planejar_mes monta num texto (com a prioridade do pedido e o núcleo).
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes", "conversa"\)/g)?.length).toBe(1);
     expect(calendario).toContain('sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}');

@@ -46,7 +46,7 @@ const corsHeaders = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CAMPOS = "id, client_id, nome, storage_bucket, storage_path, categoria, tags, descricao, ativa, gerada, criado_em";
+const CAMPOS = "id, client_id, nome, storage_bucket, storage_path, categoria, pasta, tags, descricao, ativa, gerada, criado_em";
 /** A rodada inteira cabe longe dos 150 s (a resposta tem fôlego, mas o cron não precisa esperar mais). */
 const PRAZO_DA_RODADA_MS = 110_000;
 /** Cópia leve: a miniatura de 640 px serve; original acima disto não é aberto aqui (a copias-leves reduz). */

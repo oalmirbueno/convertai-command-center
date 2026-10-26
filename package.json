@@ -21,7 +21,7 @@
     "typecheck": "npm run typecheck:app && npm run typecheck:node && npm run typecheck:test",
     "typecheck:app": "tsc -p tsconfig.app.json --noEmit --pretty false",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit --pretty false",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit --pretty false",
+    "typecheck:test": "node --max-old-space-size=6144 node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit --pretty false",
     "migrations:verify": "node scripts/verify-migration-integrity.mjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "mcp:portability": "node scripts/verify-mcp-portability.mjs",

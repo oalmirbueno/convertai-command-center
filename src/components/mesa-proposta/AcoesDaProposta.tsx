@@ -144,7 +144,7 @@ export function ListaDePropostas({ propostas, abertaId, onAbrir }: { propostas: 
               <button type="button" onClick={() => onAbrir(p.id)} className={juntar(lista.linha, "w-full text-left", p.id === abertaId && lista.destaque)} aria-current={p.id === abertaId ? "true" : undefined}>
                 <span className={juntar(texto.auxiliar, "mr-3 shrink-0 tabular-nums")}>{p.numero}</span>
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{p.titulo}</span>
-                <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 tabular-nums sm:inline")}>{textoDoTotal(p.totais)}</span>
+                <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 tabular-nums sm:inline")}>{textoDoTotal(p.totais, p.moeda)}</span>
                 {f && (
                   <>
                     <span className={juntar(etiqueta, "ml-3 hidden shrink-0 bg-warning/15 text-warning md:inline")} title="Follow-up pronto no Acompanhar" data-followup={f.situacao}>

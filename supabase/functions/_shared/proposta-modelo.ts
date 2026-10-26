@@ -94,7 +94,8 @@ export type DadosDoBloco = {
   entregaveis: { itens: Array<{ nome: string; detalhe: string }>; nao_inclui: string[] };
   processo: { etapas: TituloETexto[] };
   cronograma: { marcos: Array<{ titulo: string; quando: string }>; observacao: string };
-  investimento: { intangiveis: string[]; condicoes: string; observacao: string };
+  /** moeda: só quando não é real (proposta para cliente no exterior, 26/10/2026). */
+  investimento: { intangiveis: string[]; condicoes: string; observacao: string; moeda?: MoedaDaProposta };
   provas: { cases: Array<{ titulo: string; texto: string; link: string }>; depoimentos: Array<{ nome: string; texto: string }> };
   quem_somos: { texto: string };
   proximos_passos: { passos: string[]; chamada: string };
@@ -208,7 +209,7 @@ export function normalizarDados<T extends TipoDeBloco>(tipo: T, bruto: unknown):
         observacao: textoLimpo(o.observacao, 300),
       });
     case "investimento":
-      return r({ intangiveis: listaDeTextos(o.intangiveis, 160, 10), condicoes: textoLimpo(o.condicoes, 500), observacao: textoLimpo(o.observacao, 300) });
+      return r({ intangiveis: listaDeTextos(o.intangiveis, 160, 10), condicoes: textoLimpo(o.condicoes, 500), observacao: textoLimpo(o.observacao, 300), ...(o.moeda === "USD" || o.moeda === "EUR" ? { moeda: o.moeda } : {}) });
     case "provas":
       return r({
         cases: (Array.isArray(o.cases) ? o.cases : [])
@@ -379,7 +380,7 @@ export function modeloDaProposta(c: ConteudoDaProposta, nome: string, validadeDi
     processo: (d) => ({ etapas: d.etapas }),
     entregaveis: (d) => ({ nao_inclui: d.nao_inclui }),
     cronograma: (d) => ({ observacao: d.observacao }),
-    investimento: (d) => ({ condicoes: d.condicoes }),
+    investimento: (d) => ({ condicoes: d.condicoes, ...(d.moeda ? { moeda: d.moeda } : {}) }),
     proximos_passos: (d) => ({ passos: d.passos, chamada: d.chamada }),
     desafio: (d) => ({ compromisso: d.compromisso }),
   };
@@ -492,21 +493,36 @@ export function totaisDosItens(itens: ItemDaProposta[]): Totais {
   return { unico: centavos(unico), mensal: centavos(mensal), itens: itens.length };
 }
 
-export function reais(v: number): string {
+/** Moeda da proposta (26/10/2026): real, salvo proposta para cliente no exterior. */
+export type MoedaDaProposta = "BRL" | "USD" | "EUR";
+export const SIMBOLO_DA_MOEDA_DA_PROPOSTA: Record<MoedaDaProposta, string> = { BRL: "R$", USD: "US$", EUR: "€" };
+
+/** "R$ 1.234,56", "US$ 1.234,56" ou "€ 1.234,56" (mesma escrita brasileira, o símbolo muda). */
+export function dinheiro(v: number, moeda: MoedaDaProposta = "BRL"): string {
   const n = Number.isFinite(v) ? v : 0;
   const inteiro = Math.floor(Math.abs(n));
   const cent = Math.round((Math.abs(n) - inteiro) * 100);
   const milhar = String(inteiro).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return `${n < 0 ? "-" : ""}R$ ${milhar},${String(cent).padStart(2, "0")}`;
+  return `${n < 0 ? "-" : ""}${SIMBOLO_DA_MOEDA_DA_PROPOSTA[moeda] || "R$"} ${milhar},${String(cent).padStart(2, "0")}`;
+}
+
+export function reais(v: number): string {
+  return dinheiro(v, "BRL");
+}
+
+/** A moeda guardada no bloco de investimento (vem do modelo); sem ela, real. */
+export function moedaDoConteudo(c: ConteudoDaProposta): MoedaDaProposta {
+  const m = (blocoDoTipo(c, "investimento").dados as DadosDoBloco["investimento"]).moeda;
+  return m === "USD" || m === "EUR" ? m : "BRL";
 }
 
 /** Frase do total: "R$ 3.000,00 + R$ 1.500,00 por mês". */
-export function textoDoTotal(t: Totais): string {
+export function textoDoTotal(t: Totais, moeda: MoedaDaProposta = "BRL"): string {
   if (!t.itens) return "Sem itens";
   const partes: string[] = [];
-  if (t.unico > 0) partes.push(reais(t.unico));
-  if (t.mensal > 0) partes.push(`${reais(t.mensal)} por mês`);
-  return partes.join(" + ") || reais(0);
+  if (t.unico > 0) partes.push(dinheiro(t.unico, moeda));
+  if (t.mensal > 0) partes.push(`${dinheiro(t.mensal, moeda)} por mês`);
+  return partes.join(" + ") || dinheiro(0, moeda);
 }
 
 // ------------------------------------------------------------------ status e validade
@@ -896,6 +912,10 @@ export function aplicarGeracao(atual: ConteudoDaProposta, bruto: unknown, origem
     // Condição de pagamento vazia: fica a do modelo (a do dono), não um branco.
     if (tipo === "investimento" && !(dados as DadosDoBloco["investimento"]).condicoes) {
       dados = { ...(dados as DadosDoBloco["investimento"]), condicoes: (antes.dados as DadosDoBloco["investimento"]).condicoes } as typeof dados;
+    }
+    // A moeda é do dono (veio do modelo), nunca do modelo de linguagem.
+    if (tipo === "investimento" && (antes.dados as DadosDoBloco["investimento"]).moeda) {
+      dados = { ...(dados as DadosDoBloco["investimento"]), moeda: (antes.dados as DadosDoBloco["investimento"]).moeda } as typeof dados;
     }
     conteudo = comBloco(conteudo, tipo, { dados });
   }

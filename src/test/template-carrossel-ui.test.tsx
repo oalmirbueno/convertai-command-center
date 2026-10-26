@@ -255,7 +255,7 @@ describe("Carrossel X: texto com quebra e negrito, aplicar a todas, selo, perfil
     fireEvent.click(screen.getByRole("button", { name: "Texto" }));
     const { ErroDaMesa } = await import("@/lib/mesa/api");
     estado.chamar.mockImplementation(async (_f: string, corpo: { acao: string; confirmado?: boolean }) => {
-      if (corpo.acao === "template_destaques" && !corpo.confirmado) throw Object.assign(new ErroDaMesa("custo"), { codigo: "confirmar_custo", detalhes: { custo_estimado_usd: 0.004 } });
+      if (corpo.acao === "template_destaques" && !corpo.confirmado) throw Object.assign(new ErroDaMesa("custo", ""), { codigo: "confirmar_custo", detalhes: { custo_estimado_usd: 0.004 } });
       if (corpo.acao === "template_destaques") return { trabalho, laminas: [{ ordem: 1, destaques: ["desistiu"] }], custo_usd: 0.003 };
       return {};
     });
@@ -311,7 +311,7 @@ describe("Carrossel X: texto com quebra e negrito, aplicar a todas, selo, perfil
     await waitFor(() => expect(ultimoTemplate().bloco?.grafico).toMatchObject({ fonte: "Folha", dados: [{ valor: 40 }, { valor: 25 }] }));
     expect(chamadas("template_bloco_ia")[0]).toMatchObject({ tipo: "grafico", ordem: 1, confirmado: true });
     expect(document.querySelector("[data-aviso-da-ia]")).toHaveTextContent("fonte: Folha");
-    estado.chamar.mockImplementationOnce(async () => { throw Object.assign(new ErroDaMesa("Não achei números reais para este gráfico."), { codigo: "sem_dado_real", detalhes: { custo_usd: 0.01 } }); });
+    estado.chamar.mockImplementationOnce(async () => { throw Object.assign(new ErroDaMesa("Não achei números reais para este gráfico.", ""), { codigo: "sem_dado_real", detalhes: { custo_usd: 0.01 } }); });
     fireEvent.click(screen.getByRole("button", { name: "Gráfico pela IA" }));
     await waitFor(() => expect(document.querySelector("[data-aviso-da-ia]")).toHaveTextContent("Não achei números reais"));
     expect(ultimoTemplate().bloco?.grafico).toMatchObject({ fonte: "Folha" });

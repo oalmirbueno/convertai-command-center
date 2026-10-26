@@ -54,6 +54,7 @@ const PALAVRAS: Record<ServicoDoContrato, RegExp> = {
   video: /(v[ií]deos?|reels? roteirizad|motion|anima[cç][aã]o|capta[cç][aã]o|filmagem|edi[cç][aã]o de v[ií]deo)/i,
   design: /(folder|panfleto|flyer|banner|cart[aã]o de visita|card[aá]pio|embalagem|apresenta[cç][aã]o|pe[cç]a avulsa|design pontual)/i,
   mensalista: /(fee mensal|mensalista|pacote mensal de (design|pe[cç]as|horas)|banco de horas|horas de cria[cç][aã]o)/i,
+  exterior: /(exterior|fora do brasil|d[oó]lar|\beuros?\b|\bUSD\b|\bEUR\b|estados unidos|\bEUA\b|portugal|paraguai|bil[ií]ngue|em ingl[eê]s)/i,
 };
 
 /** Serviços citados com as palavras de sempre (reserva sem IA; o Jev decide quando está no ar). */
@@ -386,7 +387,7 @@ export function regrasDasOperacoes(ctx: ContextoDasRegras): Record<string, Regra
 }
 
 export const DESCRICOES_DAS_OPERACOES: Record<(typeof OPERACOES_DO_AGENTE)[number], string> = {
-  criar_contrato: "ref n1; para = serviços separados por vírgula (social, site, marca, naming, trafego, video, design, mensalista). Cria o rascunho para o cliente aberto",
+  criar_contrato: "ref n1; para = serviços separados por vírgula (social, site, marca, naming, trafego, video, design, mensalista, exterior). Cria o rascunho para o cliente aberto",
   incluir_servico: "ref s#; inclui o bloco do serviço no contrato aberto",
   retirar_servico: "ref s#; tira o bloco do serviço do contrato aberto",
   preencher: "ref v#; para = o valor (moeda em número, data AAAA-MM-DD, escolha pelo rótulo). Só com valor dito pelo dono ou pelos DADOS; nunca invente",

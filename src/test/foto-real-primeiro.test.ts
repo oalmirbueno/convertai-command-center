@@ -15,6 +15,7 @@ import {
 import {
   ESQUEMA_DA_LEITURA_DO_ACERVO,
   fotosDaRodada,
+  prioridadeDaFoto,
   MAX_TENTATIVAS_DA_LEITURA,
   normalizarLeituraDoAcervo,
   patchDaFalha,
@@ -226,6 +227,16 @@ describe("robô acervo-ler-fotos: quem entra na fila", () => {
     expect(g.get("c1")!.map((f) => f.id)).toEqual(["a", "c"]);
   });
 
+  it("foto real primeiro: pasta ou categoria de foto antes de arte e criativos (26/10)", () => {
+    expect(prioridadeDaFoto(paraLer("r", { pasta: "Fotos De trabalhos Reais" }))).toBe(0);
+    expect(prioridadeDaFoto(paraLer("q", { pasta: "Imagens Quartos Reais / Quarto 1", categoria: "?" }))).toBe(0);
+    expect(prioridadeDaFoto(paraLer("c", { pasta: "Arquivos / criativos", categoria: null }))).toBe(2);
+    expect(prioridadeDaFoto(paraLer("e", { pasta: "Execução / Helena / Backup", categoria: "?" }))).toBe(2);
+    expect(prioridadeDaFoto(paraLer("x", { pasta: "Fotos Thaina", categoria: "arte" }))).toBe(2);
+    const fotos = [paraLer("arte1", { pasta: "Arquivos / materiais" }), paraLer("real1", { pasta: "Fotos Thaina" }), paraLer("arte2", { pasta: "Arquivos / entregas" }), paraLer("real2", { categoria: "ambiente" })];
+    expect(fotosDaRodada(fotos, 3, () => true).get("c1")!.map((f) => f.id)).toEqual(["real1", "real2", "arte1"]);
+  });
+
   it("tentativas pela etiqueta; a falha soma uma e troca a etiqueta anterior", () => {
     expect(tentativasDaLeitura(["x", "leitura_falhou:2"])).toBe(2);
     expect(tentativasDaLeitura([])).toBe(0);
@@ -243,6 +254,10 @@ describe("robô acervo-ler-fotos: o que grava", () => {
     expect(l.real).toBe(true);
     expect(normalizarLeituraDoAcervo({ ...bruta, categoria: "arte", real: true })!.real).toBe(false);
     expect(normalizarLeituraDoAcervo({ ...bruta, categoria: "inventada" })!.categoria).toBe("outro");
+    // 26/10: o que não é foto real (card, print) fica sempre na categoria arte; logo continua logo.
+    expect(normalizarLeituraDoAcervo({ ...bruta, real: false, categoria: "antes_depois" })!.categoria).toBe("arte");
+    expect(normalizarLeituraDoAcervo({ ...bruta, real: false, categoria: "pessoa" })!.categoria).toBe("arte");
+    expect(normalizarLeituraDoAcervo({ ...bruta, real: false, categoria: "logo" })!.categoria).toBe("logo");
     expect(normalizarLeituraDoAcervo({ ...bruta, descricao: "" })).toBeNull();
     expect(normalizarLeituraDoAcervo(null)).toBeNull();
   });

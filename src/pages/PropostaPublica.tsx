@@ -6,15 +6,17 @@ import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import {
   dataCurta,
   diaValido,
+  dinheiro,
   ehStatus,
   hojeEmSaoPaulo,
+  moedaDoConteudo,
   motivoParaNaoAceitar,
   normalizarConteudo,
   normalizarItens,
-  reais,
   statusEfetivo,
   totaisDosItens,
   validarAceite,
+  type MoedaDaProposta,
 } from "../../supabase/functions/_shared/proposta-modelo";
 import { ehNivel, normalizarPagamento, resumoDosPacotes, textoDaOpcao, type NivelDoPacote, type ResumoDoPacote, type OpcaoDePagamento } from "../../supabase/functions/_shared/proposta-comercial";
 
@@ -109,6 +111,7 @@ function FormularioDeAceite({
   pacote,
   onPacote,
   onAceito,
+  moeda = "BRL",
 }: {
   token: string;
   pacotes: ResumoDoPacote[];
@@ -117,6 +120,7 @@ function FormularioDeAceite({
   pacote: NivelDoPacote | null;
   onPacote: (n: NivelDoPacote) => void;
   onAceito: (nome: string, em: string) => void;
+  moeda?: MoedaDaProposta;
 }) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -170,7 +174,7 @@ function FormularioDeAceite({
               <input type="radio" name="pacote" value={p.nivel} checked={pacote === p.nivel} onChange={() => onPacote(p.nivel)} />
               <span>
                 {p.nome}
-                {p.destaque ? " (recomendado)" : ""}: {[p.totais.unico > 0 ? reais(p.totais.unico) : "", p.totais.mensal > 0 ? `${reais(p.totais.mensal)} por mês` : ""].filter(Boolean).join(" + ")}
+                {p.destaque ? " (recomendado)" : ""}: {[p.totais.unico > 0 ? dinheiro(p.totais.unico, moeda) : "", p.totais.mensal > 0 ? `${dinheiro(p.totais.mensal, moeda)} por mês` : ""].filter(Boolean).join(" + ")}
               </span>
             </label>
           ))}
@@ -182,7 +186,7 @@ function FormularioDeAceite({
           {opcoes.map((op) => (
             <label key={op.id}>
               <input type="radio" name="pagamento" value={op.id} checked={pagamento === op.id} onChange={() => setPagamento(op.id)} />
-              <span>{textoDaOpcao(op, totaisDoPacote)}</span>
+              <span>{textoDaOpcao(op, totaisDoPacote, moeda)}</span>
             </label>
           ))}
         </fieldset>
@@ -394,7 +398,7 @@ export default function PropostaPublica() {
         <p className="pd-erro">{motivo}</p>
       </div>
     ) : (
-      <FormularioDeAceite token={token} pacotes={pacotes} opcoes={opcoes} totaisDoPacote={totaisDoPacote} pacote={pacote} onPacote={setPacote} onAceito={(nome, em) => setAceiteFeito({ nome, em })} />
+      <FormularioDeAceite token={token} pacotes={pacotes} opcoes={opcoes} totaisDoPacote={totaisDoPacote} moeda={moedaDoConteudo(conteudo)} pacote={pacote} onPacote={setPacote} onAceito={(nome, em) => setAceiteFeito({ nome, em })} />
     );
 
   return (

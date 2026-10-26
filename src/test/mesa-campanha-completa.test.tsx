@@ -322,7 +322,7 @@ describe("conferência da série pelo Jev (servidor, puro)", () => {
 describe("conflito com a agenda", () => {
   it("avisa o dia cheio e sugere o dia livre mais perto dentro da janela, contando a própria série", async () => {
     const { conflitosDaSerie } = await import("@/components/mesa/regrasDaCampanha");
-    const agenda = { ocupacao: [{ data: "2026-11-27", hora: null, hype: false }], regra: { porDia: 1, hypesPorDia: 1, horasEntre: 2 } };
+    const agenda = { ocupacao: [{ data: "2026-11-27", hora: null, hype: false }], regra: { porDia: 1, hypesPorDia: 1, horasEntre: 2, fimDeSemana: false } };
     const c = conflitosDaSerie(
       [
         { tema_id: "a", data: "2026-11-27", formato: "estatico" },

@@ -32,7 +32,7 @@ const CONTRATO = "22222222-2222-4222-8222-222222222222";
 describe("contratos: o Jev escolhe os blocos", () => {
   it("uma pergunta por serviço, direitos em Choice e mudança de cláusula só com contrato aberto", () => {
     const sem = perguntasDoPedido({ comContrato: false });
-    expect(Object.keys(sem).filter((k) => k.indexOf("servico_") === 0)).toHaveLength(8);
+    expect(Object.keys(sem).filter((k) => k.indexOf("servico_") === 0)).toHaveLength(9);
     expect(sem.direitos.type).toBe("choice");
     expect(Object.keys((sem.direitos as { criteria: Record<string, unknown> }).criteria)).toEqual(["cessao", "licenca", "nao_diz"]);
     expect(sem.muda_clausula).toBeUndefined();
