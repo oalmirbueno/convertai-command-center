@@ -6,6 +6,7 @@ import * as freshness from "../../supabase/functions/_shared/operator-freshness"
 import * as progresso from "../../supabase/functions/_shared/operator-progress-detail";
 import * as guardaDoVinculo from "../../supabase/functions/_shared/vinculo-guard";
 import * as travaDoDono from "../../supabase/functions/_shared/trava-do-dono";
+import * as rodadaEProva from "../../supabase/functions/mcp-server/modulos/rodada-e-prova";
 
 type Row = Record<string, unknown>;
 type Report = { event: string; operator: string; run_key: string; kanban_task_id?: string };
@@ -52,6 +53,7 @@ function harness() {
     "./vinculo-guard.ts": guardaDoVinculo,
     // 19/10: só trava para o dono o que só o dono resolve (puro). O Jev fora do ar mantém a trava.
     "./trava-do-dono.ts": travaDoDono,
+    "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
     "./jev.ts": { jevPerguntar: async () => { throw new Error("jev fora do ar no teste"); } },
   };
   const source = readFileSync(resolve(process.cwd(), "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");

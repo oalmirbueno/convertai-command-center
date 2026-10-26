@@ -17,6 +17,7 @@ export type CategoriaDoAviso =
   | "alerta"
   | "agente"
   | "comercial"
+  | "anuncios"
   | "geral";
 
 const CATEGORIA: Record<string, CategoriaDoAviso> = {
@@ -43,6 +44,8 @@ const CATEGORIA: Record<string, CategoriaDoAviso> = {
   operator_executou: "agente",
   commercial: "comercial",
   commercial_caixa: "comercial",
+  // 26/10: um aviso por boletim do Hermes (frente SERVIDOR), com link para /anuncios/hoje.
+  ads_boletim: "anuncios",
 };
 
 /** O nome de alguns tipos (aparece no title do ícone do aviso). */
@@ -61,6 +64,8 @@ export function categoriaDoAviso(tipo: string | null | undefined): CategoriaDoAv
 
 /** Rota interna -> texto do link. A primeira que casar vence. */
 const ROTULOS_DAS_ROTAS: Array<[string, string]> = [
+  ["/anuncios/hoje", "Abrir Anúncios hoje"],
+  ["/central/mensagens", "Abrir Mensagens da semana"],
   ["/ciclo/revisao", "Abrir a revisão"],
   ["/aprovacoes", "Ver Arquivo"],
   ["/calendario", "Abrir na Agenda"],
@@ -91,4 +96,70 @@ export function rotuloDoLink(link: string | null | undefined): string {
     if (caminho === rota || caminho.indexOf(rota + "/") === 0) return rotulo;
   }
   return "Abrir";
+}
+
+/**
+ * Sino agrupado (26/10/2026): ~1.200 não lidos de ruído escondiam o que pede
+ * decisão. Os avisos vêm em grupos por tipo, cada grupo com "Marcar todos como
+ * lidos", e só o que pede decisão do dono ganha destaque.
+ */
+const PEDEM_DECISAO = new Set(["approval", "aprovacao_necessaria", "central_review_pendente", "operator_insumo", "operator_pronto"]);
+
+/** Todos os tipos conhecidos de uma categoria (o grupo marca como lido também os que não estão na lista carregada). */
+export function tiposDaCategoria(categoria: CategoriaDoAviso): string[] {
+  return Object.keys(CATEGORIA).filter((t) => CATEGORIA[t] === categoria);
+}
+
+export function avisoPedeDecisao(tipo: string | null | undefined): boolean {
+  return !!tipo && PEDEM_DECISAO.has(tipo);
+}
+
+export const NOME_DO_GRUPO: Record<CategoriaDoAviso, string> = {
+  decisao: "Decisões e aprovações",
+  pedido: "Pedidos de clientes",
+  projeto: "Projetos",
+  cobranca: "Cobrança",
+  tarefa: "Tarefas",
+  relatorio: "Relatórios",
+  publicacao: "Publicações",
+  entrega: "Entregas",
+  alerta: "Alertas",
+  agente: "Agentes",
+  comercial: "Comercial",
+  anuncios: "Anúncios",
+  geral: "Outros avisos",
+};
+
+export interface GrupoDeAvisos<T> {
+  categoria: CategoriaDoAviso;
+  nome: string;
+  itens: T[];
+  naoLidos: number;
+  /** Algum aviso do grupo pede decisão do dono (fica no topo e em destaque). */
+  pedeDecisao: boolean;
+  /** Os tipos do grupo (para marcar todos como lidos no banco). */
+  tipos: string[];
+}
+
+/** Agrupa por tipo: primeiro o que pede decisão, depois os grupos com não lidos, depois o resto (mais novo antes). */
+export function agruparAvisos<T extends { notification_type?: string | null; read?: boolean | null; created_at?: string | null }>(avisos: readonly T[]): Array<GrupoDeAvisos<T>> {
+  const mapa = new Map<CategoriaDoAviso, GrupoDeAvisos<T>>();
+  for (const a of avisos) {
+    const cat = categoriaDoAviso(a.notification_type);
+    let g = mapa.get(cat);
+    if (!g) {
+      g = { categoria: cat, nome: NOME_DO_GRUPO[cat], itens: [], naoLidos: 0, pedeDecisao: false, tipos: [] };
+      mapa.set(cat, g);
+    }
+    g.itens.push(a);
+    if (!a.read) g.naoLidos += 1;
+    if (!a.read && avisoPedeDecisao(a.notification_type)) g.pedeDecisao = true;
+    const tipo = a.notification_type || "";
+    if (tipo && g.tipos.indexOf(tipo) < 0) g.tipos.push(tipo);
+  }
+  const maisNovo = (g: GrupoDeAvisos<T>) => g.itens.reduce((m, a) => ((a.created_at || "") > m ? a.created_at || "" : m), "");
+  return Array.from(mapa.values()).sort((x, y) =>
+    Number(y.pedeDecisao) - Number(x.pedeDecisao)
+    || Number(y.naoLidos > 0) - Number(x.naoLidos > 0)
+    || maisNovo(y).localeCompare(maisNovo(x)));
 }

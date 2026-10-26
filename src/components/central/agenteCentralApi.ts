@@ -20,6 +20,7 @@ import { RITUAL_DA_CENTRAL, atualizarAvancosDoDossie, marcarRitual } from "@/lib
 import { addDays, localIso, mondayOf } from "@/lib/cycleWeek";
 import { avisosDoRitual, resumoDaRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
 import { corpoDoModelo, escolhaGuardada } from "./modeloDaCentral";
+import { acharTarefaParecida, type TarefaAberta } from "@/lib/tarefaParecida";
 // 23/10: o texto que sai para o cliente passa pelo acabamento (saudação do envio, https, painel).
 import { textoNaHoraDoEnvio } from "../../../supabase/functions/ritual-writer/modulos/acabamento";
 
@@ -303,18 +304,37 @@ async function publicarRascunho(p: {
 }
 
 /**
+ * 26/10: as tarefas abertas do cliente (todos os projetos), para o ritual não
+ * criar de novo o mesmo próximo passo (119 abertas, 106 vencidas no diagnóstico).
+ */
+export async function tarefasAbertasDoCliente(clientId: string): Promise<TarefaAberta[]> {
+  const { data: projetos, error } = await supabase.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null);
+  if (error) throw new Error("Não consegui ler os projetos do cliente.");
+  const ids = ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id);
+  if (!ids.length) return [];
+  const { data, error: erroTarefas } = await supabase.from("tasks").select("id, title, status, due_date")
+    .in("project_id", ids).is("deleted_at", null).neq("status", "done").limit(500);
+  if (erroTarefas) throw new Error("Não consegui ler as tarefas do cliente.");
+  return ((data ?? []) as TarefaAberta[]).filter((t) => t.status !== "cancelled" && t.status !== "archived");
+}
+
+/**
  * Tarefa sugerida pelo ritual vira tarefa de verdade só quando alguém da
  * equipe toca em "Criar tarefa": esse toque é a aprovação. Idempotente pela
  * origem (ritual:<relatório>:<n>), nasce com dono, prazo e marco.
+ * 26/10: antes de criar, procura tarefa aberta parecida do mesmo cliente
+ * (título normalizado); achou, devolve "parecida" e não cria, a menos que a
+ * pessoa peça para criar mesmo assim.
  */
 export async function criarTarefaDoRitual(input: {
-  clientId: string; reportId: string; indice: number; tarefa: TarefaSugerida; userId: string;
-}): Promise<"criada" | "ja_existia"> {
+  clientId: string; reportId: string; indice: number; tarefa: TarefaSugerida; userId: string; mesmoAssim?: boolean;
+}): Promise<"criada" | "ja_existia" | "parecida"> {
   const origem = `ritual:${input.reportId}:${input.indice}`;
   const projectId = await projetoDoCliente(input.clientId);
   const { data: existente } = await supabase.from("tasks").select("id")
     .eq("project_id", projectId).eq("source", origem).is("deleted_at", null).limit(1).maybeSingle();
   if (existente) return "ja_existia";
+  if (!input.mesmoAssim && acharTarefaParecida(input.tarefa.titulo, await tarefasAbertasDoCliente(input.clientId))) return "parecida";
   const { data: marco } = await supabase.from("milestones").select("id").eq("project_id", projectId)
     .is("deleted_at", null).neq("status", "completed").order("target_date", { ascending: true, nullsFirst: false })
     .limit(1).maybeSingle();

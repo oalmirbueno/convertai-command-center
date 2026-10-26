@@ -2,10 +2,26 @@
 
 The script reads only operator_board and operator_diary through the existing MCP,
 leases each (link_id, entry_id) in a locked SQLite database, and emits a wakeAgent
-gate. A lease is completed only after a later diary read confirms an operator entry
-contains the original entry_id; expired leases are retried. It never answers the
-diary or executes the work; the cron agent does that only when this script reports
-new human context.
+gate. It never answers the diary or executes the work; the cron agent does that only
+when this script reports new human context.
+
+26/10/2026 (correção do laço): até aqui a rotina rodava a cada minuto, lia todos os
+vínculos (inclusive concluídos) com limite 100, tratava instrucao/decisao/correcao de
+agente como humana e só dava a entrada por respondida quando a resposta citava o
+entry_id, que o próprio diário proíbe escrever. A reserva de 15 min vencia e a mesma
+instrução acordava o agente de novo (~120 leituras/min e dezenas de respostas iguais).
+Agora:
+- humano = autor_kind humano (o tipo da entrada não basta quando o autor é agente);
+- só vínculos abertos (status diferente de done) e só de operadores do Hermes; vínculos
+  de operadores do Paperclip têm dono próprio e não são respondidos aqui;
+- resposta = qualquer entrada de operador posterior à humana, reply_to_entry_id ou
+  respondida_por do painel; respondida, a entrada fica processada para sempre;
+- cada entrada é entregue ao agente no máximo MAX_ATTEMPTS vezes e só enquanto não
+  houver resposta (no máximo 1 resposta); depois vira expired;
+- leitura incremental: só abre o diário quando ultima_entrada_humana_em mudou ou há
+  reserva pendente, com limite pequeno, e usa `desde` quando o MCP aceitar;
+- teto de acordadas do agente por dia e de mensagens por acordada;
+- entradas anteriores ao corte de implantação não são respondidas (baseline_skipped).
 """
 from __future__ import annotations
 
@@ -26,10 +42,29 @@ from typing import Any, Iterable
 HERMES_ROOT = "/usr/local/lib/hermes-agent"
 DEFAULT_DB = Path("/root/.hermes/workflows/panel-diary-consumer-v1/diary-consumer.sqlite3")
 ALLOWED_TOOLS = {"aceleriq_operator_board", "aceleriq_operator_diary", "aceleriq_list_clients"}
+REQUIRED_TOOLS = {"aceleriq_operator_board", "aceleriq_operator_diary"}
 HUMAN_ENTRY_TYPES = {"instrucao", "decisao", "correcao"}
-HUMAN_MARKERS = {"human", "humano", "user", "almir", "almir de barros bueno"}
-LEASE_SECONDS = 900
-DIARY_LIMIT = 100
+HUMAN_MARKERS = {"human", "humano", "user", "usuario", "usuário", "dono", "owner"}
+AUTHOR_KIND_KEYS = ("autor_kind", "author_kind", "author_type", "actor_type", "actor_kind", "autor_tipo", "source_type")
+OPEN_EXCLUDED_STATUS = {"done", "cancelled", "canceled", "cancelado", "cancelada", "archived"}
+# Operadores do Paperclip quando o board não traz `operadores` (fallback conservador).
+PAPERCLIP_FALLBACK = {
+    "paperclip", "chefe", "gestor-trafego", "otimizador", "sentinela", "criativos",
+    "analista", "estrategista", "desenvolvedor", "revisor",
+}
+TERMINAL_STATES = {"processed", "completed", "expired", "baseline_skipped", "superseded"}
+LEASE_SECONDS = 1800
+MAX_ATTEMPTS = 2
+DIARY_LIMIT = 30
+DAILY_WAKE_CAP = 36
+MAX_MESSAGES_PER_WAKE = 5
+# Corte de implantação: entradas humanas anteriores a isto não acordam o agente.
+# (a rotina antiga foi pausada às 13:09 UTC de 26/10/2026; tudo antes já foi tratado
+# pelo laço antigo, até repetidamente.)
+DEFAULT_ELIGIBLE_SINCE = "2026-10-26T13:09:00+00:00"
+SEEN_FIELD = "ultima_entrada_humana_em"
+BRT = dt.timezone(dt.timedelta(hours=-3))
+
 _SECRET_ASSIGNMENT = re.compile(
     r"(?i)(\b(?:access_token|refresh_token|authorization|api_key|password|senha|cookie|secret)\b\s*[:=]\s*)[^\s,;]+"
 )
@@ -65,23 +100,14 @@ def _entry_id(entry: dict[str, Any]) -> str | None:
     return str(value)
 
 
-def _is_human(entry: dict[str, Any]) -> bool:
-    entry_type = str(entry.get("entry_type") or entry.get("tipo") or "").strip().lower()
-    if entry_type in HUMAN_ENTRY_TYPES:
-        return True
-    for key in ("author_type", "author_kind", "actor_type", "actor_kind", "autor_tipo", "autor_kind", "source_type"):
-        marker = str(entry.get(key) or "").strip().lower()
-        if marker in HUMAN_MARKERS:
-            return True
-    for key in ("author", "actor", "created_by_name", "autor"):
-        marker = str(entry.get(key) or "").strip().lower()
-        if marker in HUMAN_MARKERS:
-            return True
-    return False
+def _as_utc(value: dt.datetime | None = None) -> dt.datetime:
+    value = value or dt.datetime.now(dt.timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=dt.timezone.utc)
+    return value.astimezone(dt.timezone.utc)
 
 
-def _entry_time(entry: dict[str, Any]) -> dt.datetime | None:
-    raw = entry.get("created_at") or entry.get("createdAt") or entry.get("quando")
+def _parse_time(raw: Any) -> dt.datetime | None:
     if not raw:
         return None
     try:
@@ -90,34 +116,96 @@ def _entry_time(entry: dict[str, Any]) -> dt.datetime | None:
         return None
 
 
-def _has_operator_response(raw_entries: Iterable[Any], entry_id: str, after: dt.datetime | None = None) -> bool:
-    """Return true for a non-human diary entry that cites the source entry_id or comes after it.
+def _entry_time(entry: dict[str, Any]) -> dt.datetime | None:
+    return _parse_time(entry.get("created_at") or entry.get("createdAt") or entry.get("quando"))
 
-    19/10/2026: the diary tool tells operators to write without UUIDs, so replies never
-    cited the entry_id; the lease expired every 15 minutes and the same instruction woke
-    the agent again (50 to 80 near-identical replies a day on one link). An operator
-    entry written after the human entry now also counts as the reply.
+
+def _author_kind(entry: dict[str, Any]) -> str | None:
+    for key in AUTHOR_KIND_KEYS:
+        value = entry.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip().lower()
+    return None
+
+
+def _is_human(entry: dict[str, Any]) -> bool:
+    """Human = real human author. An agent writing instrucao/decisao/correcao is not human.
+
+    The panel always sends autor_kind ("humano" / "operador"). The entry type is only a
+    fallback for payloads that carry no author kind at all (older tool versions/tests).
     """
-    reference_keys = (
-        "reply_to_entry_id", "parent_entry_id", "source_entry_id", "in_reply_to",
-    )
-    for entry in raw_entries:
-        if not isinstance(entry, dict) or _is_human(entry):
+    kind = _author_kind(entry)
+    if kind is not None:
+        return kind in HUMAN_MARKERS
+    entry_type = str(entry.get("entry_type") or entry.get("tipo") or "").strip().lower()
+    return entry_type in HUMAN_ENTRY_TYPES
+
+
+def _has_operator_response(raw_entries: Iterable[Any], entry: dict[str, Any] | str,
+                           after: dt.datetime | None = None) -> bool:
+    """True when the human entry already has an operator reply.
+
+    Counts: respondida_por on the human entry (new panel contract), an operator entry
+    with reply_to_entry_id (or similar) pointing at it, an operator entry citing the id,
+    or any operator entry written after it (the diary forbids ids in visible text).
+    """
+    if isinstance(entry, dict):
+        entry_id = _entry_id(entry) or ""
+        answered = entry.get("respondida_por") or entry.get("answered_by") or entry.get("respostas")
+        if answered:
+            return True
+        if after is None:
+            after = _entry_time(entry)
+    else:
+        entry_id = str(entry)
+    reference_keys = ("reply_to_entry_id", "parent_entry_id", "source_entry_id", "in_reply_to", "responde_a")
+    for other in raw_entries:
+        if not isinstance(other, dict) or _is_human(other):
             continue
-        if any(str(entry.get(key) or "") == entry_id for key in reference_keys):
+        if entry_id and any(str(other.get(key) or "") == entry_id for key in reference_keys):
             return True
-        title = entry.get("title") or entry.get("titulo") or ""
-        body = entry.get("body") or entry.get("texto") or ""
-        if entry_id in f"{title}\n{body}":
+        title = other.get("title") or other.get("titulo") or ""
+        body = other.get("body") or other.get("texto") or ""
+        if entry_id and entry_id in f"{title}\n{body}":
             return True
-        quando = _entry_time(entry)
+        quando = _entry_time(other)
         if after is not None and quando is not None and quando > after:
             return True
     return False
 
 
+def paperclip_operators(board: dict[str, Any] | None) -> set[str]:
+    """Operators owned by the Paperclip team (they answer their own links)."""
+    operators = board.get("operadores") if isinstance(board, dict) else None
+    if not isinstance(operators, list) or not operators:
+        return set(PAPERCLIP_FALLBACK)
+    owned = {"paperclip"}
+    for op in operators:
+        if not isinstance(op, dict):
+            continue
+        slug = str(op.get("slug") or "").strip().lower()
+        area = str(op.get("area") or "").strip().lower()
+        parent = str(op.get("responde_a") or "").strip().lower()
+        if slug and (area == "paperclip" or parent == "paperclip"):
+            owned.add(slug)
+    return owned
+
+
+def link_is_open(link: dict[str, Any]) -> bool:
+    return str(link.get("status") or "").strip().lower() not in OPEN_EXCLUDED_STATUS
+
+
+def link_is_hermes(link: dict[str, Any], paperclip: set[str]) -> bool:
+    operator = str(link.get("operador") or "").strip().lower()
+    return bool(operator) and operator not in paperclip
+
+
 def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[str, Any]]:
-    """Normalize only human diary entries; the original entry_id is preserved."""
+    """Normalize only human diary entries; the original entry_id is preserved.
+
+    The reply is always signed by the link's operator, never by the entry author or by
+    an operator of another team.
+    """
     link_id = link.get("id") or link.get("link_id")
     if not link_id:
         return []
@@ -129,7 +217,7 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
         entry_id = _entry_id(entry)
         if entry_id is None:
             continue
-        operator = entry.get("operator") or entry.get("operador") or link.get("operador")
+        operator = link.get("operador")
         candidates.append({
             **client_target(link, str(entry.get("body") or entry.get("texto") or "")),
             "entry_id": entry_id,
@@ -139,6 +227,7 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             "project_name": _safe_text(link.get("projeto") or ""),
             "project_client": _safe_text(link.get("cliente") or ""),
             "project_client_id": link.get("client_id"),
+            "link_status": link.get("status"),
             "communication": (
                 "Identifique o cliente do pedido antes de agir. O cliente do projeto pode ser "
                 "a agência coordenadora de uma carteira; use a referência explícita na mensagem "
@@ -158,7 +247,7 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             "title": _safe_text(entry.get("title") or entry.get("titulo") or ""),
             "body": _safe_text(entry.get("body") or entry.get("texto") or ""),
             "created_at": _safe_text(entry.get("created_at") or entry.get("createdAt") or entry.get("quando") or ""),
-            "response_confirmed": _has_operator_response(raw_entries, entry_id, _entry_time(entry)),
+            "response_confirmed": _has_operator_response(raw_entries, entry),
         })
     return candidates
 
@@ -181,8 +270,6 @@ def _init_db(con: sqlite3.Connection) -> None:
         for row in con.execute("PRAGMA table_info(processed_entries)")
     }
     if columns and columns.get("entry_id") == 1 and columns.get("link_id") != 1:
-        # Migrate the first-generation entry_id-only table. Old claims are leases,
-        # not confirmed responses, so they are eligible for a safe retry.
         con.execute("ALTER TABLE processed_entries RENAME TO processed_entries_legacy")
         columns = {}
     con.execute("""
@@ -203,7 +290,14 @@ def _init_db(con: sqlite3.Connection) -> None:
     }
     if "lease_token" not in columns:
         con.execute("ALTER TABLE processed_entries ADD COLUMN lease_token TEXT")
+    if "attempts" not in columns:
+        con.execute("ALTER TABLE processed_entries ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+    if "note" not in columns:
+        con.execute("ALTER TABLE processed_entries ADD COLUMN note TEXT")
     con.execute("CREATE TABLE IF NOT EXISTS link_seen (link_id TEXT PRIMARY KEY, human_at TEXT NOT NULL)")
+    con.execute("CREATE TABLE IF NOT EXISTS wakes (day TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)")
+    con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    con.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('eligible_since', ?)", (DEFAULT_ELIGIBLE_SINCE,))
     if con.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='processed_entries_legacy'"
     ).fetchone():
@@ -214,13 +308,6 @@ def _init_db(con: sqlite3.Connection) -> None:
             FROM processed_entries_legacy
         """)
         con.execute("DROP TABLE processed_entries_legacy")
-
-
-def _as_utc(value: dt.datetime | None = None) -> dt.datetime:
-    value = value or dt.datetime.now(dt.timezone.utc)
-    if value.tzinfo is None:
-        return value.replace(tzinfo=dt.timezone.utc)
-    return value.astimezone(dt.timezone.utc)
 
 
 def _lease_until(now: dt.datetime, lease_seconds: int = LEASE_SECONDS) -> str:
@@ -236,28 +323,61 @@ def _lease_deadline_is_active(value: str | None, now: dt.datetime) -> bool:
         return False
 
 
+def _brt_day(now: dt.datetime) -> str:
+    return now.astimezone(BRT).date().isoformat()
+
+
+def wakes_today(db_path: Path | str, now: dt.datetime | None = None) -> int:
+    db_path = Path(db_path)
+    with _database_lock(db_path):
+        con = sqlite3.connect(db_path, timeout=5)
+        try:
+            _init_db(con)
+            con.commit()
+            row = con.execute("SELECT n FROM wakes WHERE day = ?", (_brt_day(_as_utc(now)),)).fetchone()
+            return int(row[0]) if row else 0
+        finally:
+            con.close()
+
+
 def claim_new_entries(
     db_path: Path | str,
     entries: Iterable[dict[str, Any]],
     *,
     now: dt.datetime | None = None,
     lease_seconds: int = LEASE_SECONDS,
+    max_attempts: int = MAX_ATTEMPTS,
+    max_messages: int = MAX_MESSAGES_PER_WAKE,
+    daily_cap: int = DAILY_WAKE_CAP,
+    read_links: dict[str, set[str]] | None = None,
+    deferred_links: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Reconcile replies and atomically lease unacknowledged human entries.
+    """Reconcile replies and atomically lease unanswered human entries.
 
-    The lease prevents duplicate concurrent cron fires without losing an entry when
-    the agent fails before writing the response. Only a later read-back confirmation
-    changes state to processed.
+    - answered entries become processed (terminal) and are never dispatched again;
+    - entries older than eligible_since are recorded as baseline_skipped;
+    - an entry is dispatched at most `max_attempts` times and only while unanswered;
+    - at most `max_messages` per wake and `daily_cap` wakes per day (BRT);
+    - read_links maps link_id -> entry ids returned by that read; pending rows of a
+      read link that fell out of the window become superseded.
+    Links that still hold unclaimed work are added to `deferred_links`.
     """
     db_path = Path(db_path)
     claimed: list[dict[str, Any]] = []
+    deferred = deferred_links if deferred_links is not None else set()
     with _database_lock(db_path):
         con = sqlite3.connect(db_path, timeout=5)
         con.execute("PRAGMA synchronous=FULL")
         try:
             _init_db(con)
             now_dt = _as_utc(now)
-            now = now_dt.isoformat()
+            now_text = now_dt.isoformat()
+            eligible_since = _parse_time(
+                (con.execute("SELECT value FROM meta WHERE key='eligible_since'").fetchone() or [None])[0]
+            )
+            day = _brt_day(now_dt)
+            used = con.execute("SELECT n FROM wakes WHERE day = ?", (day,)).fetchone()
+            cap_reached = bool(used and int(used[0]) >= daily_cap)
             with con:
                 for entry in entries:
                     entry_id = _entry_id(entry)
@@ -265,52 +385,89 @@ def claim_new_entries(
                     if entry_id is None or not link_id:
                         continue
                     link_id = str(link_id)
-                    if entry.get("response_confirmed"):
-                        con.execute(
-                            """
-                            INSERT INTO processed_entries
-                                (link_id, entry_id, state, claimed_at, lease_until, lease_token, completed_at)
-                            VALUES (?, ?, 'processed', ?, NULL, NULL, ?)
-                            ON CONFLICT(link_id, entry_id) DO UPDATE SET
-                                state='processed', lease_until=NULL, lease_token=NULL, completed_at=excluded.completed_at
-                            """,
-                            (link_id, entry_id, now, now),
-                        )
-                        continue
                     row = con.execute(
-                        "SELECT state, lease_until FROM processed_entries "
+                        "SELECT state, lease_until, attempts FROM processed_entries "
                         "WHERE link_id = ? AND entry_id = ?",
                         (link_id, entry_id),
                     ).fetchone()
-                    if row and row[0] == "processed":
+                    if entry.get("response_confirmed"):
+                        if not row or row[0] not in TERMINAL_STATES or row[0] == "expired":
+                            con.execute(
+                                """
+                                INSERT INTO processed_entries
+                                    (link_id, entry_id, state, claimed_at, lease_until, lease_token, completed_at, attempts)
+                                VALUES (?, ?, 'processed', ?, NULL, NULL, ?, 0)
+                                ON CONFLICT(link_id, entry_id) DO UPDATE SET
+                                    state='processed', lease_until=NULL, lease_token=NULL,
+                                    completed_at=excluded.completed_at
+                                """,
+                                (link_id, entry_id, now_text, now_text),
+                            )
                         continue
-                    lease_until = row[1] if row else None
-                    if lease_until:
-                        if _lease_deadline_is_active(lease_until, now_dt):
-                            continue
+                    if row and row[0] in TERMINAL_STATES:
+                        continue
+                    created = _parse_time(entry.get("created_at"))
+                    if not row and eligible_since and created and created < eligible_since:
+                        con.execute(
+                            "INSERT OR IGNORE INTO processed_entries "
+                            "(link_id, entry_id, state, claimed_at, completed_at, attempts, note) "
+                            "VALUES (?, ?, 'baseline_skipped', ?, ?, 0, 'anterior ao corte de 26/10')",
+                            (link_id, entry_id, now_text, now_text),
+                        )
+                        continue
+                    if row and _lease_deadline_is_active(row[1], now_dt):
+                        continue  # in flight
+                    attempts = int(row[2] or 0) if row else 0
+                    if attempts >= max_attempts:
+                        con.execute(
+                            "UPDATE processed_entries SET state='expired', lease_until=NULL, lease_token=NULL, "
+                            "completed_at=?, note='sem resposta após tentativas' WHERE link_id=? AND entry_id=?",
+                            (now_text, link_id, entry_id),
+                        )
+                        continue
+                    if cap_reached or len(claimed) >= max_messages:
+                        deferred.add(link_id)
+                        continue
                     lease_token = uuid.uuid4().hex
                     deadline = _lease_until(now_dt, lease_seconds)
-                    cursor = con.execute(
+                    con.execute(
                         """
                         INSERT INTO processed_entries
-                            (link_id, entry_id, state, claimed_at, lease_until, lease_token, completed_at)
-                        VALUES (?, ?, 'leased', ?, ?, ?, NULL)
+                            (link_id, entry_id, state, claimed_at, lease_until, lease_token, completed_at, attempts)
+                        VALUES (?, ?, 'leased', ?, ?, ?, NULL, 1)
                         ON CONFLICT(link_id, entry_id) DO UPDATE SET
                             state='leased', claimed_at=excluded.claimed_at,
                             lease_until=excluded.lease_until, lease_token=excluded.lease_token,
-                            completed_at=NULL
+                            completed_at=NULL, attempts=processed_entries.attempts + 1
                         """,
-                        (link_id, entry_id, now, deadline, lease_token),
+                        (link_id, entry_id, now_text, deadline, lease_token),
                     )
-                    if cursor.rowcount == 1:
-                        claimed_entry = {key: value for key, value in entry.items()
-                                         if key != "response_confirmed"}
-                        claimed_entry.update({
-                            "lease_token": lease_token,
-                            "lease_until": deadline,
-                            "lease_deadline": deadline,
-                        })
-                        claimed.append(claimed_entry)
+                    claimed_entry = {key: value for key, value in entry.items() if key != "response_confirmed"}
+                    claimed_entry.update({
+                        "lease_token": lease_token,
+                        "lease_until": deadline,
+                        "lease_deadline": deadline,
+                        "attempt": attempts + 1,
+                    })
+                    claimed.append(claimed_entry)
+                for link_id, seen_ids in (read_links or {}).items():
+                    pending = con.execute(
+                        "SELECT entry_id FROM processed_entries WHERE link_id = ? AND state = 'leased' "
+                        "AND (lease_until IS NULL OR lease_until <= ?)",
+                        (link_id, now_text),
+                    ).fetchall()
+                    for (pending_id,) in pending:
+                        if pending_id not in seen_ids:
+                            con.execute(
+                                "UPDATE processed_entries SET state='superseded', lease_until=NULL, lease_token=NULL, "
+                                "completed_at=?, note='fora da janela de leitura' WHERE link_id=? AND entry_id=?",
+                                (now_text, link_id, pending_id),
+                            )
+                if claimed:
+                    con.execute(
+                        "INSERT INTO wakes(day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1",
+                        (day,),
+                    )
         finally:
             con.close()
     return claimed
@@ -323,12 +480,7 @@ def renew_leases(
     now: dt.datetime | None = None,
     lease_seconds: int = LEASE_SECONDS,
 ) -> list[dict[str, Any]]:
-    """Renew only unexpired leases owned by the supplied lease token.
-
-    Renewal is deliberately compare-and-set: a worker that missed its deadline cannot
-    resurrect an entry after another worker has reclaimed it. The returned deadline is
-    carried by the caller as the next heartbeat/deadline for this execution.
-    """
+    """Renew only unexpired leases owned by the supplied lease token (compare-and-set)."""
     db_path = Path(db_path)
     renewed: list[dict[str, Any]] = []
     with _database_lock(db_path):
@@ -371,7 +523,27 @@ def renew_leases(
     return renewed
 
 
-def gate_payload(messages: list[dict[str, Any]]) -> dict[str, Any]:
+def expire_stuck_leases(db_path: Path | str, *, now: dt.datetime | None = None) -> int:
+    """One-off cleanup: every 'leased' row becomes expired, without answering it."""
+    db_path = Path(db_path)
+    with _database_lock(db_path):
+        con = sqlite3.connect(db_path, timeout=5)
+        try:
+            _init_db(con)
+            now_text = _as_utc(now).isoformat()
+            with con:
+                cur = con.execute(
+                    "UPDATE processed_entries SET state='expired', lease_until=NULL, lease_token=NULL, "
+                    "completed_at=?, note='reserva presa do laço antigo, expirada em 26/10 sem resposta' "
+                    "WHERE state='leased'",
+                    (now_text,),
+                )
+                return cur.rowcount
+        finally:
+            con.close()
+
+
+def gate_payload(messages: list[dict[str, Any]], *, reply_field: bool = False) -> dict[str, Any]:
     if not messages:
         return {"wakeAgent": False}
     safe_messages = []
@@ -384,8 +556,18 @@ def gate_payload(messages: list[dict[str, Any]]) -> dict[str, Any]:
             value['dispatch_kind'] = 'clarification_only'
         else:
             value['dispatch_kind'] = 'portfolio_coordination' if value.get('target_scope') == 'portfolio' else 'scoped_request'
+        if reply_field:
+            value['reply_to_entry_id'] = value.get('entry_id')
         safe_messages.append(value)
-    return {"wakeAgent": True, "messages": safe_messages}
+    return {
+        "wakeAgent": True,
+        "reply_to_supported": bool(reply_field),
+        "regra": (
+            "Uma única resposta por vínculo nesta rodada, assinada pelo operator indicado na mensagem. "
+            "Não chame aceleriq_operator_board; o contexto do vínculo já está aqui."
+        ),
+        "messages": safe_messages,
+    }
 
 
 def _decode_tool_result(result: Any) -> Any:
@@ -414,17 +596,9 @@ def consumer_run_lock(db_path: Path, blocking=False):
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
-SEEN_FIELD = "ultima_entrada_humana_em"
-
 
 def should_read_diary(link: dict[str, Any], seen: dict[str, str] | None, pending: set[str] | None) -> bool:
-    """Read a link diary only when it can hold new human context.
-
-    19/10/2026: reading every diary on every cron fire cost ~2.000 MCP calls per
-    hour. The board now carries the time of the last human entry per link. A link
-    is read when the board lacks that field (older panel), when it still has an
-    unconfirmed lease here, or when the time differs from the one already read.
-    """
+    """Read a link diary only when it can hold new human context."""
     link_id = str(link.get("id") or link.get("link_id") or "")
     if seen is None or SEEN_FIELD not in link:
         return True
@@ -438,7 +612,9 @@ def should_read_diary(link: dict[str, Any], seen: dict[str, str] | None, pending
 
 async def collect_candidates(call, *, deadline, board_limit=500, diary_limit=DIARY_LIMIT, max_links=500,
                              seen: dict[str, str] | None = None, pending: set[str] | None = None,
-                             read_marks: dict[str, str] | None = None):
+                             read_marks: dict[str, str] | None = None,
+                             read_links: dict[str, set[str]] | None = None,
+                             diary_supports_since: bool = False):
     async def bounded(name, args):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -446,34 +622,45 @@ async def collect_candidates(call, *, deadline, board_limit=500, diary_limit=DIA
         return await asyncio.wait_for(call(name, args), timeout=min(remaining, 15))
     board = await bounded("aceleriq_operator_board", {"limit": board_limit})
     links = board.get("vinculos", []) if isinstance(board, dict) else []
+    paperclip = paperclip_operators(board if isinstance(board, dict) else None)
     semaphore = asyncio.Semaphore(4)
+
     async def read(link):
+        link_id = str(link.get("id") or link.get("link_id"))
+        args: dict[str, Any] = {"link_id": link_id, "limit": diary_limit}
+        if diary_supports_since and seen and link_id in seen and not (pending and link_id in pending):
+            args["desde"] = seen[link_id]
         async with semaphore:
             try:
-                diary = await bounded("aceleriq_operator_diary", {"link_id": str(link.get("id") or link.get("link_id")), "limit": diary_limit})
-                if not isinstance(diary, dict):
-                    return []
-                if read_marks is not None and link.get(SEEN_FIELD):
-                    read_marks[str(link.get("id") or link.get("link_id"))] = str(link.get(SEEN_FIELD))
-                return human_candidates(link, diary)
+                diary = await bounded("aceleriq_operator_diary", args)
             except Exception:
                 return []
-    rows = await asyncio.gather(*(read(link) for link in links[:max_links]
-                                  if isinstance(link, dict) and (link.get("id") or link.get("link_id"))
-                                  and should_read_diary(link, seen, pending)))
+        if not isinstance(diary, dict):
+            return []
+        entries = diary.get("entradas") or diary.get("entries") or []
+        if read_links is not None and "desde" not in args:
+            read_links[link_id] = {e for e in (_entry_id(x) for x in entries if isinstance(x, dict)) if e}
+        if read_marks is not None and link.get(SEEN_FIELD):
+            read_marks[link_id] = str(link.get(SEEN_FIELD))
+        return human_candidates(link, diary)
+
+    eligible = [
+        link for link in links[:max_links]
+        if isinstance(link, dict) and (link.get("id") or link.get("link_id"))
+        and link_is_open(link) and link_is_hermes(link, paperclip)
+        and should_read_diary(link, seen, pending)
+    ]
+    rows = await asyncio.gather(*(read(link) for link in eligible))
     unique = {(r["link_id"], r["entry_id"]): r for group in rows for r in group}
-    if any(r.get('target_client_id') for r in unique.values()):
+    pending_targets = [r for r in unique.values() if r.get('target_client_id') and not r.get('response_confirmed')]
+    if pending_targets:
         roster = await bounded('aceleriq_list_clients', {'limit': 500, 'offset': 0})
-        verify_client_targets(list(unique.values()), roster)
+        verify_client_targets(pending_targets, roster)
     return sorted(unique.values(), key=lambda r: (r.get("created_at") or "", r["link_id"], r["entry_id"]))
 
 
 def verify_client_targets(messages, roster):
-    """Confirm the client role against the existing MCP before leasing work.
-
-    An incomplete/unavailable roster aborts this read, so the next scheduled run
-    retries without consuming or acknowledging the human message.
-    """
+    """Confirm the client role against the existing MCP before leasing work."""
     items = roster.get('items', []) if isinstance(roster, dict) else []
     if not isinstance(roster, dict) or roster.get('has_more') or roster.get('total') != len(items):
         raise RuntimeError('Não foi possível conferir o cadastro completo de clientes.')
@@ -502,7 +689,7 @@ def load_read_state(db_path: Path | str) -> tuple[dict[str, str], set[str]]:
             _init_db(con)
             seen = {str(r[0]): str(r[1]) for r in con.execute("SELECT link_id, human_at FROM link_seen")}
             pending = {str(r[0]) for r in con.execute(
-                "SELECT DISTINCT link_id FROM processed_entries WHERE state != 'processed'")}
+                "SELECT DISTINCT link_id FROM processed_entries WHERE state = 'leased'")}
             con.commit()
         finally:
             con.close()
@@ -528,8 +715,23 @@ def remember_read(db_path: Path | str, marks: dict[str, str]) -> None:
             con.close()
 
 
+def tool_features(tools: Iterable[Any]) -> dict[str, bool]:
+    """Detect the new panel contract from the MCP tool list (no call needed)."""
+    features = {"reply_to": False, "since": False}
+    for tool in tools:
+        if getattr(tool, "name", None) != "aceleriq_operator_diary":
+            continue
+        schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None) or {}
+        props = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        features["reply_to"] = "reply_to_entry_id" in props
+        features["since"] = "desde" in props
+    return features
+
+
 async def _collect_candidates(seen: dict[str, str] | None = None, pending: set[str] | None = None,
-                              read_marks: dict[str, str] | None = None) -> list[dict[str, Any]]:
+                              read_marks: dict[str, str] | None = None,
+                              read_links: dict[str, set[str]] | None = None,
+                              features_out: dict[str, bool] | None = None) -> list[dict[str, Any]]:
     sys.path.insert(0, HERMES_ROOT)
     from tools.mcp_tool_config import _load_mcp_config
     from tools.mcp_tool_discovery import _connect_server
@@ -539,9 +741,13 @@ async def _collect_candidates(seen: dict[str, str] | None = None, pending: set[s
         raise RuntimeError("Aceleriq MCP is not configured")
     server = await _connect_server("aceleriq", config["aceleriq"])
     try:
-        available = {tool.name for tool in (await server.session.list_tools()).tools}
-        if not ALLOWED_TOOLS.issubset(available):
+        tools = (await server.session.list_tools()).tools
+        available = {tool.name for tool in tools}
+        if not REQUIRED_TOOLS.issubset(available):
             raise RuntimeError("Required Aceleriq diary tools are unavailable")
+        features = tool_features(tools)
+        if features_out is not None:
+            features_out.update(features)
 
         async def call(name: str, args: dict[str, Any]) -> Any:
             if name not in ALLOWED_TOOLS:
@@ -549,8 +755,8 @@ async def _collect_candidates(seen: dict[str, str] | None = None, pending: set[s
             return _decode_tool_result(await asyncio.wait_for(server.session.call_tool(name, args), timeout=20))
 
         return await collect_candidates(call, deadline=time.monotonic() + 40,
-                                        seen=seen, pending=pending, read_marks=read_marks)
-
+                                        seen=seen, pending=pending, read_marks=read_marks,
+                                        read_links=read_links, diary_supports_since=features["since"])
     finally:
         await server.shutdown()
 
@@ -561,16 +767,26 @@ async def run(db_path: Path) -> dict[str, Any]:
             return {"wakeAgent": False}
         seen, pending = load_read_state(db_path)
         marks: dict[str, str] = {}
-        candidates = await asyncio.wait_for(_collect_candidates(seen, pending, marks), timeout=50)
-        payload = gate_payload(claim_new_entries(db_path, candidates))
-        remember_read(db_path, marks)
-        return payload
+        read_links: dict[str, set[str]] = {}
+        features: dict[str, bool] = {}
+        candidates = await asyncio.wait_for(
+            _collect_candidates(seen, pending, marks, read_links, features), timeout=50)
+        deferred: set[str] = set()
+        claimed = claim_new_entries(db_path, candidates, read_links=read_links, deferred_links=deferred)
+        # Links with work left for a later run keep their old mark so they are read again.
+        remember_read(db_path, {k: v for k, v in marks.items() if k not in deferred})
+        return gate_payload(claimed, reply_field=features.get("reply_to", False))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
+    parser.add_argument("--expire-stuck-leases", action="store_true",
+                        help="Marca todas as reservas 'leased' como expired, sem responder, e sai.")
     args = parser.parse_args()
+    if args.expire_stuck_leases:
+        print(json.dumps({"expired": expire_stuck_leases(args.db)}))
+        return 0
     try:
         payload = asyncio.run(run(args.db))
     except Exception as exc:

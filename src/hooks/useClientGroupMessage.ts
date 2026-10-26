@@ -91,7 +91,7 @@ export function useClientGroupMessage(client: any | null) {
             .select("spend, actions, objective")
             .eq("client_id", clientId!).gte("day", localIso(segunda)),
           (supabase as any).from("ads_campaigns")
-            .select("status, effective_status")
+            .select("status, effective_status, stop_time")
             .eq("client_id", clientId!),
           // O calendário editorial: peça pronta, com nome, que não depende da
           // janela de 7 dias dos arquivos. É a fonte que faltava — medindo a
@@ -184,7 +184,7 @@ export function useClientGroupMessage(client: any | null) {
       // Anúncios: só entra se houver campanha ou gasto de verdade.
       const dias = ((adsDias as any).data || []) as any[];
       const campanhasNoAr = (((adsCampanhas as any).data || []) as any[]).filter(
-        (c) => statusLabel(c.status, c.effective_status).noAr,
+        (c) => statusLabel(c.status, c.effective_status, c.stop_time).noAr,
       ).length;
       let anuncios: GroupMessageContext["anuncios"] = null;
       if (dias.length > 0 || campanhasNoAr > 0) {

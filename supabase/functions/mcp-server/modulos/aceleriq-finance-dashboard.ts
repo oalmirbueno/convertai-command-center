@@ -20,7 +20,7 @@
  * Nada aqui escreve. Nem uma linha.
  */
 
-import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
+import { db, isUuid, READ_LIMITS } from '../../_shared/aceleriq-read-services.ts';
 
 /* ────────────────────────── Régua do Plano Diretor ───────────────────── */
 

@@ -2553,6 +2553,54 @@
       "remote_name": "ponte_laboratorio_campanhas",
       "remote_statements_sha256": "13ccbf4d33a5bdb0ac8cdf485be45a056c185eb5aa1f8092ad164f79afc12043",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026120000",
+      "path": "supabase/migrations/20261026120000_autoria_e_limite_do_mcp.sql",
+      "local_sha256": "ef26a030e8eb90d84fe6a1765b6735ee85e8837613d30df2074f6bdb669c54ef",
+      "remote_name": "autoria_e_limite_do_mcp",
+      "remote_statements_sha256": "6a7fd60e82d1fe39e4a61abd2c79b54e4f2d285c3ae4235eebb6ac4260910873",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026120100",
+      "path": "supabase/migrations/20261026120100_rodada_e_avisos_sem_ruido.sql",
+      "local_sha256": "496ef67fbc2216d9062a65de98c34e4bd2e71bf4f2450a092de47d48106ddefd",
+      "remote_name": "rodada_e_avisos_sem_ruido",
+      "remote_statements_sha256": "116d757df7905dc8ad9418b8ce37fffcbbd2d3aa0db328f2db02c6b537288e81",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026120200",
+      "path": "supabase/migrations/20261026120200_tarefa_com_origem_externa.sql",
+      "local_sha256": "70d10bdafe12dbb8ac59e1c385c186647f2590969835cf8c20e5e4e6081e5aa7",
+      "remote_name": "tarefa_com_origem_externa",
+      "remote_statements_sha256": "7389abd255c25fd050607d081170a6fe6b319713e0f2613a4b9992afe1615719",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026120300",
+      "path": "supabase/migrations/20261026120300_ads_registro_e_boletim.sql",
+      "local_sha256": "f3e35102dc2ca61fe8cc4280943a69ac9cbbf6ec680024c36e8461e459df2a9a",
+      "remote_name": "ads_registro_e_boletim",
+      "remote_statements_sha256": "138f4d3a746f7bfc905d00d4dc4690a6603255d4f556f194582377d20875a1fc",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026120400",
+      "path": "supabase/migrations/20261026120400_dossie_uma_versao_por_dia.sql",
+      "local_sha256": "492ed8c2936c0d7f352fbc410b15fa15925dab1750cfde6b32569d893d6c52c8",
+      "remote_name": "dossie_uma_versao_por_dia",
+      "remote_statements_sha256": "0b14c31684027d895fb44660477c8c708afbd17a1c9e6ff9aad4087212732341",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026140000",
+      "path": "supabase/migrations/20261026140000_mcp_oauth_retorno_local_claude_code.sql",
+      "local_sha256": "1e59259a60d5dcdd265a59171761974a3bda5416b66f5a762dacaca6718a7b0c",
+      "remote_name": "mcp_oauth_retorno_local_claude_code",
+      "remote_statements_sha256": "fb9a40d280162fa91507a1fdfad03927e2ff9278fe7624a28be7449f89d361ee",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

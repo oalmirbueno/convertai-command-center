@@ -39,3 +39,9 @@ export async function marcarAreaComoLida(userId: string, area: AreaDosAvisos) {
   const { error } = await filtrarArea(supabase.from("notifications").update({ read: true }).eq("user_id", userId).eq("read", false), area);
   if (error) throw error;
 }
+/** 26/10: "Marcar todos como lidos" de um grupo do sino (os tipos do grupo, na mesma área). */
+export async function marcarTiposComoLidos(userId: string, area: AreaDosAvisos, tipos: string[]) {
+  if (!tipos.length) return;
+  const { error } = await filtrarArea(supabase.from("notifications").update({ read: true }).eq("user_id", userId).eq("read", false).in("notification_type", tipos), area);
+  if (error) throw error;
+}

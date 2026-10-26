@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState, useRef } from "react";
 import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { RITUAL_DA_CENTRAL, marcarRitual, atualizarAvancosDoDossie } from "@/lib/esteira/esteiraAcoes";
@@ -69,7 +70,7 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, CalendarDays, Camera, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, LayoutGrid, Lightbulb, Loader2, Maximize2, Megaphone, Minimize2, NotebookPen, Package, Play, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, CalendarDays, Camera, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, LayoutGrid, Lightbulb, Loader2, Maximize2, Megaphone, MessagesSquare, Minimize2, NotebookPen, Package, Play, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 // 23/10: copiar e publicar o ritual com a saudação do horário do envio, https e a linha do painel.
@@ -210,6 +211,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
    */
   const cortes = useRef<Record<string, boolean>>({});
   const { user, profile } = useAuth();
+  // 26/10: atalho para as mensagens da semana, com o número das prontas.
+  const mensagensProntas = useContagemDeMensagensProntas();
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading: carregandoClientes } = useClients();
   const { data: projects } = useProjects();
@@ -2437,6 +2440,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   </button>
                 )}
                 <AgenteDaCentral />
+                {profile?.role === "admin" && (
+                  <Link to="/central/mensagens" className={juntar(botao.icone, "relative", mensagensProntas > 0 && "text-primary")} aria-label={`Mensagens da semana${mensagensProntas ? `: ${mensagensProntas} prontas` : ""}`} title={mensagensProntas ? `Mensagens da semana: ${mensagensProntas} prontas para aprovar` : "Mensagens da semana"} data-atalho-mensagens="">
+                    <MessagesSquare className="h-[18px] w-[18px]" aria-hidden="true" />
+                    {mensagensProntas > 0 && <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none tabular-nums text-primary-foreground" aria-hidden="true">{mensagensProntas}</span>}
+                  </Link>
+                )}
                 <button
                   type="button"
                   data-tour="central-gerador"

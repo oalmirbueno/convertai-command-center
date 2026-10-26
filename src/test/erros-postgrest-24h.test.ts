@@ -47,11 +47,12 @@ describe("operator_participar: o link_id e conferido antes do RPC", () => {
   });
 
   it("o diario confere o vinculo antes de ler ou escrever", () => {
-    const servico = ler("supabase/functions/_shared/aceleriq-operators-services.ts");
+    // MCP 2.19: o diario mora em mcp-server/modulos/diario.ts.
+    const servico = ler("supabase/functions/mcp-server/modulos/diario.ts");
     const diario = servico.slice(servico.indexOf("export async function operatorDiary"));
     const guarda = diario.indexOf("await exigirVinculoExistente(");
     expect(guarda).toBeGreaterThan(0);
-    expect(guarda).toBeLessThan(diario.indexOf("rpc('operator_participar'"));
+    expect(guarda).toBeLessThan(diario.indexOf("return await escrever("));
   });
 });
 

@@ -43,11 +43,11 @@ export const FERRAMENTAS_POR_AREA: Record<string, string[]> = {
   arquivos: ['aceleriq_list_files', 'aceleriq_get_file', 'aceleriq_get_file_content', 'aceleriq_search_file_content', 'aceleriq_get_file_processing_status', 'aceleriq_upload_file', 'aceleriq_upload_file_inline', 'aceleriq_prepare_file_upload', 'aceleriq_finalize_file_upload', 'aceleriq_update_file_metadata', 'aceleriq_create_file_version', 'aceleriq_archive_file', 'aceleriq_restore_file'],
   workspace: ['aceleriq_list_workspace_nodes', 'aceleriq_get_workspace_node', 'aceleriq_studio_read', 'aceleriq_studio_draft'],
   metricas: ['aceleriq_get_social_metrics', 'aceleriq_list_social_posts', 'aceleriq_instagram_diagnostico'],
-  anuncios: ['aceleriq_get_ads_campaigns', 'aceleriq_get_ads_creatives', 'aceleriq_get_ads_performance'],
+  anuncios: ['aceleriq_get_ads_campaigns', 'aceleriq_get_ads_creatives', 'aceleriq_get_ads_performance', 'aceleriq_ads_registrar_acao', 'aceleriq_ads_boletim'],
   relatorios: ['aceleriq_list_reports', 'aceleriq_get_report', 'aceleriq_create_report_draft'],
   comercial: ['aceleriq_list_opportunities', 'aceleriq_get_opportunity', 'aceleriq_create_opportunity', 'aceleriq_update_opportunity', 'aceleriq_move_opportunity', 'aceleriq_add_opportunity_note', 'aceleriq_archive_opportunity', 'aceleriq_delete_opportunity', 'aceleriq_list_commercial_activities', 'aceleriq_create_commercial_activity', 'aceleriq_complete_commercial_activity', 'aceleriq_list_commercial_organizations', 'aceleriq_upsert_commercial_organization', 'aceleriq_upsert_commercial_contact', 'aceleriq_comercial_fila', 'aceleriq_comercial_registrar_mensagem', 'aceleriq_comercial_avisar_caixa', 'aceleriq_comercial_registrar_fato', 'aceleriq_comercial_atribuir_agente', 'aceleriq_comercial_maquina_buscar', 'aceleriq_comercial_maquina_candidatos', 'aceleriq_membros'],
   mesa: ['aceleriq_mes_campanhas', 'aceleriq_mesa_campanha_acao', 'aceleriq_mesa_campanha_criar', 'aceleriq_mesa_campanha_salvar', 'aceleriq_mesa_calendario_pedido', 'aceleriq_mesa_calendario_gravar', 'aceleriq_mesa_stories', 'aceleriq_mesa_hype', 'aceleriq_mesa_templates', 'aceleriq_estudio_trabalhos', 'aceleriq_mesa_enviar_para_aprovacao', 'aceleriq_cerebro_do_cliente', 'aceleriq_client_instruction'],
-  mesa_ads: ['aceleriq_mesa_ads_contexto', 'aceleriq_mesa_ads_saude', 'aceleriq_mesa_ads_briefing_salvar', 'aceleriq_mesa_ads_oferta_salvar', 'aceleriq_mesa_ads_oferta_do_contexto', 'aceleriq_mesa_ads_plano_gerar', 'aceleriq_mesa_ads_criativos_produzir', 'aceleriq_mesa_ads_arte_gerar', 'aceleriq_mesa_ads_entregar_ao_gestor', 'aceleriq_mesa_campanha_acao'],
+  mesa_ads: ['aceleriq_mesa_ads_contexto', 'aceleriq_mesa_ads_saude', 'aceleriq_mesa_ads_briefing_salvar', 'aceleriq_mesa_ads_oferta_salvar', 'aceleriq_mesa_ads_oferta_do_contexto', 'aceleriq_mesa_ads_plano_gerar', 'aceleriq_mesa_ads_criativos_produzir', 'aceleriq_mesa_ads_arte_gerar', 'aceleriq_mesa_ads_entregar_ao_gestor', 'aceleriq_mesa_campanha_acao', 'aceleriq_ads_registrar_acao', 'aceleriq_ads_boletim'],
   mesa_foto: ['aceleriq_mesa_foto_contexto'],
   mesa_site: ['aceleriq_mesa_site'],
   laboratorio: ['aceleriq_laboratorio'],
@@ -66,6 +66,11 @@ export const REGRAS_DE_ACAO = [
   'Toda ação pede idempotency_key: repetir a mesma chave não refaz nada (24 h). Em tempo esgotado, confira pela leitura ANTES de repetir.',
   'Erro com transitorio=true: espere alguns segundos e tente UMA vez. Conflito (versão mudou, já decidido) não se repete: leia de novo.',
   'Leituras vêm enxutas; detalhe="completo" traz tudo. Listas longas: use proximo_cursor.',
+  'Assinatura (2.19): operator só pode ser um agente da sua credencial; outro vira o padrão da credencial, com aviso_de_autoria.',
+  'Feito só com prova (2.19): done leva em evidence o permalink do post, ads_acao:<id>, envio:<id> ou aceleriq-file://<id>; sem prova vira revisão.',
+  'Anúncios (2.19): toda ação feita na conta (Composio ou à mão) vai para aceleriq_ads_registrar_acao; o boletim das 9h e 17h30, para aceleriq_ads_boletim (um aviso no sino, página /anuncios/hoje).',
+  'Diário (2.19): leia com desde (só o novo), no máximo 30 vezes por minuto por vínculo; responda com reply_to_entry_id; texto repetido sem fato novo não é registrado.',
+  'Tarefas (2.19): quem traz tarefa de outro sistema manda origem_externa (ex.: paperclip:ACE-275); título igual de tarefa aberta no projeto devolve a existente.',
 ];
 
 /** Skills e jeitos da casa que o agente deve seguir ao produzir (nomes das skills do Claude Code). */

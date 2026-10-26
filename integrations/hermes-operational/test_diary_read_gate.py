@@ -42,9 +42,9 @@ class ReadGateTest(unittest.TestCase):
             calls.append((name, args.get("link_id")))
             if name == "aceleriq_operator_board":
                 return {"vinculos": [
-                    {"id": A, SEEN_FIELD: T1},
-                    {"id": B, SEEN_FIELD: T2},
-                    {"id": C, SEEN_FIELD: None},
+                    {"id": A, "operador": "helena", "status": "queued", SEEN_FIELD: T1},
+                    {"id": B, "operador": "helena", "status": "queued", SEEN_FIELD: T2},
+                    {"id": C, "operador": "helena", "status": "queued", SEEN_FIELD: None},
                 ]}
             return {"entradas": [{"id": "e1", "autor_kind": "humano", "texto": "Faça o vídeo"}]}
 

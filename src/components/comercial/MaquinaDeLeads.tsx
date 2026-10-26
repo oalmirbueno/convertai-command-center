@@ -24,7 +24,7 @@ import {
   ROTULO_DA_ORIGEM_DO_DADO,
   telefoneLegivel,
 } from "@/lib/comercial/maquinaApi";
-import { FONTES_DA_BUSCA, type FonteDaBusca, ROTULO_DA_FONTE, UFS } from "../../../supabase/functions/comercial-leads/regras";
+import { FONTES_DA_BUSCA, type FonteDaBusca, PAISES, ROTULO_DA_FONTE, UFS } from "../../../supabase/functions/comercial-leads/regras";
 
 /**
  * Máquina de leads (25/10/2026, dono: "junto disso a máquina de leads, e tudo organizado e de forma
@@ -103,6 +103,9 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
           <select value={uf} onChange={(e) => setUf(e.target.value)} className={juntar(campo, "mt-1")} aria-label="UF">
             <option value="">Todas</option>
             {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
+            <optgroup label="Outro país">
+              {Object.keys(PAISES).map((p) => <option key={p} value={p}>{PAISES[p]}</option>)}
+            </optgroup>
           </select>
         </label>
       </div>
@@ -379,7 +382,7 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setAbertaId(b.id)} aria-expanded={abertaAqui} aria-label={`Abrir a busca ${b.nicho} em ${b.cidade}`}>
                     {andando ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden="true" /> : <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                     <span className="min-w-0 flex-1">
-                      <span className={juntar(texto.corpo, "block truncate font-medium")}>{b.nicho} em {b.cidade}{b.uf ? `/${b.uf}` : ""}</span>
+                      <span className={juntar(texto.corpo, "block truncate font-medium")}>{b.nicho} em {b.cidade}{b.uf ? `/${PAISES[b.uf] || b.uf}` : ""}</span>
                       <span className={juntar(texto.auxiliar, "block truncate", b.situacao === "falhou" && "text-destructive")}>
                         {estadoDaBusca(b)} · {dataCurta(b.created_at)}{b.entregar_ao_mercurio ? " · Mercúrio" : ""}
                       </span>

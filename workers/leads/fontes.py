@@ -41,6 +41,12 @@ OVERPASS = os.environ.get("LEADS_OVERPASS_URL") or "https://overpass-api.de/api/
 OVERPASS_ESPELHO = os.environ.get("LEADS_OVERPASS_ESPELHO") or "https://overpass.kumi.systems/api/interpreter"
 NOMINATIM = os.environ.get("LEADS_NOMINATIM_URL") or "https://nominatim.openstreetmap.org/search"
 CREDITO_OSM = "© OpenStreetMap contributors (ODbL)"
+# Quando o "uf" é um destes códigos, a cidade é procurada nesse país (e não no Brasil).
+PAISES = {
+    "PY": "Paraguay", "US": "United States", "PT": "Portugal", "ES": "España", "IT": "Italia", "DE": "Deutschland",
+    "GB": "United Kingdom", "IE": "Ireland", "CH": "Schweiz", "JP": "Japan", "AR": "Argentina", "UY": "Uruguay",
+    "CA": "Canada", "FR": "France",
+}
 
 
 class Educado:
@@ -119,9 +125,15 @@ def _json_de(educado, url, corpo=None):
 
 
 def area_da_cidade(educado, cidade, uf=None):
-    """O id de área do OSM (3600000000 + relação) da cidade, e o nome que o Nominatim achou."""
-    q = "%s%s, Brasil" % (cidade, (", " + uf) if uf else "")
-    url = "%s?q=%s&format=json&limit=5&addressdetails=0&countrycodes=br" % (NOMINATIM, quote(q))
+    """O id de área do OSM (3600000000 + relação) da cidade, e o nome que o Nominatim achou.
+
+    uf é o estado (Brasil) ou um código de país de PAISES (a cidade é procurada lá).
+    """
+    codigo, pais = "br", "Brasil"
+    if uf and uf.upper() in PAISES:
+        codigo, pais, uf = uf.lower(), PAISES[uf.upper()], None
+    q = "%s%s, %s" % (cidade, (", " + uf) if uf else "", pais)
+    url = "%s?q=%s&format=json&limit=5&addressdetails=0&countrycodes=%s" % (NOMINATIM, quote(q), codigo)
     lista = _json_de(educado, url)
     for item in lista or []:
         if item.get("osm_type") == "relation":

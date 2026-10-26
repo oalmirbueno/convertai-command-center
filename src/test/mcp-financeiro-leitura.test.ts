@@ -74,7 +74,7 @@ describe("o financeiro enxerga o mês inteiro", () => {
 
 describe("a area financeira inteira, nao so a visao geral", () => {
   const fluxo = readFileSync(
-    resolve(raiz, "supabase/functions/_shared/aceleriq-finance-fluxo.ts"), "utf8",
+    resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-finance-fluxo.ts"), "utf8",
   );
 
   it("as oito abas do painel tem leitura no MCP", () => {
@@ -142,7 +142,7 @@ describe("a area financeira inteira, nao so a visao geral", () => {
 
 describe("o painel financeiro inteiro, mes a mes", () => {
   const painel = readFileSync(
-    resolve(raiz, "supabase/functions/_shared/aceleriq-finance-dashboard.ts"), "utf8",
+    resolve(raiz, "supabase/functions/mcp-server/modulos/aceleriq-finance-dashboard.ts"), "utf8",
   );
 
   it("RECEBIDO soma planos MAIS parcelas de projeto", () => {
@@ -204,7 +204,7 @@ describe("o painel financeiro inteiro, mes a mes", () => {
     const exports: Record<string, unknown> = {};
     const execute = new Function("exports", "require", "setTimeout", compiled);
     execute(exports, (dependency: string) => {
-      if (dependency !== "./aceleriq-read-services.ts") throw new Error(`Unexpected test dependency: ${dependency}`);
+      if (dependency !== "../../_shared/aceleriq-read-services.ts") throw new Error(`Unexpected test dependency: ${dependency}`);
       return { db: () => db, READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } };
     }, () => 0);
     const getDashboard = exports.getFinanceDashboard as (input: { competence: string }) => Promise<{

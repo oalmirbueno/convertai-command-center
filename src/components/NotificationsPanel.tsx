@@ -1,11 +1,11 @@
 import ContextoDoAviso, { destinoOperacional } from "@/components/execucao/ContextoDoAviso";
 import { useState } from "react";
-import { useAvisosPorArea, marcarAreaComoLida, type AreaDosAvisos } from "@/hooks/useAvisosPorArea";
+import { useAvisosPorArea, marcarAreaComoLida, marcarTiposComoLidos, type AreaDosAvisos } from "@/hooks/useAvisosPorArea";
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, CreditCard, FileArchive,
-  FolderOpen, Instagram, ListChecks, Package,
+  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, ChevronDown, CreditCard, FileArchive,
+  FolderOpen, Instagram, ListChecks, Megaphone, Package,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import { toast } from "sonner";
 import { estadoDosAvisos, pedirPermissaoDeAvisos, type EstadoDoAviso } from "@/lib/avisosDoNavegador";
-import { categoriaDoAviso, rotuloDoLink, rotuloDoTipoDoAviso } from "@/lib/avisos/rotulos";
+import { agruparAvisos, avisoPedeDecisao, categoriaDoAviso, rotuloDoLink, rotuloDoTipoDoAviso, tiposDaCategoria, type CategoriaDoAviso, type GrupoDeAvisos } from "@/lib/avisos/rotulos";
 import TesteDeAvisos from "@/components/avisos/TesteDeAvisos";
 import { AjudaRecolhida, JanelaCentral, SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
 
@@ -31,6 +31,7 @@ function getNotifIcon(type: string) {
     case "alerta": return { icon: <AlertTriangle className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
     case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
     case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info/10 text-info" };
+    case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
     default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
   }
 }
@@ -49,32 +50,6 @@ function timeAgo(dateStr: string): string {
   if (seconds < 172800) return "ontem";
   if (seconds < 604800) return `há ${Math.floor(seconds / 86400)} dias`;
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
-
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function groupNotifications(notifs: any[]) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const groups: { label: string; items: any[] }[] = [];
-  const todayItems = notifs.filter(n => isSameDay(new Date(n.created_at), today));
-  const yesterdayItems = notifs.filter(n => isSameDay(new Date(n.created_at), yesterday));
-  const weekItems = notifs.filter(n => {
-    const d = new Date(n.created_at);
-    return !isSameDay(d, today) && !isSameDay(d, yesterday) && (today.getTime() - d.getTime()) < 7 * 86400000;
-  });
-  const olderItems = notifs.filter(n => (today.getTime() - new Date(n.created_at).getTime()) >= 7 * 86400000);
-
-  if (todayItems.length) groups.push({ label: "Hoje", items: todayItems });
-  if (yesterdayItems.length) groups.push({ label: "Ontem", items: yesterdayItems });
-  if (weekItems.length) groups.push({ label: "Esta semana", items: weekItems });
-  if (olderItems.length) groups.push({ label: "Anteriores", items: olderItems });
-
-  return groups;
 }
 
 interface Props {
@@ -130,8 +105,21 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
 
   const listaCarregada = avisos?.lista || [];
   const unreadCount = avisos?.naoLidas || 0;
-  const displayNotifs = listaCarregada;
-  const groups = groupNotifications(displayNotifs);
+  // 26/10: grupos por tipo; o que pede decisão vem primeiro e é o único em destaque.
+  const groups = agruparAvisos(listaCarregada as Array<{ id: string; notification_type?: string | null; read?: boolean | null; created_at?: string | null }>);
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
+  const grupoAberto = (g: GrupoDeAvisos<unknown>) => (abertos[g.categoria] !== undefined ? abertos[g.categoria] : g.pedeDecisao || g.itens.length <= 3);
+  const marcarGrupo = async (g: GrupoDeAvisos<unknown>) => {
+    if (!user?.id || g.naoLidos === 0) return;
+    const tipos = g.tipos.concat(tiposDaCategoria(g.categoria as CategoriaDoAviso).filter((t) => g.tipos.indexOf(t) < 0));
+    try {
+      await marcarTiposComoLidos(user.id, area, tipos);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success(`${g.nome}: marcados como lidos`);
+    } catch {
+      toast.error("Não consegui marcar agora. Tente de novo.");
+    }
+  };
 
   return (
     // Janela central (30/09, dono: "qualquer pop-up abrir no centro e não na
@@ -203,19 +191,32 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
           {isError ? <button type="button" className="m-5 text-[13px] text-warning" onClick={() => void refetch()}>Não foi possível ler os avisos. Tentar novamente</button> : groups.length === 0 ? (
             <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
           ) : (
-            groups.map((group) => (
-              <div key={group.label}>
-                <div className="px-5 py-2">
-                  <p className={juntar(texto.etiqueta, "text-muted-foreground")}>{group.label}</p>
+            groups.map((group) => {
+              const aberto = grupoAberto(group);
+              return (
+              <section key={group.categoria} aria-label={group.nome} data-grupo-do-sino={group.categoria} className="border-b border-border/50 last:border-b-0">
+                <div className="flex min-w-0 items-center px-5 py-2">
+                  <button type="button" aria-expanded={aberto} onClick={() => setAbertos((x) => ({ ...x, [group.categoria]: !aberto }))} className="flex min-w-0 flex-1 items-center text-left">
+                    <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", !aberto && "-rotate-90")} aria-hidden="true" />
+                    <span className={juntar(texto.etiqueta, "min-w-0 truncate", group.pedeDecisao ? "text-primary" : "text-muted-foreground")}>{group.nome}</span>
+                    <span className={juntar(texto.etiqueta, "ml-1.5 shrink-0 tabular-nums text-muted-foreground")}>{group.naoLidos > 0 ? `${group.naoLidos} não ${group.naoLidos === 1 ? "lido" : "lidos"}` : group.itens.length}</span>
+                  </button>
+                  {group.naoLidos > 0 && (
+                    <button type="button" onClick={() => void marcarGrupo(group)} className={juntar(botao.discreto, "ml-2 h-7 shrink-0 px-2 text-[12px]")} title={`Marcar todos de ${group.nome} como lidos`} aria-label={`Marcar todos de ${group.nome} como lidos`}>
+                      Marcar todos como lidos
+                    </button>
+                  )}
                 </div>
-                {group.items.map((n: any) => {
+                {aberto && group.itens.map((n: any) => {
                   const { icon, bg } = getNotifIcon(n.notification_type);
+                  const destaque = !n.read && avisoPedeDecisao(n.notification_type);
                   return (
                     <div
                       key={n.id}
                       onClick={() => handleClick(n)}
-                      className={`px-5 py-3.5 cursor-pointer transition-colors ${
-                        n.read ? "hover:bg-secondary/30" : "bg-primary/5 hover:bg-primary/10"
+                      data-pede-decisao={destaque ? "" : undefined}
+                      className={`px-5 py-3 cursor-pointer transition-colors ${
+                        destaque ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-secondary/30"
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -223,7 +224,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                           {icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[13px] leading-snug ${n.read ? "text-muted-foreground" : "text-foreground font-medium"}`}>
+                          <p className={`text-[13px] leading-snug ${n.read ? "text-muted-foreground" : destaque ? "text-foreground font-medium" : "text-foreground"}`}>
                             {n.message}
                           </p>
                           {area === "agentes" && n.link && <ContextoDoAviso link={n.link} />}
@@ -232,13 +233,14 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                             <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)}</p>
                           )}
                         </div>
-                        {!n.read && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />}
+                        {!n.read && <div className={`w-2 h-2 rounded-full shrink-0 mt-2 ${destaque ? "bg-primary" : "bg-muted-foreground/40"}`} />}
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            ))
+              </section>
+              );
+            })
           )}
         </div>
     </JanelaCentral>

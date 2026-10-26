@@ -71,6 +71,8 @@ const AdminProjection = rotas.lazy(() => import("@/pages/AdminProjection"));
 const AdminExecucao = rotas.lazy(() => import("@/pages/AdminExecucao"));
 const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = rotas.lazy(() => import("@/pages/AdminAds"));
+const AnunciosHoje = rotas.lazy(() => import("@/pages/AnunciosHoje"));
+const MensagensDaSemana = rotas.lazy(() => import("@/pages/MensagensDaSemana"));
 const AdminCiclo = rotas.lazy(() => import("@/pages/AdminCiclo"));
 const AdminEsteira = rotas.lazy(() => import("@/pages/AdminEsteira"));
 const ClientFinanceiro = rotas.lazy(() => import("@/pages/ClientFinanceiro"));
@@ -377,6 +379,8 @@ export function AppRoutes() {
         <Route path="/base-dos-agentes" element={<StaffRoute><BaseDosAgentes /></StaffRoute>} />
         <Route path="/metricas" element={<StaffRoute><AdminMetricas /></StaffRoute>} />
         <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
+        {/* 26/10: boletim do Hermes, mudanças nas contas e o que precisa do dono, numa página só. */}
+        <Route path="/anuncios/hoje" element={<StaffRoute><AnunciosHoje /></StaffRoute>} />
         <Route path="/calendario" element={<EditorialCalendar />} />
         <Route path="/clientes" element={<StaffRoute><Clients /></StaffRoute>} />
         <Route path="/equipe" element={<StaffRoute><Team /></StaffRoute>} />
@@ -435,6 +439,8 @@ export function AppRoutes() {
         <Route path="/laboratorio" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><Laboratorio /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/mesas" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Mesas /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
+        {/* 26/10: as mensagens dos rituais da semana numa tela só (só o admin aprova). */}
+        <Route path="/central/mensagens" element={<>{profile?.role === "admin" ? <MensagensDaSemana /> : <Navigate to="/central" replace />}</>} />
         <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />
         <Route path="/novidades" element={<Novidades />} />
         <Route path="/contratos" element={<StaffRoute><AdminContracts /></StaffRoute>} />

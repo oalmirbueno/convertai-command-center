@@ -72,7 +72,7 @@ export default function ClientLiveCampaigns({ clientId }: { clientId?: string })
 
       <ul className={juntar(lista.aberta, lista.divisoria, "mt-4")} aria-label="Campanhas">
         {porCampanha.map(({ resumo, ficha }) => {
-          const situacao = statusLabel(ficha?.status, ficha?.effective_status);
+          const situacao = statusLabel(ficha?.status, ficha?.effective_status, (ficha as { stop_time?: string | null } | undefined)?.stop_time);
           return (
             <li key={resumo.campaignId} className="min-w-0 px-2 py-2.5">
               <div className="flex min-w-0 items-center">

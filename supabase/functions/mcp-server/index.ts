@@ -43,7 +43,8 @@ import {
 import { getMcpRuntimeConfig } from "../_shared/mcp-runtime.ts";
 import { decidirGet, descobertaDoMcp } from "../_shared/mcp-descoberta.ts";
 import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";
-import { executarFerramenta, segundoPlanoPadrao } from "./modulos/executar-ferramenta.ts";
+import { executarFerramenta, resultadoDeErro, segundoPlanoPadrao } from "./modulos/executar-ferramenta.ts";
+import { anexarAviso, depoisDaAutoria, prepararAutoria } from "./modulos/autoria.ts";
 import { CredencialEmCache } from "./modulos/credencial-em-cache.ts";
 import { descritorEnxuto, lerRecurso, montarPrompt, PROMPTS, RECURSOS } from "./modulos/guia-do-painel.ts";
 
@@ -340,7 +341,12 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
 
     // MCP 2.17: validação, cache curto, prazo, nova tentativa (só leitura e só transitório),
     // erro claro com isError e registro leve. Ver modulos/executar-ferramenta.ts.
-    const desfecho = await executarFerramenta(tool, args, { ...ctx, correlationId }, {
+    // MCP 2.19: quem assina é a credencial que chama (modulos/autoria.ts).
+    const autoria = await prepararAutoria(tool, args, ctx);
+    if (autoria.erro) {
+      return rpcResult(id, resultadoDeErro("autoria", autoria.erro, "Assine com um operador desta credencial (aceleriq_operator_board mostra os slugs).", false, correlationId));
+    }
+    const desfecho = await executarFerramenta(tool, autoria.args, { ...ctx, correlationId }, {
       auditar: auditLog,
       emSegundoPlano: segundoPlanoPadrao,
       ehForaDoEscopo,
@@ -348,7 +354,8 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
     if (desfecho.tipo === "fora_do_escopo") {
       return rpcError(id, RpcErrors.forbidden, "Resource is outside this restricted client scope");
     }
-    return rpcResult(id, desfecho.result);
+    await depoisDaAutoria(tool.name, autoria.args, ctx, desfecho.result.isError !== true).catch(() => {});
+    return rpcResult(id, autoria.aviso ? anexarAviso(desfecho.result, autoria.aviso) : desfecho.result);
   }
 
   if (isNotification) return null;

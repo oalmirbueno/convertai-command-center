@@ -15,10 +15,11 @@ import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { botao, campoTexto, conversa, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import {
-  aplicarRespostas, criarTarefaDoRitual, listarClientesDoAgente, prepararCliente, reescreverRitual, salvarEPublicarRitual,
+  aplicarRespostas, criarTarefaDoRitual, tarefasAbertasDoCliente, listarClientesDoAgente, prepararCliente, reescreverRitual, salvarEPublicarRitual,
   type Aplicado, type ClienteDoAgente,
 } from "./agenteCentralApi";
 import { avisoDeRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
+import { acharTarefaParecida } from "@/lib/tarefaParecida";
 // 23/10: na hora de copiar, a saudação vale o horário do envio (e o https e o painel continuam garantidos).
 import { textoNaHoraDoEnvio } from "../../../supabase/functions/ritual-writer/modulos/acabamento";
 import {
@@ -138,13 +139,27 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
 }) {
   const { user } = useAuth();
   const [criando, setCriando] = useState<number | null>(null);
+  // 26/10: antes de criar, a tarefa aberta parecida do mesmo cliente (o ritual repetia o mesmo passo toda semana).
+  const abertas = useQuery({
+    queryKey: ["tarefas-abertas-do-cliente", clientId],
+    enabled: tarefas.length > 0,
+    staleTime: 30_000,
+    queryFn: () => tarefasAbertasDoCliente(clientId),
+  });
   if (!tarefas.length) return null;
-  const criar = async (i: number) => {
+  const parecidaDe = (t: TarefaSugerida) => acharTarefaParecida(t.titulo, abertas.data ?? []);
+  const criar = async (i: number, mesmoAssim = false) => {
     if (!user || criando !== null) return;
     setCriando(i);
     try {
-      const r = await criarTarefaDoRitual({ clientId, reportId, indice: i, tarefa: tarefas[i], userId: user.id });
+      const r = await criarTarefaDoRitual({ clientId, reportId, indice: i, tarefa: tarefas[i], userId: user.id, mesmoAssim });
+      if (r === "parecida") {
+        toast.message("Já existe uma tarefa aberta parecida: abra a que existe.");
+        void abertas.refetch();
+        return;
+      }
       onCriada(i);
+      void abertas.refetch();
       toast.success(r === "criada" ? "Tarefa criada no Kanban." : "Essa tarefa já existia.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível criar a tarefa.");
@@ -165,6 +180,15 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
             </div>
             {criadas.includes(i) ? (
               <span className="inline-flex shrink-0 items-center text-[12px] text-success"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Criada</span>
+            ) : parecidaDe(t) ? (
+              <span className="flex shrink-0 items-center" data-ja-existe="">
+                <Link to={`/kanban?task=${encodeURIComponent(parecidaDe(t)!.id)}`} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} title={`Já existe: ${parecidaDe(t)!.title}`}>
+                  <ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" /> Já existe: abrir
+                </Link>
+                <button type="button" onClick={() => void criar(i, true)} disabled={criando !== null} className={juntar(botao.icone, "ml-1")} title="Criar outra mesmo assim" aria-label="Criar outra mesmo assim">
+                  {criando === i ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ListPlus className="h-3.5 w-3.5" aria-hidden="true" />}
+                </button>
+              </span>
             ) : (
               <button type="button" onClick={() => void criar(i)} disabled={criando !== null} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
                 {criando === i ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ListPlus className="mr-1 h-3 w-3" />} Criar tarefa
