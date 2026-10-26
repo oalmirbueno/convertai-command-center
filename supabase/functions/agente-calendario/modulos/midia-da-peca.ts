@@ -11,7 +11,10 @@
  */
 import {
   candidatasDoAcervo,
+  type EscolhaDaFotoReal,
+  escolherFotoReal,
   type FotoDoAcervo,
+  itemDaDescricaoDaTarefa,
   itemComMidia,
   type MidiaDaPeca,
   pedidoDaMidia,
@@ -55,18 +58,26 @@ export type PlanoDaMidia = {
 
 const CAMPOS_DO_ACERVO = "id, nome, descricao, tags, pasta, categoria, ativa, gerada";
 
+type TarefaDaPeca = { id: string; title: string; description: string | null; due_date: string | null; delivery_type: string | null; project_id: string | null };
+
+/**
+ * O item da peça: o da proposta do Mês quando a tarefa nasceu de uma; sem ela
+ * (26/10: peça criada pelo MCP, pela Mesa Ads ou à mão), o item montado pelo
+ * título e pelos campos da descrição, com `proposta` nula.
+ */
 // deno-lint-ignore no-explicit-any
 async function itemDaTarefa(db: any, clientId: string, taskId: string) {
   const [t, p] = await Promise.all([
-    db.from("tasks").select("id, title, due_date, delivery_type, deleted_at").eq("id", taskId).maybeSingle(),
+    db.from("tasks").select("id, title, description, due_date, delivery_type, project_id, deleted_at").eq("id", taskId).maybeSingle(),
     db.from("calendario_propostas").select("id, itens").eq("client_id", clientId).contains("task_ids", [taskId]).order("criado_em", { ascending: false }).limit(1),
   ]);
   if (t.error || p.error) throw new Error("Não foi possível ler a peça agora. Tente de novo.");
   if (!t.data || t.data.deleted_at) throw new Error("Esta peça não está mais na agenda.");
+  const tarefa = t.data as TarefaDaPeca;
   const proposta = (p.data || [])[0] as { id: string; itens: Array<Record<string, unknown>> } | undefined;
   const indice = proposta && Array.isArray(proposta.itens) ? proposta.itens.findIndex((i) => i && i.task_id === taskId) : -1;
-  if (!proposta || indice < 0) throw new Error("Esta peça não tem o roteiro do Mês. Abra no Estúdio e escolha a mídia por lá.");
-  return { tarefa: t.data as { title: string; due_date: string | null; delivery_type: string | null }, proposta, indice, item: proposta.itens[indice] };
+  if (!proposta || indice < 0) return { tarefa, proposta: null, indice: -1, item: itemDaDescricaoDaTarefa(tarefa) };
+  return { tarefa, proposta, indice, item: proposta.itens[indice] };
 }
 
 /** O tipo pela peça quando o pedido não diz: item de vídeo é vídeo; de foto é foto. */
@@ -157,10 +168,40 @@ export async function planejarMidia(deps: DepsDaMidia, a: { clientId: string; ta
   return { midia, versao, custo, avisos };
 }
 
-/** Grava a mídia no item da proposta (CAS pelo item lido agora) e devolve o recibo para Desfazer. */
+/**
+ * Grava a mídia no item da proposta (CAS pelo item lido agora) e devolve o recibo para Desfazer. Peça sem
+ * proposta: um roteiro espelho gravado com o item montado da tarefa (o mesmo do "troca_gravada"), para o
+ * Estúdio e a Agenda acharem a mídia; o recibo volta o espelho ao item sem a mídia.
+ */
 // deno-lint-ignore no-explicit-any
 export async function gravarMidia(db: any, clientId: string, taskId: string, plano: PlanoDaMidia): Promise<PassoDoFormato[]> {
-  const { proposta, indice } = await itemDaTarefa(db, clientId, taskId);
+  const { tarefa, proposta, indice, item } = await itemDaTarefa(db, clientId, taskId);
+  if (!proposta) {
+    const data = String(item.data || new Date().toISOString().slice(0, 10));
+    const { data: espelho, error } = await db.from("calendario_propostas").insert({
+      client_id: clientId, project_id: tarefa.project_id ?? null, periodo_inicio: data, periodo_fim: data,
+      parametros: { origem: "midia_da_tarefa" }, status: "gravada", diagnostico: null, temas: [], itens: [item], task_ids: [taskId],
+      gravada_em: new Date().toISOString(),
+    }).select("id").single();
+    if (error || !espelho) throw new Error("Não foi possível guardar a mídia desta peça. Nada mudou.");
+    return gravarPassosDoFormato(db, [{ tabela: "calendario_propostas", id: (espelho as { id: string }).id, antes: { itens: [item] }, depois: { itens: [itemComMidia(item, plano.midia, plano.versao)] } }], clientId);
+  }
   const itens = proposta.itens.map((i, k) => (k === indice ? itemComMidia(i, plano.midia, plano.versao) : i));
   return gravarPassosDoFormato(db, [{ tabela: "calendario_propostas", id: proposta.id, antes: { itens: proposta.itens }, depois: { itens } }], clientId);
+}
+
+/**
+ * Foto real primeiro (26/10, dono: "achar interessante colocar de forma inteligente imagens reais quando tem"):
+ * só as fotos REAIS do acervo (fotoReal), o Jev dá a nota contra a peça e a melhor acima do corte é a
+ * sugerida; sem nenhuma, a peça gera com IA e a tela diz isso numa linha. Não grava nada; o custo é o do Jev.
+ */
+export async function fotoRealDaPeca(deps: Pick<DepsDaMidia, "db" | "julgar">, a: { clientId: string; taskId: string; uso: "arte" | "video"; max?: number }): Promise<EscolhaDaFotoReal & { julgou: boolean }> {
+  const { tarefa, item } = await itemDaTarefa(deps.db, a.clientId, a.taskId);
+  const tema = String(item.tema || tarefa.title || "").replace(/^Peça de foto: /, "");
+  const { data } = await deps.db.from("cliente_imagens").select(CAMPOS_DO_ACERVO).eq("client_id", a.clientId).eq("ativa", true).order("criado_em", { ascending: false }).limit(200);
+  return escolherFotoReal((data || []) as FotoDoAcervo[], [tema, item.gancho, item.referencia].filter(Boolean).join(" "), deps.julgar, {
+    uso: a.uso === "video" ? "imagem de partida de um vídeo curto" : "foto real de base da arte (capa do post)",
+    peca: { tema, gancho: item.gancho ?? null, formato: item.formato ?? null },
+    max: a.max,
+  });
 }

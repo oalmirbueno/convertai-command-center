@@ -8,7 +8,7 @@ import { assuntosDoNicho, assuntoValido, CACHE_DAS_NOTICIAS_MS, CacheCurto, data
 import { lerSinaisDoMundo } from "../mesa-roteiros/modulos/sinais-do-mundo.ts";
 // 23/10 (COPY-V): a skill "copy viral do nicho" (contexto forte, ganchos do banco e guia da casa) e o modelo da copy.
 import { escolherComViralidade, modeloDaCopy, nichosEmTexto, prepararCopyViral } from "../estudio-arte/modulos/copy-viral-servidor.ts";
-import { gravarMidia, planejarMidia, type DepsDaMidia, type PlanoDaMidia } from "./modulos/midia-da-peca.ts";
+import { fotoRealDaPeca, gravarMidia, planejarMidia, type DepsDaMidia, type PlanoDaMidia } from "./modulos/midia-da-peca.ts";
 import { itensDoOpenverse, urlDoOpenverse } from "../mesa-foto/calculos.ts";
 import { blocoDosPerfis, lerPerfisParaOPrompt, type PerfilNoPrompt } from "../_shared/perfis-no-prompt.ts";
 import { ehHype, encaixarNaAgenda, type Ocupacao, regraDoCliente, type RegraDoDia } from "../_shared/agenda-inteligente.ts";
@@ -228,7 +228,7 @@ import {
   type ItemDoAjuste,
   pedidoPontual,
 } from "./modulos/cadencia-do-mes.ts";
-import { ESQUEMA_DA_MIDIA_DA_PECA, GANCHO_NO_VIDEO_DA_PAUTA, tipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
+import { ESQUEMA_DA_MIDIA_DA_PECA, GANCHO_NO_VIDEO_DA_PAUTA, LINHA_SEM_FOTO_REAL, tipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
 import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaMistura, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, semanasDoPeriodo, trocasParaMisturar } from "./modulos/mistura-do-nicho.ts";
 // 24/10: a escolha de formatos da preparação (Stories e os dois caminhos do vídeo) e a troca de peças.
 import { blocoDaEscolha, cadenciaComEscolha, caminhoDoNicho, caminhoDoVideo, caminhosDosVideos, descricaoDosStories, formatoDaOpcao, formatosNaEscolha, fraseDosStories, IDS_DAS_OPCOES, mixDaEscolha, normalizarEscolha, opcaoDoItem, opcaoDoTexto, ROTULO_DA_OPCAO, ROTULO_DO_CAMINHO, storiesDoPlano, tituloDosStories, type CaminhoDoVideo, type OpcaoDoMes, type StoryPlanejado } from "./modulos/escolha-do-mes.ts";
@@ -9529,6 +9529,31 @@ async function midiaDaPeca(servico: SupabaseClient, chamador: Chamador, corpo: R
 }
 
 /**
+ * foto_real_da_peca { client_id, task_id, uso: "arte" | "video" } (26/10, dono: "achar interessante colocar de
+ * forma inteligente imagens reais quando tem"): o Estúdio abre a peça e pergunta se há foto REAL do acervo que
+ * combina (só o Jev, centavos; nada é gravado). Com nota acima do corte, a tela pré-seleciona a foto (dá para
+ * trocar); sem nenhuma, segue a geração por IA e a tela diz isso numa linha. Peça sem proposta também vale.
+ */
+async function fotoRealDaPecaAcao(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const taskId = String(corpo.task_id ?? "");
+  if (!UUID.test(taskId)) throw new ErroHttp(400, "task_invalida", "task_id precisa ser um UUID.");
+  await tarefaDoCliente(servico, taskId, clientId);
+  const custo = { usd: 0 };
+  const uso = corpo.uso === "video" ? "video" : "arte";
+  try {
+    const r = await fotoRealDaPeca(depsDaMidia(servico, chamador, clientId, taskId, custo), { clientId, taskId, uso, max: 1 });
+    return json({ modo: r.modo, fotos: r.fotos, linha: r.linha, custo_usd: Math.round(custo.usd * 1e6) / 1e6 });
+  } catch (e) {
+    if (e instanceof ErroHttp) throw e;
+    // Jev fora ou peça ilegível: a geração por IA segue como hoje, com o motivo.
+    registrarFalha("agente-calendario: foto real da peça não escolhida", e, { client_id: clientId, task_id: taskId });
+    return json({ modo: "ia", fotos: [], linha: LINHA_SEM_FOTO_REAL, aviso: "O Jev não respondeu: escolha a foto à mão se quiser.", custo_usd: Math.round(custo.usd * 1e6) / 1e6 });
+  }
+}
+
+/**
  * sugerir_mistura { client_id, mes }: proativo (dono: "ele já dá a sugestão para eu aprovar"). Lê a agenda do
  * mês; repetitiva num formato só, o Jev diz o perfil do nicho e quanto cada tema rende como vídeo e como foto,
  * o código escolhe as trocas e a sugestão entra na conversa do agente como cartão com Confirmar e Desfazer
@@ -10015,6 +10040,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_trilha: trilhaDaCampanha.campanhaTrilha,
   campanha_narracao: narracaoDaCampanha.campanhaNarracao,
   midia_da_peca: midiaDaPeca,
+  foto_real_da_peca: fotoRealDaPecaAcao,
   sugerir_mistura: sugerirMistura,
   // 24/10: trocar uma peça (3 opções, o Jev recomenda; Confirmar e Desfazer) e trocar várias (refazer com proteção).
   trocar_peca_opcoes: trocarPecaOpcoes,
