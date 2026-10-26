@@ -20,13 +20,14 @@ BEGIN
      OR EXISTS(SELECT 1 FROM public.operator_approvals) OR EXISTS(SELECT 1 FROM public.operator_participations)
      OR EXISTS(SELECT 1 FROM public.assignment_proposals) OR EXISTS(SELECT 1 FROM public.operator_deliveries)
      OR EXISTS(SELECT 1 FROM social_private.autopublish_jobs)
-     -- The canonical render migration generates one local callback secret.
-     -- Accept only its metadata, with rendering disconnected. Never read its
-     -- value, allow provider credentials, or remove canonical replay data.
-     OR (SELECT count(*) FROM vault.secrets)<>1
+     -- The canonical render and ponte migrations each generate one local
+     -- callback secret. Accept only their metadata, with rendering
+     -- disconnected. Never read a value, allow provider credentials, or
+     -- remove canonical replay data.
+     OR (SELECT count(*) FROM vault.secrets)<>2
      OR EXISTS(SELECT 1 FROM vault.secrets
-       WHERE name IS DISTINCT FROM 'render_nuvem_segredo'
-          OR description IS DISTINCT FROM 'Aviso do banco para o render na nuvem (Modal)')
+       WHERE (name, description) IS DISTINCT FROM ('render_nuvem_segredo', 'Aviso do banco para o render na nuvem (Modal)')
+         AND (name, description) IS DISTINCT FROM ('ponte_lab_campanha_segredo', 'Aviso do banco para a ponte Laboratório e Campanhas'))
      OR EXISTS(SELECT 1 FROM public.render_nuvem WHERE ligada OR url_acordar IS NOT NULL)
      OR EXISTS(SELECT 1 FROM net.http_request_queue)
      OR to_regclass('aceleriq_ci_replay.e2e_seed_guard') IS NOT NULL THEN
