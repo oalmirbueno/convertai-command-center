@@ -121,7 +121,7 @@ describe("contrato: cliente no exterior", () => {
   });
 
   it("o seed da migration tem o mesmo texto do arquivo (fonte única) e amplia a CHECK", () => {
-    const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261026170000_contrato_exterior.sql"), "utf8");
+    const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261026200000_contrato_exterior.sql"), "utf8");
     expect(sql).toContain("'mensalista', 'exterior'");
     for (const m of MODELOS_EXTERIOR_V1) {
       expect(sql).toContain(`'${m.chave}'`);

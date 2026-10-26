@@ -13,7 +13,7 @@
  * CPF ou CNPJ das condições gerais, que continua obrigatório.
  *
  * Texto próprio, com a marca interna "v1 · revisão jurídica pendente". Fonte
- * do seed da migration 20261026170000_contrato_exterior.sql (o teste confere
+ * do seed da migration 20261026200000_contrato_exterior.sql (o teste confere
  * que o banco e este arquivo têm o mesmo texto). Sem travessão.
  */
 import type { ModeloDeContrato } from "../../_shared/contrato-modelo.ts";
