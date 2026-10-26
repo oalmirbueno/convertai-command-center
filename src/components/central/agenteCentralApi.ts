@@ -19,6 +19,7 @@ import { recordMemory } from "@/lib/clientMemory";
 import { RITUAL_DA_CENTRAL, atualizarAvancosDoDossie, marcarRitual } from "@/lib/esteira/esteiraAcoes";
 import { addDays, localIso, mondayOf } from "@/lib/cycleWeek";
 import { avisosDoRitual, resumoDaRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
+import { tarefaVaga } from "../../../supabase/functions/ritual-writer/modulos/tarefa-concreta";
 import { corpoDoModelo, escolhaGuardada } from "./modeloDaCentral";
 import { acharTarefaParecida, type TarefaAberta } from "@/lib/tarefaParecida";
 // 23/10: o texto que sai para o cliente passa pelo acabamento (saudação do envio, https, painel).
@@ -325,10 +326,13 @@ export async function tarefasAbertasDoCliente(clientId: string): Promise<TarefaA
  * 26/10: antes de criar, procura tarefa aberta parecida do mesmo cliente
  * (título normalizado); achou, devolve "parecida" e não cria, a menos que a
  * pessoa peça para criar mesmo assim.
+ * 27/10: só passo concreto (com dono, quem tocou, e prazo); o vago devolve "vaga" e fica no resumo.
  */
 export async function criarTarefaDoRitual(input: {
   clientId: string; reportId: string; indice: number; tarefa: TarefaSugerida; userId: string; mesmoAssim?: boolean;
-}): Promise<"criada" | "ja_existia" | "parecida"> {
+}): Promise<"criada" | "ja_existia" | "parecida" | "vaga"> {
+  // 27/10: passo vago (acompanhar, revisar, publicar post...) não vira tarefa: fica no resumo do ritual.
+  if (tarefaVaga(input.tarefa.titulo)) return "vaga";
   const origem = `ritual:${input.reportId}:${input.indice}`;
   const projectId = await projetoDoCliente(input.clientId);
   const { data: existente } = await supabase.from("tasks").select("id")

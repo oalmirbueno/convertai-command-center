@@ -1265,7 +1265,7 @@ const createTaskTool: ToolDefinition = {
   name: 'aceleriq_create_task',
   title: 'Criar tarefa',
   description:
-    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, delivery_type, assigned_to, due_date, milestone_id, idempotency_key, origem_externa. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente. SEM DUPLICAR (2.19): a mesma origem_externa no cliente, ou o mesmo título (sem acento e caixa) numa tarefa aberta do projeto, devolve a existente com ja_existia=true, para qualquer credencial. Quem traz tarefa de outro sistema (Paperclip) manda origem_externa.',
+    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, delivery_type, assigned_to, due_date, milestone_id, idempotency_key, origem_externa. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente. SEM DUPLICAR (2.19): a mesma origem_externa no cliente, ou o mesmo título (sem acento e caixa) numa tarefa aberta do projeto, devolve a existente com ja_existia=true, para qualquer credencial. Quem traz tarefa de outro sistema (Paperclip) manda origem_externa. TORNEIRA (2.22): credencial de agente só cria tarefa com cliente, dono (assigned_to) e prazo (due_date); sem isso recusa. O que foi feito ou o que falta vai no aceleriq_operator_diary; decisão do dono, no aceleriq_operator_request_approval.',
   scopes: WRITE,
   annotations: WRITE_ANNOTATIONS,
   inputSchema: {
@@ -3844,7 +3844,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
   { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_checklist, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente, rituais de relacionamento e o Dia Prioritario de cada cliente (clientes do dia, semana, pendencias e registros).', pelo_mcp: 'aceleriq_get_client_context, aceleriq_dia_prioritario (leitura), aceleriq_dia_prioritario_registrar (acao)' },
-  { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado' },
+  { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado; lembrete de aprovação e cobrança aprovados pelo dono: aceleriq_mensagens_automaticas_fila, aceleriq_mensagens_automaticas_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
   { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
@@ -4355,6 +4355,59 @@ const avisoPublicacaoMarcarEnviadoTool: ToolDefinition = {
   },
 };
 
+// MCP 2.22 (27/10/2026): lembrete de aprovação e régua de cobrança (tabela própria mensagem_automatica).
+import { mensagensAutomaticasFila, mensagensAutomaticasMarcarEnviado } from '../mcp-server/modulos/mensagens-automaticas.ts';
+
+const mensagensAutomaticasFilaTool: ToolDefinition = {
+  name: 'aceleriq_mensagens_automaticas_fila',
+  title: 'Lembretes de aprovação e cobranças aprovados para enviar',
+  description:
+    'As mensagens que o painel preparou e o dono JÁ aprovou para o grupo do cliente no WhatsApp: lembrete de aprovação (peça esperando o cliente há mais de 48 h, no máximo 1 por cliente por dia) e cobrança (D+1, D+5 e D+10 após o vencimento). aprovados_para_enviar traz o texto exato e o grupo (destino.recipient); só vem com janela_aberta=true (dia útil, 9h às 18h em São Paulo). Antes de devolver, o painel tira o que parou (cliente aprovou ou pagou). Leia a cada hora útil; lista vazia não é erro. Só leitura.',
+  scopes: READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: { operator: { type: 'string', description: 'Slug do operador que lê (ex.: default).' } },
+    required: ['operator'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({ operator: z.string().min(2).max(40) }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await mensagensAutomaticasFila(parsed.data, ctx);
+  },
+};
+
+const mensagensAutomaticasMarcarEnviadoTool: ToolDefinition = {
+  name: 'aceleriq_mensagens_automaticas_marcar_enviado',
+  title: 'Registrar que o lembrete ou a cobrança foi enviado',
+  description:
+    'Depois de enviar no grupo do cliente o texto exato de uma mensagem de aprovados_para_enviar (aceleriq_mensagens_automaticas_fila), registra o envio com a evidência (grupo, data, hora e, se houver, id da mensagem). Só mensagem aprovada pelo dono aceita. Sem este registro o painel considera NÃO enviada. Não envia nada por si. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que enviou.' },
+      mensagem_id: { type: 'string', description: 'UUID da mensagem (aprovados_para_enviar na fila).' },
+      evidence: { type: 'string', description: 'Prova do envio: grupo, data, hora e, se houver, id da mensagem.' },
+      idempotency_key: { type: 'string', description: 'Chave estável deste envio (8 a 128 caracteres).' },
+    },
+    required: ['operator', 'mensagem_id', 'evidence', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      operator: z.string().min(2).max(40),
+      mensagem_id: UUID,
+      evidence: z.string().min(3).max(2000),
+      idempotency_key: z.string().min(8).max(128),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await mensagensAutomaticasMarcarEnviado(parsed.data, ctx);
+  },
+};
+
 /*
  * CRM da casa com acesso completo (v1.44.0).
  *
@@ -4754,6 +4807,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   avisoPublicacaoPrepararTool,
   avisoPublicacaoDecidirTool,
   avisoPublicacaoMarcarEnviadoTool,
+  // MCP 2.22: lembrete de aprovação e régua de cobrança (o Hermes envia o que o dono aprovou).
+  mensagensAutomaticasFilaTool,
+  mensagensAutomaticasMarcarEnviadoTool,
   // CRM da casa com acesso completo (v1.44.0)
   getOpportunityTool,
   createOpportunityTool,

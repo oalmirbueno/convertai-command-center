@@ -303,6 +303,7 @@ import {
 } from "./modulos/memoria-da-conta.ts";
 // 12/10/2026: alertas da Conta ao vivo e auditoria da conta (checklist do claude-ads adaptado à Meta).
 import { type Alerta, alertasDaConta } from "./modulos/alertas-da-conta.ts";
+import { boletimMinimo, type FatosDoBoletim, PRINCIPAL_DO_BOLETIM_MINIMO } from "./modulos/boletim-minimo.ts";
 import { type Controle, controlesDaConta, notaDaAuditoria } from "./modulos/auditoria-da-conta.ts";
 // Frente AD4 (28/09): "otimizar" = régua em código + Jev, troca pelo acervo com Confirmar.
 import {
@@ -11242,6 +11243,30 @@ const ACOES_LONGAS = new Set([
   "auditoria_rodar",
 ]);
 
+/**
+ * boletim_minimo_cron (só com x-cron-secret; 27/10/2026): se nenhum boletim de anúncios do dia foi gravado
+ * até 9h15, grava o boletim mínimo (modulos/boletim-minimo.ts: só exceções, regras fixas) pelo mesmo
+ * ads_boletim_registrar do MCP, que toca o sino uma vez. { simular: true } devolve sem gravar.
+ */
+async function boletimMinimoCron(servico: SupabaseClient, simular: boolean): Promise<Response> {
+  const { data, error } = await servico.rpc("ads_boletim_minimo_fatos");
+  if (error) return json({ error: "banco_indisponivel", mensagem: `Não li os dados dos anúncios: ${error.message}` }, 503);
+  const fatos = (data ?? {}) as FatosDoBoletim;
+  const b = boletimMinimo({ hoje: String(fatos.hoje ?? ""), boletins_hoje: fatos.boletins_hoje ?? [], campanhas: fatos.campanhas ?? [], contas: fatos.contas ?? [] }, new Date());
+  if (b.pular || simular) return json({ simulacao: simular, ...b });
+  const { data: gravado, error: erro } = await servico.rpc("ads_boletim_registrar", {
+    _periodo: b.periodo,
+    _resumo: b.resumo,
+    _alertas: b.alertas,
+    _por_cliente: b.por_cliente,
+    _texto_completo: b.texto_completo,
+    _operator_slug: "painel",
+    _principal: PRINCIPAL_DO_BOLETIM_MINIMO,
+  });
+  if (erro) return json({ error: "boletim_nao_gravado", mensagem: erro.message }, 503);
+  return json({ simulacao: false, gravado, excecoes: b.excecoes.length });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido" }, 405);
@@ -11255,7 +11280,9 @@ Deno.serve(async (req) => {
       try { doCron = await req.json(); } catch { /* corpo vazio */ }
       const acaoDoCron = String(doCron.acao ?? "");
       // 12/10/2026: o cron também roda a auditoria semanal (código, sem IA e sem custo).
-      if (acaoDoCron !== "rotina_cron" && acaoDoCron !== "auditoria_cron") return json({ error: "acao_desconhecida", mensagem: "O cron só roda a rotina de tráfego e a auditoria semanal." }, 400);
+      // 27/10/2026: boletim mínimo de anúncios às 9h15 BRT dos dias úteis, só se o agente não gravou (regras fixas, sem IA).
+      if (acaoDoCron === "boletim_minimo_cron") return await boletimMinimoCron(servico, doCron.simular === true);
+      if (acaoDoCron !== "rotina_cron" && acaoDoCron !== "auditoria_cron") return json({ error: "acao_desconhecida", mensagem: "O cron só roda a rotina de tráfego, a auditoria semanal e o boletim mínimo." }, 400);
       return respostaComFolego(async () => {
         try {
           return acaoDoCron === "auditoria_cron" ? await auditoriaCron(servico, inicioMs) : await rotinaCron(servico, inicioMs);

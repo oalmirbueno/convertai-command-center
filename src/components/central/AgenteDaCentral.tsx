@@ -153,6 +153,10 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
     setCriando(i);
     try {
       const r = await criarTarefaDoRitual({ clientId, reportId, indice: i, tarefa: tarefas[i], userId: user.id, mesmoAssim });
+      if (r === "vaga") {
+        toast.message("Esse passo não é uma entrega: fica no resumo, sem tarefa.");
+        return;
+      }
       if (r === "parecida") {
         toast.message("Já existe uma tarefa aberta parecida: abra a que existe.");
         void abertas.refetch();
@@ -178,7 +182,9 @@ function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
               {t.passo && <p className="text-[12px] leading-snug text-muted-foreground">{t.passo}</p>}
               <p className="text-[12px] text-muted-foreground">Prazo: {t.prazo_dias} dia(s){t.frente !== "geral" ? ` · ${t.frente === "social" ? "Conteúdo" : "Anúncios"}` : ""}</p>
             </div>
-            {criadas.includes(i) ? (
+            {t.no_resumo ? (
+              <span className="shrink-0 text-[12px] text-muted-foreground" data-no-resumo="" title={t.no_resumo}>Fica no resumo</span>
+            ) : criadas.includes(i) ? (
               <span className="inline-flex shrink-0 items-center text-[12px] text-success"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Criada</span>
             ) : parecidaDe(t) ? (
               <span className="flex shrink-0 items-center" data-ja-existe="">

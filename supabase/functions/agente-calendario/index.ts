@@ -231,6 +231,7 @@ import {
 import { ESQUEMA_DA_MIDIA_DA_PECA, GANCHO_NO_VIDEO_DA_PAUTA, LINHA_SEM_FOTO_REAL, tipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
 import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaMistura, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, semanasDoPeriodo, trocasParaMisturar, mixDoPerfil } from "./modulos/mistura-do-nicho.ts";
 import { classificar, decidirAtrasados, descricaoDaTarefa, escolherPautas, type FatosDoCliente, medir, ORIGEM_DA_TAREFA, type Pauta, precisaPreparar, sequenciaDeFormatos, somarDias as somarDiasDaVigia, sugestaoDoResumo, tituloDaTarefa, urgencia } from "./modulos/vigia-do-calendario.ts";
+import { escolherEspacos, type PecaSemData } from "./modulos/agenda-sozinha.ts";
 // 24/10: a escolha de formatos da preparação (Stories e os dois caminhos do vídeo) e a troca de peças.
 import { blocoDaEscolha, cadenciaComEscolha, caminhoDoNicho, caminhoDoVideo, caminhosDosVideos, descricaoDosStories, formatoDaOpcao, formatosNaEscolha, fraseDosStories, IDS_DAS_OPCOES, mixDaEscolha, normalizarEscolha, opcaoDoItem, opcaoDoTexto, ROTULO_DA_OPCAO, ROTULO_DO_CAMINHO, storiesDoPlano, tituloDosStories, type CaminhoDoVideo, type OpcaoDoMes, type StoryPlanejado } from "./modulos/escolha-do-mes.ts";
 import { entregaDaOpcao, escopoDaEsteira, formatosDasOpcoes, fraseDaTrocaFeita, OPCOES_POR_TROCA, passosDaTroca, pedidoDaTroca, perguntasDaTroca, protecaoDaPeca, recomendadaDaTroca, trabalhoLivre, type PecaDaEsteira, type SituacaoDaPeca } from "./modulos/troca-da-peca.ts";
@@ -9989,6 +9990,42 @@ async function separarProtegidasDoRefazer(servico: SupabaseClient, clientId: str
   return { livres, protegidas };
 }
 
+// ------------------------------------------ aprovou, agenda sozinho (27/10, chamada interna do agendador)
+
+/**
+ * agenda_sozinha_interno (agendador, a cada 15 min das 08h às 20h BRT). Peça aprovada sem data entra no
+ * próximo espaço do calendário (meta da semana, um post por dia, 9h às 20h; modulos/agenda-sozinha.ts) e o
+ * banco agenda pela transição oficial (public.agenda_sozinha_aplicar, que confere tudo de novo).
+ * { simular: true } devolve a lista sem gravar; { incluir_antigas: true } aceita peça aprovada há mais de 30 dias.
+ */
+async function agendaSozinhaInterno(servico: SupabaseClient, corpo: Record<string, unknown>): Promise<Response> {
+  const simular = corpo.simular === true;
+  const agora = new Date();
+  const { data, error } = await servico.rpc("agenda_sozinha_fatos");
+  if (error) throw new ErroHttp(503, "banco_indisponivel", `Não li as peças aprovadas sem data: ${error.message}`);
+  const pecas = (Array.isArray(data) ? data : []) as PecaSemData[];
+  const decisoes = escolherEspacos(pecas, agora, { incluirAntigas: corpo.incluir_antigas === true });
+  const resultados: Array<Record<string, unknown>> = [];
+  for (const d of decisoes) {
+    if (d.acao !== "agendar" || simular) { resultados.push({ ...d }); continue; }
+    const { data: r, error: erro } = await servico.rpc("agenda_sozinha_aplicar", { _trabalho_id: d.trabalho_id, _quando: d.quando });
+    const res = (r ?? {}) as Record<string, unknown>;
+    if (erro || res.ok !== true) {
+      registrarFalha("agente-calendario: agenda sozinha não agendou", erro ?? res, { trabalho_id: d.trabalho_id });
+      resultados.push({ ...d, acao: "pular", motivo: `o banco recusou: ${String(res.motivo ?? erro?.message ?? "sem resposta").slice(0, 160)}` });
+    } else {
+      resultados.push({ ...d, agendado: true });
+    }
+  }
+  return json({
+    simulacao: simular,
+    em: agora.toISOString(),
+    total: resultados.length,
+    agendados: resultados.filter((r) => r.agendado === true).length,
+    decisoes: resultados,
+  });
+}
+
 // ------------------------------------------ vigia do calendário (26/10, chamada interna do agendador)
 
 /**
@@ -10469,7 +10506,7 @@ Deno.serve(async (req) => {
     const acao = String(corpo.acao ?? corpo.action ?? "");
     // 02/10: refazer uma proposta no servidor. Só com a chave de serviço no Authorization e o x-cron-secret.
     // 17/10: a busca semanal de hype (agendador) usa a mesma porta.
-    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno" || acao === "vigia_do_calendario_interno" || acao === "campanha_reorganizar_interno") {
+    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno" || acao === "vigia_do_calendario_interno" || acao === "campanha_reorganizar_interno" || acao === "agenda_sozinha_interno") {
       const autorizado = autorizarChamadaInterna({
         authorization: req.headers.get("Authorization"),
         cronSecretDoPedido: req.headers.get("x-cron-secret"),
@@ -10482,6 +10519,8 @@ Deno.serve(async (req) => {
           if (acao === "hypes_da_semana_interno") return await hypesDaSemanaInterno(servico);
           // 26/10: a vigia do calendário (mede todos, publica o atrasado aprovado uma vez, prepara um cliente).
           if (acao === "vigia_do_calendario_interno") return await vigiaDoCalendarioInterno(servico, corpo);
+          // 27/10: peça aprovada sem data entra sozinha no próximo espaço do calendário.
+          if (acao === "agenda_sozinha_interno") return await agendaSozinhaInterno(servico, corpo);
           // 22/10/2026: reescrever uma campanha no tom comercial, assinada por um usuário da equipe (nunca aprova nem publica).
           if (acao === "campanha_reescrever_comercial_interno") return await campanhaReescreverComercialInterno(servico, corpo);
           if (acao === "campanha_reorganizar_interno") return await campanhaReorganizarInterno(servico, corpo);

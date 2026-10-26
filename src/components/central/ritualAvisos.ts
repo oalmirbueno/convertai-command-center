@@ -5,12 +5,16 @@
  * igual e guardarem no rascunho do mesmo jeito.
  */
 
+import { tarefaVaga } from "../../../supabase/functions/ritual-writer/modulos/tarefa-concreta";
+
 export interface TarefaSugerida {
   titulo: string;
   passo: string;
   frente: "social" | "trafego" | "geral";
   prazo_dias: number;
   promessa: string;
+  /** 27/10: passo vago (acompanhar, revisar, publicar post...): não vira tarefa, fica como linha no resumo. */
+  no_resumo?: string;
 }
 
 export interface ResumoDaRepeticao {
@@ -66,6 +70,11 @@ export function tarefasSugeridas(data: Resposta): TarefaSugerida[] {
       promessa: String(t.promessa ?? "").slice(0, 200),
     }))
     .filter((t) => t.titulo.length >= 4)
+    // 27/10: a mesma regra do ritual-writer, também para os rascunhos salvos antes dela.
+    .map((t) => {
+      const vaga = tarefaVaga(t.titulo);
+      return vaga ? { ...t, no_resumo: vaga.texto } : t;
+    })
     .slice(0, 5);
 }
 

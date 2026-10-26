@@ -21,6 +21,7 @@ import { angulosDasVersoes, formulasDeMolde, instrucaoDoAngulo } from "./modulos
 // 23/10 (dono: "https em todo link, bom dia/boa tarde pelo horário, início/meio/fechamento da semana, tudo no painel"):
 // regras fixas aplicadas por código depois da IA, em toda versão, antes da escolha.
 import { acabamentoDoRitual, momentoDaSemana, NOME_DO_MOMENTO, saudacaoPelaHora } from "./modulos/acabamento.ts";
+import { tarefaVaga } from "./modulos/tarefa-concreta.ts";
 // Frente SPP (revisão 30/09): o método da casa (prova) também no escritor dos rituais (agente rituais.escritor).
 import type { MetodoInjetado } from "../_shared/superpoderes-catalogo.ts";
 
@@ -101,7 +102,7 @@ ALERTAS INTERNOS (nunca vão para o cliente): liste em "alertas" o que você pre
 
 PRÓXIMO PASSO SEPARADO: além do texto, devolva em "next_steps" UMA frase objetiva (até 240 caracteres) com a próxima ação combinada e o que se espera dela, tirada da linha do próximo passo. Nunca vazio.
 
-TAREFAS SUGERIDAS PARA A EQUIPE (nunca vão para o cliente): em "tarefas_sugeridas" liste de 0 a 5 tarefas internas que a equipe precisa executar para CUMPRIR o que esta mensagem promete. Cada uma nasce de uma frase do texto (em "promessa", o trecho que ela cumpre) e de um fato; nada genérico ("postar nas redes", "acompanhar métricas"). Diga QUAL peça, QUAL campanha, QUAL decisão. "frente" é social, trafego ou geral; "prazo_dias" é em quantos dias precisa estar feito (1 a 14). Não repita uma tarefa que os fatos já mostram como aberta. Elas são sugestão: a equipe aprova antes de virar tarefa.
+TAREFAS SUGERIDAS PARA A EQUIPE (nunca vão para o cliente): em "tarefas_sugeridas" liste de 0 a 5 tarefas internas que a equipe precisa executar para CUMPRIR o que esta mensagem promete. Cada uma nasce de uma frase do texto (em "promessa", o trecho que ela cumpre) e de um fato; nada genérico ("postar nas redes", "acompanhar métricas"). Diga QUAL peça, QUAL campanha, QUAL decisão. Só ação concreta que começa com verbo de entrega (gravar, editar, ativar, pausar, enviar, criar, trocar); nunca "acompanhar", "revisar", "conferir", "comparar", "monitorar" (isso vai no texto do resumo) nem "publicar post" (a Agenda publica sozinha o que foi aprovado). "frente" é social, trafego ou geral; "prazo_dias" é em quantos dias precisa estar feito (1 a 14). Não repita uma tarefa que os fatos já mostram como aberta. Elas são sugestão: a equipe aprova antes de virar tarefa.
 
 QUANDO HOUVER "TEXTO ATUAL": a tarefa é APRIMORAR E COMPLEMENTAR, não recomeçar. O texto atual é a base: frase que está certa volta igual. Mantenha o que está certo e no tom, corrija o que os fatos contradizem, complete com os fatos que faltaram (números, vendas, frentes sem menção), separe o que estiver misturado entre conteúdo e tráfego, tire o que repete mensagens anteriores, e devolva o texto inteiro já pronto.
 
@@ -140,9 +141,11 @@ export interface TarefaSugerida {
   frente: "social" | "trafego" | "geral";
   prazo_dias: number;
   promessa: string;
+  /** 27/10: passo vago (acompanhar, revisar, publicar post...): não vira tarefa, fica como linha no resumo. */
+  no_resumo?: string;
 }
 
-/** Sugestões da IA em forma segura: no máximo 5, campos curtos, frente fechada. */
+/** Sugestões da IA em forma segura: no máximo 5, campos curtos, frente fechada; as vagas marcadas (no_resumo). */
 export function normalizarTarefas(raw: unknown): TarefaSugerida[] {
   if (!Array.isArray(raw)) return [];
   const vistas = new Set<string>();
@@ -163,6 +166,7 @@ export function normalizarTarefas(raw: unknown): TarefaSugerida[] {
       frente,
       prazo_dias: Number.isFinite(prazo) ? Math.min(14, Math.max(1, prazo)) : 4,
       promessa: String(r.promessa ?? "").replace(/\s+/g, " ").trim().slice(0, 200),
+      ...(tarefaVaga(titulo) ? { no_resumo: tarefaVaga(titulo)!.texto } : {}),
     });
     if (saida.length >= 5) break;
   }

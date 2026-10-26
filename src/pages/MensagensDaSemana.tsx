@@ -13,6 +13,7 @@ import { centralReviewError } from "@/lib/centralReview";
 import { NOME_DO_RITUAL, aprovarEEnviar, montarMensagens, prazoEmPalavras, pularMensagem, type MensagemDaSemana } from "@/lib/mensagensDaSemana";
 import { reescreverRitual } from "@/components/central/agenteCentralApi";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
+import MensagensAutomaticas from "@/components/central/MensagensAutomaticas";
 import {
   BotaoComIcone,
   CabecalhoDePagina,
@@ -300,6 +301,9 @@ export default function MensagensDaSemana() {
                 </Secao>
               );
             })}
+
+      {/* Cobranças (D+1, D+5, D+10) e o lembrete de aprovação: mesmo rito, o dono aprova e o Hermes envia. */}
+      <MensagensAutomaticas />
 
       <JanelaCentral
         aberta={!!aberta}

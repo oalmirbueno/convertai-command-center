@@ -621,7 +621,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
                 ? `Cada post sai no melhor horário do seu tipo, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
                 : `Horário fixo: ${p?.hora_publicacao || "09:00"}, ${regraDoDia.data?.fimDeSemana ? "todos os dias, sábado e domingo também" : "de segunda a sexta"}.`}{" "}
               {p?.agendar_ao_aprovar
-                ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar."
+                ? "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Aprovada sem data: entra sozinha no próximo dia livre do plano (um post por dia, entre 9h e 20h)."
                 : "Cada entrega entra na Agenda na hora. Com a data confirmada, publica depois que o cliente aprovar. Peças antigas: a equipe agenda pela Agenda."}
             </p>
             {regraDoDia.data && (
@@ -677,7 +677,7 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
           </label>
           <label className="flex items-center">
             <Switch checked={agendar} onCheckedChange={setAgendar} className="mr-2 shrink-0" />
-            <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar ({fimDeSemana ? "todos os dias" : "segunda a sexta"})</span>
+            <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar: sem data, vai para o próximo dia livre do plano, entre 9h e 20h ({fimDeSemana ? "todos os dias" : "segunda a sexta"})</span>
           </label>
           {blocoDeHorarios}
           <div className="flex justify-end">

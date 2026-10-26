@@ -299,6 +299,43 @@ async function tarefaJaExistente(input: CreateTaskInput, clientId: string, clien
   return igual ? { record: igual, por: 'titulo' } : null;
 }
 
+// ─── Torneira das tarefas (27/10/2026) ──────────────────────────
+// Diagnóstico de 26/10: agentes criaram 597 tarefas em 30 dias contra 2 entregas com prova; 762 abertas,
+// 538 sem dono. Tarefa de agente só nasce com cliente, dono e prazo; o resto vai para o diário ou para o
+// pedido ao dono. Credencial de agente = a que tem operador ligado em operator_key_bindings (a mesma
+// regra da autoria, mcp-server/modulos/autoria.ts); gente (OAuth do dono, sem operador) cria como antes.
+export const TAREFA_DE_AGENTE_RECUSADA = 'tarefa de agente precisa de cliente, dono e prazo; prefira diário/pedido ao dono';
+
+/** O que falta para um agente criar a tarefa (vazio = pode). */
+export function faltaNaTarefaDeAgente(a: { client_id?: string | null; assigned_to?: string | null; due_date?: string | null }): string[] {
+  const falta: string[] = [];
+  if (!a.client_id) falta.push('cliente (projeto de um cliente)');
+  if (!a.assigned_to) falta.push('dono (assigned_to)');
+  if (!a.due_date) falta.push('prazo (due_date)');
+  return falta;
+}
+
+/** 'key:<id>' ou 'oauth:<client>' (o OAuth leva o client no origin "oauth:<client>:<sub>"). */
+export function principalDaEscrita(ctx: Pick<WriteCtx, 'keyId' | 'origin'>): string {
+  const id = String(ctx.keyId ?? '');
+  if (id.startsWith('oauth:')) {
+    const m = /^oauth:([^:]+):/.exec(String(ctx.origin ?? ''));
+    return m && m[1] !== 'user' ? `oauth:${m[1]}` : id;
+  }
+  return `key:${id}`;
+}
+
+/** A credencial é de agente? Na dúvida (erro de leitura), trata como agente: a regra é a torneira. */
+export async function credencialDeAgente(ctx: Pick<WriteCtx, 'keyId' | 'origin'>): Promise<boolean> {
+  const { data, error } = await db().from('operator_key_bindings').select('operator_slug')
+    .eq('principal', principalDaEscrita(ctx)).limit(1);
+  if (error) {
+    // Tabela ainda não aplicada (42P01): o comportamento antigo segue.
+    return !/42P01|does not exist/.test(`${(error as { code?: string }).code ?? ''} ${error.message ?? ''}`);
+  }
+  return Array.isArray(data) && data.length > 0;
+}
+
 export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
   const projeto = await getWritableProject(input.project_id, ctx);
   const replay = await replayIdempotent(
@@ -327,6 +364,12 @@ export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
         : 'Já existe tarefa aberta com o mesmo título neste projeto: devolvida a existente, nada criado.',
       correlation_id: ctx.correlationId,
     };
+  }
+
+  // 27/10: agente só cria com cliente, dono e prazo (a existente acima continua sendo devolvida).
+  if (await credencialDeAgente(ctx)) {
+    const falta = faltaNaTarefaDeAgente({ client_id: projeto.client_id ? String(projeto.client_id) : null, assigned_to: input.assigned_to, due_date: input.due_date });
+    if (falta.length) throw new WriteError('validation', `${TAREFA_DE_AGENTE_RECUSADA} (falta: ${falta.join(', ')}). Para registrar o que fez ou o que precisa, use aceleriq_operator_diary; para pedir decisão ao dono, aceleriq_operator_request_approval.`);
   }
 
   // Validate milestone belongs to the project, if provided.
@@ -494,6 +537,21 @@ function isEditorialReplay(
   return task.project_id === projectId && task.source === source;
 }
 
+/**
+ * 27/10: pauta nova nasce com dono quando o cliente tem gente da equipe ligada (team_client_assignments,
+ * o primeiro ligado). Sem ninguém ligado, fica item do calendário como antes (a Agenda cuida dela; a faxina
+ * e o arquivamento semanal nunca mexem em pauta).
+ */
+async function donoPadraoDaPauta(clientId: string): Promise<string | null> {
+  try {
+    const { data } = await db().from('team_client_assignments').select('user_id').eq('client_id', clientId).order('created_at').limit(1);
+    const id = Array.isArray(data) ? (data[0] as { user_id?: string } | undefined)?.user_id : null;
+    return id ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createEditorialItem(input: CreateEditorialItemInput, ctx: WriteCtx) {
   if (!dataScopeAllowsClient(ctx.dataScope, input.client_id)) {
     throw new WriteError('forbidden', 'client_id is outside this MCP principal data scope');
@@ -579,7 +637,7 @@ export async function createEditorialItem(input: CreateEditorialItemInput, ctx: 
     priority: input.priority ?? 'medium',
     workstream: workstreamForEditorialDelivery(format),
     delivery_type: format,
-    assigned_to: input.assigned_to ?? null,
+    assigned_to: input.assigned_to ?? await donoPadraoDaPauta(input.client_id),
     due_date: input.due_date,
     source,
   };

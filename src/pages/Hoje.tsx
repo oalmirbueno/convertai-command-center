@@ -13,6 +13,7 @@ import {
   destinoDaCampanha, destinoDoFeito, destinoDoPedido, destinoDoRisco, normalizarResumo, resumoEstaVazio, rpcAusente,
   type ClienteEmRisco, type NivelDoDia, type ResumoDoDia, type TipoDoPedido,
 } from "@/lib/resumoDoDia";
+import { lerDecisoesDasMensagens } from "@/lib/mensagensAutomaticas";
 
 /*
  * Hoje (26/10/2026). Decisão do dono: "1 resumo por dia numa tela Hoje + 1
@@ -160,7 +161,10 @@ export default function Hoje() {
   const consulta = useResumoDoDia();
   const identidades = useIdentidadesDosClientes();
   const r = consulta.data?.resumo;
-  const pedidos = r?.precisaDeVoce ?? [];
+  // Cobranças para aprovar e o modelo do lembrete sem aprovação (27/10): só quando pedem decisão.
+  const decisoesDasMensagens = useQuery({ queryKey: ["mensagens-automaticas-decisoes"], refetchInterval: 5 * 60_000, queryFn: lerDecisoesDasMensagens });
+  const pedidosDasMensagens = normalizarResumo({ precisa_de_voce: decisoesDasMensagens.data ?? [] }).precisaDeVoce;
+  const pedidos = (r?.precisaDeVoce ?? []).concat(pedidosDasMensagens);
   const logoDe = (id: string | null) => (id ? identidades.data?.get(id)?.profile_picture_url ?? null : null);
   const irPara = (id: string) => () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -182,7 +186,7 @@ export default function Hoje() {
       {consulta.isLoading ? <Carregando linhas={4} rotulo="Lendo o resumo do dia" />
         : consulta.error ? <EstadoDeErro titulo="Não foi possível ler o resumo do dia." descricao={(consulta.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void consulta.refetch()}>Tentar de novo</button>} />
           : consulta.data?.ausente ? <EstadoVazio titulo="O resumo do dia ainda não chega a este painel." descricao="Falta ligar o resumo no servidor. Enquanto isso, a Execução mostra o que espera você." acao={<Link to="/execucao" className={botao.secundario}>Abrir a Execução</Link>} />
-            : !r || resumoEstaVazio(r) ? <EstadoVazio icone={<CheckCircle2 className="h-5 w-5" />} titulo="Nada para hoje." descricao="Nenhuma decisão pendente, nenhum cliente sem post e nada mudou nos anúncios." />
+            : !r || (resumoEstaVazio(r) && !pedidosDasMensagens.length) ? <EstadoVazio icone={<CheckCircle2 className="h-5 w-5" />} titulo="Nada para hoje." descricao="Nenhuma decisão pendente, nenhum cliente sem post e nada mudou nos anúncios." />
               : <>
                 <FaixaDeNumeros
                   rotulo="O dia em números"

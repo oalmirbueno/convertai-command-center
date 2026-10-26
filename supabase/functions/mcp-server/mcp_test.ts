@@ -299,6 +299,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_list_workspace_nodes',
     'aceleriq_mcp_saude',
     'aceleriq_membros',
+    'aceleriq_mensagens_automaticas_fila',
+    'aceleriq_mensagens_automaticas_marcar_enviado',
     'aceleriq_mes_campanhas',
     'aceleriq_mesa_ads_arte_gerar',
     'aceleriq_mesa_ads_briefing_salvar',

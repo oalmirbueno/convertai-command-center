@@ -110,12 +110,30 @@ export async function registrarAcaoDeAnuncio(input: z.infer<typeof registrarAcao
   };
 }
 
+/**
+ * 27/10: o único boletim que chegou em 26/10 (Hermes, 17h47) foi recusado por nivel "medio". O nível aceita
+ * os sinônimos comuns e grava sempre um dos três da página.
+ */
+export const NIVEL_DO_ALERTA: Record<string, 'info' | 'atencao' | 'critico'> = {
+  info: 'info', baixo: 'info', baixa: 'info', low: 'info', informativo: 'info', ok: 'info',
+  atencao: 'atencao', medio: 'atencao', media: 'atencao', medium: 'atencao', aviso: 'atencao', alerta: 'atencao', warning: 'atencao',
+  critico: 'critico', alto: 'critico', alta: 'critico', high: 'critico', grave: 'critico', urgente: 'critico', critical: 'critico',
+};
+const nivelDoAlerta = z.string().trim().transform((v, c) => {
+  const n = NIVEL_DO_ALERTA[v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()];
+  if (!n) {
+    c.addIssue({ code: z.ZodIssueCode.custom, message: `nivel "${v}" não existe: use info, atencao ou critico` });
+    return z.NEVER;
+  }
+  return n;
+});
+
 export const boletimSchema = z.object({
   periodo: z.string().trim().min(1).max(40),
   resumo: z.string().trim().min(1).max(2000),
   alertas: z.array(z.object({
     client_id: UUID.optional(),
-    nivel: z.enum(['info', 'atencao', 'critico']),
+    nivel: nivelDoAlerta,
     texto: z.string().trim().min(1).max(600),
   }).strict()).max(60).default([]),
   por_cliente: z.array(z.object({
@@ -193,7 +211,7 @@ const boletimTool: ToolDefinition = {
     properties: {
       periodo: { type: 'string', description: '"09h", "17h30" ou outro rótulo curto.' },
       resumo: { type: 'string', description: 'O que o dono precisa saber, em 1 a 3 frases.' },
-      alertas: { type: 'array', maxItems: 60, items: { type: 'object', properties: { client_id: { type: 'string', format: 'uuid' }, nivel: { type: 'string', enum: ['info', 'atencao', 'critico'] }, texto: { type: 'string' } }, required: ['nivel', 'texto'], additionalProperties: false } },
+      alertas: { type: 'array', maxItems: 60, items: { type: 'object', properties: { client_id: { type: 'string', format: 'uuid' }, nivel: { type: 'string', enum: ['info', 'atencao', 'critico'], description: 'info, atencao ou critico (baixo, medio e alto também são aceitos e convertidos).' }, texto: { type: 'string' } }, required: ['nivel', 'texto'], additionalProperties: false } },
       por_cliente: { type: 'array', maxItems: 80, items: { type: 'object', properties: { client_id: { type: 'string', format: 'uuid' }, gasto: { type: 'number', description: 'Gasto em reais (opcional).' }, resultado: { type: ['number', 'string'], description: 'Resultados (número de conversões) ou frase curta (opcional).' }, observacao: { type: 'string' } }, required: ['client_id'], additionalProperties: false } },
       texto_completo: { type: 'string', description: 'O boletim inteiro (até 40 mil caracteres).' },
       operator: { type: 'string', description: 'Slug do agente (da sua credencial) que escreveu.' },
