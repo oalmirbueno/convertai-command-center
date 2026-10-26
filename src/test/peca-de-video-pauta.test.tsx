@@ -23,6 +23,8 @@ const mock = vi.hoisted(() => ({
   handoff: vi.fn(),
   revisao: vi.fn(),
   carregarPost: vi.fn(),
+  aprovar: vi.fn(),
+  entrega: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => {
@@ -51,7 +53,8 @@ vi.mock("@/components/mesa-videos/videosApi", async (original) => {
   };
 });
 vi.mock("@/lib/workspaceFileHandoff", () => ({ handoffWorkspaceFileToFiles: (...a: unknown[]) => mock.handoff(...a) }));
-vi.mock("@/lib/fileApprovalActions", () => ({ requestFileAgencyReview: (...a: unknown[]) => mock.revisao(...a) }));
+vi.mock("@/lib/fileApprovalActions", () => ({ NOTA_DO_AVAL: "aval do cliente ao admin", requestFileAgencyReview: (...a: unknown[]) => mock.revisao(...a), aprovarPeloCliente: (...a: unknown[]) => mock.aprovar(...a) }));
+vi.mock("@/lib/editorialEntregaAprovada", () => ({ entregaDaArteAprovada: (...a: unknown[]) => mock.entrega(...a) }));
 vi.mock("@/hooks/useEditorialCalendar", () => ({ loadEditorialPostForMutation: (...a: unknown[]) => mock.carregarPost(...a) }));
 vi.mock("@/components/mesa/Seletores", async (original) => {
   const real = (await original()) as Record<string, unknown>;
@@ -245,7 +248,7 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
     const corrido = document.querySelector("[data-texto-corrido]") as HTMLElement;
     expect(corrido.textContent).toBe("Se eu precisasse dobrar as vendas de uma loja, eu não faria isso.\n\nEu começaria pelo cliente que já comprou.");
     expect(screen.getByRole("button", { name: "Copiar o texto" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Preparar para publicar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Entregar/ })).toBeNull();
   });
 
   it("subir o vídeo gravado: vai para o Workspace do cliente, liga na peça e fica Pronto com o player", async () => {
@@ -268,7 +271,7 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
     const player = await screen.findByLabelText("gravacao.mp4");
     expect(player.tagName).toBe("VIDEO");
     expect(screen.getByRole("button", { name: "Ver grande" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Preparar para publicar/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Entregar/ })).toBeTruthy();
   });
 
   it("preparar para publicar: legenda da casa pelo roteiro, post de Reels na Agenda na data da peça, aguardando aprovação; nunca publica; Desfazer arquiva", async () => {
@@ -284,7 +287,7 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
     const item = pauta({ video_pronto: { bucket: "workspace", caminho: `${CLIENTE}/videos/gravacao.mp4`, nome: "gravacao.mp4", em: "2026-10-24T10:00:00Z" } });
     montar(h(PecaDeVideoDaPauta, { item, geracoes: [], aoGerar: vi.fn(), aoAbrirRoteiro: vi.fn() }));
     expect(screen.getByText("Pronto")).toBeTruthy();
-    const preparar = screen.getByRole("button", { name: /Preparar para publicar/ });
+    const preparar = screen.getByRole("button", { name: /^Entregar/ });
     await waitFor(() => expect(preparar).not.toBeDisabled());
     // Custo antes: o botão mostra a estimativa (diretor + Jev) e pede o segundo clique.
     expect(preparar.textContent).toMatch(/~US\$/);
@@ -309,7 +312,87 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
     expect(await screen.findByText(/Agendado para 10\/11.*aguardando aprovação/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Desfazer/ }));
     await waitFor(() => expect(rpcs("archive_editorial_post")).toEqual([{ p_post_id: "post-1", p_expected_version: 3 }]));
-    expect(await screen.findByRole("button", { name: /Preparar para publicar/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /^Entregar/ })).toBeTruthy();
+  });
+});
+
+// ------------------------------------------------------------------ as três opções do carrossel (26/10)
+
+describe("entregar o vídeo como o carrossel: pronto para agendar, enviar para aprovação ou só Arquivos", () => {
+  const POST = "post-1";
+  const bundle = (pub: Record<string, unknown> | null, extra: Record<string, unknown> = {}) => ({
+    post: { id: POST, client_id: CLIENTE, project_id: "77777777-7777-4777-8777-777777777777", primary_file_id: "file-1", title: "t", content_type: "reel", objective: null, default_caption: "legenda aprovada", production_status: "ready", version: 4, archived_at: null, created_at: "2026-10-24T10:00:00Z" },
+    internal: { idempotency_key: "k", task_id: TAREFA, responsible_id: null, internal_notes: null, revision_of_post_id: null, approval_fingerprint: "fp", ...extra },
+    publications: pub ? [{ publication: { id: "pub-1", status: "planned", version: 2, external_account_id: "conta-ig", file_id: null, caption: "c", first_comment: null, alt_text: null, scheduled_at: "2026-10-25T21:00:00.000Z", scheduled_timezone: "America/Sao_Paulo", ...pub }, internal: { idempotency_key: "pk" } }] : [],
+  });
+
+  const preparar = () => {
+    mock.tabelas.roteiros = [linha()];
+    mock.tabelas.workspace_nodes = [{ id: "no-1", client_id: CLIENTE, kind: "file", name: "gravacao.mp4", mime: "video/mp4", size_bytes: 10, storage_path: `${CLIENTE}/videos/gravacao.mp4`, sent_for_approval_file_id: null }];
+    mock.tabelas.editorial_post_internal = [];
+    mock.tabelas.mesa_cliente_config = [{ hora_publicacao: "19:00:00" }];
+    mock.tabelas.project_external_accounts = [{ external_account_id: "conta-ig" }];
+    mock.tabelas.external_accounts = [{ id: "conta-ig", platform: "instagram", status: "active" }];
+    mock.tabelas.external_account_connections = [{ connection_status: "connected", automation_enabled: true }];
+    mock.handoff.mockResolvedValue({ fileId: "file-1", created: true });
+    mock.revisao.mockResolvedValue({ ok: true });
+    mock.aprovar.mockResolvedValue({ file_id: "file-1", estado: "aprovado" });
+    mock.entrega.mockResolvedValue({ delivery_mode: "automatic", asset_file_ids: ["file-1"] });
+    respostas.legenda_do_video = { task_id: TAREFA, com_roteiro: true, legenda: "Legenda.", hashtags: [], custo_usd: 0.03 };
+    return pauta({ video_pronto: { bucket: "workspace", caminho: `${CLIENTE}/videos/gravacao.mp4`, nome: "gravacao.mp4", em: "2026-10-24T10:00:00Z" } });
+  };
+
+  it("o seletor tem as três opções e lembra a escolha do Estúdio; só Arquivos não cria post nem pede aprovação", async () => {
+    const item = preparar();
+    montar(h(PecaDeVideoDaPauta, { item, geracoes: [], aoGerar: vi.fn(), aoAbrirRoteiro: vi.fn() }));
+    const seletor = screen.getByLabelText("Como entregar") as HTMLSelectElement;
+    expect(Array.from(seletor.options).map((o) => o.value)).toEqual(["pronto", "aprovacao", "arquivos"]);
+    fireEvent.change(seletor, { target: { value: "arquivos" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Entregar/ }));
+    expect(await screen.findByText("Em Arquivos, sem post na Agenda.")).toBeTruthy();
+    expect(mock.handoff).toHaveBeenCalledTimes(1);
+    expect(rpcs("save_editorial_post")).toHaveLength(0);
+    expect(mock.revisao).not.toHaveBeenCalled();
+    expect(chamadas("estudio-arte", "legenda_do_video")).toHaveLength(0);
+  });
+
+  it("pronto para agendar: o mesmo post, aprovado em nome do cliente e agendado na data da peça pelo caminho do Programar", async () => {
+    const item = preparar();
+    mock.carregarPost.mockResolvedValue(bundle({ scheduled_at: "2030-11-10T22:00:00.000Z" }));
+    montar(h(PecaDeVideoDaPauta, { item, geracoes: [], aoGerar: vi.fn(), aoAbrirRoteiro: vi.fn() }));
+    fireEvent.change(screen.getByLabelText("Como entregar"), { target: { value: "pronto" } });
+    const entregar = screen.getByRole("button", { name: /^Entregar/ });
+    await waitFor(() => expect(entregar).not.toBeDisabled());
+    await confirmarCusto(entregar, "estudio-arte", "legenda_do_video");
+    await waitFor(() => expect(rpcs("save_editorial_post")).toHaveLength(2));
+    expect(mock.aprovar).toHaveBeenCalledWith("file-1", "aval do cliente ao admin");
+    expect(mock.revisao).not.toHaveBeenCalled();
+    // O segundo save é o do Programar: mesmo post, a publicação com a entrega congelada e a data da peça.
+    const agendar = rpcs("save_editorial_post")[1];
+    expect(agendar.p_payload.id).toBe(POST);
+    expect(agendar.p_payload.publications).toEqual([expect.objectContaining({ id: "pub-1", delivery_mode: "automatic", asset_file_ids: ["file-1"], scheduled_at: "2030-11-10T22:00:00.000Z" })]);
+    expect(await screen.findByText(/Aprovado e agendado para 10\/11/)).toBeTruthy();
+  });
+
+  it("post já aprovado e preso com data que passou: não regrava o texto e o Agendar da peça remarca no mesmo card", async () => {
+    const item = preparar();
+    // Publicação que falhou (passou da hora): a transição oficial move a data, sem criar outro card.
+    mock.carregarPost.mockResolvedValue(bundle({ status: "failed" }));
+    const arte = { post_id: POST, titulo: "t", legenda: null, status: "approved", do_estudio: false, capa: null };
+    montar(h(PecaDeVideoDaPauta, { item, arte, geracoes: [], aoGerar: vi.fn(), aoAbrirRoteiro: vi.fn() }));
+    fireEvent.click(screen.getByRole("button", { name: "Agendar ou reagendar" }));
+    fireEvent.change(screen.getByLabelText("Dia e horário da publicação"), { target: { value: "2030-12-01T19:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Agendar" }));
+    await waitFor(() => expect(rpcs("transition_editorial_publication")).toHaveLength(1));
+    expect(rpcs("transition_editorial_publication")[0]).toEqual(expect.objectContaining({ p_publication_id: "pub-1", p_action: "schedule", p_expected_version: 2, p_scheduled_at: "2030-12-01T22:00:00.000Z" }));
+    expect(rpcs("save_editorial_post")).toHaveLength(0);
+  });
+
+  it("design não vê o Pronto para agendar", () => {
+    // O papel vem do useAuth (admin no teste): a regra está no código.
+    const fonte = readFileSync(resolve(process.cwd(), "src/components/mesa/PecaDeVideoDaPauta.tsx"), "utf8");
+    expect(fonte).toContain('const podeLiberar = ["admin", "manager"].indexOf(profile?.role || "") >= 0 && !isImpersonating;');
+    expect(fonte).toContain("opcoesDaEntrega(podeLiberar)");
   });
 });
 

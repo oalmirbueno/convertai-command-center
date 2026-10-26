@@ -2,8 +2,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { chamarMesaVideos, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { handoffWorkspaceFileToFiles, type WorkspaceFileForHandoff } from "@/lib/workspaceFileHandoff";
-import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
+import { aprovarPeloCliente, NOTA_DO_AVAL, requestFileAgencyReview } from "@/lib/fileApprovalActions";
 import { loadEditorialPostForMutation } from "@/hooks/useEditorialCalendar";
+import { entregaDaArteAprovada } from "@/lib/editorialEntregaAprovada";
+import type { ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
 import { EDITORIAL_DEFAULT_TIME_ZONE, zonedDateTimeLocalToIso } from "@/lib/editorialDate";
 import { fonteDoArquivo, type ArteNaAgenda, type ItemDoMes } from "./useItensDoMes";
 import type { VideoEscolhido } from "./VideoProntoDaPeca";
@@ -179,7 +181,10 @@ async function postDaTarefa(clientId: string, taskId: string) {
 }
 
 export interface ResultadoDoPreparo {
-  post_id: string;
+  /** Como foi entregue (as três opções do carrossel). */
+  modo: ModoDeEntrega;
+  /** null em "Só Arquivos" (sem post na Agenda). */
+  post_id: string | null;
   versao: number;
   /** O preparo criou o post (o Desfazer arquiva); false: atualizou o que já existia. */
   criado: boolean;
@@ -189,11 +194,21 @@ export interface ResultadoDoPreparo {
   sem_conta: boolean;
   revisao_pedida: boolean;
   legenda: string;
+  /** pronto: aprovado em nome do cliente, mas falta a data (ou a conta) para agendar. */
+  precisa_data?: boolean;
+  /** pronto: a aprovação ou o agendamento não fechou (o post ficou na Agenda). */
+  aviso?: string | null;
 }
 
 /**
- * Workspace -> Arquivos -> post de Reels na Agenda com a legenda e a data da peça, publicação planejada (o
- * banco agenda quando a aprovação chegar) e o pedido de revisão da agência. Nunca publica.
+ * 26/10/2026 (dono: "tem que ter o mesmo fluxo do carrossel, pronto para agendar, mandar para aprovação ou só
+ * arquivos ... e não recriar outro"). As três opções do Estúdio, no vídeo:
+ * - aprovacao: Workspace -> Arquivos -> post de Reels na Agenda com a legenda e a data da peça, publicação
+ *   planejada (o banco agenda quando a aprovação chegar) e o pedido de revisão da agência.
+ * - pronto (admin e gestor): o mesmo post, aprovado em nome do cliente (aprovar_pelo_cliente) e agendado na data
+ *   da peça pelo caminho do "Programar" da Agenda. Sem data à frente, fica aprovado e a peça pede a data.
+ * - arquivos: só leva o vídeo para Arquivos (sem post, sem aprovação, sem legenda).
+ * O post vivo da tarefa é sempre reaproveitado. Nunca publica na hora: o motor publica no horário.
  */
 export async function prepararParaPublicar(p: {
   clientId: string;
@@ -201,14 +216,19 @@ export async function prepararParaPublicar(p: {
   item: Pick<ItemDoMes, "id" | "title" | "due_date" | "project_id" | "delivery_type">;
   video: VideoDaPauta;
   legenda: string;
+  modo?: ModoDeEntrega;
 }): Promise<ResultadoDoPreparo> {
   const { clientId, userId, item, video } = p;
+  const modo: ModoDeEntrega = p.modo || "aprovacao";
   let no: WorkspaceFileForHandoff;
   if (video.bucket === "workspace") no = await noPeloCaminho(clientId, video.caminho);
   else if (video.arquivo_id) no = await arquivoParaOWorkspace(clientId, video.arquivo_id);
   else if (video.fonte === "agenda") throw new Error("Este vídeo já está na Agenda. Para trocar, suba o vídeo novo na peça.");
   else throw new Error("O vídeo não está no acervo nem no Workspace. Suba de novo na peça.");
   const arquivo = await handoffWorkspaceFileToFiles({ node: no, clientId, userId, fileName: item.title, folder: "materiais", fileType: "creative", projectId: item.project_id });
+  if (modo === "arquivos") {
+    return { modo, post_id: null, versao: 0, criado: false, file_id: arquivo.fileId, agendado_para: null, sem_conta: false, revisao_pedida: false, legenda: "" };
+  }
   const [atual, hora, conta] = await Promise.all([postDaTarefa(clientId, item.id), horaDoCliente(clientId), contaDoInstagram(clientId, item.project_id)]);
   const quando = horarioDaPeca(item.due_date, hora, hojeLocal());
   // Post da tarefa com outro arquivo vira revisão (nunca sobrescreve um material já aprovado).
@@ -244,31 +264,61 @@ export async function prepararParaPublicar(p: {
       scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
     });
   }
-  const { data, error } = await (supabase as any).rpc("save_editorial_post", {
-    p_payload: {
-      id: mesmo ? mesmo.post.id : null,
-      idempotency_key: (mesmo && mesmo.internal && mesmo.internal.idempotency_key) || `mesa-video:${item.id}:${arquivo.fileId}`,
-      mutation_id: crypto.randomUUID(),
-      client_id: clientId,
-      project_id: item.project_id,
-      primary_file_id: arquivo.fileId,
-      title: item.title,
-      content_type: mesmo ? mesmo.post.content_type : tipo,
-      objective: mesmo ? mesmo.post.objective : null,
-      default_caption: p.legenda,
-      // 26/10/2026: o vídeo final já é o material pronto (a aprovação decide a publicação). Nascer como
-      // "draft" travava o Programar do post aprovado ("approved editorial copy is immutable").
-      production_status: mesmo && mesmo.post.production_status !== "draft" ? mesmo.post.production_status : "ready",
-      task_id: item.id,
-      responsible_id: mesmo && mesmo.internal ? mesmo.internal.responsible_id : null,
-      internal_notes: mesmo && mesmo.internal ? mesmo.internal.internal_notes : null,
-      revision_of_post_id: revisar && atual ? atual.post.id : mesmo && mesmo.internal ? mesmo.internal.revision_of_post_id : null,
-      publications: publicacoes,
-    },
-    p_expected_version: mesmo ? mesmo.post.version : null,
-  });
-  if (error || !data) throw new Error((error && error.message) || "Não foi possível criar o post na Agenda.");
-  const salvo = data as { post_id: string; version: number };
+  // Já aprovado: o texto aprovado não muda (o banco recusa "approved editorial copy is immutable"); só agenda.
+  const jaAprovado = !!mesmo && !!mesmo.internal && !!mesmo.internal.approval_fingerprint;
+  let salvo: { post_id: string; version: number };
+  if (jaAprovado && mesmo) {
+    salvo = { post_id: mesmo.post.id, version: mesmo.post.version };
+  } else {
+    const { data, error } = await (supabase as any).rpc("save_editorial_post", {
+      p_payload: {
+        id: mesmo ? mesmo.post.id : null,
+        idempotency_key: (mesmo && mesmo.internal && mesmo.internal.idempotency_key) || `mesa-video:${item.id}:${arquivo.fileId}`,
+        mutation_id: crypto.randomUUID(),
+        client_id: clientId,
+        project_id: item.project_id,
+        primary_file_id: arquivo.fileId,
+        title: item.title,
+        content_type: mesmo ? mesmo.post.content_type : tipo,
+        objective: mesmo ? mesmo.post.objective : null,
+        default_caption: p.legenda,
+        // 26/10/2026: o vídeo final já é o material pronto (a aprovação decide a publicação). Nascer como
+        // "draft" travava o Programar do post aprovado ("approved editorial copy is immutable").
+        production_status: mesmo && mesmo.post.production_status !== "draft" ? mesmo.post.production_status : "ready",
+        task_id: item.id,
+        responsible_id: mesmo && mesmo.internal ? mesmo.internal.responsible_id : null,
+        internal_notes: mesmo && mesmo.internal ? mesmo.internal.internal_notes : null,
+        revision_of_post_id: revisar && atual ? atual.post.id : mesmo && mesmo.internal ? mesmo.internal.revision_of_post_id : null,
+        publications: publicacoes,
+      },
+      p_expected_version: mesmo ? mesmo.post.version : null,
+    });
+    if (error || !data) throw new Error((error && error.message) || "Não foi possível criar o post na Agenda.");
+    salvo = data as { post_id: string; version: number };
+  }
+  const viva = vivas.length ? vivas[0].publication : null;
+  const agendada = !jaAprovado && publicacoes.length ? (publicacoes[publicacoes.length - 1].scheduled_at as string | null) : viva ? viva.scheduled_at : quando;
+  const base = { modo, post_id: salvo.post_id, versao: salvo.version, criado: !mesmo, file_id: arquivo.fileId, agendado_para: agendada || null, sem_conta: !conta && !vivas.length, legenda: jaAprovado && mesmo ? mesmo.post.default_caption || "" : p.legenda };
+  if (modo === "pronto" || jaAprovado) {
+    if (!jaAprovado) {
+      try {
+        await aprovarPeloCliente(arquivo.fileId, NOTA_DO_AVAL);
+      } catch (e) {
+        return { ...base, revisao_pedida: false, aviso: `Ficou na Agenda, mas a aprovação pelo cliente não fechou: ${e instanceof Error ? e.message : String(e)}` };
+      }
+    }
+    const futuro = !!agendada && new Date(agendada).getTime() > Date.now() + 2 * 60 * 1000;
+    // Já agendada à frente: nada a fazer.
+    if (viva && viva.status === "scheduled" && futuro) return { ...base, modo: "pronto", revisao_pedida: false };
+    // Aprovado: agenda pelo caminho do "Programar". Sem data à frente ou sem conta, a peça pede a data.
+    if (!futuro || base.sem_conta) return { ...base, modo: "pronto", agendado_para: null, revisao_pedida: false, precisa_data: true };
+    try {
+      const r = await agendarVideoNaAgenda({ clientId, postId: salvo.post_id, quando: agendada as string });
+      return { ...base, modo: "pronto", versao: r.versao, revisao_pedida: false };
+    } catch (e) {
+      return { ...base, modo: "pronto", agendado_para: null, revisao_pedida: false, precisa_data: true, aviso: `Aprovado, mas a Agenda não agendou: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
   let revisao = false;
   try {
     await requestFileAgencyReview(arquivo.fileId);
@@ -276,22 +326,114 @@ export async function prepararParaPublicar(p: {
   } catch {
     // Já em revisão ou aprovado: segue como está (a aprovação continua sendo a do fluxo de sempre).
   }
-  const agendada = publicacoes.length ? (publicacoes[publicacoes.length - 1].scheduled_at as string | null) : vivas.length ? vivas[0].publication.scheduled_at : null;
-  return { post_id: salvo.post_id, versao: salvo.version, criado: !mesmo, file_id: arquivo.fileId, agendado_para: agendada || null, sem_conta: !conta && !vivas.length, revisao_pedida: revisao, legenda: p.legenda };
+  return { ...base, revisao_pedida: revisao };
+}
+
+/**
+ * Agendar ou reagendar o post do vídeo (26/10/2026, dono: "não dá pra reprogramar, está preso ... deixe mais
+ * simples se quiser agendar ou reagendar se caso der erros"). O mesmo caminho do "Programar" da Agenda, no mesmo
+ * card (nunca cria outro):
+ * - publicação agendada ou que falhou: a transição oficial move a data (vale para horário que já passou);
+ * - planejada ou nenhuma: salva o plano com a conta e a data; com o vídeo aprovado vai congelado e agendado na
+ *   hora, sem aprovação fica planejado e o banco agenda quando aprovar.
+ */
+export async function agendarVideoNaAgenda(p: { clientId: string; postId: string; quando: string }): Promise<{ versao: number; aprovado: boolean }> {
+  const { clientId, postId, quando } = p;
+  if (!quando || !(new Date(quando).getTime() > Date.now() + 60 * 1000)) throw new Error("Escolha um dia e horário à frente.");
+  const fresh = await loadEditorialPostForMutation(postId, clientId);
+  const ativa = fresh.publications.find(({ publication }) => ["planned", "scheduled", "failed"].indexOf(publication.status) >= 0);
+  const db = supabase as any;
+  if (ativa && ativa.publication.status !== "planned") {
+    const { error } = await db.rpc("transition_editorial_publication", {
+      p_publication_id: ativa.publication.id,
+      p_action: "schedule",
+      p_expected_version: ativa.publication.version,
+      p_scheduled_at: quando,
+      p_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+      p_permalink: null,
+      p_external_post_id: null,
+      p_failure_code: null,
+      p_failure_reason: null,
+      p_published_at: null,
+    });
+    if (error) throw new Error(error.message || "A Agenda não aceitou a nova data.");
+    return { versao: fresh.post.version, aprovado: true };
+  }
+  if (!ativa && fresh.publications.some(({ publication }) => publication.status === "published")) throw new Error("Este vídeo já foi publicado.");
+  const conta = (ativa && ativa.publication.external_account_id) || (fresh.post.project_id ? await contaDoInstagram(clientId, fresh.post.project_id) : null);
+  if (!conta) throw new Error("O projeto não tem conta do Instagram ligada. Ligue a conta pelo card da Agenda.");
+  const { data: conexao } = await db.from("external_account_connections").select("connection_status, automation_enabled").eq("external_account_id", conta).maybeSingle();
+  const entrega = await entregaDaArteAprovada(fresh, conta, [{ id: conta, connection_status: conexao ? conexao.connection_status : null, automation_enabled: conexao ? conexao.automation_enabled : null }]);
+  const publicacoes: Record<string, unknown>[] = fresh.publications
+    .filter(({ publication }) => publication.status === "planned")
+    .map(({ publication, internal }) => {
+      const alvo = !!ativa && ativa.publication.id === publication.id;
+      return {
+        ...(alvo && entrega ? entrega : {}),
+        id: publication.id,
+        idempotency_key: (internal && internal.idempotency_key) || crypto.randomUUID(),
+        external_account_id: alvo ? conta : publication.external_account_id,
+        file_id: publication.file_id,
+        caption: publication.caption,
+        first_comment: publication.first_comment,
+        alt_text: publication.alt_text,
+        scheduled_at: alvo ? quando : publication.scheduled_at,
+        scheduled_timezone: alvo ? EDITORIAL_DEFAULT_TIME_ZONE : publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
+      };
+    });
+  if (!ativa) {
+    publicacoes.push({
+      ...(entrega || { delivery_mode: "manual", asset_file_ids: [] }),
+      id: null,
+      idempotency_key: crypto.randomUUID(),
+      external_account_id: conta,
+      file_id: null,
+      caption: fresh.post.default_caption,
+      first_comment: null,
+      alt_text: null,
+      scheduled_at: quando,
+      scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+    });
+  }
+  const { data, error } = await db.rpc("save_editorial_post", {
+    p_payload: {
+      id: fresh.post.id,
+      idempotency_key: (fresh.internal && fresh.internal.idempotency_key) || crypto.randomUUID(),
+      mutation_id: crypto.randomUUID(),
+      client_id: fresh.post.client_id,
+      project_id: fresh.post.project_id,
+      primary_file_id: fresh.post.primary_file_id,
+      title: fresh.post.title,
+      content_type: fresh.post.content_type,
+      objective: fresh.post.objective,
+      default_caption: fresh.post.default_caption,
+      production_status: fresh.post.production_status,
+      task_id: (fresh.internal && fresh.internal.task_id) || null,
+      responsible_id: (fresh.internal && fresh.internal.responsible_id) || null,
+      internal_notes: (fresh.internal && fresh.internal.internal_notes) || null,
+      revision_of_post_id: fresh.internal ? fresh.internal.revision_of_post_id ?? null : null,
+      publications: publicacoes,
+    },
+    p_expected_version: fresh.post.version,
+  });
+  if (error || !data) throw new Error((error && error.message) || "A Agenda não aceitou a data.");
+  return { versao: (data as { version: number }).version, aprovado: !!entrega };
 }
 
 /** Desfazer o preparo: arquiva o post que ele criou (o vídeo continua no Workspace e em Arquivos). */
 export async function desfazerPreparo(r: Pick<ResultadoDoPreparo, "post_id" | "versao" | "criado">): Promise<void> {
-  if (!r.criado) throw new Error("O post já existia antes: mude pela Agenda.");
+  if (!r.criado || !r.post_id) throw new Error("O post já existia antes: mude pela Agenda.");
   const { error } = await (supabase as any).rpc("archive_editorial_post", { p_post_id: r.post_id, p_expected_version: r.versao });
   if (error) throw new Error(error.message || "Não foi possível desfazer.");
 }
 
 /** Uma frase do estado depois do preparo. */
-export function textoDoPreparo(r: Pick<ResultadoDoPreparo, "agendado_para" | "sem_conta">): string {
+export function textoDoPreparo(r: Pick<ResultadoDoPreparo, "agendado_para" | "sem_conta"> & Partial<Pick<ResultadoDoPreparo, "modo" | "aviso" | "precisa_data">>): string {
+  if (r.modo === "arquivos") return "Em Arquivos, sem post na Agenda.";
+  if (r.aviso) return r.aviso;
   if (r.sem_conta) return "Na Agenda, sem conta do Instagram no projeto: ligue a conta pelo card para agendar.";
-  if (!r.agendado_para) return "Na Agenda, sem data (o dia da peça já passou): escolha o horário pelo card.";
+  if (!r.agendado_para) return r.modo === "pronto" ? "Aprovado. Escolha o dia e o horário para agendar." : "Na Agenda, sem data: escolha o dia e o horário.";
   const d = new Date(r.agendado_para);
   const quando = d.toLocaleString("pt-BR", { timeZone: EDITORIAL_DEFAULT_TIME_ZONE, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  return `Agendado para ${quando}, aguardando aprovação.`;
+  return r.modo === "pronto" ? `Aprovado e agendado para ${quando}.` : `Agendado para ${quando}, aguardando aprovação.`;
 }

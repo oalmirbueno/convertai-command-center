@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, CheckCircle2, CircleDashed, Copy, Film, Loader2, ScrollText, Send, Sparkles, Undo2, Video, X } from "lucide-react";
+import { AlignLeft, CalendarClock, CheckCircle2, CircleDashed, Copy, Film, FolderCheck, Loader2, ScrollText, Send, Sparkles, TriangleAlert, Undo2, Video, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { padraoPara, parteDaConferenciaDoJev, TAMANHOS, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
-import { botao, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
+import { EDITORIAL_DEFAULT_TIME_ZONE, isoUtcToZonedDateTimeLocal, zonedDateTimeLocalToIso } from "@/lib/editorialDate";
+import { opcoesDaEntrega, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
+import { useEstadoGuardado } from "./estudioUtil";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import type { ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
@@ -19,6 +22,7 @@ import { TrazerVideo, type VideoEscolhido } from "./VideoProntoDaPeca";
 import { useRoteiroDaPeca } from "./roteiroDaPeca";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
 import {
+  agendarVideoNaAgenda,
   desfazerPreparo,
   guardarVideoDaPauta,
   legendaComHashtags,
@@ -46,8 +50,12 @@ import type { VideoProntoDaPeca } from "../../../supabase/functions/agente-calen
  *   direto ao Workspace do cliente e a peça fica Pronta) e Gerar com IA.
  * - Roteiro: o completo (blocos com fala, visual, texto na tela e B-roll, mais a direção de gravação).
  * - Só o texto: as falas corridas, como teleprompter, com Copiar.
- * - Com vídeo pronto: Preparar para publicar (legenda da casa + post de Reels na Agenda na data da peça,
- *   aguardando aprovação; Desfazer arquiva o post criado). Nada vai para a rede sem aprovação.
+ * - Com vídeo pronto: as três opções do carrossel (26/10/2026), na mesma escolha lembrada do Estúdio:
+ *   Pronto para agendar (aprova em nome do cliente e agenda na data da peça), Enviar para aprovação (legenda
+ *   da casa + post de Reels na Agenda aguardando aprovação) e Só Arquivos. Reaproveita o post da tarefa;
+ *   Desfazer arquiva o post criado.
+ * - Agendar ou reagendar na própria peça (ícone de calendário): data que passou, publicação que falhou ou
+ *   aprovada sem data. O mesmo caminho do "Programar" da Agenda, no mesmo card.
  * Antes o miolo mostrava a direção genérica do estilo ("Produto elegante"), que agora fica só no "?".
  */
 
@@ -113,11 +121,21 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
   const [desfazendo, setDesfazendo] = useState(false);
   const [tirando, setTirando] = useState(false);
   const podeEditar = ["admin", "manager", "design"].indexOf(profile?.role || "") >= 0 && !isImpersonating;
+  // As três opções do carrossel; design não aprova pelo cliente. A escolha é a mesma lembrada no Estúdio.
+  const podeLiberar = ["admin", "manager"].indexOf(profile?.role || "") >= 0 && !isImpersonating;
+  const opcoes = opcoesDaEntrega(podeLiberar);
+  const [modoGuardado, setModo] = useEstadoGuardado<ModoDeEntrega>("mesa:estudio:modo-da-entrega", "aprovacao");
+  const modo: ModoDeEntrega = opcoes.some((o) => o.modo === modoGuardado) ? modoGuardado : "aprovacao";
+  const [entregandoArquivos, setEntregandoArquivos] = useState(false);
+  const [agendaAberta, setAgendaAberta] = useState(false);
+  const [quandoLocal, setQuandoLocal] = useState("");
+  const [agendando, setAgendando] = useState(false);
   const diretor = padraoPara(catalogo, "diretor_arte");
 
   const reler = () => {
     void qc.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
     void qc.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
+    void qc.invalidateQueries({ queryKey: ["editorial-calendar"] });
   };
 
   // A geração da IA que termina vira o vídeo pronto da peça (guardado no plano, sem custo), uma vez por vídeo.
@@ -168,8 +186,57 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
   const preparar = async () => {
     if (!video || !userId) throw new Error("Escolha o vídeo da peça antes de preparar.");
     const l = await legendaDoVideo(clientId, item.id);
-    const r = await prepararParaPublicar({ clientId, userId, item, video, legenda: legendaComHashtags(l) });
+    const r = await prepararParaPublicar({ clientId, userId, item, video, legenda: legendaComHashtags(l), modo });
     return { ...r, custo_usd: Number(l && l.custo_usd) || 0 };
+  };
+
+  const abrirAgenda = (iso: string | null | undefined) => {
+    const aFrente = !!iso && new Date(iso).getTime() > Date.now();
+    const local = isoUtcToZonedDateTimeLocal(aFrente ? (iso as string) : new Date(Date.now() + 24 * 3600 * 1000).toISOString(), EDITORIAL_DEFAULT_TIME_ZONE) || "";
+    setQuandoLocal(aFrente ? local : local ? `${local.slice(0, 10)}T18:00` : "");
+    setAgendaAberta(true);
+  };
+
+  const aoPreparar = (r: ResultadoDoPreparo) => {
+    setPreparo(r);
+    if (r.precisa_data) abrirAgenda(r.agendado_para);
+    reler();
+  };
+
+  // Só Arquivos: sem legenda, sem custo, sem post.
+  const soArquivos = async () => {
+    if (!video || !userId) return;
+    setEntregandoArquivos(true);
+    try {
+      aoPreparar(await prepararParaPublicar({ clientId, userId, item, video, legenda: "", modo: "arquivos" }));
+      toast.success("Vídeo em Arquivos", { description: "Sem post na Agenda e sem aprovação." });
+    } catch (e) {
+      toast.error("O vídeo não foi para Arquivos", { description: textoDoErro(e) });
+    } finally {
+      setEntregandoArquivos(false);
+    }
+  };
+
+  const agendar = async () => {
+    const postId = (preparo && preparo.post_id) || (arte && arte.post_id) || null;
+    if (!postId) return;
+    const iso = zonedDateTimeLocalToIso(quandoLocal, EDITORIAL_DEFAULT_TIME_ZONE);
+    if (!iso) {
+      toast.error("Data ou horário inválido.");
+      return;
+    }
+    setAgendando(true);
+    try {
+      const r = await agendarVideoNaAgenda({ clientId, postId, quando: iso });
+      setAgendaAberta(false);
+      setPreparo((a) => (a ? { ...a, agendado_para: iso, precisa_data: false, aviso: null, versao: r.versao } : a));
+      reler();
+      toast.success(r.aprovado ? "Agendado" : "Data guardada", { description: r.aprovado ? "Sai no horário escolhido." : "Aguardando aprovação: agenda sozinho quando aprovar." });
+    } catch (e) {
+      toast.error("Não deu para agendar", { description: textoDoErro(e) });
+    } finally {
+      setAgendando(false);
+    }
   };
 
   const desfazer = async () => {
@@ -189,6 +256,8 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
 
   const fala = textoCorrido(roteiro);
   const naAgenda = !!arte && !!arte.post_id && !preparo;
+  const postDaPeca = (preparo && preparo.post_id) || (arte && arte.post_id) || null;
+  const podeAgendar = podeLiberar && !!postDaPeca;
 
   return (
     <div className="flex min-w-0 shrink-0 flex-col" data-peca-de-video={item.id} data-vista={vista}>
@@ -216,10 +285,15 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
             <div className="flex min-w-0 shrink-0 items-center gap-1" data-preparar-para-publicar={preparo ? "feito" : naAgenda ? "na-agenda" : "pronto"}>
               {preparo ? (
                 <>
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                  {preparo.aviso ? <TriangleAlert className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />}
                   <span className={juntar(texto.auxiliar, "max-w-[220px] truncate")} role="status" title={textoDoPreparo(preparo)}>
                     {textoDoPreparo(preparo)}
                   </span>
+                  {podeAgendar && preparo.modo !== "arquivos" && (
+                    <button type="button" className={botao.icone} onClick={() => (agendaAberta ? setAgendaAberta(false) : abrirAgenda(preparo.agendado_para))} aria-label={preparo.agendado_para ? "Reagendar" : "Agendar"} title={preparo.agendado_para ? "Reagendar" : "Agendar"} data-agendar-video="">
+                      <CalendarClock className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
                   {preparo.criado && (
                     <button type="button" className={botao.icone} onClick={() => void desfazer()} disabled={desfazendo} aria-label="Desfazer" title="Desfazer: tira o post da Agenda (o vídeo continua no Workspace)">
                       {desfazendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
@@ -228,32 +302,75 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
                 </>
               ) : (
                 <>
-                  <AjudaRecolhida rotulo="Sobre preparar para publicar">
-                    {naAgenda ? "Já tem post na Agenda: preparar de novo atualiza a legenda." : "Legenda, Agenda e aprovação num clique. Nada é publicado sem aprovação."}
+                  {podeAgendar && naAgenda && (
+                    <button type="button" className={botao.icone} onClick={() => (agendaAberta ? setAgendaAberta(false) : abrirAgenda(null))} aria-label="Agendar ou reagendar" title="Agendar ou reagendar (data que passou ou publicação que falhou)" data-agendar-video="">
+                      <CalendarClock className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
+                  <AjudaRecolhida rotulo="Como entregar o vídeo">
+                    Pronto para agendar: o cliente já deu o aval; aprova em nome dele e agenda na data da peça. Enviar para
+                    aprovação: legenda, post na Agenda e o cliente aprova no portal. Só Arquivos: fica em Arquivos, sem post.
+                    {naAgenda ? " Já tem post na Agenda: ele é reaproveitado, nunca duplica." : ""}
                   </AjudaRecolhida>
-                  <BotaoComCusto
-                    rotulo={
-                      <>
-                        <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                        Preparar para publicar
-                      </>
-                    }
-                    titulo="Preparar para publicar"
-                    descricao="Leva o vídeo para Arquivos, escreve a legenda com o roteiro como base e cria o post de Reels na Agenda no dia da peça, aguardando aprovação. Nada é publicado sem aprovação."
-                    partes={partes}
-                    disabled={!podeEditar || !diretor || video.fonte === "agenda"}
-                    executar={preparar}
-                    aoConcluir={(data) => {
-                      setPreparo(data as ResultadoDoPreparo);
-                      reler();
-                    }}
-                    className="h-8 px-3"
-                  />
+                  <select
+                    aria-label="Como entregar"
+                    className={juntar(campo, "h-8 w-auto max-w-[180px] px-2 text-[12px]")}
+                    value={modo}
+                    onChange={(e) => setModo(e.target.value as ModoDeEntrega)}
+                    disabled={!podeEditar}
+                    data-modo-do-video={modo}
+                  >
+                    {opcoes.map((o) => (
+                      <option key={o.modo} value={o.modo} title={o.dica}>
+                        {o.modo === "aprovacao" && !podeLiberar ? "Pedir revisão" : o.curto}
+                      </option>
+                    ))}
+                  </select>
+                  {modo === "arquivos" ? (
+                    <button type="button" className={juntar(botao.primario, "h-8 px-3 text-[12px]")} onClick={() => void soArquivos()} disabled={!podeEditar || entregandoArquivos || video.fonte === "agenda"}>
+                      {entregandoArquivos ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <FolderCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
+                      Entregar
+                    </button>
+                  ) : (
+                    <BotaoComCusto
+                      rotulo={
+                        <>
+                          <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                          Entregar
+                        </>
+                      }
+                      titulo={modo === "pronto" ? "Pronto para agendar" : "Enviar para aprovação"}
+                      descricao={
+                        modo === "pronto"
+                          ? "Leva o vídeo para Arquivos, escreve a legenda com o roteiro como base, aprova em nome do cliente e agenda o Reels na data da peça (sem data à frente, pede o horário)."
+                          : "Leva o vídeo para Arquivos, escreve a legenda com o roteiro como base e cria o post de Reels na Agenda no dia da peça, aguardando aprovação. Nada é publicado sem aprovação."
+                      }
+                      partes={partes}
+                      disabled={!podeEditar || !diretor || video.fonte === "agenda"}
+                      executar={preparar}
+                      aoConcluir={(data) => aoPreparar(data as ResultadoDoPreparo)}
+                      className="h-8 px-3"
+                    />
+                  )}
                 </>
               )}
             </div>
           )}
       </div>
+
+      {agendaAberta && podeAgendar && (
+        <div className="mt-2 flex min-w-0 flex-wrap items-center justify-end gap-2" data-agenda-do-video="">
+          <span className={texto.auxiliar}>Publicar em</span>
+          <input type="datetime-local" className={juntar(campo, "h-8 w-auto px-2 text-[12px]")} value={quandoLocal} onChange={(e) => setQuandoLocal(e.target.value)} aria-label="Dia e horário da publicação" />
+          <button type="button" className={juntar(botao.primario, "h-8 px-3 text-[12px]")} onClick={() => void agendar()} disabled={agendando || !quandoLocal}>
+            {agendando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CalendarClock className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
+            Agendar
+          </button>
+          <button type="button" className={botao.icone} onClick={() => setAgendaAberta(false)} aria-label="Fechar" title="Fechar">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {vista === "video" && (
         <div className="mt-3 flex min-w-0 shrink-0 flex-col" data-vista-do-video="">
