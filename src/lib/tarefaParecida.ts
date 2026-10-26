@@ -4,7 +4,7 @@
  * vencidas. Antes de criar, o painel procura uma tarefa aberta do mesmo
  * cliente com o título parecido e oferece "Já existe: abrir".
  *
- * Puro. Sem \p{} nem lookbehind (Safari 11): acento sai por normalize + faixa
+ * Puro. Sem classe Unicode nem lookbehind (Safari 11): acento sai por normalize + faixa
  * de marcas combinantes.
  */
 
