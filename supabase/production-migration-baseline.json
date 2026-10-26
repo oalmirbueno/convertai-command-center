@@ -2633,6 +2633,14 @@
       "remote_name": "faxina_das_tarefas",
       "remote_statements_sha256": "b09264f1c973b35bef53524dc882135193d723321fa6854d85189ed0e4ec404f",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026200000",
+      "path": "supabase/migrations/20261026200000_contrato_exterior.sql",
+      "local_sha256": "ca8f3e9a454183c36757fb21b47e7e0772e1bb0d95484ae5346ef208e5edbc85",
+      "remote_name": "contrato_exterior",
+      "remote_statements_sha256": "4f0a7e488f24c00db4de7140d23878f05d5f8a54be110df45ad6db4e75cdbcd1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
