@@ -191,7 +191,7 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
   const naAgenda = !!arte && !!arte.post_id && !preparo;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-peca-de-video={item.id} data-vista={vista}>
+    <div className="flex min-w-0 shrink-0 flex-col" data-peca-de-video={item.id} data-vista={vista}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SeloDoEstadoDoVideo pronto={pronto} />
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={video ? video.nome : item.title}>
