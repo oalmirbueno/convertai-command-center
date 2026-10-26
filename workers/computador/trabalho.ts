@@ -47,6 +47,8 @@ import {
   type RespostaDaOpenAI,
   sistemaDoCaso,
 } from "./modelo.ts";
+import { CASO_DO_PC, MENSAGEM_PC_INDISPONIVEL, normalizarPedidoDoPc, type PassoDoPc } from "../../supabase/functions/computador-do-agente/modulos/navegador-do-pc.ts";
+import { type MotorDoEgo, motorDoPedido, type SaidaDoEgo } from "./ego.ts";
 
 /** Altura máxima da captura de página inteira (px): página infinita não vira PNG gigante. */
 export const ALTURA_MAXIMA_DA_CAPTURA = 16_000;
@@ -70,6 +72,8 @@ export interface Ambiente {
   executor: string;
   versao: string;
   log?: (msg: string) => void;
+  /** Navegador do PC: o Ego Lite do dono, com os logins dele (null = desligado ou não instalado). */
+  ego?: MotorDoEgo | null;
 }
 
 /** Provedores de computer use que este worker pode usar agora (variável ligada e chave na máquina). */
@@ -82,9 +86,12 @@ export function provedoresDoWorker(amb: Pick<Ambiente, "comModelo" | "modelo" | 
 }
 
 /** Os casos que este worker aceita pegar agora. */
-export function casosDoWorker(amb: Pick<Ambiente, "comModelo" | "modelo" | "openai">): CasoDoNavegador[] {
+export function casosDoWorker(amb: Pick<Ambiente, "comModelo" | "modelo" | "openai" | "ego">): string[] {
   const comModelo = provedoresDoWorker(amb).length > 0;
-  return CASOS_DO_NAVEGADOR.filter((c) => casoLigado(c, comModelo));
+  const casos: string[] = CASOS_DO_NAVEGADOR.filter((c) => casoLigado(c, comModelo));
+  // O executor anuncia o caso do PC só com o Ego instalado e ligado: é assim que o MCP sabe se o PC está disponível.
+  if (amb.ego) casos.push(CASO_DO_PC);
+  return casos;
 }
 
 export class Parada extends Error {
@@ -620,6 +627,8 @@ export interface Saida {
 
 export async function umaTarefa(amb: Ambiente, t: TarefaDoNavegador, token: string): Promise<Saida> {
   const log = amb.log || (() => undefined);
+  if (t.caso === CASO_DO_PC) return await umaTarefaNoPc(amb, t, token);
+  if (t.caso === "conferir_post" && amb.ego && motorDoPedido(t, amb.ego.modo) === "ego" && !motivoParaNaoRodar(t, amb)) return await conferirPostNoEgo(amb, t, token);
   const recusa = motivoParaNaoRodar(t, amb);
   if (recusa) {
     await amb.fila.concluir(t.id, token, "falhou", { recusada: true }, recusa);
@@ -689,4 +698,134 @@ export async function pegarERodar(amb: Ambiente): Promise<boolean> {
   if (!t) return false;
   await umaTarefa(amb, t, token);
   return true;
+}
+
+// ------------------------------------------------------------------ navegador do PC (Ego do dono)
+
+/** Sobe os prints que o roteiro gravou no Ego (um passo da fila cada); para no teto ou no Parar. */
+async function subirPrintsDoEgo(amb: Ambiente, saida: SaidaDoEgo, passos: Passos): Promise<{ imagens: Imagem[]; teto: boolean }> {
+  const imagens: Imagem[] = [];
+  for (const p of saida.prints) {
+    let png: Uint8Array;
+    try {
+      png = (amb.ego as MotorDoEgo).lerPrint(p.caminho);
+    } catch {
+      continue;
+    }
+    const r = await passos.provar(png, p.legenda, 0, "ego");
+    if (passos.ultimo) imagens.push({ rotulo: p.legenda, storage_path: passos.ultimo });
+    if (r === "teto") return { imagens, teto: true };
+  }
+  return { imagens, teto: false };
+}
+
+const nomeDoEspaco = (t: TarefaDoNavegador) => `aceleriq-${t.id.slice(0, 8)}-${Date.now().toString(36)}`;
+
+/** Motivo de não rodar um pedido do PC (defesa em profundidade: o MCP já conferiu). null = pode, com os passos. */
+export function motivoParaNaoRodarNoPc(t: TarefaDoNavegador, amb: Pick<Ambiente, "ego">): { motivo: string | null; passos: PassoDoPc[] } {
+  if (!podeExecutar(t)) return { motivo: "A tarefa não tem a autorização gravada (aprovado_por e aprovado_em).", passos: [] };
+  if (!amb.ego) return { motivo: MENSAGEM_PC_INDISPONIVEL, passos: [] };
+  const brutos = Array.isArray(t.passos) ? (t.passos as Array<Record<string, unknown>>) : [];
+  const n = normalizarPedidoDoPc({ passos: brutos });
+  if (n.ok === false) return { motivo: (n as { erro: string }).erro, passos: [] };
+  // "autorizado" só vale como o servidor gravou; o resto vem da normalização do módulo de regras.
+  const passos = n.pedido.passos.map((p, i) => ({ ...p, autorizado: !!brutos[i] && brutos[i].autorizado === true }));
+  for (const i of n.pedido.sensiveis) {
+    if (!passos[i].autorizado) return { motivo: `O passo ${i + 1} muda a conta e não tem aprovação. Nada foi feito.`, passos: [] };
+  }
+  return { motivo: null, passos };
+}
+
+export async function umaTarefaNoPc(amb: Ambiente, t: TarefaDoNavegador, token: string): Promise<Saida> {
+  const log = amb.log || (() => undefined);
+  const conferido = motivoParaNaoRodarNoPc(t, amb);
+  if (conferido.motivo !== null) {
+    await amb.fila.concluir(t.id, token, "falhou", { recusada: true, motor: "ego" }, conferido.motivo);
+    return { estado: "falhou", motivo: conferido.motivo, resultado: { recusada: true } };
+  }
+  const ego = amb.ego as MotorDoEgo;
+  const passos = criarPassos(amb, t, token);
+  log(`[navegador] ${t.id} pc_ego no Ego do dono · ${conferido.passos.length} passo(s) · ${t.url_inicial}`);
+  let saida: SaidaDoEgo | null = null;
+  try {
+    saida = await ego.rodar({ nomeDoEspaco: nomeDoEspaco(t), passos: conferido.passos });
+    const { imagens, teto } = await subirPrintsDoEgo(amb, saida, passos);
+    const resultado: Record<string, unknown> = {
+      motor: "ego",
+      sessao: "Ego Lite do PC do dono (logins dele)",
+      passos_feitos: saida.passos,
+      url_final: saida.url_final,
+      titulo: saida.titulo,
+      texto: saida.texto_final,
+      imagens,
+      passos: passos.feitos,
+      ...(saida.parou ? { parou: saida.parou } : {}),
+      ...(teto ? { parcial: true } : {}),
+    };
+    const motivo = saida.parou ? saida.parou.motivo : saida.erro ? `Falhou no Ego: ${saida.erro}` : null;
+    const estado: "feita" | "falhou" = motivo ? "falhou" : "feita";
+    const ok = await amb.fila.concluir(t.id, token, estado, resultado, motivo);
+    return ok ? { estado, motivo, resultado } : { estado: "parada", motivo: "Parada pelo dono.", resultado };
+  } catch (err) {
+    if (err instanceof Parada && err.tipo === "parar") return { estado: "parada", motivo: err.message, resultado: { passos: passos.feitos } };
+    const motivo = `Falhou: ${err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300)}`;
+    await amb.fila.concluir(t.id, token, "falhou", { motor: "ego", passos: passos.feitos }, motivo).catch(() => false);
+    return { estado: "falhou", motivo, resultado: { passos: passos.feitos } };
+  } finally {
+    if (saida) {
+      try {
+        ego.limpar(saida);
+      } catch {
+        // Pasta temporária do pedido; o sistema limpa depois.
+      }
+    }
+  }
+}
+
+/** conferir_post no Ego: com o login do dono, a rede mostra o post (sem o "faça login" do navegador descartável). */
+async function conferirPostNoEgo(amb: Ambiente, t: TarefaDoNavegador, token: string): Promise<Saida> {
+  const ego = amb.ego as MotorDoEgo;
+  const passos = criarPassos(amb, t, token);
+  let saida: SaidaDoEgo | null = null;
+  try {
+    saida = await ego.rodar({ nomeDoEspaco: nomeDoEspaco(t), passos: [{ acao: "navegar", url: t.url_inicial }, { acao: "ler", inteira: true }], limiteTexto: 20_000 });
+    const { imagens } = await subirPrintsDoEgo(amb, saida, passos);
+    const lido = saida.passos.find((p) => p.acao === "ler");
+    const texto = String((lido && lido.texto) || "");
+    const titulo = String(saida.titulo || "");
+    let no_ar: boolean | "inconclusivo";
+    let motivo: string;
+    if (saida.parou && saida.parou.codigo === "sessao_expirada") {
+      no_ar = "inconclusivo";
+      motivo = "A sessão do dono no Ego caiu (a rede pediu login); confira pelo celular ou peça ao dono para entrar de novo no Ego.";
+    } else if (saida.parou || saida.erro) {
+      no_ar = "inconclusivo";
+      motivo = saida.parou ? saida.parou.motivo : `O Ego não abriu o post: ${saida.erro}`;
+    } else if (SINAIS_DE_FORA_DO_AR.some((r) => r.test(texto) || r.test(titulo))) {
+      no_ar = false;
+      motivo = "A página diz que o conteúdo não está disponível.";
+    } else if (texto.trim().length > 40) {
+      no_ar = true;
+      motivo = "A página abriu na conta do dono e mostra o conteúdo.";
+    } else {
+      no_ar = "inconclusivo";
+      motivo = "A página abriu, mas sem conteúdo legível.";
+    }
+    const resultado = { no_ar, motivo, motor: "ego", url_final: saida.url_final, titulo: saida.titulo, imagens, fontes: [t.url_inicial], passos: passos.feitos };
+    const ok = await amb.fila.concluir(t.id, token, "feita", resultado, null);
+    return ok ? { estado: "feita", motivo: null, resultado } : { estado: "parada", motivo: "Parada pelo dono.", resultado };
+  } catch (err) {
+    if (err instanceof Parada && err.tipo === "parar") return { estado: "parada", motivo: err.message, resultado: { passos: passos.feitos } };
+    const motivo = `Falhou: ${err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300)}`;
+    await amb.fila.concluir(t.id, token, "falhou", { motor: "ego", passos: passos.feitos }, motivo).catch(() => false);
+    return { estado: "falhou", motivo, resultado: { passos: passos.feitos } };
+  } finally {
+    if (saida) {
+      try {
+        ego.limpar(saida);
+      } catch {
+        // Pasta temporária do pedido.
+      }
+    }
+  }
 }

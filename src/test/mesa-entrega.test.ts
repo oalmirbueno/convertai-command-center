@@ -130,10 +130,11 @@ describe("custo do Jev na carteira", () => {
     // 23/10: + a melhor imagem da busca de todos os bancos para a lâmina (Choice, só com ordenar: "jev",
     // no gerador do carrossel com o custo já confirmado; template_videos_buscar e template_destaques usam a
     // mesma perguntarJev do carrossel, já cobrada).
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(18);
+    // 26/10: + a foto real do acervo que combina com o pedido (Score por candidata, foto real primeiro).
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(19);
     // 24/10: + a nota das substitutas do Trocar no Mês (cobrada logo depois).
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(19);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(17);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(18);
     // 18/10: módulo que precisa do Jev não pergunta sozinho (sem cobrança); usa o `julgar` de quem chama.
     for (const m of ["escolha-da-capa", "referencias-do-pedido"]) {
       expect(ler(`supabase/functions/estudio-arte/modulos/${m}.ts`)).not.toMatch(/jevPerguntar\(/);

@@ -82,6 +82,144 @@ export function palavrasDoTexto(...textos: unknown[]): string[] {
   return saida;
 }
 
+// ------------------------------------------------------------------ foto real primeiro (26/10)
+
+/** Categorias do acervo (as que a tela e o leitor de fotos usam). */
+export const CATEGORIAS_DO_ACERVO = ["pessoa", "produto", "ambiente", "detalhe", "antes_depois", "arte", "logo", "outro"] as const;
+export type CategoriaDoAcervo = (typeof CATEGORIAS_DO_ACERVO)[number];
+/** Etiquetas que o leitor de fotos (acervo-ler-fotos) grava: fotografia real ou arte, card e print. */
+export const TAG_FOTO_REAL = "foto_real";
+export const TAG_ARTE_OU_PRINT = "arte_ou_print";
+const TAGS_QUE_NAO_SAO_REAIS = ["gerada", "pessoa_sintetica", "referencia_web", "nao_publicar", TAG_ARTE_OU_PRINT];
+
+/**
+ * Foto que conta como REAL do cliente: usável, não gerada por IA (gerada=true
+ * ou etiqueta), não é referência da internet nem arte ou print (o leitor de
+ * fotos marca). Foto ainda não lida conta; o Jev decide se serve.
+ */
+export function fotoReal(f: FotoDoAcervo): boolean {
+  if (!fotoUsavel(f) || f.gerada === true) return false;
+  const tags = f.tags || [];
+  return !TAGS_QUE_NAO_SAO_REAIS.some((t) => tags.indexOf(t) >= 0);
+}
+
+/** Nota (0 a 3) para a foto real entrar sozinha na peça: "Serve" para cima. Abaixo, gera com IA. */
+export const CORTE_DA_FOTO_REAL = 2;
+export const LINHA_SEM_FOTO_REAL = "Sem foto real que combine: vai gerar com IA";
+
+export type EscolhaDaFotoReal = {
+  modo: "real" | "ia";
+  fotos: Array<{ id: string; nome: string; nota: number }>;
+  /** A linha que a tela mostra. */
+  linha: string;
+};
+
+/** Foto real com nota acima do corte (até `max`, a melhor primeiro) ou a geração por IA, com a linha da tela. */
+export function escolhaDaFotoReal<T extends { id: string; nome: string }>(candidatas: T[], respostas: Record<string, { score?: number } | undefined>, max = 1): EscolhaDaFotoReal {
+  const boas = escolhidasPelasNotas(candidatas, respostas, max, CORTE_DA_FOTO_REAL).map((f) => ({ id: f.id, nome: f.nome, nota: f.nota }));
+  if (!boas.length) return { modo: "ia", fotos: [], linha: LINHA_SEM_FOTO_REAL };
+  return { modo: "real", fotos: boas, linha: `Foto real do acervo: ${umaLinha(boas[0].nome, 80)} (nota ${boas[0].nota} de 3). Dá para trocar.` };
+}
+
+/**
+ * A escolha inteira, com o Jev injetado (a mídia da peça e o Estúdio usam a mesma): só fotos reais, as
+ * candidatas pelo tema, uma nota por candidata numa chamada, e a melhor acima do corte. Sem candidata, nem
+ * pergunta (sem custo). O Jev que falha propaga: quem chama decide (a geração por IA segue).
+ */
+export async function escolherFotoReal<T extends FotoDoAcervo>(
+  fotos: T[],
+  tema: string,
+  julgar: (state: unknown, questions: Record<string, unknown>) => Promise<Record<string, { score?: number } | undefined>>,
+  a: { uso: string; peca: Record<string, unknown>; max?: number },
+): Promise<EscolhaDaFotoReal & { julgou: boolean }> {
+  const candidatas = candidatasDoAcervo(fotos.filter(fotoReal), tema);
+  if (!candidatas.length) return { ...escolhaDaFotoReal([], {}), julgou: false };
+  const r = await julgar({ peca: a.peca, candidatas: candidatas.map(textoDaFoto) }, perguntasDaMidia(candidatas.length, a.uso));
+  return { ...escolhaDaFotoReal(candidatas, r, Math.max(1, Math.min(2, a.max ?? 1))), julgou: true };
+}
+
+// ------------------------------------------------------------------ item a partir da tarefa (26/10)
+
+export type TarefaParaOItem = { id: string; title: string; description?: string | null; delivery_type?: string | null; due_date?: string | null };
+
+/** Rótulos das linhas da descrição da tarefa (descricaoDoItem do Mês, MCP aceleriq_create_editorial_item, Mesa Ads). */
+const ROTULOS_DA_DESCRICAO = [
+  "Tema", "Formato", "Tipo", "Pilar", "Público", "Objetivo", "Métrica principal", "Palavra-chave", "Termo regional", "Gancho do momento",
+  "Tipo e framework", "Etapa da campanha", "Gancho", "Resumo", "Instrução de arte da equipe", "Caminho do vídeo", "Estilo de vídeo",
+  "Direção do vídeo", "Narração", "Referências", "Roteiro dos cards", "Roteiro das cenas", "Fotos do post", "Telas", "CTA", "Legenda (copy)", "Origem",
+];
+const BLOCOS = ["Roteiro dos cards", "Roteiro das cenas", "Fotos do post", "Telas", "Legenda (copy)"];
+const UUID_DO_TEXTO = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/** Os campos da descrição da tarefa ("Rótulo: valor"; blocos de várias linhas até o próximo rótulo). */
+export function camposDaDescricao(descricao: unknown): Record<string, string> {
+  const campos: Record<string, string> = {};
+  let bloco: string | null = null;
+  for (const linha of String(descricao == null ? "" : descricao).replace(/\r\n/g, "\n").split("\n")) {
+    const m = /^([^:\n]{2,40}):\s*(.*)$/.exec(linha.trim());
+    const rotulo = m ? ROTULOS_DA_DESCRICAO.find((r) => r.toLowerCase() === m[1].trim().toLowerCase()) : undefined;
+    if (m && rotulo) {
+      bloco = BLOCOS.indexOf(rotulo) >= 0 ? rotulo : null;
+      if (campos[rotulo] === undefined) campos[rotulo] = m[2].trim();
+      continue;
+    }
+    if (bloco && linha.trim()) campos[bloco] = `${campos[bloco] ? `${campos[bloco]}\n` : ""}${linha.trim()}`;
+  }
+  return campos;
+}
+
+/** O formato do item pela tarefa (entrega e linha Formato). */
+export function formatoDaTarefa(t: Pick<TarefaParaOItem, "title" | "delivery_type">, formatoEscrito = ""): "video" | "foto" | "carrossel" | "estatico" {
+  const entrega = String(t.delivery_type || "").toLowerCase();
+  const escrito = semAcento(formatoEscrito.toLowerCase());
+  if (String(t.title || "").indexOf("Peça de foto: ") === 0 || /^peca de foto/.test(escrito)) return "foto";
+  if (ENTREGAS_DE_VIDEO.indexOf(entrega) >= 0 || /\b(video|reels?)\b/.test(escrito)) return "video";
+  if (entrega === "carousel" || /carrossel/.test(escrito)) return "carrossel";
+  return "estatico";
+}
+
+/**
+ * O item do Mês montado a partir da tarefa, para a peça que não nasceu de uma
+ * proposta (MCP, Mesa Ads, criada à mão): título e os campos da descrição.
+ * Mesmo formato do item da proposta, no que a mídia da peça e o Estúdio leem.
+ */
+export function itemDaDescricaoDaTarefa(t: TarefaParaOItem): Record<string, unknown> {
+  const c = camposDaDescricao(t.description);
+  const formato = formatoDaTarefa(t, c["Formato"] || "");
+  const tema = umaLinha(c["Tema"] || String(t.title || "").replace(/^Peça de foto: /, ""), 300);
+  const roteiro = c["Roteiro dos cards"] || c["Telas"] || "";
+  const cards = formato === "carrossel" || formato === "estatico"
+    ? roteiro.split("\n")
+      .map((l) => /^(?:card|tela)\s*(\d+)(?:\s*\(([^)]*)\))?\s*:\s*(.+)$/i.exec(l.trim()))
+      .filter((m): m is RegExpExecArray => !!m)
+      .map((m) => ({ ordem: Number(m[1]), funcao: umaLinha(m[2] || "", 60), texto: umaLinha(m[3], 600) }))
+    : [];
+  const item: Record<string, unknown> = {
+    task_id: t.id,
+    tema,
+    gancho: umaLinha(c["Gancho"] || "", 300) || null,
+    referencia: umaLinha([c["Resumo"], c["Instrução de arte da equipe"], c["Roteiro das cenas"]].filter(Boolean).join(" "), 1500) || null,
+    copy: String(c["Legenda (copy)"] || "").trim().slice(0, 2200) || null,
+    formato,
+    mesa: formato === "foto" ? "foto" : formato === "video" ? "video" : "arte",
+    data: t.due_date ? String(t.due_date).slice(0, 10) : null,
+    cards,
+    origem_do_item: "tarefa",
+  };
+  if (formato === "video") {
+    const caminho = semAcento(String(c["Caminho do vídeo"] || "").toLowerCase());
+    if (/gravar/.test(caminho)) item.caminho_video = "gravar";
+    else if (/\bia\b|gerar/.test(caminho)) item.caminho_video = "ia";
+    item.video = normalizarVideoDaPauta({
+      estilo: String(c["Estilo de vídeo"] || "").trim().toLowerCase(),
+      prompt: c["Direção do vídeo"] || "",
+      narracao: c["Narração"] || "",
+      referencias: String(c["Referências"] || "").match(UUID_DO_TEXTO) || [],
+    });
+  }
+  return item;
+}
+
 /** Texto da foto para o Jev ler (nome, pasta, categoria, etiquetas e descrição). */
 export function textoDaFoto(f: FotoDoAcervo): string {
   const tags = (f.tags || []).filter((t) => t.indexOf(":") < 0 && ["mesa_foto", "gerada"].indexOf(t) < 0);
@@ -139,13 +277,13 @@ export function perguntasDaMidia(n: number, uso: string): Record<string, { type:
 }
 
 /** As candidatas com nota mínima, da maior para a menor, até `max`. Sem nota (Jev fora), nenhuma entra. */
-export function escolhidasPelasNotas<T>(candidatas: T[], respostas: Record<string, { score?: number } | undefined>, max: number): Array<T & { nota: number }> {
+export function escolhidasPelasNotas<T>(candidatas: T[], respostas: Record<string, { score?: number } | undefined>, max: number, minimo = NOTA_MINIMA_DA_MIDIA): Array<T & { nota: number }> {
   return candidatas
     .map((c, i) => {
       const s = respostas[`m${i}`]?.score;
       return { c, i, nota: typeof s === "number" && Number.isFinite(s) ? s : -1 };
     })
-    .filter((x) => x.nota >= NOTA_MINIMA_DA_MIDIA)
+    .filter((x) => x.nota >= minimo)
     .sort((a, b) => b.nota - a.nota || a.i - b.i)
     .slice(0, Math.max(0, max))
     .map((x) => ({ ...(x.c as T), nota: Math.round(x.nota * 100) / 100 }));

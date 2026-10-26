@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCheck, Loader2, MessageCircle, MonitorSmartphone, RefreshCw, RotateCcw, Send, SkipForward, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCheck, ChevronDown, CornerDownLeft, Loader2, MessageCircle, MonitorSmartphone, RefreshCw, RotateCcw, Send, SkipForward, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useCentralReviews } from "@/hooks/useCentralReviews";
@@ -35,11 +35,18 @@ import {
  * (src/lib/mensagensDaSemana.ts).
  */
 
-const SECOES: Array<{ situacao: MensagemDaSemana["situacao"]; titulo: string }> = [
-  { situacao: "pronta", titulo: "Prontas para aprovar" },
-  { situacao: "venceu", titulo: "Venceram sem decisão" },
-  { situacao: "aprovada", titulo: "Aprovadas, o Hermes envia" },
+/*
+ * 26/10 (dono: "uma coisa por vez, mais enxuto"): duas listas só (para aprovar,
+ * com as vencidas junto, e as aprovadas recolhidas), agrupadas por cliente, e
+ * uma mensagem aberta por vez. As outras ficam numa linha com o começo do texto.
+ */
+const SECOES: Array<{ chave: string; situacoes: Array<MensagemDaSemana["situacao"]>; titulo: string }> = [
+  { chave: "pronta", situacoes: ["pronta", "venceu"], titulo: "Para aprovar" },
+  { chave: "aprovada", situacoes: ["aprovada"], titulo: "Aprovadas, o Hermes envia" },
 ];
+
+/** Marca de "a pessoa fechou a aberta" (nenhuma aberta até escolher outra). */
+const FECHADAS = "__nenhuma__";
 
 export default function MensagensDaSemana() {
   const { user, profile } = useAuth();
@@ -54,6 +61,9 @@ export default function MensagensDaSemana() {
   const [escondidas, setEscondidas] = useState<string[]>([]);
   const [confirmarTodas, setConfirmarTodas] = useState(false);
   const [emLote, setEmLote] = useState<{ feitas: number; total: number } | null>(null);
+  /** A mensagem aberta (uma por vez); sem escolha, a primeira da lista. */
+  const [abertaEscolhida, setAbertaEscolhida] = useState<string | null>(null);
+  const [pedindoAjuste, setPedindoAjuste] = useState<string | null>(null);
 
   const nomes = useMemo(() => {
     const m = new Map<string, string>();
@@ -62,11 +72,17 @@ export default function MensagensDaSemana() {
   }, [clientes]);
   const agora = Date.now();
   const mensagens = useMemo(
-    () => montarMensagens(rascunhos.data ?? [], pedidos.data ?? [], Date.now()).filter((m) => escondidas.indexOf(m.chave) < 0),
+    () => montarMensagens(rascunhos.data ?? [], pedidos.data ?? [], Date.now())
+      .filter((m) => escondidas.indexOf(m.chave) < 0)
+      // Agrupadas por cliente (dentro do cliente, a ordem da semana).
+      .map((m, i) => ({ m, i }))
+      .sort((a, b) => (nomes.get(a.m.clientId) || "").localeCompare(nomes.get(b.m.clientId) || "", "pt-BR") || a.i - b.i)
+      .map((x) => x.m),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rascunhos.data, pedidos.data, escondidas],
+    [rascunhos.data, pedidos.data, escondidas, nomes],
   );
   const prontas = mensagens.filter((m) => m.situacao !== "aprovada");
+  const aberta = abertaEscolhida && prontas.some((m) => m.chave === abertaEscolhida) ? abertaEscolhida : abertaEscolhida === FECHADAS ? null : prontas[0]?.chave ?? null;
 
   if (profile && !eAdmin) return <Navigate to="/central" replace />;
 
@@ -178,53 +194,69 @@ export default function MensagensDaSemana() {
         : erro ? <EstadoDeErro titulo="Não foi possível ler as mensagens." descricao={(erro as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void atualizar()}>Tentar de novo</button>} />
           : mensagens.length === 0 ? <EstadoVazio titulo="Nenhuma mensagem esperando você esta semana." descricao="Quando um ritual ficar pronto, ele aparece aqui." />
             : SECOES.map((s, i) => {
-              const daSecao = mensagens.filter((m) => m.situacao === s.situacao);
+              const daSecao = mensagens.filter((m) => s.situacoes.indexOf(m.situacao) >= 0);
               if (!daSecao.length) return null;
               return (
-                <Secao key={s.situacao} titulo={s.titulo} descricao={`${daSecao.length}`} recolher={`mensagens-semana:${s.situacao}`} recolhidaDeInicio={s.situacao === "aprovada"} divisoria={i > 0}>
-                  <ul className="min-w-0 divide-y divide-border/60" aria-label={s.titulo}>
+                <Secao key={s.chave} titulo={s.titulo} descricao={`${daSecao.length}`} recolher={`mensagens-semana:${s.chave}`} recolhidaDeInicio={s.chave === "aprovada"} divisoria={i > 0}>
+                  <ul className="min-w-0 max-w-3xl divide-y divide-border/60" aria-label={s.titulo}>
                     {daSecao.map((m) => {
                       const valor = textoDe(m);
                       const editado = valor.trim() !== (m.report.summary || "").trim();
                       const agindo = ocupado[m.chave];
                       const urgente = m.situacao === "pronta" && !!m.venceEm && Date.parse(m.venceEm) - agora < 6 * 3_600_000;
+                      const decide = m.situacao !== "aprovada";
+                      const estaAberta = decide && m.chave === aberta;
+                      const nomeCliente = nomes.get(m.clientId) || "Cliente";
                       return (
-                        <li key={m.chave} className="min-w-0 max-w-3xl py-4 first:pt-1" data-mensagem={m.situacao}>
-                          <div className="flex min-w-0 items-center">
-                            <p className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
-                              <span className="font-medium">{nomes.get(m.clientId) || "Cliente"}</span>
+                        <li key={m.chave} className="min-w-0 py-2.5" data-mensagem={m.situacao} data-aberta={estaAberta ? "" : undefined}>
+                          <button
+                            type="button"
+                            onClick={() => { if (decide) setAbertaEscolhida(estaAberta ? FECHADAS : m.chave); }}
+                            aria-expanded={decide ? estaAberta : undefined}
+                            className="flex w-full min-w-0 items-center rounded-md text-left"
+                          >
+                            {decide && <ChevronDown className={juntar("mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", !estaAberta && "-rotate-90")} aria-hidden="true" />}
+                            <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
+                              <span className="font-medium">{nomeCliente}</span>
                               <span className="text-muted-foreground"> · {NOME_DO_RITUAL[m.ritual] || m.report.title}</span>
-                            </p>
+                            </span>
                             <span className="ml-2 shrink-0 text-muted-foreground" title={m.canal === "whatsapp" ? `WhatsApp · ${m.destinatario}` : "Portal do cliente"} aria-label={m.canal === "whatsapp" ? "WhatsApp" : "Portal"}>
                               {m.canal === "whatsapp" ? <MessageCircle className="h-4 w-4" /> : <MonitorSmartphone className="h-4 w-4" />}
                             </span>
-                            {m.situacao !== "aprovada" && <span className={juntar(etiqueta, "ml-2", m.situacao === "venceu" ? "bg-destructive/10 text-destructive" : urgente ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")} data-prazo="">{prazoEmPalavras(m.venceEm, agora)}</span>}
-                          </div>
-                          {m.situacao === "aprovada" ? (
-                            <p className={juntar(texto.corpo, "mt-2 whitespace-pre-wrap text-muted-foreground")}>{m.report.summary}</p>
+                            {decide && <span className={juntar(etiqueta, "ml-2 shrink-0", m.situacao === "venceu" ? "bg-destructive/10 text-destructive" : urgente ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")} data-prazo="">{prazoEmPalavras(m.venceEm, agora)}</span>}
+                          </button>
+                          {!decide ? (
+                            <p className={juntar(texto.auxiliar, "mt-1 line-clamp-2 whitespace-pre-wrap pl-5")}>{m.report.summary}</p>
+                          ) : !estaAberta ? (
+                            <p className={juntar(texto.auxiliar, "mt-0.5 truncate pl-5")}>{valor.replace(/\s+/g, " ")}</p>
                           ) : (
-                            <>
-                              <label className="sr-only" htmlFor={`texto-${m.chave}`}>Texto da mensagem para {nomes.get(m.clientId) || "o cliente"}</label>
-                              <textarea id={`texto-${m.chave}`} value={valor} onChange={(e) => setTextos((x) => ({ ...x, [m.chave]: e.target.value }))} rows={6} className={juntar(campoTexto, "mt-2")} disabled={!!agindo} />
-                              <div className="mt-2 flex min-w-0 items-center">
-                                <label className="sr-only" htmlFor={`ajuste-${m.chave}`}>Pedir ajuste ao agente</label>
-                                <input id={`ajuste-${m.chave}`} value={ajustes[m.chave] || ""} onChange={(e) => setAjustes((x) => ({ ...x, [m.chave]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void ajustar(m); }} placeholder="Pedir ajuste ao agente (ex.: mais curto, cite o novo criativo)" className={juntar(campo, "min-w-0 flex-1")} disabled={!!agindo} />
-                                <button type="button" onClick={() => void ajustar(m)} disabled={!!agindo || !(ajustes[m.chave] || "").trim()} className={juntar(botao.icone, "ml-1")} title="Ajustar com o agente da Central" aria-label="Ajustar com o agente">
-                                  {agindo === "ajustar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-                                </button>
-                              </div>
-                              <div className="-m-1 mt-2 flex flex-wrap items-center [&>*]:m-1">
-                                <button type="button" onClick={() => void aprovar(m)} disabled={!!agindo || !!emLote || !valor.trim()} className={botao.primario}>
+                            <div className="mt-2 min-w-0 pl-5">
+                              <label className="sr-only" htmlFor={`texto-${m.chave}`}>Texto da mensagem para {nomeCliente}</label>
+                              <textarea id={`texto-${m.chave}`} value={valor} onChange={(e) => setTextos((x) => ({ ...x, [m.chave]: e.target.value }))} rows={6} className={campoTexto} disabled={!!agindo} />
+                              {pedindoAjuste === m.chave && (
+                                <div className="mt-2 flex min-w-0 items-center">
+                                  <label className="sr-only" htmlFor={`ajuste-${m.chave}`}>Pedir ajuste ao agente</label>
+                                  <input id={`ajuste-${m.chave}`} autoFocus value={ajustes[m.chave] || ""} onChange={(e) => setAjustes((x) => ({ ...x, [m.chave]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") void ajustar(m); }} placeholder="Ex.: mais curto, cite o novo criativo" className={juntar(campo, "min-w-0 flex-1")} disabled={!!agindo} />
+                                  <button type="button" onClick={() => void ajustar(m)} disabled={!!agindo || !(ajustes[m.chave] || "").trim()} className={juntar(botao.icone, "ml-1")} title="Enviar o pedido de ajuste ao agente da Central" aria-label="Enviar o pedido de ajuste">
+                                    {agindo === "ajustar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CornerDownLeft className="h-4 w-4" aria-hidden="true" />}
+                                  </button>
+                                </div>
+                              )}
+                              <div className="mt-2 flex min-w-0 flex-wrap items-center">
+                                <button type="button" onClick={() => void aprovar(m)} disabled={!!agindo || !!emLote || !valor.trim()} className={juntar(botao.primario, "mr-1")}>
                                   {agindo === "aprovar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />}
                                   Aprovar e enviar
                                 </button>
-                                <button type="button" onClick={() => void pular(m)} disabled={!!agindo || !!emLote} className={botao.discreto} title={m.situacao === "pronta" ? "Registra que esta mensagem não vai" : "Tira da lista"}>
-                                  <SkipForward className="mr-1.5 h-4 w-4" aria-hidden="true" />Pular
+                                <button type="button" onClick={() => setPedindoAjuste(pedindoAjuste === m.chave ? null : m.chave)} disabled={!!agindo} className={botao.icone} title="Pedir ajuste ao agente" aria-label="Pedir ajuste ao agente" aria-pressed={pedindoAjuste === m.chave}>
+                                  <Sparkles className="h-4 w-4" aria-hidden="true" />
                                 </button>
-                                {editado && <button type="button" onClick={() => setTextos((x) => { const y = { ...x }; delete y[m.chave]; return y; })} className={botao.icone} title="Voltar ao texto original" aria-label="Voltar ao texto original"><RotateCcw className="h-4 w-4" aria-hidden="true" /></button>}
-                                {editado && <span className={texto.auxiliar}>Editada: ao aprovar, vira uma nova versão.</span>}
+                                <button type="button" onClick={() => void pular(m)} disabled={!!agindo || !!emLote} className={botao.icone} title={m.situacao === "pronta" ? "Pular: registra que esta mensagem não vai" : "Pular: tira da lista"} aria-label="Pular">
+                                  {agindo === "pular" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <SkipForward className="h-4 w-4" aria-hidden="true" />}
+                                </button>
+                                {editado && <button type="button" onClick={() => setTextos((x) => { const y = { ...x }; delete y[m.chave]; return y; })} className={botao.icone} title="Voltar ao texto original (editada: ao aprovar, vira uma nova versão)" aria-label="Voltar ao texto original"><RotateCcw className="h-4 w-4" aria-hidden="true" /></button>}
+                                {editado && <span className={juntar(texto.auxiliar, "ml-1")}>editada</span>}
                               </div>
-                            </>
+                            </div>
                           )}
                         </li>
                       );

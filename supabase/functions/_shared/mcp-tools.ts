@@ -58,6 +58,7 @@ import {
 import { operatorDiary } from '../mcp-server/modulos/diario.ts';
 import { agentConversationsTool, agentHandoffTool } from './mcp-agentes-das-mesas.ts';
 import { browserActTool, browserSessionTool } from '../mcp-server/modulos/mcp-navegador.ts';
+import { navegadorDoPcTool } from '../mcp-server/modulos/mcp-navegador-do-pc.ts';
 import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modulos/painel-inteiro.ts';
 import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
 import {
@@ -4741,6 +4742,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Navegador remoto real do cliente (lote C, v2.7.0)
   browserSessionTool,
   browserActTool,
+  // MCP 2.20: navegador do PC do dono (Ego Lite, com os logins dele).
+  navegadorDoPcTool,
   // Revisao do Ciclo como area do Hermes (v1.43.0)
   centralReviewFilaTool,
   centralReviewPrepararTool,

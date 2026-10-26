@@ -43,9 +43,10 @@ function montar() {
 const abaAberta = () => document.querySelector('nav[aria-label="Abas da Execução"] [aria-current="page"]')?.getAttribute("data-etapa");
 
 describe("Execução: abas no sistema de design", () => {
-  it("abre no Escritório na primeira visita", () => {
+  // 26/10 (dono: "o que pede decisão primeiro"): a primeira visita abre em "Precisa de você".
+  it("abre no que espera você na primeira visita", () => {
     montar();
-    expect(abaAberta()).toBe("pessoas");
+    expect(abaAberta()).toBe("decisoes");
     expect(screen.getByText(/Nada está parado esperando você/)).toBeInTheDocument();
   });
 

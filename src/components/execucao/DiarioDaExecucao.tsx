@@ -1,4 +1,5 @@
 import EvidenciaVisual from "./EvidenciaVisual";
+import { nomeDaTarefaDoBanco } from "@/lib/nomeDaTarefa";
 import { contextoDoPedido } from '@/lib/carteiraOperacao';
 import { useEffect, useRef, useState } from "react";
 import { leituraSimples, limparTecnico, prepararEntrada, tituloDoCaderno } from "@/lib/cadernoExecucao";
@@ -402,7 +403,7 @@ export default function DiarioDaExecucao({
               {contextoInicial ? `Pedido para ${contextoInicial.cliente.nome} · conversa compartilhada com a coordenação` : 'Conversa, trabalho e comprovantes no mesmo lugar.'}
             </DialogDescription>
             {contextoInicial && <span className="truncate text-[12px] leading-4 text-primary">Para {contextoInicial.cliente.nome}</span>}
-            {!contextoInicial && contexto.data && <span className="truncate text-[12px] leading-4 text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</span>}
+            {!contextoInicial && contexto.data && <span className="truncate text-[12px] leading-4 text-primary">{nomeDaTarefaDoBanco(contexto.data).texto}</span>}
             {!contextoInicial && contexto.isError && <button className="text-[12px] leading-4 text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">

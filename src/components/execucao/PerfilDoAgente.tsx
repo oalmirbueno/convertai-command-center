@@ -1,4 +1,5 @@
 import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
+import { nomeDaTarefaDoBanco } from "@/lib/nomeDaTarefa";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -298,7 +299,7 @@ export default function PerfilDoAgente({
         <button type="button" onClick={() => aoAbrirDiario(v.id, t?.title || v.last_action)} className="group flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-muted/60">
           <span className={juntar("h-2 w-2 shrink-0 rounded-full", TOM_DO_ESTADO[v.status] ?? "bg-muted-foreground")} aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium text-foreground">{t?.title || limparTecnico(String(v.last_action || "")) || "(tarefa sem título)"}</span>
+            <span className="block truncate text-[13px] font-medium text-foreground">{t?.title ? nomeDaTarefaDoBanco(t, { agente: operador?.display_name }).semCliente : limparTecnico(String(v.last_action || "")) || "(tarefa sem título)"}</span>
             <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
               {precisaDecisao(v) ? <span className="font-medium text-warning">precisa da sua aprovação</span> : v.status === "done" && !v.last_evidence ? <span className="font-medium text-warning">concluída sem evidência</span> : ROTULO_DO_ESTADO[v.status] ?? v.status}
               {cliente && ` · ${cliente}`}{v.updated_at && ` · ${quando(v.updated_at)}`}

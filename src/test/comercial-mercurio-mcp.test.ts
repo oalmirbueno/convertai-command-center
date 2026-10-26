@@ -233,7 +233,7 @@ describe("MCP 2.18 com as ferramentas do comercial", () => {
   };
 
   it("cada ferramenta existe com o escopo certo, entra no guia do comercial e a versão subiu", () => {
-    expect(MCP_VERSION).toBe("2.19.0");
+    expect(MCP_VERSION).toBe("2.20.0");
     // O catálogo importa zod por URL (Deno): conferido pelo texto, como os outros testes do MCP.
     const tools = readFileSync(resolve(__dirname, "../../supabase/functions/_shared/mcp-tools.ts"), "utf8");
     const lista = tools.slice(tools.indexOf("const RAW_TOOLS: readonly ToolDefinition[] = ["));

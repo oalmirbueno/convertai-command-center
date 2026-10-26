@@ -803,6 +803,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "perfis-instagram/index.ts#gerarResumo": "leituras",
   "perfis-instagram/index.ts#lerPostsDoPerfil": "leituras",
   "workspace-organizar/nucleo.ts#lerNoCliente/lerLote": "leituras",
+  // 26/10: o robô que lê as fotos do acervo sem descrição (mesmo leitor do organizador).
+  "acervo-ler-fotos/index.ts#lerDoCliente/lerLote": "leituras",
 };
 
 /**

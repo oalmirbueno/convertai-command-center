@@ -1,4 +1,5 @@
 import { limparTecnico } from "@/lib/cadernoExecucao";
+import { nomeDaTarefaDoBanco } from "@/lib/nomeDaTarefa";
 import { useMemo } from "react";
 import { Bot, FolderOpen, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
@@ -337,7 +338,8 @@ export default function Escritorio({
                         onClick={() => idTarefa && aoAbrirTarefa(String(idTarefa))}
                         className={juntar(superficie.poco, "mt-2 block w-full min-w-0 px-2.5 py-1.5 text-left transition-colors hover:bg-muted", foco)}
                       >
-                        <span className="block truncate text-[13px] text-foreground">{tarefa.title}</span>
+                        {/* 26/10: "Área · assunto" (o cliente vem logo abaixo); o código ACE fica no detalhe da tarefa. */}
+                        <span className="block truncate text-[13px] text-foreground" title={nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).texto}>{nomeDaTarefaDoBanco(tarefa, { agente: a.display_name }).semCliente}</span>
                         <span className="-mx-1 mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground [&>*]:mx-1">
                           {cliente && <span className="min-w-0 truncate font-medium text-foreground/80">{cliente.company_name || cliente.full_name}</span>}
                           {responsavel && <span className="inline-flex shrink-0 items-center"><UserRound className="mr-1 h-2.5 w-2.5" aria-hidden="true" />{responsavel}</span>}

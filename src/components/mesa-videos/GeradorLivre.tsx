@@ -64,7 +64,10 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
   const [destinoDoDiretor, setDestinoDoDiretor] = useState<"inicial" | "final" | "referencia">("inicial");
   const [r, setR] = useEstadoDaTela<RascunhoLivre>(escopo || `mesa-videos:livre:${clientId}`, { ...INICIAL, prompt: promptInicial, ...(direcaoInicial ? { narracao: direcaoInicial.narracao, audio: !!direcaoInicial.narracao, formato: direcaoInicial.formato } : {}) }, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
   const mudar = (m: Partial<RascunhoLivre>) => setR((x) => ({ ...x, ...m }));
-  const fotosDaDirecao = (direcaoInicial?.referencias || []).map((id) => fotosQ.data?.find((f) => f.client_id === clientId && f.ativa && !f.referencia_web && (f.id === id || f.workspace_node_id === id || f.storage_path === id))).filter((f) => f && (f.storage_bucket || "mesa") === "mesa" && f.storage_path.startsWith(`${clientId}/`));
+  const achadasDaDirecao = (direcaoInicial?.referencias || []).map((id) => fotosQ.data?.find((f) => f.client_id === clientId && f.ativa && !f.referencia_web && (f.id === id || f.workspace_node_id === id || f.storage_path === id)));
+  const fotosDaDirecao = achadasDaDirecao.filter((f) => f && (f.storage_bucket || "mesa") === "mesa" && f.storage_path.startsWith(`${clientId}/`));
+  // 26/10: a foto real do Workspace ou de Arquivos (outro bucket) também abre como imagem de partida: copiada para a Mesa, como no Escolher.
+  const foraDaMesa = fotosDaDirecao.length ? null : achadasDaDirecao.find((f) => !!f) || null;
   const preCarregou = useRef(false);
   useEffect(() => {
     if (!fotosQ.data || preCarregou.current) return;
@@ -72,6 +75,9 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
     if (fotosDaDirecao[0]) {
       preCarregou.current = true;
       mudar({ inicial: fotosDaDirecao[0].storage_path, ...(fotosDaDirecao[1] ? { final: fotosDaDirecao[1].storage_path } : {}) });
+    } else if (foraDaMesa) {
+      preCarregou.current = true;
+      void usarFotos([foraDaMesa.id], "inicial").catch(() => toast.error("A foto real não pôde ser carregada. Escolha a imagem de partida à mão."));
     }
   }, [fotosQ.data, direcaoInicial, r.inicial, r.final, r.referencias.length]);
   const modo = r.inicial && r.final ? "primeiro_ultimo" : r.inicial ? "primeiro_quadro" : r.referencias.length ? "referencia" : "texto";

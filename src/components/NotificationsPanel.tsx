@@ -5,7 +5,7 @@ import { useAvisosPorArea, marcarAreaComoLida, marcarTiposComoLidos, type AreaDo
 import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, ChevronDown, CreditCard, FileArchive,
-  FolderOpen, Instagram, ListChecks, Megaphone, Package,
+  FolderOpen, Instagram, ListChecks, Megaphone, Package, Sunrise,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +32,8 @@ function getNotifIcon(type: string) {
     case "agente": return { icon: <Bot className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
     case "comercial": return { icon: <Briefcase className="w-4 h-4" />, bg: "bg-info/10 text-info" };
     case "anuncios": return { icon: <Megaphone className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
+    // 26/10: o resumo do dia (um por dia) leva à tela Hoje.
+    case "resumo": return { icon: <Sunrise className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
     default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
   }
 }

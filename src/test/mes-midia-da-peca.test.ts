@@ -29,7 +29,7 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>) {
   let relogio = 0;
   const from = (tabela: string) => {
     const filtros: Array<(l: Linha) => boolean> = [];
-    let acao: { tipo: "select" } | { tipo: "update"; valores: Linha } = { tipo: "select" };
+    let acao: { tipo: "select" } | { tipo: "update"; valores: Linha } | { tipo: "insert"; valores: Linha } = { tipo: "select" };
     let limite = Infinity;
     let ordem: { col: string; asc: boolean } | null = null;
     const linhas = () => {
@@ -38,6 +38,11 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>) {
       return r.slice(0, limite);
     };
     const executar = () => {
+      if (acao.tipo === "insert") {
+        const nova = { id: `novo-${++relogio}`, criado_em: `t${relogio}`, atualizado_em: `t${relogio}`, ...JSON.parse(JSON.stringify(acao.valores)) };
+        (tabelas[tabela] = tabelas[tabela] || []).push(nova);
+        return { data: [{ id: nova.id }], error: null, status: 201 };
+      }
       if (acao.tipo === "update") {
         const alvo = linhas();
         for (const l of alvo) Object.assign(l, JSON.parse(JSON.stringify(acao.valores)), { atualizado_em: `t${++relogio}`, updated_at: `t${relogio}` });
@@ -48,6 +53,7 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>) {
     const q: any = {
       select: () => q,
       update: (valores: Linha) => { acao = { tipo: "update", valores }; return q; },
+      insert: (valores: Linha) => { acao = { tipo: "insert", valores }; return q; },
       eq: (c: string, v: unknown) => { filtros.push((l) => l[c] === v); return q; },
       is: (c: string, v: unknown) => { filtros.push((l) => (l[c] ?? null) === v); return q; },
       in: (c: string, v: unknown[]) => { filtros.push((l) => v.indexOf(l[c]) >= 0); return q; },
@@ -173,10 +179,30 @@ describe("mídia da peça: o pedido de troca muda o item de verdade", () => {
     expect(db.tabelas.calendario_propostas[0].itens[0].midia.web[0].licenca).toBe("CC BY 2.0");
   });
 
-  it("sem roteiro do Mês: avisa e não grava nada", async () => {
+  it("sem roteiro do Mês (peça do MCP): monta o item pela tarefa, grava num roteiro espelho e o Desfazer volta", async () => {
     const db = cenario();
     db.tabelas.calendario_propostas = [];
-    await expect(planejarMidia(deps(db), { clientId: CLIENTE, taskId: TAREFA, tipo: "video" })).rejects.toThrow("não tem o roteiro do Mês");
+    db.tabelas.tasks[0].project_id = "p1";
+    db.tabelas.tasks[0].description = "Tema: Jardim vertical na varanda\nFormato: Vídeo rápido (Estúdio)\n\nGancho: Sua varanda pode virar um jardim\n\nResumo: Fotos reais do projeto ganham movimento.\n\nCaminho do vídeo: Gerar com IA\nEstilo de vídeo: jardim\nDireção do vídeo: push-in lento na parede verde";
+    const d = deps(db);
+    const plano = await planejarMidia(d, { clientId: CLIENTE, taskId: TAREFA, tipo: "video" });
+    expect(plano.midia.acervo.map((a) => a.id)).toEqual([FOTO_JARDIM]);
+    expect(d.pedidos[0]).toContain("GANCHO ATUAL DA PEÇA: Sua varanda pode virar um jardim");
+    const passos = await gravarMidia(db, CLIENTE, TAREFA, plano);
+    const espelho = db.tabelas.calendario_propostas[0];
+    expect(espelho.status).toBe("gravada");
+    expect(espelho.parametros.origem).toBe("midia_da_tarefa");
+    expect(espelho.task_ids).toEqual([TAREFA]);
+    expect(espelho.itens[0].video.referencias).toEqual([FOTO_JARDIM]);
+    expect(espelho.itens[0].caminho_video).toBe("ia");
+    await desfazerPassosDoFormato(db, passos, CLIENTE);
+    expect(db.tabelas.calendario_propostas[0].itens[0].midia).toBeUndefined();
+  });
+
+  it("peça que saiu da agenda: avisa e não grava nada", async () => {
+    const db = cenario();
+    db.tabelas.tasks[0].deleted_at = "2026-10-25";
+    await expect(planejarMidia(deps(db), { clientId: CLIENTE, taskId: TAREFA, tipo: "video" })).rejects.toThrow("não está mais na agenda");
   });
 });
 

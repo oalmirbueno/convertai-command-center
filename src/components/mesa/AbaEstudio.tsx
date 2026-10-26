@@ -2095,6 +2095,14 @@ export function DetalheDoItem({
 
   const ferramentaConjunto = trabalho ? (
     <div className="space-y-4">
+      {trabalho.direcao?.foto_real?.linha && (
+        <section>
+          <Rotulo>Foto real</Rotulo>
+          <p className="text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" role="status" data-foto-real={trabalho.direcao.foto_real.modo}>
+            {trabalho.direcao.foto_real.linha}{trabalho.direcao.foto_real.lamina ? ` Na lâmina ${trabalho.direcao.foto_real.lamina}.` : ""}
+          </p>
+        </section>
+      )}
       <section>
         <Rotulo>Conceito</Rotulo>
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">

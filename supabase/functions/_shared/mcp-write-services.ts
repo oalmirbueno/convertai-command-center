@@ -195,13 +195,89 @@ export function tituloNormalizado(titulo: string): string {
 
 const CAMPOS_DA_TAREFA = 'id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, created_at, updated_at';
 
+// ─── Nome da tarefa: "Cliente · Área · assunto" (26/10/2026) ───
+// Dono: "o nome ACE com número é confuso; marcação por departamento, por cliente". A tela já mostra
+// assim (src/lib/nomeDaTarefa.ts); aqui a tarefa nova criada por agente já nasce no padrão quando falta
+// o cliente ou a área. O código (ACE-275) fica no assunto: a tela tira para o detalhe.
+export const AREAS_DA_TAREFA = ['Tráfego', 'Conteúdo', 'Design', 'Vídeo', 'Site', 'Atendimento', 'Relatório', 'Comercial', 'Operação'] as const;
+const AREA_POR_ENTREGA: Record<string, string> = {
+  traffic: 'Tráfego',
+  static: 'Conteúdo', carousel: 'Conteúdo', story: 'Conteúdo', article: 'Conteúdo', google_post: 'Conteúdo', copywriting: 'Conteúdo',
+  design: 'Design', branding: 'Design',
+  reel: 'Vídeo', video: 'Vídeo', short: 'Vídeo',
+  website: 'Site', landing_page: 'Site', seo: 'Site',
+  report: 'Relatório', document: 'Relatório',
+  automation: 'Operação',
+};
+const AREA_POR_ASSUNTO: Array<[string, RegExp]> = [
+  ['Tráfego', /\b(meta|ads|an[uú]ncios?|campanhas?|tr[aá]fego|bm|pixel|verba|boletins?|conjuntos?|google ads|cpa|cpm|roas)\b/i],
+  ['Site', /\b(site|landing|checkout|dom[ií]nio|wordpress|p[aá]gina de vendas)\b/i],
+  ['Vídeo', /\b(v[ií]deos?|reels?|edi[cç][aã]o|roteiros?)\b/i],
+  ['Design', /\b(arte|artes|logo|identidade|mockups?|design)\b/i],
+  ['Conteúdo', /\b(posts?|carross[eé]is|carrossel|stories|story|legendas?|criativos?|copy|conte[uú]do|calend[aá]rio|pautas?)\b/i],
+  ['Atendimento', /\b(whatsapp|grupo do cliente|rituais?|atendimento|onboarding)\b/i],
+  ['Relatório', /\b(relat[oó]rios?|m[eé]tricas)\b|\bdossi[eê]/i],
+  ['Comercial', /\b(leads?|proposta|comercial|crm|prospec[cç][aã]o)\b/i],
+];
+const semAcentoNome = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function mesmoClienteNoNome(prefixo: string, cliente: string): boolean {
+  const a = semAcentoNome(prefixo), b = semAcentoNome(cliente);
+  if (!a || !b) return false;
+  if (a === b || b.startsWith(a) || a.startsWith(b)) return true;
+  const pa = a.split(/\s+/)[0], pb = b.split(/\s+/)[0];
+  return pa === pb && pa.length >= 3;
+}
+const nomeDoClienteNaTarefa = (c: string) => (/^aceleri?q$/i.test(c.replace(/\s+/g, '')) ? 'Aceleriq' : c.replace(/\s+/g, ' ').trim().slice(0, 60));
+
+/** Separa "Cliente · Área · assunto" (ou "Cliente — assunto") e devolve só o assunto; sem prefixo, o título. */
+export function assuntoDaTarefa(titulo: string, cliente: string | null | undefined): string {
+  let resto = String(titulo ?? '').replace(/\s+/g, ' ').trim();
+  const c = String(cliente ?? '').trim();
+  for (let i = 0; i < 2; i += 1) {
+    const m = resto.match(/^([^|:—–·]{1,60}?)\s*(?:\||:|—|–|·|\s-\s)\s*(.+)$/);
+    if (!m) break;
+    const prefixo = m[1].trim();
+    const ehCliente = c && mesmoClienteNoNome(prefixo, nomeDoClienteNaTarefa(c));
+    const ehArea = (AREAS_DA_TAREFA as readonly string[]).some((a) => semAcentoNome(a) === semAcentoNome(prefixo));
+    if (!ehCliente && !ehArea) break;
+    resto = m[2].trim();
+  }
+  return resto;
+}
+
+/** O título no padrão da casa; sem o nome do cliente, devolve o título como veio. */
+export function tituloNoPadraoDaCasa(titulo: string, cliente: string | null | undefined, tipoDeEntrega?: string | null): string {
+  const limpo = String(titulo ?? '').replace(/\s+/g, ' ').trim();
+  const c = String(cliente ?? '').trim();
+  if (!c || !limpo) return limpo;
+  const nome = nomeDoClienteNaTarefa(c);
+  const partes = limpo.split(' · ');
+  if (partes.length >= 3 && mesmoClienteNoNome(partes[0], nome) && (AREAS_DA_TAREFA as readonly string[]).includes(partes[1].trim())) return limpo.slice(0, 200);
+  const assunto = assuntoDaTarefa(limpo, c) || limpo;
+  const area = AREA_POR_ENTREGA[String(tipoDeEntrega ?? '')]
+    ?? AREA_POR_ASSUNTO.find(([, re]) => re.test(assunto))?.[0]
+    ?? 'Operação';
+  return `${nome} · ${area} · ${assunto.charAt(0).toUpperCase()}${assunto.slice(1)}`.slice(0, 200);
+}
+
+async function nomeDoClienteDaTarefa(clientId: string): Promise<string | null> {
+  try {
+    const { data } = await db().from('profiles').select('company_name, full_name').eq('id', clientId).maybeSingle();
+    const linha = (Array.isArray(data) ? data[0] : data) as { company_name?: string | null; full_name?: string | null } | null;
+    const nome = String(linha?.company_name ?? '').trim() || String(linha?.full_name ?? '').trim();
+    return nome || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * MCP 2.19 (26/10/2026): o Paperclip recriava as mesmas tarefas a cada troca de chave (o
  * idempotency_key só vale dentro da mesma credencial). Antes de criar: a mesma origem_externa em
  * qualquer projeto do cliente, ou o mesmo título normalizado numa tarefa aberta do projeto, devolve a
  * existente. Vale para todas as credenciais.
  */
-async function tarefaJaExistente(input: CreateTaskInput, clientId: string): Promise<{ record: Record<string, unknown>; por: 'origem_externa' | 'titulo' } | null> {
+async function tarefaJaExistente(input: CreateTaskInput, clientId: string, cliente: string | null = null): Promise<{ record: Record<string, unknown>; por: 'origem_externa' | 'titulo' } | null> {
   if (input.origem_externa) {
     const { data: projetos } = await db().from('projects').select('id').eq('client_id', clientId).is('deleted_at', null).limit(500);
     const ids = ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id);
@@ -212,9 +288,14 @@ async function tarefaJaExistente(input: CreateTaskInput, clientId: string): Prom
     }
   }
   const alvo = tituloNormalizado(input.title);
+  // 26/10: o título novo vem no padrão "Cliente · Área · assunto"; a antiga pode não estar. Compara também o assunto.
+  const alvoDoAssunto = tituloNormalizado(assuntoDaTarefa(input.title, cliente));
   const { data: abertas } = await db().from('tasks').select(CAMPOS_DA_TAREFA)
     .eq('project_id', input.project_id).is('deleted_at', null).neq('status', 'done').limit(1000);
-  const igual = ((abertas ?? []) as Array<Record<string, unknown>>).find((x) => tituloNormalizado(String(x.title ?? '')) === alvo);
+  const igual = ((abertas ?? []) as Array<Record<string, unknown>>).find((x) => {
+    const titulo = String(x.title ?? '');
+    return tituloNormalizado(titulo) === alvo || (alvoDoAssunto !== '' && tituloNormalizado(assuntoDaTarefa(titulo, cliente)) === alvoDoAssunto);
+  });
   return igual ? { record: igual, por: 'titulo' } : null;
 }
 
@@ -230,7 +311,10 @@ export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
     return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
   }
 
-  const existente = await tarefaJaExistente(input, String(projeto.client_id));
+  // 26/10: tarefa nova nasce "Cliente · Área · assunto" (prefixa o que faltar).
+  const cliente = await nomeDoClienteDaTarefa(String(projeto.client_id));
+  if (cliente) input = { ...input, title: tituloNoPadraoDaCasa(input.title, cliente, input.delivery_type) };
+  const existente = await tarefaJaExistente(input, String(projeto.client_id), cliente);
   if (existente) {
     // A existente aprende a origem que faltava: a próxima chamada casa direto pela origem.
     if (input.origem_externa && existente.por === 'titulo') {
