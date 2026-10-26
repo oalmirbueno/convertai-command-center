@@ -14,7 +14,7 @@
  * (consumidor do Hermes e fim_da_rodada do MCP 2.19), então a volta à fila não
  * gera mais conversa. Se o vínculo já está com quem executa, só registra.
  *
- * Sem lookbehind e sem \p{} (Safari 11).
+ * Sem lookbehind e sem classe Unicode (Safari 11).
  */
 
 export interface EntradaDoDiarioMinima {

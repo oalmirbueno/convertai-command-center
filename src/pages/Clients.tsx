@@ -15,6 +15,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   Users,
+  UserX,
   Repeat,
   Zap,
   Blend,
@@ -37,6 +38,7 @@ import {
   FaixaDeNumeros,
   Painel,
   Secao,
+  SeletorCompacto,
   botao,
   campo,
   etiqueta,
@@ -59,6 +61,13 @@ import { useQuery } from "@tanstack/react-query";
 import AreaDePropostas from "@/components/clientes-propostas/AreaDePropostas";
 import { AcoesComerciaisDoCliente } from "@/components/clientes-propostas/PropostasDoCliente";
 import NovaProposta, { type TipoDaNovaProposta } from "@/components/clientes-propostas/NovaProposta";
+import {
+  FILTROS_DA_COBRANCA,
+  passaNoFiltroDaCobranca,
+  renovacaoEmAlerta as alertaDaRenovacao,
+  situacoesPorCliente,
+  type FiltroDaCobranca,
+} from "@/lib/clientes/situacaoDaCobranca";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -79,7 +88,6 @@ const STATUS_TABS = [
   { value: "active", label: "Ativos" },
   { value: "onboarding", label: "Em andamento" },
   { value: "standby", label: "Standby" },
-  { value: "inactive", label: "Inativos" },
 ];
 
 // Bolinha de status parada (nada piscando na lista).
@@ -102,6 +110,8 @@ const TYPE_TABS = [
   { value: "recurring", label: "Recorrentes" },
   { value: "one_off", label: "Avulsos" },
   { value: "hybrid", label: "Híbridos" },
+  // 26/10/2026 (dono): inativo não faz mais parte do ciclo; fica só nesta aba.
+  { value: "inactive", label: "Inativos" },
 ];
 
 // 16/10/2026 (dono): os tipos viram abas em ícone na linha do título (o nome no title).
@@ -110,6 +120,7 @@ const TYPE_ICONS: Record<string, ReactNode> = {
   recurring: <Repeat className="h-4 w-4" />,
   one_off: <Zap className="h-4 w-4" />,
   hybrid: <Blend className="h-4 w-4" />,
+  inactive: <UserX className="h-4 w-4" />,
 };
 
 // Filtro por serviço contratado (services_config do cadastro). Rótulos curtos
@@ -689,6 +700,7 @@ export default function Clients() {
   const [typeFilter, setTypeFilter] = useEstadoDaTela("filtro:tipo", "all", { validar: validarOpcao(TYPE_TABS) });
   const [serviceFilter, setServiceFilter] = useEstadoDaTela("filtro:servico", "all", { validar: validarOpcao(SERVICE_FILTERS) });
   const [search, setSearch] = useEstadoDaTela("busca", "", { validar: (v) => typeof v === "string" });
+  const [filtroCobranca, setFiltroCobranca] = useEstadoDaTela<FiltroDaCobranca>("filtro:cobranca", "todas", { validar: (v) => FILTROS_DA_COBRANCA.some((f) => f.valor === v) });
 
   useEffect(() => {
     const requestedClientId = searchParams.get("client");
@@ -713,9 +725,24 @@ export default function Clients() {
 
   const searchTerm = normalizeSearch(search);
   const searching = searchTerm.length > 0;
+  function correspondeABusca(c: any) {
+    const searchable = normalizeSearch([
+      c.company_name,
+      c.full_name,
+      c.email,
+      c.phone,
+    ].filter(Boolean).join(" "));
+    const searchedDigits = search.replace(/\D/g, "");
+    const phoneDigits = String(c.phone || "").replace(/\D/g, "");
+    const matchesPhone = searchedDigits.length > 0 && phoneDigits.includes(searchedDigits);
+    return searchable.includes(searchTerm) || matchesPhone;
+  }
 
   const filtered = clientRows.filter((c) => {
     const status = c.plan_status || "active";
+    // Inativo só aparece na aba Inativos; nas outras abas ele não existe (não cancela, não renova, não cobra).
+    if (typeFilter === "inactive") return status === "inactive" && (!searching || correspondeABusca(c));
+    if (status === "inactive") return false;
     if (tab !== "all" && status !== tab) return false;
     if (typeFilter !== "all") {
       const type = c.client_type || "recurring";
@@ -726,20 +753,10 @@ export default function Clients() {
     }
     if (serviceFilter !== "all" && !(c as any).services_config?.[serviceFilter]) return false;
 
-    if (searching) {
-      const searchable = normalizeSearch([
-        c.company_name,
-        c.full_name,
-        c.email,
-        c.phone,
-      ].filter(Boolean).join(" "));
-      const searchedDigits = search.replace(/\D/g, "");
-      const phoneDigits = String(c.phone || "").replace(/\D/g, "");
-      const matchesPhone = searchedDigits.length > 0 && phoneDigits.includes(searchedDigits);
-      if (!searchable.includes(searchTerm) && !matchesPhone) return false;
-    }
+    if (searching && !correspondeABusca(c)) return false;
     return true;
   });
+  const inativosCount = clientRows.filter((c) => c.plan_status === "inactive").length;
 
   // Separação para a lista: clientes de verdade (recorrentes + híbridos),
   // avulsos em seção própria e empresas do grupo fora da contagem.
@@ -853,44 +870,19 @@ export default function Clients() {
   // Leitura simples da cobrança de CADA cliente na lista: Atrasado ganha de
   // A receber, que ganha de Em dia. É a mesma fonte real dos KPIs (billing),
   // sem os termos internos do Financeiro (rascunho/revisar) que só confundiam.
-  const billingReadByClient = new Map<
-    string,
-    { tone: "late" | "due" | "paid"; label: string; detail: string }
-  >();
-  for (const bill of (kpiBilling || []) as any[]) {
-    if (!bill?.client_id || bill.type === "ads_recharge") continue;
-    const clientKey = String(bill.client_id);
-    const due = parseAppDate(bill.due_date);
-    const pendingLike = bill.status === "pending" || bill.status === "partial";
-    const current = billingReadByClient.get(clientKey);
-    if (pendingLike && due && kpiToday && due < kpiToday) {
-      if (current?.tone !== "late") {
-        billingReadByClient.set(clientKey, {
-          tone: "late",
-          label: "Atrasado",
-          detail: `Venceu ${formatBRDate(bill.due_date)}`,
-        });
-      }
-      continue;
-    }
-    if (current?.tone === "late") continue;
-    if (pendingLike && kpiInThisMonth(bill.due_date)) {
-      billingReadByClient.set(clientKey, {
-        tone: "due",
-        label: "A receber",
-        detail: `Vence ${formatBRDate(bill.due_date)}`,
-      });
-      continue;
-    }
-    if (current) continue;
-    if (bill.status === "paid" && kpiInThisMonth(bill.paid_date || bill.due_date)) {
-      billingReadByClient.set(clientKey, {
-        tone: "paid",
-        label: "Em dia",
-        detail: `Pago em ${formatBRDate(bill.paid_date || bill.due_date)}`,
-      });
-    }
-  }
+  // 26/10/2026 (dono): "se o cliente já pagou, mesmo atrasado, esse alerta tem que sair". A regra mora em
+  // lib/clientes/situacaoDaCobranca.ts: Atrasado só com saldo a pagar vencido.
+  const hojeIso = kpiToday
+    ? `${kpiToday.getFullYear()}-${String(kpiToday.getMonth() + 1).padStart(2, "0")}-${String(kpiToday.getDate()).padStart(2, "0")}`
+    : new Date().toISOString().slice(0, 10);
+  const situacoes = situacoesPorCliente((kpiBilling || []) as any[], hojeIso);
+  const billingReadByClient = new Map<string, { tone: "late" | "due" | "paid"; label: string; detail: string }>();
+  situacoes.forEach((sit, id) => billingReadByClient.set(id, { tone: sit.tom, label: sit.rotulo, detail: sit.detalhe }));
+  const passaNaCobranca = (c: any) => isInternalClient(c) ? filtroCobranca === "todas" : passaNoFiltroDaCobranca(situacoes.get(String(c.id)), filtroCobranca);
+  const contagemDaCobranca = (f: FiltroDaCobranca) => [...principais, ...avulsosList].filter((c) => !isInternalClient(c) && passaNoFiltroDaCobranca(situacoes.get(String(c.id)), f)).length;
+  // Na aba Inativos, todos os inativos numa lista só (recorrente, híbrido ou avulso).
+  const principaisVisiveis = (typeFilter === "inactive" ? filtered.filter((c) => !isInternalClient(c)) : principais).filter(passaNaCobranca);
+  const avulsosVisiveis = typeFilter === "inactive" ? [] : avulsosList.filter(passaNaCobranca);
 
   // Recebido REAL no mês corrente (mensalidades + parcelas de projetos)
   const receivedMonthBills = (kpiBilling || [])
@@ -966,7 +958,7 @@ export default function Clients() {
     },
   ];
 
-  const filtrosAtivos = serviceFilter !== "all" || typeFilter !== "all" || tab !== "all";
+  const filtrosAtivos = serviceFilter !== "all" || typeFilter !== "all" || tab !== "all" || filtroCobranca !== "todas";
   const abrirMenuNoBotao = (e: { currentTarget: HTMLElement }, cliente: any) => {
     const r = e.currentTarget.getBoundingClientRect();
     setMenuCliente({ x: Math.max(8, r.right - 220), y: r.bottom + 4, cliente });
@@ -1153,7 +1145,8 @@ export default function Clients() {
 
     const nome = c.company_name || c.full_name;
     const status = getRenewalStatus(c.plan_renewal_date);
-    const renovacaoEmAlerta = status?.level === "expired" || status?.level === "urgent";
+    // A data da renovação só alerta quando há cobrança vencida e não paga (cliente que pagou fica sem alerta).
+    const renovacaoEmAlerta = !internal && alertaDaRenovacao(status?.level, situacoes.get(String(c.id)));
     const tipo = typeBadge[c.client_type || "recurring"];
     const origemDoValor =
       priceSource === "official"
@@ -1227,14 +1220,14 @@ export default function Clients() {
                       "ml-3 hidden shrink-0 items-center rounded-md px-2 py-1 text-[12px] tabular-nums md:inline-flex",
                       renovacaoEmAlerta ? juntar(status?.color, "bg-destructive/10") : "text-muted-foreground",
                     )}
-                    aria-label={`Renovação ${formatBRDate(c.plan_renewal_date)}${status?.label ? `. ${status.label}` : ""}`}
+                    aria-label={`Renovação ${formatBRDate(c.plan_renewal_date)}${renovacaoEmAlerta && status?.label ? `. ${status.label}` : ""}`}
                   >
-                    {status?.icon ? <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <CalendarClock className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                    {renovacaoEmAlerta ? <AlertTriangle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <CalendarClock className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
                     {formatBRDate(c.plan_renewal_date)}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <p className="text-[12px]">{status?.label || "Renovação"}</p>
+                  <p className="text-[12px]">{renovacaoEmAlerta ? status?.label || "Renovação" : situacoes.get(String(c.id))?.tom === "paid" ? `Renovação · ${situacoes.get(String(c.id))?.detalhe}` : "Renovação"}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1353,8 +1346,9 @@ export default function Clients() {
     setServiceFilter("all");
     setTypeFilter("all");
     setTab("all");
+    setFiltroCobranca("todas");
   };
-  const filtrosNoMenu = (tab !== "all" ? 1 : 0) + (serviceFilter !== "all" ? 1 : 0);
+  const filtrosNoMenu = (tab !== "all" ? 1 : 0) + (serviceFilter !== "all" ? 1 : 0) + (filtroCobranca !== "todas" ? 1 : 0);
 
   // 16/10/2026 (dono): "Todos, recorrentes, avulsos... tudo aqui em cima, com
   // ícone"; ações só no ícone, sem borda (o nome no title). Status e serviço
@@ -1363,7 +1357,7 @@ export default function Clients() {
     <Etapas
       soIcone
       rotulo="Filtrar clientes por tipo"
-      itens={TYPE_TABS.map((t) => ({ valor: t.value, rotulo: t.label, icone: TYPE_ICONS[t.value] }))}
+      itens={TYPE_TABS.map((t) => ({ valor: t.value, rotulo: t.label, icone: TYPE_ICONS[t.value], contador: t.value === "inactive" ? inativosCount : null }))}
       valor={typeFilter}
       onEscolher={setTypeFilter}
       className="min-w-0"
@@ -1406,6 +1400,16 @@ export default function Clients() {
             ))}
           </select>
         </label>
+        {isAdmin && (
+          <label className="mb-3 block min-w-0">
+            <span className={juntar(texto.rotulo, "mb-1 block")}>Cobrança</span>
+            <select value={filtroCobranca} onChange={(e) => setFiltroCobranca(e.target.value as FiltroDaCobranca)} className={campo} aria-label="Filtrar pela cobrança">
+              {FILTROS_DA_COBRANCA.map((f) => (
+                <option key={f.valor} value={f.valor}>{f.rotulo}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block min-w-0">
           <span className={juntar(texto.rotulo, "mb-1 block")}>Serviço</span>
           <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className={campo}>
@@ -1550,24 +1554,35 @@ export default function Clients() {
           />
         ) : (
           <div className="space-y-6">
-            <section aria-label="Clientes recorrentes e híbridos">
-              {principais.length > 0 ? (
+            {isAdmin && (
+              <div className="flex min-w-0 flex-wrap items-center gap-2" data-filtro-da-cobranca="">
+                <SeletorCompacto
+                  rotulo="Situação da cobrança"
+                  modo="segmentado"
+                  valor={filtroCobranca}
+                  onEscolher={(v) => setFiltroCobranca(v as FiltroDaCobranca)}
+                  opcoes={FILTROS_DA_COBRANCA.map((f) => ({ valor: f.valor, rotulo: f.rotulo, contador: f.valor === "todas" ? null : contagemDaCobranca(f.valor) }))}
+                />
+              </div>
+            )}
+            <section aria-label={typeFilter === "inactive" ? "Clientes inativos" : "Clientes recorrentes e híbridos"}>
+              {principaisVisiveis.length > 0 ? (
                 <Painel semEspaco>
-                  <ul className="divide-y divide-border">{principais.map((c) => renderClientRow(c))}</ul>
+                  <ul className="divide-y divide-border">{principaisVisiveis.map((c) => renderClientRow(c, typeFilter === "inactive" ? { apagado: true } : undefined))}</ul>
                 </Painel>
               ) : (
-                <EstadoVazio compacto titulo="Nenhum recorrente ou híbrido nestes filtros." />
+                <EstadoVazio compacto titulo={typeFilter === "inactive" ? "Nenhum cliente inativo nestes filtros." : "Nenhum recorrente ou híbrido nestes filtros."} />
               )}
             </section>
 
-            {avulsosList.length > 0 && (
+            {avulsosVisiveis.length > 0 && (
               <Secao
                 titulo="Avulsos"
-                descricao={isMobile ? `${avulsosList.length} em andamento` : `${avulsosList.length} em andamento · ${principais.length + avulsosList.length} clientes no total`}
+                descricao={isMobile ? `${avulsosVisiveis.length} em andamento` : `${avulsosVisiveis.length} em andamento · ${principaisVisiveis.length + avulsosVisiveis.length} clientes no total`}
               >
                 <Painel semEspaco>
                   <ul className="divide-y divide-border">
-                    {avulsosList.map((c) =>
+                    {avulsosVisiveis.map((c) =>
                       renderClientRow(c, {
                         acao: (
                           <button
