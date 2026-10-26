@@ -1,5 +1,5 @@
 import { ControlesDaPauta } from "./ControlesDaPauta";
-import { superficie, juntar } from "@/components/sistema/estilos";
+import { botao, superficie, juntar } from "@/components/sistema/estilos";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Film, ImagePlus, Maximize2, Wand2, Type, Send, PenLine, Image, type LucideIcon } from "lucide-react";
@@ -45,7 +45,7 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
   const [destinoSelecao, setDestinoSelecao] = useState<HTMLDivElement | null>(null);
   const [selecaoAberta, setSelecaoAberta] = useState(false);
   return <SelecaoContexto.Provider value={{ destino: destinoSelecao, abrir: setSelecaoAberta }}><AcoesContexto.Provider value={destino}><PainelContexto.Provider value={ativa}><section className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden")} data-bancada-da-pauta={tipo}>
-    <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-primary px-3 py-2">
+    <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
       <Icone className="h-4 w-4 shrink-0 text-primary" /><p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
       {controles}{acoes}<div ref={setDestino} className="flex min-w-0 flex-wrap items-center" />
     </header>
@@ -54,7 +54,7 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
         <p className="mb-3 text-[12px] font-medium text-muted-foreground">Prancheta</p><div hidden={selecaoAberta}>{prancheta}</div><div ref={setDestinoSelecao} hidden={!selecaoAberta} />
       </aside>
       <main aria-label="Prévia do conteúdo" className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4">{previa}</main>
-      <div className="flex min-h-0 min-w-0 border-t lg:border-l lg:border-t-0"><aside aria-label={tipo === "fotos" ? "Ferramentas de fotos" : "Ferramentas de vídeo"} className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><h3 className="mb-4 border-b pb-3 text-[13px] font-semibold">{abas.find((a) => a.id === ativa)?.nome || "Ferramentas"}</h3>{ferramentas}</aside>
+      <div className="flex min-h-0 min-w-0 border-t lg:border-l lg:border-t-0"><aside aria-label={tipo === "fotos" ? "Ferramentas de fotos" : "Ferramentas de vídeo"} className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><h3 className="mb-3 text-[13px] font-semibold">{abas.find((a) => a.id === ativa)?.nome || "Ferramentas"}</h3>{ferramentas}</aside>
       {!!abas.length && <TooltipProvider delayDuration={200}><nav aria-label="Ferramentas do estúdio" className="flex min-h-0 w-12 shrink-0 flex-col items-center overflow-y-auto overscroll-contain border-l py-2">{abas.map(({ id, nome, icone: Icone, onAbrir }) => <Tooltip key={id}><TooltipTrigger asChild><button type="button" aria-label={nome} aria-pressed={ativa === id} onClick={() => onAbrir ? onAbrir() : onAba?.(id)} className={`mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary ${ativa === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}><Icone className="h-[18px] w-[18px]" /></button></TooltipTrigger><TooltipContent side="left">{nome}</TooltipContent></Tooltip>)}</nav></TooltipProvider>}</div>
     </div>
   </section></PainelContexto.Provider></AcoesContexto.Provider></SelecaoContexto.Provider>;
@@ -107,7 +107,7 @@ export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, o
   ];
   return <BancadaDaPauta tipo="fotos" titulo={titulo}
     abas={abas} ativa={painel} onAba={setPainel} escolhendo={!!seletor}
-    acoes={onEscolher && <button type="button" onClick={onEscolher} className="rounded-md bg-primary px-3 py-2 text-[12px] text-primary-foreground">Escolher fotos</button>}
+    acoes={onEscolher && <button type="button" onClick={onEscolher} className={botao.secundario}>Escolher fotos</button>}
     prancheta={seletor || <><ol className="flex gap-3 overflow-x-auto lg:flex-col lg:overflow-visible">{fotos.map((f, i) => <li key={f.id} className="w-28 shrink-0">
       <button type="button" aria-pressed={foto?.id === f.id} aria-label={`Ver foto ${i + 1}: ${f.nome}`} onClick={() => setAtiva(f.id)} className={`block w-full overflow-hidden rounded-lg border-2 ${foto?.id === f.id ? 'border-primary' : 'border-transparent'}`}>
         <ImagemDaMesa caminho={f.caminho} bucket={f.bucket || "mesa"} alt={f.nome} className="aspect-[4/5] w-full object-cover" />

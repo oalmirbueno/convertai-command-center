@@ -1849,7 +1849,8 @@ export function DetalheDoItem({
           {prancheta(true)}
         </div>
       </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4">
+      {/* 26/10/2026: folga embaixo para a lâmina e o rodapé não ficarem cortados no fim da rolagem. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 pb-12">
         {avisoDePostDeFotos}
         {avisoDeAjuste}
         <EstudioSemTipografia clientId={clientId} />

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { padraoPara, parteDaConferenciaDoJev, TAMANHOS, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import type { ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { BotaoComCusto } from "./Custo";
@@ -211,6 +212,47 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
             </button>
           ))}
         </div>
+          {pronto && video && (
+            <div className="flex min-w-0 shrink-0 items-center gap-1" data-preparar-para-publicar={preparo ? "feito" : naAgenda ? "na-agenda" : "pronto"}>
+              {preparo ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                  <span className={juntar(texto.auxiliar, "max-w-[220px] truncate")} role="status" title={textoDoPreparo(preparo)}>
+                    {textoDoPreparo(preparo)}
+                  </span>
+                  {preparo.criado && (
+                    <button type="button" className={botao.icone} onClick={() => void desfazer()} disabled={desfazendo} aria-label="Desfazer" title="Desfazer: tira o post da Agenda (o vídeo continua no Workspace)">
+                      {desfazendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <AjudaRecolhida rotulo="Sobre preparar para publicar">
+                    {naAgenda ? "Já tem post na Agenda: preparar de novo atualiza a legenda." : "Legenda, Agenda e aprovação num clique. Nada é publicado sem aprovação."}
+                  </AjudaRecolhida>
+                  <BotaoComCusto
+                    rotulo={
+                      <>
+                        <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                        Preparar para publicar
+                      </>
+                    }
+                    titulo="Preparar para publicar"
+                    descricao="Leva o vídeo para Arquivos, escreve a legenda com o roteiro como base e cria o post de Reels na Agenda no dia da peça, aguardando aprovação. Nada é publicado sem aprovação."
+                    partes={partes}
+                    disabled={!podeEditar || !diretor || video.fonte === "agenda"}
+                    executar={preparar}
+                    aoConcluir={(data) => {
+                      setPreparo(data as ResultadoDoPreparo);
+                      reler();
+                    }}
+                    className="h-8 px-3"
+                  />
+                </>
+              )}
+            </div>
+          )}
       </div>
 
       {vista === "video" && (
@@ -298,48 +340,6 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
         </div>
       )}
 
-      {pronto && video && (
-        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3" data-preparar-para-publicar={preparo ? "feito" : naAgenda ? "na-agenda" : "pronto"}>
-          {preparo ? (
-            <>
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-              <span className={juntar(texto.corpo, "min-w-0 flex-1 [overflow-wrap:anywhere]")} role="status">
-                {textoDoPreparo(preparo)}
-              </span>
-              {preparo.criado && (
-                <button type="button" className={juntar(botao.barra, "border border-border")} onClick={() => void desfazer()} disabled={desfazendo} title="Desfazer: tira o post da Agenda (o vídeo continua no Workspace)">
-                  {desfazendo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Undo2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-                  Desfazer
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <span className={juntar(texto.auxiliar, "hidden min-w-0 flex-1 truncate sm:block")}>
-                {naAgenda ? "Já tem post na Agenda: preparar de novo atualiza a legenda." : "Legenda, Agenda e aprovação num clique."}
-              </span>
-              <BotaoComCusto
-                rotulo={
-                  <>
-                    <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                    Preparar para publicar
-                  </>
-                }
-                titulo="Preparar para publicar"
-                descricao="Leva o vídeo para Arquivos, escreve a legenda com o roteiro como base e cria o post de Reels na Agenda no dia da peça, aguardando aprovação. Nada é publicado sem aprovação."
-                partes={partes}
-                disabled={!podeEditar || !diretor || video.fonte === "agenda"}
-                executar={preparar}
-                aoConcluir={(data) => {
-                  setPreparo(data as ResultadoDoPreparo);
-                  reler();
-                }}
-                className="h-8 px-3"
-              />
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }

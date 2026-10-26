@@ -23,12 +23,12 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, ids, onFoto
   const [quantidade, setQuantidade] = useState(direcao ? inicial.quantidade : 1);
   const [progresso, setProgresso] = useState("");
   const fontes = ids.map((id) => fotos.data?.find((f) => f.id === id && f.client_id === clientId && f.ativa && !f.referencia_web)).filter((f) => !!f);
-  return <section aria-label="Gerar fotos da pauta" className="mb-4 space-y-3 border-b pb-4">
+  return <section aria-label="Gerar fotos da pauta" className="mb-4 space-y-3">
     <p className="text-[13px] font-semibold">Direção da foto</p>
     <textarea aria-label="Direção para gerar as fotos" value={instrucao} onChange={(e) => setInstrucao(e.target.value)} className="min-h-32 w-full rounded-lg border bg-background p-3 text-[13px]" />
     <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setMotor} />
     <label className="flex items-center justify-between text-[12px]">Fotos a gerar<select aria-label="Quantidade de fotos a gerar" className="rounded border bg-background p-2" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))}>{Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>
-    <AcoesDaBancada><BotaoComCusto rotulo={progresso || `Gerar fotos (${quantidade})`} titulo="Gerar fotos da pauta" descricao="Cria novas versões no acervo, usando as fotos escolhidas como base. Confira o resultado antes de preparar e enviar."
+    <AcoesDaBancada><BotaoComCusto rotulo={progresso || (quantidade === 1 ? "Gerar foto" : `Gerar ${quantidade} fotos`)} titulo="Gerar fotos da pauta" descricao="Cria novas versões no acervo, usando as fotos escolhidas como base. Confira o resultado antes de preparar e enviar."
       disabled={!fontes.length || !modelo || !instrucao.trim() || !!progresso} partes={() => Array.from({ length: quantidade }, () => partesDoPreparo(modelo, "alta")).flat()}
       executar={async () => {
         const geradas: string[] = []; let custo = 0;

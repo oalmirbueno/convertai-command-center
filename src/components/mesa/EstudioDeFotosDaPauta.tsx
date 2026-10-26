@@ -90,11 +90,11 @@ export default function EstudioDeFotosDaPauta({ item, roteiro, arte }: { item: I
     { id: "clones", nome: "Clones", icone: UserRound, onAbrir: () => setEtapa("clones") },
     { id: "diretor", nome: "Diretor de fotos", icone: MessageSquare, onAbrir: () => setDiretor(true) },
   ];
-  const ferramentas = null;
+  // 26/10/2026: a mídia pensada vai na barra da bancada (sem linha própria em cima da peça).
+  const ferramentas = <MidiaDaPauta item={{ ...item, modo_estudio: "fotos" }} />;
   const fonte = fonteDoArquivo(arte?.capa);
   return <MesaFotoProvider valor={valor}>
     <div className="flex min-h-0 flex-1 flex-col" data-estudio-fotos-da-pauta={item.id}>
-      {!ferramentaAberta && !diretor && <MidiaDaPauta item={{ ...item, modo_estudio: "fotos" }} />}
       <div hidden={ferramentaAberta || diretor} className={ferramentaAberta || diretor ? "hidden" : "flex min-h-0 flex-1 flex-col"}>{posts.isLoading ? <p role="status">Lendo as fotos desta pauta…</p> : posts.isError ? <p role="alert">Não foi possível ler este post. <button onClick={() => void posts.refetch()}>Tentar novamente</button></p> :
         post?.cards.length && !trocando ? <PostAberto post={post} estudio={{ ferramentas, extras }} onTrocarFotos={() => { setSelecionadas(post.imagem_ids); setTrocando(true); }} /> :
         !post && arte && fonte.caminho ? <BancadaDeFotos titulo={item.title} fotos={[{ id: arte.capa!.id, nome: item.title, caminho: fonte.caminho, bucket: fonte.bucket }]}>{ferramentas}<p className="text-[13px] font-semibold">Fotos já vinculadas à Agenda</p><p className="my-3 whitespace-pre-wrap text-[13px]">{arte.legenda}</p><a href="/calendario" className="text-[13px] text-primary">Conferir na Agenda</a></BancadaDeFotos> :
