@@ -2657,6 +2657,38 @@
       "remote_name": "post_aprovado_fica_pronto",
       "remote_statements_sha256": "7cf38f05102dfc761ce633f6841e457cbbc1aaf6ddab8a96850b681b893c0e7e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027090000",
+      "path": "supabase/migrations/20261027090000_aprovou_agenda_sozinho.sql",
+      "local_sha256": "abbb548a04d01e44693741890697058d6b48917a89ebbdba7eeb349a64064553",
+      "remote_name": "aprovou_agenda_sozinho",
+      "remote_statements_sha256": "e1b4da67ca6f6d86fde7f6aaf7b358ed02c0b45535e31e9773018ca409a4fa5b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027090100",
+      "path": "supabase/migrations/20261027090100_arquivar_tarefas_sem_dono_de_agente.sql",
+      "local_sha256": "477bca43b0111984de2c3c65eb09e18e351db5f1af0c67e2a47f67b1f94d6262",
+      "remote_name": "arquivar_tarefas_sem_dono_de_agente",
+      "remote_statements_sha256": "8b60b2edf6a5a211d0d5d44d485119c79fdfd914339ba2597cca366f115037f2",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027090200",
+      "path": "supabase/migrations/20261027090200_boletim_minimo_de_anuncios.sql",
+      "local_sha256": "6ba51b1f828f1133ac57f0aab06add8dd226a36943c52ebb0ec9f8ac830732af",
+      "remote_name": "boletim_minimo_de_anuncios",
+      "remote_statements_sha256": "890057dc14bbc65e50e5be94e52dc67b75911431f4acfc3705792dcd26d9400a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027100000",
+      "path": "supabase/migrations/20261027100000_lembrete_de_aprovacao_e_regua_de_cobranca.sql",
+      "local_sha256": "2e7052df131f8dff36a965d5bde6f599fe90d06c9635e0d21fc22d74d1bac036",
+      "remote_name": "lembrete_de_aprovacao_e_regua_de_cobranca",
+      "remote_statements_sha256": "0a9cf6be2cb58ab286ac0d8dd49bbfc04fc1b391ec92a00fc07aaae83fdd6f87",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
