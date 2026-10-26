@@ -2641,6 +2641,14 @@
       "remote_name": "contrato_exterior",
       "remote_statements_sha256": "4f0a7e488f24c00db4de7140d23878f05d5f8a54be110df45ad6db4e75cdbcd1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026210000",
+      "path": "supabase/migrations/20261026210000_post_aprovado_fica_pronto.sql",
+      "local_sha256": "090d608302217711a8608f7732eebb489e22a2c58ad5f751faa8a4428f61c328",
+      "remote_name": "post_aprovado_fica_pronto",
+      "remote_statements_sha256": "7cf38f05102dfc761ce633f6841e457cbbc1aaf6ddab8a96850b681b893c0e7e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
