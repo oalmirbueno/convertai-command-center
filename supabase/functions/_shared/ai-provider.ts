@@ -296,11 +296,19 @@ export async function requestAiChatCompletion(
     );
 
     try {
-      const response = await fetchAiChatCompletion(
+      let response = await fetchAiChatCompletion(
         provider,
         providerPayload,
         fetcher,
       );
+      // 26/10/2026: erro passageiro do provedor (5xx) ganha uma nova tentativa no mesmo provedor antes de
+      // seguir a cadeia (o OpenRouter deu 500 uma vez e a reserva direta estava sem crédito: a legenda caía).
+      if (response.status >= 500 && response.status <= 599) {
+        console.warn(`[ai] ${provider.label} -> HTTP ${response.status}; nova tentativa`);
+        await response.body?.cancel().catch(() => {});
+        await new Promise((r) => setTimeout(r, 900));
+        response = await fetchAiChatCompletion(provider, providerPayload, fetcher);
+      }
       if (response.ok) {
         if (lastResponse?.body) await lastResponse.body.cancel().catch(() => {});
         return { response, provider, attempts: index + 1 };

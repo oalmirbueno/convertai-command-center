@@ -131,7 +131,8 @@ describe("portable AI provider configuration", () => {
         url: input.toString(),
         body: JSON.parse(String(init?.body)),
       });
-      return calls.length === 1
+      // 26/10/2026: 5xx ganha uma nova tentativa no mesmo provedor; falhando de novo, segue a cadeia.
+      return calls.length <= 2
         ? new Response("unavailable", { status: 503 })
         : new Response("{}", { status: 200 });
     });
@@ -148,6 +149,10 @@ describe("portable AI provider configuration", () => {
     expect(result.provider.kind).toBe("openai");
     expect(result.attempts).toBe(2);
     expect(calls).toEqual([
+      {
+        url: "https://inference.example.test/v1/chat/completions",
+        body: expect.objectContaining({ model: "configured-model", stream: true }),
+      },
       {
         url: "https://inference.example.test/v1/chat/completions",
         body: expect.objectContaining({ model: "configured-model", stream: true }),

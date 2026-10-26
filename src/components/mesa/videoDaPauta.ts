@@ -256,7 +256,9 @@ export async function prepararParaPublicar(p: {
       content_type: mesmo ? mesmo.post.content_type : tipo,
       objective: mesmo ? mesmo.post.objective : null,
       default_caption: p.legenda,
-      production_status: mesmo ? mesmo.post.production_status : "draft",
+      // 26/10/2026: o vídeo final já é o material pronto (a aprovação decide a publicação). Nascer como
+      // "draft" travava o Programar do post aprovado ("approved editorial copy is immutable").
+      production_status: mesmo && mesmo.post.production_status !== "draft" ? mesmo.post.production_status : "ready",
       task_id: item.id,
       responsible_id: mesmo && mesmo.internal ? mesmo.internal.responsible_id : null,
       internal_notes: mesmo && mesmo.internal ? mesmo.internal.internal_notes : null,
