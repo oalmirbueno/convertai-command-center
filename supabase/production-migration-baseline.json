@@ -2601,6 +2601,14 @@
       "remote_name": "mcp_oauth_retorno_local_claude_code",
       "remote_statements_sha256": "fb9a40d280162fa91507a1fdfad03927e2ff9278fe7624a28be7449f89d361ee",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026170000",
+      "path": "supabase/migrations/20261026170000_contrato_exterior.sql",
+      "local_sha256": "ca8f3e9a454183c36757fb21b47e7e0772e1bb0d95484ae5346ef208e5edbc85",
+      "remote_name": "contrato_exterior",
+      "remote_statements_sha256": "4f0a7e488f24c00db4de7140d23878f05d5f8a54be110df45ad6db4e75cdbcd1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
