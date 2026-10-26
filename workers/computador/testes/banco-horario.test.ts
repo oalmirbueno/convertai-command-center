@@ -1,5 +1,5 @@
 /**
- * Horário comercial do Ego (26/10/2026): a migration 20261026200000 num Postgres em memória (PGlite), por
+ * Horário comercial do Ego (26/10/2026): a migration 20261026200500 num Postgres em memória (PGlite), por
  * cima das do navegador do agente e do navegador do PC. Confere que pedido agendado não sai antes da hora,
  * sai na hora por ordem de prioridade, não é cancelado pelo corte de 24 h antes de contar da hora agendada,
  * que tarefa antiga (sem agendamento) continua saindo como antes e que a migration roda duas vezes.
@@ -68,7 +68,7 @@ before(async () => {
   await db.exec(ler("20260930320200_navegador_do_agente.sql"));
   await db.exec(ler("20260930325000_navegador_qualquer_modelo_e_acoes.sql"));
   await db.exec(ler("20261026150500_navegador_do_pc_ego.sql"));
-  const sql = ler("20261026200000_ego_horario_comercial.sql");
+  const sql = ler("20261026200500_ego_horario_comercial.sql");
   await db.exec(sql);
   await db.exec(sql); // idempotente
 });
@@ -77,7 +77,7 @@ beforeEach(async () => {
   await db.exec("UPDATE public.agente_computador_tarefas SET estado = 'cancelada' WHERE estado IN ('aprovada', 'executando')");
 });
 
-describe("horário comercial do Ego no banco (migration 20261026200000)", () => {
+describe("horário comercial do Ego no banco (migration 20261026200500)", () => {
   it("agendado para depois não sai; ao dar a hora, sai", async () => {
     const id = await pedido("now() + interval '10 hours'");
     assert.deepEqual(await pegar(), []);
