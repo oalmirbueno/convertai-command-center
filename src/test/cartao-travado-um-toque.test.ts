@@ -17,11 +17,15 @@ describe("cartão travado: decide com um toque", () => {
     expect(pagina).not.toContain("Responder e destravar");
   });
 
-  it("Pode seguir manda o agente seguir com o melhor julgamento e o revisor conferir", () => {
-    const seguir = pagina.slice(pagina.indexOf("const podeSeguir = async"), pagina.indexOf("const podeSeguir = async") + 1600);
-    expect(seguir).toContain('_new_status: "queued"');
+  /* 26/10: cada toque em Pode seguir virava instrução + fila (~100 comentários e um pedido novo ao
+     Revisor). Agora é uma decisão só, respondendo ao pedido, que libera o dono sem reenfileirar
+     (o comportamento está testado em decisao-do-vinculo.test.ts). */
+  it("Pode seguir é uma decisão que libera o dono com o melhor julgamento, sem reenfileirar", () => {
+    const seguir = pagina.slice(pagina.indexOf("const podeSeguir = async"), pagina.indexOf("const podeSeguir = async") + 600);
+    expect(seguir).toContain("decidirELiberar(v, \"Pode seguir\"");
     expect(seguir).toContain("melhor julgamento");
-    expect(seguir).toContain("revisor");
+    expect(seguir).not.toContain('"queued"');
+    expect(seguir).not.toContain('"instrucao"');
   });
 
   it("Concluir e Encerrar fecham pela mão humana, com o porquê no diário", () => {

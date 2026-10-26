@@ -53,5 +53,42 @@ class MirrorTests(unittest.TestCase):
             self.assertEqual(calls, ["aceleriq_operator_board"])
 
 
+    def test_item_is_discarded_after_max_attempts_and_window_is_small(self):
+        with tempfile.TemporaryDirectory() as folder:
+            m = Mirror(Path(folder)/"test.sqlite3", start=False)
+            m.event("s", "tool.complete", {"name": "mcp_aceleriq_operator_diary", "args": {"link_id": LINK}})
+            limits = []
+            async def call(name, args):
+                if name.endswith("board"):
+                    return {"vinculos": [{"id": LINK, "client_id": "client", "operador": "registro"}]}
+                if not args.get("body"):
+                    limits.append(args.get("limit"))
+                return {"entradas": []}  # marker never shows up
+            for _ in range(5):
+                with m.connect() as con:
+                    con.execute("UPDATE public_updates SET claimed=0")
+                asyncio.run(m.deliver(call))
+            with m.connect() as con:
+                state, attempts = con.execute("SELECT state, attempts FROM public_updates").fetchone()
+            self.assertEqual((state, attempts), ("discarded", 3))
+            self.assertTrue(limits and max(limits) <= 20)
+
+    def test_paperclip_or_done_link_is_discarded_without_writing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            m = Mirror(Path(folder)/"test.sqlite3", start=False)
+            m.event("s", "tool.complete", {"name": "mcp_aceleriq_operator_diary", "args": {"link_id": LINK}})
+            writes = []
+            async def call(name, args):
+                if name.endswith("board"):
+                    return {"operadores": [{"slug": "gestor-trafego", "area": "Paperclip"}],
+                            "vinculos": [{"id": LINK, "client_id": "client", "operador": "gestor-trafego"}]}
+                writes.append(args)
+                return {"entradas": []}
+            asyncio.run(m.deliver(call))
+            self.assertEqual(writes, [])
+            with m.connect() as con:
+                self.assertEqual(con.execute("SELECT state FROM public_updates").fetchone()[0], "discarded")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -40,6 +40,8 @@ import {
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 import { excluirTarefa } from "@/lib/taskDelete";
+import DonoDaTarefa from "@/components/execucao/DonoDaTarefa";
+import { registrarDecisaoDoDono, type ClienteDaDecisao } from "@/lib/decisaoDoVinculo";
 import { lazyDiscreto, quandoOcioso } from "@/lib/lazyComPreCarga";
 import {
   AjudaRecolhida, AreaDeTrabalho, BarraDeControles, CabecalhoDePagina, CampoDeBusca, Carregando,
@@ -217,6 +219,8 @@ const STATUS_ROTULO: Record<string, string> = {
   review: "em revisão",
   awaiting_input: "aguardando insumo",
   blocked: "bloqueada",
+  // 26/10 (migration 20261026120100): rodada sem fato novo depois de 72 h sai da fila.
+  parado: "parada sem novidade",
 };
 
 /** Onde as áreas recolhidas ficam guardadas entre visitas. */
@@ -1317,29 +1321,33 @@ export default function AdminExecucao() {
     if (r.error) { toast.error(r.error.message); return; }
     toast.success(qual === "prova" ? "Pedido enviado: o agente vai anexar a entrega aqui." : "Pedido enviado: o agente vai explicar o quê, o porquê e o resultado.");
   };
-  const aprovarESeguir = async (v: Vinculo): Promise<boolean> => {
-    const quem = profile?.full_name || "a equipe";
-    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `Aprovado por ${quem}: pode executar agora e trazer o resultado pronto para eu aprovar.`, _resolve_approval: true });
-    if (error) { toast.error(error.message || "Não foi possível aprovar."); return false; }
-    if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Aprovado: pode seguir", body: "Aprovado. Pode executar agora: faça o trabalho, use o navegador do cliente ou pesquise na internet se precisar, e volte com o resultado pronto (com a prova) para eu aprovar.", attachments: [] });
-    toast.success("Aprovado: voltou para a fila do agente executar e trazer pronto.");
+  /* 26/10 (diagnóstico: "Pode seguir" e "Aprovado: pode seguir" gravavam instrução e devolviam o
+     vínculo para a fila; cada toque virava ~100 comentários e um pedido novo ao Revisor; aprovar
+     gerava conversa, não trabalho): a decisão é gravada UMA vez, respondendo ao pedido do agente
+     (reply_to_entry_id), e libera a execução do único dono do vínculo, sem reenfileirar. Se o
+     vínculo já está com quem executa, só registra. */
+  const decidirELiberar = async (v: Vinculo, titulo: string, corpo: string, ok: string): Promise<boolean> => {
+    if (!profile?.id) { toast.error("Entre de novo para decidir."); return false; }
+    try {
+      const r = await registrarDecisaoDoDono(supabase as unknown as ClienteDaDecisao, { linkId: v.id, status: v.status, autorId: profile.id, quem: profile?.full_name || "a equipe", titulo, corpo });
+      toast.success(r.repetida ? "Essa decisão já estava registrada: nada foi repetido." : r.liberou ? ok : "Decisão registrada: o dono já está executando.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível decidir.");
+      return false;
+    }
     void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+    void queryClient.invalidateQueries({ queryKey: ["diario", v.id] });
     return true;
   };
+  const aprovarESeguir = async (v: Vinculo): Promise<boolean> =>
+    decidirELiberar(v, "Aprovado: pode seguir", "Aprovado. Pode executar e voltar com o resultado pronto, com a prova.", "Aprovado: a execução foi liberada para o dono da tarefa.");
 
   /* 19/10 (dono: "responder e destravar está complexo demais, nem sei o que responder; não tem
-     aprovar ali"): o travado decide com um toque. Pode seguir devolve para o agente com a
-     autorização de usar o melhor julgamento (conferência ou divergência vão para o revisor);
-     Encerrar fecha sem continuar. */
-  const podeSeguir = async (v: Vinculo): Promise<boolean> => {
-    const quem = profile?.full_name || "a equipe";
-    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `${quem} liberou: pode seguir com o melhor julgamento.`, _resolve_approval: true });
-    if (error) { toast.error(error.message || "Não foi possível liberar."); return false; }
-    if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Pode seguir", body: "Pode seguir. Use o seu melhor julgamento: se for conferência, divergência ou prova faltando, peça ao revisor e siga com o que ele decidir. Volte com o resultado pronto, com a prova.", attachments: [] });
-    toast.success("Liberado: o agente segue e volta com o resultado.");
-    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
-    return true;
-  };
+     aprovar ali"): o travado decide com um toque. Pode seguir libera o dono com a autorização
+     de usar o melhor julgamento; Encerrar fecha sem continuar. 26/10: sem pedir revisor nem
+     reenfileirar (a decisão é uma só, respondendo ao pedido do agente). */
+  const podeSeguir = async (v: Vinculo): Promise<boolean> =>
+    decidirELiberar(v, "Pode seguir", "Pode seguir com o seu melhor julgamento e voltar com o resultado pronto, com a prova.", "Liberado: o dono da tarefa segue e volta com o resultado.");
   /* 19/10 (dono: "eu respondo e já resolvo ali mesmo, sem precisar ir para outro lugar"): a
      resposta escrita no cartão volta a tarefa para a fila do agente e entra no diário. */
   const responderVinculo = async (v: Vinculo, texto: string): Promise<boolean> => {
@@ -1405,6 +1413,8 @@ export default function AdminExecucao() {
       passo: travada || emRevisao ? null : v.next_step ? falarComoGente(v.next_step).humano : null,
       diagrama: travada || emRevisao
         ? <div className="space-y-4">
+          {/* 26/10: dono (um só), o que espera de você e o que já foi entregue com prova. */}
+          <DonoDaTarefa linkId={v.id} agente={op?.display_name || "Agente sem nome"} />
           {/* Para que serve: o quê, por quê e o resultado, da descrição da tarefa. */}
           <div>
             <p className="text-[12px] font-semibold text-primary">Sobre esta tarefa</p>

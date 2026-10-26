@@ -146,7 +146,7 @@ const TOM: Record<string, string> = {
 };
 
 function StatusChip({ campaign }: { campaign?: AdsCampaign }) {
-  const { label, tone } = statusLabel(campaign?.status, campaign?.effective_status);
+  const { label, tone } = statusLabel(campaign?.status, campaign?.effective_status, campaign?.stop_time);
   return <span className={juntar(etiqueta, "ml-2 shrink-0", TOM[tone])}>{label}</span>;
 }
 

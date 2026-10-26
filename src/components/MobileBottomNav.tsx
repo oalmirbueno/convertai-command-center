@@ -23,6 +23,8 @@ export interface DestinoDoCelular {
   icon: React.FC<{ className?: string }>;
   /** Acende só na rota exata (ex.: "/comercial" não acende nas abas dele). */
   fimExato?: boolean;
+  /** Número ao lado do nome (ex.: mensagens prontas para aprovar). */
+  contador?: number;
 }
 
 /**
@@ -184,6 +186,7 @@ export default function MobileBottomNav({ lancador, maisAberto, onMaisAberto, gr
                       >
                         <item.icon className="mr-2.5 h-4 w-4 shrink-0" />
                         <span className="min-w-0 truncate">{item.title}</span>
+                        {item.contador ? <span className="ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-foreground" aria-label={`${item.contador} para aprovar`}>{item.contador}</span> : null}
                       </NavLink>
                     ))}
                   </div>

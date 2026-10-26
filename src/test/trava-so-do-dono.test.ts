@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { ModuleKind, transpileModule } from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import * as travaDoDono from "../../supabase/functions/_shared/trava-do-dono";
+import * as rodadaEProva from "../../supabase/functions/mcp-server/modulos/rodada-e-prova";
 import { decidirTrava, MOTIVOS_DO_DONO, perguntaDaTrava } from "../../supabase/functions/_shared/trava-do-dono";
 import * as freshness from "../../supabase/functions/_shared/operator-freshness";
 import * as progresso from "../../supabase/functions/_shared/operator-progress-detail";
@@ -20,6 +21,7 @@ function relatoCom(jev: () => Promise<unknown>) {
     "./arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
     "./vinculo-guard.ts": guardaDoVinculo,
     "./trava-do-dono.ts": travaDoDono,
+    "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
     "./jev.ts": { jevPerguntar: jev },
   };
   const fonte = readFileSync(resolve(__dirname, "../..", "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8");

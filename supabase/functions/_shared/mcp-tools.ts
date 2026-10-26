@@ -39,7 +39,6 @@ import {
   OPERATOR_EVENTS,
   operatorBoard,
   operatorAssign,
-  operatorDiary,
   operatorChecklist,
   operatorProposeAssignee,
   operatorRequestApproval,
@@ -56,9 +55,11 @@ import {
   studioRead,
   vaultOverview,
 } from './aceleriq-operators-services.ts';
+import { operatorDiary } from '../mcp-server/modulos/diario.ts';
 import { agentConversationsTool, agentHandoffTool } from './mcp-agentes-das-mesas.ts';
 import { browserActTool, browserSessionTool } from '../mcp-server/modulos/mcp-navegador.ts';
 import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modulos/painel-inteiro.ts';
+import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
 import {
   CLASSES_DO_LEAD,
   ETAPAS_DO_FUNIL,
@@ -93,12 +94,12 @@ import {
   getFinanceCashFlow,
   listFinanceHistory,
   listFinanceMensalidades,
-} from './aceleriq-finance-fluxo.ts';
+} from '../mcp-server/modulos/aceleriq-finance-fluxo.ts';
 import {
   getFinanceDashboard,
   listFinanceExpenses,
   listFinanceProjectPayments,
-} from './aceleriq-finance-dashboard.ts';
+} from '../mcp-server/modulos/aceleriq-finance-dashboard.ts';
 import {
   getFinanceBilling,
   getFinanceOverview,
@@ -1263,7 +1264,7 @@ const createTaskTool: ToolDefinition = {
   name: 'aceleriq_create_task',
   title: 'Criar tarefa',
   description:
-    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, delivery_type, assigned_to, due_date, milestone_id, idempotency_key. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente.',
+    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, delivery_type, assigned_to, due_date, milestone_id, idempotency_key, origem_externa. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente. SEM DUPLICAR (2.19): a mesma origem_externa no cliente, ou o mesmo título (sem acento e caixa) numa tarefa aberta do projeto, devolve a existente com ja_existia=true, para qualquer credencial. Quem traz tarefa de outro sistema (Paperclip) manda origem_externa.',
   scopes: WRITE,
   annotations: WRITE_ANNOTATIONS,
   inputSchema: {
@@ -1282,6 +1283,7 @@ const createTaskTool: ToolDefinition = {
       due_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
       milestone_id: { type: 'string', format: 'uuid' },
       idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+      origem_externa: { type: 'string', minLength: 3, maxLength: 160, description: 'De onde a tarefa veio, sistema:id (ex.: paperclip:ACE-275). Única por cliente: repetir devolve a existente.' },
     },
     required: ['project_id', 'title', 'idempotency_key'],
     additionalProperties: false,
@@ -3593,7 +3595,7 @@ const operatorReportTool: ToolDefinition = {
   name: 'aceleriq_operator_report',
   title: 'Relatar execucao de operador interno',
   description:
-    'Registra um evento de execucao de um operador interno Hermes (vertice, registro, prisma, augusto): started, progress, done, failed, blocked, review, awaiting_input ou heartbeat. O banco aplica tudo numa transacao: vinculo com a tarefa (SEM tocar no responsavel humano), historico de runs com idempotencia por (operador, run_key), trilha de auditoria IMUTAVEL e notificacao interna apenas para excecoes e marcos (progress e heartbeat nunca notificam). done sem evidencia vira review: feito de verdade tem evidencia verificavel. Duas execucoes simultaneas da mesma tarefa colidem com erro claro. Evidencia com credencial na URL perde a query string. NAO atribui tarefa a humano, NAO publica, NAO gasta, NAO altera financeiro. TRAVAR PARA O ALMIR (blocked, awaiting_input, failed) SO por dinheiro, acesso ou senha que so ele tem, aprovar algo que vai ao cliente, ou decisao de estrategia: diga qual em precisa_do_dono. O resto (conferencia, divergencia, prova faltando, erro tecnico, rodada que caiu) nao trava: vira progresso, voce segue com o melhor julgamento e o Revisor Independente desempata em ate 2 rodadas. Sem precisa_do_dono, o Jev le o motivo e so mantem a trava se for mesmo do Almir. FIM DA RODADA: todo relato no fim da sua rodada fecha a rodada. Terminou (done ou review com prova) ou travou para o Almir: mande esse evento. Avancou e a tarefa espera a proxima rodada (sua ou de outro agente): mande progress com fim_da_rodada true; a rodada fecha na hora e a tarefa volta para a fila. progress sem fim_da_rodada so enquanto voce continua trabalhando agora; sem relato final a rodada vira timeout, conta como falha e, na terceira em 24 h, trava a tarefa.',
+    'Registra um evento de execucao de um operador interno Hermes (vertice, registro, prisma, augusto): started, progress, done, failed, blocked, review, awaiting_input ou heartbeat. O banco aplica tudo numa transacao: vinculo com a tarefa (SEM tocar no responsavel humano), historico de runs com idempotencia por (operador, run_key), trilha de auditoria IMUTAVEL e notificacao interna apenas para excecoes e marcos (progress e heartbeat nunca notificam). done sem evidencia vira review: feito de verdade tem evidencia verificavel. Duas execucoes simultaneas da mesma tarefa colidem com erro claro. Evidencia com credencial na URL perde a query string. NAO atribui tarefa a humano, NAO publica, NAO gasta, NAO altera financeiro. TRAVAR PARA O ALMIR (blocked, awaiting_input, failed) SO por dinheiro, acesso ou senha que so ele tem, aprovar algo que vai ao cliente, ou decisao de estrategia: diga qual em precisa_do_dono. O resto (conferencia, divergencia, prova faltando, erro tecnico, rodada que caiu) nao trava: vira progresso, voce segue com o melhor julgamento e o Revisor Independente desempata em ate 2 rodadas. Sem precisa_do_dono, o Jev le o motivo e so mantem a trava se for mesmo do Almir. FIM DA RODADA: todo relato no fim da sua rodada fecha a rodada. Terminou (done ou review com prova) ou travou para o Almir: mande esse evento. Avancou e a tarefa espera a proxima rodada (sua ou de outro agente): mande progress com fim_da_rodada true; a rodada fecha na hora e a tarefa volta para a fila. progress sem fim_da_rodada so enquanto voce continua trabalhando agora; sem relato final a rodada vira timeout, conta como falha e, na terceira em 24 h, trava a tarefa. 2.19: done SO COM PROVA em evidence (permalink do post publicado, ads_acao:<id> de aceleriq_ads_registrar_acao, envio:<id> de mensagem enviada ou aceleriq-file://<id>); sem prova vira review com aviso e nao conta como feito; com prova vira entrega registrada. Rodada sem fato novo nao volta para a fila; sem entrega em 72 h o vinculo fica parado. Relato de so leitura/preservado/recuperacao nao move card. O sino so toca para done com entrega, trava do dono e pedido de decisao. operator so pode ser um agente da sua credencial.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3851,7 +3853,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Comercial (CRM)', rota: '/comercial/crm', para: 'Funil de negocios, empresas, contatos e agenda comercial. Area da casa.', pelo_mcp: 'aceleriq_list_opportunities, aceleriq_get_opportunity, aceleriq_create_opportunity, aceleriq_update_opportunity, aceleriq_move_opportunity, aceleriq_add_opportunity_note, aceleriq_archive_opportunity, aceleriq_delete_opportunity, aceleriq_list_commercial_activities, aceleriq_create_commercial_activity, aceleriq_complete_commercial_activity, aceleriq_list_commercial_organizations, aceleriq_upsert_commercial_organization, aceleriq_upsert_commercial_contact' },
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
-  { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
+  { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives; o que foi feito e o boletim do dia em /anuncios/hoje: aceleriq_ads_registrar_acao, aceleriq_ads_boletim' },
   { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha; aja com as ferramentas de acao (OAuth).', pelo_mcp: 'aceleriq_mesa_ads_contexto e aceleriq_mesa_ads_saude (leitura), aceleriq_mesa_ads_briefing_salvar, aceleriq_mesa_ads_oferta_salvar, aceleriq_mesa_ads_oferta_do_contexto, aceleriq_mesa_ads_plano_gerar, aceleriq_mesa_ads_criativos_produzir, aceleriq_mesa_ads_arte_gerar, aceleriq_mesa_ads_entregar_ao_gestor (acao)' },
   { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas. Os ids das fotos aprovadas sao os que se anexam a campanha.', pelo_mcp: 'aceleriq_mesa_foto_contexto (leitura); anexar foto a campanha: aceleriq_mesa_campanha_salvar' },
   { area: 'Mesa do cliente', rota: '/mesa', para: 'Calendario do mes com o estrategista, campanhas (briefing, imagens, conteudos) e o Estudio de arte com entrega e aprovacao.', pelo_mcp: 'aceleriq_mesa_calendario_pedido, aceleriq_mesa_calendario_gravar, aceleriq_mesa_campanha_criar, aceleriq_mesa_campanha_salvar, aceleriq_mesa_enviar_para_aprovacao (acao, OAuth)' },
@@ -3912,7 +3914,7 @@ const operatorDiaryTool: ToolDefinition = {
   name: 'aceleriq_operator_diary',
   title: 'Diario da execucao: ler instrucoes e participar',
   description:
-    'O caderno de contexto de um vinculo de execucao. SEM body, lista as entradas — inclusive as do Almir: instrucao, decisao e correcao humanas MANDAM, leia antes de continuar. COM body (e operator + entry_type), escreve uma entrada assinada pelo operador. pedido_insumo e pedido_revisao notificam o dono do painel e param o trabalho ate a resposta; comentario e contexto so registram. Nada daqui vai para cliente ou canal externo: e conversa interna, na trilha. COMO ESCREVER (o dono le no painel): portugues simples, frases curtas, para uma pessoa; sem UUID, hash, chave=valor, nome de tabela, caminho de servidor ou status em ingles. Use blocos em maiusculas quando ajudar: FEITO:, EM ANDAMENTO:, PROXIMO PASSO:, TRAVADO: (o painel mostra cada um com icone). Sempre que houver resultado visivel (post, arte, pagina, print da conta, planilha), anexe a imagem ou o arquivo em attachments: a comprovacao aparece como miniatura. ENTREGAS (arte, carrossel, laminas, video, post, pagina): produza pela Mesa do painel do cliente, nunca como arquivo solto, anexe a imagem final em alta qualidade (ou o PDF/documento) e peca a aprovacao do dono (pedido_revisao ou o fluxo de aprovacao): ele aprova na Execucao sem sair da tela. Se a tarefa for cancelada, diga isso no diario com a palavra cancelada. SEJA PROATIVO: trabalho interno (pesquisar, montar, rascunhar, conferir) nao pede permissao, faca e traga pronto; peca aprovacao so do resultado ou de acao externa (publicar, gastar, alterar conta). Na primeira entrada e em todo pedido de revisao, explique em 2 a 4 frases: o que e a tarefa, por que existe, onde afeta (cliente, conta, site, campanha) e qual resultado traz. Entrega com varias pecas (carrossel de 6) anexa TODAS, nomeadas na ordem (1 de 6 ... 6 de 6), nunca parte. Quando o dono escrever Aprovado: pode seguir, execute na hora: use o navegador remoto do cliente (aceleriq_browser_session/act) para sites e contas, pesquise na internet se faltar informacao, e volte com o resultado pronto e a prova; se der erro, registre o erro no diario em frase simples e diga o que precisa.',
+    'O caderno de contexto de um vinculo de execucao. SEM body, lista as entradas — inclusive as do Almir: instrucao, decisao e correcao humanas MANDAM, leia antes de continuar. COM body (e operator + entry_type), escreve uma entrada assinada pelo operador. pedido_insumo e pedido_revisao notificam o dono do painel e param o trabalho ate a resposta; comentario e contexto so registram. Nada daqui vai para cliente ou canal externo: e conversa interna, na trilha. COMO ESCREVER (o dono le no painel): portugues simples, frases curtas, para uma pessoa; sem UUID, hash, chave=valor, nome de tabela, caminho de servidor ou status em ingles. Use blocos em maiusculas quando ajudar: FEITO:, EM ANDAMENTO:, PROXIMO PASSO:, TRAVADO: (o painel mostra cada um com icone). Sempre que houver resultado visivel (post, arte, pagina, print da conta, planilha), anexe a imagem ou o arquivo em attachments: a comprovacao aparece como miniatura. ENTREGAS (arte, carrossel, laminas, video, post, pagina): produza pela Mesa do painel do cliente, nunca como arquivo solto, anexe a imagem final em alta qualidade (ou o PDF/documento) e peca a aprovacao do dono (pedido_revisao ou o fluxo de aprovacao): ele aprova na Execucao sem sair da tela. Se a tarefa for cancelada, diga isso no diario com a palavra cancelada. SEJA PROATIVO: trabalho interno (pesquisar, montar, rascunhar, conferir) nao pede permissao, faca e traga pronto; peca aprovacao so do resultado ou de acao externa (publicar, gastar, alterar conta). Na primeira entrada e em todo pedido de revisao, explique em 2 a 4 frases: o que e a tarefa, por que existe, onde afeta (cliente, conta, site, campanha) e qual resultado traz. Entrega com varias pecas (carrossel de 6) anexa TODAS, nomeadas na ordem (1 de 6 ... 6 de 6), nunca parte. Quando o dono escrever Aprovado: pode seguir, execute na hora: use o navegador remoto do cliente (aceleriq_browser_session/act) para sites e contas, pesquise na internet se faltar informacao, e volte com o resultado pronto e a prova; se der erro, registre o erro no diario em frase simples e diga o que precisa. LER (2.19): mais recentes primeiro, com desde e cursor; limite de 30 leituras/min por vinculo e 120/min por credencial. RESPONDER: reply_to_entry_id = id da instrucao atendida (ela passa a mostrar respondida_por). Texto do mesmo autor sem fato novo em 6 h volta "nada novo; nao registrado". operator so pode ser um agente da sua credencial.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3924,12 +3926,15 @@ const operatorDiaryTool: ToolDefinition = {
       title: { type: 'string', description: 'Titulo curto da entrada.' },
       body: { type: 'string', description: 'O texto. Presente = escrever; ausente = listar.' },
       attachments: { type: 'array', maxItems: 12, description: 'Comprovações visuais: nome e url. Para arquivo salvo no painel, prefira aceleriq-file://<file_id UUID retornado pelo upload>; a tela resolve o arquivo com acesso do leitor. Também aceita HTTPS sem segredo, files://task-attachments/... ou mcp-files://caminho real. Não invente caminho pelo ID e não coloque só códigos no texto.', items: { type: 'object', properties: { name: { type: 'string' }, url: { type: 'string' } }, required: ['name', 'url'], additionalProperties: false } },
-      limit: { type: 'number', description: 'Ao listar, quantas entradas (max 100).' },
+      limit: { type: 'number', description: 'Ao listar, quantas entradas (max 100). Mais recentes primeiro.' },
+      desde: { type: 'string', description: 'Ao listar, so entradas depois deste instante (ISO). Use o quando da ultima entrada que voce ja viu.' },
+      cursor: { type: 'string', description: 'Ao listar, a pagina mais antiga: o proximo_cursor da leitura anterior.' },
+      reply_to_entry_id: { type: 'string', description: 'Ao escrever, o id da entrada (deste vinculo) que esta responde: marca a instrucao como atendida (respondida_por).' },
     },
     required: ['link_id'],
     additionalProperties: false,
   },
-  handler: async (input) => {
+  handler: async (input, ctx) => {
     const schema = z.object({
       link_id: UUID,
       operator: z.string().min(2).max(40).optional(),
@@ -3939,12 +3944,15 @@ const operatorDiaryTool: ToolDefinition = {
       body: z.string().max(8000).optional(),
       attachments: z.array(z.object({ name: z.string().max(120), url: z.string().max(2000) }).strict()).max(12).optional(),
       limit: limite(100),
+      desde: z.string().max(40).optional(),
+      cursor: z.string().max(40).optional(),
+      reply_to_entry_id: UUID.optional(),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) {
       throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
     }
-    return await operatorDiary(parsed.data);
+    return await operatorDiary(parsed.data, ctx);
   },
 };
 
@@ -4854,6 +4862,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getContentTool, searchContentTool, processingStatusTool,
   // MCP 2.17: o painel inteiro (panoramas, Mês, Estúdio, Site, Laboratório, base, membros, guia).
   ...FERRAMENTAS_DO_PAINEL_INTEIRO,
+  // MCP 2.19: ações feitas nos anúncios e boletim do período (modulos/anuncios-registro.ts).
+  ...FERRAMENTAS_DE_ANUNCIOS,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so

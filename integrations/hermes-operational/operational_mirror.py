@@ -2,6 +2,12 @@
 
 No prompts, reasoning, tool arguments or raw tool output are persisted. Task and
 operator are verified again against the panel before delivery. No status changes.
+
+26/10/2026 (contra laço): cada item tem no máximo MAX_ATTEMPTS tentativas e é
+descartado depois disso; o marcador é procurado só nas entradas mais recentes
+(MARKER_WINDOW) e o worker só tenta de novo após RETRY_SECONDS. Antes, um item
+cujo marcador nunca aparecia relia o diário com limite 100 a cada 10 s para sempre.
+Itens de vínculos fechados ou de operadores do Paperclip são descartados.
 """
 import asyncio
 import hashlib
@@ -14,6 +20,10 @@ import time
 from pathlib import Path
 from contextlib import contextmanager
 
+MAX_ATTEMPTS = 3
+MARKER_WINDOW = 20
+RETRY_SECONDS = 600
+PAPERCLIP_AREA = "paperclip"
 UUID = re.compile(r"^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$", re.I)
 SECRET = re.compile(r"(?i)(\b(?:access_token|refresh_token|authorization|api_key|password|senha|cookie|secret)\b\s*[:=]\s*)[^\s,;]+")
 
@@ -85,6 +95,8 @@ class Mirror:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         con = sqlite3.connect(self.path, timeout=5)
         con.execute("CREATE TABLE IF NOT EXISTS public_updates (key TEXT PRIMARY KEY, link_id TEXT, title TEXT, body TEXT, state TEXT DEFAULT 'pending', claimed REAL DEFAULT 0)")
+        if "attempts" not in {r[1] for r in con.execute("PRAGMA table_info(public_updates)")}:
+            con.execute("ALTER TABLE public_updates ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
         try:
             with con:
                 yield con
@@ -104,19 +116,28 @@ class Mirror:
         self.flush()
         with self.connect() as con:
             con.execute("BEGIN IMMEDIATE")
-            rows = con.execute("SELECT key,link_id,title,body FROM public_updates WHERE state!='sent' AND claimed<? LIMIT 8", (time.time()-120,)).fetchall()
-            con.executemany("UPDATE public_updates SET claimed=? WHERE key=?", [(time.time(), r[0]) for r in rows])
+            con.execute("UPDATE public_updates SET state='discarded' WHERE state='pending' AND attempts>=?", (MAX_ATTEMPTS,))
+            rows = con.execute("SELECT key,link_id,title,body FROM public_updates WHERE state='pending' AND claimed<? LIMIT 8", (time.time()-RETRY_SECONDS,)).fetchall()
+            con.executemany("UPDATE public_updates SET claimed=?, attempts=attempts+1 WHERE key=?", [(time.time(), r[0]) for r in rows])
         if not rows:
             return 0
         board = await call("aceleriq_operator_board", {"limit": 500})
         links = {str(v.get("id")): v for v in board.get("vinculos", [])}
+        paperclip = {str(o.get("slug")) for o in board.get("operadores", []) or []
+                     if str(o.get("area") or "").lower() == PAPERCLIP_AREA or str(o.get("responde_a") or "").lower() == PAPERCLIP_AREA}
+        paperclip.add("paperclip")
         sent = 0
         for key, link, title, body in rows:
             context = links.get(link)
+            if (context and (str(context.get("status") or "") == "done" or context.get("operador") in paperclip)):
+                # Vínculo fechado ou de outro time: não escreve em nome de ninguém.
+                with self.connect() as con:
+                    con.execute("UPDATE public_updates SET state='discarded' WHERE key=?", (key,))
+                continue
             if not context or not context.get("operador") or not context.get("client_id"):
                 continue
             marker = f"sha256: {key}"
-            diary = await call("aceleriq_operator_diary", {"link_id": link, "limit": 100})
+            diary = await call("aceleriq_operator_diary", {"link_id": link, "limit": MARKER_WINDOW})
             if not any(marker in str(e.get("texto", "")) for e in diary.get("entradas", [])):
                 refs = list(dict.fromkeys(re.findall(r"aceleriq-file://[a-f0-9-]{36}", body, re.I)))[:12]
                 await call("aceleriq_operator_diary", {
@@ -125,7 +146,7 @@ class Mirror:
                     "attachments": [{"name": "Arquivo do trabalho", "url": u} for u in refs],
                 })
                 # Confirm the write before declaring delivery. Retry first checks this marker.
-                readback = await call("aceleriq_operator_diary", {"link_id": link, "limit": 100})
+                readback = await call("aceleriq_operator_diary", {"link_id": link, "limit": MARKER_WINDOW})
                 if not any(marker in str(e.get("texto", "")) for e in readback.get("entradas", [])):
                     continue
             with self.connect() as con:
@@ -159,7 +180,9 @@ class Mirror:
             try:
                 self.flush()
                 with self.connect() as con:
-                    pending = con.execute("SELECT 1 FROM public_updates WHERE state!='sent' LIMIT 1").fetchone()
+                    pending = con.execute(
+                        "SELECT 1 FROM public_updates WHERE state='pending' AND attempts<? AND claimed<? LIMIT 1",
+                        (MAX_ATTEMPTS, time.time() - RETRY_SECONDS)).fetchone()
                 if pending:
                     asyncio.run(self.network_delivery())
             except Exception as exc:

@@ -197,8 +197,12 @@ export type StatusTone = "ativa" | "pausada" | "encerrada" | "atencao";
 export function statusLabel(
   status: string | null | undefined,
   effectiveStatus?: string | null,
+  /** Fim programado (stop_time). 26/10: ACTIVE com fim no passado é campanha terminada (status desatualizado na Meta). */
+  fim?: string | null,
+  agora: number = Date.now(),
 ): { label: string; tone: StatusTone; noAr: boolean } {
   const real = String(effectiveStatus || status || "").toUpperCase();
+  if (real === "ACTIVE" && campanhaTerminou(fim, agora)) return { label: "Terminada", tone: "encerrada", noAr: false };
   if (real === "ACTIVE") return { label: "No ar", tone: "ativa", noAr: true };
   if (real === "PAUSED" || real === "ADSET_PAUSED" || real === "CAMPAIGN_PAUSED") {
     return { label: "Pausada", tone: "pausada", noAr: false };
@@ -213,6 +217,13 @@ export function statusLabel(
     return { label: "Encerrada", tone: "encerrada", noAr: false };
   }
   return { label: "Sem informação", tone: "pausada", noAr: false };
+}
+
+/** A data de fim programada já passou (sem data, não terminou). */
+export function campanhaTerminou(fim: string | null | undefined, agora: number = Date.now()): boolean {
+  if (!fim) return false;
+  const t = Date.parse(fim);
+  return Number.isFinite(t) && t <= agora;
 }
 
 /* ─────────────────────────────── o resultado ─────────────────────────────── */

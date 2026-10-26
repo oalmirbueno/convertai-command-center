@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { campanhaTerminou } from "@/lib/adsLanguage";
 import {
   AlertTriangle, ChevronDown, Flame, Lightbulb, MousePointerClick,
 } from "lucide-react";
@@ -63,7 +64,7 @@ export default function CampanhasAtivas({
     queryKey: ["campanhas-ativas", clientId ?? "todas"],
     queryFn: async () => {
       let q = (supabase as any).from("ads_campaigns")
-        .select("campaign_id, name, effective_status, objective, daily_budget, lifetime_budget, client_id, updated_at");
+        .select("campaign_id, name, effective_status, objective, daily_budget, lifetime_budget, client_id, updated_at, stop_time");
       if (clientId) q = q.eq("client_id", clientId);
       const { data: campanhas, error: erroCampanhas } = await q;
       if (erroCampanhas) throw new Error(erroCampanhas.message);
@@ -88,7 +89,8 @@ export default function CampanhasAtivas({
 
   const ativas = useMemo(
     () => (data?.campanhas ?? []).filter(
-      (c) => (c.effective_status || "").toUpperCase() === "ACTIVE"),
+      // 26/10: ACTIVE com fim no passado é campanha terminada (a Meta não atualizou o status).
+      (c) => (c.effective_status || "").toUpperCase() === "ACTIVE" && !campanhaTerminou((c as { stop_time?: string | null }).stop_time)),
     [data],
   );
 

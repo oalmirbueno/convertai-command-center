@@ -76,8 +76,10 @@ describe("a migracao do centro de comando", () => {
 
 describe("o mcp expoe a participacao", () => {
   it("os tres servicos existem e estao registrados", () => {
+    // MCP 2.19: o diario mora em mcp-server/modulos/diario.ts.
+    expect(ler("supabase/functions/mcp-server/modulos/diario.ts")).toContain("export async function operatorDiary(");
     for (const fn of ["operatorDiary", "operatorRequestApproval", "operatorProposeAssignee"]) {
-      expect(servicos).toContain(`export async function ${fn}(`);
+      if (fn !== "operatorDiary") expect(servicos).toContain(`export async function ${fn}(`);
       expect(tools).toContain(fn);
     }
     for (const nome of [

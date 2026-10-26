@@ -181,12 +181,45 @@ export const createTaskSchema = z.object({
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'due_date must be YYYY-MM-DD' }).optional(),
   milestone_id: UUID.optional(),
   idempotency_key: IDEMPOTENCY_KEY,
+  origem_externa: z.string().trim().min(3).max(160)
+    .regex(/^[A-Za-z0-9_-]+:\S/, { message: 'origem_externa: sistema:id, ex. paperclip:ACE-275' })
+    .transform((v) => v.replace(/^[^:]+/, (s) => s.toLowerCase())).optional(),
 }).strict();
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
+/** Título comparável: sem acento, caixa, pontuação e espaço repetido. */
+export function tituloNormalizado(titulo: string): string {
+  return titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const CAMPOS_DA_TAREFA = 'id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, created_at, updated_at';
+
+/**
+ * MCP 2.19 (26/10/2026): o Paperclip recriava as mesmas tarefas a cada troca de chave (o
+ * idempotency_key só vale dentro da mesma credencial). Antes de criar: a mesma origem_externa em
+ * qualquer projeto do cliente, ou o mesmo título normalizado numa tarefa aberta do projeto, devolve a
+ * existente. Vale para todas as credenciais.
+ */
+async function tarefaJaExistente(input: CreateTaskInput, clientId: string): Promise<{ record: Record<string, unknown>; por: 'origem_externa' | 'titulo' } | null> {
+  if (input.origem_externa) {
+    const { data: projetos } = await db().from('projects').select('id').eq('client_id', clientId).is('deleted_at', null).limit(500);
+    const ids = ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id);
+    if (ids.length) {
+      const { data, error } = await db().from('tasks').select(CAMPOS_DA_TAREFA)
+        .in('project_id', ids).eq('origem_externa', input.origem_externa).is('deleted_at', null).limit(1);
+      if (!error && data && data.length) return { record: data[0] as Record<string, unknown>, por: 'origem_externa' };
+    }
+  }
+  const alvo = tituloNormalizado(input.title);
+  const { data: abertas } = await db().from('tasks').select(CAMPOS_DA_TAREFA)
+    .eq('project_id', input.project_id).is('deleted_at', null).neq('status', 'done').limit(1000);
+  const igual = ((abertas ?? []) as Array<Record<string, unknown>>).find((x) => tituloNormalizado(String(x.title ?? '')) === alvo);
+  return igual ? { record: igual, por: 'titulo' } : null;
+}
+
 export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
-  await getWritableProject(input.project_id, ctx);
+  const projeto = await getWritableProject(input.project_id, ctx);
   const replay = await replayIdempotent(
     'aceleriq_create_task', ctx.keyId, input.idempotency_key,
     async (id) => (await db().from('tasks').select('id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, created_at, updated_at').eq('id', id).maybeSingle()).data,
@@ -195,6 +228,21 @@ export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
   if (replay) {
     if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as any).id;
     return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
+  }
+
+  const existente = await tarefaJaExistente(input, String(projeto.client_id));
+  if (existente) {
+    // A existente aprende a origem que faltava: a próxima chamada casa direto pela origem.
+    if (input.origem_externa && existente.por === 'titulo') {
+      await db().from('tasks').update({ origem_externa: input.origem_externa }).eq('id', String(existente.record.id)).is('origem_externa', null);
+    }
+    if (ctx.resultRefHolder) ctx.resultRefHolder.value = String(existente.record.id);
+    return {
+      record: existente.record, replayed: false, ja_existia: true, motivo: existente.por === 'origem_externa'
+        ? 'Já existe tarefa com esta origem_externa neste cliente: devolvida a existente, nada criado.'
+        : 'Já existe tarefa aberta com o mesmo título neste projeto: devolvida a existente, nada criado.',
+      correlation_id: ctx.correlationId,
+    };
   }
 
   // Validate milestone belongs to the project, if provided.
@@ -226,14 +274,21 @@ export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
     due_date: input.due_date ?? null,
     milestone_id: input.milestone_id ?? null,
     source: 'mcp',
+    ...(input.origem_externa ? { origem_externa: input.origem_externa } : {}),
   };
 
-  const { data, error } = await db()
+  const inserir = (linha: Record<string, unknown>) => db()
     .from('tasks')
-    .insert(row)
+    .insert(linha)
     .select('id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, source, created_at, updated_at')
     .single();
-  if (error) throw new WriteError('validation', error.message);
+  let { data, error } = await inserir(row);
+  // Banco sem a coluna (migration 20261026120200 ainda não aplicada): cria sem a origem.
+  if (error && /origem_externa/.test(error.message) && !/duplicate|23505/.test(error.message)) {
+    const { origem_externa: _semOrigem, ...semOrigem } = row as Record<string, unknown>;
+    ({ data, error } = await inserir(semOrigem));
+  }
+  if (error || !data) throw new WriteError('validation', error?.message ?? 'task not created');
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
   return { record: data, replayed: false, correlation_id: ctx.correlationId };
 }

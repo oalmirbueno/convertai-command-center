@@ -10,6 +10,7 @@ import DefinirResponsavel from "./DefinirResponsavel";
 import ProvaDaEntrega from "./ProvaDaEntrega";
 import { oQueFoiFeito, tipoDaEntrega } from "@/lib/execucaoHumana";
 import ChatDoHermes from "./central/ChatDoHermes";
+import { eRuidoDoDiario } from "@/lib/decisaoDoVinculo";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -257,6 +258,9 @@ export default function DiarioDaExecucao({
     : nomesDeAgentes.get(String(e.operator_id)) || "Agente";
   const agente = vinculo.data?.operator_id ? nomesDeAgentes.get(String(vinculo.data.operator_id)) || "Agente" : null;
   const ultimaDoAgente = entradas.find((e) => e.author_kind === "operador");
+  const [mostrarTudo, setMostrarTudo] = useState(false);
+  const visiveis = mostrarTudo ? entradas : entradas.filter((e) => !eRuidoDoDiario(e));
+  const ocultas = entradas.length - visiveis.length;
 
   // O que a fala quer dizer, lido enquanto o dono escreve (pausa de 1,2 s) e mostrado antes de registrar.
   const textoLimpo = texto.trim();
@@ -495,7 +499,15 @@ export default function DiarioDaExecucao({
                   <div className="mx-auto max-w-2xl"><ProvaDaEntrega linkId={linkId} ultimaProva={vinculo.data?.last_evidence} aoConversar={() => setAba("hermes")} /></div>
                 </section>
               )}
-              {entradas.map((e) => (
+              {/* 26/10: batida de vida, "preservado" e "sem alteração" ficam escondidos por padrão. */}
+              {ocultas > 0 && (
+                <div className="flex justify-end">
+                  <button type="button" aria-pressed={mostrarTudo} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => setMostrarTudo((x) => !x)} title={mostrarTudo ? "Esconder as atualizações sem novidade" : "Mostrar também as atualizações sem novidade"}>
+                    {mostrarTudo ? "Esconder sem novidade" : `Mostrar tudo (${ocultas} sem novidade)`}
+                  </button>
+                </div>
+              )}
+              {visiveis.map((e) => (
                 <EntradaDoDiario key={e.id} e={e} autor={nomeDoAutor(e)} doHumano={e.author_kind === "humano"} aoResponder={(x) => {
                   setTituloEntrada(`Sobre: ${tituloDoCaderno(x.title)}`);
                   if (x.entry_type === "pedido_insumo" && travada) entrarNoModo("destravar");

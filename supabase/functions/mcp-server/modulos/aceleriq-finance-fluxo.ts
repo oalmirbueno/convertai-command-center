@@ -19,7 +19,7 @@
  * Nada escreve. Nem uma linha.
  */
 
-import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
+import { db, isUuid, READ_LIMITS } from '../../_shared/aceleriq-read-services.ts';
 
 const numero = (valor: unknown): number => {
   const n = Number(valor ?? 0);

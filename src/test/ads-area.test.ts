@@ -88,7 +88,8 @@ describe("a área da equipe", () => {
   it("entra como rota e item de menu próprios, sem mexer nas outras", () => {
     expect(app).toContain('path="/anuncios"');
     expect(app).toContain('lazy(() => import("@/pages/AdminAds"))');
-    expect(menu).toContain('{ title: "Anúncios", url: "/anuncios", icon: Megaphone }');
+    // 26/10: acende só na rota exata (Anúncios hoje mora em /anuncios/hoje).
+    expect(menu).toContain('{ title: "Anúncios", url: "/anuncios", icon: Megaphone, fimExato: true }');
     // A área de métricas do Instagram continua onde estava.
     expect(app).toContain('path="/metricas"');
     expect(menu).toContain('{ title: "Métricas", url: "/metricas", icon: BarChart3 }');

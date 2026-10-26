@@ -19,9 +19,10 @@ import {
   LayoutGrid, GraduationCap, BookOpen, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 import MobileBottomNav, { destinosDaBarra, type DestinoDoCelular } from "@/components/MobileBottomNav";
 import { rotuloDoLugar } from "@/lib/navegacao/lugares";
@@ -147,6 +148,10 @@ interface NavItem {
   /** Acende só na rota exata. Sem isto, a entrada "/comercial" ficaria
       acesa em todas as áreas do departamento ao mesmo tempo. */
   fimExato?: boolean;
+  /** Só o admin enxerga (decisão que só o dono toma). */
+  soAdmin?: boolean;
+  /** Número ao lado do nome (ex.: mensagens prontas para aprovar). */
+  contador?: number;
 }
 
 const adminMainNav: NavItem[] = [
@@ -166,7 +171,9 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Operação da semana",
     items: [
-      { title: "Central", url: "/central", icon: HeartPulse },
+      { title: "Central", url: "/central", icon: HeartPulse, fimExato: true },
+      // 26/10: as mensagens dos rituais da semana, de todos os clientes, numa tela só (com o contador).
+      { title: "Mensagens da semana", url: "/central/mensagens", icon: MessagesSquare, soAdmin: true },
       { title: "Mesas", url: "/mesas", icon: LayoutGrid, soCriacao: true },
       // 17/10: o que cada agente sabe (o dono ensina e a pesquisa semanal complementa).
       { title: "Base dos agentes", url: "/base-dos-agentes", icon: GraduationCap, soCriacao: true },
@@ -183,7 +190,9 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     label: "Resultados",
     items: [
       { title: "Métricas", url: "/metricas", icon: BarChart3 },
-      { title: "Anúncios", url: "/anuncios", icon: Megaphone },
+      { title: "Anúncios", url: "/anuncios", icon: Megaphone, fimExato: true },
+      // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
+      { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
       { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
       { title: "Timeline", url: "/timeline", icon: GitBranch },
     ],
@@ -291,7 +300,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isTeam = ["design", "traffic", "manager"].includes(role);
   const isAdminOrTeam = isAdmin || isTeam;
   const podeGestao = isAdmin || role === "manager";
-  const gruposDoMenu = gruposPorPapel(podeGestao, podeGestao || role === "design");
+  const mensagensProntas = useContagemDeMensagensProntas();
+  // 26/10: item só do admin (soAdmin) e o contador das mensagens prontas.
+  const gruposDoMenu = gruposPorPapel(podeGestao, podeGestao || role === "design").map((grupo) => ({
+    ...grupo,
+    items: grupo.items
+      .filter((item) => isAdmin || !item.soAdmin)
+      .map((item) => (item.url === "/central/mensagens" ? { ...item, contador: mensagensProntas } : item)),
+  })).filter((grupo) => grupo.items.length > 0);
   const mainNav = isAdminOrTeam ? adminMainNav : clientMainNav;
   const moreNav = isAdminOrTeam
     ? gruposDoMenu.flatMap((grupo) => grupo.items)
@@ -576,6 +592,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         >
                           <item.icon className="w-3.5 h-3.5" />
                           {item.title}
+                          {item.contador ? <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-foreground" aria-label={`${item.contador} para aprovar`}>{item.contador}</span> : null}
                         </NavLink>
                       ))}
                     </div>

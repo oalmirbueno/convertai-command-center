@@ -24,10 +24,10 @@
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
 import { progressDetail, type OperatorProgressDetail } from './operator-progress-detail.ts';
 import { operatorRunIsStale } from './operator-freshness.ts';
-import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
 import { mensagemVinculoInexistente, type VinculoCandidato } from './vinculo-guard.ts';
 import { jevPerguntar } from './jev.ts';
 import { decidirTrava, perguntaDaTrava, ROTULO_DO_MOTIVO, type MotivoDoDono, type RespostaDaTrava } from './trava-do-dono.ts';
+import { avaliarRodada, classificarProva, ehSoLeitura, provaConfere, vinculoSemEntrega, type Prova } from '../mcp-server/modulos/rodada-e-prova.ts';
 
 const texto = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;
@@ -182,13 +182,24 @@ async function fecharRodada(
 ): Promise<Record<string, unknown>> {
   const agora = new Date().toISOString();
   let operadorId: string | null = null;
+  let inicio: string | null = null;
   if (resultado.run_id) {
     const r = await comPrazo(db().from('operator_runs')
       .update({ status: 'done', finished_at: agora })
       .eq('id', resultado.run_id).in('status', ['started', 'progress'])
-      .select('operator_id'));
+      .select('operator_id, started_at'));
     if (r.error) return { rodada_fechada: false, aviso_da_rodada: `A rodada não fechou: ${r.error.message}` };
     operadorId = (Array.isArray(r.data) ? r.data[0]?.operator_id : null) ?? null;
+    inicio = (Array.isArray(r.data) ? r.data[0]?.started_at : null) ?? null;
+  }
+  // 26/10/2026: rodada sem fato novo (sem prova, entrega, mudança de estado nem diário com conteúdo)
+  // não devolve a tarefa para a fila; sem entrega em 72 h, o vínculo vai para "parado", sem aviso.
+  if (resultado.link_id) {
+    const avaliacao = await avaliarRodada(db(), {
+      runId: resultado.run_id, linkId: resultado.link_id, operatorId: operadorId, inicio,
+      evidence: input.evidence, anexos: input.detail?.attachments ?? null,
+    });
+    if (!avaliacao.fato) return await rodadaSemFato(resultado.link_id, operadorId, input, actor);
   }
   let voltouParaFila = false;
   if (resultado.link_id) {
@@ -208,6 +219,25 @@ async function fecharRodada(
   return { rodada_fechada: true, run_status: 'done', ...(voltouParaFila ? { link_status: 'queued' } : {}) };
 }
 
+async function rodadaSemFato(linkId: string, operadorId: string | null, input: OperatorReportInput, actor: string): Promise<Record<string, unknown>> {
+  const base = { rodada_fechada: true, run_status: 'done', sem_fato_novo: true };
+  const v = await comPrazo(db().from('operator_task_links').select('status, created_at').eq('id', linkId).maybeSingle());
+  const vinculo = v.data as { status?: string; created_at?: string } | null;
+  if (vinculo?.status === 'in_progress' && await vinculoSemEntrega(db(), linkId, vinculo.created_at ?? null)) {
+    const p = await comPrazo(db().from('operator_task_links')
+      .update({ status: 'parado', next_step: 'Parado: sem entrega há 72 h. Volta quando alguém reabrir ou oferecer de novo.', updated_at: new Date().toISOString() })
+      .eq('id', linkId).eq('status', 'in_progress').select('id'));
+    if (!p.error && Array.isArray(p.data) && p.data.length) {
+      await comPrazo(db().from('operator_audit_log').insert({
+        actor, operator_id: operadorId, task_link_id: linkId, kanban_task_id: input.kanban_task_id ?? null,
+        action: 'parado: sem entrega há 72 h e rodada sem fato novo', old_status: 'in_progress', new_status: 'parado', run_key: input.run_key,
+      }));
+      return { ...base, link_status: 'parado', aviso_da_rodada: 'Rodada sem fato novo e sem entrega há 72 h: a tarefa saiu da fila (parado). Só volta se alguém reabrir ou oferecer de novo.' };
+    }
+  }
+  return { ...base, aviso_da_rodada: 'Rodada sem fato novo (sem prova, entrega, mudança de estado ou diário com conteúdo): a tarefa não voltou para a fila.' };
+}
+
 /** O Jev lê o motivo da trava. Falha do Jev devolve null: quem chama mantém a trava. */
 export async function classificarTrava(motivo: string, oQueDestrava: string | null): Promise<RespostaDaTrava | null> {
   try {
@@ -218,6 +248,26 @@ export async function classificarTrava(motivo: string, oQueDestrava: string | nu
     return (r.answers.trava ?? null) as RespostaDaTrava | null;
   } catch {
     return null;
+  }
+}
+
+/** done com prova vira linha em operator_deliveries (uma por operador e run_key). */
+async function registrarEntrega(r: Record<string, unknown>, input: OperatorReportInput, detail: Record<string, unknown>, prova: Prova): Promise<Record<string, unknown>> {
+  try {
+    const op = await comPrazo(db().from('internal_operators').select('id').eq('slug', String(r.operator ?? input.operator)).maybeSingle());
+    const operadorId = (op.data as { id?: string } | null)?.id;
+    if (!operadorId) return { entrega_registrada: false };
+    const ja = await comPrazo(db().from('operator_deliveries').select('id').eq('operator_id', operadorId).eq('run_key', input.run_key).limit(1));
+    if (Array.isArray(ja.data) && ja.data.length) return { entrega_registrada: true, delivery_id: (ja.data[0] as { id: string }).id };
+    const ins = await comPrazo(db().from('operator_deliveries').insert({
+      operator_id: operadorId, kanban_task_id: (r.kanban_task_id as string | null) ?? input.kanban_task_id ?? null,
+      task_link_id: (r.link_id as string | null) ?? null, client_id: (detail.client_id as string | null) ?? null,
+      o_que: String(input.action || detail.title || 'Entrega concluída').slice(0, 500),
+      como: `Prova: ${prova.tipo.replace(/_/g, ' ')}`, onde_acessar: prova.ref.slice(0, 2000), run_key: input.run_key,
+    }).select('id').maybeSingle());
+    return ins.error ? { entrega_registrada: false } : { entrega_registrada: true, delivery_id: (ins.data as { id?: string } | null)?.id ?? null };
+  } catch {
+    return { entrega_registrada: false };
   }
 }
 
@@ -260,6 +310,25 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     throw new Error('painel_task_id must be a UUID');
   }
   const detail = progressDetail(input.detail, input.action, input.evidence, input.next_step);
+  // 26/10/2026: "só leitura / preservado / recuperação" sem evidência não move card nem notifica.
+  const soLeitura = RODADA_ABERTA.has(input.event) && !texto(input.evidence)
+    && ehSoLeitura(input.action, input.detail?.summary, input.detail?.title);
+  if (soLeitura) detail.work_kind = 'documental';
+  // 26/10/2026: done só com prova (post com permalink, ação de anúncio registrada, mensagem enviada,
+  // arquivo entregue). Sem prova vira review com aviso e não conta como feito.
+  let prova: Prova | null = null;
+  if (input.event === 'done' && detail.work_kind !== 'documental') {
+    prova = classificarProva(input.evidence, input.detail?.attachments ?? null);
+    if (prova && !await provaConfere(db(), prova)) prova = null;
+    // Prova que veio só nos anexos também é a evidência do banco (sem ela o banco rebaixaria a revisão).
+    if (prova && !texto(input.evidence)) { input = { ...input, evidence: prova.ref }; detail.evidence = prova.ref; }
+    if (!prova) {
+      aviso = { ...(aviso ?? {}), sem_prova: true,
+        por_que: 'Feito só com prova: post publicado com permalink, ação de anúncio registrada (ads_acao:<id> de aceleriq_ads_registrar_acao), mensagem enviada (envio:<id>) ou arquivo entregue (aceleriq-file://<id>). Sem isso a tarefa foi para revisão.',
+        o_que_fazer: 'Registre a prova e mande done de novo com ela em evidence.' };
+      input = { ...input, event: 'review' };
+    }
+  }
   // O time do Paperclip relata uma vez por rodada, com uma run por tarefa (link:<vínculo>): o
   // progress dele é sempre fim de rodada, a menos que diga fim_da_rodada false.
   const rodadaDoPaperclip = input.operator === 'paperclip' && input.run_key.startsWith('link:');
@@ -316,8 +385,12 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     throw new Error(`operator_report_event: ${error.message}`);
   }
   let resultado = data;
+  if (prova && data && typeof data === 'object') {
+    resultado = { ...(data as Record<string, unknown>), prova: prova.tipo, ...await registrarEntrega(data as Record<string, unknown>, input, detail, prova) };
+  }
+  if (soLeitura && resultado && typeof resultado === 'object') resultado = { ...(resultado as Record<string, unknown>), so_leitura: true };
   if (fechaRodada && data && typeof data === 'object') {
-    resultado = { ...(data as Record<string, unknown>), ...await fecharRodada(data as Record<string, string | null>, input, actor) };
+    resultado = { ...(resultado as Record<string, unknown>), ...await fecharRodada(data as Record<string, string | null>, input, actor) };
   }
   return aviso && resultado && typeof resultado === 'object' ? { ...(resultado as Record<string, unknown>), ...aviso } : resultado;
 }
@@ -1074,7 +1147,7 @@ export async function operatorQueue(opts: { operator?: string; limit?: number })
  * erro que diz qual id usar (id da tarefa trocado pelo do vinculo, ou id
  * remendado parecido com um vinculo real). Nunca grava no vinculo sugerido.
  */
-async function exigirVinculoExistente(linkId: string, operador: string | null): Promise<void> {
+export async function exigirVinculoExistente(linkId: string, operador: string | null): Promise<void> {
   const { data: existe, error } = await comPrazo(db().from('operator_task_links')
     .select('id').eq('id', linkId).maybeSingle());
   if (error) throw new Error(`operator_task_links: ${error.message}`);
@@ -1118,93 +1191,7 @@ async function exigirVinculoExistente(linkId: string, operador: string | null): 
   throw new Error(mensagemVinculoInexistente(linkId, candidatos, operador));
 }
 
-/**
- * O diario da execucao: onde o agente le as instrucoes do Almir e escreve
- * as proprias entradas.
- *
- * Sem body, LISTA — e listar e o que fecha o ciclo de participacao: uma
- * instrucao humana que o agente nunca le e um bilhete na gaveta. Com
- * body, ESCREVE via RPC, que valida operador vivo, audita e decide se
- * notifica (pedido_insumo e pedido_revisao notificam; comentario nao —
- * diario nao e spam).
- */
-export async function operatorDiary(input: {
-  link_id: string;
-  operator?: string;
-  entry_type?: string;
-  title?: string;
-  body?: string;
-  attachments?: { name: string; url: string }[];
-  limit?: number;
-}) {
-  if (!isUuid(input.link_id)) throw new Error('link_id must be a UUID');
-  // Confere o vinculo antes de ler ou escrever: o RPC recusaria com 400
-  // link_not_found e o agente so veria "nao existe" (68 vezes em 24h).
-  await exigirVinculoExistente(input.link_id, texto(input.operator)?.toLowerCase() ?? null);
-
-  if (texto(input.body)) {
-    if (!texto(input.operator)) {
-      throw new Error('para escrever no diario informe operator (slug do operador que assina)');
-    }
-    const { data, error } = await comPrazo(db().rpc('operator_participar', {
-      _operator_slug: String(input.operator).trim().toLowerCase(),
-      _link_id: input.link_id,
-      _entry_type: texto(input.entry_type) ?? 'comentario',
-      _body: String(input.body),
-      _title: texto(input.title),
-      _attachments: progressDetail({ attachments: input.attachments }).attachments || [],
-    }));
-    if (error) throw new Error(`operator_participar: ${error.message}`);
-    const workspace = await organizarArquivosDaExecucao(db(), input.link_id, input.attachments || []).catch(() => ({ organizados: 0, avisos: ["O diário foi salvo; a organização dos arquivos não foi confirmada no Workspace."] }));
-    return { ...data, workspace };
-  }
-
-  const limit = Math.min(Math.max(Number(input.limit) || 50, 1), READ_LIMITS.maxPageSize);
-  const { data, error } = await comPrazo(db().from('operator_participations')
-    .select('id, entry_type, title, body, attachments, author_kind, author_id, operator_id, created_at')
-    .eq('task_link_id', input.link_id)
-    .order('created_at', { ascending: false })
-    .limit(limit));
-  if (error) throw new Error(`operator_participations: ${error.message}`);
-
-  const linhas = [...(data ?? [])].reverse() as Array<Record<string, unknown>>;
-
-  // Nome de autor resolvido aqui para o leitor nao receber UUID cru.
-  const humanos = [...new Set(linhas.map((l) => texto(l.author_id)).filter(Boolean))] as string[];
-  const agentes = [...new Set(linhas.map((l) => texto(l.operator_id)).filter(Boolean))] as string[];
-  const [perfis, ops] = await Promise.all([
-    humanos.length
-      ? comPrazo(db().from('profiles').select('id, full_name').in('id', humanos))
-      : Promise.resolve({ data: [], error: null }),
-    agentes.length
-      ? comPrazo(db().from('internal_operators').select('id, slug, display_name').in('id', agentes))
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  const nomeHumano = new Map(((perfis.data ?? []) as Array<Record<string, unknown>>)
-    .map((p) => [String(p.id), texto(p.full_name) ?? 'pessoa']));
-  const nomeAgente = new Map(((ops.data ?? []) as Array<Record<string, unknown>>)
-    .map((o) => [String(o.id), texto(o.display_name) ?? texto(o.slug) ?? 'operador']));
-
-  return {
-    link_id: input.link_id,
-    total: linhas.length,
-    entradas: linhas.map((l) => ({
-      id: l.id,
-      quando: l.created_at,
-      tipo: l.entry_type,
-      autor: l.author_kind === 'humano'
-        ? (nomeHumano.get(String(l.author_id)) ?? 'pessoa')
-        : (nomeAgente.get(String(l.operator_id)) ?? 'operador'),
-      autor_kind: l.author_kind,
-      titulo: l.title,
-      texto: l.body,
-      anexos: l.attachments,
-    })),
-    como_usar: 'Entradas do tipo instrucao, decisao e correcao vem do humano e MANDAM: '
-      + 'leia antes de continuar a tarefa. Para responder, chame de novo com operator, '
-      + 'entry_type e body. resposta_insumo fecha um pedido_insumo seu.',
-  };
-}
+// MCP 2.19: o diario (aceleriq_operator_diary) mora em mcp-server/modulos/diario.ts.
 
 /**
  * O agente pede aprovacao COM a explicacao completa — ou nao pede.
