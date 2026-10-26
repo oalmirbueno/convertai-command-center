@@ -47,7 +47,7 @@ function consulta(tabela: string) {
   };
   function exec(): { data: any; error: any; count?: number } {
     if (modo === "insert") {
-      const nova = { id: `id-${++seq}`, created_at: new Date().toISOString(), ...(carga as Linha) };
+      const nova: Linha = { id: `id-${++seq}`, created_at: new Date().toISOString(), ...(carga as Linha) };
       if (tabela === "commercial_lead_messages" && nova.id_externo && linhas().some((l) => l.lead_id === nova.lead_id && l.id_externo === nova.id_externo)) {
         return { data: null, error: { message: "duplicate key value violates unique constraint" } };
       }
@@ -170,7 +170,7 @@ describe("serviços do Mercúrio", () => {
     await expect(comercialRegistrarMensagem({ lead_id: LEAD2, direcao: "saida", texto: "Oi Bruno" }, ctx)).rejects.toThrow(/Teto do dia/);
     // Conversa já aberta não conta no teto.
     const r2 = await comercialRegistrarMensagem({ lead_id: LEAD, direcao: "saida", texto: "Posso te mandar um exemplo?" }, ctx);
-    expect(r2.primeiro_contato).toBe(false);
+    expect(r2).toMatchObject({ primeiro_contato: false });
   });
 
   it("fora do horário, o primeiro contato frio é recusado", async () => {
@@ -180,7 +180,7 @@ describe("serviços do Mercúrio", () => {
 
   it("pedido para parar marca nao_contatar e recusa as saídas seguintes", async () => {
     const r = await comercialRegistrarMensagem({ lead_id: LEAD, direcao: "entrada", texto: "não tenho interesse" }, ctx);
-    expect(r.pediu_para_parar).toBe(true);
+    expect(r).toMatchObject({ pediu_para_parar: true });
     expect(banco.commercial_leads[0].qualificacao.nao_contatar).toBe("sim");
     await expect(comercialRegistrarMensagem({ lead_id: LEAD, direcao: "saida", texto: "Mas olha essa oferta" }, ctx)).rejects.toThrow(/LGPD/);
   });

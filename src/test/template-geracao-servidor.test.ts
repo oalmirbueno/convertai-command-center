@@ -57,7 +57,7 @@ describe("template_conteudo: texto do post com custo antes", () => {
     expect(c.ler().direcao.cards.map((x) => x.texto_exato)).toEqual(["Pão às 7h.", "Fermentação natural.", "Chegue cedo."]);
     expect(c.ler().legenda).toBe("Pão às 7h.\n\n#padaria");
     expect(c.ler().custo_usd).toBeCloseTo(2.03);
-    const pedido = c.escrever.mock.calls[0][2];
+    const pedido = (c.escrever.mock.calls[0] as unknown as Array<Record<string, any>>)[2];
     expect(pedido.rede).toBe("twitter");
     expect(pedido.pedido).toMatchObject({ tema: "pão", ordens_pedidas: [1, 2, 3], quantidade: 3 });
     expect(pedido.sistema).toContain("FIO de 3 posts");
@@ -114,8 +114,9 @@ describe("template_imagem: foto do post pelo gerador, sem texto", () => {
   it("gera no tamanho da proporção, guarda na pasta do cliente e acrescenta à lâmina com o custo", async () => {
     const c = cenario();
     const r = await json(await c.acoes.template_imagem(ch, { trabalho_id: TRABALHO, ordem: 2, rede: "twitter", proporcao: "16:9", descricao: "pão na bancada", confirmado: true }));
-    expect(c.gerar.mock.calls[0][2]).toMatchObject({ tamanho: TAMANHO_DA_FOTO["16:9"] });
-    const prompt = c.gerar.mock.calls[0][2].prompt as string;
+    const chamadaGerar = (c.gerar.mock.calls[0] as unknown as Array<Record<string, any>>)[2];
+    expect(chamadaGerar).toMatchObject({ tamanho: TAMANHO_DA_FOTO["16:9"] });
+    const prompt = chamadaGerar.prompt as string;
     expect(prompt).toContain("pão na bancada");
     expect(prompt).toContain("SEM TEXTO NA IMAGEM");
     expect(r.imagem).toMatchObject({ caminho: `${CLIENTE}/estudio/template/foto.png`, origem: "gerador", proporcao: "16:9" });

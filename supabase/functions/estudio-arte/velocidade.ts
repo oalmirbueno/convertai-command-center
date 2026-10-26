@@ -68,8 +68,8 @@ export async function emParalelo<A, B>(principal: Promise<A>, lado: Promise<B>):
   const ladoSeguro = lado.then((v) => ({ ok: true as const, v }), (erro: unknown) => ({ ok: false as const, erro }));
   const a = await principal;
   const r = await ladoSeguro;
-  if (!r.ok) throw r.erro;
-  return [a, r.v];
+  if (!r.ok) throw (r as { ok: false; erro: unknown }).erro;
+  return [a, (r as { ok: true; v: B }).v];
 }
 
 /** Cronômetro das etapas de uma lâmina (ms desde a última marca), para o log. */

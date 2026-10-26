@@ -396,7 +396,7 @@ describe("agente da campanha mais agêntico", () => {
   });
 
   it("as sugestões mudam com o estado da campanha", () => {
-    const s = atalhosDoEstado({ briefing: { stories: [{ tema_id: "s1", sequencia_id: null }], ads: { campaign_id: "1" } } }, [{ formato: "video" }]).map((a) => a.rotulo);
+    const s = atalhosDoEstado({ briefing: { stories: [{ tema_id: "s1", sequencia_id: null }], ads: { campaign_id: "1" } } } as unknown as Parameters<typeof atalhosDoEstado>[0], [{ formato: "video" }]).map((a) => a.rotulo);
     expect(s.slice(0, 4)).toEqual(["O que falta?", "Reorganizar datas e fases", "Criar os stories que faltam", "Roteiros dos vídeos"]);
     expect(s).toContain("Como está o anúncio?");
     const pronta = atalhosDoEstado(campanha, [{ formato: "video", roteiro_video: {} }]).map((a) => a.rotulo);
