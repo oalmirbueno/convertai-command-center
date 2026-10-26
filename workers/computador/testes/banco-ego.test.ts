@@ -1,5 +1,5 @@
 /**
- * Navegador do PC (26/10/2026): a migration 20261026150000 num Postgres em memória (PGlite), por cima das
+ * Navegador do PC (26/10/2026): a migration 20261026150500 num Postgres em memória (PGlite), por cima das
  * do navegador do agente. Confere que o caso pc_ego entra na fila, que só o worker que anuncia o caso
  * pega, que o sinal do executor guarda o caso (o MCP usa isso para saber se o PC está ligado) e que um
  * caso desconhecido continua recusado.
@@ -61,12 +61,12 @@ before(async () => {
   await db.exec(tabelaOriginal());
   await db.exec(ler("20260930320200_navegador_do_agente.sql"));
   await db.exec(ler("20260930325000_navegador_qualquer_modelo_e_acoes.sql"));
-  const sql = ler("20261026150000_navegador_do_pc_ego.sql");
+  const sql = ler("20261026150500_navegador_do_pc_ego.sql");
   await db.exec(sql);
   await db.exec(sql); // idempotente
 });
 
-describe("navegador do PC no banco (migration 20261026150000)", () => {
+describe("navegador do PC no banco (migration 20261026150500)", () => {
   it("aceita o caso pc_ego e continua recusando caso desconhecido", async () => {
     assert.ok(await pedidoDoPc());
     await assert.rejects(pedidoDoPc("'comprar'"), /caso_check/);
