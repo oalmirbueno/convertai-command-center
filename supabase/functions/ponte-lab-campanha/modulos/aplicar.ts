@@ -179,7 +179,7 @@ async function gravarFunil(db: SupabaseClient, projeto: ProjetoLido, canvas: Can
   const resumo = `Fases da campanha: ${etapas.map((e) => e.nome).join("; ")}.`;
   const saida = { texto: resumo, json: { etapas, upsell: "", downsell: "", metas: [], resumo, blocos_sem_fonte: [] } };
   if (anterior && iguais(obj(anterior.saida).json, saida.json)) return;
-  await db.from("lab_execucoes").insert({
+  const { error } = await db.from("lab_execucoes").insert({
     projeto_id: projeto.id,
     no_id: no.id,
     tipo: "funil",
@@ -189,6 +189,7 @@ async function gravarFunil(db: SupabaseClient, projeto: ProjetoLido, canvas: Can
     custo_usd: 0,
     finished_at: new Date().toISOString(),
   });
+  if (error) console.warn("[ponte-lab-campanha] fases do funil não gravadas", { projeto_id: projeto.id, codigo: error.code });
 }
 
 /** Grava as sugestões abertas (sem repetir) e marca como superadas as que não valem mais. */
@@ -298,6 +299,8 @@ export async function garantirProjeto(db: SupabaseClient, campanhaId: string, cr
   }
   const projeto = projetoDe(data as Record<string, unknown>);
   await db.from("mesa_campanhas").update({ sincronia: { ...obj(lida.campanha.sincronia), projeto_id: projeto.id, chaves: r.chaves, ultima_em: new Date().toISOString(), lado: "campanha", resumo: r.resumo } }).eq("id", campanhaId);
+  // O canvas nasce com as fases da campanha na saída do Funil (sem custo).
+  await gravarFunil(db, projeto, r.canvas, r.campanha, {}).catch(() => undefined);
   return { projeto, criado: true };
 }
 
