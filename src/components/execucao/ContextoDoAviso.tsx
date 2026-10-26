@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { nomeDaTarefa } from "@/lib/nomeDaTarefa";
 import { supabase } from "@/integrations/supabase/client";
 
 export function destinoOperacional(link: string): string {
@@ -28,10 +29,11 @@ export default function ContextoDoAviso({ link }: { link: string }) {
       if (v.error) throw v.error;
       const taskId = v.data?.kanban_task_id || v.data?.painel_task_id;
       if (!taskId) return titulo || v.data?.last_action;
-      const t = await (supabase as any).from("tasks").select("title,project:projects!tasks_project_id_fkey(name,client:profiles!projects_client_id_fkey(company_name,full_name))").eq("id", taskId).maybeSingle();
+      const t = await (supabase as any).from("tasks").select("title,delivery_type,project:projects!tasks_project_id_fkey(name,client:profiles!projects_client_id_fkey(company_name,full_name))").eq("id", taskId).maybeSingle();
       if (t.error) throw t.error;
       const c = t.data?.project?.client;
-      return [c?.company_name || c?.full_name, t.data?.title || titulo].filter(Boolean).join(" · ");
+      // 26/10: "Cliente · Área · assunto", sem o código ACE.
+      return nomeDaTarefa({ titulo: t.data?.title || titulo, cliente: c?.company_name || c?.full_name, tipoDeEntrega: t.data?.delivery_type }).texto;
     },
   });
   return data ? <p className="mt-1 text-[12px] leading-relaxed text-foreground/80">{data}</p> : null;

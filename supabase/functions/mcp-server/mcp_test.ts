@@ -321,6 +321,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_mesa_stories',
     'aceleriq_mesa_templates',
     'aceleriq_move_opportunity',
+    'aceleriq_navegador_do_pc',
     'aceleriq_operator_assign',
     'aceleriq_operator_board',
     'aceleriq_operator_checklist',

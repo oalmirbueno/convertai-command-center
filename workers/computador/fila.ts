@@ -27,6 +27,8 @@ export interface TarefaDoNavegador {
   modelo_id?: string | null;
   /** Frente CUS: os sites de uma pesquisa de concorrentes visuais (o primeiro é a url_inicial). */
   urls?: string[] | null;
+  /** Navegador do PC (caso pc_ego): os passos pedidos pelo agente, conferidos pelo MCP. */
+  passos?: unknown;
 }
 
 export type RespostaDoPasso = "seguir" | "parar" | "teto";

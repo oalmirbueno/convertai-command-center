@@ -18,6 +18,7 @@ export type CategoriaDoAviso =
   | "agente"
   | "comercial"
   | "anuncios"
+  | "resumo"
   | "geral";
 
 const CATEGORIA: Record<string, CategoriaDoAviso> = {
@@ -46,6 +47,8 @@ const CATEGORIA: Record<string, CategoriaDoAviso> = {
   commercial_caixa: "comercial",
   // 26/10: um aviso por boletim do Hermes (frente SERVIDOR), com link para /anuncios/hoje.
   ads_boletim: "anuncios",
+  // 26/10: um aviso por dia (frente SERVIDOR), com link para /hoje.
+  resumo_do_dia: "resumo",
 };
 
 /** O nome de alguns tipos (aparece no title do ícone do aviso). */
@@ -65,6 +68,7 @@ export function categoriaDoAviso(tipo: string | null | undefined): CategoriaDoAv
 /** Rota interna -> texto do link. A primeira que casar vence. */
 const ROTULOS_DAS_ROTAS: Array<[string, string]> = [
   ["/anuncios/hoje", "Abrir Anúncios hoje"],
+  ["/hoje", "Abrir o resumo de hoje"],
   ["/central/mensagens", "Abrir Mensagens da semana"],
   ["/ciclo/revisao", "Abrir a revisão"],
   ["/aprovacoes", "Ver Arquivo"],
@@ -127,6 +131,7 @@ export const NOME_DO_GRUPO: Record<CategoriaDoAviso, string> = {
   agente: "Agentes",
   comercial: "Comercial",
   anuncios: "Anúncios",
+  resumo: "Resumo do dia",
   geral: "Outros avisos",
 };
 
@@ -160,6 +165,8 @@ export function agruparAvisos<T extends { notification_type?: string | null; rea
   const maisNovo = (g: GrupoDeAvisos<T>) => g.itens.reduce((m, a) => ((a.created_at || "") > m ? a.created_at || "" : m), "");
   return Array.from(mapa.values()).sort((x, y) =>
     Number(y.pedeDecisao) - Number(x.pedeDecisao)
+    // 26/10: o resumo do dia não lido fica logo abaixo do que pede decisão.
+    || Number(y.categoria === "resumo" && y.naoLidos > 0) - Number(x.categoria === "resumo" && x.naoLidos > 0)
     || Number(y.naoLidos > 0) - Number(x.naoLidos > 0)
     || maisNovo(y).localeCompare(maisNovo(x)));
 }

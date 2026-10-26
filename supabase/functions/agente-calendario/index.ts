@@ -229,7 +229,8 @@ import {
   pedidoPontual,
 } from "./modulos/cadencia-do-mes.ts";
 import { ESQUEMA_DA_MIDIA_DA_PECA, GANCHO_NO_VIDEO_DA_PAUTA, LINHA_SEM_FOTO_REAL, tipoDeMidia } from "./modulos/midia-da-peca-regras.ts";
-import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaMistura, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, semanasDoPeriodo, trocasParaMisturar } from "./modulos/mistura-do-nicho.ts";
+import { blocoDaMistura, cadenciaDoNicho, comMisturaDoNicho, falaDaSugestao, misturaDoMes, perfilDaMistura, perfilDaResposta, perfilPorRegra, perguntaDaMistura, perguntasDasTrocas, type PerfilDeMistura, semanasDoPeriodo, trocasParaMisturar, mixDoPerfil } from "./modulos/mistura-do-nicho.ts";
+import { classificar, decidirAtrasados, descricaoDaTarefa, escolherPautas, type FatosDoCliente, medir, ORIGEM_DA_TAREFA, type Pauta, precisaPreparar, sequenciaDeFormatos, somarDias as somarDiasDaVigia, sugestaoDoResumo, tituloDaTarefa, urgencia } from "./modulos/vigia-do-calendario.ts";
 // 24/10: a escolha de formatos da preparação (Stories e os dois caminhos do vídeo) e a troca de peças.
 import { blocoDaEscolha, cadenciaComEscolha, caminhoDoNicho, caminhoDoVideo, caminhosDosVideos, descricaoDosStories, formatoDaOpcao, formatosNaEscolha, fraseDosStories, IDS_DAS_OPCOES, mixDaEscolha, normalizarEscolha, opcaoDoItem, opcaoDoTexto, ROTULO_DA_OPCAO, ROTULO_DO_CAMINHO, storiesDoPlano, tituloDosStories, type CaminhoDoVideo, type OpcaoDoMes, type StoryPlanejado } from "./modulos/escolha-do-mes.ts";
 import { entregaDaOpcao, escopoDaEsteira, formatosDasOpcoes, fraseDaTrocaFeita, OPCOES_POR_TROCA, passosDaTroca, pedidoDaTroca, perguntasDaTroca, protecaoDaPeca, recomendadaDaTroca, trabalhoLivre, type PecaDaEsteira, type SituacaoDaPeca } from "./modulos/troca-da-peca.ts";
@@ -9988,6 +9989,229 @@ async function separarProtegidasDoRefazer(servico: SupabaseClient, clientId: str
   return { livres, protegidas };
 }
 
+// ------------------------------------------ vigia do calendário (26/10, chamada interna do agendador)
+
+/**
+ * vigia_do_calendario_interno (agendador, 06h07 a 18h37 BRT a cada 30 min). Dono: "não pode o cliente ficar
+ * sem postar mais de 3 dias; já tem que preparar algo e me avisar; enxuto".
+ * 1) Mede TODOS os clientes ativos com social (public.vigia_calendario_fatos, sem IA) e grava um estado por
+ *    cliente (vigia_calendario_estado).
+ * 2) Agendado aprovado que passou da hora e não saiu: uma tentativa de pôr no ar pelo caminho oficial
+ *    (vigia_publicar_atrasado; o editorial-autopublish publica). Sem aprovação, só aviso.
+ * 3) Uma tarefa por cliente em risco ("Cliente · Conteúdo · preparar N posts até dd/mm"), atualizada; quando o
+ *    calendário volta ao normal, a tarefa fecha com a prova.
+ * 4) Prepara no máximo UM cliente por chamada (o mais urgente): a busca do que está em alta só roda se o
+ *    cliente ainda não tem a desta semana e tem saldo; a pauta sai do que a busca trouxe (tema, gancho,
+ *    legenda) nos formatos da mistura do nicho. Nada de arte ou vídeo: o dono gera nas Mesas.
+ */
+async function vigiaDoCalendarioInterno(servico: SupabaseClient, corpo: Record<string, unknown>): Promise<Response> {
+  const inicio = Date.now();
+  const agora = new Date();
+  const hoje = hojeSaoPaulo();
+  const lerFatos = async (): Promise<FatosDoCliente[]> => {
+    const { data, error } = await servico.rpc("vigia_calendario_fatos");
+    if (error) throw new ErroHttp(503, "banco_indisponivel", `A vigia não leu os fatos: ${error.message}`);
+    return (Array.isArray(data) ? data : []) as FatosDoCliente[];
+  };
+  const fatos = await lerFatos();
+  const { data: donoLido } = await servico.rpc("vigia_dono");
+  const dono = typeof donoLido === "string" ? donoLido : null;
+  const somenteMedir = corpo.somente_medir === true;
+
+  type Lido = {
+    f: FatosDoCliente;
+    m: ReturnType<typeof medir>;
+    c: ReturnType<typeof classificar>;
+    decisoes: ReturnType<typeof decidirAtrasados>;
+    pautas: Pauta[];
+  };
+  const lidos: Lido[] = [];
+  const publicados: Array<{ client_id: string; publication_id: string; ok: boolean; motivo?: string }> = [];
+  for (const f of fatos) {
+    const m = medir(f, hoje);
+    const c = classificar(m, f, hoje);
+    const decisoes = decidirAtrasados(f.atrasados, agora);
+    if (!somenteMedir) {
+      for (const d of decisoes) {
+        if (d.acao !== "publicar") continue;
+        const { data, error } = await servico.rpc("vigia_publicar_atrasado", { _publication_id: d.id, _motivo: d.motivo });
+        const r = (data ?? {}) as { ok?: boolean; motivo?: string; erro?: string };
+        publicados.push({ client_id: f.client_id, publication_id: d.id, ok: r.ok === true, motivo: r.erro ?? r.motivo ?? error?.message });
+        if (r.ok !== true) {
+          d.acao = "avisar";
+          d.motivo = `a vigia tentou pôr no ar e não conseguiu (${String(r.erro ?? r.motivo ?? error?.message ?? "sem resposta").slice(0, 120)}): publique pelo painel`;
+        }
+      }
+    }
+    // A pauta preparada antes continua valendo até o próximo preparo (sem custo novo).
+    const pautas = c.faltam > 0 ? ((f.estado_anterior?.pautas ?? []) as Pauta[]) : [];
+    lidos.push({ f, m, c, decisoes, pautas });
+  }
+
+  const atrasadosDoEstado = (l: Lido) => l.decisoes.map((d) => {
+    const a = (l.f.atrasados ?? []).find((x) => x.id === d.id);
+    return { id: d.id, titulo: a?.titulo ?? "Post", quando: a?.quando ?? hoje, acao: d.acao, motivo: d.motivo };
+  });
+
+  const linhaDoEstado = (l: Lido, extra: Record<string, unknown> = {}) => {
+    const anterior = l.f.estado_anterior;
+    const emRisco = l.c.estado !== "em_dia";
+    return {
+      client_id: l.f.client_id,
+      estado: l.c.estado,
+      situacao: l.c.situacao,
+      motivos: l.c.motivos,
+      meta_semana: l.m.meta_semana,
+      meta_fonte: l.m.meta_fonte,
+      prox7: l.m.prox7,
+      prox14: l.m.prox14,
+      dias_sem_post: l.m.dias_sem_post,
+      ultimo_post_em: l.f.ultimo_post ?? null,
+      buraco_em: l.m.buraco_em,
+      atrasados: atrasadosDoEstado(l),
+      pct_mes: l.m.pct_mes,
+      faltam: l.c.faltam,
+      preparar_ate: l.c.preparar_ate,
+      sugestao: emRisco ? sugestaoDoResumo(l.pautas, l.decisoes) : null,
+      pautas: l.pautas,
+      preparo: l.c.faltam > 0 ? (anterior?.preparo && anterior.preparo !== "nao_precisa" ? anterior.preparo : "pendente") : "nao_precisa",
+      em_risco_desde: emRisco ? (anterior?.em_risco_desde ?? agora.toISOString()) : null,
+      medido_em: agora.toISOString(),
+      ...(anterior?.estado !== l.c.estado ? { mudou_em: agora.toISOString() } : {}),
+      ...extra,
+    };
+  };
+
+  // A tarefa do cliente (uma só, origem vigia:calendario): cria, atualiza ou fecha com a prova.
+  const sincronizarTarefa = async (l: Lido, preparo: string | null): Promise<string | null> => {
+    const t = l.f.tarefa ?? null;
+    if (l.c.estado === "em_dia") {
+      if (t && t.status !== "done") {
+        const prova = `\n\nFechada pelo painel em ${hoje.slice(8, 10)}/${hoje.slice(5, 7)}: calendário em dia (${l.m.prox14} posts nos próximos 14 dias).`;
+        await servico.from("tasks").update({ status: "done", description: `${t.descricao ?? ""}${prova}`.slice(0, 4000) }).eq("id", t.id);
+      }
+      return t?.id ?? null;
+    }
+    const titulo = tituloDaTarefa(l.f.nome, l.c, l.decisoes.length);
+    const descricao = descricaoDaTarefa({
+      clientId: l.f.client_id,
+      classificacao: l.c,
+      medida: l.m,
+      ultimoPost: l.f.ultimo_post,
+      pautas: l.pautas,
+      ruins: l.f.ruins ?? [],
+      atrasados: atrasadosDoEstado(l),
+      preparo,
+    });
+    const prazo = l.c.preparar_ate ?? somarDiasDaVigia(hoje, 1);
+    const prioridade = l.c.estado === "sem_post_agendado" || l.c.estado === "vai_ficar_sem_post" ? "high" : "medium";
+    if (t) {
+      if (t.titulo === titulo && (t.descricao ?? "") === descricao && t.due_date === prazo && t.status !== "done") return t.id;
+      const { error } = await servico.from("tasks").update({
+        title: titulo,
+        description: descricao,
+        due_date: prazo,
+        priority: prioridade,
+        ...(t.status === "done" ? { status: "todo" } : {}),
+        ...(dono ? { assigned_to: dono } : {}),
+      }).eq("id", t.id);
+      if (error) registrarFalha("agente-calendario: vigia não atualizou a tarefa", error, { client_id: l.f.client_id });
+      return t.id;
+    }
+    if (!l.f.projeto_id) return null;
+    const { data, error } = await servico.from("tasks").insert({
+      project_id: l.f.projeto_id,
+      title: titulo,
+      description: descricao,
+      status: "todo",
+      priority: prioridade,
+      delivery_type: "planning",
+      workstream: "content",
+      assigned_to: dono,
+      due_date: prazo,
+      source: "agente:vigia",
+      origem_externa: ORIGEM_DA_TAREFA,
+    }).select("id").single();
+    if (error) {
+      // Corrida com outra chamada: o índice único (projeto + origem) segura a segunda; vale a que já existe.
+      if (!/duplicate|23505/i.test(String(error.message ?? ""))) registrarFalha("agente-calendario: vigia não criou a tarefa", error, { client_id: l.f.client_id });
+      return null;
+    }
+    return (data as { id: string } | null)?.id ?? null;
+  };
+
+  // Quem prepara agora: o mais urgente que precisa (um por chamada; o resto, nas próximas meias horas).
+  const fila = somenteMedir ? [] : lidos.filter((l) => precisaPreparar(l.c, l.f.estado_anterior, agora)).sort((a, b) => urgencia(a.c, a.m) - urgencia(b.c, b.m));
+  const alvo = fila[0] ?? null;
+  const estados: Record<string, unknown>[] = [];
+  for (const l of lidos) {
+    const taskId = somenteMedir || l === alvo ? null : await sincronizarTarefa(l, l.f.estado_anterior?.preparo ?? null);
+    estados.push(linhaDoEstado(l, taskId ? { task_id: taskId } : {}));
+  }
+  if (estados.length) {
+    const { error: erroEstados } = await servico.from("vigia_calendario_estado").upsert(estados, { onConflict: "client_id" });
+    if (erroEstados) throw new ErroHttp(503, "estado_nao_gravado", `A vigia não gravou o estado: ${erroEstados.message}`);
+    // Cliente que saiu da carteira ativa (ou do social) sai da vigia.
+    await servico.from("vigia_calendario_estado").delete().not("client_id", "in", `(${lidos.map((l) => l.f.client_id).join(",")})`);
+  }
+
+  let preparo: Record<string, unknown> | null = null;
+  if (alvo) {
+    const clientId = alvo.f.client_id;
+    let custo = 0;
+    let situacaoDoPreparo = "feito";
+    let f = alvo.f;
+    try {
+      let autorValido: string | null = null;
+      for (const autor of [alvo.f.autor, dono]) {
+        if (!autor || autorValido) continue;
+        try { autorValido = (await chamadorDoAutor(servico, autor, clientId)).userId; } catch { /* tenta o próximo */ }
+      }
+      const temSaldo = Number(alvo.f.saldo_usd ?? 0) >= SALDO_MINIMO_DA_SEMANAL;
+      // A busca do que está em alta (com pauta pronta) só se o cliente não tem a desta semana: o resto é de graça.
+      if (autorValido && !alvo.f.hype_desta_semana && temSaldo) {
+        const r = await buscarHypes(servico, { userId: autorValido, token: "", interno: { clientId } }, { client_id: clientId });
+        const corpoDaBusca = await r.json().catch(() => ({})) as { custo_usd?: number };
+        custo += Number(corpoDaBusca.custo_usd ?? 0) || 0;
+        f = (await lerFatos()).find((x) => x.client_id === clientId) ?? f;
+      }
+      let formatos = sequenciaDeFormatos({ carrossel: 1 }, alvo.c.faltam);
+      if (autorValido) {
+        const mistura = await misturaDoCliente(servico, clientId, { referencia: { tipo: "vigia_calendario", id: clientId }, criadoPor: autorValido });
+        custo += mistura.custo;
+        formatos = sequenciaDeFormatos(mixDoPerfil(mistura.perfil, Math.min(5, alvo.c.faltam), mistura.formatoDoPerfil), alvo.c.faltam);
+      }
+      const pautas = escolherPautas(f.hypes, { hoje, quantas: alvo.c.faltam, temasNaAgenda: f.temas_na_agenda, evitar: (f.ruins ?? []).map((r) => r.titulo), formatos });
+      situacaoDoPreparo = pautas.length >= alvo.c.faltam ? "feito" : pautas.length ? "parcial" : !temSaldo && !f.hype_desta_semana ? "sem_saldo" : "parcial";
+      alvo.pautas = pautas;
+    } catch (e) {
+      situacaoDoPreparo = "falhou";
+      registrarFalha("agente-calendario: vigia não preparou a pauta", e, { client_id: clientId });
+    }
+    const taskId = await sincronizarTarefa(alvo, situacaoDoPreparo);
+    const custoAnterior = Number(alvo.f.estado_anterior?.custo_usd ?? 0) || 0;
+    await servico.from("vigia_calendario_estado").update({
+      pautas: alvo.pautas,
+      preparo: situacaoDoPreparo,
+      preparado_em: agora.toISOString(),
+      sugestao: sugestaoDoResumo(alvo.pautas, alvo.decisoes),
+      custo_usd: Math.round((custoAnterior + custo) * 10000) / 10000,
+      ...(taskId ? { task_id: taskId } : {}),
+    }).eq("client_id", clientId);
+    preparo = { client_id: clientId, situacao: situacaoDoPreparo, pautas: alvo.pautas.length, custo_usd: custo };
+  }
+
+  return json({
+    hoje,
+    clientes: lidos.length,
+    em_risco: lidos.filter((l) => l.c.estado !== "em_dia").map((l) => ({ client_id: l.f.client_id, nome: l.f.nome, estado: l.c.estado, situacao: l.c.situacao, faltam: l.c.faltam })),
+    publicados,
+    preparo,
+    na_fila_de_preparo: Math.max(0, fila.length - (alvo ? 1 : 0)),
+    tempo_ms: Date.now() - inicio,
+  });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   itens_mcp: itensMcp,
   ativar_item_mcp: ativarItemMcp,
@@ -10245,7 +10469,7 @@ Deno.serve(async (req) => {
     const acao = String(corpo.acao ?? corpo.action ?? "");
     // 02/10: refazer uma proposta no servidor. Só com a chave de serviço no Authorization e o x-cron-secret.
     // 17/10: a busca semanal de hype (agendador) usa a mesma porta.
-    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno" || acao === "campanha_reorganizar_interno") {
+    if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno" || acao === "vigia_do_calendario_interno" || acao === "campanha_reorganizar_interno") {
       const autorizado = autorizarChamadaInterna({
         authorization: req.headers.get("Authorization"),
         cronSecretDoPedido: req.headers.get("x-cron-secret"),
@@ -10256,6 +10480,8 @@ Deno.serve(async (req) => {
       return respostaComFolego(async () => {
         try {
           if (acao === "hypes_da_semana_interno") return await hypesDaSemanaInterno(servico);
+          // 26/10: a vigia do calendário (mede todos, publica o atrasado aprovado uma vez, prepara um cliente).
+          if (acao === "vigia_do_calendario_interno") return await vigiaDoCalendarioInterno(servico, corpo);
           // 22/10/2026: reescrever uma campanha no tom comercial, assinada por um usuário da equipe (nunca aprova nem publica).
           if (acao === "campanha_reescrever_comercial_interno") return await campanhaReescreverComercialInterno(servico, corpo);
           if (acao === "campanha_reorganizar_interno") return await campanhaReorganizarInterno(servico, corpo);

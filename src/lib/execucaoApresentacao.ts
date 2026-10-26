@@ -16,7 +16,8 @@ export function avisoDaExecucao(n: { notification_type?: string; link?: string |
 export function contagensDasAbas(vinculos: readonly { id: string; status: string; approval_required?: boolean }[], agentes: number) {
   const unicos = [...new Map(vinculos.map(v => [v.id, v])).values()];
   return { pessoas: agentes, trabalho: unicos.length,
-    decisoes: unicos.filter(v => ["awaiting_input", "blocked"].includes(v.status) || (v.approval_required && v.status !== "done")).length,
+    // 26/10: a aba "Precisa de você" conta também a entrega em revisão (a mesa mostra as três).
+    decisoes: unicos.filter(v => ["review", "awaiting_input", "blocked"].includes(v.status) || (v.approval_required && v.status !== "done")).length,
     feito: 0, relatorios: 0 };
 }
 

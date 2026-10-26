@@ -1,4 +1,5 @@
 import { limparTecnico } from "@/lib/cadernoExecucao";
+import { nomeDaTarefa } from "@/lib/nomeDaTarefa";
 import { fraseDoAgente, tipoDaEntrega } from "@/lib/execucaoHumana";
 import QuemEstaTrabalhando, { type PessoaTrabalhando } from "@/components/execucao/QuemEstaTrabalhando";
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -152,7 +153,7 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
     const mexido = new Date(String(v.updated_at || 0)).getTime();
     if (v.status !== "in_progress" || agora - mexido > 60 * 60_000 || trabalhando.has(String(v.operator_id))) continue;
     const t = d.tarefas.get(v.kanban_task_id || v.painel_task_id || "");
-    trabalhando.set(String(v.operator_id), { agente: nome.get(String(v.operator_id)) || "Agente", titulo: t?.title || limparTecnico(String(v.last_action || "trabalhando")), cliente: t?.cliente || null, desde: mexido, linkId: v.id });
+    trabalhando.set(String(v.operator_id), { agente: nome.get(String(v.operator_id)) || "Agente", titulo: t?.title ? nomeDaTarefa({ titulo: t.title, cliente: t.cliente }).semCliente : limparTecnico(String(v.last_action || "trabalhando")), cliente: t?.cliente || null, desde: mexido, linkId: v.id });
   }
   const pessoas = [...trabalhando.values()].sort((a, b) => b.desde - a.desde).slice(0, 6);
   // Todos com trabalho aberto, cada um pela tarefa que mais pede atenção, falando como gente.
@@ -162,7 +163,8 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d:
   const comTrabalho: PessoaTrabalhando[] = [...porAgente.entries()].map(([op, lista]) => {
     const v = [...lista].sort((a, b) => ORDEM.indexOf(String(a.status)) - ORDEM.indexOf(String(b.status)))[0];
     const t = d.tarefas.get(v.kanban_task_id || v.painel_task_id || "");
-    const titulo = t?.title || limparTecnico(String(v.last_action || ""));
+    // 26/10: "Área · assunto" (o cliente vai ao lado), sem o código ACE.
+    const titulo = t?.title ? nomeDaTarefa({ titulo: t.title, cliente: t.cliente }).semCliente : limparTecnico(String(v.last_action || ""));
     return { operatorId: op, agente: nome.get(op) || "Agente", frase: fraseDoAgente({ status: String(v.status), titulo, cliente: t?.cliente, tipo: t?.tipo, motivo: v.block_reason ? limparTecnico(v.block_reason) : null }), cliente: t?.cliente, linkId: v.id, titulo, agora: trabalhando.has(op), status: String(v.status), outras: lista.length - 1 };
   }).sort((a, b) => Number(b.agora) - Number(a.agora) || ORDEM.indexOf(a.status) - ORDEM.indexOf(b.status));
   const ha = (ms: number) => { const m = Math.max(1, Math.round((agora - ms) / 60_000)); return m < 60 ? `há ${m} min` : `há ${Math.round(m / 60)} h`; };

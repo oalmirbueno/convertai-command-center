@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, CalendarClock, ExternalLink, FileText, Info, Megaphone, RefreshCw, ShieldAlert, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, ExternalLink, FileText, History, Info, Megaphone, RefreshCw, ShieldAlert, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAdsConnection } from "@/hooks/useAdsMetrics";
@@ -117,6 +117,8 @@ export default function AnunciosHoje() {
   const { data: clientes = [] } = useClients();
   const [cliente, setCliente] = useState("");
   const [aberto, setAberto] = useState<Boletim | null>(null);
+  // 26/10 (dono: "mais enxuto"): os boletins anteriores saíram da página para uma janela (ícone ao lado do boletim).
+  const [historicoAberto, setHistoricoAberto] = useState(false);
   // O aviso do sino traz ?boletim=<id>: boletim anterior abre na janela; o último já está na tela.
   const [params] = useSearchParams();
   const pedido = params.get("boletim");
@@ -137,6 +139,16 @@ export default function AnunciosHoje() {
   const ultimo = boletins.data?.linhas[0] ?? null;
   const filtrar = (id: string | null) => !cliente || id === cliente;
   const acoesVisiveis = (acoes.data?.linhas ?? []).filter((a) => a.estado !== "proposta" && filtrar(a.clientId));
+  // 26/10: as mudanças agrupadas por cliente (o cliente com a mudança mais recente primeiro).
+  const mudancasPorCliente = useMemo(() => {
+    const grupos = new Map<string, AcaoNaConta[]>();
+    for (const a of acoesVisiveis.slice(0, 40)) {
+      const chave = a.clientId || "";
+      const g = grupos.get(chave);
+      if (g) g.push(a); else grupos.set(chave, [a]);
+    }
+    return [...grupos.entries()];
+  }, [acoesVisiveis]);
   const pedidos = precisaDeVoce({
     contas: (conexao.data?.contas ?? []) as never,
     campanhas: campanhas.data ?? [],
@@ -189,7 +201,13 @@ export default function AnunciosHoje() {
         )}
       </Secao>
 
-      <Secao titulo="Último boletim" descricao={ultimo ? quando(ultimo.criado_em) : undefined} recolher="anuncios-hoje:boletim" divisoria>
+      <Secao
+        titulo="Último boletim"
+        descricao={ultimo ? quando(ultimo.criado_em) : undefined}
+        recolher="anuncios-hoje:boletim"
+        divisoria
+        acao={(boletins.data?.linhas.length ?? 0) > 1 ? <button type="button" onClick={() => setHistoricoAberto(true)} className={botao.icone} title={`Boletins anteriores (${(boletins.data?.linhas.length ?? 1) - 1})`} aria-label="Boletins anteriores"><History className="h-4 w-4" aria-hidden="true" /></button> : undefined}
+      >
         {boletins.isLoading ? <Carregando linhas={3} rotulo="Carregando o boletim" />
           : boletins.error ? <EstadoDeErro titulo="Não foi possível ler o boletim." descricao={(boletins.error as Error).message} acao={<button type="button" className={botao.secundario} onClick={() => void boletins.refetch()}>Tentar de novo</button>} />
             : !ultimo ? <EstadoVazio compacto titulo={boletins.data?.ausente ? "O boletim ainda não chega a este painel." : "Nenhum boletim ainda hoje."} descricao={boletins.data?.ausente ? "Falta ligar a gravação do boletim no servidor." : "O Hermes manda às 9h e às 17h30."} />
@@ -200,41 +218,45 @@ export default function AnunciosHoje() {
         {acoes.isLoading ? <Carregando linhas={3} rotulo="Carregando as mudanças" />
           : acoes.error ? <EstadoDeErro titulo="Não foi possível ler as mudanças." descricao={(acoes.error as Error).message} />
             : acoesVisiveis.length === 0 ? <EstadoVazio compacto titulo="Nenhuma mudança registrada nas contas." />
-              : <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Mudanças nas contas">
-                {acoesVisiveis.slice(0, 40).map((a) => (
+              : <div className="min-w-0 space-y-4">{mudancasPorCliente.map(([clienteId, doCliente]) => (
+                <div key={clienteId || "geral"} className="min-w-0" data-cliente-das-mudancas={clienteId}>
+                <p className={juntar(texto.rotulo, "mb-0.5")}>{nomeDe(clienteId || null)} · {doCliente.length}</p>
+                <ul className={juntar(lista.aberta, lista.divisoria)} aria-label={`Mudanças nas contas de ${nomeDe(clienteId || null)}`}>
+                {doCliente.map((a) => (
                   <li key={a.id} className={juntar(lista.linha, "block")} data-mudanca="">
                     <p className={juntar(texto.corpo, "min-w-0 truncate")}>
                       <span className="font-medium">{a.acao}</span> {a.alvoTipo ? <span className="text-muted-foreground">{a.alvoTipo} </span> : null}<span className="font-medium">{a.alvoNome}</span>
                     </p>
                     {(a.antes || a.depois) && <p className={juntar(texto.corpo, "mt-0.5 min-w-0 truncate tabular-nums")}><span className="text-muted-foreground">{a.antes || "-"}</span><span className="mx-1.5 text-muted-foreground" aria-label="para">→</span><span>{a.depois || "-"}</span></p>}
-                    {a.motivo && <p className={juntar(texto.auxiliar, "mt-0.5 line-clamp-2")} title={a.motivo}>{a.motivo}</p>}
-                    <p className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-center")}>
-                      <span className="min-w-0 truncate">{a.quem} · {nomeDe(a.clientId)} · {quando(a.quando)}{a.estado === "desfeita" ? " · desfeita" : a.estado === "falhou" ? " · falhou" : ""}</span>
+                    {a.motivo && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={a.motivo}>{a.motivo}</p>}
+                    <p className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center")}>
+                      <span className="min-w-0 truncate">{a.quem} · {quando(a.quando)}{a.estado === "desfeita" ? " · desfeita" : a.estado === "falhou" ? " · falhou" : ""}</span>
                       {a.provaUrl && <a href={a.provaUrl} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex shrink-0 items-center text-primary hover:underline" title="Abrir a prova" aria-label="Abrir a prova"><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a>}
                     </p>
                   </li>
                 ))}
-              </ul>}
+              </ul>
+                </div>
+              ))}</div>}
       </Secao>
 
-      <Secao titulo="Histórico dos boletins" descricao={boletins.data?.linhas.length ? `${boletins.data.linhas.length} boletins` : undefined} recolher="anuncios-hoje:historico" recolhidaDeInicio divisoria>
-        {(boletins.data?.linhas.length ?? 0) <= 1 ? <EstadoVazio compacto titulo="Ainda não há boletins anteriores." /> : (
-          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Boletins anteriores">
-            {boletins.data!.linhas.slice(1).map((b) => (
-              <li key={b.id}>
-                <button type="button" onClick={() => setAberto(b)} className={juntar(lista.linha, "w-full text-left")}>
-                  <FileText className="mr-2.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <span className="min-w-0 flex-1">
-                    <span className={juntar(texto.corpo, "block truncate font-medium")}>{nomeDoPeriodo(b.periodo)} · {quando(b.criado_em)}</span>
-                    <span className={juntar(texto.auxiliar, "block truncate")}>{b.resumo || "Sem resumo"}</span>
-                  </span>
-                  {b.alertas.some((x) => x.nivel === "critico") && <AlertTriangle className="ml-2 h-4 w-4 shrink-0 text-destructive" aria-label="Tem alerta urgente" />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Secao>
+
+      <JanelaCentral aberta={historicoAberto} onMudar={setHistoricoAberto} titulo="Boletins anteriores" icone={<History className="h-4 w-4" />} largura="md">
+        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Boletins anteriores">
+          {(boletins.data?.linhas ?? []).slice(1).map((b) => (
+            <li key={b.id}>
+              <button type="button" onClick={() => { setHistoricoAberto(false); setAberto(b); }} className={juntar(lista.linha, "w-full text-left")}>
+                <FileText className="mr-2.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className={juntar(texto.corpo, "block truncate font-medium")}>{nomeDoPeriodo(b.periodo)} · {quando(b.criado_em)}</span>
+                  <span className={juntar(texto.auxiliar, "block truncate")}>{b.resumo || "Sem resumo"}</span>
+                </span>
+                {b.alertas.some((x) => x.nivel === "critico") && <AlertTriangle className="ml-2 h-4 w-4 shrink-0 text-destructive" aria-label="Tem alerta urgente" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </JanelaCentral>
 
       <JanelaCentral aberta={!!aberto} onMudar={(v) => { if (!v) setAberto(null); }} titulo={aberto ? nomeDoPeriodo(aberto.periodo) : "Boletim"} descricao={aberto ? quando(aberto.criado_em) : undefined} icone={<FileText className="h-4 w-4" />} largura="lg">
         {aberto && <div className="space-y-4">
