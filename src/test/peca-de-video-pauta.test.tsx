@@ -299,7 +299,7 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
       task_id: TAREFA,
       primary_file_id: "file-1",
       content_type: "reel",
-      production_status: "draft",
+      production_status: "ready",
       default_caption: "Se fosse a gente, começava pelo cliente que já comprou.\n\n#varejo #vendas",
     }));
     expect(payload.publications).toEqual([expect.objectContaining({ external_account_id: "conta-ig", delivery_mode: "manual", scheduled_at: "2030-11-10T22:00:00.000Z", caption: payload.default_caption, asset_file_ids: [] })]);
