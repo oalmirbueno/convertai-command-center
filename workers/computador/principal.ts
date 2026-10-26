@@ -22,6 +22,10 @@
  * ANTHROPIC_WORKSPACE_ID (opcional): chave da Anthropic sem workspace.
  * COMPUTADOR_MODELO=opus-5-5 troca o padrão das tarefas sem modelo (Sonnet 5.5).
  * Atalho: workers\ligar\ligar-navegador.cmd. "--uma-vez" faz uma tarefa e sai.
+ * Navegador do PC (26/10, cus-1.3): com o Ego Lite instalado, o worker também roda os pedidos dos agentes
+ * (caso pc_ego, MCP aceleriq_navegador_do_pc) no Ego do dono, com os logins dele. COMPUTADOR_EGO=desligado
+ * desliga, so_pc deixa o resto no Chromium, logado (padrão) também confere posts das redes no Ego.
+ * EGO_BROWSER_BIN troca o caminho do ego-browser.exe; COMPUTADOR_EGO_TEMPO_S, o tempo máximo (240 s).
  */
 
 import os from "node:os";
@@ -29,10 +33,11 @@ import { createClient } from "@supabase/supabase-js";
 import { aoPedirParada, avisarSupervisor, encerrarCanal, esperaQueAcorda } from "../supervisor/canal.ts";
 import { armazemSupabase, filaSupabase } from "./fila.ts";
 import { abrirNavegador } from "./navegador.ts";
+import { motorDoEgo } from "./ego.ts";
 import { clienteAnthropic, clienteOpenAI, modeloDoComputador, semSegredo } from "./modelo.ts";
 import { type Ambiente, casosDoWorker, pegarERodar, provedoresDoWorker } from "./trabalho.ts";
 
-export const VERSAO_DO_WORKER = "cus-1.2";
+export const VERSAO_DO_WORKER = "cus-1.3";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv) {
   const url = String(env.SUPABASE_URL || "").trim();
@@ -83,13 +88,15 @@ async function principal() {
     executor: cfg.executor,
     versao: VERSAO_DO_WORKER,
     log: (m) => console.log(m),
+    ego: motorDoEgo(process.env, (m) => console.log(m)),
   };
   const provedores = provedoresDoWorker(amb);
   console.log(
     `[navegador] ${VERSAO_DO_WORKER} · ${cfg.executor} · casos: ${casosDoWorker(amb).join(", ")}` +
       (provedores.length ? ` · computer use: ${provedores.join(" e ")} (padrão ${cfg.qualModelo.api})` : "") +
       (cfg.comModelo && !provedores.length ? " · computer use pedido sem ANTHROPIC_API_KEY nem OPENAI_API_KEY: fica desligado" : "") +
-      (!cfg.comModelo ? " · computer use desligado (COMPUTADOR_COM_MODELO_LIGADO diferente de 1)" : ""),
+      (!cfg.comModelo ? " · computer use desligado (COMPUTADOR_COM_MODELO_LIGADO diferente de 1)" : "") +
+      (amb.ego ? ` · navegador do PC: Ego ${amb.ego.versao || ""} (${amb.ego.modo})` : " · navegador do PC desligado (sem Ego Lite ou COMPUTADOR_EGO=desligado)"),
   );
   const umaVez = process.argv.indexOf("--uma-vez") >= 0;
   let parar = false;

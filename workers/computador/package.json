@@ -11,8 +11,9 @@
     "worker": "node principal.ts",
     "uma-vez": "node principal.ts --uma-vez",
     "navegador": "npx playwright-core install chromium",
-    "teste": "node --test testes/travas.test.ts testes/banco.test.ts testes/modelos-no-banco.test.ts testes/acoes-e-modelos.test.ts testes/banco-cus.test.ts",
-    "prova-real": "node prova-real.ts"
+    "teste": "node --test testes/travas.test.ts testes/banco.test.ts testes/modelos-no-banco.test.ts testes/acoes-e-modelos.test.ts testes/banco-cus.test.ts testes/ego.test.ts testes/banco-ego.test.ts",
+    "prova-real": "node prova-real.ts",
+    "prova-ego": "node prova-ego.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.97.0",

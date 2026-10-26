@@ -2609,6 +2609,30 @@
       "remote_name": "acervo_ler_fotos_cron",
       "remote_statements_sha256": "aff10547146e8ed6011398a4caeddf20f2bba3b70df8c74883c6ad350b117d9e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026150500",
+      "path": "supabase/migrations/20261026150500_navegador_do_pc_ego.sql",
+      "local_sha256": "f7d0b949ff160e139b7e323766cf0cf0c7ea2236094ac6f0444df89a406e2ab6",
+      "remote_name": "navegador_do_pc_ego",
+      "remote_statements_sha256": "53b4cabb5ff8301a79b6ff05df67b2f99b98301ebca233fbdbafa82e5932f6dd",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026190000",
+      "path": "supabase/migrations/20261026190000_vigia_do_calendario_e_resumo_do_dia.sql",
+      "local_sha256": "af790e57b28709bf91d73fac2e630123ba3a070f8329de63fbad18787306ec0b",
+      "remote_name": "vigia_do_calendario_e_resumo_do_dia",
+      "remote_statements_sha256": "13362952e55a1660f7fa52d8a59a0ed4780253d554925482f95623f04d458dda",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026190100",
+      "path": "supabase/migrations/20261026190100_faxina_das_tarefas.sql",
+      "local_sha256": "ee11a4f38b902cc884fa615dc9bf009d0ebd0936dbdf19a76ec7c31a0ad61599",
+      "remote_name": "faxina_das_tarefas",
+      "remote_statements_sha256": "b09264f1c973b35bef53524dc882135193d723321fa6854d85189ed0e4ec404f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

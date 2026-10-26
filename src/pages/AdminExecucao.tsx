@@ -1,5 +1,8 @@
 import { incluirConcluidas, leituraSimples } from "@/lib/cadernoExecucao";
 import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
+import { nomeDaTarefaDoBanco, type NomeDaTarefa } from "@/lib/nomeDaTarefa";
+import { ultimasAcoesReais } from "@/lib/funcionandoDeVerdade";
+import FuncionandoDeVerdade from "@/components/execucao/FuncionandoDeVerdade";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -35,7 +38,7 @@ import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import { falaDaMeta } from "@/components/execucao/DestravarAqui";
 import {
-  ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
+  ROTULO_ORIGEM, origemDaExecucao, passaNoFiltro,
 } from "@/lib/execucaoBadges";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
@@ -161,11 +164,12 @@ type Operador = {
  * A aba não é decoração: ela é a resposta a "onde eu olho agora".
  */
 const ABAS = [
+  // 26/10 (dono: "muita coisa para decidir, acaba confundindo"): o que espera você vem primeiro.
+  { id: "decisoes", rotulo: "Precisa de você", visoes: ["esperando", "aprovacao", "review", "awaiting_input", "blocked"] },
   { id: "central", rotulo: "Central", visoes: ["central"] },
   { id: "performance", rotulo: "Performance Meta", visoes: ["performance"] },
   { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
   { id: "trabalho", rotulo: "Trabalho", visoes: ["atividade", "quadro", "execucoes", "fila", "in_progress", "done"] },
-  { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "review", "awaiting_input", "blocked"] },
   { id: "feito", rotulo: "O que foi feito", visoes: [] },
   { id: "relatorios", rotulo: "Relatórios", visoes: ["relatorios"] },
 ] as const;
@@ -189,7 +193,7 @@ const AJUDA_DA_ABA: Record<(typeof ABAS)[number]["id"], string> = {
   performance: "Resultado das campanhas da Meta por cliente, com o que pede ação.",
   pessoas: "Quem são os agentes, em que departamento estão e o que cada um está fazendo.",
   trabalho: "O trabalho dos agentes: tarefas, execuções, fila por operador e o que está em andamento ou em revisão.",
-  decisoes: "O que espera você: aprovações, insumos que faltam e tarefas bloqueadas.",
+  decisoes: "O que espera você, uma coisa por vez e agrupado por cliente: aprovações, entregas para revisar, respostas que o agente pede e tarefas travadas.",
   feito: "O que já foi entregue, com a prova registrada.",
   relatorios: "Relatórios da operação para ler ou enviar.",
 };
@@ -204,6 +208,7 @@ const VISOES = [
   { id: "fila", rotulo: "Fila por operador" },
   { id: "in_progress", rotulo: "Em andamento" },
   { id: "done", rotulo: "Concluídas com evidência" },
+  { id: "esperando", rotulo: "Tudo que espera você" },
   { id: "review", rotulo: "Em revisão" },
   { id: "awaiting_input", rotulo: "Aguardando insumo" },
   { id: "blocked", rotulo: "Bloqueadas" },
@@ -255,10 +260,11 @@ export default function AdminExecucao() {
   const abaAlvo = searchParams.get("aba");
   // Aba e visão ficam guardadas (sair e voltar mantém). O padrão continua
   // sendo o Escritório: é a porta de entrada.
-  const [visao, setVisao] = useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao", "escritorio", {
+  // 26/10: a Execução abre no que espera você (chave nova: quem tinha o Escritório guardado também abre aqui).
+  const [visao, setVisao] = useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao:v2", "esperando", {
     validar: (v) => VISOES.some((x) => x.id === v),
   });
-  const [aba, setAba] = useEstadoDaTela<(typeof ABAS)[number]["id"]>("execucao:aba", "pessoas", {
+  const [aba, setAba] = useEstadoDaTela<(typeof ABAS)[number]["id"]>("execucao:aba:v2", "decisoes", {
     validar: (v) => ABAS.some((x) => x.id === v),
   });
   // A tarefa aberta DENTRO da Execução, em pop-up central. Antes isto era
@@ -462,6 +468,11 @@ export default function AdminExecucao() {
 
   const opDe = (id: string) => operadores.find((o) => o.id === id);
   const hoje = new Date().toISOString().slice(0, 10);
+  /** 26/10 (dono: "ACE com número é confuso"): toda tarefa como "Cliente · Área · assunto"; o código fica no detalhe. */
+  const nomeDoVinculo = (v: { operator_id: string; last_action?: string | null; kanban_task_id?: string | null }): NomeDaTarefa => {
+    const op = opDe(v.operator_id);
+    return nomeDaTarefaDoBanco(tarefaDoVinculo(v, tarefas), { textoSemTarefa: v.last_action ? leituraSimples(String(v.last_action)).resumo : "Tarefa sem título", agente: op?.display_name, areaDoAgente: op?.area });
+  };
 
   /** Os números do quadro, uma vez só: cabeçalho, cartões e vazios usam. */
   // A tarefa concluída/arquivada pode ainda ter um vínculo aguardando insumo.
@@ -594,6 +605,7 @@ export default function AdminExecucao() {
       awaiting_input: conta((v) => v.status === "awaiting_input"),
       blocked: conta((v) => v.status === "blocked"),
       aprovacao: conta((v) => precisaDecisao(v)),
+      esperando: conta((v) => ["review", "awaiting_input", "blocked"].includes(v.status) || precisaDecisao(v)),
       hierarquia: operadores.length,
       // Relatorios nao e uma lista de vinculos: numero ali seria invencao.
       relatorios: 0,
@@ -605,7 +617,7 @@ export default function AdminExecucao() {
 
   const pedidosVisiveis = pedidos.filter((p: any) => !filtroCliente || (p.client?.company_name || p.client?.full_name) === filtroCliente);
   contagemDasAbas.decisoes = new Set([
-    ...vinculosVisiveis.filter(v => ["awaiting_input", "blocked"].includes(v.status) || precisaDecisao(v)).map(v => v.id),
+    ...vinculosVisiveis.filter(v => ["review", "awaiting_input", "blocked"].includes(v.status) || precisaDecisao(v)).map(v => v.id),
     ...pedidosVisiveis.map((p: any) => p.task_link_id || p.id),
   ]).size;
   contagemDaVisao.aprovacao = pedidosVisiveis.length;
@@ -676,8 +688,8 @@ export default function AdminExecucao() {
   );
   const titulosDeTarefas = useMemo(() => {
     const m = new Map<string, string>();
-    for (const [id, t] of tarefas) if (t?.title) m.set(id, String(t.title));
-    for (const t of disponiveis) if ((t as any).title) m.set(String((t as any).id), String((t as any).title));
+    for (const [id, t] of tarefas) if (t?.title) m.set(id, nomeDaTarefaDoBanco(t).texto);
+    for (const t of disponiveis) if ((t as any).title && !m.has(String((t as any).id))) m.set(String((t as any).id), nomeDaTarefaDoBanco(t as any).texto);
     return m;
   }, [tarefas, disponiveis]);
 
@@ -692,13 +704,8 @@ export default function AdminExecucao() {
     const doDia = (iso?: string | null) => Boolean(iso && String(iso).slice(0, 10) === hoje);
     const linha = (v: Vinculo) => {
       const t = tarefaDoVinculo(v, tarefas);
-      const cliente = t?.project?.client;
       return [
-        "- " + [
-          cliente ? (cliente.company_name || cliente.full_name) : null,
-          t?.project?.name,
-          t?.title || v.last_action || "(sem tarefa vinculada)",
-        ].filter(Boolean).join(" · "),
+        "- " + nomeDoVinculo(v).texto + (t?.project?.name ? ` (projeto ${t.project.name})` : ""),
         "  operador: " + (opDe(v.operator_id)?.display_name || "?")
           + " · humano: " + (t?.assigned_to ? (humanos.get(String(t.assigned_to)) || "?") : "sem responsavel")
           + (t?.due_date ? " · prazo: " + t.due_date : ""),
@@ -893,7 +900,7 @@ export default function AdminExecucao() {
       {
         rotulo: "Copiar resumo",
         acao: () => void copiar(
-          [t?.title || v.last_action || "(tarefa)", `operador: ${opDe(v.operator_id)?.display_name || "?"}`,
+          [nomeDoVinculo(v).texto, `operador: ${opDe(v.operator_id)?.display_name || "?"}`,
            `status: ${STATUS_ROTULO[v.status] || v.status}`, v.last_evidence ? `evidencia: ${v.last_evidence}` : null,
            v.next_step ? `proximo passo: ${v.next_step}` : null].filter(Boolean).join("\n"),
           "Resumo",
@@ -1031,10 +1038,10 @@ export default function AdminExecucao() {
       .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
     for (const v of emAndamento) {
       if (mapa.has(v.operator_id)) continue;
-      mapa.set(v.operator_id, { texto: v.last_action || "Tarefa em andamento", desde: v.updated_at });
+      mapa.set(v.operator_id, { texto: tarefaDoVinculo(v, tarefas) ? nomeDoVinculo(v).texto : v.last_action || "Tarefa em andamento", desde: v.updated_at });
     }
     return mapa;
-  }, [runs, vinculosAtivos]);
+  }, [runs, vinculosAtivos, tarefas, operadores]);
 
   /** A faixa "Movimentação agora": as 8 coisas mais recentes, das execuções e das tarefas. */
   const movimentosDoOrganograma: MovimentoDoOrganograma[] = useMemo(() => {
@@ -1053,10 +1060,11 @@ export default function AdminExecucao() {
     for (const v of vinculos) {
       const agente = nome(v.operator_id);
       if (!agente || !v.updated_at) continue;
-      lista.push({ id: `link:${v.id}`, agenteId: v.operator_id, agente, quando: v.updated_at, tom: tomDe(v.status), texto: v.block_reason || v.last_action || v.next_step || "Tarefa atualizada" });
+      const oQue = v.block_reason || v.last_action || v.next_step || "Tarefa atualizada";
+      lista.push({ id: `link:${v.id}`, agenteId: v.operator_id, agente, quando: v.updated_at, tom: tomDe(v.status), texto: tarefaDoVinculo(v, tarefas) ? nomeDoVinculo(v).texto : oQue });
     }
     return lista.sort((a, b) => (a.quando < b.quando ? 1 : -1)).slice(0, 8);
-  }, [runs, vinculos, operadores]);
+  }, [runs, vinculos, operadores, tarefas]);
 
   /** Os nós do organograma, montados dos operadores reais. */
   const nosDoOrganograma: NoDoOrganograma[] = useMemo(
@@ -1084,6 +1092,13 @@ export default function AdminExecucao() {
       };
     }),
     [operadores, vinculosAtivos, agoraDoAgente],
+  );
+
+  /** A última ação real de cada agente, com prova (lateral). */
+  const funcionando = useMemo(
+    () => ultimasAcoesReais(operadores, vinculos, (v) => nomeDoVinculo(v).texto),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [operadores, vinculos, tarefas],
   );
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
@@ -1140,12 +1155,11 @@ export default function AdminExecucao() {
   };
   const Cartao = ({ v }: { v: Vinculo }) => {
     const t = tarefaDoVinculo(v, tarefas);
-    const cliente = t?.project?.client;
     const op = opDe(v.operator_id);
     const destacado = v.id === vinculoAlvo;
     const prazoVencido = t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
     const origem = origemDaExecucao(v);
-    const cat = categoriaDaTarefa(t?.title);
+    const nome = nomeDoVinculo(v);
     const parado = !encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3;
     const aviso = v.block_reason && !encerrado(v)
       ? { tom: "text-destructive", texto: `bloqueio: ${falarComoGente(v.block_reason).humano}` }
@@ -1154,7 +1168,7 @@ export default function AdminExecucao() {
         : encerrado(v)
           ? { tom: "text-muted-foreground", texto: "encerrado: tarefa concluída, arquivada ou excluída" }
           : null;
-    const temMais = !!(v.last_action || v.last_evidence || v.next_step);
+    const temMais = !!(v.last_action || v.last_evidence || v.next_step || nome.codigo || t?.project?.name);
     return (
       <div
         ref={destacado ? destacadoRef : undefined}
@@ -1187,15 +1201,13 @@ export default function AdminExecucao() {
               {ROTULO_ORIGEM[origem]}
             </span>
           )}
-          {cat !== "geral" && <span className="truncate">{ROTULO_CATEGORIA[cat]}</span>}
           <span className="ml-auto shrink-0 tabular-nums">{dataCurta(v.updated_at)}</span>
         </div>
 
-        <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
-          {t?.title || v.last_action || "(sem tarefa vinculada)"}
-        </p>
-        <p className="mt-0.5 truncate text-[12px] text-primary/90">
-          {[cliente ? (cliente.company_name || cliente.full_name) : null, t?.project?.name].filter(Boolean).join(" · ") || "sem projeto"}
+        {/* 26/10: "Cliente · Área" em cima e o assunto embaixo (lê-se "Cliente · Área · assunto"); o código fica em "ver mais". */}
+        <p className="mt-1.5 truncate text-[12px] text-primary/90" title={nome.texto}>{nome.cliente} · {nome.area}</p>
+        <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
+          {nome.assunto}
         </p>
 
         {aviso && <p className={juntar("mt-1.5 line-clamp-2 text-[12px]", aviso.tom)}>{aviso.texto}</p>}
@@ -1223,7 +1235,7 @@ export default function AdminExecucao() {
             )}
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }); }}
+              onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: nome.texto }); }}
               className="inline-flex h-7 items-center rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Conversar com o agente nesta execução: instrução, contexto, correção"
             >
@@ -1241,7 +1253,7 @@ export default function AdminExecucao() {
           >
             <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:hidden hover:text-foreground">ver mais</summary>
             <div className="mt-1.5 space-y-1.5 text-[12px] text-muted-foreground">
-              <p>humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span></p>
+              <p>humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span>{t?.project?.name ? ` · projeto ${t.project.name}` : ""}{nome.codigo ? ` · código ${nome.codigo}` : ""}</p>
               {v.last_action && <p className="text-foreground/85">{falarComoGente(v.last_action).humano}</p>}
               {v.last_evidence && (() => {
                 // Traduz UMA vez: o cartão é redesenhado a cada atualização da fila.
@@ -1383,10 +1395,12 @@ export default function AdminExecucao() {
   const itensDosVinculos = (lista: Vinculo[]): ItemDaMesa[] => lista.map((v) => {
     const t = tarefaDoVinculo(v, tarefas);
     const cliente = t?.project?.client;
-    const nomeCliente = cliente ? (cliente.company_name || cliente.full_name) : "Operação interna";
+    const nome = nomeDoVinculo(v);
+    const nomeCliente = cliente ? nome.cliente : "Operação interna";
     const op = opDe(v.operator_id);
     const decidir = precisaDecisao(v);
-    const titulo = t?.title || v.last_action || "(sem tarefa vinculada)";
+    // A mesa mostra o cliente em cima; o título leva "Área · assunto" (lê-se "Cliente · Área · assunto").
+    const titulo = nome.semCliente;
     const prazoVencido = t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
     const travada = v.status === "blocked" || v.status === "awaiting_input";
     const emRevisao = !decidir && v.status === "review";
@@ -1404,7 +1418,7 @@ export default function AdminExecucao() {
       tipo: fechada ? "Cancelada ou encerrada" : decidir ? "Precisa da sua decisão" : v.status === "blocked" ? "Travada" : v.status === "awaiting_input" ? "Esperando resposta sua" : `${tipoDaTarefa ? `${tipoDaTarefa.charAt(0).toUpperCase()}${tipoDaTarefa.slice(1)} · ` : ""}${STATUS_ROTULO[v.status] || v.status}`,
       tomDoTipo: fechada ? undefined : v.status === "blocked" ? "perigo" : "aviso",
       // A prova em destaque (imagem, print, PDF), que abre ali mesmo para aprovar com contexto.
-      midia: (emRevisao || travada) && !fechada ? <ProvaDaEntrega linkId={v.id} ultimaProva={v.last_evidence} aoConversar={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined, aba: "hermes" })} /> : undefined,
+      midia: (emRevisao || travada) && !fechada ? <ProvaDaEntrega linkId={v.id} ultimaProva={v.last_evidence} aoConversar={() => setDiarioAberto({ linkId: v.id, titulo: nome.texto, aba: "hermes" })} /> : undefined,
       cliente: nomeCliente,
       avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
       titulo,
@@ -1429,16 +1443,15 @@ export default function AdminExecucao() {
         { icone: <Bot className="h-3 w-3" />, texto: op?.display_name || "agente" },
         ...(diasParado(v) >= 1 ? [{ icone: <PauseCircle className="h-3 w-3" />, texto: `parado há ${diasParado(v)} ${diasParado(v) === 1 ? "dia" : "dias"}`, tom: (diasParado(v) >= 3 ? "aviso" : "neutro") as "aviso" | "neutro" }] : []),
         ...(t?.due_date ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${String(t.due_date).split("-").reverse().slice(0, 2).join("/")}`, tom: (prazoVencido ? "perigo" : "neutro") as "perigo" | "neutro" }] : []),
-        ...(t?.project?.name ? [{ texto: t.project.name }] : []),
       ],
       detalhes: <div className="space-y-2 text-[13px]">
-        <p>Responsável humano: <span className="text-foreground">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span> · agente <span className="text-foreground">{op?.display_name || "?"}</span> · atualizado em {dataCurta(v.updated_at)}</p>
+        <p>Responsável humano: <span className="text-foreground">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span> · agente <span className="text-foreground">{op?.display_name || "?"}</span> · atualizado em {dataCurta(v.updated_at)}{nome.codigo ? <> · código <span className="text-foreground">{nome.codigo}</span></> : null}</p>
         {v.last_action && <p>O que o agente disse por último: <span className="text-foreground">{leituraSimples(String(v.last_action)).resumo}</span></p>}
         {v.next_step && <p>Próximo passo: <span className="text-foreground">{leituraSimples(String(v.next_step)).resumo}</span></p>}
         {/* A prova abre ali mesmo (imagem, documento, site ou tela do painel), sem trocar de tela. */}
         {v.last_evidence && (destinoDaEvidencia(String(v.last_evidence)) ? <div className="max-w-sm"><EvidenciaVisual url={String(v.last_evidence)} nome="Abrir a prova" /></div> : <p>Prova: <span className="text-foreground">{leituraSimples(String(v.last_evidence)).resumo}</span></p>)}
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })}>Ver o diário completo</button>
+          <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setDiarioAberto({ linkId: v.id, titulo: nome.texto })}>Ver o diário completo</button>
           {idTarefa ? <button type="button" className="inline-flex items-center text-primary underline-offset-2 hover:underline" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })}><SquareArrowOutUpRight className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Abrir a tarefa</button> : null}
         </p>
       </div>,
@@ -1457,7 +1470,7 @@ export default function AdminExecucao() {
         : emRevisao ? undefined
           : travada && motivo?.retomavel ? { rotulo: "Retomar", icone: <RotateCcw className="h-4 w-4" />, aoClicar: () => retomarVinculo(v) }
             : travada ? { rotulo: "Pode seguir", icone: <Play className="h-4 w-4" />, aoClicar: () => podeSeguir(v) }
-              : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
+              : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: nome.texto }) },
       acoes: [
         ...(emRevisao ? [{ rotulo: "Aprovar e seguir", icone: <Play className="h-4 w-4" />, tom: "sucesso" as const, dica: "Aprova e devolve para o agente executar e trazer pronto", aoClicar: () => aprovarESeguir(v) }] : []),
         ...(travada ? [
@@ -1467,12 +1480,23 @@ export default function AdminExecucao() {
       ],
       extras: <>
         {emRevisao && !v.last_evidence && <button type="button" onClick={() => void pedirAoAgente(v, "prova")} title="Pede ao agente para anexar a entrega pronta" aria-label="Pedir a prova" className={juntar(botao.discreto, "h-11 px-3")}><ImagePlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Pedir a prova</span></button>}
-        {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Escrever ao agente ou ler o diário" aria-label="Diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
+        {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: nome.texto })} title="Escrever ao agente ou ler o diário" aria-label="Diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
         {/* Acesso na Meta é clique do dono: o atalho abre o Gerenciador de Negócios. */}
         {travada && falaDaMeta(`${v.block_reason || ""} ${v.next_step || ""}`) && <a href="https://business.facebook.com/settings" target="_blank" rel="noopener noreferrer" title="Liberar a conta ou a Página para a Aceleriq (Atribuir parceiro)" aria-label="Abrir a Meta" className={juntar(botao.discreto, "h-11 px-3")}><ExternalLink className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Abrir a Meta</span></a>}
       </>,
     };
   });
+
+  /** Peso de cada estado na mesa: aprovação e entrega pronta antes de resposta e trava. */
+  const pesoDaDecisao = (v: Vinculo) => (precisaDecisao(v) ? 0 : v.status === "review" ? 1 : v.status === "awaiting_input" ? 2 : 3);
+  const esperandoVoce = vinculosVisiveis
+    .filter((v) => ["review", "awaiting_input", "blocked"].includes(v.status) || precisaDecisao(v))
+    .map((v) => ({ v, nome: nomeDoVinculo(v) }))
+    // Agrupado por cliente; o cliente com a decisão mais urgente vem primeiro.
+    .sort((a, b) => {
+      return a.nome.cliente.localeCompare(b.nome.cliente, "pt-BR") || pesoDaDecisao(a.v) - pesoDaDecisao(b.v) || (a.v.updated_at < b.v.updated_at ? 1 : -1);
+    })
+    .map((x) => x.v);
 
   const ListaDeCartoes = ({ lista, rotulo, pilha = false }: { lista: Vinculo[]; rotulo: string; pilha?: boolean }) => (
     <ul className={pilha ? "space-y-2" : "grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"} aria-label={rotulo}>
@@ -1494,8 +1518,7 @@ export default function AdminExecucao() {
   if (numeros.aguardando > 0) linhasDeAtencao.push({ chave: "aguard", texto: `${numeros.aguardando} ${numeros.aguardando === 1 ? "agente espera uma resposta sua" : "agentes esperam uma resposta sua"}`, tom: "text-warning", ponto: "bg-warning", visao: "awaiting_input" });
   if (numeros.revisao > 0) linhasDeAtencao.push({ chave: "rev", texto: `${numeros.revisao} ${numeros.revisao === 1 ? "entrega pronta para você revisar" : "entregas prontas para você revisar"}`, tom: "text-warning", ponto: "bg-warning", visao: "review" });
   if (numeros.bloqueadas > 0) linhasDeAtencao.push({ chave: "bloq", texto: `${numeros.bloqueadas} ${numeros.bloqueadas === 1 ? "tarefa travada" : "tarefas travadas"} (o motivo está no cartão)`, tom: "text-destructive", ponto: "bg-destructive", visao: "blocked" });
-  if (numeros.andamento > 0) linhasDeAtencao.push({ chave: "and", texto: `${numeros.andamento} em andamento agora`, tom: "text-info", ponto: "bg-info", visao: "in_progress" });
-  if (numeros.feitas > 0) linhasDeAtencao.push({ chave: "feitas", texto: `${numeros.feitas} ${numeros.feitas === 1 ? "concluída com prova" : "concluídas com prova"}`, tom: "text-success", ponto: "bg-success", visao: "done" });
+  // 26/10: andando e feito com prova não pedem nada de você: saem da lista e viram uma linha de estado.
 
   const atencao = (
     <Secao
@@ -1524,13 +1547,23 @@ export default function AdminExecucao() {
           ))}
         </ul>
       )}
+      {(numeros.andamento > 0 || numeros.feitas > 0) && (
+        <p className={juntar(texto.auxiliar, "mt-2 flex flex-wrap items-center")} data-estados-da-execucao="">
+          <button type="button" onClick={() => irParaVisao("in_progress")} className="mr-3 inline-flex items-center hover:text-foreground" title="Ver o que está andando">
+            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-info" aria-hidden="true" />{numeros.andamento} andando
+          </button>
+          <button type="button" onClick={() => irParaVisao("done")} className="inline-flex items-center hover:text-foreground" title="Ver o que foi feito com prova">
+            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />{numeros.feitas} feito com prova
+          </button>
+        </p>
+      )}
     </Secao>
   );
 
   const areasEIncidentes = (
     <div className="space-y-6">
       {incidentes.length > 0 && (
-        <Secao titulo={`${incidentes.length} incidente(s) de execução`} recolher="execucao:incidentes">
+        <Secao titulo={`${incidentes.length} incidente(s) de execução`} recolher="execucao:incidentes" recolhidaDeInicio>
           <ul className="space-y-1.5">
             {incidentes.slice(0, 5).map((r) => (
               <li key={String(r.id)} className="flex min-w-0 items-start text-[12px] leading-5 text-muted-foreground" title={`execução ${String(r.run_key)}`}>
@@ -1550,6 +1583,9 @@ export default function AdminExecucao() {
       <Secao
         titulo="Áreas"
         descricao={`${operadores.length} ${operadores.length === 1 ? "agente" : "agentes"}`}
+        // 26/10: o Escritório e a Hierarquia já mostram os agentes; aqui fica recolhido.
+        recolher="execucao:areas-dos-agentes"
+        recolhidaDeInicio
         acao={agrupadosPorArea.length > 1 ? (
           <button
             type="button"
@@ -1830,6 +1866,36 @@ export default function AdminExecucao() {
           )}
         </Secao>
       )}
+    </div>
+  ) : visao === "esperando" ? (
+    /* 26/10 (dono: "uma coisa por vez; o que pede decisão primeiro"): tudo que espera você numa
+       mesa só, um cartão por vez, agrupado por cliente. Os pedidos explicados do agente vêm antes. */
+    <div className="space-y-6">
+      <AprovacoesExplicadas
+        filtroCliente={filtroCliente}
+        nomesDeAgentes={nomesDeAgentes}
+        titulosDeTarefas={titulosDeTarefas}
+        destaqueId={aprovacaoDoCartao || aprovacaoAlvo}
+        aoAbrirDiario={(linkId) => setDiarioAberto({ linkId })}
+      />
+      {esperandoVoce.length > 0 ? (
+        // No celular, o pé da mesa (fixo embaixo) sobe acima do botão "Atenção" da lateral, para um não cobrir o outro.
+        <Secao nivel={3} titulo="Tarefas esperando você" descricao={`${esperandoVoce.length}`} className="max-sm:[&_[data-decidir-no-pe]]:bottom-[64px]">
+          <MesaDeDecisao rotulo="Tarefas esperando você" itens={itensDosVinculos(esperandoVoce)} onDecidir={decidirVinculo} />
+        </Secao>
+      ) : pedidosVisiveis.length === 0 ? (
+        <EstadoVazio
+          compacto
+          icone={<CheckCircle2 className="h-5 w-5" />}
+          titulo="Nada está parado esperando você"
+          acao={<button type="button" className={botao.secundario} onClick={() => irParaAba("pessoas")}>Ver os agentes</button>}
+        />
+      ) : null}
+      <PropostasDeResponsavel
+        nomesDeAgentes={nomesDeAgentes}
+        titulosDeTarefas={titulosDeTarefas}
+        destaqueId={propostaAlvo}
+      />
     </div>
   ) : visao === "aprovacao" ? (
     <div className="space-y-6">
@@ -2124,6 +2190,11 @@ export default function AdminExecucao() {
                 <div aria-label="O que pede a sua atenção" role="group">
                   {atencao}
                 </div>
+                <FuncionandoDeVerdade
+                  comProva={funcionando.comProva}
+                  semProva={funcionando.semProva}
+                  aoAbrir={(linkId, titulo) => setDiarioAberto({ linkId, titulo })}
+                />
                 {areasEIncidentes}
               </div>
             </RegiaoRolavel>
@@ -2197,8 +2268,7 @@ export default function AdminExecucao() {
         linkId={diarioAberto?.linkId ?? null}
         titulo={diarioAberto?.titulo || (() => {
           const v = vinculos.find(v => v.id === diarioAberto?.linkId);
-          const t = v ? tarefaDoVinculo(v, tarefas) : null;
-          return t ? [t.project?.client?.company_name || t.project?.client?.full_name, t.title].filter(Boolean).join(" · ") : undefined;
+          return v && tarefaDoVinculo(v, tarefas) ? nomeDoVinculo(v).texto : undefined;
         })()}
         nomesDeAgentes={nomesDeAgentes}
         aberto={Boolean(diarioAberto)}

@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -169,11 +169,22 @@ const adminMainNav: NavItem[] = [
 // ferramenta pontual ocupando espaço de todo dia.
 const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
   {
+    // 26/10 (dono: "mais enxuto, mais direto"): a área de agentes no topo, começando pelo Hoje
+    // (um resumo por dia, destino do aviso diário do sino).
+    label: "Agentes",
+    items: [
+      { title: "Hoje", url: "/hoje", icon: Sunrise },
+      { title: "Execução da equipe", url: "/execucao", icon: Bot },
+      // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
+      { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
+      // 26/10: as mensagens dos rituais da semana, de todos os clientes, numa tela só (com o contador).
+      { title: "Mensagens da semana", url: "/central/mensagens", icon: MessagesSquare, soAdmin: true },
+    ],
+  },
+  {
     label: "Operação da semana",
     items: [
       { title: "Central", url: "/central", icon: HeartPulse, fimExato: true },
-      // 26/10: as mensagens dos rituais da semana, de todos os clientes, numa tela só (com o contador).
-      { title: "Mensagens da semana", url: "/central/mensagens", icon: MessagesSquare, soAdmin: true },
       { title: "Mesas", url: "/mesas", icon: LayoutGrid, soCriacao: true },
       // 17/10: o que cada agente sabe (o dono ensina e a pesquisa semanal complementa).
       { title: "Base dos agentes", url: "/base-dos-agentes", icon: GraduationCap, soCriacao: true },
@@ -181,7 +192,6 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Laboratório", url: "/laboratorio", icon: FlaskConical, soCriacao: true },
       { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
-      { title: "Execução da equipe", url: "/execucao", icon: Bot },
       { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
       { title: "Briefings", url: "/briefings", icon: FileText },
     ],
@@ -191,8 +201,6 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Métricas", url: "/metricas", icon: BarChart3 },
       { title: "Anúncios", url: "/anuncios", icon: Megaphone, fimExato: true },
-      // 26/10: o boletim do Hermes e as mudanças nas contas, com um aviso no sino por boletim.
-      { title: "Anúncios hoje", url: "/anuncios/hoje", icon: Newspaper },
       { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
       { title: "Timeline", url: "/timeline", icon: GitBranch },
     ],

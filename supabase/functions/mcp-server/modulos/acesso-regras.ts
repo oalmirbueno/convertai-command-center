@@ -37,7 +37,8 @@ export const COMO_PEDIR_ACESSO =
   + 'a senha vem na hora. 2) Se não vier, chame aceleriq_acesso_pedir com tipo senha, o print da tela (print_base64) '
   + 'e uma mensagem curta. 3) Consulte aceleriq_acesso_estado a cada 30 a 60 s até mudar de aberto. '
   + "Código de verificação: aceleriq_acesso_pedir com tipo 'codigo' e espere; o código chega uma vez só e vale 10 min. "
-  + "Facebook, Instagram, Meta e Google: nunca senha; use tipo 'conectar' com o link oficial da Composio. "
+  + "Facebook, Instagram, Meta e Google: nunca senha; primeiro use aceleriq_navegador_do_pc (o Ego do PC do dono já está logado nelas); "
+  + "se ele responder indisponível, não repita: use tipo 'conectar' com o link oficial da Composio. "
   + 'NUNCA escreva senha ou código em diário, comentário, tarefa, relatório ou mensagem; depois de usar, não guarde. '
   + MANTER_A_SESSAO;
 

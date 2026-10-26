@@ -73,6 +73,8 @@ const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = rotas.lazy(() => import("@/pages/AdminAds"));
 const AnunciosHoje = rotas.lazy(() => import("@/pages/AnunciosHoje"));
 const MensagensDaSemana = rotas.lazy(() => import("@/pages/MensagensDaSemana"));
+// 26/10: a tela Hoje (um resumo por dia dos agentes; destino do aviso diário do sino).
+const Hoje = rotas.lazy(() => import("@/pages/Hoje"));
 const AdminCiclo = rotas.lazy(() => import("@/pages/AdminCiclo"));
 const AdminEsteira = rotas.lazy(() => import("@/pages/AdminEsteira"));
 const ClientFinanceiro = rotas.lazy(() => import("@/pages/ClientFinanceiro"));
@@ -381,6 +383,7 @@ export function AppRoutes() {
         <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
         {/* 26/10: boletim do Hermes, mudanças nas contas e o que precisa do dono, numa página só. */}
         <Route path="/anuncios/hoje" element={<StaffRoute><AnunciosHoje /></StaffRoute>} />
+        <Route path="/hoje" element={<StaffRoute><Hoje /></StaffRoute>} />
         <Route path="/calendario" element={<EditorialCalendar />} />
         <Route path="/clientes" element={<StaffRoute><Clients /></StaffRoute>} />
         <Route path="/equipe" element={<StaffRoute><Team /></StaffRoute>} />

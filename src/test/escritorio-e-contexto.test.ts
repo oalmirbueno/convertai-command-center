@@ -124,13 +124,14 @@ describe("o contexto do agente no card do Kanban", () => {
   });
 });
 
-describe("o Escritório é a porta de entrada", () => {
+describe("a porta de entrada da Execução", () => {
   const pagina = ler("src/pages/AdminExecucao.tsx");
 
-  it("abre nele, e não no quadro por colunas", () => {
-    // A visão agora é guardada (useEstadoDaTela do sistema); o padrão, na
-    // primeira visita, continua sendo o Escritório.
-    expect(pagina).toContain('useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao", "escritorio"');
+  it("abre no que espera você (26/10), e não no quadro por colunas", () => {
+    // 26/10 (dono: "muita coisa para decidir; o que pede decisão primeiro"): a
+    // primeira visita abre em "Tudo que espera você"; a chave nova faz valer
+    // também para quem tinha o Escritório guardado. O Escritório segue numa aba.
+    expect(pagina).toContain('useEstadoDaTela<(typeof VISOES)[number]["id"]>("execucao:visao:v2", "esperando"');
     // A Central de Autonomia e a Performance vieram antes na lista de abas; o Escritório continua nela.
     expect(pagina).toContain('{ id: "escritorio", rotulo: "Escritório" }');
   });

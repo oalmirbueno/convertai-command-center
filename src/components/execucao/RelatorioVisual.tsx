@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { nomeDaTarefaDoBanco } from "@/lib/nomeDaTarefa";
 import { AlertTriangle, CheckCircle2, Clock, Hand, ListTodo } from "lucide-react";
 import { falhaDaExecucao, estadoDaExecucao, destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import { fraseDoAgente, tipoDaEntrega } from "@/lib/execucaoHumana";
@@ -68,7 +69,7 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
                 <ul className="space-y-2">
                   {visiveis.map((v) => {
                     const t = tarefas.get(v.kanban_task_id || v.painel_task_id);
-                    const titulo = t?.title || limparTecnico(String(v.last_action || "")) || "Atividade do agente";
+                    const titulo = t?.title ? nomeDaTarefaDoBanco(t).semCliente : limparTecnico(String(v.last_action || "")) || "Atividade do agente";
                     const cliente = t?.project?.client ? (t.project.client.company_name || t.project.client.full_name) : null;
                     const tipo = tipoDaEntrega(t?.delivery_type, titulo);
                     const prova = v.last_evidence && destinoDaEvidencia(String(v.last_evidence)) ? String(v.last_evidence) : null;

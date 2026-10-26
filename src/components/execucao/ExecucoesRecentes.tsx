@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { nomeDaTarefa } from "@/lib/nomeDaTarefa";
 import { Activity, CheckCircle2, Clock, MessageSquare } from "lucide-react";
 import { estadoDaExecucao, falhaDaExecucao } from "@/lib/execucaoApresentacao";
 import { leituraSimples } from "@/lib/cadernoExecucao";
@@ -37,7 +38,9 @@ export default function ExecucoesRecentes({ runs, agentes, vinculos, tarefas, de
     const v = vinculos.find(v => v.id === r.task_link_id);
     const tarefa = tarefas.get(v?.kanban_task_id || v?.painel_task_id);
     const d = r.detail || {};
-    const titulo = d.title || tarefa?.title || d.action || v?.last_action || "Execução sem título informado";
+    // 26/10: com tarefa, "Área · assunto" (o cliente vai ao lado); sem tarefa, só o assunto sem o código ACE.
+    const nome = nomeDaTarefa({ titulo: d.title || tarefa?.title || d.action || v?.last_action || "Execução sem título informado", cliente: tarefa?.project?.client?.company_name || tarefa?.project?.client?.full_name || d.client_name, tipoDeEntrega: tarefa?.delivery_type, agente: agente?.display_name });
+    const titulo = tarefa ? nome.semCliente : nome.assunto;
     const cliente = tarefa?.project?.client;
     const nomeCliente = cliente?.company_name || cliente?.full_name || d.client_name;
     const provas = Array.isArray(d.attachments) ? d.attachments : [];
