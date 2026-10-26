@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
 import DiaPrioritarioNoCadastro from "@/components/dia-prioritario/DiaPrioritarioNoCadastro";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -342,7 +343,7 @@ export default function EditClientDrawer({
   const { data: clientBilling } = useQuery({
     queryKey: ["client-exec-billing", client?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("billing").select("id, status, amount, due_date")
+      const { data } = await supabase.from("billing").select("id, type, status, amount, paid_amount, due_date")
         .eq("client_id", client.id);
       return data || [];
     },
@@ -356,7 +357,9 @@ export default function EditClientDrawer({
   const execPendingFiles = (clientPendingFiles || []).length;
   const execPublishedReports = (clientReports || []).filter((r: any) => r.status === "published").length;
   const execPendingBills = (clientBilling || []).filter((b: any) => b.status === "pending").length;
-  const execOverdueBills = (clientBilling || []).filter((b: any) => b.status === "pending" && new Date(b.due_date) < new Date()).length;
+  // 26/10/2026 (dono): atrasado é só o que venceu e ainda tem saldo a pagar (a mesma regra da lista de Clientes).
+  const hojeDaFicha = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const execOverdueBills = (clientBilling || []).filter((b: any) => b.type !== "ads_recharge" && saldoDaCobranca(b) > 0 && String(b.due_date || "").slice(0, 10) < hojeDaFicha).length;
 
   useEffect(() => {
     if (!open) return;
@@ -1188,7 +1191,7 @@ export default function EditClientDrawer({
                         const remaining = pay.total_value - paidTotal;
                         const paidCount = installments.filter((i: any) => i.status === "paid").length;
                         const totalCount = installments.length;
-                        const hasOverdue = installments.some((i: any) => i.status !== "paid" && new Date(i.due_date) < new Date());
+                        const hasOverdue = installments.some((i: any) => saldoDaCobranca(i) > 0 && String(i.due_date || "").slice(0, 10) < new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
 
                         return (
                           <li key={proj.id} className="py-1">
