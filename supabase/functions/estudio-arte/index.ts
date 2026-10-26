@@ -735,6 +735,7 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { baseDoAgente } from "../_shared/base-do-agente.ts";
 import { CANDIDATAS_DO_PEDIDO, referenciasDoPedido } from "./modulos/referencias-do-pedido.ts";
 import { autorizarChamadaInterna } from "../agente-calendario/modulos/refazer-interno.ts";
+import { type EscolhaDaFotoReal, escolherFotoReal } from "../agente-calendario/modulos/midia-da-peca-regras.ts";
 import { lerSaldo } from "../_shared/ia-motor.ts";
 import { escolherCapa, ESQUEMA_CAPAS } from "./modulos/escolha-da-capa.ts";
 
@@ -1011,6 +1012,8 @@ function codigoMotor(e: unknown): string {
 // ------------------------------------------------------- tipos do trabalho
 
 type Direcao = {
+  /** 26/10: foto real do acervo pré-selecionada pela nota do Jev, ou a linha "vai gerar com IA". */
+  foto_real?: (EscolhaDaFotoReal & { lamina: number | null }) | null;
   conceito: string;
   carrossel_infinito: boolean;
   cards: CardDirecao[];
@@ -3069,9 +3072,11 @@ type ImagemAcervo = {
   categoria: string | null;
   tags: string[] | null;
   descricao: string | null;
+  /** Gerada por IA (Mesa Foto): nunca conta como foto real na escolha automática. */
+  gerada?: boolean | null;
 };
 
-const CAMPOS_ACERVO = "id, client_id, storage_bucket, storage_path, nome, pasta, categoria, tags, descricao";
+const CAMPOS_ACERVO = "id, client_id, storage_bucket, storage_path, nome, pasta, categoria, tags, descricao, gerada";
 
 /**
  * Acervo ativo do cliente para o diretor escolher a foto de cada lâmina (sem
@@ -3723,6 +3728,20 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         return rj.answers;
       },
     );
+    // 26/10 (dono: "ler as fotos e achar interessante colocar de forma inteligente imagens reais quando tem"):
+    // a foto REAL do acervo que combina com o pedido, pela nota do Jev (centavos). Acima do corte, ela vai para a
+    // capa (o diretor recebe a sugestão; se não usar, o código põe); sem nenhuma, a direção diz "vai gerar com IA".
+    // Fica de fora quando a peça já tem fotos escolhidas (arte rápida, plano da campanha) e no carrossel contínuo.
+    const comFotoEscolhida = semMarca || (!!rapida && rapida.fotosDoAcervo.length > 0) || plano.pecas.length > 0 || pedidoInfinito === true;
+    const fotoRealP: Promise<EscolhaDaFotoReal | null> = comFotoEscolhida
+      ? Promise.resolve(null)
+      : escolherFotoReal(acervo, textoDoItem || item.tarefa.title, async (state, questions) => {
+        const rj = await jevPerguntar({ state, questions: questions as Record<string, PerguntaJev> });
+        const cobrado = await cobrarJev(rj, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+        if (cobrado) custoDoMundo += cobrado.custoUsd;
+        return rj.answers;
+      }, { uso: "foto real de base da arte (capa do post)", peca: { tema: item.tarefa.title, pedido: instrucao || null } })
+        .catch((e) => (registrarFalha("estudio-arte: foto real do acervo não escolhida (segue como antes)", e, { trabalho_id: trabalhoId }), null));
     // 17/10: data comemorativa pelo texto (obrigatória) ou pela data de publicação (convite).
     const temasDoItem = temasDaEpoca({ data: item.tarefa.due_date, textos: [textoDoItem, rapida ? rapida.gravada.pedido : ""] });
     const contexto = {
@@ -3780,6 +3799,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Fotos reais do cliente: o diretor escolhe por id (imagem_acervo) e a foto entra como está.
       acervo: acervo.map((a) => ({ id: a.id, nome: texto(a.nome, 80), pasta: a.pasta, categoria: a.categoria, descricao: texto(a.descricao, 240) || null })),
       pedido_da_equipe: instrucao || null,
+      foto_real_sugerida: ((f) => (f && f.modo === "real" ? { imagem_acervo: f.fotos[0].id, nota_de_0_a_3: f.fotos[0].nota, regra: "Foto REAL do cliente que combina com esta peça: use na capa (imagem_acervo da lâmina 1), salvo se o pedido da equipe disser outra coisa." } : null))(await fotoRealP),
       direcao_atual: existente
         ? {
           conceito: existente.direcao.conceito,
@@ -3828,7 +3848,24 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     if (!cards.length) {
       throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
     }
+    // 26/10: foto real primeiro. O diretor não pôs foto do acervo em nenhuma lâmina: a sugerida vai para a capa.
+    const fotoReal = await fotoRealP;
+    let laminaDaFoto: number | null = null;
+    let linhaDaFoto = fotoReal ? fotoReal.linha : "";
+    if (fotoReal && fotoReal.modo === "real" && !(infinito && cards.length > 1)) {
+      const sugerida = fotoReal.fotos[0].id;
+      const comFoto = cards.filter((c) => (c.imagens_ids || []).length > 0);
+      if (!comFoto.length && cards[0]) {
+        cards[0] = { ...cards[0], imagens_ids: [sugerida] };
+        laminaDaFoto = cards[0].ordem;
+      } else {
+        // O diretor já pôs foto do acervo: a escolha dele vale.
+        laminaDaFoto = comFoto.find((c) => (c.imagens_ids || []).indexOf(sugerida) >= 0)?.ordem ?? null;
+        if (laminaDaFoto === null) linhaDaFoto = "O diretor escolheu outra foto do acervo; dá para trocar na lâmina.";
+      }
+    } else if (fotoReal && fotoReal.modo === "real") linhaDaFoto = "Carrossel contínuo: a cena é o panorama, sem foto real nas lâminas.";
     direcao = { conceito, fio_visual: fioVisual, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
+    direcao.foto_real = fotoReal ? { ...fotoReal, linha: linhaDaFoto, lamina: laminaDaFoto } : null;
     // 17/10: as referências que o diretor usou neste pedido; na lâmina, o gerador dá preferência a elas (mesma linha).
     (direcao as unknown as Record<string, unknown>).referencias_do_pedido = (await refsDoPedidoP).map((x) => x.id);
     avisosDoDiretor = (Array.isArray(bruto.avisos_para_a_equipe) ? bruto.avisos_para_a_equipe : []).map((a: unknown) => texto(a, 300)).filter(Boolean).slice(0, 4);

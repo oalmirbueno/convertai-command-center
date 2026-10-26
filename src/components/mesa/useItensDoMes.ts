@@ -144,6 +144,8 @@ export interface Trabalho {
     fidelidade_referencia?: string | null;
     /** Papéis dos quadros de cada referência prancha, marcados pela equipe (frente E). */
     pranchas?: Record<string, { papeis: string[] }> | null;
+    /** 26/10: foto real do acervo pré-selecionada pelo Jev (lâmina) ou a linha "vai gerar com IA". */
+    foto_real?: { modo: "real" | "ia"; fotos: Array<{ id: string; nome: string; nota: number }>; linha: string; lamina: number | null } | null;
   };
   modelo_imagem_id: string | null;
   qualidade: string | null;

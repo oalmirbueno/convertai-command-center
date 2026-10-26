@@ -16,6 +16,7 @@ import { useArquivosDeVideo, usePedidos, useVersoes } from "@/components/mesa-vi
 import { LinhaDoFinal } from "@/components/mesa-edicao/Finais";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
 import BancadaDaPauta, { PainelDaBancada } from "./BancadaDaPauta";
+import { direcaoComFotoReal, precisaDeFotoReal, useFotoRealDaPeca } from "./useFotoRealDaPeca";
 import type { ItemDoMes, ArteNaAgenda } from "./useItensDoMes";
 
 const BASES = ESTILOS_DE_VIDEO_DA_PAUTA;
@@ -49,6 +50,12 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const [vendo, setVendo] = useState<string | null>(null);
   const atual = arquivos.find((a) => a.id === vendo) || arquivos[0];
   const tema = BASES.find((b) => b.id === base) || BASES[0];
+  // 26/10: foto real primeiro. Sem imagem de partida escolhida, a melhor foto real do acervo (Jev) abre pré-selecionada.
+  const perguntar = !gravar && precisaDeFotoReal(item);
+  const fotoRealQ = useFotoRealDaPeca(clientId, item.id, "video", perguntar);
+  const fotoReal = perguntar ? fotoRealQ.data : null;
+  const direcao = direcaoComFotoReal(item.video, fotoReal);
+  const chaveDaFoto = fotoReal && fotoReal.modo === "real" ? fotoReal.fotos[0]?.id || "" : "";
   return <div className="flex min-h-0 flex-1 flex-col" data-video-da-pauta={item.id}>
     <BancadaDaPauta tipo="video" titulo={item.title}
       ativa={aba} onAba={setAba} abas={[
@@ -69,7 +76,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       </>}
       ferramentas={<div className="space-y-4">
       <PainelDaBancada id="gravar"><GravarDaPauta item={item} /></PainelDaBancada>
-      <PainelDaBancada id="gerar"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div><GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={item.video} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} /></PainelDaBancada>
+      <PainelDaBancada id="gerar"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div>{fotoReal && <p className="mb-2 text-[12px] text-muted-foreground" role="status" data-foto-real={fotoReal.modo}>{fotoReal.linha}</p>}<GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}:${chaveDaFoto}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={direcao} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} /></PainelDaBancada>
       <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para adicionar a trilha.</p>}</PainelDaBancada>
       <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : <p className="text-[13px]">A legenda fica disponível quando o vídeo estiver pronto.</p>}</PainelDaBancada>
       <PainelDaBancada id="entrega">{atual ? <EntregaDoVideoDaPauta key={atual.id} item={item} arquivo={atual} /> : <p role="status" className="text-[13px]">{arte ? 'Este vídeo já está na Agenda.' : 'Escolha um resultado na prancheta para preparar a legenda e enviar para aprovação.'}</p>}</PainelDaBancada>

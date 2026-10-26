@@ -670,3 +670,11 @@ const PEDIDO_DE_AGENDA =
 export const ehPedidoNaAgenda = (mensagem: string) => PEDIDO_DE_AGENDA.test(String(mensagem || ""));
 
 export const criarLoteNaAgenda = (mensagemId: string, lote: number) => chamarFuncao<any>("agente-calendario", { acao: "criar_lote_agenda", mensagem_id: mensagemId, lote });
+
+// ------------------------------------------------------------------ foto real primeiro (26/10)
+
+/** A foto real do acervo que combina com a peça (nota do Jev) ou "vai gerar com IA". Não grava nada. */
+export type FotoRealDaPeca = { modo: "real" | "ia"; fotos: Array<{ id: string; nome: string; nota: number }>; linha: string; aviso?: string; custo_usd?: number };
+
+export const fotoRealDaPeca = (clientId: string, taskId: string, uso: "arte" | "video") =>
+  chamarFuncao<FotoRealDaPeca>("agente-calendario", { acao: "foto_real_da_peca", client_id: clientId, task_id: taskId, uso });
