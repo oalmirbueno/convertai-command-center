@@ -126,6 +126,31 @@ class Overpass(unittest.TestCase):
             fontes._json_de = antes
 
 
+class Cidade(unittest.TestCase):
+    def _url_da_cidade(self, cidade, uf):
+        import fontes
+
+        pedidas = []
+        antes = fontes._json_de
+        fontes._json_de = lambda ed, url, corpo=None: pedidas.append(url) or [{"osm_type": "relation", "osm_id": 7, "display_name": "achou"}]
+        try:
+            self.assertEqual(fontes.area_da_cidade(None, cidade, uf), (3600000007, "achou"))
+        finally:
+            fontes._json_de = antes
+        return pedidas[0]
+
+    def test_cidade_do_brasil_com_uf(self):
+        url = self._url_da_cidade("Curitiba", "PR")
+        self.assertIn("countrycodes=br", url)
+        self.assertIn("Curitiba%2C%20PR%2C%20Brasil", url)
+
+    def test_cidade_de_outro_pais_pelo_uf(self):
+        url = self._url_da_cidade("Ciudad del Este", "PY")
+        self.assertIn("countrycodes=py", url)
+        self.assertIn("Ciudad%20del%20Este%2C%20Paraguay", url)
+        self.assertNotIn("Brasil", url)
+
+
 class Busca(unittest.TestCase):
     def test_busca_com_osm_e_site_falsos(self):
         import buscar as b

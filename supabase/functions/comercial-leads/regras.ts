@@ -16,6 +16,8 @@ export const ROTULO_DA_FONTE: Record<FonteDaBusca, string> = {
 };
 
 export const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+/** Outros países aceitos no campo uf (código ISO de 2 letras): a busca sai do Brasil e procura a cidade nesse país. */
+export const PAISES: Record<string, string> = { PY: "Paraguai", US: "Estados Unidos", PT: "Portugal", ES: "Espanha", IT: "Itália", DE: "Alemanha", GB: "Reino Unido", IE: "Irlanda", CH: "Suíça", JP: "Japão", AR: "Argentina", UY: "Uruguai", CA: "Canadá", FR: "França" };
 
 export interface PedidoDeBusca {
   nicho: string;
@@ -54,7 +56,7 @@ export function normalizarBusca(o: Record<string, unknown>): { busca: PedidoDeBu
     busca: {
       nicho: nicho || "Sites colados",
       cidade: cidade || "Lista",
-      uf: UFS.indexOf(uf) >= 0 ? uf : null,
+      uf: UFS.indexOf(uf) >= 0 || Object.prototype.hasOwnProperty.call(PAISES, uf) ? uf : null,
       fontes,
       limite,
       campanha_id: typeof o.campanha_id === "string" && UUID.test(o.campanha_id) ? o.campanha_id : null,
