@@ -13,7 +13,7 @@
  * e a área do agente é "Paperclip" ou "Core" (plataforma, não departamento),
  * por isso a área sai do tipo de entrega, do assunto ou do nome do agente.
  *
- * Puro, sem lookbehind nem \p{} (Safari 11).
+ * Puro, sem lookbehind nem classe Unicode (Safari 11).
  */
 
 export interface EntradaDoNome {
