@@ -2601,6 +2601,14 @@
       "remote_name": "mcp_oauth_retorno_local_claude_code",
       "remote_statements_sha256": "fb9a40d280162fa91507a1fdfad03927e2ff9278fe7624a28be7449f89d361ee",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261026150000",
+      "path": "supabase/migrations/20261026150000_acervo_ler_fotos_cron.sql",
+      "local_sha256": "02b41e09313ec18c2a9391e6afa515ed30b59b23e89e79dedd965404af5374a0",
+      "remote_name": "acervo_ler_fotos_cron",
+      "remote_statements_sha256": "aff10547146e8ed6011398a4caeddf20f2bba3b70df8c74883c6ad350b117d9e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
