@@ -8,7 +8,7 @@ Estúdio de campanhas em autoatendimento dentro da área de membros (`/membros`,
 
 | Peça | Onde |
 |---|---|
-| Banco (tabelas `bolso_*`, funções, bucket privado `bolso`) | `supabase/migrations/20261026230000_aceleriq_de_bolso.sql` |
+| Banco (tabelas `bolso_*`, funções, bucket privado `bolso`) | `supabase/migrations/20261027120000_aceleriq_de_bolso.sql` |
 | Trabalhador (fornecedor simulado e adaptador OpenAI desligado) | `supabase/functions/bolso/` |
 | Telas | `src/components/membros/bolso/` (`EstudioBolso`, `CreditosBolso`, `AdminBolso`) |
 | Regras da tela e chamadas | `src/lib/bolso/` |

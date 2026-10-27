@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const MIGRATION = "supabase/migrations/20261026230000_aceleriq_de_bolso.sql";
+const MIGRATION = "supabase/migrations/20261027120000_aceleriq_de_bolso.sql";
 const CENARIOS = "supabase/testes/bolso_cenarios.sql";
 const PROJETO = "jjjtkowvxemvituvywvf";
 

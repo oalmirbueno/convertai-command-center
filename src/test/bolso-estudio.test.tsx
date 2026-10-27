@@ -163,7 +163,7 @@ describe("estúdio com o banco simulado", () => {
 });
 
 describe("contrato da migration", () => {
-  const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261026230000_aceleriq_de_bolso.sql"), "utf8");
+  const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261027120000_aceleriq_de_bolso.sql"), "utf8");
 
   it("chaves nascem desligadas e sem limites", () => {
     for (const k of ["modulo_exposto", "geracao_real", "pagamentos", "modo_simulado", "kill_switch"]) expect(sql).toContain(`${k} boolean NOT NULL DEFAULT false`);
