@@ -58,10 +58,7 @@ describe("os pedidos antigos continuam com os mesmos blocos obrigatórios", () =
 
   it("foto real intacta e logo colada pelo código continuam no servidor", () => {
     // Foto fixa: o original volta alinhado por cima (só o texto e a logo mudam).
-    expect(fonte).toContain("const volta = img.tamanho === quadro.tamanho ? await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa }) : null;");
-    // 27/10: sem garantia de que só as letras mudaram, a imagem do gerador nunca vai para a lâmina (placa de texto + foto intacta).
-    expect(fonte).toContain("if (fotoFixa && (!volta || !volta.recortouTexto)) {");
-    expect(fonte).toContain("await letrasSobreAFoto(baseFoto, placa.png, chave.rgb)");
+    expect(fonte).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });");
     // A logo colada pelo código numa versão antiga fica protegida no ajuste.
     expect(fonte).toContain("const protegidas: Area[] = marcaDaVersao.logo_no_codigo ? [c] : [];");
     // A vitrine de logos dos parceiros continua colada pelo código.

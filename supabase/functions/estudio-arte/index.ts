@@ -7256,7 +7256,6 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     let final = img.png;
     let medida: Record<string, unknown> | null = null;
     let cenaMudada = false;
-    let custoDaPlaca = 0;
     if (panorama) {
       // Só as letras e a logo, dentro das áreas delas (com folga): o resto é a fatia intacta.
       const colado = await colarMudancasNaBase(baseFoto, img.png, areasComLogo.map((a) => ampliar(a, 0.03)));
@@ -7264,47 +7263,20 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       // Cena mudada: fica a imagem inteira do gerador (coerente), marcada fora da emenda.
       if (colado.png) final = colado.png;
       medida = { ...colado.alinhamento, alinhou: colado.alinhou, erro: Math.round(colado.erro * 10) / 10, recorte_texto: !!colado.png, cena_mudada: cenaMudada };
-    } else {
+    } else if (img.tamanho === quadro.tamanho) {
       // Foto real: o gerador redesenha tudo mesmo com máscara (e reenquadra): o
       // original é alinhado ao que ele devolveu e volta fora das áreas; dentro
-      // das áreas do texto e da logo fica só o que ele desenhou (as letras).
-      const volta = img.tamanho === quadro.tamanho ? await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa }) : null;
-      if (volta) {
-        final = volta.png;
-        medida = { ...volta.alinhamento, alinhou: volta.alinhou, erro: Math.round(volta.erro * 10) / 10, recorte_texto: volta.recortouTexto, cena_mudada: volta.cenaMudada };
-      }
-      // 27/10 (dono: "não gerar por cima da foto, isso não pode acontecer"): sem garantia de que só as letras
-      // mudaram (não alinhou, cena mudada ou outro tamanho), a imagem do gerador NUNCA vai para a lâmina. Ele
-      // desenha só o texto e a logo numa placa de cor lisa, copiando a arte que acabou de fazer, e o código cola
-      // as letras na foto original intacta (letras-na-foto.ts).
-      if (fotoFixa && (!volta || !volta.recortouTexto)) {
-        const { chaveParaAArte, letrasSobreAFoto } = await import("../_shared/letras-na-foto.ts");
-        const chave = await chaveParaAArte(img.png, areas);
-        const promptDaPlaca = [
-          `PLACA DE TEXTO PARA RECORTE. A imagem inteira é um fundo LISO na cor exata ${chave.hex}: sem foto, sem cena, sem textura, sem gradiente, sem sombra no fundo, sem vinheta e sem moldura.`,
-          `Sobre esse fundo, desenhe SÓ o texto${regraDaLogo ? " e a logo" : ""} desta lâmina, dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Copie da última imagem de referência (a arte desta lâmina) a mesma fonte, o mesmo peso, as mesmas cores, o mesmo tamanho e a mesma posição das letras${regraDaLogo ? " e da logo" : ""}, mas NÃO copie a foto dela.`,
-          `Nenhuma letra, logo ou contorno pode usar a cor ${chave.hex} nem tons parecidos. Fora das áreas, só o fundo liso.`,
-          regrasDeRender(t, cardComElementos(card), legendas, regraDaLogo, false, false),
-        ].join("\n\n");
-        const placa = await chamarImagem({
-          ...comum,
-          referencias: [...comum.referencias, { bytes: img.png, mime: "image/png", nome: "arte-desta-lamina.png" }],
-          prompt: promptDaPlaca,
-          tamanho: quadro.tamanho,
-          tamanhoFixo: quadro.fixo,
-        });
-        const colado = await letrasSobreAFoto(baseFoto, placa.png, chave.rgb);
-        final = colado.png;
-        custoDaPlaca = placa.custoUsd;
-        medida = { ...(medida || {}), placa_de_texto: true, chave: chave.hex, pixels_de_letra: colado.pixelsDeLetra };
-      }
+      // das áreas do texto e da logo fica o que ele desenhou.
+      const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });
+      final = volta.png;
+      medida = { ...volta.alinhamento, alinhou: volta.alinhou, erro: Math.round(volta.erro * 10) / 10, recorte_texto: volta.recortouTexto, cena_mudada: volta.cenaMudada };
     }
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       avisos: avisosDaGeracao, regras: regrasDaGeracao,
       referencias: idsReferencias,
       // Frente R5: a chamada curta do redator (texto enxuto na geração) entra no custo desta versão.
-      custoExtraUsd: (textoNaGeracao ? textoNaGeracao.custoUsd : 0) + custoDaPlaca,
+      custoExtraUsd: textoNaGeracao ? textoNaGeracao.custoUsd : 0,
       extra: {
         referencias_jev: escolhida.jev,
         tamanho: img.tamanho,

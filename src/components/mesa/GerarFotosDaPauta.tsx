@@ -20,7 +20,6 @@ import {
   type PapelDaReferencia, type ReferenciaDaPauta,
 } from "@/components/mesa-foto/fotoDaPautaApi";
 import { linhasDaDirecaoDeFoto, normalizarDirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
-import { caminhoDaFotoDaPauta, ordenarReferencias } from "../../../supabase/functions/mesa-foto/foto-da-pauta-regras";
 
 /** Categorias da biblioteca que viram cartão de estilo (o assunto vem da pauta e das referências). */
 const CATEGORIAS_DE_ESTILO = ["estilo", "luz", "composicao", "cenario", "ambiente"];
@@ -102,23 +101,6 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
   };
 
   const pronto = !!modelo && (!!instrucao.trim() || refs.length > 0) && !progresso;
-  const ordenadas = ordenarReferencias(refs);
-  const caminho = caminhoDaFotoDaPauta(ordenadas);
-  const montar = async () => {
-    if (caminho.tipo !== "montagem") return;
-    try {
-      for (let n = 0; n < caminho.pares; n++) {
-        setProgresso(`Montando ${n + 1} de ${caminho.pares}…`);
-        const r = await gerarFotoDaPauta({ clientId, taskId, titulo, pedido: instrucao, referencias: ordenadas, guia: { modo: "nenhum" }, modeloImagemId: modelo, formato, marcaId: marca?.id || null, posicao: { atual: n + 1, total: caminho.pares } });
-        if (!r.imagem) throw new Error("A montagem não foi confirmada.");
-        acrescentarFotos(cache, clientId, [r.imagem]);
-        onFotos([r.imagem.id]);
-      }
-      toast.success("Antes e depois pronto", { description: "Com as fotos reais, sem IA. Está na prancheta." });
-    } catch (e) {
-      toast.error("O antes e depois não foi montado", { description: e instanceof Error ? e.message : "Tente de novo." });
-    } finally { setProgresso(""); invalidarFotos(cache, clientId); }
-  };
   const grupos = gruposDasReferencias(refs);
   const trocarPapel = (id: string, papel: PapelDaReferencia) => onReferencias(referencias.map((x) => x.imagem_id === id ? { ...x, papel } : x));
   const itemDaReferencia = (r: ReferenciaDaPauta) => {
@@ -198,11 +180,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
       <label className="min-w-0 text-[12px] text-muted-foreground">Fotos<select aria-label="Quantidade de fotos a gerar" className={juntar(campo, "mt-1")} value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
     </div>
     <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setMotor} />
-    {/* 27/10 (dono): foto real nunca passa pelo gerador. Antes e depois: montagem com os pixels reais (sem custo);
-        antes, depois ou lugar sem par: entra no post como está; só produto ou estilo: aí o gerador cria a cena. */}
-    {caminho.tipo === "montagem" ? <AcoesDaBancada><button type="button" className={juntar(botao.primario, "mb-1")} disabled={!!progresso} onClick={() => void montar()} data-montar-antes-depois="">{progresso || (caminho.pares > 1 ? `Montar ${caminho.pares} antes e depois` : "Montar antes e depois")}</button></AcoesDaBancada>
-      : caminho.tipo === "real_como_esta" ? <AcoesDaBancada><button type="button" className={juntar(botao.primario, "mb-1")} onClick={() => { onFotos(caminho.indices.map((k) => ordenadas[k].imagem_id)); toast.success("Fotos reais no post", { description: "Entram como estão, sem passar pelo gerador." }); }} data-usar-fotos-reais="">Usar as fotos reais</button></AcoesDaBancada>
-      : <AcoesDaBancada><BotaoComCusto rotulo={progresso || (quantidade === 1 ? "Gerar foto" : `Gerar ${quantidade} fotos`)} titulo="Gerar fotos da pauta" descricao="Cria fotos novas pelo contexto da pauta, no estilo e com as referências escolhidas. Entram no acervo e na prancheta, marcadas como geradas."
+    <AcoesDaBancada><BotaoComCusto rotulo={progresso || (quantidade === 1 ? "Gerar foto" : `Gerar ${quantidade} fotos`)} titulo="Gerar fotos da pauta" descricao="Cria fotos novas pelo contexto da pauta, no estilo e com as referências escolhidas. Entram no acervo e na prancheta, marcadas como geradas."
       disabled={!pronto} partes={() => Array.from({ length: quantidade }, () => partesDoGerar([modelo], "alta", refs.length + (estilo ? 1 : 0))).flat()}
       executar={async () => {
         const geradas: string[] = []; let custo = 0;
@@ -220,8 +198,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
           }
           return { custo_usd: custo };
         } finally { setProgresso(""); invalidarFotos(cache, clientId); atualizarCusto(); }
-      }} /></AcoesDaBancada>}
-    {caminho.tipo !== "gerar" && <p className="text-[12px] text-muted-foreground" data-foto-real-intacta="">{caminho.tipo === "montagem" ? "Antes e depois montado com as duas fotos reais, lado a lado, sem IA e sem custo." : "Foto real de antes, depois ou do lugar não vai ao gerador (ele redesenha). Entra no post como está; marque antes e depois para montar a comparação."}</p>}
+      }} /></AcoesDaBancada>
     {!modelo && <p className="text-[12px] text-muted-foreground">Escolha o modelo de imagem.</p>}
     {progresso && <p role="status" className="text-[12px] text-primary">{progresso}</p>}
     <JanelaCentral aberta={escolhendo} onFechar={() => setEscolhendo(false)} titulo={`Referências: ${ROTULO_DO_PAPEL[papelNovo]}`} largura="xl">

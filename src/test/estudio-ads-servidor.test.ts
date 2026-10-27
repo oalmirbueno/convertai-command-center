@@ -97,9 +97,8 @@ describe("Estúdio Ads: tamanho por formato", () => {
     expect(g).toContain("editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo");
     // foto real com máscara e devolução do original
     expect(g).toContain("mascara: await mascara(quadro.largura, quadro.altura, areas)");
-    expect(g).toContain("const volta = img.tamanho === quadro.tamanho ? await devolverOriginalAlinhado(");
-    expect(g).toContain("prompt: promptDaPlaca,");
-    expect(g).toContain("await devolverOriginalAlinhado(baseFoto, img.png, areas");
+    expect(g).toContain("} else if (img.tamanho === quadro.tamanho) {");
+    expect(g).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas");
     expect(g).not.toContain("mascara(1088, 1360");
     // normal
     expect(g).toContain("tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,");
