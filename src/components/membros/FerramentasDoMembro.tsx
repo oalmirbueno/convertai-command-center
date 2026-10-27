@@ -18,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
 import { mensagemDoErro } from "@/lib/membros/api";
 import { urlHttps } from "@/lib/membros/modelo";
+import { CAPAS_MEMBROS } from "@/lib/membros/capas";
+import "./vitrine-membros.css";
 import {
   temLicencaDaFerramenta,
   abrirSessaoFerramenta,
@@ -144,14 +146,25 @@ export default function FerramentasDoMembro({
                   className="membros-ferramenta-capa-imagem"
                   src={
                     urlHttps(f.capa_url) ||
-                    `/membros/capas/${f.motor === "crm" ? "relacionamento" : "comunicacao"}-v1.webp`
+                    CAPAS_MEMBROS[
+                      f.motor === "crm" ? "relacionamento" : "comunicacao"
+                    ]
                   }
                   alt=""
                   loading="lazy"
                   decoding="async"
                   referrerPolicy="no-referrer"
                   onError={(evento) => {
-                    evento.currentTarget.hidden = true;
+                    const imagem = evento.currentTarget;
+                    if (imagem.dataset.fallback) {
+                      imagem.hidden = true;
+                      return;
+                    }
+                    imagem.dataset.fallback = "true";
+                    imagem.src =
+                      CAPAS_MEMBROS[
+                        f.motor === "crm" ? "relacionamento" : "comunicacao"
+                      ];
                   }}
                 />
               </div>

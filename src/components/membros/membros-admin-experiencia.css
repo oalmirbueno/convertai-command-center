@@ -85,7 +85,7 @@
 .membros-admin .membros-admin-lancamento { padding-inline: 18px; }
 .membros-admin .membros-admin-corpo {
   width: 100%;
-  max-width: 1700px;
+  max-width: none;
   margin-inline: auto;
   padding: 28px clamp(20px, 3vw, 48px) 28px;
   gap: 28px;
@@ -112,9 +112,20 @@
   text-transform: uppercase;
 }
 .membros-admin .membros-admin-recolher {
-  padding: 8px;
+  gap: 9px;
+  padding: 9px 12px;
   min-width: 36px;
-  min-height: 36px;
+  min-height: 40px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 11px;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+.membros-admin .membros-admin-conteudo-barra {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
 }
 .membros-admin .membros-admin-nav > .membros-acao {
   min-height: 48px;
@@ -500,6 +511,7 @@
   .membros-admin .membros-admin-catalogo > .membros-acao:not(.membros-admin-produto) { min-height: 64px; margin: 0; }
 }
 @media (max-width: 1099px) {
+  .membros-admin .membros-admin-conteudo-barra { display: none; }
   .membros-admin .membros-admin-corpo { gap: 18px; padding-top: 18px; }
   .membros-admin .membros-admin-nav { padding-bottom: 4px; }
   .membros-admin .membros-admin-nav-topo { display: none; }

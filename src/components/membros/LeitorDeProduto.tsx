@@ -45,6 +45,7 @@ import {
 import { texto, AjudaRecolhida } from "@/components/sistema";
 import { BotaoPomodoro, PomodoroCompacto } from "./FocoDeEstudo";
 import OfertaDoProduto from "./OfertaDoProduto";
+import { capaDoProduto, capaPadraoDoProduto } from "@/lib/membros/capas";
 import ComunidadeDoCurso from "./ComunidadeDoCurso";
 const PdfSeguro = lazy(() => import("./PdfSeguro"));
 
@@ -412,15 +413,17 @@ export default function LeitorDeProduto({
   pendente,
   previa,
   teste,
+  somenteOferta = false,
 }: {
   produto: Produto;
   fechar: () => void;
   pendente: boolean;
   previa?: string;
   teste?: TesteCliente;
+  somenteOferta?: boolean;
 }) {
   const { user } = useAuth();
-  const permitido = podeAbrir(produto);
+  const permitido = !somenteOferta && podeAbrir(produto);
   const [selecionado, setSelecionado] = useState(produto.ultimo_material || "");
   const [foco, setFoco] = useState(false);
   const [sumario, setSumario] = useState(true);
@@ -510,15 +513,19 @@ export default function LeitorDeProduto({
           <img
             key={produto.capa_url || "capa-padrao"}
             className="membros-curso-banner-imagem"
-            src={
-              urlHttps(produto.capa_url) || "/membros/capas/boas-vindas-v2.webp"
-            }
+            src={capaDoProduto(produto)}
             alt=""
             aria-hidden="true"
             referrerPolicy="no-referrer"
             decoding="async"
             onError={(evento) => {
-              evento.currentTarget.hidden = true;
+              const imagem = evento.currentTarget;
+              if (imagem.dataset.fallback) {
+                imagem.hidden = true;
+                return;
+              }
+              imagem.dataset.fallback = "true";
+              imagem.src = capaPadraoDoProduto(produto);
             }}
           />
           {permitido && (
@@ -547,7 +554,10 @@ export default function LeitorDeProduto({
               {produto.titulo}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              {rotuloDoAcesso(produto)} · {produto.formato}
+              {somenteOferta
+                ? "Apresentação do produto"
+                : rotuloDoAcesso(produto)}{" "}
+              · {produto.formato}
             </DialogDescription>
           </div>
           {permitido && (

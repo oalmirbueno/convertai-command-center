@@ -145,11 +145,23 @@ describe("biblioteca integrada", () => {
     mocks.ferramentas.mockResolvedValue([ferramentaCrm(null)]);
     montar();
     fireEvent.click(await screen.findByRole("button", { name: "CRM privado · Sem licença ativa" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("A licença desta ferramenta não está liberada ou venceu");
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Novo negócio" })).toBeNull();
     expect(mocks.sessao).not.toHaveBeenCalled();
     expect(mocks.crm).not.toHaveBeenCalled();
     expect(mocks.materiais).not.toHaveBeenCalled();
     expect(mocks.arquivo).not.toHaveBeenCalled();
+  });
+  it.each([null, "2020-10-21T12:00:00Z", "inválida"])("o link direto do CRM abre a oferta com licença %s sem consultar conteúdo", async (fim) => {
+    mocks.role = "admin";
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm(fim)]);
+    montar("/membros?produto=crm");
+    await screen.findByRole("dialog");
+    expect(screen.queryByRole("button", { name: "Novo negócio" })).not.toBeInTheDocument();
+    expect(mocks.sessao).not.toHaveBeenCalled();
+    expect(mocks.crm).not.toHaveBeenCalled();
+    expect(mocks.materiais).not.toHaveBeenCalled();
   });
   it("não oferece abertura enquanto a licença é conferida nem usa materiais da URL antiga", async () => {
     let concluir: ((dados: ReturnType<typeof ferramentaCrm>[]) => void) | undefined;
@@ -212,7 +224,7 @@ describe("biblioteca integrada", () => {
   ])("a marca retorna ao início e preserva o contexto de %s", async (inicio) => {
     mocks.role = "admin";
     montar(inicio);
-    await screen.findByText("Conhecer produto");
+    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
     fireEvent.change(screen.getByRole("searchbox", { name: "Buscar produtos" }), {
       target: { value: "inexistente" },
     });
@@ -251,7 +263,8 @@ describe("biblioteca integrada", () => {
     mocks.ferramentas.mockResolvedValue([ferramentaCrm(fim)]);
     montar();
     fireEvent.click(await screen.findByRole("button", { name: "CRM privado · Sem licença ativa" }));
-    await screen.findByRole("alert");
+    await screen.findByRole("dialog");
+    expect(screen.queryByRole("button", { name: "Novo negócio" })).toBeNull();
     expect(mocks.sessao).not.toHaveBeenCalled();
     expect(mocks.materiais).not.toHaveBeenCalled();
   });
@@ -260,7 +273,7 @@ describe("biblioteca integrada", () => {
     mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
     mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
     montar(url);
-    await screen.findByText("Conhecer produto");
+    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
     fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
     expect(await screen.findByText("Ferramentas disponíveis na conta do próprio titular.")).toBeInTheDocument();
     expect(mocks.ferramentas).not.toHaveBeenCalled();
@@ -408,18 +421,18 @@ describe("biblioteca integrada", () => {
     });
     expect(screen.getByText("Nenhum produto encontrado")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Limpar busca"));
-    expect(screen.getByText("Conhecer produto")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Conhecer produto", exact: true })).toBeInTheDocument();
   });
   it("não mostra administração para membro", async () => {
     montar();
-    await screen.findByText("Conhecer produto");
+    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
     expect(
       screen.queryByRole("link", { name: "Administrar biblioteca" }),
     ).not.toBeInTheDocument();
   });
   it("o menu da conta preserva o destino do membro e fecha por Escape", async () => {
     montar();
-    await screen.findByText("Conhecer produto");
+    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
     const conta = screen.getByLabelText("Opções da conta de Minha conta");
     fireEvent.click(conta);
     expect(screen.getByRole("link", { name: "Painel Aceleriq" })).toHaveAttribute("href", "/solucoes");
@@ -526,7 +539,7 @@ describe("biblioteca integrada", () => {
     montar("/membros?modo=cliente");
     await screen.findByText("Continuar na biblioteca");
     fireEvent.click(screen.getByRole("button", { name: "Simular bloqueio" }));
-    await screen.findByText("Conhecer produto");
+    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
     expect(mocks.catalogo).toHaveBeenLastCalledWith(undefined, {
       teste: true,
       bloqueado: true,

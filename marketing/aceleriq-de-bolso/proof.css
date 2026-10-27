@@ -1,0 +1,21 @@
+.proof-section{background:#141714;border-bottom:1px solid var(--line)}
+.proof-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.proof-card{display:flex;flex-direction:column;gap:14px;min-width:0;padding:30px 30px 22px;border:1px solid var(--line);border-radius:22px;background:var(--panel)}
+.proof-card .proof-number{color:var(--green-text);font-size:clamp(2.8rem,5vw,4.1rem);font-weight:840;letter-spacing:-.05em;line-height:1}
+.proof-number small{margin-right:8px;color:var(--fg);font-size:.36em;font-weight:760;letter-spacing:0;vertical-align:.55em}
+.proof-card p{color:var(--muted);font-size:.98rem;line-height:1.72}.proof-card strong{color:var(--fg)}
+.proof-card .proof-source{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:auto;padding-top:12px;border-top:1px solid var(--line);color:var(--soft);font-size:.8rem;line-height:1.5}
+.proof-source a{display:inline-flex;align-items:center;gap:6px;min-height:44px;color:var(--green-text);font-weight:760;text-decoration:none;white-space:nowrap}.proof-source a:hover{text-decoration:underline}
+.proof-print{display:block;overflow:hidden;margin-bottom:8px;border:1px solid #2c362d;border-radius:14px;background:#fff;text-decoration:none;transition:transform .18s,box-shadow .18s}
+.proof-print:hover{transform:translateY(-2px);box-shadow:0 14px 30px #00000059}
+.proof-print-bar{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#e8ebe8;color:#4b544b;font-size:.72rem;font-weight:650;line-height:1}
+.proof-print-bar i{width:8px;height:8px;border-radius:50%;background:#c2c8c2}.proof-print-bar i:last-of-type{margin-right:6px}
+.proof-print img{width:100%;height:210px;object-fit:contain;object-position:center;background:#fff}
+.proof-card p a.accent{color:var(--green-text)}
+.proof-note{max-width:82ch;margin-top:26px;color:var(--soft);font-size:.84rem;line-height:1.7}
+.proof-action{margin-top:30px}
+@media(max-width:780px){.proof-grid{grid-template-columns:1fr}}
+@media(max-width:640px){
+  .proof-card{padding:24px 22px 16px;border-radius:18px}.proof-card p{font-size:.94rem}
+  .proof-card .proof-source{flex-direction:column;align-items:flex-start;gap:0}.proof-action .button{width:100%}
+}
