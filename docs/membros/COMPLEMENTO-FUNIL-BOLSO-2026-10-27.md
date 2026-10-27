@@ -14,9 +14,9 @@ O motor e o painel partem do PR103 integrado, commit `a381fb151918ae3e97a58e51c5
 - Comparação visual entre uma arte isolada e uma campanha orientada por uma oferta. A comparação não apresenta métricas de vendas nem promete resultados.
 - Demonstração fictícia substituída por quatro imagens reais: cadastro da marca, escolha do objetivo, edição do texto e uma arte gerada no Bolso. As telas representam a prévia desta evolução, e a arte é resultado de geração real já concluída anteriormente.
 - Três novos posters originais, somados aos seis já existentes. Galeria horizontal, ampliação, navegação por teclado e peças sem corte.
-- Oferta alinhada às condições aprovadas: R$97/ano,100 créditos iniciais,1 por texto e5 por imagem, com recargas avulsas. Os R$8,08 continuam sendo equivalência mensal do valor anual, não parcela prometida.
+- Oferta alinhada às condições aprovadas: R$ 97/ano, 100 créditos iniciais, 1 por texto e 5 por imagem, com recargas avulsas. Os R$ 8,08 continuam sendo equivalência mensal do valor anual, não parcela prometida.
 - Barra de oferta no mobile, oculta junto ao hero e à própria oferta para evitar duplicação; respeita área segura e movimento reduzido.
-- Copy, estudos e garantia escritos pelo Claude preservados. A garantia de7dias está na base editorial; operação de reembolso/checkout ainda precisa acompanhar a implantação comercial.
+- Copy, estudos e garantia escritos pelo Claude preservados. A garantia de 7 dias está na base editorial; operação de reembolso/checkout ainda precisa acompanhar a implantação comercial.
 
 ## O que muda na experiência do membro
 
@@ -31,10 +31,10 @@ No desktop, o cabeçalho e a navegação ficam estáveis, enquanto a área de tr
 
 ## Motor criativo preparado
 
-- **Sol6.1** (`openai/gpt-6.1-sol`): organiza uma ideia em proposta de briefing. O usuário aplica e salva explicitamente; a IA não sobrescreve a campanha em silêncio.
-- **Terra6.1** (`openai/gpt-6.1-terra`): copy e legenda em português natural, com fatos da oferta e uma chamada clara. Sem fallback oculto para outro modelo.
+- **Sol 6.1** (`openai/gpt-6.1-sol`): organiza uma ideia em proposta de briefing. O usuário aplica e salva explicitamente; a IA não sobrescreve a campanha em silêncio.
+- **Terra 6.1** (`openai/gpt-6.1-terra`): copy e legenda em português natural, com fatos da oferta e uma chamada clara. Sem fallback oculto para outro modelo.
 - **Imagens:** mantém o modelo de imagem contratado. Referências e fotos do próprio usuário são privadas e limitadas por campanha. Um ajuste cria uma nova imagem e preserva a original.
-- **Cobrança:** preparação por IA e copy usam1crédito por solicitação; nova imagem e ajuste usam5. São ações distintas e o custo é informado antes da confirmação. Upload de referência não é uma geração.
+- **Cobrança:** preparação por IA e copy usam 1 crédito por solicitação; nova imagem e ajuste usam 5. São ações distintas e o custo é informado antes da confirmação. Upload de referência não é uma geração.
 - **UGC:** somente “Em breve”. Não gera vídeos, não vende acesso e não consome saldo.
 
 Esses novos recursos de servidor dependem da migration incremental, implantação da função e ativação controlada da flag. A prévia visual funciona com a API atual; nenhum teste local equivale a afirmar que os novos modelos já foram ativados na conta de produção.
@@ -47,11 +47,11 @@ Esses novos recursos de servidor dependem da migration incremental, implantaçã
 |---|---|---|
 | Atenção | Poster “Campanha primeiro. Pixels depois.” apresenta o mecanismo | Clique qualificado e visita à seção do método |
 | Comparação | Poster “Bonito não basta.” mostra a diferença de abordagem | Interesse na demonstração real |
-| Oferta | Poster “Pare o scroll. Comece uma conversa.” apresenta R$97/ano | Visualização da oferta e início de compra, quando habilitado |
+| Oferta | Poster “Pare o scroll. Comece uma conversa.” apresenta R$ 97/ano | Visualização da oferta e início de compra, quando habilitado |
 | Convencimento | Copy do Claude + comparação + peças + produto real + condições | Avanço até oferta e dúvidas recorrentes |
 | Ativação | Guia gratuito → marca → objetivo → oferta → texto → arte | Primeira campanha concluída, sem impor gasto extra |
 | Uso recorrente | Histórico, versões, referências próprias, legenda e ajustes | Retorno ao estúdio e custo real por geração |
-| Recarga |50/R$19,150/R$49,350/R$97 | Consumo, margem de contribuição e recompra após ativar pagamentos |
+| Recarga | 50/R$ 19, 150/R$ 49, 350/R$ 97 | Consumo, margem de contribuição e recompra após ativar pagamentos |
 | Próximo passo | Orçamento em Movimento e CRM, conforme necessidade e licença | Interesse no produto e uso, sem desbloqueio automático |
 | Serviço | Planos recorrentes/contato da agência quando destino oficial estiver cadastrado | Pedido de conversa com a equipe |
 | Futuro | UGC identificado como “Em breve” | Interesse, sem promessa de entrega ou data inventada |
@@ -62,9 +62,9 @@ As três peças são hipóteses de teste, não anúncios com conversão comprova
 
 | Arquivo | Uso |
 |---|---|
-|01-campanha-primeiro|Poster de mecanismo,4:5|
-|02-bonito-nao-basta|Poster comparativo,4:5|
-|03-pare-o-scroll|Poster de atenção e preço,4:5|
+|01-campanha-primeiro|Poster de mecanismo, 4:5|
+|02-bonito-nao-basta|Poster comparativo, 4:5|
+|03-pare-o-scroll|Poster de atenção e preço, 4:5|
 |04-capa-estudio|Aceleriq de Bolso|
 |05-capa-relacionamento|CRM|
 |06-capa-comunicacao|Comunicação e Orçamento|
@@ -72,9 +72,18 @@ As três peças são hipóteses de teste, não anúncios com conversão comprova
 
 Originais PNG ficam no pacote local. O painel usa WebP com a composição preservada. Capas cadastradas pelo administrador continuam tendo prioridade. As artes conceituais geradas por IA são diferentes das capturas reais do produto e não representam resultados comerciais medidos.
 
+## Entrega para revisão
+
+- [Landing privada no Sites](https://aceleriq-de-bolso-previa-20261026.oalmirbueno.chatgpt.site), no projeto existente e restrita à conta proprietária. Pode exigir login no ChatGPT.
+- [PR 104](https://github.com/oalmirbueno/convertai-command-center/pull/104), com painel, motor, migration incremental e snapshot da landing em `marketing/aceleriq-de-bolso`.
+- Prévia local autenticada em `http://127.0.0.1:4187/membros`.
+- Pacotes locais `landing-aceleriq-refinada.zip` e `criativos-e-capas-aceleriq.zip`, com este complemento incluído.
+
+A publicação privada da landing foi concluída. A versão de produção do painel permanece na entrega anterior; esta evolução ainda depende da revisão e autorização do PR 104. O teste visual não consumiu créditos nem criou campanhas definitivas na conta.
+
 ## Implantação e pontos ainda dependentes de autorização
 
-1. Revisar o draftPR, evidências, testes e plano incremental do motor.
+1. Revisar o draft PR, evidências, testes e plano incremental do motor.
 2. Autorizar a migration nova e publicar frontend/função, mantendo pagamentos desligados. Não executar `db push` nem repetir migrations anteriores.
 3. Ativar recursos criativos após verificações de saldo, isolamento e idempotência. Fazer smoke real de briefing, copy, referência e ajuste com a conta autorizada e reconciliar os créditos.
 4. A limpeza cadastral de boas-vindas tem plano próprio. Exige leitura dos UUIDs reais dos materiais de demonstração antes de arquivar; não remove direitos, histórico ou arquivos definitivamente.
