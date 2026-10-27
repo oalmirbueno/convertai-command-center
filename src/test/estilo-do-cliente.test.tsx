@@ -34,6 +34,7 @@ import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import { guiaDoFormulario, normalizarEstado } from "@/components/estilo/estiloApi";
 import { layoutPadrao, promptDaLamina } from "../../supabase/functions/_shared/direcao-arte";
+import { expectPromptLegado } from "./helpers/prompt-legado";
 import {
   blocoDoEstiloParaOGerador,
   CAMPOS_DAS_REGRAS,
@@ -216,8 +217,8 @@ describe("1. Estilo desligado: o prompt é o de hoje, byte a byte", () => {
     expect(HOJE_NORMAL.normal.length).toBe(CASOS_NORMAIS.length);
     CASOS_NORMAIS.forEach((c, i) => {
       const base = baseNormal(c);
-      expect(base, c.nome).toBe(HOJE_NORMAL.normal[i].prompt);
-      expect(compoeNormal(base, ""), c.nome).toBe(`${HOJE_NORMAL.normal[i].prompt}\n\n${REGRAS}`);
+      expectPromptLegado(base, HOJE_NORMAL.normal[i].prompt, c, c.nome);
+      expectPromptLegado(compoeNormal(base, ""), `${HOJE_NORMAL.normal[i].prompt}\n\n${REGRAS}`, c, c.nome);
     });
   });
 
@@ -302,8 +303,7 @@ describe("2. Estilo ligado: bloco curto no fim e referências depois das da lâm
     }
     CASOS_NORMAIS.forEach((c, i) => {
       const com = compoeNormal(baseNormal(c), bloco);
-      expect(com.startsWith(`${HOJE_NORMAL.normal[i].prompt}\n\n`)).toBe(true);
-      expect(com).toContain(`\n\n${bloco}\n\n${REGRAS}`);
+      expectPromptLegado(com, `${HOJE_NORMAL.normal[i].prompt}\n\n${bloco}\n\n${REGRAS}`, c, c.nome);
     });
   });
 

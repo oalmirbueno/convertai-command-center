@@ -36,6 +36,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
 
 import { promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
+import { expectPromptLegado } from "./helpers/prompt-legado";
 import type { FidelidadeDaReferencia } from "../../supabase/functions/_shared/fidelidade-da-referencia";
 import type { ResultadoJev } from "../../supabase/functions/_shared/jev";
 import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
@@ -154,7 +155,7 @@ const compoe = (prompt: string, blocoDaCopia: string, blocoDoRosto = "") => [pro
 describe("1. Caminho de hoje: nenhum bloco e o prompt byte a byte", () => {
   it("promptDoReplicar continua o do fixture em todos os casos (a frente não mexe nele)", () => {
     expect(HOJE.replicar.length).toBe(CASOS_DO_REPLICAR.length);
-    CASOS_DO_REPLICAR.forEach((c, i) => expect(promptDoReplicar(c.entrada).prompt, c.nome).toBe(HOJE.replicar[i].prompt));
+    CASOS_DO_REPLICAR.forEach((c, i) => expectPromptLegado(promptDoReplicar(c.entrada).prompt, HOJE.replicar[i].prompt, { anuncio: c.entrada.anuncio, referencia: true }, c.nome));
   });
 
   it("só tenta no replicar, com o interruptor ligado, com copy e sem foto do cliente", () => {

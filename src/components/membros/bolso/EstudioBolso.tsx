@@ -634,10 +634,11 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
               {c.versao_escolhida ? `Usa o texto V${c.versao_escolhida}.` : "Escolha ou escreva o texto antes."}
             </p>
             {semMensagemNaArte ? (
-              <p role="status" className="bolso-aviso">Esta versão não tem mensagem principal, por isso a arte será criada sem texto. Para incluir texto na arte, escreva uma mensagem principal de até 80 caracteres e uma chamada de até 50, salve e escolha a nova versão.</p>
+              <p role="status" className="bolso-aviso">Esta versão não tem mensagem principal. A arte será criada sem texto.</p>
             ) : textoLongoNaArte && (
-              <p role="status" className="bolso-aviso">Esta versão tem textos longos, por isso a arte será criada sem texto. Para incluí-lo, reduza a mensagem principal para até 80 caracteres e a chamada para até 50, salve e escolha a nova versão.</p>
+              <p role="status" className="bolso-aviso">Esta versão tem textos longos. A arte será criada sem texto.</p>
             )}
+            {(semMensagemNaArte || textoLongoNaArte) && <AjudaRecolhida rotulo="Como incluir texto na arte">Use uma mensagem principal de até 80 caracteres e uma chamada para ação de até 50. Salve e escolha a nova versão antes de pedir a arte.</AjudaRecolhida>}
             <BotaoDePedido estado={estado} campanha={c} tipo="imagem" formato={formato} rotulo="Pedir a arte" aoPedir={atualizar} />
           </div>
           {c.artes.length ? (

@@ -43,7 +43,7 @@ import {
   seloDaSerie,
 } from "@/components/mesa/fidelidadeDaReferencia";
 import { blocoDaSerie, promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
-import { direcaoCriativaParaImagem } from "../../supabase/functions/_shared/motor-criativo-campanha";
+import { expectPromptLegado } from "./helpers/prompt-legado";
 import {
   blocoDaVariedade,
   capasNoHistorico,
@@ -95,9 +95,7 @@ describe("1. Idêntica preserva o prompt aprovado, com direção de campanha adi
         const r = promptDoReplicar({ ...c.entrada, fidelidade: f });
         // O motor adiciona um bloco de campanha no anúncio; o contrato da
         // referência e todos os prompts orgânicos continuam byte a byte.
-        const campanha = c.entrada.anuncio ? direcaoCriativaParaImagem({ formato: c.entrada.anuncio.formato, referencia: true }) : null;
-        if (campanha) expect(r.prompt.split(campanha), c.nome).toHaveLength(2);
-        expect(campanha ? r.prompt.replace(`${campanha}\n`, "") : r.prompt, c.nome).toBe(HOJE.replicar[i].prompt);
+        expectPromptLegado(r.prompt, HOJE.replicar[i].prompt, { anuncio: c.entrada.anuncio, referencia: true }, c.nome);
         expect(r.textoExato, c.nome).toBe(HOJE.replicar[i].textoExato);
       }
     });
