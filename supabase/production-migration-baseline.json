@@ -2689,6 +2689,14 @@
       "remote_name": "lembrete_de_aprovacao_e_regua_de_cobranca",
       "remote_statements_sha256": "0a9cf6be2cb58ab286ac0d8dd49bbfc04fc1b391ec92a00fc07aaae83fdd6f87",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027110000",
+      "path": "supabase/migrations/20261027110000_cobranca_pausada_por_cliente.sql",
+      "local_sha256": "0a315cf77b99c7872763b6f9d76153ca345ff92a09b44c6f4af592e60d4d2999",
+      "remote_name": "cobranca_pausada_por_cliente",
+      "remote_statements_sha256": "277e64bfbc27afeb9c430bbc4babe948c6411985d144929d1df724f16ed9e5ff",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
