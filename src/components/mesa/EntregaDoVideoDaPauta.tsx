@@ -1,72 +1,119 @@
-import { lazy, Suspense, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { FolderCheck, Loader2, Send, Undo2 } from "lucide-react";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
+import { padraoPara, parteDaConferenciaDoJev, TAMANHOS, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { opcoesDaEntrega, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
+import type { ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
+import { BotaoComCusto } from "./Custo";
+import { useEstadoGuardado } from "./estudioUtil";
 import { useMesa } from "./MesaContexto";
-import { chamarMesaVideos, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
-import { handoffWorkspaceFileToFiles, type WorkspaceFileForHandoff } from "@/lib/workspaceFileHandoff";
-import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
-import { loadEditorialPostForMutation, type EditorialPostBundle } from "@/hooks/useEditorialCalendar";
+import { desfazerPreparo, legendaComHashtags, legendaDoVideo, prepararParaPublicar, textoDoPreparo, type ResultadoDoPreparo, type VideoDaPauta } from "./videoDaPauta";
 import type { ItemDoMes } from "./useItensDoMes";
 
-const Editor = lazy(() => import("@/components/editorial/EditorialEditor"));
-const Detalhe = lazy(() => import("@/components/editorial/EditorialDetailSheet"));
-
-/** Reuses Workspace -> Files -> Agenda and its two approval gates. Never auto-publishes. */
+/**
+ * Enviar o vídeo escolhido na prancheta (27/10/2026, dono: "enviar para aprovação igual o fluxo normal").
+ * O mesmo caminho da peça e do carrossel, num clique: Workspace -> Arquivos -> legenda da casa (com o roteiro)
+ * -> post de Reels na Agenda no dia da peça -> revisão da agência e aprovação do cliente. Também "Pronto para
+ * agendar" (admin e gestor) e "Só Arquivos". Reaproveita o post da tarefa; Desfazer arquiva o que o envio criou.
+ * Nada é publicado sem aprovação.
+ */
 export default function EntregaDoVideoDaPauta({ item, arquivo }: { item: ItemDoMes; arquivo: ArquivoDeVideo }) {
-  const { clientId, clientName, userId } = useMesa();
+  const { clientId, userId, catalogo } = useMesa();
   const { profile } = useAuth();
   const { isImpersonating } = useImpersonation();
-  const cache = useQueryClient();
-  const [ocupado, setOcupado] = useState(false);
-  const [editor, setEditor] = useState(false);
-  const [detalhe, setDetalhe] = useState(false);
-  const [fileId, setFileId] = useState<string | null>(null);
-  const [post, setPost] = useState<EditorialPostBundle | null>(null);
-  const [revisao, setRevisao] = useState<EditorialPostBundle | null>(null);
-  const projeto = useQuery({ queryKey: ["mesa", "projeto-da-pauta", clientId, item.project_id], queryFn: async () => {
-    const { data, error } = await supabase.from("projects").select("id, name").eq("id", item.project_id).eq("client_id", clientId).single();
-    if (error) throw error; return data;
-  } });
-  const preparar = async () => {
-    if (!userId || !projeto.data) return;
-    setOcupado(true);
+  const qc = useQueryClient();
+  const podeEditar = ["admin", "manager", "design"].indexOf(profile?.role || "") >= 0 && !isImpersonating;
+  const podeLiberar = ["admin", "manager"].indexOf(profile?.role || "") >= 0 && !isImpersonating;
+  const opcoes = opcoesDaEntrega(podeLiberar);
+  const [modoGuardado, setModo] = useEstadoGuardado<ModoDeEntrega>("mesa:estudio:modo-da-entrega", "aprovacao");
+  const modo: ModoDeEntrega = opcoes.some((o) => o.modo === modoGuardado) ? modoGuardado : "aprovacao";
+  const [preparo, setPreparo] = useState<ResultadoDoPreparo | null>(null);
+  const [ocupado, setOcupado] = useState<"arquivos" | "desfazer" | null>(null);
+  const diretor = padraoPara(catalogo, "diretor_arte");
+  const video: VideoDaPauta = { bucket: arquivo.storage_bucket || "mesa", caminho: arquivo.storage_path, nome: arquivo.nome || arquivo.nome_original, fonte: "ia", arquivo_id: arquivo.id, ...(arquivo.duracao_s ? { duracao_s: arquivo.duracao_s } : {}) };
+
+  const reler = () => {
+    void qc.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
+    void qc.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
+    void qc.invalidateQueries({ queryKey: ["editorial-calendar"] });
+  };
+  const partes = (): ParteDaEstimativa[] => [
+    { modeloId: diretor ? diretor.id : "", tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida } as ParteDaEstimativa,
+    parteDaConferenciaDoJev(),
+    parteDaConferenciaDoJev(),
+  ];
+  const enviar = async () => {
+    if (!userId) throw new Error("Entre de novo para enviar.");
+    const l = await legendaDoVideo(clientId, item.id);
+    const r = await prepararParaPublicar({ clientId, userId, item, video, legenda: legendaComHashtags(l), modo });
+    return { ...r, custo_usd: Number(l && l.custo_usd) || 0 };
+  };
+  const soArquivos = async () => {
+    if (!userId) return;
+    setOcupado("arquivos");
     try {
-      const r = await chamarMesaVideos<{ client_id: string; workspace: { node_id: string | null } }>({ acao: "final_para_workspace", arquivo_id: arquivo.id });
-      if (r.client_id !== clientId || !r.workspace.node_id) throw new Error("O vídeo ainda não foi confirmado no Workspace.");
-      const { data: node, error } = await supabase.from("workspace_nodes").select("id, client_id, kind, name, mime, size_bytes, storage_path, sent_for_approval_file_id").eq("id", r.workspace.node_id).eq("client_id", clientId).single();
-      if (error || !node) throw new Error("Não foi possível conferir o vídeo salvo no Workspace.");
-      const f = await handoffWorkspaceFileToFiles({ node: node as WorkspaceFileForHandoff, clientId, userId, fileName: item.title, folder: "materiais", fileType: "creative", projectId: item.project_id });
-      setFileId(f.fileId);
-      const { data: vinculados, error: erroVinculo } = await supabase.from("editorial_post_internal").select("post_id").eq("task_id", item.id);
-      if (erroVinculo) throw erroVinculo;
-      const atuais = await Promise.all((vinculados || []).map((v) => loadEditorialPostForMutation(v.post_id, clientId)));
-      const atual = atuais.filter((p) => !p.post.archived_at).sort((a, b) => b.post.created_at.localeCompare(a.post.created_at))[0] || null;
-      // An existing piece with another file becomes a revision, never an overwrite.
-      const precisaRevisao = !!atual?.post.primary_file_id && atual.post.primary_file_id !== f.fileId;
-      setPost(precisaRevisao ? null : atual); setRevisao(precisaRevisao ? atual : null);
-      await cache.invalidateQueries({ queryKey: ["editorial-editor-options"] });
-      setEditor(true);
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível preparar o vídeo para a Agenda."); }
-    finally { setOcupado(false); }
+      setPreparo(await prepararParaPublicar({ clientId, userId, item, video, legenda: "", modo: "arquivos" }));
+      reler();
+      toast.success("Vídeo em Arquivos", { description: "Sem post na Agenda e sem aprovação." });
+    } catch (e) {
+      toast.error("O vídeo não foi para Arquivos", { description: textoDoErro(e) });
+    } finally {
+      setOcupado(null);
+    }
   };
-  const salvo = async (id: string) => {
-    setEditor(false);
-    void cache.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
-    void cache.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
-    try { setPost(await loadEditorialPostForMutation(id, clientId)); setDetalhe(true); }
-    catch (e) { toast.error("Post salvo. Não foi possível abrir a conferência agora; consulte a Agenda."); }
+  const desfazer = async () => {
+    if (!preparo) return;
+    setOcupado("desfazer");
+    try {
+      await desfazerPreparo(preparo);
+      setPreparo(null);
+      reler();
+      toast.success("Envio desfeito", { description: "O post saiu da Agenda. O vídeo continua no Workspace e em Arquivos." });
+    } catch (e) {
+      toast.error("Não deu para desfazer", { description: textoDoErro(e) });
+    } finally {
+      setOcupado(null);
+    }
   };
-  const podeEditar = ["admin", "manager", "design"].includes(profile?.role || "") && !isImpersonating;
-  return <div className="space-y-2 border-t pt-2">
-    <button type="button" className="rounded-md border px-3 py-2 text-[12px]" disabled={ocupado || !podeEditar || !projeto.data} onClick={() => void preparar()}>{ocupado ? "Preparando vídeo…" : "Legenda do post, revisão e Agenda"}</button>
-    {projeto.isError && <p role="alert" className="text-[12px]">Não foi possível ler o projeto desta pauta. <button onClick={() => void projeto.refetch()}>Tentar novamente</button></p>}
-    {fileId && post && <button type="button" disabled={ocupado} className="ml-2 text-[12px] text-primary" onClick={async () => { setOcupado(true); try { await requestFileAgencyReview(fileId); toast.success("Vídeo enviado para revisão da agência."); } catch (e) { toast.error(e instanceof Error ? e.message : "Revisão não confirmada."); } finally { setOcupado(false); } }}>Pedir revisão da agência</button>}
-    <Suspense fallback={<p role="status">Abrindo a Agenda…</p>}>
-      {editor && <Editor open post={post} revisionOf={revisao} clients={[{ id: clientId, name: clientName }]} projects={[{ id: item.project_id, name: projeto.data?.name || "Projeto da pauta", client_id: clientId }]} teamMembers={[]} defaultClientId={clientId} defaultProjectId={item.project_id} defaultTaskId={item.id} lockTaskId defaultTitle={item.title} defaultContentType={item.delivery_type === "reel" || item.delivery_type === "short" ? item.delivery_type : "video"} defaultPrimaryFileId={fileId || ""} onOpenChange={setEditor} onSaved={(id) => void salvo(id)} />}
-      {detalhe && post && <Detalhe open post={post} clientName={clientName} projectName={projeto.data?.name || "Projeto da pauta"} canEdit={podeEditar} canPublish={profile?.role === "admin" || profile?.role === "manager"} isImpersonating={!!isImpersonating} onOpenChange={setDetalhe} onEdit={(p) => { setPost(p); setRevisao(null); setDetalhe(false); setEditor(true); }} onCreateRevision={(p) => { setPost(null); setRevisao(p); setDetalhe(false); setEditor(true); }} onArchived={() => { setDetalhe(false); setPost(null); }} />}
-    </Suspense>
+
+  if (preparo) {
+    return <div className="min-w-0 space-y-2" data-entrega-do-video="feita">
+      <p className="text-[13px]" role="status">{textoDoPreparo(preparo)}</p>
+      {preparo.legenda && <p className={juntar(texto.auxiliar, "line-clamp-4 whitespace-pre-wrap")}>{preparo.legenda}</p>}
+      {preparo.post_id && preparo.criado && <button type="button" className={botao.icone} onClick={() => void desfazer()} disabled={ocupado === "desfazer"} aria-label="Desfazer o envio" title="Desfazer o envio (o post sai da Agenda)">
+        {ocupado === "desfazer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+      </button>}
+    </div>;
+  }
+  return <div className="min-w-0 space-y-3" data-entrega-do-video="">
+    <label className="block min-w-0 text-[12px] text-muted-foreground">Como entregar
+      <select className={juntar(campo, "mt-1")} value={modo} onChange={(e) => setModo(e.target.value as ModoDeEntrega)} disabled={!podeEditar} aria-label="Como entregar o vídeo">
+        {opcoes.map((o) => <option key={o.modo} value={o.modo} title={o.dica}>{o.modo === "aprovacao" && !podeLiberar ? "Pedir revisão" : o.curto}</option>)}
+      </select>
+    </label>
+    <p className={texto.auxiliar}>{opcoes.find((o) => o.modo === modo)?.dica}</p>
+    {modo === "arquivos" ? (
+      <button type="button" className={juntar(botao.primario, "h-8 px-3 text-[12px]")} onClick={() => void soArquivos()} disabled={!podeEditar || ocupado === "arquivos"}>
+        {ocupado === "arquivos" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <FolderCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}Entregar
+      </button>
+    ) : (
+      <BotaoComCusto
+        rotulo={<><Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />{modo === "pronto" ? "Aprovar e agendar" : "Enviar para aprovação"}</>}
+        titulo={modo === "pronto" ? "Pronto para agendar" : "Enviar para aprovação"}
+        descricao={modo === "pronto"
+          ? "Leva este vídeo para Arquivos, escreve a legenda com o roteiro como base, aprova em nome do cliente e agenda o Reels na data da peça."
+          : "Leva este vídeo para Arquivos, escreve a legenda com o roteiro como base e cria o post de Reels na Agenda no dia da peça, aguardando a revisão da agência e a aprovação do cliente. Nada é publicado sem aprovação."}
+        partes={partes}
+        disabled={!podeEditar || !diretor}
+        executar={enviar}
+        aoConcluir={(data) => { setPreparo(data as ResultadoDoPreparo); reler(); }}
+        className="h-8 px-3"
+      />
+    )}
+    {!podeEditar && <p className={texto.auxiliar}>Só a equipe de criação envia.</p>}
   </div>;
 }

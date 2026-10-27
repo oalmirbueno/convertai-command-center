@@ -1,8 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { chamarFuncao } from "@/lib/mesa/api";
-import { chaveDasFotos, classeDaFoto, invalidarFotos, normalizarFoto, type FotoDoAcervo, type Guia } from "./fotoApi";
-import { MAX_REFERENCIAS_DA_PAUTA, PAPEIS_DA_REFERENCIA, type PapelDaReferencia } from "../../../supabase/functions/mesa-foto/foto-da-pauta-regras";
+import { chamarFuncao, padraoPara, parteDaConferenciaDoJev, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { chaveDasFotos, classeDaFoto, invalidarFotos, normalizarFoto, TAMANHOS_DA_FOTO, type FotoDoAcervo, type Guia } from "./fotoApi";
+import { MAX_REFERENCIAS_DA_PAUTA, ordenarReferencias, PAPEIS_DA_REFERENCIA, paresDeTransformacao, type PapelDaReferencia } from "../../../supabase/functions/mesa-foto/foto-da-pauta-regras";
 
 /**
  * Estúdio da pauta de fotos (27/10/2026): Gerar com contexto, estilo e
@@ -23,6 +23,10 @@ export const ROTULO_DO_PAPEL: Record<PapelDaReferencia, string> = {
 export interface ReferenciaDaPauta {
   imagem_id: string;
   papel: PapelDaReferencia;
+  /** O que a foto mostra, pela leitura de "Entender e organizar" (só tela). */
+  descricao?: string | null;
+  /** Rótulo da cena: mesmo lugar ou objeto entre fotos (só tela). */
+  cena?: string | null;
 }
 
 export interface PedidoDeFotoDaPauta {
@@ -63,6 +67,94 @@ export async function gerarFotoDaPauta(p: PedidoDeFotoDaPauta): Promise<{ imagem
     custo_usd: Number((data && data.custo_usd) || 0) || 0,
     avisos: data && Array.isArray(data.avisos) ? data.avisos.map(String) : [],
   };
+}
+
+// ------------------------------------------------------------------ entender e organizar as referências
+
+export interface ReferenciaOrganizada {
+  imagem_id: string;
+  papel: PapelDaReferencia;
+  descricao: string | null;
+  cena: string | null;
+  confianca: number | null;
+  par: string | null;
+}
+
+/** O corpo exato da ação referencias_organizar (os testes conferem). */
+export function corpoDoOrganizar(p: { clientId: string; taskId: string | null; titulo: string; pedido: string; referencias: ReferenciaDaPauta[] }): Record<string, unknown> {
+  return {
+    acao: "referencias_organizar",
+    client_id: p.clientId,
+    ...(p.taskId ? { task_id: p.taskId } : {}),
+    titulo: p.titulo,
+    pedido: p.pedido.trim(),
+    referencias: p.referencias.slice(0, MAX_REFERENCIAS_DA_PAUTA).map((r) => ({ imagem_id: r.imagem_id, papel: r.papel })),
+  };
+}
+
+export async function organizarReferencias(p: Parameters<typeof corpoDoOrganizar>[0]): Promise<{ referencias: ReferenciaOrganizada[]; custo_usd: number; avisos: string[] }> {
+  const data = await chamarFuncao<any>("mesa-foto", corpoDoOrganizar(p));
+  const lista: ReferenciaOrganizada[] = (data && Array.isArray(data.referencias) ? data.referencias : [])
+    .filter((r: any) => r && typeof r.imagem_id === "string" && (PAPEIS_DA_REFERENCIA as readonly string[]).indexOf(r.papel) >= 0)
+    .map((r: any) => ({
+      imagem_id: r.imagem_id,
+      papel: r.papel,
+      descricao: typeof r.descricao === "string" ? r.descricao : null,
+      cena: typeof r.cena === "string" ? r.cena : null,
+      confianca: typeof r.confianca === "number" ? r.confianca : null,
+      par: typeof r.par === "string" ? r.par : null,
+    }));
+  return {
+    referencias: lista,
+    custo_usd: Number((data && data.custo_usd) || 0) || 0,
+    avisos: data && Array.isArray(data.avisos) ? data.avisos.map(String) : [],
+  };
+}
+
+/**
+ * Aplica a organização: papel, descrição e a ordem que o servidor devolveu.
+ * Referência que a pessoa pôs enquanto a IA lia continua, no fim. Pura.
+ */
+export function aplicarOrganizacao(atuais: ReferenciaDaPauta[], organizadas: ReferenciaOrganizada[]): ReferenciaDaPauta[] {
+  const ainda = new Set(atuais.map((r) => r.imagem_id));
+  const vindas: ReferenciaDaPauta[] = organizadas
+    .filter((o) => ainda.has(o.imagem_id))
+    .map((o) => ({ imagem_id: o.imagem_id, papel: o.papel, descricao: o.descricao, cena: o.cena }));
+  const vistas = new Set(vindas.map((r) => r.imagem_id));
+  return vindas.concat(atuais.filter((r) => !vistas.has(r.imagem_id))).slice(0, MAX_REFERENCIAS_DA_PAUTA);
+}
+
+export type GrupoDeReferencias =
+  | { tipo: "par"; antes: ReferenciaDaPauta; depois: ReferenciaDaPauta }
+  | { tipo: "solta"; referencia: ReferenciaDaPauta };
+
+/**
+ * Como o gerador vai ler as referências: os pares antes e depois juntos (o 1º
+ * antes com o 1º depois, a mesma regra do motor) e o resto na ordem. Pura.
+ */
+export function gruposDasReferencias(refs: ReferenciaDaPauta[]): GrupoDeReferencias[] {
+  const ordem = ordenarReferencias(refs);
+  const pares = paresDeTransformacao(ordem);
+  const emPar = new Set<number>();
+  const grupos: GrupoDeReferencias[] = pares.map((p) => {
+    emPar.add(p.antes);
+    emPar.add(p.depois);
+    return { tipo: "par", antes: ordem[p.antes], depois: ordem[p.depois] };
+  });
+  ordem.forEach((r, i) => {
+    if (!emPar.has(i)) grupos.push({ tipo: "solta", referencia: r });
+  });
+  return grupos;
+}
+
+/** Estimativa: uma leitura de visão com as fotos e a escolha dos papéis no Jev. */
+export function partesDoOrganizar(catalogo: ModeloIa[], fotos: number): ParteDaEstimativa[] {
+  const m = padraoPara(catalogo, "leitura");
+  const n = Math.max(1, fotos);
+  return [
+    { modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: TAMANHOS_DA_FOTO.lerFoto.entrada * n, tokensSaida: 250 * n },
+    parteDaConferenciaDoJev(),
+  ];
 }
 
 // ------------------------------------------------------------------ organizar o acervo

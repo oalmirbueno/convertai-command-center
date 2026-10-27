@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ImagePlus, Search, Upload, X } from "lucide-react";
+import { ArrowRight, Check, ImagePlus, Search, Upload, Wand2, X } from "lucide-react";
 import { BotaoComCusto } from "./Custo";
 import { AcoesDaBancada } from "./BancadaDaPauta";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
@@ -15,7 +15,10 @@ import { ImagemDaBiblioteca, temImagem } from "@/components/mesa-foto/EtapaBibli
 import SeletorDeFotos from "@/components/mesa-foto/SeletorDeFotos";
 import { acrescentarFotos, invalidarFotos, subirOriginais, useBiblioteca, useFotos, type ItemDaBiblioteca } from "@/components/mesa-foto/fotoApi";
 import { partesDoGerar } from "@/components/mesa-foto/canvasApi";
-import { gerarFotoDaPauta, MAX_REFERENCIAS_DA_PAUTA, PAPEIS_DA_REFERENCIA, ROTULO_DO_PAPEL, type PapelDaReferencia, type ReferenciaDaPauta } from "@/components/mesa-foto/fotoDaPautaApi";
+import {
+  aplicarOrganizacao, gerarFotoDaPauta, gruposDasReferencias, MAX_REFERENCIAS_DA_PAUTA, organizarReferencias, PAPEIS_DA_REFERENCIA, partesDoOrganizar, ROTULO_DO_PAPEL,
+  type PapelDaReferencia, type ReferenciaDaPauta,
+} from "@/components/mesa-foto/fotoDaPautaApi";
 import { linhasDaDirecaoDeFoto, normalizarDirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
 
 /** Categorias da biblioteca que viram cartão de estilo (o assunto vem da pauta e das referências). */
@@ -36,6 +39,10 @@ export function estilosEmCartoes(itens: ItemDaBiblioteca[], busca = ""): ItemDaB
  * cliente, no estilo escolhido em cartões, com referências marcadas por papel
  * (antes, depois, produto, cenário, estilo). Custo à vista; o resultado cai
  * no acervo e na prancheta do post.
+ *
+ * "Entender e organizar" (27/10): a IA olha as referências, descreve cada
+ * uma, o Jev escolhe o papel e os pares antes e depois ficam juntos, na
+ * ordem que o gerador usa. O papel continua editável à mão.
  */
 export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias, onReferencias, onFotos }: {
   taskId: string; titulo: string; direcao?: Record<string, unknown>;
@@ -62,7 +69,11 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
   const [escolhendo, setEscolhendo] = useState(false);
   const [subindo, setSubindo] = useState("");
   const [progresso, setProgresso] = useState("");
+  const [sugerirOrganizar, setSugerirOrganizar] = useState(false);
   const arquivo = useRef<HTMLInputElement>(null);
+  // A resposta da organização chega depois: aplica sobre a lista de agora, não a do clique.
+  const referenciasAgora = useRef(referencias);
+  referenciasAgora.current = referencias;
 
   const cartoes = useMemo(() => estilosEmCartoes(biblioteca.data || [], busca), [biblioteca.data, busca]);
   const estilo = (biblioteca.data || []).find((i) => i.id === estiloId) || null;
@@ -82,6 +93,7 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
       const r = await subirOriginais(clientId, Array.from(lista).slice(0, MAX_REFERENCIAS_DA_PAUTA), (feitos, total) => setSubindo(`Subindo ${feitos} de ${total}…`));
       acrescentarFotos(cache, clientId, r.registradas);
       acrescentarRefs(r.registradas.map((f) => f.id), papelNovo);
+      if (r.registradas.length) setSugerirOrganizar(true);
       if (r.recusadas.length) toast.message(`${r.recusadas.length} ficou de fora`, { description: r.recusadas[0].motivo });
     } catch (e) {
       toast.error("As fotos não subiram", { description: e instanceof Error ? e.message : "Tente de novo." });
@@ -89,6 +101,18 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
   };
 
   const pronto = !!modelo && (!!instrucao.trim() || refs.length > 0) && !progresso;
+  const grupos = gruposDasReferencias(refs);
+  const trocarPapel = (id: string, papel: PapelDaReferencia) => onReferencias(referencias.map((x) => x.imagem_id === id ? { ...x, papel } : x));
+  const itemDaReferencia = (r: ReferenciaDaPauta) => {
+    const f = porId.get(r.imagem_id)!;
+    return <div className="min-w-0" data-referencia={r.papel}>
+      <div className="relative"><MiniaturaDaFoto foto={f} className="rounded-md" /><button type="button" aria-label={`Tirar ${f.nome} das referências`} title="Tirar das referências" onClick={() => onReferencias(referencias.filter((x) => x.imagem_id !== r.imagem_id))} className="absolute right-1 top-1 rounded-full bg-card/90 p-0.5 hover:bg-card"><X className="h-3 w-3" aria-hidden="true" /></button></div>
+      <select aria-label={`Papel de ${f.nome}`} value={r.papel} onChange={(e) => trocarPapel(r.imagem_id, e.target.value as PapelDaReferencia)} className="mt-1 h-8 w-full min-w-0 rounded-md border border-input bg-background px-1 text-[12px]">
+        {PAPEIS_DA_REFERENCIA.map((p) => <option key={p} value={p}>{ROTULO_DO_PAPEL[p]}</option>)}
+      </select>
+      {r.descricao && <p className="mt-0.5 line-clamp-2 break-words text-[11px] text-muted-foreground" title={r.descricao} data-descricao-da-referencia="">{r.descricao}</p>}
+    </div>;
+  };
   return <section aria-label="Gerar fotos da pauta" className="min-w-0 space-y-4" data-gerar-da-pauta="">
     <div className="min-w-0">
       <label className="mb-1 block text-[12px] font-medium text-muted-foreground" htmlFor={`direcao-${taskId}`}>O que a foto mostra</label>
@@ -114,17 +138,34 @@ export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias
     </div>
 
     <div className="min-w-0" data-referencias-da-pauta="">
-      <div className="mb-2 flex min-w-0 items-center justify-between"><p className="text-[12px] font-medium text-muted-foreground">Referências</p><span className="text-[12px] text-muted-foreground">{refs.length}/{MAX_REFERENCIAS_DA_PAUTA}</span></div>
+      <div className="mb-2 flex min-w-0 items-center justify-between">
+        <p className="text-[12px] font-medium text-muted-foreground">Referências</p>
+        <div className="flex min-w-0 items-center">
+          <BotaoComCusto rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Entender e organizar as fotos</span></>} titulo="Entender e organizar as fotos"
+            variant={sugerirOrganizar ? "default" : "ghost"} className="mr-1 h-8 px-2" disabled={!refs.length || !!progresso}
+            partes={() => partesDoOrganizar(catalogo, refs.length)}
+            executar={async () => {
+              const r = await organizarReferencias({ clientId, taskId, titulo, pedido: instrucao, referencias: refs });
+              onReferencias(aplicarOrganizacao(referenciasAgora.current, r.referencias));
+              setSugerirOrganizar(false);
+              if (r.avisos.length) toast.message("Confira as referências", { description: r.avisos.join(" ") });
+              return { custo_usd: r.custo_usd };
+            }} />
+          <span className="text-[12px] text-muted-foreground">{refs.length}/{MAX_REFERENCIAS_DA_PAUTA}</span>
+        </div>
+      </div>
+      {sugerirOrganizar && refs.length > 0 && <p role="status" className="mb-2 text-[12px] text-primary">Fotos novas: use a varinha para a IA entender e organizar.</p>}
       <div role="radiogroup" aria-label="Papel das próximas referências" className="mb-2 flex flex-wrap">
         {PAPEIS_DA_REFERENCIA.map((p) => <button key={p} type="button" role="radio" aria-checked={papelNovo === p} onClick={() => setPapelNovo(p)} className={juntar("mb-1 mr-1 rounded-full border px-2.5 py-1 text-[12px]", foco, papelNovo === p ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{ROTULO_DO_PAPEL[p]}</button>)}
       </div>
       {refs.length > 0 && <ul className="mb-2 grid grid-cols-3 gap-2" aria-label="Referências escolhidas">
-        {refs.map((r) => { const f = porId.get(r.imagem_id)!; return <li key={r.imagem_id} className="min-w-0" data-referencia={r.papel}>
-          <div className="relative"><MiniaturaDaFoto foto={f} className="rounded-md" /><button type="button" aria-label={`Tirar ${f.nome} das referências`} onClick={() => onReferencias(referencias.filter((x) => x.imagem_id !== r.imagem_id))} className="absolute right-1 top-1 rounded-full bg-card/90 p-0.5 hover:bg-card"><X className="h-3 w-3" aria-hidden="true" /></button></div>
-          <select aria-label={`Papel de ${f.nome}`} value={r.papel} onChange={(e) => onReferencias(referencias.map((x) => x.imagem_id === r.imagem_id ? { ...x, papel: e.target.value as PapelDaReferencia } : x))} className="mt-1 h-8 w-full min-w-0 rounded-md border border-input bg-background px-1 text-[12px]">
-            {PAPEIS_DA_REFERENCIA.map((p) => <option key={p} value={p}>{ROTULO_DO_PAPEL[p]}</option>)}
-          </select>
-        </li>; })}
+        {grupos.map((g) => g.tipo === "par"
+          ? <li key={`${g.antes.imagem_id}-${g.depois.imagem_id}`} className="col-span-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-1" data-par-antes-depois="" aria-label={`Par: ${porId.get(g.antes.imagem_id)!.nome} antes, ${porId.get(g.depois.imagem_id)!.nome} depois`}>
+              {itemDaReferencia(g.antes)}
+              <ArrowRight className="mt-8 h-4 w-4 text-primary" aria-hidden="true" />
+              {itemDaReferencia(g.depois)}
+            </li>
+          : <li key={g.referencia.imagem_id} className="min-w-0">{itemDaReferencia(g.referencia)}</li>)}
       </ul>}
       {(antes > 0 || depois > 0) && <p className="mb-2 text-[12px] text-muted-foreground">{antes && depois ? `Antes e depois: a foto sai como comparação fiel, sem inventar resultado.` : antes ? "Marque também o depois para montar a comparação." : "Marque também o antes para montar a comparação."}</p>}
       <div className="flex flex-wrap">

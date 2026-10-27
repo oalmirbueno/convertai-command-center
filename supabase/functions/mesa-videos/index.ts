@@ -199,6 +199,7 @@ import {
 // Mesa Edição (02/10): organizar a Entrada, espelhar no Workspace, legenda do vídeo pronto e tratar vídeo.
 import { entradaOrganizarPropor, finalLegendaGerar, finalParaWorkspace, lerFinal, linhasDoCorpo, workspaceEspelhoConfirmar, workspaceEspelhoDesfazer, workspaceEspelhoPropor } from "./edicao.ts";
 import { projetoComLegenda } from "./modulos/legenda-do-final.ts";
+import { ErroDoCorte, lerCorte, projetoDoCorte } from "./modulos/corte-do-final.ts";
 import { tratamentoAmostra, tratamentoDescartar, tratamentoFinal, tratamentosColetar, tratamentoStatus } from "./tratamento.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
@@ -1485,6 +1486,37 @@ async function finalLegendaVersao(ch: Chamador, corpo: Record<string, unknown>) 
   return versaoRegistrar(ch, { client_id: f.arquivo.client_id, video_id: videoId, titulo, roteiro_id: roteiroId, projeto: comLegenda, nota: "Com a legenda gravada no vídeo (gerador de legenda)." });
 }
 
+/**
+ * Corte simples do vídeo pronto (27/10): a pessoa marca o início e o fim na bancada da pauta; vira a próxima
+ * versão do mesmo vídeo, com o pronto como fonte única, e a tela pede o render de sempre. O original não muda.
+ */
+async function finalCorteVersao(ch: Chamador, corpo: Record<string, unknown>) {
+  const f = await lerFinal(baseDa(ch), idDe(corpo.arquivo_id, "arquivo_id"));
+  if (f.janela) throw new ErroHttp(409, "e_amostra", "Esta é uma amostra. Corte o vídeo inteiro.");
+  let projeto;
+  let corte;
+  try {
+    corte = lerCorte(corpo.entrada_s, corpo.saida_s, f.arquivo.duracao_s);
+    projeto = projetoDoCorte({ ...f.arquivo, storage_bucket: f.arquivo.storage_bucket || "mesa" }, corte);
+  } catch (e) {
+    if (e instanceof ErroDoCorte) throw new ErroHttp(e.status, e.codigo, e.message);
+    throw e;
+  }
+  let titulo = f.arquivo.nome.replace(/\s*\((?:render|amostra)[^)]*\)\s*$/i, "").replace(/\s+v\d+$/i, "").trim() || "Vídeo";
+  let videoId: string | null = null;
+  let roteiroId: string | null = null;
+  if (f.versao_id) {
+    const v = await lerVersao(f.versao_id).catch(() => null);
+    if (v && v.client_id === f.arquivo.client_id) {
+      titulo = v.titulo;
+      videoId = v.video_id;
+      roteiroId = v.roteiro_id;
+    }
+  }
+  const s = (n: number) => n.toFixed(1).replace(".", ",");
+  return versaoRegistrar(ch, { client_id: f.arquivo.client_id, video_id: videoId, titulo, roteiro_id: roteiroId, projeto, nota: `Cortado de ${s(corte.entrada_s)} s a ${s(corte.saida_s)} s na bancada da pauta.` });
+}
+
 // ------------------------------------------------------------------ aprendizado (AG2, 29/09)
 
 // "Esquecer" e "Guardar como regra": o diretor e o agente da Mesa Vídeos gravam na mesa "video";
@@ -1572,6 +1604,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   // Gerador de legenda do vídeo pronto (SRT e VTT ao lado do vídeo) e a versão com a legenda gravada.
   final_legenda_gerar: direto(finalLegendaGerar),
   final_legenda_versao: finalLegendaVersao,
+  final_corte_versao: finalCorteVersao,
   // O vídeo pronto no Workspace (Vídeos / título / Finais), idempotente; a tela chama ao ver o render pronto.
   final_para_workspace: direto(finalParaWorkspace),
   // Tratar vídeo: tirar a legenda gravada e melhorar a qualidade (amostra, comparar, vídeo inteiro).

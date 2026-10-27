@@ -10,6 +10,10 @@ const m = vi.hoisted(() => ({
   salvarCanvas: vi.fn(),
   gerarNoCanvas: vi.fn(),
   preparar: vi.fn(),
+  legenda: vi.fn(),
+  entregar: vi.fn(),
+  decidir: vi.fn(),
+  erro: vi.fn(),
   fotos: [] as unknown[],
 }));
 
@@ -22,8 +26,8 @@ vi.mock("@/components/mesa/MesaContexto", async (original) => ({
   ImagemDaMesa: ({ alt }: { alt: string }) => <img alt={alt} />,
 }));
 vi.mock("@/components/mesa/Custo", () => ({
-  BotaoComCusto: ({ rotulo, executar, aoConcluir, disabled, partes }: { rotulo: string; executar: () => Promise<unknown>; aoConcluir?: (r: unknown) => void; disabled?: boolean; partes: () => unknown }) =>
-    <button type="button" disabled={disabled} onClick={async () => { partes(); const r = await executar(); aoConcluir?.(r); }}>{rotulo}</button>,
+  BotaoComCusto: ({ rotulo, titulo, executar, aoConcluir, disabled, partes }: { rotulo: ReactNode; titulo: string; executar: () => Promise<unknown>; aoConcluir?: (r: unknown) => void; disabled?: boolean; partes: () => unknown }) =>
+    <button type="button" title={titulo} disabled={disabled} onClick={async () => { partes(); try { const r = await executar(); aoConcluir?.(r); } catch (e) { m.erro(e); } }}>{rotulo}</button>,
   useAvisarErro: () => vi.fn(),
 }));
 vi.mock("@/components/mesa/Seletores", () => ({ SeletorDeModelo: () => null }));
@@ -38,6 +42,7 @@ vi.mock("@/components/mesa-foto/fotoApi", async (original) => ({
   useKits: () => ({ data: [{ id: "k1", nome: "Sérum", refs: [{ imagem_id: "a" }] }] }),
   acrescentarFotos: vi.fn(),
   invalidarFotos: vi.fn(),
+  decidirFoto: m.decidir,
 }));
 vi.mock("@/components/mesa-foto/Comuns", async (original) => ({
   ...(await original<object>()),
@@ -52,7 +57,7 @@ vi.mock("@/components/mesa-foto/EscolhaDoModeloDaFoto", () => ({ default: ({ onE
 vi.mock("@/components/mesa-foto/modelosApi", async (original) => ({ ...(await original<object>()), usePersonas: () => ({ data: [{ id: "p1", nome: "Ana", versao: 3, ancora_imagem_id: "anc", status: "pronta" }] }), useImagensDaPersona: () => ({ data: [] }) }));
 vi.mock("@/components/mesa-foto/clonesApi", async (original) => ({ ...(await original<object>()), useClones: () => ({ data: [] }) }));
 vi.mock("@/components/mesa-foto/canvasApi", async (original) => ({ ...(await original<object>()), salvarCanvas: m.salvarCanvas, gerarNoCanvas: m.gerarNoCanvas, useCanvases: () => ({ data: [] }) }));
-vi.mock("@/components/mesa-foto/agendaApi", async (original) => ({ ...(await original<object>()), prepararPostDeFotos: m.preparar, useItensParaFotos: () => ({ data: [] }), invalidarPostsDeFotos: vi.fn() }));
+vi.mock("@/components/mesa-foto/agendaApi", async (original) => ({ ...(await original<object>()), prepararPostDeFotos: m.preparar, escreverLegenda: m.legenda, entregarEEnviar: m.entregar, useItensParaFotos: () => ({ data: [] }), invalidarPostsDeFotos: vi.fn() }));
 vi.mock("@/components/sistema/JanelaCentral", () => ({ default: ({ aberta, children }: { aberta: boolean; children: ReactNode }) => (aberta ? <div>{children}</div> : null) }));
 vi.mock("@/components/mesa/ImagemComZoom", () => ({ default: ({ alt }: { alt: string }) => <div role="img" aria-label={`Prévia: ${alt}`} /> }));
 
@@ -162,5 +167,91 @@ describe("Carrossel monta e entrega", () => {
     await waitFor(() => expect(m.preparar).toHaveBeenCalledTimes(1));
     expect(m.preparar.mock.calls[0][0]).toMatchObject({ clientId: "c1", imagemIds: [B, A], taskId: "t1" });
     await waitFor(() => expect(onPronto).toHaveBeenCalledWith("tr1", "t1"));
+  });
+});
+
+describe("Entender e organizar as referências", () => {
+  it("o botão de ícone manda as fotos, aplica papéis e ordem e mostra o par antes → depois com a descrição", async () => {
+    m.chamarFuncao.mockResolvedValue({
+      referencias: [
+        { imagem_id: A, papel: "antes", descricao: "Sala com parede manchada", cena: "sala", confianca: 0.9, par: B },
+        { imagem_id: B, papel: "depois", descricao: "Sala pintada e limpa", cena: "sala", confianca: 0.85, par: A },
+        { imagem_id: "c", papel: "produto", descricao: "Lata de tinta", cena: "lata", confianca: 0.7, par: null },
+      ],
+      custo_usd: 0.01,
+      avisos: [],
+    });
+    const onReferencias = vi.fn();
+    const refs = [{ imagem_id: B, papel: "produto" as const }, { imagem_id: "c", papel: "produto" as const }, { imagem_id: A, papel: "produto" as const }];
+    const { rerender } = comCache(<GerarFotosDaPauta taskId="t1" titulo="Reforma" referencias={refs} onReferencias={onReferencias} onFotos={vi.fn()} />);
+    const botao = screen.getByRole("button", { name: "Entender e organizar as fotos" });
+    expect(botao).toHaveAttribute("title", "Entender e organizar as fotos");
+    fireEvent.click(botao);
+    await waitFor(() => expect(onReferencias).toHaveBeenCalled());
+    const [funcao, corpo] = m.chamarFuncao.mock.calls[0];
+    expect(funcao).toBe("mesa-foto");
+    expect(corpo).toMatchObject({ acao: "referencias_organizar", client_id: "c1", task_id: "t1", titulo: "Reforma", referencias: refs });
+    const novas = onReferencias.mock.calls[0][0];
+    expect(novas.map((r: { imagem_id: string; papel: string }) => [r.imagem_id, r.papel])).toEqual([[A, "antes"], [B, "depois"], ["c", "produto"]]);
+    rerender(<QueryClientProvider client={new QueryClient()}><GerarFotosDaPauta taskId="t1" titulo="Reforma" referencias={novas} onReferencias={onReferencias} onFotos={vi.fn()} /></QueryClientProvider>);
+    const par = screen.getByRole("listitem", { name: "Par: Sala antes antes, Sala depois depois" });
+    expect(within(par).getByText("Sala com parede manchada")).toBeInTheDocument();
+    expect(within(par).getByText("Sala pintada e limpa")).toBeInTheDocument();
+    expect(screen.getByText("Lata de tinta")).toBeInTheDocument();
+    // O papel manual continua valendo depois da organização.
+    fireEvent.change(screen.getByRole("combobox", { name: "Papel de Produto" }), { target: { value: "cenario" } });
+    expect(onReferencias).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ imagem_id: "c", papel: "cenario" })]));
+  });
+
+  it("sem referências o botão fica desligado", () => {
+    comCache(<GerarFotosDaPauta taskId="t1" titulo="Reforma" referencias={[]} onReferencias={vi.fn()} onFotos={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Entender e organizar as fotos" })).toBeDisabled();
+  });
+});
+
+describe("Enviar para aprovação num passo", () => {
+  const montar = (fotosIniciais: string[]) => {
+    const onPronto = vi.fn();
+    comCache(<MontarOPost fotosIniciais={fotosIniciais} post={null} taskInicial="t1" destinoFixo estudio={{ taskId: "t1", onSelecionadas: vi.fn(), titulo: "Pauta", principais }} onPronto={onPronto} onCancelar={vi.fn()} />);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Ferramentas do estúdio" })).getByRole("button", { name: "Carrossel" }));
+    return onPronto;
+  };
+
+  it("prepara, escreve a legenda, aprova a gerada e envia, nessa ordem", async () => {
+    m.fotos = [foto(A, "Sala antes"), foto("g", "Gerada", { gerada: true, aprovada: false })];
+    const ordem: string[] = [];
+    m.preparar.mockImplementation(async () => { ordem.push("preparar"); return { trabalho: { id: "tr1", status: "rascunho", file_ids: [], legenda: null, cards: [] }, task: { id: "t1" }, recusadas: [], avisos: [] }; });
+    m.legenda.mockImplementation(async () => { ordem.push("legenda"); return { legenda: "Texto", custo_usd: 0.02 }; });
+    m.decidir.mockImplementation(async (_c: string, id: string) => { ordem.push(`aprovar:${id}`); return null; });
+    m.entregar.mockImplementation(async () => { ordem.push("enviar"); return { entregue: true, enviado: true, resultado: { estado: "aguardando_revisao" } }; });
+    const onPronto = montar([A, "g"]);
+    expect(screen.getByRole("button", { name: /Preparar na Agenda/ })).toBeInTheDocument();
+    fireEvent.click(within(document.querySelector("[data-envio-da-pauta]") as HTMLElement).getByRole("button", { name: "Preparar e enviar" }));
+    await waitFor(() => expect(onPronto).toHaveBeenCalledWith("tr1", "t1"));
+    expect(ordem).toEqual(["preparar", "legenda", "aprovar:g", "enviar"]);
+    expect(m.preparar.mock.calls[0][0]).toMatchObject({ clientId: "c1", imagemIds: [A, "g"], taskId: "t1" });
+    expect(m.legenda).toHaveBeenCalledWith("tr1");
+    expect(m.entregar.mock.calls[0][0]).toMatchObject({ id: "tr1", status: "rascunho", file_ids: [] });
+    expect(m.erro).not.toHaveBeenCalled();
+  });
+
+  it("legenda já escrita não é refeita", async () => {
+    m.preparar.mockResolvedValue({ trabalho: { id: "tr1", status: "rascunho", file_ids: [], legenda: "Já tem" }, task: { id: "t1" }, recusadas: [], avisos: [] });
+    m.entregar.mockResolvedValue({ entregue: true, enviado: true, resultado: {} });
+    const onPronto = montar([A]);
+    fireEvent.click(within(document.querySelector("[data-envio-da-pauta]") as HTMLElement).getByRole("button", { name: "Preparar e enviar" }));
+    await waitFor(() => expect(onPronto).toHaveBeenCalled());
+    expect(m.legenda).not.toHaveBeenCalled();
+  });
+
+  it("erro numa etapa avisa, não envia e o post preparado abre para continuar", async () => {
+    m.preparar.mockResolvedValue({ trabalho: { id: "tr1", status: "rascunho", file_ids: [], legenda: null }, task: { id: "t1" }, recusadas: [], avisos: [] });
+    m.legenda.mockRejectedValue(new Error("Saldo insuficiente"));
+    const onPronto = montar([A]);
+    fireEvent.click(within(document.querySelector("[data-envio-da-pauta]") as HTMLElement).getByRole("button", { name: "Preparar e enviar" }));
+    await waitFor(() => expect(m.erro).toHaveBeenCalled());
+    expect((m.erro.mock.calls[0][0] as Error).message).toBe("Saldo insuficiente");
+    expect(m.entregar).not.toHaveBeenCalled();
+    expect(onPronto).toHaveBeenCalledWith("tr1", "t1");
   });
 });

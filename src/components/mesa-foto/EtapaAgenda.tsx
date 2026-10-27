@@ -27,7 +27,7 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import EstudioRefinarTexto from "@/components/mesa/EstudioRefinarTexto";
 import { JanelaDaPublicacao, TOM_DO_ESTADO } from "@/components/mesa/PublicacaoDaPeca";
 import { copiarTexto, legendaParaCopiar, normalizarHashtags } from "@/components/mesa/estudioUtil";
-import { chamarFuncao, padraoPara, TAMANHOS, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { chamarFuncao, padraoPara, parteDaConferenciaDoJev, TAMANHOS, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
@@ -140,7 +140,7 @@ export function MontarOPost({
   onPronto: (trabalhoId: string, taskId: string | null) => void;
   onCancelar: () => void;
 }) {
-  const { clientId } = useMesa();
+  const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const fotosQ = useFotos(clientId);
@@ -153,6 +153,7 @@ export function MontarOPost({
   const [data, setData] = useState(DATA_DE_HOJE());
   const [escolhendo, setEscolhendo] = useState(false);
   const [preparando, setPreparando] = useState(false);
+  const [etapaDoEnvio, setEtapaDoEnvio] = useState("");
   const [pedido] = useState(novoPedido);
   const porId = new Map(todas.map((f) => [f.id, f]));
   const fotos = ids.map((id) => porId.get(id)).filter((f): f is FotoDoAcervo => !!f);
@@ -185,6 +186,16 @@ export function MontarOPost({
     })),
   );
 
+  const pedidoDoPreparo = () => ({
+    clientId,
+    imagemIds: ids,
+    formato,
+    taskId: post ? post.task_id : destino !== "novo" ? destino : null,
+    trabalhoId: post ? post.id : null,
+    novoItem: !post && destino === "novo" ? { titulo: titulo.trim() || "Post de fotos", data } : null,
+    pedidoId: pedido,
+  });
+
   const preparar = async () => {
     if (!ids.length) return;
     if (destino === "novo" && !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
@@ -193,15 +204,7 @@ export function MontarOPost({
     }
     setPreparando(true);
     try {
-      const r = await prepararPostDeFotos({
-        clientId,
-        imagemIds: ids,
-        formato,
-        taskId: post ? post.task_id : destino !== "novo" ? destino : null,
-        trabalhoId: post ? post.id : null,
-        novoItem: !post && destino === "novo" ? { titulo: titulo.trim() || "Post de fotos", data } : null,
-        pedidoId: pedido,
-      });
+      const r = await prepararPostDeFotos(pedidoDoPreparo());
       gravarNaSessao(clientId, CHAVE_DAS_FOTOS_DO_POST, null);
       invalidarPostsDeFotos(queryClient, clientId);
       toast.success(post ? "Fotos do post trocadas" : r.item_criado ? "Post novo na Agenda" : "Post pronto na Agenda", {
@@ -217,6 +220,85 @@ export function MontarOPost({
       avisarErro(e, "O post não foi montado");
     } finally {
       setPreparando(false);
+    }
+  };
+
+  // A legenda da casa só é escrita quando o post ainda não tem (custo à vista).
+  const comLegenda = !!(post && post.legenda && post.legenda.trim());
+  const diretor = padraoPara(catalogo, "diretor_arte");
+  const partesDoEnvio = (): ParteDaEstimativa[] => comLegenda
+    ? [{ modeloId: null, tipo: "texto", fixoUsd: 0 }]
+    : [
+      { modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
+      // A conferência da legenda e a escolha das hashtags (duas perguntas ao Jev).
+      parteDaConferenciaDoJev(),
+      parteDaConferenciaDoJev(),
+    ];
+
+  /**
+   * Enviar para aprovação num passo (27/10/2026, dono: "enviar para aprovação
+   * igual o fluxo normal"): prepara o post, escreve a legenda se faltar,
+   * aprova as geradas (equipe), entrega em Arquivos e envia (revisão da
+   * agência, depois o cliente). Se uma etapa falha, o que já foi feito fica e
+   * o post abre para continuar dali.
+   */
+  const enviarParaAprovacao = async () => {
+    if (!ids.length) throw new Error("Escolha as fotos do post.");
+    if (destino === "novo" && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error("Escolha a data do post.");
+    const feito: string[] = [];
+    let trabalhoId = "";
+    let taskId: string | null = null;
+    let custo = 0;
+    try {
+      setEtapaDoEnvio("Preparando o post…");
+      const r = await prepararPostDeFotos(pedidoDoPreparo());
+      const trabalho = (r.trabalho || {}) as Record<string, unknown>;
+      trabalhoId = trabalho.id ? String(trabalho.id) : "";
+      taskId = r.task ? r.task.id : null;
+      if (!trabalhoId) throw new Error("O post não foi confirmado na Agenda. Tente de novo.");
+      gravarNaSessao(clientId, CHAVE_DAS_FOTOS_DO_POST, null);
+      feito.push("post preparado na Agenda");
+      if (!String(trabalho.legenda || "").trim()) {
+        setEtapaDoEnvio("Escrevendo a legenda…");
+        const l = await escreverLegenda(trabalhoId);
+        custo += Number(l && l.custo_usd) || 0;
+        feito.push("legenda escrita");
+      }
+      const geradas = fotos.filter((f) => precisaDaEquipe(f));
+      if (geradas.length) {
+        setEtapaDoEnvio("Aprovando as fotos geradas…");
+        for (const f of geradas) {
+          const nova = await decidirFoto(clientId, f.id, "aprovar");
+          if (nova) acrescentarFotos(queryClient, clientId, [nova]);
+        }
+        invalidarFotos(queryClient, clientId);
+        feito.push(geradas.length === 1 ? "foto gerada aprovada" : "fotos geradas aprovadas");
+      }
+      setEtapaDoEnvio("Enviando para aprovação…");
+      const env = await entregarEEnviar({
+        id: trabalhoId,
+        status: String(trabalho.status || ""),
+        file_ids: Array.isArray(trabalho.file_ids) ? (trabalho.file_ids as string[]) : [],
+        entrega_status: trabalho.entrega_status ? String(trabalho.entrega_status) : null,
+      });
+      invalidarPostsDeFotos(queryClient, clientId);
+      const res = env.resultado as { estado?: string };
+      onPronto(trabalhoId, taskId);
+      return {
+        custo_usd: custo,
+        aviso_da_acao: res && res.estado === "aguardando_revisao"
+          ? "Enviado: aguardando a revisão da agência, depois segue ao cliente."
+          : "Enviado para o cliente aprovar. A publicação depende da aprovação e da data confirmada.",
+      };
+    } catch (e) {
+      if (feito.length) {
+        invalidarPostsDeFotos(queryClient, clientId);
+        toast.message("O que já foi feito continua", { description: `Feito: ${feito.join(", ")}. Termine o envio pelo post.`, duration: 12000 });
+        if (trabalhoId) onPronto(trabalhoId, taskId);
+      }
+      throw e;
+    } finally {
+      setEtapaDoEnvio("");
     }
   };
 
@@ -314,13 +396,33 @@ export function MontarOPost({
             )}
           </div>
         )}
-        <div className="flex min-w-0 flex-wrap items-center">
-          <Button type="button" size="sm" className="mb-1 mr-2 h-9 text-[13px]" disabled={!ids.length || preparando} onClick={() => void preparar()} data-preparar-na-agenda="">
-            {preparando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />}
-            {post ? "Trocar as fotos" : "Preparar na Agenda"}
-          </Button>
-          <span className="mb-1 text-[12px] text-muted-foreground">Sem custo: nada é gerado. Nada vai ao cliente até você enviar.</span>
-        </div>
+        {estudio ? (
+          <div className="flex min-w-0 flex-wrap items-center" data-envio-da-pauta="">
+            <BotaoComCusto
+              rotulo={<><Send className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Preparar e enviar</span></>}
+              titulo="Enviar para aprovação"
+              descricao={comLegenda ? "Enviar para aprovação: prepara o post, aprova as geradas e envia (revisão da agência, depois o cliente)" : "Enviar para aprovação: prepara o post, escreve a legenda, aprova as geradas e envia (revisão da agência, depois o cliente)"}
+              className="mb-1 mr-2 h-9 px-3"
+              disabled={!ids.length || preparando || !!etapaDoEnvio}
+              partes={partesDoEnvio}
+              executar={enviarParaAprovacao}
+            />
+            <button type="button" disabled={!ids.length || preparando || !!etapaDoEnvio} onClick={() => void preparar()} data-preparar-na-agenda=""
+              aria-label={post ? "Trocar as fotos" : "Preparar na Agenda"} title={post ? "Trocar as fotos, sem enviar (sem custo)" : "Preparar na Agenda, sem enviar (sem custo)"}
+              className={juntar("mb-1 mr-2 inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground disabled:opacity-40", foco)}>
+              {preparando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CalendarPlus className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            <span role="status" className="mb-1 min-w-0 text-[12px] text-muted-foreground">{etapaDoEnvio || "Nada vai ao cliente sem aprovação."}</span>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-center">
+            <Button type="button" size="sm" className="mb-1 mr-2 h-9 text-[13px]" disabled={!ids.length || preparando} onClick={() => void preparar()} data-preparar-na-agenda="">
+              {preparando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />}
+              {post ? "Trocar as fotos" : "Preparar na Agenda"}
+            </Button>
+            <span className="mb-1 text-[12px] text-muted-foreground">Sem custo: nada é gerado. Nada vai ao cliente até você enviar.</span>
+          </div>
+        )}
       </div></PainelDaBancada>
     </Cartao>
   );

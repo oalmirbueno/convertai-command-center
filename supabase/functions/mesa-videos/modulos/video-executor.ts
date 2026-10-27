@@ -127,6 +127,19 @@ export function corpoDaGeracao(m: MotorDeVideo, e: EntradaDaGeracao): Record<str
       if (o3) return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: String(d), generate_audio: audio });
       return semVazios({ prompt, start_image_url: ini, end_image_url: fim, duration: String(d), negative_prompt: e.negativo, generate_audio: audio, elements: elementos });
     }
+    case "kling4": {
+      // Kling 4.0 (esquema público da fal, 27/10): duração inteira, start_image_url, referências como @Image1..N.
+      const arK = ar === "9:16" || ar === "16:9" || ar === "1:1" ? ar : "9:16";
+      if (e.modo === "texto") return semVazios({ prompt, duration: d, aspect_ratio: arK, resolution: r });
+      if (e.modo === "referencia") {
+        const imagens = refs.slice(0, 10);
+        const marcado = imagens.length && prompt.indexOf("@Image") < 0
+          ? `${prompt}\nReferências fiéis: ${imagens.map((_, i) => `@Image${i + 1}`).join(", ")} (produto, lugar e pessoas reais, sem inventar).`.slice(0, 2400)
+          : prompt;
+        return semVazios({ prompt: marcado, start_image_url: ini, image_urls: imagens, duration: d, resolution: r, aspect_ratio: ini ? "auto" : arK });
+      }
+      return semVazios({ prompt, start_image_url: ini, end_image_url: fim, duration: d, resolution: r });
+    }
     case "veo": {
       const arV = ar === "9:16" || ar === "16:9" ? ar : "9:16";
       const base = { prompt, duration: `${d}s`, resolution: r, aspect_ratio: arV, generate_audio: audio };

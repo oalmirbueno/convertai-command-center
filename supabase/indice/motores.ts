@@ -787,6 +787,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "mesa-foto/clones.ts#cloneConferir": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/clones.ts#cloneVariacoesSugerir": "mesa_foto.diretor_e_variacoes",
   "mesa-foto/clones.ts#lerExpressaoPorVisao": "mesa_foto.leitores_e_conferencias",
+  // 27/10: Entender e organizar as referências da pauta (leitura de visão; o papel é do Jev).
+  "mesa-foto/foto-da-pauta.ts#referenciasOrganizar": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/index.ts#acervoLerFoto": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/index.ts#ensaioPlanejar": "mesa_foto.diretor_e_variacoes",
   "mesa-foto/index.ts#kitSugerir": "mesa_foto.leitores_e_conferencias",

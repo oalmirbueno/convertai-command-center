@@ -233,6 +233,7 @@ export type NivelDoMotor = "normal" | "top" | "rapido";
 export type DialetoDoMotor =
   | "seedance"
   | "kling"
+  | "kling4"
   | "veo"
   | "gemini_omni"
   | "wan3"
@@ -415,6 +416,17 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
     cap: cap({ primeiro_quadro: true, ultimo_quadro: true, audio: true, pessoa_real: true }),
     preco: { por_segundo: { padrao: 0.07 }, por_segundo_audio: { padrao: 0.14 }, fonte: F("fal-ai/kling-video/v2.6/pro/image-to-video"), conferido_em: HOJE },
     papeis: ["transicao", "barato"], prazo_min: 30, nota: "Primeiro e último quadro com bom preço.",
+  },
+  // 27/10/2026 (dono: "coloque o kling 4.0 ali"): Kling 4.0 no fal desde 16/10, conferido ao vivo nos esquemas
+  // (start_image_url, até 8 quadros no meio, até 10 imagens de referência como @Image1) e nas páginas de preço.
+  // Linha própria: aparece para escolher, sem trocar o motor que a mesa já sugere. Sem áudio no esquema.
+  {
+    id: "kling-4", rotulo: "Kling 4.0", familia: "video", linha: "kling-4", versao: "4.0", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "kling/v4/text-to-video", imagem: "kling/v4/image-to-video", ultimo: "kling/v4/image-to-video", referencia: "kling/v4/reference-to-video" },
+    dialeto: "kling4", duracoes: faixa(3, 15), resolucoes: ["720p", "1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9", "1:1"],
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 10, pessoa_real: true }),
+    preco: { por_segundo: { "720p": 0.157, "1080p": 0.235 }, fonte: F("kling/v4/image-to-video"), conferido_em: "2026-10-27" },
+    papeis: ["hero", "consistencia"], prazo_min: 40, nota: "O Kling mais novo (16/10): até 10 fotos reais como referência fiel do produto, do lugar e das pessoas. Sem áudio.",
   },
   // ------------------------------------------------------------------ Veo (Google)
   {
@@ -787,7 +799,7 @@ export function nivelDoMotor(m: MotorDeVideo, motores: MotorDeVideo[] = MOTORES_
 export const ROTULO_DO_NIVEL: Record<NivelDoMotor, string> = { normal: "Normal", top: "Top", rapido: "Rápido" };
 
 /** Ordem de preferência das linhas no Top (a linha escolhe; a versão sai do catálogo). */
-export const ORDEM_DAS_LINHAS_TOP = ["seedance", "veo", "kling", "kling-o3", "minimax-h3", "wan", "flux3", "luma", "gemini-omni", "happyhorse", "grok", "ltx", "pixverse", "hailuo", "hunyuan", "h3-labial", "heygen-fal", "sync-labial", "qwen-angulos", "flux2-angulos", "painel"];
+export const ORDEM_DAS_LINHAS_TOP = ["seedance", "veo", "kling-4", "kling", "kling-o3", "minimax-h3", "wan", "flux3", "luma", "gemini-omni", "happyhorse", "grok", "ltx", "pixverse", "hailuo", "hunyuan", "h3-labial", "heygen-fal", "sync-labial", "qwen-angulos", "flux2-angulos", "painel"];
 
 export interface RequisitoDoPedido {
   modo: "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "imagem" | "angulo" | "avatar" | "labial";

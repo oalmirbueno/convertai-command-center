@@ -9,13 +9,19 @@
  *     guia?: { modo, prompt_id?, referencia_ids?, texto? }, modelo_imagem_id?, qualidade?, formato?,
  *     marca_id?, posicao?: { atual, total } }
  *     -> { imagem, url, prompt, referencias, custo_usd, saldo_usd, reserva_usada, avisos } (UMA imagem por chamada)
+ * - referencias_organizar { client_id, task_id?, titulo?, pedido?, referencias?: [{ imagem_id, papel }] | imagem_ids?: [] (até 6) }
+ *     -> { referencias: [{ imagem_id, papel, descricao, cena, confianca, par }], custo_usd, saldo_usd, avisos }
+ *     UMA leitura de visão descreve as fotos (o que mostra, cena e estado); o Jev decide o papel
+ *     (confiança baixa mantém o que estava); antes e depois saem pareados pela cena e em ordem.
+ *     Regras puras em referencias-organizar.ts.
  *
  * Sem LLM: o contexto entra por regra (contextoParaFoto) e o gerador recebe
  * as fotos reais do acervo na ordem do prompt. A foto entra no acervo como
  * gerada e sem aprovação (a equipe aprova no envio, como as outras).
  */
 
-import { chamarImagem, type ImagemEntrada, type ModeloIa, type Qualidade } from "../_shared/ia-motor.ts";
+import { chamarImagem, chamarTexto, cobrarJev, type ImagemEntrada, type ModeloIa, type Qualidade } from "../_shared/ia-motor.ts";
+import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { arred6, dimensoesDaImagem, ErroDeRegra, extensaoDe, limpo, mimeDe, sha256Hex, UUID } from "./calculos.ts";
 import type { Chamador, FerramentasDaMesa } from "./ferramentas.ts";
@@ -29,9 +35,20 @@ import {
   MAX_REFERENCIAS_DA_PAUTA,
   ordenarReferencias,
   promptDaFotoDaPauta,
+  type PapelDaReferencia,
 } from "./foto-da-pauta-regras.ts";
+import {
+  descricaoParaOAcervo,
+  ESQUEMA_DA_LEITURA_DAS_REFERENCIAS,
+  lerLeituraDasReferencias,
+  lerPapeis,
+  parearEOrdenar,
+  pedidoDaLeitura,
+  perguntasDosPapeis,
+  SISTEMA_DA_LEITURA_DAS_REFERENCIAS,
+} from "./referencias-organizar.ts";
 
-export const ACOES_LONGAS_DA_FOTO_DA_PAUTA = ["foto_da_pauta_gerar"];
+export const ACOES_LONGAS_DA_FOTO_DA_PAUTA = ["foto_da_pauta_gerar", "referencias_organizar"];
 
 /** O que o index empresta (sem import circular): o modelo de imagem e o estilo da biblioteca já resolvido. */
 export interface ExtrasDaFotoDaPauta {
@@ -42,6 +59,8 @@ export interface ExtrasDaFotoDaPauta {
 }
 
 const LADO_DA_REFERENCIA = 1024;
+/** referencia_tipo de ia_usos (o mesmo do index). */
+const REF_IMAGEM = "cliente_imagem";
 
 export function acoesDaFotoDaPauta(f: FerramentasDaMesa, x: ExtrasDaFotoDaPauta) {
   const db = () => f.servico();
@@ -153,5 +172,105 @@ export function acoesDaFotoDaPauta(f: FerramentasDaMesa, x: ExtrasDaFotoDaPauta)
     });
   }
 
-  return { acoes: { foto_da_pauta_gerar: fotoDaPautaGerar } };
+  /**
+   * Entender e organizar as referências (27/10/2026): a visão descreve, o Jev
+   * decide o papel e as regras puras pareiam antes e depois pela cena.
+   */
+  async function referenciasOrganizar(ch: Chamador, corpo: Record<string, unknown>) {
+    const clientId = String(corpo.client_id ?? "");
+    if (!UUID.test(clientId)) throw new ErroDeRegra(400, "client_id_invalido", "Cliente inválido.");
+    await f.garantirAcesso(ch, clientId);
+    const taskId = corpo.task_id != null && corpo.task_id !== "" ? String(corpo.task_id) : null;
+    if (taskId && !UUID.test(taskId)) throw new ErroDeRegra(400, "task_id_invalido", "Pauta inválida.");
+    // A tela manda as referências com o papel atual; imagem_ids sozinhos entram como produto.
+    const brutas = Array.isArray(corpo.referencias)
+      ? corpo.referencias
+      : Array.isArray(corpo.imagem_ids) ? corpo.imagem_ids.map((id) => ({ imagem_id: id, papel: "produto" })) : [];
+    let atuais;
+    try {
+      atuais = lerReferenciasComPapel(brutas);
+    } catch (e) {
+      if (e instanceof ErroDaFotoDaPauta) throw new ErroDeRegra(e.status, e.codigo, e.message);
+      throw e;
+    }
+    if (!atuais.length) throw new ErroDeRegra(400, "sem_imagens", "Escolha as fotos para organizar.");
+    const lidas = await f.lerImagens(clientId, atuais.map((r) => r.imagem_id));
+    const comFoto = atuais.map((r) => {
+      const img = lidas.find((l) => l.id === r.imagem_id);
+      if (!img || img.ativa === false) throw new ErroDeRegra(409, "id_fora_do_cliente", "Uma das fotos não está no acervo deste cliente.");
+      return { ...r, img };
+    });
+    const titulo = limpo(corpo.titulo, 140) || null;
+    const pedido = limpo(corpo.pedido, MAX_PEDIDO_DA_PAUTA);
+    const avisos: string[] = [];
+
+    // 1. Uma leitura de visão com todas as fotos juntas (a cena só se compara vendo todas).
+    const imagens = await f.emParalelo(comFoto, 3, (r) => f.baixarReduzida(r.img.storage_bucket || "mesa", r.img.storage_path, LADO_DA_REFERENCIA, r.img.nome));
+    const leitor = await f.modeloDeTexto("leitura", corpo.modelo_id);
+    const lido = await chamarTexto({
+      clientId,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_DA_LEITURA_DAS_REFERENCIAS,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: pedidoDaLeitura({ titulo, pedido, fotos: comFoto.map((r) => ({ nome: r.img.nome, descricao: r.img.descricao, gerada: r.img.gerada })) }),
+        imagens,
+      }],
+      esquemaJson: ESQUEMA_DA_LEITURA_DAS_REFERENCIAS,
+      maxTokensSaida: 2_000,
+      timeoutMs: f.timeoutTextoMs,
+      referencia: taskId ? { tipo: "task", id: taskId } : { tipo: REF_IMAGEM, id: comFoto[0].imagem_id },
+      criadoPor: ch.userId,
+    });
+    let custo = lido.custoUsd;
+    const leituras = lerLeituraDasReferencias(lido.json, comFoto.length);
+    if (leituras.some((l) => !l.descricao)) avisos.push("Uma das fotos não foi descrita: o papel dela ficou como estava.");
+
+    // 2. O papel de cada foto é julgamento: o Jev escolhe; confiança baixa mantém o que estava.
+    let respostas: Record<string, { choice?: string; confidence?: number }> | null = null;
+    try {
+      const { state, questions } = perguntasDosPapeis({ titulo, pedido, fotos: comFoto.map((r, i) => ({ nome: r.img.nome, leitura: leituras[i] })) });
+      const res = await jevPerguntar({ state, questions });
+      const cobrado = await cobrarJev(res, { clientId, tarefa: "leitura_referencia", referencia: { tipo: REF_IMAGEM, id: comFoto[0].imagem_id }, criadoPor: ch.userId });
+      if (cobrado) custo += cobrado.custoUsd;
+      respostas = res.answers;
+    } catch (e) {
+      if (!(e instanceof JevErro)) throw e;
+      registrarFalha("mesa-foto: Jev não decidiu o papel das referências", e);
+      avisos.push("O Jev não respondeu agora: os papéis ficaram como estavam; descrições e pares foram atualizados.");
+    }
+    const decididos = lerPapeis(comFoto.map((r) => r.papel), respostas);
+    // Foto sem descrição não troca de papel (o Jev julgaria no escuro).
+    const papeis: PapelDaReferencia[] = decididos.map((d, i) => (leituras[i].descricao ? d.papel : comFoto[i].papel));
+
+    // 3. Pares pela cena e a ordem (cada antes logo antes do seu depois).
+    const { ordem, avisos: avisosDosPares } = parearEOrdenar(comFoto.map((r, i) => ({
+      imagem_id: r.imagem_id,
+      papel: papeis[i],
+      cena: leituras[i].cena,
+      descricao: leituras[i].descricao,
+      confianca: decididos[i].confianca,
+    })));
+    avisos.push(...avisosDosPares);
+
+    // A descrição entra no acervo só onde estava vazia (nunca sobrescreve a da equipe).
+    await f.emParalelo(comFoto, 3, async (r, i) => {
+      const texto = descricaoParaOAcervo(leituras[i]);
+      if (!texto || (r.img.descricao && r.img.descricao.trim())) return;
+      const base = db().from("cliente_imagens").update({ descricao: texto }).eq("id", r.imagem_id).eq("client_id", clientId);
+      const { error } = await (r.img.descricao === null ? base.is("descricao", null) : base.eq("descricao", r.img.descricao));
+      if (error) registrarFalha("mesa-foto: descrição da referência não gravada", error, { imagem_id: r.imagem_id });
+    });
+
+    return f.json({
+      referencias: ordem.map((r) => ({ imagem_id: r.imagem_id, papel: r.papel, descricao: r.descricao || null, cena: r.cena || null, confianca: r.confianca, par: r.par })),
+      custo_usd: arred6(custo),
+      saldo_usd: lido.saldoUsd,
+      avisos: Array.from(new Set(avisos)),
+    });
+  }
+
+  return { acoes: { foto_da_pauta_gerar: fotoDaPautaGerar, referencias_organizar: referenciasOrganizar } };
 }

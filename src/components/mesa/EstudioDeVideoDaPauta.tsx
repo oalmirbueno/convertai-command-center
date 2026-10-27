@@ -1,5 +1,9 @@
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { AlertCircle, History, Loader2, Music, PenLine, Plus, Send, SlidersHorizontal, Type, Video } from "lucide-react";
+import { AlertCircle, History, Loader2, Music, PenLine, Plus, Scissors, Send, SlidersHorizontal, Type, Video, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import CortarVideoDaPauta from "./CortarVideoDaPauta";
+import { textoDoErro } from "@/lib/mesa/api";
 import GravarDaPauta from "./GravarDaPauta";
 import TrilhaDoVideoDaPauta from "./TrilhaDoVideoDaPauta";
 import { resultadosDeVideoDaPauta, videoEnviadoDaPeca } from "./resultadosDeVideoDaPauta";
@@ -12,7 +16,7 @@ import { useMesa } from "./MesaContexto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { juntar, texto } from "@/components/sistema/estilos";
 import GeradorLivre from "@/components/mesa-videos/GeradorLivre";
-import { useArquivosDeVideo, usePedidos, useVersoes, type ArquivoDeVideo, type PedidoDeVideo } from "@/components/mesa-videos/videosApi";
+import { chamarMesaVideos, chaveDosArquivos, useArquivosDeVideo, usePedidos, useVersoes, type ArquivoDeVideo, type PedidoDeVideo } from "@/components/mesa-videos/videosApi";
 import { TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
 import { LinhaDoFinal } from "@/components/mesa-edicao/Finais";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
@@ -81,6 +85,23 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
     if (prontosAgora) { void arquivosQ.refetch(); void versoesQ.refetch(); }
   }, [prontosAgora]);
   const [vendo, setVendo] = useState<string | null>(null);
+  const cache = useQueryClient();
+  // 27/10 (dono: "poder remover ali o que eu não quero mais"): tira da prancheta arquivando o resultado, com
+  // Desfazer. O vídeo que está na peça (Pronto) sai pela própria peça; versão aprovada fica (o servidor recusa).
+  const [tirando, setTirando] = useState<string | null>(null);
+  const tirarDaPrancheta = async (a: ArquivoDeVideo) => {
+    setTirando(a.id);
+    try {
+      const r = await chamarMesaVideos<{ desfazer: Record<string, unknown> }>({ acao: "arquivo_editar", arquivo_id: a.id, campos: { estado: "arquivado" } });
+      if (vendo === a.id) setVendo(null);
+      void cache.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+      toast.success("Saiu da prancheta", { description: "Fica arquivado no acervo da Mesa Vídeos.", action: { label: "Desfazer", onClick: () => void chamarMesaVideos({ acao: "arquivo_editar", arquivo_id: a.id, campos: r.desfazer }).then(() => cache.invalidateQueries({ queryKey: chaveDosArquivos(clientId) })).catch((e) => toast.error("Não deu para desfazer", { description: textoDoErro(e) })) } });
+    } catch (e) {
+      toast.error("Não saiu da prancheta", { description: textoDoErro(e) });
+    } finally {
+      setTirando(null);
+    }
+  };
   const atual = arquivos.find((a) => a.id === vendo) || paraAPeca[0] || arquivos[0];
   const tema = BASES.find((b) => b.id === base) || BASES[0];
   // 26/10: foto real primeiro. Sem imagem de partida escolhida, a melhor foto real do acervo (Jev) abre pré-selecionada.
@@ -100,7 +121,8 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
         ...(gravar ? [] : [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }]),
         { id: "som", nome: "Trilha sonora", icone: Music },
         { id: "legenda", nome: "Legendar o vídeo", icone: Type },
-        { id: "entrega", nome: "Legenda do post e aprovação", icone: Send },
+        { id: "cortar", nome: "Cortar o vídeo", icone: Scissors },
+        { id: "entrega", nome: "Enviar para aprovação", icone: Send },
         { id: "resultados", nome: "Gerações e versões", icone: History },
         { id: "livre", nome: "Gerador livre (avançado)", icone: SlidersHorizontal },
       ]}
@@ -115,7 +137,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
             <span className="min-w-0 flex-1"><span className={juntar("block truncate text-[12px] font-medium", falhou && "text-destructive")}>{l.rotulo}</span><span className={juntar(texto.auxiliar, "block truncate")}>{falhou ? "Ver o motivo" : l.detalhe}</span></span>
           </button>;
         })}
-        <ol className="flex shrink-0 gap-2 lg:flex-col">{arquivos.map((a, i) => <li key={a.id} className="w-12 shrink-0 lg:w-full"><button type="button" aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba("entrega"); }} className={`block w-full overflow-hidden rounded-lg border-2 text-left ${atual?.id === a.id ? "border-primary" : "border-transparent"}`} title={a.nome}>
+        <ol className="flex shrink-0 gap-2 lg:flex-col">{arquivos.map((a, i) => <li key={a.id} className="relative w-12 shrink-0 lg:w-full">{a.id !== enviado?.id && <button type="button" disabled={tirando === a.id} onClick={() => void tirarDaPrancheta(a)} aria-label={`Tirar ${nomeNaPrancheta(a, pedidos, i)} da prancheta`} title="Tirar da prancheta" className="absolute right-1 top-1 z-10 rounded-full bg-card/90 p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-50">{tirando === a.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <X className="h-3 w-3" aria-hidden="true" />}</button>}<button type="button" aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba("entrega"); }} className={`block w-full overflow-hidden rounded-lg border-2 text-left ${atual?.id === a.id ? "border-primary" : "border-transparent"}`} title={a.nome}>
           <span className="relative block aspect-[9/16] w-full bg-muted"><QuadroDoVideo bucket={a.storage_bucket || "mesa"} caminho={a.storage_path} /></span>
         </button><p className={juntar(texto.auxiliar, "mt-1 truncate")}>{nomeNaPrancheta(a, pedidos, i)}</p></li>)}</ol>
         {arte?.capa?.tipo_midia === "video" && <p className="text-[12px] text-primary">Vídeo na Agenda</p>}
@@ -131,6 +153,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       <PainelDaBancada id="livre"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div>{aba === "livre" && <GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}:${chaveDaFoto}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={direcao} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba("resultados"); }} />}</PainelDaBancada>
       <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para adicionar a trilha.</p>}</PainelDaBancada>
       <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : <p className="text-[13px]">A legenda fica disponível quando o vídeo estiver pronto.</p>}</PainelDaBancada>
+      <PainelDaBancada id="cortar">{atual ? <CortarVideoDaPauta key={atual.id} arquivo={atual} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para cortar.</p>}</PainelDaBancada>
       <PainelDaBancada id="entrega">{atual ? <EntregaDoVideoDaPauta key={atual.id} item={item} arquivo={atual} /> : <p role="status" className="text-[13px]">{arte ? "Este vídeo já está na Agenda." : "Escolha um resultado na prancheta para preparar a legenda e enviar para aprovação."}</p>}</PainelDaBancada>
       <PainelDaBancada id="resultados"><GeracoesDaPauta pedidos={pedidos} titulo="Gerações desta pauta" conferirSozinho={false} />{arquivos.length > 0 && <p className={juntar(texto.auxiliar, "mt-3")}>{arquivos.length} {arquivos.length === 1 ? "vídeo pronto" : "vídeos prontos"} na prancheta. Clique em um para conferir e preparar a entrega.</p>}</PainelDaBancada>
       {(arquivosQ.isError || pedidosQ.isError) && <p role="alert" className="text-[12px] text-destructive">Não foi possível ler os resultados. <button type="button" className="underline" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); }}>Recarregar</button></p>}

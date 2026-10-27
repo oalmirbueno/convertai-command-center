@@ -2569,6 +2569,168 @@
      "9:16"
     ]
    }
+  },
+  "kling/v4/text-to-video": {
+   "obrigatorios": [],
+   "campos": [
+    "aspect_ratio",
+    "duration",
+    "multi_prompt",
+    "prompt",
+    "resolution"
+   ],
+   "valores": {
+    "aspect_ratio": [
+     "16:9",
+     "9:16",
+     "1:1",
+     "21:9"
+    ],
+    "resolution": [
+     "720p",
+     "1080p"
+    ],
+    "duration": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30
+    ]
+   }
+  },
+  "kling/v4/image-to-video": {
+   "obrigatorios": [
+    "start_image_url"
+   ],
+   "campos": [
+    "duration",
+    "end_image_url",
+    "middle_image_urls",
+    "multi_prompt",
+    "prompt",
+    "resolution",
+    "start_image_url"
+   ],
+   "valores": {
+    "resolution": [
+     "720p",
+     "1080p"
+    ],
+    "duration": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30
+    ]
+   }
+  },
+  "kling/v4/reference-to-video": {
+   "obrigatorios": [],
+   "campos": [
+    "aspect_ratio",
+    "duration",
+    "elements",
+    "end_image_url",
+    "image_urls",
+    "middle_image_urls",
+    "multi_prompt",
+    "prompt",
+    "resolution",
+    "start_image_url",
+    "video_urls",
+    "voice_ids"
+   ],
+   "valores": {
+    "resolution": [
+     "720p",
+     "1080p"
+    ],
+    "aspect_ratio": [
+     "auto",
+     "16:9",
+     "9:16",
+     "1:1",
+     "21:9"
+    ],
+    "duration": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30
+    ]
+   }
   }
  }
 }

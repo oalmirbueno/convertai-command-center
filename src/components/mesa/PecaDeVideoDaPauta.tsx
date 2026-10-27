@@ -377,7 +377,7 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
           {video ? (
             <>
               {/* 26/10/2026: altura fixa; esticando (flex-1) o player vazava por cima de Preparar e das gerações. */}
-              <PreviaDaPauta key={`${video.bucket}:${video.caminho}`} caminho={video.caminho} bucket={video.bucket} nome={video.nome} video compacta />
+              <PreviaDaPauta key={`${video.bucket}:${video.caminho}`} caminho={video.caminho} bucket={video.bucket} nome={video.nome} video alta />
               <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
                 <span className={juntar(texto.auxiliar, "min-w-0 flex-1 truncate")}>
                   {ORIGEM[video.fonte]}
