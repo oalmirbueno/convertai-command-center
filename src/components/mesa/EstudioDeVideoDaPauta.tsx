@@ -180,7 +180,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       </div>}
       // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
       // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra. A linha da mídia mora dentro da peça, não solta acima.
-      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} aoMudarVideo={(v) => { conferido.current = ""; setNoAcervo(null); setVideoDaPeca(v); }} />
+      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} aoEntregar={() => setAba("entrega")} aoMudarVideo={(v) => { conferido.current = ""; setNoAcervo(null); setVideoDaPeca(v); }} />
         <div className="mt-3"><GeracoesDaPauta pedidos={pedidos} compacta titulo="Gerando agora" /></div>
       </>}
       ferramentas={<div className="space-y-4">
