@@ -4753,7 +4753,7 @@ const comercialMaquinaCandidatosTool = ferramentaDoCrm(
 const ITEM_MANUAL = z.object({
   nome: z.string().min(2).max(120), valor: z.number().min(0).max(10_000_000),
   recorrencia: z.enum(['unico', 'mensal']).optional(), descricao: z.string().max(300).optional(),
-  quantidade: z.number().int().min(1).max(999).optional(),
+  quantidade: z.number().int().min(1).optional(),
 }).strict();
 
 const comercialPedirPropostaTool = ferramentaDoCrm(
