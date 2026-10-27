@@ -18,4 +18,25 @@ No head `41aaa848`, CI geral teve 11.531 testes aprovados, seis falhas e um skip
 
 A sexta falha era de padrão visual introduzido nesta frente e foi corrigida sem ampliar tetos: textos curtos, ajuda contextual e componentes/tokens do sistema. Catraca 16/16, estúdio 23/23, administração 10/10 e recargas 7/7 passaram.
 
-Homologação final do navegador, versão do frontend e resultado dos trabalhos reais devem ser acrescentados após a verificação. O teste isolado do adaptador já gerou texto e imagem reais, mas não substitui o fluxo autenticado da carteira.
+## Homologação autenticada e publicação concluídas
+
+PR 102 integrado ao main em `ed213451cc314a3dc36c64426ecf21f36a3d54e8`. Frontend publicado em `https://aceleriq.online` e conferido pelo `version.json`: build `mvqz57g6-o2tsxj`, revisão do merge, deployment Cloudflare `e646b20b-200d-4b43-8015-463d09b14a6f`. O build passou. O recibo não afirma que o CI geral ficou verde: permanecem as cinco falhas de baseline descritas acima.
+
+O fluxo autenticado da conta do proprietário concluiu pelo OpenRouter:
+
+| Pedido | Resultado | Créditos | Custo informado pelo fornecedor |
+| --- | --- | ---: | ---: |
+| Texto | Concluído, mensagem disponível para edição | 1 | US$ 0,000641 |
+| Imagem | Concluída em 1024 × 1024, inspecionada e baixada pelo botão do painel | 5 | US$ 0,067605 |
+
+Total observado: US$ 0,068246. A edição manual da direção da arte não consumiu créditos. O extrato passou de 12 para 11 e depois 6; nenhuma reserva ficou pendente. Os erros OpenAI anteriores foram devolvidos e permanecem no histórico. O teste comprova geração, armazenamento, download e contabilização; não comprova conversão publicitária nem custo máximo de todas as gerações.
+
+Após o teste, a política comercial V2 foi criada e aprovada pelo fluxo administrativo com 100 créditos iniciais, 12 meses, texto 1, imagem 5 e formatos quadrado, retrato e Stories. O acesso foi concedido exclusivamente à conta autenticada do proprietário pelo botão “Usar minha conta” e confirmado no banco e na interface. Saldo final: **106 créditos**, somando 100 comerciais e 6 remanescentes da validação privada; zero reservado. Validade do novo acesso: 27/10/2027. Nenhum saldo anterior foi apagado.
+
+As três ofertas foram salvas, conferidas e publicadas no catálogo da V2: Essencial 50/R$ 19, Impulso 150/R$ 49 e Escala 350/R$ 97, com validade de 365 dias. Provisões internas de R$ 7, R$ 21 e R$ 49 são planejamento, não transferência de dinheiro nem lucro líquido. Recargas não renovam o acesso.
+
+Estado final conferido: pagamentos false; exposição geral do estúdio false; geração real true; demonstração false; pausa false. Limite privado final de 1 pedido simultâneo e 10 diários por pessoa e no total, para que os quatro pedidos de homologação não bloqueiem o uso da conta. Não é a definição de capacidade para um lançamento público. Nenhuma compra, recarga financeira ou campanha de mídia foi ativada.
+
+## Ajuste adicional identificado no navegador
+
+Após a imagem ser entregue, o painel ainda mostrava o aviso de uma falha anterior do mesmo tipo. A correção considera somente o pedido mais recente de texto e de imagem; falhas atuais do outro tipo continuam visíveis. Revisão independente sem achados bloqueantes, 33/33 testes do estúdio aprovados, incluindo sete regressões novas. Este ajuste pertence ao PR complementar e não está incluído na revisão publicada acima até que seu merge/publicação sejam registrados.

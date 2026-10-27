@@ -21,7 +21,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u-a" }, profile: { role: "client" } }) }));
 
-import { motivoParaNaoPedir, nomeDoArquivo, situacaoDoEstudio, faltasDoBriefing, avisoDeCondicoes, BRIEFING_VAZIO, type EstadoDoEstudio } from "@/lib/bolso/modelo";
+import { motivoParaNaoPedir, nomeDoArquivo, situacaoDoEstudio, faltasDoBriefing, avisoDeCondicoes, BRIEFING_VAZIO, type EstadoDoEstudio, type Job } from "@/lib/bolso/modelo";
 import { erroDoBolso } from "@/lib/bolso/api";
 import EstudioBolso from "@/components/membros/bolso/EstudioBolso";
 import CreditosBolso from "@/components/membros/bolso/CreditosBolso";
@@ -170,6 +170,50 @@ describe("estúdio com o banco simulado", () => {
     fireEvent.click(screen.getByRole("button", { name: "Voltar às campanhas" }));
     expect(await screen.findByRole("button", { name: /Bolo de pote/ })).toBeTruthy();
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+  });
+
+  const pedidoDoHistorico = (id: string, tipo: Job["tipo"], estado: Job["estado"], erro: string | null): Job => ({
+    id, tipo, estado, erro, formato: tipo === "imagem" ? "feed_1x1" : null,
+    provedor: "openrouter", tarifa: tipo === "imagem" ? 5 : 1, carteira: "real",
+    versao_campanha: 1, criado_em: "2026-10-27T12:00:00Z",
+  });
+
+  it.each((["texto", "imagem"] as const).flatMap((tipo) =>
+    (["concluido", "na_fila", "processando"] as const).map((estado) => ({ tipo, estado })),
+  ))("pedido de $tipo $estado substitui a falha anterior sem esconder a falha do outro tipo", async ({ tipo, estado }) => {
+    const outroTipo = tipo === "texto" ? "imagem" : "texto";
+    mock.respostas.bolso_campanha_ler = {
+      ...CAMPANHA,
+      jobs: [
+        pedidoDoHistorico("novo", tipo, estado, null),
+        pedidoDoHistorico("outro", outroTipo, "falhou", "Falha atual de outro tipo"),
+        pedidoDoHistorico("antigo", tipo, "falhou", "Falha anterior"),
+      ],
+    };
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+
+    expect(await screen.findByRole("heading", { name: "Bolo de pote" })).toBeTruthy();
+    expect(screen.queryByText(/Falha anterior/)).toBeNull();
+    expect(screen.getByText(/Falha atual de outro tipo/).textContent).toContain(`O último pedido de ${outroTipo === "imagem" ? "arte" : "texto"}`);
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+  });
+
+  it("mantém os avisos quando o pedido mais recente de texto e o de arte falharam", async () => {
+    mock.respostas.bolso_campanha_ler = {
+      ...CAMPANHA,
+      jobs: [
+        pedidoDoHistorico("imagem", "imagem", "falhou", "Falha atual da imagem"),
+        pedidoDoHistorico("texto", "texto", "falhou", "Falha atual do texto"),
+        pedidoDoHistorico("antigo", "imagem", "falhou", "Falha anterior"),
+      ],
+    };
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+
+    expect(await screen.findByText(/Falha atual da imagem/)).toBeTruthy();
+    expect(screen.getByText(/Falha atual do texto/)).toBeTruthy();
+    expect(screen.queryByText(/Falha anterior/)).toBeNull();
   });
 
   it.each([
