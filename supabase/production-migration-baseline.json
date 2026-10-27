@@ -2715,11 +2715,19 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261028090000",
-      "path": "supabase/migrations/20261028090000_mercurio_proposta_e_bolso.sql",
-      "local_sha256": "3eb8d3016ac8370051f57c7c080f00240a3d9dc5356f35d88f09ff4251a89387",
-      "remote_name": "mercurio_proposta_e_bolso",
-      "remote_statements_sha256": "6a191f1947bf5f6c08478a19d5d2edf8fbf20630002d39eb30715166e3cbcd06",
+      "version": "20261027230000",
+      "path": "supabase/migrations/20261027230000_bolso_fluxo_criativo.sql",
+      "local_sha256": "9501e81ae6fd0f13b63d6beb3f032b00ee450ab3d865e7286d77b27e3fdb5668",
+      "remote_name": "bolso_fluxo_criativo",
+      "remote_statements_sha256": "49e8550eca3fc367b781559a12630217edb7ab0e2252bcd32ad130bc64873ffb",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027235000",
+      "path": "supabase/migrations/20261027235000_meta_usuario_do_sistema.sql",
+      "local_sha256": "10a78a7d2e30e1c59f3e7a678d4fad62238a474851a16fc50492fd9a9116f2d4",
+      "remote_name": "meta_usuario_do_sistema",
+      "remote_statements_sha256": "bac735e0b7e070a4c500f2ebe375f760dc49fe25d14b438a6af47c2006273ab9",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

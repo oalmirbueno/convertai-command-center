@@ -1,6 +1,6 @@
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import TituloMembros from "@/components/membros/TituloMembros";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -56,6 +56,8 @@ import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
 import FerramentasDoMembro from "@/components/membros/FerramentasDoMembro";
 import EstudioBolso, { useEstadoDoBolso } from "@/components/membros/bolso/EstudioBolso";
 import CreditosBolso from "@/components/membros/bolso/CreditosBolso";
+import VitrineDoMembro from "@/components/membros/VitrineDoMembro";
+import { capaDoProduto, capaPadraoDoProduto, produtoDeDemonstracao } from "@/lib/membros/capas";
 import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
 import { temLicencaDaFerramenta } from "@/lib/membros/ferramentas";
 import { texto, AjudaRecolhida } from "@/components/sistema";
@@ -79,20 +81,21 @@ export function CapaProduto({
   destaque?: boolean;
 }) {
   const [falhou, setFalhou] = useState(false);
+  const [falhouPadrao, setFalhouPadrao] = useState(false);
+  useEffect(() => { setFalhou(false); setFalhouPadrao(false); }, [produto.id, produto.capa_url]);
   const capa =
-    urlHttps(produto.capa_url) ||
-    (destaque ? "/membros/capas/boas-vindas-v2.webp" : null);
-  return capa && !falhou ? (
+    falhou ? capaPadraoDoProduto(produto) : capaDoProduto(produto);
+  return !falhouPadrao ? (
     <img
       className="membros-capa"
       src={capa}
       alt={`Capa de ${produto.titulo}`}
-      width={640}
-      height={400}
+      width={1024}
+      height={1536}
       loading={destaque ? "eager" : "lazy"}
       decoding="async"
       referrerPolicy="no-referrer"
-      onError={() => setFalhou(true)}
+      onError={() => falhou ? setFalhouPadrao(true) : setFalhou(true)}
     />
   ) : (
     <div className="membros-capa membros-fallback" data-formato={produto.tipo_produto || "material"} aria-hidden="true">
@@ -485,7 +488,15 @@ function ConteudoAreaDeMembros() {
       if (ferramentas.isError) void ferramentas.refetch();
       return;
     }
-    if (crmDoProduto(p.id)) {
+    const ferramenta = crmDoProduto(p.id);
+    if (ferramenta && !temLicencaDaFerramenta(ferramenta)) {
+      const proximos = new URLSearchParams(parametros);
+      proximos.delete("ferramenta");
+      proximos.set("produto", p.id);
+      setParametros(proximos);
+      return;
+    }
+    if (ferramenta) {
       const proximos = new URLSearchParams(parametros);
       proximos.delete("produto");
       proximos.set("ferramenta", p.id);
@@ -502,11 +513,16 @@ function ConteudoAreaDeMembros() {
     setParametros(proximos);
     setSecao("ferramentas");
   }
+  const crmAberto = aberto ? crmDoProduto(aberto) : undefined;
+  const ofertaDeCrm = !!crmAberto && !temLicencaDaFerramenta(crmAberto);
   const ferramentaAberta =
     parametros.get("ferramenta") ||
-    (aberto && crmDoProduto(aberto) ? aberto : null);
+    (aberto && crmAberto && !ofertaDeCrm ? aberto : null);
   const secaoAtual = ferramentaAberta ? "ferramentas" : secao;
-  const produtos = catalogo.data?.produtos || [];
+  const conteudo = useRef<HTMLElement>(null);
+  useEffect(() => { if (conteudo.current) conteudo.current.scrollTop = 0; }, [secaoAtual]);
+  const produtosDoCatalogo = catalogo.data?.produtos || [];
+  const produtos = produtosDoCatalogo.filter((produto) => !produtoDeDemonstracao(produto));
   const comunidades = produtos.filter(
     (p) => p.comunidade_ativa && podeAbrir(p),
   );
@@ -541,7 +557,8 @@ function ConteudoAreaDeMembros() {
   const categorias = Array.from(
     new Set(produtos.map((p) => p.categoria).filter(Boolean)),
   );
-  const produtoAberto = produtos.find((p) => p.id === aberto);
+  // Ocultar amostras da vitrine não revoga acesso a um material já guardado por URL.
+  const produtoAberto = produtosDoCatalogo.find((p) => p.id === aberto);
   const acessoDestaque = destaque ? acessoDoCartao(destaque) : null;
   let acaoDestaque = "Conhecer produto";
   if (acessoDestaque?.conferindo) acaoDestaque = "Conferindo acesso…";
@@ -569,7 +586,7 @@ function ConteudoAreaDeMembros() {
       usuario={user?.id || "visitante"}
       leitorAberto={!!produtoAberto && !ferramentaAberta}
     >
-      <div className="membros bg-background text-foreground">
+      <div className="membros membros-portal bg-background text-foreground">
         <a
           href="#biblioteca"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4"
@@ -663,22 +680,7 @@ function ConteudoAreaDeMembros() {
         <div
           className={`membros-biblioteca-corpo ${recolhida ? "recolhida" : ""}`}
         >
-          <aside className="membros-menu" aria-label="Menu de membros">
-            <button
-              className="membros-acao membros-menu-recolher"
-              aria-label={
-                recolhida
-                  ? "Expandir menu de membros"
-                  : "Recolher menu de membros"
-              }
-              onClick={() => setRecolhida((r) => !r)}
-            >
-              {recolhida ? (
-                <PanelLeftOpen size={18} />
-              ) : (
-                <PanelLeftClose size={18} />
-              )}
-            </button>
+          <aside id="menu-de-membros" className="membros-menu" aria-label="Menu de membros">
             {[
               { id: "inicio", nome: "Início", icone: Home },
               { id: "lista", nome: "Minha lista", icone: Bookmark },
@@ -705,7 +707,20 @@ function ConteudoAreaDeMembros() {
             ))}
             <BotaoPomodoro compacto={recolhida} />
           </aside>
-          <main id="biblioteca" className="membros-conteudo space-y-8">
+          <main ref={conteudo} id="biblioteca" className={`membros-conteudo ${secaoAtual === "estudio" && comBolso ? "membros-conteudo-estudio" : "space-y-8"}`}>
+            <div className="membros-conteudo-barra">
+              <button
+                type="button"
+                className="membros-acao membros-menu-recolher"
+                aria-label={recolhida ? "Expandir menu de membros" : "Recolher menu de membros"}
+                aria-expanded={!recolhida}
+                aria-controls="menu-de-membros"
+                onClick={() => setRecolhida((r) => !r)}
+              >
+                {recolhida ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+                <span>{recolhida ? "Abrir menu" : "Recolher menu"}</span>
+              </button>
+            </div>
             {secaoAtual === "estudio" && comBolso && <EstudioBolso />}
             {secaoAtual === "creditos" && comBolso && <CreditosBolso />}
             {secaoAtual === "ferramentas" && (
@@ -716,9 +731,8 @@ function ConteudoAreaDeMembros() {
                 aoVoltar={voltarDasFerramentas}
                 conhecer={(id) => {
                   if (crmDoProduto(id)) {
-                    setAvisoLista(
-                      "Peça à administração para conferir sua licença do CRM. Seus contatos e negócios continuam guardados.",
-                    );
+                    const produto = produtosDoCatalogo.find((p) => p.id === id);
+                    if (produto) abrirProduto(produto);
                     return;
                   }
                   setAberto(id);
@@ -899,6 +913,7 @@ function ConteudoAreaDeMembros() {
                   </Link>
                 </section>
               ) : !produtos.length ? (
+                <>
                 <section className="py-16 max-w-xl space-y-4">
                   <BookOpen size={36} className="text-primary" />
                   <CabecalhoDePagina
@@ -917,6 +932,8 @@ function ConteudoAreaDeMembros() {
                     </Link>
                   )}
                 </section>
+                <VitrineDoMembro produtos={[]} abrir={abrirProduto} acesso={acessoDoCartao} abrirEstudio={comBolso ? () => irParaSecao("estudio") : undefined} acessoEstudio={{ liberado: !!bolso.data?.direito, conferindo: bolso.isPending }} />
+                </>
               ) : (
                 <>
                   {destaque && !busca && !categoria && (
@@ -957,6 +974,7 @@ function ConteudoAreaDeMembros() {
                       </div>
                     </section>
                   )}
+                  {!busca && !categoria && <VitrineDoMembro produtos={produtos} abrir={abrirProduto} acesso={acessoDoCartao} abrirEstudio={comBolso ? () => irParaSecao("estudio") : undefined} acessoEstudio={{ liberado: !!bolso.data?.direito, conferindo: bolso.isPending }} />}
                   {catalogo.data?.jornada && (
                     <Jornada jornada={catalogo.data.jornada} />
                   )}
@@ -1078,13 +1096,14 @@ function ConteudoAreaDeMembros() {
             previa={previa}
             teste={teste}
             produto={produtoAberto}
+            somenteOferta={ofertaDeCrm}
             pendente={
               !!catalogo.data?.pendentes.some(
                 (p) => p.produto_id === produtoAberto.id,
               )
             }
             fechar={() => {
-              setAberto(null);
+                        setAberto(null);
               void catalogo.refetch();
             }}
           />

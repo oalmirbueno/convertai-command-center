@@ -1,5 +1,6 @@
 import { DEMOS } from "./demos.ts";
-import { FORMATOS, mimeReal, modeloPermitido, modeloOpenrouterPermitido, openaiPronta, openrouterPronto, pedidoDeImagem, pedidoDeTexto, textoSimulado, validarConteudo, type Briefing, type ConteudoDaCampanha, type Formato, type Marca } from "./regras.ts";
+import { LIMITE_CONTEXTO_CRIATIVO, LIMITE_SAIDA_CRIATIVA, MODELO_COPY, MODELO_ESTRUTURA, pedidoDeBriefing, pedidoDeLegenda, validarBriefingGerado, type EntradaCriativa, type NaturezaCriativa } from "./criativo.ts";
+import { FORMATOS, mimeReal, modeloPermitido, modeloOpenrouterPermitido, openaiPronta, openrouterPronto, pedidoDeAjuste, pedidoDeImagem, pedidoDeTexto, textoSimulado, validarConteudo, type Briefing, type ConteudoDaCampanha, type Formato, type Marca } from "./regras.ts";
 
 /**
  * Fornecedores do estúdio. O simulado é determinístico e marcado DEMONSTRAÇÃO. Os reais exigem gate
@@ -12,16 +13,22 @@ export interface Contexto {
   briefing: Briefing;
   versao: Partial<ConteudoDaCampanha> | null;
   formato: Formato | null;
+  natureza?: NaturezaCriativa;
+  entrada?: EntradaCriativa;
+  /** URLs privadas de curta duração, resolvidas e validadas pelo worker, nunca aceitas do navegador. */
+  referencias?: string[];
 }
 
 /** OpenAI: estimativa por tokens. OpenRouter: custo retornado pelo fornecedor em usage.cost. */
 export type CustoEstimado = { modelo: string; custo_usd: number };
 export type ResultadoTexto = { ok: true; conteudo: ConteudoDaCampanha; custo?: CustoEstimado } | { ok: false; motivo: string; definitiva: boolean; incerto?: boolean };
 export type ResultadoImagem = { ok: true; bytes: Uint8Array; custo?: CustoEstimado } | { ok: false; motivo: string; definitiva: boolean; incerto?: boolean };
+export type ResultadoBriefing = { ok: true; briefing: Briefing; custo?: CustoEstimado } | Extract<ResultadoTexto, { ok: false }>;
 
 export interface Provedor {
   texto(ctx: Contexto): Promise<ResultadoTexto>;
   imagem(ctx: Contexto): Promise<ResultadoImagem>;
+  briefing?(ctx: Contexto): Promise<ResultadoBriefing>;
 }
 
 const deBase64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -222,7 +229,7 @@ export function openai(env: ConfiguracaoOpenai, buscar: Busca = fetch): Provedor
 
 /** Custo comunicado pelo OpenRouter. Ausência ou metadado inválido não significa custo zero. */
 export function custoInformadoOpenrouter(modelo: string, uso: unknown): CustoEstimado | undefined {
-  if (!modeloOpenrouterPermitido("texto", modelo) && !modeloOpenrouterPermitido("imagem", modelo)) return undefined;
+  if (![MODELO_ESTRUTURA, MODELO_COPY].includes(modelo) && !modeloOpenrouterPermitido("texto", modelo) && !modeloOpenrouterPermitido("imagem", modelo)) return undefined;
   const custo = registro(uso)?.cost;
   if (typeof custo !== "number" || !Number.isFinite(custo) || custo < 0 || custo >= 1_000_000) return undefined;
   const custo_usd = Number(custo.toFixed(6));
@@ -257,16 +264,45 @@ export function openrouter(env: ConfiguracaoOpenrouter, buscar: Busca = fetch): 
     return recusa(`Fornecedor recusou o pedido (${res.status}).`);
   };
   return {
+    async briefing(ctx) {
+      if (!pronta.ok) return recusa(pronta.motivo || "Geração real indisponível.");
+      const ideia = ctx.entrada?.ideia?.trim() || "";
+      if (!ideia || ideia.length > 1500) return recusa("Escreva uma ideia de até 1500 caracteres.");
+      const pedido = pedidoDeBriefing(ctx.marca, ctx.briefing, ideia);
+      if (pedido.usuario.length > LIMITE_CONTEXTO_CRIATIVO) return recusa("Resuma os dados da campanha antes de continuar.");
+      let res: Response;
+      try {
+        res = await buscar("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: MODELO_ESTRUTURA, stream: false, max_tokens: LIMITE_SAIDA_CRIATIVA,
+            reasoning: { effort: "low" }, response_format: { type: "json_object" }, provider: { allow_fallbacks: false },
+            messages: [{ role: "system", content: pedido.sistema }, { role: "user", content: pedido.usuario }],
+          }), signal: AbortSignal.timeout(60_000),
+        });
+      } catch { return incerto("Sem resposta do fornecedor de briefing."); }
+      if (!res.ok) return erroHttp(res);
+      let corpo;
+      try { corpo = await res.json(); }
+      catch (erro) { return erro instanceof SyntaxError ? recusa("Resposta do fornecedor ilegível.") : incerto("Sem resposta completa do fornecedor de briefing."); }
+      try {
+        const validado = validarBriefingGerado(JSON.parse(corpo.choices[0].message.content), ctx.briefing, ideia);
+        if (validado.ok === false) return recusa(validado.motivo);
+        return { ok: true, briefing: validado.briefing, custo: custoInformadoOpenrouter(MODELO_ESTRUTURA, corpo.usage) };
+      } catch { return recusa("Resposta do fornecedor ilegível."); }
+    },
     async texto(ctx) {
       if (!pronta.ok) return recusa(pronta.motivo || "Geração real indisponível.");
-      const modelo = modeloOpenrouterPermitido("texto", env.modeloTexto)!;
-      const { sistema, usuario } = pedidoDeTexto(ctx.marca, ctx.briefing);
+      const modelo = ctx.natureza === "legenda" ? MODELO_COPY : modeloOpenrouterPermitido("texto", env.modeloTexto)!;
+      const redacaoTerra = modelo === MODELO_COPY;
+      const { sistema, usuario } = redacaoTerra ? pedidoDeLegenda(ctx.marca, ctx.briefing) : pedidoDeTexto(ctx.marca, ctx.briefing);
+      if (usuario.length > LIMITE_CONTEXTO_CRIATIVO) return recusa("Resuma os dados da campanha antes de continuar.");
       let res: Response;
       try {
         res = await buscar("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST", headers,
           body: JSON.stringify({
             model: modelo, stream: false, max_tokens: 1200, response_format: { type: "json_object" },
+            ...(redacaoTerra ? { reasoning: { effort: "none" }, provider: { allow_fallbacks: false } } : {}),
             messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }],
           }),
           signal: AbortSignal.timeout(60_000),
@@ -294,13 +330,21 @@ export function openrouter(env: ConfiguracaoOpenrouter, buscar: Busca = fetch): 
       if (!pronta.ok) return recusa(pronta.motivo || "Geração real indisponível.");
       if (!ctx.formato || !PROPORCOES_OPENROUTER[ctx.formato]) return recusa("Formato ausente ou inválido.");
       const modelo = modeloOpenrouterPermitido("imagem", env.modeloImagem)!;
+      if (ctx.natureza === "ajuste" && (!ctx.referencias?.length || !ctx.entrada?.ajuste?.trim())) return recusa("Escolha a arte e descreva o ajuste visual.");
+      if ((ctx.referencias?.length || 0) > 4) return recusa("Use até três referências e uma arte original.");
+      const prompt = ctx.natureza === "ajuste"
+        ? pedidoDeAjuste(ctx.versao, ctx.formato, ctx.entrada!.ajuste!)
+        : pedidoDeImagem(ctx.marca, ctx.briefing, ctx.versao, ctx.formato)
+          + (ctx.referencias?.length ? "\nUse as imagens anexadas como referência real do produto e da identidade. Preserve suas características; não substitua o produto por outro." : "");
+      if (prompt.length > 24_000) return recusa("Resuma a direção visual e o ajuste antes de continuar.");
       let res: Response;
       try {
         res = await buscar("https://openrouter.ai/api/v1/images", {
           method: "POST", headers,
           body: JSON.stringify({
-            model: modelo, prompt: pedidoDeImagem(ctx.marca, ctx.briefing, ctx.versao, ctx.formato),
+            model: modelo, prompt,
             resolution: "1K", aspect_ratio: PROPORCOES_OPENROUTER[ctx.formato], n: 1,
+            ...(ctx.referencias?.length ? { input_references: ctx.referencias.map((url) => ({ type: "image_url", image_url: { url } })), provider: { allow_fallbacks: false } } : {}),
           }),
           signal: AbortSignal.timeout(120_000),
         });

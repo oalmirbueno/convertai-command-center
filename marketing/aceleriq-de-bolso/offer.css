@@ -1,0 +1,27 @@
+.hero-price{margin-top:17px;color:#c5d1c0;font-size:.86rem;line-height:1.6}
+.hero-price strong{color:#f7f7f7;font-weight:750;margin-right:5px}
+.hero-person{bottom:12px}.hero-scene{height:520px}
+.delivery-copy .section-title{font-size:clamp(2.25rem,3.7vw,3.2rem);max-width:17ch}
+.creative-open .creative-brand{bottom:5px;left:17px;width:106px;height:36px;max-width:36%}
+.creative-card figcaption{font-size:.86rem;line-height:1.7}.creative-card figcaption strong{font-size:1.03rem;line-height:1.4;margin-bottom:6px}
+.gallery-action{display:flex;justify-content:center;margin-top:38px}
+.value-anchor{margin-top:32px;padding:23px 0 23px 23px;border-left:2px solid #00a500;max-width:360px;background:linear-gradient(90deg,#00a5000f,transparent)}
+.value-anchor>span{display:block;font-size:.83rem;color:#c2cfbc;line-height:1.7}
+.value-anchor strong{display:block;font-size:clamp(2.4rem,4vw,3.1rem);line-height:1.25;letter-spacing:-.045em;color:#55e66c;margin:8px 0}
+.value-anchor small{font-size:.9rem;font-weight:650;letter-spacing:0;color:#d6e2d0}
+.offer-card{padding:31px 34px}.offer-brand{margin-bottom:14px}.offer-card ul{margin:21px 0 22px}.offer-card li{padding-top:10px;padding-bottom:10px}
+.price-block{padding:0 0 25px}.price-prefix{display:block;font-size:.83rem;font-weight:600;color:#d2dfcd}
+.price-block .price{display:flex;align-items:baseline;gap:8px;margin:2px 0 0;color:#55e66c;font-weight:850;font-size:clamp(4rem,6vw,5.4rem);letter-spacing:-.055em;line-height:1.1}
+.currency{font-size:1.65rem;letter-spacing:-.03em;font-weight:650}.price-period{font-size:1rem;letter-spacing:0;color:#d2dfcd;font-weight:650}
+.price-block .payment-note{font-size:.88rem;color:#d2dfcd;margin:8px 0 0}
+.offer-cta .button{font-size:.93rem;min-height:58px}
+@media(max-width:780px){.value-anchor{padding-left:18px}.value-anchor strong{font-size:2.35rem}.offer-card{padding:30px 25px}}
+@media(max-width:640px){
+ .hero-scene{height:325px;min-height:325px}.hero-person{bottom:0}.hero-price{font-size:.84rem;margin-top:12px;text-align:center}
+ .delivery-copy .section-title{font-size:clamp(2.1rem,8.3vw,2.8rem);max-width:19ch}
+ .gallery-action .button{width:100%;font-size:.87rem}.gallery-action{margin-top:30px}
+ .creative-open .creative-brand{bottom:5px;left:15px;width:106px;height:36px}
+ .value-anchor{margin-top:25px;padding:17px 0 17px 18px}.value-anchor strong{font-size:2.65rem}
+ .offer-card{padding:30px 24px}.offer-card h3{font-size:2rem}.offer-card li{font-size:.89rem}.price-block .price{font-size:4.7rem}
+ .closing .button{font-size:.9rem}.creative-viewer-image{max-height:min(70svh,calc(100svh - 210px))}
+}

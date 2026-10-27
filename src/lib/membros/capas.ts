@@ -1,4 +1,73 @@
+import { urlHttps, type Produto } from "./modelo";
 import { supabase } from "@/integrations/supabase/client";
+
+export const CAPAS_MEMBROS = {
+  estudio: "/membros/refino-20261027/04-capa-estudio.webp",
+  relacionamento: "/membros/refino-20261027/05-capa-relacionamento.webp",
+  comunicacao: "/membros/refino-20261027/06-capa-comunicacao.webp",
+  ugc: "/membros/refino-20261027/07-capa-ugc.webp",
+} as const;
+
+const normalizar = (valor: string) =>
+  valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+/** Fallback visual apenas. Nunca determina direitos de acesso. */
+export function capaPadraoDoProduto(
+  produto: Pick<Produto, "titulo" | "categoria" | "formato">,
+): string {
+  const assunto = normalizar(
+    `${produto.titulo} ${produto.categoria} ${produto.formato}`,
+  );
+  if (/\bugc\b/.test(assunto)) return CAPAS_MEMBROS.ugc;
+  if (/\bcrm\b|relacionamento|orcamento/.test(assunto))
+    return CAPAS_MEMBROS.relacionamento;
+  if (/comunicacao|resposta/.test(assunto)) return CAPAS_MEMBROS.comunicacao;
+  return CAPAS_MEMBROS.estudio;
+}
+
+export function capaDoProduto(
+  produto: Pick<Produto, "titulo" | "categoria" | "formato" | "capa_url">,
+): string {
+  return urlHttps(produto.capa_url) || capaPadraoDoProduto(produto);
+}
+
+/** Retira cadastros explicitamente marcados como teste da exposição comercial. */
+export function produtoDeDemonstracao(
+  produto: Pick<Produto, "titulo" | "categoria">,
+): boolean {
+  return (
+    normalizar(produto.categoria) === "teste" ||
+    /\bproduto de teste\b/.test(normalizar(produto.titulo))
+  );
+}
+
+export function produtoDeBoasVindas(
+  produto: Pick<Produto, "titulo" | "gratuito" | "categoria">,
+): boolean {
+  return (
+    produto.gratuito &&
+    !produtoDeDemonstracao(produto) &&
+    /boas[ -]vindas/.test(normalizar(produto.titulo))
+  );
+}
+
+export function produtosDaVitrine(produtos: Produto[]): Produto[] {
+  return produtos
+    .filter(
+      (produto) =>
+        produto.estado === "publicado" &&
+        !produtoDeDemonstracao(produto) &&
+        !produtoDeBoasVindas(produto),
+    )
+    .slice()
+    .sort(
+      (a, b) => a.ordem - b.ordem || a.titulo.localeCompare(b.titulo, "pt-BR"),
+    );
+}
 
 /** Decodifica e reencoda a capa. Não envia SVG, HTML nem o nome original. */
 export async function enviarCapa(

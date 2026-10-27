@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Briefing, Campanha, ConteudoDaCampanha, EstadoDoEstudio, Formato, LancamentoDoExtrato, Marca, ResumoDaCampanha } from "./modelo";
+import type { Briefing, Campanha, ConteudoDaCampanha, EntradaCriativa, EstadoDoEstudio, Formato, LancamentoDoExtrato, Marca, NaturezaCriativa, ReferenciaCriativa, ResultadoCriativo, ResumoDaCampanha } from "./modelo";
 
 /**
  * Chamadas do Aceleriq de Bolso. Tudo passa pelas funções bolso_* do banco (o membro não lê tabela) e pela
@@ -8,10 +8,15 @@ import type { Briefing, Campanha, ConteudoDaCampanha, EstadoDoEstudio, Formato, 
  */
 
 const banco = supabase as unknown as SupabaseClient;
+const ERROS_DE_REFERENCIA: Record<string, string> = {
+  referencias_pendentes: "Há envios de imagem em andamento. Se algum foi interrompido, aguarde 15 minutos e tente novamente. Você também pode remover uma referência já enviada para liberar espaço.",
+  limite_referencias: "Você já tem três referências nesta campanha. Remova uma delas para enviar outra imagem.",
+};
 
 /** Erros do banco do estúdio já vêm em português claro; o resto vira frase genérica. */
 export function erroDoBolso(e: unknown): string {
   const obj = (e || {}) as { code?: string; message?: string; context?: { status?: number } };
+  if (obj.code && Object.prototype.hasOwnProperty.call(ERROS_DE_REFERENCIA, obj.code)) return ERROS_DE_REFERENCIA[obj.code];
   const codigos = ["42501", "22023", "40001", "53400", "P0001"];
   if (obj.message && obj.code && codigos.indexOf(obj.code) >= 0) return obj.message;
   if (obj.context && obj.context.status === 401) return "Sua sessão venceu. Entre de novo.";
@@ -57,6 +62,47 @@ export function pedir(campanha: string, tipo: "texto" | "imagem", formato: Forma
   return rpc<{ job_id: string; estado: string; repetido: boolean; tarifa?: number; provedor?: string }>("bolso_pedir", {
     _campanha: campanha, _tipo: tipo, _formato: formato, _chave: chave, _tarifa_vista: tarifaVista,
   });
+}
+
+/** Natureza e tarifa são conferidas no banco; este wrapper não escolhe modelos nem debita saldo. */
+export function pedirCriativo(campanha: string, natureza: NaturezaCriativa, formato: Formato | null, chave: string, tarifaVista: number, entrada: EntradaCriativa = {}) {
+  return rpc<{ job_id: string; estado: string; repetido: boolean }>("bolso_pedir_criativo", {
+    _campanha: campanha, _natureza: natureza, _formato: formato, _chave: chave, _tarifa_vista: tarifaVista, _entrada: entrada,
+  });
+}
+export const lerResultadoCriativo = (job: string) => rpc<ResultadoCriativo>("bolso_criativo_resultado", { _job: job });
+export const listarReferencias = (campanha: string) => rpc<ReferenciaCriativa[]>("bolso_referencias_listar", { _campanha: campanha });
+export const removerReferencia = (id: string) => rpc<void>("bolso_referencia_remover", { _id: id });
+
+/** O servidor confere o dono e assina apenas um caminho privado; nenhum segredo de IA chega ao navegador. */
+export async function enviarReferencia(campanha: string, arquivo: File): Promise<ReferenciaCriativa> {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(arquivo.type) || !arquivo.size || arquivo.size > 5 * 1024 * 1024) {
+    throw Object.assign(new Error("Envie uma imagem PNG, JPEG ou WEBP de até 5 MB."), { code: "22023" });
+  }
+  const { data, error } = await supabase.functions.invoke("bolso", {
+    body: { acao: "preparar_referencia", campanha_id: campanha, nome: arquivo.name, mime: arquivo.type, bytes: arquivo.size },
+  });
+  if (error) {
+    const contexto = (error as { context?: Response }).context;
+    const corpo = contexto instanceof Response ? await contexto.clone().json().catch(() => null) : null;
+    if (typeof corpo?.erro === "string" && Object.prototype.hasOwnProperty.call(ERROS_DE_REFERENCIA, corpo.erro)) {
+      throw Object.assign(new Error(ERROS_DE_REFERENCIA[corpo.erro]), { code: corpo.erro });
+    }
+    throw error;
+  }
+  const preparada = data as { referencia: ReferenciaCriativa; token: string };
+  if (!preparada?.referencia?.id || !preparada.token) throw new Error("Referência indisponível");
+  const { error: erroUpload } = await supabase.storage.from("bolso").uploadToSignedUrl(preparada.referencia.caminho, preparada.token, arquivo, { contentType: arquivo.type });
+  if (erroUpload) {
+    await removerReferencia(preparada.referencia.id).catch(() => {});
+    throw erroUpload;
+  }
+  const { error: erroConferencia } = await supabase.functions.invoke("bolso", { body: { acao: "confirmar_referencia", referencia_id: preparada.referencia.id } });
+  if (erroConferencia) {
+    await removerReferencia(preparada.referencia.id).catch(() => {});
+    throw erroConferencia;
+  }
+  return preparada.referencia;
 }
 
 /** Pede ao servidor para processar o job (o crédito já está reservado; repetir não cobra de novo). */

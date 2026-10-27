@@ -9,6 +9,8 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { urlHttps, type Produto } from "@/lib/membros/modelo";
+import { capaDoProduto, capaPadraoDoProduto } from "@/lib/membros/capas";
+import "./vitrine-membros.css";
 export default function OfertaDoProduto({
   produto,
   pendente,
@@ -39,7 +41,10 @@ export default function OfertaDoProduto({
   }
   const comprar = checkout && produto.em_venda !== false;
   return (
-    <section className="membros-oferta" aria-label="Oferta do produto">
+    <section
+      className="membros-oferta membros-oferta-refinada"
+      aria-label="Oferta do produto"
+    >
       {endereco ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
@@ -78,30 +83,36 @@ export default function OfertaDoProduto({
         </>
       ) : (
         <div className="membros-oferta-apresentacao">
-          {urlHttps(produto.capa_url) && (
+          <div className="membros-oferta-capa">
             <img
-              src={urlHttps(produto.capa_url)!}
+              src={capaDoProduto(produto)}
               alt={`Capa de ${produto.titulo}`}
-              className="w-full rounded-xl"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={(evento) => {
+                const imagem = evento.currentTarget;
+                if (imagem.dataset.fallback) {
+                  imagem.hidden = true;
+                  return;
+                }
+                imagem.dataset.fallback = "true";
+                imagem.src = capaPadraoDoProduto(produto);
+              }}
             />
-          )}
+          </div>
           <div>
-            <span className="text-[11px] text-primary inline-flex items-center gap-2">
+            <span className="membros-oferta-categoria">
               <LockKeyhole size={14} />
-              Conheça seu próximo passo
+              {produto.categoria || "Conheça seu próximo passo"}
             </span>
-            <p className="text-[14px] leading-7 whitespace-pre-wrap mt-3">
-              {produto.descricao}
-            </p>
+            <p className="membros-oferta-descricao">{produto.descricao}</p>
             {produto.condicoes && (
-              <p className="text-[12px] leading-6 text-muted-foreground whitespace-pre-wrap mt-3">
-                {produto.condicoes}
-              </p>
+              <p className="membros-oferta-condicoes">{produto.condicoes}</p>
             )}
           </div>
         </div>
       )}
-      <div className="flex flex-wrap gap-2 items-center pt-3">
+      <div className="membros-oferta-acoes">
         {landing &&
           modo !== "pagina" &&
           (produto.landing_embutida ? (

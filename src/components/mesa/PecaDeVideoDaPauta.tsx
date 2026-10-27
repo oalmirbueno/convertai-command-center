@@ -89,7 +89,7 @@ export function SeloDoEstadoDoVideo({ pronto, className = "" }: { pronto: boolea
 
 const doArquivo = (a: ArquivoDeVideo): VideoDaPauta => ({ bucket: a.storage_bucket, caminho: a.storage_path, nome: a.nome || a.nome_original, fonte: "ia", arquivo_id: a.id, ...(a.duracao_s ? { duracao_s: a.duracao_s } : {}) });
 
-export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null, aoGerar, aoAbrirRoteiro, aoMudarVideo }: {
+export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null, aoGerar, aoAbrirRoteiro, aoMudarVideo, aoEntregar }: {
   item: ItemDoMes;
   arte?: ArteNaAgenda | null;
   /** As gerações e versões da IA ligadas à pauta (mais nova primeiro). */
@@ -100,6 +100,8 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
   aoAbrirRoteiro: () => void;
   /** 27/10: o Estúdio acompanha o vídeo da peça na hora (legendar, trilha, cortar e entrega usam o mesmo). */
   aoMudarVideo?: (v: VideoProntoDaPeca | null) => void;
+  /** No Estúdio (27/10): Entregar abre a aba de envio, com a legenda do post à vista e editável. */
+  aoEntregar?: () => void;
 }) {
   const { clientId, userId, catalogo } = useMesa();
   const { profile } = useAuth();
@@ -338,6 +340,12 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
                       Entregar
                     </button>
                   ) : (
+                    aoEntregar ? (
+                      <button type="button" className={juntar(botao.primario, "h-8 px-3 text-[12px]")} onClick={aoEntregar} disabled={!podeEditar || video.fonte === "agenda"} data-abrir-entrega="">
+                        <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                        Legenda e entrega
+                      </button>
+                    ) : (
                     <BotaoComCusto
                       rotulo={
                         <>
@@ -357,6 +365,7 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
                       aoConcluir={(data) => aoPreparar(data as ResultadoDoPreparo)}
                       className="h-8 px-3"
                     />
+                    )
                   )}
                 </>
               )}

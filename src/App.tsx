@@ -73,6 +73,8 @@ const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = rotas.lazy(() => import("@/pages/AdminAds"));
 const AnunciosHoje = rotas.lazy(() => import("@/pages/AnunciosHoje"));
 const MensagensDaSemana = rotas.lazy(() => import("@/pages/MensagensDaSemana"));
+// 27/10: token do usuário do sistema da BM para a Meta (só admin).
+const MetaUsuarioDoSistema = rotas.lazy(() => import("@/pages/MetaUsuarioDoSistema"));
 // 26/10: a tela Hoje (um resumo por dia dos agentes; destino do aviso diário do sino).
 const Hoje = rotas.lazy(() => import("@/pages/Hoje"));
 const AdminCiclo = rotas.lazy(() => import("@/pages/AdminCiclo"));
@@ -389,6 +391,7 @@ export function AppRoutes() {
         <Route path="/equipe" element={<StaffRoute><Team /></StaffRoute>} />
         <Route path="/arquivos" element={<StaffRoute><AdminFiles /></StaffRoute>} />
         <Route path="/config" element={<StaffRoute><SettingsPage /></StaffRoute>} />
+        <Route path="/config/meta-usuario-do-sistema" element={<>{profile?.role === "admin" ? <MetaUsuarioDoSistema /> : <Navigate to="/config" replace />}</>} />
         <Route path="/pedidos" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminRequests /> : <ClientRequests />}</>} />
         <Route path="/documentos" element={<ClientDocuments />} />
         <Route path="/perfil" element={<ProfilePage />} />

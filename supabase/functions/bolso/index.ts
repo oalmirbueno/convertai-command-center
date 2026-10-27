@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chave as chaveDoPainel } from "../_shared/chaves.ts";
 import { configuracaoOpenaiDoServidor, configuracaoOpenrouterDoServidor, openai, openrouter, simulado, type Contexto, type Provedor } from "./provedores.ts";
 import { caminhoDaArte, mimeReal, type Formato } from "./regras.ts";
+import type { EntradaCriativa, NaturezaCriativa } from "./criativo.ts";
 
 /**
  * Trabalhador do Aceleriq de Bolso (26/10/2026).
@@ -38,7 +39,7 @@ async function provedorDe(nome: string): Promise<Provedor | null> {
 }
 
 type Pegado = {
-  job: { id: string; user_id: string; campanha_id: string; tipo: "texto" | "imagem"; formato: Formato | null; provedor: string; tentativa: number };
+  job: { id: string; user_id: string; campanha_id: string; tipo: "texto" | "imagem"; formato: Formato | null; provedor: string; tentativa: number; natureza?: NaturezaCriativa; entrada?: EntradaCriativa };
   marca: Contexto["marca"];
   briefing: Contexto["briefing"];
   versao: Contexto["versao"];
@@ -55,7 +56,18 @@ async function processarUm(servico: SupabaseClient, jobId: string | null): Promi
   };
   const provedor = await provedorDe(p.job.provedor);
   if (!provedor) return falhar("Fornecedor desconhecido.", true);
-  const ctx: Contexto = { marca: p.marca, briefing: p.briefing, versao: p.versao, formato: p.job.formato };
+  const ctx: Contexto = { marca: p.marca, briefing: p.briefing, versao: p.versao, formato: p.job.formato, natureza: p.job.natureza, entrada: p.job.entrada };
+
+  if (p.job.natureza === "briefing") {
+    if (!provedor.briefing) return falhar("A preparação de campanha está indisponível neste fornecedor.", true);
+    const r = await provedor.briefing(ctx);
+    if (!r.ok) return r.incerto ? { job_id: p.job.id, estado: "processando" } : falhar(r.motivo, r.definitiva);
+    const { data: concluido, error: erroConclusao } = await servico.rpc("bolso_trabalho_concluir", {
+      _job: p.job.id, _tentativa: p.job.tentativa, _resultado: { briefing: r.briefing }, _arquivo: null, _custo: r.custo || null,
+    });
+    if (erroConclusao) return falhar("O briefing não passou na conferência.", true);
+    return { job_id: p.job.id, estado: concluido?.estado || "concluido" };
+  }
 
   if (p.job.tipo === "texto") {
     const r = await provedor.texto(ctx);
@@ -69,6 +81,31 @@ async function processarUm(servico: SupabaseClient, jobId: string | null): Promi
     return { job_id: p.job.id, estado: (c as { estado?: string }).estado || "concluido" };
   }
 
+  if (p.job.entrada?.referencias?.length || p.job.natureza === "ajuste") {
+    // Só IDs do próprio membro/campanha chegam a URLs assinadas. Nenhuma URL enviada pelo cliente é buscada.
+    const caminhos: { caminho: string; limite: number }[] = [];
+    if (p.job.natureza === "ajuste") {
+      const { data: arte } = await servico.from("bolso_arquivos").select("caminho").eq("id", p.job.entrada?.arte_origem).eq("user_id", p.job.user_id).eq("campanha_id", p.job.campanha_id).maybeSingle();
+      if (!arte) return falhar("A arte original não está disponível nesta campanha.", true);
+      caminhos.push({ caminho: arte.caminho, limite: 10 * 1024 * 1024 });
+    }
+    const ids = p.job.entrada?.referencias || [];
+    if (ids.length > 3 || new Set(ids).size !== ids.length) return falhar("Selecione até três referências diferentes.", true);
+    if (ids.length) {
+      const { data: refs, error: erroRefs } = await servico.from("bolso_referencias").select("id,caminho").eq("user_id", p.job.user_id).eq("campanha_id", p.job.campanha_id).is("removida_em", null).not("confirmada_em", "is", null).in("id", ids);
+      if (erroRefs || refs?.length !== ids.length) return falhar("Uma referência não está mais disponível nesta campanha.", true);
+      caminhos.push(...ids.map((id) => ({ caminho: refs.find((ref) => ref.id === id)!.caminho, limite: 5 * 1024 * 1024 })));
+    }
+    ctx.referencias = [];
+    for (const { caminho, limite } of caminhos) {
+      if (!caminho.startsWith(`${p.job.user_id}/${p.job.campanha_id}/`)) return falhar("Referência fora desta campanha.", true);
+      const { data: arquivo, error: erroArquivo } = await servico.storage.from("bolso").download(caminho);
+      if (erroArquivo || !arquivo || arquivo.size > limite || !mimeReal(new Uint8Array(await arquivo.arrayBuffer()))) return falhar("Uma referência não é uma imagem válida. Envie novamente.", true);
+      const { data: assinada, error: erroAssinatura } = await servico.storage.from("bolso").createSignedUrl(caminho, 180);
+      if (erroAssinatura || !assinada) return falhar("Não foi possível abrir a referência agora.", true);
+      ctx.referencias.push(assinada.signedUrl);
+    }
+  }
   const r = await provedor.imagem(ctx);
   if (!r.ok) {
     if (r.incerto) return { job_id: p.job.id, estado: "processando" };
@@ -109,6 +146,39 @@ Deno.serve(async (req) => {
   }
   const servico = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
+    if (corpo.acao === "confirmar_referencia") {
+      if (typeof corpo.referencia_id !== "string" || !UUID.test(corpo.referencia_id)) return resposta({ erro: "referencia_invalida" }, 400);
+      const { data: ref } = await servico.from("bolso_referencias").select("id,caminho,mime,bytes").eq("id", corpo.referencia_id).eq("user_id", auth.user.id).is("removida_em", null).maybeSingle();
+      if (!ref?.caminho?.startsWith(`${auth.user.id}/`)) return resposta({ erro: "referencia_nao_encontrada" }, 404);
+      const { data: arquivo, error: erroArquivo } = await servico.storage.from("bolso").download(ref.caminho);
+      if (erroArquivo || !arquivo || arquivo.size !== ref.bytes || arquivo.size > 5 * 1024 * 1024
+        || mimeReal(new Uint8Array(await arquivo.arrayBuffer())) !== ref.mime) return resposta({ erro: "referencia_invalida" }, 400);
+      const { error: erroConfirmacao } = await servico.from("bolso_referencias").update({ confirmada_em: new Date().toISOString() }).eq("id", ref.id).eq("user_id", auth.user.id).is("removida_em", null);
+      if (erroConfirmacao) return resposta({ erro: "referencia_indisponivel" }, 503);
+      return resposta({ confirmada: true });
+    }
+    if (corpo.acao === "preparar_referencia") {
+      if (typeof corpo.campanha_id !== "string" || !UUID.test(corpo.campanha_id)) return resposta({ erro: "campanha_invalida" }, 400);
+      const { data: referencia, error: erroReferencia } = await usuario.rpc("bolso_referencia_registrar", {
+        _campanha: corpo.campanha_id, _nome: corpo.nome, _mime: corpo.mime, _bytes: corpo.bytes,
+      });
+      if (erroReferencia?.code === "53400") {
+        // Apenas as duas recusas conhecidas viram códigos públicos. Nunca devolver detalhes SQL.
+        if (erroReferencia.message === "Há envios em andamento. Envios interrompidos liberam espaço após 15 minutos.") {
+          return resposta({ erro: "referencias_pendentes" }, 409);
+        }
+        if (erroReferencia.message === "Use até três referências por campanha") {
+          return resposta({ erro: "limite_referencias" }, 409);
+        }
+      }
+      if (erroReferencia || !referencia?.caminho?.startsWith(`${auth.user.id}/${corpo.campanha_id}/`)) return resposta({ erro: "referencia_nao_permitida" }, 403);
+      const { data: assinada, error: erroAssinatura } = await servico.storage.from("bolso").createSignedUploadUrl(referencia.caminho);
+      if (erroAssinatura || !assinada) {
+        await usuario.rpc("bolso_referencia_remover", { _id: referencia.id });
+        return resposta({ erro: "upload_indisponivel" }, 503);
+      }
+      return resposta({ referencia, token: assinada.token });
+    }
     if (corpo.acao === "processar") {
       if (typeof corpo.job_id !== "string" || !UUID.test(corpo.job_id)) return resposta({ erro: "job_invalido" }, 400);
       // Dono confere pelo JWT do membro: só a campanha dele devolve o job.

@@ -241,6 +241,11 @@ export interface ResultadoDoPreparo {
  * - arquivos: só leva o vídeo para Arquivos (sem post, sem aprovação, sem legenda).
  * O post vivo da tarefa é sempre reaproveitado. Nunca publica na hora: o motor publica no horário.
  */
+/** Formato do post de vídeo na Agenda: o da tarefa quando ela já é de vídeo; senão, Reels. Pura. */
+export function formatoDoVideoNaAgenda(tipoDaTarefa: string | null | undefined): "reel" | "short" | "video" | "story" {
+  return tipoDaTarefa === "short" || tipoDaTarefa === "video" || tipoDaTarefa === "story" || tipoDaTarefa === "reel" ? tipoDaTarefa : "reel";
+}
+
 export async function prepararParaPublicar(p: {
   clientId: string;
   userId: string;
@@ -265,7 +270,14 @@ export async function prepararParaPublicar(p: {
   // Post da tarefa com outro arquivo vira revisão (nunca sobrescreve um material já aprovado).
   const revisar = !!atual && !!atual.post.primary_file_id && atual.post.primary_file_id !== arquivo.fileId;
   const mesmo = atual && !revisar ? atual : null;
-  const tipo = item.delivery_type === "short" ? "short" : "reel";
+  // 27/10 (dono: "não está agendando"): o banco exige o formato do post igual ao tipo de entrega da tarefa
+  // ("O tipo da tarefa não corresponde ao formato do conteúdo editorial"). Tarefa de vídeo mantém o tipo dela;
+  // pauta planejada em outro formato que virou vídeo passa a Reels antes de salvar o post.
+  const tipo = formatoDoVideoNaAgenda(item.delivery_type);
+  if (tipo !== item.delivery_type) {
+    const { error: erroDoTipo } = await supabase.from("tasks").update({ delivery_type: tipo }).eq("id", item.id);
+    if (erroDoTipo) throw new Error("Não foi possível marcar esta pauta como Reels para ir à Agenda. Tente de novo.");
+  }
   const planejadas = mesmo ? mesmo.publications.filter((x) => x.publication.status === "planned") : [];
   const publicacoes: Record<string, unknown>[] = planejadas.map(({ publication, internal }) => ({
     id: publication.id,
