@@ -235,8 +235,8 @@ export default function CreditosBolso() {
           <span className="bolso-nota">Últimas movimentações</span>
         </div>
         <p className="bolso-nota mb-4">
-          O valor aparece antes de confirmar. Pedidos que falham devolvem os
-          créditos; pedidos em conferência ficam reservados até a revisão.
+          O valor aparece antes de confirmar. Se o pedido falhar, créditos ainda
+          válidos voltam ao saldo. Pedidos em conferência ficam reservados até a revisão.
         </p>
         {extrato.isPending ? (
           <p role="status">Carregando o extrato…</p>

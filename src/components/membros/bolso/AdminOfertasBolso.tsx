@@ -63,6 +63,7 @@ export default function AdminOfertasBolso({
   const provisao = centavosDoCampo(form.provisao);
   const valido =
     form.nome.trim() &&
+    form.codigo.length >= 3 &&
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.codigo) &&
     preco !== null &&
     preco > 0 &&
@@ -120,9 +121,9 @@ export default function AdminOfertasBolso({
       <div className="bolso-admin-financeiro">
         <Wallet size={22} aria-hidden="true" />
         <p>
-          <strong>Uma carteira para cada pessoa.</strong> O cliente usa créditos
-          Aceleriq. O custo do OpenRouter é da operação e não movimenta sua
-          carteira pessoal ou a do Mesa Ads.
+          <strong>Uma carteira para cada pessoa.</strong> Cada cliente usa apenas
+          o próprio saldo do Bolso. O custo do OpenRouter fica na operação da
+          Aceleriq, registrado separadamente do Mesa Ads.
         </p>
         <span className="bolso-etiqueta">Pagamentos desligados</span>
       </div>

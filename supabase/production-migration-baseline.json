@@ -2705,6 +2705,14 @@
       "remote_name": "aceleriq_de_bolso",
       "remote_statements_sha256": "14c0d0ee06db57a8a42646fb9e24a2285d34808d743261ff4a9a609431c9ee22",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027220000",
+      "path": "supabase/migrations/20261027220000_bolso_carteiras_recargas_openrouter.sql",
+      "local_sha256": "4cb5bab4d7539dadcc270590d5ff44bfd0f6b97aa5b06bae5159f353f058a2dc",
+      "remote_name": "bolso_carteiras_recargas_openrouter",
+      "remote_statements_sha256": "cf00eb45069ce501b8d96c0c36f8b8f90c987ae875549ca39edbeae719aa3a78",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

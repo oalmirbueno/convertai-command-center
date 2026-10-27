@@ -169,8 +169,8 @@ export const EXPLICA_JOB: Record<EstadoDoJob, string> = {
   na_fila: "Os créditos ficam reservados até terminar.",
   processando: "Pode sair desta tela; o resultado fica guardado aqui.",
   concluido: "Os créditos reservados foram usados.",
-  falhou: "Os créditos reservados voltaram para o seu saldo.",
-  cancelado: "Os créditos reservados voltaram para o seu saldo.",
+  falhou: "A reserva foi liberada. Créditos ainda válidos voltam ao saldo.",
+  cancelado: "A reserva foi liberada. Créditos ainda válidos voltam ao saldo.",
   incerto: "O fornecedor não respondeu a tempo. A equipe confere antes de cobrar ou devolver.",
 };
 
