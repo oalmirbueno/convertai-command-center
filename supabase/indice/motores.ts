@@ -700,6 +700,7 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
   revisoes: "Segunda passada curta sobre uma saída que já levou o método (reparo de formato e encaixe na cadência do agente do Mês, correção de tutorial, revisão do texto das lâminas no Estúdio, reescrita da copy na Mesa Ads): conserta e completa o que a primeira chamada fez.",
   "nucleo.fatos": "Redação presa aos fatos do núcleo comum (Gestor da Central e Mesa Vídeos): responde só com o que as leituras devolveram e o código confere; o método da casa puxaria conteúdo novo.",
   "cfo.explicacao": "Explicação do CFO (frente CFO): a IA só reescreve a conta do motor em código, presa aos números (valor fora da conta faz valer o motor); método de trabalho puxaria conteúdo além da conta.",
+  "videos.referencias_virais": "Busca de referências virais do vídeo da pauta (27/10): pesquisa na web que só devolve vídeos reais com o link que a busca citou e descreve a estrutura pela forma; não escreve peça, e o método da casa puxaria conteúdo além da busca.",
   "laboratorio.v1": "Laboratório v1 (19/10): o catálogo de superpoderes ainda não tem agente do Laboratório (agente do projeto e nós especialistas); sai desta lista quando o catálogo ganhar laboratorio.agente e laboratorio.geracao.",
 };
 
@@ -727,6 +728,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "agente-calendario/index.ts#ajustarCriacao": "revisoes",
   // 23/10: o roteiro curto do vídeo da peça (2 versões, o Jev escolhe) e os termos da busca de referência livre.
   "agente-calendario/index.ts#escreverMidiaDaPeca": "revisoes",
+  // 27/10: a busca de referências virais (vídeos de IA e satisfatórios do nicho) do vídeo da pauta no Estúdio.
+  "agente-calendario/index.ts#buscarReferenciasVirais": "videos.referencias_virais",
   "mesa-ads/index.ts#chamarReescrita": "revisoes",
   "estudio-arte/index.ts#prepararItem/revisarConteudo": "revisoes",
   // 17/10: o redator das capas alternativas (o Jev escolhe a melhor antes de qualquer imagem).

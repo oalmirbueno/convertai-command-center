@@ -92,7 +92,7 @@ function tipoDoItem(item: Record<string, unknown>): TipoDeMidia | null {
  * partida entra no roteiro; o modelo só quando é vídeo ou quando falta foto
  * (para os termos da busca livre); a busca livre só sem foto do acervo.
  */
-export async function planejarMidia(deps: DepsDaMidia, a: { clientId: string; taskId: string; tipo?: TipoDeMidia | null; pedido?: string | null }): Promise<PlanoDaMidia> {
+export async function planejarMidia(deps: DepsDaMidia, a: { clientId: string; taskId: string; tipo?: TipoDeMidia | null; pedido?: string | null; maxFotos?: number | null }): Promise<PlanoDaMidia> {
   const { tarefa, item } = await itemDaTarefa(deps.db, a.clientId, a.taskId);
   const tipo = a.tipo || tipoDoItem(item);
   if (!tipo) throw new Error("Esta peça é de arte (carrossel ou estático). Peça foto ou vídeo para ela e o formato muda junto.");
@@ -112,7 +112,8 @@ export async function planejarMidia(deps: DepsDaMidia, a: { clientId: string; ta
     try {
       const uso = tipo === "video" ? "imagem de partida de um vídeo curto" : "foto do post";
       const r = await deps.julgar({ peca, candidatas: candidatas.map(textoDaFoto) }, perguntasDaMidia(candidatas.length, uso));
-      const quantas = tipo === "video" ? 2 : Math.max(1, Math.min(4, Number((item.foto as Record<string, unknown> | undefined)?.quantidade) || 4));
+      // 27/10: a composição do vídeo da pauta pede uma foto por cena (até 4); o "Pensar a mídia" segue com 2.
+      const quantas = tipo === "video" ? Math.max(1, Math.min(4, Math.floor(Number(a.maxFotos)) || 2)) : Math.max(1, Math.min(4, Number((item.foto as Record<string, unknown> | undefined)?.quantidade) || 4));
       acervo = escolhidasPelasNotas(candidatas, r, quantas);
     } catch {
       avisos.push("O Jev não respondeu: as fotos do Workspace ficaram para você escolher.");

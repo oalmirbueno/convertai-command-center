@@ -728,6 +728,11 @@ export const partesDosHypes = (catalogo: ModeloIa[]): ParteDaEstimativa[] => [
   { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada, tokensSaida: saidaPorRaciocinio("medium"), buscasWeb: TAMANHOS.proporTemas.buscasWeb },
 ];
 
+/** 27/10: referências virais do vídeo da pauta: uma pesquisa na web curta do estrategista (raciocínio baixo). */
+export const partesDaBuscaViral = (catalogo: ModeloIa[]): ParteDaEstimativa[] => [
+  { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: 9000, tokensSaida: saidaPorRaciocinio("low") + 2500, buscasWeb: 4 },
+];
+
 export const partesDaCampanha = (catalogo: ModeloIa[], quantidade: number | null, anexos: number): ParteDaEstimativa[] => [
   {
     modeloId: modeloDoEstrategista(catalogo),

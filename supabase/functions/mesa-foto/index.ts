@@ -255,6 +255,7 @@ import { ACOES_LONGAS_DE_CLONES, acoesDeClones, ALVOS_DE_ESTIMATIVA_DE_CLONES } 
 import { ACOES_LONGAS_DO_BOOK, acoesDoBook, ALVOS_DE_ESTIMATIVA_DO_BOOK } from "./book.ts";
 import { ACOES_LONGAS_DA_BIBLIOTECA, acoesDaBibliotecaEmLote } from "./biblioteca-lote.ts";
 import { ACOES_LONGAS_DAS_FERRAMENTAS_PRO, acoesDasFerramentasPro } from "./ferramentas-pro.ts";
+import { ACOES_LONGAS_DA_FOTO_DA_PAUTA, acoesDaFotoDaPauta } from "./foto-da-pauta.ts";
 import type { FerramentasDaMesa } from "./ferramentas.ts";
 import {
   AZIMUTES,
@@ -4686,6 +4687,16 @@ ${PADRAO_PUBLICITARIO}`,
 });
 const BIBLIOTECA_EM_LOTE = acoesDaBibliotecaEmLote(FERRAMENTAS, { ehAdmin, atualizarItemDaBiblioteca, modeloDeImagem });
 const FERRAMENTAS_PRO = acoesDasFerramentasPro(FERRAMENTAS);
+// Foto da pauta (27/10): gerar no Estúdio da Mesa pelo contexto, estilo e referências com papel (foto-da-pauta.ts).
+const FOTO_DA_PAUTA = acoesDaFotoDaPauta(FERRAMENTAS, {
+  modeloDeImagem,
+  lerQualidade,
+  resolverEstilo: async (clientId, bruto) => {
+    const guia = lerGuia(bruto);
+    const r = await resolverGuia(clientId, guia);
+    return { ...r, prompt_id: guia.prompt_id };
+  },
+});
 
 // ------------------------------------------------------------------ ações nas fotos (propor e confirmar)
 
@@ -4888,6 +4899,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   ...FERRAMENTAS_PRO.acoes,
   // Diretor agêntico (26/09; diretor.ts): pacote de contexto do cliente e a geração item a item.
   ...DIRETOR.acoes,
+  // Foto da pauta (27/10): Gerar do Estúdio da Mesa (contexto, estilo e referências com papel).
+  ...FOTO_DA_PAUTA.acoes,
 };
 
 /**
@@ -4900,7 +4913,7 @@ const ACOES_LONGAS = new Set([
   "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "agente_aplicar", "estimar",
   "produto_publico", "produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar",
   ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS, ...ACOES_LONGAS_DE_CLONES, ...ACOES_LONGAS_DA_BIBLIOTECA, ...ACOES_LONGAS_DO_BOOK,
-  ...ACOES_LONGAS_DAS_FERRAMENTAS_PRO, ...ACOES_LONGAS_DO_DIRETOR,
+  ...ACOES_LONGAS_DAS_FERRAMENTAS_PRO, ...ACOES_LONGAS_DO_DIRETOR, ...ACOES_LONGAS_DA_FOTO_DA_PAUTA,
 ]);
 
 Deno.serve(async (req) => {

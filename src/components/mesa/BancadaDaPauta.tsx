@@ -2,7 +2,7 @@ import { ControlesDaPauta } from "./ControlesDaPauta";
 import { botao, superficie, juntar } from "@/components/sistema/estilos";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Camera, Film, ImagePlus, Maximize2, Wand2, Type, Send, PenLine, Image, type LucideIcon } from "lucide-react";
+import { Camera, Film, ImagePlus, Maximize2, Wand2, Type, Send, PenLine, Image, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { useFotos, type FotoDoAcervo } from "@/components/mesa-foto/fotoApi";
@@ -84,10 +84,12 @@ export function PreviaDaPauta({ caminho, bucket = "mesa", nome, video = false, c
   </div>;
 }
 
-export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, onRemover, onEditar, seletor, extras = [], pronta = false, onDerivada }: {
+export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, onRemover, onEditar, seletor, extras = [], principais = [], pronta = false, onDerivada }: {
   titulo: string; fotos: FotoDaPrancheta[]; children: ReactNode; onEscolher?: () => void;
   onMover?: (indice: number, direcao: number) => void; onRemover?: (id: string) => void; onEditar?: (id: string) => void;
   seletor?: ReactNode; extras?: FerramentaDaBancada[]; pronta?: boolean; onDerivada?: (antiga: string, nova: FotoDoAcervo) => void | Promise<void>;
+  /** 27/10: as ações principais (Acervo, Produto + modelo, Carrossel) logo depois de Gerar; as ferramentas avulsas vão para "Mais". */
+  principais?: FerramentaDaBancada[];
 }) {
   const { clientId } = useMesa();
   const acervo = useFotos(clientId);
@@ -97,13 +99,17 @@ export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, o
   const foto = fotos.find((f) => f.id === ativa) || fotos[0];
   const original = acervo.data?.find((f) => f.id === foto?.id);
   const editar = onEditar || mesa.abrirNoEstudio;
+  // Com as principais, as ferramentas avulsas (que abrem a tela inteira) ficam juntas em "Mais ferramentas".
+  const agrupar = principais.length > 0 && extras.length > 0;
   const abas: FerramentaDaBancada[] = [
-    { id: "gerar", nome: pronta ? "Fotos do post" : "Gerar fotos", icone: PenLine },
+    { id: "gerar", nome: principais.length ? "Gerar" : pronta ? "Fotos do post" : "Gerar fotos", icone: PenLine },
+    ...principais,
     { id: "melhorar", nome: "Melhorar e ampliar", icone: Wand2 },
     { id: "logo", nome: "Logo da marca", icone: Image },
-    ...extras,
+    ...(agrupar ? [] : extras),
     { id: "legenda", nome: "Legenda", icone: Type },
     { id: "entrega", nome: "Enviar para aprovação", icone: Send },
+    ...(agrupar ? [{ id: "mais", nome: "Mais ferramentas", icone: MoreHorizontal }] : []),
   ];
   return <BancadaDaPauta tipo="fotos" titulo={titulo}
     abas={abas} ativa={painel} onAba={setPainel} escolhendo={!!seletor}
@@ -115,5 +121,5 @@ export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, o
       {onMover && <div className="flex items-center justify-between text-[12px]"><button type="button" disabled={!i} aria-label={`Mover foto ${i + 1} para antes`} onClick={() => onMover(i, -1)}>←</button><button type="button" aria-label={`Remover foto ${i + 1}`} onClick={() => onRemover?.(f.id)}>Remover</button><button type="button" disabled={i === fotos.length - 1} aria-label={`Mover foto ${i + 1} para depois`} onClick={() => onMover(i, 1)}>→</button></div>}
     </li>)}</ol>{onEscolher && <button type="button" onClick={onEscolher} aria-label="Adicionar fotos" title="Adicionar fotos" className="mt-3 flex w-full items-center justify-center rounded-lg px-2 py-3 text-muted-foreground hover:bg-muted hover:text-foreground"><ImagePlus className="h-4 w-4" aria-hidden="true" /></button>}</>}
     previa={<><div className="flex items-center justify-between text-[13px]"><strong>{foto ? `Foto ${fotos.indexOf(foto) + 1} de ${fotos.length}` : "Foto da pauta"}</strong>{foto && onEditar && <button type="button" onClick={() => onEditar(foto.id)} className="text-primary">Melhorar esta foto</button>}</div>{foto ? <PreviaDaPauta key={foto.id} {...foto} /> : <div className="flex min-h-[400px] flex-1 flex-col items-center justify-center rounded-lg border border-dashed text-center"><Camera className="mb-3 h-8 w-8 text-muted-foreground" /><p className="text-[13px]">Escolha as fotos para montar esta pauta.</p>{onEscolher && <button type="button" onClick={onEscolher} className="mt-4 rounded-md bg-primary px-4 py-2 text-[13px] text-primary-foreground">Escolher fotos do cliente</button>}</div>}</>}
-    ferramentas={<>{children}<PainelDaBancada id="logo">{original && onDerivada ? <LogoNaFoto key={original.id} foto={original} onPronta={async (nova) => { await onDerivada(original.id, nova); setAtiva(nova.id); }} /> : <p className="text-[13px]">{pronta ? "Use Trocar fotos para aplicar a logo em uma nova versão antes de enviar." : "Escolha uma foto na prancheta para aplicar a logo."}</p>}</PainelDaBancada><PainelDaBancada id="melhorar">{original && onDerivada ? <><MelhorarFotoNaBancada key={original.id} foto={original} onPronta={async (nova) => { await onDerivada(original.id, nova); setAtiva(nova.id); }} />{editar && <button type="button" className="mt-4 rounded-md border p-2 text-[12px]" onClick={() => editar(original.id)}>Luz, cor, cenário e recorte</button>}</> : <p className="text-[13px]">Escolha uma foto editável na prancheta. Posts enviados mantêm a versão aprovada.</p>}</PainelDaBancada></>} />;
+    ferramentas={<>{children}{agrupar && <PainelDaBancada id="mais"><ul className="min-w-0" aria-label="Mais ferramentas">{extras.map(({ id, nome, icone: Icone, onAbrir }) => <li key={id}><button type="button" onClick={() => onAbrir ? onAbrir() : setPainel(id)} className="flex w-full min-w-0 items-center rounded-md px-2 py-2.5 text-left text-[13px] hover:bg-muted"><Icone className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate">{nome}</span></button></li>)}</ul></PainelDaBancada>}<PainelDaBancada id="logo">{original && onDerivada ? <LogoNaFoto key={original.id} foto={original} onPronta={async (nova) => { await onDerivada(original.id, nova); setAtiva(nova.id); }} /> : <p className="text-[13px]">{pronta ? "Use Trocar fotos para aplicar a logo em uma nova versão antes de enviar." : "Escolha uma foto na prancheta para aplicar a logo."}</p>}</PainelDaBancada><PainelDaBancada id="melhorar">{original && onDerivada ? <><MelhorarFotoNaBancada key={original.id} foto={original} onPronta={async (nova) => { await onDerivada(original.id, nova); setAtiva(nova.id); }} />{editar && <button type="button" className="mt-4 rounded-md border p-2 text-[12px]" onClick={() => editar(original.id)}>Luz, cor, cenário e recorte</button>}</> : <p className="text-[13px]">Escolha uma foto editável na prancheta. Posts enviados mantêm a versão aprovada.</p>}</PainelDaBancada></>} />;
 }

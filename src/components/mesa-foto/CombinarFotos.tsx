@@ -15,8 +15,8 @@ import EscolhaDoProduto, { capaDoKit } from "./EscolhaDoProduto";
 import EscolhaDoModeloDaFoto from "./EscolhaDoModeloDaFoto";
 import { type ModeloEscolhido } from "./escolhasDaLinha";
 import { acrescentarFotos, useFotos, useKits, decidirFoto, chaveDosKits, type FotoDoAcervo } from "./fotoApi";
-import { useClones } from "./clonesApi";
-import { usePersonas } from "./modelosApi";
+import { useClones, type Clone } from "./clonesApi";
+import { usePersonas, type Persona } from "./modelosApi";
 import { useCanvases, canvasVazio, novoNo, porCartao, salvarCanvas, gerarNoCanvas, partesDoGerar, chaveDosCanvases } from "./canvasApi";
 import SeletorDeFotos from "./SeletorDeFotos";
 import GaleriaDeFotos from "./GaleriaDeFotos";
@@ -32,6 +32,29 @@ export const CENARIOS_PARA_COMBINAR = [
   { id: "flatlay", nome: "Flat lay", pedido: "Composição vista de cima, produto organizado sobre superfície de cor harmônica, luz suave." },
 ] as const;
 const VARIACOES = ["Composição principal em três quartos.", "Enquadramento frontal, mantendo o mesmo cenário.", "Detalhe próximo do acabamento real.", "Enquadramento aberto com mais respiro no mesmo ambiente."];
+
+/**
+ * Uma combinação produto + pessoa + cenário pelo Canvas (o mesmo motor da
+ * Mesa Foto). Exportada para o Estúdio da pauta usar sem duplicar a montagem.
+ */
+export async function gerarCombinacao(p: {
+  clientId: string; kitId: string; kitNome: string;
+  modelo?: Pick<Persona, "id" | "versao"> | null; clone?: Clone | null; ambienteId?: string | null;
+  cenario: (typeof CENARIOS_PARA_COMBINAR)[number]; pedido: string; formato: string; motor: string; indice: number;
+}): Promise<FotoDoAcervo> {
+  const saida = novoNo("gerar", 500, 0, { motores: [p.motor], formato: p.formato, qualidade: "alta" });
+  let c = { ...canvasVazio(p.clientId, `Combinar · ${p.kitNome} · ${p.cenario.nome} · ${p.indice + 1}`), nos: [saida] };
+  c = porCartao(c, novoNo("produto", 0, 0, { kit_id: p.kitId }), { gerarId: saida.id });
+  if (p.modelo) c = porCartao(c, novoNo("modelo", 0, 0, { modelo_id: p.modelo.id, versao: p.modelo.versao }), { gerarId: saida.id });
+  if (p.clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (p.clone.identidade_real.find((i) => i.principal) || p.clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: p.clone.nome, clone_id: p.clone.id }), { gerarId: saida.id });
+  if (p.ambienteId) c = porCartao(c, novoNo("ambiente", 0, 0, { imagem_id: p.ambienteId, modo: "foto", uso: "usar" }), { gerarId: saida.id });
+  c = porCartao(c, novoNo("texto", 0, 0, { texto: `${p.cenario.pedido}\n${p.pedido}\n${VARIACOES[p.indice % VARIACOES.length]} Preserve a identidade, forma, cor e proporção do produto.` }), { gerarId: saida.id });
+  const salvo = await salvarCanvas(c);
+  if (!salvo.id) throw new Error("Não foi possível salvar a combinação.");
+  const resultado = await gerarNoCanvas({ canvasId: salvo.id, gerarId: saida.id, motorId: p.motor, qualidade: "alta" });
+  if (!resultado.imagem) throw new Error("A imagem ainda não foi confirmada. As versões concluídas continuam salvas.");
+  return resultado.imagem;
+}
 interface Rascunho { pessoa: ModeloEscolhido | null; ambiente: string | null; cenario: string; pedido: string; formato: string; motor: string; quantidade: number; resultados: string[]; grupos?: Record<string, string[]>; produtoTratado?: string; origemKit?: string | null; kitTratado?: string; fotoDoKitTratado?: string }
 const INICIAL: Rascunho = { pessoa: null, ambiente: null, cenario: "estudio", pedido: "", formato: "4:5", motor: "", quantidade: 2, resultados: [] };
 
@@ -70,18 +93,7 @@ export default function CombinarFotos({ escopo }: { escopo?: string } = {}) {
         <BotaoComCusto rotulo={`Gerar ${r.quantidade} ${r.quantidade === 1 ? "foto" : "variações"}`} titulo="Combinar produtos e cenários" descricao="Cria novas versões com as referências escolhidas." disabled={ocupado || !kit || !motor || faltaPessoa} partes={() => Array.from({ length: r.quantidade }, () => partesDoGerar([motor], "alta", Math.min(14, (kit?.refs.length || 0) + 6))).flat()} executar={async () => {
           setOcupado(true);
           try { for (let i = 0; i < r.quantidade; i++) {
-            const saida = novoNo("gerar", 500, 0, { motores: [motor], formato: r.formato, qualidade: "alta" });
-            let c = { ...canvasVazio(clientId, `Combinar · ${kit?.nome} · ${cenario.nome} · ${i + 1}`), nos: [saida] };
-            c = porCartao(c, novoNo("produto", 0, 0, { kit_id: kitDeGeracao }), { gerarId: saida.id });
-            if (modelo) c = porCartao(c, novoNo("modelo", 0, 0, { modelo_id: modelo.id, versao: modelo.versao }), { gerarId: saida.id });
-            if (clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (clone.identidade_real.find((i) => i.principal) || clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: clone.nome, clone_id: clone.id }), { gerarId: saida.id });
-            if (ambiente) c = porCartao(c, novoNo("ambiente", 0, 0, { imagem_id: ambiente.id, modo: "foto", uso: "usar" }), { gerarId: saida.id });
-            c = porCartao(c, novoNo("texto", 0, 0, { texto: `${cenario.pedido}\n${r.pedido}\n${VARIACOES[i]} Preserve a identidade, forma, cor e proporção do produto.` }), { gerarId: saida.id });
-            const salvo = await salvarCanvas(c);
-            if (!salvo.id) throw new Error("Não foi possível salvar a combinação.");
-            const resultado = await gerarNoCanvas({ canvasId: salvo.id, gerarId: saida.id, motorId: motor, qualidade: "alta" });
-            if (!resultado.imagem) throw new Error("A imagem ainda não foi confirmada. As versões concluídas continuam salvas.");
-            registrar(resultado.imagem);
+            registrar(await gerarCombinacao({ clientId, kitId: kitDeGeracao!, kitNome: kit?.nome || "Produto", modelo, clone, ambienteId: ambiente?.id || null, cenario, pedido: r.pedido, formato: r.formato, motor, indice: i }));
           } return { pronto: true }; } finally { setOcupado(false); atualizarCusto(); void cache.invalidateQueries({ queryKey: chaveDosCanvases(clientId) }); }
         }} />
         {atual && <button type="button" className="ml-2 mt-3 rounded-md border p-2 text-[12px]" onClick={() => prepararNaAgenda?.([atual.id])}>Usar esta foto no post</button>}

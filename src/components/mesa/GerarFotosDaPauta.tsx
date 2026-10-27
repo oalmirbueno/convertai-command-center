@@ -1,52 +1,167 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Check, ImagePlus, Search, Upload, X } from "lucide-react";
 import { BotaoComCusto } from "./Custo";
 import { AcoesDaBancada } from "./BancadaDaPauta";
-import { useMesa } from "./MesaContexto";
+import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { SeletorDeModelo } from "./Seletores";
 import { padraoPara } from "@/lib/mesa/api";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { acrescentarFotos, invalidarFotos, partesDoPreparo, prepararFoto, useFotos } from "@/components/mesa-foto/fotoApi";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
+import { botao, campo, campoTexto, foco, juntar } from "@/components/sistema/estilos";
+import { MiniaturaDaFoto, Moldura } from "@/components/mesa-foto/Comuns";
+import { ImagemDaBiblioteca, temImagem } from "@/components/mesa-foto/EtapaBiblioteca";
+import SeletorDeFotos from "@/components/mesa-foto/SeletorDeFotos";
+import { acrescentarFotos, invalidarFotos, subirOriginais, useBiblioteca, useFotos, type ItemDaBiblioteca } from "@/components/mesa-foto/fotoApi";
+import { partesDoGerar } from "@/components/mesa-foto/canvasApi";
+import { gerarFotoDaPauta, MAX_REFERENCIAS_DA_PAUTA, PAPEIS_DA_REFERENCIA, ROTULO_DO_PAPEL, type PapelDaReferencia, type ReferenciaDaPauta } from "@/components/mesa-foto/fotoDaPautaApi";
 import { linhasDaDirecaoDeFoto, normalizarDirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
 
-/** Gera derivadas no acervo com os mesmos custos e aprovações da Mesa Fotos. */
-export default function GerarFotosDaPauta({ taskId, titulo, direcao, ids, onFotos }: {
-  taskId: string; titulo: string; direcao?: Record<string, unknown>; ids: string[]; onFotos: (ids: string[]) => void;
+/** Categorias da biblioteca que viram cartão de estilo (o assunto vem da pauta e das referências). */
+const CATEGORIAS_DE_ESTILO = ["estilo", "luz", "composicao", "cenario", "ambiente"];
+
+/** Cartões de estilo: prompts da biblioteca com imagem de exemplo, os de estilo e os em destaque primeiro. Pura. */
+export function estilosEmCartoes(itens: ItemDaBiblioteca[], busca = ""): ItemDaBiblioteca[] {
+  const termo = busca.trim().toLowerCase();
+  const peso = (i: ItemDaBiblioteca) => (CATEGORIAS_DE_ESTILO.indexOf(i.categoria) >= 0 ? 0 : 2) - (i.destaque ? 1 : 0);
+  return itens
+    .filter((i) => i.tipo === "prompt" && temImagem(i))
+    .filter((i) => !termo || `${i.titulo} ${i.categoria} ${i.tags.join(" ")}`.toLowerCase().indexOf(termo) >= 0)
+    .sort((a, b) => peso(a) - peso(b) || a.titulo.localeCompare(b.titulo, "pt-BR"));
+}
+
+/**
+ * Gerar da pauta (27/10/2026): a foto nasce do contexto da pauta e do
+ * cliente, no estilo escolhido em cartões, com referências marcadas por papel
+ * (antes, depois, produto, cenário, estilo). Custo à vista; o resultado cai
+ * no acervo e na prancheta do post.
+ */
+export default function GerarFotosDaPauta({ taskId, titulo, direcao, referencias, onReferencias, onFotos }: {
+  taskId: string; titulo: string; direcao?: Record<string, unknown>;
+  referencias: ReferenciaDaPauta[]; onReferencias: (r: ReferenciaDaPauta[]) => void;
+  /** Fotos novas (vão para a prancheta, depois das que já estão). */
+  onFotos: (ids: string[]) => void;
 }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId, catalogo, atualizarCusto } = useMesa();
+  const { marca } = useMarcaDaMesa();
   const cache = useQueryClient();
   const fotos = useFotos(clientId);
+  const biblioteca = useBiblioteca(clientId);
   const inicial = normalizarDirecaoDeFoto(direcao, { tema: titulo });
+  const chave = (parte: string) => `mesa:foto:gerar:${clientId}:${taskId}:${parte}`;
   const [instrucao, setInstrucao] = useEstadoDaTela(`mesa:foto:gerar:${clientId}:${taskId}`, linhasDaDirecaoDeFoto(inicial).join("\n"));
+  const [estiloId, setEstiloId] = useEstadoDaTela<string | null>(chave("estilo"), null);
+  const [formato, setFormato] = useEstadoDaTela(chave("formato"), "4:5");
   const [motor, setMotor] = useState("");
   const modelo = motor || padraoPara(catalogo, "imagem")?.id || "";
-  const [quantidade, setQuantidade] = useState(direcao ? inicial.quantidade : 1);
+  const [quantidade, setQuantidade] = useState(Math.min(4, Math.max(1, direcao ? inicial.quantidade : 1)));
+  const [papelNovo, setPapelNovo] = useState<PapelDaReferencia>("produto");
+  const [busca, setBusca] = useState("");
+  const [limite, setLimite] = useState(6);
+  const [escolhendo, setEscolhendo] = useState(false);
+  const [subindo, setSubindo] = useState("");
   const [progresso, setProgresso] = useState("");
-  const fontes = ids.map((id) => fotos.data?.find((f) => f.id === id && f.client_id === clientId && f.ativa && !f.referencia_web)).filter((f) => !!f);
-  return <section aria-label="Gerar fotos da pauta" className="mb-4 space-y-3">
-    <p className="text-[13px] font-semibold">Direção da foto</p>
-    <textarea aria-label="Direção para gerar as fotos" value={instrucao} onChange={(e) => setInstrucao(e.target.value)} className="min-h-32 w-full rounded-lg border bg-background p-3 text-[13px]" />
+  const arquivo = useRef<HTMLInputElement>(null);
+
+  const cartoes = useMemo(() => estilosEmCartoes(biblioteca.data || [], busca), [biblioteca.data, busca]);
+  const estilo = (biblioteca.data || []).find((i) => i.id === estiloId) || null;
+  const porId = new Map((fotos.data || []).map((f) => [f.id, f]));
+  const refs = referencias.filter((r) => porId.has(r.imagem_id));
+  const cheio = refs.length >= MAX_REFERENCIAS_DA_PAUTA;
+  const antes = refs.filter((r) => r.papel === "antes").length;
+  const depois = refs.filter((r) => r.papel === "depois").length;
+
+  const acrescentarRefs = (ids: string[], papel: PapelDaReferencia) => {
+    const novas = ids.filter((id) => !referencias.some((r) => r.imagem_id === id)).map((imagem_id) => ({ imagem_id, papel }));
+    onReferencias(referencias.concat(novas).slice(0, MAX_REFERENCIAS_DA_PAUTA));
+  };
+  const subir = async (lista: FileList | null) => {
+    if (!lista || !lista.length) return;
+    try {
+      const r = await subirOriginais(clientId, Array.from(lista).slice(0, MAX_REFERENCIAS_DA_PAUTA), (feitos, total) => setSubindo(`Subindo ${feitos} de ${total}…`));
+      acrescentarFotos(cache, clientId, r.registradas);
+      acrescentarRefs(r.registradas.map((f) => f.id), papelNovo);
+      if (r.recusadas.length) toast.message(`${r.recusadas.length} ficou de fora`, { description: r.recusadas[0].motivo });
+    } catch (e) {
+      toast.error("As fotos não subiram", { description: e instanceof Error ? e.message : "Tente de novo." });
+    } finally { setSubindo(""); if (arquivo.current) arquivo.current.value = ""; }
+  };
+
+  const pronto = !!modelo && (!!instrucao.trim() || refs.length > 0) && !progresso;
+  return <section aria-label="Gerar fotos da pauta" className="min-w-0 space-y-4" data-gerar-da-pauta="">
+    <div className="min-w-0">
+      <label className="mb-1 block text-[12px] font-medium text-muted-foreground" htmlFor={`direcao-${taskId}`}>O que a foto mostra</label>
+      <textarea id={`direcao-${taskId}`} aria-label="Direção para gerar as fotos" value={instrucao} onChange={(e) => setInstrucao(e.target.value)} className={juntar(campoTexto, "min-h-28")} />
+      <p className="mt-1 text-[12px] text-muted-foreground">Já vem da pauta e do contexto do cliente.</p>
+    </div>
+
+    <div className="min-w-0" data-estilos-da-pauta="">
+      <div className="mb-2 flex min-w-0 items-center justify-between"><p className="text-[12px] font-medium text-muted-foreground">Estilo</p><span className="truncate text-[12px]">{estilo ? estilo.titulo : "Pela marca"}</span></div>
+      <div className="relative mb-2"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><input aria-label="Buscar estilo" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(6); }} placeholder="Buscar estilo" className={juntar(campo, "pl-8")} /></div>
+      <div role="radiogroup" aria-label="Estilo da foto" className="grid grid-cols-3 gap-2">
+        <button type="button" role="radio" aria-checked={!estiloId} onClick={() => setEstiloId(null)} className={juntar("min-w-0 rounded-lg border-2 p-1 text-left", foco, !estiloId ? "border-primary" : "border-transparent hover:border-border")}>
+          <Moldura proporcao={1} className="bg-muted"><span className="flex h-full w-full items-center justify-center px-1 text-center text-[11px] text-muted-foreground">Pela marca</span></Moldura>
+          <span className="mt-1 block truncate text-[11px]">Sem estilo extra</span>
+        </button>
+        {cartoes.slice(0, limite).map((i) => <button key={i.id} type="button" role="radio" aria-checked={estiloId === i.id} title={i.uso || i.titulo} onClick={() => setEstiloId(i.id)} className={juntar("min-w-0 rounded-lg border-2 p-1 text-left", foco, estiloId === i.id ? "border-primary" : "border-transparent hover:border-border")}>
+          <Moldura proporcao={1} className="overflow-hidden rounded-md bg-muted"><ImagemDaBiblioteca item={i} />{estiloId === i.id && <span className="absolute right-1 top-1 rounded-full bg-primary p-0.5 text-primary-foreground"><Check className="h-3 w-3" aria-hidden="true" /></span>}</Moldura>
+          <span className="mt-1 block truncate text-[11px]">{i.titulo}</span>
+        </button>)}
+      </div>
+      {biblioteca.isLoading && <p role="status" className="mt-2 text-[12px] text-muted-foreground">Lendo os estilos…</p>}
+      {cartoes.length > limite && <button type="button" className="mt-2 text-[12px] text-primary" onClick={() => setLimite((l) => l + 9)}>Ver mais estilos ({cartoes.length - limite})</button>}
+    </div>
+
+    <div className="min-w-0" data-referencias-da-pauta="">
+      <div className="mb-2 flex min-w-0 items-center justify-between"><p className="text-[12px] font-medium text-muted-foreground">Referências</p><span className="text-[12px] text-muted-foreground">{refs.length}/{MAX_REFERENCIAS_DA_PAUTA}</span></div>
+      <div role="radiogroup" aria-label="Papel das próximas referências" className="mb-2 flex flex-wrap">
+        {PAPEIS_DA_REFERENCIA.map((p) => <button key={p} type="button" role="radio" aria-checked={papelNovo === p} onClick={() => setPapelNovo(p)} className={juntar("mb-1 mr-1 rounded-full border px-2.5 py-1 text-[12px]", foco, papelNovo === p ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{ROTULO_DO_PAPEL[p]}</button>)}
+      </div>
+      {refs.length > 0 && <ul className="mb-2 grid grid-cols-3 gap-2" aria-label="Referências escolhidas">
+        {refs.map((r) => { const f = porId.get(r.imagem_id)!; return <li key={r.imagem_id} className="min-w-0" data-referencia={r.papel}>
+          <div className="relative"><MiniaturaDaFoto foto={f} className="rounded-md" /><button type="button" aria-label={`Tirar ${f.nome} das referências`} onClick={() => onReferencias(referencias.filter((x) => x.imagem_id !== r.imagem_id))} className="absolute right-1 top-1 rounded-full bg-card/90 p-0.5 hover:bg-card"><X className="h-3 w-3" aria-hidden="true" /></button></div>
+          <select aria-label={`Papel de ${f.nome}`} value={r.papel} onChange={(e) => onReferencias(referencias.map((x) => x.imagem_id === r.imagem_id ? { ...x, papel: e.target.value as PapelDaReferencia } : x))} className="mt-1 h-8 w-full min-w-0 rounded-md border border-input bg-background px-1 text-[12px]">
+            {PAPEIS_DA_REFERENCIA.map((p) => <option key={p} value={p}>{ROTULO_DO_PAPEL[p]}</option>)}
+          </select>
+        </li>; })}
+      </ul>}
+      {(antes > 0 || depois > 0) && <p className="mb-2 text-[12px] text-muted-foreground">{antes && depois ? `Antes e depois: a foto sai como comparação fiel, sem inventar resultado.` : antes ? "Marque também o depois para montar a comparação." : "Marque também o antes para montar a comparação."}</p>}
+      <div className="flex flex-wrap">
+        <button type="button" disabled={cheio} onClick={() => setEscolhendo(true)} className={juntar(botao.secundario, "mb-1 mr-2")}><ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />Do acervo</button>
+        <button type="button" disabled={cheio || !!subindo} onClick={() => arquivo.current?.click()} className={juntar(botao.secundario, "mb-1")}><Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />{subindo || "Subir"}</button>
+        <input ref={arquivo} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden aria-label="Subir referências" onChange={(e) => void subir(e.target.files)} />
+      </div>
+    </div>
+
+    <div className="grid min-w-0 grid-cols-2 gap-2">
+      <label className="min-w-0 text-[12px] text-muted-foreground">Formato<select aria-label="Formato da foto" className={juntar(campo, "mt-1")} value={formato} onChange={(e) => setFormato(e.target.value)}>{["4:5", "1:1", "9:16", "16:9"].map((f) => <option key={f}>{f}</option>)}</select></label>
+      <label className="min-w-0 text-[12px] text-muted-foreground">Fotos<select aria-label="Quantidade de fotos a gerar" className={juntar(campo, "mt-1")} value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+    </div>
     <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setMotor} />
-    <label className="flex items-center justify-between text-[12px]">Fotos a gerar<select aria-label="Quantidade de fotos a gerar" className="rounded border bg-background p-2" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))}>{Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>
-    <AcoesDaBancada><BotaoComCusto rotulo={progresso || (quantidade === 1 ? "Gerar foto" : `Gerar ${quantidade} fotos`)} titulo="Gerar fotos da pauta" descricao="Cria novas versões no acervo, usando as fotos escolhidas como base. Confira o resultado antes de preparar e enviar."
-      disabled={!fontes.length || !modelo || !instrucao.trim() || !!progresso} partes={() => Array.from({ length: quantidade }, () => partesDoPreparo(modelo, "alta")).flat()}
+    <AcoesDaBancada><BotaoComCusto rotulo={progresso || (quantidade === 1 ? "Gerar foto" : `Gerar ${quantidade} fotos`)} titulo="Gerar fotos da pauta" descricao="Cria fotos novas pelo contexto da pauta, no estilo e com as referências escolhidas. Entram no acervo e na prancheta, marcadas como geradas."
+      disabled={!pronto} partes={() => Array.from({ length: quantidade }, () => partesDoGerar([modelo], "alta", refs.length + (estilo ? 1 : 0))).flat()}
       executar={async () => {
         const geradas: string[] = []; let custo = 0;
         try {
           for (let n = 0; n < quantidade; n++) {
             setProgresso(`Gerando ${n + 1} de ${quantidade}…`);
-            const fonte = fontes[n % fontes.length]!;
-            const angulo = inicial.angulos[n % Math.max(1, inicial.angulos.length)] || "";
-            const r = await prepararFoto({ clientId, imagemId: fonte.id, modeloImagemId: modelo, modo: "cenario", areas: [], cenario: inicial.cenario || instrucao,
-              instrucao: `${instrucao}\nFoto ${n + 1} de ${quantidade}.${angulo ? ` Ângulo: ${angulo}.` : ""} Preserve a identidade, o produto e os materiais reais da referência.` });
-            if (!r.imagem) throw new Error(`A foto ${n + 1} não foi confirmada. As versões já concluídas continuam no acervo.`);
-            acrescentarFotos(cache, clientId, [r.imagem]); geradas.push(r.imagem.id); custo += r.custo_usd || 0;
-            onFotos([...geradas]);
+            const r = await gerarFotoDaPauta({
+              clientId, taskId, titulo, pedido: instrucao, referencias: refs, guia: estilo ? { modo: "biblioteca", prompt_id: estilo.id } : { modo: "nenhum" },
+              modeloImagemId: modelo, formato, marcaId: marca?.id || null, posicao: quantidade > 1 ? { atual: n + 1, total: quantidade } : null,
+            });
+            if (!r.imagem) throw new Error(`A foto ${n + 1} não foi confirmada. As já concluídas continuam no acervo.`);
+            acrescentarFotos(cache, clientId, [r.imagem]); geradas.push(r.imagem.id); custo += r.custo_usd;
+            onFotos([r.imagem.id]);
+            if (r.avisos.length) toast.message("Confira a foto nova", { description: r.avisos.join(" ") });
           }
           return { custo_usd: custo };
-        } finally { setProgresso(""); invalidarFotos(cache, clientId); }
+        } finally { setProgresso(""); invalidarFotos(cache, clientId); atualizarCusto(); }
       }} /></AcoesDaBancada>
-    {!fontes.length && <p className="text-[12px] text-muted-foreground">Escolha uma foto real na prancheta. A direção já está preenchida.</p>}
+    {!modelo && <p className="text-[12px] text-muted-foreground">Escolha o modelo de imagem.</p>}
     {progresso && <p role="status" className="text-[12px] text-primary">{progresso}</p>}
+    <JanelaCentral aberta={escolhendo} onFechar={() => setEscolhendo(false)} titulo={`Referências: ${ROTULO_DO_PAPEL[papelNovo]}`} largura="xl">
+      {escolhendo && <SeletorDeFotos fotos={(fotos.data || []).filter((f) => f.client_id === clientId && f.ativa)} titulo={`Escolher ${ROTULO_DO_PAPEL[papelNovo].toLowerCase()}`} multiplas jaEscolhidas={refs.map((r) => r.imagem_id)} limiteSelecao={MAX_REFERENCIAS_DA_PAUTA - refs.length} onUsar={(ids) => { acrescentarRefs(ids, papelNovo); setEscolhendo(false); }} onFechar={() => setEscolhendo(false)} />}
+    </JanelaCentral>
   </section>;
 }

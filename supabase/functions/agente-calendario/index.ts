@@ -177,6 +177,7 @@ import {
   versoesDaResposta,
 } from "./modulos/agente-de-roteiro.ts";
 import { blocoDoMercado, ESQUEMA_DO_MERCADO, mercadoComFonte, type MercadoDaCampanha, normalizarMercado } from "./modulos/mercado-da-campanha.ts";
+import { ESQUEMA_DAS_REFERENCIAS_VIRAIS, focoDaBusca, pedidoDaBuscaViral, referenciasComFonte } from "./modulos/referencias-virais-de-video.ts";
 import { aplicarMudanca as aplicarMudancaDaCampanha, ESQUEMA_DA_MUDANCA, type ItemDaMudanca, type ItemDaSerie, itensDaMudanca, itensEscolhidos, pecasComApelido as pecasDaCampanhaComApelido, REGRAS_DA_MUDANCA, type VersaoDaCampanha, versoesDaCampanha } from "./modulos/mudanca-da-campanha.ts";
 // 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
 import { blocoDosMoldes, type Molde, moldesDosVencedores, type PostDoMolde } from "./modulos/moldes.ts";
@@ -9502,17 +9503,17 @@ function depsDaMidia(servico: SupabaseClient, chamador: Chamador, clientId: stri
 }
 
 /** Pensa e grava a mídia de uma peça (travas da agenda antes). Devolve o plano, o recibo e o custo. */
-async function pensarEGravarMidia(servico: SupabaseClient, chamador: Chamador, clientId: string, taskId: string, tipo: unknown, pedido: unknown): Promise<{ plano: PlanoDaMidia; passos: PassoDoFormato[]; custo: number }> {
+async function pensarEGravarMidia(servico: SupabaseClient, chamador: Chamador, clientId: string, taskId: string, tipo: unknown, pedido: unknown, maxFotos?: unknown): Promise<{ plano: PlanoDaMidia; passos: PassoDoFormato[]; custo: number }> {
   const trava = await travaDaPeca(servico, clientId, taskId);
   if (trava) throw new Error(trava);
   const custo = { usd: 0 };
-  const plano = await planejarMidia(depsDaMidia(servico, chamador, clientId, taskId, custo), { clientId, taskId, tipo: tipoDeMidia(tipo), pedido: typeof pedido === "string" ? pedido : null });
+  const plano = await planejarMidia(depsDaMidia(servico, chamador, clientId, taskId, custo), { clientId, taskId, tipo: tipoDeMidia(tipo), pedido: typeof pedido === "string" ? pedido : null, maxFotos: typeof maxFotos === "number" ? maxFotos : null });
   const passos = await gravarMidia(servico, clientId, taskId, plano);
   return { plano, passos, custo: Math.round((custo.usd + plano.custo) * 1e6) / 1e6 };
 }
 
 /**
- * midia_da_peca { client_id, task_id, tipo?, pedido? }: o "Pensar a mídia" da pauta (clique da equipe, custo
+ * midia_da_peca { client_id, task_id, tipo?, pedido?, max_fotos? }: o "Pensar a mídia" da pauta (clique da equipe, custo
  * mostrado antes na tela). Fotos do Workspace pelo Jev, referência livre quando falta, roteiro do vídeo com gancho.
  */
 async function midiaDaPeca(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -9522,7 +9523,7 @@ async function midiaDaPeca(servico: SupabaseClient, chamador: Chamador, corpo: R
   if (!UUID.test(taskId)) throw new ErroHttp(400, "task_invalida", "task_id precisa ser um UUID.");
   await tarefaDoCliente(servico, taskId, clientId);
   try {
-    const r = await pensarEGravarMidia(servico, chamador, clientId, taskId, corpo.tipo, corpo.pedido);
+    const r = await pensarEGravarMidia(servico, chamador, clientId, taskId, corpo.tipo, corpo.pedido, corpo.max_fotos);
     return json({ midia: r.plano.midia, avisos: r.plano.avisos, custo_usd: r.custo });
   } catch (e) {
     if (e instanceof ErroHttp || e instanceof IaMotorErro) throw e;
@@ -9553,6 +9554,68 @@ async function fotoRealDaPecaAcao(servico: SupabaseClient, chamador: Chamador, c
     registrarFalha("agente-calendario: foto real da peça não escolhida", e, { client_id: clientId, task_id: taskId });
     return json({ modo: "ia", fotos: [], linha: LINHA_SEM_FOTO_REAL, aviso: "O Jev não respondeu: escolha a foto à mão se quiser.", custo_usd: Math.round(custo.usd * 1e6) / 1e6 });
   }
+}
+
+/**
+ * video_referencias_virais { client_id, task_id, foco?: "ambos" | "ia" | "satisfatorio" } (27/10, dono: "buscar
+ * referências virais de vídeos gerados com IA com base no nicho e vídeos satisfatórios, para replicar"). A pesquisa
+ * na web do motor de texto com o nicho (motor de copy viral), os assuntos em alta (mesa_hypes) e os ganchos que
+ * vencem; só entram os vídeos cujo link a busca citou. Cada cartão traz a estrutura pela forma, que a tela usa
+ * com as fotos do próprio cliente. Nada é gravado nem gerado; o custo aparece antes do clique na tela.
+ */
+async function videoReferenciasVirais(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const tarefa = await tarefaDoCliente(servico, corpo.task_id, clientId);
+  const foco = focoDaBusca(corpo.foco);
+  const hoje = hojeSaoPaulo();
+  const [viral, hype] = await Promise.all([
+    prepararCopyViral(servico, { clientId, formato: "reels_abertura", versoes: 2, n: 8, semente: tarefa.id }).catch((e) => (registrarFalha("agente-calendario: ganchos da busca viral não lidos", e), null)),
+    Promise.resolve(servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1).maybeSingle())
+      .then(({ data }) => hypesQueValem(data as { semana: string; resumo: string | null; itens: unknown } | null, { inicio: hoje, fim: somarDias(hoje, 21) }), () => null),
+  ]);
+  let nicho = viral ? [nichosEmTexto(viral.nichos), viral.contexto.nicho].filter(Boolean).join(" | ") : "";
+  if (!nicho) {
+    const n = await nichoDoCliente(servico, clientId).catch(() => null);
+    nicho = n ? [n.nome, n.segmento, n.negocio].filter(Boolean).join(" | ") : "negócio local";
+  }
+  const r = await buscarReferenciasVirais(chamador, clientId, tarefa.id, corpo.modelo_id, pedidoDaBuscaViral({
+    hoje,
+    foco,
+    nicho,
+    publico: viral ? viral.contexto.publico ?? null : null,
+    tema: String(tarefa.title || "").replace(/^Peça de foto: /, ""),
+    hype: blocoDoHype(hype) || null,
+    ganchos: viral ? viral.bloco : null,
+  }));
+  const referencias = referenciasComFonte(r.json, r.fontes, foco);
+  return json({
+    referencias,
+    foco,
+    custo_usd: Math.round(r.custoUsd * 1e6) / 1e6,
+    ...(referencias.length ? {} : { aviso: r.fontes.length ? "A busca não trouxe vídeo com link conferido. Tente o outro foco." : "A busca não citou nenhuma página agora. Tente de novo em instantes." }),
+  });
+}
+
+/** A pesquisa na web das referências virais (só o motor de texto com a busca ligada; o esquema fecha a saída). */
+async function buscarReferenciasVirais(chamador: Chamador, clientId: string, taskId: string, modeloId: unknown, pedido: string): Promise<{ json: unknown; fontes: string[]; custoUsd: number }> {
+  const { modelo, raciocinio } = await resolverModelo(modeloId, "low", { pesquisaWeb: true });
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: "Você pesquisa vídeos curtos virais reais (Reels, TikTok, Shorts) para um diretor de vídeo de IA. Só vídeo com link real da busca. Descreve a estrutura pela forma, para replicar com o produto de outro negócio, nunca o conteúdo. Português do Brasil, sem travessão.",
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio,
+    pesquisaWeb: true,
+    esquemaJson: ESQUEMA_DAS_REFERENCIAS_VIRAIS,
+    referencia: { tipo: "tarefa", id: taskId },
+    criadoPor: chamador.userId,
+  });
+  const fontes = ((s as unknown as { fontes?: Array<{ url?: string }> }).fontes ?? []).map((f) => String(f.url || "")).filter(Boolean);
+  return { json: s.json, fontes, custoUsd: s.custoUsd };
 }
 
 /**
@@ -10302,6 +10365,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_narracao: narracaoDaCampanha.campanhaNarracao,
   midia_da_peca: midiaDaPeca,
   foto_real_da_peca: fotoRealDaPecaAcao,
+  video_referencias_virais: videoReferenciasVirais,
   sugerir_mistura: sugerirMistura,
   // 24/10: trocar uma peça (3 opções, o Jev recomenda; Confirmar e Desfazer) e trocar várias (refazer com proteção).
   trocar_peca_opcoes: trocarPecaOpcoes,
@@ -10311,7 +10375,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", "midia_da_peca", "sugerir_mistura", "trocar_peca_opcoes", "trocar_peca_aplicar", "propor_refazer_esteira", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", "campanha_mudanca_planejar", "campanha_mudanca_confirmar", "campanha_mercado", "campanha_reescrever_comercial", "campanha_reorganizar", "campanha_roteiro_video", "campanha_roteiro_agente", "campanha_trilha", "campanha_narracao", "midia_da_peca", "video_referencias_virais", "sugerir_mistura", "trocar_peca_opcoes", "trocar_peca_aplicar", "propor_refazer_esteira", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 

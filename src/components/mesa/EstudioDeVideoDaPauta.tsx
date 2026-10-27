@@ -1,5 +1,5 @@
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { PenLine, Type, Send, Music, History, Video } from "lucide-react";
+import { AlertCircle, History, Loader2, Music, PenLine, Plus, Send, SlidersHorizontal, Type, Video } from "lucide-react";
 import GravarDaPauta from "./GravarDaPauta";
 import TrilhaDoVideoDaPauta from "./TrilhaDoVideoDaPauta";
 import { resultadosDeVideoDaPauta, videoEnviadoDaPeca } from "./resultadosDeVideoDaPauta";
@@ -10,16 +10,46 @@ import PecaDeVideoDaPauta from "./PecaDeVideoDaPauta";
 import { useEffect, useState } from "react";
 import { useMesa } from "./MesaContexto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { juntar, texto } from "@/components/sistema/estilos";
 import GeradorLivre from "@/components/mesa-videos/GeradorLivre";
-import GeracoesRecentes from "@/components/mesa-videos/GeracoesRecentes";
-import { useArquivosDeVideo, usePedidos, useVersoes } from "@/components/mesa-videos/videosApi";
+import { useArquivosDeVideo, usePedidos, useVersoes, type ArquivoDeVideo, type PedidoDeVideo } from "@/components/mesa-videos/videosApi";
+import { TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
 import { LinhaDoFinal } from "@/components/mesa-edicao/Finais";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
 import BancadaDaPauta, { PainelDaBancada } from "./BancadaDaPauta";
+import { useUrlDaMesa } from "./MesaContexto";
 import { direcaoComFotoReal, precisaDeFotoReal, useFotoRealDaPeca } from "./useFotoRealDaPeca";
+import ComposicaoDoVideoDaPauta from "./ComposicaoDoVideoDaPauta";
+import GeracoesDaPauta from "./GeracoesDaPauta";
+import { arquivosDeCena } from "./composicaoDoVideo";
+import { situacaoDoPedido } from "./estadoDaGeracao";
 import type { ItemDoMes, ArteNaAgenda } from "./useItensDoMes";
 
 const BASES = ESTILOS_DE_VIDEO_DA_PAUTA;
+
+/** Os pedidos do gerador desta pauta (os três vínculos: parâmetro, alvo e os pedidos desta tela). */
+export function pedidosDaPauta(clientId: string, taskId: string, pedidos: PedidoDeVideo[], locais: string[] = []): PedidoDeVideo[] {
+  return pedidos.filter((p) => p.client_id === clientId && TIPOS_DO_GERADOR.indexOf(String(p.tipo)) >= 0 && (p.parametros?.task_id === taskId || (p.alvo as { task_id?: string } | null)?.task_id === taskId || locais.includes(p.id)));
+}
+
+/**
+ * 27/10: a miniatura do vídeo na prancheta é o primeiro quadro do próprio vídeo (o <img> com o caminho do MP4
+ * aparecia quebrado: a miniatura .mini.jpg só existe depois que alguém abre o vídeo no navegador).
+ */
+function QuadroDoVideo({ bucket, caminho }: { bucket: string; caminho: string }) {
+  const url = useUrlDaMesa(caminho, bucket);
+  if (!url.data) return null;
+  return <video src={`${url.data}#t=0.5`} muted playsInline preload="metadata" aria-hidden="true" tabIndex={-1} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />;
+}
+
+/** O nome do resultado na prancheta: o vídeo final montado, a cena da composição ou a geração solta. */
+function nomeNaPrancheta(a: ArquivoDeVideo, pedidos: PedidoDeVideo[], k: number): string {
+  if (a.origem && typeof a.origem.versao_id === "string") return "Vídeo final";
+  const p = pedidos.find((x) => x.id === a.pedido_id || x.id === (a.origem && a.origem.pedido));
+  const comp = p && (p.parametros as { composicao?: { ordem?: number } }).composicao;
+  if (comp && comp.ordem) return `Cena ${comp.ordem}`;
+  return `Vídeo ${k + 1}`;
+}
 
 export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes; arte?: ArteNaAgenda | null }) {
   const { clientId } = useMesa();
@@ -32,23 +62,26 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const arquivosQ = useArquivosDeVideo(clientId);
   const pedidosQ = usePedidos(clientId);
   const versoesQ = useVersoes(clientId);
-  const pedidos = (pedidosQ.data?.itens || []).filter((p) => p.parametros.task_id === item.id || ids.includes(p.id));
-  const gerados = resultadosDeVideoDaPauta(clientId, item.id, arquivosQ.data?.arquivos || [], pedidosQ.data?.itens || [], versoesQ.data?.itens || [], ids);
+  const todosOsArquivos = arquivosQ.data?.arquivos || [];
+  const pedidos = pedidosDaPauta(clientId, item.id, pedidosQ.data?.itens || [], ids);
+  const gerados = resultadosDeVideoDaPauta(clientId, item.id, todosOsArquivos, pedidosQ.data?.itens || [], versoesQ.data?.itens || [], ids);
   // 25/10: o vídeo enviado para a peça (Pronto) também libera legendar, trilha e entrega, como as gerações da IA.
-  const enviado = videoEnviadoDaPeca(clientId, item.video_pronto, arquivosQ.data?.arquivos || []);
+  const enviado = videoEnviadoDaPeca(clientId, item.video_pronto, todosOsArquivos);
   const arquivos = enviado && !gerados.some((a) => a.id === enviado.id) ? [enviado, ...gerados] : gerados;
+  // 27/10: a cena de uma composição fica na prancheta, mas só o vídeo final montado vira o vídeo da peça.
+  const deCena = arquivosDeCena(pedidos, todosOsArquivos);
+  const paraAPeca = arquivos.filter((a) => !deCena.has(a.id));
   useEffect(() => {
     void arquivosQ.refetch(); void pedidosQ.refetch(); void versoesQ.refetch();
   }, [clientId, item.id]);
+  // 27/10 (bug do "gerando" parado): o pedido que fica pronto relê a lista de arquivos uma vez, para o resultado
+  // entrar sozinho na prancheta e no player. A conferência no provedor fica no GeracoesDaPauta (uma só, com recuo).
+  const prontosAgora = pedidos.filter((p) => ["pronto", "parcial"].includes(String(p.estado))).map((p) => p.id).join(",");
   useEffect(() => {
-    if (!pedidos.length) return;
-    const pendentes = pedidos.some((p) => !["pronto", "erro", "cancelado"].includes(p.estado));
-    if (!pendentes) { void arquivosQ.refetch(); return; }
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") { void arquivosQ.refetch(); void pedidosQ.refetch(); void versoesQ.refetch(); } }, 20000);
-    return () => window.clearInterval(timer);
-  }, [pedidos.map((p) => `${p.id}:${p.estado}`).join(",")]);
+    if (prontosAgora) { void arquivosQ.refetch(); void versoesQ.refetch(); }
+  }, [prontosAgora]);
   const [vendo, setVendo] = useState<string | null>(null);
-  const atual = arquivos.find((a) => a.id === vendo) || arquivos[0];
+  const atual = arquivos.find((a) => a.id === vendo) || paraAPeca[0] || arquivos[0];
   const tema = BASES.find((b) => b.id === base) || BASES[0];
   // 26/10: foto real primeiro. Sem imagem de partida escolhida, a melhor foto real do acervo (Jev) abre pré-selecionada.
   const perguntar = !gravar && precisaDeFotoReal(item);
@@ -56,32 +89,51 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const fotoReal = perguntar ? fotoRealQ.data : null;
   const direcao = direcaoComFotoReal(item.video, fotoReal);
   const chaveDaFoto = fotoReal && fotoReal.modo === "real" ? fotoReal.fotos[0]?.id || "" : "";
+  const idsDaFotoReal = fotoReal && fotoReal.modo === "real" ? fotoReal.fotos.map((f) => f.id) : [];
+  const andando = pedidos.filter((p) => ["enviado", "gerando", "baixando", "erro", "parcial"].includes(String(p.estado))).slice(0, 4);
+  const agora = Date.now();
   return <div className="flex min-h-0 flex-1 flex-col" data-video-da-pauta={item.id}>
     <BancadaDaPauta tipo="video" titulo={item.title}
       ativa={aba} onAba={setAba} abas={[
         ...(gravar ? [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }] : []),
-        { id: "gerar", nome: "Gerar vídeo", icone: PenLine },
+        { id: "gerar", nome: "Gerar vídeo com IA", icone: PenLine },
         ...(gravar ? [] : [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }]),
         { id: "som", nome: "Trilha sonora", icone: Music },
         { id: "legenda", nome: "Legendar o vídeo", icone: Type },
         { id: "entrega", nome: "Legenda do post e aprovação", icone: Send },
         { id: "resultados", nome: "Gerações e versões", icone: History },
+        { id: "livre", nome: "Gerador livre (avançado)", icone: SlidersHorizontal },
       ]}
       acoes={<AjudaRecolhida rotulo="Direção do vídeo">{tema.texto}</AjudaRecolhida>}
-      prancheta={<div className="space-y-2"><button type="button" aria-pressed={aba === 'gerar'} className="w-full rounded-lg border border-dashed px-2 py-5 text-[12px]" onClick={() => setAba('gerar')}>+ Gerar vídeo</button>{arquivos.map((a, i) => <button type="button" key={a.id} aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba('entrega'); }} className={`w-full rounded-lg border px-2 py-4 text-left text-[12px] ${atual?.id === a.id ? 'border-primary bg-primary/10' : ''}`}>Vídeo {i + 1}<span className="mt-2 block truncate">{a.nome}</span></button>)}{arte?.capa?.tipo_midia === "video" && <p className="rounded-lg border p-3 text-[12px] text-primary">Vídeo na Agenda</p>}</div>}
+      prancheta={<div className="flex min-w-0 items-start gap-2 overflow-x-auto lg:block lg:space-y-2 lg:overflow-visible" data-prancheta-do-video="">
+        <button type="button" aria-pressed={aba === "gerar"} aria-label="Gerar vídeo com IA" title="Gerar vídeo com IA" className="flex h-12 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground lg:h-auto lg:w-full lg:py-2" onClick={() => setAba("gerar")}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+        {andando.map((p) => {
+          const l = situacaoDoPedido(p, agora);
+          const falhou = l.situacao === "falhou" || l.situacao === "parcial";
+          return <button type="button" key={p.id} onClick={() => setAba("resultados")} className="flex w-36 min-w-0 shrink-0 items-center rounded-lg px-1 py-1 text-left hover:bg-muted lg:w-full" title={`${l.rotulo}: ${l.detalhe}`} data-pedido-na-prancheta={l.situacao}>
+            <span className={juntar("mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded bg-muted", falhou ? "text-destructive" : "text-muted-foreground")}>{falhou ? <AlertCircle className="h-4 w-4" aria-hidden="true" /> : <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}</span>
+            <span className="min-w-0 flex-1"><span className={juntar("block truncate text-[12px] font-medium", falhou && "text-destructive")}>{l.rotulo}</span><span className={juntar(texto.auxiliar, "block truncate")}>{falhou ? "Ver o motivo" : l.detalhe}</span></span>
+          </button>;
+        })}
+        <ol className="flex shrink-0 gap-2 lg:flex-col">{arquivos.map((a, i) => <li key={a.id} className="w-12 shrink-0 lg:w-full"><button type="button" aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba("entrega"); }} className={`block w-full overflow-hidden rounded-lg border-2 text-left ${atual?.id === a.id ? "border-primary" : "border-transparent"}`} title={a.nome}>
+          <span className="relative block aspect-[9/16] w-full bg-muted"><QuadroDoVideo bucket={a.storage_bucket || "mesa"} caminho={a.storage_path} /></span>
+        </button><p className={juntar(texto.auxiliar, "mt-1 truncate")}>{nomeNaPrancheta(a, pedidos, i)}</p></li>)}</ol>
+        {arte?.capa?.tipo_midia === "video" && <p className="text-[12px] text-primary">Vídeo na Agenda</p>}
+      </div>}
       // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
       // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra. A linha da mídia mora dentro da peça, não solta acima.
-      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={arquivos} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} />
-        <div className="mt-3 sm:max-h-52 sm:overflow-y-auto"><GeracoesRecentes arquivos={arquivos} taskId={item.id} pedidosIds={ids} /></div>
+      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} />
+        <div className="mt-3"><GeracoesDaPauta pedidos={pedidos} compacta titulo="Gerando agora" /></div>
       </>}
       ferramentas={<div className="space-y-4">
       <PainelDaBancada id="gravar"><GravarDaPauta item={item} /></PainelDaBancada>
-      <PainelDaBancada id="gerar"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div>{fotoReal && <p className="mb-2 text-[12px] text-muted-foreground" role="status" data-foto-real={fotoReal.modo}>{fotoReal.linha}</p>}<GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}:${chaveDaFoto}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={direcao} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} /></PainelDaBancada>
+      <PainelDaBancada id="gerar">{fotoReal && <p className="mb-2 text-[12px] text-muted-foreground" role="status" data-foto-real={fotoReal.modo}>{fotoReal.linha}</p>}<ComposicaoDoVideoDaPauta item={item} pedidos={pedidos} arquivos={todosOsArquivos} fotoReal={idsDaFotoReal} /></PainelDaBancada>
+      <PainelDaBancada id="livre"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div>{aba === "livre" && <GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}:${chaveDaFoto}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={direcao} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba("resultados"); }} />}</PainelDaBancada>
       <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para adicionar a trilha.</p>}</PainelDaBancada>
       <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : <p className="text-[13px]">A legenda fica disponível quando o vídeo estiver pronto.</p>}</PainelDaBancada>
-      <PainelDaBancada id="entrega">{atual ? <EntregaDoVideoDaPauta key={atual.id} item={item} arquivo={atual} /> : <p role="status" className="text-[13px]">{arte ? 'Este vídeo já está na Agenda.' : 'Escolha um resultado na prancheta para preparar a legenda e enviar para aprovação.'}</p>}</PainelDaBancada>
-      <PainelDaBancada id="resultados"><p className="text-[13px]">{arquivos.length ? `${arquivos.length} versões prontas na prancheta. Clique em uma para conferir e preparar a entrega.` : 'A geração aparece abaixo da prévia. O resultado entra automaticamente na prancheta.'}</p><button type="button" className="mt-3 rounded-md border p-2 text-[12px]" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); void versoesQ.refetch(); }}>Conferir resultados</button></PainelDaBancada>
-      {(arquivosQ.isError || pedidosQ.isError) && <p role="alert">Não foi possível ler os resultados. <button type="button" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); }}>Recarregar</button></p>}
+      <PainelDaBancada id="entrega">{atual ? <EntregaDoVideoDaPauta key={atual.id} item={item} arquivo={atual} /> : <p role="status" className="text-[13px]">{arte ? "Este vídeo já está na Agenda." : "Escolha um resultado na prancheta para preparar a legenda e enviar para aprovação."}</p>}</PainelDaBancada>
+      <PainelDaBancada id="resultados"><GeracoesDaPauta pedidos={pedidos} titulo="Gerações desta pauta" conferirSozinho={false} />{arquivos.length > 0 && <p className={juntar(texto.auxiliar, "mt-3")}>{arquivos.length} {arquivos.length === 1 ? "vídeo pronto" : "vídeos prontos"} na prancheta. Clique em um para conferir e preparar a entrega.</p>}</PainelDaBancada>
+      {(arquivosQ.isError || pedidosQ.isError) && <p role="alert" className="text-[12px] text-destructive">Não foi possível ler os resultados. <button type="button" className="underline" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); }}>Recarregar</button></p>}
       </div>} />
   </div>;
 }

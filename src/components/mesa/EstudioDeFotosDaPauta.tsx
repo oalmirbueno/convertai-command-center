@@ -1,5 +1,5 @@
 import { superficie, juntar } from "@/components/sistema/estilos";
-import { Images, Layers, FolderOpen, UsersRound, UserRound, MessageSquare } from "lucide-react";
+import { Images, Layers, FolderOpen, UsersRound, UserRound, MessageSquare, Package, GalleryHorizontal } from "lucide-react";
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { useMesa } from "./MesaContexto";
 import { CHAVES_DO_ABERTO } from "@/components/mesa-foto/diretorApi";
@@ -9,7 +9,11 @@ import { MontarOPost, PostAberto } from "@/components/mesa-foto/EtapaAgenda";
 import { usePostsDeFotos } from "@/components/mesa-foto/agendaApi";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
 import { useFotos } from "@/components/mesa-foto/fotoApi";
-import { BancadaDeFotos, type FerramentaDaBancada } from "./BancadaDaPauta";
+import { BancadaDeFotos, PainelDaBancada, type FerramentaDaBancada } from "./BancadaDaPauta";
+import GerarFotosDaPauta from "./GerarFotosDaPauta";
+import AcervoDaPauta from "./AcervoDaPauta";
+import ProdutoEModeloDaPauta from "./ProdutoEModeloDaPauta";
+import type { ReferenciaDaPauta } from "@/components/mesa-foto/fotoDaPautaApi";
 import { fonteDoArquivo } from "./useItensDoMes";
 import MidiaDaPauta from "./MidiaDaPauta";
 import type { ItemDoMes, InfoDoRoteiro, ArteNaAgenda } from "./useItensDoMes";
@@ -82,23 +86,43 @@ export default function EstudioDeFotosDaPauta({ item, roteiro, arte }: { item: I
     abrirNoEstudio: (id) => { setImagemId(id); setEtapa("estudio"); },
     prepararNaAgenda: (ids) => { setSelecionadas(ids); setTrocando(true); setEtapa("agenda"); },
   };
+  // 27/10/2026 (dono: "não só escolher fotos; deixe mais fácil"): 4 ações claras na bancada
+  // (Gerar, Acervo, Produto + modelo, Carrossel); as ferramentas de tela inteira ficam em "Mais".
+  const principais: FerramentaDaBancada[] = [
+    { id: "acervo", nome: "Acervo", icone: FolderOpen },
+    { id: "produto", nome: "Produto + modelo", icone: Package },
+    { id: "carrossel", nome: "Carrossel", icone: GalleryHorizontal },
+  ];
   const extras: FerramentaDaBancada[] = [
     { id: "compor", nome: "Compor foto", icone: Images, onAbrir: () => setEtapa("compor") },
     { id: "combinar", nome: "Combinar produtos e cenários", icone: Layers, onAbrir: () => setEtapa("combinar") },
-    { id: "acervo", nome: "Acervo e Workspace", icone: FolderOpen, onAbrir: () => setEtapa("acervo") },
+    { id: "acervo-completo", nome: "Acervo e Workspace", icone: FolderOpen, onAbrir: () => setEtapa("acervo") },
     { id: "modelos", nome: "Modelos", icone: UsersRound, onAbrir: () => setEtapa("modelos") },
     { id: "clones", nome: "Clones", icone: UserRound, onAbrir: () => setEtapa("clones") },
     { id: "diretor", nome: "Diretor de fotos", icone: MessageSquare, onAbrir: () => setDiretor(true) },
   ];
+  const [referencias, setReferencias] = useEstadoDaTela<ReferenciaDaPauta[]>(chave("referencias"), [], { validar: Array.isArray });
+  // A prancheta do post: o que está escolhido agora (ou o post já preparado).
+  const naPrancheta = trocando || selecionadas.length ? selecionadas : post?.imagem_ids || [];
+  const acrescentar = (novos: string[]) => {
+    const base = trocando || selecionadas.length ? selecionadas : post?.imagem_ids || [];
+    setSelecionadas(Array.from(new Set([...base, ...novos])).slice(0, 10));
+    setTrocando(true);
+  };
   // 26/10/2026: a mídia pensada vai na barra da bancada (sem linha própria em cima da peça).
-  const ferramentas = <MidiaDaPauta item={{ ...item, modo_estudio: "fotos" }} />;
+  const ferramentas = <>
+    <MidiaDaPauta item={{ ...item, modo_estudio: "fotos" }} />
+    <PainelDaBancada id="gerar"><GerarFotosDaPauta taskId={item.id} titulo={item.title} direcao={roteiro?.direcao_foto} referencias={referencias} onReferencias={setReferencias} onFotos={acrescentar} /></PainelDaBancada>
+    <PainelDaBancada id="acervo"><AcervoDaPauta taskId={item.id} noPost={naPrancheta} onUsar={acrescentar} referencias={referencias} onReferencias={setReferencias} onAbrirCompleto={() => setEtapa("acervo")} /></PainelDaBancada>
+    <PainelDaBancada id="produto"><ProdutoEModeloDaPauta taskId={item.id} titulo={item.title} onFotos={acrescentar} onAbrirCompleto={() => setEtapa("combinar")} /></PainelDaBancada>
+  </>;
   const fonte = fonteDoArquivo(arte?.capa);
   return <MesaFotoProvider valor={valor}>
     <div className="flex min-h-0 flex-1 flex-col" data-estudio-fotos-da-pauta={item.id}>
       <div hidden={ferramentaAberta || diretor} className={ferramentaAberta || diretor ? "hidden" : "flex min-h-0 flex-1 flex-col"}>{posts.isLoading ? <p role="status">Lendo as fotos desta pauta…</p> : posts.isError ? <p role="alert">Não foi possível ler este post. <button onClick={() => void posts.refetch()}>Tentar novamente</button></p> :
-        post?.cards.length && !trocando ? <PostAberto post={post} estudio={{ ferramentas, extras }} onTrocarFotos={() => { setSelecionadas(post.imagem_ids); setTrocando(true); }} /> :
-        !post && arte && fonte.caminho ? <BancadaDeFotos titulo={item.title} fotos={[{ id: arte.capa!.id, nome: item.title, caminho: fonte.caminho, bucket: fonte.bucket }]}>{ferramentas}<p className="text-[13px] font-semibold">Fotos já vinculadas à Agenda</p><p className="my-3 whitespace-pre-wrap text-[13px]">{arte.legenda}</p><a href="/calendario" className="text-[13px] text-primary">Conferir na Agenda</a></BancadaDeFotos> :
-        <MontarOPost key={post?.id || item.id} fotosIniciais={trocando || selecionadas.length ? selecionadas : post?.imagem_ids || []} post={post} taskInicial={item.id} destinoFixo estudio={{ taskId: item.id, onSelecionadas: setSelecionadas, titulo: item.title, direcao: roteiro?.direcao_foto, ferramentas, extras }} onPronto={() => { setTrocando(false); void posts.refetch(); }} onCancelar={() => setTrocando(false)} />}</div>
+        post?.cards.length && !trocando ? <PostAberto post={post} estudio={{ ferramentas, extras, principais }} onTrocarFotos={() => { setSelecionadas(post.imagem_ids); setTrocando(true); }} /> :
+        !post && arte && fonte.caminho ? <BancadaDeFotos titulo={item.title} principais={principais.filter((p) => p.id !== "carrossel")} fotos={[{ id: arte.capa!.id, nome: item.title, caminho: fonte.caminho, bucket: fonte.bucket }]}>{ferramentas}<p className="text-[13px] font-semibold">Fotos já vinculadas à Agenda</p><p className="my-3 whitespace-pre-wrap text-[13px]">{arte.legenda}</p><a href="/calendario" className="text-[13px] text-primary">Conferir na Agenda</a></BancadaDeFotos> :
+        <MontarOPost key={post?.id || item.id} fotosIniciais={trocando || selecionadas.length ? selecionadas : post?.imagem_ids || []} post={post} taskInicial={item.id} destinoFixo estudio={{ taskId: item.id, onSelecionadas: setSelecionadas, titulo: item.title, direcao: roteiro?.direcao_foto, ferramentas, extras, principais }} onPronto={() => { setTrocando(false); void posts.refetch(); }} onCancelar={() => setTrocando(false)} />}</div>
       {ferramentaAberta && <section className={juntar(superficie.painel, "flex min-h-0 flex-1 flex-col overflow-y-auto p-3")}><header className="mb-2 flex min-w-0 shrink-0 items-center justify-between gap-2 border-b pb-2"><strong className="min-w-0 truncate text-[13px]">{ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa)?.rotulo}</strong><button type="button" className="rounded-md border px-3 py-2 text-[12px]" onClick={() => setFerramentaAberta(false)}>Voltar à prancheta</button></header>
         <div className="flex min-h-0 flex-1 flex-col" key={navegacao}><Suspense fallback={<p role="status">Abrindo ferramentas…</p>}>
             {etapa === "estudio" && <Estudio escopo={chave("edicao")} />}

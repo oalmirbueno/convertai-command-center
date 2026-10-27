@@ -41,6 +41,7 @@
  * carteira conferido antes; cobrança por variação pronta (ia_registrar_uso).
  */
 
+import { extrasDaComposicao } from "./modulos/composicao-no-pedido.ts";
 import { chave as chaveDoPainel, chaveCarregada } from "../_shared/chaves.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarImagem, garantirSaldo, IaMotorErro, modeloPadrao } from "../_shared/ia-motor.ts";
@@ -431,7 +432,8 @@ export async function gerarVideo(b: BaseDaFuncao, corpo: Record<string, unknown>
     projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
     planoRef: linha(corpo.plano_ref, 8) || null,
     titulo: linha(corpo.titulo, 120) || null,
-    extras: { ...(taskId ? { task_id: taskId } : {}), ...(criativoId ? { ads_criativo_id: criativoId } : {}) },
+    // 27/10: a cena da composição da pauta e o papel de cada referência (antes, depois, movimento, produto).
+    extras: { ...(taskId ? { task_id: taskId } : {}), ...(criativoId ? { ads_criativo_id: criativoId } : {}), ...extrasDaComposicao(corpo, clientId) },
   });
   return b.json(r);
 }
