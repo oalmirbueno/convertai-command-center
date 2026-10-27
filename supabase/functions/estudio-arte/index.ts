@@ -168,6 +168,7 @@ import {
   valorDaCor,
   margensDoQuadro,
 } from "../_shared/direcao-arte.ts";
+import { direcaoCriativaParaImagem } from "../_shared/motor-criativo-campanha.ts";
 import {
   areaDaNavegacao,
   avisoDaNavegacao,
@@ -6927,11 +6928,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       logoDescricao: anexoLogo ? anexoLogo.descricao : null,
       areaDaLogo: caixaDaLogoAqui ? { x0: caixaDaLogoAqui.x0 * 100, y0: caixaDaLogoAqui.y0 * 100, x1: caixaDaLogoAqui.x1 * 100, y1: caixaDaLogoAqui.y1 * 100 } : null,
       // Criativo de anúncio: quadro, zona segura e regras do formato (conhecimento-ads.ts).
-      anuncio: quadro.formato ? { formato: quadro.formato } : null,
+      anuncio: quadro.formato ? { formato: quadro.formato, tom: t.direcao.tom } : null,
       // Post orgânico em 3:4, 1:1 ou 9:16: quadro e margens do formato.
       post: quadro.post,
     })
-    : card.prompt_imagem;
+    : [card.prompt_imagem, quadro.formato ? direcaoCriativaParaImagem({ formato: quadro.formato, sobrio: t.direcao.tom === "sobrio", fotoFixa: !!resumoDoFundo }) : ""].filter(Boolean).join("\n\n");
   // Estilo pedido na conversa com o diretor: entra em todas as lâminas, depois da campanha.
   // Refazer: a lâmina já tem versão, então a nova precisa ser outra composição.
   const versoesAntes = t.cards.filter((c) => c.ordem === ordem).length;
@@ -7093,7 +7094,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       fotos: fotosReplicar,
       logo: { leva, indice: indiceDaLogo, medida: logo ? logo.medida : null, descricao: anexoLogo ? anexoLogo.descricao : null },
       quadro: quadro.final,
-      anuncio: quadro.formato ? { formato: quadro.formato } : null,
+      anuncio: quadro.formato ? { formato: quadro.formato, tom: t.direcao.tom } : null,
       post: quadro.post,
       termoDecorativo: termoDaLamina ? termoDaLamina.termo : null,
       fidelidade,

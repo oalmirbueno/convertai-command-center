@@ -1533,3 +1533,225 @@
     animation: none;
   }
 }
+
+/* Bolso: a campanha em primeiro plano, ajuda sob demanda e controles claros. */
+.bolso-estudio {
+  max-width: 1120px;
+  margin-inline: auto;
+  min-width: 0;
+}
+.bolso-cabecalho {
+  align-items: center;
+  gap: 18px;
+  padding-block: 4px 25px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.bolso-cabecalho .membros-titulo h1 {
+  font-size: clamp(22px, 2.3vw, 30px);
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  white-space: normal;
+  overflow: visible;
+}
+.bolso-cabecalho .membros-titulo h1 > span { gap: 12px; }
+.bolso-saldo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 13px;
+  border: 1px solid hsl(var(--primary) / 0.16);
+  background: hsl(var(--primary) / 0.055);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.bolso-saldo > svg { color: hsl(var(--primary)); margin-right: 3px; }
+.bolso-saldo strong { font-size: 16px; font-weight: 650; }
+.bolso-estudio .membros-acao { border-radius: 12px; font-weight: 550; }
+.bolso-estudio .membros-acao.bg-primary { padding-inline: 19px; }
+.bolso-estudio .membros-acao:not(:disabled):hover { filter: brightness(1.035); }
+.bolso-cartao {
+  border-radius: 18px;
+  padding: clamp(18px, 2.3vw, 28px);
+}
+.bolso-arte-quadro img { max-height: 420px; }
+.bolso-formulario { max-width: 860px; }
+.bolso-titulo-de-bloco {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 7px;
+}
+.bolso-titulo-de-bloco > svg { color: hsl(var(--primary)); }
+.bolso-titulo-de-bloco h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.025em; }
+.bolso-estudio .membros-campo {
+  min-height: 46px;
+  border: 1px solid hsl(var(--border) / 0.65);
+  background: hsl(var(--background) / 0.7);
+  border-radius: 11px;
+  padding: 12px 14px;
+  line-height: 1.6;
+  transition: border-color 0.16s, box-shadow 0.16s;
+}
+.bolso-estudio .membros-campo:focus-visible {
+  border-color: hsl(var(--primary));
+  outline: 2px solid hsl(var(--primary) / 0.24);
+  outline-offset: 2px;
+}
+.bolso-estudio .membros-campo::placeholder { color: hsl(var(--muted-foreground)); opacity: 0.8; }
+.bolso-opcao {
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  border-radius: 12px;
+  font-weight: 550;
+}
+.bolso-opcao-marca {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid hsl(var(--muted-foreground) / 0.5);
+  border-radius: 50%;
+}
+.bolso-opcao[data-escolhida] .bolso-opcao-marca {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.bolso-biblioteca-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.bolso-biblioteca-topo h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.025em; }
+.bolso-marca-atalho { color: hsl(var(--muted-foreground)); min-width: 0; max-width: 260px; }
+.bolso-marca-atalho span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bolso-primeira-campanha {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: clamp(24px, 6vw, 72px);
+  align-items: center;
+  border: 1px solid hsl(var(--primary) / 0.16);
+  border-radius: 22px;
+  background: radial-gradient(ellipse at 10% 10%, hsl(var(--primary) / 0.09), transparent 70%), hsl(var(--card));
+  padding: clamp(24px, 4vw, 52px);
+}
+.bolso-convite-icone {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid hsl(var(--primary) / 0.17);
+  background: hsl(var(--primary) / 0.07);
+  color: hsl(var(--primary));
+  border-radius: 17px;
+  margin-bottom: 24px;
+}
+.bolso-convite h3 {
+  font-size: clamp(26px, 3.1vw, 40px);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.14;
+  text-wrap: balance;
+  margin-bottom: 25px;
+}
+.bolso-caminho { display: grid; gap: 0; list-style: none; padding: 0; margin: 0; }
+.bolso-caminho li { display: flex; gap: 17px; align-items: center; padding-block: 23px; border-bottom: 1px solid hsl(var(--border)); }
+.bolso-caminho li:last-child { border-bottom: 0; }
+.bolso-caminho li > span { color: hsl(var(--primary)); }
+.bolso-caminho small { display: block; margin-bottom: 4px; color: hsl(var(--muted-foreground)); font-size: 11px; font-variant-numeric: tabular-nums; }
+.bolso-caminho strong { font-size: 14px; font-weight: 550; }
+.bolso-lista { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.bolso-lista > li { min-width: 0; }
+.bolso-campanha-cartao {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  gap: 25px;
+  padding: 22px;
+  border-radius: 18px;
+  background: hsl(var(--card));
+  transition: background-color 0.18s, border-color 0.18s, transform 0.18s;
+}
+.bolso-campanha-cartao:hover {
+  transform: translateY(-2px);
+  border-color: hsl(var(--primary) / 0.4);
+  background: hsl(var(--primary) / 0.035);
+}
+.bolso-cartao-topo { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bolso-campanha-icone { display: grid; place-items: center; flex: none; width: 43px; height: 43px; border-radius: 13px; color: hsl(var(--primary)); background: hsl(var(--primary) / 0.075); }
+.bolso-estado-campanha { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: hsl(var(--muted-foreground)); }
+.bolso-cartao-seta { margin-left: auto; color: hsl(var(--muted-foreground)); flex: none; }
+.bolso-cartao-conteudo { display: block; min-width: 0; }
+.bolso-objetivo { display: block; font-size: 11px; color: hsl(var(--muted-foreground)); margin-bottom: 7px; }
+.bolso-cartao-conteudo strong { display: block; font-size: 19px; line-height: 1.35; font-weight: 600; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+.bolso-cartao-rodape { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 17px; border-top: 1px solid hsl(var(--border) / 0.7); color: hsl(var(--muted-foreground)); font-size: 11px; font-variant-numeric: tabular-nums; }
+.bolso-campanha-topo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+.bolso-campanha-topo h2 { font-size: 24px; font-weight: 600; line-height: 1.25; letter-spacing: -0.035em; overflow-wrap: anywhere; }
+.bolso-etapas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 6px; background: hsl(var(--muted) / 0.55); border: 1px solid hsl(var(--border)); border-radius: 16px; }
+.bolso-etapas button { display: flex; justify-content: center; align-items: center; gap: 10px; min-height: 49px; min-width: 0; padding: 10px 12px; font-size: 13px; font-weight: 550; border-radius: 11px; color: hsl(var(--muted-foreground)); line-height: 1.4; }
+.bolso-etapas button[aria-current="step"] { background: hsl(var(--card)); color: hsl(var(--foreground)); box-shadow: 0 2px 5px hsl(var(--foreground) / 0.045); }
+.bolso-etapas button:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.bolso-etapa-numero { display: grid; place-items: center; flex: none; width: 25px; height: 25px; border: 1px solid hsl(var(--border)); border-radius: 50%; font-size: 11px; font-variant-numeric: tabular-nums; }
+.bolso-etapas button[aria-current="step"] .bolso-etapa-numero { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); border-color: hsl(var(--primary)); }
+.bolso-resumo-oferta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 32px; }
+.bolso-resumo-oferta dt { color: hsl(var(--muted-foreground)); font-size: 12px; margin-bottom: 6px; }
+.bolso-resumo-oferta dd { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.bolso-formulario-acoes { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid hsl(var(--border)); padding-top: 20px; }
+.bolso-proximo-passo { display: flex; justify-content: flex-end; }
+.bolso-entrada { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; padding: 24px 28px; border: 1px solid hsl(var(--primary) / 0.18); border-radius: 18px; background: linear-gradient(110deg, hsl(var(--primary) / 0.065), hsl(var(--card)) 70%); }
+.bolso-entrada-marca { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.bolso-entrada-marca p { font-size: 18px; letter-spacing: -0.025em; }
+.bolso-entrada-icone { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 13px; background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); }
+.bolso-estudio .text-muted-foreground,
+.bolso-estudio .bolso-marca-atalho,
+.bolso-estudio .bolso-estado-campanha,
+.bolso-estudio .bolso-cartao-seta,
+.bolso-estudio .bolso-objetivo,
+.bolso-estudio .bolso-cartao-rodape,
+.bolso-estudio .bolso-caminho small,
+.bolso-estudio .bolso-resumo-oferta dt,
+.bolso-estudio .bolso-etapas button:not([aria-current]) {
+  color: hsl(var(--foreground) / 0.7);
+}
+.membros-menu .membros-acao { transition: color 0.16s, background-color 0.16s; }
+.membros-menu .membros-acao:hover { background: hsl(var(--muted) / 0.7); }
+.membros-menu .membros-acao[aria-current="page"] { font-weight: 600; }
+@media (max-width: 900px) {
+  .bolso-primeira-campanha { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+}
+@media (max-width: 640px) {
+  .bolso-cabecalho { gap: 16px; padding-bottom: 20px; }
+  .bolso-cabecalho .membros-titulo h1 { font-size: 24px; }
+  .bolso-saldo { font-size: 11px; }
+  .bolso-biblioteca-topo { align-items: flex-start; }
+  .bolso-biblioteca-topo > div { width: 100%; justify-content: space-between; }
+  .bolso-marca-atalho { max-width: 48%; padding-inline: 0; }
+  .bolso-primeira-campanha { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 25px; }
+  .bolso-convite h3 { font-size: 31px; }
+  .bolso-convite .membros-acao { width: 100%; }
+  .bolso-caminho { border-top: 1px solid hsl(var(--border)); }
+  .bolso-caminho li { padding-block: 16px; }
+  .bolso-lista { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .bolso-campanha-cartao { padding: 20px; gap: 20px; }
+  .bolso-etapas { gap: 3px; padding: 4px; }
+  .bolso-etapas button { flex-direction: column; gap: 5px; padding: 10px 5px; font-size: 11px; }
+  .bolso-resumo-oferta { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .bolso-formulario-acoes .membros-acao { flex: 1 1 auto; }
+  .bolso-entrada { padding: 20px; gap: 18px; }
+  .bolso-entrada > button { width: 100%; }
+  .bolso-estudio .bolso-formulario input:not([type="checkbox"]):not([type="radio"]),
+  .bolso-estudio .bolso-formulario textarea,
+  .bolso-estudio select { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bolso-campanha-cartao { transition: none; }
+  .bolso-campanha-cartao:hover { transform: none; }
+}

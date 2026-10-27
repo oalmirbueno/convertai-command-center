@@ -43,6 +43,7 @@ import {
   seloDaSerie,
 } from "@/components/mesa/fidelidadeDaReferencia";
 import { blocoDaSerie, promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
+import { direcaoCriativaParaImagem } from "../../supabase/functions/_shared/motor-criativo-campanha";
 import {
   blocoDaVariedade,
   capasNoHistorico,
@@ -86,13 +87,17 @@ function secoes(prompt: string): Record<string, string> {
   return saida;
 }
 
-describe("1. Idêntica é o prompt de hoje, byte a byte", () => {
-  it("sem nível e com Idêntica, em todos os casos (capa, miolo, foto, sem molde, 2 referências, anúncio, 1:1, sem referência)", () => {
+describe("1. Idêntica preserva o prompt aprovado, com direção de campanha adicional só no anúncio", () => {
+  it("sem nível e com Idêntica, preserva cada bloco (capa, miolo, foto, sem molde, 2 referências, anúncio, 1:1, sem referência)", () => {
     expect(HOJE.replicar.length).toBe(CASOS_DO_REPLICAR.length);
     CASOS_DO_REPLICAR.forEach((c, i) => {
       for (const f of [undefined, null, "identica" as const]) {
         const r = promptDoReplicar({ ...c.entrada, fidelidade: f });
-        expect(r.prompt, c.nome).toBe(HOJE.replicar[i].prompt);
+        // O motor adiciona um bloco de campanha no anúncio; o contrato da
+        // referência e todos os prompts orgânicos continuam byte a byte.
+        const campanha = c.entrada.anuncio ? direcaoCriativaParaImagem({ formato: c.entrada.anuncio.formato, referencia: true }) : null;
+        if (campanha) expect(r.prompt.split(campanha), c.nome).toHaveLength(2);
+        expect(campanha ? r.prompt.replace(`${campanha}\n`, "") : r.prompt, c.nome).toBe(HOJE.replicar[i].prompt);
         expect(r.textoExato, c.nome).toBe(HOJE.replicar[i].textoExato);
       }
     });

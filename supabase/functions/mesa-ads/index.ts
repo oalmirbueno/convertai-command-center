@@ -375,6 +375,7 @@ import {
 } from "./calculos.ts";
 // Frente CR (27/09): criativo que converte (formatos, layout, estruturas de copy) e a ordem dos estilos pelo resultado real.
 import { copyQueConverteParaOPrompt, formatoDoEstiloParaOPrompt, formatosParaOPlano, FRAMEWORKS_IDS } from "./modulos/conhecimento-criativo.ts";
+import { direcaoCriativaParaImagem, rotasVisuaisParaOPrompt } from "../_shared/motor-criativo-campanha.ts";
 // Frente ADM (01/10): os números da Meta certos e com o nome certo (Conta da Mesa Ads).
 import {
   avisosDoNumero,
@@ -1988,6 +1989,7 @@ function direcaoDoAnuncio(
     tom,
     regras_do_criativo: [
       regrasDoCriativo(formato),
+      direcaoCriativaParaImagem({ formato: formatoDoCard, sobrio: tom === "sobrio" }),
       direcaoDoTomParaArte(tom),
       info.estilo ? `ESTILO VISUAL DESTA PEÇA (${info.estilo.nome}): ${info.estilo.como_fazer}` : "",
       info.objetivo ? `OBJETIVO DA CAMPANHA (${info.objetivo.nome}): ${info.objetivo.como_o_criativo_muda}` : "",
@@ -3474,6 +3476,7 @@ NÚMEROS REAIS DA OFERTA (os únicos que podem aparecer): ${JSON.stringify(numer
 ${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda, venda })}
 ${rep ? `\n${rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
 ${copyQueConverteParaOPrompt({ comLayout: true })}
+${rotasVisuaisParaOPrompt(escrever, { sobrio: tom === "sobrio", preservarPrimeira: !!estilo || !!rep })}
 
 ${regrasDoTomParaCopy(tom)}
 

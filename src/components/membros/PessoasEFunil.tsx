@@ -507,7 +507,7 @@ export function EditorFunil({
   return (
     <section className="space-y-5">
       <TituloMembros
-        titulo="Esteira de produtos"
+        titulo="Recomendações"
         acoes={
           <button
             className="membros-acao"
@@ -528,7 +528,7 @@ export function EditorFunil({
         className={`membros-editor-curso membros-editor-funil${dados.funil?.length ? "" : " sem-etapas"}`}
       >
         {!!dados.funil?.length && (
-          <nav className="membros-editor-lista" aria-label="Etapas da esteira">
+          <nav className="membros-editor-lista" aria-label="Etapas das recomendações">
             {(dados.funil || []).map((f) => (
               <button
                 key={f.id}
@@ -717,7 +717,7 @@ function FormFunil({
             v.produto_origem === v.produto_destino
           }
         >
-          Salvar etapa da esteira
+          Salvar recomendação
         </button>
       </div>
     </form>
