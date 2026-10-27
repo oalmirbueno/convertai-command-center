@@ -2697,6 +2697,14 @@
       "remote_name": "cobranca_pausada_por_cliente",
       "remote_statements_sha256": "277e64bfbc27afeb9c430bbc4babe948c6411985d144929d1df724f16ed9e5ff",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027120000",
+      "path": "supabase/migrations/20261027120000_aceleriq_de_bolso.sql",
+      "local_sha256": "b42c139cd5ffc15ba57c0e36771d9135b9b39f9173c602d7bf93f0cdec1815a5",
+      "remote_name": "aceleriq_de_bolso",
+      "remote_statements_sha256": "14c0d0ee06db57a8a42646fb9e24a2285d34808d743261ff4a9a609431c9ee22",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
