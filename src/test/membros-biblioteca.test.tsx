@@ -224,7 +224,7 @@ describe("biblioteca integrada", () => {
   ])("a marca retorna ao início e preserva o contexto de %s", async (inicio) => {
     mocks.role = "admin";
     montar(inicio);
-    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
+    await screen.findByRole("button", { name: "Conhecer produto" });
     fireEvent.change(screen.getByRole("searchbox", { name: "Buscar produtos" }), {
       target: { value: "inexistente" },
     });
@@ -273,7 +273,7 @@ describe("biblioteca integrada", () => {
     mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
     mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
     montar(url);
-    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
+    await screen.findByRole("button", { name: "Conhecer produto" });
     fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
     expect(await screen.findByText("Ferramentas disponíveis na conta do próprio titular.")).toBeInTheDocument();
     expect(mocks.ferramentas).not.toHaveBeenCalled();
@@ -421,18 +421,18 @@ describe("biblioteca integrada", () => {
     });
     expect(screen.getByText("Nenhum produto encontrado")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Limpar busca"));
-    expect(screen.getByRole("button", { name: "Conhecer produto", exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Conhecer produto" })).toBeInTheDocument();
   });
   it("não mostra administração para membro", async () => {
     montar();
-    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
+    await screen.findByRole("button", { name: "Conhecer produto" });
     expect(
       screen.queryByRole("link", { name: "Administrar biblioteca" }),
     ).not.toBeInTheDocument();
   });
   it("o menu da conta preserva o destino do membro e fecha por Escape", async () => {
     montar();
-    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
+    await screen.findByRole("button", { name: "Conhecer produto" });
     const conta = screen.getByLabelText("Opções da conta de Minha conta");
     fireEvent.click(conta);
     expect(screen.getByRole("link", { name: "Painel Aceleriq" })).toHaveAttribute("href", "/solucoes");
@@ -539,7 +539,7 @@ describe("biblioteca integrada", () => {
     montar("/membros?modo=cliente");
     await screen.findByText("Continuar na biblioteca");
     fireEvent.click(screen.getByRole("button", { name: "Simular bloqueio" }));
-    await screen.findByRole("button", { name: "Conhecer produto", exact: true });
+    await screen.findByRole("button", { name: "Conhecer produto" });
     expect(mocks.catalogo).toHaveBeenLastCalledWith(undefined, {
       teste: true,
       bloqueado: true,

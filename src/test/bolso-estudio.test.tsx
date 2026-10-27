@@ -117,7 +117,7 @@ describe("estúdio com o banco simulado", () => {
     expect(screen.getByLabelText("Por que escolher você")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "WhatsApp" }));
     expect(screen.getByLabelText("Texto da chamada")).toHaveValue("Chame no WhatsApp");
-    fireEvent.click(screen.getByRole("button", { name: "Voltar", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
     expect(screen.getByLabelText("Produto ou serviço")).toHaveValue("Bolo da semana");
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
@@ -133,7 +133,7 @@ describe("estúdio com o banco simulado", () => {
     fireEvent.change(screen.getByLabelText("Produto ou serviço"), { target: { value: "Bolo de pote" } });
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     fireEvent.change(screen.getByLabelText("Condições comerciais"), { target: { value: "R$14 por pote" } });
-    fireEvent.click(screen.getByRole("button", { name: "Site", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Site" }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(screen.getByText("R$14 por pote")).toBeVisible();
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_campanha_salvar", expect.anything());
@@ -198,7 +198,7 @@ describe("estúdio com o banco simulado", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Criar outra versão/ }));
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir_criativo", expect.anything());
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(mock.rpc).toHaveBeenCalledWith("bolso_pedir_criativo", expect.objectContaining({ _campanha: "c-1", _natureza: "legenda", _tarifa_vista: 1, _entrada: {} })));
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
   });
@@ -209,13 +209,13 @@ describe("estúdio com o banco simulado", () => {
     mock.respostas.bolso_criativo_resultado = { estado: "concluido", natureza: "briefing", aplicado: false, briefing: { ...CAMPANHA.briefing, diferencial: "Feito no mesmo dia", condicoes: "R$14", cta: "Chame no WhatsApp" } };
     montar(h(EstudioBolso));
     fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Oferta", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Oferta" }));
     fireEvent.click(screen.getByRole("button", { name: "Editar oferta" }));
     fireEvent.click(screen.getByText("Completar com IA"));
     fireEvent.change(screen.getByLabelText("Conte sua ideia"), { target: { value: "Divulgar o bolo fresco de hoje por14reais" } });
     fireEvent.click(screen.getByRole("button", { name: /Preparar minha oferta/ }));
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir_criativo", expect.anything());
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     const aplicar = await screen.findByRole("button", { name: "Aplicar sugestão nos campos" });
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_campanha_salvar", expect.anything());
     fireEvent.click(aplicar);
@@ -231,7 +231,7 @@ describe("estúdio com o banco simulado", () => {
     mock.respostas.bolso_criativo_resultado = situacao === "incerto" ? { estado: "incerto", natureza: "briefing" } : conclusao;
     montar(h(EstudioBolso));
     fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Oferta", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Oferta" }));
     fireEvent.click(screen.getByRole("button", { name: "Editar oferta" }));
     if (situacao === "incerto") {
       const conferir = await screen.findByRole("button", { name: "Conferir pedido" });
@@ -259,7 +259,7 @@ describe("estúdio com o banco simulado", () => {
     await waitFor(() => expect(pedirArte).toBeEnabled());
     fireEvent.click(pedirArte);
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir_criativo", expect.anything());
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(mock.rpc).toHaveBeenCalledWith("bolso_pedir_criativo", expect.objectContaining({ _campanha: "c-1", _natureza: "imagem", _entrada: { referencias: ["r-1"] } })));
   });
 
@@ -269,12 +269,12 @@ describe("estúdio com o banco simulado", () => {
     mock.respostas.bolso_criativo_resultado = { estado: "concluido", natureza: "briefing", aplicado: false, briefing: { ...CAMPANHA.briefing, diferencial: "Receita artesanal", condicoes: "R$97", cta: "Compre pelo site" } };
     montar(h(EstudioBolso));
     fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Oferta", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Oferta" }));
     fireEvent.click(screen.getByRole("button", { name: "Editar oferta" }));
     await screen.findByRole("button", { name: "Aplicar sugestão nos campos" });
     fireEvent.click(within(screen.getByRole("navigation", { name: "Preparação da campanha" })).getByRole("button", { name: "Oferta" }));
     fireEvent.change(screen.getByLabelText("Condições comerciais"), { target: { value: "R$197" } });
-    fireEvent.click(screen.getByRole("button", { name: "WhatsApp", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "WhatsApp" }));
     fireEvent.click(within(screen.getByRole("navigation", { name: "Preparação da campanha" })).getByRole("button", { name: "Objetivo" }));
     fireEvent.change(screen.getByLabelText("Conte sua ideia"), { target: { value: "Uma nova campanha" } });
     expect(screen.getByRole("button", { name: /Preparar minha oferta/ })).toBeDisabled();
@@ -293,7 +293,7 @@ describe("estúdio com o banco simulado", () => {
     mock.respostas.bolso_criativo_resultado = { estado: "concluido", natureza: "briefing", aplicado: false, briefing: { ...CAMPANHA.briefing, diferencial: "Sugestão já paga" } };
     montar(h(EstudioBolso));
     fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Oferta", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Oferta" }));
     fireEvent.click(screen.getByRole("button", { name: "Editar oferta" }));
     expect(await screen.findByRole("button", { name: "Aplicar sugestão nos campos" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Preparar minha oferta/ })).toBeDisabled();
