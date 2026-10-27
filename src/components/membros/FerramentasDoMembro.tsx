@@ -9,11 +9,15 @@ import {
   Send,
   Copy,
   Wrench,
+  Columns3,
+  MessagesSquare,
+  ArrowUpRight,
 } from "lucide-react";
 import { AjudaRecolhida } from "@/components/sistema";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
 import { mensagemDoErro } from "@/lib/membros/api";
+import { urlHttps } from "@/lib/membros/modelo";
 import {
   temLicencaDaFerramenta,
   abrirSessaoFerramenta,
@@ -42,7 +46,10 @@ export default function FerramentasDoMembro({
   const { user } = useAuth();
   const [selecionada, setSelecionada] = useState<string | null>(null);
   const [aviso, setAviso] = useState("");
-  const propria = useCatalogoFerramentas(user?.id, !somenteLeitura && !catalogo);
+  const propria = useCatalogoFerramentas(
+    user?.id,
+    !somenteLeitura && !catalogo,
+  );
   const dados = catalogo || propria;
   const produto = produtoInicial || selecionada;
   const ferramenta = dados.isSuccess
@@ -56,7 +63,7 @@ export default function FerramentasDoMembro({
   };
   if (somenteLeitura)
     return (
-      <section className="space-y-5">
+      <section className="membros-ferramentas space-y-5">
         <TituloMembros
           titulo="Ferramentas"
           principal
@@ -77,7 +84,7 @@ export default function FerramentasDoMembro({
       />
     );
   return (
-    <section className="space-y-5">
+    <section className="membros-ferramentas space-y-5">
       <TituloMembros
         titulo="Ferramentas"
         principal
@@ -118,55 +125,93 @@ export default function FerramentasDoMembro({
         <div className="membros-ferramentas-grade">
           {dados.data.map((f) => (
             <article key={f.produto_id} className="membros-ferramenta">
-              <Wrench size={23} className="text-primary" />
-              <h2 className="font-semibold">{f.titulo}</h2>
-              <p className="text-[12px] text-muted-foreground">
-                {temLicencaDaFerramenta(f)
-                  ? `Acesso até ${new Date(f.fim).toLocaleDateString("pt-BR")}`
-                  : "Acesso não liberado ou vencido"}
-              </p>
-              {f.disponivel === false ? (
-                <span className="text-[12px]">Ferramenta indisponível</span>
-              ) : (
-                <button
-                  className="membros-acao bg-primary text-primary-foreground"
-                  onClick={() =>
-                    temLicencaDaFerramenta(f)
-                      ? setSelecionada(f.produto_id)
-                      : conhecer(f.produto_id)
+              <div
+                className="membros-ferramenta-capa"
+                data-motor={f.motor}
+                aria-hidden="true"
+              >
+                <span className="membros-ferramenta-marca">aceleriq</span>
+                {f.motor === "crm" ? (
+                  <Columns3 size={52} strokeWidth={1.25} />
+                ) : (
+                  <MessagesSquare size={52} strokeWidth={1.25} />
+                )}
+                <span className="membros-ferramenta-categoria">
+                  {f.motor === "crm" ? "Relacionamento" : "Comunicação"}
+                </span>
+                <img
+                  key={f.capa_url || f.motor}
+                  className="membros-ferramenta-capa-imagem"
+                  src={
+                    urlHttps(f.capa_url) ||
+                    `/membros/capas/${f.motor === "crm" ? "relacionamento" : "comunicacao"}-v1.webp`
                   }
-                >
-                  {temLicencaDaFerramenta(f) ? (
-                    "Abrir ferramenta"
-                  ) : (
-                    <>
-                      <LockKeyhole size={15} />
-                      Ver produto
-                    </>
-                  )}
-                </button>
-              )}
-              {f.motor === "crm" && (
-                <details className="text-[12px]">
-                  <summary className="cursor-pointer py-2">Meus dados</summary>
-                  <p>Os registros ficam privados até você pedir exclusão.</p>
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  onError={(evento) => {
+                    evento.currentTarget.hidden = true;
+                  }}
+                />
+              </div>
+              <div className="membros-ferramenta-corpo">
+                <h2 className="font-semibold">{f.titulo}</h2>
+                <p className="text-[12px] text-muted-foreground">
+                  {temLicencaDaFerramenta(f)
+                    ? `Acesso até ${new Date(f.fim).toLocaleDateString("pt-BR")}`
+                    : "Acesso não liberado ou vencido"}
+                </p>
+              </div>
+              <div className="membros-ferramenta-rodape">
+                {f.disponivel === false ? (
+                  <span className="text-[12px]">Ferramenta indisponível</span>
+                ) : (
                   <button
-                    className="membros-acao"
-                    onClick={async () => {
-                      try {
-                        await pedirExclusaoCrm(f.produto_id);
-                        setAviso(
-                          "Pedido de exclusão registrado para a administração.",
-                        );
-                      } catch (e) {
-                        setAviso(mensagemDoErro(e));
-                      }
-                    }}
+                    className="membros-acao bg-primary text-primary-foreground"
+                    onClick={() =>
+                      temLicencaDaFerramenta(f)
+                        ? setSelecionada(f.produto_id)
+                        : conhecer(f.produto_id)
+                    }
                   >
-                    Solicitar exclusão dos meus dados
+                    {temLicencaDaFerramenta(f) ? (
+                      <>
+                        Abrir ferramenta
+                        <ArrowUpRight size={16} aria-hidden="true" />
+                      </>
+                    ) : (
+                      <>
+                        <LockKeyhole size={15} />
+                        Ver produto
+                      </>
+                    )}
                   </button>
-                </details>
-              )}
+                )}
+                {f.motor === "crm" && (
+                  <details className="text-[12px]">
+                    <summary className="cursor-pointer py-2">
+                      Meus dados
+                    </summary>
+                    <p>Os registros ficam privados até você pedir exclusão.</p>
+                    <button
+                      className="membros-acao"
+                      onClick={async () => {
+                        try {
+                          await pedirExclusaoCrm(f.produto_id);
+                          setAviso(
+                            "Pedido de exclusão registrado para a administração.",
+                          );
+                        } catch (e) {
+                          setAviso(mensagemDoErro(e));
+                        }
+                      }}
+                    >
+                      Solicitar exclusão dos meus dados
+                    </button>
+                  </details>
+                )}
+              </div>
             </article>
           ))}
         </div>
@@ -248,8 +293,8 @@ function SessaoDaFerramenta({
     };
   }, [abrir, qc, usuario, ferramenta.produto_id]);
   return (
-    <section className="space-y-4 min-w-0">
-      <header className="flex items-center gap-2">
+    <section className="membros-ferramenta-sessao space-y-4 min-w-0">
+      <header className="membros-ferramenta-cabecalho flex items-center gap-2">
         <button
           className="membros-acao"
           aria-label="Voltar às ferramentas"
@@ -282,7 +327,7 @@ function SessaoDaFerramenta({
       ) : !sessao ? (
         <p role="status">Conferindo seu acesso…</p>
       ) : sessao.conflito ? (
-        <div className="space-y-4 max-w-lg">
+        <div className="membros-ferramenta-dispositivo space-y-4 max-w-lg">
           <Laptop size={24} />
           <p>{sessao.mensagem}</p>
           <button
@@ -319,9 +364,9 @@ function ProximaResposta({
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   return (
-    <section className="space-y-5 max-w-4xl">
+    <section className="membros-resposta-assistente space-y-5 max-w-4xl">
       <form
-        className="grid sm:grid-cols-2 gap-4"
+        className="membros-resposta-formulario grid sm:grid-cols-2 gap-4"
         onSubmit={async (e) => {
           e.preventDefault();
           setOcupado(true);
@@ -407,7 +452,10 @@ function ProximaResposta({
       </form>
       {erro && <p role="alert">{erro}</p>}
       {resultado && (
-        <section className="space-y-4" aria-live="polite">
+        <section
+          className="membros-resposta-resultado space-y-4"
+          aria-live="polite"
+        >
           <h2 className="font-semibold text-[15px]">Próximo passo</h2>
           <p className="text-[13px]">{resultado.orientacao}</p>
           {resultado.mensagem && (

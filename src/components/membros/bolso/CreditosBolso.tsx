@@ -31,7 +31,7 @@ export default function CreditosBolso() {
   if (!e.exposto) return <p className="text-[13px] text-muted-foreground">{situacao.texto}</p>;
   const vencido = !e.direito;
   return (
-    <section className="space-y-6" aria-labelledby="bolso-creditos-titulo">
+    <section className="bolso-creditos space-y-6" aria-labelledby="bolso-creditos-titulo">
       {situacao.demonstracao && <FaixaDeDemonstracao />}
       <TituloMembros titulo="Créditos e acesso" principal icone={<Coins size={20} className="text-primary" aria-hidden="true" />}>
         Cada pedido ao estúdio mostra quantos créditos usa antes de confirmar. Os créditos ficam reservados enquanto o pedido roda: se não der
@@ -69,7 +69,7 @@ export default function CreditosBolso() {
           Seu acesso ao estúdio não está ativo. Campanhas, textos e artes que você já fez continuam aqui para consultar e baixar.
         </p>
       )}
-      <div className="space-y-3">
+      <div className="bolso-creditos-extrato space-y-3">
         <h3 className="text-[15px] font-semibold">Extrato</h3>
         {extrato.isPending ? (
           <p role="status">Carregando o extrato…</p>

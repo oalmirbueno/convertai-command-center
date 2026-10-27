@@ -212,8 +212,8 @@ export default function CrmDoMembro({
   const contatoEmEdicao =
     edicao?.tipo === "negocio" ? edicao.linha.contato_id : null;
   return (
-    <section className="min-w-0 space-y-4" aria-label="Seu CRM">
-      <div className="flex flex-wrap gap-2 items-center">
+    <section className="membros-crm min-w-0 space-y-4" aria-label="Seu CRM">
+      <div className="membros-crm-barra flex flex-wrap gap-2 items-center">
         <button
           className="membros-acao"
           aria-pressed={aba === "funil"}
@@ -280,8 +280,8 @@ export default function CrmDoMembro({
           {aba === "contatos" ? "Novo contato" : "Novo negócio"}
         </button>
       </div>
-      <div className="flex gap-3 items-center">
-        <label className="flex flex-1 items-center gap-2">
+      <div className="membros-crm-filtros flex gap-3 items-center">
+        <label className="membros-crm-busca flex flex-1 items-center gap-2">
           <Search size={16} />
           <input
             className="membros-campo"

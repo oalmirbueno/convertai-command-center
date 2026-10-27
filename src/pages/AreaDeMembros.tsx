@@ -8,6 +8,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   LogOut,
   Search,
   Settings2,
@@ -59,7 +60,9 @@ import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
 import { temLicencaDaFerramenta } from "@/lib/membros/ferramentas";
 import { texto, AjudaRecolhida } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import { ProviderAparenciaMembros, BotaoAparenciaMembros } from "@/components/membros/AparenciaMembros";
 import "@/components/membros/membros.css";
+import "@/components/membros/membros-experiencia.css";
 
 type AcessoDoCartao = {
   rotulo: string;
@@ -92,13 +95,13 @@ export function CapaProduto({
       onError={() => setFalhou(true)}
     />
   ) : (
-    <div className="membros-capa membros-fallback">
-      <BookOpen size={32} className="text-primary mb-4" aria-hidden="true" />
-      <span className="text-[12px] text-muted-foreground">
-        {produto.categoria || "Aceleriq · Biblioteca"}
-      </span>
-      <span className="mt-2 text-[12px] text-muted-foreground">
-        {produto.formato}
+    <div className="membros-capa membros-fallback" data-formato={produto.tipo_produto || "material"} aria-hidden="true">
+      <span className="membros-capa-assinatura">aceleriq<span>CONTEÚDOS</span></span>
+      <span className="membros-capa-simbolo"><BookOpen size={42} strokeWidth={1.25} /></span>
+      <span className="membros-capa-editorial">
+        <span>{produto.categoria || "Biblioteca"}</span>
+        <strong>{produto.titulo}</strong>
+        <span>{produto.formato}</span>
       </span>
     </div>
   );
@@ -121,12 +124,12 @@ export function TrilhoProdutos({
   const ref = useRef<HTMLDivElement>(null);
   const id = `trilho-${titulo.normalize("NFD").replace(/[^a-zA-Z]/g, "")}`;
   return (
-    <section aria-labelledby={`${id}-titulo`} className="min-w-0">
-      <div className="flex items-center justify-between mb-3">
+    <section aria-labelledby={`${id}-titulo`} className="membros-prateleira min-w-0">
+      <div className="membros-prateleira-cabecalho">
         <h2 id={`${id}-titulo`} className={texto.tituloSecao}>
           {titulo}
         </h2>
-        <div className="flex">
+        <div className="membros-prateleira-controles">
           <button
             className="membros-acao text-muted-foreground"
             aria-label={`Voltar em ${titulo}`}
@@ -176,12 +179,17 @@ export function TrilhoProdutos({
                 aria-label={`${p.titulo} · ${estado.rotulo}`}
                 disabled={estado.conferindo}
               >
-                <CapaProduto produto={p} />
-                <div className="pt-3 px-1">
-                  <h3 className="text-[13px] leading-5 font-medium line-clamp-2">
+                <div className="membros-cartao-capa">
+                  <CapaProduto produto={p} />
+                  <span className="membros-cartao-abrir" aria-hidden="true">
+                    {estado.liberado ? <ArrowRight size={20} /> : <LockKeyhole size={18} />}
+                  </span>
+                </div>
+                <div className="membros-cartao-info">
+                  <h3>
                     {p.titulo}
                   </h3>
-                  <p className="text-[12px] leading-5 text-muted-foreground mt-1">
+                  <p className="membros-cartao-acesso">
                     {!estado.ferramenta && p.progresso === 100 ? "Concluído" : estado.rotulo}
                     {!estado.ferramenta && estado.liberado &&
                       p.materiais_total !== undefined &&
@@ -361,6 +369,14 @@ function ControlesTeste({
   );
 }
 export default function AreaDeMembros() {
+  return (
+    <ProviderAparenciaMembros>
+      <ConteudoAreaDeMembros />
+    </ProviderAparenciaMembros>
+  );
+}
+
+function ConteudoAreaDeMembros() {
   const { profile, user, logout } = useAuth();
   const qc = useQueryClient();
   const [secao, setSecao] = useState(() => {
@@ -535,6 +551,18 @@ export default function AreaDeMembros() {
       : "Conferir licença";
   else if (destaque && podeAbrir(destaque))
     acaoDestaque = "Continuar na biblioteca";
+  const nomeDaConta = profile?.full_name?.trim() || "Minha conta";
+  const primeiroNome = profile?.full_name?.trim().split(/\s+/)[0];
+  const iniciais = nomeDaConta.split(/\s+/).slice(0, 2).map((nome) => nome[0]).join("").toUpperCase();
+  function irParaSecao(destino: string) {
+    if (ferramentaAberta) {
+      const proximos = new URLSearchParams(parametros);
+      proximos.delete("ferramenta");
+      if (aberto && crmDoProduto(aberto)) proximos.delete("produto");
+      setParametros(proximos);
+    }
+    setSecao(destino);
+  }
   return (
     <FocoDeEstudo
       key={user?.id || "visitante"}
@@ -549,8 +577,9 @@ export default function AreaDeMembros() {
           Ir para a biblioteca
         </a>
         <header className="membros-topo">
-          <div>
+          <div className="membros-topo-interno">
             <Link
+              className="membros-marca"
               to={
                 teste
                   ? `/membros?modo=cliente${teste.bloqueado ? "&bloqueado=1" : ""}`
@@ -559,39 +588,75 @@ export default function AreaDeMembros() {
                     : "/membros"
               }
               aria-label="Biblioteca Aceleriq"
+              onClick={(e) => {
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                setSecao("inicio");
+                setBusca("");
+                setCategoria("");
+              }}
             >
-              <MarcaAceleriq altura={24} />
+              <MarcaAceleriq altura={32} />
+              <span>Área de membros</span>
             </Link>
+            <label className="membros-topo-busca">
+              <Search size={18} aria-hidden="true" />
+              <span className="sr-only">Buscar produtos</span>
+              <input
+                type="search"
+                value={busca}
+                onChange={(e) => {
+                  setBusca(e.target.value);
+                  irParaSecao("inicio");
+                }}
+                placeholder="Buscar na biblioteca"
+                autoComplete="off"
+              />
+            </label>
             <nav
               aria-label="Navegação da biblioteca"
-              className="flex items-center min-w-0 gap-1"
+              className="membros-topo-acoes"
             >
-              {profile?.role === "admin" && !previa && !teste && (
-                <Link
-                  className="membros-acao text-muted-foreground"
-                  to="/membros/administrar"
-                  aria-label="Administrar biblioteca"
-                >
-                  <Settings2 size={18} />
-                  <span className="hidden sm:inline">Administrar</span>
-                </Link>
-              )}
-              {!teste && (
-                <Link
-                  to={destinoOperacional(profile?.role)}
-                  className="membros-acao text-muted-foreground"
-                >
-                  Painel Aceleriq
-                  <ArrowRight size={16} className="hidden sm:block" />
-                </Link>
-              )}
-              <button
-                className="membros-acao text-muted-foreground"
-                onClick={() => void logout()}
-                aria-label="Sair da conta"
+              <BotaoAparenciaMembros />
+              <details
+                className="membros-conta"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.currentTarget.open = false;
+                    e.currentTarget.querySelector("summary")?.focus();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) {
+                    e.currentTarget.open = false;
+                  }
+                }}
               >
-                <LogOut size={18} />
-              </button>
+                <summary aria-label={`Opções da conta de ${nomeDaConta}`}>
+                  <span className="membros-avatar" aria-hidden="true">{iniciais}</span>
+                  <span className="membros-conta-nome">{primeiroNome || "Minha conta"}</span>
+                  <ChevronDown size={15} aria-hidden="true" />
+                </summary>
+                <div className="membros-conta-menu">
+                  <strong>{nomeDaConta}</strong>
+                  {profile?.role === "admin" && !previa && !teste && (
+                    <Link
+                      className="membros-acao"
+                      to="/membros/administrar"
+                      aria-label="Administrar biblioteca"
+                    >
+                      <Settings2 size={17} /> Administrar
+                    </Link>
+                  )}
+                  {!teste && (
+                    <Link to={destinoOperacional(profile?.role)} className="membros-acao">
+                      <ArrowRight size={17} /> Painel Aceleriq
+                    </Link>
+                  )}
+                  <button className="membros-acao" onClick={() => void logout()} aria-label="Sair da conta">
+                    <LogOut size={17} /> Sair da conta
+                  </button>
+                </div>
+              </details>
             </nav>
           </div>
         </header>
@@ -600,7 +665,7 @@ export default function AreaDeMembros() {
         >
           <aside className="membros-menu" aria-label="Menu de membros">
             <button
-              className="membros-acao"
+              className="membros-acao membros-menu-recolher"
               aria-label={
                 recolhida
                   ? "Expandir menu de membros"
@@ -632,15 +697,7 @@ export default function AreaDeMembros() {
                 title={i.nome}
                 aria-label={i.nome}
                 aria-current={secaoAtual === i.id ? "page" : undefined}
-                onClick={() => {
-                  if (ferramentaAberta) {
-                    const proximos = new URLSearchParams(parametros);
-                    proximos.delete("ferramenta");
-                    if (aberto && crmDoProduto(aberto)) proximos.delete("produto");
-                    setParametros(proximos);
-                  }
-                  setSecao(i.id);
-                }}
+                onClick={() => irParaSecao(i.id)}
               >
                 <i.icone size={18} />
                 <span>{i.nome}</span>
@@ -803,12 +860,15 @@ export default function AreaDeMembros() {
                 </button>
               </div>
             )}
-            <div hidden={secaoAtual !== "inicio"} className="space-y-8">
+            <div hidden={secaoAtual !== "inicio"} className="membros-inicio space-y-8">
               {produtos.length > 0 && (
-                <CabecalhoDePagina
-                  className="sr-only"
-                  titulo={<> Biblioteca Aceleriq </>}
-                />
+                <div className="membros-abertura">
+                  <div>
+                    <span className="membros-saudacao">{primeiroNome ? `Bom ter você aqui, ${primeiroNome}.` : "Seu espaço para ir além."}</span>
+                    <CabecalhoDePagina titulo={<>Sua biblioteca</>} />
+                  </div>
+                  <span className="membros-abertura-marca" aria-hidden="true">APRENDER. APLICAR. ACELERAR.</span>
+                </div>
               )}
               {catalogo.isPending ? (
                 <div
@@ -864,25 +924,24 @@ export default function AreaDeMembros() {
                       className="membros-destaque"
                       aria-label="Produto em destaque"
                     >
-                      <div className="membros-destaque-capa" aria-hidden="true">
+                      <div className={`membros-destaque-capa ${urlHttps(destaque.capa_url) ? "com-capa-propria" : ""}`} aria-hidden="true">
                         <CapaProduto
                           key={destaque.id}
                           produto={destaque}
                           destaque
                         />
                       </div>
-                      <div className="membros-destaque-texto space-y-4">
-                        <p className="text-[12px] text-emerald-300 font-medium">
-                          {acessoDestaque?.rotulo} · {destaque.formato}
-                        </p>
-                        <div className="flex items-center gap-2">
+                      <div className="membros-destaque-texto">
+                        <span className="membros-destaque-selo">EM DESTAQUE</span>
+                        <div className="membros-destaque-titulo">
                           <h2>{destaque.titulo}</h2>
                           <AjudaRecolhida rotulo={`Sobre ${destaque.titulo}`}>
                             {destaque.descricao}
                           </AjudaRecolhida>
                         </div>
+                        <span className="membros-destaque-meta">{acessoDestaque?.rotulo} · {destaque.formato}</span>
                         <button
-                          className="membros-acao bg-primary text-primary-foreground"
+                          className="membros-acao membros-destaque-acao bg-primary text-primary-foreground"
                           onClick={() => abrirProduto(destaque)}
                           disabled={acessoDestaque?.conferindo}
                         >
@@ -901,40 +960,28 @@ export default function AreaDeMembros() {
                   {catalogo.data?.jornada && (
                     <Jornada jornada={catalogo.data.jornada} />
                   )}
-                  {comBolso && !busca && !categoria && (
-                    <section
-                      className="bolso-entrada"
-                      aria-label="Aceleriq de Bolso"
-                    >
-                      <div className="bolso-entrada-marca">
-                        <span className="bolso-entrada-icone" aria-hidden="true"><Megaphone size={23} /></span>
-                        <p className="text-[15px] font-semibold">
-                          Aceleriq de Bolso
-                        </p>
-                      </div>
-                      <button
-                        className="membros-acao bg-primary text-primary-foreground"
-                        onClick={() => setSecao("estudio")}
-                      >
-                        Abrir o estúdio
-                        <ArrowRight size={16} aria-hidden="true" />
+                  {!busca && !categoria && (
+                    <nav className="membros-atalhos" aria-label="Acesso rápido">
+                      {comBolso && (
+                        <button className="membros-atalho membros-atalho-estudio" onClick={() => irParaSecao("estudio")} aria-label="Abrir o estúdio">
+                          <span className="membros-atalho-icone"><Megaphone size={23} aria-hidden="true" /></span>
+                          <span><small>Aceleriq de Bolso</small><strong>Abrir o estúdio</strong></span>
+                          <ArrowRight size={19} aria-hidden="true" />
+                        </button>
+                      )}
+                      <button className="membros-atalho" onClick={() => irParaSecao("ferramentas")} aria-label="Explorar minhas ferramentas">
+                        <span className="membros-atalho-icone"><Wrench size={22} aria-hidden="true" /></span>
+                        <span><small>Do plano à prática</small><strong>Minhas ferramentas</strong></span>
+                        <ArrowRight size={19} aria-hidden="true" />
                       </button>
-                    </section>
+                      <button className="membros-atalho" onClick={() => irParaSecao("lista")} aria-label="Ver conteúdos salvos">
+                        <span className="membros-atalho-icone"><Bookmark size={22} aria-hidden="true" /></span>
+                        <span><small>Continue no seu ritmo</small><strong>Conteúdos salvos</strong></span>
+                        <ArrowRight size={19} aria-hidden="true" />
+                      </button>
+                    </nav>
                   )}
-                  <div className="flex flex-wrap gap-3 items-center">
-                    <label className="relative block w-full sm:max-w-sm">
-                      <Search
-                        size={17}
-                        className="absolute left-3 top-3.5 text-muted-foreground"
-                      />
-                      <span className="sr-only">Buscar produtos</span>
-                      <input
-                        value={busca}
-                        onChange={(e) => setBusca(e.target.value)}
-                        placeholder="Buscar na biblioteca"
-                        className="w-full h-11 pl-10 pr-3 bg-muted rounded-lg text-[13px] focus-visible:ring-2 focus-visible:ring-ring outline-none"
-                      />
-                    </label>
+                  {(categorias.length > 1 || busca || categoria) && <div className="membros-filtros">
                     {categorias.length > 1 && (
                       <label>
                         <span className="sr-only">Categoria</span>
@@ -950,7 +997,12 @@ export default function AreaDeMembros() {
                         </select>
                       </label>
                     )}
-                  </div>
+                    {(busca || categoria) && (
+                      <button className="membros-acao text-muted-foreground" onClick={() => { setBusca(""); setCategoria(""); }} aria-label="Remover filtros">
+                        Limpar filtros
+                      </button>
+                    )}
+                  </div>}
                   {catalogo.data?.pendentes.length ? (
                     <p
                       role="status"
