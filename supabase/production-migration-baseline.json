@@ -2721,6 +2721,14 @@
       "remote_name": "bolso_fluxo_criativo",
       "remote_statements_sha256": "49e8550eca3fc367b781559a12630217edb7ab0e2252bcd32ad130bc64873ffb",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261027235000",
+      "path": "supabase/migrations/20261027235000_meta_usuario_do_sistema.sql",
+      "local_sha256": "10a78a7d2e30e1c59f3e7a678d4fad62238a474851a16fc50492fd9a9116f2d4",
+      "remote_name": "meta_usuario_do_sistema",
+      "remote_statements_sha256": "bac735e0b7e070a4c500f2ebe375f760dc49fe25d14b438a6af47c2006273ab9",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
