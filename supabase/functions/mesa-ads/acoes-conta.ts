@@ -636,6 +636,10 @@ export class ErroDaMeta extends Error {
   }
 }
 
+/** O app da Meta do token em modo de desenvolvimento: nada novo vai ao ar até ele ficar "Ao vivo". */
+export const MOTIVO_APP_EM_DESENVOLVIMENTO =
+  "O app da Meta que o painel usa (Aceleriq Insights, ID 1834985740798426) está em modo de desenvolvimento, e a Meta só deixa criar anúncio com post novo quando ele está Ao vivo. Não é problema do criativo nem da conta. Para liberar: developers.facebook.com > Meus apps > Aceleriq Insights > no topo, troque Modo do app de Desenvolvimento para Ao vivo (se pedir, a política de privacidade é https://aceleriq.com/privacidade). Depois é só tentar de novo.";
+
 /** Mensagem curta e sem token a partir do erro da Graph API. */
 export function motivoDoErroDaMeta(corpo: unknown, status: number): string {
   const e = corpo && typeof corpo === "object" ? (corpo as Record<string, unknown>).error as Record<string, unknown> | undefined : undefined;
@@ -647,6 +651,10 @@ export function motivoDoErroDaMeta(corpo: unknown, status: number): string {
     return `A Meta recusou a gestão nesta conta (código ${codigo}${sub})${original ? `: ${original}` : ""}. Confira se esta conta de anúncios foi marcada ao conectar e se o seu perfil é administrador ou anunciante dela.`;
   }
   if (codigo === 190) return "O acesso à Meta venceu. Conecte a conta de anúncios de novo.";
+  // 27/10/2026 (RD AR): o anúncio cria o post da página pelo app do token; com o app em modo de desenvolvimento
+  // a Meta recusa (subcódigo 1885183). Não é a conta nem o criativo: é o app "Aceleriq Insights" que precisa ir ao ar.
+  const textoDoErro = e ? `${String(e.message ?? "")} ${String(e.error_user_msg ?? "")} ${String(e.error_user_title ?? "")}` : "";
+  if (Number(e?.error_subcode ?? 0) === 1885183 || /modo de desenvolvimento|development mode/i.test(textoDoErro)) return MOTIVO_APP_EM_DESENVOLVIMENTO;
   if (codigo === 17 || codigo === 4 || codigo === 80004) return "A Meta pediu uma pausa (limite de chamadas). Tente de novo em alguns minutos.";
   if (codigo === 100 && e && typeof e.error_user_msg === "string") return `A Meta recusou: ${limpo(e.error_user_msg, 240)}`;
   const msg = e && typeof e.message === "string" ? limpo(e.message.replace(/access_token=[^&\s]+/gi, ""), 240) : "";
