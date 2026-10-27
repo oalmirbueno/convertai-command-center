@@ -88,6 +88,7 @@ import {
   comercialRegistrarFato,
   comercialRegistrarMensagem,
 } from './aceleriq-commercial-services.ts';
+import { comercialBolsoLiberar, comercialBolsoPedir, comercialPedirProposta } from '../mcp-server/modulos/comercial-conduzir.ts';
 import { TIPOS_DE_EVIDENCIA, type TipoDeEvidencia } from './comercial-evidencia.ts';
 import {
   getFinanceAdsInvestment,
@@ -386,6 +387,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_comercial_registrar_fato: 'commercial:write',
   aceleriq_comercial_atribuir_agente: 'commercial:write',
   aceleriq_comercial_maquina_buscar: 'commercial:write',
+  aceleriq_comercial_pedir_proposta: 'commercial:write',
+  aceleriq_comercial_bolso_pedir: 'commercial:write',
+  aceleriq_comercial_bolso_liberar: 'commercial:write',
   aceleriq_get_workspace_node: 'workspace:read',
 };
 
@@ -4742,6 +4746,73 @@ const comercialMaquinaCandidatosTool = ferramentaDoCrm(
   comercialMaquinaCandidatos,
 );
 
+// ─── 28/10/2026 (MCP 2.23): o Mercurio conduz ate o contrato, com aprovacao humana ───
+// Proposta em rascunho na Mesa Proposta e o Aceleriq de Bolso que so libera com pagamento confirmado.
+// Servico: mcp-server/modulos/comercial-conduzir.ts; banco: 20261028090000_mercurio_proposta_e_bolso.sql.
+
+const ITEM_MANUAL = z.object({
+  nome: z.string().min(2).max(120), valor: z.number().min(0).max(10_000_000),
+  recorrencia: z.enum(['unico', 'mensal']).optional(), descricao: z.string().max(300).optional(),
+  quantidade: z.number().int().min(1).max(999).optional(),
+}).strict();
+
+const comercialPedirPropostaTool = ferramentaDoCrm(
+  'aceleriq_comercial_pedir_proposta', 'Pedir proposta do lead (rascunho para o Almir aprovar)',
+  'Monta o rascunho da proposta a partir do lead: negocio, dor (nas palavras do lead), plano sugerido, avulsos, verba e moeda (BRL; USD ou EUR para cliente no exterior). Os itens saem do catalogo do painel: plano_id (Financeiro, aceleriq_list_finance_plans) e servico_ids (biblioteca de servicos da proposta), sempre em reais. Em US$ ou euro, ou valor que so esta nas orientacoes (avulso combinado), mande itens_manuais: entram como pendencia para o Almir conferir. Lead que ja e cliente vira proposta em RASCUNHO na Mesa Proposta na hora; lead sem ficha fica guardado e entra na Mesa quando o Almir criar o cliente. Avisa a Caixa sozinho. NADA e enviado: o link publico (link_publico) so existe depois que o Almir aprovar e enviar; chame de novo com o mesmo lead para ver o estado e pegar o link (nao duplica). A verba e interna e nunca vai para a pagina.',
+  true, z.object({
+    lead_id: UUID, negocio: z.string().min(3).max(600), dor: z.string().min(3).max(1600),
+    plano_sugerido: z.string().max(200).optional(), avulsos: z.array(z.string().min(2).max(120)).max(12).optional(),
+    verba: z.string().max(200).optional(), moeda: z.enum(['BRL', 'USD', 'EUR']).optional(),
+    palavras_do_cliente: z.array(z.string().min(2).max(200)).max(4).optional(), observacoes: z.string().max(1200).optional(),
+    plano_id: UUID.optional(), servico_ids: z.array(UUID).max(20).optional(), itens_manuais: z.array(ITEM_MANUAL).max(20).optional(),
+    operador: OPERADOR,
+  }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string', description: 'UUID do lead (commercial_leads.id, o lead_id da fila).' },
+    negocio: { type: 'string', description: 'O negocio do lead em uma ou duas frases (ramo, cidade, porte).' },
+    dor: { type: 'string', description: 'A dor principal, de preferencia nas palavras do lead.' },
+    plano_sugerido: { type: 'string', description: 'O plano que voce sugeriu (nome), para a equipe ler.' },
+    avulsos: { type: 'array', items: { type: 'string' }, description: 'Avulsos que o lead pediu (site, identidade, video...). Preco so pela proposta.' },
+    verba: { type: 'string', description: 'O que o lead disse que pode investir (interno).' },
+    moeda: { type: 'string', description: 'BRL (padrao), USD ou EUR.' },
+    palavras_do_cliente: { type: 'array', items: { type: 'string' }, description: 'Ate 4 frases do lead, exatas.' },
+    observacoes: { type: 'string', description: 'Prazo, decisor, objecoes, o que mais importa.' },
+    plano_id: { type: 'string', description: 'UUID do plano do Financeiro (so em BRL).' },
+    servico_ids: { type: 'array', items: { type: 'string' }, description: 'UUIDs da biblioteca de servicos (so em BRL).' },
+    itens_manuais: { type: 'array', items: { type: 'object', properties: {
+      nome: { type: 'string' }, valor: { type: 'number', description: 'Valor unitario na moeda da proposta.' },
+      recorrencia: { type: 'string', description: 'unico ou mensal.' }, descricao: { type: 'string' }, quantidade: { type: 'number' },
+    }, required: ['nome', 'valor'], additionalProperties: false }, description: 'Itens com valor da tabela do exterior ou das orientacoes; o Almir confere.' },
+    operador: { type: 'string', description: 'Slug do agente. Padrao: mercurio.' },
+  }, required: ['lead_id', 'negocio', 'dor'], additionalProperties: false },
+  comercialPedirProposta,
+);
+
+const comercialBolsoPedirTool = ferramentaDoCrm(
+  'aceleriq_comercial_bolso_pedir', 'Aceleriq de Bolso: registrar o pedido de acesso',
+  'Registra que o lead quer o Aceleriq de Bolso (acesso anual, R$ 97 pela politica comercial aprovada, com os creditos iniciais dela), ligado ao lead e ao e-mail da conta da area de membros, e avisa a Caixa. Devolve o checkout: com ligado=true mande o url ao lead; com ligado=false NAO mande link de pagamento (a equipe combina e o Almir confirma). Nao libera nada: liberar e aceleriq_comercial_bolso_liberar, depois do pagamento confirmado. Um pedido aberto por lead (chamar de novo devolve o mesmo).',
+  true, z.object({ lead_id: UUID, email: z.string().min(5).max(120).optional(), observacao: z.string().max(1000).optional(), operador: OPERADOR }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string', description: 'UUID do lead.' },
+    email: { type: 'string', description: 'E-mail da conta que recebe o acesso. Padrao: o e-mail do lead.' },
+    observacao: { type: 'string', description: 'Contexto para a equipe.' },
+    operador: { type: 'string', description: 'Slug do agente. Padrao: mercurio.' },
+  }, required: ['lead_id'], additionalProperties: false },
+  comercialBolsoPedir,
+);
+
+const comercialBolsoLiberarTool = ferramentaDoCrm(
+  'aceleriq_comercial_bolso_liberar', 'Aceleriq de Bolso: liberar depois do pagamento confirmado',
+  'Libera o acesso anual SO se o pagamento ja foi confirmado por uma pessoa da administracao (no painel) ou por uma compra aprovada que chegou pelo gateway (vendas-webhook) para este lead ou e-mail, no valor do pedido. Comprovante em imagem, print, PDF ou a palavra do lead NUNCA liberam: nao existe campo para isso. Respostas: liberado=true (mande a mensagem_sugerida); motivo=pagamento_nao_confirmado (nao diga que liberou; tente de novo depois, no maximo a cada 30 min); motivo=conta_ausente (peca para criar a conta com o e-mail do pedido e confirmar o e-mail, depois chame de novo). Idempotente.',
+  true, z.object({ pedido_id: UUID.optional(), lead_id: UUID.optional(), operador: OPERADOR }).strict(),
+  { type: 'object', properties: {
+    pedido_id: { type: 'string', description: 'UUID do pedido (aceleriq_comercial_bolso_pedir).' },
+    lead_id: { type: 'string', description: 'Ou o lead: usa o pedido mais recente dele.' },
+    operador: { type: 'string', description: 'Slug do agente. Padrao: mercurio.' },
+  }, additionalProperties: false },
+  comercialBolsoLiberar,
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -4832,6 +4903,10 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   comercialAtribuirAgenteTool,
   comercialMaquinaBuscarTool,
   comercialMaquinaCandidatosTool,
+  // MCP 2.23: o Mercurio conduz ate o contrato (proposta e Aceleriq de Bolso com aprovacao humana).
+  comercialPedirPropostaTool,
+  comercialBolsoPedirTool,
+  comercialBolsoLiberarTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,
