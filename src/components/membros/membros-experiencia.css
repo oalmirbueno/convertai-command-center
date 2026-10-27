@@ -1518,3 +1518,408 @@
     transform: none;
   }
 }
+/* Carteira individual e catálogo. A aparência acompanha o tema da área de membros. */
+.bolso-carteira-destaque {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 36px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 24px;
+  background: hsl(var(--card));
+  box-shadow: var(--membros-sombra);
+  position: relative;
+  overflow: hidden;
+}
+.bolso-carteira-destaque:before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: hsl(var(--primary));
+}
+.bolso-sobrelinha {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-saldo-grande {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 76px;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.065em;
+  color: hsl(var(--foreground));
+  margin: 12px 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+.bolso-saldo-grande span {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-carteira-reserva {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-carteira-acesso {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  border-left: 1px solid hsl(var(--border));
+  padding-left: 36px;
+  min-width: 240px;
+}
+.bolso-carteira-acesso > strong {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+.bolso-carteira-acesso > span:not(.bolso-sobrelinha) {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-carteira-acesso .membros-acao {
+  margin-top: 10px;
+  border-radius: 999px;
+}
+.bolso-custos-criacao {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 0 8px;
+}
+.bolso-custos-criacao > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-custos-criacao svg {
+  color: hsl(var(--primary));
+  flex-shrink: 0;
+}
+.bolso-custos-criacao strong {
+  display: block;
+  font-size: 14px;
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  margin-top: 2px;
+}
+.bolso-cabecalho-secao {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.bolso-cabecalho-secao h2,
+.bolso-cabecalho-secao h3 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+}
+.bolso-cabecalho-secao .bolso-sobrelinha + h2 {
+  margin-top: 5px;
+}
+.bolso-etiqueta {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+}
+.bolso-recargas {
+  scroll-margin-top: 110px;
+}
+.bolso-ofertas-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.bolso-oferta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 26px 24px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
+}
+.bolso-oferta:hover {
+  border-color: hsl(var(--primary) / 0.45);
+  transform: translateY(-2px);
+}
+.bolso-oferta h3,
+.bolso-oferta h4 {
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  margin: 12px 0;
+}
+.bolso-oferta h3 small,
+.bolso-oferta h4 small {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-oferta .bolso-cabecalho-secao {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin: 0;
+  gap: 8px;
+}
+.bolso-oferta-descricao {
+  font-size: 13px;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 8px;
+}
+.bolso-oferta-preco {
+  font-size: 30px;
+  letter-spacing: -0.04em;
+  font-weight: 650;
+  margin: 20px 0;
+}
+.bolso-oferta-preco span {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: hsl(var(--muted-foreground));
+  margin-top: 4px;
+}
+.bolso-oferta ul {
+  padding: 17px 0;
+  border-top: 1px solid hsl(var(--border));
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+}
+.bolso-oferta li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bolso-oferta li svg {
+  color: hsl(var(--primary));
+}
+.bolso-oferta-validade {
+  font-size: 11px;
+  line-height: 1.6;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 20px;
+}
+.bolso-oferta .bolso-oferta-botao {
+  margin-top: auto;
+  justify-content: center;
+  border-radius: 999px;
+  width: 100%;
+  min-height: 44px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  opacity: 1;
+}
+.bolso-nota {
+  font-size: 12px;
+  line-height: 1.65;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-recargas-vazio {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 20px;
+  padding: 28px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 1.65;
+}
+.bolso-recargas-vazio svg {
+  flex-shrink: 0;
+  color: hsl(var(--primary));
+}
+.bolso-recargas-vazio h3,
+.bolso-recargas-vazio h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 3px;
+}
+.bolso-extrato-quantidade {
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bolso-creditos-extrato .bolso-extrato-linha {
+  padding: 18px 0;
+  gap: 18px;
+}
+.bolso-creditos-extrato .bolso-extrato-linha strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bolso-admin-financeiro {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 18px;
+  background: hsl(var(--primary) / 0.055);
+  border: 1px solid hsl(var(--primary) / 0.14);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.bolso-admin-financeiro > svg {
+  color: hsl(var(--primary));
+  flex-shrink: 0;
+}
+.bolso-admin-financeiro p {
+  flex: 1;
+}
+.bolso-admin-financeiro strong {
+  display: block;
+  font-weight: 600;
+}
+.bolso-oferta-formulario {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.bolso-oferta-formulario label {
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.bolso-oferta-formulario .membros-campo {
+  width: 100%;
+}
+.bolso-provisao-resumo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px;
+  border-radius: 16px;
+  background: hsl(var(--secondary));
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+.bolso-provisao-resumo strong {
+  display: block;
+  font-size: 18px;
+  color: hsl(var(--foreground));
+  margin-top: 5px;
+}
+.bolso-oferta-conta {
+  font-size: 12px;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 16px;
+  margin: 0 0 22px;
+}
+.bolso-oferta-conta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.bolso-oferta-conta dt {
+  color: hsl(var(--muted-foreground));
+}
+.bolso-oferta-conta dd {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 700px) {
+  .bolso-carteira-destaque {
+    padding: 26px;
+    gap: 24px;
+    flex-direction: column;
+  }
+  .bolso-saldo-grande {
+    font-size: 64px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .bolso-carteira-acesso {
+    border-left: 0;
+    border-top: 1px solid hsl(var(--border));
+    padding: 22px 0 0;
+    min-width: 0;
+  }
+  .bolso-carteira-acesso .membros-acao {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .bolso-custos-criacao {
+    gap: 18px;
+    grid-template-columns: 1fr;
+    padding: 0 4px;
+  }
+  .bolso-cabecalho-secao {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .bolso-cabecalho-secao h2,
+  .bolso-cabecalho-secao h3 {
+    font-size: 22px;
+  }
+  .bolso-oferta-formulario {
+    grid-template-columns: 1fr;
+  }
+  .bolso-provisao-resumo {
+    grid-template-columns: 1fr;
+  }
+  .bolso-admin-financeiro {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .bolso-admin-financeiro p {
+    flex-basis: calc(100% - 40px);
+  }
+  .bolso-recargas-vazio {
+    padding: 22px;
+    align-items: flex-start;
+  }
+  .bolso-ofertas-grade {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bolso-oferta {
+    transition: none;
+  }
+  .bolso-oferta:hover {
+    transform: none;
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, X } from "lucide-react";
 import TituloMembros from "@/components/membros/TituloMembros";
+import { useAuth } from "@/contexts/AuthContext";
 import { AjudaRecolhida } from "@/components/sistema";
 import {
   cancelarPedido,
@@ -61,7 +62,8 @@ export function FaixaDeDemonstracao() {
 }
 
 export function useEstadoDoBolso(ativo = true) {
-  return useQuery({ queryKey: ["bolso", "estado"], queryFn: lerEstado, enabled: ativo, retry: false, staleTime: 30_000 });
+  const { user } = useAuth();
+  return useQuery({ queryKey: ["bolso", "estado", user?.id], queryFn: lerEstado, enabled: ativo && !!user, retry: false, staleTime: 30_000 });
 }
 
 function Campo({ id, rotulo, ajuda, children }: { id: string; rotulo: string; ajuda?: string; children: React.ReactNode }) {
@@ -480,13 +482,15 @@ function CartaoDaArte({ arte, titulo, aoMudar }: { arte: Arte; titulo: string; a
 type Etapa = "oferta" | "texto" | "arte";
 
 function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDoEstudio | undefined; aoVoltar: () => void }) {
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [etapa, setEtapa] = useState<Etapa>("texto");
   const [editandoOferta, setEditandoOferta] = useState(false);
   const formatos = (estado && estado.politica && estado.politica.formatos) || [];
   const [formato, setFormato] = useState<Formato>(formatos[0] || "feed_1x1");
   const campanha = useQuery({
-    queryKey: ["bolso", "campanha", id],
+    queryKey: ["bolso", "campanha", id, user?.id],
+    enabled: !!user,
     queryFn: () => lerCampanha(id),
     retry: false,
     refetchInterval: (q) => {
@@ -658,10 +662,11 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
 
 // ─── Entrada do estúdio ────────────────────────────────────────────────
 export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServicos?: () => void }) {
+  const { user } = useAuth();
   const qc = useQueryClient();
   const estado = useEstadoDoBolso();
-  const marca = useQuery({ queryKey: ["bolso", "marca"], queryFn: lerMarca, retry: false, enabled: !!estado.data && estado.data.exposto });
-  const campanhas = useQuery({ queryKey: ["bolso", "campanhas"], queryFn: listarCampanhas, retry: false, enabled: !!marca.data });
+  const marca = useQuery({ queryKey: ["bolso", "marca", user?.id], queryFn: lerMarca, retry: false, enabled: !!user && !!estado.data && estado.data.exposto });
+  const campanhas = useQuery({ queryKey: ["bolso", "campanhas", user?.id], queryFn: listarCampanhas, retry: false, enabled: !!user && !!marca.data });
   const [aberta, setAberta] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
   const [editandoMarca, setEditandoMarca] = useState(false);

@@ -1,4 +1,3 @@
-import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import {
   useEffect,
   useRef,
@@ -6,7 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -25,6 +24,7 @@ import {
   Upload,
   Wrench,
   Megaphone,
+  Search,
 } from "lucide-react";
 import {
   carregarAdmin,
@@ -44,8 +44,12 @@ import AdminFerramentas from "@/components/membros/AdminFerramentas";
 import TituloMembros from "@/components/membros/TituloMembros";
 import { enviarCapa } from "@/lib/membros/capas";
 import { urlHttps } from "@/lib/membros/modelo";
-import { texto, AjudaRecolhida } from "@/components/sistema";
+import { texto, AjudaRecolhida, CabecalhoDePagina } from "@/components/sistema";
+import { MarcaAceleriq } from "@/components/publico/CascaPublica";
+import { ProviderAparenciaMembros, BotaoAparenciaMembros } from "@/components/membros/AparenciaMembros";
 import "@/components/membros/membros.css";
+import "@/components/membros/membros-experiencia.css";
+import "@/components/membros/membros-admin-experiencia.css";
 
 const campo =
   "w-full min-h-11 rounded-lg bg-muted px-3 py-2 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -107,6 +111,14 @@ function Bloco({
   );
 }
 export default function AdminMembros() {
+  return (
+    <ProviderAparenciaMembros>
+      <ConteudoAdminMembros />
+    </ProviderAparenciaMembros>
+  );
+}
+
+function ConteudoAdminMembros() {
   const qc = useQueryClient();
   const [check, setCheck] = useState(false);
   const [erro, setErro] = useState("");
@@ -114,7 +126,16 @@ export default function AdminMembros() {
   const [ocupado, setOcupado] = useState(false);
   const [pessoa, setPessoa] = useState("");
   const [recolhida, setRecolhida] = useState(false);
-  const [secao, setSecao] = useState("produtos");
+  const [parametros, setParametros] = useSearchParams();
+  const secaoIndicada = parametros.get("secao") || "produtos";
+  const secao = ["produtos", "materiais", "acessos", "funil", "ferramentas", "cliente", "pagamentos", "bolso"].includes(secaoIndicada)
+    ? secaoIndicada
+    : "produtos";
+  const setSecao = (proxima: string) => setParametros((anteriores) => {
+    const novos = new URLSearchParams(anteriores);
+    novos.set("secao", proxima);
+    return novos;
+  });
   const principal = useRef<HTMLFieldSetElement>(null);
   useEffect(() => {
     if (principal.current) principal.current.scrollTop = 0;
@@ -141,17 +162,23 @@ export default function AdminMembros() {
   };
   return (
     <main className="membros membros-admin">
-      <header className="flex flex-wrap justify-between gap-4 items-center">
-        <div className="flex items-center gap-3">
-          <BookOpen size={22} className="text-primary" />
-          <div>
-            <CabecalhoDePagina titulo={<> Biblioteca de membros </>} />
+      <a className="membros-admin-pular" href="#administracao-conteudo">Ir para o conteúdo</a>
+      <header className="membros-admin-topo">
+        <div className="membros-admin-identidade">
+          <Link to="/membros" className="membros-marca" aria-label="Biblioteca Aceleriq">
+            <MarcaAceleriq altura={30} />
+            <span>Área de membros</span>
+          </Link>
+          <div className="membros-admin-titulo">
+            <span>Administração</span>
+            <CabecalhoDePagina titulo="Biblioteca de membros" nivel={1} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="membros-admin-acoes-topo">
+          <BotaoAparenciaMembros />
           <Link
             to="/membros"
-            className="membros-acao"
+            className="membros-acao membros-admin-ver"
             aria-label="Ver biblioteca"
             title="Ver biblioteca"
           >
@@ -160,7 +187,7 @@ export default function AdminMembros() {
           </Link>
           <Link
             to="/membros?modo=cliente"
-            className="membros-acao border border-border"
+            className="membros-acao membros-admin-teste"
             aria-label="Testar como cliente"
             title="Testar como cliente"
           >
@@ -168,7 +195,7 @@ export default function AdminMembros() {
             <span>Testar como cliente</span>
           </Link>
           <button
-            className="membros-acao bg-primary text-primary-foreground"
+            className="membros-acao bg-primary text-primary-foreground membros-admin-lancamento"
             disabled={!dados.data}
             onClick={() => setCheck(true)}
             aria-label="Preparar lançamento"
@@ -180,17 +207,21 @@ export default function AdminMembros() {
         </div>
       </header>
       {erro && (
-        <p role="alert" className="text-[13px] text-destructive">
+        <p role="alert" className="membros-admin-retorno membros-admin-retorno-erro">
           {erro}
         </p>
       )}
       {sucesso && (
-        <p role="status" className="text-[13px] text-primary">
+        <p role="status" className="membros-admin-retorno membros-admin-retorno-sucesso">
           {sucesso}
         </p>
       )}
       {dados.isPending ? (
-        <p role="status">Carregando administração…</p>
+        <div className="membros-admin-carregando" role="status">
+          <span className="membros-admin-carregando-menu" aria-hidden="true" />
+          <span className="membros-admin-carregando-painel" aria-hidden="true" />
+          <span className="sr-only">Carregando administração…</span>
+        </div>
       ) : dados.isError ? (
         <section role="alert" className="space-y-3">
           <p>{mensagemDoErro(dados.error)}</p>
@@ -207,8 +238,10 @@ export default function AdminMembros() {
             className="membros-admin-nav"
             aria-label="Administração da biblioteca"
           >
-            <button
-              className="membros-acao"
+            <div className="membros-admin-nav-topo">
+              <span>Gerenciar</span>
+              <button
+              className="membros-acao membros-admin-recolher"
               aria-label={
                 recolhida
                   ? "Expandir menu administrativo"
@@ -221,7 +254,8 @@ export default function AdminMembros() {
               ) : (
                 <PanelLeftClose size={17} />
               )}
-            </button>
+              </button>
+            </div>
             {[
               {
                 id: "produtos",
@@ -270,6 +304,8 @@ export default function AdminMembros() {
           </nav>
           <fieldset
             ref={principal}
+            id="administracao-conteudo"
+            tabIndex={-1}
             disabled={ocupado}
             className="membros-admin-principal"
           >
@@ -406,13 +442,22 @@ function Produtos({ dados, agir, inicial }: Props & { inicial?: string }) {
     inicial || dados.produtos[0]?.id || "",
   );
   const produto = dados.produtos.find((p) => p.id === selecionado);
+  const [busca, setBusca] = useState("");
+  const produtosVisiveis = dados.produtos.filter((p) =>
+    `${p.titulo} ${p.categoria}`.toLocaleLowerCase("pt-BR").includes(busca.toLocaleLowerCase("pt-BR")),
+  );
   return (
     <Bloco titulo={`Produtos · ${dados.produtos.length}`} aberto>
       <div className="membros-admin-produtos">
         <nav
           aria-label="Produtos cadastrados"
-          className="max-h-96 overflow-auto space-y-1"
+          className="membros-admin-catalogo"
         >
+          <label className="membros-admin-busca">
+            <Search size={16} aria-hidden="true" />
+            <span className="sr-only">Buscar produto para editar</span>
+            <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produto" />
+          </label>
           <button
             className="membros-acao w-full justify-start"
             onClick={() => setSelecionado("")}
@@ -420,19 +465,24 @@ function Produtos({ dados, agir, inicial }: Props & { inicial?: string }) {
             <Plus size={16} />
             Novo produto
           </button>
-          {dados.produtos.map((p) => (
+          {produtosVisiveis.map((p) => (
             <button
               key={p.id}
               aria-current={p.id === selecionado ? "page" : undefined}
-              className={`membros-acao w-full text-left justify-between gap-2 ${p.id === selecionado ? "bg-muted" : ""}`}
+              className={`membros-acao membros-admin-produto ${p.id === selecionado ? "bg-muted" : ""}`}
               onClick={() => setSelecionado(p.id)}
             >
-              <span className="min-w-0 break-words flex-1">{p.titulo}</span>
-              <span className="text-[11px] text-muted-foreground">
-                {p.estado}
+              <span className="membros-admin-produto-capa" aria-hidden="true">
+                <BookOpen size={20} />
+                {urlHttps(p.capa_url) && <img src={urlHttps(p.capa_url)!} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.hidden = true; }} />}
+              </span>
+              <span className="membros-admin-produto-info">
+                <strong>{p.titulo}</strong>
+                <span className={`membros-admin-estado membros-admin-estado-${p.estado}`}>{p.estado === "publicado" ? "Publicado" : p.estado === "rascunho" ? "Rascunho" : "Indisponível"}</span>
               </span>
             </button>
           ))}
+          {!produtosVisiveis.length && <p className="membros-admin-sem-resultados">Nenhum produto encontrado.</p>}
         </nav>
         <FormProduto
           key={produto?.id || "novo"}
@@ -488,14 +538,14 @@ function FormProduto({
     });
   };
   return (
-    <div className="min-w-0">
+    <div className="membros-admin-editor-produto min-w-0">
       <form onSubmit={enviar} className="grid sm:grid-cols-2 gap-4 min-w-0">
         {urlHttps(v.capa_url) && (
           <img
             key={v.capa_url}
             src={urlHttps(v.capa_url)!}
             alt="Prévia da capa do produto"
-            className="sm:col-span-2 w-full max-h-44 object-cover rounded-xl"
+            className="membros-admin-previa-capa sm:col-span-2"
             loading="lazy"
             referrerPolicy="no-referrer"
             onError={(e) => {

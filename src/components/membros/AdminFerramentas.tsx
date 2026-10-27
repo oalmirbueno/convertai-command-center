@@ -243,8 +243,7 @@ export default function AdminFerramentas({ dados }: { dados: DadosAdmin }) {
       {admin.isError ? (
         <div role="alert">
           <p>
-            Não foi possível carregar a configuração. A migração desta etapa
-            precisa estar disponível no ambiente de teste.
+            Não foi possível carregar a configuração. Tente novamente.
           </p>
           <button className="membros-acao" onClick={() => void admin.refetch()}>
             Tentar novamente
