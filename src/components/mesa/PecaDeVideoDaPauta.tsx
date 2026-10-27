@@ -11,7 +11,7 @@ import { opcoesDaEntrega, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes
 import { useEstadoGuardado } from "./estudioUtil";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import type { ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
+import { chaveDosArquivos, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { PreviaDaPauta } from "./BancadaDaPauta";
@@ -89,7 +89,7 @@ export function SeloDoEstadoDoVideo({ pronto, className = "" }: { pronto: boolea
 
 const doArquivo = (a: ArquivoDeVideo): VideoDaPauta => ({ bucket: a.storage_bucket, caminho: a.storage_path, nome: a.nome || a.nome_original, fonte: "ia", arquivo_id: a.id, ...(a.duracao_s ? { duracao_s: a.duracao_s } : {}) });
 
-export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null, aoGerar, aoAbrirRoteiro }: {
+export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null, aoGerar, aoAbrirRoteiro, aoMudarVideo }: {
   item: ItemDoMes;
   arte?: ArteNaAgenda | null;
   /** As gerações e versões da IA ligadas à pauta (mais nova primeiro). */
@@ -98,6 +98,8 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
   emFoco?: ArquivoDeVideo | null;
   aoGerar: () => void;
   aoAbrirRoteiro: () => void;
+  /** 27/10: o Estúdio acompanha o vídeo da peça na hora (legendar, trilha, cortar e entrega usam o mesmo). */
+  aoMudarVideo?: (v: VideoProntoDaPeca | null) => void;
 }) {
   const { clientId, userId, catalogo } = useMesa();
   const { profile } = useAuth();
@@ -158,6 +160,9 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
     setPreparo(null);
     setVista("video");
     reler();
+    // O envio criou o registro no acervo: a prancheta relê para o vídeo entrar já em legendar, trilha e cortar.
+    void qc.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+    if (aoMudarVideo) aoMudarVideo(noWorkspace);
     toast.success("Vídeo na peça: Pronto", { description: r.guardado ? "Está no Workspace do cliente. Agora é só preparar para publicar." : "Está no Workspace do cliente. A peça não veio do plano do Mês: a ligação vale nesta tela até ir para a Agenda." });
   };
 
@@ -167,6 +172,7 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
       await guardarVideoDaPauta(clientId, item.id, null);
       setAgora(null);
       setSemPlano(null);
+      if (aoMudarVideo) aoMudarVideo(null);
       setPreparo(null);
       reler();
     } catch (e) {

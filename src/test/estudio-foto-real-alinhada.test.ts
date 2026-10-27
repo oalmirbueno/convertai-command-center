@@ -39,8 +39,9 @@ describe("foto real: o original volta alinhado ao que o gerador devolveu", () =>
     expect(imagem).toContain("if (opcoes.texto && !(erro <= LIMITE_CENA_MUDADA)) {");
     expect(imagem).toContain("export const LIMITE_CENA_MUDADA = 24;");
     // Só na foto real: o panorama cola as letras na fatia intacta (colarMudancasNaBase).
-    expect(gerar).toContain("await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa })");
-    expect(gerar).toContain("cena_mudada: volta.cenaMudada");
+    expect(gerar).not.toContain("devolverOriginalAlinhado(baseFoto");
+    // 27/10 (dono): sem colar nada por cima: a arte da foto real é a imagem inteira do gerador.
+    expect(gerar).toContain("Foto real (27/10/2026");
   });
 });
 

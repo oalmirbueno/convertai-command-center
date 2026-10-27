@@ -58,7 +58,9 @@ describe("os pedidos antigos continuam com os mesmos blocos obrigatórios", () =
 
   it("foto real intacta e logo colada pelo código continuam no servidor", () => {
     // Foto fixa: o original volta alinhado por cima (só o texto e a logo mudam).
-    expect(fonte).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });");
+    expect(fonte).not.toContain("devolverOriginalAlinhado(baseFoto");
+    // 27/10 (dono): sem colar nada por cima: a arte da foto real é a imagem inteira do gerador.
+    expect(fonte).toContain("Foto real (27/10/2026");
     // A logo colada pelo código numa versão antiga fica protegida no ajuste.
     expect(fonte).toContain("const protegidas: Area[] = marcaDaVersao.logo_no_codigo ? [c] : [];");
     // A vitrine de logos dos parceiros continua colada pelo código.

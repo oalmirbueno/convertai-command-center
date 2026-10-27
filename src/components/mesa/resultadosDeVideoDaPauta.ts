@@ -20,7 +20,8 @@ export function resultadosDeVideoDaPauta(clientId: string, taskId: string, arqui
 /**
  * 25/10/2026 (dono: "subi o vídeo, ficou Pronto e não libera o fluxo"): o vídeo enviado para a peça mora no
  * Workspace, mas legendar, trilha e entrega trabalham pelo registro no acervo da Mesa Vídeos. Acha esse registro:
- * pelo arquivo_id guardado na peça; pelo caminho, quando a peça guardou o do acervo; e, para envios antigos sem id,
+ * pelo arquivo_id guardado na peça; pelo caminho, quando a peça guardou o do acervo (ou o do Workspace para onde o
+ * acervo levou o final); e, para envios antigos sem id,
  * pelo nome do arquivo com a mesma duração (só vídeo ativo do mesmo cliente, o mais recente).
  */
 export function videoEnviadoDaPeca(clientId: string, pronto: { bucket: string; caminho: string; nome: string; duracao_s?: number; arquivo_id?: string } | null | undefined, arquivos: ArquivoDeVideo[]): ArquivoDeVideo | null {
@@ -32,6 +33,14 @@ export function videoEnviadoDaPeca(clientId: string, pronto: { bucket: string; c
   }
   const porCaminho = ativos.find((a) => a.storage_bucket === pronto.bucket && a.storage_path === pronto.caminho);
   if (porCaminho) return porCaminho;
+  // 27/10: o final que a Mesa Vídeos levou ao Workspace guarda o caminho de lá (origem.workspace.storage_path).
+  if (pronto.bucket === "workspace") {
+    const noWorkspace = ativos.find((a) => {
+      const w = a.origem && typeof a.origem.workspace === "object" && a.origem.workspace ? (a.origem.workspace as { storage_path?: unknown }) : null;
+      return !!w && w.storage_path === pronto.caminho;
+    });
+    if (noWorkspace) return noWorkspace;
+  }
   const nome = pronto.nome.trim().toLowerCase();
   if (!nome) return null;
   const mesmaDuracao = (a: ArquivoDeVideo) => !pronto.duracao_s || !a.duracao_s || Math.abs(a.duracao_s - pronto.duracao_s) < 1.5;

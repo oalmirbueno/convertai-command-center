@@ -11,7 +11,9 @@ import { ESTILOS_DE_VIDEO_DA_PAUTA } from "../../../supabase/functions/_shared/v
 import EntregaDoVideoDaPauta from "./EntregaDoVideoDaPauta";
 import MidiaDaPauta from "./MidiaDaPauta";
 import PecaDeVideoDaPauta from "./PecaDeVideoDaPauta";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { garantirVideoNoAcervo, guardarVideoDaPauta } from "./videoDaPauta";
+import type { VideoProntoDaPeca } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 import { useMesa } from "./MesaContexto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { juntar, texto } from "@/components/sistema/estilos";
@@ -70,7 +72,12 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   const pedidos = pedidosDaPauta(clientId, item.id, pedidosQ.data?.itens || [], ids);
   const gerados = resultadosDeVideoDaPauta(clientId, item.id, todosOsArquivos, pedidosQ.data?.itens || [], versoesQ.data?.itens || [], ids);
   // 25/10: o vídeo enviado para a peça (Pronto) também libera legendar, trilha e entrega, como as gerações da IA.
-  const enviado = videoEnviadoDaPeca(clientId, item.video_pronto, todosOsArquivos);
+  // 27/10: o mesmo vídeo que a peça mostra: o que acabou de subir (antes da lista reler), o do plano ou o guardado
+  // nesta tela (pauta sem plano do Mês).
+  const [videoDaPeca, setVideoDaPeca] = useState<VideoProntoDaPeca | null | undefined>(undefined);
+  const [semPlano] = useEstadoDaTela<VideoProntoDaPeca | null>(chave("video-pronto"), null, { validar: (v) => v === null || (!!v && typeof v === "object") });
+  const pronto = videoDaPeca !== undefined ? videoDaPeca : item.video_pronto || semPlano;
+  const enviado = videoEnviadoDaPeca(clientId, pronto, todosOsArquivos);
   const arquivos = enviado && !gerados.some((a) => a.id === enviado.id) ? [enviado, ...gerados] : gerados;
   // 27/10: a cena de uma composição fica na prancheta, mas só o vídeo final montado vira o vídeo da peça.
   const deCena = arquivosDeCena(pedidos, todosOsArquivos);
@@ -86,6 +93,35 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
   }, [prontosAgora]);
   const [vendo, setVendo] = useState<string | null>(null);
   const cache = useQueryClient();
+  // 27/10 (dono: "vídeo Pronto e a aba Legendar diz que fica disponível quando o vídeo estiver pronto"): o vídeo
+  // Pronto da peça sempre entra na prancheta. Sem registro no acervo na lista, relê uma vez (o envio acabou de
+  // criar); ainda sem, registra no acervo da Mesa Vídeos e guarda o id na peça.
+  const chaveDoPronto = pronto ? `${pronto.bucket}:${pronto.caminho}:${pronto.arquivo_id || ""}` : "";
+  const conferido = useRef("");
+  const [noAcervo, setNoAcervo] = useState<{ estado: "registrando" | "erro"; mensagem?: string } | null>(null);
+  const temLista = !!arquivosQ.data;
+  useEffect(() => {
+    if (!pronto || enviado || !temLista || arquivosQ.isFetching || conferido.current === chaveDoPronto) return;
+    conferido.current = chaveDoPronto;
+    const alvo = pronto;
+    void (async () => {
+      const relida = await arquivosQ.refetch();
+      if (videoEnviadoDaPeca(clientId, alvo, (relida.data && relida.data.arquivos) || []) || alvo.bucket !== "workspace") return;
+      setNoAcervo({ estado: "registrando" });
+      const id = await garantirVideoNoAcervo(clientId, alvo);
+      const comId: VideoProntoDaPeca = { ...alvo, arquivo_id: id };
+      await guardarVideoDaPauta(clientId, item.id, comId).catch(() => undefined);
+      setVideoDaPeca(comId);
+      await cache.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+      setNoAcervo(null);
+    })().catch((e) => setNoAcervo({ estado: "erro", mensagem: textoDoErro(e) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDoPronto, !!enviado, temLista, arquivosQ.isFetching]);
+  const semVideo = (padrao: string) => noAcervo && noAcervo.estado === "registrando"
+    ? <p role="status" className="text-[13px]"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Preparando o vídeo da peça no acervo…</p>
+    : noAcervo && noAcervo.estado === "erro"
+      ? <p role="alert" className="text-[13px] text-destructive">O vídeo da peça não entrou no acervo: {noAcervo.mensagem} <button type="button" className="underline" onClick={() => { conferido.current = ""; setNoAcervo(null); void arquivosQ.refetch(); }}>Tentar de novo</button></p>
+      : <p className="text-[13px]">{padrao}</p>;
   // 27/10 (dono: "poder remover ali o que eu não quero mais"): tira da prancheta arquivando o resultado, com
   // Desfazer. O vídeo que está na peça (Pronto) sai pela própria peça; versão aprovada fica (o servidor recusa).
   const [tirando, setTirando] = useState<string | null>(null);
@@ -144,16 +180,16 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       </div>}
       // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
       // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra. A linha da mídia mora dentro da peça, não solta acima.
-      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} />
+      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} aoMudarVideo={(v) => { conferido.current = ""; setNoAcervo(null); setVideoDaPeca(v); }} />
         <div className="mt-3"><GeracoesDaPauta pedidos={pedidos} compacta titulo="Gerando agora" /></div>
       </>}
       ferramentas={<div className="space-y-4">
       <PainelDaBancada id="gravar"><GravarDaPauta item={item} /></PainelDaBancada>
       <PainelDaBancada id="gerar">{fotoReal && <p className="mb-2 text-[12px] text-muted-foreground" role="status" data-foto-real={fotoReal.modo}>{fotoReal.linha}</p>}<ComposicaoDoVideoDaPauta item={item} pedidos={pedidos} arquivos={todosOsArquivos} fotoReal={idsDaFotoReal} /></PainelDaBancada>
       <PainelDaBancada id="livre"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div>{aba === "livre" && <GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}:${chaveDaFoto}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={direcao} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba("resultados"); }} />}</PainelDaBancada>
-      <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para adicionar a trilha.</p>}</PainelDaBancada>
-      <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : <p className="text-[13px]">A legenda fica disponível quando o vídeo estiver pronto.</p>}</PainelDaBancada>
-      <PainelDaBancada id="cortar">{atual ? <CortarVideoDaPauta key={atual.id} arquivo={atual} /> : <p className="text-[13px]">Gere ou escolha um vídeo na prancheta para cortar.</p>}</PainelDaBancada>
+      <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : semVideo("Gere ou escolha um vídeo na prancheta para adicionar a trilha.")}</PainelDaBancada>
+      <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : semVideo("A legenda fica disponível quando o vídeo estiver pronto.")}</PainelDaBancada>
+      <PainelDaBancada id="cortar">{atual ? <CortarVideoDaPauta key={atual.id} arquivo={atual} /> : semVideo("Gere ou escolha um vídeo na prancheta para cortar.")}</PainelDaBancada>
       <PainelDaBancada id="entrega">{atual ? <EntregaDoVideoDaPauta key={atual.id} item={item} arquivo={atual} /> : <p role="status" className="text-[13px]">{arte ? "Este vídeo já está na Agenda." : "Escolha um resultado na prancheta para preparar a legenda e enviar para aprovação."}</p>}</PainelDaBancada>
       <PainelDaBancada id="resultados"><GeracoesDaPauta pedidos={pedidos} titulo="Gerações desta pauta" conferirSozinho={false} />{arquivos.length > 0 && <p className={juntar(texto.auxiliar, "mt-3")}>{arquivos.length} {arquivos.length === 1 ? "vídeo pronto" : "vídeos prontos"} na prancheta. Clique em um para conferir e preparar a entrega.</p>}</PainelDaBancada>
       {(arquivosQ.isError || pedidosQ.isError) && <p role="alert" className="text-[12px] text-destructive">Não foi possível ler os resultados. <button type="button" className="underline" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); }}>Recarregar</button></p>}

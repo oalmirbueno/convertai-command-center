@@ -97,8 +97,9 @@ describe("Estúdio Ads: tamanho por formato", () => {
     expect(g).toContain("editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo");
     // foto real com máscara e devolução do original
     expect(g).toContain("mascara: await mascara(quadro.largura, quadro.altura, areas)");
-    expect(g).toContain("} else if (img.tamanho === quadro.tamanho) {");
-    expect(g).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas");
+    expect(g).not.toContain("devolverOriginalAlinhado(baseFoto");
+    // 27/10 (dono): sem colar nada por cima: a arte da foto real é a imagem inteira do gerador.
+    expect(g).toContain("Foto real (27/10/2026");
     expect(g).not.toContain("mascara(1088, 1360");
     // normal
     expect(g).toContain("tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,");

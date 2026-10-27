@@ -296,6 +296,8 @@ describe("miolo da peça de vídeo: A fazer / Pronto, Vídeo, Roteiro e Só o te
     expect(chamadas("estudio-arte", "legenda_do_video")[0]).toEqual(expect.objectContaining({ acao: "legenda_do_video", client_id: CLIENTE, task_id: TAREFA }));
     expect(mock.handoff).toHaveBeenCalledWith(expect.objectContaining({ clientId: CLIENTE, fileName: item.title, folder: "materiais", projectId: item.project_id, node: expect.objectContaining({ id: "no-1" }) }));
     const payload = rpcs("save_editorial_post")[0].p_payload;
+    // 27/10: a chave de idempotência do post é uuid no banco ("mesa-video:<tarefa>:<arquivo>" derrubava o Entregar).
+    expect(payload.idempotency_key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(payload).toEqual(expect.objectContaining({
       id: null,
       client_id: CLIENTE,
@@ -366,6 +368,7 @@ describe("entregar o vídeo como o carrossel: pronto para agendar, enviar para a
     await confirmarCusto(entregar, "estudio-arte", "legenda_do_video");
     await waitFor(() => expect(rpcs("save_editorial_post")).toHaveLength(2));
     expect(mock.aprovar).toHaveBeenCalledWith("file-1", "aval do cliente ao admin");
+    expect(rpcs("save_editorial_post")[0].p_payload.idempotency_key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(mock.revisao).not.toHaveBeenCalled();
     // O segundo save é o do Programar: mesmo post, a publicação com a entrega congelada e a data da peça.
     const agendar = rpcs("save_editorial_post")[1];

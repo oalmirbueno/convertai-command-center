@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
-import { chamarMesaVideos, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
+import { chamarMesaVideos, hashDoArquivo, subirVideos, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { handoffWorkspaceFileToFiles, type WorkspaceFileForHandoff } from "@/lib/workspaceFileHandoff";
 import { aprovarPeloCliente, NOTA_DO_AVAL, requestFileAgencyReview } from "@/lib/fileApprovalActions";
 import { loadEditorialPostForMutation } from "@/hooks/useEditorialCalendar";
@@ -106,6 +106,37 @@ export async function levarAoWorkspace(clientId: string, v: VideoEscolhido): Pro
   if (!v.arquivo_id) throw new Error("O vídeo subiu, mas o registro no acervo não voltou. Tente enviar de novo.");
   const no = await arquivoParaOWorkspace(clientId, v.arquivo_id);
   return { bucket: "workspace", caminho: String(no.storage_path), nome: v.nome || no.name, ...(v.duracao_s ? { duracao_s: v.duracao_s } : {}), arquivo_id: v.arquivo_id, em: new Date().toISOString() };
+}
+
+/**
+ * 27/10/2026 (dono: "o vídeo está Pronto e a aba Legendar diz que a legenda fica disponível quando o vídeo estiver
+ * pronto"): legendar, trilha, cortar e a entrega da prancheta trabalham pelo registro no acervo da Mesa Vídeos.
+ * O vídeo Pronto da peça que mora só no Workspace ganha esse registro: primeiro procura o que já existe (o final
+ * que a Mesa Vídeos levou a este caminho do Workspace, ou o mesmo conteúdo pelo SHA-256); sem nada, copia o
+ * arquivo para o acervo pelo envio de sempre (Storage da Mesa + arquivo_registrar). Devolve o id do acervo.
+ */
+export async function garantirVideoNoAcervo(clientId: string, pronto: Pick<VideoProntoDaPeca, "bucket" | "caminho" | "nome">): Promise<string> {
+  const db = supabase as any;
+  const ativo = (q: any) => q.eq("client_id", clientId).eq("estado", "ativo").order("criado_em", { ascending: false }).limit(1);
+  const { data: final } = await ativo(db.from("video_arquivos").select("id").eq("origem->workspace->>storage_path", pronto.caminho));
+  const achado = ((final || []) as { id: string }[])[0];
+  if (achado) return achado.id;
+  const { data: blob, error } = await supabase.storage.from(pronto.bucket).download(pronto.caminho);
+  if (error || !blob) throw new Error("Não foi possível ler o vídeo da peça no Workspace.");
+  const arquivo = new File([blob], pronto.nome || pronto.caminho.split("/").pop() || "video.mp4", { type: blob.type || "video/mp4" });
+  const sha = await hashDoArquivo(arquivo);
+  const pelaHash = async () => {
+    if (!sha) return null;
+    const { data } = await ativo(db.from("video_arquivos").select("id").eq("sha256", sha));
+    return ((data || []) as { id: string }[])[0] || null;
+  };
+  const igual = await pelaHash();
+  if (igual) return igual.id;
+  const r = await subirVideos(clientId, [arquivo], () => undefined);
+  if (r.registrados[0]) return r.registrados[0].id;
+  const repetido = r.duplicados.length ? await pelaHash() : null;
+  if (repetido) return repetido.id;
+  throw new Error((r.recusados[0] && r.recusados[0].motivo) || r.aviso || "O vídeo não entrou no acervo da Mesa Vídeos.");
 }
 
 /** Guarda (ou tira) o vídeo pronto na peça. sem_plano: a pauta não veio do Mês e a tela guarda só aqui. */
@@ -273,7 +304,9 @@ export async function prepararParaPublicar(p: {
     const { data, error } = await (supabase as any).rpc("save_editorial_post", {
       p_payload: {
         id: mesmo ? mesmo.post.id : null,
-        idempotency_key: (mesmo && mesmo.internal && mesmo.internal.idempotency_key) || `mesa-video:${item.id}:${arquivo.fileId}`,
+        // A chave de idempotência do post é uuid no banco (save_editorial_post faz ::uuid). 27/10: a chave
+        // composta "mesa-video:<tarefa>:<arquivo>" derrubava todo Entregar com "invalid input syntax for type uuid".
+        idempotency_key: (mesmo && mesmo.internal && mesmo.internal.idempotency_key) || crypto.randomUUID(),
         mutation_id: crypto.randomUUID(),
         client_id: clientId,
         project_id: item.project_id,

@@ -154,7 +154,9 @@ describe("2. Foto exata: continua intacta", () => {
   it("o caminho da foto real fixa não mudou: alinhamento, recorte das letras e máscara com a logo", () => {
     const g = trecho("async function gerarCard(", "async function gravarVersao(");
     expect(g).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
-    expect(g).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });");
+    expect(g).not.toContain("devolverOriginalAlinhado(baseFoto");
+    // 27/10 (dono): sem colar nada por cima: a arte da foto real é a imagem inteira do gerador.
+    expect(g).toContain("Foto real (27/10/2026");
     expect(g).toContain("const mascaraComLogo = cenaFixa;");
   });
 

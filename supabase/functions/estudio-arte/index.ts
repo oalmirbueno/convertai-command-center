@@ -7263,14 +7263,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       // Cena mudada: fica a imagem inteira do gerador (coerente), marcada fora da emenda.
       if (colado.png) final = colado.png;
       medida = { ...colado.alinhamento, alinhou: colado.alinhou, erro: Math.round(colado.erro * 10) / 10, recorte_texto: !!colado.png, cena_mudada: cenaMudada };
-    } else if (img.tamanho === quadro.tamanho) {
-      // Foto real: o gerador redesenha tudo mesmo com máscara (e reenquadra): o
-      // original é alinhado ao que ele devolveu e volta fora das áreas; dentro
-      // das áreas do texto e da logo fica o que ele desenhou.
-      const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });
-      final = volta.png;
-      medida = { ...volta.alinhamento, alinhou: volta.alinhou, erro: Math.round(volta.erro * 10) / 10, recorte_texto: volta.recortouTexto, cena_mudada: volta.cenaMudada };
     }
+    // Foto real (27/10/2026, dono: "não quero que nada gere por cima; só olhar a foto e gerar com a foto, sem
+    // colar nada por cima"): a arte é a imagem que o gerador fez a partir da foto, inteira. O original não é
+    // mais colado de volta (a colagem com o gerador reenquadrado virava "foto sobre foto").
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       avisos: avisosDaGeracao, regras: regrasDaGeracao,
@@ -7880,10 +7876,9 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     tarefa: "estudio",
     agente: "gerador_imagem",
   });
-  // Ajuste pontual de verdade: fora das áreas marcadas voltam os pixels da versão anterior.
-  let img = comMascara && gerado.tamanho === tamanhoAtual && !naEmenda
-    ? { ...gerado, png: await devolverOriginalForaDasAreas(atual, gerado.png, abertas, 16), mime: "image/png" }
-    : gerado;
+  // 27/10/2026 (dono: "sem colar nada por cima"): o ajuste é a imagem que o gerador fez, inteira. A volta dos
+  // pixels da versão anterior fora das áreas marcadas ficou desligada (com o gerador reenquadrando, virava mosaico).
+  let img = gerado;
   // Frente RO, fase 2: "usa esta foto aqui, igual" com área marcada. 17/10 (dono: "nada colado"): a foto vai ao
   // gerador como referência para reproduzir idêntica e integrada; a colagem pelo código ficou desligada.
   if (COLAR_FOTO_EXATA_NO_AJUSTE && !naEmenda && colaAFotoExata(anexosDoAjuste, comMascara)) {

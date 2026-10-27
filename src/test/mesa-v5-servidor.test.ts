@@ -240,7 +240,9 @@ describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica,
     // Desde 25/09 a fatia nunca é reenquadrada: só as letras são coladas nela (sem faixa dupla na borda).
     // 26/09: a logo é desenhada pelo gerador; a área dela é colada junto com a do texto (nunca apagada).
     expect(g).toContain("await colarMudancasNaBase(baseFoto, img.png, areasComLogo.map((a) => ampliar(a, 0.03)));");
-    expect(g).toContain("devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa })");
+    expect(g).not.toContain("devolverOriginalAlinhado(baseFoto");
+    // 27/10 (dono): sem colar nada por cima: a arte da foto real é a imagem inteira do gerador.
+    expect(g).toContain("Foto real (27/10/2026");
   });
   it("texto sobre foto ou panorama nunca vem numa caixa, e a foto não é escurecida", () => {
     expect(corpoDe(estudio, "gerarCard")).toContain("SEM_CAIXA_ATRAS_DO_TEXTO,");
