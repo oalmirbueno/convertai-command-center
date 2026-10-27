@@ -8,6 +8,8 @@ Análise de 27/10/2026. Estudo financeiro, sem alteração de preços, concessõ
 
 Não é possível afirmar lucro líquido nem uma margem “esperada” estatística a partir de apenas um texto e uma imagem. Os valores abaixo são projeções condicionais. Não incluem conversão, recompra, renovação ou clientes que deixam créditos sem usar como receitas presumidas.
 
+Conferência posterior no fluxo autenticado de produção: texto US$ 0,000641 e imagem US$ 0,067605, ambos concluídos, total US$ 0,068246. É uma segunda amostra, consistente com o teste isolado usado nas tabelas, sem transformar a observação em teto ou média estatística. A diferença de custo de imagem não altera a decisão comercial apresentada; o [recibo de publicação](BOLSO-PUBLICACAO-2026-10-27.md) documenta a carteira e a entrega reais.
+
 Recomendação inicial: manter os preços aprovados, preservar os 100 créditos como **pacote inicial único, não mensal**, usar R$ 30 como teto experimental de CAC no cenário indicado e validar custos com uma amostra maior antes de escalar. Nenhum desses parâmetros foi alterado na aplicação por este estudo.
 
 ## Entradas e origem

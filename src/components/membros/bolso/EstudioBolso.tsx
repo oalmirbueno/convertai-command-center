@@ -516,7 +516,10 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
   const semMensagemNaArte = !!textoDaArte && !textoDaArte.mensagem.trim();
   const textoLongoNaArte = !!textoDaArte && (textoDaArte.mensagem.trim().length > 80 || textoDaArte.cta.trim().length > 50);
   const andamento = c.jobs.filter((j) => j.estado === "na_fila" || j.estado === "processando" || j.estado === "incerto");
-  const ultimosProblemas = c.jobs.filter((j) => j.estado === "falhou").slice(0, 1);
+  // O banco entrega os pedidos do mais recente para o mais antigo.
+  const ultimosProblemas = c.jobs.filter((j, indice, pedidos) =>
+    j.estado === "falhou" && pedidos.findIndex((pedido) => pedido.tipo === j.tipo) === indice,
+  );
   const etapas: { id: Etapa; nome: string; feito: boolean }[] = [
     { id: "oferta", nome: "Oferta", feito: true },
     { id: "texto", nome: "Texto", feito: c.versoes.length > 0 },
