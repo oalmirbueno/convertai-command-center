@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { openai, simulado, type Contexto, type Provedor } from "./provedores.ts";
+import { configuracaoOpenaiDoServidor, openai, simulado, type Contexto, type Provedor } from "./provedores.ts";
 import { caminhoDaArte, mimeReal, type Formato } from "./regras.ts";
 
 /**
@@ -25,12 +25,7 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function provedorDe(nome: string): Provedor | null {
   if (nome === "simulado") return simulado;
   if (nome === "openai") {
-    return openai({
-      habilitado: Deno.env.get("BOLSO_OPENAI_HABILITADO"),
-      chave: Deno.env.get("BOLSO_OPENAI_API_KEY"),
-      modeloTexto: Deno.env.get("BOLSO_OPENAI_MODELO_TEXTO"),
-      modeloImagem: Deno.env.get("BOLSO_OPENAI_MODELO_IMAGEM"),
-    });
+    return openai(configuracaoOpenaiDoServidor((nome) => Deno.env.get(nome)));
   }
   return null;
 }
