@@ -101,6 +101,73 @@ describe("contrato das chamadas OpenAI do Bolso", () => {
     expect(buscar).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    "insufficient_quota",
+    "credit_balance_exhausted",
+    "organization_spend_limit_exceeded",
+    "project_spend_limit_exceeded",
+    "organization_usage_limit_exceeded",
+  ])("cota %s encerra texto e imagem com diagnóstico seguro, sem repetir", async (code) => {
+    const buscar = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({
+      error: { code, type: "insufficient_quota", message: "prompt privado credencial-de-teste", param: "dado-interno" },
+    }, { status: 429, headers: { "x-request-id": "identificador-privado" } }));
+    const p = openai(CONFIG, buscar);
+    for (const r of [await p.texto(CONTEXTO), await p.imagem(CONTEXTO)]) {
+      expect(r).toEqual({
+        ok: false,
+        definitiva: true,
+        motivo: `A geração está sem saldo ou cota no fornecedor (${code}). A administração precisa revisar os créditos e limites da API.`,
+      });
+      expect(JSON.stringify(r)).not.toMatch(/credencial-de-teste|prompt privado|dado-interno|identificador-privado/);
+    }
+    expect(buscar).toHaveBeenCalledTimes(2);
+  });
+
+  it("aceita type de cota conhecido sem propagar code desconhecido", async () => {
+    const buscar = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({
+      error: { type: "insufficient_quota", code: "codigo-com-dado-privado", message: "credencial-de-teste" },
+    }, { status: 429 }));
+    const p = openai(CONFIG, buscar);
+    for (const r of [await p.texto(CONTEXTO), await p.imagem(CONTEXTO)]) {
+      expect(r).toMatchObject({ ok: false, definitiva: true, motivo: expect.stringContaining("(insufficient_quota)") });
+      expect(JSON.stringify(r)).not.toMatch(/codigo-com-dado-privado|credencial-de-teste/);
+    }
+    expect(buscar).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { type: "rate_limit_error" },
+    { code: "rate_limit_exceeded" },
+    { code: "slow_down", type: "rate_limit_error" },
+  ])("limite de ritmo %j permanece transitório sem retry interno", async (error) => {
+    const buscar = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({
+      error: { ...error, message: "prompt privado" },
+    }, { status: 429, headers: { "Retry-After": "identificador-privado" } }));
+    const p = openai(CONFIG, buscar);
+    for (const r of [await p.texto(CONTEXTO), await p.imagem(CONTEXTO)]) {
+      expect(r).toEqual({ ok: false, definitiva: false, motivo: "Limite temporário de requisições do fornecedor (429). Aguarde antes de tentar novamente." });
+    }
+    expect(buscar).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    null,
+    [],
+    { error: null },
+    { error: "insufficient_quota" },
+    { error: [{ code: "insufficient_quota" }] },
+    { error: { code: "insufficient_quota credencial-de-teste", message: "saldo esgotado" } },
+    { error: { code: { segredo: "insufficient_quota" }, type: ["insufficient_quota"] } },
+    { error: { code: "desconhecido", type: "privado", message: "credit_balance_exhausted" } },
+  ])("429 desconhecido %j não infere cobrança nem expõe o payload", async (payload) => {
+    const buscar = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(payload, { status: 429 }));
+    const p = openai(CONFIG, buscar);
+    for (const r of [await p.texto(CONTEXTO), await p.imagem(CONTEXTO)]) {
+      expect(r).toEqual({ ok: false, definitiva: false, motivo: "Fornecedor temporariamente indisponível (429). Aguarde antes de tentar novamente." });
+    }
+    expect(buscar).toHaveBeenCalledTimes(2);
+  });
+
   it("rede ou timeout fica incerto, sem tentativa automática", async () => {
     const buscar = vi.fn<typeof fetch>().mockRejectedValue(new Error("credencial-de-teste"));
     const r = await openai(CONFIG, buscar).imagem(CONTEXTO);

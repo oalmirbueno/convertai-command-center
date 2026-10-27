@@ -117,6 +117,9 @@ Deno.serve(async (req) => {
         const r = await processarUm(servico, null);
         if (r.estado === "nada_a_fazer") break;
         feitos.push(r);
+        // O banco pode devolver o mesmo job à fila. Não gastar suas tentativas no mesmo lote.
+        // Um resultado incerto também encerra o lote e mantém o lease para conferência.
+        if (r.estado === "na_fila" || r.estado === "processando") break;
       }
       return resposta({ processados: feitos });
     }

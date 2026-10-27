@@ -58,6 +58,41 @@ const registro = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
 const tokens = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
+// Códigos documentados em https://developers.openai.com/api/docs/guides/error-codes.
+// Só estes valores exatos podem sair no diagnóstico. Nunca repassar message, corpo ou headers.
+const CODIGOS_DE_COTA = [
+  "insufficient_quota",
+  "credit_balance_exhausted",
+  "organization_spend_limit_exceeded",
+  "project_spend_limit_exceeded",
+  "organization_usage_limit_exceeded",
+] as const;
+
+async function erroDeLimite(res: Response): Promise<Extract<ResultadoTexto, { ok: false }>> {
+  let erro: Record<string, unknown> | null = null;
+  try {
+    erro = registro(registro(await res.json())?.error);
+  } catch {
+    // Resposta desconhecida continua transitória, sem inventar uma causa de cobrança.
+  }
+  const codigo = CODIGOS_DE_COTA.find((c) => erro?.code === c)
+    || CODIGOS_DE_COTA.find((c) => erro?.type === c);
+  if (codigo) return {
+    ok: false,
+    motivo: `A geração está sem saldo ou cota no fornecedor (${codigo}). A administração precisa revisar os créditos e limites da API.`,
+    definitiva: true,
+  };
+  const limiteDeRitmo = erro?.type === "rate_limit_error"
+    || erro?.code === "rate_limit_exceeded" || erro?.code === "slow_down";
+  return {
+    ok: false,
+    motivo: limiteDeRitmo
+      ? "Limite temporário de requisições do fornecedor (429). Aguarde antes de tentar novamente."
+      : "Fornecedor temporariamente indisponível (429). Aguarde antes de tentar novamente.",
+    definitiva: false,
+  };
+}
+
 /**
  * Preços Standard em USD por milhão de tokens, conferidos em 27/10/2026:
  * https://developers.openai.com/api/docs/models/gpt-4.1-mini
@@ -119,7 +154,8 @@ export function openai(env: ConfiguracaoOpenai, buscar: Busca = fetch): Provedor
       } catch {
         return incerto("Sem resposta do fornecedor de texto.");
       }
-      if (res.status === 429 || res.status >= 500) return { ok: false, motivo: `Fornecedor indisponível (${res.status}).`, definitiva: false };
+      if (res.status === 429) return erroDeLimite(res);
+      if (res.status >= 500) return { ok: false, motivo: `Fornecedor indisponível (${res.status}).`, definitiva: false };
       if (!res.ok) return recusa(`Fornecedor recusou o pedido (${res.status}).`);
       try {
         const corpo = await res.json();
@@ -150,7 +186,8 @@ export function openai(env: ConfiguracaoOpenai, buscar: Busca = fetch): Provedor
       } catch {
         return incerto("Sem resposta do fornecedor de imagem.");
       }
-      if (res.status === 429 || res.status >= 500) return { ok: false, motivo: `Fornecedor indisponível (${res.status}).`, definitiva: false };
+      if (res.status === 429) return erroDeLimite(res);
+      if (res.status >= 500) return { ok: false, motivo: `Fornecedor indisponível (${res.status}).`, definitiva: false };
       if (!res.ok) return recusa(`Fornecedor recusou o pedido (${res.status}).`);
       try {
         const corpo = await res.json();
