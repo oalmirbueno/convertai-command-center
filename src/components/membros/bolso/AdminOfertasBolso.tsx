@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, Coins, Plus, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AjudaRecolhida, texto } from "@/components/sistema";
+import { cn } from "@/lib/utils";
 import {
   arquivarOferta,
   erroDoBolso,
@@ -121,19 +123,21 @@ export default function AdminOfertasBolso({
       <div className="bolso-admin-financeiro">
         <Wallet size={22} aria-hidden="true" />
         <p>
-          <strong>Uma carteira para cada pessoa.</strong> Cada cliente usa apenas
-          o próprio saldo do Bolso. O custo do OpenRouter fica na operação da
-          Aceleriq, registrado separadamente do Mesa Ads.
+          <strong>Carteiras individuais.</strong> Cada pessoa usa apenas seu saldo.
         </p>
+        <AjudaRecolhida rotulo="Sobre as carteiras e o custo de IA">
+          Cada cliente usa apenas o próprio saldo do Bolso. O custo do OpenRouter
+          fica na operação da Aceleriq, separado da carteira do Mesa Ads.
+        </AjudaRecolhida>
         <span className="bolso-etiqueta">Pagamentos desligados</span>
       </div>
       {erro && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className={cn(texto.corpo, "text-destructive")}>
           {erro}
         </p>
       )}
       {aviso && (
-        <p role="status" className="text-sm">
+        <p role="status" className={texto.corpo}>
           {aviso}
         </p>
       )}
@@ -281,8 +285,7 @@ export default function AdminOfertasBolso({
               </div>
             )}
           <p className="bolso-nota">
-            A provisão é um planejamento do orçamento. Não transfere dinheiro ao
-            OpenRouter. O restante ainda cobre taxas, impostos e operação.
+            Provisão não transfere dinheiro. O restante cobre taxas, impostos e operação.
           </p>
           <button
             className="membros-acao bg-primary text-primary-foreground"

@@ -1,10 +1,10 @@
 # Bolso: carteiras, recargas e OpenRouter
 
-Plano incremental de 27/10/2026. Não é autorização de publicação ou alteração de produção.
+Plano incremental de 27/10/2026. Aplicação e publicação autorizadas por Almir nesta conversa, com pagamentos desligados. O documento registra o procedimento; a autorização veio do dono.
 
 ## Escopo e estado
 
-A aprovação comercial existente é R$ 97 pelo acesso anual, com um pacote inicial e recargas avulsas. Quantidade inicial, tarifas finais, preços/quantidades dos pacotes e provisão de IA precisam de definição. Esta migração não cria políticas, acessos, créditos ou ofertas; não altera flags, não cobra e não habilita pagamentos.
+A aprovação comercial é R$ 97 pelo acesso anual com 100 créditos iniciais; recargas de 50 por R$ 19, 150 por R$ 49 e 350 por R$ 97; consumo de 1 crédito por texto e 5 por imagem. A provisão interna é estimativa de planejamento, detalhada no estudo de economia unitária. Esta migração não cria políticas, acessos, créditos ou ofertas; não altera flags, não cobra e não habilita pagamentos.
 
 O backend Bolso já existe no banco atual. O baseline `20261027120000_aceleriq_de_bolso.sql` não consta no histórico de migrações remoto segundo o levantamento anterior. **Não reaplicar o baseline nem executar db push, db reset ou replay geral.** Conferir o schema real, e aplicar somente o incremento explicitamente revisado no projeto existente `jjjtkowvxemvituvywvf`. Não criar outro projeto Supabase.
 

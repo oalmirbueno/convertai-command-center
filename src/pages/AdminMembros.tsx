@@ -44,7 +44,7 @@ import AdminFerramentas from "@/components/membros/AdminFerramentas";
 import TituloMembros from "@/components/membros/TituloMembros";
 import { enviarCapa } from "@/lib/membros/capas";
 import { urlHttps } from "@/lib/membros/modelo";
-import { texto, AjudaRecolhida } from "@/components/sistema";
+import { texto, AjudaRecolhida, CabecalhoDePagina } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import { ProviderAparenciaMembros, BotaoAparenciaMembros } from "@/components/membros/AparenciaMembros";
 import "@/components/membros/membros.css";
@@ -171,7 +171,7 @@ function ConteudoAdminMembros() {
           </Link>
           <div className="membros-admin-titulo">
             <span>Administração</span>
-            <h1>Biblioteca de membros</h1>
+            <CabecalhoDePagina titulo="Biblioteca de membros" nivel={1} />
           </div>
         </div>
         <div className="membros-admin-acoes-topo">

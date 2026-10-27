@@ -10,6 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AjudaRecolhida } from "@/components/sistema";
 import TituloMembros from "@/components/membros/TituloMembros";
 import { erroDoBolso, lerExtrato, lerOfertas } from "@/lib/bolso/api";
 import {
@@ -129,8 +130,7 @@ export default function CreditosBolso() {
       </div>
       {!e.direito && (
         <p role="status" className="bolso-aviso">
-          Seu acesso ao estúdio não está ativo. Campanhas, textos e artes que
-          você já fez continuam aqui para consultar e baixar.
+          Acesso inativo. Seus textos e artes continuam disponíveis para consultar e baixar.
         </p>
       )}
       {e.carteira !== "teste" && (
@@ -218,9 +218,7 @@ export default function CreditosBolso() {
                 ))}
               </div>
               <p className="bolso-nota">
-                Combine textos e imagens com o mesmo saldo. A recarga adiciona
-                créditos e não renova o acesso anual. As compras ainda não estão
-                disponíveis.
+                Recargas não renovam o acesso anual. Compras ainda indisponíveis.
               </p>
             </>
           )}
@@ -231,12 +229,18 @@ export default function CreditosBolso() {
         aria-labelledby="bolso-extrato-titulo"
       >
         <div className="bolso-cabecalho-secao">
-          <h2 id="bolso-extrato-titulo">Seu extrato</h2>
+          <div className="flex items-center gap-2">
+            <h2 id="bolso-extrato-titulo">Seu extrato</h2>
+            <AjudaRecolhida rotulo="Sobre reservas e devoluções">
+              O custo aparece antes de confirmar. Se o pedido falhar, créditos
+              ainda válidos voltam ao saldo. Pedidos em conferência continuam
+              reservados até a revisão.
+            </AjudaRecolhida>
+          </div>
           <span className="bolso-nota">Últimas movimentações</span>
         </div>
         <p className="bolso-nota mb-4">
-          O valor aparece antes de confirmar. Se o pedido falhar, créditos ainda
-          válidos voltam ao saldo. Pedidos em conferência ficam reservados até a revisão.
+          Os créditos ficam reservados até a entrega ou a conclusão da conferência.
         </p>
         {extrato.isPending ? (
           <p role="status">Carregando o extrato…</p>

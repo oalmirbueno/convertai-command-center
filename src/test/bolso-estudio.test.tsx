@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement as h } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -63,6 +63,7 @@ beforeEach(() => {
 const montar = (filho: unknown) => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(h(QueryClientProvider, { client: qc }, filho as never));
+  return qc;
 };
 
 describe("regras da tela", () => {
@@ -123,6 +124,52 @@ describe("estúdio com o banco simulado", () => {
     expect(screen.getByRole("button", { name: /Pedir a arte/ })).toBeTruthy();
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
     expect(await screen.findByRole("img", { name: /versão 1 do texto/ })).toBeTruthy();
+  });
+
+  it("selecionar uma campanha troca a lista pelo carregamento antes da resposta do banco", async () => {
+    let concluirLeitura!: (resultado: { data: typeof CAMPANHA; error: null }) => void;
+    const leitura = new Promise<{ data: typeof CAMPANHA; error: null }>((resolver) => { concluirLeitura = resolver; });
+    mock.rpc.mockImplementation((nome: string) => nome === "bolso_campanha_ler"
+      ? leitura
+      : Promise.resolve({ data: mock.respostas[nome] ?? null, error: null }));
+    montar(h(EstudioBolso));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+
+    expect(screen.getByText("Abrindo a campanha…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Bolo de pote/ })).toBeNull();
+    expect(mock.rpc).toHaveBeenCalledWith("bolso_campanha_ler", { _id: "c-1" });
+    await act(async () => { concluirLeitura({ data: CAMPANHA, error: null }); });
+    expect(await screen.findByRole("heading", { name: "Bolo de pote" })).toBeTruthy();
+  });
+
+  it("atualizar saldo, marca e campanhas não fecha a campanha nem muda a etapa selecionada", async () => {
+    const qc = montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Arte e download" }));
+    mock.respostas.bolso_estado = { ...SIMULADO, saldo: { disponivel: 12, reservado: 0 } };
+
+    await act(async () => { await qc.invalidateQueries({ queryKey: ["bolso"] }); });
+
+    await waitFor(() => expect(screen.getByLabelText("Seu saldo de créditos").textContent).toMatch(/12 créditos/));
+    expect(screen.getByRole("heading", { name: "Bolo de pote" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Arte e download" })).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByRole("button", { name: /Bolo de pote/ })).toBeNull();
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+  });
+
+  it("erro ao abrir a campanha aparece e permite voltar à lista sem consumir créditos", async () => {
+    mock.rpc.mockImplementation(async (nome: string) => nome === "bolso_campanha_ler"
+      ? { data: null, error: { code: "42501", message: "Esta campanha não está disponível para sua conta." } }
+      : { data: mock.respostas[nome] ?? null, error: null });
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Esta campanha não está disponível para sua conta/);
+    expect(screen.queryByRole("button", { name: /Bolo de pote/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Voltar às campanhas" }));
+    expect(await screen.findByRole("button", { name: /Bolo de pote/ })).toBeTruthy();
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
   });
 
   it.each([

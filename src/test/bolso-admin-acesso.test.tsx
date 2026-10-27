@@ -48,12 +48,12 @@ async function montar() {
 }
 
 function selecionar(formulario: HTMLElement, pessoa = "conta-autenticada") {
-  fireEvent.change(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true }), { target: { value: pessoa } });
-  fireEvent.change(within(formulario).getByRole("combobox", { name: "Política", exact: true }), { target: { value: "politica-real" } });
+  fireEvent.change(within(formulario).getByRole("combobox", { name: "Pessoa" }), { target: { value: pessoa } });
+  fireEvent.change(within(formulario).getByRole("combobox", { name: "Política" }), { target: { value: "politica-real" } });
 }
 
 async function abrirConcessao(formulario: HTMLElement) {
-  fireEvent.click(within(formulario).getByRole("button", { name: "Conceder acesso", exact: true }));
+  fireEvent.click(within(formulario).getByRole("button", { name: "Conceder acesso" }));
   return screen.findByRole("alertdialog", { name: "Confirmar concessão de acesso" });
 }
 
@@ -95,8 +95,8 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
     visao.politicas = [politica("rascunho")];
     const formulario = await montar();
     expect(within(formulario).getByText("Aprove uma política para liberar o acesso real.")).toBeVisible();
-    expect(within(formulario).getByRole("combobox", { name: "Política", exact: true })).toBeDisabled();
-    expect(within(formulario).getByRole("button", { name: "Conceder acesso", exact: true })).toBeDisabled();
+    expect(within(formulario).getByRole("combobox", { name: "Política" })).toBeDisabled();
+    expect(within(formulario).getByRole("button", { name: "Conceder acesso" })).toBeDisabled();
     fireEvent.click(within(formulario).getByRole("button", { name: "Usar minha conta" }));
     fireEvent.submit(formulario);
     expect(api.conceder).not.toHaveBeenCalled();
@@ -118,13 +118,13 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
 
     fireEvent.click(within(formulario).getByRole("button", { name: "Revisar política V1" }));
     dialogo = await screen.findByRole("alertdialog", { name: "Aprovar política V1?" });
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Aprovar política", exact: true }));
-    await waitFor(() => expect(within(formulario).getByRole("combobox", { name: "Política", exact: true })).toHaveValue("politica-real"));
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Aprovar política" }));
+    await waitFor(() => expect(within(formulario).getByRole("combobox", { name: "Política" })).toHaveValue("politica-real"));
     expect(api.aprovar).toHaveBeenCalledExactlyOnceWith("politica-real");
     expect(api.ler).toHaveBeenCalledTimes(2);
     expect(api.conceder).not.toHaveBeenCalled();
     expect(api.configurar).not.toHaveBeenCalled();
-    expect(within(formulario).getByRole("button", { name: "Conceder acesso", exact: true })).toBeDisabled();
+    expect(within(formulario).getByRole("button", { name: "Conceder acesso" })).toBeDisabled();
   });
 
   it("não libera nem seleciona a política quando a aprovação é recusada pelo servidor", async () => {
@@ -133,19 +133,19 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
     const formulario = await montar();
     fireEvent.click(within(formulario).getByRole("button", { name: "Revisar política V1" }));
     const dialogo = await screen.findByRole("alertdialog", { name: "Aprovar política V1?" });
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Aprovar política", exact: true }));
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Aprovar política" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Aprovação não autorizada.");
-    expect(within(formulario).getByRole("combobox", { name: "Política", exact: true })).toHaveValue("");
-    expect(within(formulario).getByRole("button", { name: "Conceder acesso", exact: true })).toBeDisabled();
+    expect(within(formulario).getByRole("combobox", { name: "Política" })).toHaveValue("");
+    expect(within(formulario).getByRole("button", { name: "Conceder acesso" })).toBeDisabled();
     expect(api.conceder).not.toHaveBeenCalled();
   });
 
   it("distingue minha conta de um perfil homônimo e permite cancelar a concessão", async () => {
     const formulario = await montar();
-    fireEvent.change(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true }), { target: { value: "perfil-homonimo" } });
+    fireEvent.change(within(formulario).getByRole("combobox", { name: "Pessoa" }), { target: { value: "perfil-homonimo" } });
     fireEvent.click(within(formulario).getByRole("button", { name: "Usar minha conta" }));
-    fireEvent.change(within(formulario).getByRole("combobox", { name: "Política", exact: true }), { target: { value: "politica-real" } });
-    expect(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true })).toHaveValue("conta-autenticada");
+    fireEvent.change(within(formulario).getByRole("combobox", { name: "Política" }), { target: { value: "politica-real" } });
+    expect(within(formulario).getByRole("combobox", { name: "Pessoa" })).toHaveValue("conta-autenticada");
     expect(within(formulario).getByRole("option", { name: "Minha conta · admin@example.invalid" })).toBeInTheDocument();
     expect(within(formulario).getByRole("option", { name: "Almir do teste · cliente@example.invalid" })).toBeInTheDocument();
     const dialogo = await abrirConcessao(formulario);
@@ -168,9 +168,9 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar acesso" }));
     expect(await screen.findByText("Acesso concedido a Minha conta.")).toHaveAttribute("role", "status");
     expect(api.conceder).toHaveBeenCalledExactlyOnceWith("conta-autenticada", "anual", "politica-real", expect.stringMatching(/^manual-[\da-f-]{36}$/));
-    expect(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true })).toHaveValue("");
-    expect(within(formulario).getByRole("combobox", { name: "Política", exact: true })).toHaveValue("");
-    expect(within(formulario).getByRole("button", { name: "Conceder acesso", exact: true })).toBeDisabled();
+    expect(within(formulario).getByRole("combobox", { name: "Pessoa" })).toHaveValue("");
+    expect(within(formulario).getByRole("combobox", { name: "Política" })).toHaveValue("");
+    expect(within(formulario).getByRole("button", { name: "Conceder acesso" })).toBeDisabled();
     expect(api.configurar).not.toHaveBeenCalled();
     expect(visao.config.pagamentos).toBe(false);
     expect(visao.direitos).toBe(1);
@@ -184,7 +184,7 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar acesso" }));
     expect(await within(formulario).findByRole("alert")).toHaveTextContent("Sem conexão.");
     const referencia = api.conceder.mock.calls[0][3];
-    expect(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true })).toHaveValue("conta-autenticada");
+    expect(within(formulario).getByRole("combobox", { name: "Pessoa" })).toHaveValue("conta-autenticada");
     dialogo = await abrirConcessao(formulario);
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar acesso" }));
     await screen.findByText("Acesso concedido a Minha conta.");
@@ -221,7 +221,7 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar acesso" }));
     await within(formulario).findByRole("alert");
     const anterior = api.conceder.mock.calls[0][3];
-    fireEvent.change(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true }), { target: { value: "perfil-homonimo" } });
+    fireEvent.change(within(formulario).getByRole("combobox", { name: "Pessoa" }), { target: { value: "perfil-homonimo" } });
     dialogo = await abrirConcessao(formulario);
     expect(dialogo).toHaveTextContent("Almir do teste (cliente@example.invalid)");
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar acesso" }));
