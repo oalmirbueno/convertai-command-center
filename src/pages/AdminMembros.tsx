@@ -25,6 +25,7 @@ import {
   Wrench,
   Megaphone,
   Search,
+  LayoutDashboard,
 } from "lucide-react";
 import {
   carregarAdmin,
@@ -176,6 +177,7 @@ function ConteudoAdminMembros() {
         </div>
         <div className="membros-admin-acoes-topo">
           <BotaoAparenciaMembros />
+          <Link to="/dashboard" className="membros-acao membros-admin-ver" aria-label="Painel Aceleriq" title="Painel Aceleriq"><LayoutDashboard size={17} /><span>Painel Aceleriq</span></Link>
           <Link
             to="/membros"
             className="membros-acao membros-admin-ver"
@@ -235,26 +237,12 @@ function ConteudoAdminMembros() {
       ) : dados.data ? (
         <div className={`membros-admin-corpo ${recolhida ? "recolhida" : ""}`}>
           <nav
+            id="menu-administrativo"
             className="membros-admin-nav"
             aria-label="Administração da biblioteca"
           >
             <div className="membros-admin-nav-topo">
               <span>Gerenciar</span>
-              <button
-              className="membros-acao membros-admin-recolher"
-              aria-label={
-                recolhida
-                  ? "Expandir menu administrativo"
-                  : "Recolher menu administrativo"
-              }
-              onClick={() => setRecolhida((r) => !r)}
-            >
-              {recolhida ? (
-                <PanelLeftOpen size={17} />
-              ) : (
-                <PanelLeftClose size={17} />
-              )}
-              </button>
             </div>
             {[
               {
@@ -309,6 +297,19 @@ function ConteudoAdminMembros() {
             disabled={ocupado}
             className="membros-admin-principal"
           >
+            <div className="membros-admin-conteudo-barra">
+              <button
+                type="button"
+                className="membros-acao membros-admin-recolher"
+                aria-label={recolhida ? "Expandir menu administrativo" : "Recolher menu administrativo"}
+                aria-expanded={!recolhida}
+                aria-controls="menu-administrativo"
+                onClick={() => setRecolhida((r) => !r)}
+              >
+                {recolhida ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+                <span>{recolhida ? "Abrir menu" : "Recolher menu"}</span>
+              </button>
+            </div>
             {secao === "ferramentas" && <AdminFerramentas dados={dados.data} />}
             {secao === "bolso" && <AdminBolso pessoas={dados.data.pessoas} />}
             <section hidden={secao !== "cliente"} className="space-y-6">

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Copy, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, Video, X } from "lucide-react";
 import TituloMembros from "@/components/membros/TituloMembros";
+import FormularioDaOferta from "./FormularioDaOferta";
+import VisualizadorDaArte from "./VisualizadorDaArte";
+import { AjustarArte, ReferenciasDaCampanha } from "./RecursosCriativos";
 import { useAuth } from "@/contexts/AuthContext";
 import { AjudaRecolhida } from "@/components/sistema";
 import {
@@ -14,18 +17,15 @@ import {
   lerMarca,
   listarCampanhas,
   pedir,
+  pedirCriativo,
   processar,
-  salvarCampanha,
   salvarMarca,
   salvarVersao,
   urlDaArte,
 } from "@/lib/bolso/api";
 import {
-  avisoDeCondicoes,
-  BRIEFING_VAZIO,
   dataCurta,
   EXPLICA_JOB,
-  faltasDoBriefing,
   FORMATOS,
   MARCA_VAZIA,
   marcaValida,
@@ -36,13 +36,11 @@ import {
   situacaoDoEstudio,
   TIPOS,
   type Arte,
-  type Briefing,
   type Campanha,
   type ConteudoDaCampanha,
   type EstadoDoEstudio,
   type Formato,
   type Marca,
-  type TipoDaCampanha,
 } from "@/lib/bolso/modelo";
 
 /**
@@ -92,11 +90,12 @@ function Erro({ texto }: { texto: string | null }) {
 }
 
 // ─── Marca ─────────────────────────────────────────────────────────────
-export function FormularioDaMarca({ inicial, aoSalvar }: { inicial: Marca | null; aoSalvar: (m: Marca) => void }) {
+export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar }: { inicial: Marca | null; aoSalvar: (m: Marca) => void; aoCancelar?: () => void }) {
   const [m, setM] = useState<Marca>(inicial || MARCA_VAZIA);
   const [cor, setCor] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [confirmarSaida, setConfirmarSaida] = useState(false);
   const mudar = (campo: keyof Marca, valor: unknown) => setM((a) => ({ ...a, [campo]: valor }));
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,112 +171,19 @@ export function FormularioDaMarca({ inicial, aoSalvar }: { inicial: Marca | null
         <span>Confirmo que posso usar o nome, a logo e as imagens desta marca.</span>
       </label>
       <Erro texto={erro} />
+      <div className="flex flex-wrap items-center gap-3">
+      {aoCancelar && <button type="button" className="membros-acao bolso-voltar border border-border" disabled={salvando} onClick={() => JSON.stringify(m) === JSON.stringify(inicial || MARCA_VAZIA) ? aoCancelar() : setConfirmarSaida(true)}><ArrowLeft size={16} aria-hidden="true" />Voltar às campanhas</button>}
       <button type="submit" className="membros-acao bg-primary text-primary-foreground" disabled={salvando}>
         {salvando ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
         Salvar marca
       </button>
+      </div>
+      {confirmarSaida && <div className="bolso-confirmar" role="group" aria-label="Alterações da marca não salvas"><p className="text-[13px]">Sair sem salvar as alterações da marca?</p><div className="flex flex-wrap gap-2"><button type="button" className="membros-acao border border-border" onClick={aoCancelar}>Sair sem salvar</button><button type="button" className="membros-acao" onClick={() => setConfirmarSaida(false)}>Continuar editando</button></div></div>}
     </form>
   );
 }
 
-// ─── Oferta (briefing) ─────────────────────────────────────────────────
-function FormularioDaOferta({ campanha, aoSalvar, aoCancelar }: { campanha: Campanha | null; aoSalvar: (id: string) => void; aoCancelar?: () => void }) {
-  const [b, setB] = useState<Briefing>(campanha ? { ...BRIEFING_VAZIO, ...campanha.briefing } : BRIEFING_VAZIO);
-  const [titulo, setTitulo] = useState(campanha ? campanha.titulo : "");
-  const [erro, setErro] = useState<string | null>(null);
-  const [salvando, setSalvando] = useState(false);
-  const mudar = (campo: keyof Briefing, valor: string) => setB((a) => ({ ...a, [campo]: valor }));
-  const faltas = faltasDoBriefing(b);
-  const aviso = avisoDeCondicoes(b);
-  const enviar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!b.produto.trim()) return setErro("Diga qual produto ou serviço a campanha divulga.");
-    setSalvando(true);
-    setErro(null);
-    try {
-      aoSalvar(await salvarCampanha({ id: campanha ? campanha.id : undefined, titulo, briefing: b }, campanha ? campanha.versao : undefined));
-    } catch (er) {
-      setErro(erroDoBolso(er));
-    } finally {
-      setSalvando(false);
-    }
-  };
-  return (
-    <form className="bolso-cartao bolso-formulario space-y-5" onSubmit={(e) => void enviar(e)} aria-labelledby="bolso-oferta-titulo" noValidate>
-      <div className="bolso-titulo-de-bloco">
-        <Target size={19} aria-hidden="true" />
-        <h2 id="bolso-oferta-titulo">
-          Sua campanha
-        </h2>
-        <AjudaRecolhida rotulo="Como preencher a oferta">
-          Escreva só o que é verdade hoje. O estúdio não inventa preço, desconto, estoque, prazo, depoimento ou resultado: o que você não informar
-          fica de fora do texto.
-        </AjudaRecolhida>
-      </div>
-      <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">Qual é o objetivo?</legend>
-        <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
-          {(Object.keys(TIPOS) as TipoDaCampanha[]).map((t) => (
-            <label key={t} className="bolso-opcao" data-escolhida={b.tipo === t || undefined}>
-              <input type="radio" name="bolso-tipo" value={t} checked={b.tipo === t} onChange={() => mudar("tipo", t)} className="sr-only" />
-              <span className="bolso-opcao-marca" aria-hidden="true">{b.tipo === t && <Check size={12} />}</span>
-              <span>{TIPOS[t].nome}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo id="bolso-produto" rotulo="Produto ou serviço">
-          <input id="bolso-produto" className="membros-campo" value={b.produto} onChange={(e) => mudar("produto", e.target.value)} maxLength={1500} required />
-        </Campo>
-        <Campo id="bolso-titulo" rotulo="Nome da campanha" ajuda="Opcional. Só para você achar depois.">
-          <input id="bolso-titulo" className="membros-campo" value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={160} aria-describedby="bolso-titulo-ajuda" />
-        </Campo>
-      </div>
-      <Campo id="bolso-diferencial" rotulo="Por que escolher você" ajuda="Um diferencial real, nas suas palavras.">
-        <textarea id="bolso-diferencial" className="membros-campo" rows={2} value={b.diferencial} onChange={(e) => mudar("diferencial", e.target.value)} maxLength={1500} aria-describedby="bolso-diferencial-ajuda" />
-      </Campo>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo id="bolso-publico" rotulo="Para quem é esta campanha" ajuda="Vazio: usa o público da marca.">
-          <input id="bolso-publico" className="membros-campo" value={b.publico} onChange={(e) => mudar("publico", e.target.value)} maxLength={1500} aria-describedby="bolso-publico-ajuda" />
-        </Campo>
-        <Campo id="bolso-canal" rotulo="Onde vai publicar">
-          <input id="bolso-canal" className="membros-campo" value={b.canal} onChange={(e) => mudar("canal", e.target.value)} placeholder="Instagram, WhatsApp..." maxLength={1500} />
-        </Campo>
-      </div>
-      <Campo id="bolso-condicoes" rotulo="Condições comerciais" ajuda={aviso || "Aparecem como você escreveu."}>
-        <textarea id="bolso-condicoes" className="membros-campo" rows={2} value={b.condicoes} onChange={(e) => mudar("condicoes", e.target.value)} placeholder="Preço, prazo, forma de pagamento (se quiser mostrar)" maxLength={1500} aria-describedby="bolso-condicoes-ajuda" />
-      </Campo>
-      <Campo id="bolso-cta" rotulo="O que a pessoa deve fazer" ajuda={TIPOS[b.tipo].cta}>
-        <input id="bolso-cta" className="membros-campo" value={b.cta} onChange={(e) => mudar("cta", e.target.value)} maxLength={1500} aria-describedby="bolso-cta-ajuda" />
-      </Campo>
-      {faltas.length > 0 && (
-        <div className="text-[12px] text-muted-foreground" aria-live="polite">
-          <p>Para um texto melhor, falta:</p>
-          <ul className="list-disc pl-5">
-            {faltas.map((f) => (
-              <li key={f}>{f}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <Erro texto={erro} />
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" className="membros-acao bg-primary text-primary-foreground" disabled={salvando}>
-          {salvando ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
-          Salvar oferta
-        </button>
-        {aoCancelar && (
-          <button type="button" className="membros-acao" onClick={aoCancelar}>
-            Cancelar
-          </button>
-        )}
-      </div>
-    </form>
-  );
-}
-
-// ─── Pedido com confirmação do consumo ─────────────────────────────────
+// ─── Pedidos de geração ─────────────────────────────────────────────
 function BotaoDePedido({
   estado,
   campanha,
@@ -285,6 +191,8 @@ function BotaoDePedido({
   formato,
   rotulo,
   aoPedir,
+  referencias = [],
+  aguardandoReferencias = false,
 }: {
   estado: EstadoDoEstudio | undefined;
   campanha: Campanha;
@@ -292,24 +200,29 @@ function BotaoDePedido({
   formato: Formato | null;
   rotulo: string;
   aoPedir: () => void;
+  referencias?: string[];
+  aguardandoReferencias?: boolean;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [chave, setChave] = useState(novaChave);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const tarifa = estado && estado.politica ? (tipo === "texto" ? estado.politica.tarifa_texto : estado.politica.tarifa_imagem) : null;
-  const bloqueio = motivoParaNaoPedir(estado, tarifa, !!campanha.versao_escolhida, tipo);
+  const bloqueio = aguardandoReferencias ? "Aguarde a conferência das referências antes de pedir a arte." : motivoParaNaoPedir(estado, tarifa, !!campanha.versao_escolhida, tipo);
   const confirmar = async () => {
-    if (tarifa === null) return;
+    if (tarifa === null || bloqueio || enviando) return;
     setEnviando(true);
     setErro(null);
     try {
-      const r = await pedir(campanha.id, tipo, formato, chave, tarifa);
+      const novoMotor = tipo === "texto" ? estado?.recursos_criativos?.legenda : estado?.recursos_criativos?.referencias;
+      const r = novoMotor
+        ? await pedirCriativo(campanha.id, tipo === "texto" ? "legenda" : "imagem", formato, chave, tarifa, tipo === "imagem" ? { referencias } : {})
+        : await pedir(campanha.id, tipo, formato, chave, tarifa);
       aoPedir();
       setConfirmando(false);
       setChave(novaChave());
       // O crédito já está reservado; processar é seguro de repetir.
-      void processar(r.job_id).finally(aoPedir);
+      void processar(r.job_id).then(aoPedir, aoPedir);
     } catch (er) {
       setErro(erroDoBolso(er));
     } finally {
@@ -377,6 +290,14 @@ function EditorDoTexto({ campanha, aoMudar }: { campanha: Campanha; aoMudar: () 
     }
   };
   const mudar = (campo: keyof ConteudoDaCampanha, valor: string) => setRascunho((a) => ({ ...a, [campo]: valor }));
+  const copiarLegenda = async () => {
+    try {
+      await navigator.clipboard.writeText(rascunho.texto);
+      setAviso("Legenda copiada.");
+    } catch {
+      setAviso("Não foi possível copiar automaticamente. Selecione o texto da legenda para copiar.");
+    }
+  };
   return (
     <div className="space-y-4">
       {campanha.versoes.length > 1 && (
@@ -400,9 +321,10 @@ function EditorDoTexto({ campanha, aoMudar }: { campanha: Campanha; aoMudar: () 
       <Campo id="bolso-texto-mensagem" rotulo="Mensagem principal" ajuda="A ideia em uma frase.">
         <input id="bolso-texto-mensagem" className="membros-campo" value={rascunho.mensagem} onChange={(e) => mudar("mensagem", e.target.value)} maxLength={4000} aria-describedby="bolso-texto-mensagem-ajuda" />
       </Campo>
-      <Campo id="bolso-texto-texto" rotulo="Texto da publicação">
+      <Campo id="bolso-texto-texto" rotulo="Legenda da publicação">
         <textarea id="bolso-texto-texto" className="membros-campo" rows={7} value={rascunho.texto} onChange={(e) => mudar("texto", e.target.value)} maxLength={4000} />
       </Campo>
+      <button type="button" className="membros-acao border border-border" onClick={() => void copiarLegenda()} disabled={!rascunho.texto.trim()}><Copy size={15} aria-hidden="true" />Copiar legenda</button>
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo id="bolso-texto-cta" rotulo="Chamada para ação">
           <input id="bolso-texto-cta" className="membros-campo" value={rascunho.cta} onChange={(e) => mudar("cta", e.target.value)} maxLength={4000} />
@@ -429,7 +351,7 @@ function EditorDoTexto({ campanha, aoMudar }: { campanha: Campanha; aoMudar: () 
 }
 
 // ─── Arte: prévia e download ───────────────────────────────────────────
-function CartaoDaArte({ arte, titulo, aoMudar }: { arte: Arte; titulo: string; aoMudar: () => void }) {
+function CartaoDaArte({ arte, titulo, campanha, estado, aoMudar }: { arte: Arte; titulo: string; campanha: string; estado: EstadoDoEstudio | undefined; aoMudar: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [baixando, setBaixando] = useState(false);
@@ -455,7 +377,7 @@ function CartaoDaArte({ arte, titulo, aoMudar }: { arte: Arte; titulo: string; a
   return (
     <figure className="bolso-arte" data-escolhida={arte.escolhido || undefined}>
       <div className="bolso-arte-quadro" style={{ aspectRatio: FORMATOS[arte.formato].proporcao.replace(":", " / ") }}>
-        {url ? <img src={url} alt={`Arte ${FORMATOS[arte.formato].nome}, versão ${arte.versao_campanha} do texto`} loading="lazy" /> : <Loader2 className="animate-spin text-muted-foreground" aria-label="Carregando prévia" />}
+        {url ? <VisualizadorDaArte url={url} alt={`Arte ${FORMATOS[arte.formato].nome}, versão ${arte.versao_campanha} do texto`} titulo={`${titulo} · ${FORMATOS[arte.formato].nome}`} baixando={baixando} aoBaixar={() => void baixar()}><img src={url} alt={`Arte ${FORMATOS[arte.formato].nome}, versão ${arte.versao_campanha} do texto`} loading="lazy" /></VisualizadorDaArte> : <Loader2 className="animate-spin text-muted-foreground" aria-label="Carregando prévia" />}
       </div>
       <figcaption className="space-y-2 p-3 text-[12px]">
         <p>
@@ -473,6 +395,7 @@ function CartaoDaArte({ arte, titulo, aoMudar }: { arte: Arte; titulo: string; a
           </button>
         </div>
         <Erro texto={erro} />
+        {estado?.recursos_criativos?.ajuste && <AjustarArte campanha={campanha} arte={arte.id} formato={arte.formato} estado={estado} aoConcluir={aoMudar} />}
       </figcaption>
     </figure>
   );
@@ -486,6 +409,8 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
   const qc = useQueryClient();
   const [etapa, setEtapa] = useState<Etapa>("texto");
   const [editandoOferta, setEditandoOferta] = useState(false);
+  const [referencias, setReferencias] = useState<string[]>([]);
+  const [referenciasOcupadas, setReferenciasOcupadas] = useState(false);
   const formatos = (estado && estado.politica && estado.politica.formatos) || [];
   const [formato, setFormato] = useState<Formato>(formatos[0] || "feed_1x1");
   const campanha = useQuery({
@@ -526,8 +451,9 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
     { id: "arte", nome: "Arte e download", feito: c.artes.length > 0 },
   ];
   return (
-    <section className="space-y-5" aria-labelledby="bolso-campanha-titulo">
-      <button type="button" className="membros-acao text-muted-foreground" onClick={aoVoltar}>
+    <section className="bolso-campanha" aria-labelledby="bolso-campanha-titulo">
+      <div className="bolso-campanha-navegacao">
+      <button type="button" className="membros-acao bolso-voltar text-muted-foreground" onClick={aoVoltar}>
         <ArrowLeft size={16} aria-hidden="true" />
         Minhas campanhas
       </button>
@@ -536,6 +462,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
           {c.titulo}
         </h2>
         <p className="text-[12px] text-muted-foreground">Atualizada em {dataCurta(c.atualizado_em)}</p>
+      </div>
       </div>
       <nav className="bolso-etapas" aria-label="Etapas da campanha">
         {etapas.map((e, i) => (
@@ -570,7 +497,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
 
       {etapa === "oferta" &&
         (editandoOferta ? (
-          <FormularioDaOferta campanha={c} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
+          <FormularioDaOferta campanha={c} estado={estado} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
         ) : (
           <div className="bolso-cartao space-y-5">
             <dl className="bolso-resumo-oferta">
@@ -589,8 +516,8 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         ))}
 
       {etapa === "texto" && (
-        <div className="space-y-5">
-          <div className="bolso-cartao space-y-3">
+        <div className="bolso-trabalho bolso-trabalho-texto">
+          <div className="bolso-cartao bolso-trabalho-controles space-y-4">
             <div className="flex items-center gap-2">
               <h3 className="text-[15px] font-semibold">Texto da campanha</h3>
               <AjudaRecolhida rotulo="Sobre criar o texto">
@@ -598,9 +525,15 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
                 editar à mão quantas vezes quiser, sem crédito.
               </AjudaRecolhida>
             </div>
+            <dl className="bolso-contexto-campanha">
+              <div><dt>Produto ou serviço</dt><dd>{c.briefing.produto}</dd></div>
+              <div><dt>Objetivo</dt><dd>{TIPOS[c.briefing.tipo].nome}</dd></div>
+              {c.briefing.condicoes && <div><dt>Condições</dt><dd>{c.briefing.condicoes}</dd></div>}
+            </dl>
+            <button type="button" className="membros-acao border border-border" onClick={() => setEtapa("oferta")}>Conferir oferta <ArrowUpRight size={15} aria-hidden="true" /></button>
             <BotaoDePedido estado={estado} campanha={c} tipo="texto" formato={null} rotulo={c.versoes.length ? "Criar outra versão" : "Criar o texto"} aoPedir={atualizar} />
           </div>
-          <div className="bolso-cartao">
+          <div className="bolso-cartao bolso-trabalho-resultado">
             <div className="mb-4 flex items-center gap-2">
               <h3 className="text-[15px] font-semibold">{c.versoes.length ? "Revisar e editar" : "Ou escreva você mesmo"}</h3>
               <AjudaRecolhida rotulo="Como o texto aparece na arte">
@@ -614,49 +547,25 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
       )}
 
       {etapa === "arte" && (
-        <div className="space-y-5">
-          <div className="bolso-cartao space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[15px] font-semibold">Arte da campanha</h3>
-              <AjudaRecolhida rotulo="Sobre a arte">
-                Uma imagem estática no formato escolhido, ligada à versão do texto marcada. Não é vídeo nem arquivo editável por camadas, e nada é
-                publicado automaticamente: você baixa e publica.
-              </AjudaRecolhida>
+        <div className="bolso-trabalho bolso-trabalho-arte">
+          <div className="bolso-cartao bolso-trabalho-controles space-y-4">
+            <div className="bolso-arte-barra">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[15px] font-semibold">Arte da campanha</h3>
+                <AjudaRecolhida rotulo="Sobre a arte">Uma imagem estática no formato escolhido, ligada à versão do texto marcada. Você revisa, baixa e publica.</AjudaRecolhida>
+              </div>
+              {formatos.length > 0 ? (
+                <label className="bolso-formato-inline"><span>Formato</span><select className="membros-campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>{formatos.map((f) => <option key={f} value={f}>{FORMATOS[f].nome} ({FORMATOS[f].proporcao})</option>)}</select></label>
+              ) : <p className="text-[12px] text-muted-foreground">Os formatos aparecem quando o seu acesso estiver ativo.</p>}
+              <span className="bolso-texto-em-uso">{c.versao_escolhida ? `Texto V${c.versao_escolhida}` : "Escolha o texto antes"}</span>
+              <BotaoDePedido estado={estado} campanha={c} tipo="imagem" formato={formato} rotulo="Pedir a arte" aoPedir={atualizar} referencias={referencias} aguardandoReferencias={!!estado?.recursos_criativos?.referencias && referenciasOcupadas} />
             </div>
-            {formatos.length > 0 ? (
-              <label className="block max-w-xs space-y-1.5 text-[13px]">
-                <span className="font-medium">Formato</span>
-                <select className="membros-campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>
-                  {formatos.map((f) => (
-                    <option key={f} value={f}>
-                      {FORMATOS[f].nome} ({FORMATOS[f].proporcao})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <p className="text-[12px] text-muted-foreground">Os formatos aparecem quando o seu acesso estiver ativo.</p>
-            )}
-            <p className="text-[12px] text-muted-foreground">
-              {c.versao_escolhida ? `Usa o texto V${c.versao_escolhida}.` : "Escolha ou escreva o texto antes."}
-            </p>
-            {semMensagemNaArte ? (
-              <p role="status" className="bolso-aviso">Esta versão não tem mensagem principal. A arte será criada sem texto.</p>
-            ) : textoLongoNaArte && (
-              <p role="status" className="bolso-aviso">Esta versão tem textos longos. A arte será criada sem texto.</p>
-            )}
+            {textoDaArte && <details className="bolso-mensagem-em-uso"><summary>Conferir a mensagem escolhida</summary><dl className="bolso-contexto-campanha">{textoDaArte.mensagem && <div><dt>Mensagem</dt><dd>{textoDaArte.mensagem}</dd></div>}{textoDaArte.cta && <div><dt>Chamada para ação</dt><dd>{textoDaArte.cta}</dd></div>}</dl></details>}
+            {estado?.recursos_criativos?.referencias && <ReferenciasDaCampanha campanha={c.id} aoMudar={setReferencias} aoOcupar={setReferenciasOcupadas} />}
+            {semMensagemNaArte ? <p role="status" className="bolso-aviso">Esta versão não tem mensagem principal. A arte será criada sem texto.</p> : textoLongoNaArte && <p role="status" className="bolso-aviso">Esta versão tem textos longos. A arte será criada sem texto.</p>}
             {(semMensagemNaArte || textoLongoNaArte) && <AjudaRecolhida rotulo="Como incluir texto na arte">Use uma mensagem principal de até 80 caracteres e uma chamada para ação de até 50. Salve e escolha a nova versão antes de pedir a arte.</AjudaRecolhida>}
-            <BotaoDePedido estado={estado} campanha={c} tipo="imagem" formato={formato} rotulo="Pedir a arte" aoPedir={atualizar} />
           </div>
-          {c.artes.length ? (
-            <div className="bolso-galeria">
-              {c.artes.map((a) => (
-                <CartaoDaArte key={a.id} arte={a} titulo={c.titulo} aoMudar={atualizar} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-[13px] text-muted-foreground">As artes desta campanha aparecem aqui, com prévia e download.</p>
-          )}
+          {c.artes.length ? <div className="bolso-galeria bolso-trabalho-resultado">{c.artes.map((a) => <CartaoDaArte key={a.id} arte={a} titulo={c.titulo} campanha={c.id} estado={estado} aoMudar={atualizar} />)}</div> : <div className="bolso-arte-vazia bolso-trabalho-resultado"><Image size={34} aria-hidden="true" /><p>As artes desta campanha aparecem aqui, com prévia e download.</p></div>}
         </div>
       )}
     </section>
@@ -690,7 +599,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
   if (!e.exposto) return <p className="text-[13px] text-muted-foreground">{situacao.texto}</p>;
 
   return (
-    <section className="bolso-estudio space-y-7" data-bolso-estudio="" aria-label="Estúdio Aceleriq de Bolso">
+    <section className="bolso-estudio" data-bolso-estudio="" aria-label="Estúdio Aceleriq de Bolso">
       {situacao.demonstracao && <FaixaDeDemonstracao />}
       <header className="bolso-cabecalho">
         <div className="min-w-0">
@@ -720,6 +629,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : !marca.data || editandoMarca ? (
         <FormularioDaMarca
           inicial={marca.data}
+          aoCancelar={marca.data ? () => setEditandoMarca(false) : undefined}
           aoSalvar={() => {
             setEditandoMarca(false);
             void qc.invalidateQueries({ queryKey: ["bolso"] });
@@ -730,6 +640,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : nova ? (
         <FormularioDaOferta
           campanha={null}
+          estado={e}
           aoSalvar={(id) => {
             setNova(false);
             setAberta(id);
@@ -738,7 +649,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
           aoCancelar={() => setNova(false)}
         />
       ) : (
-        <div className="space-y-5">
+        <div className="bolso-biblioteca space-y-5">
           <div className="bolso-biblioteca-topo">
             <h2>Minhas campanhas</h2>
             <div className="flex flex-wrap gap-2">
@@ -764,11 +675,14 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
                   Criar primeira campanha <ArrowUpRight size={17} aria-hidden="true" />
                 </button>
               </div>
+              <div className="bolso-convite-visual">
+                <img src="/membros/refino-20261027/04-capa-estudio.webp" alt="" width={1024} height={1536} loading="lazy" />
               <ol className="bolso-caminho" aria-label="Como criar sua primeira campanha">
                 <li><span aria-hidden="true"><Target size={20} /></span><div><small>01</small><strong>Prepare a oferta</strong></div></li>
                 <li><span aria-hidden="true"><Type size={20} /></span><div><small>02</small><strong>Encontre a mensagem</strong></div></li>
                 <li><span aria-hidden="true"><Image size={20} /></span><div><small>03</small><strong>Crie e revise a arte</strong></div></li>
               </ol>
+              </div>
             </div>
           ) : (
             <ul className="bolso-lista">
@@ -793,6 +707,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
               ))}
             </ul>
           )}
+          <aside className="bolso-em-breve" aria-label="Vídeos UGC em breve"><Video size={22} aria-hidden="true" /><strong>Vídeos UGC</strong><span>Em breve</span></aside>
           {campanhas.data && campanhas.data.some((c) => c.artes > 0) && (
             <div className="bolso-agencia">
               <p className="text-[13px]">Prefere delegar? A equipe Aceleriq também faz por você.</p>

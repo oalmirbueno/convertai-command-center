@@ -297,7 +297,7 @@ export default function AdminBolso({ pessoas }: { pessoas: Pessoa[] }) {
             ))}
           </ul>
         ) : (
-          <p className="text-[13px] text-muted-foreground">Nenhuma política ainda. Sem política aprovada, o estúdio não concede acesso real nem gera de verdade.</p>
+          <div className="flex items-center gap-2"><p className="text-[13px] text-muted-foreground">Nenhuma política ainda.</p><AjudaRecolhida rotulo="Sobre a política comercial">Sem política aprovada, o estúdio não concede acesso real nem gera de verdade.</AjudaRecolhida></div>
         )}
         <form
           className="space-y-3"

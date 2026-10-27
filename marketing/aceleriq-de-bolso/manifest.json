@@ -1,0 +1,142 @@
+[
+  {
+    "arquivo": "assets/aceleriq-01.webp",
+    "bytes": 180092,
+    "sha256": "2afe06380532654af98fb0aade910bbcf8663a4738e18603f499456ad2483e89"
+  },
+  {
+    "arquivo": "assets/aceleriq-02.webp",
+    "bytes": 123376,
+    "sha256": "880760963173cb0161b7c24854c8675c611d07288b0bae7a477fbe1e03a0b01b"
+  },
+  {
+    "arquivo": "assets/aceleriq-03.webp",
+    "bytes": 209216,
+    "sha256": "ed12dcd1bfd7a71d748b54441b06930865d80836973f936e7fdb3cdafa84ab64"
+  },
+  {
+    "arquivo": "assets/aceleriq-04.webp",
+    "bytes": 190184,
+    "sha256": "154418b45d67c374d8f58f7b37a2573548006cbe1139bd38c74b1138bba36c8b"
+  },
+  {
+    "arquivo": "assets/aceleriq-05.webp",
+    "bytes": 139056,
+    "sha256": "2ab3eb3c1bdd190b20b85dc54b28e2bff8e4271914115099b8fab07aa903e568"
+  },
+  {
+    "arquivo": "assets/aceleriq-06.webp",
+    "bytes": 130188,
+    "sha256": "dc4f046cfb56c7e7784fdd5bf626ef293aabb0b0364ed657fa62274f17692e57"
+  },
+  {
+    "arquivo": "assets/arte-real-bolso.png",
+    "bytes": 1076597,
+    "sha256": "ea738e325cbe92a6f6a0d795f63610122683a7e7d22651cb64925eeb66b3ddb5"
+  },
+  {
+    "arquivo": "assets/hero-cutout.png",
+    "bytes": 1671547,
+    "sha256": "8984a10b84573df10aa2a8d487e353f38852618983f2a12d40515a75a7c9fe72"
+  },
+  {
+    "arquivo": "assets/logo-aceleriq.png",
+    "bytes": 9163,
+    "sha256": "17b46456ccd6fea1d3093f9ba1e37720a2cd790fe99f4d22d01af517d7c17fbc"
+  },
+  {
+    "arquivo": "assets/painel-marca-real.png",
+    "bytes": 20104,
+    "sha256": "9a477080b3cbb8d283d8b7f1572d7c054f0527a821f9cf1bff7428f238d5a92f"
+  },
+  {
+    "arquivo": "assets/painel-oferta-real.png",
+    "bytes": 22162,
+    "sha256": "ea7d5f460457a0d729b8b5dd5eaf0a16b0f5257dfffe0c197ba9c02f91c7d686"
+  },
+  {
+    "arquivo": "assets/painel-texto-real.png",
+    "bytes": 26409,
+    "sha256": "f68b09380781da9dadc0451389ae0d2b3decf2601d8da0716e6e0eed8c2f2b8b"
+  },
+  {
+    "arquivo": "assets/provas/kantar-warc-2023.webp",
+    "bytes": 23028,
+    "sha256": "831102317dedce643e25c1f801f3d88c7d6af4b820c50fef7d6805a39dc2e479"
+  },
+  {
+    "arquivo": "assets/provas/meta-kitkat-2022.webp",
+    "bytes": 71024,
+    "sha256": "e53928ba13f5228c9cc9b26714e027c1eee4060d7b5693c66aa48b58d7a1997b"
+  },
+  {
+    "arquivo": "assets/provas/meta-nepa-2022.webp",
+    "bytes": 57914,
+    "sha256": "2460ddf524b60bfd1a9211f5f8b5dd3acbf777642fbc65b30e98e8d7eab08236"
+  },
+  {
+    "arquivo": "assets/provas/nielsen-2017.webp",
+    "bytes": 29196,
+    "sha256": "c15e143868bd6a2393414cb3ecef517b36aefe8f5a0edbec6ffb4859a6549d39"
+  },
+  {
+    "arquivo": "assets/refino/01-campanha-primeiro.webp",
+    "bytes": 202504,
+    "sha256": "a14f1b5c532e1f5ec354da6233233703051c3ec9b305c749d65d311af0cbde06"
+  },
+  {
+    "arquivo": "assets/refino/02-bonito-nao-basta.webp",
+    "bytes": 175402,
+    "sha256": "e84015df76e1c424e028f9c627fb301a2a6a1f047f686e1ad3b4fd6109fb2e2b"
+  },
+  {
+    "arquivo": "assets/refino/03-pare-o-scroll.webp",
+    "bytes": 216992,
+    "sha256": "7cb972ebf345f7b9ae95831bae7811d15a9cde345876ee1c5d60b225e56107b1"
+  },
+  {
+    "arquivo": "creative-gallery.css",
+    "bytes": 4792,
+    "sha256": "639f5d2663bc86725b4d2b98992c664f25a5151b967c7421c76a1b6c2a05d9b1"
+  },
+  {
+    "arquivo": "creative-gallery.js",
+    "bytes": 6640,
+    "sha256": "3504fbaca1e05115d098f3b90574f0a8c7781406070a03ba2ca103b36665e930"
+  },
+  {
+    "arquivo": "extras.css",
+    "bytes": 7029,
+    "sha256": "4c00886e8c185a81ada92df63d2f6626ece155e70a3bf5ff4acc3919a416b604"
+  },
+  {
+    "arquivo": "index.html",
+    "bytes": 33879,
+    "sha256": "39d914c811754a4620f71cbdb552fdf99b0e1b728255bd51c7d0bfc83bc3b058"
+  },
+  {
+    "arquivo": "offer.css",
+    "bytes": 2608,
+    "sha256": "5a67cf1a2e8f7d106679b7c4e6fec0a7d583062110a21ce0becece8a1f413208"
+  },
+  {
+    "arquivo": "proof.css",
+    "bytes": 2216,
+    "sha256": "cb55b9851318ea9f2d49ce5e631831816ac69b071d385ad87fceea5e07d39a08"
+  },
+  {
+    "arquivo": "refino.css",
+    "bytes": 10535,
+    "sha256": "c24a285aa39ff820fb64c32e0660f0ba3f1c54dcb348008925e6dbee92a8080e"
+  },
+  {
+    "arquivo": "refino.js",
+    "bytes": 1919,
+    "sha256": "c115304f36f3187636bf18977c2dfbd9682d8dd0dbd9c18d1aae6c33f7bfdb7c"
+  },
+  {
+    "arquivo": "sales.css",
+    "bytes": 19748,
+    "sha256": "4efddc3c3ccbc4797dcf4d839438a800d569f6e22a427aa1ec1ca3eb03ff164f"
+  }
+]

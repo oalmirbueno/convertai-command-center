@@ -7,6 +7,13 @@
 export type ModoDoEstudio = "real" | "simulado" | "pausado" | "fechado" | "sem_acesso" | "indisponivel";
 export type Formato = "feed_1x1" | "feed_4x5" | "stories_9x16";
 export type TipoDaCampanha = "venda" | "agendamento" | "orcamento";
+export type NaturezaCriativa = "briefing" | "legenda" | "imagem" | "ajuste";
+export interface EntradaCriativa { ideia?: string; ajuste?: string; arte_origem?: string; referencias?: string[] }
+export interface ReferenciaCriativa { id: string; caminho: string; nome: string; mime: string; bytes: number }
+export interface ResultadoCriativo {
+  estado: EstadoDoJob; natureza: NaturezaCriativa; erro?: string | null;
+  briefing?: Briefing; conteudo?: ConteudoDaCampanha; aplicado?: boolean;
+}
 
 export interface EstadoDoEstudio {
   exposto: boolean;
@@ -19,6 +26,7 @@ export interface EstadoDoEstudio {
   politica?: { versao: number; teste: boolean; tarifa_texto: number; tarifa_imagem: number; formatos: Formato[] } | null;
   limites_configurados?: boolean;
   destino_agencia?: string | null;
+  recursos_criativos?: { briefing: boolean; legenda: boolean; referencias: boolean; ajuste: boolean };
 }
 
 export interface Marca {
@@ -72,6 +80,7 @@ export interface Job {
   versao_campanha: number | null;
   erro: string | null;
   criado_em: string;
+  natureza?: NaturezaCriativa | null;
 }
 
 export interface Arte {
@@ -119,6 +128,7 @@ export interface LancamentoDoExtrato {
   descricao: string;
   criado_em: string;
   job_id: string | null;
+  natureza?: NaturezaCriativa | null;
 }
 
 export const FORMATOS: Record<Formato, { nome: string; proporcao: string }> = {
