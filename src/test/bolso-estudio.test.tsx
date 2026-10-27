@@ -93,12 +93,69 @@ describe("regras da tela", () => {
 });
 
 describe("estúdio com o banco simulado", () => {
-  it("modo demonstração: faixa fixa, limites do produto e saldo de teste", async () => {
+  it("modo demonstração: faixa e saldo visíveis, limites do produto na ajuda", async () => {
     montar(h(EstudioBolso));
     expect(await screen.findByText("DEMONSTRAÇÃO / PROVEDOR SIMULADO")).toBeTruthy();
-    expect(screen.getByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeTruthy();
+    expect(screen.queryByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeNull();
     expect(screen.getByLabelText("Seu saldo de créditos").textContent).toMatch(/5 créditos de teste/);
     expect(await screen.findByText("Bolo de pote")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "O que é isto?" }));
+    expect(await screen.findByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeTruthy();
+  });
+
+  it("primeira campanha abre a oferta com os campos e objetivos acessíveis", async () => {
+    mock.respostas.bolso_campanhas_listar = [];
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar primeira campanha" }));
+    expect(screen.getByLabelText("Produto ou serviço")).toBeTruthy();
+    expect(screen.getByLabelText("Por que escolher você")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Vender" })).toBeChecked();
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("button", { name: "Criar primeira campanha" })).toBeTruthy();
+  });
+
+  it("próximo passo leva à arte sem consumir créditos", async () => {
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continuar para a arte" }));
+    expect(screen.getByRole("button", { name: "Arte e download" })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("button", { name: /Pedir a arte/ })).toBeTruthy();
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+    expect(await screen.findByRole("img", { name: /versão 1 do texto/ })).toBeTruthy();
+  });
+
+  it.each([
+    { mensagem: "m".repeat(81), cta: "Peça no direct", aviso: true },
+    { mensagem: "Mensagem curta", cta: "c".repeat(51), aviso: true },
+    { mensagem: "m".repeat(80), cta: "c".repeat(50), aviso: false },
+  ])("avisa sobre texto longo antes da arte, sem bloquear o histórico: $aviso", async ({ mensagem, cta, aviso }) => {
+    mock.respostas.bolso_campanha_ler = {
+      ...CAMPANHA,
+      versoes: [{ ...CAMPANHA.versoes[0], conteudo: { ...CAMPANHA.versoes[0].conteudo, mensagem, cta } }],
+    };
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+    expect(await screen.findByLabelText("Mensagem principal")).toHaveValue(mensagem);
+    fireEvent.click(screen.getByRole("button", { name: "Continuar para a arte" }));
+    expect(!!screen.queryByText(/Esta versão tem textos longos/)).toBe(aviso);
+    expect(await screen.findByRole("img", { name: /versão 1 do texto/ })).toBeTruthy();
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+  });
+
+  it.each(["", "   "])("avisa antes do gasto quando a versão manual não tem mensagem principal: %j", async (mensagem) => {
+    mock.respostas.bolso_campanha_ler = {
+      ...CAMPANHA,
+      versoes: [{ ...CAMPANHA.versoes[0], origem: "manual", conteudo: { ...CAMPANHA.versoes[0].conteudo, mensagem } }],
+    };
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
+    expect(await screen.findByLabelText("Mensagem principal")).toHaveValue(mensagem);
+    fireEvent.click(screen.getByRole("button", { name: "Continuar para a arte" }));
+    expect(screen.getByText(/Esta versão não tem mensagem principal/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Pedir a arte/ })).not.toBeDisabled();
+    expect(await screen.findByRole("img", { name: /versão 1 do texto/ })).toBeTruthy();
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
   });
 
   it("pedir arte: confirma o consumo antes, reserva com a chave e processa; prévia e download por URL assinada", async () => {

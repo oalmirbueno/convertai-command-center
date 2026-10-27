@@ -36,6 +36,7 @@ import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import { mover, normalizarEstadoDosTemplates } from "@/components/estilo/templatesApi";
 import { layoutPadrao, promptDaLamina } from "../../supabase/functions/_shared/direcao-arte";
+import { expectPromptLegado } from "./helpers/prompt-legado";
 import {
   blocoDoTemplateParaOGerador,
   comNovaVersaoDoTemplate,
@@ -260,8 +261,8 @@ describe("1. Template Nenhum: prompt e entradas byte a byte os de hoje", () => {
     expect(HOJE_NORMAL.normal.length).toBe(CASOS_NORMAIS.length);
     CASOS_NORMAIS.forEach((c, i) => {
       const base = baseNormal(c);
-      expect(base, c.nome).toBe(HOJE_NORMAL.normal[i].prompt);
-      expect(compoeNormal(base, "", ""), c.nome).toBe(`${HOJE_NORMAL.normal[i].prompt}\n\n${REGRAS}`);
+      expectPromptLegado(base, HOJE_NORMAL.normal[i].prompt, c, c.nome);
+      expectPromptLegado(compoeNormal(base, "", ""), `${HOJE_NORMAL.normal[i].prompt}\n\n${REGRAS}`, c, c.nome);
     });
   });
 
@@ -307,8 +308,7 @@ describe("2. Template escolhido: bloco depois do estilo e prioridade das imagens
     const estilo = "ESTILO DO CLIENTE (sintético)";
     CASOS_NORMAIS.forEach((c, i) => {
       const com = compoeNormal(baseNormal(c), estilo, tpl);
-      expect(com.startsWith(`${HOJE_NORMAL.normal[i].prompt}\n\n`)).toBe(true);
-      expect(com.endsWith(`${estilo}\n\n${tpl}\n\n${REGRAS}`)).toBe(true);
+      expectPromptLegado(com, `${HOJE_NORMAL.normal[i].prompt}\n\n${estilo}\n\n${tpl}\n\n${REGRAS}`, c, c.nome);
     });
     for (const c of HOJE_REPLICAR.replicar) {
       const com = compoeReplicar(c.prompt, "", tpl);

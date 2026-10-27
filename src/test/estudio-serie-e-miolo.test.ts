@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
  */
 
 import { blocoDaSerie, type MoldeDaReferencia, promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
+import { expectPromptLegado } from "./helpers/prompt-legado";
 import type { ResultadoJev } from "../../supabase/functions/_shared/jev";
 import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import {
@@ -422,7 +423,7 @@ describe("4. A capa não muda; referência da própria lâmina e anúncio iguais
   it("Idêntica (replicar) e o bloco da série do anúncio são os de hoje, byte a byte", () => {
     CASOS_DO_REPLICAR.forEach((c, i) => {
       const r = promptDoReplicar({ ...c.entrada, fidelidade: "identica" });
-      expect(r.prompt, c.nome).toBe(HOJE.replicar[i].prompt);
+      expectPromptLegado(r.prompt, HOJE.replicar[i].prompt, { anuncio: c.entrada.anuncio, referencia: true }, c.nome);
     });
     CASOS_DA_SERIE.forEach((c, i) => expect(blocoDaSerie(c)).toBe(HOJE.serie[i]));
     // Replicando (referência da lâmina, prancha ou sem nada só da capa), o prompt próprio continua sem bloco da série.

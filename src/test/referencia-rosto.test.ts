@@ -26,6 +26,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
 
 import { promptDoReplicar } from "../../supabase/functions/_shared/direcao-arte";
+import { expectPromptLegado } from "./helpers/prompt-legado";
 import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/indice/motores";
 import {
   autorizacaoDoCloneValida,
@@ -58,8 +59,9 @@ describe("1. Sem rosto: o de hoje, byte a byte", () => {
     expect(blocoDoRosto({ indices: [], destacar: true, pessoaNaReferencia: true })).toBe("");
     CASOS_DO_REPLICAR.forEach((c, i) => {
       const p = promptDoReplicar(c.entrada).prompt;
-      expect(p).toBe(HOJE.replicar[i].prompt);
-      expect(compoe(p, "", "")).toBe(`${HOJE.replicar[i].prompt}\n\n${REGRAS}`);
+      const contexto = { anuncio: c.entrada.anuncio, referencia: true };
+      expectPromptLegado(p, HOJE.replicar[i].prompt, contexto, c.nome);
+      expectPromptLegado(compoe(p, "", ""), `${HOJE.replicar[i].prompt}\n\n${REGRAS}`, contexto, c.nome);
     });
   });
 

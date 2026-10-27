@@ -903,16 +903,13 @@ export default function AreaDeMembros() {
                   )}
                   {comBolso && !busca && !categoria && (
                     <section
-                      className="bolso-cartao flex flex-wrap items-center justify-between gap-3"
+                      className="bolso-entrada"
                       aria-label="Aceleriq de Bolso"
                     >
-                      <div className="min-w-0 space-y-1">
+                      <div className="bolso-entrada-marca">
+                        <span className="bolso-entrada-icone" aria-hidden="true"><Megaphone size={23} /></span>
                         <p className="text-[15px] font-semibold">
                           Aceleriq de Bolso
-                        </p>
-                        <p className="text-[13px] text-muted-foreground">
-                          Monte a campanha, revise o texto e baixe a arte. Você
-                          cria, revisa e publica.
                         </p>
                       </div>
                       <button
@@ -920,7 +917,7 @@ export default function AreaDeMembros() {
                         onClick={() => setSecao("estudio")}
                       >
                         Abrir o estúdio
-                        <Megaphone size={16} />
+                        <ArrowRight size={16} aria-hidden="true" />
                       </button>
                     </section>
                   )}

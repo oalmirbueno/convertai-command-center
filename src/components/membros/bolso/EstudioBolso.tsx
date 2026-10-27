@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Download, FlaskConical, Loader2, Megaphone, Plus, RotateCcw, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, X } from "lucide-react";
 import TituloMembros from "@/components/membros/TituloMembros";
 import { AjudaRecolhida } from "@/components/sistema";
 import {
@@ -111,11 +111,14 @@ export function FormularioDaMarca({ inicial, aoSalvar }: { inicial: Marca | null
     }
   };
   return (
-    <form className="bolso-cartao space-y-4" onSubmit={(e) => void enviar(e)} aria-labelledby="bolso-marca-titulo" noValidate>
-      <h2 id="bolso-marca-titulo" className="text-[15px] font-semibold">
-        Sua marca
-      </h2>
-      <p className="text-[13px] text-muted-foreground">Uma marca por conta. O estúdio usa estes dados em todas as campanhas; você pode mudar quando quiser.</p>
+    <form className="bolso-cartao bolso-formulario space-y-5" onSubmit={(e) => void enviar(e)} aria-labelledby="bolso-marca-titulo" noValidate>
+      <div className="bolso-titulo-de-bloco">
+        <Palette size={19} aria-hidden="true" />
+        <h2 id="bolso-marca-titulo">Sua marca</h2>
+        <AjudaRecolhida rotulo="Sobre sua marca">
+          Estes dados orientam suas campanhas. Você pode atualizar sua marca quando quiser.
+        </AjudaRecolhida>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo id="bolso-marca-nome" rotulo="Nome da marca">
           <input id="bolso-marca-nome" className="membros-campo" value={m.nome} onChange={(e) => mudar("nome", e.target.value)} maxLength={120} required aria-invalid={!m.nome.trim() && !!erro} />
@@ -198,10 +201,11 @@ function FormularioDaOferta({ campanha, aoSalvar, aoCancelar }: { campanha: Camp
     }
   };
   return (
-    <form className="bolso-cartao space-y-4" onSubmit={(e) => void enviar(e)} aria-labelledby="bolso-oferta-titulo" noValidate>
-      <div className="flex items-center gap-2">
-        <h2 id="bolso-oferta-titulo" className="text-[15px] font-semibold">
-          A oferta
+    <form className="bolso-cartao bolso-formulario space-y-5" onSubmit={(e) => void enviar(e)} aria-labelledby="bolso-oferta-titulo" noValidate>
+      <div className="bolso-titulo-de-bloco">
+        <Target size={19} aria-hidden="true" />
+        <h2 id="bolso-oferta-titulo">
+          Sua campanha
         </h2>
         <AjudaRecolhida rotulo="Como preencher a oferta">
           Escreva só o que é verdade hoje. O estúdio não inventa preço, desconto, estoque, prazo, depoimento ou resultado: o que você não informar
@@ -209,13 +213,13 @@ function FormularioDaOferta({ campanha, aoSalvar, aoCancelar }: { campanha: Camp
         </AjudaRecolhida>
       </div>
       <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">O que a campanha quer</legend>
+        <legend className="text-[13px] font-medium">Qual é o objetivo?</legend>
         <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
           {(Object.keys(TIPOS) as TipoDaCampanha[]).map((t) => (
             <label key={t} className="bolso-opcao" data-escolhida={b.tipo === t || undefined}>
               <input type="radio" name="bolso-tipo" value={t} checked={b.tipo === t} onChange={() => mudar("tipo", t)} className="sr-only" />
-              <span className="font-medium">{TIPOS[t].nome}</span>
-              <span className="text-[12px] text-muted-foreground">{TIPOS[t].dica}</span>
+              <span className="bolso-opcao-marca" aria-hidden="true">{b.tipo === t && <Check size={12} />}</span>
+              <span>{TIPOS[t].nome}</span>
             </label>
           ))}
         </div>
@@ -504,12 +508,15 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
       </div>
     );
   const c = campanha.data;
+  const textoDaArte = c.versoes.find((v) => v.numero === c.versao_escolhida)?.conteudo;
+  const semMensagemNaArte = !!textoDaArte && !textoDaArte.mensagem.trim();
+  const textoLongoNaArte = !!textoDaArte && (textoDaArte.mensagem.trim().length > 80 || textoDaArte.cta.trim().length > 50);
   const andamento = c.jobs.filter((j) => j.estado === "na_fila" || j.estado === "processando" || j.estado === "incerto");
   const ultimosProblemas = c.jobs.filter((j) => j.estado === "falhou").slice(0, 1);
   const etapas: { id: Etapa; nome: string; feito: boolean }[] = [
-    { id: "oferta", nome: "1. Oferta", feito: true },
-    { id: "texto", nome: "2. Texto", feito: c.versoes.length > 0 },
-    { id: "arte", nome: "3. Arte e download", feito: c.artes.length > 0 },
+    { id: "oferta", nome: "Oferta", feito: true },
+    { id: "texto", nome: "Texto", feito: c.versoes.length > 0 },
+    { id: "arte", nome: "Arte e download", feito: c.artes.length > 0 },
   ];
   return (
     <section className="space-y-5" aria-labelledby="bolso-campanha-titulo">
@@ -517,17 +524,17 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         <ArrowLeft size={16} aria-hidden="true" />
         Minhas campanhas
       </button>
-      <div>
-        <h2 id="bolso-campanha-titulo" className="text-[20px] font-semibold">
+      <div className="bolso-campanha-topo">
+        <h2 id="bolso-campanha-titulo">
           {c.titulo}
         </h2>
         <p className="text-[12px] text-muted-foreground">Atualizada em {dataCurta(c.atualizado_em)}</p>
       </div>
-      <nav className="membros-abas" aria-label="Etapas da campanha">
-        {etapas.map((e) => (
-          <button key={e.id} type="button" className="membros-acao" aria-current={etapa === e.id ? "step" : undefined} onClick={() => setEtapa(e.id)}>
-            {e.feito && e.id !== "oferta" && <Check size={14} aria-label="feito" />}
-            {e.nome}
+      <nav className="bolso-etapas" aria-label="Etapas da campanha">
+        {etapas.map((e, i) => (
+          <button key={e.id} type="button" aria-current={etapa === e.id ? "step" : undefined} onClick={() => setEtapa(e.id)}>
+            <span className="bolso-etapa-numero" aria-hidden="true">{e.feito && etapa !== e.id ? <Check size={14} /> : i + 1}</span>
+            <span>{e.nome}</span>
           </button>
         ))}
       </nav>
@@ -558,16 +565,19 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         (editandoOferta ? (
           <FormularioDaOferta campanha={c} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
         ) : (
-          <div className="bolso-cartao space-y-2 text-[13px]">
-            <p><strong>Objetivo:</strong> {TIPOS[c.briefing.tipo].nome}</p>
-            <p><strong>Produto ou serviço:</strong> {c.briefing.produto}</p>
-            {c.briefing.diferencial && <p><strong>Diferencial:</strong> {c.briefing.diferencial}</p>}
-            {c.briefing.condicoes ? <p><strong>Condições:</strong> {c.briefing.condicoes}</p> : <p className="text-muted-foreground">Sem condições comerciais informadas.</p>}
-            {c.briefing.cta && <p><strong>Chamada:</strong> {c.briefing.cta}</p>}
-            {c.briefing.canal && <p><strong>Canal:</strong> {c.briefing.canal}</p>}
-            <button type="button" className="membros-acao border border-border" onClick={() => setEditandoOferta(true)}>
-              Editar oferta
-            </button>
+          <div className="bolso-cartao space-y-5">
+            <dl className="bolso-resumo-oferta">
+              <div><dt>Objetivo</dt><dd>{TIPOS[c.briefing.tipo].nome}</dd></div>
+              <div><dt>Produto ou serviço</dt><dd>{c.briefing.produto}</dd></div>
+              {c.briefing.diferencial && <div><dt>Diferencial</dt><dd>{c.briefing.diferencial}</dd></div>}
+              <div><dt>Condições</dt><dd>{c.briefing.condicoes || "Não informadas"}</dd></div>
+              {c.briefing.cta && <div><dt>Chamada para ação</dt><dd>{c.briefing.cta}</dd></div>}
+              {c.briefing.canal && <div><dt>Canal</dt><dd>{c.briefing.canal}</dd></div>}
+            </dl>
+            <div className="bolso-formulario-acoes">
+              <button type="button" className="membros-acao border border-border" onClick={() => setEditandoOferta(true)}>Editar oferta</button>
+              <button type="button" className="membros-acao bg-primary text-primary-foreground" onClick={() => setEtapa("texto")}>Continuar para o texto <ArrowRight size={16} aria-hidden="true" /></button>
+            </div>
           </div>
         ))}
 
@@ -575,7 +585,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         <div className="space-y-5">
           <div className="bolso-cartao space-y-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-[15px] font-semibold">Criar o texto com o estúdio</h3>
+              <h3 className="text-[15px] font-semibold">Texto da campanha</h3>
               <AjudaRecolhida rotulo="Sobre criar o texto">
                 O estúdio escreve mensagem, texto, chamada, onde usar e a direção da arte com base na sua marca e na oferta. Você revisa e pode
                 editar à mão quantas vezes quiser, sem crédito.
@@ -584,9 +594,15 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
             <BotaoDePedido estado={estado} campanha={c} tipo="texto" formato={null} rotulo={c.versoes.length ? "Criar outra versão" : "Criar o texto"} aoPedir={atualizar} />
           </div>
           <div className="bolso-cartao">
-            <h3 className="mb-3 text-[15px] font-semibold">{c.versoes.length ? "Revisar e editar" : "Ou escreva você mesmo"}</h3>
+            <div className="mb-4 flex items-center gap-2">
+              <h3 className="text-[15px] font-semibold">{c.versoes.length ? "Revisar e editar" : "Ou escreva você mesmo"}</h3>
+              <AjudaRecolhida rotulo="Como o texto aparece na arte">
+                Para incluir texto na arte, use até 80 caracteres na mensagem principal e até 50 na chamada para ação. O texto da publicação pode ser mais longo. Versões antigas continuam editáveis.
+              </AjudaRecolhida>
+            </div>
             <EditorDoTexto campanha={c} aoMudar={atualizar} />
           </div>
+          {!!c.versao_escolhida && <div className="bolso-proximo-passo"><button type="button" className="membros-acao border border-border" onClick={() => setEtapa("arte")}>Continuar para a arte <ArrowRight size={16} aria-hidden="true" /></button></div>}
         </div>
       )}
 
@@ -594,7 +610,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         <div className="space-y-5">
           <div className="bolso-cartao space-y-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-[15px] font-semibold">Pedir uma arte estática</h3>
+              <h3 className="text-[15px] font-semibold">Arte da campanha</h3>
               <AjudaRecolhida rotulo="Sobre a arte">
                 Uma imagem estática no formato escolhido, ligada à versão do texto marcada. Não é vídeo nem arquivo editável por camadas, e nada é
                 publicado automaticamente: você baixa e publica.
@@ -617,6 +633,12 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
             <p className="text-[12px] text-muted-foreground">
               {c.versao_escolhida ? `Usa o texto V${c.versao_escolhida}.` : "Escolha ou escreva o texto antes."}
             </p>
+            {semMensagemNaArte ? (
+              <p role="status" className="bolso-aviso">Esta versão não tem mensagem principal. A arte será criada sem texto.</p>
+            ) : textoLongoNaArte && (
+              <p role="status" className="bolso-aviso">Esta versão tem textos longos. A arte será criada sem texto.</p>
+            )}
+            {(semMensagemNaArte || textoLongoNaArte) && <AjudaRecolhida rotulo="Como incluir texto na arte">Use uma mensagem principal de até 80 caracteres e uma chamada para ação de até 50. Salve e escolha a nova versão antes de pedir a arte.</AjudaRecolhida>}
             <BotaoDePedido estado={estado} campanha={c} tipo="imagem" formato={formato} rotulo="Pedir a arte" aoPedir={atualizar} />
           </div>
           {c.artes.length ? (
@@ -660,18 +682,17 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
   if (!e.exposto) return <p className="text-[13px] text-muted-foreground">{situacao.texto}</p>;
 
   return (
-    <section className="space-y-6" data-bolso-estudio="" aria-labelledby="bolso-titulo">
+    <section className="bolso-estudio space-y-7" data-bolso-estudio="" aria-label="Estúdio Aceleriq de Bolso">
       {situacao.demonstracao && <FaixaDeDemonstracao />}
       <header className="bolso-cabecalho">
-        <div className="space-y-1">
-          <TituloMembros titulo="Aceleriq de Bolso" principal icone={<Megaphone size={20} className="text-primary" aria-hidden="true" />} />
-          <p id="bolso-titulo" className="text-[14px]">
-            Sua agência de marketing digital de bolso: você cria, revisa e publica.
-          </p>
-          <p className="text-[12px] text-muted-foreground">Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas.</p>
+        <div className="min-w-0">
+          <TituloMembros titulo="Aceleriq de Bolso" principal icone={<Sparkles size={23} className="text-primary" aria-hidden="true" />}>
+            Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas.
+          </TituloMembros>
         </div>
         {e.saldo && (
           <p className="bolso-saldo" aria-label="Seu saldo de créditos">
+            <Coins size={16} aria-hidden="true" />
             <strong>{e.saldo.disponivel}</strong> crédito{e.saldo.disponivel === 1 ? "" : "s"}
             {e.carteira === "teste" ? " de teste" : ""}
             {e.saldo.reservado > 0 && <span> · {e.saldo.reservado} reservado{e.saldo.reservado === 1 ? "" : "s"}</span>}
@@ -709,17 +730,17 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
           aoCancelar={() => setNova(false)}
         />
       ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-[16px] font-semibold">Minhas campanhas</h2>
+        <div className="space-y-5">
+          <div className="bolso-biblioteca-topo">
+            <h2>Minhas campanhas</h2>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="membros-acao text-muted-foreground" onClick={() => setEditandoMarca(true)}>
-                Marca: {marca.data.nome}
+              <button type="button" className="membros-acao bolso-marca-atalho" onClick={() => setEditandoMarca(true)} aria-label={`Editar marca: ${marca.data.nome}`}>
+                <Palette size={16} aria-hidden="true" /><span>{marca.data.nome}</span>
               </button>
-              <button type="button" className="membros-acao bg-primary text-primary-foreground" onClick={() => setNova(true)}>
+              {!!campanhas.data?.length && <button type="button" className="membros-acao bg-primary text-primary-foreground" onClick={() => setNova(true)}>
                 <Plus size={16} aria-hidden="true" />
                 Nova campanha
-              </button>
+              </button>}
             </div>
           </div>
           {campanhas.isPending ? (
@@ -727,29 +748,38 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
           ) : campanhas.isError ? (
             <p role="alert">{erroDoBolso(campanhas.error)}</p>
           ) : campanhas.data.length === 0 ? (
-            <div className="bolso-cartao space-y-3">
-              <h3 className="text-[15px] font-semibold">Sua primeira campanha</h3>
-              <ol className="list-decimal space-y-1 pl-5 text-[13px] text-muted-foreground">
-                <li>Conte a oferta: o produto, o objetivo e o que a pessoa deve fazer.</li>
-                <li>Crie o texto com o estúdio ou escreva você mesmo, e revise.</li>
-                <li>Peça a arte no formato do seu canal e baixe.</li>
+            <div className="bolso-primeira-campanha">
+              <div className="bolso-convite">
+                <span className="bolso-convite-icone" aria-hidden="true"><Sparkles size={28} /></span>
+                <h3>Sua próxima ideia<br />começa aqui.</h3>
+                <button type="button" className="membros-acao bg-primary text-primary-foreground" onClick={() => setNova(true)}>
+                  Criar primeira campanha <ArrowUpRight size={17} aria-hidden="true" />
+                </button>
+              </div>
+              <ol className="bolso-caminho" aria-label="Como criar sua primeira campanha">
+                <li><span aria-hidden="true"><Target size={20} /></span><div><small>01</small><strong>Prepare a oferta</strong></div></li>
+                <li><span aria-hidden="true"><Type size={20} /></span><div><small>02</small><strong>Encontre a mensagem</strong></div></li>
+                <li><span aria-hidden="true"><Image size={20} /></span><div><small>03</small><strong>Crie e revise a arte</strong></div></li>
               </ol>
-              <button type="button" className="membros-acao bg-primary text-primary-foreground" onClick={() => setNova(true)}>
-                Começar
-              </button>
             </div>
           ) : (
             <ul className="bolso-lista">
               {campanhas.data.map((c) => (
                 <li key={c.id}>
-                  <button type="button" className="bolso-linha" onClick={() => setAberta(c.id)}>
-                    <span className="min-w-0">
-                      <strong className="block truncate">{c.titulo}</strong>
-                      <span className="text-[12px] text-muted-foreground">
-                        {TIPOS[c.tipo].nome} · {c.versoes} versão{c.versoes === 1 ? "" : "ões"} de texto · {c.artes} arte{c.artes === 1 ? "" : "s"} · {dataCurta(c.atualizado_em)}
-                      </span>
+                  <button type="button" className="bolso-linha bolso-campanha-cartao" onClick={() => setAberta(c.id)}>
+                    <span className="bolso-cartao-topo">
+                      <span className="bolso-campanha-icone" aria-hidden="true"><Megaphone size={22} /></span>
+                      <span className="bolso-estado-campanha">{c.em_andamento > 0 ? <><Loader2 size={13} className="animate-spin" aria-hidden="true" />Em criação</> : c.artes > 0 ? "Para revisar" : c.versoes > 0 ? "Texto criado" : "Rascunho"}</span>
+                      <ArrowUpRight size={18} className="bolso-cartao-seta" aria-hidden="true" />
                     </span>
-                    {c.em_andamento > 0 && <Loader2 size={16} className="animate-spin text-primary" aria-label="Pedido em andamento" />}
+                    <span className="bolso-cartao-conteudo">
+                      <span className="bolso-objetivo">{TIPOS[c.tipo].nome}</span>
+                      <strong>{c.titulo}</strong>
+                    </span>
+                    <span className="bolso-cartao-rodape">
+                      <span>{c.versoes} {c.versoes === 1 ? "texto" : "textos"} · {c.artes} {c.artes === 1 ? "arte" : "artes"}</span>
+                      <time dateTime={c.atualizado_em}>{dataCurta(c.atualizado_em)}</time>
+                    </span>
                   </button>
                 </li>
               ))}

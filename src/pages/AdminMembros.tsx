@@ -241,7 +241,7 @@ export default function AdminMembros() {
                 icone: KeyRound,
                 total: dados.data.acessos.filter((a) => !a.revogado_em).length,
               },
-              { id: "funil", nome: "Esteira de produtos", icone: Waypoints },
+              { id: "funil", nome: "Recomendações", icone: Waypoints },
               { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
               { id: "cliente", nome: "Visão do cliente", icone: Eye },
               { id: "pagamentos", nome: "Pagamentos", icone: CreditCard },
@@ -355,7 +355,7 @@ export default function AdminMembros() {
             </section>
             <section
               hidden={secao !== "funil"}
-              aria-label="Esteira de produtos"
+              aria-label="Recomendações"
             >
               <EditorFunil
                 dados={dados.data}

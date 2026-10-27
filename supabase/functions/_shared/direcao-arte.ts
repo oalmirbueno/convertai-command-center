@@ -29,6 +29,7 @@
  */
 
 import { regrasDoCriativo, TAMANHO_DO_FORMATO, ZONA_SEGURA, type FormatoAds } from "./conhecimento-ads.ts";
+import { direcaoCriativaParaImagem } from "./motor-criativo-campanha.ts";
 import { type FidelidadeDaReferencia, FIDELIDADES } from "./fidelidade-da-referencia.ts";
 import { BLOCO_DE_COR_E_REALISMO_NA_IMAGEM } from "./diversidade-visual.ts";
 import {
@@ -833,7 +834,7 @@ export function promptDaLamina(
      */
     areaDaLogo?: Caixa | null;
     /** Criativo de anúncio (trabalho tipo 'ads'): quadro, zona segura e regras do formato. */
-    anuncio?: { formato: FormatoCriativo } | null;
+    anuncio?: { formato: FormatoCriativo; tom?: string | null } | null;
     /** Formato do post orgânico (trabalho social); sem ele ou em 4:5, o prompt de sempre. */
     post?: FormatoDoPost | null;
   },
@@ -908,7 +909,9 @@ export function promptDaLamina(
     foto && capa
       ? "- CAPA QUE PARA A ROLAGEM: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, legível até no tamanho da miniatura do feed. A foto já é o elemento visual forte: não mude a foto. Nada competindo com a headline."
       : anuncio && capa
-      ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado ligado à oferta (escala grande, recorte ousado, produto ou serviço em ação, rosto ou olhar para a câmera); contraste pela escala e pela cor de destaque, legível na tela do celular. Nada competindo com a headline."
+      ? opcoes.anuncio?.tom === "sobrio"
+        ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta, grande e legível no celular; produto, serviço em ação ou detalhe cotidiano pertinente à oferta. Contraste pela hierarquia e pelo espaço, preservando a naturalidade e o estilo sóbrio. Nada competindo com a headline."
+        : "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado ligado à oferta (escala grande, recorte ousado, produto ou serviço em ação, rosto ou olhar para a câmera); contraste pela escala e pela cor de destaque, legível na tela do celular. Nada competindo com a headline."
       : capa
       ? "- CAPA QUE PARA A ROLAGEM: quem está rolando o feed tem que parar aqui. A maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado (escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed; mesma paleta e tratamento das lâminas seguintes. Nada competindo com a headline."
       : "",
@@ -919,6 +922,7 @@ export function promptDaLamina(
     foto ? "" : `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
     foto ? "" : `- Tratamento: ${layout.tratamento}.`,
     marca.estilo && !foto ? `- Estilo visual da marca, obrigatório: ${marca.estilo}` : "",
+    formato ? direcaoCriativaParaImagem({ formato, sobrio: opcoes.anuncio?.tom === "sobrio", fotoFixa: foto }) : "",
     "",
     "2. TEXTO EXATO (escrito pela própria arte, integrado à composição; só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
     `- Área do texto: ${descreverPosicao(caixa)}, alinhamento ${layout.alinhamento === "centro" ? "ao centro" : `à ${layout.alinhamento}`}, todos os blocos no mesmo eixo e com a mesma margem.`,
@@ -1374,7 +1378,7 @@ export type EntradaDoReplicar = {
   fotos: { indice: number; descricao?: string | null; papel: "fundo" | "elemento" }[];
   logo: { leva: boolean; indice: number | null; medida: LogoMedida | null; descricao: string | null };
   quadro: { largura: number; altura: number };
-  anuncio?: { formato: FormatoCriativo } | null;
+  anuncio?: { formato: FormatoCriativo; tom?: string | null } | null;
   post?: FormatoDoPost | null;
   /**
    * Fidelidade à referência (frente E, 25/09 à noite; fidelidade-da-referencia.ts).
@@ -1707,6 +1711,7 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
   const proibicoes = blocoDasProibicoes({ serie, replicar: true });
   const prompt = [
     ...cabecalho,
+    formato ? direcaoCriativaParaImagem({ formato, sobrio: e.anuncio?.tom === "sobrio", referencia: true }) : "",
     ...layout,
     ...texto,
     ...logo,

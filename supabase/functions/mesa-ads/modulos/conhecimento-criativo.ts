@@ -1,4 +1,5 @@
 import { CONHECIMENTO_FORMATOS_VIDEO_ADS } from "./formatos-video-ads.ts";
+import { METODO_CRIATIVO_DA_CAMPANHA } from "../../_shared/motor-criativo-campanha.ts";
 /**
  * Base "criativo que converte" da Mesa Ads (frente CR, pedido do dono em 27/09/2026):
  * "aumentar a inteligência do estúdio do criativo, a base por baixo, repositório,
@@ -375,7 +376,7 @@ export function formatosParaOPlano(): string {
 }
 
 export function copyQueConverteParaOPrompt(opcoes: { comLayout?: boolean } = {}): string {
-  return [CONHECIMENTO_FORMATOS_VIDEO_ADS, REGRAS_DA_COPY_QUE_CONVERTE, FRAMEWORKS_RESUMO, TAMANHOS_DA_COPY, opcoes.comLayout ? LAYOUT_QUE_CONVERTE : ""].filter(Boolean).join("\n\n");
+  return [METODO_CRIATIVO_DA_CAMPANHA, CONHECIMENTO_FORMATOS_VIDEO_ADS, REGRAS_DA_COPY_QUE_CONVERTE, FRAMEWORKS_RESUMO, TAMANHOS_DA_COPY, opcoes.comLayout ? LAYOUT_QUE_CONVERTE : ""].filter(Boolean).join("\n\n");
 }
 
 /** O formato que converte do estilo, em duas linhas para o pedido da copy e da arte. */

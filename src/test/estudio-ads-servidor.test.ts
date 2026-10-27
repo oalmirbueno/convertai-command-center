@@ -7,6 +7,7 @@ import {
   FORMATOS_CRIATIVO,
   margensDoQuadro,
   promptDaLamina,
+  promptDoReplicar,
   QUADRO_FINAL,
   type CardDirecao,
   type MarcaParaDirecao,
@@ -193,7 +194,59 @@ describe("Estúdio Ads: zona segura", () => {
     const areas = corpoDe("areasDeDesenho");
     expect(areas).toContain("caixaDaZona(zona, capa, total > 1, formato, post)");
     expect(areas).toContain("caixaDaLogo(zona, capa, formato, post, aspecto)");
-    expect(corpoDe("gerarCard")).toContain("anuncio: quadro.formato ? { formato: quadro.formato } : null,");
+    const geracao = corpoDe("gerarCard");
+    expect(geracao.match(/anuncio: quadro\.formato \? \{ formato: quadro\.formato, tom: t\.direcao\.tom \} : null,/g)).toHaveLength(2);
+    // O compositor normal, o legado sem layout e o replicar alimentam o prompt enviado ao gerador.
+    expect(geracao).toContain('card.prompt_imagem, quadro.formato ? direcaoCriativaParaImagem(');
+    expect(geracao).toContain('const baseComCampanha = [\n    base,');
+    expect(geracao).toContain('const prompt = `${baseComCampanha}');
+    expect(geracao).toContain('const prompt = [\n      replica.prompt,');
+    expect(geracao).toMatch(/chamarImagem\(\{[\s\S]*?\.\.\.comum,[\s\S]*?prompt,/);
+  });
+
+  it("o prompt completo de anúncio contém o motor comum sem reescrever copy, paleta e estilo", () => {
+    const p = promptDaLamina(card(), { ...marca(), estilo: "fotografia editorial clara" }, {
+      total: 1, carrosselInfinito: false, levaLogo: true,
+      anuncio: { formato: "stories_9x16", tom: "sobrio" },
+    });
+    expect(p).toContain("DIREÇÃO CRIATIVA DA CAMPANHA");
+    expect(p).toContain("Tom sóbrio:");
+    expect(p).not.toContain("Exagere a encenação visual");
+    expect(p).toContain("fotografia editorial clara");
+    expect(p).toContain("#1E5AA8");
+    expect(p).toContain("Orçamento em 1 dia");
+    expect(p).toContain("Chame no WhatsApp");
+    expect(p).toContain("14% superiores, 20% inferiores");
+  });
+
+  it("foto fixa e referência mantêm suas regras no prompt final do anúncio", () => {
+    const p = promptDaLamina(card(), marca(), {
+      total: 1, carrosselInfinito: false, levaLogo: true,
+      fotoReal: "equipe autorizada atendendo na loja",
+      anuncio: { formato: "feed_4x5", tom: "sobrio" },
+    });
+    expect(p).toContain("DIREÇÃO CRIATIVA DA CAMPANHA");
+    expect(p).toContain("Foto real fixa:");
+    expect(p).toContain("Não redesenhe a foto");
+    expect(p).not.toContain("Exagere a encenação visual");
+    expect(p).not.toContain("Contraste pela composição, cor e iluminação");
+    expect(p).toContain("somente quando uma referência autorizada for fornecida");
+    const entrada = {
+      card: card(), marca: marca(), total: 1,
+      referencias: [{ indice: 1, molde: null }], editando: true,
+      fotos: [{ indice: 2, descricao: "equipe autorizada", papel: "elemento" as const }],
+      logo: { leva: false, indice: null, medida: null, descricao: null },
+      quadro: { largura: 1080, altura: 1350 },
+    };
+    const replica = promptDoReplicar({ ...entrada, anuncio: { formato: "feed_4x5", tom: "sobrio" } });
+    expect(replica.prompt).toContain("DIREÇÃO CRIATIVA DA CAMPANHA");
+    expect(replica.prompt).toContain("dentro do nível de fidelidade escolhido");
+    expect(replica.prompt).toContain("Tom sóbrio:");
+    expect(replica.prompt).toContain("mesmo rosto, feições");
+    expect(replica.textoExato).toBe(entrada.card.texto_exato);
+    // A evolução é exclusiva de anúncio, inclusive ao replicar.
+    expect(promptDoReplicar(entrada).prompt).not.toContain("DIREÇÃO CRIATIVA DA CAMPANHA");
+    expect(promptDaLamina(card(), marca(), { total: 1, carrosselInfinito: false, levaLogo: true })).not.toContain("DIREÇÃO CRIATIVA DA CAMPANHA");
   });
 });
 

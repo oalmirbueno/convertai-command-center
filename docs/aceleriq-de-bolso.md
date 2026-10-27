@@ -33,6 +33,12 @@ Extrato só de inclusão (`bolso_creditos`): concessão, reserva, captura, liber
 - Tirar do ar sem apagar histórico financeiro: revogar `EXECUTE` das funções `bolso_*`. As tabelas ficam.
 - Biblioteca, CRM e licenças antigas não dependem de nada do Bolso.
 
+## Oferta aprovada e próxima etapa
+
+Almir aprovou **R$ 97 por ano**, com possibilidade de parcelamento no cartão. Na landing, R$ 8,08 é apenas a equivalência mensal do anual dividido por 12, não o valor de uma parcela. Checkout continua para depois; número de parcelas e juros não foram definidos. Esta aprovação não liga pagamentos, geração real ou créditos automaticamente.
+
+Em 27/10/2026, o estúdio passou a consumir o núcleo criativo puro compartilhado com a Mesa Ads, mantendo seus próprios dados, autorizações, créditos e adaptadores. A interface foi refinada e a arte passou a receber headline e CTA exatos da versão escolhida. Escopo, pesquisa, validação e limites estão em [BOLSO-MOTOR-CRIATIVO.md](membros/BOLSO-MOTOR-CRIATIVO.md). Essa evolução de código não confirma publicação nem homologação do fornecedor.
+
 ## Decisões pendentes do dono
 
-Preço (R$ 97 é hipótese), créditos iniciais, tarifas de texto e arte, validade, formatos, suporte, recarga e mensal (preço, cota, sobra), regra do anual vencendo no meio de um mensal pago, retenção e exclusão, termos e reembolso, orçamento e modelo da OpenAI, destino comercial de "Conhecer serviços da agência" e autorização de homologação.
+Créditos iniciais, tarifas de texto e arte, validade, formatos, suporte, recarga e mensal (preço, cota, sobra), regra do anual vencendo no meio de um mensal pago, retenção e exclusão, termos e reembolso, orçamento e modelo da OpenAI, destino comercial de "Conhecer serviços da agência", condições de parcelamento e autorização de homologação.
