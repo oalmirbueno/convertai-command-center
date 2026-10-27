@@ -156,7 +156,7 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
         { id: "gerar", nome: "Gerar vídeo com IA", icone: PenLine },
         ...(gravar ? [] : [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }]),
         { id: "som", nome: "Trilha sonora", icone: Music },
-        { id: "legenda", nome: "Legendar o vídeo", icone: Type },
+        { id: "legenda", nome: "Falas na tela (legenda no vídeo)", icone: Type },
         { id: "cortar", nome: "Cortar o vídeo", icone: Scissors },
         { id: "entrega", nome: "Enviar para aprovação", icone: Send },
         { id: "resultados", nome: "Gerações e versões", icone: History },
