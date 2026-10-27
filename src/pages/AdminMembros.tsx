@@ -24,6 +24,7 @@ import {
   PanelLeftOpen,
   Upload,
   Wrench,
+  Megaphone,
 } from "lucide-react";
 import {
   carregarAdmin,
@@ -38,6 +39,7 @@ import PessoasEFunil, { EditorFunil } from "@/components/membros/PessoasEFunil";
 import ConfiguracaoKiwify from "@/components/membros/ConfiguracaoKiwify";
 import ChecklistLancamento from "@/components/membros/ChecklistLancamento";
 import CanaisDoProduto from "@/components/membros/CanaisDoProduto";
+import AdminBolso from "@/components/membros/bolso/AdminBolso";
 import AdminFerramentas from "@/components/membros/AdminFerramentas";
 import TituloMembros from "@/components/membros/TituloMembros";
 import { enviarCapa } from "@/lib/membros/capas";
@@ -243,6 +245,7 @@ export default function AdminMembros() {
               { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
               { id: "cliente", nome: "Visão do cliente", icone: Eye },
               { id: "pagamentos", nome: "Pagamentos", icone: CreditCard },
+              { id: "bolso", nome: "Aceleriq de Bolso", icone: Megaphone },
             ].map((s) => (
               <button
                 key={s.id}
@@ -271,6 +274,7 @@ export default function AdminMembros() {
             className="membros-admin-principal"
           >
             {secao === "ferramentas" && <AdminFerramentas dados={dados.data} />}
+            {secao === "bolso" && <AdminBolso pessoas={dados.data.pessoas} />}
             <section hidden={secao !== "cliente"} className="space-y-6">
               <TituloMembros
                 titulo="Experimente a biblioteca inteira"

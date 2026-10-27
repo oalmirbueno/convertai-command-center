@@ -214,3 +214,6 @@ project_id = "aceleriq-os"
 
   [functions.area-membros-kiwify]
     verify_jwt = true
+
+  [functions.bolso]
+    verify_jwt = true

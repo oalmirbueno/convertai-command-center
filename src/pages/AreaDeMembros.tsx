@@ -24,6 +24,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Wrench,
+  Megaphone,
+  Coins,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -51,6 +53,8 @@ import { FocoDeEstudo, BotaoPomodoro } from "@/components/membros/FocoDeEstudo";
 import ComunidadeDoCurso from "@/components/membros/ComunidadeDoCurso";
 import LeitorDeProduto from "@/components/membros/LeitorDeProduto";
 import FerramentasDoMembro from "@/components/membros/FerramentasDoMembro";
+import EstudioBolso, { useEstadoDoBolso } from "@/components/membros/bolso/EstudioBolso";
+import CreditosBolso from "@/components/membros/bolso/CreditosBolso";
 import { useCatalogoFerramentas } from "@/hooks/useCatalogoFerramentas";
 import { temLicencaDaFerramenta } from "@/lib/membros/ferramentas";
 import { texto, AjudaRecolhida } from "@/components/sistema";
@@ -359,7 +363,11 @@ function ControlesTeste({
 export default function AreaDeMembros() {
   const { profile, user, logout } = useAuth();
   const qc = useQueryClient();
-  const [secao, setSecao] = useState("inicio");
+  const [secao, setSecao] = useState(() => {
+    // Link direto para o estúdio (?secao=estudio | creditos).
+    const pedida = new URLSearchParams(window.location.search).get("secao");
+    return pedida === "estudio" || pedida === "creditos" ? pedida : "inicio";
+  });
   const [recolhida, setRecolhida] = useState(false);
   const [comunidade, setComunidade] = useState("");
   const [avisoLista, setAvisoLista] = useState("");
@@ -373,6 +381,9 @@ export default function AreaDeMembros() {
   const previa = teste ? undefined : parametros.get("visao") || undefined;
   const somenteLeitura = !!previa || !!teste;
   const ferramentas = useCatalogoFerramentas(user?.id, !somenteLeitura);
+  // Aceleriq de Bolso (26/10/2026): só aparece quando o banco libera para esta conta.
+  const bolso = useEstadoDoBolso(!!user && !somenteLeitura);
+  const comBolso = !somenteLeitura && !!bolso.data?.exposto;
   const aberto = parametros.get("produto");
   const setAberto = (id: string | null) => {
     const proximos = new URLSearchParams(parametros);
@@ -608,6 +619,12 @@ export default function AreaDeMembros() {
               { id: "lista", nome: "Minha lista", icone: Bookmark },
               { id: "comunidade", nome: "Comunidade", icone: MessageCircle },
               { id: "ferramentas", nome: "Ferramentas", icone: Wrench },
+              ...(comBolso
+                ? [
+                    { id: "estudio", nome: "Estúdio", icone: Megaphone },
+                    { id: "creditos", nome: "Créditos e acesso", icone: Coins },
+                  ]
+                : []),
             ].map((i) => (
               <button
                 key={i.id}
@@ -632,6 +649,8 @@ export default function AreaDeMembros() {
             <BotaoPomodoro compacto={recolhida} />
           </aside>
           <main id="biblioteca" className="membros-conteudo space-y-8">
+            {secaoAtual === "estudio" && comBolso && <EstudioBolso />}
+            {secaoAtual === "creditos" && comBolso && <CreditosBolso />}
             {secaoAtual === "ferramentas" && (
               <FerramentasDoMembro
                 somenteLeitura={somenteLeitura}
@@ -881,6 +900,29 @@ export default function AreaDeMembros() {
                   )}
                   {catalogo.data?.jornada && (
                     <Jornada jornada={catalogo.data.jornada} />
+                  )}
+                  {comBolso && !busca && !categoria && (
+                    <section
+                      className="bolso-cartao flex flex-wrap items-center justify-between gap-3"
+                      aria-label="Aceleriq de Bolso"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-[15px] font-semibold">
+                          Aceleriq de Bolso
+                        </p>
+                        <p className="text-[13px] text-muted-foreground">
+                          Monte a campanha, revise o texto e baixe a arte. Você
+                          cria, revisa e publica.
+                        </p>
+                      </div>
+                      <button
+                        className="membros-acao bg-primary text-primary-foreground"
+                        onClick={() => setSecao("estudio")}
+                      >
+                        Abrir o estúdio
+                        <Megaphone size={16} />
+                      </button>
+                    </section>
                   )}
                   <div className="flex flex-wrap gap-3 items-center">
                     <label className="relative block w-full sm:max-w-sm">
