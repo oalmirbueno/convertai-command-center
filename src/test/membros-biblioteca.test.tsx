@@ -187,6 +187,49 @@ describe("biblioteca integrada", () => {
     expect(mocks.ferramentas).toHaveBeenCalledTimes(1);
     expect(mocks.materiais).not.toHaveBeenCalled();
   });
+  it("a busca do topo volta do CRM para a biblioteca sem alterar acessos", async () => {
+    mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm(), produto()], pendentes: [] });
+    mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
+    montar("/membros?ferramenta=crm");
+    await screen.findByRole("button", { name: "Novo negócio" });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar produtos" }), {
+      target: { value: "Kit de marca" },
+    });
+
+    expect(await screen.findByRole("heading", { name: "Resultados da busca" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Novo negócio" })).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Buscar produtos" })).toHaveValue("Kit de marca");
+    expect(mocks.materiais).not.toHaveBeenCalled();
+    expect(mocks.catalogo).toHaveBeenCalledTimes(1);
+    expect(mocks.ferramentas).toHaveBeenCalledTimes(1);
+    expect(mocks.sessao).toHaveBeenCalledWith("crm", "prova-do-teste", false);
+  });
+  it.each([
+    "/membros",
+    "/membros?modo=cliente&bloqueado=1",
+    "/membros?visao=cliente",
+  ])("a marca retorna ao início e preserva o contexto de %s", async (inicio) => {
+    mocks.role = "admin";
+    montar(inicio);
+    await screen.findByText("Conhecer produto");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar produtos" }), {
+      target: { value: "inexistente" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Minha lista" }));
+    expect(screen.getByRole("heading", { name: "Minha lista" })).toBeInTheDocument();
+
+    const marca = screen.getByRole("link", { name: "Biblioteca Aceleriq" });
+    expect(marca).toHaveAttribute("href", inicio);
+    fireEvent.click(marca);
+
+    expect(await screen.findByRole("heading", { name: "Sua biblioteca" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Minha lista" })).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Buscar produtos" })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Conhecer produto" })).toBeInTheDocument();
+    expect(mocks.catalogo).toHaveBeenCalledTimes(1);
+    expect(mocks.progresso).not.toHaveBeenCalled();
+  });
   it("remove o CRM aberto quando a licença é suspensa e recupera o acesso após reativar", async () => {
     mocks.catalogo.mockResolvedValue({ produtos: [produtoCrm()], pendentes: [] });
     mocks.ferramentas.mockResolvedValue([ferramentaCrm()]);
@@ -373,6 +416,20 @@ describe("biblioteca integrada", () => {
     expect(
       screen.queryByRole("link", { name: "Administrar biblioteca" }),
     ).not.toBeInTheDocument();
+  });
+  it("o menu da conta preserva o destino do membro e fecha por Escape", async () => {
+    montar();
+    await screen.findByText("Conhecer produto");
+    const conta = screen.getByLabelText("Opções da conta de Minha conta");
+    fireEvent.click(conta);
+    expect(screen.getByRole("link", { name: "Painel Aceleriq" })).toHaveAttribute("href", "/solucoes");
+    expect(screen.queryByRole("link", { name: "Administrar biblioteca" })).not.toBeInTheDocument();
+
+    const sair = screen.getByRole("button", { name: "Sair da conta" });
+    fireEvent.keyDown(sair, { key: "Escape" });
+    expect(sair).not.toBeVisible();
+    expect(conta).toHaveFocus();
+    expect(mocks.logout).not.toHaveBeenCalled();
   });
   it("produto removido tem saída clara pela URL direta", async () => {
     montar("/membros?produto=removido");

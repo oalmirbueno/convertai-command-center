@@ -92,8 +92,20 @@ export default function ComunidadeDoCurso({
         key={c.id}
         className={`membros-conversa ${filha ? "membros-resposta" : ""} ${c.oculto ? "opacity-60" : ""}`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <strong className="text-[13px]">{c.autor_nome}</strong>
+        <div className="membros-conversa-cabecalho flex items-center justify-between gap-2">
+          <div className="membros-conversa-autor">
+            <span className="membros-avatar" aria-hidden="true">
+              {(c.autor_nome || "Membro")
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((nome) => nome[0])
+                .join("")
+                .toLocaleUpperCase("pt-BR")}
+            </span>
+            <strong className="text-[13px]">{c.autor_nome}</strong>
+          </div>
           <time
             className="text-[11px] text-muted-foreground"
             dateTime={c.criado_em}
@@ -176,7 +188,7 @@ export default function ComunidadeDoCurso({
   }
   return (
     <section className="membros-comunidade" aria-label="Comunidade do curso">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      <header className="membros-comunidade-cabecalho flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2
             className={`${tituloOculto ? "sr-only" : "text-[15px] font-semibold flex items-center gap-2"}`}
@@ -232,7 +244,7 @@ export default function ComunidadeDoCurso({
         </p>
       ) : (
         <form
-          className="membros-conversa"
+          className="membros-conversa membros-comunidade-compor"
           onSubmit={(e) => {
             e.preventDefault();
             void agir(

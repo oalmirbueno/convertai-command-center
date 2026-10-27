@@ -171,7 +171,10 @@ export function ConsumoMaterial({
     }
   }
   return (
-    <section className="min-w-0 space-y-4" aria-label={material.titulo}>
+    <section
+      className="membros-material-conteudo min-w-0 space-y-4"
+      aria-label={material.titulo}
+    >
       <h2 className={texto.tituloSecao}>{material.titulo}</h2>
       {material.tipo === "texto" ? (
         <article className="prose prose-sm max-w-none dark:prose-invert">
@@ -444,6 +447,10 @@ export default function LeitorDeProduto({
   const materiais = dados.data?.materiais || [];
   const modulos = dados.data?.modulos || [];
   const progresso = dados.data?.progresso || [];
+  const concluidos = progresso.filter((p) => p.concluido).length;
+  const percentualConcluido = materiais.length
+    ? Math.min(100, Math.round((100 * concluidos) / materiais.length))
+    : 0;
   useEffect(() => {
     if (dados.data && !dados.data.materiais.some((m) => m.id === selecionado))
       setSelecionado(
@@ -499,10 +506,24 @@ export default function LeitorDeProduto({
           }
         }}
       >
-        <header className="membros-leitor-cabecalho">
+        <header className="membros-leitor-cabecalho membros-curso-banner">
+          <img
+            key={produto.capa_url || "capa-padrao"}
+            className="membros-curso-banner-imagem"
+            src={
+              urlHttps(produto.capa_url) || "/membros/capas/boas-vindas-v2.webp"
+            }
+            alt=""
+            aria-hidden="true"
+            referrerPolicy="no-referrer"
+            decoding="async"
+            onError={(evento) => {
+              evento.currentTarget.hidden = true;
+            }}
+          />
           {permitido && (
             <button
-              className="membros-acao shrink-0"
+              className="membros-acao membros-curso-menu shrink-0"
               aria-label={
                 sumario
                   ? "Recolher conteúdo do curso"
@@ -518,7 +539,10 @@ export default function LeitorDeProduto({
               )}
             </button>
           )}
-          <div className="min-w-0">
+          <div className="membros-curso-identidade min-w-0">
+            <span className="membros-curso-categoria">
+              {produto.categoria || "Biblioteca Aceleriq"}
+            </span>
             <DialogTitle className={texto.tituloPagina}>
               {produto.titulo}
             </DialogTitle>
@@ -527,7 +551,7 @@ export default function LeitorDeProduto({
             </DialogDescription>
           </div>
           {permitido && (
-            <div className="flex items-center gap-1 mr-6">
+            <div className="membros-curso-controles flex items-center gap-1 mr-6">
               <BotaoPomodoro compacto />
               <button
                 className="membros-acao"
@@ -573,13 +597,19 @@ export default function LeitorDeProduto({
                 <div className="membros-sumario-topo">
                   <p className="text-[13px] font-semibold">Conteúdo do curso</p>
                   <p className="text-[12px] text-muted-foreground mt-1">
-                    {progresso.filter((p) => p.concluido).length} de{" "}
-                    {materiais.length} concluídos
+                    {concluidos} de {materiais.length} concluídos
                   </p>
-                  <div className="membros-progresso mt-3">
+                  <div
+                    className="membros-progresso mt-3"
+                    role="progressbar"
+                    aria-label="Progresso do curso"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={percentualConcluido}
+                  >
                     <span
                       style={{
-                        width: `${Math.round((100 * progresso.filter((p) => p.concluido).length) / materiais.length)}%`,
+                        width: `${percentualConcluido}%`,
                       }}
                     />
                   </div>

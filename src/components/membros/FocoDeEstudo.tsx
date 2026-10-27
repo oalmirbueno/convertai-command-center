@@ -212,7 +212,7 @@ export function FocoDeEstudo({
           }}
         >
           <DialogContent className="membros-pomodoro">
-            <div className="flex items-center gap-2 pr-6">
+            <div className="membros-pomodoro-cabecalho flex items-center gap-2 pr-6">
               <DialogTitle>Seu tempo de foco</DialogTitle>
               <AjudaRecolhida rotulo="Como usar o Pomodoro">
                 O relógio continua durante a aula. Minimize para estudar e
@@ -222,7 +222,7 @@ export function FocoDeEstudo({
             <DialogDescription className="sr-only">
               Temporizador de estudo com pausas e modo compacto.
             </DialogDescription>
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="membros-pomodoro-etapas flex flex-wrap gap-1 mt-2" aria-label="Etapas do Pomodoro">
               {(["foco", "pausa", "descanso"] as Etapa[]).map((etapa) => (
                 <button
                   key={etapa}
@@ -253,7 +253,7 @@ export function FocoDeEstudo({
             >
               {formatarTempo(restante)}
             </div>
-            <div className="flex justify-center gap-2">
+            <div className="membros-pomodoro-acoes flex justify-center gap-2">
               <button
                 className="membros-acao bg-primary text-primary-foreground"
                 onClick={alternar}
