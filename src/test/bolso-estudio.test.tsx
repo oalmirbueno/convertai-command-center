@@ -212,8 +212,8 @@ describe("estúdio com o banco simulado", () => {
 
   it("créditos e acesso: saldo, validade e extrato vindos do banco", async () => {
     montar(h(CreditosBolso));
-    expect(await screen.findByText("Teste (demonstração)")).toBeTruthy();
-    expect(screen.getByText(/até 26\/10\/2027/)).toBeTruthy();
+    expect(await screen.findByText("Demonstração")).toBeTruthy();
+    expect(screen.getByText(/Até 26\/10\/2027/)).toBeTruthy();
     expect(await screen.findByText("Créditos recebidos")).toBeTruthy();
     expect(screen.getByText("1 usado")).toBeTruthy();
   });

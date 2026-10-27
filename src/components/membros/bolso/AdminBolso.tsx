@@ -4,6 +4,7 @@ import { AlertTriangle, Check, Loader2, Megaphone, Play, ShieldAlert } from "luc
 import TituloMembros from "@/components/membros/TituloMembros";
 import { AjudaRecolhida } from "@/components/sistema";
 import { useAuth } from "@/contexts/AuthContext";
+import AdminOfertasBolso from "./AdminOfertasBolso";
 import {
   aprovarPolitica,
   arquivarPolitica,
@@ -35,15 +36,14 @@ type Confirmacao = { titulo: string; descricao: string; botao: string; executar:
 const CHAVES: { id: keyof VisaoAdmin["config"]; nome: string; dica: string; perigo?: boolean }[] = [
   { id: "modulo_exposto", nome: "Estúdio visível aos membros", dica: "Desligado: só a administração vê o estúdio." },
   { id: "modo_simulado", nome: "Modo demonstração", dica: "Provedor simulado para admin e contas com crédito de teste. Faixa de DEMONSTRAÇÃO sempre visível." },
-  { id: "geracao_real", nome: "Geração real (OpenAI)", dica: "Exige política aprovada e a chave do servidor ligada. Gasta dinheiro.", perigo: true },
-  { id: "pagamentos", nome: "Eventos de pagamento", dica: "Sem isto, eventos só são guardados. Kiwify e Asaas continuam desligados.", perigo: true },
+  { id: "geracao_real", nome: "Geração real (OpenRouter)", dica: "Usa a conexão da Aceleriq no servidor. O consumo de cada pessoa fica na própria carteira.", perigo: true },
   { id: "kill_switch", nome: "Pausar o estúdio", dica: "Para pedidos novos na hora. Consulta e download continuam." },
 ];
 
 export default function AdminBolso({ pessoas }: { pessoas: Pessoa[] }) {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const visao = useQuery({ queryKey: ["bolso", "admin"], queryFn: lerVisaoAdmin, retry: false });
+  const visao = useQuery({ queryKey: ["bolso", "admin", user?.id], queryFn: lerVisaoAdmin, retry: false, enabled: !!user });
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -113,8 +113,7 @@ export default function AdminBolso({ pessoas }: { pessoas: Pessoa[] }) {
   return (
     <section className="space-y-6" aria-label="Aceleriq de Bolso">
       <TituloMembros titulo="Aceleriq de Bolso" icone={<Megaphone size={20} className="text-primary" aria-hidden="true" />}>
-        Estúdio de campanhas em autoatendimento. Tudo nasce desligado; nada é vendido nem gerado de verdade sem uma política aprovada e as chaves
-        ligadas aqui.
+        Acessos, créditos e operação do estúdio.
       </TituloMembros>
       {erro && !erroNoAcesso && <p role="alert" className="text-[13px] text-destructive">{erro}</p>}
       {aviso && <p role="status" className="text-[13px]">{aviso}</p>}
@@ -252,6 +251,8 @@ export default function AdminBolso({ pessoas }: { pessoas: Pessoa[] }) {
         </div>
         <button type="submit" className="membros-acao border border-border" disabled={ocupado}>Salvar limites</button>
       </form>
+
+      <AdminOfertasBolso politicas={v.politicas} />
 
       <div className="bolso-cartao space-y-4">
         <div className="flex items-center gap-2">

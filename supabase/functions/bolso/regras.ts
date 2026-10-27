@@ -203,3 +203,20 @@ export function openaiPronta(env: { habilitado?: string; chave?: string; modeloT
   if (!modeloPermitido("texto", env.modeloTexto) || !modeloPermitido("imagem", env.modeloImagem)) return { ok: false, motivo: "Modelo fora da lista permitida." };
   return { ok: true };
 }
+
+/** Rotas aprovadas do Bolso. Nunca aceita modelo vindo do navegador ou da carteira Mesa. */
+export const MODELOS_OPENROUTER_PERMITIDOS = { texto: ["openai/gpt-4.1-mini"], imagem: ["google/gemini-3.1-flash-image"] } as const;
+
+export function modeloOpenrouterPermitido(tipo: "texto" | "imagem", pedido: string | undefined): string | null {
+  const lista = MODELOS_OPENROUTER_PERMITIDOS[tipo] as readonly string[];
+  return pedido && lista.includes(pedido) ? pedido : null;
+}
+
+export function openrouterPronto(env: { habilitado?: string; chave?: string; modeloTexto?: string; modeloImagem?: string }): { ok: boolean; motivo?: string } {
+  if (env.habilitado !== "sim") return { ok: false, motivo: "Geração real desligada no servidor (BOLSO_OPENROUTER_HABILITADO)." };
+  if (!env.chave?.trim()) return { ok: false, motivo: "A geração precisa de uma credencial configurada pela administração." };
+  if (!modeloOpenrouterPermitido("texto", env.modeloTexto) || !modeloOpenrouterPermitido("imagem", env.modeloImagem)) {
+    return { ok: false, motivo: "Modelo fora da lista permitida." };
+  }
+  return { ok: true };
+}

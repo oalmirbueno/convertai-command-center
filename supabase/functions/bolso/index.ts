@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { configuracaoOpenaiDoServidor, openai, simulado, type Contexto, type Provedor } from "./provedores.ts";
+import { chave as chaveDoPainel } from "../_shared/chaves.ts";
+import { configuracaoOpenaiDoServidor, configuracaoOpenrouterDoServidor, openai, openrouter, simulado, type Contexto, type Provedor } from "./provedores.ts";
 import { caminhoDaArte, mimeReal, type Formato } from "./regras.ts";
 
 /**
@@ -22,10 +23,16 @@ const resposta = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
-function provedorDe(nome: string): Provedor | null {
+async function provedorDe(nome: string): Promise<Provedor | null> {
   if (nome === "simulado") return simulado;
   if (nome === "openai") {
     return openai(configuracaoOpenaiDoServidor((nome) => Deno.env.get(nome)));
+  }
+  if (nome === "openrouter") {
+    return openrouter(await configuracaoOpenrouterDoServidor(
+      (nome) => Deno.env.get(nome),
+      () => chaveDoPainel("OPENROUTER_API_KEY"),
+    ));
   }
   return null;
 }
@@ -46,7 +53,7 @@ async function processarUm(servico: SupabaseClient, jobId: string | null): Promi
     const { data: f } = await servico.rpc("bolso_trabalho_falhar", { _job: p.job.id, _tentativa: p.job.tentativa, _erro: motivo, _definitiva: definitiva });
     return { job_id: p.job.id, estado: (f && (f as { estado?: string }).estado) || "falhou" };
   };
-  const provedor = provedorDe(p.job.provedor);
+  const provedor = await provedorDe(p.job.provedor);
   if (!provedor) return falhar("Fornecedor desconhecido.", true);
   const ctx: Contexto = { marca: p.marca, briefing: p.briefing, versao: p.versao, formato: p.job.formato };
 

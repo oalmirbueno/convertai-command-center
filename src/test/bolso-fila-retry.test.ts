@@ -17,10 +17,14 @@ const AMBIENTE: Record<string, string> = {
   BOLSO_OPENAI_API_KEY: "credencial-de-teste",
   BOLSO_OPENAI_MODELO_TEXTO: "gpt-4.1-mini",
   BOLSO_OPENAI_MODELO_IMAGEM: "gpt-image-2",
+  BOLSO_OPENROUTER_HABILITADO: "sim",
+  BOLSO_OPENROUTER_API_KEY: "dedicada-isolada",
+  BOLSO_OPENROUTER_MODELO_TEXTO: "openai/gpt-4.1-mini",
+  BOLSO_OPENROUTER_MODELO_IMAGEM: "google/gemini-3.1-flash-image",
 };
 const JOB = "11111111-1111-4111-8111-111111111111";
 
-function filaIsolada(buscar: typeof fetch, quantidade = 1) {
+function filaIsolada(buscar: typeof fetch, quantidade = 1, provedor = "openai") {
   const jobs = Array.from({ length: quantidade }, (_, i) => ({
     id: i === 0 ? JOB : `job-${i + 1}`,
     estado: "na_fila",
@@ -33,7 +37,7 @@ function filaIsolada(buscar: typeof fetch, quantidade = 1) {
       job.estado = "processando";
       job.tentativa++;
       return { data: {
-        job: { ...job, user_id: "dono", campanha_id: "campanha", tipo: "texto", formato: "feed_1x1", provedor: "openai" },
+        job: { ...job, user_id: "dono", campanha_id: "campanha", tipo: "texto", formato: "feed_1x1", provedor },
         marca: { nome: "Doceria", cores: ["#113355"], tom: "acolhedor" },
         briefing: { tipo: "venda", produto: "Bolo de pote", cta: "Peça no direct", condicoes: "" },
         versao: null,
@@ -57,7 +61,12 @@ function filaIsolada(buscar: typeof fetch, quantidade = 1) {
   };
   const deps: Record<string, unknown> = {
     "npm:@supabase/supabase-js@2": { createClient: (_url: string, chave: string) => chave === AMBIENTE.SUPABASE_ANON_KEY ? usuario : { rpc } },
-    "./provedores.ts": { ...provedores, openai: (config: provedores.ConfiguracaoOpenai) => provedores.openai(config, buscar) },
+    "./provedores.ts": {
+      ...provedores,
+      openai: (config: provedores.ConfiguracaoOpenai) => provedores.openai(config, buscar),
+      openrouter: (config: provedores.ConfiguracaoOpenrouter) => provedores.openrouter(config, buscar),
+    },
+    "../_shared/chaves.ts": { chave: async () => { throw new Error("Chave empresarial não deve ser consultada"); } },
     "./regras.ts": regras,
   };
   let handler!: (req: Request) => Promise<Response>;
@@ -123,5 +132,55 @@ describe("lote do Bolso preserva tentativas e não reserva crédito novamente", 
     expect(body.processados.every((r: { estado: string }) => r.estado === "concluido")).toBe(true);
     expect(jobs[5]).toMatchObject({ estado: "na_fila", tentativa: 0 });
     expect(buscar).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe("fila OpenRouter usa somente a reserva e o custo do Bolso", () => {
+  it("402 pede falha definitiva e estorno pela RPC existente", async () => {
+    const buscar = vi.fn<typeof fetch>().mockResolvedValue(new Response("dados privados", { status: 402 }));
+    const { processar, rpc, jobs } = filaIsolada(buscar, 1, "openrouter");
+    expect(await (await processar()).json()).toEqual({ processados: [{ job_id: JOB, estado: "falhou" }] });
+    expect(jobs[0]).toMatchObject({ estado: "falhou", tentativa: 1 });
+    expect(rpc.mock.calls.map(([nome]) => nome)).toEqual(["bolso_trabalho_pegar", "bolso_trabalho_falhar", "bolso_trabalho_pegar"]);
+    expect(rpc.mock.calls[1][1]).toMatchObject({ _job: JOB, _tentativa: 1, _definitiva: true });
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain("dados privados");
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it("429 mantém uma tentativa na fila e encerra o lote", async () => {
+    const buscar = vi.fn<typeof fetch>().mockResolvedValue(new Response("limite", { status: 429 }));
+    const { processar, rpc, jobs } = filaIsolada(buscar, 2, "openrouter");
+    expect(await (await processar()).json()).toEqual({ processados: [{ job_id: JOB, estado: "na_fila" }] });
+    expect(jobs.map(({ estado, tentativa }) => ({ estado, tentativa }))).toEqual([
+      { estado: "na_fila", tentativa: 1 }, { estado: "na_fila", tentativa: 0 },
+    ]);
+    expect(rpc.mock.calls.map(([nome]) => nome)).toEqual(["bolso_trabalho_pegar", "bolso_trabalho_falhar"]);
+    expect(rpc.mock.calls[1][1]).toMatchObject({ _definitiva: false });
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it("timeout preserva o lease para conciliação, sem estornar ou repetir sozinho", async () => {
+    const buscar = vi.fn<typeof fetch>().mockRejectedValue(new Error("timeout"));
+    const { processar, rpc } = filaIsolada(buscar, 2, "openrouter");
+    expect(await (await processar()).json()).toEqual({ processados: [{ job_id: JOB, estado: "processando" }] });
+    expect(rpc.mock.calls.map(([nome]) => nome)).toEqual(["bolso_trabalho_pegar"]);
+    expect(buscar).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0.01543, undefined])("passa custo %s à conclusão sem consultar a carteira Mesa", async (cost) => {
+    const buscar = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({
+      choices: [{ message: { content: JSON.stringify({
+        mensagem: "Uma pausa mais doce.", texto: "Escolha seu bolo de pote e peça no direct.", cta: "Peça no direct",
+        aplicacao: "Instagram", direcao_visual: "Um bolo de pote sobre a mesa.",
+      }) } }], usage: { cost },
+    }));
+    const { processar, rpc } = filaIsolada(buscar, 1, "openrouter");
+    expect(await (await processar()).json()).toEqual({ processados: [{ job_id: JOB, estado: "concluido" }] });
+    expect(rpc.mock.calls.map(([nome]) => nome)).toEqual(["bolso_trabalho_pegar", "bolso_trabalho_concluir", "bolso_trabalho_pegar"]);
+    expect(rpc.mock.calls[1][1]).toMatchObject({
+      _job: JOB, _tentativa: 1,
+      _custo: cost === undefined ? null : { modelo: "openai/gpt-4.1-mini", custo_usd: cost },
+    });
+    expect(buscar).toHaveBeenCalledTimes(1);
   });
 });

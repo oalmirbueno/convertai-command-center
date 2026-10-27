@@ -1,10 +1,10 @@
 import { DEMOS } from "./demos.ts";
-import { FORMATOS, modeloPermitido, openaiPronta, pedidoDeImagem, pedidoDeTexto, textoSimulado, validarConteudo, type Briefing, type ConteudoDaCampanha, type Formato, type Marca } from "./regras.ts";
+import { FORMATOS, mimeReal, modeloPermitido, modeloOpenrouterPermitido, openaiPronta, openrouterPronto, pedidoDeImagem, pedidoDeTexto, textoSimulado, validarConteudo, type Briefing, type ConteudoDaCampanha, type Formato, type Marca } from "./regras.ts";
 
 /**
- * Fornecedores do estúdio. O simulado é determinístico e marcado DEMONSTRAÇÃO; a OpenAI só responde com
- * BOLSO_OPENAI_HABILITADO=sim, chave no servidor e modelos da lista (regras.ts). Nenhum dos dois decide
- * crédito: isso é do banco.
+ * Fornecedores do estúdio. O simulado é determinístico e marcado DEMONSTRAÇÃO. Os reais exigem gate
+ * dedicado, credencial no servidor e modelos da lista (regras.ts). Nenhum fornecedor decide crédito:
+ * reserva, débito e estorno pertencem exclusivamente às RPCs e carteiras do Bolso.
  */
 
 export interface Contexto {
@@ -14,7 +14,7 @@ export interface Contexto {
   formato: Formato | null;
 }
 
-/** Estimativa pelo uso retornado e tabela pública, não conciliação da fatura do fornecedor. */
+/** OpenAI: estimativa por tokens. OpenRouter: custo retornado pelo fornecedor em usage.cost. */
 export type CustoEstimado = { modelo: string; custo_usd: number };
 export type ResultadoTexto = { ok: true; conteudo: ConteudoDaCampanha; custo?: CustoEstimado } | { ok: false; motivo: string; definitiva: boolean; incerto?: boolean };
 export type ResultadoImagem = { ok: true; bytes: Uint8Array; custo?: CustoEstimado } | { ok: false; motivo: string; definitiva: boolean; incerto?: boolean };
@@ -39,6 +39,25 @@ export const simulado: Provedor = {
 type Busca = typeof fetch;
 
 export type ConfiguracaoOpenai = { habilitado?: string; chave?: string; modeloTexto?: string; modeloImagem?: string };
+export type ConfiguracaoOpenrouter = ConfiguracaoOpenai;
+
+/** Credencial dedicada primeiro. Chave empresarial só com opção explícita, nunca por ausência da dedicada. */
+export async function configuracaoOpenrouterDoServidor(
+  ambiente: (nome: string) => string | undefined,
+  lerChaveEmpresarial?: () => Promise<string>,
+): Promise<ConfiguracaoOpenrouter> {
+  const config: ConfiguracaoOpenrouter = {
+    habilitado: ambiente("BOLSO_OPENROUTER_HABILITADO"),
+    modeloTexto: ambiente("BOLSO_OPENROUTER_MODELO_TEXTO"),
+    modeloImagem: ambiente("BOLSO_OPENROUTER_MODELO_IMAGEM"),
+  };
+  if (config.habilitado !== "sim") return config;
+  config.chave = ambiente("BOLSO_OPENROUTER_API_KEY")?.trim();
+  if (!config.chave && ambiente("BOLSO_OPENROUTER_USAR_CHAVE_EMPRESA") === "sim") {
+    config.chave = ambiente("OPENROUTER_API_KEY")?.trim() || (await lerChaveEmpresarial?.())?.trim();
+  }
+  return config;
+}
 
 /** Exclusivo do servidor. A chave compartilhada não ativa o Bolso nem escolhe seu modelo. */
 export function configuracaoOpenaiDoServidor(ambiente: (nome: string) => string | undefined): ConfiguracaoOpenai {
@@ -194,6 +213,116 @@ export function openai(env: ConfiguracaoOpenai, buscar: Busca = fetch): Provedor
         const b64 = corpo && corpo.data && corpo.data[0] && corpo.data[0].b64_json;
         if (typeof b64 !== "string") return recusa("Fornecedor não devolveu a imagem.");
         return { ok: true, bytes: deBase64(b64), custo: custoEstimadoPeloUso("imagem", modelo, corpo.usage) };
+      } catch {
+        return recusa("Resposta do fornecedor ilegível.");
+      }
+    },
+  };
+}
+
+/** Custo comunicado pelo OpenRouter. Ausência ou metadado inválido não significa custo zero. */
+export function custoInformadoOpenrouter(modelo: string, uso: unknown): CustoEstimado | undefined {
+  if (!modeloOpenrouterPermitido("texto", modelo) && !modeloOpenrouterPermitido("imagem", modelo)) return undefined;
+  const custo = registro(uso)?.cost;
+  if (typeof custo !== "number" || !Number.isFinite(custo) || custo < 0 || custo >= 1_000_000) return undefined;
+  const custo_usd = Number(custo.toFixed(6));
+  return custo_usd < 1_000_000 ? { modelo, custo_usd } : undefined;
+}
+
+const LIMITE_IMAGEM_BYTES = 10 * 1024 * 1024;
+const LIMITE_IMAGEM_BASE64 = Math.ceil(LIMITE_IMAGEM_BYTES / 3) * 4;
+const PROPORCOES_OPENROUTER: Record<Formato, string> = { feed_1x1: "1:1", feed_4x5: "4:5", stories_9x16: "9:16" };
+
+/**
+ * Transporte exclusivo do Bolso. Sem clientId, BYOK Mesa, carteira em USD ou fallback de fornecedor.
+ * Texto: Chat Completions JSON. Imagem: Images API, Gemini Flash Image em 1K, uma arte por pedido.
+ * Contrato e capacidades conferidos no catálogo público OpenRouter em 27/10/2026.
+ */
+export function openrouter(env: ConfiguracaoOpenrouter, buscar: Busca = fetch): Provedor {
+  const pronta = openrouterPronto(env);
+  const recusa = (motivo: string) => ({ ok: false as const, motivo, definitiva: true });
+  const incerto = (motivo: string) => ({ ok: false as const, motivo, definitiva: false, incerto: true });
+  const headers = {
+    Authorization: `Bearer ${env.chave}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": "https://aceleriq.online",
+    "X-Title": "Aceleriq de Bolso",
+  };
+  const erroHttp = async (res: Response): Promise<Extract<ResultadoTexto, { ok: false }>> => {
+    // O corpo pode conter dados da campanha ou de autenticação. Nunca o expor nem usá-lo como instrução.
+    await res.body?.cancel().catch(() => {});
+    if (res.status === 402) return recusa("A geração está temporariamente sem saldo no fornecedor. Seus créditos serão devolvidos.");
+    if (res.status === 429) return { ok: false, motivo: "Limite temporário de requisições do fornecedor (429). Aguarde antes de tentar novamente.", definitiva: false };
+    if (res.status >= 500) return { ok: false, motivo: `Fornecedor indisponível (${res.status}).`, definitiva: false };
+    return recusa(`Fornecedor recusou o pedido (${res.status}).`);
+  };
+  return {
+    async texto(ctx) {
+      if (!pronta.ok) return recusa(pronta.motivo || "Geração real indisponível.");
+      const modelo = modeloOpenrouterPermitido("texto", env.modeloTexto)!;
+      const { sistema, usuario } = pedidoDeTexto(ctx.marca, ctx.briefing);
+      let res: Response;
+      try {
+        res = await buscar("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST", headers,
+          body: JSON.stringify({
+            model: modelo, stream: false, max_tokens: 1200, response_format: { type: "json_object" },
+            messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }],
+          }),
+          signal: AbortSignal.timeout(60_000),
+        });
+      } catch {
+        return incerto("Sem resposta do fornecedor de texto.");
+      }
+      if (!res.ok) return erroHttp(res);
+      let corpo;
+      try {
+        corpo = await res.json();
+      } catch (erro) {
+        return erro instanceof SyntaxError ? recusa("Resposta do fornecedor ilegível.") : incerto("Sem resposta completa do fornecedor de texto.");
+      }
+      try {
+        const bruto = JSON.parse(corpo.choices[0].message.content);
+        const v = validarConteudo(bruto, ctx.briefing);
+        if (v.ok === false) return recusa(v.motivo);
+        return { ok: true, conteudo: v.conteudo, custo: custoInformadoOpenrouter(modelo, corpo.usage) };
+      } catch {
+        return recusa("Resposta do fornecedor ilegível.");
+      }
+    },
+    async imagem(ctx) {
+      if (!pronta.ok) return recusa(pronta.motivo || "Geração real indisponível.");
+      if (!ctx.formato || !PROPORCOES_OPENROUTER[ctx.formato]) return recusa("Formato ausente ou inválido.");
+      const modelo = modeloOpenrouterPermitido("imagem", env.modeloImagem)!;
+      let res: Response;
+      try {
+        res = await buscar("https://openrouter.ai/api/v1/images", {
+          method: "POST", headers,
+          body: JSON.stringify({
+            model: modelo, prompt: pedidoDeImagem(ctx.marca, ctx.briefing, ctx.versao, ctx.formato),
+            resolution: "1K", aspect_ratio: PROPORCOES_OPENROUTER[ctx.formato], n: 1,
+          }),
+          signal: AbortSignal.timeout(120_000),
+        });
+      } catch {
+        return incerto("Sem resposta do fornecedor de imagem.");
+      }
+      if (!res.ok) return erroHttp(res);
+      let corpo;
+      try {
+        corpo = await res.json();
+      } catch (erro) {
+        return erro instanceof SyntaxError ? recusa("Resposta do fornecedor ilegível.") : incerto("Sem resposta completa do fornecedor de imagem.");
+      }
+      try {
+        const b64 = corpo?.data?.[0]?.b64_json;
+        // Só base64 da resposta. Nunca busca URLs remotas devolvidas pelo modelo ou pelo fornecedor.
+        if (typeof b64 !== "string" || !b64.length || b64.length > LIMITE_IMAGEM_BASE64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) {
+          return recusa("O fornecedor não devolveu uma imagem válida de até 10 MB.");
+        }
+        const bytes = deBase64(b64);
+        if (bytes.length > LIMITE_IMAGEM_BYTES || !mimeReal(bytes)) return recusa("A imagem recebida não é um PNG, JPEG ou WEBP válido de até 10 MB.");
+        return { ok: true, bytes, custo: custoInformadoOpenrouter(modelo, corpo.usage) };
       } catch {
         return recusa("Resposta do fornecedor ilegível.");
       }

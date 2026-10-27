@@ -16,6 +16,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/lib/bolso/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/bolso/api")>()),
   lerVisaoAdmin: api.ler,
+  lerOfertasAdmin: async () => [],
   aprovarPolitica: api.aprovar,
   arquivarPolitica: api.arquivar,
   concederAcesso: api.conceder,
@@ -165,7 +166,7 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
     selecionar(formulario);
     const dialogo = await abrirConcessao(formulario);
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar acesso" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Acesso concedido a Minha conta.");
+    expect(await screen.findByText("Acesso concedido a Minha conta.")).toHaveAttribute("role", "status");
     expect(api.conceder).toHaveBeenCalledExactlyOnceWith("conta-autenticada", "anual", "politica-real", expect.stringMatching(/^manual-[\da-f-]{36}$/));
     expect(within(formulario).getByRole("combobox", { name: "Pessoa", exact: true })).toHaveValue("");
     expect(within(formulario).getByRole("combobox", { name: "Política", exact: true })).toHaveValue("");
@@ -247,19 +248,19 @@ describe("administração de acessos ao Aceleriq de Bolso", () => {
 
   it("só ativa geração real após confirmação e não modifica pagamentos", async () => {
     await montar();
-    const geracao = screen.getByRole("switch", { name: "Geração real (OpenAI)" });
+    const geracao = screen.getByRole("switch", { name: "Geração real (OpenRouter)" });
     expect(geracao).toHaveAttribute("aria-checked", "false");
     fireEvent.click(geracao);
-    let dialogo = await screen.findByRole("alertdialog", { name: "Ativar geração real (openai)?" });
+    let dialogo = await screen.findByRole("alertdialog", { name: "Ativar geração real (openrouter)?" });
     fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
     expect(api.configurar).not.toHaveBeenCalled();
     expect(geracao).toHaveAttribute("aria-checked", "false");
     fireEvent.click(geracao);
-    dialogo = await screen.findByRole("alertdialog", { name: "Ativar geração real (openai)?" });
+    dialogo = await screen.findByRole("alertdialog", { name: "Ativar geração real (openrouter)?" });
     fireEvent.click(within(dialogo).getByRole("button", { name: "Confirmar ativação" }));
-    await waitFor(() => expect(screen.getByRole("switch", { name: "Geração real (OpenAI)" })).toHaveAttribute("aria-checked", "true"));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Geração real (OpenRouter)" })).toHaveAttribute("aria-checked", "true"));
     expect(api.configurar).toHaveBeenCalledExactlyOnceWith({ geracao_real: true });
-    expect(screen.getByRole("switch", { name: "Eventos de pagamento" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("switch", { name: "Eventos de pagamento" })).toBeNull();
     expect(visao.config.pagamentos).toBe(false);
   });
 });

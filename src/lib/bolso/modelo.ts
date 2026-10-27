@@ -66,7 +66,7 @@ export interface Job {
   tipo: "texto" | "imagem";
   formato: Formato | null;
   estado: EstadoDoJob;
-  provedor: "simulado" | "openai";
+  provedor: "simulado" | "openai" | "openrouter";
   tarifa: number;
   carteira: "real" | "teste";
   versao_campanha: number | null;

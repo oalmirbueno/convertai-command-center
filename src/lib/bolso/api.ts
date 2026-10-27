@@ -27,6 +27,21 @@ async function rpc<T>(nome: string, args?: Record<string, unknown>): Promise<T> 
 
 export const lerEstado = () => rpc<EstadoDoEstudio>("bolso_estado");
 export const lerExtrato = (limite = 50) => rpc<LancamentoDoExtrato[]>("bolso_extrato", { _limite: limite });
+export interface OfertaBolso {
+  id: string; codigo: string; versao: number; nome: string; descricao: string;
+  preco_centavos: number; moeda: "BRL"; creditos: number; validade_dias: number;
+  tarifa_texto: number; tarifa_imagem: number; formatos: Formato[];
+}
+export interface OfertaAdminBolso extends OfertaBolso {
+  politica_id: string; provisao_ia_centavos: number;
+  estado: "rascunho" | "publicado" | "arquivado";
+}
+export type DadosOfertaBolso = Pick<OfertaAdminBolso, "codigo" | "nome" | "descricao" | "preco_centavos" | "creditos" | "validade_dias" | "politica_id" | "provisao_ia_centavos">;
+export const lerOfertas = () => rpc<{ pagamentos_habilitados: boolean; ofertas: OfertaBolso[] }>("bolso_ofertas_listar");
+export const lerOfertasAdmin = () => rpc<OfertaAdminBolso[]>("bolso_admin_ofertas_listar");
+export const salvarOferta = (dados: DadosOfertaBolso) => rpc<string>("bolso_admin_oferta_salvar", { _dados: dados });
+export const publicarOferta = (id: string) => rpc<void>("bolso_admin_oferta_aprovar", { _id: id });
+export const arquivarOferta = (id: string) => rpc<void>("bolso_admin_oferta_arquivar", { _id: id });
 export const lerMarca = () => rpc<Marca | null>("bolso_marca_ler");
 export const salvarMarca = (m: Marca) => rpc<Marca>("bolso_marca_salvar", { _dados: m, _versao: m.versao ?? null });
 export const listarCampanhas = () => rpc<ResumoDaCampanha[]>("bolso_campanhas_listar");
