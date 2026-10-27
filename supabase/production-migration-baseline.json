@@ -2713,6 +2713,14 @@
       "remote_name": "bolso_carteiras_recargas_openrouter",
       "remote_statements_sha256": "cf00eb45069ce501b8d96c0c36f8b8f90c987ae875549ca39edbeae719aa3a78",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261028090000",
+      "path": "supabase/migrations/20261028090000_mercurio_proposta_e_bolso.sql",
+      "local_sha256": "3eb8d3016ac8370051f57c7c080f00240a3d9dc5356f35d88f09ff4251a89387",
+      "remote_name": "mercurio_proposta_e_bolso",
+      "remote_statements_sha256": "6a191f1947bf5f6c08478a19d5d2edf8fbf20630002d39eb30715166e3cbcd06",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
