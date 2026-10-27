@@ -33,6 +33,8 @@ import {
   lerReferenciasComPapel,
   MAX_PEDIDO_DA_PAUTA,
   MAX_REFERENCIAS_DA_PAUTA,
+  caminhoDaFotoDaPauta,
+  MENSAGEM_DA_FOTO_REAL,
   ordenarReferencias,
   promptDaFotoDaPauta,
   type PapelDaReferencia,
@@ -65,6 +67,56 @@ const REF_IMAGEM = "cliente_imagem";
 export function acoesDaFotoDaPauta(f: FerramentasDaMesa, x: ExtrasDaFotoDaPauta) {
   const db = () => f.servico();
 
+  type RefComFoto = { imagem_id: string; img: { id: string; nome: string; storage_bucket?: string | null; storage_path: string } };
+  /** Antes e depois montado no código com as duas fotos reais, sem IA e sem custo (montagem-antes-depois.ts). */
+  async function montagemReal(ch: Chamador, clientId: string, taskId: string | null, formato: Formato, antes: RefComFoto, depois: RefComFoto, titulo: string | null) {
+    const [l, a] = TAMANHO_DO_FORMATO[formato].split("x").map(Number);
+    const [ia, id] = await Promise.all([antes, depois].map((r) => f.baixarReduzida(r.img.storage_bucket || "mesa", r.img.storage_path, 2048, r.img.nome)));
+    let bytes: Uint8Array;
+    try {
+      // Sob demanda (FN-01): o imagescript só carrega quando há montagem.
+      const { montarAntesEDepois } = await import("./montagem-antes-depois.ts");
+      bytes = await montarAntesEDepois(ia.bytes, id.bytes, l, a);
+    } catch (e) {
+      registrarFalha("mesa-foto: antes e depois não montado", e, { antes: antes.imagem_id, depois: depois.imagem_id });
+      throw new ErroDeRegra(422, "montagem_falhou", "Não foi possível abrir uma das fotos para montar o antes e depois. Tente com a foto em JPEG ou PNG.");
+    }
+    const caminho = `${clientId}/foto/pauta/${taskId ?? "avulsa"}/${crypto.randomUUID()}.jpg`;
+    await f.salvarNoMesa(caminho, bytes, "image/jpeg");
+    const { data: img, error } = await db().from("cliente_imagens").insert({
+      client_id: clientId,
+      origem: "mesa_foto",
+      storage_bucket: "mesa",
+      storage_path: caminho,
+      nome: `${titulo || "Antes e depois"} (fotos reais)`.slice(0, 160),
+      pasta: "Mesa Foto / Pauta",
+      categoria: null,
+      tags: Array.from(new Set(["mesa_foto", "pauta", "antes_e_depois", "montagem_real", ...(taskId ? [`task:${taskId}`] : [])])),
+      descricao: "Antes e depois montado com as duas fotos reais, sem IA e sem retoque.",
+      derivada_de: antes.imagem_id,
+      gerada: false,
+      modo: null,
+      kit_id: null,
+      sha256: await sha256Hex(bytes),
+      largura: l,
+      altura: a,
+      aprovada: false,
+    }).select(f.camposImagem).single();
+    if (error || !img) throw new ErroDeRegra(503, "gravacao_falhou", "A montagem ficou pronta, mas não entrou no acervo. Tente de novo.");
+    const url = await f.urlAssinada("mesa", caminho);
+    return f.json({
+      imagem: { ...(img as unknown as Record<string, unknown>), url },
+      url,
+      prompt: null,
+      referencias: [{ ordem: 1, imagem_id: antes.imagem_id, papel: "antes" }, { ordem: 2, imagem_id: depois.imagem_id, papel: "depois" }],
+      custo_usd: 0,
+      saldo_usd: null,
+      reserva_usada: null,
+      avisos: [],
+      montagem_real: true,
+    });
+  }
+
   async function fotoDaPautaGerar(ch: Chamador, corpo: Record<string, unknown>) {
     const clientId = String(corpo.client_id ?? "");
     if (!UUID.test(clientId)) throw new ErroDeRegra(400, "client_id_invalido", "Cliente inválido.");
@@ -92,6 +144,11 @@ export function acoesDaFotoDaPauta(f: FerramentasDaMesa, x: ExtrasDaFotoDaPauta)
       return { ...r, img };
     });
     const ordenadas = ordenarReferencias(comFoto);
+    // 27/10 (dono): foto real nunca vai ao gerador (ele redesenha). Antes e depois: montagem com os pixels reais.
+    const posPedida = corpo.posicao && typeof corpo.posicao === "object" ? Number((corpo.posicao as Record<string, unknown>).atual) || 1 : 1;
+    const caminhoReal = caminhoDaFotoDaPauta(ordenadas, posPedida);
+    if (caminhoReal.tipo === "real_como_esta") throw new ErroDeRegra(409, "foto_real_intacta", MENSAGEM_DA_FOTO_REAL);
+    if (caminhoReal.tipo === "montagem") return await montagemReal(ch, clientId, taskId, formato, ordenadas[caminhoReal.par.antes], ordenadas[caminhoReal.par.depois], limpo(corpo.titulo, 140) || null);
     const avisos: string[] = [];
     const [estilo, contexto] = await Promise.all([
       x.resolverEstilo(clientId, corpo.guia),

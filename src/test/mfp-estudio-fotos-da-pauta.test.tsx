@@ -101,21 +101,40 @@ describe("Estúdio da pauta de fotos: 4 ações claras", () => {
 });
 
 describe("Gerar manda contexto, estilo e referências com papel", () => {
-  it("o corpo leva a direção da pauta, o estilo escolhido e antes/depois marcados", async () => {
+  it("só produto: o gerador recebe a direção da pauta, o estilo e a referência com papel", async () => {
     m.chamarFuncao.mockResolvedValue({ imagem: foto("nova", "Foto nova", { gerada: true, aprovada: false }), custo_usd: 0.04, avisos: [] });
     const onFotos = vi.fn();
-    comCache(<GerarFotosDaPauta taskId="t1" titulo="Reforma da sala" direcao={{ tema: "Reforma da sala", cenario: "sala clara" }} referencias={[{ imagem_id: B, papel: "depois" }, { imagem_id: A, papel: "antes" }]} onReferencias={vi.fn()} onFotos={onFotos} />);
-    expect(screen.getByRole("radiogroup", { name: "Estilo da foto" })).toBeInTheDocument();
+    comCache(<GerarFotosDaPauta taskId="t1" titulo="Reforma da sala" direcao={{ tema: "Reforma da sala", cenario: "sala clara" }} referencias={[{ imagem_id: A, papel: "produto" }]} onReferencias={vi.fn()} onFotos={onFotos} />);
     fireEvent.click(screen.getByRole("radio", { name: /Editorial claro/ }));
-    expect(screen.getByText(/Antes e depois: a foto sai como comparação fiel/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Gerar/ }));
     await waitFor(() => expect(m.chamarFuncao).toHaveBeenCalled());
     const [funcao, corpo] = m.chamarFuncao.mock.calls[0];
     expect(funcao).toBe("mesa-foto");
     expect(corpo).toMatchObject({ acao: "foto_da_pauta_gerar", client_id: "c1", task_id: "t1", titulo: "Reforma da sala", guia: { modo: "biblioteca", prompt_id: "est-1" }, modelo_imagem_id: "img-1", formato: "4:5", marca_id: "m1" });
     expect(corpo.pedido).toMatch(/sala clara/);
-    expect(corpo.referencias).toEqual([{ imagem_id: B, papel: "depois" }, { imagem_id: A, papel: "antes" }]);
+    expect(corpo.referencias).toEqual([{ imagem_id: A, papel: "produto" }]);
     await waitFor(() => expect(onFotos).toHaveBeenCalledWith(["nova"]));
+  });
+
+  it("antes e depois nunca vão ao gerador: viram a montagem com as fotos reais, sem custo", async () => {
+    m.chamarFuncao.mockResolvedValue({ imagem: foto("mont", "Antes e depois (fotos reais)"), custo_usd: 0, avisos: [], montagem_real: true });
+    const onFotos = vi.fn();
+    comCache(<GerarFotosDaPauta taskId="t1" titulo="Reforma da sala" referencias={[{ imagem_id: B, papel: "depois" }, { imagem_id: A, papel: "antes" }]} onReferencias={vi.fn()} onFotos={onFotos} />);
+    expect(screen.queryByRole("button", { name: /^Gerar/ })).toBeNull();
+    expect(screen.getByText(/sem IA e sem custo/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Montar antes e depois" }));
+    await waitFor(() => expect(onFotos).toHaveBeenCalledWith(["mont"]));
+    const corpo = m.chamarFuncao.mock.calls[0][1];
+    expect(corpo).toMatchObject({ acao: "foto_da_pauta_gerar", guia: { modo: "nenhum" }, posicao: { atual: 1, total: 1 } });
+    expect(corpo.referencias).toEqual([{ imagem_id: A, papel: "antes" }, { imagem_id: B, papel: "depois" }]);
+  });
+
+  it("foto do lugar sem par entra no post como está, sem chamar nada", () => {
+    const onFotos = vi.fn();
+    comCache(<GerarFotosDaPauta taskId="t1" titulo="Pauta" referencias={[{ imagem_id: A, papel: "cenario" }]} onReferencias={vi.fn()} onFotos={onFotos} />);
+    fireEvent.click(screen.getByRole("button", { name: "Usar as fotos reais" }));
+    expect(onFotos).toHaveBeenCalledWith([A]);
+    expect(m.chamarFuncao).not.toHaveBeenCalled();
   });
 
   it("trocar o papel de uma referência chega na lista", () => {

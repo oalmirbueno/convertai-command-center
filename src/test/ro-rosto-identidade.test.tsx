@@ -154,7 +154,10 @@ describe("2. Foto exata: continua intacta", () => {
   it("o caminho da foto real fixa não mudou: alinhamento, recorte das letras e máscara com a logo", () => {
     const g = trecho("async function gerarCard(", "async function gravarVersao(");
     expect(g).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
-    expect(g).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });");
+    expect(g).toContain("const volta = img.tamanho === quadro.tamanho ? await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa }) : null;");
+    // 27/10: sem garantia de que só as letras mudaram, a imagem do gerador nunca vai para a lâmina (placa de texto + foto intacta).
+    expect(g).toContain("if (fotoFixa && (!volta || !volta.recortouTexto)) {");
+    expect(g).toContain("await letrasSobreAFoto(baseFoto, placa.png, chave.rgb)");
     expect(g).toContain("const mascaraComLogo = cenaFixa;");
   });
 
