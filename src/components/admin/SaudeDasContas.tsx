@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertTriangle, CheckCircle2, Link2Off } from "lucide-react";
 import { Carregando, EstadoDeErro, EstadoVazio, Painel, botao, etiqueta, juntar, texto } from "@/components/sistema";
+import { conexaoVencida } from "@/lib/config/metaUsuarioDoSistema";
 
 /**
  * Quais contas estão realmente medindo, e quais só parecem estar.
@@ -56,7 +57,7 @@ export default function SaudeDasContas() {
 
       const [conexoes, perfis, metricas] = await Promise.all([
         (supabase as any).from("external_account_connections")
-          .select("external_account_id, connection_status, automation_enabled, expires_at")
+          .select("external_account_id, connection_status, automation_enabled, expires_at, data_access_expires_at")
           .in("external_account_id", ids),
         (supabase as any).from("profiles").select("id, full_name, company_name")
           .in("id", [...new Set(((contas || []) as any[]).map((c) => c.client_id))].filter(Boolean)),
@@ -85,7 +86,8 @@ export default function SaudeDasContas() {
           cliente: nomeDe.get(c.client_id) ?? null,
           conectada: cx?.connection_status === "connected",
           automacao: cx?.automation_enabled === true,
-          vencida: Boolean(cx?.expires_at && new Date(cx.expires_at) < new Date()),
+          // Prazo nulo (usuário do sistema) não vence: nunca acusa.
+          vencida: conexaoVencida(cx),
           posts: met.n,
           ultima: met.ultima,
         } as Linha;

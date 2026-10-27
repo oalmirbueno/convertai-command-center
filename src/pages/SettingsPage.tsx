@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Brain, Building2, CalendarHeart, ChevronRight, Cpu, KeyRound, Moon, Palette, Shield, Sparkles, Sun, User, Users } from "lucide-react";
+import { Bell, Brain, Building2, CalendarHeart, ChevronRight, Cpu, KeyRound, Link2, Moon, Palette, Shield, Sparkles, Sun, User, Users } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -200,6 +200,14 @@ export default function SettingsPage() {
           >
             <ChavesECustos destaque={destaque} />
           </LinhaQueAbre>
+        )}
+        {admin && (
+          <LinhaDeAcao
+            icone={<Link2 className="h-4 w-4" />}
+            rotulo="Meta pelo usuário do sistema"
+            apoio="Token da BM que não vence, para publicar e medir"
+            onClick={() => navigate("/config/meta-usuario-do-sistema")}
+          />
         )}
         <LinhaQueAbre
           id="motores"
