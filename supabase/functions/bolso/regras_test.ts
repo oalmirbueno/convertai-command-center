@@ -114,7 +114,9 @@ Deno.test("tipo do arquivo pela assinatura, não pelo que o fornecedor diz", asy
 Deno.test("modelo fora da lista não passa; OpenAI desligada por padrão", () => {
   assertEquals(modeloPermitido("texto", "gpt-qualquer"), null);
   assert(!openaiPronta({}).ok);
-  assert(!openaiPronta({ habilitado: "sim", chave: "x", modeloTexto: "gpt-qualquer", modeloImagem: "gpt-image-1" }).ok);
+  assert(!openaiPronta({ habilitado: "sim", chave: "x", modeloTexto: "gpt-qualquer", modeloImagem: "gpt-image-2" }).ok);
+  assertEquals(modeloPermitido("imagem", "gpt-image-1"), null);
+  assertEquals(modeloPermitido("imagem", "gpt-image-2"), "gpt-image-2");
 });
 
 Deno.test("adaptador OpenAI desligado não chama a rede", async () => {
@@ -126,7 +128,7 @@ Deno.test("adaptador OpenAI desligado não chama a rede", async () => {
 });
 
 Deno.test("adaptador OpenAI (fetch simulado): resposta válida passa pela conferência; rede caída fica incerta", async () => {
-  const env = { habilitado: "sim", chave: "chave-de-teste", modeloTexto: "gpt-4.1-mini", modeloImagem: "gpt-image-1" };
+  const env = { habilitado: "sim", chave: "chave-de-teste", modeloTexto: "gpt-4.1-mini", modeloImagem: "gpt-image-2" };
   const ok = openai(env, () => Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ mensagem: "m", texto: "Bolo de pote fresquinho", cta: "Peça no direct" }) } }] }))));
   const r1 = await ok.texto({ marca: MARCA, briefing: BRIEFING, versao: null, formato: null });
   assert(r1.ok);
@@ -139,7 +141,7 @@ Deno.test("adaptador OpenAI (fetch simulado): resposta válida passa pela confer
 });
 
 Deno.test("adaptador recusa copy nova longa e ainda envia arte de versão histórica sem cortar texto", async () => {
-  const env = { habilitado: "sim", chave: "chave-de-teste", modeloTexto: "gpt-4.1-mini", modeloImagem: "gpt-image-1" };
+  const env = { habilitado: "sim", chave: "chave-de-teste", modeloTexto: "gpt-4.1-mini", modeloImagem: "gpt-image-2" };
   const contexto = { marca: MARCA, briefing: BRIEFING, versao: null, formato: null };
   for (const versao of [{ mensagem: "a".repeat(81), cta: "Peça" }, { mensagem: "Seu bolo", cta: "b".repeat(51) }]) {
     const p = openai(env, () => Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ...versao, texto: "Legenda completa" }) } }] }))));
