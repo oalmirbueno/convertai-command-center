@@ -139,7 +139,7 @@ function CartaoDeRisco({ c, logo }: { c: ClienteEmRisco; logo: string | null }) 
     <li className="min-w-0" data-risco={c.clientId}>
       <CartaoQueLeva para={destinoDoRisco(c)} rotulo={`Abrir a pauta na Mesa: ${c.nome}`}>
         <span className="flex min-w-0 items-start">
-          <LogoDoCliente url={logo} nome={c.nome} tamanho={36} className="mr-3" />
+          <LogoDoCliente url={logo} clienteId={c.clientId} nome={c.nome} tamanho={36} className="mr-3" />
           <span className="min-w-0 flex-1">
             <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.nome}</span>
             <span className={juntar(texto.auxiliar, "block truncate")}>{c.falta || c.situacao}</span>
@@ -235,7 +235,7 @@ export default function Hoje() {
                     <Grade itens={r.campanhas} rotulo="Dá para fazer campanha" cartao={(c) => (
                       <li key={c.clientId} className="min-w-0" data-campanha-do-dia={c.clientId}>
                         <Link to={destinoDaCampanha(c)} className={juntar(cartaoLink, "flex-row items-center p-3")} title="Abrir Campanhas" aria-label={`Abrir Campanhas: ${c.nome} · ${c.tema}`}>
-                          <LogoDoCliente url={logoDe(c.clientId)} nome={c.nome} tamanho={32} className="mr-3" />
+                          <LogoDoCliente url={logoDe(c.clientId)} clienteId={c.clientId} nome={c.nome} tamanho={32} className="mr-3" />
                           <span className="min-w-0 flex-1">
                             <span className={juntar(texto.corpo, "flex min-w-0 items-center font-medium")}><Flame className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 truncate">{c.tema}</span></span>
                             <span className={juntar(texto.auxiliar, "block truncate")} title={c.porQue || undefined}>{c.nome}{c.porQue ? ` · ${c.porQue}` : ""}</span>

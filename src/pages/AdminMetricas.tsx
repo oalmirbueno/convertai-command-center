@@ -28,7 +28,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import SaudeDasContas, { AJUDA_DA_SAUDE } from "@/components/admin/SaudeDasContas";
-import LogoDoCliente, { useIdentidadesPorConta } from "@/components/admin/LogoDoCliente";
+import LogoDoCliente, { useIdentidadesPorConta, type IdentidadeMinima } from "@/components/admin/LogoDoCliente";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import IdentidadeDoCliente from "@/components/admin/IdentidadeDoCliente";
 import {
   AreaDeTrabalho,
@@ -105,6 +106,17 @@ const fmtWeek = (row: SocialMetricsWeek) => {
 };
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+/**
+ * A logo dos arquivos é do CLIENTE, e a linha é de uma CONTA: só serve de
+ * reserva quando o cliente tem uma conta só. Com duas (@aceleriq e
+ * @sitebolt), a foto vencida de uma não pode virar a marca da outra.
+ */
+function clienteDaContaUnica(identidades: Map<string, IdentidadeMinima> | undefined, clientId: string): string | null {
+  let contas = 0;
+  for (const i of identidades?.values() ?? []) if (i.client_id === clientId) contas += 1;
+  return contas <= 1 ? clientId : null;
+}
 
 function DeltaBadge({ pct, className = "" }: { pct: number | null; className?: string }) {
   if (pct == null) return null;
@@ -278,6 +290,7 @@ function ClientMetricsDetail({
   const [pedindoLeitura, setPedindoLeitura] = useState(false);
   const queryClient = useQueryClient();
   const { data: identity } = useSocialClientIdentity(clientId, accountId);
+  const { data: identidadesPorConta } = useIdentidadesPorConta();
   const { data: evolucao } = useUltimaEvolucao(clientId);
   const { data: daMesa } = useDesempenhoDaMesa(clientId, 30);
   const { data: conexao } = useAdsConnection();
@@ -336,18 +349,15 @@ function ClientMetricsDetail({
 
   const destaques = rankedPosts.slice(0, 6);
 
-  const foto = identity?.profile_picture_url ? (
-    <img
-      src={identity.profile_picture_url}
+  const foto = (
+    <FotoDoCliente
+      nome={clientName}
+      fotos={identity?.profile_picture_url ? [{ url: identity.profile_picture_url, tipo: "instagram" }] : null}
+      clienteId={clienteDaContaUnica(identidadesPorConta, clientId)}
+      lado={32}
       alt=""
-      referrerPolicy="no-referrer"
-      className="mr-2.5 h-8 w-8 shrink-0 rounded-full border border-border object-cover"
-      onError={(event) => {
-        (event.target as HTMLImageElement).style.display = "none";
-      }}
+      className="mr-2.5"
     />
-  ) : (
-    <LogoDoCliente url={null} nome={clientName} tamanho={32} className="mr-2.5" />
   );
 
   const site = identity?.website ? identity.website.replace(/^https?:\/\//, "") : "";
@@ -880,6 +890,7 @@ export default function AdminMetricas() {
                               {/* A marca antes do nome: o olho acha antes da palavra. */}
                               <LogoDoCliente
                                 url={identidades?.get(accountId)?.profile_picture_url}
+                                clienteId={clienteDaContaUnica(identidades, clientId)}
                                 nome={clientNames.get(clientId)}
                                 tamanho={32}
                                 className="mr-2.5"

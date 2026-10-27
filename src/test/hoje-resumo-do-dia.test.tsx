@@ -17,6 +17,8 @@ import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
 const resposta: { data: unknown; error: { message: string; code?: string } | null } = { data: null, error: null };
 const rpc = vi.fn(async () => resposta);
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: (...a: unknown[]) => (rpc as any)(...a) } }));
+// A logo do cartão busca a foto da carteira pelo id; sem pessoa logada a consulta nem sai.
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null, profile: null }) }));
 vi.mock("@/components/admin/LogoDoCliente", async (orig) => ({ ...(await orig<any>()), useIdentidadesDosClientes: () => ({ data: new Map() }) }));
 
 import Hoje from "@/pages/Hoje";

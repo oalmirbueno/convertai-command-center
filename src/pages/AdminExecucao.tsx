@@ -483,7 +483,7 @@ export default function AdminExecucao() {
       const respostas = await Promise.all(lotes.map(async (lote) => {
         const { data, error } = await (supabase as any)
           .from("tasks")
-          .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, description, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+          .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, description, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(id, full_name, company_name))")
           .in("id", lote);
         // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
         // sem projeto nem cliente, como se o dado nao existisse.
@@ -532,7 +532,7 @@ export default function AdminExecucao() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, status, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+        .select("id, title, status, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(id, full_name, company_name))")
         .in("status", ["backlog", "todo", "doing", "review"])
         .is("deleted_at", null)
         .order("due_date", { ascending: true, nullsFirst: false })
@@ -1528,7 +1528,7 @@ export default function AdminExecucao() {
       // A prova em destaque (imagem, print, PDF), que abre ali mesmo para aprovar com contexto.
       midia: (emRevisao || travada) && !fechada ? <ProvaDaEntrega linkId={v.id} ultimaProva={v.last_evidence} aoConversar={() => setDiarioAberto({ linkId: v.id, titulo: nome.texto, aba: "hermes" })} /> : undefined,
       cliente: nomeCliente,
-      avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
+      avatar: <FotoDoCliente nome={nomeCliente} clienteId={cliente?.id ? String(cliente.id) : null} tamanho="sm" />,
       titulo,
       // Travada: o motivo já aparece no desenho ("Parou aqui"); não repete em cima.
       mensagem: fechada ? "A tarefa foi cancelada, arquivada ou excluída no Kanban. Esta execução ficou sobrando e pode sair da lista." : travada ? null : fala,

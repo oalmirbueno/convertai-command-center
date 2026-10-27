@@ -17,7 +17,7 @@ vi.mock("@/hooks/useAvisosDePublicacao", () => ({
   chamarAviso: estado.aviso,
   useAvisosDePublicacao: () => ({ data: estado.avisos, isLoading: false, error: null }),
 }));
-vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null }) }));
+vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null, fotosDe: () => [] }) }));
 vi.mock("@/lib/fileUrls", () => ({ useResolvedFileUrl: () => ({ url: "" }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 

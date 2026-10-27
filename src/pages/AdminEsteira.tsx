@@ -91,7 +91,7 @@ export default function AdminEsteira() {
   const { total: revisoesPendentes } = useCentralReviewPendentes(profile?.role === "admin");
   const canWrite = !erro && ["admin", "manager"].includes(profile?.role || "");
   const clientesParaFoto = useMemo(() => clientes.map((c) => ({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })), [clientes]);
-  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
+  const { fotosDe } = useFotosDosClientes(clientesParaFoto);
   const [detalheId, setDetalheId] = useState<string | null>(null);
   // Cronômetro por cliente (frente CR): a ficha do cliente aberta no Ciclo conta no tempo dele.
   useClienteEmFoco(detalheId);
@@ -307,7 +307,7 @@ export default function AdminEsteira() {
                     cliente={c}
                     frente={frente}
                     weekStart={weekStart}
-                    foto={fotoDe({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })}
+                    fotos={fotosDe({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })}
                     onAbrir={() => setDetalheId(c.id)}
                     onMudou={recarregarAposAcao}
                   />
@@ -423,11 +423,11 @@ function SemanaNav({ segunda, quando, offset, onMudar, onHoje }: { segunda: Date
 }
 
 /** Um cliente na lista: sem caixa, as três linhas que mais pedem e os rituais. */
-function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou }: {
+function CartaoDoCliente({ cliente: c, frente, weekStart, fotos, onAbrir, onMudou }: {
   cliente: ClienteDaEsteira;
   frente: "social" | "trafego";
   weekStart: string;
-  foto: ReturnType<ReturnType<typeof useFotosDosClientes>["fotoDe"]>;
+  fotos: ReturnType<ReturnType<typeof useFotosDosClientes>["fotosDe"]>;
   onAbrir: () => void;
   onMudou: () => void;
 }) {
@@ -441,7 +441,7 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou
   return (
     <button type="button" onClick={onAbrir} className={juntar("block w-full min-w-0 rounded-md px-1 py-3 text-left transition-colors hover:bg-muted/40 lg:px-2", foco)}>
       <span className="flex min-w-0 items-center">
-        <span className="mr-2.5 shrink-0"><FotoDoCliente nome={c.nome} foto={foto} tamanho="md" /></span>
+        <span className="mr-2.5 shrink-0"><FotoDoCliente nome={c.nome} fotos={fotos} tamanho="md" /></span>
         <span className="mr-2 min-w-0 flex-1">
           <span className="block truncate text-[14px] font-semibold leading-5">{c.nome}</span>
           {/* 16/10/2026 (dono, celular mais limpo): abaixo de 640 px o cartão é

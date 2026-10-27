@@ -48,7 +48,7 @@ vi.mock("@/hooks/useFinanceV2", () => ({
   useFinanceSettings: () => ({ data: null }),
 }));
 vi.mock("@/hooks/useFinancialData", () => ({ useBilling: () => ({ data: [] }) }));
-vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null }) }));
+vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null, fotosDe: () => [] }) }));
 vi.mock("@/components/cronometro/CronometroProvider", () => ({ useClienteEmFoco: () => undefined }));
 vi.mock("@/components/admin/EditClientDrawer", () => ({ default: () => null }));
 vi.mock("@/components/admin/CreateClientModal", () => ({ default: () => null }));

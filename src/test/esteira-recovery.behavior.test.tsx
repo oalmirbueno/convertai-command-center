@@ -15,7 +15,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: dbState.fro
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: dbState.userId }, profile: { role: dbState.role } }) }));
 vi.mock("@/hooks/useNow", () => ({ useNow: () => new Date("2026-09-12T12:00:00Z") }));
 vi.mock("@/hooks/usePwaProfile", () => ({ usePwaProfile: () => undefined }));
-vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null }) }));
+vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null, fotosDe: () => [] }) }));
 vi.mock("@/components/esteira/EsteiraClientSheet", () => ({ default: () => null }));
 
 function response(data: Row[] = []): DbResult { return { data, error: null }; }

@@ -1,10 +1,13 @@
 /**
- * A cara do cliente no painel: a foto de cadastro, senao a foto do perfil
- * do Instagram (a mesma que /metricas mostra), senao a logo mais
- * "de perfil" que existe nos arquivos dele. Sem nada, as iniciais.
+ * A cara do cliente no painel, como uma LISTA de candidatas em ordem: a foto
+ * de cadastro, a logo dos arquivos (miniatura leve) e a foto do perfil do
+ * Instagram. Quem desenha tenta a primeira e, se a imagem nao abrir, passa
+ * para a seguinte; sem nenhuma, as iniciais.
  *
- * A ordem importa: o cadastro e o que alguem escolheu a mao; o Instagram e
- * a marca como o mundo a ve; a logo dos arquivos e um palpite bem feito.
+ * 26/10/2026: a logo subiu para antes do Instagram. O link da foto do perfil
+ * vem da CDN da Meta e vence em cerca de 4 dias (parametro `oe=`), enquanto a
+ * recaptura roda a cada 7: 12 de 16 fotos estavam vencidas e 11 clientes com
+ * logo nos arquivos caiam nas iniciais. Link vencido nem entra na lista.
  */
 
 export interface FotoDoCliente {
@@ -54,11 +57,60 @@ export function escolherArquivoDeLogo(arquivos: readonly ArquivoDeLogo[]): Arqui
   })[0];
 }
 
-export function fotoDoCliente(input: { avatarUrl?: string | null; instagramUrl?: string | null; logoUrl?: string | null }): FotoDoCliente | null {
-  if (input.avatarUrl && input.avatarUrl.trim()) return { url: input.avatarUrl, tipo: "foto" };
-  if (input.instagramUrl && input.instagramUrl.trim()) return { url: input.instagramUrl, tipo: "instagram" };
-  if (input.logoUrl && input.logoUrl.trim()) return { url: input.logoUrl, tipo: "logo" };
-  return null;
+/**
+ * Quando o link da Meta (fbcdn / cdninstagram) deixa de abrir: o parametro
+ * `oe=` e o vencimento em segundos desde 1970, escrito em hexadecimal.
+ * Link de outro lugar, ou sem `oe=`, devolve null (nao sabemos).
+ */
+export function vencimentoDoLinkDaMeta(url?: string | null): number | null {
+  const u = String(url ?? "");
+  if (!/^https?:\/\/[^/?#]*(fbcdn\.net|cdninstagram\.com|facebook\.com)(?=[/?#:]|$)/i.test(u)) return null;
+  const m = /[?&]oe=([0-9a-f]{6,12})(?=&|#|$)/i.exec(u);
+  if (!m) return null;
+  const segundos = parseInt(m[1], 16);
+  return Number.isFinite(segundos) && segundos > 0 ? segundos * 1000 : null;
+}
+
+export function linkDaMetaVencido(url?: string | null, agora: number = Date.now()): boolean {
+  const vence = vencimentoDoLinkDaMeta(url);
+  return vence !== null && vence <= agora;
+}
+
+/** Junta listas de candidatas: tira vazio, link da Meta vencido e repetido, mantendo a ordem. */
+export function juntarCandidatas(
+  listas: ReadonlyArray<ReadonlyArray<FotoDoCliente | null | undefined> | null | undefined>,
+  agora: number = Date.now(),
+): FotoDoCliente[] {
+  const vistas = new Set<string>();
+  const saida: FotoDoCliente[] = [];
+  for (const lista of listas) {
+    for (const f of lista ?? []) {
+      const url = f?.url?.trim();
+      if (!f || !url || vistas.has(url) || linkDaMetaVencido(url, agora)) continue;
+      vistas.add(url);
+      saida.push(url === f.url ? f : { ...f, url });
+    }
+  }
+  return saida;
+}
+
+/** As candidatas em ordem: cadastro, logo leve, Instagram (so se o link ainda abre). */
+export function candidatasDaFoto(input: {
+  avatarUrl?: string | null;
+  logoUrl?: string | null;
+  instagramUrl?: string | null;
+  agora?: number;
+}): FotoDoCliente[] {
+  return juntarCandidatas([[
+    input.avatarUrl ? { url: input.avatarUrl, tipo: "foto" } : null,
+    input.logoUrl ? { url: input.logoUrl, tipo: "logo" } : null,
+    input.instagramUrl ? { url: input.instagramUrl, tipo: "instagram" } : null,
+  ]], input.agora);
+}
+
+/** A primeira candidata (quem so guarda uma foto). */
+export function fotoDoCliente(input: { avatarUrl?: string | null; instagramUrl?: string | null; logoUrl?: string | null; agora?: number }): FotoDoCliente | null {
+  return candidatasDaFoto(input)[0] ?? null;
 }
 
 /** Duas letras para o circulo sem foto: "Mirante Luz Floripa" -> "ML". */

@@ -219,7 +219,7 @@ export default function AprovacoesExplicadas({
       tipo: ROTULO_ACAO[a.action_kind] || a.action_kind,
       tomDoTipo: a.reversivel ? "aviso" : "perigo",
       cliente,
-      avatar: <FotoDoCliente nome={cliente} foto={null} tamanho="sm" />,
+      avatar: <FotoDoCliente nome={cliente} clienteId={a.client_id || null} tamanho="sm" />,
       titulo: String(relatorio?.title || a.o_que),
       mensagem: typeof relatorio?.summary === "string" && relatorio.summary.trim() ? relatorio.summary : a.por_que,
       passo: typeof relatorio?.next_steps === "string" && relatorio.next_steps.trim() ? relatorio.next_steps : null,

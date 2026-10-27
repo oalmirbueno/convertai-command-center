@@ -4,9 +4,10 @@ import { escolherArquivoDeLogo, fotoDoCliente, iniciaisDoCliente, pontuarLogo, t
 const arq = (file_name: string, over: Partial<ArquivoDeLogo> = {}): ArquivoDeLogo => ({ id: file_name, client_id: "c1", file_name, file_url: `files://c1/${file_name}`, mime_type: "image/png", created_at: "2026-09-01T00:00:00Z", ...over });
 
 describe("a cara do cliente", () => {
-  it("cadastro vence Instagram, que vence logo dos arquivos", () => {
+  it("cadastro vence a logo dos arquivos, que vence o Instagram (o link da Meta vence)", () => {
     expect(fotoDoCliente({ avatarUrl: "a", instagramUrl: "i", logoUrl: "l" })).toEqual({ url: "a", tipo: "foto" });
-    expect(fotoDoCliente({ avatarUrl: " ", instagramUrl: "i", logoUrl: "l" })).toEqual({ url: "i", tipo: "instagram" });
+    expect(fotoDoCliente({ avatarUrl: " ", instagramUrl: "i", logoUrl: "l" })).toEqual({ url: "l", tipo: "logo" });
+    expect(fotoDoCliente({ avatarUrl: " ", instagramUrl: "i", logoUrl: null })).toEqual({ url: "i", tipo: "instagram" });
     expect(fotoDoCliente({ avatarUrl: null, instagramUrl: null, logoUrl: "l" })).toEqual({ url: "l", tipo: "logo" });
     expect(fotoDoCliente({})).toBeNull();
   });

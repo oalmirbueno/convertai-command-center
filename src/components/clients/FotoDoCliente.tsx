@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { iniciaisDoCliente, type FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
+import { useState, type CSSProperties } from "react";
+import { iniciaisDoCliente, juntarCandidatas, type FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
+import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 
 const TAMANHO = {
   sm: { caixa: "h-9 w-9", texto: "text-[12px]", borda: "p-1" },
@@ -10,39 +11,79 @@ const TAMANHO = {
 
 interface Props {
   nome: string;
-  foto: Foto | null;
+  /** Uma foto que a tela ja tem em maos (entra antes das outras). */
+  foto?: Foto | null;
+  /** Candidatas em ordem; a seguinte entra se a anterior nao abrir. */
+  fotos?: readonly Foto[] | null;
+  /** Com o id, busca sozinho as candidatas do cliente (cache unico da carteira). */
+  clienteId?: string | null;
   tamanho?: keyof typeof TAMANHO;
+  /** Lado em px, no lugar de `tamanho` (o LogoDoCliente usa). */
+  lado?: number;
+  forma?: "redonda" | "quadrada";
+  /** Dica quando so sobram as iniciais. */
+  tituloSemFoto?: string;
+  alt?: string;
   className?: string;
 }
 
 /**
  * O circulo com a cara do cliente. Foto (cadastro ou Instagram) preenche o
  * circulo; logo de arquivo entra inteira, com respiro e fundo claro, para
- * nao cortar a marca nem sumir num fundo escuro. Sem imagem, as iniciais.
+ * nao cortar a marca nem sumir num fundo escuro. Se a imagem nao abrir
+ * (link vencido, arquivo sumido), passa para a candidata seguinte; so sem
+ * nenhuma aparecem as iniciais. A caixa tem tamanho fixo desde o primeiro
+ * quadro: a imagem chegando nao empurra a linha.
  */
-export default function FotoDoCliente({ nome, foto, tamanho = "md", className = "" }: Props) {
-  const [quebrou, setQuebrou] = useState(false);
-  useEffect(() => { setQuebrou(false); }, [foto?.url]);
-  const t = TAMANHO[tamanho];
-  const base = `${t.caixa} shrink-0 overflow-hidden rounded-full ${className}`;
+export default function FotoDoCliente(props: Props) {
+  if (props.clienteId) return <FotoComBusca {...props} clienteId={props.clienteId} />;
+  return <Desenho {...props} lista={juntarCandidatas([props.fotos, [props.foto]])} />;
+}
 
-  if (!foto || quebrou) {
+function FotoComBusca(props: Props & { clienteId: string }) {
+  const { fotosDe } = useFotosDosClientes();
+  return <Desenho {...props} lista={juntarCandidatas([props.fotos, [props.foto], fotosDe(props.clienteId)])} />;
+}
+
+function Desenho({ nome, lista, tamanho = "md", lado, forma = "redonda", tituloSemFoto, alt, className = "" }: Props & { lista: Foto[] }) {
+  // Guarda as que falharam (e nao um indice): a lista pode mudar quando a consulta chega.
+  const [quebradas, setQuebradas] = useState<readonly string[]>([]);
+  const atual = lista.find((f) => !quebradas.includes(f.url)) ?? null;
+  const t = TAMANHO[tamanho];
+  const arredondado = forma === "quadrada" ? "rounded-xl" : "rounded-full";
+  const caixa = lado ? "" : t.caixa;
+  const estilo: CSSProperties | undefined = lado ? { width: lado, height: lado } : undefined;
+  const base = `${caixa} shrink-0 overflow-hidden ${arredondado} ${className}`;
+  const quebrou = (url: string) => setQuebradas((q) => (q.includes(url) ? q : [...q, url]));
+
+  if (!atual) {
     return (
-      <div className={`${base} flex items-center justify-center bg-primary/15 font-semibold text-primary ${t.texto}`} aria-label={nome} role="img">
+      <div
+        className={`${base} flex items-center justify-center bg-primary/15 font-semibold text-primary ${lado ? "" : t.texto}`}
+        style={lado ? { ...estilo, fontSize: Math.max(10, lado * 0.32) } : undefined}
+        aria-label={nome}
+        title={tituloSemFoto}
+        role="img"
+      >
         {iniciaisDoCliente(nome)}
       </div>
     );
   }
-  if (foto.tipo === "logo") {
+  const texto = alt ?? nome;
+  if (atual.tipo === "logo") {
     return (
-      <div className={`${base} flex items-center justify-center bg-white ring-1 ring-border ${t.borda}`}>
-        <img src={foto.url} alt={nome} loading="lazy" onError={() => setQuebrou(true)} className="h-full w-full object-contain" />
+      <div
+        className={`${base} flex items-center justify-center bg-white ring-1 ring-border ${lado ? "" : t.borda}`}
+        style={lado ? { ...estilo, padding: Math.max(2, Math.round(lado * 0.1)) } : undefined}
+      >
+        <img key={atual.url} src={atual.url} alt={texto} loading="lazy" onError={() => quebrou(atual.url)} className="h-full w-full object-contain" />
       </div>
     );
   }
   return (
-    <div className={`${base} bg-secondary ring-1 ring-border/60`}>
-      <img src={foto.url} alt={nome} loading="lazy" referrerPolicy="no-referrer" onError={() => setQuebrou(true)} className="h-full w-full object-cover" />
+    <div className={`${base} bg-secondary ring-1 ring-border/60`} style={estilo}>
+      {/* A CDN da Meta recusa requisicao com referer de outro dominio. */}
+      <img key={atual.url} src={atual.url} alt={texto} loading="lazy" referrerPolicy="no-referrer" onError={() => quebrou(atual.url)} className="h-full w-full object-cover" />
     </div>
   );
 }

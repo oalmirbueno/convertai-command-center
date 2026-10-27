@@ -674,7 +674,7 @@ function ClientAdsDetail({
         voltar={{ para: "/anuncios", rotulo: "Anúncios" }}
         titulo={
           <span className="flex min-w-0 items-center">
-            <LogoDoCliente url={logoUrl} nome={clientName} tamanho={28} className="mr-2.5" />
+            <LogoDoCliente url={logoUrl} clienteId={clientId} nome={clientName} tamanho={28} className="mr-2.5" />
             <span className="min-w-0 truncate">{clientName}</span>
           </span>
         }
@@ -1606,6 +1606,7 @@ export default function AdminAds() {
                               {/* Mesma marca da grade de Métricas: reconhecer o cliente não pode depender da tela. */}
                               <LogoDoCliente
                                 url={identidades?.get(clientId)?.profile_picture_url}
+                                clienteId={clientId}
                                 nome={nomes.get(clientId)}
                                 tamanho={36}
                                 className="mr-2.5"

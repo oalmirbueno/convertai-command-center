@@ -28,7 +28,7 @@ vi.mock("@/hooks/useSocialMetrics", async (importOriginal) => ({ ...await import
 vi.mock("@/hooks/useAdsMetrics", () => ({ useAdsCampaigns: () => ({ data: state.empty }), useAdsDaily: () => ({ data: state.empty }) }));
 vi.mock("@/hooks/useNow", () => ({ useNow: () => state.now }));
 vi.mock("@/hooks/usePwaProfile", () => ({ usePwaProfile: () => undefined }));
-vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null }) }));
+vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null, fotosDe: () => [] }) }));
 vi.mock("@/hooks/useEsteira", () => ({ useEsteira: () => ({ clientes: state.cycleClients, carregando: false, atualizando: false, erro: null, recarregar: vi.fn() }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: vi.fn(), rpc: vi.fn(), functions: { invoke: state.invoke } } }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({

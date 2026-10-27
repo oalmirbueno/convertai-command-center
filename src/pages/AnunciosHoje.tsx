@@ -453,7 +453,7 @@ function CartaoDeAnuncio({ cartao: c, nome, logo, aoVerMudancas }: { cartao: Car
     <li className={juntar(superficie.painel, "flex min-w-0 flex-col p-4")} data-cartao-de-anuncio={c.clientId}>
       {/* Cabeçalho: logo, nome e o que pede atenção. */}
       <div className="flex min-w-0 items-center">
-        <LogoDoCliente url={logo} nome={nome} tamanho={32} className="mr-2.5" />
+        <LogoDoCliente url={logo} clienteId={c.clientId} nome={nome} tamanho={32} className="mr-2.5" />
         <p className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")} title={nome}>{nome}</p>
         {c.saldoBaixo && <Wallet className="ml-2 h-4 w-4 shrink-0 text-destructive" aria-label="Saldo baixo" />}
         {urgentes.length > 0 && <AlertTriangle className={juntar("ml-2 h-4 w-4 shrink-0", urgentes.some((x) => x.nivel === "critico") ? "text-destructive" : "text-warning")} aria-label={urgentes.map((x) => x.texto).join("; ")} />}

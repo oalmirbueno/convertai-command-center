@@ -19,6 +19,7 @@ import { useInvalidarContexto, type CandidatoALogo, type KitDoContexto } from ".
 import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
 import { estiloDoFundoDaLogo, fundoDeConferencia, tomGravado, useTomDaLogo, type FundoDaLogo, type TomDaLogo } from "./logoAnalise";
 import { escolherIdentidadePrincipal } from "@/lib/identidadePrincipal";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 
 /**
  * Logo principal e alternativa lado a lado: miniatura que abre maior, e
@@ -533,7 +534,7 @@ export default function LogosDaMarca({
 
       {!principal && !principalArquivo.isLoading && fotoIg.data && fotoIg.data.url && (
         <div className="flex min-w-0 items-center rounded-lg border border-primary/30 bg-primary/5 p-2" data-logo-do-instagram="">
-          <img src={fotoIg.data.url} alt="Foto do perfil do Instagram" referrerPolicy="no-referrer" className="h-10 w-10 shrink-0 rounded-full border border-border object-cover" />
+          <FotoDoCliente nome={clientName} fotos={[{ url: fotoIg.data.url, tipo: "instagram" }]} tamanho="md" alt="Foto do perfil do Instagram" />
           <p className="mx-2 min-w-0 flex-1 text-[12px] leading-4 text-foreground">
             Sem logo? Use a foto do perfil do Instagram{fotoIg.data.username ? ` (@${fotoIg.data.username})` : ""}.
           </p>

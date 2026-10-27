@@ -21,7 +21,7 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "staff"
 // Sábado, 12/09/2026: o ritual devido é a Prova de Movimento (sexta).
 vi.mock("@/hooks/useNow", () => ({ useNow: () => new Date("2026-09-12T12:00:00Z") }));
 vi.mock("@/hooks/usePwaProfile", () => ({ usePwaProfile: () => undefined }));
-vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null }) }));
+vi.mock("@/hooks/useFotosDosClientes", () => ({ useFotosDosClientes: () => ({ fotoDe: () => null, fotosDe: () => [] }) }));
 vi.mock("@/components/esteira/EsteiraClientSheet", () => ({ default: () => null }));
 
 const copiado = vi.hoisted(() => ({ texto: "" }));

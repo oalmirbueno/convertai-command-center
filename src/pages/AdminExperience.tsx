@@ -745,7 +745,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // Carteira recorrente completa: ativos E em onboarding entram nos rituais.
   const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
-  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
+  const { fotoDe, fotosDe } = useFotosDosClientes(clientesParaFoto);
 
   const portfolioClients = useMemo(
     () =>
@@ -2583,7 +2583,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <button type="button" aria-expanded={open} onClick={() => setExpandedHealth(open ? null : row.client.id)} className={juntar(linhaDeLista, "max-sm:min-h-[60px]")}>
                           <span className={`mr-3 hidden h-2 w-2 shrink-0 rounded-full sm:block ${meta.dot}`} aria-hidden="true" />
                           <span className="relative mr-3 inline-flex shrink-0 sm:hidden" aria-hidden="true">
-                            <FotoDoCliente nome={nomeDoCliente(row.client)} foto={fotoDe({ id: String(row.client.id), nome: nomeDoCliente(row.client), avatar_url: row.client.avatar_url })} tamanho="md" />
+                            <FotoDoCliente nome={nomeDoCliente(row.client)} fotos={fotosDe({ id: String(row.client.id), nome: nomeDoCliente(row.client), avatar_url: row.client.avatar_url })} tamanho="md" />
                             <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background ${meta.dot}`} />
                           </span>
                           <span className="min-w-0 flex-1">
@@ -2691,7 +2691,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     foto, nome, a nota como um ponto de cor e os sinais como ícones curtos; os
                     atalhos viram ícones (o nome no toque/mouse). */}
                 <div className="flex min-w-0 items-center">
-                  <FotoDoCliente nome={nomeDoCliente(client)} foto={fotoDe({ id: String(client.id), nome: nomeDoCliente(client), avatar_url: client.avatar_url })} tamanho="xl" className="!h-12 !w-12 sm:!h-14 sm:!w-14" />
+                  <FotoDoCliente nome={nomeDoCliente(client)} fotos={fotosDe({ id: String(client.id), nome: nomeDoCliente(client), avatar_url: client.avatar_url })} tamanho="xl" className="!h-12 !w-12 sm:!h-14 sm:!w-14" />
                   <div className="ml-3 min-w-0 flex-1">
                     <div className="flex min-w-0 items-center">
                       <SeletorCompacto
@@ -3030,7 +3030,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                   return (
                                     <li key={client.id} className="group flex min-w-0 items-center rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40 max-sm:py-2">
                                       <button type="button" onClick={() => openClientProfile(client.id)} title={`Abrir o cadastro de ${nome}`} className={juntar("flex min-w-0 flex-1 items-center text-left", foco)}>
-                                        <FotoDoCliente nome={nome} foto={fotoDe({ id: String(client.id), nome, avatar_url: client.avatar_url })} tamanho="sm" />
+                                        <FotoDoCliente nome={nome} fotos={fotosDe({ id: String(client.id), nome, avatar_url: client.avatar_url })} tamanho="sm" />
                                         <span className="ml-2.5 min-w-0 flex-1">
                                           <span className="block truncate text-[13px] text-foreground">{nome}</span>
                                           <span className={juntar(texto.auxiliar, "flex min-w-0 items-center tabular-nums")}>
@@ -3154,7 +3154,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           id: r.id,
                           tipo: meta ? meta.label : "Mensagem",
                           cliente: nome,
-                          avatar: <FotoDoCliente nome={nome} foto={r.client_id ? fotoDe({ id: String(r.client_id), nome, avatar_url: r.client?.avatar_url }) : null} tamanho="sm" />,
+                          avatar: <FotoDoCliente nome={nome} fotos={r.client_id ? fotosDe({ id: String(r.client_id), nome, avatar_url: r.client?.avatar_url }) : null} tamanho="sm" />,
                           titulo: tituloSimples(r.title, nome),
                           mensagem: textoSimples(edits.summary || r.summary || ""),
                           passo: edits.next_steps || r.next_steps || null,

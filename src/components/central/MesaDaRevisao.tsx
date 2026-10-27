@@ -42,11 +42,11 @@ export default function MesaDaRevisao({ reports, clients, isAdmin, clientId = ""
   const pedidos = useCentralReviews(isAdmin, null);
   const avisos = useAvisosDePublicacao(isAdmin);
   const clientesParaFoto = useMemo(() => clients.map((c) => ({ id: c.id, nome: c.company_name || c.full_name || null, avatar_url: c.avatar_url ?? null })), [clients]);
-  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
+  const { fotosDe } = useFotosDosClientes(clientesParaFoto);
   const chaves = useRef(new Map<string, string>());
   const chave = (c: string) => { let k = chaves.current.get(c); if (!k) { k = crypto.randomUUID(); chaves.current.set(c, k); } return k; };
   const nomeDe = (id: string) => { const c = clients.find((x) => x.id === id); return c?.company_name || c?.full_name || "Cliente"; };
-  const avatarDe = (id: string) => { const c = clientesParaFoto.find((x) => x.id === id); const nome = c?.nome || "Cliente"; return <FotoDoCliente nome={nome} foto={c ? fotoDe(c) : null} tamanho="sm" />; };
+  const avatarDe = (id: string) => { const c = clientesParaFoto.find((x) => x.id === id); const nome = c?.nome || "Cliente"; return <FotoDoCliente nome={nome} fotos={c ? fotosDe(c) : null} tamanho="sm" />; };
 
   // Origem de cada cartão, para decidir pelo RPC certo.
   const origem = useRef(new Map<string, { tipo: "ritual"; approval: CentralApproval } | { tipo: "aviso"; aviso: AvisoDePublicacao }>());
@@ -112,7 +112,7 @@ export default function MesaDaRevisao({ reports, clients, isAdmin, clientId = ""
     origem.current = mapa;
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedidos.data, avisos.data, reports, clients, clientId, fotoDe]);
+  }, [pedidos.data, avisos.data, reports, clients, clientId, fotosDe]);
 
   const decidir = async (item: ItemDaMesa, decisao: DecisaoDaMesa, nota: string) => {
     const o = origem.current.get(item.id);

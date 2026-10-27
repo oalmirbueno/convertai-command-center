@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ClipboardCopy, Download, Globe, ImageOff, Palette } from "lucide-react";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { Carregando, EstadoDeErro, EstadoVazio, Secao, botao, campo, espaco, foco, juntar, texto } from "@/components/sistema";
 import {
   extrairPaleta, identidadeEmTexto, textoSobre, type CorDaMarca,
@@ -140,18 +141,15 @@ export default function IdentidadeDoCliente({
     <div className={espaco.pagina}>
       {/* O perfil: logo, nome, @, site e bio. Aberto, sem caixa (SISTEMA.md 4.1). */}
       <div className="flex min-w-0 items-start">
-        {logo ? (
-          <img
-            src={logo}
-            alt={`Logo de ${clientName}`}
-            referrerPolicy="no-referrer"
-            className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover"
-          />
-        ) : (
-          <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <ImageOff className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-          </span>
-        )}
+        {/* Foto vencida (link da Meta) cai na logo dos arquivos e só depois nas iniciais. */}
+        <FotoDoCliente
+          nome={clientName}
+          fotos={logo ? [{ url: logo, tipo: "instagram" }] : null}
+          clienteId={clientId}
+          lado={80}
+          forma="quadrada"
+          alt={`Logo de ${clientName}`}
+        />
         <div className="ml-4 min-w-0 flex-1">
           <p className={juntar(texto.tituloSecao, "truncate")}>{ident.display_name || clientName}</p>
           {ident.username && <p className={juntar(texto.auxiliar, "truncate")}>@{ident.username}</p>}

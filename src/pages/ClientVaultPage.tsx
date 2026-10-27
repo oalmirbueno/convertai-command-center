@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import ClientVault from "@/components/vault/ClientVault";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { MoreHorizontal, Search, Trash2, Users } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -274,12 +275,6 @@ export default function ClientVaultPage() {
                   <ul className="divide-y divide-border">
                     {filteredClients.map((c) => {
                       const active = c.id === effectiveClientId;
-                      const initials = (c.full_name || "?")
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase();
                       return (
                         <li key={c.id} className="group flex min-w-0 items-center py-1">
                           <button
@@ -291,13 +286,15 @@ export default function ClientVaultPage() {
                               active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                             )}
                           >
-                            <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
-                              {c.avatar_url ? (
-                                <img src={c.avatar_url} alt="" className="h-full w-full object-cover" />
-                              ) : (
-                                <span className="text-[11px] font-semibold text-primary">{initials}</span>
-                              )}
-                            </span>
+                            <FotoDoCliente
+                              nome={c.full_name || "?"}
+                              fotos={c.avatar_url ? [{ url: c.avatar_url, tipo: "foto" }] : null}
+                              clienteId={c.id}
+                              lado={28}
+                              forma="quadrada"
+                              alt=""
+                              className="mr-2.5"
+                            />
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] font-medium">{c.full_name}</span>
                               {c.company_name && <span className="block truncate text-[12px] text-muted-foreground">{c.company_name}</span>}

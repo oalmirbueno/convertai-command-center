@@ -229,7 +229,7 @@ export default function MensagensDaSemana() {
     return (
       <li key={m.chave} className={juntar(superficie.painel, "flex min-w-0 flex-col p-4")} data-mensagem={m.situacao}>
         <div className="flex min-w-0 items-center">
-          <LogoDoCliente url={identidades.data?.get(m.clientId)?.profile_picture_url ?? null} nome={nomeCliente} tamanho={32} className="mr-2.5" />
+          <LogoDoCliente url={identidades.data?.get(m.clientId)?.profile_picture_url ?? null} clienteId={m.clientId} nome={nomeCliente} tamanho={32} className="mr-2.5" />
           <div className="min-w-0 flex-1">
             <p className={juntar(texto.corpo, "truncate font-medium")}>{nomeCliente}</p>
             <p className={juntar(texto.auxiliar, "truncate")}>{NOME_DO_RITUAL[m.ritual] || m.report.title}</p>

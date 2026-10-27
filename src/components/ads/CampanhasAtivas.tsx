@@ -273,6 +273,7 @@ export default function CampanhasAtivas({
                       >
                         <LogoDoCliente
                           url={identidades?.get(grupo.clientId)?.profile_picture_url}
+                          clienteId={grupo.clientId}
                           nome={grupo.nome}
                           tamanho={22}
                           className="mr-2"

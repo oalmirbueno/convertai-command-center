@@ -568,7 +568,7 @@ export default function Clients() {
   const { data: clients, isLoading, isError, refetch } = useClients();
   // A cara de cada cliente: cadastro, senao Instagram (como em /metricas), senao a logo dos arquivos.
   const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
-  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
+  const { fotoDe, fotosDe } = useFotosDosClientes(clientesParaFoto);
 
   const toggleOneOffDone = async (client: any, done: boolean) => {
     const nextConfig = { ...(client.services_config || {}), one_off_done: done };
@@ -1182,7 +1182,7 @@ export default function Clients() {
             aria-describedby={financeiroNaLinha ? `client-finance-${c.id}` : undefined}
             className={juntar("flex min-w-0 flex-1 items-center rounded-md bg-transparent text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isMobile && "min-h-[44px]")}
           >
-            <FotoDoCliente nome={nome || ""} foto={fotoDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho="md" />
+            <FotoDoCliente nome={nome || ""} fotos={fotosDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho="md" />
             <span className="ml-3 block min-w-0 flex-1">
               <span className="flex min-w-0 items-center">
                 <span className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">{nome}</span>
