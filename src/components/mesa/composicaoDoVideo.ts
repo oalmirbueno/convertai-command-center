@@ -22,7 +22,7 @@ import type { MidiaDaPeca } from "../../../supabase/functions/agente-calendario/
 import type { RoteiroDeVideo } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 import type { ReferenciaViral } from "../../../supabase/functions/agente-calendario/modulos/referencias-virais-de-video";
 import { MOVIMENTOS_DA_CENA, movimentoDoTexto, type MovimentoDaCena, type PapelDaReferencia } from "../../../supabase/functions/mesa-videos/modulos/composicao-no-pedido";
-import { atende, custoDoMotor, duracaoNoMotor, motorDoNivel, motorPorId, resolucaoNoMotor, type CustoDoMotor, type MotorDeVideo, type NivelDoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { atende, custoDoMotor, duracaoNoMotor, motorDoNivel, motorPorId, resolucaoParaPostar, type CustoDoMotor, type MotorDeVideo, type NivelDoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import type { ArquivoDeVideo, PedidoDeVideo } from "@/components/mesa-videos/videosApi";
 
 export { MOVIMENTOS_DA_CENA };
@@ -380,7 +380,8 @@ export function pedidosDaComposicao(c: ComposicaoDoVideo, o: {
     }
     // Imagem fora da Mesa (Workspace, Arquivos): a tela copia para a pasta do cliente antes de enviar (imagemNaMesa).
     const duracao = duracaoNoMotor(motor, cena.duracao_s);
-    const resolucao = resolucaoNoMotor(motor, "");
+    // 28/10: a cena vai ao ar; 1080p sempre que o motor oferece (antes: o padrão do motor, 720p em vários).
+    const resolucao = resolucaoParaPostar(motor);
     const custo = custoDoMotor(motor, { duracao_s: duracao, resolucao, audio: false, variacoes: 1 });
     const tentativa = (o.tentativas && o.tentativas[cena.id]) || 0;
     const corpo: Record<string, unknown> = {

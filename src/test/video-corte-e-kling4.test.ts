@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lerCorte, projetoDoCorte, ErroDoCorte } from "../../supabase/functions/mesa-videos/modulos/corte-do-final";
 import { corpoDaGeracao, endpointDaGeracao } from "../../supabase/functions/mesa-videos/modulos/video-executor";
-import { MOTORES_DE_VIDEO } from "../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { MOTORES_DE_VIDEO, resolucaoParaPostar } from "../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { trechoValido } from "@/components/mesa/CortarVideoDaPauta";
 
 const CLIENTE = "11111111-1111-4111-8111-111111111111";
@@ -58,5 +58,15 @@ describe("Kling 4.0 (27/10)", () => {
     expect(c.image_urls).toEqual(["https://x/1.jpg", "https://x/2.jpg"]);
     expect(String(c.prompt)).toContain("@Image1, @Image2");
     expect(c).not.toHaveProperty("generate_audio");
+  });
+});
+
+describe("vídeo para ir ao ar em alta (28/10)", () => {
+  it("1080p quando o motor oferece; senão a maior que ele tiver", () => {
+    const de = (id: string) => MOTORES_DE_VIDEO.find((x) => x.id === id)!;
+    expect(resolucaoParaPostar(de("wan-3.0"))).toBe("1080p");
+    expect(resolucaoParaPostar(de("kling-4"))).toBe("1080p");
+    expect(resolucaoParaPostar(de("kling-3-4k"))).toBe("4k");
+    expect(resolucaoParaPostar(de("kling-o3-standard"))).toBe("720p");
   });
 });

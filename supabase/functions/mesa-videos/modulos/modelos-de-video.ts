@@ -686,6 +686,16 @@ export function duracaoNoMotor(m: MotorDeVideo, segundos: number): number {
 
 export const resolucaoNoMotor = (m: MotorDeVideo, r: string | null | undefined) => (r && m.resolucoes.indexOf(r) >= 0 ? r : m.resolucao_padrao);
 
+/**
+ * Resolução para ir ao ar (28/10/2026, dono: "tem que postar em altíssima qualidade"): 1080p quando o motor
+ * oferece (o máximo que o Instagram aproveita no Reels); sem 1080p, a maior que ele tiver.
+ */
+export function resolucaoParaPostar(m: MotorDeVideo): string {
+  if (m.resolucoes.indexOf("1080p") >= 0) return "1080p";
+  const ordem = ["4k", "1440p", "1080p", "768p", "720p", "540p", "512p", "480p"];
+  return ordem.find((r) => m.resolucoes.indexOf(r) >= 0) || m.resolucao_padrao;
+}
+
 export interface CustoDoMotor {
   usd: number | null;
   detalhe: string;
