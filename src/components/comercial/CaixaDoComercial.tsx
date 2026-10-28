@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, MessageCircle, Phone, Settings2 } from "lucide-react";
+import { BadgeCheck, ExternalLink, FileText, MessageCircle, Phone, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { AjudaRecolhida, AreaDeTrabalho, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import {
   CONFIG_PADRAO,
+  confirmarPagamentoDoBolso,
   dadosLegiveis,
+  linkDaPropostaNaCaixa,
+  pedidoDoBolsoNaCaixa,
   lerConfigDoMercurio,
   linkDeLigar,
   linkDoWhatsapp,
@@ -44,6 +47,63 @@ const quando = (iso: string) => {
 
 const ROTULO_DA_SITUACAO: Record<SituacaoDaCaixa, string> = { nova: "Novas", assumida: "Assumidas", concluida: "Concluídas" };
 
+/**
+ * Aceleriq de Bolso pedido pelo Mercúrio (MCP 2.23): só a administração confirma, depois de ver o dinheiro no
+ * extrato, no Pix ou no gateway (a RPC recusa quem não é admin). Comprovante em imagem não vale. Confirmado, o
+ * acesso sai na hora se a conta existe.
+ */
+function ConfirmarPagamentoDoBolso({ pedidoId }: { pedidoId: string }) {
+  const [aberto, setAberto] = useState(false);
+  const [nota, setNota] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const confirmar = async () => {
+    setEnviando(true);
+    try {
+      const r = await confirmarPagamentoDoBolso(pedidoId, nota.trim());
+      if (r.liberado) toast.success(r.ja_liberado ? "Já estava liberado." : "Pagamento confirmado e acesso ao Bolso liberado.");
+      else if (r.motivo === "conta_ausente") toast.success(`Pagamento confirmado. Falta a conta com ${r.email || "o e-mail do pedido"}: o Mercúrio pede ao lead e libera depois.`);
+      else toast.success("Pagamento confirmado.");
+      setAberto(false);
+      setNota("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível confirmar.");
+    } finally {
+      setEnviando(false);
+    }
+  };
+  if (!aberto) {
+    return (
+      <button type="button" onClick={() => setAberto(true)} className={juntar(botao.secundario, "lg:w-full")}>
+        <BadgeCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
+        Confirmar pagamento do Bolso
+      </button>
+    );
+  }
+  return (
+    <div className="grid min-w-0 gap-2 lg:w-full">
+      <label className={texto.auxiliar} htmlFor={`bolso-nota-${pedidoId}`}>
+        Onde você viu o dinheiro? Comprovante em imagem não vale.
+      </label>
+      <input
+        id={`bolso-nota-${pedidoId}`}
+        className={campo}
+        value={nota}
+        maxLength={500}
+        placeholder="Ex.: Pix no extrato do Inter, 28/10 14h"
+        onChange={(e) => setNota(e.target.value)}
+      />
+      <div className="flex min-w-0 gap-2">
+        <button type="button" disabled={enviando || nota.trim().length < 5} onClick={() => void confirmar()} className={juntar(botao.primario, "flex-1")}>
+          Confirmar
+        </button>
+        <button type="button" disabled={enviando} onClick={() => setAberto(false)} className={juntar(botao.discreto, "flex-1")}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: ItemDaCaixa; destacado: boolean; aoAbrirLead?: () => void; aoMudar: (s: SituacaoDaCaixa) => Promise<void> }) {
   const [mudando, setMudando] = useState(false);
   const telefone = item.telefone || (item.lead && item.lead.whatsapp) || "";
@@ -51,6 +111,8 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
   const whatsapp = linkDoWhatsapp(telefone, mensagemDeContinuidade(nome));
   const ligar = linkDeLigar(telefone);
   const dados = dadosLegiveis(item.dados);
+  const pedidoDoBolso = pedidoDoBolsoNaCaixa(item.dados);
+  const linkDaProposta = linkDaPropostaNaCaixa(item.dados);
   const mudar = async (s: SituacaoDaCaixa) => {
     setMudando(true);
     try {
@@ -119,6 +181,13 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
             Abrir o lead
           </button>
         )}
+        {linkDaProposta && (
+          <a href={linkDaProposta} className={juntar(botao.secundario, "lg:w-full")}>
+            <FileText className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Abrir na Mesa Proposta
+          </a>
+        )}
+        {pedidoDoBolso && <ConfirmarPagamentoDoBolso pedidoId={pedidoDoBolso} />}
         <div className="flex min-w-0 gap-2 lg:w-full">
           {item.situacao === "nova" && (
             <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.secundario, "flex-1")}>

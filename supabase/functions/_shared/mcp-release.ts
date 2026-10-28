@@ -6,4 +6,5 @@
 // 2.21.0 (26/10/2026): horario comercial do Ego (9h-18h seg a sex, Sao Paulo; EGO_HORARIO/EGO_DIAS/EGO_FUSO): fora da janela aceleriq_navegador_do_pc agenda (estado agendada, executar_a_partir_de, prioridade) e responde agendado_para com nao_insistir; guia com trabalho de nuvem fora do horario e regra de nada parado.
 // 2.22.0 (27/10/2026): lembrete de aprovacao e regua de cobranca: aceleriq_mensagens_automaticas_fila (so o que o dono aprovou, so na janela 9h-18h dia util) e aceleriq_mensagens_automaticas_marcar_enviado.
 // 2.22.0 (27/10/2026, mesma versao): torneira das tarefas (aceleriq_create_task de agente so com cliente, dono e prazo) e aceleriq_ads_boletim aceita nivel medio/baixo/alto (vira atencao/info/critico).
-export const MCP_VERSION = '2.22.0';
+// 2.23.0 (28/10/2026): o Mercurio conduz ate o contrato com aprovacao humana: aceleriq_comercial_pedir_proposta (rascunho na Mesa Proposta, BRL/USD/EUR, preco do catalogo), aceleriq_comercial_bolso_pedir (anual do Aceleriq de Bolso, checkout pronto) e aceleriq_comercial_bolso_liberar (so com pagamento confirmado por pessoa ou gateway; comprovante nunca libera).
+export const MCP_VERSION = '2.23.0';

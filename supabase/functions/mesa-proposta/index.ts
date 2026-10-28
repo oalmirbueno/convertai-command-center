@@ -133,6 +133,8 @@ import { avisosDaRevisao, type ConferenciaDoDado, lerConferencia, PERGUNTAS_DA_R
 // Frente PRO3 (30/09): proposta de upsell (o que o cliente já tem e os resultados reais).
 import { blocoJaTem, materialDoUpsell, NOME_DO_MATERIAL_DO_UPSELL, TITULO_DO_PROXIMO_PASSO, type UpsellDaProposta } from "./modulos/proposta-upsell.ts";
 import { retratoDoCliente } from "./upsell.ts";
+// MCP 2.23 (28/10): o rascunho que o Mercúrio deixou para o lead entra na proposta nova desse lead.
+import { aplicarPedidoNaProposta } from "../_shared/proposta-do-lead.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
@@ -622,6 +624,15 @@ async function criar(ch: Chamador, corpo: Record<string, unknown>) {
     conteudo = comUpsell(conteudo, retrato);
     contexto = { upsell: retrato, materiais: [materialDoUpsell(retrato)] };
   }
+  // MCP 2.23: o pedido do agente comercial esperando este lead vira o começo da proposta (desafio, moeda, itens e notas).
+  const pedidoDoAgente = leadId && !retrato ? await pedidoDoAgenteEsperando(leadId) : null;
+  let itens: ItemDaProposta[] = [];
+  if (pedidoDoAgente) {
+    conteudo = aplicarPedidoNaProposta(conteudo, pedidoDoAgente);
+    itens = normalizarItens(pedidoDoAgente.itens);
+    contexto = { notas: textoLimpo(pedidoDoAgente.notas, 6000) };
+  }
+  const totais = totaisDosItens(itens);
   const base = {
     client_id: clientId,
     marca_id: marcaId,
@@ -629,7 +640,9 @@ async function criar(ch: Chamador, corpo: Record<string, unknown>) {
     modelo_id: modeloId,
     titulo: textoLimpo(corpo.titulo, 120) || (retrato ? `${TITULO_DO_PROXIMO_PASSO} para ${cliente}` : `Proposta para ${cliente}`),
     conteudo,
-    itens: [],
+    itens,
+    total_unico: totais.unico,
+    total_mensal: totais.mensal,
     validade_ate: somarDias(hoje, modelo.validade_dias),
     contexto,
     logo_cliente_path: await logoDoCliente(clientId, marcaId),
@@ -638,8 +651,22 @@ async function criar(ch: Chamador, corpo: Record<string, unknown>) {
   // PRO2: as cores da marca do cliente entram no visual (o tema "Cores do cliente" usa).
   const cores = await coresDoCliente(clientId, marcaId);
   const linha = await inserirProposta(temPro2 && cores.length ? { ...base, visual: normalizarVisual({ tema: "aceleriq", cores }) } : base);
-  await evento({ proposta_id: linha.id, client_id: clientId, tipo: "criada", dados: { modelo_id: modeloId, lead_id: leadId, agencia: avisoDaAgencia, tipo: retrato ? "upsell" : "nova", ...(retrato ? { upsell_avisos: retrato.avisos } : {}) }, criado_por: ch.userId });
+  await evento({ proposta_id: linha.id, client_id: clientId, tipo: "criada", dados: { modelo_id: modeloId, lead_id: leadId, agencia: avisoDaAgencia, tipo: retrato ? "upsell" : "nova", ...(retrato ? { upsell_avisos: retrato.avisos } : {}), ...(pedidoDoAgente ? { pedido_do_agente: pedidoDoAgente.id } : {}) }, criado_por: ch.userId });
+  if (pedidoDoAgente) {
+    const { error: e } = await servico().from("commercial_pedidos_proposta").update({ situacao: "rascunho_criado", proposta_id: linha.id }).eq("id", pedidoDoAgente.id).eq("situacao", "aguardando_cliente");
+    if (e) registrarFalha("mesa-proposta: pedido do agente não marcado", e, { pedido: pedidoDoAgente.id });
+  }
   return json({ proposta: saidaDaLinha(linha), aviso_agencia: avisoDaAgencia, avisos_upsell: retrato ? retrato.avisos : [], custo_usd: 0 });
+}
+
+/** O pedido do agente comercial (MCP 2.23) que espera este lead virar cliente; sem a tabela ou sem pedido, nada muda. */
+async function pedidoDoAgenteEsperando(leadId: string): Promise<{ id: string; conteudo: unknown; itens: unknown; notas: string } | null> {
+  const { data, error } = await servico().from("commercial_pedidos_proposta").select("id, conteudo, itens, notas").eq("lead_id", leadId).eq("situacao", "aguardando_cliente").maybeSingle();
+  if (error) {
+    if (!semTabela(error)) registrarFalha("mesa-proposta: pedido do agente não lido", error, { lead_id: leadId });
+    return null;
+  }
+  return (data as { id: string; conteudo: unknown; itens: unknown; notas: string } | null) || null;
 }
 
 /** PRO3: o bloco "O que você já tem" com o retrato e a solução vira o "Próximo passo" (título; o texto é do estrategista). */

@@ -323,7 +323,7 @@ Deno.test('executar: fora do escopo continua erro de protocolo; leitura audita e
 const NOVAS = ['aceleriq_guia', 'aceleriq_panorama_do_cliente', 'aceleriq_panorama_da_casa', 'aceleriq_mes_campanhas', 'aceleriq_mesa_stories', 'aceleriq_mesa_hype', 'aceleriq_mesa_templates', 'aceleriq_estudio_trabalhos', 'aceleriq_mesa_site', 'aceleriq_laboratorio', 'aceleriq_base_dos_agentes', 'aceleriq_membros', 'aceleriq_mcp_saude', 'aceleriq_mesa_campanha_acao'];
 
 Deno.test('catálogo 2.17: as ferramentas novas existem, sem nome repetido, e a versão subiu', () => {
-  assertEquals(MCP_VERSION, '2.22.0');
+  assertEquals(MCP_VERSION, '2.23.0');
   for (const n of NOVAS) assert(TOOL_MAP.has(n), n);
   assertEquals(new Set(TOOLS.map((t) => t.name)).size, TOOLS.length);
   assertEquals(FERRAMENTAS_DO_PAINEL_INTEIRO.length, NOVAS.length);

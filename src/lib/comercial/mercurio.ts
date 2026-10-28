@@ -136,6 +136,33 @@ export async function mudarSituacaoDaCaixa(id: string, situacao: SituacaoDaCaixa
   if (error) throw new ErroDoComercial("Não foi possível mudar o item da Caixa.", error);
 }
 
+/* ─────────────────── Mercúrio até o contrato (MCP 2.23, 28/10/2026) ─────────────────── */
+
+/** O pedido do Aceleriq de Bolso que este item da Caixa carrega (o Mercúrio registrou), ou null. */
+export function pedidoDoBolsoNaCaixa(dados: Record<string, unknown> | null | undefined): string | null {
+  const id = dados ? dados.bolso_pedido_id : null;
+  return typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
+}
+
+/** O caminho da Mesa Proposta que o pedido de proposta deixou na Caixa, ou null. */
+export function linkDaPropostaNaCaixa(dados: Record<string, unknown> | null | undefined): string | null {
+  const link = dados ? dados.link : null;
+  return typeof link === "string" && link.indexOf("/mesa-proposta?") === 0 ? link : null;
+}
+
+export type LiberacaoDoBolso = { liberado: boolean; ja_liberado?: boolean; motivo?: string; email?: string };
+
+/**
+ * A administração confirma que viu o dinheiro do Aceleriq de Bolso (extrato, Pix ou gateway) e o acesso é
+ * liberado na hora quando a conta já existe. Comprovante em imagem não vale: a nota diz onde foi conferido.
+ */
+export async function confirmarPagamentoDoBolso(pedidoId: string, nota: string): Promise<LiberacaoDoBolso> {
+  const { data, error } = await (supabase as unknown as { rpc: (f: string, a: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> })
+    .rpc("comercial_bolso_confirmar_pagamento", { _pedido: pedidoId, _nota: nota });
+  if (error) throw new ErroDoComercial((error as { message?: string }).message || "Não foi possível confirmar o pagamento.", error);
+  return (data || { liberado: false }) as LiberacaoDoBolso;
+}
+
 /** "valor_mensal" -> "Valor mensal"; valores de lista e objeto viram texto curto. */
 export function dadosLegiveis(dados: Record<string, unknown>): Array<{ chave: string; valor: string }> {
   const saida: Array<{ chave: string; valor: string }> = [];
