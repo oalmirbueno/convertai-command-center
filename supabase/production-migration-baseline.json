@@ -2745,6 +2745,14 @@
       "remote_name": "publicar_video_do_workspace",
       "remote_statements_sha256": "c795aba34f74bb66a3143791df18760ae965b91dc31ec0cd6545979feb3cbda3",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261028173409",
+      "path": "supabase/migrations/20261028173409_aviso_publicacao_falhou.sql",
+      "local_sha256": "129ddcaedeed3e1425436ed7ff904ba435250d595fd42c36490e8e14cd24e808",
+      "remote_name": "aviso_publicacao_falhou",
+      "remote_statements_sha256": "ed096fee2b88445ebfc2a4a3344478eaa447fd05bc14f34fe7c0669c0160f7c6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
