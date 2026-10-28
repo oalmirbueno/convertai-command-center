@@ -571,6 +571,21 @@ function ConteudoAreaDeMembros() {
   const nomeDaConta = profile?.full_name?.trim() || "Minha conta";
   const primeiroNome = profile?.full_name?.trim().split(/\s+/)[0];
   const iniciais = nomeDaConta.split(/\s+/).slice(0, 2).map((nome) => nome[0]).join("").toUpperCase();
+  const estudioAtivo = secaoAtual === "estudio" && comBolso;
+  const controleDoMenu = (
+    <button
+      type="button"
+      className="membros-acao membros-menu-recolher"
+      aria-label={recolhida ? "Expandir menu de membros" : "Recolher menu de membros"}
+      title={recolhida ? "Expandir menu de membros" : "Recolher menu de membros"}
+      aria-expanded={!recolhida}
+      aria-controls="menu-de-membros"
+      onClick={() => setRecolhida((r) => !r)}
+    >
+      {recolhida ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+      <span>{recolhida ? "Abrir menu" : "Recolher menu"}</span>
+    </button>
+  );
   function irParaSecao(destino: string) {
     if (ferramentaAberta) {
       const proximos = new URLSearchParams(parametros);
@@ -586,7 +601,7 @@ function ConteudoAreaDeMembros() {
       usuario={user?.id || "visitante"}
       leitorAberto={!!produtoAberto && !ferramentaAberta}
     >
-      <div className="membros membros-portal bg-background text-foreground">
+      <div className={`membros membros-portal bg-background text-foreground${estudioAtivo ? " membros-estudio-ativo" : ""}`}>
         <a
           href="#biblioteca"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-4"
@@ -595,6 +610,7 @@ function ConteudoAreaDeMembros() {
         </a>
         <header className="membros-topo">
           <div className="membros-topo-interno">
+            {estudioAtivo && controleDoMenu}
             <Link
               className="membros-marca"
               to={
@@ -612,8 +628,8 @@ function ConteudoAreaDeMembros() {
                 setCategoria("");
               }}
             >
-              <MarcaAceleriq altura={32} />
-              <span>Área de membros</span>
+              <MarcaAceleriq altura={estudioAtivo ? 26 : 32} />
+              <span className="membros-marca-legenda">Área de membros</span>
             </Link>
             <label className="membros-topo-busca">
               <Search size={18} aria-hidden="true" />
@@ -707,21 +723,9 @@ function ConteudoAreaDeMembros() {
             ))}
             <BotaoPomodoro compacto={recolhida} />
           </aside>
-          <main ref={conteudo} id="biblioteca" className={`membros-conteudo ${secaoAtual === "estudio" && comBolso ? "membros-conteudo-estudio" : "space-y-8"}`}>
-            <div className="membros-conteudo-barra">
-              <button
-                type="button"
-                className="membros-acao membros-menu-recolher"
-                aria-label={recolhida ? "Expandir menu de membros" : "Recolher menu de membros"}
-                aria-expanded={!recolhida}
-                aria-controls="menu-de-membros"
-                onClick={() => setRecolhida((r) => !r)}
-              >
-                {recolhida ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
-                <span>{recolhida ? "Abrir menu" : "Recolher menu"}</span>
-              </button>
-            </div>
-            {secaoAtual === "estudio" && comBolso && <EstudioBolso />}
+          <main ref={conteudo} id="biblioteca" className={`membros-conteudo ${estudioAtivo ? "membros-conteudo-estudio" : "space-y-8"}`}>
+            {!estudioAtivo && <div className="membros-conteudo-barra">{controleDoMenu}</div>}
+            {estudioAtivo && <EstudioBolso />}
             {secaoAtual === "creditos" && comBolso && <CreditosBolso />}
             {secaoAtual === "ferramentas" && (
               <FerramentasDoMembro

@@ -6,6 +6,7 @@ import FormularioDaOferta from "./FormularioDaOferta";
 import VisualizadorDaArte from "./VisualizadorDaArte";
 import { AjustarArte, ReferenciasDaCampanha } from "./RecursosCriativos";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { AjudaRecolhida } from "@/components/sistema";
 import {
   cancelarPedido,
@@ -299,7 +300,7 @@ function EditorDoTexto({ campanha, aoMudar }: { campanha: Campanha; aoMudar: () 
     }
   };
   return (
-    <div className="space-y-4">
+    <div className="bolso-editor-texto space-y-4">
       {campanha.versoes.length > 1 && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Versões do texto">
           {campanha.versoes.map((v) => (
@@ -322,7 +323,7 @@ function EditorDoTexto({ campanha, aoMudar }: { campanha: Campanha; aoMudar: () 
         <input id="bolso-texto-mensagem" className="membros-campo" value={rascunho.mensagem} onChange={(e) => mudar("mensagem", e.target.value)} maxLength={4000} aria-describedby="bolso-texto-mensagem-ajuda" />
       </Campo>
       <Campo id="bolso-texto-texto" rotulo="Legenda da publicação">
-        <textarea id="bolso-texto-texto" className="membros-campo" rows={7} value={rascunho.texto} onChange={(e) => mudar("texto", e.target.value)} maxLength={4000} />
+        <textarea id="bolso-texto-texto" className="membros-campo bolso-editor-legenda" rows={10} value={rascunho.texto} onChange={(e) => mudar("texto", e.target.value)} maxLength={4000} />
       </Campo>
       <button type="button" className="membros-acao border border-border" onClick={() => void copiarLegenda()} disabled={!rascunho.texto.trim()}><Copy size={15} aria-hidden="true" />Copiar legenda</button>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -404,6 +405,23 @@ function CartaoDaArte({ arte, titulo, campanha, estado, aoMudar }: { arte: Arte;
 // ─── Campanha ──────────────────────────────────────────────────────────
 type Etapa = "oferta" | "texto" | "arte";
 
+function ContextoDaCampanha({ campanha }: { campanha: Campanha }) {
+  const noCelular = useIsMobile();
+  const contexto = (
+    <dl className="bolso-contexto-campanha">
+      <div><dt>Produto ou serviço</dt><dd>{campanha.briefing.produto}</dd></div>
+      <div><dt>Objetivo</dt><dd>{TIPOS[campanha.briefing.tipo].nome}</dd></div>
+      {campanha.briefing.condicoes && <div><dt>Condições</dt><dd>{campanha.briefing.condicoes}</dd></div>}
+    </dl>
+  );
+  return noCelular ? (
+    <details className="bolso-contexto-recolhido">
+      <summary>Contexto da oferta</summary>
+      {contexto}
+    </details>
+  ) : contexto;
+}
+
 function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDoEstudio | undefined; aoVoltar: () => void }) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -452,13 +470,14 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
   ];
   return (
     <section className="bolso-campanha" aria-labelledby="bolso-campanha-titulo">
+      <div className="bolso-campanha-barra">
       <div className="bolso-campanha-navegacao">
-      <button type="button" className="membros-acao bolso-voltar text-muted-foreground" onClick={aoVoltar}>
+      <button type="button" className="membros-acao bolso-voltar text-muted-foreground" aria-label="Minhas campanhas" title="Minhas campanhas" onClick={aoVoltar}>
         <ArrowLeft size={16} aria-hidden="true" />
-        Minhas campanhas
+        <span className="bolso-voltar-rotulo">Minhas campanhas</span>
       </button>
       <div className="bolso-campanha-topo">
-        <h2 id="bolso-campanha-titulo">
+        <h2 id="bolso-campanha-titulo" title={c.titulo}>
           {c.titulo}
         </h2>
         <p className="text-[12px] text-muted-foreground">Atualizada em {dataCurta(c.atualizado_em)}</p>
@@ -472,6 +491,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
           </button>
         ))}
       </nav>
+      </div>
       {andamento.length > 0 && (
         <ul className="space-y-2" aria-live="polite">
           {andamento.map((j) => (
@@ -525,13 +545,9 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
                 editar à mão quantas vezes quiser, sem crédito.
               </AjudaRecolhida>
             </div>
-            <dl className="bolso-contexto-campanha">
-              <div><dt>Produto ou serviço</dt><dd>{c.briefing.produto}</dd></div>
-              <div><dt>Objetivo</dt><dd>{TIPOS[c.briefing.tipo].nome}</dd></div>
-              {c.briefing.condicoes && <div><dt>Condições</dt><dd>{c.briefing.condicoes}</dd></div>}
-            </dl>
-            <button type="button" className="membros-acao border border-border" onClick={() => setEtapa("oferta")}>Conferir oferta <ArrowUpRight size={15} aria-hidden="true" /></button>
             <BotaoDePedido estado={estado} campanha={c} tipo="texto" formato={null} rotulo={c.versoes.length ? "Criar outra versão" : "Criar o texto"} aoPedir={atualizar} />
+            <ContextoDaCampanha campanha={c} />
+            <button type="button" className="membros-acao border border-border" onClick={() => setEtapa("oferta")}>Conferir oferta <ArrowUpRight size={15} aria-hidden="true" /></button>
           </div>
           <div className="bolso-cartao bolso-trabalho-resultado">
             <div className="mb-4 flex items-center gap-2">
