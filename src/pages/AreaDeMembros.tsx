@@ -605,7 +605,6 @@ function ConteudoAreaDeMembros() {
       onClick={() => setRecolhida((r) => !r)}
     >
       {recolhida ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
-      <span>{recolhida ? "Abrir menu" : "Recolher menu"}</span>
     </button>
   );
   function irParaSecao(destino: string) {
@@ -632,7 +631,6 @@ function ConteudoAreaDeMembros() {
         </a>
         <header className="membros-topo">
           <div className="membros-topo-interno">
-            {estudioAtivo && controleDoMenu}
             <Link
               className="membros-marca"
               to={
@@ -720,6 +718,7 @@ function ConteudoAreaDeMembros() {
           className={`membros-biblioteca-corpo ${recolhida ? "recolhida" : ""}`}
         >
           <aside id="menu-de-membros" className="membros-menu" aria-label="Menu de membros">
+            <div className="membros-menu-controle">{controleDoMenu}</div>
             {[
               { id: "inicio", nome: "Início", icone: Home },
               { id: "lista", nome: "Minha lista", icone: Bookmark },
@@ -747,7 +746,6 @@ function ConteudoAreaDeMembros() {
             <BotaoPomodoro compacto={recolhida} />
           </aside>
           <main ref={conteudo} id="biblioteca" className={`membros-conteudo ${estudioAtivo ? "membros-conteudo-estudio" : "space-y-8"}`}>
-            {!estudioAtivo && <div className="membros-conteudo-barra">{controleDoMenu}</div>}
             {estudioAtivo && <EstudioBolso />}
             {secaoAtual === "creditos" && comBolso && <CreditosBolso />}
             {secaoAtual === "ferramentas" && (

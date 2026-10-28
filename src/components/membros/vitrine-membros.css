@@ -48,6 +48,9 @@
   position: relative;
   isolation: isolate;
   display: flex;
+  min-width: 0;
+  width: 100%;
+  container-type: inline-size;
   min-height: 370px;
   aspect-ratio: 3/4;
   align-items: flex-end;
@@ -135,6 +138,7 @@ button.membros-vitrine-cartao:hover .membros-vitrine-imagem {
 }
 .membros-vitrine-identidade h3 {
   font-size: clamp(24px, 2.35vw, 35px);
+  font-size: clamp(21px, 10cqi, 32px);
   font-weight: 650;
   line-height: 1.08;
   letter-spacing: -0.045em;

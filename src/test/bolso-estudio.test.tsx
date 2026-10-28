@@ -94,13 +94,13 @@ describe("regras da tela", () => {
 });
 
 describe("estúdio com o banco simulado", () => {
-  it("modo demonstração: faixa e saldo visíveis, limites do produto na ajuda", async () => {
+  it("estúdio sem faixa de título ou saldo, com demonstração e ajuda acessíveis", async () => {
     montar(h(EstudioBolso));
     expect(await screen.findByText("DEMONSTRAÇÃO / PROVEDOR SIMULADO")).toBeTruthy();
     expect(screen.queryByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeNull();
-    expect(await screen.findByLabelText("Seu saldo de créditos")).toHaveTextContent(/5 créditos de teste/);
-    expect(screen.getByLabelText("Seu saldo de créditos")).toBeVisible();
     expect(await screen.findByText("Bolo de pote")).toBeTruthy();
+    expect(screen.queryByLabelText("Seu saldo de créditos")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Aceleriq de Bolso" })).toHaveClass("sr-only");
     fireEvent.click(screen.getByRole("button", { name: "Sobre o estúdio" }));
     expect(await screen.findByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeTruthy();
   });
@@ -453,10 +453,14 @@ describe("estúdio com o banco simulado", () => {
 
     await act(async () => { await qc.invalidateQueries({ queryKey: ["bolso"] }); });
 
-    await waitFor(() => expect(screen.getByLabelText("Seu saldo de créditos").textContent).toMatch(/12 créditos/));
+    await waitFor(() => expect(qc.getQueryData<EstadoDoEstudio>(["bolso", "estado", "u-a"])?.saldo?.disponivel).toBe(12));
     expect(screen.getByRole("heading", { name: "Bolo de pote" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Arte e download" })).toHaveAttribute("aria-current", "step");
     expect(screen.queryByRole("heading", { name: "Minhas campanhas" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Minhas campanhas" })).toHaveTextContent("");
+    expect(screen.queryByLabelText("Seu saldo de créditos")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Pedir a arte" }));
+    expect(screen.getByRole("group", { name: "Confirmar consumo de créditos" })).toHaveTextContent(/de 12/);
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
   });
 

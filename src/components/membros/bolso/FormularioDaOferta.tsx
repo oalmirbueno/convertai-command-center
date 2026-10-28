@@ -17,7 +17,7 @@ function Campo({ id, rotulo, ajuda, children }: { id: string; rotulo: string; aj
   return <div className="space-y-1.5"><label htmlFor={id} className="block text-[13px] font-medium">{rotulo}</label>{children}{ajuda && <p id={`${id}-ajuda`} className="text-[12px] text-muted-foreground">{ajuda}</p>}</div>;
 }
 
-export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCancelar, saldo }: { campanha: Campanha | null; estado?: EstadoDoEstudio; aoSalvar: (id: string) => void; aoCancelar?: () => void; saldo?: ReactNode }) {
+export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCancelar }: { campanha: Campanha | null; estado?: EstadoDoEstudio; aoSalvar: (id: string) => void; aoCancelar?: () => void }) {
   const [b, setB] = useState<Briefing>(campanha ? { ...BRIEFING_VAZIO, ...campanha.briefing } : BRIEFING_VAZIO);
   const [titulo, setTitulo] = useState(campanha?.titulo || "");
   const [etapa, setEtapa] = useState(0);
@@ -87,7 +87,7 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
           <Target size={19} aria-hidden="true" /><h2 id="bolso-oferta-titulo">Sua campanha</h2>
           <AjudaRecolhida rotulo="Como preencher a oferta">Escreva só o que é verdade hoje. O estúdio não inventa preço, desconto, estoque, prazo, depoimento ou resultado: o que você não informar fica de fora do texto.</AjudaRecolhida>
         </div>
-        <div className="bolso-assistente-topo-meta">{saldo}<span className="bolso-assistente-contagem">{etapa + 1} de {ETAPAS.length}</span></div>
+        <span className="bolso-assistente-contagem">{etapa + 1} de {ETAPAS.length}</span>
       </div>
       <nav className="bolso-assistente-etapas" aria-label="Preparação da campanha">
         {ETAPAS.map((nome, indice) => <button key={nome} type="button" aria-current={etapa === indice ? "step" : undefined} onClick={() => { setErro(null); setEtapa(indice); }} disabled={salvando}><span aria-hidden="true">{indice + 1}</span>{nome}</button>)}

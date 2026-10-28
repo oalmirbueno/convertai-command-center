@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Copy, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, Video, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Copy, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, Video, X } from "lucide-react";
 import FormularioDaOferta from "./FormularioDaOferta";
 import VisualizadorDaArte from "./VisualizadorDaArte";
 import { AjustarArte, ReferenciasDaCampanha } from "./RecursosCriativos";
@@ -89,28 +89,8 @@ function Erro({ texto }: { texto: string | null }) {
   );
 }
 
-/** Saldo e ajuda permanecem acessíveis em cada contexto, sem uma faixa extra. */
-function ResumoDoEstudio({ estado }: { estado: EstadoDoEstudio | undefined }) {
-  return (
-    <div className="bolso-saldo-contexto">
-      <AjudaRecolhida rotulo="Sobre o estúdio">
-        Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas. Para consultar recargas, use Créditos e acesso no menu.
-      </AjudaRecolhida>
-      {estado?.saldo && (
-        <p className="bolso-saldo" aria-label="Seu saldo de créditos" aria-describedby="bolso-saldo-detalhe">
-          <Coins size={16} aria-hidden="true" />
-          <strong>{estado.saldo.disponivel}</strong> crédito{estado.saldo.disponivel === 1 ? "" : "s"}
-          {estado.carteira === "teste" ? " de teste" : ""}
-          {estado.saldo.reservado > 0 && <span> · {estado.saldo.reservado} reservado{estado.saldo.reservado === 1 ? "" : "s"}</span>}
-          <span id="bolso-saldo-detalhe" className="sr-only">{estado.saldo.disponivel} crédito{estado.saldo.disponivel === 1 ? "" : "s"}{estado.carteira === "teste" ? " de teste" : ""}{estado.saldo.reservado > 0 ? `, ${estado.saldo.reservado} reservado${estado.saldo.reservado === 1 ? "" : "s"}` : ""}. Para recarregar, use Créditos e acesso no menu.</span>
-        </p>
-      )}
-    </div>
-  );
-}
-
 // ─── Marca ─────────────────────────────────────────────────────────────
-export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar, saldo }: { inicial: Marca | null; aoSalvar: (m: Marca) => void; aoCancelar?: () => void; saldo?: React.ReactNode }) {
+export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar }: { inicial: Marca | null; aoSalvar: (m: Marca) => void; aoCancelar?: () => void }) {
   const [m, setM] = useState<Marca>(inicial || MARCA_VAZIA);
   const [cor, setCor] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -139,7 +119,6 @@ export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar, saldo }: { in
         <AjudaRecolhida rotulo="Sobre sua marca">
           Estes dados orientam suas campanhas. Você pode atualizar sua marca quando quiser.
         </AjudaRecolhida>
-        {saldo}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo id="bolso-marca-nome" rotulo="Nome da marca">
@@ -252,12 +231,12 @@ function BotaoDePedido({
   };
   const disponivel = estado && estado.saldo ? estado.saldo.disponivel : 0;
   return (
-    <div className="space-y-2">
+    <div className="bolso-pedido space-y-2">
       {!confirmando ? (
         <div className={tipo === "imagem" ? "bolso-gerar-arte-linha" : undefined}>
         <button type="button" className={`membros-acao bg-primary text-primary-foreground${tipo === "imagem" ? " bolso-gerar-arte-acao" : ""}`} aria-label={tipo === "imagem" ? rotulo : undefined} title={tipo === "imagem" ? rotulo : undefined} disabled={!!bloqueio} aria-describedby={[bloqueio ? `bolso-bloqueio-${tipo}` : null, tipo === "imagem" && tarifa !== null ? "bolso-tarifa-imagem" : null].filter(Boolean).join(" ") || undefined} onClick={() => setConfirmando(true)}>
           <Sparkles size={16} aria-hidden="true" />
-          {tipo === "texto" && rotulo}
+          {tipo === "texto" && <span className="bolso-gerar-texto-rotulo">{rotulo}</span>}
           {tipo === "texto" && tarifa !== null && <span className="opacity-80">· {tarifa} crédito{tarifa === 1 ? "" : "s"}</span>}
         </button>
         {tipo === "imagem" && tarifa !== null && <span id="bolso-tarifa-imagem" className="bolso-gerar-arte-custo">{tarifa} crédito{tarifa === 1 ? "" : "s"} por arte</span>}
@@ -488,7 +467,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
   const etapas: { id: Etapa; nome: string; feito: boolean }[] = [
     { id: "oferta", nome: "Oferta", feito: true },
     { id: "texto", nome: "Texto", feito: c.versoes.length > 0 },
-    { id: "arte", nome: "Arte e download", feito: c.artes.length > 0 },
+    { id: "arte", nome: "Arte", feito: c.artes.length > 0 },
   ];
   return (
     <section className="bolso-campanha" aria-labelledby="bolso-campanha-titulo">
@@ -501,13 +480,12 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         <h2 id="bolso-campanha-titulo" title={c.titulo}>
           {c.titulo}
         </h2>
-        <p className="text-[12px] text-muted-foreground">Atualizada em {dataCurta(c.atualizado_em)}</p>
+        <time className="bolso-campanha-data" dateTime={c.atualizado_em} title={`Atualizada em ${dataCurta(c.atualizado_em)}`} aria-label={`Atualizada em ${dataCurta(c.atualizado_em)}`}>{dataCurta(c.atualizado_em)}</time>
       </div>
-      {!editandoOferta && <ResumoDoEstudio estado={estado} />}
       </div>
       <nav className="bolso-etapas" aria-label="Etapas da campanha">
         {etapas.map((e, i) => (
-          <button key={e.id} type="button" aria-current={etapa === e.id ? "step" : undefined} onClick={() => setEtapa(e.id)}>
+          <button key={e.id} type="button" aria-label={e.id === "arte" ? "Arte e download" : e.nome} aria-current={etapa === e.id ? "step" : undefined} onClick={() => setEtapa(e.id)}>
             <span className="bolso-etapa-numero" aria-hidden="true">{e.feito && etapa !== e.id ? <Check size={14} /> : i + 1}</span>
             <span>{e.nome}</span>
           </button>
@@ -539,7 +517,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
 
       {etapa === "oferta" &&
         (editandoOferta ? (
-          <FormularioDaOferta campanha={c} estado={estado} saldo={<ResumoDoEstudio estado={estado} />} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
+          <FormularioDaOferta campanha={c} estado={estado} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
         ) : (
           <div className="bolso-cartao space-y-5">
             <dl className="bolso-resumo-oferta">
@@ -593,7 +571,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
                 <AjudaRecolhida rotulo="Sobre a arte">Uma imagem estática no formato escolhido, ligada à versão do texto marcada. Você revisa, baixa e publica.</AjudaRecolhida>
               </div>
               {formatos.length > 0 ? (
-                <label className="bolso-formato-inline"><span>Formato</span><select className="membros-campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>{formatos.map((f) => <option key={f} value={f}>{FORMATOS[f].nome} ({FORMATOS[f].proporcao})</option>)}</select></label>
+                <label className="bolso-formato-inline"><span className="bolso-formato-rotulo">Formato</span><select className="membros-campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>{formatos.map((f) => <option key={f} value={f}>{FORMATOS[f].nome} ({FORMATOS[f].proporcao})</option>)}</select></label>
               ) : <p className="text-[12px] text-muted-foreground">Os formatos aparecem quando o seu acesso estiver ativo.</p>}
               <span className="bolso-texto-em-uso">{c.versao_escolhida ? `Texto V${c.versao_escolhida}` : "Escolha o texto antes"}</span>
               <BotaoDePedido estado={estado} campanha={c} tipo="imagem" formato={formato} rotulo="Pedir a arte" aoPedir={atualizar} referencias={referencias} aguardandoReferencias={!!estado?.recursos_criativos?.referencias && referenciasOcupadas} />
@@ -653,7 +631,6 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : !marca.data || editandoMarca ? (
         <FormularioDaMarca
           inicial={marca.data}
-          saldo={<ResumoDoEstudio estado={e} />}
           aoCancelar={marca.data ? () => setEditandoMarca(false) : undefined}
           aoSalvar={() => {
             setEditandoMarca(false);
@@ -666,7 +643,6 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
         <FormularioDaOferta
           campanha={null}
           estado={e}
-          saldo={<ResumoDoEstudio estado={e} />}
           aoSalvar={(id) => {
             setNova(false);
             setAberta(id);
@@ -677,7 +653,12 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : (
         <div className="bolso-biblioteca space-y-5">
           <div className="bolso-biblioteca-topo">
-            <div className="bolso-biblioteca-titulo"><h2>Minhas campanhas</h2><ResumoDoEstudio estado={e} /></div>
+            <div className="bolso-biblioteca-titulo">
+              <h2>Minhas campanhas</h2>
+              <AjudaRecolhida rotulo="Sobre o estúdio">
+                Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas. Para consultar saldo e recargas, use Créditos e acesso no menu.
+              </AjudaRecolhida>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="membros-acao bolso-marca-atalho" onClick={() => setEditandoMarca(true)} aria-label={`Editar marca: ${marca.data.nome}`}>
                 <Palette size={16} aria-hidden="true" /><span>{marca.data.nome}</span>
