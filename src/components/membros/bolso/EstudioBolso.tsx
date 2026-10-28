@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Copy, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, Video, X } from "lucide-react";
-import TituloMembros from "@/components/membros/TituloMembros";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Copy, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, Video, X } from "lucide-react";
 import FormularioDaOferta from "./FormularioDaOferta";
 import VisualizadorDaArte from "./VisualizadorDaArte";
 import { AjustarArte, ReferenciasDaCampanha } from "./RecursosCriativos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AjudaRecolhida } from "@/components/sistema";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import {
   cancelarPedido,
   erroDoBolso,
@@ -232,13 +232,16 @@ function BotaoDePedido({
   };
   const disponivel = estado && estado.saldo ? estado.saldo.disponivel : 0;
   return (
-    <div className="space-y-2">
+    <div className="bolso-pedido space-y-2">
       {!confirmando ? (
-        <button type="button" className="membros-acao bg-primary text-primary-foreground" disabled={!!bloqueio} aria-describedby={bloqueio ? `bolso-bloqueio-${tipo}` : undefined} onClick={() => setConfirmando(true)}>
+        <div className={tipo === "imagem" ? "bolso-gerar-arte-linha" : undefined}>
+        <button type="button" className={`membros-acao bg-primary text-primary-foreground${tipo === "imagem" ? " bolso-gerar-arte-acao" : ""}`} aria-label={tipo === "imagem" ? rotulo : undefined} title={tipo === "imagem" ? rotulo : undefined} disabled={!!bloqueio} aria-describedby={[bloqueio ? `bolso-bloqueio-${tipo}` : null, tipo === "imagem" && tarifa !== null ? "bolso-tarifa-imagem" : null].filter(Boolean).join(" ") || undefined} onClick={() => setConfirmando(true)}>
           <Sparkles size={16} aria-hidden="true" />
-          {rotulo}
-          {tarifa !== null && <span className="opacity-80">· {tarifa} crédito{tarifa === 1 ? "" : "s"}</span>}
+          {tipo === "texto" && <span className="bolso-gerar-texto-rotulo">{rotulo}</span>}
+          {tipo === "texto" && tarifa !== null && <span className="opacity-80">· {tarifa} crédito{tarifa === 1 ? "" : "s"}</span>}
         </button>
+        {tipo === "imagem" && tarifa !== null && <span id="bolso-tarifa-imagem" className="bolso-gerar-arte-custo">{tarifa} crédito{tarifa === 1 ? "" : "s"} por arte</span>}
+        </div>
       ) : (
         <div className="bolso-confirmar" role="group" aria-label="Confirmar consumo de créditos">
           <p className="text-[13px]">
@@ -386,9 +389,8 @@ function CartaoDaArte({ arte, titulo, campanha, estado, aoMudar }: { arte: Arte;
           {arte.simulado && <span className="bolso-selo">Demonstração</span>}
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="membros-acao border border-border" onClick={() => void baixar()} disabled={baixando}>
+          <button type="button" className="membros-acao bolso-acao-icone" aria-label="Baixar arte" title="Baixar arte" onClick={() => void baixar()} disabled={baixando}>
             {baixando ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Download size={15} aria-hidden="true" />}
-            Baixar
           </button>
           <button type="button" className="membros-acao" aria-pressed={arte.escolhido} onClick={() => void escolherArte(arte.id).then(aoMudar)}>
             <Check size={15} aria-hidden="true" />
@@ -466,26 +468,25 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
   const etapas: { id: Etapa; nome: string; feito: boolean }[] = [
     { id: "oferta", nome: "Oferta", feito: true },
     { id: "texto", nome: "Texto", feito: c.versoes.length > 0 },
-    { id: "arte", nome: "Arte e download", feito: c.artes.length > 0 },
+    { id: "arte", nome: "Arte", feito: c.artes.length > 0 },
   ];
   return (
     <section className="bolso-campanha" aria-labelledby="bolso-campanha-titulo">
       <div className="bolso-campanha-barra">
       <div className="bolso-campanha-navegacao">
-      <button type="button" className="membros-acao bolso-voltar text-muted-foreground" aria-label="Minhas campanhas" title="Minhas campanhas" onClick={aoVoltar}>
+      <button type="button" className="membros-acao bolso-voltar bolso-navegacao-voltar text-muted-foreground" aria-label="Minhas campanhas" title="Minhas campanhas" onClick={aoVoltar}>
         <ArrowLeft size={16} aria-hidden="true" />
-        <span className="bolso-voltar-rotulo">Minhas campanhas</span>
       </button>
       <div className="bolso-campanha-topo">
         <h2 id="bolso-campanha-titulo" title={c.titulo}>
           {c.titulo}
         </h2>
-        <p className="text-[12px] text-muted-foreground">Atualizada em {dataCurta(c.atualizado_em)}</p>
+        <time className="bolso-campanha-data" dateTime={c.atualizado_em} title={`Atualizada em ${dataCurta(c.atualizado_em)}`} aria-label={`Atualizada em ${dataCurta(c.atualizado_em)}`}>{dataCurta(c.atualizado_em)}</time>
       </div>
       </div>
       <nav className="bolso-etapas" aria-label="Etapas da campanha">
         {etapas.map((e, i) => (
-          <button key={e.id} type="button" aria-current={etapa === e.id ? "step" : undefined} onClick={() => setEtapa(e.id)}>
+          <button key={e.id} type="button" aria-label={e.id === "arte" ? "Arte e download" : e.nome} aria-current={etapa === e.id ? "step" : undefined} onClick={() => setEtapa(e.id)}>
             <span className="bolso-etapa-numero" aria-hidden="true">{e.feito && etapa !== e.id ? <Check size={14} /> : i + 1}</span>
             <span>{e.nome}</span>
           </button>
@@ -571,7 +572,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
                 <AjudaRecolhida rotulo="Sobre a arte">Uma imagem estática no formato escolhido, ligada à versão do texto marcada. Você revisa, baixa e publica.</AjudaRecolhida>
               </div>
               {formatos.length > 0 ? (
-                <label className="bolso-formato-inline"><span>Formato</span><select className="membros-campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>{formatos.map((f) => <option key={f} value={f}>{FORMATOS[f].nome} ({FORMATOS[f].proporcao})</option>)}</select></label>
+                <label className="bolso-formato-inline"><span className="bolso-formato-rotulo">Formato</span><select className="membros-campo" value={formato} onChange={(e) => setFormato(e.target.value as Formato)}>{formatos.map((f) => <option key={f} value={f}>{FORMATOS[f].nome} ({FORMATOS[f].proporcao})</option>)}</select></label>
               ) : <p className="text-[12px] text-muted-foreground">Os formatos aparecem quando o seu acesso estiver ativo.</p>}
               <span className="bolso-texto-em-uso">{c.versao_escolhida ? `Texto V${c.versao_escolhida}` : "Escolha o texto antes"}</span>
               <BotaoDePedido estado={estado} campanha={c} tipo="imagem" formato={formato} rotulo="Pedir a arte" aoPedir={atualizar} referencias={referencias} aguardandoReferencias={!!estado?.recursos_criativos?.referencias && referenciasOcupadas} />
@@ -616,22 +617,8 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
 
   return (
     <section className="bolso-estudio" data-bolso-estudio="" aria-label="Estúdio Aceleriq de Bolso">
+      <CabecalhoDePagina className="sr-only" titulo="Aceleriq de Bolso" />
       {situacao.demonstracao && <FaixaDeDemonstracao />}
-      <header className="bolso-cabecalho">
-        <div className="min-w-0">
-          <TituloMembros titulo="Aceleriq de Bolso" principal icone={<Sparkles size={23} className="text-primary" aria-hidden="true" />}>
-            Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas.
-          </TituloMembros>
-        </div>
-        {e.saldo && (
-          <p className="bolso-saldo" aria-label="Seu saldo de créditos">
-            <Coins size={16} aria-hidden="true" />
-            <strong>{e.saldo.disponivel}</strong> crédito{e.saldo.disponivel === 1 ? "" : "s"}
-            {e.carteira === "teste" ? " de teste" : ""}
-            {e.saldo.reservado > 0 && <span> · {e.saldo.reservado} reservado{e.saldo.reservado === 1 ? "" : "s"}</span>}
-          </p>
-        )}
-      </header>
       {!situacao.podeGerar && (
         <p role="status" className="bolso-aviso">
           <strong>{situacao.titulo}.</strong> {situacao.texto}
@@ -667,7 +654,12 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : (
         <div className="bolso-biblioteca space-y-5">
           <div className="bolso-biblioteca-topo">
-            <h2>Minhas campanhas</h2>
+            <div className="bolso-biblioteca-titulo">
+              <h2>Minhas campanhas</h2>
+              <AjudaRecolhida rotulo="Sobre o estúdio">
+                Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas. Para consultar saldo e recargas, use Créditos e acesso no menu.
+              </AjudaRecolhida>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="membros-acao bolso-marca-atalho" onClick={() => setEditandoMarca(true)} aria-label={`Editar marca: ${marca.data.nome}`}>
                 <Palette size={16} aria-hidden="true" /><span>{marca.data.nome}</span>

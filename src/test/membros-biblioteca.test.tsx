@@ -6,6 +6,7 @@ import {
   waitFor,
   cleanup,
   act,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -105,6 +106,22 @@ beforeEach(() => {
   mocks.materiais.mockResolvedValue({ materiais: [], progresso: [] });
 });
 describe("biblioteca integrada", () => {
+  it("recolhe o menu com um único ícone dentro da lateral e preserva a navegação", async () => {
+    montar();
+    const menu = await screen.findByRole("complementary", { name: "Menu de membros" });
+    const recolher = within(menu).getByRole("button", { name: "Recolher menu de membros" });
+    expect(screen.getAllByRole("button", { name: "Recolher menu de membros" })).toHaveLength(1);
+    expect(recolher).toHaveTextContent("");
+    expect(recolher.closest("header, main")).toBeNull();
+    fireEvent.click(recolher);
+    expect(within(menu).getByRole("button", { name: "Expandir menu de membros" })).toHaveAttribute("aria-expanded", "false");
+    expect(menu.parentElement).toHaveClass("recolhida");
+    fireEvent.click(within(menu).getByRole("button", { name: "Minha lista" }));
+    expect(within(menu).getByRole("button", { name: "Minha lista" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(menu).getByRole("button", { name: "Expandir menu de membros" }));
+    expect(menu.parentElement).not.toHaveClass("recolhida");
+    expect(within(menu).getByRole("button", { name: "Recolher menu de membros" })).toHaveAttribute("aria-expanded", "true");
+  });
   const produtoCrm = (origens: Produto["origens"] = []) => produto({
     id: "crm", titulo: "CRM privado", categoria: "Ferramentas", formato: "CRM",
     origens, em_venda: false,
