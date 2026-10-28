@@ -155,7 +155,7 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
       {marca && <div className="flex items-center gap-1.5"><p className={texto.auxiliar}>Arquivos do painel: {marca.nome}</p><AjudaRecolhida rotulo="Pastas compartilhadas entre marcas">As pastas do Workspace são compartilhadas entre as marcas deste cliente.</AjudaRecolhida></div>}
       <div className="grid min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
         {/* 22/10 (dono: "tá rolando inteiro"): no computador a lateral de pastas fica parada (cada lista de pastas rola sozinha); só a galeria rola com a página. */}
-        <aside aria-label="Pastas da organização" data-lateral-fixa="" className={juntar(superficie.painel, "min-w-0 self-start p-2 md:sticky md:top-[calc(env(safe-area-inset-top)+152px)]")}>
+        <aside aria-label="Pastas da organização" data-lateral-fixa="" className={juntar(superficie.painel, "min-w-0 self-start p-2 md:sticky md:top-[calc(env(safe-area-inset-top)+152px)] md:max-h-[calc(100dvh-env(safe-area-inset-top)-168px)] md:overflow-y-auto md:overscroll-contain")}>
           {linha("todos", "Todos os arquivos", itens.length)}
           {linha("workspace", "Workspace do cliente", itens.filter((i) => i.origem === "workspace").length)}
           <div className="max-h-72 overflow-y-auto">{pastas.map((p) => linha(`workspace:${p.id}`, p.nome, contagens.get(p.id) || 0, true))}</div>
