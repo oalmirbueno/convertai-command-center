@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Coins, Copy, Download, FlaskConical, Image, Loader2, Megaphone, Palette, Plus, RotateCcw, Sparkles, Target, Type, Video, X } from "lucide-react";
-import TituloMembros from "@/components/membros/TituloMembros";
 import FormularioDaOferta from "./FormularioDaOferta";
 import VisualizadorDaArte from "./VisualizadorDaArte";
 import { AjustarArte, ReferenciasDaCampanha } from "./RecursosCriativos";
@@ -90,8 +89,28 @@ function Erro({ texto }: { texto: string | null }) {
   );
 }
 
+/** Saldo e ajuda permanecem acessíveis em cada contexto, sem uma faixa extra. */
+function ResumoDoEstudio({ estado }: { estado: EstadoDoEstudio | undefined }) {
+  return (
+    <div className="bolso-saldo-contexto">
+      <AjudaRecolhida rotulo="Sobre o estúdio">
+        Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas. Para consultar recargas, use Créditos e acesso no menu.
+      </AjudaRecolhida>
+      {estado?.saldo && (
+        <p className="bolso-saldo" aria-label="Seu saldo de créditos" aria-describedby="bolso-saldo-detalhe">
+          <Coins size={16} aria-hidden="true" />
+          <strong>{estado.saldo.disponivel}</strong> crédito{estado.saldo.disponivel === 1 ? "" : "s"}
+          {estado.carteira === "teste" ? " de teste" : ""}
+          {estado.saldo.reservado > 0 && <span> · {estado.saldo.reservado} reservado{estado.saldo.reservado === 1 ? "" : "s"}</span>}
+          <span id="bolso-saldo-detalhe" className="sr-only">{estado.saldo.disponivel} crédito{estado.saldo.disponivel === 1 ? "" : "s"}{estado.carteira === "teste" ? " de teste" : ""}{estado.saldo.reservado > 0 ? `, ${estado.saldo.reservado} reservado${estado.saldo.reservado === 1 ? "" : "s"}` : ""}. Para recarregar, use Créditos e acesso no menu.</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Marca ─────────────────────────────────────────────────────────────
-export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar }: { inicial: Marca | null; aoSalvar: (m: Marca) => void; aoCancelar?: () => void }) {
+export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar, saldo }: { inicial: Marca | null; aoSalvar: (m: Marca) => void; aoCancelar?: () => void; saldo?: React.ReactNode }) {
   const [m, setM] = useState<Marca>(inicial || MARCA_VAZIA);
   const [cor, setCor] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -120,6 +139,7 @@ export function FormularioDaMarca({ inicial, aoSalvar, aoCancelar }: { inicial: 
         <AjudaRecolhida rotulo="Sobre sua marca">
           Estes dados orientam suas campanhas. Você pode atualizar sua marca quando quiser.
         </AjudaRecolhida>
+        {saldo}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo id="bolso-marca-nome" rotulo="Nome da marca">
@@ -234,11 +254,14 @@ function BotaoDePedido({
   return (
     <div className="space-y-2">
       {!confirmando ? (
-        <button type="button" className="membros-acao bg-primary text-primary-foreground" disabled={!!bloqueio} aria-describedby={bloqueio ? `bolso-bloqueio-${tipo}` : undefined} onClick={() => setConfirmando(true)}>
+        <div className={tipo === "imagem" ? "bolso-gerar-arte-linha" : undefined}>
+        <button type="button" className={`membros-acao bg-primary text-primary-foreground${tipo === "imagem" ? " bolso-gerar-arte-acao" : ""}`} aria-label={tipo === "imagem" ? rotulo : undefined} title={tipo === "imagem" ? rotulo : undefined} disabled={!!bloqueio} aria-describedby={[bloqueio ? `bolso-bloqueio-${tipo}` : null, tipo === "imagem" && tarifa !== null ? "bolso-tarifa-imagem" : null].filter(Boolean).join(" ") || undefined} onClick={() => setConfirmando(true)}>
           <Sparkles size={16} aria-hidden="true" />
-          {rotulo}
-          {tarifa !== null && <span className="opacity-80">· {tarifa} crédito{tarifa === 1 ? "" : "s"}</span>}
+          {tipo === "texto" && rotulo}
+          {tipo === "texto" && tarifa !== null && <span className="opacity-80">· {tarifa} crédito{tarifa === 1 ? "" : "s"}</span>}
         </button>
+        {tipo === "imagem" && tarifa !== null && <span id="bolso-tarifa-imagem" className="bolso-gerar-arte-custo">{tarifa} crédito{tarifa === 1 ? "" : "s"} por arte</span>}
+        </div>
       ) : (
         <div className="bolso-confirmar" role="group" aria-label="Confirmar consumo de créditos">
           <p className="text-[13px]">
@@ -386,9 +409,8 @@ function CartaoDaArte({ arte, titulo, campanha, estado, aoMudar }: { arte: Arte;
           {arte.simulado && <span className="bolso-selo">Demonstração</span>}
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="membros-acao border border-border" onClick={() => void baixar()} disabled={baixando}>
+          <button type="button" className="membros-acao bolso-acao-icone" aria-label="Baixar arte" title="Baixar arte" onClick={() => void baixar()} disabled={baixando}>
             {baixando ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Download size={15} aria-hidden="true" />}
-            Baixar
           </button>
           <button type="button" className="membros-acao" aria-pressed={arte.escolhido} onClick={() => void escolherArte(arte.id).then(aoMudar)}>
             <Check size={15} aria-hidden="true" />
@@ -472,9 +494,8 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
     <section className="bolso-campanha" aria-labelledby="bolso-campanha-titulo">
       <div className="bolso-campanha-barra">
       <div className="bolso-campanha-navegacao">
-      <button type="button" className="membros-acao bolso-voltar text-muted-foreground" aria-label="Minhas campanhas" title="Minhas campanhas" onClick={aoVoltar}>
+      <button type="button" className="membros-acao bolso-voltar bolso-navegacao-voltar text-muted-foreground" aria-label="Minhas campanhas" title="Minhas campanhas" onClick={aoVoltar}>
         <ArrowLeft size={16} aria-hidden="true" />
-        <span className="bolso-voltar-rotulo">Minhas campanhas</span>
       </button>
       <div className="bolso-campanha-topo">
         <h2 id="bolso-campanha-titulo" title={c.titulo}>
@@ -482,6 +503,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
         </h2>
         <p className="text-[12px] text-muted-foreground">Atualizada em {dataCurta(c.atualizado_em)}</p>
       </div>
+      {!editandoOferta && <ResumoDoEstudio estado={estado} />}
       </div>
       <nav className="bolso-etapas" aria-label="Etapas da campanha">
         {etapas.map((e, i) => (
@@ -517,7 +539,7 @@ function TelaDaCampanha({ id, estado, aoVoltar }: { id: string; estado: EstadoDo
 
       {etapa === "oferta" &&
         (editandoOferta ? (
-          <FormularioDaOferta campanha={c} estado={estado} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
+          <FormularioDaOferta campanha={c} estado={estado} saldo={<ResumoDoEstudio estado={estado} />} aoSalvar={() => { setEditandoOferta(false); atualizar(); }} aoCancelar={() => setEditandoOferta(false)} />
         ) : (
           <div className="bolso-cartao space-y-5">
             <dl className="bolso-resumo-oferta">
@@ -616,22 +638,8 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
 
   return (
     <section className="bolso-estudio" data-bolso-estudio="" aria-label="Estúdio Aceleriq de Bolso">
+      <h1 className="sr-only">Aceleriq de Bolso</h1>
       {situacao.demonstracao && <FaixaDeDemonstracao />}
-      <header className="bolso-cabecalho">
-        <div className="min-w-0">
-          <TituloMembros titulo="Aceleriq de Bolso" principal icone={<Sparkles size={23} className="text-primary" aria-hidden="true" />}>
-            Você prepara a campanha, revisa o texto e a arte, baixa e publica. Autoatendimento. Não é agência humana, não faz gestão de anúncios e não garante vendas.
-          </TituloMembros>
-        </div>
-        {e.saldo && (
-          <p className="bolso-saldo" aria-label="Seu saldo de créditos">
-            <Coins size={16} aria-hidden="true" />
-            <strong>{e.saldo.disponivel}</strong> crédito{e.saldo.disponivel === 1 ? "" : "s"}
-            {e.carteira === "teste" ? " de teste" : ""}
-            {e.saldo.reservado > 0 && <span> · {e.saldo.reservado} reservado{e.saldo.reservado === 1 ? "" : "s"}</span>}
-          </p>
-        )}
-      </header>
       {!situacao.podeGerar && (
         <p role="status" className="bolso-aviso">
           <strong>{situacao.titulo}.</strong> {situacao.texto}
@@ -645,6 +653,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : !marca.data || editandoMarca ? (
         <FormularioDaMarca
           inicial={marca.data}
+          saldo={<ResumoDoEstudio estado={e} />}
           aoCancelar={marca.data ? () => setEditandoMarca(false) : undefined}
           aoSalvar={() => {
             setEditandoMarca(false);
@@ -657,6 +666,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
         <FormularioDaOferta
           campanha={null}
           estado={e}
+          saldo={<ResumoDoEstudio estado={e} />}
           aoSalvar={(id) => {
             setNova(false);
             setAberta(id);
@@ -667,7 +677,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
       ) : (
         <div className="bolso-biblioteca space-y-5">
           <div className="bolso-biblioteca-topo">
-            <h2>Minhas campanhas</h2>
+            <div className="bolso-biblioteca-titulo"><h2>Minhas campanhas</h2><ResumoDoEstudio estado={e} /></div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="membros-acao bolso-marca-atalho" onClick={() => setEditandoMarca(true)} aria-label={`Editar marca: ${marca.data.nome}`}>
                 <Palette size={16} aria-hidden="true" /><span>{marca.data.nome}</span>

@@ -96,13 +96,16 @@
   justify-content: center;
   flex: none;
   gap: 8px;
-  min-height: 40px;
-  padding: 8px 10px;
-  border: 1px solid hsl(var(--border));
+  width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  border: 0;
   border-radius: 10px;
   color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
+.membros-estudio-ativo .membros-topo .membros-menu-recolher > span { display: none; }
+.membros-estudio-ativo .membros-topo .membros-menu-recolher:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
 .membros-estudio-ativo .membros-topo .membros-menu-recolher:hover {
   background: hsl(var(--muted));
   color: hsl(var(--foreground));
@@ -1196,7 +1199,7 @@
 .bolso-trabalho-texto .bolso-cartao { padding: 20px; }
 .bolso-editor-texto { min-width: 0; }
 .bolso-estudio textarea.membros-campo { min-height: 120px; resize: vertical; }
-.bolso-estudio textarea.bolso-editor-legenda { min-height: 240px; }
+.bolso-estudio textarea.bolso-editor-legenda { min-height: 320px; }
 .bolso-assistente { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 16px; }
 .bolso-assistente-topo { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .bolso-assistente-topo .bolso-titulo-de-bloco { padding: 0; }
@@ -1229,11 +1232,12 @@
 .bolso-mensagem-em-uso summary { width: fit-content; cursor: pointer; }
 .bolso-mensagem-em-uso .bolso-contexto-campanha { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; border-bottom: 0; }
 .bolso-arte-ampliar { display: grid; position: relative; width: 100%; height: 100%; min-height: 0; place-items: center; cursor: zoom-in; }
+.bolso-arte-ampliar:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -3px; }
 .bolso-arte-ampliar-selo { display: flex; align-items: center; gap: 6px; position: absolute; right: 12px; bottom: 12px; padding: 7px 10px; background: #101b17dd; color: white; border: 1px solid #ffffff2b; border-radius: 99px; font-size: 11px; }
 .bolso-trabalho-arte .bolso-galeria { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); grid-auto-rows: max-content; align-content: start; align-items: start; padding: 2px; }
 .bolso-trabalho-arte .bolso-galeria > .bolso-arte { height: max-content; min-height: min-content; align-self: start; }
-.bolso-trabalho-arte .bolso-arte-quadro { max-height: min(64dvh, 720px); margin-inline: auto; }
-.bolso-trabalho-arte .bolso-arte-quadro img { max-height: min(64dvh, 720px); }
+.bolso-trabalho-arte .bolso-arte-quadro { width: 100%; max-height: 74vh; max-height: min(74dvh, 840px); margin-inline: auto; }
+.bolso-trabalho-arte .bolso-arte-quadro img { display: block; width: auto; height: auto; max-width: 100%; max-height: 74vh; max-height: min(74dvh, 840px); object-fit: contain; }
 .bolso-convite-visual { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 28px; }
 .bolso-convite-visual > img { width: 100%; max-height: 300px; object-fit: contain; border-radius: 16px; }
 .bolso-em-breve { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border: 1px solid hsl(var(--border)); border-radius: 16px; color: hsl(var(--muted-foreground)); background: hsl(var(--card)); }
@@ -2219,4 +2223,42 @@
   .membros-portal .bolso-assistente-objetivos { gap: 10px; }
   .membros-portal .bolso-assistente-objetivos .bolso-opcao { min-height: 56px; padding: 13px 14px; font-size: 15px; }
   .membros-portal .bolso-assistente-acoes { padding-top: 14px; }
+}
+
+/* Estúdio: mais espaço para criar, com controles compactos e acessíveis. */
+.bolso-assistente-topo-meta { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 14px; min-width: 0; }
+.bolso-saldo-contexto { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.bolso-saldo-contexto .bolso-saldo { display: inline-flex; align-items: center; flex-wrap: wrap; min-height: 36px; padding: 6px 10px; gap: 4px; font-size: 11px; }
+.bolso-saldo-contexto .bolso-saldo strong { font-size: 14px; }
+.bolso-biblioteca-titulo { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.bolso-gerar-arte-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.bolso-estudio .membros-acao.bg-primary.bolso-gerar-arte-acao { display: inline-flex; justify-content: center; align-items: center; width: 44px; min-width: 44px; min-height: 44px; padding: 10px; }
+.bolso-gerar-arte-custo { color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.4; }
+.bolso-assistente-acoes { border-top: 0; }
+.bolso-estudio .bolso-acao-voltar, .bolso-estudio .bolso-navegacao-voltar { border: 0; background: transparent; box-shadow: none; color: hsl(var(--muted-foreground)); }
+.bolso-estudio .bolso-acao-voltar:hover, .bolso-estudio .bolso-navegacao-voltar:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.bolso-estudio .bolso-acao-icone { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 10px; border: 0; border-radius: 12px; }
+.bolso-estudio .bolso-acao-icone:focus-visible, .bolso-revisao-editar:focus-visible, .bolso-opcao:focus-within { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+.bolso-revisao-grupos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; }
+.bolso-revisao-grupo { min-width: 0; padding-top: 14px; border-top: 1px solid hsl(var(--border)); }
+.bolso-revisao-grupo-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.bolso-revisao-grupo-topo h4 { font-size: 14px; font-weight: 650; }
+.bolso-revisao-valor { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.bolso-revisao-editar { min-height: 40px; padding: 8px 10px; border-radius: 8px; color: hsl(var(--primary)); font-size: 12px; font-weight: 600; }
+.bolso-revisao-editar:hover { background: hsl(var(--muted)); }
+.bolso-revisao-grupo .bolso-resumo-oferta { gap: 14px 18px; }
+.bolso-campanha-barra .bolso-etapas { gap: 2px; padding: 0; border: 0; background: transparent; }
+.bolso-campanha-barra .bolso-etapas button { min-height: 44px; padding: 6px 10px; font-size: 12px; }
+.bolso-campanha-barra .bolso-etapa-numero { width: 21px; height: 21px; font-size: 10px; }
+@media (prefers-reduced-motion: no-preference) {
+  .bolso-etapa-animada { animation: bolso-entrada-etapa .24s ease-out both; }
+  @keyframes bolso-entrada-etapa { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+}
+@media (max-width: 767px) {
+  .bolso-revisao-grupos { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .bolso-assistente-topo-meta { gap: 6px; }
+  .bolso-campanha-barra .bolso-etapas button { padding-inline: 5px; gap: 4px; }
+  .bolso-campanha-navegacao { flex-wrap: wrap; }
+  .bolso-campanha-navegacao .bolso-campanha-topo { flex: 1 1 160px; }
+  .bolso-saldo-contexto .bolso-saldo { max-width: 100%; }
 }

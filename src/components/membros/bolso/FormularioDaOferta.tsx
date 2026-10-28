@@ -17,7 +17,7 @@ function Campo({ id, rotulo, ajuda, children }: { id: string; rotulo: string; aj
   return <div className="space-y-1.5"><label htmlFor={id} className="block text-[13px] font-medium">{rotulo}</label>{children}{ajuda && <p id={`${id}-ajuda`} className="text-[12px] text-muted-foreground">{ajuda}</p>}</div>;
 }
 
-export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCancelar }: { campanha: Campanha | null; estado?: EstadoDoEstudio; aoSalvar: (id: string) => void; aoCancelar?: () => void }) {
+export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCancelar, saldo }: { campanha: Campanha | null; estado?: EstadoDoEstudio; aoSalvar: (id: string) => void; aoCancelar?: () => void; saldo?: ReactNode }) {
   const [b, setB] = useState<Briefing>(campanha ? { ...BRIEFING_VAZIO, ...campanha.briefing } : BRIEFING_VAZIO);
   const [titulo, setTitulo] = useState(campanha?.titulo || "");
   const [etapa, setEtapa] = useState(0);
@@ -26,6 +26,7 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
   const [salvando, setSalvando] = useState(false);
   const cabecalho = useRef<HTMLHeadingElement>(null);
   const etapaAnterior = useRef(0);
+  const navegandoPorSetas = useRef(false);
   useEffect(() => {
     if (etapaAnterior.current !== etapa) {
       const tituloDaEtapa = cabecalho.current;
@@ -48,6 +49,11 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
     etapaAnterior.current = etapa;
   }, [etapa]);
   const mudar = (campo: keyof Briefing, valor: string) => setB((a) => ({ ...a, [campo]: valor }));
+  const escolherObjetivo = (tipo: TipoDaCampanha) => {
+    mudar("tipo", tipo);
+    setErro(null);
+    setEtapa(1);
+  };
   const faltas = faltasDoBriefing(b);
   const briefingSalvo = { ...BRIEFING_VAZIO, ...campanha?.briefing };
   const rascunhoAlterado = (Object.keys(b) as (keyof Briefing)[]).some((campo) => b[campo] !== briefingSalvo[campo]);
@@ -57,7 +63,12 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
   };
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (etapa < ETAPAS.length - 1) { setEtapa((atual) => atual + 1); return; }
+    if (etapa === 1 && !b.produto.trim()) {
+      setErro("Diga qual produto ou serviço a campanha divulga.");
+      document.getElementById("bolso-produto")?.focus();
+      return;
+    }
+    if (etapa < ETAPAS.length - 1) { setErro(null); setEtapa((atual) => atual + 1); return; }
     if (!b.produto.trim()) { setErro("Diga qual produto ou serviço a campanha divulga."); setEtapa(1); return; }
     setSalvando(true);
     setErro(null);
@@ -76,18 +87,18 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
           <Target size={19} aria-hidden="true" /><h2 id="bolso-oferta-titulo">Sua campanha</h2>
           <AjudaRecolhida rotulo="Como preencher a oferta">Escreva só o que é verdade hoje. O estúdio não inventa preço, desconto, estoque, prazo, depoimento ou resultado: o que você não informar fica de fora do texto.</AjudaRecolhida>
         </div>
-        <span className="bolso-assistente-contagem">{etapa + 1} de {ETAPAS.length}</span>
+        <div className="bolso-assistente-topo-meta">{saldo}<span className="bolso-assistente-contagem">{etapa + 1} de {ETAPAS.length}</span></div>
       </div>
       <nav className="bolso-assistente-etapas" aria-label="Preparação da campanha">
-        {ETAPAS.map((nome, indice) => <button key={nome} type="button" aria-current={etapa === indice ? "step" : undefined} onClick={() => setEtapa(indice)} disabled={salvando}><span aria-hidden="true">{indice + 1}</span>{nome}</button>)}
+        {ETAPAS.map((nome, indice) => <button key={nome} type="button" aria-current={etapa === indice ? "step" : undefined} onClick={() => { setErro(null); setEtapa(indice); }} disabled={salvando}><span aria-hidden="true">{indice + 1}</span>{nome}</button>)}
       </nav>
-      <div className="bolso-assistente-passo">
+      <div key={etapa} className="bolso-assistente-passo bolso-etapa-animada">
         <h3 ref={cabecalho} tabIndex={-1} className="bolso-assistente-titulo">{["Qual é o objetivo?", "O que você quer divulgar?", "Qual é a sua oferta?", "Tudo certo para começar?"][etapa]}</h3>
         {erro && <p role="alert" className="text-[13px] text-destructive">{erro}</p>}
         {etapa === 0 && campanha && estado && (estado.recursos_criativos?.briefing || campanha.jobs.some((job) => job.natureza === "briefing")) && <CompletarOferta campanha={campanha} estado={estado} rascunhoAlterado={rascunhoAlterado} aoCompletar={aplicarSugestao} />}
-        {etapa === 0 && <fieldset className="space-y-3"><legend className="sr-only">Qual é o objetivo?</legend><div className="bolso-assistente-objetivos" role="radiogroup">{(Object.keys(TIPOS) as TipoDaCampanha[]).map((t) => <label key={t} className="bolso-opcao" data-escolhida={b.tipo === t || undefined}><input type="radio" name="bolso-tipo" value={t} checked={b.tipo === t} onChange={() => mudar("tipo", t)} className="sr-only" /><span className="bolso-opcao-marca" aria-hidden="true">{b.tipo === t && <Check size={12} />}</span><span>{TIPOS[t].nome}</span></label>)}</div></fieldset>}
+        {etapa === 0 && <fieldset className="space-y-3" onKeyDownCapture={(e) => { navegandoPorSetas.current = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key); }} onKeyUpCapture={() => { navegandoPorSetas.current = false; }} onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) navegandoPorSetas.current = false; }}><legend className="sr-only">Qual é o objetivo?</legend><div className="bolso-assistente-objetivos" role="radiogroup">{(Object.keys(TIPOS) as TipoDaCampanha[]).map((t) => <label key={t} className="bolso-opcao" data-escolhida={b.tipo === t || undefined}><input type="radio" name="bolso-tipo" value={t} checked={b.tipo === t} onChange={() => mudar("tipo", t)} onClick={() => { if (navegandoPorSetas.current) { mudar("tipo", t); return; } escolherObjetivo(t); }} onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); escolherObjetivo(t); } }} className="sr-only" /><span className="bolso-opcao-marca" aria-hidden="true">{b.tipo === t && <Check size={12} />}</span><span>{TIPOS[t].nome}</span></label>)}</div></fieldset>}
         {etapa === 1 && <div className="bolso-assistente-campos">
-          <Campo id="bolso-produto" rotulo="Produto ou serviço"><input id="bolso-produto" className="membros-campo" value={b.produto} onChange={(e) => mudar("produto", e.target.value)} maxLength={1500} required aria-invalid={!b.produto.trim() && !!erro} /></Campo>
+          <Campo id="bolso-produto" rotulo="Produto ou serviço"><input id="bolso-produto" className="membros-campo" value={b.produto} onChange={(e) => { mudar("produto", e.target.value); if (e.target.value.trim()) setErro(null); }} maxLength={1500} required aria-invalid={!b.produto.trim() && !!erro} /></Campo>
           <Campo id="bolso-titulo" rotulo="Nome da campanha" ajuda="Opcional. Só para você achar depois."><input id="bolso-titulo" className="membros-campo" value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={160} aria-describedby="bolso-titulo-ajuda" /></Campo>
           <Campo id="bolso-publico" rotulo="Para quem é esta campanha" ajuda="Vazio: usa o público da marca."><input id="bolso-publico" className="membros-campo" value={b.publico} onChange={(e) => mudar("publico", e.target.value)} maxLength={1500} aria-describedby="bolso-publico-ajuda" /></Campo>
           <Campo id="bolso-canal" rotulo="Onde vai publicar"><input id="bolso-canal" className="membros-campo" value={b.canal} onChange={(e) => mudar("canal", e.target.value)} placeholder="Instagram, WhatsApp..." maxLength={1500} /></Campo>
@@ -102,17 +113,25 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
           </div>
         </div>}
         {etapa === 3 && <div className="space-y-5">
-          <dl className="bolso-resumo-oferta bolso-assistente-revisao">
-            <div><dt>Objetivo</dt><dd>{TIPOS[b.tipo].nome}</dd></div><div><dt>Produto ou serviço</dt><dd>{b.produto || "Não informado"}</dd></div>
-            <div><dt>Campanha</dt><dd>{titulo || b.produto || "Sem nome"}</dd></div><div><dt>Público</dt><dd>{b.publico || "Público da marca"}</dd></div>
-            <div><dt>Diferencial</dt><dd>{b.diferencial || "Não informado"}</dd></div><div><dt>Condições</dt><dd>{b.condicoes || "Não informadas"}</dd></div>
-            <div><dt>Chamada na arte</dt><dd>{b.cta || "Não definida"}</dd></div><div><dt>Canal</dt><dd>{b.canal || "Não informado"}</dd></div>
-          </dl>
+          <div className="bolso-revisao-grupos">
+            <section className="bolso-revisao-grupo" aria-labelledby="bolso-revisao-objetivo">
+              <div className="bolso-revisao-grupo-topo"><h4 id="bolso-revisao-objetivo">Objetivo</h4><button type="button" className="bolso-revisao-editar" onClick={() => setEtapa(0)} aria-label="Editar objetivo">Editar</button></div>
+              <p className="bolso-revisao-valor">{TIPOS[b.tipo].nome}</p>
+            </section>
+            <section className="bolso-revisao-grupo" aria-labelledby="bolso-revisao-produto">
+              <div className="bolso-revisao-grupo-topo"><h4 id="bolso-revisao-produto">Produto</h4><button type="button" className="bolso-revisao-editar" onClick={() => setEtapa(1)} aria-label="Editar produto">Editar</button></div>
+              <dl className="bolso-resumo-oferta"><div><dt>Produto ou serviço</dt><dd>{b.produto || "Não informado"}</dd></div><div><dt>Campanha</dt><dd>{titulo || b.produto || "Sem nome"}</dd></div><div><dt>Público</dt><dd>{b.publico || "Público da marca"}</dd></div><div><dt>Canal</dt><dd>{b.canal || "Não informado"}</dd></div></dl>
+            </section>
+            <section className="bolso-revisao-grupo" aria-labelledby="bolso-revisao-oferta">
+              <div className="bolso-revisao-grupo-topo"><h4 id="bolso-revisao-oferta">Oferta</h4><button type="button" className="bolso-revisao-editar" onClick={() => setEtapa(2)} aria-label="Editar oferta">Editar</button></div>
+              <dl className="bolso-resumo-oferta"><div><dt>Diferencial</dt><dd>{b.diferencial || "Não informado"}</dd></div><div><dt>Condições</dt><dd>{b.condicoes || "Não informadas"}</dd></div><div><dt>Chamada na arte</dt><dd>{b.cta || "Não definida"}</dd></div></dl>
+            </section>
+          </div>
           {faltas.length > 0 && <p className="text-[12px] text-muted-foreground">Para um texto melhor, complete: {faltas.join(", ")}.</p>}
         </div>}
       </div>
       <div className="bolso-assistente-acoes">
-        <div className="flex flex-wrap gap-2">{etapa > 0 && <button type="button" className="membros-acao border border-border" disabled={salvando} onClick={() => setEtapa((atual) => atual - 1)}><ArrowLeft size={16} aria-hidden="true" />Voltar</button>}{aoCancelar && <button type="button" className="membros-acao" disabled={salvando} onClick={aoCancelar}>Cancelar</button>}</div>
+        <div className="flex flex-wrap gap-2">{etapa > 0 && <button type="button" className="membros-acao bolso-acao-voltar" disabled={salvando} onClick={() => { setErro(null); setEtapa((atual) => atual - 1); }}><ArrowLeft size={16} aria-hidden="true" />Voltar</button>}{aoCancelar && <button type="button" className="membros-acao" disabled={salvando} onClick={aoCancelar}>Cancelar</button>}</div>
         <button type="submit" className="membros-acao bg-primary text-primary-foreground" disabled={salvando}>{salvando ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : etapa === 3 ? <Check size={16} aria-hidden="true" /> : null}{etapa === 3 ? "Salvar oferta" : "Continuar"}{etapa < 3 && <ArrowRight size={16} aria-hidden="true" />}</button>
       </div>
     </form>

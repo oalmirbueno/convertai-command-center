@@ -98,9 +98,10 @@ describe("estúdio com o banco simulado", () => {
     montar(h(EstudioBolso));
     expect(await screen.findByText("DEMONSTRAÇÃO / PROVEDOR SIMULADO")).toBeTruthy();
     expect(screen.queryByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeNull();
-    expect(screen.getByLabelText("Seu saldo de créditos").textContent).toMatch(/5 créditos de teste/);
+    expect(await screen.findByLabelText("Seu saldo de créditos")).toHaveTextContent(/5 créditos de teste/);
+    expect(screen.getByLabelText("Seu saldo de créditos")).toBeVisible();
     expect(await screen.findByText("Bolo de pote")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "O que é isto?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sobre o estúdio" }));
     expect(await screen.findByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeTruthy();
   });
 
@@ -122,6 +123,40 @@ describe("estúdio com o banco simulado", () => {
     expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.getByRole("button", { name: "Criar primeira campanha" })).toBeTruthy();
+  });
+
+  it("escolher o objetivo avança mesmo quando ele já estava selecionado e preserva o rascunho ao voltar", async () => {
+    mock.respostas.bolso_campanhas_listar = [];
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar primeira campanha" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Vender" }));
+    expect(screen.getByLabelText("Produto ou serviço")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Produto ou serviço"), { target: { value: "Bolo da semana" } });
+    fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Agendar" }));
+    expect(screen.getByLabelText("Produto ou serviço")).toHaveValue("Bolo da semana");
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(screen.getByText("Agendar")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Editar produto" }));
+    expect(screen.getByLabelText("Produto ou serviço")).toHaveValue("Bolo da semana");
+    expect(mock.rpc).not.toHaveBeenCalledWith("bolso_pedir", expect.anything());
+  });
+
+  it("permite navegar pelos objetivos com setas antes de confirmar", async () => {
+    mock.respostas.bolso_campanhas_listar = [];
+    montar(h(EstudioBolso));
+    fireEvent.click(await screen.findByRole("button", { name: "Criar primeira campanha" }));
+    const vender = screen.getByRole("radio", { name: "Vender" });
+    const agendar = screen.getByRole("radio", { name: "Agendar" });
+    fireEvent.keyDown(vender, { key: "ArrowRight" });
+    // Navegadores disparam click e change ao percorrer rádios com setas.
+    fireEvent.click(agendar);
+    expect(agendar).toBeChecked();
+    expect(screen.getByRole("heading", { name: "Qual é o objetivo?" })).toBeVisible();
+    fireEvent.keyUp(agendar, { key: "ArrowRight" });
+    fireEvent.keyDown(agendar, { key: " " });
+    expect(screen.getByLabelText("Produto ou serviço")).toBeVisible();
   });
 
   it("ao mudar de etapa revela o título fora da área visível sem rolar quando ele já aparece", async () => {
@@ -148,11 +183,11 @@ describe("estúdio com o banco simulado", () => {
       expect(screen.getByRole("heading", { name: "Qual é o objetivo?" })).toHaveFocus();
 
       topoDoTitulo = 600;
-      for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+      fireEvent.click(screen.getByRole("button", { name: /Revisão/ }));
       fireEvent.click(screen.getByRole("button", { name: "Salvar oferta" }));
       expect(screen.getByRole("alert")).toHaveTextContent("Diga qual produto");
       expect(screen.getByRole("heading", { name: "O que você quer divulgar?" })).toHaveFocus();
-      expect(rolar).toHaveBeenCalledTimes(5);
+      expect(rolar).toHaveBeenCalledTimes(3);
       expect(mock.rpc).not.toHaveBeenCalledWith("bolso_campanha_salvar", expect.anything());
     } finally {
       retangulo.mockRestore();
@@ -206,7 +241,11 @@ describe("estúdio com o banco simulado", () => {
     mock.respostas.bolso_campanhas_listar = [];
     montar(h(EstudioBolso));
     fireEvent.click(await screen.findByRole("button", { name: "Criar primeira campanha" }));
-    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Diga qual produto");
+    expect(screen.getByLabelText("Produto ou serviço")).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: /Revisão/ }));
     fireEvent.click(screen.getByRole("button", { name: "Salvar oferta" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Diga qual produto");
     expect(screen.getByLabelText("Produto ou serviço")).toHaveAttribute("aria-invalid", "true");
@@ -517,7 +556,9 @@ describe("estúdio com o banco simulado", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Bolo de pote/ }));
     fireEvent.click(await screen.findByRole("button", { name: /Arte e download/ }));
     const pedirArte = await screen.findByRole("button", { name: /Pedir a arte/ });
-    expect(pedirArte.textContent).toMatch(/2 créditos/);
+    expect(pedirArte).toHaveAccessibleDescription(/2 créditos por arte/);
+    expect(document.getElementById("bolso-tarifa-imagem")).toBeVisible();
+    expect(document.getElementById("bolso-tarifa-imagem")).toHaveTextContent("2 créditos por arte");
     fireEvent.click(pedirArte);
     const confirmar = within(screen.getByRole("group", { name: "Confirmar consumo de créditos" }));
     expect(confirmar.getByText(/reserva/).textContent).toMatch(/2 crédito.*de 5.*de teste/);
