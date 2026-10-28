@@ -1434,7 +1434,7 @@
   .bolso-campanha-barra .bolso-etapas button { flex-direction: row; padding: 8px; gap: 6px; min-height: 44px; }
   .bolso-trabalho-texto .bolso-cartao { padding: 18px; }
   .bolso-trabalho-resultado { min-height: 360px; }
-  .bolso-formato-inline { flex: 1; }
+  .bolso-formato-inline { flex: 1 1 100%; min-width: 0; }
   .bolso-formato-inline .membros-campo { flex: 1; min-width: 0; max-width: none; }
   .bolso-arte-barra > div:first-child { width: 100%; }
   .bolso-arte-barra > div:last-child { width: 100%; }
@@ -1447,6 +1447,9 @@
   .bolso-convite-visual { gap: 18px; }
   .bolso-convite-visual .bolso-caminho { border-top: 0; }
   .bolso-convite-visual .bolso-caminho li { padding-block: 14px; gap: 9px; }
+}
+@media (max-width: 359px) {
+  .bolso-formato-inline { flex-direction: column; align-items: stretch; }
 }
 @keyframes membros-chegada {
   from {
