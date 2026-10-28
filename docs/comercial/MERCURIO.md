@@ -2,7 +2,7 @@
 
 Roteiro operacional para o Hermes (operador `mercurio`, área Comercial e Aquisição). O WhatsApp é o do
 Hermes; o painel guarda a fila, a conversa, os fatos e os avisos. Ferramentas do MCP 2.18 (escopo
-`commercial:read` e `commercial:write`).
+`commercial:read` e `commercial:write`); proposta e Aceleriq de Bolso desde o MCP 2.23.
 
 ## Ciclo de cada rodada
 
@@ -28,6 +28,22 @@ Hermes; o painel guarda a fila, a conversa, os fatos e os avisos. Ferramentas do
    os dados úteis (plano, valor, prazo combinado, melhor horário, quem decide). Avançou é: pediu proposta,
    marcou reunião, quer falar com alguém da equipe, mandou dado para fechar. A equipe recebe no sino e
    continua a conversa com um clique.
+
+## Até o contrato (MCP 2.23)
+
+O Mercúrio conduz até o contrato; quem aprova é o Almir, na Caixa e na Mesa Proposta.
+
+- **Proposta:** `aceleriq_comercial_pedir_proposta` com o lead, o negócio, a dor (nas palavras do lead), o plano
+  sugerido, os avulsos, a verba e a moeda. Itens do catálogo: `plano_id` (Financeiro) e `servico_ids` (biblioteca de
+  serviços), sempre em reais. Exterior (US$ ou €) e valor que só está nas orientações vão em `itens_manuais`, que o
+  Almir confere. Lead que já é cliente vira rascunho na Mesa Proposta na hora; lead sem ficha espera o Almir criar o
+  cliente, e a proposta nasce com o rascunho. A Caixa é avisada sozinha. Nada é enviado: o link público só existe
+  depois que o Almir aprovar e enviar. Chame de novo com o mesmo lead para ver o estado e pegar o link.
+- **Aceleriq de Bolso:** `aceleriq_comercial_bolso_pedir` registra o anual (R$ 97, política aprovada) na conta do
+  e-mail que o lead usa na área de membros e devolve o checkout. Checkout desligado: não mande link de pagamento; a
+  equipe combina. Quando o lead disser que pagou, `aceleriq_comercial_bolso_liberar`: só libera com o pagamento
+  confirmado pelo Almir no painel ou pelo gateway (vendas-webhook). Comprovante em imagem, print ou PDF nunca libera.
+  Sem conta com aquele e-mail, peça para criar a conta e confirmar o e-mail, e chame de novo.
 
 ## Réguas
 
