@@ -7,6 +7,7 @@ import { AjustarArte, ReferenciasDaCampanha } from "./RecursosCriativos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AjudaRecolhida } from "@/components/sistema";
+import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import {
   cancelarPedido,
   erroDoBolso,
@@ -616,7 +617,7 @@ export default function EstudioBolso({ aoConhecerServicos }: { aoConhecerServico
 
   return (
     <section className="bolso-estudio" data-bolso-estudio="" aria-label="Estúdio Aceleriq de Bolso">
-      <h1 className="sr-only">Aceleriq de Bolso</h1>
+      <CabecalhoDePagina className="sr-only" titulo="Aceleriq de Bolso" />
       {situacao.demonstracao && <FaixaDeDemonstracao />}
       {!situacao.podeGerar && (
         <p role="status" className="bolso-aviso">

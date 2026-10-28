@@ -73,7 +73,7 @@ const TETO: Record<Metrica, number> = {
   cartaoFeitoAMao: 3, // 18/10 (onda visual): cartões com função usam superficie.painel; sobra só o Dashboard
   secaoEmCartao: 0,
   cartaoDentroDeCartao: 6, // 18/10 (onda visual): dentro de cartão, raio de controle (rounded-md) ou poço
-  paragrafoFixo: 28, // 24/10: catraca baixada (roteiro unificado)
+  paragrafoFixo: 27, // 28/10: topo do Bolso sem parágrafo repetido de atualização
   descricaoExplicativa: 1, // 28/09: ondas 1 e 2 da padronização somadas
   cantoForaDoToken: 0, // 18/10 (onda visual): balões e esqueleto em rounded-xl
   tituloQueQuebra: 1, // 24/10: catraca baixada (roteiro unificado)

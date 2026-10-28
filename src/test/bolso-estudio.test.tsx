@@ -100,7 +100,7 @@ describe("estúdio com o banco simulado", () => {
     expect(screen.queryByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeNull();
     expect(await screen.findByText("Bolo de pote")).toBeTruthy();
     expect(screen.queryByLabelText("Seu saldo de créditos")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Aceleriq de Bolso" })).toHaveClass("sr-only");
+    expect(screen.getByRole("heading", { name: "Aceleriq de Bolso" }).closest(".sr-only")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Sobre o estúdio" }));
     expect(await screen.findByText(/Não é agência humana, não faz gestão de anúncios e não garante vendas/)).toBeTruthy();
   });
