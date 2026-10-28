@@ -2737,6 +2737,14 @@
       "remote_name": "mercurio_proposta_e_bolso",
       "remote_statements_sha256": "6a191f1947bf5f6c08478a19d5d2edf8fbf20630002d39eb30715166e3cbcd06",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261028165136",
+      "path": "supabase/migrations/20261028165136_publicar_video_do_workspace.sql",
+      "local_sha256": "6d56c46139defb3291309ea93a8a47743cb22e7c5918dbe5325fd683212a8bf6",
+      "remote_name": "publicar_video_do_workspace",
+      "remote_statements_sha256": "c795aba34f74bb66a3143791df18760ae965b91dc31ec0cd6545979feb3cbda3",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
