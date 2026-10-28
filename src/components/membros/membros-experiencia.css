@@ -1206,7 +1206,7 @@
 .bolso-assistente-etapas button[aria-current] { color: hsl(var(--primary)); border-bottom-color: hsl(var(--primary)); font-weight: 650; }
 .bolso-assistente-etapas button > span { font-size: 10px; opacity: .7; }
 .bolso-assistente-passo { display: flex; flex-direction: column; gap: 22px; min-height: 260px; min-width: 0; }
-.bolso-assistente-titulo { font-size: clamp(23px, 2.3vw, 28px); line-height: 1.2; letter-spacing: -.035em; font-weight: 600; }
+.bolso-assistente-titulo { font-size: clamp(23px, 2.3vw, 28px); line-height: 1.2; letter-spacing: -.035em; font-weight: 600; scroll-margin-top: 16px; }
 .bolso-assistente-titulo:focus { outline: none; }
 .bolso-assistente-objetivos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .bolso-assistente-objetivos .bolso-opcao { min-height: 100px; padding: 22px; font-size: 16px; }
@@ -1359,7 +1359,7 @@
   min-width: 0;
   margin-inline: 0;
 }
-/* No desktop, navegação e cabeçalhos ficam no lugar; cada área rola no seu espaço. */
+/* A navegação permanece fixa e o estúdio usa uma única rolagem de conteúdo. */
 @media (min-width: 768px) {
   html:has(.membros-portal),
   body:has(.membros-portal) { height: 100%; overflow: clip; }
@@ -1368,48 +1368,26 @@
   .membros-portal .membros-biblioteca-corpo { flex: 1; min-height: 0; align-items: stretch; overflow: hidden; margin-block: 0; }
   .membros-portal .membros-menu { position: relative; top: auto; height: 100%; max-height: none; }
   .membros-portal .membros-conteudo { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scroll-padding-block: 24px; }
-  .membros-portal .membros-conteudo-estudio { display: flex; flex-direction: column; overflow: hidden; padding: 16px 24px 20px; }
+  .membros-portal .membros-conteudo-estudio { display: block; overflow-y: auto; padding: 16px 24px 20px; }
   .membros-conteudo-estudio > .membros-conteudo-barra { flex: none; margin-bottom: 10px; }
-  .membros-conteudo-estudio > .bolso-estudio { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; margin-top: 0; }
+  .membros-conteudo-estudio > .bolso-estudio { display: flex; flex-direction: column; min-height: 0; gap: 12px; margin-top: 0; }
   .membros-conteudo-estudio .bolso-estudio > :not([hidden]) { margin-top: 0; }
   .membros-conteudo-estudio .bolso-cabecalho { flex: none; padding-block: 0 10px; }
   .membros-conteudo-estudio .bolso-cabecalho .membros-titulo h1 { font-size: 22px; }
   .membros-conteudo-estudio .bolso-saldo { padding: 6px 10px; }
   .membros-conteudo-estudio .bolso-etapas { padding: 3px; }
   .membros-conteudo-estudio .bolso-etapas button { min-height: 38px; padding: 7px 12px; gap: 7px; }
-  .membros-conteudo-estudio .bolso-campanha { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; }
+  .membros-conteudo-estudio .bolso-campanha { display: flex; flex-direction: column; min-height: 0; gap: 12px; }
   .membros-conteudo-estudio .bolso-campanha > :not([hidden]) { margin-top: 0; }
-  .membros-conteudo-estudio .bolso-campanha > ul { max-height: 100px; overflow: auto; flex: none; }
-  .membros-conteudo-estudio .bolso-campanha > .bolso-trabalho { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 2px; }
+  .membros-conteudo-estudio .bolso-campanha > ul { flex: none; }
+  .membros-conteudo-estudio .bolso-campanha > .bolso-trabalho { min-height: 0; overflow: visible; padding: 2px; }
   .membros-conteudo-estudio .bolso-estudio > .bolso-formulario,
   .membros-conteudo-estudio .bolso-campanha > .bolso-cartao,
-  .membros-conteudo-estudio .bolso-biblioteca { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .membros-conteudo-estudio .bolso-biblioteca { min-height: 0; overflow: visible; }
   .membros-conteudo-estudio .bolso-estudio > .bolso-assistente,
-  .membros-conteudo-estudio .bolso-campanha > .bolso-assistente { overflow: hidden; gap: 14px; padding: 20px 24px; }
-  .membros-conteudo-estudio .bolso-assistente-passo { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 2px 4px 8px 2px; scrollbar-width: thin; }
+  .membros-conteudo-estudio .bolso-campanha > .bolso-assistente { grid-template-rows: auto auto auto auto; overflow: visible; gap: 14px; padding: 20px 24px; }
+  .membros-conteudo-estudio .bolso-assistente-passo { min-height: 260px; overflow: visible; padding: 2px 4px 8px 2px; }
   .membros-conteudo-estudio .bolso-assistente-acoes { padding-top: 12px; }
-}
-@media (min-width: 768px) and (min-height: 650px) {
-  @container (min-width: 760px) {
-    .membros-conteudo-estudio .bolso-campanha > .bolso-trabalho { align-items: stretch; align-content: stretch; overflow: hidden; }
-    .membros-conteudo-estudio .bolso-campanha > .bolso-trabalho-texto { grid-template-rows: minmax(0, 1fr) auto; }
-    .membros-conteudo-estudio .bolso-campanha > .bolso-trabalho-arte { grid-template-rows: minmax(0, 1fr); }
-    .membros-conteudo-estudio .bolso-trabalho > .bolso-trabalho-controles,
-    .membros-conteudo-estudio .bolso-trabalho > .bolso-trabalho-resultado { height: 100%; min-height: 0; max-height: 100%; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; }
-    .membros-conteudo-estudio .bolso-trabalho-arte > .bolso-arte-vazia { min-height: 0; }
-  }
-}
-/* Janelas baixas e zoom não podem reduzir o editor a uma faixa sem espaço. */
-@media (min-width: 768px) and (max-height: 649px) {
-  .membros-portal .membros-conteudo-estudio { display: block; overflow-y: auto; }
-  .membros-conteudo-estudio > .bolso-estudio { min-height: 100%; }
-  .membros-conteudo-estudio .bolso-campanha,
-  .membros-conteudo-estudio .bolso-campanha > .bolso-trabalho { flex: none; min-height: auto; overflow: visible; }
-  .membros-conteudo-estudio .bolso-estudio > .bolso-formulario,
-  .membros-conteudo-estudio .bolso-campanha > .bolso-cartao,
-  .membros-conteudo-estudio .bolso-biblioteca { flex: none; min-height: auto; overflow: visible; }
-  .membros-conteudo-estudio .bolso-assistente { grid-template-rows: auto auto auto auto; }
-  .membros-conteudo-estudio .bolso-assistente-passo { min-height: 260px; overflow: visible; }
 }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .bolso-campanha-cartao { transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease, background-color .22s ease; }
@@ -1420,6 +1398,7 @@
   .bolso-campanha-cartao:hover { transform: none; }
 }
 @media (max-width: 767px) {
+  .bolso-assistente-titulo { scroll-margin-top: 145px; }
   .bolso-assistente { grid-template-rows: auto auto auto auto; gap: 16px; padding: 18px; }
   .bolso-assistente-passo { min-height: 180px; gap: 20px; }
   .bolso-assistente-objetivos, .bolso-assistente-campos { grid-template-columns: minmax(0, 1fr); gap: 14px; }

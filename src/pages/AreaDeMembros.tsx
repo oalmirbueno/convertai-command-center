@@ -1,6 +1,6 @@
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import TituloMembros from "@/components/membros/TituloMembros";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,6 +27,7 @@ import {
   Wrench,
   Megaphone,
   Coins,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -63,6 +64,7 @@ import { temLicencaDaFerramenta } from "@/lib/membros/ferramentas";
 import { texto, AjudaRecolhida } from "@/components/sistema";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import { ProviderAparenciaMembros, BotaoAparenciaMembros } from "@/components/membros/AparenciaMembros";
+import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import "@/components/membros/membros.css";
 import "@/components/membros/membros-experiencia.css";
 
@@ -72,6 +74,26 @@ type AcessoDoCartao = {
   liberado: boolean;
   conferindo?: boolean;
 };
+
+/** Oferece a atualização sem interromper quem está preenchendo uma campanha. */
+export function AtualizacaoDosMembros() {
+  const pendente = useSyncExternalStore(assinarVersaoNova, versaoNovaPendente, versaoNovaPendente);
+  if (!pendente) return null;
+  return (
+    <button
+      type="button"
+      className="membros-acao text-primary"
+      aria-label="Nova versão disponível. Atualizar área de membros"
+      title="Nova versão disponível"
+      onClick={() => {
+        if (window.confirm("Salve suas alterações antes de atualizar. Deseja atualizar agora?")) atualizarAgora();
+      }}
+    >
+      <RefreshCw size={17} aria-hidden="true" />
+      <span className="hidden sm:inline">Nova versão</span>
+    </button>
+  );
+}
 
 export function CapaProduto({
   produto,
@@ -649,6 +671,7 @@ function ConteudoAreaDeMembros() {
               aria-label="Navegação da biblioteca"
               className="membros-topo-acoes"
             >
+              <AtualizacaoDosMembros />
               <BotaoAparenciaMembros />
               <details
                 className="membros-conta"
