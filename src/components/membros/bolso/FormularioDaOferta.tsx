@@ -25,12 +25,25 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const cabecalho = useRef<HTMLHeadingElement>(null);
-  const painel = useRef<HTMLDivElement>(null);
   const etapaAnterior = useRef(0);
   useEffect(() => {
     if (etapaAnterior.current !== etapa) {
-      if (painel.current) painel.current.scrollTop = 0;
-      cabecalho.current?.focus({ preventScroll: true });
+      const tituloDaEtapa = cabecalho.current;
+      if (tituloDaEtapa) {
+        const areaPrincipal = tituloDaEtapa.closest(".membros-conteudo-estudio");
+        const area = areaPrincipal?.getBoundingClientRect();
+        const titulo = tituloDaEtapa.getBoundingClientRect();
+        const portal = tituloDaEtapa.closest(".membros-portal");
+        const limiteDoMenu = window.innerWidth < 768
+          ? Math.max(0, ...Array.from(portal?.querySelectorAll(".membros-topo, .membros-menu") ?? [], (item) => item.getBoundingClientRect().bottom))
+          : 0;
+        const limiteSuperior = Math.max(0, limiteDoMenu, area?.top ?? 0);
+        const limiteInferior = Math.min(window.innerHeight, area?.bottom ?? window.innerHeight);
+        if (titulo.top < limiteSuperior || titulo.bottom > limiteInferior) {
+          tituloDaEtapa.scrollIntoView({ block: "start", behavior: "auto" });
+        }
+        tituloDaEtapa.focus({ preventScroll: true });
+      }
     }
     etapaAnterior.current = etapa;
   }, [etapa]);
@@ -68,7 +81,7 @@ export default function FormularioDaOferta({ campanha, estado, aoSalvar, aoCance
       <nav className="bolso-assistente-etapas" aria-label="Preparação da campanha">
         {ETAPAS.map((nome, indice) => <button key={nome} type="button" aria-current={etapa === indice ? "step" : undefined} onClick={() => setEtapa(indice)} disabled={salvando}><span aria-hidden="true">{indice + 1}</span>{nome}</button>)}
       </nav>
-      <div ref={painel} className="bolso-assistente-passo">
+      <div className="bolso-assistente-passo">
         <h3 ref={cabecalho} tabIndex={-1} className="bolso-assistente-titulo">{["Qual é o objetivo?", "O que você quer divulgar?", "Qual é a sua oferta?", "Tudo certo para começar?"][etapa]}</h3>
         {erro && <p role="alert" className="text-[13px] text-destructive">{erro}</p>}
         {etapa === 0 && campanha && estado && (estado.recursos_criativos?.briefing || campanha.jobs.some((job) => job.natureza === "briefing")) && <CompletarOferta campanha={campanha} estado={estado} rascunhoAlterado={rascunhoAlterado} aoCompletar={aplicarSugestao} />}

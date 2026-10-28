@@ -101,7 +101,8 @@ Planos-base editáveis: R$ 597, R$ 1.197, R$ 2.297, R$ 5.597 e Sob Medida. Servi
 
 ## Estado atual de referência
 
-- Lote visual em revisão de 27/10/2026: estúdio do Bolso com topo compacto, controles e resultados em colunas quando há largura, campos maiores e rolagem adaptada a janelas baixas. Sem alterações de geração, créditos ou pagamentos. Conferência e reversão em [`BOLSO-ESPACO-CRIACAO.md`](../membros/BOLSO-ESPACO-CRIACAO.md); não confirma publicação.
+- O PR 106 foi publicado em 28/10/2026 com topo compacto, controles e resultados em colunas quando há largura e campos maiores; confira [`BOLSO-ESPACO-CRIACAO.md`](../membros/BOLSO-ESPACO-CRIACAO.md).
+- Lote posterior em revisão: remover limites de altura e rolagens internas do estúdio, incorporar ajuste de formato móvel e oferecer atualização voluntária na área de membros para proteger rascunhos. Conferência e reversão em [`BOLSO-ROLAGEM-LIVRE.md`](../membros/BOLSO-ROLAGEM-LIVRE.md). A presença deste registro não confirma publicação do novo lote.
 
 - Lote em revisão de 27/10/2026: Bolso e Mesa Ads compartilham um núcleo puro de estratégia e direção criativa, preservando adaptadores, dados, créditos e autorizações independentes. Área de membros refinada, sem schema novo ou ativação de geração/pagamentos. Contrato, pesquisa e conferência em [`BOLSO-MOTOR-CRIATIVO.md`](../membros/BOLSO-MOTOR-CRIATIVO.md). Não confirma publicação ou homologação real do fornecedor.
 

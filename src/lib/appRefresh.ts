@@ -10,9 +10,9 @@
  * Três camadas de defesa:
  * 1. Vigia de versão: o build carimba um id e publica /version.json; o app
  *    compara ao abrir, ao voltar para a tela e a cada minutos. Versão nova?
- *    Recarrega sozinho só na abertura (ou na volta depois de muito tempo
- *    longe); no meio do uso, acende o ícone de versão nova no topo e a pessoa
- *    recarrega quando quiser (16/10: trocar de tela NUNCA recarrega).
+ *    Fora da área de membros, recarrega sozinho na abertura ou na volta depois
+ *    de muito tempo longe. Na área de membros, a atualização é voluntária para
+ *    não apagar um formulário ou criativo em edição.
  * 2. Recuperação de chunk: cobre também Safari/iOS ("Load failed") e promises
  *    rejeitadas, que o detector antigo não via.
  * 3. Recarga forçada: URL com parâmetro novo (fura o cache do documento),
@@ -157,9 +157,12 @@ export function hardRefresh(force = false): boolean {
  */
 const UPDATE_KEY = "aceleriq-update-reloads";
 
-export function updateReload(): boolean {
+export function updateReload(podeRecarregar: () => boolean = () => true): boolean {
+  if (!podeRecarregar()) return false;
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    window.addEventListener("online", () => void updateReload(), { once: true });
+    window.addEventListener("online", () => {
+      if (podeRecarregar()) void updateReload(podeRecarregar);
+    }, { once: true });
     return false;
   }
   const now = Date.now();
@@ -176,6 +179,9 @@ export function updateReload(): boolean {
   } catch { /* idem */ }
 
   const go = () => {
+    // A limpeza é assíncrona: a pessoa pode ter aberto a área de membros
+    // depois que o vigia iniciou a recarga automática.
+    if (!podeRecarregar()) return;
     try {
       const url = new URL(window.location.href);
       url.searchParams.set("v", String(now));
@@ -327,15 +333,20 @@ async function conferirVersaoPublicada(): Promise<boolean> {
 /** Aba escondida por mais que isto e versão nova: recarrega na volta (a pessoa não estava usando). */
 const LONGE_DEMAIS_MS = 30 * 60_000;
 
+/** A área de membros pode conter rascunhos que ainda não foram salvos. */
+function estaNaAreaDeMembros(): boolean {
+  return /^\/membros\/?$/.test(window.location.pathname);
+}
+
 /**
  * Vigia de versão: compara o carimbo do app carregado com o publicado.
  *
  * 16/10: o dono clicava num cliente, em Mesas ou no estúdio e o painel
  * reiniciava (a versão pendente recarregava na troca de tela). Agora recarrega
  * sozinho só nos primeiros segundos da abertura (antes de qualquer trabalho) ou
- * quando a aba volta depois de mais de 30 minutos escondida. No resto do
- * tempo a versão nova só acende o ícone do topo (AppLayout), e a recarga sai
- * quando a pessoa clica nele. Devolve a função que desliga o vigia (testes).
+ * quando a aba volta depois de mais de 30 minutos escondida. Na área de
+ * membros, mesmo nesses momentos, só indica a versão pendente: atualizar é
+ * uma escolha explícita, pois pode haver conteúdo ainda não salvo.
  */
 export function startVersionWatch(): () => void {
   if (BUILD_ID === "dev") return () => undefined;
@@ -343,7 +354,7 @@ export function startVersionWatch(): () => void {
   const abertoEm = Date.now();
   const check = async (recarregarSe: () => boolean) => {
     if (!(await conferirVersaoPublicada())) return;
-    if (recarregarSe()) updateReload();
+    if (recarregarSe() && !estaNaAreaDeMembros()) updateReload(() => !estaNaAreaDeMembros());
   };
   const nunca = () => false;
 
@@ -360,7 +371,8 @@ export function startVersionWatch(): () => void {
     escondidaDesde = null;
     if (longeDemais) {
       // Só se a resposta chegar logo: depois disso a pessoa já voltou a usar.
-      if (updatePending) updateReload();
+      if (updatePending && !estaNaAreaDeMembros()) updateReload(() => !estaNaAreaDeMembros());
+      else if (updatePending) return;
       else void check(() => Date.now() - voltouEm < 8_000 && document.visibilityState === "visible");
       return;
     }

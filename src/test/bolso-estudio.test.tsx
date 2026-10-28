@@ -124,6 +124,66 @@ describe("estúdio com o banco simulado", () => {
     expect(screen.getByRole("button", { name: "Criar primeira campanha" })).toBeTruthy();
   });
 
+  it("ao mudar de etapa revela o título fora da área visível sem rolar quando ele já aparece", async () => {
+    mock.respostas.bolso_campanhas_listar = [];
+    let topoDoTitulo = 600;
+    const rolar = vi.fn();
+    const anterior = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = rolar;
+    const retangulo = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const top = this.tagName === "H3" ? topoDoTitulo : 100;
+      const bottom = this.tagName === "H3" ? topoDoTitulo + 30 : 500;
+      return { top, bottom, left: 0, right: 600, width: 600, height: bottom - top, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      montar(h("main", { className: "membros-conteudo-estudio" }, h(EstudioBolso)));
+      fireEvent.click(await screen.findByRole("button", { name: "Criar primeira campanha" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+      expect(rolar).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("heading", { name: "O que você quer divulgar?" })).toHaveFocus();
+
+      topoDoTitulo = 150;
+      fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
+      expect(rolar).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("heading", { name: "Qual é o objetivo?" })).toHaveFocus();
+
+      topoDoTitulo = 600;
+      for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Salvar oferta" }));
+      expect(screen.getByRole("alert")).toHaveTextContent("Diga qual produto");
+      expect(screen.getByRole("heading", { name: "O que você quer divulgar?" })).toHaveFocus();
+      expect(rolar).toHaveBeenCalledTimes(5);
+      expect(mock.rpc).not.toHaveBeenCalledWith("bolso_campanha_salvar", expect.anything());
+    } finally {
+      retangulo.mockRestore();
+      HTMLElement.prototype.scrollIntoView = anterior;
+    }
+  });
+
+  it("no celular revela o título que ficaria encoberto pelo menu fixo", async () => {
+    mock.respostas.bolso_campanhas_listar = [];
+    const rolar = vi.fn();
+    const anterior = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = rolar;
+    vi.stubGlobal("innerWidth", 390);
+    const retangulo = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const top = this.tagName === "H3" ? 100 : this.classList.contains("membros-menu") ? 70 : 0;
+      const bottom = this.tagName === "H3" ? 130 : this.classList.contains("membros-menu") ? 125 : this.classList.contains("membros-topo") ? 70 : 800;
+      return { top, bottom, left: 0, right: 390, width: 390, height: bottom - top, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      montar(h("div", { className: "membros-portal" }, h("header", { className: "membros-topo" }), h("aside", { className: "membros-menu" }), h("main", { className: "membros-conteudo-estudio" }, h(EstudioBolso))));
+      fireEvent.click(await screen.findByRole("button", { name: "Criar primeira campanha" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+      expect(rolar).toHaveBeenCalledOnce();
+      expect(screen.getByRole("heading", { name: "O que você quer divulgar?" })).toHaveFocus();
+    } finally {
+      retangulo.mockRestore();
+      HTMLElement.prototype.scrollIntoView = anterior;
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("revisa o briefing completo e só salva no último passo sem consumir crédito", async () => {
     mock.respostas.bolso_campanhas_listar = [];
     mock.respostas.bolso_campanha_salvar = "c-1";
