@@ -60,6 +60,24 @@ describe("carrossel ambientado no tema até o fim", () => {
   });
 });
 
+describe("continuidade da capa (29/10: a lâmina 2 não seguiu a capa)", () => {
+  const index = readFileSync(resolve(process.cwd(), "supabase/functions/estudio-arte/index.ts"), "utf8");
+  const serie = readFileSync(resolve(process.cwd(), "supabase/functions/estudio-arte/serie-da-capa.ts"), "utf8");
+  it("a capa manda no fundo e no tratamento quando a direção da lâmina pede outro", () => {
+    expect(linhaDoMundoTematico({ ordem: 2, total: 10, tema: "" })).toMatch(/A CAPA MANDA NA IDENTIDADE: .* vale o da capa/);
+  });
+  it("referência marcada só na capa guia as lâminas seguintes", () => {
+    expect(index).toContain("const idsDaCapa = (t.direcao.cards.find((c) => c.ordem === 1)?.referencias_ids) || [];");
+    expect(index).toContain("if (idsDaCapa.length) refsDaEquipe.push(...(await referenciasPorId(t.client_id, idsDaCapa)).slice(0, MAX_REFERENCIAS));");
+    // Entra antes da decisão do caso A, que separa o que é só da capa.
+    expect(index.indexOf("const idsDaCapa")).toBeLessThan(index.indexOf("const serieDaCapa = herdaReferenciaDaCapa({"));
+  });
+  it("a série não proíbe mais o indicador de arrastar", () => {
+    expect(serie).not.toContain("a seta ou o sinal de arraste");
+    expect(serie.split("o indicador de navegação de arrastar continua").length - 1).toBe(2);
+  });
+});
+
 describe("letra e rosto", () => {
   it("a família é a da empresa; da referência só o tratamento", () => {
     expect(LINHA_DO_TRATAMENTO_DA_LETRA).toMatch(/família é sempre a da empresa/);

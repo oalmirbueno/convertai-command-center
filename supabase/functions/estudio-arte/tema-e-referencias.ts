@@ -80,6 +80,7 @@ export function linhaDoMundoTematico(e: { ordem: number; total: number; tema: st
     `MUNDO TEMÁTICO DA SÉRIE (lâmina ${e.ordem} de ${e.total}): a capa abriu um tema${tema} e esta lâmina continua dentro dele.`,
     "- O mesmo ambiente ou a mesma família de cenários, a mesma época e clima, a mesma luz e o mesmo tipo de objeto do tema, ambientados a partir da capa. Com elementos NOVOS: outro objeto, outro canto do ambiente, outro detalhe que mostra o que o texto desta lâmina diz.",
     "- Nada de lâmina genérica fora do tema, e nada repetido da capa.",
+    "- A CAPA MANDA NA IDENTIDADE: se a direção desta lâmina pedir outro tipo de fundo ou de tratamento de imagem (por exemplo, a capa com foto de fundo inteira e esta com fundo liso), vale o da capa: a mesma família de fundo, de foto e de luz, com a composição desta lâmina.",
     final ? "- Fechamento: termine o tema, ainda dentro do mesmo mundo, com o CTA em destaque." : "",
   ].filter(Boolean).join("\n");
 }

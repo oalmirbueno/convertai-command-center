@@ -6344,6 +6344,14 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const elementos = livres.filter((f) => f.papel === "elemento").slice(0, 2);
   // Referências escolhidas pela equipe: com elas a lâmina replica o layout da referência (fora do contínuo).
   const refsDaEquipe = await referenciasDaEquipe(t, card);
+  // 29/10/2026 (dono: "gerei a capa, mas a segunda lâmina não seguiu a continuidade"): referência marcada só na
+  // CAPA, sem referência do conjunto nem desta lâmina, vale para a série como a do conjunto (caso A da série da
+  // capa: guia da identidade, com o que é só da capa fora). Antes a lâmina 2 só via a imagem da capa, e o layout
+  // dela (fundo liso, por exemplo) puxava a série para fora.
+  if (!refsDaEquipe.length && ordem > 1 && total > 1 && !ads && !(card.referencias_ids || []).length && !(t.direcao.referencias_ids || []).length) {
+    const idsDaCapa = (t.direcao.cards.find((c) => c.ordem === 1)?.referencias_ids) || [];
+    if (idsDaCapa.length) refsDaEquipe.push(...(await referenciasPorId(t.client_id, idsDaCapa)).slice(0, MAX_REFERENCIAS));
+  }
   // Frente E (25/09 à noite): fidelidade à referência (Idêntica, o padrão, é o
   // caminho de sempre) e referência prancha (print com várias artes: vira o
   // quadro desta lâmina; a simples segue igual).
