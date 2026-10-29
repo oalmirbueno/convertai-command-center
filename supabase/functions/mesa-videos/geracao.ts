@@ -400,15 +400,20 @@ async function entradaDoCorpo(b: BaseDaFuncao, clientId: string, corpo: Record<s
   return { entrada, caminhos: { quadro_inicial: qi, quadro_final: qf, referencias: refs, video_arquivo_id: videoArquivoId } };
 }
 
+/** A pauta do pedido (task_id), conferida no cliente aberto; null sem pauta. */
+async function pautaDoPedido(b: BaseDaFuncao, corpo: Record<string, unknown>, clientId: string): Promise<string | null> {
+  const taskId = corpo.task_id == null ? null : String(corpo.task_id);
+  if (!taskId) return null;
+  if (!UUID.test(taskId)) throw b.erro(400, "pauta_invalida", "Escolha uma pauta válida.");
+  const { data: tarefa, error } = await b.servico().from("tasks").select("id, projects!inner(client_id)").eq("id", taskId).eq("projects.client_id", clientId).is("deleted_at", null).maybeSingle();
+  if (error || !tarefa) throw b.erro(404, "pauta_inexistente", "Esta pauta não pertence ao cliente aberto.");
+  return taskId;
+}
+
 export async function gerarVideo(b: BaseDaFuncao, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
   await b.garantirAcesso(clientId);
-  const taskId = corpo.task_id == null ? null : String(corpo.task_id);
-  if (taskId) {
-    if (!UUID.test(taskId)) throw b.erro(400, "pauta_invalida", "Escolha uma pauta válida.");
-    const { data: tarefa, error } = await b.servico().from("tasks").select("id, projects!inner(client_id)").eq("id", taskId).eq("projects.client_id", clientId).is("deleted_at", null).maybeSingle();
-    if (error || !tarefa) throw b.erro(404, "pauta_inexistente", "Esta pauta não pertence ao cliente aberto.");
-  }
+  const taskId = await pautaDoPedido(b, corpo, clientId);
   const criativoId = corpo.ads_criativo_id == null ? null : String(corpo.ads_criativo_id);
   if (criativoId) {
     if (!UUID.test(criativoId)) throw b.erro(400, "criativo_invalido", "Escolha um criativo válido.");
@@ -496,6 +501,8 @@ export async function continuarVideo(b: BaseDaFuncao, corpo: Record<string, unkn
   const { motor } = await motorPronto(b, linha(corpo.motor, 60));
   const nativo = motor.cap.estender && corpo.usar_extensao !== false;
   const modo: ModoDaGeracao = nativo ? "estender" : "primeiro_quadro";
+  // 29/10/2026: a continuação ou a nova versão feita na peça de vídeo da pauta entra na prancheta dela.
+  const taskId = await pautaDoPedido(b, corpo, clientId);
   if (!nativo && !corpo.quadro_path) throw b.erro(400, "quadro_faltando", "Falta o último quadro do vídeo (a tela extrai antes).");
   const { entrada, caminhos } = await entradaDoCorpo(b, clientId, { ...corpo, quadro_inicial_path: nativo ? null : corpo.quadro_path, video_arquivo_id: corpo.arquivo_id }, motor, modo);
   const r = await enviarGeracao(b, {
@@ -510,6 +517,7 @@ export async function continuarVideo(b: BaseDaFuncao, corpo: Record<string, unkn
     projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
     planoRef: linha(corpo.plano_ref, 8) || null,
     titulo: linha(corpo.titulo, 120) || null,
+    ...(taskId ? { extras: { task_id: taskId } } : {}),
   });
   return b.json({ ...r, via: nativo ? "extensao_nativa" : "ultimo_quadro" });
 }
@@ -520,6 +528,7 @@ export async function transicaoGerar(b: BaseDaFuncao, corpo: Record<string, unkn
   await b.garantirAcesso(clientId);
   const { motor } = await motorPronto(b, linha(corpo.motor, 60));
   if (!motor.cap.ultimo_quadro) throw b.erro(400, "motor_sem_ultimo_quadro", `${motor.rotulo} não aceita último quadro. Escolha outro motor.`);
+  const taskId = await pautaDoPedido(b, corpo, clientId);
   const prompt = linha(corpo.prompt, 2400) || "Seamless continuous transition between the two shots, same characters, same place and light, smooth camera move, photorealistic.";
   const { entrada, caminhos } = await entradaDoCorpo(b, clientId, { ...corpo, prompt, quadro_inicial_path: corpo.quadro_a_path, quadro_final_path: corpo.quadro_b_path }, motor, "primeiro_ultimo");
   const r = await enviarGeracao(b, {
@@ -534,6 +543,7 @@ export async function transicaoGerar(b: BaseDaFuncao, corpo: Record<string, unkn
     projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
     planoRef: null,
     titulo: linha(corpo.titulo, 120) || "Transição",
+    ...(taskId ? { extras: { task_id: taskId } } : {}),
   });
   return b.json(r);
 }

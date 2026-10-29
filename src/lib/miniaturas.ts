@@ -507,6 +507,9 @@ const MAX_POR_SESSAO = 300;
 let feitosNaSessao = 0;
 
 /** Liga as cópias em segundo plano (só para a equipe: o cliente não grava no Storage). */
+/** A equipe grava cópias leves (o cliente só lê): vale também para a capa dos vídeos (capaDoVideo.ts). */
+export const autoMiniaturasLigadas = () => autoLigado;
+
 export function definirAutoMiniaturas(ligado: boolean, admin = false) {
   autoLigado = ligado;
   if (!ligado) fila.length = 0;

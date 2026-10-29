@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, CalendarClock, CheckCircle2, CircleDashed, Copy, Film, FolderCheck, Loader2, ScrollText, Send, Sparkles, TriangleAlert, Undo2, Video, X } from "lucide-react";
+import { AlignLeft, CalendarClock, CheckCircle2, CircleDashed, Copy, Film, FolderCheck, Loader2, Repeat2, ScrollText, Send, Sparkles, TriangleAlert, Undo2, Video, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
@@ -89,7 +89,7 @@ export function SeloDoEstadoDoVideo({ pronto, className = "" }: { pronto: boolea
 
 const doArquivo = (a: ArquivoDeVideo): VideoDaPauta => ({ bucket: a.storage_bucket, caminho: a.storage_path, nome: a.nome || a.nome_original, fonte: "ia", arquivo_id: a.id, ...(a.duracao_s ? { duracao_s: a.duracao_s } : {}) });
 
-export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null, aoGerar, aoAbrirRoteiro, aoMudarVideo, aoEntregar }: {
+export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null, aoGerar, aoAPartir, aoAbrirRoteiro, aoMudarVideo, aoEntregar }: {
   item: ItemDoMes;
   arte?: ArteNaAgenda | null;
   /** As gerações e versões da IA ligadas à pauta (mais nova primeiro). */
@@ -97,6 +97,8 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
   /** Geração escolhida na prancheta: aparece no Vídeo no lugar da padrão. */
   emFoco?: ArquivoDeVideo | null;
   aoGerar: () => void;
+  /** 29/10/2026: abre "A partir deste vídeo" (continuar, nova versão, transição, cortar, trilha, legenda). */
+  aoAPartir?: () => void;
   aoAbrirRoteiro: () => void;
   /** 27/10: o Estúdio acompanha o vídeo da peça na hora (legendar, trilha, cortar e entrega usam o mesmo). */
   aoMudarVideo?: (v: VideoProntoDaPeca | null) => void;
@@ -398,6 +400,12 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
                   {ORIGEM[video.fonte]}
                   {video.duracao_s ? ` · ${Math.round(video.duracao_s)} s` : ""}
                 </span>
+                {aoAPartir && (
+                  <button type="button" className={juntar(botao.barra, "border border-border")} onClick={aoAPartir} title="Continuar, fazer nova versão, emendar, cortar, pôr trilha ou legenda a partir deste vídeo" data-a-partir-deste-video="">
+                    <Repeat2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                    A partir deste vídeo
+                  </button>
+                )}
                 <TrazerVideo clientId={clientId} rotulo="Trocar o vídeo da peça" aoEscolher={escolher} />
                 {!emFoco && situacao.video && situacao.video.fonte === "peca" && situacao.video.bucket === "workspace" && (
                   <button type="button" className={botao.icone} onClick={() => void tirar()} disabled={tirando} aria-label="Tirar o vídeo da peça" title="Tirar o vídeo da peça (o arquivo continua no Workspace)">

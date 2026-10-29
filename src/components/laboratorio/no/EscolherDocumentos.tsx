@@ -6,6 +6,10 @@ import { JanelaCentral, botao, juntar, texto } from "@/components/sistema";
 import { ExploradorDePastas } from "@/components/mesa/NavegadorDePastas";
 import { pastasDoWorkspace, RAIZ, useArvoreDoWorkspace, type NoDoWorkspace } from "@/lib/mesa/pastas";
 import type { ArquivoDoNo } from "@/lib/laboratorio/nos";
+import CapaDoVideo from "@/components/sistema/CapaDoVideo";
+
+// 29/10/2026: vídeo aparece com a capa (antes, só o ícone de documento: difícil de identificar).
+const ehVideo = (n: { mime: string | null; storage_path: string | null }) => (n.mime || "").indexOf("video/") === 0 || /\.(mp4|mov|webm|m4v|mkv)$/i.test(n.storage_path || "");
 
 /**
  * Escolher documentos que já estão no Workspace, com o mesmo explorador de
@@ -150,7 +154,13 @@ export default function EscolherDocumentos({
                     aria-pressed={marcado}
                     title={ja ? `${n.name} (já anexado)` : n.name}
                   >
-                    <FileText className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    {ehVideo(n) && n.storage_path ? (
+                      <span className="relative mr-2 block h-14 w-10 shrink-0 overflow-hidden rounded bg-muted" data-capa-no-seletor="">
+                        <CapaDoVideo bucket="workspace" caminho={n.storage_path} nome={n.name} />
+                      </span>
+                    ) : (
+                      <FileText className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    )}
                     <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate", ja && "text-muted-foreground")}>{n.name}</span>
                     {marcado || ja ? <Check className="ml-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> : null}
                   </button>

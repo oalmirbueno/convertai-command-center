@@ -21,8 +21,10 @@ export const MEIO_QUADRO_S = 0.017;
 export const PASTA_DOS_QUADROS = (clientId: string) => `${clientId}/video/quadros`;
 
 /** Tempo exato do quadro pedido (puro, testável). */
-export function tempoDoQuadro(posicao: "primeiro" | "ultimo", duracao: number): number {
+export function tempoDoQuadro(posicao: "primeiro" | "ultimo" | "capa", duracao: number): number {
   if (posicao === "primeiro" || !isFinite(duracao) || duracao <= 0) return 0;
+  // 29/10/2026: a capa sai perto de 1 s (o quadro 0 costuma ser preto, entrada em fade); vídeo curto, 10% dele.
+  if (posicao === "capa") return Math.round(Math.min(1, duracao * 0.1) * 1000) / 1000;
   return Math.max(0, Math.round((duracao - MEIO_QUADRO_S) * 1000) / 1000);
 }
 
@@ -63,7 +65,7 @@ function paraBlob(c: HTMLCanvasElement, tipo: string, qualidade?: number): Promi
  * Tira um quadro do vídeo (URL assinada ou objeto local). O vídeo precisa
  * permitir leitura (crossOrigin anonymous: URLs do Storage permitem).
  */
-export async function extrairQuadro(fonte: string | Blob, posicao: "primeiro" | "ultimo", opcoes: { lado?: number; tipo?: "image/png" | "image/jpeg" } = {}): Promise<{ blob: Blob; largura: number; altura: number; tempo: number }> {
+export async function extrairQuadro(fonte: string | Blob, posicao: "primeiro" | "ultimo" | "capa", opcoes: { lado?: number; tipo?: "image/png" | "image/jpeg" } = {}): Promise<{ blob: Blob; largura: number; altura: number; tempo: number }> {
   const el = document.createElement("video");
   el.crossOrigin = "anonymous";
   el.muted = true;
@@ -78,7 +80,7 @@ export async function extrairQuadro(fonte: string | Blob, posicao: "primeiro" | 
   try {
     await esperar(el, "loadeddata", 20000);
     const tempo = tempoDoQuadro(posicao, el.duration);
-    if (tempo > 0 || posicao === "ultimo") {
+    if (tempo > 0 || posicao !== "primeiro") {
       el.currentTime = tempo;
       await esperar(el, "seeked", 15000);
     }
@@ -117,19 +119,19 @@ export async function subirQuadro(clientId: string, blob: Blob, nome: string): P
 }
 
 /** Último (ou primeiro) quadro de um vídeo do acervo, já no Storage. */
-export async function quadroDoVideoNoStorage(clientId: string, bucket: string, caminhoDoVideo: string, posicao: "primeiro" | "ultimo"): Promise<string> {
+export async function quadroDoVideoNoStorage(clientId: string, bucket: string, caminhoDoVideo: string, posicao: "primeiro" | "ultimo" | "capa"): Promise<string> {
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(caminhoDoVideo, 600);
   if (error || !data || !data.signedUrl) throw error || new Error("Vídeo indisponível.");
   const q = await extrairQuadro(data.signedUrl, posicao);
   return subirQuadro(clientId, q.blob, `${posicao}-${caminhoDoVideo.split("/").pop() || "video"}`);
 }
 
-/** Miniatura própria do vídeo (<vídeo>.mini.jpg), do primeiro quadro. Nunca falha para quem chamou. */
+/** Miniatura própria do vídeo (<vídeo>.mini.jpg), do quadro da capa (perto de 1 s). Nunca falha para quem chamou. */
 export async function gravarMiniaturaDoVideo(bucket: string, caminhoDoVideo: string): Promise<boolean> {
   try {
     const { data } = await supabase.storage.from(bucket).createSignedUrl(caminhoDoVideo, 600);
     if (!data || !data.signedUrl) return false;
-    const q = await extrairQuadro(data.signedUrl, "primeiro", { lado: LADO_MINIATURA, tipo: "image/jpeg" });
+    const q = await extrairQuadro(data.signedUrl, "capa", { lado: LADO_MINIATURA, tipo: "image/jpeg" });
     const r = await supabase.storage.from(bucket).upload(caminhoDaMiniatura(caminhoDoVideo), q.blob, { contentType: "image/jpeg", upsert: true, cacheControl: "86400" });
     return !r.error;
   } catch {

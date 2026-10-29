@@ -20,10 +20,15 @@ import { chamarMesaVideos, chaveDosPedidos, useArquivosDeVideo, type ArquivoDeVi
  *   primeiro quadro do novo clipe.
  * - Transição A para B: primeiro quadro = último de A, último quadro =
  *   primeiro de B; o motor precisa aceitar último quadro.
+ * - Nova versão (29/10/2026, dono: "gerar mais vídeos a partir daquele como
+ *   referência"): o quadro da capa do vídeo (perto de 1 s) vira o primeiro
+ *   quadro de um clipe novo, com o que muda descrito no texto.
+ * Na peça de vídeo da pauta: abre com o vídeo da peça (videoInicial), grava a
+ * pauta no pedido (taskId) e avisa o pedido criado (aoGerar).
  */
 
 interface Rascunho {
-  modo: "continuar" | "transicao";
+  modo: "continuar" | "transicao" | "variar";
   nivel: NivelDoMotor;
   motor: string;
   video: string;
@@ -38,29 +43,38 @@ const INICIAL: Rascunho = { modo: "continuar", nivel: "top", motor: "", video: "
 
 const ehVideo = (a: ArquivoDeVideo) => a.estado !== "arquivado" && (a.tipo === "gerado" || a.tipo === "bruto" || a.tipo === "take" || a.tipo === "entrega") && !a.so_no_storage;
 
-export default function ContinuarVideo() {
+export default function ContinuarVideo({ videoInicial, taskId, aoGerar, escopo }: { videoInicial?: string; taskId?: string; aoGerar?: (pedidoId: string) => void; escopo?: string } = {}) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const motores = useMotoresDaMesa();
   const arquivosQ = useArquivosDeVideo(clientId);
-  const [r, setR] = useEstadoDaTela<Rascunho>(`mesa-videos:continuar:${clientId}`, INICIAL, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
+  const [r, setR] = useEstadoDaTela<Rascunho>(escopo || `mesa-videos:continuar:${clientId}`, videoInicial ? { ...INICIAL, video: videoInicial } : INICIAL, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
   const [etapa, setEtapa] = useState<string | null>(null);
   const mudar = (m: Partial<Rascunho>) => setR((x) => ({ ...x, ...m }));
   const videos = ((arquivosQ.data && arquivosQ.data.arquivos) || []).filter(ehVideo);
   const a = videos.find((x) => x.id === r.video) || null;
   const b = videos.find((x) => x.id === r.videoB) || null;
-  const requisito = r.modo === "transicao" ? ({ modo: "primeiro_ultimo", formato: r.formato } as const) : ({ modo: r.nativo ? "estender" : "primeiro_quadro", formato: r.formato } as const);
+  const requisito = r.modo === "transicao" ? ({ modo: "primeiro_ultimo", formato: r.formato } as const) : ({ modo: r.modo === "continuar" && r.nativo ? "estender" : "primeiro_quadro", formato: r.formato } as const);
   const motor = motorPorId(r.motor, motores.motores) || motorDoNivel(r.nivel, requisito, motores.motores) || (r.modo === "continuar" ? motorDoNivel(r.nivel, { modo: "primeiro_quadro", formato: r.formato }, motores.motores) : null);
   const nativo = r.modo === "continuar" && r.nativo && !!motor && motor.cap.estender;
   const duracao = motor ? duracaoNoMotor(motor, r.duracao) : r.duracao;
   const custo = custoNaTela(motor, { duracao_s: duracao });
   const estado = motor ? motores.lista.find((x) => x.motor.id === motor.id) : null;
-  const motivo = !a ? "Escolha o vídeo." : r.modo === "transicao" && !b ? "Escolha o vídeo B." : !motor ? "Nenhum motor faz isso." : estado && estado.estado !== "pronto" ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}.` : r.modo === "continuar" && !r.prompt.trim() ? "Diga o que acontece depois." : null;
+  const motivo = !a ? "Escolha o vídeo." : r.modo === "transicao" && !b ? "Escolha o vídeo B." : !motor ? "Nenhum motor faz isso." : estado && estado.estado !== "pronto" ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}.` : r.modo === "variar" && !r.prompt.trim() ? "Diga o que muda nesta nova versão." : r.modo === "continuar" && !r.prompt.trim() ? "Diga o que acontece depois." : null;
 
   const gerar = async (usd: number) => {
     if (!motor || !a) return;
     const registrar = (caminho: string, posicao: string, origem: string) => chamarMesaVideos({ acao: "quadro_registrar", client_id: clientId, storage_path: caminho, posicao, origem_arquivo_id: origem }).catch(() => null);
-    if (r.modo === "continuar") {
+    const daPauta = taskId ? { task_id: taskId } : {};
+    if (r.modo === "variar") {
+      setEtapa("Tirando o quadro de abertura");
+      const quadro = await quadroDoVideoNoStorage(clientId, a.storage_bucket, a.storage_path, "capa");
+      void registrar(quadro, "primeiro", a.id);
+      setEtapa("Enviando");
+      const resp = await chamarMesaVideos<{ pedido_id: string }>({ acao: "continuar_video", client_id: clientId, arquivo_id: a.id, quadro_path: quadro, usar_extensao: false, prompt: r.prompt, motor: motor.id, duracao_s: duracao, formato: r.formato, variacoes: 1, uid: novoUid(), custo_confirmado_usd: usd, titulo: `${a.nome} nova versão`, ...daPauta });
+      toast.success("Nova versão enviada", { description: "A partir da abertura do vídeo, com o que você pediu." });
+      if (aoGerar && resp && resp.pedido_id) aoGerar(resp.pedido_id);
+    } else if (r.modo === "continuar") {
       let quadro: string | null = null;
       if (!nativo) {
         setEtapa("Tirando o último quadro");
@@ -68,16 +82,18 @@ export default function ContinuarVideo() {
         void registrar(quadro, "ultimo", a.id);
       }
       setEtapa("Enviando");
-      const resp = await chamarMesaVideos<{ pedido_id: string; via: string }>({ acao: "continuar_video", client_id: clientId, arquivo_id: a.id, quadro_path: quadro, usar_extensao: nativo, prompt: r.prompt, motor: motor.id, duracao_s: duracao, formato: r.formato, variacoes: 1, uid: novoUid(), custo_confirmado_usd: usd, titulo: `${a.nome} continuação` });
+      const resp = await chamarMesaVideos<{ pedido_id: string; via: string }>({ acao: "continuar_video", client_id: clientId, arquivo_id: a.id, quadro_path: quadro, usar_extensao: nativo, prompt: r.prompt, motor: motor.id, duracao_s: duracao, formato: r.formato, variacoes: 1, uid: novoUid(), custo_confirmado_usd: usd, titulo: `${a.nome} continuação`, ...daPauta });
       toast.success("Continuação enviada", { description: resp.via === "extensao_nativa" ? "Pela extensão nativa do motor." : "A partir do último quadro." });
+      if (aoGerar && resp && resp.pedido_id) aoGerar(resp.pedido_id);
     } else if (b) {
       setEtapa("Tirando os quadros de A e B");
       const [qa, qb] = await Promise.all([quadroDoVideoNoStorage(clientId, a.storage_bucket, a.storage_path, "ultimo"), quadroDoVideoNoStorage(clientId, b.storage_bucket, b.storage_path, "primeiro")]);
       void registrar(qa, "ultimo", a.id);
       void registrar(qb, "primeiro", b.id);
       setEtapa("Enviando");
-      await chamarMesaVideos({ acao: "transicao_gerar", client_id: clientId, quadro_a_path: qa, quadro_b_path: qb, prompt: r.prompt, motor: motor.id, duracao_s: duracao, formato: r.formato, variacoes: 1, uid: novoUid(), custo_confirmado_usd: usd, titulo: `Transição ${a.nome} para ${b.nome}` });
+      const resp = await chamarMesaVideos<{ pedido_id: string }>({ acao: "transicao_gerar", client_id: clientId, quadro_a_path: qa, quadro_b_path: qb, prompt: r.prompt, motor: motor.id, duracao_s: duracao, formato: r.formato, variacoes: 1, uid: novoUid(), custo_confirmado_usd: usd, titulo: `Transição ${a.nome} para ${b.nome}`, ...daPauta });
       toast.success("Transição enviada", { description: "Primeiro quadro = fim de A; último quadro = começo de B." });
+      if (aoGerar && resp && resp.pedido_id) aoGerar(resp.pedido_id);
     }
     setEtapa(null);
     void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
@@ -107,7 +123,7 @@ export default function ContinuarVideo() {
 
   return (
     <div className="min-w-0 space-y-5" data-continuar-video="">
-      <SeletorCompacto rotulo="Continuar ou transição" opcoes={[{ valor: "continuar", rotulo: "Continuar" }, { valor: "transicao", rotulo: "Transição A para B" }]} valor={r.modo} onEscolher={(v) => mudar({ modo: v as Rascunho["modo"], motor: "" })} />
+      <SeletorCompacto rotulo="O que fazer com o vídeo" opcoes={[{ valor: "continuar", rotulo: "Continuar" }, { valor: "variar", rotulo: "Nova versão" }, { valor: "transicao", rotulo: "Transição A para B" }]} valor={r.modo} onEscolher={(v) => mudar({ modo: v as Rascunho["modo"], motor: "" })} />
       <GrupoDeCampos>
         {opcoesDeVideo(r.video, r.modo === "transicao" ? "Vídeo A" : "Vídeo", (v) => mudar({ video: v }))}
         {r.modo === "transicao" && opcoesDeVideo(r.videoB, "Vídeo B", (v) => mudar({ videoB: v }))}
@@ -119,8 +135,8 @@ export default function ContinuarVideo() {
           Usar a extensão nativa do {motor.rotulo}
         </label>
       )}
-      <CampoDeFormulario rotulo={r.modo === "continuar" ? "O que acontece depois" : "Como é a passagem"} largo apoio="Mesmo personagem e mesmo lugar: repita a aparência e a roupa como no vídeo.">
-        <textarea className={juntar(campoTexto, "min-h-[80px]")} value={r.prompt} maxLength={2400} onChange={(e) => mudar({ prompt: e.target.value })} placeholder={r.modo === "continuar" ? "Ex.: ele entra na padaria e acende a luz, câmera acompanha" : "Opcional"} />
+      <CampoDeFormulario rotulo={r.modo === "continuar" ? "O que acontece depois" : r.modo === "variar" ? "O que muda nesta versão" : "Como é a passagem"} largo apoio={r.modo === "variar" ? "Começa na mesma abertura do vídeo: diga o movimento, o ângulo, a ação ou o clima novo." : "Mesmo personagem e mesmo lugar: repita a aparência e a roupa como no vídeo."}>
+        <textarea className={juntar(campoTexto, "min-h-[80px]")} value={r.prompt} maxLength={2400} onChange={(e) => mudar({ prompt: e.target.value })} placeholder={r.modo === "continuar" ? "Ex.: ele entra na padaria e acende a luz, câmera acompanha" : r.modo === "variar" ? "Ex.: mesma cena, câmera aproxima devagar do produto e a luz fica mais quente" : "Opcional"} />
       </CampoDeFormulario>
       <GrupoDeCampos>
         <CampoDeFormulario rotulo="Duração">
@@ -137,7 +153,7 @@ export default function ContinuarVideo() {
           <SeletorCompacto rotulo="Formato" larguraTotal opcoes={(motor ? motor.formatos : ["9:16", "16:9"]).map((f) => ({ valor: f, rotulo: f }))} valor={r.formato} onEscolher={(v) => mudar({ formato: v })} />
         </div>
       </GrupoDeCampos>
-      <BotaoDeGerar custo={custo} rotulo={r.modo === "continuar" ? "Continuar" : "Gerar transição"} motivo={etapa || motivo} onConfirmar={confirmar} />
+      <BotaoDeGerar custo={custo} rotulo={r.modo === "continuar" ? "Continuar" : r.modo === "variar" ? "Gerar nova versão" : "Gerar transição"} motivo={etapa || motivo} onConfirmar={confirmar} />
     </div>
   );
 }

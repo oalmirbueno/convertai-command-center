@@ -46,6 +46,8 @@ import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, mensagemDaFuncao, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 import { urlsLevesEmLote } from "@/lib/miniaturas";
+import { capasDeVideoEmLote } from "@/lib/capaDoVideo";
+import CapaDoVideo from "@/components/sistema/CapaDoVideo";
 // Frente OR (29/09): o "Organizar" do cliente vê as imagens (carrosséis, antes e depois, duplicatas) com prévia e Desfazer.
 // 18/10 (painel otimizado): o Estúdio flutuante (quase 200 KB) e o Organizador
 // eram mais da metade do arquivo do Workspace. A lista de arquivos aparece
@@ -873,9 +875,13 @@ export default function Workspace() {
           .catch(() => ({ kind: "cover", data: [] })));
       }
       if (vidTargets.length) {
-        jobs.push(supabase.storage.from("workspace").createSignedUrls(
-          vidTargets.map(n => n.storage_path!), 3600
-        ).then((r: any) => ({ kind: "full", data: r?.data })));
+        // 29/10/2026: a capa do vídeo (<vídeo>.mini.jpg) vem junto, na mesma chamada; sem ela, o quadro do vídeo.
+        jobs.push(capasDeVideoEmLote("workspace", vidTargets.map(n => n.storage_path!), 3600)
+          .then((mapa) => ({
+            kind: "video",
+            data: Object.keys(mapa).map((path) => ({ path, signedUrl: mapa[path].video, capa: mapa[path].capa })),
+          }))
+          .catch(() => ({ kind: "video", data: [] })));
       }
       const results = await Promise.all(jobs);
       if (!alive) return;
@@ -883,7 +889,9 @@ export default function Workspace() {
       const fullPatch: Record<string, string> = {};
       for (const r of results as any[]) {
         for (const row of (r?.data as any[] | undefined) || []) {
-          if (!row?.signedUrl || !row?.path) continue;
+          if (!row?.path) continue;
+          if (r.kind === "video" && row.capa) coverPatch[row.path] = row.capa;
+          if (!row?.signedUrl) continue;
           if (r.kind === "cover") coverPatch[row.path] = row.signedUrl;
           else fullPatch[row.path] = row.signedUrl;
         }
@@ -902,7 +910,7 @@ export default function Workspace() {
     if (isInboxQuarantined(n)) return null;
     if (!n.storage_path) return null;
     if (k === "image") return coverUrls[n.storage_path] || signedUrls[n.storage_path] || null;
-    return signedUrls[n.storage_path] || null;
+    return coverUrls[n.storage_path] || signedUrls[n.storage_path] || null;
   };
 
 
@@ -2695,7 +2703,12 @@ export default function Workspace() {
                         style={{ paddingBottom: "100%" }}
                       >
                         {temImagem ? (
-                          <WorkspaceThumb node={n} cover={cover} />
+                          <WorkspaceThumb
+                            node={n}
+                            cover={cover}
+                            capaDoVideo={k === "video" && n.storage_path ? coverUrls[n.storage_path] || null : undefined}
+                            urlDoVideo={k === "video" && n.storage_path ? signedUrls[n.storage_path] || null : undefined}
+                          />
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <Icon className={juntar("h-10 w-10", isFolder ? "text-primary" : KIND_META[k].color)} aria-hidden="true" />
@@ -3201,7 +3214,7 @@ function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promis
   );
 }
 
-function WorkspaceThumb({ node, cover }: { node: Node; cover: string | null }) {
+function WorkspaceThumb({ node, cover, capaDoVideo, urlDoVideo }: { node: Node; cover: string | null; capaDoVideo?: string | null; urlDoVideo?: string | null }) {
   const ref = storageRefFromFile({ fileUrl: node.__external_url, storageBucket: node.__storage_bucket, storagePath: node.__storage_path });
   const k = kindOf(node);
   const Icon = iconFor(node);
@@ -3221,7 +3234,9 @@ function WorkspaceThumb({ node, cover }: { node: Node; cover: string | null }) {
     );
   }
   if (k === "video") {
-    return <video src={`${url}#t=0.1`} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="none" />;
+    // 29/10/2026: capa leve quando existe; senão o quadro do vídeo, carregado ao aparecer (antes o vídeo nunca carregava e o cartão ficava vazio).
+    if (capaDoVideo !== undefined || urlDoVideo !== undefined) return <CapaDoVideo capa={capaDoVideo} video={urlDoVideo ?? url} nome={node.name} />;
+    return <CapaDoVideo bucket={ref?.bucket} caminho={ref?.path} video={url} nome={node.name} />;
   }
   return <img src={url} alt={node.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />;
 }

@@ -1,5 +1,7 @@
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { AlertCircle, History, Loader2, Music, PenLine, Plus, Scissors, Send, SlidersHorizontal, Type, Video, X } from "lucide-react";
+import { AlertCircle, History, Loader2, Music, PenLine, Plus, Repeat2, Scissors, Send, SlidersHorizontal, Type, Video, X } from "lucide-react";
+import ContinuarVideo from "@/components/mesa-videos/ContinuarVideo";
+import CapaDoVideo from "@/components/sistema/CapaDoVideo";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import CortarVideoDaPauta from "./CortarVideoDaPauta";
@@ -23,7 +25,6 @@ import { TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
 import { LinhaDoFinal } from "@/components/mesa-edicao/Finais";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
 import BancadaDaPauta, { PainelDaBancada } from "./BancadaDaPauta";
-import { useUrlDaMesa } from "./MesaContexto";
 import { direcaoComFotoReal, precisaDeFotoReal, useFotoRealDaPeca } from "./useFotoRealDaPeca";
 import ComposicaoDoVideoDaPauta from "./ComposicaoDoVideoDaPauta";
 import GeracoesDaPauta from "./GeracoesDaPauta";
@@ -43,9 +44,8 @@ export function pedidosDaPauta(clientId: string, taskId: string, pedidos: Pedido
  * aparecia quebrado: a miniatura .mini.jpg só existe depois que alguém abre o vídeo no navegador).
  */
 function QuadroDoVideo({ bucket, caminho }: { bucket: string; caminho: string }) {
-  const url = useUrlDaMesa(caminho, bucket);
-  if (!url.data) return null;
-  return <video src={`${url.data}#t=0.5`} muted playsInline preload="metadata" aria-hidden="true" tabIndex={-1} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />;
+  // 29/10/2026: a capa leve (<vídeo>.mini.jpg) quando existe; senão o quadro do vídeo, carregado ao aparecer.
+  return <CapaDoVideo bucket={bucket} caminho={caminho} />;
 }
 
 /** O nome do resultado na prancheta: o vídeo final montado, a cena da composição ou a geração solta. */
@@ -155,6 +155,8 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
         ...(gravar ? [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }] : []),
         { id: "gerar", nome: "Gerar vídeo com IA", icone: PenLine },
         ...(gravar ? [] : [{ id: "gravar", nome: "Gravar com roteiro", icone: Video }]),
+        // 29/10/2026 (dono: "gerar mais vídeos a partir daquele, como referência, usar ou editar"): o vídeo da peça vira ponto de partida.
+        { id: "apartir", nome: "A partir deste vídeo", icone: Repeat2 },
         { id: "som", nome: "Trilha sonora", icone: Music },
         { id: "legenda", nome: "Falas na tela (legenda no vídeo)", icone: Type },
         { id: "cortar", nome: "Cortar o vídeo", icone: Scissors },
@@ -180,13 +182,23 @@ export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes;
       </div>}
       // 24/10 (dono): o miolo é a peça (A fazer / Pronto, Vídeo, Roteiro e Só o texto, subir e preparar para publicar);
       // a direção genérica do estilo ("Produto elegante") ficou só no "?" da barra. A linha da mídia mora dentro da peça, não solta acima.
-      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAbrirRoteiro={() => setAba("gravar")} aoEntregar={() => setAba("entrega")} aoMudarVideo={(v) => { conferido.current = ""; setNoAcervo(null); setVideoDaPeca(v); }} />
+      previa={<><MidiaDaPauta item={{ ...item, modo_estudio: "video" }} /><PecaDeVideoDaPauta item={item} arte={arte} geracoes={paraAPeca} emFoco={vendo ? atual || null : null} aoGerar={() => setAba("gerar")} aoAPartir={() => setAba("apartir")} aoAbrirRoteiro={() => setAba("gravar")} aoEntregar={() => setAba("entrega")} aoMudarVideo={(v) => { conferido.current = ""; setNoAcervo(null); setVideoDaPeca(v); }} />
         <div className="mt-3"><GeracoesDaPauta pedidos={pedidos} compacta titulo="Gerando agora" /></div>
       </>}
       ferramentas={<div className="space-y-4">
       <PainelDaBancada id="gravar"><GravarDaPauta item={item} /></PainelDaBancada>
       <PainelDaBancada id="gerar">{fotoReal && <p className="mb-2 text-[12px] text-muted-foreground" role="status" data-foto-real={fotoReal.modo}>{fotoReal.linha}</p>}<ComposicaoDoVideoDaPauta item={item} pedidos={pedidos} arquivos={todosOsArquivos} fotoReal={idsDaFotoReal} /></PainelDaBancada>
       <PainelDaBancada id="livre"><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><div className="my-2"><AjudaRecolhida rotulo="Sobre este estilo">{tema.texto}</AjudaRecolhida></div>{aba === "livre" && <GeradorLivre key={`${item.id}:${base}:${item.midia?.gerada_em || ""}:${chaveDaFoto}`} escopo={chave(`video:${base}${item.midia?.gerada_em ? `:${item.midia.gerada_em}` : ""}`)} pauta={item} direcaoInicial={direcao} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}\nProduza apenas cenas coerentes com esta pauta e com as referências reais do cliente.`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba("resultados"); }} />}</PainelDaBancada>
+      <PainelDaBancada id="apartir">{atual ? <div className="space-y-4" data-a-partir-do-video={atual.id}>
+        <p className="text-[13px]">Use <strong>{atual.nome}</strong> como ponto de partida: continue a história, faça uma nova versão da mesma abertura ou emende com outro vídeo. O resultado entra na prancheta desta pauta.</p>
+        <div className="flex flex-wrap gap-2" aria-label="Editar este vídeo">
+          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("cortar")}><Scissors className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Cortar</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("som")}><Music className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Trilha</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("legenda")}><Type className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Legenda</button>
+          <button type="button" className="inline-flex h-8 items-center rounded-md border border-border px-2.5 text-[12px] hover:bg-muted" onClick={() => setAba("entrega")}><Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Enviar para aprovação</button>
+        </div>
+        <ContinuarVideo key={atual.id} videoInicial={atual.id} taskId={item.id} escopo={chave(`a-partir:${atual.id}`)} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba("resultados"); }} />
+      </div> : semVideo("Suba, escolha no Workspace ou gere um vídeo para usar como ponto de partida.")}</PainelDaBancada>
       <PainelDaBancada id="som">{atual ? <TrilhaDoVideoDaPauta key={atual.id} arquivo={atual} taskId={item.id} /> : semVideo("Gere ou escolha um vídeo na prancheta para adicionar a trilha.")}</PainelDaBancada>
       <PainelDaBancada id="legenda">{atual ? <ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul> : semVideo("A legenda fica disponível quando o vídeo estiver pronto.")}</PainelDaBancada>
       <PainelDaBancada id="cortar">{atual ? <CortarVideoDaPauta key={atual.id} arquivo={atual} /> : semVideo("Gere ou escolha um vídeo na prancheta para cortar.")}</PainelDaBancada>
