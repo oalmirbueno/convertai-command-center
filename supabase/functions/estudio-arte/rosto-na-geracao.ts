@@ -34,6 +34,7 @@
  */
 
 import { linhasDaIdentidadeDaFoto } from "./modulos/uso-da-foto.ts";
+import { linhasDoEnquadramentoDoRosto } from "./tema-e-referencias.ts";
 
 export type FonteDoRosto = "cliente" | "equipe" | "fotos" | "escolhidas";
 export const FONTES_DO_ROSTO: FonteDoRosto[] = ["cliente", "equipe", "fotos", "escolhidas"];
@@ -219,6 +220,8 @@ export function blocoDoRosto(e: { indices: number[]; destacar: boolean; pessoaNa
       ? `- COMO ELA APARECE (pedido da equipe): ${como}. Faça essa pose e essa expressão com naturalidade; o rosto continua o das fotos.`
       : "",
     "- RECRIE a pessoa dentro da composição, nunca a foto recortada e colada: pose, gesto, direção do olhar e enquadramento escolhidos para combinar com o layout e deixar o texto livre e legível.",
+    // 29/10/2026 (dono: "fiel, mas sem repetir os mesmos ângulos; de lado se for de lado, só a cara se for só a cara").
+    ...linhasDoEnquadramentoDoRosto(!!como),
     // Frente RO (29/09): foto da lâmina no modo "Usar o rosto": a frase do dono e a cena nova pela direção.
     ...(e.daFoto ? linhasDaIdentidadeDaFoto() : []),
     lamina

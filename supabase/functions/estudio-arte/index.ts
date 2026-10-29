@@ -698,6 +698,8 @@ import {
   separarIdentidadeDaCapa,
   temAlgoSoDaCapa,
 } from "./serie-da-capa.ts";
+// 29/10/2026: a referência é o estilo e o tema manda no conteúdo; combinar referências; mundo temático da série.
+import { blocoDaCombinacao, blocoDaTrocaPeloTema, LINHA_DO_TRATAMENTO_DA_LETRA, linhaDoMundoTematico, temaDoConteudo } from "./tema-e-referencias.ts";
 import { componenteDaLamina, componenteGravado } from "./miolo-rico.ts";
 // Frente T2 (26/09): tipografia do cliente (kit da marca do trabalho, amostra com papel, âncora da série, sem inventar).
 import {
@@ -3406,7 +3408,8 @@ const COLAR_FOTO_EXATA_NO_AJUSTE = false;
 /** 17/10: vai na mensagem (não no sistema): o sistema do diretor tem teto e fica no cache do provedor. */
 const REPERTORIO_E_MISTURA = `REPERTÓRIO E MISTURA (17/10, dono: "não repetir igual o arsenal, mas juntar detalhes que foram usados em um estilo com outro, para diversificar sem sair do gosto e das referências")
 - A base de conhecimento, as referências de técnica, os perfis do Instagram, as artes já publicadas da marca, os \`carrosseis_aprovados_pelo_cliente\` (a régua de qualidade e gosto dele) e o acervo são REPERTÓRIO, não molde: em cada peça combine detalhes de duas ou mais fontes (o recorte de uma, o grid de outra, a escala de título de uma terceira) dentro do kit da marca.
-- Nunca reproduza igual uma arte anterior, um post de referência ou um modelo da base; o resultado tem que parecer da marca e ser novo.`;
+- Nunca reproduza igual uma arte anterior, um post de referência ou um modelo da base; o resultado tem que parecer da marca e ser novo.
+- (29/10) Referência é ESTILO: os objetos, cenários, produtos e pessoas de cada lâmina saem do TEMA deste conteúdo e do nicho do cliente, com elementos reais e reconhecíveis (produtos, ambientes, interfaces e componentes de verdade). Com duas ou mais referências, combine o melhor de cada uma. No carrossel, a capa abre um mundo temático e cada lâmina seguinte continua nele com um elemento novo até o fim (nada genérico, nada repetido).`;
 
 type ModoDirecao = "diretor" | "roteiro";
 
@@ -7006,6 +7009,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       cenaFixa,
     }),
     replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),
+    // 29/10/2026: o mundo temático aberto pela capa continua até o fim, com elementos novos.
+    replicar || ads || cenaFixa ? "" : linhaDoMundoTematico({ ordem, total, tema: temaDoConteudo(t.direcao) }),
+    // 29/10/2026: com a referência do conjunto como guia, o que é do assunto dela troca pelo tema.
+    replicar || ads || indiceDaReferenciaDaSerie == null ? "" : blocoDaTrocaPeloTema({ tema: temaDoConteudo(t.direcao), cliente: marca.nomeCliente, temCopy: !!copyDaLamina(card) }),
     // Frente R3 e R4: lâmina de conteúdo desenhada pelo gerador (componente de lâmina). Capa, fechamento, replicar e anúncio: vazio.
     replicar || ads ? "" : blocoDoMioloDesenhado({ ordem, total, blocos: cardDoPrompt.blocos && cardDoPrompt.blocos.length ? cardDoPrompt.blocos : [{ papel: "apoio", texto: cardDoPrompt.texto_exato }], cenaFixa, componente: componenteDoMiolo, zona: zonaDoTexto }),
     // Frente R5: arranjo dividido da série (título no alto, apoio na base) e o texto em partes curtas em lugares diferentes.
@@ -7134,14 +7141,20 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       adaptacao ? adaptacao.bloco : "",
       blocoDoRostoAqui,
       preferencias ? `As regras abaixo, aprendidas com o cliente, valem desde que não mudem o layout da referência.\n${preferencias}` : "",
+      // 29/10/2026: a referência é o estilo; cada elemento do assunto dela troca pelo tema e pelo nicho. Com duas
+      // ou mais, combina o melhor de cada uma (a grade continua a da primeira). Anúncio fica como está.
+      ads ? "" : blocoDaTrocaPeloTema({ tema: temaDoConteudo(t.direcao), cliente: marca.nomeCliente, temCopy: !!copyDaLamina(card) }),
+      ads ? "" : blocoDaCombinacao({ indices: refsNoPrompt.map((r) => r.indice) }),
       // Frente AP: padrões das entregas, sem mexer no layout da referência (sem a linha da variedade: aqui manda a referência).
       dasEntregas.bloco ? `Os padrões abaixo, das entregas deste cliente, valem desde que não mudem o layout da referência.\n${dasEntregas.bloco}` : "",
       variedade ? variedade.bloco : "",
       // Frente AG: a navegação do carrossel também no modo replicar (a referência não traz a nossa).
       blocoDaNavegacaoAqui,
       continuidade,
+      ads ? "" : linhaDoMundoTematico({ ordem, total, tema: temaDoConteudo(t.direcao) }),
       // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).
       blocoDaTipografiaAqui,
+      ads ? "" : LINHA_DO_TRATAMENTO_DA_LETRA,
       // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
       blocoDoSelo,
       elementosReais.length ? FRASE_DOS_ELEMENTOS_REAIS : "",
