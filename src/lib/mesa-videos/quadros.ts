@@ -109,6 +109,51 @@ export async function extrairQuadro(fonte: string | Blob, posicao: "primeiro" | 
   }
 }
 
+/**
+ * Vários quadros do mesmo vídeo, nas frações da duração pedidas (29/10/2026: a legenda "assiste" o vídeo). Um
+ * elemento de vídeo só, um seek por quadro. Quadro que não sai fica de fora (nunca lança por um quadro).
+ */
+export async function extrairQuadrosNasFracoes(fonte: string, fracoes: number[], opcoes: { lado?: number } = {}): Promise<Blob[]> {
+  const el = document.createElement("video");
+  el.crossOrigin = "anonymous";
+  el.muted = true;
+  el.preload = "auto";
+  el.setAttribute("playsinline", "");
+  el.src = fonte;
+  const saida: Blob[] = [];
+  try {
+    await esperar(el, "loadeddata", 20000);
+    const dur = isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+    for (const f of fracoes) {
+      try {
+        el.currentTime = Math.max(0, Math.min(dur - MEIO_QUADRO_S, dur * f));
+        await esperar(el, "seeked", 15000);
+        const w = el.videoWidth;
+        const h = el.videoHeight;
+        if (!w || !h) continue;
+        const k = Math.min(1, (opcoes.lado || 640) / Math.max(w, h));
+        const c = document.createElement("canvas");
+        c.width = Math.round(w * k);
+        c.height = Math.round(h * k);
+        const ctx = c.getContext("2d");
+        if (!ctx) continue;
+        ctx.drawImage(el, 0, 0, c.width, c.height);
+        saida.push(await paraBlob(c, "image/png"));
+      } catch {
+        // quadro que não saiu fica de fora
+      }
+    }
+    return saida;
+  } finally {
+    el.removeAttribute("src");
+    try {
+      el.load();
+    } catch {
+      /* nada */
+    }
+  }
+}
+
 /** Sobe o quadro para a pasta de quadros do cliente e devolve o caminho. */
 export async function subirQuadro(clientId: string, blob: Blob, nome: string): Promise<string> {
   const limpo = String(nome || "quadro").replace(/[^a-z0-9_-]+/gi, "-").slice(0, 60) || "quadro";

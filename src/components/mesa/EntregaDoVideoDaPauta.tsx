@@ -11,7 +11,7 @@ import type { ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { BotaoComCusto } from "./Custo";
 import { useEstadoGuardado } from "./estudioUtil";
 import { useMesa } from "./MesaContexto";
-import { desfazerPreparo, legendaComHashtags, legendaDoVideo, prepararParaPublicar, textoDoPreparo, type ResultadoDoPreparo, type VideoDaPauta } from "./videoDaPauta";
+import { assistirOVideo, desfazerPreparo, legendaComHashtags, legendaDoVideo, prepararParaPublicar, textoDoPreparo, type ResultadoDoPreparo, type VideoDaPauta } from "./videoDaPauta";
 import type { ItemDoMes } from "./useItensDoMes";
 
 /**
@@ -34,6 +34,9 @@ export default function EntregaDoVideoDaPauta({ item, arquivo }: { item: ItemDoM
   const [preparo, setPreparo] = useState<ResultadoDoPreparo | null>(null);
   const [ocupado, setOcupado] = useState<"arquivos" | "desfazer" | null>(null);
   const diretor = padraoPara(catalogo, "diretor_arte");
+  const leitor = padraoPara(catalogo, "leitura");
+  const [andamento, setAndamento] = useState<string | null>(null);
+  const [visto, setVisto] = useState<string | null>(null);
   // 27/10 (dono: "o conteúdo é preparado antes do vídeo; gerar a legenda e passar para publicar igual no
   // carrossel"): a legenda do post sai do roteiro e do tema da pauta (sem transcrever o vídeo), aparece aqui
   // e pode ser editada antes de entregar. Entregar usa o texto que está no campo.
@@ -47,18 +50,34 @@ export default function EntregaDoVideoDaPauta({ item, arquivo }: { item: ItemDoM
   };
   const partes = (): ParteDaEstimativa[] => [
     { modeloId: diretor ? diretor.id : "", tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida } as ParteDaEstimativa,
+    // 29/10/2026: assistir o vídeo (4 quadros e a fala) antes de escrever.
+    ...(leitor ? [{ modeloId: leitor.id, tipo: "texto", tokensEntrada: 5000, tokensSaida: 800 } as ParteDaEstimativa] : []),
     parteDaConferenciaDoJev(),
     parteDaConferenciaDoJev(),
   ];
+  // 29/10/2026 (dono: "tem vídeo que vou subir que não está no roteiro; ele tem que assistir o vídeo e entender"):
+  // antes de escrever, a tela tira 4 quadros e a fala do vídeo; o que ele mostra manda na legenda. Sem conseguir
+  // assistir (navegador sem suporte, vídeo sem acesso), segue pelo roteiro, como antes.
+  const assistir = async () => {
+    try {
+      return await assistirOVideo(clientId, video, setAndamento);
+    } catch {
+      return null;
+    } finally {
+      setAndamento(null);
+    }
+  };
   const escrever = async () => {
-    const l = await legendaDoVideo(clientId, item.id);
+    const assistido = await assistir();
+    const l = await legendaDoVideo(clientId, item.id, assistido);
     setLegenda(legendaComHashtags(l));
+    setVisto(l && l.pelo_video ? l.o_que_o_video_mostra || "Legenda escrita pelo que o vídeo mostra." : null);
     return { custo_usd: Number(l && l.custo_usd) || 0 };
   };
   const enviar = async () => {
     if (!userId) throw new Error("Entre de novo para enviar.");
     const pronta = legenda.trim();
-    const l = pronta ? null : await legendaDoVideo(clientId, item.id);
+    const l = pronta ? null : await legendaDoVideo(clientId, item.id, await assistir());
     const r = await prepararParaPublicar({ clientId, userId, item, video, legenda: pronta || legendaComHashtags(l!), modo });
     return { ...r, custo_usd: l ? Number(l.custo_usd) || 0 : 0 };
   };
@@ -103,9 +122,11 @@ export default function EntregaDoVideoDaPauta({ item, arquivo }: { item: ItemDoM
     {modo !== "arquivos" && <div className="min-w-0" data-legenda-do-post-do-video="">
       <div className="mb-1 flex min-w-0 items-center justify-between">
         <label className="text-[12px] text-muted-foreground" htmlFor={`legenda-video-${item.id}`}>Legenda do post</label>
-        <BotaoComCusto rotulo={<><PenLine className="mr-1 h-3.5 w-3.5" aria-hidden="true" />{legenda ? "Escrever de novo" : "Escrever pelo roteiro"}</>} titulo="Legenda do post" descricao="Escreve a legenda do Reels pelo roteiro e pelo tema da pauta, sem transcrever o vídeo. Você confere e edita aqui antes de entregar." partes={partes} disabled={!podeEditar || !diretor} executar={escrever} className="h-7 px-2" />
+        {andamento && <span role="status" className="mr-2 inline-flex items-center text-[11px] text-muted-foreground"><Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" />{andamento}</span>}
+        <BotaoComCusto rotulo={<><PenLine className="mr-1 h-3.5 w-3.5" aria-hidden="true" />{legenda ? "Escrever de novo" : "Escrever pelo vídeo"}</>} titulo="Legenda do post" descricao="Assiste o vídeo (quadros e fala) e escreve a legenda do Reels pelo que ele mostra e diz, com a pauta como intenção. Você confere e edita aqui antes de entregar." partes={partes} disabled={!podeEditar || !diretor} executar={escrever} className="h-7 px-2" />
       </div>
-      <textarea id={`legenda-video-${item.id}`} aria-label="Legenda do post" value={legenda} onChange={(e) => setLegenda(e.target.value)} placeholder="Escreva pelo roteiro (botão acima) ou digite aqui. Vazio: é escrita ao entregar." className={juntar(campoTexto, "min-h-32 text-[13px]")} disabled={!podeEditar} />
+      <textarea id={`legenda-video-${item.id}`} aria-label="Legenda do post" value={legenda} onChange={(e) => setLegenda(e.target.value)} placeholder="Escreva pelo vídeo (botão acima) ou digite aqui. Vazio: é escrita ao entregar." className={juntar(campoTexto, "min-h-32 text-[13px]")} disabled={!podeEditar} />
+      {visto && <p className={juntar(texto.auxiliar, "mt-1")} data-o-que-o-video-mostra="">O que o vídeo mostra: {visto}</p>}
     </div>}
     <label className="block min-w-0 text-[12px] text-muted-foreground">Como entregar
       <select className={juntar(campo, "mt-1")} value={modo} onChange={(e) => setModo(e.target.value as ModoDeEntrega)} disabled={!podeEditar} aria-label="Como entregar o vídeo">

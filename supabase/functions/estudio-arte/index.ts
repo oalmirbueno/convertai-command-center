@@ -8296,13 +8296,126 @@ async function legendaDoVideo(ch: Chamador, corpo: Record<string, unknown>) {
     .order("atualizado_em", { ascending: false })
     .limit(5);
   const roteiro = roteiroParaALegenda(((linhas as Record<string, unknown>[] | null) ?? []).find((l) => !l.arquivado_em) ?? null);
-  const conceito = roteiro ? roteiro.conceito : texto(item.tarefa.title, 300);
+  // 29/10/2026 (dono: "tem vídeo que vou subir que não está no roteiro; ele tem que assistir o vídeo e entender
+  // para gerar a legenda com base no vídeo"): com os quadros e a fala do vídeo (a tela tira e transcreve), o
+  // leitor assiste e o que o vídeo mostra e diz manda na legenda; o roteiro vira só a intenção da pauta.
+  const assistido = await assistirOVideo(ch, clientId, taskId, corpo.video);
+  const conceito = assistido
+    ? conceitoDoVideoAssistido(assistido, roteiro ? roteiro.conceito : texto(item.tarefa.title, 300))
+    : roteiro ? roteiro.conceito : texto(item.tarefa.title, 300);
+  const cards = assistido ? cardsDoVideoAssistido(assistido) : roteiro ? roteiro.cards : [];
   const e = await escreverLegendaDoPost(
     ch,
-    { id: taskId, client_id: clientId, direcao: { conceito, cards: roteiro ? roteiro.cards : [] }, referencia: { tipo: "tarefa", id: taskId }, alvoDaMarca: { task_id: taskId } },
+    { id: taskId, client_id: clientId, direcao: { conceito, cards }, referencia: { tipo: "tarefa", id: taskId }, alvoDaMarca: { task_id: taskId } },
     item,
   );
-  return json({ task_id: taskId, com_roteiro: !!roteiro, ...e });
+  return json({
+    task_id: taskId,
+    com_roteiro: !!roteiro,
+    pelo_video: !!assistido,
+    ...(assistido ? { o_que_o_video_mostra: assistido.resumo } : {}),
+    ...e,
+    custo_usd: arred(num(e.custo_usd) + (assistido ? assistido.custo_usd : 0)),
+  });
+}
+
+type VideoAssistido = { resumo: string; cenas: string[]; acoes: string; produto: string; texto_na_tela: string; clima: string; fala: string; custo_usd: number };
+
+const ESQUEMA_DO_VIDEO_ASSISTIDO = {
+  type: "object",
+  additionalProperties: false,
+  required: ["resumo", "cenas", "acoes", "produto", "texto_na_tela", "clima"],
+  properties: {
+    resumo: { type: "string", description: "Em 1 a 3 frases: o que o vídeo mostra e qual a mensagem dele." },
+    cenas: { type: "array", maxItems: 8, items: { type: "string" }, description: "O que aparece em cada quadro, em ordem, frase curta." },
+    acoes: { type: "string", description: "O que acontece (movimento, antes e depois, montagem, demonstração)." },
+    produto: { type: "string", description: "Produto, serviço ou resultado mostrado; vazio se não der para saber." },
+    texto_na_tela: { type: "string", description: "Textos escritos no vídeo, como estão; vazio se não houver." },
+    clima: { type: "string", description: "Tom e sensação do vídeo." },
+  },
+};
+
+const SISTEMA_DO_VIDEO_ASSISTIDO = `Você assiste um vídeo curto de Reels pelos quadros (em ordem de tempo) e pela fala transcrita.
+Descreva só o que se vê e se ouve: nada de inventar preço, prazo, resultado, marca ou nome que não apareça.
+Português do Brasil, frases curtas.`;
+
+/**
+ * Assiste o vídeo da peça: até 6 quadros (tirados pela tela, na pasta de quadros do cliente) e a fala transcrita.
+ * Sem quadros: null (a legenda segue pelo roteiro, como antes). Falha na leitura: null com o log (não derruba).
+ */
+async function assistirOVideo(ch: Chamador, clientId: string, taskId: string, bruto: unknown): Promise<VideoAssistido | null> {
+  const v = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>) : null;
+  if (!v) return null;
+  const pasta = `${clientId}/video/quadros/`;
+  const quadros = (Array.isArray(v.quadros) ? v.quadros : [])
+    .map((q) => texto(q, 400))
+    .filter((q) => q.indexOf(pasta) === 0 && q.indexOf("..") < 0)
+    .slice(0, 6);
+  const fala = texto(v.fala, 4000);
+  if (!quadros.length) return null;
+  try {
+    const imagens = await Promise.all(quadros.map((q, i) => baixarImagem("mesa", q, `quadro-${i + 1}.png`)));
+    const leitor = await modeloDoPapel("leitura");
+    const r = await chamarTexto({
+      clientId,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_DO_VIDEO_ASSISTIDO,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Quadros do vídeo em ordem (${imagens.length}).${fala ? `\nFala transcrita do vídeo: ${fala}` : "\nO vídeo não tem fala transcrita."}`,
+        imagens,
+      }],
+      esquemaJson: ESQUEMA_DO_VIDEO_ASSISTIDO,
+      maxTokensSaida: 1_500,
+      referencia: { tipo: "tarefa", id: taskId },
+      criadoPor: ch.userId,
+    });
+    const j = (r.json || {}) as Record<string, unknown>;
+    const resumo = texto(j.resumo, 600);
+    if (!resumo) return null;
+    return {
+      resumo,
+      cenas: (Array.isArray(j.cenas) ? j.cenas : []).map((c) => texto(c, 200)).filter(Boolean).slice(0, 8),
+      acoes: texto(j.acoes, 400),
+      produto: texto(j.produto, 200),
+      texto_na_tela: texto(j.texto_na_tela, 300),
+      clima: texto(j.clima, 160),
+      fala,
+      custo_usd: num(r.custoUsd),
+    };
+  } catch (e) {
+    if (erroQueSobe(e)) throw e;
+    registrarFalha("estudio-arte: assistir o vídeo para a legenda falhou", e, { client_id: clientId, task_id: taskId });
+    return null;
+  }
+}
+
+/** O conceito da legenda quando o vídeo foi assistido: o vídeo manda, a pauta é só a intenção. */
+function conceitoDoVideoAssistido(a: VideoAssistido, pauta: string): string {
+  return [
+    "Post de Reels do VÍDEO ENVIADO: a legenda fala do que este vídeo mostra e diz, não de outro assunto.",
+    `O que o vídeo mostra: ${a.resumo}`,
+    a.acoes ? `O que acontece: ${a.acoes}` : "",
+    a.produto ? `Produto ou serviço: ${a.produto}` : "",
+    a.texto_na_tela ? `Texto no vídeo: ${a.texto_na_tela}` : "",
+    a.clima ? `Clima: ${a.clima}` : "",
+    pauta ? `Pauta (intenção; use só o que combinar com o vídeo): ${texto(pauta, 400)}` : "",
+  ].filter(Boolean).join(" | ");
+}
+
+/** As "lâminas" da legenda quando o vídeo foi assistido: as falas em frases e o que aparece em cada quadro. */
+function cardsDoVideoAssistido(a: VideoAssistido): { ordem: number; funcao: string; texto_exato: string }[] {
+  const falas = a.fala
+    .replace(/([.!?])\s+/g, "$1\n")
+    .split("\n")
+    .map((f) => f.trim())
+    .filter((f) => f.length > 2)
+    .slice(0, 16)
+    .map((f) => ({ funcao: "Fala do vídeo", texto_exato: texto(f, 600) }));
+  const cenas = a.cenas.map((c) => ({ funcao: "Cena do vídeo", texto_exato: c }));
+  return [...falas, ...cenas].slice(0, 24).map((c, i) => ({ ordem: i + 1, ...c }));
 }
 
 /** O roteiro da tarefa na forma que a legenda lê: o conceito (título, gancho e CTA) e as falas como cards. */

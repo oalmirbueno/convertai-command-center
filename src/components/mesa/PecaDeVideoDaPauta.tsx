@@ -23,6 +23,7 @@ import { useRoteiroDaPeca } from "./roteiroDaPeca";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
 import {
   agendarVideoNaAgenda,
+  assistirOVideo,
   desfazerPreparo,
   guardarVideoDaPauta,
   legendaComHashtags,
@@ -195,7 +196,9 @@ export default function PecaDeVideoDaPauta({ item, arte, geracoes, emFoco = null
 
   const preparar = async () => {
     if (!video || !userId) throw new Error("Escolha o vídeo da peça antes de preparar.");
-    const l = await legendaDoVideo(clientId, item.id);
+    // 29/10/2026: assiste o vídeo (quadros e fala) para a legenda falar do que ele mostra; sem conseguir, pelo roteiro.
+    const assistido = await assistirOVideo(clientId, video).catch(() => null);
+    const l = await legendaDoVideo(clientId, item.id, assistido);
     const r = await prepararParaPublicar({ clientId, userId, item, video, legenda: legendaComHashtags(l), modo });
     return { ...r, custo_usd: Number(l && l.custo_usd) || 0 };
   };

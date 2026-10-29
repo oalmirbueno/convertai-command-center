@@ -8,6 +8,8 @@ import { entregaDaArteAprovada } from "@/lib/editorialEntregaAprovada";
 import type { ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
 import { EDITORIAL_DEFAULT_TIME_ZONE, zonedDateTimeLocalToIso } from "@/lib/editorialDate";
 import { fonteDoArquivo, type ArteNaAgenda, type ItemDoMes } from "./useItensDoMes";
+import { extrairQuadrosNasFracoes, subirQuadro } from "@/lib/mesa-videos/quadros";
+import { transcreverMidia } from "@/lib/editor/fala";
 import type { VideoEscolhido } from "./VideoProntoDaPeca";
 import type { VideoProntoDaPeca } from "../../../supabase/functions/agente-calendario/modulos/roteiro-de-video";
 
@@ -158,10 +160,52 @@ export interface LegendaDoVideo {
   hashtags: string[];
   custo_usd?: number;
   com_roteiro?: boolean;
+  /** 29/10/2026: a legenda saiu do que o vídeo mostra (quadros e fala assistidos). */
+  pelo_video?: boolean;
+  o_que_o_video_mostra?: string;
 }
 
-/** A legenda da casa para o Reels da peça (estudio-arte legenda_do_video, com o roteiro da tarefa). */
-export const legendaDoVideo = (clientId: string, taskId: string) => chamarFuncao<LegendaDoVideo>("estudio-arte", { acao: "legenda_do_video", client_id: clientId, task_id: taskId });
+/**
+ * A legenda da casa para o Reels da peça (estudio-arte legenda_do_video). 29/10/2026 (dono: "tem vídeo que não está
+ * no roteiro; ele tem que assistir o vídeo e entender para gerar a legenda"): com `assistido`, o servidor lê os
+ * quadros e a fala do próprio vídeo e o vídeo manda na legenda; sem ele, segue pelo roteiro da tarefa.
+ */
+export const legendaDoVideo = (clientId: string, taskId: string, assistido?: VideoAssistidoNaTela | null) =>
+  chamarFuncao<LegendaDoVideo>("estudio-arte", { acao: "legenda_do_video", client_id: clientId, task_id: taskId, ...(assistido && assistido.quadros.length ? { video: assistido } : {}) });
+
+export interface VideoAssistidoNaTela {
+  /** Caminhos dos quadros no bucket mesa (<cliente>/video/quadros/...), em ordem de tempo. */
+  quadros: string[];
+  /** A fala transcrita (vazia quando o vídeo não tem fala ou a transcrição não saiu). */
+  fala: string;
+}
+
+/** Frações da duração de onde saem os quadros que a legenda assiste. */
+export const FRACOES_DO_VIDEO = [0.08, 0.32, 0.56, 0.82];
+
+/**
+ * Assiste o vídeo na tela: 4 quadros ao longo dele (sobem para a pasta de quadros do cliente) e a fala transcrita
+ * (Whisper do editor, centavos por minuto). Fala que não sai vira vazia; quadro que não sai fica de fora.
+ */
+export async function assistirOVideo(clientId: string, video: Pick<VideoDaPauta, "bucket" | "caminho">, aoAndar?: (t: string) => void): Promise<VideoAssistidoNaTela> {
+  // Navegador que não toca MP4 (ou ambiente sem vídeo): desiste na hora e a legenda segue pelo roteiro.
+  if (typeof document === "undefined" || !document.createElement("video").canPlayType("video/mp4")) throw new Error("Este navegador não assiste o vídeo.");
+  const { data, error } = await supabase.storage.from(video.bucket).createSignedUrl(video.caminho, 900);
+  if (error || !data || !data.signedUrl) throw new Error("Não foi possível abrir o vídeo para assistir.");
+  if (aoAndar) aoAndar("Assistindo o vídeo");
+  const blobs = await extrairQuadrosNasFracoes(data.signedUrl, FRACOES_DO_VIDEO, { lado: 640 });
+  const quadros: string[] = [];
+  for (let i = 0; i < blobs.length; i++) quadros.push(await subirQuadro(clientId, blobs[i], `legenda-${i + 1}`));
+  let fala = "";
+  try {
+    if (aoAndar) aoAndar("Ouvindo a fala do vídeo");
+    const t = await transcreverMidia({ clientId, url: data.signedUrl, aoAndar });
+    fala = t.palavras.map((p) => p.t).join(" ").replace(/\s+/g, " ").trim().slice(0, 4000);
+  } catch {
+    fala = "";
+  }
+  return { quadros, fala };
+}
 
 /** Legenda pronta para o post: o texto e as hashtags no fim (como a entrega do Estúdio). */
 export function legendaComHashtags(l: Pick<LegendaDoVideo, "legenda" | "hashtags">): string {
