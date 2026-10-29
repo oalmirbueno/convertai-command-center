@@ -40,7 +40,8 @@ export function blocoDaTrocaPeloTema(e: { tema: string; cliente: string; temCopy
   return [
     "A REFERÊNCIA É O ESTILO; O CONTEÚDO É DO TEMA",
     `- Leia cada elemento da referência (objeto, produto, cenário, ícone, ilustração, foto, pessoa, interface). O que é do assunto DELA e não de ${tema} e do negócio de ${e.cliente || "este cliente"}: apague e troque por um equivalente do nicho, na mesma posição, escala, ângulo, luz e função na composição. O que já serve ao tema fica.`,
-    "- Mesmo em Idêntica: idêntica é a estética (layout, cores aplicadas, luz, recorte, ritmo, acabamento), não o assunto. Nada da referência aparece só porque estava lá.",
+    "- FIDELIDADE À REFERÊNCIA: a composição, a grade, as proporções e a posição de cada bloco, a hierarquia, a paleta aplicada, a luz, o recorte, o ritmo e o acabamento ficam iguais aos dela. Troque só o assunto que não é do tema, no mesmo lugar, no mesmo tamanho e na mesma forma; o resto da peça continua a referência.",
+    "- A NAVEGAÇÃO DO CARROSSEL não é elemento da referência e nunca sai: o indicador de arrastar para o lado na capa e no meio (e os ícones da última) fica sempre, como pede o bloco de navegação.",
     "- Prefira elementos REAIS e reconhecíveis do nicho: produtos, objetos, materiais e ambientes de verdade, e componentes reais da internet (botões, cards, notificações, telas de app, gráficos) recriados com os rótulos do conteúdo. Marca real só quando o conteúdo cita: a logo dela entra pelo anexo, nunca desenhada de memória.",
     "- Nunca copie e cole a referência nem pedaços dela: adapte. O resultado tem a mesma qualidade e a mesma pegada, com tudo dentro do tema.",
   ].join("\n");
@@ -59,7 +60,7 @@ export function blocoDaCombinacao(e: { indices: number[] }): string {
     `COMBINE AS REFERÊNCIAS (imagem ${primeira} e ${nomes}): leia todas, não só a primeira.`,
     `- A estrutura (grade, posição e escala dos blocos, hierarquia) é a da imagem ${primeira}.`,
     `- Da ${nomes} venha também o que for melhor que a primeira: o tratamento do título (recorte, contorno, sombra, ênfase), molduras, selos, ícones, componentes, o jeito de compor o objeto ou a pessoa, a textura e a luz. Escolha peça por peça a melhor solução das duas, sem quebrar a estrutura.`,
-    "- O resultado é um design novo e melhor que cada referência sozinha, com o mesmo nível de acabamento delas, e tudo dentro do tema.",
+    `- O resultado continua com a cara da imagem ${primeira} (fiel a ela), melhorado com o melhor das outras, no mesmo nível de acabamento e tudo dentro do tema.`,
   ].join("\n");
 }
 

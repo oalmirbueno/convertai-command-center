@@ -23,7 +23,9 @@ describe("a referência é o estilo, o tema manda no conteúdo", () => {
     expect(b).toContain("Halloween na assistência técnica");
     expect(b).toContain("Stop Informática");
     expect(b).toMatch(/apague e troque por um equivalente do nicho, na mesma posição, escala, ângulo, luz e função/);
-    expect(b).toMatch(/Mesmo em Idêntica: idêntica é a estética/);
+    expect(b).toMatch(/FIDELIDADE À REFERÊNCIA: a composição, a grade, as proporções/);
+    // 29/10: a seta de arrastar da capa sumiu com a troca; a navegação nunca é elemento da referência.
+    expect(b).toMatch(/indicador de arrastar para o lado na capa e no meio .* fica sempre/);
     expect(b).toMatch(/elementos REAIS/);
     expect(b).toMatch(/logo dela entra pelo anexo, nunca desenhada de memória/);
     expect(b).toMatch(/Nunca copie e cole/);
