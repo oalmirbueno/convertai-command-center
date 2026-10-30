@@ -2761,6 +2761,14 @@
       "remote_name": "agendamento_resiste_a_rede",
       "remote_statements_sha256": "9611268b5de4afa11e638d3e7e807fe985f9028bf86a737030cfcbf021faa4dd",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261030190000",
+      "path": "supabase/migrations/20261030190000_renovacao_nasce_no_banco.sql",
+      "local_sha256": "eb3c942b64bcf79884f76d4495709353189ea7f3eefa80c7dd42b8cd407c9976",
+      "remote_name": "renovacao_nasce_no_banco",
+      "remote_statements_sha256": "7bc6060c2d56c881f78a56f2723f6b3d611a9fcd1d42769aba36232ce9e653d8",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
