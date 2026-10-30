@@ -1,0 +1,634 @@
+{
+ "fluxo": "ACQ-02-Despacho-Aprovado",
+ "execucao": "163",
+ "status": "success",
+ "segundos": 6,
+ "erro": null,
+ "ultimo_no": "Pendentes de registro no painel",
+ "nos": {
+  "Executar manualmente": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Preparar rodada": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Ler fila": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Montar saídas": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Enfileirar e expirar": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Dono do lote": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Reivindicar lote": {
+   "execucoes": 1,
+   "itens": 0,
+   "erro": null
+  },
+  "Filtro de pendentes": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Pendentes de registro no painel": {
+   "execucoes": 1,
+   "itens": 0,
+   "erro": null
+  }
+ },
+ "bruto": {
+  "execution": {
+   "id": "163",
+   "workflowId": "fLY4w3SYgv6Ul3dM",
+   "mode": "manual",
+   "status": "success",
+   "startedAt": "2026-10-14T19:42:38.075Z",
+   "stoppedAt": "2026-10-14T19:42:39.678Z",
+   "retryOf": null,
+   "retrySuccessId": null,
+   "waitTill": null
+  },
+  "data": {
+   "version": 1,
+   "startData": {},
+   "resultData": {
+    "runData": {
+     "Executar manualmente": [
+      {
+       "startTime": 1792006958082,
+       "executionIndex": 0,
+       "source": [],
+       "hints": [],
+       "executionTime": 0,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {},
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Preparar rodada": [
+      {
+       "startTime": 1792006958083,
+       "executionIndex": 1,
+       "source": [
+        {
+         "previousNode": "Executar manualmente",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 12,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "workflow_id": "ACQ-02",
+            "run_id": "ACQ-02:2026-10-14T19:42:38.095Z:2edb8958",
+            "ambiente_chamador": "pilot",
+            "paginar": false,
+            "ref": "fila",
+            "ferramenta": "aceleriq_central_review_fila",
+            "argumentos": {
+             "operator": "default"
+            },
+            "_ctx": {
+             "run_id": "ACQ-02:2026-10-14T19:42:38.095Z:2edb8958",
+             "agoraMs": 1792006958095
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Ler fila": [
+      {
+       "startTime": 1792006958096,
+       "executionIndex": 2,
+       "source": [
+        {
+         "previousNode": "Preparar rodada",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 1139,
+       "metadata": {
+        "subExecutionsCount": 1
+       },
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "ok": true,
+            "simulado": false,
+            "ferramenta": "aceleriq_central_review_fila",
+            "ref": "fila",
+            "resultado": {
+             "como_agir": [
+              "rascunhos_sem_pedido: revise o texto (aceleriq_create_report_draft cria ou ajusta) e prepare com aceleriq_central_review_preparar informando o destino.",
+              "esperando_decisao: leve ao dono no WhatsApp; quando ele responder, registre com aceleriq_central_review_decidir (aprovado, rejeitado, alteracoes_pedidas) citando a mensagem dele como evidencia.",
+              "aprovados_para_enviar: envie ao destino congelado e registre com aceleriq_central_review_marcar_enviado, com a evidencia do envio. Sem esse registro o painel considera nao enviado."
+             ],
+             "enviados_recentes": [
+              {
+               "titulo": "Stop Informática | Fechamento da semana | 14–18/09/2026",
+               "cliente": "Stop Informatica",
+               "approval_id": "5e6df5bb-04aa-43cf-a9d9-d18ac5969ebf",
+               "executed_at": "2026-09-18T18:55:43.30812+00:00",
+               "execution_evidence": "Enviado em 18/09/2026 às 15:55:24 no fuso America/Sao_Paulo para o grupo WhatsApp congelado \"Stop - MKT - Aceleriq\". Recibo do bridge: message_id 3EB01AE23857B9AAB56E6E; chat_id 120363411747461813@g.us; ritual closing_week; content_version stop-closing-20260918-dossier-v28."
+              }
+             ],
+             "esperando_decisao": [],
+             "rascunhos_sem_pedido": [
+              {
+               "ritual": null,
+               "titulo": "Preparação interna | RD AR | Semana 05–11/10 | corte 09/10/2026",
+               "cliente": "Rd Ar Climatização",
+               "mensagem": "Semana nominal05–11/10, corte09/10 incluindo dia parcial; não final11/10. Preparação interna Augusto→Almir sem publicar/enviar/aprovar. Fonte revisao-grupo-a-20261009.json OS2.7.0; Ads09/10 20:03Z, IG19:46–20:06Z. Contrato/vigência não recuperados; cadastroactive e serviços vazios não confirmam mensalidade nem eliminam escopo. Ads05–09 campanha52551708808814 Direct: R$61,58,2.860 impressões,16 link clicks,2 conversation_started_7d; eventos não são pessoas únicas/vendas. Vendas registradas/rastreadas0 na fonte, sem prova de zero universal. SaldoMetaR$57,84; carteiraIAUS$5,04, distintas.",
+               "client_id": "52f2efb6-9928-4074-b8e2-bc972baf1f6a",
+               "report_id": "347a3ac9-1bea-44ee-aaa9-a1fd4c0e7971",
+               "created_at": "2026-10-09T20:33:03.691118+00:00",
+               "proximo_passo": "Hoje Almir conciliar contatosDirect com orçamentos/vendas e decidir verba autorizada antes de novos testes. Conferir gatesWhatsApp nas tarefas f7544267-b06c-4f06-9ab2-58ec0ac6d96a e87853648-919e-4878-b6b3-942287f57021 sem alterar destino. Separar ofertas e validar versão/prova publicada dos criativos, não tratar todo material como pendente. Conferir aprovação e agendamento do carrossel14/10 na tarefa d0495998-e9ad-4ba0-8b83-03d306b63225; review não prova agenda/publicação. Validar escopo antes de prometer volume.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Preparação interna | Preserva Eco | Semana 05–11/10 | corte 09/10/2026",
+               "cliente": "Preserva Eco",
+               "mensagem": "Semana nominal05–11/10, corte09/10 incluindo dia parcial, não final11/10. Preparação interna Augusto→Almir sem publicar/enviar/aprovar. Fonte revisao-grupo-a-20261009.json OS2.7.0; Ads09/10 20:03Z e IG19:46–20:06Z. Contrato2fa22d31-8a40-470d-83db-2e45815e273f completed, signed/locked; arquivo e4456c2c-818c-4efe-aa91-40918225f045 v1 extração pending: vigência/cláusulas/quantidades não confirmadas. Ads05–09 disponível: R$25,82 e4.066 impressões, objetivo awareness/reconhecimento.07/10 sem linha: ausência não é zero diário. Saldo MetaR$63,18; carteira interna IAUS$5,88, distintas. Não interpretar alcance como aquisição ou venda.",
+               "client_id": "5ae0705e-6f8c-40f1-b076-867fd2ab3178",
+               "report_id": "74bc5c63-95af-4cc1-887f-c2d7aade59db",
+               "created_at": "2026-10-09T20:33:03.034668+00:00",
+               "proximo_passo": "Urgência hoje: confirmar funcionamento/horário12/10 na tarefa9e65a35d-e102-885d-89d3-019c438ca190 antes de promessa de feriado. Revisar vídeos reais internamente com Almir, sem pedir nova aprovação a Angela; tarefa28da0329-4df7-4d06-941b-751fcd70f5a0. Corrigir peça16/10 e validarGoogle. Conciliar tarefas duplicadas de publicação com permalinks sem reexecutar/encerrar. Rever campanha awareness e cobertura da linha07/10 antes de conclusão de período. Escopo original requer validação; nenhuma ação financeira.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Preparação interna | Mirante Luz Floripa | Semana 05–11/10 | corte 09/10/2026",
+               "cliente": "Mirante Luz Floripa",
+               "mensagem": "Semana nominal05–11/10, corte09/10 incluindo dia parcial; não final11/10. Preparação interna Augusto→Almir, sem publicação/envio/aprovação. Fonte revisao-grupo-a-20261009.json OS2.7.0; Ads09/10 20:03Z e IG19:46–20:06Z. Contrato5061ae81-7e47-41c5-9a0c-ee368d37f1d9 completed, assinado/locked; arquivo6de59c46-82e4-4880-9343-f40f0703f408 v1 extração pending: vigência/cláusulas/quantidades não confirmadas. Ads05–09: R$64,01 gasto, 2.926 impressões. Campanha52635070617441: R$47,41, 23 conversation_started_7d;52636832339441: R$16,60, 8 conversation_started_7d. Eventos de Direct não são pessoas únicas nem reservas/vendas. Vendas registradas/rastreadas0 na fonte, sem prova de zero universal. Saldo Meta R$66,04; carteira IA US$0,35, distintas.",
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "report_id": "ba368195-2aa3-457b-91c8-f01014cad9e2",
+               "created_at": "2026-10-09T20:33:02.476045+00:00",
+               "proximo_passo": "Hoje conciliar Direct com propostas/reservas e atendimento real nas tarefas96c5280e-0a7e-4088-9cc9-d8ada40d95c6 e be98953c-5137-4df5-9769-e54463c858ba, sem alterar estado. Obter fotos reais café/almoço e conferir versão aprovada antes de finalizar/agendar; tarefa d794ec9e-ff4a-4fc5-b929-ebcba4337174. Revisar três planejados06/10 e contexto Fenaostra para decidir validade. Resolver gateWhatsApp antes de mudar destino. IA baixa sinaliza revisão de capacidade, sem ação financeira. Validar escopo no original, não prometer volumes.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Preparação interna | Casa dos Assados | Semana 05–11/10 | corte 09/10/2026",
+               "cliente": "Casa Dos Assados",
+               "mensagem": "Semana nominal05–11/10 com corte09/10 incluindo dia parcial, não fechamento final11/10. Preparação interna por Augusto para revisão de Almir, sem publicar/enviar/aprovar. Fonte revisao-grupo-a-20261009.json OS2.7.0 e contrato vivo5c556fb7-8fc3-4886-adb6-0e9d3e1387a4: completed, assinado por Almir e Maria Vivas08/10, is_signed=true e is_locked=true. Arquivo d8d9be6f-5d5d-45ac-a153-5afb6d475cf2 v1 extração pending: cláusulas, vigência e quantidades não recuperadas; não confirmar mensalista por cadastro active. Projeto diagnóstico0ecc5328-bb30-4f30-9a24-ee6fdc89b657 planning.",
+               "client_id": "d3dacbac-0da6-49eb-8322-31ae22bd79b4",
+               "report_id": "30f40871-9bdb-4ffe-8bd7-23f776faa181",
+               "created_at": "2026-10-09T20:33:01.720617+00:00",
+               "proximo_passo": "Hoje conferir briefing já recebido e pendências de entrada na tarefa5143f11d-0c0b-49e3-8094-e85e51ad9e10: confirmar escopo assinado, acessos por frente e aceite. Não abrir segundo briefing ou calendário antes desse gate. Almir revisar documento original enquanto extração pending, sem presumir serviços/limites. Registrar prova de acesso e aceite antes de propor produção; IA baixa é alerta de capacidade interna, não cobrança ou autorização de recarga.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Preparação interna | Acerbi | Semana 05–11/10 | corte 09/10/2026",
+               "cliente": "Acerbi",
+               "mensagem": "Semana nominal 05–11/10, corte 09/10 incluindo dia parcial; não é fechamento final de 11/10. Preparação interna por Augusto para revisão de Almir; sem publicação, envio ou aprovação. Fonte: revisao-grupo-a-20261009.json, OS2.7.0; Ads09/10 20:03Z, IG09/10 19:46–20:06Z. Contrato/vigência não recuperados; cadastro ativo e serviços estruturados vazios não confirmam mensalidade ou ausência de escopo. Institucional @acerbispc: 4 publicações comprovadas05–08/10. CME @cmeacerbi2025: 2 publicações comprovadas05 e07/10, separadas do institucional. Ads na integração: R$0 gasto, 0 impressões; não prova universal de inatividade. Saldo conta Meta R$0; carteira interna IA US$5,94, unidades distintas. Alcance/interações orgânicos indisponíveis no recorte.",
+               "client_id": "39ebda82-637c-498b-a23a-b622f645e852",
+               "report_id": "3decbd32-d1c7-49f3-9db1-bf46cbbad098",
+               "created_at": "2026-10-09T20:33:01.007193+00:00",
+               "proximo_passo": "Hoje: conferir SPC nas tarefas49f968f7-9c86-449f-bb98-a20121479a26 e41ae709c-55a1-4472-90a5-4bf224aa6fdb contra publicações existentes, sem mutá-las. Conferir pendência CME publication a01fa0ed-9b24-48d4-bfaa-5615bbccbfbb de08/10; separar aprovação/agenda institucional e CME de11/10. Antes de Ads, Almir confirmar objetivo, saldo/limite e autorização. Até10/10, recuperar desempenho posts e gate do teste de vídeo; falta de métrica não é zero. Validar escopo contratual antes de prometer quantidade.",
+               "review_version": 1
+              },
+              {
+               "ritual": "fechamento",
+               "titulo": "Softy | Fechamento semanal parcial 05–11/10 | corte 09/10",
+               "cliente": "Softy Móveis",
+               "mensagem": "Preparação interna para revisão; corte 09/10/2026, semana 05–11/10 parcial. Calendário comprova 3 publicações em 05–09/10, não 5 posts. Desempenho integrado: gasto R$57,45 e 5 conversas atribuídas; conversas não são posts nem prova de qualificação/venda. Saldo Ads e IA indisponíveis, não zero. 10 e 11/10 são futuros, separados das entregas realizadas. ACTIVE não comprova entrega; saldo não é orçamento. Relatório publicado 07/10 preservado como histórico. Contrato/vigência sem confirmação suficiente.",
+               "client_id": "3d08338c-0c3b-453f-a64f-79a55c5711e8",
+               "report_id": "bec858ba-59ac-41db-8327-57aba403bc49",
+               "created_at": "2026-10-09T20:32:09.777466+00:00",
+               "proximo_passo": "Augusto/Helena revisam provas externas, continuidade de conteúdo e qualificação; Almir decide eventual liberação. Obter saldos atuais, sem alterar campanha, finanças ou cron. Sem envio/publicação neste rascunho.",
+               "review_version": 1
+              },
+              {
+               "ritual": "fechamento",
+               "titulo": "Verzelo | Fechamento semanal parcial 05–11/10 | corte 09/10",
+               "cliente": "Verzelo - Jardins e Poda de árvores",
+               "mensagem": "Preparação interna para revisão; corte 09/10/2026, semana 05–11/10 parcial. Calendário comprova 2 publicações em 05–09/10. Desempenho integrado: gasto R$57,41 e 2 conversas atribuídas; não comprova qualificação ou venda. Saldo Ads e IA indisponíveis, não zero. 10 e 11/10 futuros, separados das entregas realizadas. ACTIVE não comprova entrega; saldo não é orçamento. Relatório publicado 07/10 preservado como histórico, não editado. Contrato/vigência sem confirmação suficiente.",
+               "client_id": "e590497e-f985-47be-b8f2-493bae1da7df",
+               "report_id": "36fbbe1a-08c9-4e5d-8d92-8b07e184ce34",
+               "created_at": "2026-10-09T20:32:09.100211+00:00",
+               "proximo_passo": "Augusto/Helena revisam provas e qualificação dos contatos; Almir decide eventual liberação. Obter saldos atuais, sem inferir orçamento. Sem envio/publicação neste rascunho.",
+               "review_version": 1
+              },
+              {
+               "ritual": "fechamento",
+               "titulo": "Thainá | Fechamento semanal parcial 05–11/10 | corte 09/10",
+               "cliente": "Thainá Rosa Advogada",
+               "mensagem": "Preparação interna para revisão; corte 09/10/2026, semana 05–11/10 parcial. Calendário comprova 2 publicações em 05–09/10. Integração retorna gasto R$0,00 no recorte e conversas atribuídas indisponíveis; não é prova de ausência absoluta de veiculação. Saldo Ads e IA indisponíveis, não zero. 10 e 11/10 são futuros e não entregas realizadas. ACTIVE não comprova entrega; saldo não é orçamento. Histórico publicado 07/10 preservado, sem assumir suas promessas realizadas. Contrato/vigência não confirmados.",
+               "client_id": "3ba9540c-bc09-4026-b575-05fd0df4195f",
+               "report_id": "08bf0870-f30b-4bd2-8cd5-7afbdfa0d084",
+               "created_at": "2026-10-09T20:32:08.448112+00:00",
+               "proximo_passo": "Augusto/Helena revisam provas de publicação e demais entregas; Almir decide liberação. Recuperar saldos e dependências atuais antes de propor ativação. Sem envio/publicação neste rascunho.",
+               "review_version": 1
+              },
+              {
+               "ritual": "fechamento",
+               "titulo": "Terra | Fechamento semanal parcial 05–11/10 | corte 09/10",
+               "cliente": "Terra Flor",
+               "mensagem": "Preparação interna para revisão; corte 09/10/2026, semana 05–11/10 parcial. Calendário comprova 2 publicações em 05–09/10. Desempenho integrado no recorte: gasto R$61,61 e 4 conversas atribuídas; conversas não equivalem a contatos qualificados, propostas ou vendas. Saldo Ads e saldo IA indisponíveis. Mesa Ads consultada: briefing v10 de 01/10 contém teto histórico R$120 total com encargos, não saldo atual; descreve campanha então pausada, não devendo prevalecer silenciosamente sobre desempenho posterior. 10 e 11/10 são futuros, separados das entregas realizadas. ACTIVE não comprova entrega e saldo não é orçamento. Relatório publicado 07/10 preservado como histórico. Contrato/vigência sem comprovação suficiente.",
+               "client_id": "8801caa5-7505-44c9-9c14-e3019eace772",
+               "report_id": "9453305d-24b9-4ddd-8a5d-3d07ee429bdd",
+               "created_at": "2026-10-09T20:32:07.834834+00:00",
+               "proximo_passo": "Augusto/Helena revisam divergência temporal da Mesa e prova externa; Almir decide eventual liberação. Recuperar saldo Ads e IA atual e qualificação das conversas sem mudar campanhas, finanças ou cron. Sem envio/publicação neste rascunho.",
+               "review_version": 1
+              },
+              {
+               "ritual": "fechamento",
+               "titulo": "SKC | Fechamento semanal parcial 05–11/10 | corte 09/10",
+               "cliente": "SKC TECNOLOGIA CONTABIL",
+               "mensagem": "Preparação interna para revisão; corte 09/10/2026, semana 05–11/10 parcial. Calendário comprova 2 publicações em 05–09/10. Integração de desempenho retorna gasto R$0,00 no recorte, sem conversas atribuídas disponíveis; isso não comprova ausência absoluta de veiculação. Saldo Ads e saldo IA indisponíveis: arrays financeiros vazios não são zero. 10 e 11/10 são futuros e não compõem entregas realizadas. Status ACTIVE não comprova entrega; saldo não é orçamento. Relatório publicado em 07/10 preservado como histórico, sem reutilizar suas promessas como conclusão atual. Contrato e vigência não confirmados pelas cláusulas disponíveis.",
+               "client_id": "bad69252-05ad-4b80-ab76-4a0e9fd3c314",
+               "report_id": "f682cbed-a6c5-4eab-acea-e71881ebe474",
+               "created_at": "2026-10-09T20:32:07.214228+00:00",
+               "proximo_passo": "Augusto coordena revisão com Helena; Almir decide eventual liberação. Reconciliar prova externa de entregas, pagamento e orçamento antes de qualquer ativação; obter saldos atuais sem inferência. Nenhum envio ou publicação autorizado neste rascunho.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "JÁLimpo | Revisão de vigência e backlog parcial | corte 09/10",
+               "cliente": "Jalimpo",
+               "mensagem": "Vigência comercial ambígua: cadastro ativo sem contrato/plano confirmado não comprova mensalidade. Marketing/pré-lançamento, site institucional e PWA em testes permanecem separados; sem novo backend. Nenhum movimento registrado nos últimos14 dias, publicação ou agenda à frente confirmada. Três itens da semana seguem backlog: Feed17, Feed18 e StoriesSemana09. Há35 tarefas abertas, oito em revisão e12 aprovações aguardando81–86 dias na coleta09/10. Não há métrica atual de Instagram, campanha ou saldoAdsIA confirmado. Linha de base de julho não representa performance atual. Revisão parcial interna, sem envio.",
+               "client_id": "0eca58cf-b6fd-4c16-9956-b58e2ae93a54",
+               "report_id": "eb170611-46b3-43f1-bd82-b2901d3ef9ca",
+               "created_at": "2026-10-09T20:23:25.210953+00:00",
+               "proximo_passo": "Almir confirma acordo e continuidade antes de prometer execução; reconciliar12 aprovações por versão e validar funcionamento do PWA/site. Priorizar somente itens do escopo confirmado, sem criar novas tarefas ou publicar.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "GS Gesso | Revisão pontual técnica parcial | corte 09/10",
+               "cliente": "GS Gesso",
+               "mensagem": "Projeto pontual técnico, vigência comercial a confirmar; não mensalista nem rotina social/tráfego. Duas pendências históricas seguem abertas: automação Shopify doing e página de links review, sem teste de homologação ou aceite comprovados. Não houve avanço ou entrega recente registrado. Não há campanha, publicação ou saldoAdsIA confirmado. O fechamento publicado14–18/09 permanece histórico, não comprova conclusão atual. Revisão parcial interna, sem envio.",
+               "client_id": "3f83c6f8-adac-455d-ae8e-026b634c05bf",
+               "report_id": "d2f7e25f-f168-446a-89cf-7e6911d795ff",
+               "created_at": "2026-10-09T20:23:24.343496+00:00",
+               "proximo_passo": "Almir confirma acordo e elegibilidade; conferir teste Shopify0b8ced50-e9b8-47a5-8da4-6b8d56e297f2 e revisão da página9a9e9ab7-a084-4405-ae2e-1d2e12ea6ed9, com evidência e aceite antes de encerrar.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Subaftertuor | Fechamento pontual parcial | corte 09/10",
+               "cliente": "Evento Subaftertuor",
+               "mensagem": "Trabalho pontual, não mensalidade. Em08/10 o Painel registrou três reels entregues em Materiais e liberados ao cliente; isso não é prova de publicação externa. Não há contrato ou briefing estruturado, campanha, agenda/publicação ou saldoAdsIA confirmado. Quatro tarefas com prazo07/10 seguem abertas na semana, incluindo ficha oficial, primeiro lote e duas artes. Local, horário, condições do lote e canal oficial precisam ser conciliados antes de divulgação. Cadastro e projeto ativos não confirmam pagamento, recorrência ou autorização para ampliar o escopo. Fechamento parcial interno, sem envio.",
+               "client_id": "d91d1214-cf6d-4463-aba8-e3146899dbf1",
+               "report_id": "aff48a8e-61bd-4ada-a682-d9d895951060",
+               "created_at": "2026-10-09T20:23:23.562323+00:00",
+               "proximo_passo": "Revisar ficha71781fe6-5449-571e-8eb9-6cfc49f2b7c6; confirmar dados oficiais, inventário, aceite dos reels e destino antes de publicação. Almir valida escopo pontual e mensagem.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Stop | Fechamento parcial 05–11/10 | corte 09/10",
+               "cliente": "Stop Informatica",
+               "mensagem": "Priscila, no corte de09/10 o Painel registra duas publicações nos últimos sete dias, nenhuma próxima agendada e três pedidos de aprovação, incluindo Programe sua visita e backup. O relatório de07/10 dizia carrosséis aprovados, mas a pendência de backup exige conferência por versão. Na integração de05–09/10 há R$38,46 em três campanhas, sem venda registrada; a última entrega com gasto está em07/10. Mouse e Serviços aparecem PAUSED, enquanto duas campanhas históricas aparecem ACTIVE com término já passado. Isso não comprova mídia vigente após o encerramento de07/10. Site/processos e retomada continuam sem prova suficiente de conclusão. Não há contrato estruturado retornado nem saldoAdsIA confirmado. Fechamento parcial interno, sem envio.",
+               "client_id": "6a847578-ba39-44cd-be61-08e34e18e4c9",
+               "report_id": "057c9670-9bd6-4c91-9e86-0af1ce4389e6",
+               "created_at": "2026-10-09T20:23:22.71729+00:00",
+               "proximo_passo": "Conferir versão e aprovação das peças, datas e compromisso editorial; reconciliar relatório07/10 com encerramento da mídia sem reativar; recuperar evidência de site/processos e confirmar acordo vigente. Almir revisa antes de envio. Não prometer novos prazos, verba ou resultados.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Para Si | Fechamento parcial 05–11/10 | corte 09/10",
+               "cliente": "Para Si Ótica",
+               "mensagem": "Sheila, no corte de 09/10 o Painel registra três publicações nos últimos sete dias e uma próxima em 14/10. A captação prevista para 08/10 aparece nos materiais recentes, mas realização e aceite ainda precisam de confirmação. Nos anúncios, a integração de 05–09/10 traz R$3,67, 47 impressões, um clique e uma conversa do institucional em 05/10; não são resultados comprovados da nova oferta de exame. Não há venda registrada no período. A campanha aparece ACTIVE na coleta de 09/10, mas isso não confirma entrega do anúncio novo. Há uma peça de fotos aguardando aprovação. Contrato Marketing permanece rascunho sem assinatura; limites e continuidade precisam de alinhamento. Saldo AdsIA não retornou no Painel, portanto não será informado como zero. Este é fechamento parcial interno, não mensagem enviada.",
+               "client_id": "20c96cea-6ada-4db5-a408-25a3b0c978ba",
+               "report_id": "a3dd7bf8-19d8-4ca7-99df-54094702c17e",
+               "created_at": "2026-10-09T20:23:21.928235+00:00",
+               "proximo_passo": "Confirmar captação e arquivos reais; revisar a peça pendente e os compromissos editoriais; validar contrato, oferta e atendimento. Exigir métricas por anúncio para separar institucional e nova oferta. Almir revisa antes de qualquer envio; não alterar mídia ou verba.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "Acerbi — diagnóstico e preparação de otimização de anúncios Meta",
+               "cliente": "Acerbi",
+               "mensagem": "Diagnóstico e preparação de otimização de todos os anúncios Meta da Acerbi. A leitura live encontrou uma campanha configurada e duas peças, mas zero entrega e zero resultado nos recortes de 7 e 30 dias. O trabalho preparado é consultivo e fica condicionado à validação da conta, do objetivo, do destino, da oferta e das provas; nenhuma alteração externa foi executada.",
+               "client_id": "39ebda82-637c-498b-a23a-b622f645e852",
+               "report_id": "71e0af91-8916-4143-8e7d-c2e151dc5771",
+               "created_at": "2026-10-08T19:05:16.324119+00:00",
+               "proximo_passo": "PLANO DE PREPARAÇÃO — NÃO EXECUTADO: 1) confirmar conta, forma de pagamento/limite, destino do formulário, evento de conversão e entrega real; 2) resolver a divergência entre ACTIVE/effective_status ACTIVE e o histórico off/account_spend_limit_reached, sem reativar por inferência; 3) confirmar se o objetivo deve ser alcance ou geração de leads, pois a campanha está em OUTCOME_AWARENESS enquanto a copy pede preenchimento de formulário; 4) validar com a Acerbi/COGECOM a prova e a autorização da promessa de 30% garantidos e até 40%, removendo ou reformulando qualquer afirmação não comprovada; 5) depois da base validada, propor dois testes de criativo com ângulos realmente diferentes, geografia confirmada e medição por lead qualificado e venda; 6) somente após aprovação explícita do Almir, avaliar alterações de campanha, verba, criativos ou publicação. Não houve pausa, ativação, alteração de orçamento, publicação ou contato externo nesta leitura.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "RD AR | Manutenção publicada; pausa do controle pendente | 07/10, 11h16",
+               "cliente": "Rd Ar Climatização",
+               "mensagem": "Almir aprovou substituir o controle B2 pela manutenção E, preservando a instalação D e os mesmos R$ 10/dia médios compartilhados. E 52554404948214 foi publicado isoladamente, criativo 946508288071812, sem preço inventado, Instagram Direct e Florianópolis + São José. Primeira entrega comprovada às 11h10: 5 impressões e R$ 0,18. Às 11h16, status/effective ACTIVE e rótulo delivery preparing ainda coexistiam com essas métricas. D 52554397319814 preservado, 243 impressões e R$ 4,62 hoje. Sem recarga ou aumento.",
+               "client_id": "52f2efb6-9928-4074-b8e2-bc972baf1f6a",
+               "report_id": "9144f467-6193-4477-bcd3-74b1e939c615",
+               "created_at": "2026-10-07T14:20:14.6955+00:00",
+               "proximo_passo": "Aguardar aprovação específica para descartar somente o rascunho antigo B2, preservando anúncio live e histórico; depois pausar B2, reler D/E/B2 e concluir documento. Não publicar lote de rascunhos. PDF completo de 6 páginas no modelo Stop, com artes e prévias clicáveis e capturas reais de verba/cidades/Direct, preparado para revisão final. Mensagem do grupo é rascunho; nenhum envio a cliente. Acompanhamento inicial da primeira entrega E concluído. Contextos extensos RD preservados sem truncamento.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "RD AR | Primeira entrega da instalação e oferta de manutenção | 07/10, 10h15",
+               "cliente": "Rd Ar Climatização",
+               "mensagem": "Primeira entrega do novo anúncio de instalação D 52554397319814 comprovada às 10h15 BRT: ACTIVE/effective ACTIVE/delivery active, 102 impressões e R$ 1,74 de gasto hoje. Controle B2 52553256685614 preservado ativo, 197 impressões e R$ 4,77 hoje. Mantidos R$ 10/dia médio compartilhados, somente Florianópolis e São José/SC, Instagram Direct. Complementa o relatório de implantação fe55383d-8446-4e70-a1c2-48dbdde66972. Não houve recarga, aumento ou contato externo.",
+               "client_id": "52f2efb6-9928-4074-b8e2-bc972baf1f6a",
+               "report_id": "a06a10cb-24a0-4266-b719-f6845b65b9f3",
+               "created_at": "2026-10-07T13:16:46.551752+00:00",
+               "proximo_passo": "Aguardar a decisão sobre trocar B2 por E. Não ativar terceiro anúncio com a verba pequena nem publicar rascunhos antigos do editor. Se aprovado, publicar somente E e pausar somente B2, preservando D e o orçamento compartilhado; confirmar IDs, status, criativo e destino. Conversas da nova instalação ainda indisponíveis, sem venda comprovada. O acompanhamento inicial de primeira entrega está concluído; próximas decisões dependem de qualidade, propostas e resultados comerciais.",
+               "review_version": 1
+              },
+              {
+               "ritual": null,
+               "titulo": "RD AR | Otimização de oferta, criativos e geografia | 07/10/2026",
+               "cliente": "Rd Ar Climatização",
+               "mensagem": "Aplicação autorizada em07/10. Segmentação live somenteFlorianópolis253249 eSãoJosé269712(SC), campanha52551708808814, conjunto52552963652214; R$10/dia médio contínuo preservados. NovoanúncioD52554397319814, criativo2089638528333561, publicadoeconfirmadoUIàs09h44. StatusACTIVE/IN_PROCESSàs09h43; revisão/entrega ainda nãoequivalemaimpressão. ControleB252553256685614preservado. C/A/B3nãoativados. Nenhumarecarga,aumentoorçamentáriooumensagemacliente.",
+               "client_id": "52f2efb6-9928-4074-b8e2-bc972baf1f6a",
+               "report_id": "fe55383d-8446-4e70-a1c2-48dbdde66972",
+               "created_at": "2026-10-07T12:47:00.394764+00:00",
+               "proximo_passo": "Concluirreadbackstatusentregaeaplicação9:16/Direct contextualquando possível.Preservar orçamento.Nãofragmentaremnovoscampaigns. Aguardar48hestáveissemerrotecnico;avaliarqualificação/propostas/comercial antesdepausar/escalar.Relatórioseparadoporque dossiêsgeralv13060.710caractereseprojetov2959.991não comportamcheckpointsemtruncamento.",
+               "review_version": 1
+              }
+             ],
+             "aprovados_para_enviar": []
+            },
+            "erro": null,
+            "decisao": "ler",
+            "motivo": null,
+            "tipo": "leitura",
+            "paginar": false,
+            "client_id_escopo": null,
+            "_req": {
+             "argumentos": {
+              "operator": "default"
+             },
+             "run_id": "ACQ-02:2026-10-14T19:42:38.095Z:2edb8958",
+             "ferramenta": "aceleriq_central_review_fila",
+             "tipo": "leitura",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "164",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Montar saídas": [
+      {
+       "startTime": 1792006959235,
+       "executionIndex": 3,
+       "source": [
+        {
+         "previousNode": "Ler fila",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 15,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "saidas": 0,
+            "ignorados": [],
+            "pg": [
+             "[]"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Enfileirar e expirar": [
+      {
+       "startTime": 1792006959250,
+       "executionIndex": 4,
+       "source": [
+        {
+         "previousNode": "Montar saídas",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 133,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "enfileiradas": [],
+            "expiradas": {
+             "incertos": 0
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Dono do lote": [
+      {
+       "startTime": 1792006959383,
+       "executionIndex": 5,
+       "source": [
+        {
+         "previousNode": "Enfileirar e expirar",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 14,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "pg": [
+             "ACQ-02:2026-10-14T19:42:38.095Z:2edb8958",
+             "pilot"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Reivindicar lote": [
+      {
+       "startTime": 1792006959397,
+       "executionIndex": 6,
+       "source": [
+        {
+         "previousNode": "Dono do lote",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 132,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         []
+        ]
+       }
+      }
+     ],
+     "Filtro de pendentes": [
+      {
+       "startTime": 1792006959529,
+       "executionIndex": 7,
+       "source": [
+        {
+         "previousNode": "Enfileirar e expirar",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 16,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "pg": [
+             "pilot"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Pendentes de registro no painel": [
+      {
+       "startTime": 1792006959545,
+       "executionIndex": 8,
+       "source": [
+        {
+         "previousNode": "Filtro de pendentes",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 132,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         []
+        ]
+       }
+      }
+     ]
+    },
+    "pinData": {
+     "Executar manualmente": [
+      {
+       "json": {},
+       "pairedItem": {
+        "item": 0
+       }
+      }
+     ]
+    },
+    "lastNodeExecuted": "Pendentes de registro no painel"
+   },
+   "executionData": {
+    "contextData": {},
+    "nodeExecutionStack": [],
+    "metadata": {},
+    "waitingExecution": {},
+    "waitingExecutionSource": {},
+    "runtimeData": {
+     "version": 1,
+     "establishedAt": 1792006958065,
+     "source": "manual",
+     "triggerNode": {
+      "name": "Executar manualmente",
+      "type": "n8n-nodes-base.manualTrigger"
+     },
+     "redaction": {
+      "version": 2,
+      "production": false,
+      "manual": false
+     }
+    }
+   },
+   "resumeToken": "b555a4fea0841441e851f7d9eb4c137beeaaa0d64974859beb4d38ff20d84994"
+  }
+ }
+}

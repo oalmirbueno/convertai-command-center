@@ -1,0 +1,380 @@
+{
+  "executado_em": "2026-10-14T15:13:02.911Z",
+  "observacao": "mensagens inventadas; nada de cliente",
+  "resumo": {
+    "modelo": "jev-1.13.0",
+    "casos": 12,
+    "acertos": 29,
+    "verificacoes": 29,
+    "nenhuma_aprovacao_automatica": true,
+    "autorizacoes_em_revisao": true
+  },
+  "resultados": [
+    {
+      "id": "c1",
+      "texto": "Pode fazer.",
+      "julg": {
+        "tipo": "decisao",
+        "tipo_confianca": 0.89,
+        "responde": "nenhuma",
+        "responde_confianca": 0.89,
+        "p_autoriza": 0.93,
+        "p_objeto_claro": 0.08,
+        "p_sensivel": 0.2,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "possivel_autorizacao_nunca_automatica",
+        "objeto_da_autorizacao_indefinido"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": true,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 387,
+      "tokens": {
+        "input_tokens": 828,
+        "output_tokens": 166
+      }
+    },
+    {
+      "id": "c2",
+      "texto": "Pode publicar o carrossel da Fenaostra na quinta às 10h.",
+      "julg": {
+        "tipo": "decisao",
+        "tipo_confianca": 0.68,
+        "responde": "nenhuma",
+        "responde_confianca": 0.7,
+        "p_autoriza": 0.95,
+        "p_objeto_claro": 0.77,
+        "p_sensivel": 0.82,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "possivel_autorizacao_nunca_automatica",
+        "tema_sensivel_dinheiro_campanha_publicacao"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": true,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 266,
+      "tokens": {
+        "input_tokens": 843,
+        "output_tokens": 166
+      }
+    },
+    {
+      "id": "c3",
+      "texto": "Aprovei as pautas, podem agendar.",
+      "julg": {
+        "tipo": "decisao",
+        "tipo_confianca": 1,
+        "responde": "q_pautas",
+        "responde_confianca": 1,
+        "p_autoriza": 0.97,
+        "p_objeto_claro": 0.39,
+        "p_sensivel": 0.21,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "possivel_autorizacao_nunca_automatica",
+        "objeto_da_autorizacao_indefinido"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": true,
+        "sensivel": null
+      },
+      "ms": 255,
+      "tokens": {
+        "input_tokens": 837,
+        "output_tokens": 168
+      }
+    },
+    {
+      "id": "c4",
+      "texto": "Mandei as fotos do café agora há pouco pelo drive.",
+      "julg": {
+        "tipo": "informacao",
+        "tipo_confianca": 0.59,
+        "responde": "q_fotos",
+        "responde_confianca": 1,
+        "p_autoriza": 0.11,
+        "p_objeto_claro": 0.12,
+        "p_sensivel": 0.1,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "proposta_contexto",
+      "motivos": [
+        "responde_pergunta_aberta"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": true,
+        "sensivel": null
+      },
+      "ms": 274,
+      "tokens": {
+        "input_tokens": 838,
+        "output_tokens": 167
+      }
+    },
+    {
+      "id": "c5",
+      "texto": "Bom dia pessoal! 😊",
+      "julg": {
+        "tipo": "ruido",
+        "tipo_confianca": 1,
+        "responde": "nenhuma",
+        "responde_confianca": 1,
+        "p_autoriza": 0.06,
+        "p_objeto_claro": 0.06,
+        "p_sensivel": 0.12,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "descartar",
+      "motivos": [
+        "sem_conteudo_de_trabalho"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 293,
+      "tokens": {
+        "input_tokens": 832,
+        "output_tokens": 165
+      }
+    },
+    {
+      "id": "c6",
+      "texto": "Podem aumentar a verba da campanha para 30 reais por dia.",
+      "julg": {
+        "tipo": "pedido",
+        "tipo_confianca": 0.76,
+        "responde": "nenhuma",
+        "responde_confianca": 1,
+        "p_autoriza": 0.82,
+        "p_objeto_claro": 0.69,
+        "p_sensivel": 0.97,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "possivel_autorizacao_nunca_automatica",
+        "objeto_da_autorizacao_indefinido",
+        "tema_sensivel_dinheiro_campanha_publicacao"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": true
+      },
+      "ms": 261,
+      "tokens": {
+        "input_tokens": 840,
+        "output_tokens": 164
+      }
+    },
+    {
+      "id": "c7",
+      "texto": "Na verdade a pousada fecha dia 20, não dia 25 como eu disse.",
+      "julg": {
+        "tipo": "correcao",
+        "tipo_confianca": 1,
+        "responde": "nenhuma",
+        "responde_confianca": 0.98,
+        "p_autoriza": 0.07,
+        "p_objeto_claro": 0.27,
+        "p_sensivel": 0.13,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "proposta_contexto",
+      "motivos": [
+        "correcao"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 270,
+      "tokens": {
+        "input_tokens": 846,
+        "output_tokens": 166
+      }
+    },
+    {
+      "id": "c8",
+      "texto": "Vocês conseguem criar um post sobre o feriado?",
+      "julg": {
+        "tipo": "pedido",
+        "tipo_confianca": 1,
+        "responde": "nenhuma",
+        "responde_confianca": 1,
+        "p_autoriza": 0.44,
+        "p_objeto_claro": 0.29,
+        "p_sensivel": 0.54,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "pedido_sensivel"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 269,
+      "tokens": {
+        "input_tokens": 838,
+        "output_tokens": 164
+      }
+    },
+    {
+      "id": "c9",
+      "texto": "Ok, obrigado!",
+      "julg": {
+        "tipo": "ruido",
+        "tipo_confianca": 0.99,
+        "responde": "nenhuma",
+        "responde_confianca": 0.98,
+        "p_autoriza": 0.32,
+        "p_objeto_claro": 0.06,
+        "p_sensivel": 0.12,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "descartar",
+      "motivos": [
+        "sem_conteudo_de_trabalho"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 266,
+      "tokens": {
+        "input_tokens": 829,
+        "output_tokens": 165
+      }
+    },
+    {
+      "id": "c10",
+      "texto": "Ainda não aprovei nada, vou olhar no fim de semana.",
+      "julg": {
+        "tipo": "resposta",
+        "tipo_confianca": 0.44,
+        "responde": "q_pautas",
+        "responde_confianca": 0.92,
+        "p_autoriza": 0.03,
+        "p_objeto_claro": 0.04,
+        "p_sensivel": 0.18,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "proposta_contexto",
+      "motivos": [
+        "responde_pergunta_aberta"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": true,
+        "sensivel": null
+      },
+      "ms": 257,
+      "tokens": {
+        "input_tokens": 839,
+        "output_tokens": 167
+      }
+    },
+    {
+      "id": "c11",
+      "texto": "Paguei o boleto de outubro hoje.",
+      "julg": {
+        "tipo": "informacao",
+        "tipo_confianca": 0.94,
+        "responde": "nenhuma",
+        "responde_confianca": 1,
+        "p_autoriza": 0.08,
+        "p_objeto_claro": 0.11,
+        "p_sensivel": 0.88,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "informacao_sensivel_a_conferir"
+      ],
+      "conf": {
+        "tipo": true,
+        "autoriza": true,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": true
+      },
+      "ms": 267,
+      "tokens": {
+        "input_tokens": 834,
+        "output_tokens": 166
+      }
+    },
+    {
+      "id": "c12",
+      "texto": "Sim",
+      "julg": {
+        "tipo": "resposta",
+        "tipo_confianca": 0.56,
+        "responde": "nenhuma",
+        "responde_confianca": 0.74,
+        "p_autoriza": 0.71,
+        "p_objeto_claro": 0.07,
+        "p_sensivel": 0.18,
+        "modelo": "jev-1.13.0"
+      },
+      "destino": "revisao",
+      "motivos": [
+        "possivel_autorizacao_nunca_automatica",
+        "objeto_da_autorizacao_indefinido"
+      ],
+      "conf": {
+        "tipo": null,
+        "autoriza": null,
+        "objeto_claro": null,
+        "responde": null,
+        "sensivel": null
+      },
+      "ms": 293,
+      "tokens": {
+        "input_tokens": 826,
+        "output_tokens": 165
+      }
+    }
+  ]
+}

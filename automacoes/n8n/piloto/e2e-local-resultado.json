@@ -1,0 +1,42 @@
+{
+  "executado_em": "2026-10-14T17:36:49.433Z",
+  "n8n": "2.42.7 (local)",
+  "ambiente": "test (fixtures, 127.0.0.1)",
+  "cenarios": [
+    {
+      "wf": "ACQ-00",
+      "nome": "leitura ok devolve resultado tipado",
+      "ok": false,
+      "ms": 530493,
+      "erro": "execução falhou: :\\AI\\n8n-local2\\node_modules\\n8n\\src\\task-runners\\task-managers\\task-requester.ts:310:17)\n    at LocalTaskRequester.onMessage (C:\\AI\\n8n-local2\\node_modules\\n8n\\src\\task-runners\\task-managers\\task-requester.ts:276:10)\n    at TaskBroker.handleRequestTimeout (C:\\AI\\n8n-local2\\node_modules\\n8n\\src\\task-runners\\task-broker\\task-broker.service.ts:185:50)\n    at Timeout.<anonymous> (C:\\AI\\n8n-local2\\node_modules\\n8n\\src\\task-runners\\task-broker\\task-broker.service.ts:151:9)\n    at listOnTimeout (node:internal/timers:605:17)\n    at processTimers (node:internal/timers:541:7)\r\nTask request timed out\r\n\n"
+    },
+    {
+      "wf": "ACQ-00",
+      "nome": "HTTP 200 com error JSON-RPC vira falha (sem quebrar o fluxo)",
+      "ok": false,
+      "ms": 345557,
+      "erro": "resultado deveria trazer ok:false"
+    },
+    {
+      "wf": "ACQ-00",
+      "nome": "401 vira erro de autenticação",
+      "ok": false,
+      "ms": 38072,
+      "erro": "tipo autenticacao"
+    },
+    {
+      "wf": "ACQ-00",
+      "nome": "paginação lê as 58 tarefas em 3 páginas",
+      "ok": false,
+      "ms": 28874,
+      "erro": "esperava 3 páginas, houve 0"
+    },
+    {
+      "wf": "ACQ-00",
+      "nome": "ferramenta fora da allowlist não chega ao MCP",
+      "ok": false,
+      "ms": 31477,
+      "erro": "motivo"
+    }
+  ]
+}

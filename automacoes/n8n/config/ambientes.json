@@ -1,0 +1,216 @@
+{
+  "_doc": "Ambientes do ACQ n8n. O ambiente ativo é escolhido no gerador (--ambiente) e embutido no nó 'Proteger chamada' do ACQ-00. dry_run é verdadeiro por padrão; o adaptador força dry_run no piloto e só libera escrita listada em escritas_liberadas. Nenhum segredo aqui: credenciais ficam no cofre do n8n, referidas por nome. ACQ-06/ACQ-07 (comercial pelo WhatsApp oficial) têm dry-run próprio em dry_run_por_workflow: enquanto for true, não chamam a Meta e as escritas no painel viram simulação, mesmo em produção. O bloco 'comercial' guarda só identificadores públicos (phone_number_id, waba_id, nome dos modelos); tokens e chaves ficam nas credenciais do n8n.",
+  "padrao": "pilot",
+  "ambientes": {
+    "test": {
+      "rotulo": "TESTE LOCAL (dados de fixture, nada real)",
+      "dry_run": false,
+      "exige_loopback": true,
+      "mcp_url": "http://127.0.0.1:8791/mcp",
+      "transporte": "teste",
+      "transporte_url": "http://127.0.0.1:8792",
+      "clientes_permitidos": [
+        "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+        "39ebda82-637c-498b-a23a-b622f645e852",
+        "6a847578-ba39-44cd-be61-08e34e18e4c9",
+        "20c96cea-6ada-4db5-a408-25a3b0c978ba",
+        "11111111-1111-4111-8111-111111111111"
+      ],
+      "escritas_liberadas": [
+        "aceleriq_upsert_current_dossier",
+        "aceleriq_create_report_draft",
+        "aceleriq_central_review_preparar",
+        "aceleriq_central_review_marcar_enviado",
+        "aceleriq_upsert_project_memory",
+        "aceleriq_agent_handoff",
+        "aceleriq_upload_file_inline",
+        "aceleriq_browser_act",
+        "aceleriq_comercial_registrar_mensagem",
+        "aceleriq_comercial_avisar_caixa",
+        "aceleriq_update_opportunity"
+      ],
+      "operador": "n8n-teste",
+      "lote_clientes": 2,
+      "max_paginas": 20,
+      "jev_url": "http://127.0.0.1:8791/jev",
+      "provedor_mensagens": "teste",
+      "dry_run_por_workflow": {
+        "ACQ-06": true,
+        "ACQ-07": true
+      },
+      "comercial": {
+        "operador": "mercurio",
+        "graph_url": "http://127.0.0.1:8792/graph/v21.0",
+        "phone_number_id": null,
+        "waba_id": null,
+        "modelos": {
+          "primeiro_contato": {
+            "nome": "aceleriq_diagnostico_primeiro_contato",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Se não quiser receber mensagens, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ]
+          },
+          "retomada": {
+            "nome": "aceleriq_retomada_conversa",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "rodape": "Para não receber mais mensagens, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ]
+          }
+        },
+        "max_por_rodada": 5,
+        "retomada": {
+          "ativa": false,
+          "dias_sem_resposta": 4
+        },
+        "llm_url": "http://127.0.0.1:8791/llm",
+        "llm_modelo": "anthropic/claude-sonnet-5.5",
+        "resposta_max_caracteres": 700,
+        "janela_horas": 24,
+        "limiar_pare": 0.4,
+        "exigir_assinatura": true
+      }
+    },
+    "pilot": {
+      "rotulo": "PILOTO INTERNO MIRANTE (leitura real, saídas locais)",
+      "dry_run": true,
+      "forcar_dry_run": true,
+      "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server",
+      "transporte": "nenhum",
+      "transporte_url": null,
+      "clientes_permitidos": [
+        "eb1270a5-4d9e-4c67-bb17-e25fa12ada34"
+      ],
+      "escritas_liberadas": [],
+      "operador": "default",
+      "lote_clientes": 2,
+      "max_paginas": 20,
+      "jev_url": "https://api.typesafe.ai/v1/systemone",
+      "provedor_mensagens": "oficial_pendente",
+      "dry_run_por_workflow": {
+        "ACQ-06": true,
+        "ACQ-07": true
+      },
+      "comercial": {
+        "operador": "mercurio",
+        "graph_url": "https://graph.facebook.com/v21.0",
+        "phone_number_id": null,
+        "waba_id": null,
+        "modelos": {
+          "primeiro_contato": {
+            "nome": "aceleriq_diagnostico_primeiro_contato",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Se não quiser receber mensagens, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ]
+          },
+          "retomada": {
+            "nome": "aceleriq_retomada_conversa",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "rodape": "Para não receber mais mensagens, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ]
+          }
+        },
+        "max_por_rodada": 5,
+        "retomada": {
+          "ativa": false,
+          "dias_sem_resposta": 4
+        },
+        "llm_url": "https://openrouter.ai/api/v1/chat/completions",
+        "llm_modelo": "anthropic/claude-sonnet-5.5",
+        "resposta_max_caracteres": 700,
+        "janela_horas": 24,
+        "limiar_pare": 0.4,
+        "exigir_assinatura": true
+      }
+    },
+    "production": {
+      "rotulo": "PRODUÇÃO (15/10/2026: ACQ-01, ACQ-03 e ACQ-05 ligados; ACQ-02 e ACQ-04 esperam o WhatsApp oficial)",
+      "dry_run": false,
+      "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server",
+      "transporte": "oficial_pendente",
+      "transporte_url": null,
+      "clientes_permitidos": null,
+      "escritas_liberadas": [
+        "aceleriq_upsert_current_dossier",
+        "aceleriq_create_report_draft",
+        "aceleriq_central_review_preparar",
+        "aceleriq_aviso_publicacao_preparar"
+      ],
+      "operador": "default",
+      "lote_clientes": 2,
+      "max_paginas": 20,
+      "jev_url": "https://api.typesafe.ai/v1/systemone",
+      "provedor_mensagens": "oficial_pendente",
+      "dry_run_por_workflow": {
+        "ACQ-06": true,
+        "ACQ-07": true
+      },
+      "comercial": {
+        "operador": "mercurio",
+        "graph_url": "https://graph.facebook.com/v21.0",
+        "phone_number_id": null,
+        "waba_id": null,
+        "modelos": {
+          "primeiro_contato": {
+            "nome": "aceleriq_diagnostico_primeiro_contato",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Se não quiser receber mensagens, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ]
+          },
+          "retomada": {
+            "nome": "aceleriq_retomada_conversa",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "rodape": "Para não receber mais mensagens, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ]
+          }
+        },
+        "max_por_rodada": 5,
+        "retomada": {
+          "ativa": false,
+          "dias_sem_resposta": 4
+        },
+        "llm_url": "https://openrouter.ai/api/v1/chat/completions",
+        "llm_modelo": "anthropic/claude-sonnet-5.5",
+        "resposta_max_caracteres": 700,
+        "janela_horas": 24,
+        "limiar_pare": 0.4,
+        "exigir_assinatura": true
+      }
+    }
+  }
+}

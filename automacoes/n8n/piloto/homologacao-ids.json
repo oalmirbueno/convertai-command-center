@@ -1,0 +1,60 @@
+{
+  "instancia": "blue-fly-822772.hostingersite.com",
+  "importado_em": "2026-10-15T20:51:53.353Z",
+  "workflows": [
+    {
+      "nome": "ACQ-00-Erros",
+      "id": "evTkFzYoAHcVGQO2",
+      "operacoes": 6,
+      "sem_credencial": [],
+      "error_workflow_pendente": null
+    },
+    {
+      "nome": "ACQ-00-Ferramenta-Aceleriq",
+      "id": "xhZnAPoCqWaXVvfO",
+      "operacoes": 18,
+      "sem_credencial": [],
+      "error_workflow_pendente": "evTkFzYoAHcVGQO2"
+    },
+    {
+      "nome": "ACQ-01-Contexto-Rituais",
+      "id": "8v770a6M8LMCoIXU",
+      "operacoes": 25,
+      "sem_credencial": [],
+      "error_workflow_pendente": "evTkFzYoAHcVGQO2"
+    },
+    {
+      "nome": "ACQ-02-Despacho-Aprovado",
+      "id": "fLY4w3SYgv6Ul3dM",
+      "operacoes": 53,
+      "sem_credencial": [
+        "ACQ Webhook recibos (segredo)"
+      ],
+      "error_workflow_pendente": "evTkFzYoAHcVGQO2"
+    },
+    {
+      "nome": "ACQ-03-Post-No-Ar",
+      "id": "LUrPTs349RvFawvX",
+      "operacoes": 36,
+      "sem_credencial": [],
+      "error_workflow_pendente": "evTkFzYoAHcVGQO2"
+    },
+    {
+      "nome": "ACQ-04-Conversas-Contexto",
+      "id": "rjeArp0UCeZVEt1g",
+      "operacoes": 33,
+      "sem_credencial": [
+        "ACQ Webhook mensagens (segredo)",
+        "TypeSafe Jev (servidor)"
+      ],
+      "error_workflow_pendente": "evTkFzYoAHcVGQO2"
+    },
+    {
+      "nome": "ACQ-05-Dia-Prioritario-Radar",
+      "id": "b2SY93gJfFUsc0CS",
+      "operacoes": 36,
+      "sem_credencial": [],
+      "error_workflow_pendente": "evTkFzYoAHcVGQO2"
+    }
+  ]
+}

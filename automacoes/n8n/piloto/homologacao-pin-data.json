@@ -1,0 +1,80 @@
+{
+  "executado_em": "2026-10-14T15:55:22.123Z",
+  "instancia": "blue-fly-822772.hostingersite.com",
+  "workflow": "ACQ-00-Ferramenta-Aceleriq",
+  "casos": [
+    {
+      "caso": "leitura ok",
+      "execucao": "3",
+      "ok": true,
+      "resultado": {
+        "ok": true,
+        "decisao": "ler",
+        "motivo": null,
+        "simulado": false,
+        "erro": null
+      }
+    },
+    {
+      "caso": "escrita vira simulação (dry-run do piloto)",
+      "execucao": "4",
+      "ok": true,
+      "resultado": {
+        "ok": true,
+        "decisao": "simular",
+        "motivo": "dry_run",
+        "simulado": true,
+        "erro": null
+      }
+    },
+    {
+      "caso": "HTTP 200 com error JSON-RPC é falha",
+      "execucao": "5",
+      "ok": true,
+      "resultado": {
+        "ok": false,
+        "decisao": "ler",
+        "motivo": null,
+        "simulado": false,
+        "erro": {
+          "tipo": "desconhecido",
+          "mensagem": "falha simulada",
+          "pode_repetir": false,
+          "codigo": -32603
+        }
+      }
+    },
+    {
+      "caso": "ferramenta fora da allowlist bloqueada",
+      "execucao": "6",
+      "ok": true,
+      "resultado": {
+        "ok": false,
+        "decisao": "bloquear",
+        "motivo": "ferramenta_fora_da_allowlist",
+        "simulado": false,
+        "erro": {
+          "tipo": "bloqueio_de_escopo",
+          "mensagem": "ferramenta_fora_da_allowlist",
+          "pode_repetir": false
+        }
+      }
+    },
+    {
+      "caso": "cliente fora do escopo do piloto bloqueado",
+      "execucao": "7",
+      "ok": true,
+      "resultado": {
+        "ok": false,
+        "decisao": "bloquear",
+        "motivo": "cliente_fora_do_escopo",
+        "simulado": false,
+        "erro": {
+          "tipo": "bloqueio_de_escopo",
+          "mensagem": "cliente_fora_do_escopo",
+          "pode_repetir": false
+        }
+      }
+    }
+  ]
+}

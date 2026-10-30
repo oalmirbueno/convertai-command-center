@@ -1,0 +1,147 @@
+{
+  "_doc": "Allowlist de ferramentas do MCP Aceleriq (2.10.0) por workflow. 'leitura' nunca altera o painel. 'escrita' só roda fora do dry-run, no ambiente que a liberar explicitamente. 'geracao' não altera o painel, mas gasta modelo pago: roda de verdade também no dry-run, sem nova tentativa automática e com tempo longo. Ferramentas fora desta lista são recusadas pelo adaptador (ACQ-00). Comercial (ACQ-06/07): ferramentas aceleriq_comercial_* e aceleriq_update_opportunity não têm client_id (lead não é cliente) e por isso entram em multi_cliente; as de idempotencia_propria têm esquema estrito e deduplicam sozinhas (id_externo, janela de 6 h da Caixa, qualificação que soma), então não recebem idempotency_key.",
+  "mcp_versao_conferida": "2.10.0 (comercial conferido no 2.23.0)",
+  "leitura": [
+    "aceleriq_health",
+    "aceleriq_capabilities",
+    "aceleriq_list_clients",
+    "aceleriq_dia_prioritario",
+    "aceleriq_get_client_dossier",
+    "aceleriq_get_current_dossier",
+    "aceleriq_get_project_memory",
+    "aceleriq_get_agenda_status",
+    "aceleriq_list_reports",
+    "aceleriq_get_report",
+    "aceleriq_central_review_fila",
+    "aceleriq_list_editorial_calendar",
+    "aceleriq_list_social_posts",
+    "aceleriq_get_social_metrics",
+    "aceleriq_list_tasks",
+    "aceleriq_operator_board",
+    "aceleriq_operator_digest",
+    "aceleriq_mesa_ads_saude",
+    "aceleriq_agent_conversations",
+    "aceleriq_comercial_fila"
+  ],
+  "escrita": [
+    "aceleriq_upsert_current_dossier",
+    "aceleriq_create_report_draft",
+    "aceleriq_central_review_preparar",
+    "aceleriq_central_review_marcar_enviado",
+    "aceleriq_browser_act",
+    "aceleriq_upload_file_inline",
+    "aceleriq_upsert_project_memory",
+    "aceleriq_agent_handoff",
+    "aceleriq_operator_report",
+    "aceleriq_dia_prioritario_registrar",
+    "aceleriq_aviso_publicacao_preparar",
+    "aceleriq_comercial_registrar_mensagem",
+    "aceleriq_comercial_avisar_caixa",
+    "aceleriq_update_opportunity"
+  ],
+  "geracao": [
+    "aceleriq_ritual_redigir"
+  ],
+  "condicionais": {
+    "aceleriq_browser_session": {
+      "leitura_quando": {
+        "acao": [
+          "estado",
+          "acoes"
+        ]
+      }
+    },
+    "aceleriq_operator_diary": {
+      "leitura_quando_sem": [
+        "body"
+      ]
+    }
+  },
+  "nunca_automatico": {
+    "aceleriq_central_review_decidir": "Só consome decisão humana autenticada e evidenciada; nenhum workflow decide por inferência.",
+    "aceleriq_complete_task": "Concluir tarefa real não é papel da automação.",
+    "aceleriq_operator_assign": "Não atribuir responsáveis humanos.",
+    "aceleriq_update_task": "Não alterar tarefas reais.",
+    "aceleriq_aviso_publicacao_decidir": "A decisão do aviso é do dono, no painel ou pelo Hermes com a mensagem dele como evidência.",
+    "aceleriq_comercial_atribuir_agente": "Entregar lead ao Mercúrio é decisão da equipe (Máquina de leads ou CRM).",
+    "aceleriq_comercial_pedir_proposta": "Proposta pede conversa e aprovação do Almir; o fluxo só avisa a Caixa."
+  },
+  "longas": [
+    "aceleriq_browser_act",
+    "aceleriq_ritual_redigir"
+  ],
+  "por_workflow": {
+    "ACQ-01": [
+      "aceleriq_dia_prioritario",
+      "aceleriq_get_current_dossier",
+      "aceleriq_get_project_memory",
+      "aceleriq_get_agenda_status",
+      "aceleriq_list_reports",
+      "aceleriq_get_report",
+      "aceleriq_central_review_fila",
+      "aceleriq_upsert_current_dossier",
+      "aceleriq_ritual_redigir",
+      "aceleriq_create_report_draft",
+      "aceleriq_central_review_preparar"
+    ],
+    "ACQ-02": [
+      "aceleriq_central_review_fila",
+      "aceleriq_central_review_marcar_enviado"
+    ],
+    "ACQ-03": [
+      "aceleriq_dia_prioritario",
+      "aceleriq_list_editorial_calendar",
+      "aceleriq_get_agenda_status",
+      "aceleriq_list_social_posts",
+      "aceleriq_get_social_metrics",
+      "aceleriq_browser_session",
+      "aceleriq_browser_act",
+      "aceleriq_upload_file_inline",
+      "aceleriq_aviso_publicacao_preparar"
+    ],
+    "ACQ-04": [
+      "aceleriq_get_current_dossier",
+      "aceleriq_get_project_memory",
+      "aceleriq_upsert_project_memory",
+      "aceleriq_agent_handoff"
+    ],
+    "ACQ-05": [
+      "aceleriq_dia_prioritario",
+      "aceleriq_get_agenda_status",
+      "aceleriq_list_tasks",
+      "aceleriq_operator_board",
+      "aceleriq_operator_digest",
+      "aceleriq_operator_diary",
+      "aceleriq_central_review_fila",
+      "aceleriq_mesa_ads_saude",
+      "aceleriq_operator_report",
+      "aceleriq_dia_prioritario_registrar"
+    ],
+    "ACQ-06": [
+      "aceleriq_comercial_fila",
+      "aceleriq_comercial_registrar_mensagem"
+    ],
+    "ACQ-07": [
+      "aceleriq_comercial_fila",
+      "aceleriq_comercial_registrar_mensagem",
+      "aceleriq_comercial_avisar_caixa",
+      "aceleriq_update_opportunity"
+    ]
+  },
+  "multi_cliente": [
+    "aceleriq_dia_prioritario",
+    "aceleriq_central_review_fila",
+    "aceleriq_operator_board",
+    "aceleriq_operator_digest",
+    "aceleriq_list_clients",
+    "aceleriq_comercial_fila",
+    "aceleriq_comercial_registrar_mensagem",
+    "aceleriq_comercial_avisar_caixa",
+    "aceleriq_update_opportunity"
+  ],
+  "idempotencia_propria": [
+    "aceleriq_comercial_registrar_mensagem",
+    "aceleriq_comercial_avisar_caixa",
+    "aceleriq_update_opportunity"
+  ]
+}

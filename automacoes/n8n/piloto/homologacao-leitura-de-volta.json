@@ -1,0 +1,82 @@
+{
+  "lido_em": "2026-10-14T19:25:22.246Z",
+  "workflows": [
+    {
+      "nome": "ACQ-00-Erros",
+      "id": "evTkFzYoAHcVGQO2",
+      "nos": 3,
+      "conexoes": 2,
+      "codigo_nos": 1,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 298,
+      "diferencas": []
+    },
+    {
+      "nome": "ACQ-00-Ferramenta-Aceleriq",
+      "id": "xhZnAPoCqWaXVvfO",
+      "nos": 11,
+      "conexoes": 12,
+      "codigo_nos": 4,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 285,
+      "diferencas": []
+    },
+    {
+      "nome": "ACQ-01-Contexto-Rituais",
+      "id": "8v770a6M8LMCoIXU",
+      "nos": 18,
+      "conexoes": 17,
+      "codigo_nos": 7,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 344,
+      "diferencas": []
+    },
+    {
+      "nome": "ACQ-02-Despacho-Aprovado",
+      "id": "fLY4w3SYgv6Ul3dM",
+      "nos": 31,
+      "conexoes": 30,
+      "codigo_nos": 12,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 869,
+      "diferencas": []
+    },
+    {
+      "nome": "ACQ-03-Post-No-Ar",
+      "id": "LUrPTs349RvFawvX",
+      "nos": 24,
+      "conexoes": 23,
+      "codigo_nos": 9,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 363,
+      "diferencas": []
+    },
+    {
+      "nome": "ACQ-04-Conversas-Contexto",
+      "id": "rjeArp0UCeZVEt1g",
+      "nos": 21,
+      "conexoes": 22,
+      "codigo_nos": 8,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 635,
+      "diferencas": []
+    },
+    {
+      "nome": "ACQ-05-Dia-Prioritario-Radar",
+      "id": "b2SY93gJfFUsc0CS",
+      "nos": 23,
+      "conexoes": 22,
+      "codigo_nos": 8,
+      "active": false,
+      "publicado": false,
+      "gatilhos": 424,
+      "diferencas": []
+    }
+  ]
+}

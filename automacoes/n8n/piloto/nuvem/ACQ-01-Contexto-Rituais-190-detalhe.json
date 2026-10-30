@@ -1,0 +1,219 @@
+{
+ "erro": null,
+ "ultimo_no": "Gravar evento",
+ "nos": {
+  "Pedir texto do ritual": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "workflow_id": "ACQ-01",
+     "run_id": "ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8",
+     "ambiente_chamador": "pilot",
+     "paginar": false,
+     "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|texto",
+     "ferramenta": "aceleriq_ritual_redigir",
+     "argumentos": {
+      "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "ritual": "prova_movimento"
+     }
+    }
+   ]
+  },
+  "Redigir texto do ritual": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "ok": false,
+     "simulado": false,
+     "ferramenta": "aceleriq_ritual_redigir",
+     "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|texto",
+     "resultado": null,
+     "erro": {
+      "tipo": "escopo",
+      "mensagem": "Insufficient scope. Required: reports:write",
+      "pode_repetir": false,
+      "codigo": -32003
+     },
+     "decisao": "escrever",
+     "motivo": null,
+     "tipo": "geracao",
+     "paginar": false,
+     "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+     "_req": {
+      "argumentos": {
+       "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+       "ritual": "prova_movimento"
+      },
+      "run_id": "ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8",
+      "ferramenta": "aceleriq_ritual_redigir",
+      "tipo": "geracao",
+      "max_paginas": 20,
+      "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+     }
+    }
+   ]
+  },
+  "Gravar no painel (etapa 1)": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "ok": true,
+     "simulado": true,
+     "dry_run": true,
+     "ferramenta": "aceleriq_create_report_draft",
+     "motivo": "dry_run",
+     "argumentos_hash": "18b350f14994e9f2f24e6cbaa12552e990546ed569448a31bc7ecc5c7b727e83",
+     "id_simulado": "98c2495e-93fd-4213-a3a3-871a77e04e74",
+     "resultado": null,
+     "erro": null,
+     "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|escrita|rascunho",
+     "decisao": "simular",
+     "tipo": "escrita",
+     "paginar": false,
+     "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+     "_req": {
+      "argumentos": {
+       "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+       "idempotency_key": "acq01:eb1270a5-4d9e-4c67-bb17-e25fa12ada34:2026-10-12:prova_movimento:9a6d4dbd8c3b34ee:rascunho",
+       "title": "Prova de movimento | Mirante Luz Floripa | 12/10/2026 a 18/10/2026",
+       "period_start": "2026-10-12",
+       "period_end": "2026-10-18",
+       "summary": "*O que avançou*:\nPost no ar em 15/10: Por que consultar a diária com datas, hóspedes e quarto desejado.. Post no ar em 14/10: Vai à Fenaostra? Reserve antes de viajar. Post no ar em 08/10: Consultar valores e disponibilidade para datas e número de hóspedes reais..\n\n*Onde estamos*:\n1 conteúdos prontos aguardando data de publicação.",
+       "next_steps": "Confirmar a aprovação das pautas prontas e definir as datas de publicação.\nResponder: As tarefas com prazo vencido desde 2026-09-11 ainda valem ou devem ser repactuadas?",
+       "highlights": "Post no ar em 15/10: Por que consultar a diária com datas, hóspedes e quarto desejado..\nPost no ar em 14/10: Vai à Fenaostra? Reserve antes de viajar.\nPost no ar em 08/10: Consultar valores e disponibilidade para datas e número de hóspedes reais..",
+       "metrics": {
+        "ritual_type": "prova_movimento",
+        "written_by": "n8n:ACQ-01",
+        "gerado_por": "automacao",
+        "texto_final_pendente": "aceleriq_ritual_redigir falhou (erro: escopo); ficou o rascunho por regra",
+        "proveniencia": {
+         "fatos": 9,
+         "respostas_humanas": 0,
+         "interpretacoes": 3,
+         "lacunas": 1
+        },
+        "hash_fatos": "9a6d4dbd8c3b34eeca1b1ad014711d4090600d0ec21518b5b87058ff7df6b450"
+       }
+      },
+      "run_id": "ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8",
+      "ferramenta": "aceleriq_create_report_draft",
+      "tipo": "escrita",
+      "max_paginas": 20,
+      "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+     }
+    }
+   ]
+  },
+  "Registrar evidência": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+     "evento": {
+      "schema_version": "1.0.0",
+      "event_id": "45a0817d-1010-4861-a315-bdb9b01c15e5",
+      "workflow_id": "ACQ-01",
+      "run_id": "ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8",
+      "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "entity_type": "ritual",
+      "entity_id": "prova_movimento:2026-10-12",
+      "occurred_at": "2026-10-15T13:35:38.387Z",
+      "observed_at": "2026-10-15T13:36:19.270Z",
+      "source": "n8n:ACQ-01",
+      "source_version": "dossie:v142",
+      "correlation_id": "ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8",
+      "idempotency_key": "ACQ-01|eb1270a5-4d9e-4c67-bb17-e25fa12ada34|2026-10-12|prova_movimento|propor|9a6d4dbd8c3b34ee",
+      "evidence_refs": [
+       "aceleriq_get_agenda_status",
+       "aceleriq_get_agenda_status",
+       "aceleriq_get_agenda_status:c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+       "aceleriq_get_agenda_status:b757b365-4a62-4f68-8e8d-c18cd9dfbd5b",
+       "aceleriq_get_agenda_status:fbb5987d-3339-43cc-905d-5e096a0a2ec2",
+       "aceleriq_dia_prioritario",
+       "aceleriq_dia_prioritario",
+       "aceleriq_dia_prioritario",
+       "aceleriq_get_current_dossier"
+      ],
+      "tipo": "ritual_propor",
+      "payload": {
+       "estado": "propor",
+       "perguntas": [
+        {
+         "chave": "tarefas_atrasadas_vigentes",
+         "pergunta": "As tarefas com prazo vencido desde 2026-09-11 ainda valem ou devem ser repactuadas?",
+         "por_que": "59 tarefas abertas; as mais antigas venceram em 2026-09-11.",
+         "id": "700cdcb6-d5e8-44a8-a265-0bbeb60471e1"
+        }
+       ],
+       "lacunas": [
+        "tarefas_atrasadas_vigentes"
+       ],
+       "respondidas": [],
+       "reconciliacao": [
+        {
+         "tipo": "rascunho_historico_coberto",
+         "report_id": "ba368195-2aa3-457b-91c8-f01014cad9e2",
+         "titulo": "Preparação interna | Mirante Luz Floripa | Semana 05–11/10 | corte 09/10/2026",
+         "semana": "2026-10-05",
+         "leitura": "Já existe ritual publicado na mesma semana; este rascunho não deve gerar novo pedido."
+        },
+        {
+         "tipo": "rascunho_historico_coberto",
+         "report_id": "1b019e9e-ffdb-407d-9a37-2548d3a01fbd",
+         "titulo": "Abertura da semana Mirante Luz Floripa 05/10/2026",
+         "semana": "2026-10-05",
+         "leitura": "Já existe ritual publicado na mesma semana; este rascunho não deve gerar novo pedido."
+        }
+       ],
+       "propostas": [
+        {
+         "novo": true,
+         "id": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+         "novo": true,
+         "id": "00000000-0000-4000-8000-000000000002"
+        },
+        {
+         "novo": true,
+         "id": "00000000-0000-4000-8000-000000000003"
+        }
+       ],
+       "texto_final": {
+        "ok": false,
+        "erro": "escopo: Insufficient scope. Required: reports:write"
+       },
+       "escritas": [
+        {
+         "ferramenta": "aceleriq_create_report_draft",
+         "ok": true,
+         "simulado": true,
+         "erro": null
+        },
+        {
+         "ferramenta": "aceleriq_central_review_preparar",
+         "ok": true,
+         "simulado": true,
+         "erro": null
+        }
+       ]
+      },
+      "payload_hash": "7ee59f51d44beefa13b7efb3cbe279efa5e79d159fcdbfcf770776caf6d46fab"
+     },
+     "pg": [
+      "{\"schema_version\":\"1.0.0\",\"event_id\":\"45a0817d-1010-4861-a315-bdb9b01c15e5\",\"workflow_id\":\"ACQ-01\",\"run_id\":\"ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8\",\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"entity_type\":\"ritual\",\"entity_id\":\"prova_movimento:2026-10-12\",\"occurred_at\":\"2026-10-15T13:35:38.387Z\",\"observed_at\":\"2026-10-15T13:36:19.270Z\",\"source\":\"n8n:ACQ-01\",\"source_version\":\"dossie:v142\",\"correlation_id\":\"ACQ-01:2026-10-15T13:35:38.387Z:a26c90c8\",\"idempotency_key\":\"ACQ-01|eb1270a5-4d9e-4c67-bb17-e25fa12ada34|2026-10-12|prova_movimento|propor|9a6d4dbd8c3b34ee\",\"evidence_refs\":[\"aceleriq_get_agenda_status\",\"aceleriq_get_agenda_status\",\"aceleriq_get_agenda_status:c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"aceleriq_get_agenda_status:b757b365-4a62-4f68-8e8d-c18cd9dfbd5b\",\"aceleriq_get_agenda_status:fbb5987d-3339-43cc-905d-5e096a0a2ec2\",\"aceleriq_dia_prioritario\",\"aceleriq_dia_prioritario\",\"aceleriq_dia_prioritario\",\"aceleriq_get_current_dossier\"],\"tipo\":\"ritual_propor\",\"payload\":{\"estado\":\"propor\",\"perguntas\":[{\"chave\":\"tarefas_atrasadas_vigentes\",\"pergunta\":\"As tarefas com prazo vencido desde 2026-09-11 ainda valem ou devem ser repactuadas?\",\"por_que\":\"59 tarefas abertas; as mais antigas venceram em 2026-09-11.\",\"id\":\"700cdcb6-d5e8-44a8-a265-0bbeb60471e1\"}],\"lacunas\":[\"tarefas_atrasadas_vigentes\"],\"respondidas\":[],\"reconciliacao\":[{\"tipo\":\"rascunho_historico_coberto\",\"report_id\":\"ba368195-2aa3-457b-91c8-f01014cad9e2\",\"titulo\":\"Preparação interna | Mirante Luz Floripa | Semana 05–11/10 | corte 09/10/2026\",\"semana\":\"2026-10-05\",\"leitura\":\"Já existe ritual publicado na mesma semana; este rascunho não deve gerar novo pedido.\"},{\"tipo\":\"rascunho_historico_coberto\",\"report_id\":\"1b019e9e-ffdb-407d-9a37-2548d3a01fbd\",\"titulo\":\"Abertura da semana Mirante Luz Floripa 05/10/2026\",\"semana\":\"2026-10-05\",\"leitura\":\"Já existe ritual publicado na mesma semana; este rascunho não deve gerar novo pedido.\"}],\"propostas\":[{\"novo\":true,\"id\":\"00000000-0000-4000-8000-000000000001\"},{\"novo\":true,\"id\":\"00000000-0000-4000-8000-000000000002\"},{\"novo\":true,\"id\":\"00000000-0000-4000-8000-000000000003\"}],\"texto_final\":{\"ok\":false,\"erro\":\"escopo: Insufficient scope. Required: reports:write\"},\"escritas\":[{\"ferramenta\":\"aceleriq_create_report_draft\",\"ok\":true,\"simulado\":true,\"erro\":null},{\"ferramenta\":\"aceleriq_central_review_preparar\",\"ok\":true,\"simulado\":true,\"erro\":null}]},\"payload_hash\":\"7ee59f51d44beefa13b7efb3cbe279efa5e79d159fcdbfcf770776caf6d46fab\"}",
+      "pilot",
+      "[]",
+      "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "prova_movimento:2026-10-12",
+      false
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,237 @@
+{
+ "erro": null,
+ "ultimo_no": "Registrar aviso",
+ "nos": {
+  "Montar aviso": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "pub": {
+      "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+      "projeto": "Mirante Luz Floripa | Conteúdo, Meta Ads e Reservas",
+      "post_id": "2fc7788b-3b4e-4b08-acf8-7c84da461a3b",
+      "titulo": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+      "objetivo": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+      "legenda": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+      "content_type": "carousel",
+      "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+      "status": "published",
+      "platform": "instagram",
+      "external_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+      "conta": {
+       "id": "67588009-db0f-4433-b66c-3b3b72d04504",
+       "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+       "display_name": "Mirante Luz | Hospedagem em Floripa",
+       "handle": "@miranteluzfloripa",
+       "platform": "instagram",
+       "status": "active",
+       "created_at": "2026-08-06T16:52:40.610412+00:00",
+       "updated_at": "2026-08-06T16:52:40.610412+00:00"
+      },
+      "published_at": "2026-10-15T12:05:00.068017+00:00",
+      "scheduled_at": "2026-10-15T12:00:00+00:00",
+      "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/"
+     },
+     "validacao": {
+      "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+      "estado": "valida",
+      "motivo": null,
+      "platform_media_id": "17882845287528810",
+      "prova": {
+       "media_id": "17882845287528810",
+       "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+       "posted_at": "2026-10-15T12:03:00+00:00",
+       "captured_at": "2026-10-15T13:16:00.066599+00:00",
+       "media_type": "CAROUSEL_ALBUM"
+      }
+     },
+     "captura": {
+      "ok": false,
+      "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+     },
+     "conteudo": {
+      "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+      "social_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+      "conta": "@miranteluzfloripa",
+      "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+      "platform_media_id": "17882845287528810",
+      "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+      "published_at": "2026-10-15T12:05:00.068017+00:00",
+      "verified_at": "2026-10-15T13:52:32.448Z",
+      "screenshot_file_id": null,
+      "captura": {
+       "ok": false,
+       "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+      },
+      "comparacao": {
+       "comparavel": false,
+       "motivo": "post_com_menos_de_48h"
+      },
+      "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+      "afirma_crescimento": false
+     }
+    }
+   ]
+  },
+  "Pedir aviso na revisão": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "workflow_id": "ACQ-03",
+     "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+     "ambiente_chamador": "pilot",
+     "paginar": false,
+     "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|aviso",
+     "ferramenta": "aceleriq_aviso_publicacao_preparar",
+     "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+     "argumentos": {
+      "operator": "default",
+      "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+      "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+      "channel": "portal",
+      "idempotency_key": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933:aviso"
+     }
+    }
+   ]
+  },
+  "Preparar aviso na revisão": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "ok": true,
+     "simulado": true,
+     "dry_run": true,
+     "ferramenta": "aceleriq_aviso_publicacao_preparar",
+     "motivo": "dry_run",
+     "argumentos_hash": "fa1bffce04c1fdbdbafd75bdf383ba3e279034b06aa2981832dc532205235682",
+     "id_simulado": "e23c9d38-6a70-4507-aad3-6376ce9c6216",
+     "resultado": null,
+     "erro": null,
+     "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|aviso",
+     "decisao": "simular",
+     "tipo": "escrita",
+     "paginar": false,
+     "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+     "_req": {
+      "argumentos": {
+       "operator": "default",
+       "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+       "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+       "channel": "portal",
+       "idempotency_key": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933:aviso"
+      },
+      "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+      "ferramenta": "aceleriq_aviso_publicacao_preparar",
+      "tipo": "escrita",
+      "max_paginas": 20,
+      "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+     }
+    }
+   ]
+  },
+  "Fechar aviso": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "proposta": {
+      "workflow_id": "ACQ-03",
+      "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "tipo": "aviso_publicacao",
+      "referencia": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+      "idempotency_key": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933",
+      "conteudo": {
+       "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+       "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+       "social_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+       "conta": "@miranteluzfloripa",
+       "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+       "platform_media_id": "17882845287528810",
+       "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+       "published_at": "2026-10-15T12:05:00.068017+00:00",
+       "verified_at": "2026-10-15T13:52:32.448Z",
+       "screenshot_file_id": null,
+       "captura": {
+        "ok": false,
+        "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+       },
+       "comparacao": {
+        "comparavel": false,
+        "motivo": "post_com_menos_de_48h"
+       },
+       "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+       "afirma_crescimento": false,
+       "aviso_id": null,
+       "revisao": "aviso_simulado_dry_run"
+      },
+      "hash": "16ec4c3816b9b06545d4af5915a493c9ce8852f4efddb886f2956331619358f9",
+      "estado": "proposta",
+      "motivo": "aviso_simulado_dry_run",
+      "ambiente": "pilot"
+     },
+     "evento": {
+      "schema_version": "1.0.0",
+      "event_id": "be2c451c-81d2-46a1-881f-ddd5563e79c4",
+      "workflow_id": "ACQ-03",
+      "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+      "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+      "entity_type": "publicacao",
+      "entity_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+      "occurred_at": "2026-10-15T12:05:00.068017+00:00",
+      "observed_at": "2026-10-15T13:52:45.313Z",
+      "source": "n8n:ACQ-03",
+      "source_version": null,
+      "correlation_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+      "idempotency_key": "pub:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:https://www.instagram.com/p/Deg6V28jhoZ/",
+      "evidence_refs": [
+       "publication:c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+       "media:17882845287528810"
+      ],
+      "tipo": "publicacao_aviso_simulado",
+      "payload": {
+       "proposta": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933",
+       "captura": {
+        "ok": false,
+        "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+       },
+       "revisao": {
+        "estado": "proposta",
+        "motivo": "aviso_simulado_dry_run",
+        "aviso_id": null,
+        "erro": null
+       }
+      },
+      "payload_hash": "4762aad77bed1ef8c998fa751c5276a0ceb4175a3d32628ea41efa7847c66883"
+     },
+     "pg": [
+      "{\"workflow_id\":\"ACQ-03\",\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"tipo\":\"aviso_publicacao\",\"referencia\":\"c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"idempotency_key\":\"acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933\",\"conteudo\":{\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"project_id\":\"6f06e0ae-b72b-424a-a675-6efd5adbcdd1\",\"social_account_id\":\"67588009-db0f-4433-b66c-3b3b72d04504\",\"conta\":\"@miranteluzfloripa\",\"publication_id\":\"c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"platform_media_id\":\"17882845287528810\",\"permalink\":\"https://www.instagram.com/p/Deg6V28jhoZ/\",\"published_at\":\"2026-10-15T12:05:00.068017+00:00\",\"verified_at\":\"2026-10-15T13:52:32.448Z\",\"screenshot_file_id\":null,\"captura\":{\"ok\":false,\"motivo\":\"erro: captura simulada (dry-run): nenhuma captura real feita\"},\"comparacao\":{\"comparavel\":false,\"motivo\":\"post_com_menos_de_48h\"},\"mensagem\":\"Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\\nhttps://www.instagram.com/p/Deg6V28jhoZ/\\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.\",\"afirma_crescimento\":false,\"aviso_id\":null,\"revisao\":\"aviso_simulado_dry_run\"},\"hash\":\"16ec4c3816b9b06545d4af5915a493c9ce8852f4efddb886f2956331619358f9\",\"estado\":\"proposta\",\"motivo\":\"aviso_simulado_dry_run\",\"ambiente\":\"pilot\"}",
+      "{\"schema_version\":\"1.0.0\",\"event_id\":\"be2c451c-81d2-46a1-881f-ddd5563e79c4\",\"workflow_id\":\"ACQ-03\",\"run_id\":\"ACQ-03:2026-10-15T13:52:32.448Z:793419d7\",\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"entity_type\":\"publicacao\",\"entity_id\":\"c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"occurred_at\":\"2026-10-15T12:05:00.068017+00:00\",\"observed_at\":\"2026-10-15T13:52:45.313Z\",\"source\":\"n8n:ACQ-03\",\"source_version\":null,\"correlation_id\":\"ACQ-03:2026-10-15T13:52:32.448Z:793419d7\",\"idempotency_key\":\"pub:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:https://www.instagram.com/p/Deg6V28jhoZ/\",\"evidence_refs\":[\"publication:c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"media:17882845287528810\"],\"tipo\":\"publicacao_aviso_simulado\",\"payload\":{\"proposta\":\"acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933\",\"captura\":{\"ok\":false,\"motivo\":\"erro: captura simulada (dry-run): nenhuma captura real feita\"},\"revisao\":{\"estado\":\"proposta\",\"motivo\":\"aviso_simulado_dry_run\",\"aviso_id\":null,\"erro\":null}},\"payload_hash\":\"4762aad77bed1ef8c998fa751c5276a0ceb4175a3d32628ea41efa7847c66883\"}",
+      "pilot"
+     ]
+    }
+   ]
+  },
+  "Registrar aviso": {
+   "itens": 1,
+   "erro": null,
+   "saida": [
+    {
+     "proposta": {
+      "id": "c427b392-ee2f-466d-b46b-f9d4ac52d9fe",
+      "novo": true
+     },
+     "evento": {
+      "id": 7,
+      "novo": true,
+      "event_id": "be2c451c-81d2-46a1-881f-ddd5563e79c4"
+     }
+    }
+   ]
+  }
+ }
+}

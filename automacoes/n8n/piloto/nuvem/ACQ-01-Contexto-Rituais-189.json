@@ -1,0 +1,117 @@
+{
+ "fluxo": "ACQ-01-Contexto-Rituais",
+ "execucao": "189",
+ "status": "success",
+ "segundos": 6,
+ "erro": null,
+ "ultimo_no": "Preparar rodada",
+ "nos": {
+  "Executar piloto (Mirante)": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Preparar rodada": {
+   "execucoes": 1,
+   "itens": 0,
+   "erro": null
+  }
+ },
+ "bruto": {
+  "execution": {
+   "id": "189",
+   "workflowId": "8v770a6M8LMCoIXU",
+   "mode": "manual",
+   "status": "success",
+   "startedAt": "2026-10-15T13:34:47.365Z",
+   "stoppedAt": "2026-10-15T13:34:47.584Z",
+   "retryOf": null,
+   "retrySuccessId": null,
+   "waitTill": null
+  },
+  "data": {
+   "version": 1,
+   "startData": {},
+   "resultData": {
+    "runData": {
+     "Executar piloto (Mirante)": [
+      {
+       "startTime": 1792071287374,
+       "executionIndex": 0,
+       "source": [],
+       "hints": [],
+       "executionTime": 0,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {},
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Preparar rodada": [
+      {
+       "startTime": 1792071287374,
+       "executionIndex": 1,
+       "source": [
+        {
+         "previousNode": "Executar piloto (Mirante)",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 210,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         []
+        ]
+       }
+      }
+     ]
+    },
+    "pinData": {
+     "Executar piloto (Mirante)": [
+      {
+       "json": {},
+       "pairedItem": {
+        "item": 0
+       }
+      }
+     ]
+    },
+    "lastNodeExecuted": "Preparar rodada"
+   },
+   "executionData": {
+    "contextData": {},
+    "nodeExecutionStack": [],
+    "metadata": {},
+    "waitingExecution": {},
+    "waitingExecutionSource": {},
+    "runtimeData": {
+     "version": 1,
+     "establishedAt": 1792071287341,
+     "source": "manual",
+     "triggerNode": {
+      "name": "Executar piloto (Mirante)",
+      "type": "n8n-nodes-base.manualTrigger"
+     },
+     "redaction": {
+      "version": 2,
+      "production": false,
+      "manual": false
+     }
+    }
+   },
+   "resumeToken": "274fc0dc93934b5ba87acefc7dce75830e32c24879ddc8b76d3d5e1be3becf04"
+  }
+ }
+}

@@ -1,0 +1,3420 @@
+{
+ "fluxo": "ACQ-03-Post-No-Ar",
+ "execucao": "214",
+ "status": "success",
+ "segundos": 18,
+ "erro": null,
+ "ultimo_no": "Registrar aviso",
+ "nos": {
+  "Executar manualmente": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Preparar rodada": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Ler cursor e vistos": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Pedir carteira": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Ler carteira": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Pedidos de leitura": {
+   "execucoes": 1,
+   "itens": 2,
+   "erro": null
+  },
+  "Ler calendário e posts": {
+   "execucoes": 1,
+   "itens": 2,
+   "erro": null
+  },
+  "Detectar e validar": {
+   "execucoes": 1,
+   "itens": 2,
+   "erro": null
+  },
+  "Separar controle e capturas": {
+   "execucoes": 1,
+   "itens": 2,
+   "erro": null
+  },
+  "Gravar cursor e eventos": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Pedir captura do perfil": {
+   "execucoes": 1,
+   "itens": 2,
+   "erro": null
+  },
+  "Capturar perfil": {
+   "execucoes": 1,
+   "itens": 2,
+   "erro": null
+  },
+  "Montar aviso": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Pedir aviso na revisão": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Preparar aviso na revisão": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Fechar aviso": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  },
+  "Registrar aviso": {
+   "execucoes": 1,
+   "itens": 1,
+   "erro": null
+  }
+ },
+ "bruto": {
+  "execution": {
+   "id": "214",
+   "workflowId": "LUrPTs349RvFawvX",
+   "mode": "manual",
+   "status": "success",
+   "startedAt": "2026-10-15T13:52:32.407Z",
+   "stoppedAt": "2026-10-15T13:52:45.464Z",
+   "retryOf": null,
+   "retrySuccessId": null,
+   "waitTill": null
+  },
+  "data": {
+   "version": 1,
+   "startData": {},
+   "resultData": {
+    "runData": {
+     "Executar manualmente": [
+      {
+       "startTime": 1792072352419,
+       "executionIndex": 0,
+       "source": [],
+       "hints": [],
+       "executionTime": 0,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {},
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Preparar rodada": [
+      {
+       "startTime": 1792072352419,
+       "executionIndex": 1,
+       "source": [
+        {
+         "previousNode": "Executar manualmente",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 31,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "_ctx": {
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "agoraMs": 1792072352448
+            },
+            "pg": [
+             "ACQ-03",
+             "publicacoes"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Ler cursor e vistos": [
+      {
+       "startTime": 1792072352450,
+       "executionIndex": 2,
+       "source": [
+        {
+         "previousNode": "Preparar rodada",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 989,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "cursor": {
+             "valor": {
+              "desde": "2026-10-14T19:43:23.329Z"
+             },
+             "existe": true,
+             "versao": 3,
+             "atualizado_em": "2026-10-14T19:43:30.103918+00:00"
+            },
+            "vistos": [
+             "pub:b757b365-4a62-4f68-8e8d-c18cd9dfbd5b:https://www.instagram.com/p/Dee-vuhAHxh/"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Pedir carteira": [
+      {
+       "startTime": 1792072353439,
+       "executionIndex": 3,
+       "source": [
+        {
+         "previousNode": "Ler cursor e vistos",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 21,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "workflow_id": "ACQ-03",
+            "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+            "ambiente_chamador": "pilot",
+            "paginar": false,
+            "ref": "carteira",
+            "ferramenta": "aceleriq_dia_prioritario",
+            "argumentos": {}
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Ler carteira": [
+      {
+       "startTime": 1792072353460,
+       "executionIndex": 4,
+       "source": [
+        {
+         "previousNode": "Pedir carteira",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 3075,
+       "metadata": {
+        "subExecutionsCount": 1
+       },
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "ok": true,
+            "simulado": false,
+            "ferramenta": "aceleriq_dia_prioritario",
+            "ref": "carteira",
+            "resultado": {
+             "hoje": "2026-10-15",
+             "data": "2026-10-15",
+             "dia_da_semana": "quinta-feira",
+             "clientes_do_dia": [
+              "8801caa5-7505-44c9-9c14-e3019eace772",
+              "bad69252-05ad-4b80-ab76-4a0e9fd3c314",
+              "5ae0705e-6f8c-40f1-b076-867fd2ab3178"
+             ],
+             "preparacao": [
+              {
+               "client_id": "8801caa5-7505-44c9-9c14-e3019eace772",
+               "nome": "Terra Flor",
+               "dia": "quinta-feira",
+               "situacao": "confirmado",
+               "observacao": null,
+               "proxima_data_do_dia": "2026-10-15",
+               "tarefas_abertas": 57,
+               "atrasadas": [
+                {
+                 "titulo": "Auditar presença digital e percepção atual da marca",
+                 "prazo": "2026-09-12",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Validar posicionamento de paisagismo de alto padrão",
+                 "prazo": "2026-09-12",
+                 "status": "review"
+                },
+                {
+                 "titulo": "Apresentar rebranding e conceito da logo ao Jobson",
+                 "prazo": "2026-09-14",
+                 "status": "review"
+                },
+                {
+                 "titulo": "Desenvolver sistema completo de identidade visual",
+                 "prazo": "2026-09-19",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Revisar artes e aplicações do kit inicial",
+                 "prazo": "2026-09-22",
+                 "status": "review"
+                },
+                {
+                 "titulo": "Finalizar brandbook e arquivos técnicos da marca",
+                 "prazo": "2026-09-25",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Ativar a campanha de anúncios com o valor confirmado",
+                 "prazo": "2026-10-02",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Validação final, ajustes e entrega organizada",
+                 "prazo": "2026-10-02",
+                 "status": "backlog"
+                }
+               ],
+               "desta_semana": [
+                {
+                 "titulo": "10 | Sol, sombra ou meia-sombra: de onde começa a escolha?",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Publicar post 10 no perfil da Terra Flor",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                }
+               ],
+               "captacoes": [],
+               "captacao_preferencial": "Se precisar captar, a primeira data a considerar é 2026-10-15 (Dia Prioritário), com confirmação prévia.",
+               "ultimos_registros": [],
+               "ultimo_ritual": {
+                "titulo": "Primeiros sinais da campanha e conteúdo do mês no ar",
+                "quando": "2026-10-14T18:31:48.55077+00:00"
+               },
+               "dossie_resumo": "07/10: Terra Flor ACTIVE/active. Ontem R$17,83/1 conversa; semana R$30/2/R$15. R$75,11 restantes, mídia105,42 e fim12/10 15h50 preservados. Saldo atual indisponível. Sem alteração Meta."
+              },
+              {
+               "client_id": "bad69252-05ad-4b80-ab76-4a0e9fd3c314",
+               "nome": "SKC TECNOLOGIA CONTABIL",
+               "dia": "quinta-feira",
+               "situacao": "confirmado",
+               "observacao": null,
+               "proxima_data_do_dia": "2026-10-15",
+               "tarefas_abertas": 35,
+               "atrasadas": [
+                {
+                 "titulo": "Fechar análise do primeiro mês e indicadores",
+                 "prazo": "2026-09-12",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Estruturar base de conversão e mensuração",
+                 "prazo": "2026-09-19",
+                 "status": "todo"
+                },
+                {
+                 "titulo": "Dia do Contador: guia é obrigação, decisão exige contexto",
+                 "prazo": "2026-09-22",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Como uma orientação nasce dentro da SKC",
+                 "prazo": "2026-09-24",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Criar e otimizar Perfil da Empresa no Google",
+                 "prazo": "2026-09-25",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Preparar ativação do tráfego pago",
+                 "prazo": "2026-09-26",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Publicar post agendado",
+                 "prazo": "2026-09-29",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Ativar anúncio no Instagram com verba de R$ 10",
+                 "prazo": "2026-10-02",
+                 "status": "backlog"
+                }
+               ],
+               "desta_semana": [
+                {
+                 "titulo": "Publicar posts agendados de 13/10 e 15/10",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Publicar post 'Relatório recebido x decisão tomada' no Instagram",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Relatório recebido x decisão tomada",
+                 "prazo": "2026-10-15",
+                 "status": "review"
+                }
+               ],
+               "captacoes": [],
+               "captacao_preferencial": "Se precisar captar, a primeira data a considerar é 2026-10-15 (Dia Prioritário), com confirmação prévia.",
+               "ultimos_registros": [],
+               "ultimo_ritual": {
+                "titulo": "Meio da semana com conteúdo publicado e anúncio pronto para ativar",
+                "quando": "2026-10-14T18:28:34.707729+00:00"
+               },
+               "dossie_resumo": "Conta 1355694756542660 ACTIVE/habilitada/consultável, has_payment_method=false. Nenhuma campanha retornada. Gasto R$0 explicitamente retornado em todos os cinco períodos; demais métricas indisponíveis. Painel sem campanhas em 30 dias. Ausência de método não prova dívida."
+              },
+              {
+               "client_id": "5ae0705e-6f8c-40f1-b076-867fd2ab3178",
+               "nome": "Preserva Eco",
+               "dia": "quinta-feira",
+               "situacao": "confirmado",
+               "observacao": null,
+               "proxima_data_do_dia": "2026-10-15",
+               "tarefas_abertas": 40,
+               "atrasadas": [
+                {
+                 "titulo": "PEB | 11/09 | POST ESTÁTICO | EDUCAÇÃO | Checklist da primeira visita",
+                 "prazo": "2026-09-11",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "PEB | ENTREGA | VÍDEOS DA NOVA CAPTAÇÃO | Conteúdo orgânico e Meta Ads",
+                 "prazo": "2026-09-12",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Implementar ajustes no Perfil da Empresa no Google",
+                 "prazo": "2026-09-12",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Finalizar dados públicos da Página Meta",
+                 "prazo": "2026-09-15",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Meta Ads: resolver elegibilidade a visitas ao perfil e validar entrega",
+                 "prazo": "2026-09-15",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "Relatório de acompanhamento pós-publicação e mídia",
+                 "prazo": "2026-09-15",
+                 "status": "doing"
+                },
+                {
+                 "titulo": "PEB | CAMPANHA SETEMBRO | Primeira visita e retargeting",
+                 "prazo": "2026-09-19",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Finalizar edição dos vídeos captados",
+                 "prazo": "2026-09-29",
+                 "status": "backlog"
+                }
+               ],
+               "desta_semana": [
+                {
+                 "titulo": "Ajustar Google Meu Negócio",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Agendar post 'O cuidado com o espaço' assim que receber a imagem da cliente",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "Finalizar criativos com vídeos editados para anúncios",
+                 "prazo": "2026-10-16",
+                 "status": "backlog"
+                },
+                {
+                 "titulo": "PEB | 16/10 | POST ESTÁTICO | CONFIANÇA | O cuidado com o espaço",
+                 "prazo": "2026-10-16",
+                 "status": "review"
+                }
+               ],
+               "captacoes": [],
+               "captacao_preferencial": "Se precisar captar, a primeira data a considerar é 2026-10-15 (Dia Prioritário), com confirmação prévia.",
+               "ultimos_registros": [],
+               "ultimo_ritual": {
+                "titulo": "Post do feriado entregue, próximos conteúdos prontos para avançar",
+                "quando": "2026-10-14T18:25:02.684099+00:00"
+               },
+               "dossie_resumo": "Auditoria 05/10: 04/10 R$12,77/alcance 2.110; semana R$52,31/alcance 6.186. Hoje parcial R$1,49/241. KPI REACH, restante de orçamento R$26,20. Detalhes no dossiê meta_ads do projeto."
+              }
+             ],
+             "distribuicao": [
+              {
+               "dia": 1,
+               "nome": "segunda-feira",
+               "clientes": [
+                {
+                 "client_id": "d3dacbac-0da6-49eb-8322-31ae22bd79b4",
+                 "nome": "Casa Dos Assados",
+                 "situacao": "confirmado",
+                 "observacao": null
+                },
+                {
+                 "client_id": "52f2efb6-9928-4074-b8e2-bc972baf1f6a",
+                 "nome": "Rd Ar Climatização",
+                 "situacao": "confirmado",
+                 "observacao": null
+                }
+               ]
+              },
+              {
+               "dia": 2,
+               "nome": "terça-feira",
+               "clientes": [
+                {
+                 "client_id": "6a847578-ba39-44cd-be61-08e34e18e4c9",
+                 "nome": "Stop Informatica",
+                 "situacao": "provisorio",
+                 "observacao": "Provisório: continuidade operacional documentada, vigência comercial ainda a confirmar."
+                },
+                {
+                 "client_id": "e590497e-f985-47be-b8f2-493bae1da7df",
+                 "nome": "Verzelo - Jardins e Poda de árvores",
+                 "situacao": "confirmado",
+                 "observacao": null
+                }
+               ]
+              },
+              {
+               "dia": 3,
+               "nome": "quarta-feira",
+               "clientes": [
+                {
+                 "client_id": "39ebda82-637c-498b-a23a-b622f645e852",
+                 "nome": "Acerbi",
+                 "situacao": "confirmado",
+                 "observacao": "Acerbi institucional e CME são frentes do mesmo cliente."
+                },
+                {
+                 "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                 "nome": "Mirante Luz Floripa",
+                 "situacao": "confirmado",
+                 "observacao": null
+                }
+               ]
+              },
+              {
+               "dia": 4,
+               "nome": "quinta-feira",
+               "clientes": [
+                {
+                 "client_id": "5ae0705e-6f8c-40f1-b076-867fd2ab3178",
+                 "nome": "Preserva Eco",
+                 "situacao": "confirmado",
+                 "observacao": null
+                },
+                {
+                 "client_id": "bad69252-05ad-4b80-ab76-4a0e9fd3c314",
+                 "nome": "SKC TECNOLOGIA CONTABIL",
+                 "situacao": "confirmado",
+                 "observacao": null
+                },
+                {
+                 "client_id": "8801caa5-7505-44c9-9c14-e3019eace772",
+                 "nome": "Terra Flor",
+                 "situacao": "confirmado",
+                 "observacao": null
+                }
+               ]
+              },
+              {
+               "dia": 5,
+               "nome": "sexta-feira",
+               "clientes": [
+                {
+                 "client_id": "3d08338c-0c3b-453f-a64f-79a55c5711e8",
+                 "nome": "Softy Móveis",
+                 "situacao": "confirmado",
+                 "observacao": null
+                },
+                {
+                 "client_id": "3ba9540c-bc09-4026-b575-05fd0df4195f",
+                 "nome": "Thainá Rosa Advogada",
+                 "situacao": "confirmado",
+                 "observacao": null
+                }
+               ]
+              }
+             ],
+             "sem_dia_por_nao_se_aplicar": [
+              {
+               "client_id": "20c96cea-6ada-4db5-a408-25a3b0c978ba",
+               "nome": "Para Si Ótica",
+               "observacao": "Sem renovação: fora da recorrência até renovar."
+              }
+             ],
+             "como_usar": "O Dia Prioritário é o dia útil fixo de atenção estratégica de cada cliente recorrente. Não é o único dia de atendimento: monitoramento, rituais de segunda (Rota da Semana), quarta (Check do Meio da Semana) e sexta (Prova de Movimento), campanhas, entregas e urgências seguem a semana toda. ANTES do dia: leia o histórico e o dossiê do cliente, as entregas e pendências (tarefas abertas), resultados e campanhas quando houver dado e permissão; aponte oportunidades e riscos; adiante só tarefas internas já autorizadas; entregue ao CEO um resumo curto (o que mudou, o que está travado, o que perguntar ao cliente). DURANTE: destaque os clientes do dia, apoie a conversa com o histórico e as decisões, e registre o que aconteceu com aceleriq_dia_prioritario_registrar (ligação, reunião, mensagem, alinhamento ou sem necessidade de contato). Conversa não é obrigatória. DEPOIS: registre os combinados, transforme próximos passos em tarefas pelas ferramentas que já existem (aceleriq_create_task), delegue só o que é interno e autorizado e acompanhe até a verificação. Aprovação humana continua valendo onde já vale. Captações (gravação, fotos, vídeo): o Dia Prioritário é a preferência para marcar, nunca uma trava. Dependem de serviço contratado, necessidade real, planejamento, disponibilidade e confirmação prévia. Não reserve nem marque nada com o cliente sem confirmação. Nunca envie mensagem, ligue, publique, cobre ou mexa em campanha por conta do Dia Prioritário. Provisório é interno (o cliente não vê); \"não se aplica\" é sem recorrência ativa.",
+             "caminho": "/central"
+            },
+            "erro": null,
+            "decisao": "ler",
+            "motivo": null,
+            "tipo": "leitura",
+            "paginar": false,
+            "client_id_escopo": null,
+            "_req": {
+             "argumentos": {},
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "ferramenta": "aceleriq_dia_prioritario",
+             "tipo": "leitura",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "215",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Pedidos de leitura": [
+      {
+       "startTime": 1792072356535,
+       "executionIndex": 5,
+       "source": [
+        {
+         "previousNode": "Ler carteira",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 27,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "workflow_id": "ACQ-03",
+            "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+            "ambiente_chamador": "pilot",
+            "paginar": true,
+            "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|calendario",
+            "ferramenta": "aceleriq_list_editorial_calendar",
+            "argumentos": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "publication_status": "published",
+             "date_from": "2026-10-14",
+             "date_to": "2026-10-15",
+             "include_unscheduled": false,
+             "limit": 100
+            },
+            "_client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34"
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          },
+          {
+           "json": {
+            "workflow_id": "ACQ-03",
+            "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+            "ambiente_chamador": "pilot",
+            "paginar": false,
+            "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|posts",
+            "ferramenta": "aceleriq_list_social_posts",
+            "argumentos": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "limit": 25
+            },
+            "_client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34"
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Ler calendário e posts": [
+      {
+       "startTime": 1792072356562,
+       "executionIndex": 6,
+       "source": [
+        {
+         "previousNode": "Pedidos de leitura",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 7455,
+       "metadata": {
+        "subExecutionsCount": 2
+       },
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "ok": true,
+            "simulado": false,
+            "ferramenta": "aceleriq_list_editorial_calendar",
+            "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|calendario",
+            "resultado": {
+             "items": [
+              {
+               "kind": "editorial_post",
+               "calendar_date": "2026-10-14T18:00:00+00:00",
+               "period_match": "scheduled",
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "project": {
+                "id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                "name": "Mirante Luz Floripa | Conteúdo, Meta Ads e Reservas",
+                "status": "active"
+               },
+               "task_id": "3b8a03df-e18b-8acf-9780-f870dfd70049",
+               "task": {
+                "id": "3b8a03df-e18b-8acf-9780-f870dfd70049",
+                "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                "milestone_id": null,
+                "title": "Vai à Fenaostra? Reserve antes de viajar",
+                "description": "CONTEÚDO EDITORIAL | 2026-10-02\nFormato: carrossel 1080x1350\nPilar: conversão e vendas\nFase: educação e quebra de objeção\nPúblico: visitantes com viagem marcada para a Fenaostra\nObjetivo principal: gerar reservas para 6 a 12 de outubro\nGancho: Vai à Fenaostra? Reserve antes de viajar.\nCards:\n1. Fenaostra começa em 6 de outubro\n2. Serão dias de gastronomia e cultura no CentroSul\n3. A viagem fica mais simples quando a hospedagem já está resolvida\n4. Envie entrada, saída e hóspedes\n5. Receba as opções reais para aquelas datas\n6. Mirante Luz Floripa, consulta direta pelo Direct\nCTA: Mande suas datas e veja a disponibilidade\nVisual: foto real da vista ou Quarto 01, composição limpa e clima de viagem; não prometer proximidade, preço ou vaga sem consulta\nMétrica principal: reservas e propostas enviadas\nPalavra-chave: hospedagem em Floripa em outubro\nTermo regional: CentroSul, Florianópolis\nSazonalidade: extra sazonal conectado à frequência principal\nFonte interna: evento pesquisado para 06 a 12/10; validar agenda oficial antes da arte\nStatus operacional: backlog, produção pendente\nDireção fixa: somente fotos reais da Mirante Luz Floripa, identidade roxo, amarelo/dourado, off-white e tons naturais, capa forte, miolo limpo, CTA final com logo correta e sem excesso de texto.\nIdempotency scope: 2026-10-02 | Vai à Fenaostra? Reserve antes de viajar",
+                "status": "done",
+                "kanban_status": null,
+                "priority": "high",
+                "assigned_to": null,
+                "due_date": "2026-10-02",
+                "progress": null,
+                "task_order": 0,
+                "workstream": "design",
+                "delivery_type": "carousel",
+                "source": "mcp:editorial:370632ca5e1304988baabca13c140fa96120d0cebf6f0b106cf9e0674c4ee76c",
+                "created_at": "2026-09-17T15:07:42.630688+00:00",
+                "updated_at": "2026-10-14T18:05:00.055202+00:00",
+                "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34"
+               },
+               "post": {
+                "id": "e3d67dd6-67b3-4c3d-81a6-a7b3067f16dd",
+                "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                "primary_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                "title": "Vai à Fenaostra? Reserve antes de viajar",
+                "content_type": "carousel",
+                "objective": "Arte do Estúdio (Mesa do cliente). Um roteiro de viagem resolvido antes da chegada: a luz real da hospedagem conduz da data da Fenaostra à consulta de disponibilidade, sem sugerir proximidade do evento ou vaga garantida. A capa usa a data como gancho editorial e uma fotografia real da Mirante Luz Floripa como prova visual.",
+                "default_caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo Direct e consulte a disponibilidade.\n\n#hospedagememflorianopolis #hospedagemflorianopolis #hospedagememfloripa #fenaostra2026 #fenaostra",
+                "production_status": "ready",
+                "version": 4,
+                "archived_at": null,
+                "created_at": "2026-09-30T20:08:52.078952+00:00",
+                "updated_at": "2026-10-14T18:05:00.055202+00:00",
+                "media": {
+                 "root_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                 "count": 6,
+                 "files": [
+                  {
+                   "id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "position": 1,
+                   "parent_file_id": null,
+                   "file_name": "Vai à Fenaostra? Reserve antes de viajar",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1925632,
+                   "caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo Direct e consulte a disponibilidade.\n\n#hospedagememflorianopolis #hospedagemflorianopolis #hospedagememfloripa #fenaostra2026 #fenaostra",
+                   "carousel_text": null,
+                   "description": "Arte do Estúdio (Mesa do cliente). Um roteiro de viagem resolvido antes da chegada: a luz real da hospedagem conduz da data da Fenaostra à consulta de disponibilidade, sem sugerir proximidade do evento ou vaga garantida. A capa usa a data como gancho editorial e uma fotografia real da Mirante Luz Floripa como prova visual.",
+                   "agency_approval_status": "approved",
+                   "approval_status": "approved",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-09-30T20:08:48.410598+00:00"
+                  },
+                  {
+                   "id": "938c8546-f1f6-46a6-a866-c8fab8052220",
+                   "position": 2,
+                   "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "file_name": "Vai à Fenaostra? Reserve antes de viajar (2/6)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1752078,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-09-30T20:08:49.153343+00:00"
+                  },
+                  {
+                   "id": "50a4d5f9-3af4-4f9c-997a-66e9dbc36098",
+                   "position": 3,
+                   "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "file_name": "Vai à Fenaostra? Reserve antes de viajar (3/6)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1978462,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-09-30T20:08:49.759723+00:00"
+                  },
+                  {
+                   "id": "f37d2ade-46a5-4ba5-ac0c-b85cda035238",
+                   "position": 4,
+                   "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "file_name": "Vai à Fenaostra? Reserve antes de viajar (4/6)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1880545,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-09-30T20:08:50.338887+00:00"
+                  },
+                  {
+                   "id": "74f6ea86-20aa-4dab-9fd7-884d9305c2f4",
+                   "position": 5,
+                   "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "file_name": "Vai à Fenaostra? Reserve antes de viajar (5/6)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1977515,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-09-30T20:08:50.925885+00:00"
+                  },
+                  {
+                   "id": "9126467c-d7e9-42a9-8887-a3b782f78d0c",
+                   "position": 6,
+                   "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "file_name": "Vai à Fenaostra? Reserve antes de viajar (6/6)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1883064,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-09-30T20:08:51.534642+00:00"
+                  }
+                 ]
+                },
+                "publications": [
+                 {
+                  "id": "b757b365-4a62-4f68-8e8d-c18cd9dfbd5b",
+                  "post_id": "e3d67dd6-67b3-4c3d-81a6-a7b3067f16dd",
+                  "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                  "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                  "external_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+                  "file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                  "platform": "instagram",
+                  "caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo Direct e consulte a disponibilidade.\n\n#hospedagememflorianopolis #hospedagemflorianopolis #hospedagememfloripa #fenaostra2026 #fenaostra",
+                  "first_comment": null,
+                  "alt_text": null,
+                  "scheduled_at": "2026-10-14T18:00:00+00:00",
+                  "scheduled_timezone": "America/Sao_Paulo",
+                  "status": "published",
+                  "published_at": "2026-10-14T18:05:00.055202+00:00",
+                  "permalink": "https://www.instagram.com/p/Dee-vuhAHxh/",
+                  "version": 4,
+                  "delivery_mode": "manual",
+                  "created_at": "2026-09-30T20:08:52.078952+00:00",
+                  "updated_at": "2026-10-14T18:05:00.055202+00:00",
+                  "in_requested_period": true,
+                  "account": {
+                   "id": "67588009-db0f-4433-b66c-3b3b72d04504",
+                   "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                   "display_name": "Mirante Luz | Hospedagem em Floripa",
+                   "handle": "@miranteluzfloripa",
+                   "platform": "instagram",
+                   "status": "active",
+                   "created_at": "2026-08-06T16:52:40.610412+00:00",
+                   "updated_at": "2026-08-06T16:52:40.610412+00:00"
+                  },
+                  "media": {
+                   "root_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                   "count": 6,
+                   "files": [
+                    {
+                     "id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                     "position": 1,
+                     "parent_file_id": null,
+                     "file_name": "Vai à Fenaostra? Reserve antes de viajar",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1925632,
+                     "caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo Direct e consulte a disponibilidade.\n\n#hospedagememflorianopolis #hospedagemflorianopolis #hospedagememfloripa #fenaostra2026 #fenaostra",
+                     "carousel_text": null,
+                     "description": "Arte do Estúdio (Mesa do cliente). Um roteiro de viagem resolvido antes da chegada: a luz real da hospedagem conduz da data da Fenaostra à consulta de disponibilidade, sem sugerir proximidade do evento ou vaga garantida. A capa usa a data como gancho editorial e uma fotografia real da Mirante Luz Floripa como prova visual.",
+                     "agency_approval_status": "approved",
+                     "approval_status": "approved",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-09-30T20:08:48.410598+00:00"
+                    },
+                    {
+                     "id": "938c8546-f1f6-46a6-a866-c8fab8052220",
+                     "position": 2,
+                     "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                     "file_name": "Vai à Fenaostra? Reserve antes de viajar (2/6)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1752078,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-09-30T20:08:49.153343+00:00"
+                    },
+                    {
+                     "id": "50a4d5f9-3af4-4f9c-997a-66e9dbc36098",
+                     "position": 3,
+                     "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                     "file_name": "Vai à Fenaostra? Reserve antes de viajar (3/6)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1978462,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-09-30T20:08:49.759723+00:00"
+                    },
+                    {
+                     "id": "f37d2ade-46a5-4ba5-ac0c-b85cda035238",
+                     "position": 4,
+                     "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                     "file_name": "Vai à Fenaostra? Reserve antes de viajar (4/6)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1880545,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-09-30T20:08:50.338887+00:00"
+                    },
+                    {
+                     "id": "74f6ea86-20aa-4dab-9fd7-884d9305c2f4",
+                     "position": 5,
+                     "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                     "file_name": "Vai à Fenaostra? Reserve antes de viajar (5/6)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1977515,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-09-30T20:08:50.925885+00:00"
+                    },
+                    {
+                     "id": "9126467c-d7e9-42a9-8887-a3b782f78d0c",
+                     "position": 6,
+                     "parent_file_id": "735a55dd-60d1-439d-8e52-917dd533d443",
+                     "file_name": "Vai à Fenaostra? Reserve antes de viajar (6/6)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1883064,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-09-30T20:08:51.534642+00:00"
+                    }
+                   ]
+                  }
+                 }
+                ]
+               }
+              },
+              {
+               "kind": "editorial_post",
+               "calendar_date": "2026-10-15T12:00:00+00:00",
+               "period_match": "scheduled",
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "project": {
+                "id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                "name": "Mirante Luz Floripa | Conteúdo, Meta Ads e Reservas",
+                "status": "active"
+               },
+               "task_id": "d4c1a7ed-3141-8089-bd10-a1f76b9a9c60",
+               "task": {
+                "id": "d4c1a7ed-3141-8089-bd10-a1f76b9a9c60",
+                "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                "milestone_id": null,
+                "title": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+                "description": "Tema: Por que consultar a diária com datas, hóspedes e quarto desejado.\nFormato: Carrossel\nTipo: conteúdo principal\nFase 2: educação, diferenciais, funcionamento, localização e quebra de objeções\nPilar: Transparência comercial e conversão\nPúblico: Viajantes comparando valores de hospedagem antes de escolher onde ficar.\nObjetivo: Conscientização e educação\nMétrica principal: Salvamentos e conversas iniciadas pelo WhatsApp\nPalavra-chave: valor de hospedagem em Florianópolis\nTermo regional: Florianópolis\nTipo e framework: Educativo (conteúdo de valor) · AIDA\n\nGancho: A diária depende da sua viagem\n\nResumo: Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.\n\nRoteiro dos cards:\nCard 1 (capa, atenção): A diária depende da sua viagem\n  Ilustração: Foto real de um quarto da pousada, enquadramento aberto; manter o mesmo ambiente nas lâminas seguintes.\n  Estilo: Capa com foto em destaque, título serifado sobre painel marfim e detalhe dourado fino.\nCard 2 (interesse, problema): Só a data não basta\nO número de hóspedes também ajuda a consultar uma opção adequada.\n  Ilustração: Detalhe real do mesmo quarto; recorte aproximado sem adicionar objetos ou recursos inexistentes.\n  Estilo: Imagem em faixa superior e texto em cartão azul-marinho conectado por linha dourada.\nCard 3 (interesse, contexto): O quarto também importa\nConte sua prioridade para a equipe verificar as opções disponíveis para o período.\n  Ilustração: Mesmo quarto real, agora em enquadramento lateral que evidencie o espaço existente.\n  Estilo: Composição assimétrica, foto à esquerda e bloco de texto claro à direita.\nCard 4 (desejo, orientação): Compare com dados reais\nAssim, você avalia valores e disponibilidade para a estadia que está planejando.\n  Ilustração: Mesmo ambiente real em plano mais aberto, com luz natural e sem elementos gráficos sobre a cama.\n  Estilo: Fotografia ocupando a lâmina; pequeno painel roxo escuro para a informação principal.\nCard 5 (ação, CTA final): Peça sua consulta\nEnvie datas e hóspedes pelo WhatsApp.\n  Ilustração: Foto real do quarto em enquadramento aberto, com logo oficial discreta no rodapé.\n  Estilo: Fechamento limpo em azul-marinho, CTA dourado e contraste alto.\n\nCTA: Consulte sua estadia pelo WhatsApp.\n\nLegenda (copy):\nNa hora de comparar hospedagens em Florianópolis, uma diária sem contexto não confirma quanto ficará a sua estadia.\n\nInforme as datas, quantas pessoas viajam e o tipo de quarto que procura. Assim, a equipe pode consultar os valores e a disponibilidade para o seu caso. A Mirante Luz é uma pousada; as opções devem ser confirmadas para cada período.\n\nConsulte sua estadia pelo WhatsApp.\n\nOrigem: Mesa do cliente, proposta 7f869275-1cdb-41aa-acdd-5d04dd1306af, item 2.",
+                "status": "done",
+                "kanban_status": null,
+                "priority": "medium",
+                "assigned_to": null,
+                "due_date": "2026-10-06",
+                "progress": null,
+                "task_order": 0,
+                "workstream": "design",
+                "delivery_type": "carousel",
+                "source": "mcp:editorial:8dda8b2c95da7d7010810dbedff3242a6f4cf7ef4ad0a2bf7d9ca688f82c5cd8",
+                "created_at": "2026-09-28T17:00:20.478269+00:00",
+                "updated_at": "2026-10-15T12:05:00.068017+00:00",
+                "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34"
+               },
+               "post": {
+                "id": "2fc7788b-3b4e-4b08-acf8-7c84da461a3b",
+                "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                "primary_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                "title": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+                "content_type": "carousel",
+                "objective": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+                "default_caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+                "production_status": "ready",
+                "version": 4,
+                "archived_at": null,
+                "created_at": "2026-10-05T18:38:54.569663+00:00",
+                "updated_at": "2026-10-15T12:05:00.068017+00:00",
+                "media": {
+                 "root_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                 "count": 5,
+                 "files": [
+                  {
+                   "id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                   "position": 1,
+                   "parent_file_id": null,
+                   "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 2012658,
+                   "caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+                   "carousel_text": null,
+                   "description": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+                   "agency_approval_status": "approved",
+                   "approval_status": "approved",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-10-05T18:38:51.057879+00:00"
+                  },
+                  {
+                   "id": "085cfdea-8e96-43a4-966a-dccb86cd5a39",
+                   "position": 2,
+                   "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                   "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (2/5)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1794651,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-10-05T18:38:51.756514+00:00"
+                  },
+                  {
+                   "id": "6fc8affd-5c6d-4db8-baa4-1b36119767e1",
+                   "position": 3,
+                   "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                   "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (3/5)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1917490,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-10-05T18:38:52.543205+00:00"
+                  },
+                  {
+                   "id": "f854b1d6-4560-4ca6-8efe-145a7f3bc02a",
+                   "position": 4,
+                   "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                   "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (4/5)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1923848,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-10-05T18:38:53.351095+00:00"
+                  },
+                  {
+                   "id": "3b344a16-2f26-4955-a369-a7e126aad887",
+                   "position": 5,
+                   "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                   "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (5/5)",
+                   "file_type": "carrossel",
+                   "mime_type": "image/png",
+                   "extension": "png",
+                   "size_bytes": 1722555,
+                   "caption": null,
+                   "carousel_text": null,
+                   "description": null,
+                   "agency_approval_status": "approved",
+                   "approval_status": "none",
+                   "visibility": "approval",
+                   "status": "ready",
+                   "version": 1,
+                   "created_at": "2026-10-05T18:38:53.929451+00:00"
+                  }
+                 ]
+                },
+                "publications": [
+                 {
+                  "id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+                  "post_id": "2fc7788b-3b4e-4b08-acf8-7c84da461a3b",
+                  "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                  "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+                  "external_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+                  "file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                  "platform": "instagram",
+                  "caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+                  "first_comment": null,
+                  "alt_text": null,
+                  "scheduled_at": "2026-10-15T12:00:00+00:00",
+                  "scheduled_timezone": "America/Sao_Paulo",
+                  "status": "published",
+                  "published_at": "2026-10-15T12:05:00.068017+00:00",
+                  "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+                  "version": 4,
+                  "delivery_mode": "manual",
+                  "created_at": "2026-10-05T18:38:54.569663+00:00",
+                  "updated_at": "2026-10-15T12:05:00.068017+00:00",
+                  "in_requested_period": true,
+                  "account": {
+                   "id": "67588009-db0f-4433-b66c-3b3b72d04504",
+                   "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+                   "display_name": "Mirante Luz | Hospedagem em Floripa",
+                   "handle": "@miranteluzfloripa",
+                   "platform": "instagram",
+                   "status": "active",
+                   "created_at": "2026-08-06T16:52:40.610412+00:00",
+                   "updated_at": "2026-08-06T16:52:40.610412+00:00"
+                  },
+                  "media": {
+                   "root_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                   "count": 5,
+                   "files": [
+                    {
+                     "id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                     "position": 1,
+                     "parent_file_id": null,
+                     "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 2012658,
+                     "caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+                     "carousel_text": null,
+                     "description": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+                     "agency_approval_status": "approved",
+                     "approval_status": "approved",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-10-05T18:38:51.057879+00:00"
+                    },
+                    {
+                     "id": "085cfdea-8e96-43a4-966a-dccb86cd5a39",
+                     "position": 2,
+                     "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                     "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (2/5)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1794651,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-10-05T18:38:51.756514+00:00"
+                    },
+                    {
+                     "id": "6fc8affd-5c6d-4db8-baa4-1b36119767e1",
+                     "position": 3,
+                     "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                     "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (3/5)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1917490,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-10-05T18:38:52.543205+00:00"
+                    },
+                    {
+                     "id": "f854b1d6-4560-4ca6-8efe-145a7f3bc02a",
+                     "position": 4,
+                     "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                     "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (4/5)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1923848,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-10-05T18:38:53.351095+00:00"
+                    },
+                    {
+                     "id": "3b344a16-2f26-4955-a369-a7e126aad887",
+                     "position": 5,
+                     "parent_file_id": "054c4ebc-f8f3-4884-8a74-93d231bdf520",
+                     "file_name": "Por que consultar a diária com datas, hóspedes e quarto desejado. (5/5)",
+                     "file_type": "carrossel",
+                     "mime_type": "image/png",
+                     "extension": "png",
+                     "size_bytes": 1722555,
+                     "caption": null,
+                     "carousel_text": null,
+                     "description": null,
+                     "agency_approval_status": "approved",
+                     "approval_status": "none",
+                     "visibility": "approval",
+                     "status": "ready",
+                     "version": 1,
+                     "created_at": "2026-10-05T18:38:53.929451+00:00"
+                    }
+                   ]
+                  }
+                 }
+                ]
+               }
+              }
+             ],
+             "total": 2,
+             "limit": 100,
+             "offset": 0,
+             "has_more": false,
+             "next_offset": null,
+             "filters": {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "project_id": null,
+              "date_from": "2026-10-14",
+              "date_to": "2026-10-15",
+              "format": null,
+              "status": null,
+              "production_status": null,
+              "publication_status": "published",
+              "include_unscheduled": false
+             },
+             "semantics": {
+              "primary_source": "active_editorial_posts_plus_unlinked_publishable_tasks",
+              "date_fields": {
+               "editorial_task": "tasks.due_date",
+               "editorial_post": "editorial_publications.scheduled_at"
+              },
+              "deduplication": "active_editorial_post_wins_over_linked_task",
+              "unscheduled_posts_within_period_filter": "excluded",
+              "excludes": [
+               "client_request:*",
+               "non_publishable_delivery_types"
+              ],
+              "media": "safe_metadata_only",
+              "writes": "none"
+             }
+            },
+            "erro": null,
+            "decisao": "ler",
+            "motivo": null,
+            "tipo": "leitura",
+            "paginar": true,
+            "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+            "_req": {
+             "argumentos": {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "publication_status": "published",
+              "date_from": "2026-10-14",
+              "date_to": "2026-10-15",
+              "include_unscheduled": false,
+              "limit": 100,
+              "offset": 0
+             },
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "ferramenta": "aceleriq_list_editorial_calendar",
+             "tipo": "leitura",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "216",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          },
+          {
+           "json": {
+            "ok": true,
+            "simulado": false,
+            "ferramenta": "aceleriq_list_social_posts",
+            "ref": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34|posts",
+            "resultado": {
+             "posts": [
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17882845287528810",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedage",
+               "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+               "posted_at": "2026-10-15T12:03:00+00:00",
+               "like_count": 1,
+               "comments_count": 0,
+               "reach": 3,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 2,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18077523953554809",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo D",
+               "permalink": "https://www.instagram.com/p/Dee-vuhAHxh/",
+               "posted_at": "2026-10-14T18:03:06+00:00",
+               "like_count": 3,
+               "comments_count": 0,
+               "reach": 26,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 3,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18169031185477827",
+               "media_type": "IMAGE",
+               "caption": "Já tem as datas da viagem? Esse é o primeiro passo para consultar sua hospedagem em Florianópolis.\n\nEnvie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A equipe da Mirante Luz Floripa confirma os valores e a disponibilidade para o período informado, sem presumir opções antes da consulta.\n\nConsulte valores pelo WhatsApp.\n\n#hospedagemfloripa #hospedagememflorianopolis #pousadafloripa #hospedagememfloripa #pousadaemflorianopolis",
+               "permalink": "https://www.instagram.com/p/DePGZpPFk6m/",
+               "posted_at": "2026-10-08T14:02:00+00:00",
+               "like_count": 4,
+               "comments_count": 0,
+               "reach": 36,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 5,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18111013328332145",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Centro, Ponte ou praia: o melhor ponto de partida depende do que você veio fazer em Floripa.\n\nSe a viagem tem um evento, comece pelo local e pelas datas da agenda. Quer conhecer a região da Ponte Hercílio Luz? Inclua essa prioridade no planejamento. E, se a praia é o foco, pense nos deslocamentos entre os lugares que pretende visitar.\n\nNa Mirante Luz Floripa, você pode consultar as opções de hospedagem para suas datas e o número de hóspedes. Salve este post para planejar e conte nos comentários:",
+               "permalink": "https://www.instagram.com/p/DeJ2DaulSkV/",
+               "posted_at": "2026-10-06T13:03:02+00:00",
+               "like_count": 3,
+               "comments_count": 0,
+               "reach": 47,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 3,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18194674543404012",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "A mesma vista, três momentos. E cada um tem seu jeito de mostrar Florianópolis.\n\nNa janela da Mirante Luz Floripa, a luz muda da manhã ao anoitecer e transforma a paisagem diante da Ponte Hercílio Luz. As fotos são reais e feitas do mesmo ponto.\n\nImportante: essa vista está disponível apenas em quartos específicos e depende da disponibilidade.\n\nSalve para comparar e comente: manhã, tarde ou noite?\n\n#vistaparaaponte #miranteluzfloripa #pontahercilioluz #vistafloripa #hospedagemfloripa",
+               "permalink": "https://www.instagram.com/p/Dd_i38FluVO/",
+               "posted_at": "2026-10-02T13:03:01+00:00",
+               "like_count": 3,
+               "comments_count": 0,
+               "reach": 77,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 4,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17896484178672527",
+               "media_type": "IMAGE",
+               "caption": "Evento confirmado. Agora, organize as noites da viagem.\n\nAntes de consultar hospedagem em Florianópolis, tenha em mãos as datas de entrada e saída e o número de hóspedes. Assim, a equipe pode verificar valores e disponibilidade para o período que você precisa.\n\nO café da manhã está incluso, com composição variável. Consulte suas datas pelo WhatsApp.\n\n#hospedagememflorianopolis #hospedagemparaeventos #miranteluzfloripa #pousadaemflorianopolis #turismoemflorianopolis",
+               "permalink": "https://www.instagram.com/p/Dd6gCqqDgbF/",
+               "posted_at": "2026-09-30T14:02:01+00:00",
+               "like_count": 4,
+               "comments_count": 0,
+               "reach": 59,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 5,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18589600939065906",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "A viagem para a Fenaostra já tem data. E as noites em Floripa, já estão no plano?\n\nA edição de 2026 está prevista para 6 a 12 de outubro, no CentroSul. Vale organizar a hospedagem junto com o evento e consultar as opções para as datas da sua viagem.\n\nPara verificar valores e disponibilidade na Mirante Luz Floripa, envie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A confirmação depende das datas e do quarto.\n\n#hospedagemparafenostra #hospedagememflorianopolis #hospedagemflor",
+               "permalink": "https://www.instagram.com/p/Dd30fY9lh37/",
+               "posted_at": "2026-09-29T13:03:00+00:00",
+               "like_count": 7,
+               "comments_count": 1,
+               "reach": 277,
+               "saved": 0,
+               "shares": 2,
+               "total_interactions": 12,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17892332061679603",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Vai a um evento no CentroSul, em Florianópolis? Então tem uma parte da viagem que vale resolver antes: a hospedagem.\n\nCom a data do seu compromisso definida, escolha também as noites da sua estadia. Isso evita deixar uma decisão importante para a última hora.\n\nNa Mirante Luz Floripa, a consulta é feita direto com a pousada e com opções reais para as datas informadas.\n\nPara consultar, envie pelo Direct:\n\n📅 Entrada\n📅 Saída\n👥 Número de hóspedes\n\nA partir dessas informações, verificamos a disponibil",
+               "permalink": "https://www.instagram.com/p/Ddjl8lVlvaI/",
+               "posted_at": "2026-09-21T16:31:02+00:00",
+               "like_count": 6,
+               "comments_count": 0,
+               "reach": 74,
+               "saved": 0,
+               "shares": 1,
+               "total_interactions": 8,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18110035163036665",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Quer consultar hospedagem em Floripa sem ficar indo e voltando no Direct?\nEntão manda esses 4 dados logo de cara e agiliza tudo:\n\n• data de entrada\n• data de saída\n• quantidade de hóspedes\n• sua prioridade, vista, sacada, espaço de trabalho ou sem preferência\n\nSe algum quarto chamou sua atenção, pode mandar o número também.\n\nMensagem pronta pra copiar:\n\nOlá, quero consultar de [data] a [data] para [número] hóspedes. Minha prioridade é [vista, sacada, espaço de trabalho ou sem preferência]. Vi o ",
+               "permalink": "https://www.instagram.com/p/Dc3arAOlBwp/",
+               "posted_at": "2026-09-04T12:46:03+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 110,
+               "saved": 1,
+               "shares": 2,
+               "total_interactions": 9,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18164141395461972",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Aqui você não reserva por render.\n\nNa Mirante Luz, as fotos mostram o que realmente existe.\nQuartos reais, vista real, informações claras e sem surpresa na hora da reserva.\n\nTem quarto com vista para o mar e para a Ponte Hercílio Luz.\nTem quarto com sacada.\nTem quarto sem vista.\nE isso tudo é informado antes, do jeito certo.\n\nO Quarto 01, por exemplo, tem banheiro compartilhado.\nOs Quartos 06 e 07 não possuem vista.\nCada opção tem suas características, e a ideia é simples, te ajudar a escolher c",
+               "permalink": "https://www.instagram.com/p/Dcv56MroAx1/",
+               "posted_at": "2026-09-01T14:45:06+00:00",
+               "like_count": 3,
+               "comments_count": 0,
+               "reach": 118,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 5,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18103832732235639",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Feriado de 7 de setembro em Floripa e a real é simples, quem deixa a hospedagem pra depois complica a viagem antes mesmo de sair de casa.\n\nSe você já está olhando Florianópolis para os dias 05 a 07/09, o melhor caminho é consultar do jeito certo:\n\ndata de entrada\n\ndata de saída\n\nnúmero de hóspedes\n\nse quer quarto com vista, com sacada ou uma opção mais prática\n\nNa Mirante Luz Floripa, cada opção tem suas características reais.\nO Quarto 01, por exemplo, tem configuração confirmada para 2 hóspedes",
+               "permalink": "https://www.instagram.com/p/Dci61xCoM9x/",
+               "posted_at": "2026-08-27T13:43:03+00:00",
+               "like_count": 6,
+               "comments_count": 0,
+               "reach": 164,
+               "saved": 0,
+               "shares": 1,
+               "total_interactions": 8,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18058001168548172",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Vista, sacada ou praticidade, no fim a melhor hospedagem é a que combina com o seu jeito de viajar.\n\nNa Mirante Luz Floripa, cada quarto atende uma prioridade diferente:\n\n• Quer sacada e vista, consulte os Quartos 01, 02 e 03\n• Quer vista, ar-condicionado e TV, consulte os Quartos 04 e 05\n• Se vista não é prioridade, os Quartos 06 e 07 entregam praticidade com ar e TV\n• Precisa trabalhar durante a estadia, o Quarto 01 conta com espaço exclusivo e Wi-Fi\n\nAqui a escolha é mais clara, sem enrolação",
+               "permalink": "https://www.instagram.com/p/DcdxBMhoJ-1/",
+               "posted_at": "2026-08-25T13:41:02+00:00",
+               "like_count": 3,
+               "comments_count": 0,
+               "reach": 89,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 5,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18111017795048030",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "",
+               "permalink": "https://www.instagram.com/p/DcUBjFxoKbQ/",
+               "posted_at": "2026-08-21T18:53:03+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 87,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 6,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18399865699091969",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "A ponte que faz parte da paisagem da Mirante Luz completou 100 anos em 2026, e continua sendo um dos cenários mais marcantes de Florianópolis.\n\nHospedar-se por aqui é viver Floripa com mais calma, com vista real para a Ponte Hercílio Luz e uma experiência que mistura história, charme e bons momentos.\n\nSe você procura uma pousada com vista para a Ponte Hercílio Luz, esse carrossel é pra salvar e enviar para quem toparia essa viagem com você.\n\nNa Mirante Luz Floripa, a ponte faz parte do cenário, ",
+               "permalink": "https://www.instagram.com/p/Db_sp10j7MZ/",
+               "posted_at": "2026-08-13T21:24:41+00:00",
+               "like_count": 4,
+               "comments_count": 0,
+               "reach": 91,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 6,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17998970919001780",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Procurando onde ficar em Florianópolis com vista para a Ponte Hercílio Luz? Então olha o Quarto 01 do Mirante Luz Floripa. 🌉\n\nUm quarto real, pensado para quem quer conforto, praticidade e uma vista que já faz parte da viagem.\n\nNo Quarto 01 você encontra:\n\n🛏️ 2 camas\n👥 Acomodação para até 2 hóspedes\n🌊 Sacada com vista para o mar e para a Ponte Hercílio Luz\n❄️ Ar-condicionado\n📶 Wi-Fi\n📺 TV\n🧊 Frigobar\n💻 Espaço de trabalho\n🚿 Banheiro completo compartilhado\n\nÉ uma boa opção para quem vem a Floripa a ",
+               "permalink": "https://www.instagram.com/p/DbvTjdwEc-8/",
+               "posted_at": "2026-08-07T12:37:30+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 112,
+               "saved": 1,
+               "shares": 0,
+               "total_interactions": 8,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17932757919357677",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Procurando uma pousada em Florianópolis com boa localização, conforto e opções de quartos para diferentes tipos de viagem?\n\nNo Mirante Luz Floripa, você encontra quartos reais, ambientes acolhedores e opções com ou sem vista para o mar e para a Ponte Hercílio Luz.\n\nTem quarto para casal, viagem solo, estadia rápida ou para quem vem a Floripa a trabalho. Algumas opções também contam com ar-condicionado, TV, Wi-Fi e frigobar.\n\nA ideia é simples: você escolhe o quarto que mais combina com a sua via",
+               "permalink": "https://www.instagram.com/p/DbWPymDjzJ2/",
+               "posted_at": "2026-07-28T19:03:36+00:00",
+               "like_count": 7,
+               "comments_count": 4,
+               "reach": 224,
+               "saved": 0,
+               "shares": 2,
+               "total_interactions": 16,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17894589921560458",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Floripa não acaba quando o sol se põe.\n\nA Ponte Hercílio Luz acende, a cidade ganha outro clima, a Beira-Mar fica ainda mais bonita e a noite convida para caminhar, jantar sem pressa e aproveitar tudo por outro ângulo.\n\nE no Mirante Luz Floripa, a experiência continua quando você volta para o quarto e encontra conforto, boa localização e uma vista que faz parte da viagem.\n\nPorque Floripa também se vive à noite.\n\n📍 Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo di",
+               "permalink": "https://www.instagram.com/p/DbLve62kasX/",
+               "posted_at": "2026-07-24T17:08:54+00:00",
+               "like_count": 2,
+               "comments_count": 0,
+               "reach": 98,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 3,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18024322058676620",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Floripa fora da temporada tem outro ritmo.\n\nMenos trânsito, mais calma para circular, fins de tarde mais tranquilos e mais tempo para aproveitar a cidade de verdade.\n\nTambém é uma ótima fase para quem vem a trabalho, participa de eventos ou só quer alguns dias longe da correria.\n\nE quando a hospedagem une conforto, boa localização e uma vista especial, tudo fica ainda mais leve.\n\nNo Mirante Luz Floripa, você fica perto da Ponte Hercílio Luz e vive a cidade no seu tempo.\n\n📍 Florianópolis/SC\n🌉 Pró",
+               "permalink": "https://www.instagram.com/p/Da54i7AjyYc/",
+               "posted_at": "2026-07-17T18:41:45+00:00",
+               "like_count": 2,
+               "comments_count": 0,
+               "reach": 165,
+               "saved": 1,
+               "shares": 1,
+               "total_interactions": 5,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18128610553635016",
+               "media_type": "VIDEO",
+               "caption": "Quem disse que Floripa é só verão?\n\nNo inverno, a cidade ganha outro ritmo. As praias ficam mais tranquilas, o pôr do sol continua incrível, os cafés ficam ainda mais aconchegantes e os passeios podem ser aproveitados com muito mais calma.\n\nÉ a época perfeita para conhecer os bairros históricos, experimentar a gastronomia local, caminhar pela Beira-Mar, admirar a Ponte Hercílio Luz e descobrir paisagens que continuam lindas em qualquer estação.\n\nE para aproveitar tudo isso, escolha uma hospedage",
+               "permalink": "https://www.instagram.com/reel/Da0hl8-RSwE/",
+               "posted_at": "2026-07-15T16:46:47+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 254,
+               "saved": 2,
+               "shares": 3,
+               "total_interactions": 10,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17869580763567428",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Ficar bem hospedado muda a forma de viver Floripa.\n\nQuando a localização ajuda, sobra mais tempo para curtir a cidade, trabalhar com calma, aproveitar a orla e transformar momentos simples em lembranças boas.\n\nNo Mirante Luz Floripa, você encontra vista, conforto e praticidade perto da Ponte Hercílio Luz.\n\nPorque a hospedagem certa não é só onde você dorme.\n\nÉ parte da viagem.\n\n📍 Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo direct ou link da bio\n\nSalve este pos",
+               "permalink": "https://www.instagram.com/p/Davkef5FBmb/",
+               "posted_at": "2026-07-13T18:33:59+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 75,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 5,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18100060961465886",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Floripa combina com pausa.\n\nTem dias que a melhor parte da viagem é acordar sem pressa, caminhar pela cidade, ver o pôr do sol e voltar para um lugar acolhedor no fim do dia.\n\nNo Mirante Luz Floripa, a vista, o conforto e a localização fazem parte da experiência.\n\nPorque viajar bem também é saber onde descansar.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo link da bio ou direct\n\nSalve esse post para lembrar da sua próxima pausa em Floripa.\n\n#MiranteLuzFloripa",
+               "permalink": "https://www.instagram.com/p/DagjdwGD96Z/",
+               "posted_at": "2026-07-07T22:36:32+00:00",
+               "like_count": 7,
+               "comments_count": 1,
+               "reach": 76,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 8,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18133059214592380",
+               "media_type": "VIDEO",
+               "caption": "Se eu fosse viajar para Florianópolis pela primeira vez, esses lugares entrariam fácil no roteiro. ✨\n\nPraia do Santinho, Barra da Lagoa, Lagoinha do Leste, Santo Antônio de Lisboa e Ponta das Canas.\n\nFloripa tem praia, trilha, cultura, gastronomia, vista bonita e aquele clima que faz a viagem render de verdade.\n\nE para viver tudo isso com mais praticidade, boa localização e conforto, sua estadia pode começar no Mirante Luz Floripa.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte dis",
+               "permalink": "https://www.instagram.com/reel/DaQWRPFRT--/",
+               "posted_at": "2026-07-01T15:33:57+00:00",
+               "like_count": 10,
+               "comments_count": 1,
+               "reach": 149,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 13,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18381644947162512",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Baixa temporada em Floripa também tem seu charme.\n\nA cidade fica mais leve, os caminhos ficam mais tranquilos e cada momento parece render melhor.\n\nÉ a época perfeita para caminhar sem pressa, aproveitar a vista da Ponte Hercílio Luz, curtir um fim de tarde bonito e viver Floripa em um ritmo mais gostoso.\n\nNo Mirante Luz Floripa, você une localização, vista e conforto para aproveitar a cidade com mais praticidade, seja em uma viagem rápida, a trabalho, em casal ou só para respirar um pouco.\n\nPor",
+               "permalink": "https://www.instagram.com/p/DaBXc3Ej975/",
+               "posted_at": "2026-06-25T19:55:06+00:00",
+               "like_count": 6,
+               "comments_count": 0,
+               "reach": null,
+               "saved": null,
+               "shares": null,
+               "total_interactions": null,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18054179372527893",
+               "media_type": "VIDEO",
+               "caption": "Floripa tem um jeito próprio de fazer a gente desacelerar.\n\nA cidade, a vista, a Ponte Hercílio Luz e aquele clima que mistura movimento com pausa.\n\nNo Mirante Luz Floripa, você fica perto de tudo isso e vive a cidade com mais conforto, praticidade e leveza.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo link da bio ou direct\n\nSalve esse vídeo para lembrar de Floripa na sua próxima viagem.\n\n#MiranteLuzFloripa #Floripa #Florianópolis #PonteHercílioLuz #Hospedage",
+               "permalink": "https://www.instagram.com/reel/DZ_HsNxPILt/",
+               "posted_at": "2026-06-24T22:59:26+00:00",
+               "like_count": 6,
+               "comments_count": 0,
+               "reach": null,
+               "saved": null,
+               "shares": null,
+               "total_interactions": null,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18209029801343919",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Antes de reservar sua estadia em Floripa, tem alguns detalhes que fazem toda diferença.\n\nLocalização, conforto, vista e praticidade não são só “extras”. São partes da experiência.\n\nQuando você fica perto da Ponte Hercílio Luz, ganha tempo, vive melhor a cidade e ainda tem um dos cenários mais bonitos de Floripa por perto.\n\nNo Mirante Luz Floripa, sua estadia começa com vista, charme e uma localização que facilita tudo, seja para passeio, trabalho, evento ou uma pausa rápida na cidade.\n\n📍Florianó",
+               "permalink": "https://www.instagram.com/p/DZ8OKQjD_wk/",
+               "posted_at": "2026-06-23T19:57:43+00:00",
+               "like_count": 7,
+               "comments_count": 0,
+               "reach": null,
+               "saved": null,
+               "shares": null,
+               "total_interactions": null,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              }
+             ],
+             "top_posts": [
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "17932757919357677",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Procurando uma pousada em Florianópolis com boa localização, conforto e opções de quartos para diferentes tipos de viagem?\n\nNo Mirante Luz Floripa, você encontra quartos reais, ambientes acolhedores e opções com ou sem vista para o mar e para a Ponte Hercílio Luz.\n\nTem quarto para casal, viagem solo, estadia rápida ou para quem vem a Floripa a trabalho. Algumas opções também contam com ar-condicionado, TV, Wi-Fi e frigobar.\n\nA ideia é simples: você escolhe o quarto que mais combina com a sua via",
+               "permalink": "https://www.instagram.com/p/DbWPymDjzJ2/",
+               "posted_at": "2026-07-28T19:03:36+00:00",
+               "like_count": 7,
+               "comments_count": 4,
+               "reach": 224,
+               "saved": 0,
+               "shares": 2,
+               "total_interactions": 16,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18133059214592380",
+               "media_type": "VIDEO",
+               "caption": "Se eu fosse viajar para Florianópolis pela primeira vez, esses lugares entrariam fácil no roteiro. ✨\n\nPraia do Santinho, Barra da Lagoa, Lagoinha do Leste, Santo Antônio de Lisboa e Ponta das Canas.\n\nFloripa tem praia, trilha, cultura, gastronomia, vista bonita e aquele clima que faz a viagem render de verdade.\n\nE para viver tudo isso com mais praticidade, boa localização e conforto, sua estadia pode começar no Mirante Luz Floripa.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte dis",
+               "permalink": "https://www.instagram.com/reel/DaQWRPFRT--/",
+               "posted_at": "2026-07-01T15:33:57+00:00",
+               "like_count": 10,
+               "comments_count": 1,
+               "reach": 149,
+               "saved": 0,
+               "shares": 0,
+               "total_interactions": 13,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18589600939065906",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "A viagem para a Fenaostra já tem data. E as noites em Floripa, já estão no plano?\n\nA edição de 2026 está prevista para 6 a 12 de outubro, no CentroSul. Vale organizar a hospedagem junto com o evento e consultar as opções para as datas da sua viagem.\n\nPara verificar valores e disponibilidade na Mirante Luz Floripa, envie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A confirmação depende das datas e do quarto.\n\n#hospedagemparafenostra #hospedagememflorianopolis #hospedagemflor",
+               "permalink": "https://www.instagram.com/p/Dd30fY9lh37/",
+               "posted_at": "2026-09-29T13:03:00+00:00",
+               "like_count": 7,
+               "comments_count": 1,
+               "reach": 277,
+               "saved": 0,
+               "shares": 2,
+               "total_interactions": 12,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18128610553635016",
+               "media_type": "VIDEO",
+               "caption": "Quem disse que Floripa é só verão?\n\nNo inverno, a cidade ganha outro ritmo. As praias ficam mais tranquilas, o pôr do sol continua incrível, os cafés ficam ainda mais aconchegantes e os passeios podem ser aproveitados com muito mais calma.\n\nÉ a época perfeita para conhecer os bairros históricos, experimentar a gastronomia local, caminhar pela Beira-Mar, admirar a Ponte Hercílio Luz e descobrir paisagens que continuam lindas em qualquer estação.\n\nE para aproveitar tudo isso, escolha uma hospedage",
+               "permalink": "https://www.instagram.com/reel/Da0hl8-RSwE/",
+               "posted_at": "2026-07-15T16:46:47+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 254,
+               "saved": 2,
+               "shares": 3,
+               "total_interactions": 10,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              },
+              {
+               "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+               "media_id": "18110035163036665",
+               "media_type": "CAROUSEL_ALBUM",
+               "caption": "Quer consultar hospedagem em Floripa sem ficar indo e voltando no Direct?\nEntão manda esses 4 dados logo de cara e agiliza tudo:\n\n• data de entrada\n• data de saída\n• quantidade de hóspedes\n• sua prioridade, vista, sacada, espaço de trabalho ou sem preferência\n\nSe algum quarto chamou sua atenção, pode mandar o número também.\n\nMensagem pronta pra copiar:\n\nOlá, quero consultar de [data] a [data] para [número] hóspedes. Minha prioridade é [vista, sacada, espaço de trabalho ou sem preferência]. Vi o ",
+               "permalink": "https://www.instagram.com/p/Dc3arAOlBwp/",
+               "posted_at": "2026-09-04T12:46:03+00:00",
+               "like_count": 5,
+               "comments_count": 0,
+               "reach": 110,
+               "saved": 1,
+               "shares": 2,
+               "total_interactions": 9,
+               "captured_at": "2026-10-15T13:16:00.066599+00:00"
+              }
+             ]
+            },
+            "erro": null,
+            "decisao": "ler",
+            "motivo": null,
+            "tipo": "leitura",
+            "paginar": false,
+            "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+            "_req": {
+             "argumentos": {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "limit": 25
+             },
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "ferramenta": "aceleriq_list_social_posts",
+             "tipo": "leitura",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 1
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "217",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Detectar e validar": [
+      {
+       "startTime": 1792072364018,
+       "executionIndex": 7,
+       "source": [
+        {
+         "previousNode": "Ler calendário e posts",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 46,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "tipo": "controle",
+            "falhas": [],
+            "inicializou": false,
+            "historico_ignorado": 0,
+            "para_captura": 1,
+            "pg": [
+             3,
+             "{\"desde\":\"2026-10-15T13:52:32.448Z\"}",
+             "[]",
+             "pilot"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          },
+          {
+           "json": {
+            "tipo": "captura",
+            "pub": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+             "projeto": "Mirante Luz Floripa | Conteúdo, Meta Ads e Reservas",
+             "post_id": "2fc7788b-3b4e-4b08-acf8-7c84da461a3b",
+             "titulo": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+             "objetivo": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+             "legenda": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+             "content_type": "carousel",
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "status": "published",
+             "platform": "instagram",
+             "external_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+             "conta": {
+              "id": "67588009-db0f-4433-b66c-3b3b72d04504",
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "display_name": "Mirante Luz | Hospedagem em Floripa",
+              "handle": "@miranteluzfloripa",
+              "platform": "instagram",
+              "status": "active",
+              "created_at": "2026-08-06T16:52:40.610412+00:00",
+              "updated_at": "2026-08-06T16:52:40.610412+00:00"
+             },
+             "published_at": "2026-10-15T12:05:00.068017+00:00",
+             "scheduled_at": "2026-10-15T12:00:00+00:00",
+             "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/"
+            },
+            "validacao": {
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "estado": "valida",
+             "motivo": null,
+             "platform_media_id": "17882845287528810",
+             "prova": {
+              "media_id": "17882845287528810",
+              "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+              "posted_at": "2026-10-15T12:03:00+00:00",
+              "captured_at": "2026-10-15T13:16:00.066599+00:00",
+              "media_type": "CAROUSEL_ALBUM"
+             }
+            },
+            "posts": [
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17882845287528810",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedage",
+              "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+              "posted_at": "2026-10-15T12:03:00+00:00",
+              "like_count": 1,
+              "comments_count": 0,
+              "reach": 3,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 2,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18077523953554809",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo D",
+              "permalink": "https://www.instagram.com/p/Dee-vuhAHxh/",
+              "posted_at": "2026-10-14T18:03:06+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 26,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 3,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18169031185477827",
+              "media_type": "IMAGE",
+              "caption": "Já tem as datas da viagem? Esse é o primeiro passo para consultar sua hospedagem em Florianópolis.\n\nEnvie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A equipe da Mirante Luz Floripa confirma os valores e a disponibilidade para o período informado, sem presumir opções antes da consulta.\n\nConsulte valores pelo WhatsApp.\n\n#hospedagemfloripa #hospedagememflorianopolis #pousadafloripa #hospedagememfloripa #pousadaemflorianopolis",
+              "permalink": "https://www.instagram.com/p/DePGZpPFk6m/",
+              "posted_at": "2026-10-08T14:02:00+00:00",
+              "like_count": 4,
+              "comments_count": 0,
+              "reach": 36,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18111013328332145",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Centro, Ponte ou praia: o melhor ponto de partida depende do que você veio fazer em Floripa.\n\nSe a viagem tem um evento, comece pelo local e pelas datas da agenda. Quer conhecer a região da Ponte Hercílio Luz? Inclua essa prioridade no planejamento. E, se a praia é o foco, pense nos deslocamentos entre os lugares que pretende visitar.\n\nNa Mirante Luz Floripa, você pode consultar as opções de hospedagem para suas datas e o número de hóspedes. Salve este post para planejar e conte nos comentários:",
+              "permalink": "https://www.instagram.com/p/DeJ2DaulSkV/",
+              "posted_at": "2026-10-06T13:03:02+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 47,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 3,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18194674543404012",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "A mesma vista, três momentos. E cada um tem seu jeito de mostrar Florianópolis.\n\nNa janela da Mirante Luz Floripa, a luz muda da manhã ao anoitecer e transforma a paisagem diante da Ponte Hercílio Luz. As fotos são reais e feitas do mesmo ponto.\n\nImportante: essa vista está disponível apenas em quartos específicos e depende da disponibilidade.\n\nSalve para comparar e comente: manhã, tarde ou noite?\n\n#vistaparaaponte #miranteluzfloripa #pontahercilioluz #vistafloripa #hospedagemfloripa",
+              "permalink": "https://www.instagram.com/p/Dd_i38FluVO/",
+              "posted_at": "2026-10-02T13:03:01+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 77,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 4,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17896484178672527",
+              "media_type": "IMAGE",
+              "caption": "Evento confirmado. Agora, organize as noites da viagem.\n\nAntes de consultar hospedagem em Florianópolis, tenha em mãos as datas de entrada e saída e o número de hóspedes. Assim, a equipe pode verificar valores e disponibilidade para o período que você precisa.\n\nO café da manhã está incluso, com composição variável. Consulte suas datas pelo WhatsApp.\n\n#hospedagememflorianopolis #hospedagemparaeventos #miranteluzfloripa #pousadaemflorianopolis #turismoemflorianopolis",
+              "permalink": "https://www.instagram.com/p/Dd6gCqqDgbF/",
+              "posted_at": "2026-09-30T14:02:01+00:00",
+              "like_count": 4,
+              "comments_count": 0,
+              "reach": 59,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18589600939065906",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "A viagem para a Fenaostra já tem data. E as noites em Floripa, já estão no plano?\n\nA edição de 2026 está prevista para 6 a 12 de outubro, no CentroSul. Vale organizar a hospedagem junto com o evento e consultar as opções para as datas da sua viagem.\n\nPara verificar valores e disponibilidade na Mirante Luz Floripa, envie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A confirmação depende das datas e do quarto.\n\n#hospedagemparafenostra #hospedagememflorianopolis #hospedagemflor",
+              "permalink": "https://www.instagram.com/p/Dd30fY9lh37/",
+              "posted_at": "2026-09-29T13:03:00+00:00",
+              "like_count": 7,
+              "comments_count": 1,
+              "reach": 277,
+              "saved": 0,
+              "shares": 2,
+              "total_interactions": 12,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17892332061679603",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Vai a um evento no CentroSul, em Florianópolis? Então tem uma parte da viagem que vale resolver antes: a hospedagem.\n\nCom a data do seu compromisso definida, escolha também as noites da sua estadia. Isso evita deixar uma decisão importante para a última hora.\n\nNa Mirante Luz Floripa, a consulta é feita direto com a pousada e com opções reais para as datas informadas.\n\nPara consultar, envie pelo Direct:\n\n📅 Entrada\n📅 Saída\n👥 Número de hóspedes\n\nA partir dessas informações, verificamos a disponibil",
+              "permalink": "https://www.instagram.com/p/Ddjl8lVlvaI/",
+              "posted_at": "2026-09-21T16:31:02+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": 74,
+              "saved": 0,
+              "shares": 1,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18110035163036665",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Quer consultar hospedagem em Floripa sem ficar indo e voltando no Direct?\nEntão manda esses 4 dados logo de cara e agiliza tudo:\n\n• data de entrada\n• data de saída\n• quantidade de hóspedes\n• sua prioridade, vista, sacada, espaço de trabalho ou sem preferência\n\nSe algum quarto chamou sua atenção, pode mandar o número também.\n\nMensagem pronta pra copiar:\n\nOlá, quero consultar de [data] a [data] para [número] hóspedes. Minha prioridade é [vista, sacada, espaço de trabalho ou sem preferência]. Vi o ",
+              "permalink": "https://www.instagram.com/p/Dc3arAOlBwp/",
+              "posted_at": "2026-09-04T12:46:03+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 110,
+              "saved": 1,
+              "shares": 2,
+              "total_interactions": 9,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18164141395461972",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Aqui você não reserva por render.\n\nNa Mirante Luz, as fotos mostram o que realmente existe.\nQuartos reais, vista real, informações claras e sem surpresa na hora da reserva.\n\nTem quarto com vista para o mar e para a Ponte Hercílio Luz.\nTem quarto com sacada.\nTem quarto sem vista.\nE isso tudo é informado antes, do jeito certo.\n\nO Quarto 01, por exemplo, tem banheiro compartilhado.\nOs Quartos 06 e 07 não possuem vista.\nCada opção tem suas características, e a ideia é simples, te ajudar a escolher c",
+              "permalink": "https://www.instagram.com/p/Dcv56MroAx1/",
+              "posted_at": "2026-09-01T14:45:06+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 118,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18103832732235639",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Feriado de 7 de setembro em Floripa e a real é simples, quem deixa a hospedagem pra depois complica a viagem antes mesmo de sair de casa.\n\nSe você já está olhando Florianópolis para os dias 05 a 07/09, o melhor caminho é consultar do jeito certo:\n\ndata de entrada\n\ndata de saída\n\nnúmero de hóspedes\n\nse quer quarto com vista, com sacada ou uma opção mais prática\n\nNa Mirante Luz Floripa, cada opção tem suas características reais.\nO Quarto 01, por exemplo, tem configuração confirmada para 2 hóspedes",
+              "permalink": "https://www.instagram.com/p/Dci61xCoM9x/",
+              "posted_at": "2026-08-27T13:43:03+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": 164,
+              "saved": 0,
+              "shares": 1,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18058001168548172",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Vista, sacada ou praticidade, no fim a melhor hospedagem é a que combina com o seu jeito de viajar.\n\nNa Mirante Luz Floripa, cada quarto atende uma prioridade diferente:\n\n• Quer sacada e vista, consulte os Quartos 01, 02 e 03\n• Quer vista, ar-condicionado e TV, consulte os Quartos 04 e 05\n• Se vista não é prioridade, os Quartos 06 e 07 entregam praticidade com ar e TV\n• Precisa trabalhar durante a estadia, o Quarto 01 conta com espaço exclusivo e Wi-Fi\n\nAqui a escolha é mais clara, sem enrolação",
+              "permalink": "https://www.instagram.com/p/DcdxBMhoJ-1/",
+              "posted_at": "2026-08-25T13:41:02+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 89,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18111017795048030",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "",
+              "permalink": "https://www.instagram.com/p/DcUBjFxoKbQ/",
+              "posted_at": "2026-08-21T18:53:03+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 87,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 6,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18399865699091969",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "A ponte que faz parte da paisagem da Mirante Luz completou 100 anos em 2026, e continua sendo um dos cenários mais marcantes de Florianópolis.\n\nHospedar-se por aqui é viver Floripa com mais calma, com vista real para a Ponte Hercílio Luz e uma experiência que mistura história, charme e bons momentos.\n\nSe você procura uma pousada com vista para a Ponte Hercílio Luz, esse carrossel é pra salvar e enviar para quem toparia essa viagem com você.\n\nNa Mirante Luz Floripa, a ponte faz parte do cenário, ",
+              "permalink": "https://www.instagram.com/p/Db_sp10j7MZ/",
+              "posted_at": "2026-08-13T21:24:41+00:00",
+              "like_count": 4,
+              "comments_count": 0,
+              "reach": 91,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 6,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17998970919001780",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Procurando onde ficar em Florianópolis com vista para a Ponte Hercílio Luz? Então olha o Quarto 01 do Mirante Luz Floripa. 🌉\n\nUm quarto real, pensado para quem quer conforto, praticidade e uma vista que já faz parte da viagem.\n\nNo Quarto 01 você encontra:\n\n🛏️ 2 camas\n👥 Acomodação para até 2 hóspedes\n🌊 Sacada com vista para o mar e para a Ponte Hercílio Luz\n❄️ Ar-condicionado\n📶 Wi-Fi\n📺 TV\n🧊 Frigobar\n💻 Espaço de trabalho\n🚿 Banheiro completo compartilhado\n\nÉ uma boa opção para quem vem a Floripa a ",
+              "permalink": "https://www.instagram.com/p/DbvTjdwEc-8/",
+              "posted_at": "2026-08-07T12:37:30+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 112,
+              "saved": 1,
+              "shares": 0,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17932757919357677",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Procurando uma pousada em Florianópolis com boa localização, conforto e opções de quartos para diferentes tipos de viagem?\n\nNo Mirante Luz Floripa, você encontra quartos reais, ambientes acolhedores e opções com ou sem vista para o mar e para a Ponte Hercílio Luz.\n\nTem quarto para casal, viagem solo, estadia rápida ou para quem vem a Floripa a trabalho. Algumas opções também contam com ar-condicionado, TV, Wi-Fi e frigobar.\n\nA ideia é simples: você escolhe o quarto que mais combina com a sua via",
+              "permalink": "https://www.instagram.com/p/DbWPymDjzJ2/",
+              "posted_at": "2026-07-28T19:03:36+00:00",
+              "like_count": 7,
+              "comments_count": 4,
+              "reach": 224,
+              "saved": 0,
+              "shares": 2,
+              "total_interactions": 16,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17894589921560458",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Floripa não acaba quando o sol se põe.\n\nA Ponte Hercílio Luz acende, a cidade ganha outro clima, a Beira-Mar fica ainda mais bonita e a noite convida para caminhar, jantar sem pressa e aproveitar tudo por outro ângulo.\n\nE no Mirante Luz Floripa, a experiência continua quando você volta para o quarto e encontra conforto, boa localização e uma vista que faz parte da viagem.\n\nPorque Floripa também se vive à noite.\n\n📍 Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo di",
+              "permalink": "https://www.instagram.com/p/DbLve62kasX/",
+              "posted_at": "2026-07-24T17:08:54+00:00",
+              "like_count": 2,
+              "comments_count": 0,
+              "reach": 98,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 3,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18024322058676620",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Floripa fora da temporada tem outro ritmo.\n\nMenos trânsito, mais calma para circular, fins de tarde mais tranquilos e mais tempo para aproveitar a cidade de verdade.\n\nTambém é uma ótima fase para quem vem a trabalho, participa de eventos ou só quer alguns dias longe da correria.\n\nE quando a hospedagem une conforto, boa localização e uma vista especial, tudo fica ainda mais leve.\n\nNo Mirante Luz Floripa, você fica perto da Ponte Hercílio Luz e vive a cidade no seu tempo.\n\n📍 Florianópolis/SC\n🌉 Pró",
+              "permalink": "https://www.instagram.com/p/Da54i7AjyYc/",
+              "posted_at": "2026-07-17T18:41:45+00:00",
+              "like_count": 2,
+              "comments_count": 0,
+              "reach": 165,
+              "saved": 1,
+              "shares": 1,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18128610553635016",
+              "media_type": "VIDEO",
+              "caption": "Quem disse que Floripa é só verão?\n\nNo inverno, a cidade ganha outro ritmo. As praias ficam mais tranquilas, o pôr do sol continua incrível, os cafés ficam ainda mais aconchegantes e os passeios podem ser aproveitados com muito mais calma.\n\nÉ a época perfeita para conhecer os bairros históricos, experimentar a gastronomia local, caminhar pela Beira-Mar, admirar a Ponte Hercílio Luz e descobrir paisagens que continuam lindas em qualquer estação.\n\nE para aproveitar tudo isso, escolha uma hospedage",
+              "permalink": "https://www.instagram.com/reel/Da0hl8-RSwE/",
+              "posted_at": "2026-07-15T16:46:47+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 254,
+              "saved": 2,
+              "shares": 3,
+              "total_interactions": 10,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17869580763567428",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Ficar bem hospedado muda a forma de viver Floripa.\n\nQuando a localização ajuda, sobra mais tempo para curtir a cidade, trabalhar com calma, aproveitar a orla e transformar momentos simples em lembranças boas.\n\nNo Mirante Luz Floripa, você encontra vista, conforto e praticidade perto da Ponte Hercílio Luz.\n\nPorque a hospedagem certa não é só onde você dorme.\n\nÉ parte da viagem.\n\n📍 Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo direct ou link da bio\n\nSalve este pos",
+              "permalink": "https://www.instagram.com/p/Davkef5FBmb/",
+              "posted_at": "2026-07-13T18:33:59+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 75,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18100060961465886",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Floripa combina com pausa.\n\nTem dias que a melhor parte da viagem é acordar sem pressa, caminhar pela cidade, ver o pôr do sol e voltar para um lugar acolhedor no fim do dia.\n\nNo Mirante Luz Floripa, a vista, o conforto e a localização fazem parte da experiência.\n\nPorque viajar bem também é saber onde descansar.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo link da bio ou direct\n\nSalve esse post para lembrar da sua próxima pausa em Floripa.\n\n#MiranteLuzFloripa",
+              "permalink": "https://www.instagram.com/p/DagjdwGD96Z/",
+              "posted_at": "2026-07-07T22:36:32+00:00",
+              "like_count": 7,
+              "comments_count": 1,
+              "reach": 76,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18133059214592380",
+              "media_type": "VIDEO",
+              "caption": "Se eu fosse viajar para Florianópolis pela primeira vez, esses lugares entrariam fácil no roteiro. ✨\n\nPraia do Santinho, Barra da Lagoa, Lagoinha do Leste, Santo Antônio de Lisboa e Ponta das Canas.\n\nFloripa tem praia, trilha, cultura, gastronomia, vista bonita e aquele clima que faz a viagem render de verdade.\n\nE para viver tudo isso com mais praticidade, boa localização e conforto, sua estadia pode começar no Mirante Luz Floripa.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte dis",
+              "permalink": "https://www.instagram.com/reel/DaQWRPFRT--/",
+              "posted_at": "2026-07-01T15:33:57+00:00",
+              "like_count": 10,
+              "comments_count": 1,
+              "reach": 149,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 13,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18381644947162512",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Baixa temporada em Floripa também tem seu charme.\n\nA cidade fica mais leve, os caminhos ficam mais tranquilos e cada momento parece render melhor.\n\nÉ a época perfeita para caminhar sem pressa, aproveitar a vista da Ponte Hercílio Luz, curtir um fim de tarde bonito e viver Floripa em um ritmo mais gostoso.\n\nNo Mirante Luz Floripa, você une localização, vista e conforto para aproveitar a cidade com mais praticidade, seja em uma viagem rápida, a trabalho, em casal ou só para respirar um pouco.\n\nPor",
+              "permalink": "https://www.instagram.com/p/DaBXc3Ej975/",
+              "posted_at": "2026-06-25T19:55:06+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": null,
+              "saved": null,
+              "shares": null,
+              "total_interactions": null,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18054179372527893",
+              "media_type": "VIDEO",
+              "caption": "Floripa tem um jeito próprio de fazer a gente desacelerar.\n\nA cidade, a vista, a Ponte Hercílio Luz e aquele clima que mistura movimento com pausa.\n\nNo Mirante Luz Floripa, você fica perto de tudo isso e vive a cidade com mais conforto, praticidade e leveza.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo link da bio ou direct\n\nSalve esse vídeo para lembrar de Floripa na sua próxima viagem.\n\n#MiranteLuzFloripa #Floripa #Florianópolis #PonteHercílioLuz #Hospedage",
+              "permalink": "https://www.instagram.com/reel/DZ_HsNxPILt/",
+              "posted_at": "2026-06-24T22:59:26+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": null,
+              "saved": null,
+              "shares": null,
+              "total_interactions": null,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18209029801343919",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Antes de reservar sua estadia em Floripa, tem alguns detalhes que fazem toda diferença.\n\nLocalização, conforto, vista e praticidade não são só “extras”. São partes da experiência.\n\nQuando você fica perto da Ponte Hercílio Luz, ganha tempo, vive melhor a cidade e ainda tem um dos cenários mais bonitos de Floripa por perto.\n\nNo Mirante Luz Floripa, sua estadia começa com vista, charme e uma localização que facilita tudo, seja para passeio, trabalho, evento ou uma pausa rápida na cidade.\n\n📍Florianó",
+              "permalink": "https://www.instagram.com/p/DZ8OKQjD_wk/",
+              "posted_at": "2026-06-23T19:57:43+00:00",
+              "like_count": 7,
+              "comments_count": 0,
+              "reach": null,
+              "saved": null,
+              "shares": null,
+              "total_interactions": null,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             }
+            ]
+           },
+           "pairedItem": {
+            "item": 1
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Separar controle e capturas": [
+      {
+       "startTime": 1792072364064,
+       "executionIndex": 8,
+       "source": [
+        {
+         "previousNode": "Detectar e validar",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 7,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "tipo": "controle",
+            "falhas": [],
+            "inicializou": false,
+            "historico_ignorado": 0,
+            "para_captura": 1,
+            "pg": [
+             3,
+             "{\"desde\":\"2026-10-15T13:52:32.448Z\"}",
+             "[]",
+             "pilot"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ],
+         [
+          {
+           "json": {
+            "tipo": "captura",
+            "pub": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+             "projeto": "Mirante Luz Floripa | Conteúdo, Meta Ads e Reservas",
+             "post_id": "2fc7788b-3b4e-4b08-acf8-7c84da461a3b",
+             "titulo": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+             "objetivo": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+             "legenda": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+             "content_type": "carousel",
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "status": "published",
+             "platform": "instagram",
+             "external_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+             "conta": {
+              "id": "67588009-db0f-4433-b66c-3b3b72d04504",
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "display_name": "Mirante Luz | Hospedagem em Floripa",
+              "handle": "@miranteluzfloripa",
+              "platform": "instagram",
+              "status": "active",
+              "created_at": "2026-08-06T16:52:40.610412+00:00",
+              "updated_at": "2026-08-06T16:52:40.610412+00:00"
+             },
+             "published_at": "2026-10-15T12:05:00.068017+00:00",
+             "scheduled_at": "2026-10-15T12:00:00+00:00",
+             "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/"
+            },
+            "validacao": {
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "estado": "valida",
+             "motivo": null,
+             "platform_media_id": "17882845287528810",
+             "prova": {
+              "media_id": "17882845287528810",
+              "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+              "posted_at": "2026-10-15T12:03:00+00:00",
+              "captured_at": "2026-10-15T13:16:00.066599+00:00",
+              "media_type": "CAROUSEL_ALBUM"
+             }
+            },
+            "posts": [
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17882845287528810",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedage",
+              "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+              "posted_at": "2026-10-15T12:03:00+00:00",
+              "like_count": 1,
+              "comments_count": 0,
+              "reach": 3,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 2,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18077523953554809",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Vai à Fenaostra? Resolva a hospedagem antes de pegar a estrada.\n\nA programação começa em 6 de outubro, no CentroSul, em Florianópolis. Com a estadia encaminhada, você pode planejar o restante da viagem com mais tranquilidade. Confira a agenda oficial do evento antes de viajar.\n\nPara consultar a Mirante Luz Floripa, envie pelo Direct as datas de entrada e saída e o número de hóspedes. A equipe retorna com as opções, os valores e a disponibilidade para o período informado.\n\nMande suas datas pelo D",
+              "permalink": "https://www.instagram.com/p/Dee-vuhAHxh/",
+              "posted_at": "2026-10-14T18:03:06+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 26,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 3,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18169031185477827",
+              "media_type": "IMAGE",
+              "caption": "Já tem as datas da viagem? Esse é o primeiro passo para consultar sua hospedagem em Florianópolis.\n\nEnvie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A equipe da Mirante Luz Floripa confirma os valores e a disponibilidade para o período informado, sem presumir opções antes da consulta.\n\nConsulte valores pelo WhatsApp.\n\n#hospedagemfloripa #hospedagememflorianopolis #pousadafloripa #hospedagememfloripa #pousadaemflorianopolis",
+              "permalink": "https://www.instagram.com/p/DePGZpPFk6m/",
+              "posted_at": "2026-10-08T14:02:00+00:00",
+              "like_count": 4,
+              "comments_count": 0,
+              "reach": 36,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18111013328332145",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Centro, Ponte ou praia: o melhor ponto de partida depende do que você veio fazer em Floripa.\n\nSe a viagem tem um evento, comece pelo local e pelas datas da agenda. Quer conhecer a região da Ponte Hercílio Luz? Inclua essa prioridade no planejamento. E, se a praia é o foco, pense nos deslocamentos entre os lugares que pretende visitar.\n\nNa Mirante Luz Floripa, você pode consultar as opções de hospedagem para suas datas e o número de hóspedes. Salve este post para planejar e conte nos comentários:",
+              "permalink": "https://www.instagram.com/p/DeJ2DaulSkV/",
+              "posted_at": "2026-10-06T13:03:02+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 47,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 3,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18194674543404012",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "A mesma vista, três momentos. E cada um tem seu jeito de mostrar Florianópolis.\n\nNa janela da Mirante Luz Floripa, a luz muda da manhã ao anoitecer e transforma a paisagem diante da Ponte Hercílio Luz. As fotos são reais e feitas do mesmo ponto.\n\nImportante: essa vista está disponível apenas em quartos específicos e depende da disponibilidade.\n\nSalve para comparar e comente: manhã, tarde ou noite?\n\n#vistaparaaponte #miranteluzfloripa #pontahercilioluz #vistafloripa #hospedagemfloripa",
+              "permalink": "https://www.instagram.com/p/Dd_i38FluVO/",
+              "posted_at": "2026-10-02T13:03:01+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 77,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 4,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17896484178672527",
+              "media_type": "IMAGE",
+              "caption": "Evento confirmado. Agora, organize as noites da viagem.\n\nAntes de consultar hospedagem em Florianópolis, tenha em mãos as datas de entrada e saída e o número de hóspedes. Assim, a equipe pode verificar valores e disponibilidade para o período que você precisa.\n\nO café da manhã está incluso, com composição variável. Consulte suas datas pelo WhatsApp.\n\n#hospedagememflorianopolis #hospedagemparaeventos #miranteluzfloripa #pousadaemflorianopolis #turismoemflorianopolis",
+              "permalink": "https://www.instagram.com/p/Dd6gCqqDgbF/",
+              "posted_at": "2026-09-30T14:02:01+00:00",
+              "like_count": 4,
+              "comments_count": 0,
+              "reach": 59,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18589600939065906",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "A viagem para a Fenaostra já tem data. E as noites em Floripa, já estão no plano?\n\nA edição de 2026 está prevista para 6 a 12 de outubro, no CentroSul. Vale organizar a hospedagem junto com o evento e consultar as opções para as datas da sua viagem.\n\nPara verificar valores e disponibilidade na Mirante Luz Floripa, envie pelo WhatsApp as datas de entrada e saída e o número de hóspedes. A confirmação depende das datas e do quarto.\n\n#hospedagemparafenostra #hospedagememflorianopolis #hospedagemflor",
+              "permalink": "https://www.instagram.com/p/Dd30fY9lh37/",
+              "posted_at": "2026-09-29T13:03:00+00:00",
+              "like_count": 7,
+              "comments_count": 1,
+              "reach": 277,
+              "saved": 0,
+              "shares": 2,
+              "total_interactions": 12,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17892332061679603",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Vai a um evento no CentroSul, em Florianópolis? Então tem uma parte da viagem que vale resolver antes: a hospedagem.\n\nCom a data do seu compromisso definida, escolha também as noites da sua estadia. Isso evita deixar uma decisão importante para a última hora.\n\nNa Mirante Luz Floripa, a consulta é feita direto com a pousada e com opções reais para as datas informadas.\n\nPara consultar, envie pelo Direct:\n\n📅 Entrada\n📅 Saída\n👥 Número de hóspedes\n\nA partir dessas informações, verificamos a disponibil",
+              "permalink": "https://www.instagram.com/p/Ddjl8lVlvaI/",
+              "posted_at": "2026-09-21T16:31:02+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": 74,
+              "saved": 0,
+              "shares": 1,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18110035163036665",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Quer consultar hospedagem em Floripa sem ficar indo e voltando no Direct?\nEntão manda esses 4 dados logo de cara e agiliza tudo:\n\n• data de entrada\n• data de saída\n• quantidade de hóspedes\n• sua prioridade, vista, sacada, espaço de trabalho ou sem preferência\n\nSe algum quarto chamou sua atenção, pode mandar o número também.\n\nMensagem pronta pra copiar:\n\nOlá, quero consultar de [data] a [data] para [número] hóspedes. Minha prioridade é [vista, sacada, espaço de trabalho ou sem preferência]. Vi o ",
+              "permalink": "https://www.instagram.com/p/Dc3arAOlBwp/",
+              "posted_at": "2026-09-04T12:46:03+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 110,
+              "saved": 1,
+              "shares": 2,
+              "total_interactions": 9,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18164141395461972",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Aqui você não reserva por render.\n\nNa Mirante Luz, as fotos mostram o que realmente existe.\nQuartos reais, vista real, informações claras e sem surpresa na hora da reserva.\n\nTem quarto com vista para o mar e para a Ponte Hercílio Luz.\nTem quarto com sacada.\nTem quarto sem vista.\nE isso tudo é informado antes, do jeito certo.\n\nO Quarto 01, por exemplo, tem banheiro compartilhado.\nOs Quartos 06 e 07 não possuem vista.\nCada opção tem suas características, e a ideia é simples, te ajudar a escolher c",
+              "permalink": "https://www.instagram.com/p/Dcv56MroAx1/",
+              "posted_at": "2026-09-01T14:45:06+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 118,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18103832732235639",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Feriado de 7 de setembro em Floripa e a real é simples, quem deixa a hospedagem pra depois complica a viagem antes mesmo de sair de casa.\n\nSe você já está olhando Florianópolis para os dias 05 a 07/09, o melhor caminho é consultar do jeito certo:\n\ndata de entrada\n\ndata de saída\n\nnúmero de hóspedes\n\nse quer quarto com vista, com sacada ou uma opção mais prática\n\nNa Mirante Luz Floripa, cada opção tem suas características reais.\nO Quarto 01, por exemplo, tem configuração confirmada para 2 hóspedes",
+              "permalink": "https://www.instagram.com/p/Dci61xCoM9x/",
+              "posted_at": "2026-08-27T13:43:03+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": 164,
+              "saved": 0,
+              "shares": 1,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18058001168548172",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Vista, sacada ou praticidade, no fim a melhor hospedagem é a que combina com o seu jeito de viajar.\n\nNa Mirante Luz Floripa, cada quarto atende uma prioridade diferente:\n\n• Quer sacada e vista, consulte os Quartos 01, 02 e 03\n• Quer vista, ar-condicionado e TV, consulte os Quartos 04 e 05\n• Se vista não é prioridade, os Quartos 06 e 07 entregam praticidade com ar e TV\n• Precisa trabalhar durante a estadia, o Quarto 01 conta com espaço exclusivo e Wi-Fi\n\nAqui a escolha é mais clara, sem enrolação",
+              "permalink": "https://www.instagram.com/p/DcdxBMhoJ-1/",
+              "posted_at": "2026-08-25T13:41:02+00:00",
+              "like_count": 3,
+              "comments_count": 0,
+              "reach": 89,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18111017795048030",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "",
+              "permalink": "https://www.instagram.com/p/DcUBjFxoKbQ/",
+              "posted_at": "2026-08-21T18:53:03+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 87,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 6,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18399865699091969",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "A ponte que faz parte da paisagem da Mirante Luz completou 100 anos em 2026, e continua sendo um dos cenários mais marcantes de Florianópolis.\n\nHospedar-se por aqui é viver Floripa com mais calma, com vista real para a Ponte Hercílio Luz e uma experiência que mistura história, charme e bons momentos.\n\nSe você procura uma pousada com vista para a Ponte Hercílio Luz, esse carrossel é pra salvar e enviar para quem toparia essa viagem com você.\n\nNa Mirante Luz Floripa, a ponte faz parte do cenário, ",
+              "permalink": "https://www.instagram.com/p/Db_sp10j7MZ/",
+              "posted_at": "2026-08-13T21:24:41+00:00",
+              "like_count": 4,
+              "comments_count": 0,
+              "reach": 91,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 6,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17998970919001780",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Procurando onde ficar em Florianópolis com vista para a Ponte Hercílio Luz? Então olha o Quarto 01 do Mirante Luz Floripa. 🌉\n\nUm quarto real, pensado para quem quer conforto, praticidade e uma vista que já faz parte da viagem.\n\nNo Quarto 01 você encontra:\n\n🛏️ 2 camas\n👥 Acomodação para até 2 hóspedes\n🌊 Sacada com vista para o mar e para a Ponte Hercílio Luz\n❄️ Ar-condicionado\n📶 Wi-Fi\n📺 TV\n🧊 Frigobar\n💻 Espaço de trabalho\n🚿 Banheiro completo compartilhado\n\nÉ uma boa opção para quem vem a Floripa a ",
+              "permalink": "https://www.instagram.com/p/DbvTjdwEc-8/",
+              "posted_at": "2026-08-07T12:37:30+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 112,
+              "saved": 1,
+              "shares": 0,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17932757919357677",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Procurando uma pousada em Florianópolis com boa localização, conforto e opções de quartos para diferentes tipos de viagem?\n\nNo Mirante Luz Floripa, você encontra quartos reais, ambientes acolhedores e opções com ou sem vista para o mar e para a Ponte Hercílio Luz.\n\nTem quarto para casal, viagem solo, estadia rápida ou para quem vem a Floripa a trabalho. Algumas opções também contam com ar-condicionado, TV, Wi-Fi e frigobar.\n\nA ideia é simples: você escolhe o quarto que mais combina com a sua via",
+              "permalink": "https://www.instagram.com/p/DbWPymDjzJ2/",
+              "posted_at": "2026-07-28T19:03:36+00:00",
+              "like_count": 7,
+              "comments_count": 4,
+              "reach": 224,
+              "saved": 0,
+              "shares": 2,
+              "total_interactions": 16,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17894589921560458",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Floripa não acaba quando o sol se põe.\n\nA Ponte Hercílio Luz acende, a cidade ganha outro clima, a Beira-Mar fica ainda mais bonita e a noite convida para caminhar, jantar sem pressa e aproveitar tudo por outro ângulo.\n\nE no Mirante Luz Floripa, a experiência continua quando você volta para o quarto e encontra conforto, boa localização e uma vista que faz parte da viagem.\n\nPorque Floripa também se vive à noite.\n\n📍 Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo di",
+              "permalink": "https://www.instagram.com/p/DbLve62kasX/",
+              "posted_at": "2026-07-24T17:08:54+00:00",
+              "like_count": 2,
+              "comments_count": 0,
+              "reach": 98,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 3,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18024322058676620",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Floripa fora da temporada tem outro ritmo.\n\nMenos trânsito, mais calma para circular, fins de tarde mais tranquilos e mais tempo para aproveitar a cidade de verdade.\n\nTambém é uma ótima fase para quem vem a trabalho, participa de eventos ou só quer alguns dias longe da correria.\n\nE quando a hospedagem une conforto, boa localização e uma vista especial, tudo fica ainda mais leve.\n\nNo Mirante Luz Floripa, você fica perto da Ponte Hercílio Luz e vive a cidade no seu tempo.\n\n📍 Florianópolis/SC\n🌉 Pró",
+              "permalink": "https://www.instagram.com/p/Da54i7AjyYc/",
+              "posted_at": "2026-07-17T18:41:45+00:00",
+              "like_count": 2,
+              "comments_count": 0,
+              "reach": 165,
+              "saved": 1,
+              "shares": 1,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18128610553635016",
+              "media_type": "VIDEO",
+              "caption": "Quem disse que Floripa é só verão?\n\nNo inverno, a cidade ganha outro ritmo. As praias ficam mais tranquilas, o pôr do sol continua incrível, os cafés ficam ainda mais aconchegantes e os passeios podem ser aproveitados com muito mais calma.\n\nÉ a época perfeita para conhecer os bairros históricos, experimentar a gastronomia local, caminhar pela Beira-Mar, admirar a Ponte Hercílio Luz e descobrir paisagens que continuam lindas em qualquer estação.\n\nE para aproveitar tudo isso, escolha uma hospedage",
+              "permalink": "https://www.instagram.com/reel/Da0hl8-RSwE/",
+              "posted_at": "2026-07-15T16:46:47+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 254,
+              "saved": 2,
+              "shares": 3,
+              "total_interactions": 10,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "17869580763567428",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Ficar bem hospedado muda a forma de viver Floripa.\n\nQuando a localização ajuda, sobra mais tempo para curtir a cidade, trabalhar com calma, aproveitar a orla e transformar momentos simples em lembranças boas.\n\nNo Mirante Luz Floripa, você encontra vista, conforto e praticidade perto da Ponte Hercílio Luz.\n\nPorque a hospedagem certa não é só onde você dorme.\n\nÉ parte da viagem.\n\n📍 Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo direct ou link da bio\n\nSalve este pos",
+              "permalink": "https://www.instagram.com/p/Davkef5FBmb/",
+              "posted_at": "2026-07-13T18:33:59+00:00",
+              "like_count": 5,
+              "comments_count": 0,
+              "reach": 75,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 5,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18100060961465886",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Floripa combina com pausa.\n\nTem dias que a melhor parte da viagem é acordar sem pressa, caminhar pela cidade, ver o pôr do sol e voltar para um lugar acolhedor no fim do dia.\n\nNo Mirante Luz Floripa, a vista, o conforto e a localização fazem parte da experiência.\n\nPorque viajar bem também é saber onde descansar.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo link da bio ou direct\n\nSalve esse post para lembrar da sua próxima pausa em Floripa.\n\n#MiranteLuzFloripa",
+              "permalink": "https://www.instagram.com/p/DagjdwGD96Z/",
+              "posted_at": "2026-07-07T22:36:32+00:00",
+              "like_count": 7,
+              "comments_count": 1,
+              "reach": 76,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 8,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18133059214592380",
+              "media_type": "VIDEO",
+              "caption": "Se eu fosse viajar para Florianópolis pela primeira vez, esses lugares entrariam fácil no roteiro. ✨\n\nPraia do Santinho, Barra da Lagoa, Lagoinha do Leste, Santo Antônio de Lisboa e Ponta das Canas.\n\nFloripa tem praia, trilha, cultura, gastronomia, vista bonita e aquele clima que faz a viagem render de verdade.\n\nE para viver tudo isso com mais praticidade, boa localização e conforto, sua estadia pode começar no Mirante Luz Floripa.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte dis",
+              "permalink": "https://www.instagram.com/reel/DaQWRPFRT--/",
+              "posted_at": "2026-07-01T15:33:57+00:00",
+              "like_count": 10,
+              "comments_count": 1,
+              "reach": 149,
+              "saved": 0,
+              "shares": 0,
+              "total_interactions": 13,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18381644947162512",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Baixa temporada em Floripa também tem seu charme.\n\nA cidade fica mais leve, os caminhos ficam mais tranquilos e cada momento parece render melhor.\n\nÉ a época perfeita para caminhar sem pressa, aproveitar a vista da Ponte Hercílio Luz, curtir um fim de tarde bonito e viver Floripa em um ritmo mais gostoso.\n\nNo Mirante Luz Floripa, você une localização, vista e conforto para aproveitar a cidade com mais praticidade, seja em uma viagem rápida, a trabalho, em casal ou só para respirar um pouco.\n\nPor",
+              "permalink": "https://www.instagram.com/p/DaBXc3Ej975/",
+              "posted_at": "2026-06-25T19:55:06+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": null,
+              "saved": null,
+              "shares": null,
+              "total_interactions": null,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18054179372527893",
+              "media_type": "VIDEO",
+              "caption": "Floripa tem um jeito próprio de fazer a gente desacelerar.\n\nA cidade, a vista, a Ponte Hercílio Luz e aquele clima que mistura movimento com pausa.\n\nNo Mirante Luz Floripa, você fica perto de tudo isso e vive a cidade com mais conforto, praticidade e leveza.\n\n📍Florianópolis/SC\n🌉 Próximo à Ponte Hercílio Luz\n💬 Consulte disponibilidade pelo link da bio ou direct\n\nSalve esse vídeo para lembrar de Floripa na sua próxima viagem.\n\n#MiranteLuzFloripa #Floripa #Florianópolis #PonteHercílioLuz #Hospedage",
+              "permalink": "https://www.instagram.com/reel/DZ_HsNxPILt/",
+              "posted_at": "2026-06-24T22:59:26+00:00",
+              "like_count": 6,
+              "comments_count": 0,
+              "reach": null,
+              "saved": null,
+              "shares": null,
+              "total_interactions": null,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             },
+             {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "media_id": "18209029801343919",
+              "media_type": "CAROUSEL_ALBUM",
+              "caption": "Antes de reservar sua estadia em Floripa, tem alguns detalhes que fazem toda diferença.\n\nLocalização, conforto, vista e praticidade não são só “extras”. São partes da experiência.\n\nQuando você fica perto da Ponte Hercílio Luz, ganha tempo, vive melhor a cidade e ainda tem um dos cenários mais bonitos de Floripa por perto.\n\nNo Mirante Luz Floripa, sua estadia começa com vista, charme e uma localização que facilita tudo, seja para passeio, trabalho, evento ou uma pausa rápida na cidade.\n\n📍Florianó",
+              "permalink": "https://www.instagram.com/p/DZ8OKQjD_wk/",
+              "posted_at": "2026-06-23T19:57:43+00:00",
+              "like_count": 7,
+              "comments_count": 0,
+              "reach": null,
+              "saved": null,
+              "shares": null,
+              "total_interactions": null,
+              "captured_at": "2026-10-15T13:16:00.066599+00:00"
+             }
+            ]
+           },
+           "pairedItem": {
+            "item": 1
+           }
+          }
+         ],
+         []
+        ]
+       }
+      }
+     ],
+     "Gravar cursor e eventos": [
+      {
+       "startTime": 1792072364072,
+       "executionIndex": 9,
+       "source": [
+        {
+         "previousNode": "Separar controle e capturas",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 888,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "cursor": {
+             "versao": 4,
+             "avancou": true
+            },
+            "eventos": []
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Pedir captura do perfil": [
+      {
+       "startTime": 1792072364960,
+       "executionIndex": 10,
+       "source": [
+        {
+         "previousNode": "Separar controle e capturas",
+         "previousNodeOutput": 1,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 35,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "workflow_id": "ACQ-03",
+            "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+            "ambiente_chamador": "pilot",
+            "paginar": false,
+            "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|sessao",
+            "ferramenta": "aceleriq_browser_session",
+            "argumentos": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "acao": "abrir",
+             "pedido": "Captura do perfil @miranteluzfloripa para aviso de post no ar"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          },
+          {
+           "json": {
+            "workflow_id": "ACQ-03",
+            "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+            "ambiente_chamador": "pilot",
+            "paginar": false,
+            "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|captura",
+            "ferramenta": "aceleriq_browser_act",
+            "argumentos": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "acao": "capturar",
+             "url": "https://www.instagram.com/miranteluzfloripa/",
+             "pedido": "print do perfil com o post novo"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Capturar perfil": [
+      {
+       "startTime": 1792072364995,
+       "executionIndex": 11,
+       "source": [
+        {
+         "previousNode": "Pedir captura do perfil",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 152,
+       "metadata": {
+        "subExecutionsCount": 2
+       },
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "ok": false,
+            "simulado": false,
+            "resultado": null,
+            "erro": {
+             "tipo": "bloqueio_de_escopo",
+             "mensagem": "escrita_sem_idempotency_key",
+             "pode_repetir": false
+            },
+            "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|sessao",
+            "ferramenta": "aceleriq_browser_session",
+            "decisao": "bloquear",
+            "motivo": "escrita_sem_idempotency_key",
+            "tipo": "escrita",
+            "paginar": false,
+            "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+            "_req": {
+             "argumentos": {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "acao": "abrir",
+              "pedido": "Captura do perfil @miranteluzfloripa para aviso de post no ar"
+             },
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "ferramenta": "aceleriq_browser_session",
+             "tipo": "escrita",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "218",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          },
+          {
+           "json": {
+            "ok": true,
+            "simulado": true,
+            "dry_run": true,
+            "ferramenta": "aceleriq_browser_act",
+            "motivo": "dry_run",
+            "argumentos_hash": "3bcbdefdb6e45815569e4357621a5abc4fce3790077dd5731c86e91014a5b769",
+            "id_simulado": "2e535cf5-f47a-40c5-9f46-fb3d2ab7f875",
+            "resultado": null,
+            "erro": null,
+            "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|captura",
+            "decisao": "simular",
+            "tipo": "escrita",
+            "paginar": false,
+            "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+            "_req": {
+             "argumentos": {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "acao": "capturar",
+              "url": "https://www.instagram.com/miranteluzfloripa/",
+              "pedido": "print do perfil com o post novo"
+             },
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "ferramenta": "aceleriq_browser_act",
+             "tipo": "escrita",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 1
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "219",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Montar aviso": [
+      {
+       "startTime": 1792072365147,
+       "executionIndex": 12,
+       "source": [
+        {
+         "previousNode": "Capturar perfil",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 24,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "pub": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+             "projeto": "Mirante Luz Floripa | Conteúdo, Meta Ads e Reservas",
+             "post_id": "2fc7788b-3b4e-4b08-acf8-7c84da461a3b",
+             "titulo": "Por que consultar a diária com datas, hóspedes e quarto desejado.",
+             "objetivo": "Arte do Estúdio (Mesa do cliente). Por que consultar a diária com datas, hóspedes e quarto desejado.. Explica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+             "legenda": "Antes de comparar diárias em Florianópolis, confira se os valores consideram a mesma viagem.\n\nAs datas, a quantidade de hóspedes e o quarto desejado ajudam a equipe do Mirante Luz Floripa a consultar as opções para o período. Assim, você compara valores e disponibilidade com dados ligados à sua estadia, não com uma referência sem contexto.\n\nConsulte sua estadia pelo WhatsApp: envie suas datas, o número de hóspedes e o quarto desejado.\n\n#diariaemflorianopolis #hospedagememflorianopolis #hospedagemfloripa #pousadaemflorianopolis #miranteluzfloripa",
+             "content_type": "carousel",
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "status": "published",
+             "platform": "instagram",
+             "external_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+             "conta": {
+              "id": "67588009-db0f-4433-b66c-3b3b72d04504",
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "display_name": "Mirante Luz | Hospedagem em Floripa",
+              "handle": "@miranteluzfloripa",
+              "platform": "instagram",
+              "status": "active",
+              "created_at": "2026-08-06T16:52:40.610412+00:00",
+              "updated_at": "2026-08-06T16:52:40.610412+00:00"
+             },
+             "published_at": "2026-10-15T12:05:00.068017+00:00",
+             "scheduled_at": "2026-10-15T12:00:00+00:00",
+             "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/"
+            },
+            "validacao": {
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "estado": "valida",
+             "motivo": null,
+             "platform_media_id": "17882845287528810",
+             "prova": {
+              "media_id": "17882845287528810",
+              "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+              "posted_at": "2026-10-15T12:03:00+00:00",
+              "captured_at": "2026-10-15T13:16:00.066599+00:00",
+              "media_type": "CAROUSEL_ALBUM"
+             }
+            },
+            "captura": {
+             "ok": false,
+             "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+            },
+            "conteudo": {
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+             "social_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+             "conta": "@miranteluzfloripa",
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "platform_media_id": "17882845287528810",
+             "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+             "published_at": "2026-10-15T12:05:00.068017+00:00",
+             "verified_at": "2026-10-15T13:52:32.448Z",
+             "screenshot_file_id": null,
+             "captura": {
+              "ok": false,
+              "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+             },
+             "comparacao": {
+              "comparavel": false,
+              "motivo": "post_com_menos_de_48h"
+             },
+             "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+             "afirma_crescimento": false
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Pedir aviso na revisão": [
+      {
+       "startTime": 1792072365171,
+       "executionIndex": 13,
+       "source": [
+        {
+         "previousNode": "Montar aviso",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 16,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "workflow_id": "ACQ-03",
+            "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+            "ambiente_chamador": "pilot",
+            "paginar": false,
+            "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|aviso",
+            "ferramenta": "aceleriq_aviso_publicacao_preparar",
+            "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+            "argumentos": {
+             "operator": "default",
+             "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+             "channel": "portal",
+             "idempotency_key": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933:aviso"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Preparar aviso na revisão": [
+      {
+       "startTime": 1792072365187,
+       "executionIndex": 14,
+       "source": [
+        {
+         "previousNode": "Pedir aviso na revisão",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 78,
+       "metadata": {
+        "subExecutionsCount": 1
+       },
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "ok": true,
+            "simulado": true,
+            "dry_run": true,
+            "ferramenta": "aceleriq_aviso_publicacao_preparar",
+            "motivo": "dry_run",
+            "argumentos_hash": "fa1bffce04c1fdbdbafd75bdf383ba3e279034b06aa2981832dc532205235682",
+            "id_simulado": "e23c9d38-6a70-4507-aad3-6376ce9c6216",
+            "resultado": null,
+            "erro": null,
+            "ref": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310|aviso",
+            "decisao": "simular",
+            "tipo": "escrita",
+            "paginar": false,
+            "client_id_escopo": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+            "_req": {
+             "argumentos": {
+              "operator": "default",
+              "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+              "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+              "channel": "portal",
+              "idempotency_key": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933:aviso"
+             },
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "ferramenta": "aceleriq_aviso_publicacao_preparar",
+             "tipo": "escrita",
+             "max_paginas": 20,
+             "mcp_url": "https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/mcp-server"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           },
+           "metadata": {
+            "subExecution": {
+             "executionId": "220",
+             "workflowId": "xhZnAPoCqWaXVvfO"
+            }
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Fechar aviso": [
+      {
+       "startTime": 1792072365266,
+       "executionIndex": 15,
+       "source": [
+        {
+         "previousNode": "Preparar aviso na revisão",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 48,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "proposta": {
+             "workflow_id": "ACQ-03",
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "tipo": "aviso_publicacao",
+             "referencia": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "idempotency_key": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933",
+             "conteudo": {
+              "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+              "project_id": "6f06e0ae-b72b-424a-a675-6efd5adbcdd1",
+              "social_account_id": "67588009-db0f-4433-b66c-3b3b72d04504",
+              "conta": "@miranteluzfloripa",
+              "publication_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+              "platform_media_id": "17882845287528810",
+              "permalink": "https://www.instagram.com/p/Deg6V28jhoZ/",
+              "published_at": "2026-10-15T12:05:00.068017+00:00",
+              "verified_at": "2026-10-15T13:52:32.448Z",
+              "screenshot_file_id": null,
+              "captura": {
+               "ok": false,
+               "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+              },
+              "comparacao": {
+               "comparavel": false,
+               "motivo": "post_com_menos_de_48h"
+              },
+              "mensagem": "Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\nhttps://www.instagram.com/p/Deg6V28jhoZ/\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.",
+              "afirma_crescimento": false,
+              "aviso_id": null,
+              "revisao": "aviso_simulado_dry_run"
+             },
+             "hash": "16ec4c3816b9b06545d4af5915a493c9ce8852f4efddb886f2956331619358f9",
+             "estado": "proposta",
+             "motivo": "aviso_simulado_dry_run",
+             "ambiente": "pilot"
+            },
+            "evento": {
+             "schema_version": "1.0.0",
+             "event_id": "be2c451c-81d2-46a1-881f-ddd5563e79c4",
+             "workflow_id": "ACQ-03",
+             "run_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "client_id": "eb1270a5-4d9e-4c67-bb17-e25fa12ada34",
+             "entity_type": "publicacao",
+             "entity_id": "c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+             "occurred_at": "2026-10-15T12:05:00.068017+00:00",
+             "observed_at": "2026-10-15T13:52:45.313Z",
+             "source": "n8n:ACQ-03",
+             "source_version": null,
+             "correlation_id": "ACQ-03:2026-10-15T13:52:32.448Z:793419d7",
+             "idempotency_key": "pub:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:https://www.instagram.com/p/Deg6V28jhoZ/",
+             "evidence_refs": [
+              "publication:c76c1151-cb7e-4b8c-af7f-d6f417dcd310",
+              "media:17882845287528810"
+             ],
+             "tipo": "publicacao_aviso_simulado",
+             "payload": {
+              "proposta": "acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933",
+              "captura": {
+               "ok": false,
+               "motivo": "erro: captura simulada (dry-run): nenhuma captura real feita"
+              },
+              "revisao": {
+               "estado": "proposta",
+               "motivo": "aviso_simulado_dry_run",
+               "aviso_id": null,
+               "erro": null
+              }
+             },
+             "payload_hash": "4762aad77bed1ef8c998fa751c5276a0ceb4175a3d32628ea41efa7847c66883"
+            },
+            "pg": [
+             "{\"workflow_id\":\"ACQ-03\",\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"tipo\":\"aviso_publicacao\",\"referencia\":\"c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"idempotency_key\":\"acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933\",\"conteudo\":{\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"project_id\":\"6f06e0ae-b72b-424a-a675-6efd5adbcdd1\",\"social_account_id\":\"67588009-db0f-4433-b66c-3b3b72d04504\",\"conta\":\"@miranteluzfloripa\",\"publication_id\":\"c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"platform_media_id\":\"17882845287528810\",\"permalink\":\"https://www.instagram.com/p/Deg6V28jhoZ/\",\"published_at\":\"2026-10-15T12:05:00.068017+00:00\",\"verified_at\":\"2026-10-15T13:52:32.448Z\",\"screenshot_file_id\":null,\"captura\":{\"ok\":false,\"motivo\":\"erro: captura simulada (dry-run): nenhuma captura real feita\"},\"comparacao\":{\"comparavel\":false,\"motivo\":\"post_com_menos_de_48h\"},\"mensagem\":\"Post novo no ar: Por que consultar a diária com datas, hóspedes e quarto desejado.\\nhttps://www.instagram.com/p/Deg6V28jhoZ/\\nExplica que a consulta precisa considerar os dados da estadia e direciona o público a pedir valores reais, sem usar preços antigos ou presumir disponibilidade.\",\"afirma_crescimento\":false,\"aviso_id\":null,\"revisao\":\"aviso_simulado_dry_run\"},\"hash\":\"16ec4c3816b9b06545d4af5915a493c9ce8852f4efddb886f2956331619358f9\",\"estado\":\"proposta\",\"motivo\":\"aviso_simulado_dry_run\",\"ambiente\":\"pilot\"}",
+             "{\"schema_version\":\"1.0.0\",\"event_id\":\"be2c451c-81d2-46a1-881f-ddd5563e79c4\",\"workflow_id\":\"ACQ-03\",\"run_id\":\"ACQ-03:2026-10-15T13:52:32.448Z:793419d7\",\"client_id\":\"eb1270a5-4d9e-4c67-bb17-e25fa12ada34\",\"entity_type\":\"publicacao\",\"entity_id\":\"c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"occurred_at\":\"2026-10-15T12:05:00.068017+00:00\",\"observed_at\":\"2026-10-15T13:52:45.313Z\",\"source\":\"n8n:ACQ-03\",\"source_version\":null,\"correlation_id\":\"ACQ-03:2026-10-15T13:52:32.448Z:793419d7\",\"idempotency_key\":\"pub:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:https://www.instagram.com/p/Deg6V28jhoZ/\",\"evidence_refs\":[\"publication:c76c1151-cb7e-4b8c-af7f-d6f417dcd310\",\"media:17882845287528810\"],\"tipo\":\"publicacao_aviso_simulado\",\"payload\":{\"proposta\":\"acq03:c76c1151-cb7e-4b8c-af7f-d6f417dcd310:32961df4d933\",\"captura\":{\"ok\":false,\"motivo\":\"erro: captura simulada (dry-run): nenhuma captura real feita\"},\"revisao\":{\"estado\":\"proposta\",\"motivo\":\"aviso_simulado_dry_run\",\"aviso_id\":null,\"erro\":null}},\"payload_hash\":\"4762aad77bed1ef8c998fa751c5276a0ceb4175a3d32628ea41efa7847c66883\"}",
+             "pilot"
+            ]
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ],
+     "Registrar aviso": [
+      {
+       "startTime": 1792072365314,
+       "executionIndex": 16,
+       "source": [
+        {
+         "previousNode": "Fechar aviso",
+         "previousNodeOutput": 0,
+         "previousNodeRun": 0
+        }
+       ],
+       "hints": [],
+       "executionTime": 150,
+       "executionStatus": "success",
+       "data": {
+        "main": [
+         [
+          {
+           "json": {
+            "proposta": {
+             "id": "c427b392-ee2f-466d-b46b-f9d4ac52d9fe",
+             "novo": true
+            },
+            "evento": {
+             "id": 7,
+             "novo": true,
+             "event_id": "be2c451c-81d2-46a1-881f-ddd5563e79c4"
+            }
+           },
+           "pairedItem": {
+            "item": 0
+           }
+          }
+         ]
+        ]
+       }
+      }
+     ]
+    },
+    "pinData": {
+     "Executar manualmente": [
+      {
+       "json": {},
+       "pairedItem": {
+        "item": 0
+       }
+      }
+     ]
+    },
+    "lastNodeExecuted": "Registrar aviso"
+   },
+   "executionData": {
+    "contextData": {},
+    "nodeExecutionStack": [],
+    "metadata": {},
+    "waitingExecution": {},
+    "waitingExecutionSource": {},
+    "runtimeData": {
+     "version": 1,
+     "establishedAt": 1792072352359,
+     "source": "manual",
+     "triggerNode": {
+      "name": "Executar manualmente",
+      "type": "n8n-nodes-base.manualTrigger"
+     },
+     "redaction": {
+      "version": 2,
+      "production": false,
+      "manual": false
+     }
+    }
+   },
+   "resumeToken": "27d4fd2c037d766b48e549e916bd4da28108be12a6ac6d2c843bf0f3bac26739"
+  }
+ }
+}
