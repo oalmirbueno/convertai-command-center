@@ -2753,6 +2753,14 @@
       "remote_name": "aviso_publicacao_falhou",
       "remote_statements_sha256": "ed096fee2b88445ebfc2a4a3344478eaa447fd05bc14f34fe7c0669c0160f7c6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261030100000",
+      "path": "supabase/migrations/20261030100000_agendamento_resiste_a_rede.sql",
+      "local_sha256": "8c72cc67b7811cbe0b16455c3ae1a090aae860fc7f5838a01e1ea1fd5c2e0bad",
+      "remote_name": "agendamento_resiste_a_rede",
+      "remote_statements_sha256": "9611268b5de4afa11e638d3e7e807fe985f9028bf86a737030cfcbf021faa4dd",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
