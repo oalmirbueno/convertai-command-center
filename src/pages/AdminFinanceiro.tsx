@@ -520,52 +520,10 @@ function LegacyFinanceiro() {
     }
 
 
-    // If it's a renewal, advance the renewal date by 1 month, clear overdue,
-    // reactivate paused projects and AUTO-CREATE the next month's billing entry
-    if (bill?.client_id && bill?.type === "renewal") {
-      const client = (clients || []).find((c: any) => c.id === bill.client_id);
-      if (client?.plan_renewal_date) {
-        const currentDate = new Date(client.plan_renewal_date + "T00:00:00");
-        currentDate.setMonth(currentDate.getMonth() + 1);
-        const newDate = toLocalDateKey(currentDate);
-        await supabase.from("profiles").update({
-          plan_renewal_date: newDate,
-          overdue_since: null,
-        } as any).eq("id", bill.client_id);
-
-        // Reactivate paused projects
-        const { data: pausedProjects } = await supabase
-          .from("projects")
-          .select("id")
-          .eq("client_id", bill.client_id)
-          .eq("status", "paused")
-          .is("deleted_at", null);
-        if (pausedProjects && pausedProjects.length > 0) {
-          for (const p of pausedProjects) {
-            await supabase.from("projects").update({ status: "in_progress" }).eq("id", p.id);
-          }
-        }
-
-        // Create next month's renewal billing entry (if not already existing)
-        const { data: existingNext } = await supabase
-          .from("billing")
-          .select("id")
-          .eq("client_id", bill.client_id)
-          .eq("type", "renewal")
-          .eq("status", "pending")
-          .eq("due_date", newDate)
-          .maybeSingle();
-        if (!existingNext) {
-          await supabase.from("billing").insert({
-            client_id: bill.client_id,
-            type: "renewal",
-            amount: Number(client.plan_value || bill.amount),
-            due_date: newDate,
-            description: client.plan_name ? `Renovação · ${client.plan_name}` : "Renovação Mensal",
-          });
-        }
-      }
-    }
+    // Renovação paga: o banco avança plan_renewal_date, limpa o atraso, reativa
+    // projetos pausados e cria a próxima cobrança (gatilho
+    // billing_renovacao_ao_pagar, migration 20261030190000). Vale para qualquer
+    // caminho que marque pago, então a tela não repete esse trabalho.
 
     // Notify client
     if (bill?.client_id) {
