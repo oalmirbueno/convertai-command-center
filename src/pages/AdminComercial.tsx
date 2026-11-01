@@ -102,6 +102,8 @@ import {
   previsaoDoMes,
   primeiroDiaDoMes,
   realizadoDoMes,
+  diaEmSaoPaulo,
+  linhasDeMetaDoMes,
   receitaDoMes,
   resumoDoFunil,
   rotuloDoEstagio,
@@ -352,20 +354,21 @@ export default function AdminComercial() {
 
   // O realizado da meta de recorrentes vem do Financeiro, não do funil:
   // cliente recorrente é quem a regra de recorrência cobrou no mês.
-  const { data: clientesRecorrentes = 0 } = useQuery({
+  const { data: clientesRecorrentes = 0, isError: erroNosRecorrentes } = useQuery({
     queryKey: ["comercial-clientes-recorrentes", periodo],
     queryFn: () => clientesRecorrentesDoMes(periodo),
     placeholderData: (anterior) => anterior,
   });
   // A receita realizada vem do Financeiro central, nunca daqui.
-  const { data: receita = 0 } = useQuery({
+  const { data: receita = 0, isError: erroNaReceita } = useQuery({
     queryKey: ["comercial-receita", periodo],
     queryFn: () => receitaDoMes(periodo),
     placeholderData: (anterior) => anterior,
   });
 
   // Leitura que falhou não vira "lista vazia": a tela avisa e oferece tentar de novo.
-  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas;
+  // A receita e os recorrentes do Financeiro também: falha ali mostrava "R$ 0" como dado real.
+  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas || erroNaReceita || erroNosRecorrentes;
 
   const recarregar = () =>
     Promise.all([
@@ -376,6 +379,8 @@ export default function AdminComercial() {
       queryClient.invalidateQueries({ queryKey: ["comercial-eventos"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-empresas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-contatos"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-receita"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-clientes-recorrentes"] }),
     ]);
 
   const resumo = useMemo(
@@ -401,7 +406,8 @@ export default function AdminComercial() {
   const compromissosAbertos = atividades.filter((a) => !a.done_at).length;
   const campanhasAtivas = campanhas.filter((c) => c.status === "ativa").length;
   const metasDefinidas = METRICAS.filter((m) => metas.some((meta) => meta.metric === m.id && meta.target > 0)).length;
-  const leadsNoMes = leads.filter((l) => (l.created_at || "").slice(0, 7) === periodo.slice(0, 7)).length;
+  // O mês do lead é o dia de São Paulo, não o texto UTC (criado 31/10 às 22h não é de novembro).
+  const leadsNoMes = leads.filter((l) => (diaEmSaoPaulo(l.created_at) || "").slice(0, 7) === periodo.slice(0, 7)).length;
   const aviso = (partes: Array<string | false>) => {
     const lista = partes.filter(Boolean) as string[];
     return lista.length ? <span className="text-warning">{lista.join(" · ")}</span> : null;
@@ -579,6 +585,7 @@ export default function AdminComercial() {
           resumo={resumo}
           previsao={previsao}
           receita={receita}
+          clientesRecorrentes={clientesRecorrentes}
           metas={metas}
           leads={leads}
           atividades={atividades}
@@ -733,6 +740,7 @@ function VisaoGeral({
   resumo,
   previsao,
   receita,
+  clientesRecorrentes,
   metas,
   leads,
   atividades,
@@ -744,6 +752,7 @@ function VisaoGeral({
   resumo: ReturnType<typeof resumoDoFunil>;
   previsao: ReturnType<typeof previsaoDoMes>;
   receita: number;
+  clientesRecorrentes: number;
   metas: Array<{ id: string; metric: string; target: number }>;
   leads: Lead[];
   atividades: Atividade[];
@@ -771,19 +780,11 @@ function VisaoGeral({
   const mes = periodo.slice(0, 7);
   const ativas = campanhas.filter((c) => c.status === "ativa").length;
   const leadsDeCampanhaNoMes = leads.filter(
-    (l) => l.campaign_id && (l.created_at || "").slice(0, 7) === mes,
+    (l) => l.campaign_id && (diaEmSaoPaulo(l.created_at) || "").slice(0, 7) === mes,
   ).length;
 
-  const linhasDeMeta = METRICAS.map((metrica) => {
-    const alvo = metas.find((m) => m.metric === metrica.id)?.target || 0;
-    const feito = realizadoDoMes({
-      metrica: metrica.id,
-      leads,
-      periodo,
-      receitaFinanceiro: receita,
-    });
-    return { ...metrica, alvo, feito };
-  });
+  // Com os recorrentes do Financeiro: sem eles a linha ficava sempre em 0 aqui.
+  const linhasDeMeta = linhasDeMetaDoMes({ metas, leads, periodo, receitaFinanceiro: receita, clientesRecorrentes });
   const mostrar = (linha: (typeof linhasDeMeta)[number], v: number) =>
     linha.dinheiro ? dinheiro(v) : String(Math.round(v));
 
@@ -1296,7 +1297,10 @@ function EditorDeLead({
       whatsapp: form.whatsapp,
       origin: form.origin,
       campaign_id: form.campaign_id || null,
-      stage: lead?.stage || "novo",
+      // A etapa só vai na criação. Na edição, a etapa da hora em que a janela
+      // abriu desfazia o movimento feito no meio-tempo (Mercúrio, outra
+      // pessoa), até tirando o lead de "ganho". Mudar de etapa é com moverLead.
+      ...(lead ? {} : { stage: "novo" }),
       monthly_value: Number(form.monthly_value) || 0,
       one_off_value: Number(form.one_off_value) || 0,
       expected_close_date: form.expected_close_date || null,
@@ -1343,12 +1347,19 @@ function EditorDeLead({
       toast.error("Diga em uma linha por que foi perdido. É o que ensina o próximo.");
       return;
     }
+    // Edição pendente vai antes: mover fechava a janela e a edição sumia.
+    // Salva mantendo a janela aberta; se não salvar, não move.
+    if (sujo) {
+      if (salvando) return;
+      const salvou = await salvar({ manterAberto: true });
+      if (!salvou) return;
+    }
     if (await moverLead({ lead, paraEstagio: para, motivo })) {
       setMotivo("");
       await onSalvo();
       toast.success(`Movido para ${rotuloDoEstagio(para)}.`);
       onFechar();
-    } else toast.error("Não foi possível mover.");
+    } else toast.error(`Não foi possível mover.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
   };
 
   const temDadosDaEmpresa = Object.values(form.org).some(Boolean);

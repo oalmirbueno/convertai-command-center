@@ -87,11 +87,22 @@ export function valorDaLinha(l: Pick<LinhaDaCarteira, "total_unico" | "total_men
   return partes.join(" + ") || "Sem valor";
 }
 
+/**
+ * O dia de São Paulo de um instante gravado em UTC. O `slice(0, 10)` do texto
+ * dava o dia UTC: aceita em 31/10 às 22h aparecia como 01/11. Data pura
+ * ("AAAA-MM-DD") já é o dia e passa como está.
+ */
+export function diaDoInstante(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const instante = new Date(iso);
+  return isNaN(instante.getTime()) ? iso.slice(0, 10) : hojeEmSaoPaulo(instante);
+}
+
 /** "Vista em 12/09", "Aceita em 14/09", "Enviada em 10/09" ou "Rascunho". */
 export function situacaoDaLinha(l: Pick<LinhaDaCarteira, "status" | "enviada_em" | "vista_em" | "aceita_em" | "validade_ate">): string {
-  if (l.status === "aceita") return l.aceita_em ? `Aceita em ${dataCurta(l.aceita_em.slice(0, 10))}` : "Aceita";
-  if (l.status === "vista") return l.vista_em ? `Vista em ${dataCurta(l.vista_em.slice(0, 10))}` : "Vista";
-  if (l.status === "enviada") return l.enviada_em ? `Enviada em ${dataCurta(l.enviada_em.slice(0, 10))}, não aberta` : "Enviada";
+  if (l.status === "aceita") return l.aceita_em ? `Aceita em ${dataCurta(diaDoInstante(l.aceita_em))}` : "Aceita";
+  if (l.status === "vista") return l.vista_em ? `Vista em ${dataCurta(diaDoInstante(l.vista_em))}` : "Vista";
+  if (l.status === "enviada") return l.enviada_em ? `Enviada em ${dataCurta(diaDoInstante(l.enviada_em))}, não aberta` : "Enviada";
   if (l.status === "expirada") return l.validade_ate ? `Venceu em ${dataCurta(l.validade_ate)}` : "Vencida";
   return ROTULO_DO_STATUS[l.status] || "Rascunho";
 }

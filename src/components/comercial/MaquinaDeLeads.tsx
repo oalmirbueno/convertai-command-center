@@ -236,7 +236,8 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
     onSuccess: (r) => {
       reler();
       setMarcados([]);
-      void qc.invalidateQueries({ queryKey: ["comercial"] });
+      // A chave dos leads no Comercial é ["comercial-leads"]; ["comercial"] não a alcança e o CRM ficava sem os importados.
+      void qc.invalidateQueries({ queryKey: ["comercial-leads"] });
       toast.success(`${r.importados.length} no CRM`, { description: r.repetidos.length ? `${r.repetidos.length} já estavam no CRM e foram ligados ao lead de lá.` : mercurio ? "O Mercúrio faz o primeiro contato." : undefined });
     },
     onError: (e) => toast.error("Não levei ao CRM", { description: textoDoErro(e) }),

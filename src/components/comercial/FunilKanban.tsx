@@ -286,21 +286,22 @@ export default function FunilKanban({
     await aplicarMovimento(lead, destino as EstagioId);
   };
 
+  // Só os abertos contam: o quadro só mostra o que ainda está em jogo, e
+  // contador que soma ganho e perdido promete cartão que não aparece.
+  const abertos = leads.filter((lead) => (ESTAGIOS_ABERTOS as string[]).indexOf(lead.stage) >= 0);
+
   // A régua da visão: cada opção separa uma classe, e "sem classe" empurra
   // para a mão o que ainda não foi confirmado: não confirmado é estado
   // visível, não um buraco.
   const opcoesDeClasse = [
-    { valor: "todas", rotulo: "Todas", descricao: "Todas as classes", contador: leads.length },
+    { valor: "todas", rotulo: "Todas", descricao: "Todas as classes", contador: abertos.length },
     ...CLASSES_DO_LEAD.map((c) => ({
       valor: c.id as string,
       rotulo: c.label,
-      contador: leads.filter((lead) => lead.classe === c.id).length,
+      contador: abertos.filter((lead) => lead.classe === c.id).length,
     })),
-    { valor: "sem", rotulo: "Sem classe", contador: leads.filter((lead) => !lead.classe).length },
+    { valor: "sem", rotulo: "Sem classe", contador: abertos.filter((lead) => !lead.classe).length },
   ];
-
-  // Só os abertos contam: a temperatura é do que ainda está em jogo.
-  const abertos = leads.filter((lead) => (ESTAGIOS_ABERTOS as string[]).indexOf(lead.stage) >= 0);
   const opcoesDeTemperatura = FAIXAS_DO_FILTRO.map((f) => ({
     valor: f as string,
     rotulo: f === "todas" ? "Todas" : ROTULO_DA_FAIXA[f],
@@ -335,9 +336,9 @@ export default function FunilKanban({
           modo="lista"
           icone={<Bot className="h-3.5 w-3.5" />}
           opcoes={[
-            { valor: "todos", rotulo: "Todos", descricao: "O Mercúrio e a equipe", contador: leads.length },
-            { valor: "mercurio", rotulo: "Atendidos pelo Mercúrio", contador: leads.filter((lead) => lead.agente_slug === "mercurio").length },
-            { valor: "equipe", rotulo: "Só a equipe", contador: leads.filter((lead) => !lead.agente_slug).length },
+            { valor: "todos", rotulo: "Todos", descricao: "O Mercúrio e a equipe", contador: abertos.length },
+            { valor: "mercurio", rotulo: "Atendidos pelo Mercúrio", contador: abertos.filter((lead) => lead.agente_slug === "mercurio").length },
+            { valor: "equipe", rotulo: "Só a equipe", contador: abertos.filter((lead) => !lead.agente_slug).length },
           ]}
           valor={quemAtende}
           onEscolher={setQuemAtende}
