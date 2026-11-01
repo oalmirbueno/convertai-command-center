@@ -179,11 +179,21 @@ export function recebidoDe(linha: { amount: Valor; paid_amount?: Valor; status: 
   return 0;
 }
 
-/** O que ainda falta entrar de uma cobrança ou parcela aberta. */
+/** O que ainda falta entrar de uma parcela de projeto aberta (a parcial guarda o resto na própria linha). */
 export function emAbertoDe(linha: { amount: Valor; paid_amount?: Valor; status: string | null }): number {
   if (linha.status === "pending") return numero(linha.amount);
   if (linha.status === "partial") return Math.max(0, numero(linha.amount) - numero(linha.paid_amount));
   return 0;
+}
+
+/**
+ * O que ainda falta entrar de uma cobrança (`billing`). Só a pendente deve: pagar parte marca a original como
+ * "partial" e cria uma linha "pending" com o saldo restante (01/11/2026, dono: "saldo fica só na linha nova").
+ * Contar o resto da parcial de novo dobrava o atrasado e mantinha o cliente devendo depois de quitar.
+ */
+export function emAbertoDaCobranca(linha: { amount: Valor; paid_amount?: Valor; status: string | null }): number {
+  if (linha.status !== "pending") return 0;
+  return Math.max(0, numero(linha.amount) - numero(linha.paid_amount));
 }
 
 /** Aporte de sócio e investimento com o dinheiro dele: capital, não despesa. */
@@ -540,7 +550,7 @@ export function retratoDoCFO(d: DadosDoCFO, opcoes: { meses?: number; essenciais
   const receberAtrasado: Retrato["atrasados"]["receber"] = [];
   for (const b of d.cobrancas) {
     if (b.type === "ads_recharge" || !b.due_date || b.due_date >= hoje) continue;
-    const aberto = emAbertoDe(b);
+    const aberto = emAbertoDaCobranca(b);
     if (aberto <= 0.009) continue;
     receberAtrasado.push({ id: b.id, cliente: nomeDo(b.client_id), valor: aberto, vencimento: b.due_date, dias: diasEntre(b.due_date, hoje) });
   }
@@ -577,7 +587,7 @@ export function retratoDoCFO(d: DadosDoCFO, opcoes: { meses?: number; essenciais
     const atual = renovacoesPorClienteMes[k] || { pendente: 0, existe: false };
     atual.existe = true;
     // Atrasada (vencida antes de hoje) não entra na previsão: aparece em "a cobrar".
-    if (!(b.due_date && b.due_date < hoje)) atual.pendente += emAbertoDe(b);
+    if (!(b.due_date && b.due_date < hoje)) atual.pendente += emAbertoDaCobranca(b);
     renovacoesPorClienteMes[k] = atual;
   }
   for (const c of ativos) {
@@ -594,7 +604,7 @@ export function retratoDoCFO(d: DadosDoCFO, opcoes: { meses?: number; essenciais
     if (b.type === "renewal" || b.type === "ads_recharge") continue;
     if (!b.due_date || b.due_date < hoje) continue;
     const i = indice(mesDe(b.due_date));
-    if (i >= 0 && i < meses.length) entPont[i] += emAbertoDe(b);
+    if (i >= 0 && i < meses.length) entPont[i] += emAbertoDaCobranca(b);
   }
   for (const p of d.parcelas) {
     if (!p.due_date || p.due_date < hoje) continue;

@@ -5,6 +5,7 @@ import {
   passaNoFiltroDaCobranca,
   renovacaoEmAlerta,
   saldoDaCobranca,
+  saldoDaParcela,
   situacaoDoCliente,
   situacoesPorCliente,
 } from "@/lib/clientes/situacaoDaCobranca";
@@ -37,10 +38,28 @@ describe("situação da cobrança", () => {
   it("parcial quitada pelo valor e pendente com o valor pago não contam como atraso", () => {
     expect(saldoDaCobranca({ status: "partial", amount: 300, paid_amount: 300 })).toBe(0);
     expect(saldoDaCobranca({ status: "pending", amount: 300, paid_amount: 300 })).toBe(0);
-    expect(saldoDaCobranca({ status: "partial", amount: 300, paid_amount: 100 })).toBe(200);
+    // 01/11/2026 (dono): o saldo da cobrança parcial mora só na linha nova "Saldo restante".
+    expect(saldoDaCobranca({ status: "partial", amount: 300, paid_amount: 100 })).toBe(0);
+    // Parcela de projeto guarda o resto na própria linha.
+    expect(saldoDaParcela({ status: "partial", amount: 300, paid_amount: 100 })).toBe(200);
     expect(saldoDaCobranca({ status: "cancelled", amount: 300 })).toBe(0);
     const s = situacaoDoCliente([{ type: "one_off", status: "partial", amount: 300, paid_amount: 300, due_date: "2026-09-21", paid_date: "2026-09-25" }], HOJE);
     expect(s && s.tom).toBe("paid");
+  });
+
+  it("pagou parte e depois o restante: não fica Atrasado (o saldo só existia na linha nova)", () => {
+    // 800 vencida em 10/10; pagou 300 (a original vira parcial e nasce o "Saldo restante" de 500) e depois os 500.
+    const quitou = situacaoDoCliente([
+      { type: "renewal", status: "partial", amount: 800, paid_amount: 300, due_date: "2026-10-10", paid_date: "2026-10-12" },
+      { type: "renewal", status: "paid", amount: 500, paid_amount: 500, due_date: "2026-10-10", paid_date: "2026-10-20" },
+    ], HOJE);
+    expect(quitou).toMatchObject({ tom: "paid", rotulo: "Em dia" });
+    // Ainda devendo o restante: Atrasado pela linha nova, não duas vezes.
+    const devendo = situacaoDoCliente([
+      { type: "renewal", status: "partial", amount: 800, paid_amount: 300, due_date: "2026-10-10", paid_date: "2026-10-12" },
+      { type: "renewal", status: "pending", amount: 500, due_date: "2026-10-10" },
+    ], HOJE);
+    expect(devendo).toMatchObject({ tom: "late", rotulo: "Atrasado" });
   });
 
   it("recarga de anúncio não entra; a receber é o que vence no mês", () => {

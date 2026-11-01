@@ -38,6 +38,8 @@ function agencia(extra: Partial<DadosDoCFO> = {}): DadosDoCFO {
       { id: "b3", client_id: "c3", type: "renewal", amount: 600, paid_amount: 600, status: "paid", due_date: "2026-10-10", paid_date: "2026-09-10" },
       { id: "b4", client_id: "c1", type: "renewal", amount: 1000, paid_amount: null, status: "pending", due_date: "2026-10-05", paid_date: null },
       { id: "b5", client_id: "c9", type: "renewal", amount: 300, paid_amount: 100, status: "partial", due_date: "2026-08-01", paid_date: "2026-08-02" },
+      // O resto do parcial mora na linha nova "Saldo restante" (é ela que fica a receber, uma vez só).
+      { id: "b7", client_id: "c9", type: "renewal", amount: 200, paid_amount: null, status: "pending", due_date: "2026-08-01", paid_date: null },
       { id: "b6", client_id: "c1", type: "ads_recharge", amount: 5000, paid_amount: 5000, status: "paid", due_date: "2026-09-02", paid_date: "2026-09-02" },
     ],
     parcelas: [
@@ -91,7 +93,7 @@ describe("CFO: o motor em código", () => {
     expect(r.carteira.pausados.map((p) => p.nome)).toEqual(["Delta"]);
   });
 
-  it("atrasados: a receber (com o resto do parcial) e contas vencidas", () => {
+  it("atrasados: a receber (o resto do parcial uma vez só, pela linha nova) e contas vencidas", () => {
     expect(r.atrasados.receber.map((x) => [x.cliente, x.valor])).toEqual([["Beta", 800], ["Delta", 200]]);
     expect(r.atrasados.pagar.map((x) => x.descricao)).toEqual(["Eleven Labs"]);
   });

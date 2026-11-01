@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
-import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
+import { saldoDaCobranca, saldoDaParcela } from "@/lib/clientes/situacaoDaCobranca";
 import DiaPrioritarioNoCadastro from "@/components/dia-prioritario/DiaPrioritarioNoCadastro";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -1191,7 +1191,7 @@ export default function EditClientDrawer({
                         const remaining = pay.total_value - paidTotal;
                         const paidCount = installments.filter((i: any) => i.status === "paid").length;
                         const totalCount = installments.length;
-                        const hasOverdue = installments.some((i: any) => saldoDaCobranca(i) > 0 && String(i.due_date || "").slice(0, 10) < new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
+                        const hasOverdue = installments.some((i: any) => saldoDaParcela(i) > 0 && String(i.due_date || "").slice(0, 10) < new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
 
                         return (
                           <li key={proj.id} className="py-1">

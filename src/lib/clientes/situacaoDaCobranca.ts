@@ -3,7 +3,12 @@
  * ainda fica o alerta de atrasado; se já pagou, mesmo atrasado, o alerta tem que sair; só para os atrasados e
  * não pagos"). Uma regra só para a linha, o filtro e o alerta da renovação.
  *
- * - Atrasado: há cobrança pendente ou parcial, vencida antes de hoje, com saldo a pagar (valor menos o pago).
+ * - Atrasado: há cobrança pendente, vencida antes de hoje, com saldo a pagar (valor menos o pago).
+ * - Cobrança parcial (01/11/2026, dono: "saldo fica só na linha nova"): pagar parte marca a original como
+ *   "partial" e cria uma linha "pending" com o saldo restante. O saldo mora só nessa linha nova; a original
+ *   parcial não deve mais nada (senão o mesmo saldo contava duas vezes e o cliente ficava "Atrasado" para
+ *   sempre, mesmo depois de pagar o restante). Parcela de projeto é diferente: lá o saldo fica na própria
+ *   linha (`saldoDaParcela`).
  * - A receber: cobrança com saldo a pagar que vence neste mês (ainda não venceu).
  * - Em dia: pagou neste mês, ou já pagou e não deve nada vencido.
  * - Sem cobrança: nenhuma das anteriores.
@@ -44,11 +49,27 @@ const dia = (v?: string | null) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}
 const num = (v: unknown) => Number(v) || 0;
 const br = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 
-/** O que ainda falta pagar desta cobrança (zero quando pagou, mesmo que o status tenha ficado para trás). */
+/**
+ * O que ainda falta pagar desta cobrança (`billing`). Zero quando pagou, mesmo que o status tenha ficado para
+ * trás, e zero na parcial: o saldo dela mora na linha "pending" de "Saldo restante".
+ */
 export function saldoDaCobranca(c: CobrancaLida): number {
   const status = String(c.status || "").toLowerCase();
-  if (status === "paid" || status === "cancelled" || status === "canceled" || status === "waived") return 0;
+  if (status !== "pending") return 0;
+  return saldoDaLinha(c);
+}
+
+/**
+ * O que ainda falta pagar de uma parcela de projeto (`payment_installments`). Aqui o pagamento parcial
+ * acumula `paid_amount` na própria parcela, sem linha nova: a parcial ainda deve o resto.
+ */
+export function saldoDaParcela(c: CobrancaLida): number {
+  const status = String(c.status || "").toLowerCase();
   if (status !== "pending" && status !== "partial") return 0;
+  return saldoDaLinha(c);
+}
+
+function saldoDaLinha(c: CobrancaLida): number {
   const total = num(c.amount);
   const pago = num(c.paid_amount);
   return Math.max(0, Math.round((total - pago) * 100) / 100);
