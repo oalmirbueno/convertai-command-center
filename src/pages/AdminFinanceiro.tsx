@@ -616,12 +616,19 @@ function LegacyFinanceiro() {
         }
         saldoAnterior = { balance: Number(atual.balance) || 0, last_recharge_date: atual.last_recharge_date ?? null };
         novoSaldo = saldoAnterior.balance + Number(r.amount);
-        const { error: erroDoSaldo } = await supabase.from("ads_wallet").update({
+        // Grava só se o saldo ainda é o que acabou de ser lido: um gasto ou outra recarga entre a leitura e a
+        // gravação seria apagado pela soma feita sobre o valor velho.
+        const { data: gravados, error: erroDoSaldo } = await supabase.from("ads_wallet").update({
           balance: novoSaldo,
           last_recharge_date: new Date().toISOString(),
-        }).eq("id", wallet.id);
+        }).eq("id", wallet.id).eq("balance", saldoAnterior.balance).select("id");
         if (erroDoSaldo) {
           toast.error("Não consegui atualizar o saldo da wallet. A recarga não foi concluída.");
+          return;
+        }
+        if (!gravados || gravados.length === 0) {
+          queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+          toast.error("O saldo da wallet mudou enquanto a recarga era concluída. Nada foi alterado; tente de novo.");
           return;
         }
       }

@@ -762,7 +762,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `fluxo-de-caixa-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = url; a.download = `fluxo-de-caixa-${todayBR()}.csv`;
     a.click(); URL.revokeObjectURL(url);
   };
 
@@ -1642,7 +1642,7 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
     description: initial.description || "",
     category: initial.category || defaultCat,
     amount: initial.amount?.toString() || "",
-    due_date: initial.due_date || new Date().toISOString().slice(0, 10),
+    due_date: initial.due_date || todayBR(),
     paid_date: initial.paid_date || "",
     status: initial.status || "pending",
     recurrence: initial.recurrence || "none",

@@ -198,6 +198,20 @@ describe("Financeiro: concluir recarga", () => {
     expect(estado.success).not.toHaveBeenCalled();
   });
 
+  it("saldo mudou entre a leitura e a gravação: não grava por cima, não conclui o pedido", async () => {
+    // O update só vale com o saldo lido (400); se um gasto entrou no meio, o banco não acha a linha.
+    estado.respostas["ads_wallet.update"] = { data: [] };
+    concluir();
+    await waitFor(() => expect(estado.error).toHaveBeenCalled());
+    const saldo = escritasDe("ads_wallet.update");
+    expect(saldo).toHaveLength(1);
+    expect(saldo[0].filtros).toEqual([["id", "w1"], ["balance", 400]]);
+    expect(String(estado.error.mock.calls[0][0])).toContain("mudou");
+    expect(escritasDe("recharge_requests.update")).toHaveLength(0);
+    expect(estado.notifyUser).not.toHaveBeenCalled();
+    expect(estado.success).not.toHaveBeenCalled();
+  });
+
   it("pedido já não estava aprovado: desfaz o saldo somado e mostra erro", async () => {
     estado.respostas["recharge_requests.update"] = { data: [] };
     concluir();
