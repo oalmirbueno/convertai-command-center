@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useFiles, useProjects } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
+import { projetosDoCliente } from "@/lib/clientes/projetosDoCliente";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -82,7 +83,9 @@ function ClientFileThumb({ file }: { file: any }) {
 export default function ClientDocuments() {
   const { clientId } = useClientIdentity();
   const { data: files, isLoading } = useFiles(undefined, clientId || undefined);
-  const { data: projects } = useProjects();
+  const { data: todosOsProjetos } = useProjects();
+  // Só os projetos deste cliente (em "Ver como cliente" o admin lê os de todos).
+  const projects = projetosDoCliente(todosOsProjetos as Array<{ client_id?: string | null }> | undefined, clientId);
   const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
 

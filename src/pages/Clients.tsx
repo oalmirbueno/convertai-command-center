@@ -766,7 +766,9 @@ export default function Clients() {
   // recolhido com opcao de retomar. Flag no proprio cadastro, sem migration.
   const isOneOffDone = (c: any) => Boolean(c?.services_config?.one_off_done);
   const avulsosList = avulsosAll.filter((c) => !isOneOffDone(c));
-  const avulsosDone = avulsosAll.filter((c) => isOneOffDone(c));
+  // Na aba Inativos o avulso concluído já está na lista única de inativos: sem o grupo "Avulsos concluídos"
+  // (antes ele aparecia duas vezes).
+  const avulsosDone = typeFilter === "inactive" ? [] : avulsosAll.filter((c) => isOneOffDone(c));
   const internasList = filtered.filter((c) => isInternalClient(c));
 
   const financialRows = useMemo(
@@ -879,7 +881,9 @@ export default function Clients() {
   const billingReadByClient = new Map<string, { tone: "late" | "due" | "paid"; label: string; detail: string }>();
   situacoes.forEach((sit, id) => billingReadByClient.set(id, { tone: sit.tom, label: sit.rotulo, detail: sit.detalhe }));
   const passaNaCobranca = (c: any) => isInternalClient(c) ? filtroCobranca === "todas" : passaNoFiltroDaCobranca(situacoes.get(String(c.id)), filtroCobranca);
-  const contagemDaCobranca = (f: FiltroDaCobranca) => [...principais, ...avulsosList].filter((c) => !isInternalClient(c) && passaNoFiltroDaCobranca(situacoes.get(String(c.id)), f)).length;
+  // A contagem de cada filtro conta a mesma base da lista exibida (na aba Inativos, todos os inativos).
+  const baseDaContagem = typeFilter === "inactive" ? filtered : [...principais, ...avulsosList];
+  const contagemDaCobranca = (f: FiltroDaCobranca) => baseDaContagem.filter((c) => !isInternalClient(c) && passaNoFiltroDaCobranca(situacoes.get(String(c.id)), f)).length;
   // Na aba Inativos, todos os inativos numa lista só (recorrente, híbrido ou avulso).
   const principaisVisiveis = (typeFilter === "inactive" ? filtered.filter((c) => !isInternalClient(c)) : principais).filter(passaNaCobranca);
   const avulsosVisiveis = typeFilter === "inactive" ? [] : avulsosList.filter(passaNaCobranca);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useProjects, useTasks } from "@/hooks/useSupabaseData";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 import { useAuth } from "@/contexts/AuthContext";
+import { dataDoPortal } from "@/lib/clientes/cobrancaDoPortal";
 import { Plus, MoreHorizontal, Clock, Sparkles, FolderOpen, ListFilter } from "lucide-react";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ProjectDrawer from "@/components/admin/ProjectDrawer";
@@ -66,10 +67,8 @@ export default function Projects() {
   const filtered = visiveis.filter((p: any) => filter === "all" || p.status === filter);
   const contagem = (valor: string) => (valor === "all" ? visiveis.length : visiveis.filter((p: any) => p.status === valor).length);
 
-  const formatDate = (d: string) => {
-    if (!d) return "";
-    return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
-  };
+  // `deadline` é DATE: `new Date("2026-11-10")` é 09/11 às 21h em São Paulo e a tela mostrava o dia anterior.
+  const formatDate = (d: string) => dataDoPortal(d);
 
   if (isClient && clientProject) {
     return <ProjectView project={clientProject} onBack={() => setClientProject(null)} />;
