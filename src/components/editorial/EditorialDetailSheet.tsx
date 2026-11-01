@@ -536,6 +536,9 @@ export default function EditorialDetailSheet({
           });
         if (!active) {
           publications.push({
+            // Sem publicação nenhuma (post que nasceu de tarefa) a arte aprovada também vai com as lâminas e o
+            // modo de entrega; antes ia `asset_file_ids: []` fixo e virava agendamento manual sem lâminas.
+            ...(entregaAprovada || { asset_file_ids: [] }),
             id: null,
             idempotency_key: crypto.randomUUID(),
             external_account_id: inlineAccountId,
@@ -543,7 +546,6 @@ export default function EditorialDetailSheet({
             caption: fresh.post.default_caption,
             first_comment: null,
             alt_text: null,
-            asset_file_ids: [],
             scheduled_at: scheduledAtIso,
             scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
           });

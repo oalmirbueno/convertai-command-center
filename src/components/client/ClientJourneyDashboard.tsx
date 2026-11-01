@@ -176,12 +176,16 @@ export default function ClientJourneyDashboard({
     if (pulseScore === null || pulseSending) return;
     setPulseSending(true);
     try {
-      const { data: fresh } = await supabase
+      const { data: fresh, error: erroDeLeitura } = await supabase
         .from("profiles")
         .select("services_config")
         .eq("id", clientId)
         .maybeSingle();
-      const current = (fresh?.services_config as any) || {};
+      // Sem a leitura, `current` virava {} e o update gravava SÓ o pulso, apagando o resto do services_config
+      // (frentes, empresa interna, avulso concluído, vínculo com o lead). Sem o cadastro lido, não grava nada.
+      if (erroDeLeitura) throw erroDeLeitura;
+      if (!fresh) throw new Error("Cadastro do cliente não encontrado.");
+      const current = (fresh.services_config as any) || {};
       const history = Array.isArray(current.pulse_history) ? current.pulse_history : [];
       const entry = {
         date: new Date().toISOString(),

@@ -10,6 +10,8 @@ import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Painel, Sec
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { parseAppDate } from "@/lib/dateBR";
+import { cobrancaAtrasada, dataDoPortal } from "@/lib/clientes/cobrancaDoPortal";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
@@ -38,10 +40,8 @@ function receivedOf(row: any) {
   return 0;
 }
 
-function formatDate(d: string) {
-  if (!d) return "";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
+// DATE ("AAAA-MM-DD") lido como dia de calendário: `new Date(d)` mostrava o vencimento um dia antes em UTC-3.
+const formatDate = (d: string) => dataDoPortal(d);
 
 export default function ClientFinanceiro() {
   const { user, profile: authProfile } = useAuth();
@@ -124,7 +124,7 @@ export default function ClientFinanceiro() {
 
   // Plan time
   const renewalDateStr = profile?.plan_renewal_date || latestPlan?.due_date;
-  const renewalDate = renewalDateStr ? new Date(renewalDateStr) : null;
+  const renewalDate = renewalDateStr ? parseAppDate(renewalDateStr) : null;
   const today = new Date();
   const daysLeft = renewalDate
     ? Math.max(Math.ceil((renewalDate.getTime() - today.getTime()) / 86400000), 0)
@@ -211,7 +211,7 @@ export default function ClientFinanceiro() {
   };
 
   const statusDoPagamento = (status: string, dueDate: string) => {
-    const isOverdue = status === "pending" && new Date(dueDate) < today;
+    const isOverdue = cobrancaAtrasada(status, dueDate);
     return {
       label: status === "paid" ? "Pago" : status === "partial" ? "Parcial" : isOverdue ? "Atrasado" : "Pendente",
       dot: status === "paid" ? "bg-success" : status === "partial" ? "bg-info" : isOverdue ? "bg-destructive" : "bg-warning",

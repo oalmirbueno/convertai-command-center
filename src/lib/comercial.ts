@@ -831,16 +831,34 @@ export interface Atividade {
   notes: string | null;
 }
 
-/** Todas as atividades abertas, de todos os leads: a agenda do comercial. */
+const COLUNAS_DA_ATIVIDADE = "id, lead_id, kind, title, due_at, done_at, owner_id, notes";
+
+/**
+ * Todas as atividades abertas, de todos os leads, mais as concluídas mais recentes: a agenda do comercial.
+ *
+ * Antes era uma leitura só, em ordem crescente com limite de 500: passando de 500 linhas (contando as
+ * concluídas), vinham as MAIS ANTIGAS e as de hoje e do futuro sumiam da Agenda, do funil ("sem próximo passo")
+ * e da ficha do lead. Agora as abertas vêm todas e as concluídas vêm das mais novas para trás.
+ */
 export async function listarAtividades(): Promise<Atividade[]> {
-  const { data, error } = await supabase
-    .from("commercial_activities")
-    .select("id, lead_id, kind, title, due_at, done_at, owner_id, notes")
-    .order("due_at", { ascending: true })
-    .limit(500);
-  if (error) throw new ErroDeLeitura("as atividades", error);
-  if (!data) return [];
-  return data as unknown as Atividade[];
+  const [abertas, feitas] = await Promise.all([
+    supabase
+      .from("commercial_activities")
+      .select(COLUNAS_DA_ATIVIDADE)
+      .is("done_at", null)
+      .order("due_at", { ascending: true })
+      .limit(1000),
+    supabase
+      .from("commercial_activities")
+      .select(COLUNAS_DA_ATIVIDADE)
+      .not("done_at", "is", null)
+      .order("due_at", { ascending: false })
+      .limit(500),
+  ]);
+  if (abertas.error) throw new ErroDeLeitura("as atividades", abertas.error);
+  if (feitas.error) throw new ErroDeLeitura("as atividades", feitas.error);
+  const todas = [...(abertas.data || []), ...(feitas.data || [])] as unknown as Atividade[];
+  return todas.sort((a, b) => (a.due_at < b.due_at ? -1 : a.due_at > b.due_at ? 1 : 0));
 }
 
 export async function salvarAtividade(input: {

@@ -704,13 +704,30 @@ function LegacyFinanceiro() {
           return;
         }
         if (remaining > 0 && payModal.clientId) {
-          await supabase.from("billing").insert({
+          const { error: insertError } = await supabase.from("billing").insert({
             client_id: payModal.clientId,
             type: currentBill.type || "renewal",
             amount: remaining,
             due_date: currentBill.due_date || today,
             description: `Saldo restante: ${fmt(remaining)}`,
           });
+          if (insertError) {
+            // A original já virou "partial" e o saldo só existe na linha nova: sem ela, o restante sumia de
+            // A receber, atrasados e régua (todos leem "pending") e a tela ainda dizia sucesso. Desfaz o parcial.
+            const { error: rollbackError } = await supabase.from("billing").update({
+              status: "pending",
+              paid_date: currentBill.paid_date ?? null,
+              paid_amount: currentBill.paid_amount ?? null,
+              description: currentBill.description ?? null,
+            }).eq("id", payModal.id).eq("status", "partial");
+            await queryClient.invalidateQueries({ queryKey: ["billing"] });
+            toast.error(
+              rollbackError
+                ? `Não consegui criar o saldo restante (${insertError.message}) nem desfazer o parcial. Confira esta cobrança.`
+                : `Não consegui registrar o saldo restante: ${insertError.message}. A cobrança voltou a pendente.`,
+            );
+            return;
+          }
         }
         await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label}, restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
