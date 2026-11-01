@@ -46,6 +46,7 @@ import {
   useEditorialClientScope,
   useEditorialCalendar,
   useEditorialLinkedTaskIds,
+  useEditorialClientTaskLinks,
   useEditorialMutations,
   useEditorialPostDetail,
   loadEditorialPostForMutation,
@@ -354,10 +355,19 @@ export default function EditorialCalendar() {
   );
   const canUseTeamData = permissions.canEdit && !isImpersonating;
   const editorialScopeQuery = useEditorialClientScope(canUseTeamData);
+  // "Ver como cliente" usa o índice da equipe (o mesmo vínculo que o cliente
+  // passa a receber), para a prévia mostrar a agenda como o cliente a vê.
   const linkedTaskIdsQuery = useEditorialLinkedTaskIds(
-    canUseTeamData,
+    canUseTeamData || isImpersonating,
     editorialRealtimeGateRef,
   );
+  // O cliente não lê editorial_post_internal: o vínculo tarefa -> conteúdo
+  // dele vem da função própria. Sem isto a mesma peça aparecia duas vezes
+  // (a tarefa no prazo e o card do conteúdo).
+  const clientTaskLinksQuery = useEditorialClientTaskLinks(
+    !canUseTeamData && !isImpersonating,
+  );
+  const taskLinkIndex = linkedTaskIdsQuery.data || clientTaskLinksQuery.data;
   const teamMembersQuery = useTeamMembers(canUseTeamData);
   // Pautas do Kanban aparecem para TODOS os perfis (o cronograma e trabalho
   // e o cliente tem que ver); a RLS garante que cliente so le as dele.
@@ -603,12 +613,12 @@ export default function EditorialCalendar() {
     [clientNames, projectRows],
   );
   const linkedTaskIds = useMemo(
-    () => new Set(linkedTaskIdsQuery.data?.taskIds || []),
-    [linkedTaskIdsQuery.data?.taskIds],
+    () => new Set(taskLinkIndex?.taskIds || []),
+    [taskLinkIndex?.taskIds],
   );
   const linkedPostIdByTaskId = useMemo(
-    () => linkedTaskIdsQuery.data?.postIdByTaskId || {},
-    [linkedTaskIdsQuery.data?.postIdByTaskId],
+    () => taskLinkIndex?.postIdByTaskId || {},
+    [taskLinkIndex?.postIdByTaskId],
   );
   const candidateTasks = useMemo(() => {
     const statusOrder: Record<string, number> = {

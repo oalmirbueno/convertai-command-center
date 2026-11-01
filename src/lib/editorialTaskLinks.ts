@@ -40,3 +40,26 @@ export function buildEditorialTaskLinkIndex(
     postIdByTaskId,
   };
 }
+
+/**
+ * Agenda do cliente (01/11/2026): o índice tarefa -> conteúdo do próprio cliente, vindo da função
+ * `editorial_client_task_links` (o cliente não lê editorial_post_internal). Sem ele a mesma peça aparecia
+ * duas vezes: a tarefa no prazo e o card do conteúdo.
+ *
+ * Função ainda não aplicada no banco (o PostgREST responde PGRST202; o Postgres, 42883): devolve índice
+ * vazio, que é exatamente o comportamento de antes. Qualquer outro erro sobe, para não guardar "sem
+ * vínculo" como dado bom.
+ */
+export function indiceDoClienteAPartirDaResposta(resposta: {
+  data: EditorialTaskLinkRow[] | null;
+  error: { code?: string | null; message?: string } | null;
+}): EditorialTaskLinkIndex {
+  if (resposta.error) {
+    const codigo = String(resposta.error.code || "");
+    if (codigo === "PGRST202" || codigo === "42883") return { taskIds: [], postIdByTaskId: {} };
+    throw resposta.error;
+  }
+  const linhas = resposta.data || [];
+  // A função já devolve só conteúdos ativos e não arquivados: todos contam como ativos.
+  return buildEditorialTaskLinkIndex(linhas, new Set(linhas.map((linha) => linha.post_id)));
+}
