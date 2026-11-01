@@ -710,6 +710,7 @@ export default function AdminComercial() {
           empresas={empresas}
           atividades={atividades}
           eventos={eventos}
+          clientes={clientes}
           onFechar={() => {
             setLeadAberto(null);
             setNovoLead(false);
@@ -1209,13 +1210,14 @@ type FormDoLead = {
   org: Record<CampoDaEmpresa, string>;
 };
 
-function EditorDeLead({
+export function EditorDeLead({
   lead,
   campanhas,
   equipe,
   empresas,
   atividades,
   eventos,
+  clientes = [],
   onFechar,
   onSalvo,
 }: {
@@ -1225,6 +1227,8 @@ function EditorDeLead({
   empresas: Empresa[];
   atividades: Atividade[];
   eventos: EventoDoLead[];
+  /** Os clientes do painel, para ligar o lead ganho ao cadastro (o mesmo seletor do quadro). */
+  clientes?: Array<{ id: string; nome: string }>;
   onFechar: () => void;
   onSalvo: () => Promise<unknown>;
 }) {
@@ -1272,6 +1276,9 @@ function EditorDeLead({
   const [salvando, setSalvando] = useState(false);
   const [nota, setNota, esquecerNota] = useEstadoDoComercial(`rascunho:nota:${lead?.id || "novo"}`, "", { validar: ehTexto });
   const [motivo, setMotivo] = useEstadoDoComercial(`rascunho:motivo:${lead?.id || "novo"}`, "", { validar: ehTexto });
+  // Cliente do painel para o "Ganho" pela janela. Sem isto o ganho daqui gravava won_client_id nulo:
+  // a ponte com o Financeiro e o "Gerar proposta" ficavam sem cliente (o quadro já perguntava).
+  const [clienteGanho, setClienteGanho] = useState(lead?.won_client_id || "");
   // O que estava no banco quando o editor abriu: e contra isto que se sabe se
   // ha edicao por salvar (a barra de salvar avisa, e fechar nao perde nada).
   const [formInicial] = useState(() => JSON.stringify(formDoBanco()));
@@ -1354,7 +1361,7 @@ function EditorDeLead({
       const salvou = await salvar({ manterAberto: true });
       if (!salvou) return;
     }
-    if (await moverLead({ lead, paraEstagio: para, motivo })) {
+    if (await moverLead({ lead, paraEstagio: para, motivo, clienteGanho: para === "ganho" ? clienteGanho || null : null })) {
       setMotivo("");
       await onSalvo();
       toast.success(`Movido para ${rotuloDoEstagio(para)}.`);
@@ -1595,6 +1602,22 @@ function EditorDeLead({
                   aria-label="Motivo da perda"
                   className={juntar(campo, "mt-2")}
                 />
+                {/* Cliente do ganho: o mesmo elo que o diálogo do quadro pede ao fechar. */}
+                {lead.stage !== "ganho" && (
+                  <select
+                    value={clienteGanho}
+                    onChange={(e) => setClienteGanho(e.target.value)}
+                    aria-label="Cliente no painel (ao marcar como ganho)"
+                    className={juntar(campo, "mt-2")}
+                  >
+                    <option value="">Cliente no painel (ao marcar como ganho): ainda não cadastrei</option>
+                    {clientes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </section>
 
               <AtividadesDoLead
