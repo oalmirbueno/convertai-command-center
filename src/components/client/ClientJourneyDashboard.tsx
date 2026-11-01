@@ -49,6 +49,8 @@ import { useTelaPequena } from "./useTelaPequena";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { estruturaDoRitual, resumoDoRitual } from "@/lib/ritualTexto";
 import { primeiraFrase } from "@/lib/frases";
+import { todayBR } from "@/lib/dateBR";
+import { cobrancaAtrasada } from "@/lib/clientes/cobrancaDoPortal";
 import {
   daysUntil,
   formatDateShort,
@@ -135,7 +137,7 @@ export default function ClientJourneyDashboard({
     validar: (v) => typeof v === "boolean",
   });
   const recolhidoNoCelular = pequena && !maisDetalhes;
-  const { loadingProjects, errorProjects, refetchProjects, data } = useClientDashboardData(clientId);
+  const { loadingProjects, errorProjects, refetchProjects, errorAprovacoes, refetchAprovacoes, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
     doneProjects,
@@ -156,10 +158,11 @@ export default function ClientJourneyDashboard({
   // Avisos grandes: renovação chegando (7 dias) e pagamento em atraso.
   const renewalDays = clientProfile?.plan_renewal_date ? daysUntil(clientProfile.plan_renewal_date) : null;
   const renewalSoon = renewalDays !== null && renewalDays >= 0 && renewalDays <= 7 && clientProfile?.plan_status === "active";
-  const overdueBills = (clientPendingBilling || []).filter((b: any) => {
-    const due = new Date(`${b.due_date}T12:00:00`);
-    return due.getTime() < Date.now();
-  });
+  // Atraso só depois do dia do vencimento (dia de calendário de São Paulo). Antes, `due_date` às 12h < agora
+  // punha "Pagamento em atraso" na cobrança que vence hoje a partir do meio-dia. O conjunto lido já é o das
+  // cobranças em aberto; aqui só a data decide.
+  const hojeBR = todayBR();
+  const overdueBills = (clientPendingBilling || []).filter((b: any) => cobrancaAtrasada("pending", b.due_date, hojeBR));
   const overdueAmount = overdueBills.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
 
   // Pulso Aceleriq: avaliação rápida do cliente (guardada no próprio cadastro).
@@ -176,12 +179,16 @@ export default function ClientJourneyDashboard({
     if (pulseScore === null || pulseSending) return;
     setPulseSending(true);
     try {
-      const { data: fresh } = await supabase
+      const { data: fresh, error: erroDeLeitura } = await supabase
         .from("profiles")
         .select("services_config")
         .eq("id", clientId)
         .maybeSingle();
-      const current = (fresh?.services_config as any) || {};
+      // Sem a leitura, `current` virava {} e o update gravava SÓ o pulso, apagando o resto do services_config
+      // (frentes, empresa interna, avulso concluído, vínculo com o lead). Sem o cadastro lido, não grava nada.
+      if (erroDeLeitura) throw erroDeLeitura;
+      if (!fresh) throw new Error("Cadastro do cliente não encontrado.");
+      const current = (fresh.services_config as any) || {};
       const history = Array.isArray(current.pulse_history) ? current.pulse_history : [];
       const entry = {
         date: new Date().toISOString(),
@@ -412,6 +419,14 @@ export default function ClientJourneyDashboard({
             <ArrowUpRight className="ml-3 h-4 w-4 shrink-0 text-sky-500" aria-hidden="true" />
           </button>
         </FadeUp>
+      )}
+
+      {/* 2b · Etapas ou entregas não carregaram: avisa em vez de mostrar "nenhuma pendência" */}
+      {errorAprovacoes && (
+        <EstadoDeErro
+          titulo="Não foi possível conferir as suas entregas e aprovações."
+          acao={<button type="button" className={botao.secundario} onClick={() => refetchAprovacoes()}>Tentar de novo</button>}
+        />
       )}
 
       {/* 3 · Ação necessária: o que precisa aprovar (o destaque da tela) */}

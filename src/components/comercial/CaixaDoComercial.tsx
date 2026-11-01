@@ -216,8 +216,16 @@ function ConfigDoMercurio() {
   const [form, setForm] = useState<ConfigDoAgente | null>(null);
   const [salvando, setSalvando] = useState(false);
   const atual = form || lida.data || CONFIG_PADRAO;
-  const mudar = (m: Partial<ConfigDoAgente>) => setForm({ ...atual, ...m });
+  // Só se edita o que foi lido do banco. Com a leitura falha ou ainda a
+  // caminho, os padrões apareciam como reais e "Salvar" gravava por cima,
+  // apagando as orientações.
+  const pronto = lida.isSuccess;
+  const mudar = (m: Partial<ConfigDoAgente>) => {
+    if (!pronto) return;
+    setForm({ ...atual, ...m });
+  };
   const salvar = async () => {
+    if (!pronto) return;
     setSalvando(true);
     try {
       await salvarConfigDoMercurio(atual);
@@ -235,9 +243,17 @@ function ConfigDoMercurio() {
       <div className="flex min-w-0 items-center">
         <Settings2 className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <h2 className={juntar(texto.tituloSecao, "min-w-0 flex-1")}>Mercúrio</h2>
-        <span className={texto.auxiliar}>{atual.ativo ? "ligado" : "desligado"}</span>
+        <span className={texto.auxiliar}>{!pronto ? "" : atual.ativo ? "ligado" : "desligado"}</span>
       </div>
-      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3">
+      {lida.isError && (
+        <EstadoDeErro
+          className="mt-3"
+          titulo="Não foi possível ler a configuração do Mercúrio."
+          descricao="Os campos ficam travados até a leitura dar certo, para não gravar o padrão por cima."
+          acao={<button type="button" onClick={() => void lida.refetch()} className={botao.secundario}>Tentar de novo</button>}
+        />
+      )}
+      <fieldset disabled={!pronto} aria-busy={lida.isLoading || undefined} className="mt-3 grid min-w-0 grid-cols-1 gap-3 disabled:opacity-60">
         <label className={juntar(texto.corpo, "flex items-center")}>
           <input type="checkbox" className="mr-2" checked={atual.ativo} onChange={(e) => mudar({ ativo: e.target.checked })} />
           O Mercúrio está atendendo
@@ -258,12 +274,12 @@ function ConfigDoMercurio() {
           Orientações para o Mercúrio
           <textarea value={atual.orientacoes || ""} onChange={(e) => mudar({ orientacoes: e.target.value })} rows={3} placeholder="Tom, o que oferecer primeiro, o que nunca prometer" className={juntar(campoTexto, "mt-1 resize-y")} aria-label="Orientações para o Mercúrio" />
         </label>
-      </div>
+      </fieldset>
       <div className="mt-3 flex items-center justify-end">
         <AjudaRecolhida className="mr-auto" rotulo="Sobre o limite de contatos">
           O limite vale só para o primeiro contato com quem ainda não conversou com a casa, como os leads da máquina de leads. Conversa que já começou não conta.
         </AjudaRecolhida>
-        <button type="button" disabled={salvando || !form} onClick={() => void salvar()} className={botao.primario}>
+        <button type="button" disabled={salvando || !form || !pronto} onClick={() => void salvar()} className={botao.primario}>
           {salvando ? "Salvando…" : "Salvar"}
         </button>
       </div>

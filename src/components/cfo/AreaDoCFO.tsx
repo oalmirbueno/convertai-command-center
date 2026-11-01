@@ -9,6 +9,7 @@ import { Etiqueta, corDoTom, type Tom } from "@/components/finance/pecasDoFinanc
 import { EVENTO_ABRIR_AGENTE } from "@/lib/lancador";
 import { useDadosDoCFO } from "@/lib/cfo/dadosDoCFO";
 import ConversaDoCFO from "./ConversaDoCFO";
+import { valorDigitadoEmReais } from "@/lib/financeiro/valorDigitado";
 import {
   avaliarGasto,
   reais,
@@ -189,7 +190,8 @@ function LimiteDoMes({ retrato: r }: { retrato: Retrato }) {
   const l = r.limiteQueVale;
   const [valor, setValor] = useState("");
   const [todoMes, setTodoMes] = useState(false);
-  const numeroDigitado = Number(String(valor).replace(/\./g, "").replace(",", "."));
+  // "1500.50" virava 150050 (todo ponto era tratado como milhar); a regra está em valorDigitado.ts.
+  const numeroDigitado = valorDigitadoEmReais(valor) ?? 0;
   const avaliacao = numeroDigitado > 0 ? avaliarGasto(r, { valor: numeroDigitado, recorrente: todoMes }) : null;
   const tom: Tom = avaliacao ? (avaliacao.nivel === "bloqueado" ? "perigo" : avaliacao.nivel === "atencao" ? "aviso" : "sucesso") : "apagado";
   return (

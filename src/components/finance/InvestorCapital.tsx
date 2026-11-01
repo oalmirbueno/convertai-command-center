@@ -13,6 +13,7 @@ import {
   botao, campo, campoTexto, juntar, superficie, texto,
 } from "@/components/sistema";
 import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi } from "@/components/finance/pecasDoFinanceiro";
+import { todayBR } from "@/lib/dateBR";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -529,7 +530,7 @@ function InvestorForm({ initial, onSave, onCancel }: any) {
     description: initial.description || "",
     category: initial.category || "inv_outros",
     amount: initial.amount?.toString() || "",
-    due_date: initial.due_date || new Date().toISOString().slice(0, 10),
+    due_date: initial.due_date || todayBR(),
     paid_date: initial.paid_date || "",
     status: initial.status || "paid",
     recurrence: initial.recurrence || "none",

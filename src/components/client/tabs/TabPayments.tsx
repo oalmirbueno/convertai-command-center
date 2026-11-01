@@ -4,6 +4,7 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useProjectPayments, usePaymentInstallments } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
+import { cobrancaAtrasada, dataDoPortal } from "@/lib/clientes/cobrancaDoPortal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, juntar, lista, superficie, texto } from "@/components/sistema";
@@ -60,13 +61,14 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+  // `due_date`/`paid_date` são DATE: `new Date("2026-11-10")` é 09/11 às 21h em São Paulo (dia anterior na
+  // tela e "Atrasado" desde a noite da véspera). Dia de calendário de São Paulo; atraso só depois do vencimento.
+  const formatDate = (d: string) => dataDoPortal(d);
 
   const getInstallmentStatus = (inst: any) => {
     if (inst.status === "paid") return "paid";
     if (inst.status === "partial") return "partial";
-    if (inst.due_date && new Date(inst.due_date) < new Date()) return "overdue";
+    if (cobrancaAtrasada("pending", inst.due_date)) return "overdue";
     return "pending";
   };
 

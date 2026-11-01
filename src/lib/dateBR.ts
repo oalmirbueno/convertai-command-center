@@ -50,6 +50,9 @@ export const todayBR = (d: Date = new Date()) => {
  * Convert a Date (or string) to YYYY-MM-DD in BR timezone.
  */
 export const toBRDateKey = (input: Date | string = new Date()) => {
+  // Data pura ("AAAA-MM-DD") já é o dia: `new Date` a leria como meia-noite
+  // UTC, que no Brasil ainda é o dia anterior (21h). Devolve como veio.
+  if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
   const d = typeof input === "string" ? new Date(input) : input;
   return todayBR(d);
 };

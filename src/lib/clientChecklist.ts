@@ -32,6 +32,9 @@ export interface Checklist {
 const novoId = () =>
   `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+// Ponto de abreviação ("Dr. Paulo") guardado com um caractere que não quebra; volta a ser ponto no fim.
+const PONTO_GUARDADO = "\u2024";
+
 /**
  * Quebra o pedido em itens sem depender de IA.
  *
@@ -41,10 +44,14 @@ const novoId = () =>
  * pessoas usam naturalmente ao enumerar tarefas.
  */
 export function splitRequestIntoItems(pedido: string): string[] {
+  // Ponto só separa com espaço depois: "aceleriq.com.br" e "ana@loja.com" ficam inteiros.
+  // Sem lookbehind (Safari 11): a abreviação é protegida antes do split.
   return pedido
-    .split(/\n|;|(?:,|\.)\s*(?=[a-zà-ú])|\s+e\s+(?=[a-zà-ú]{3,})|\s+depois\s+/i)
+    .replace(/\b(Dra|Dr|Sra|Sr)\.(?=\s)/gi, `$1${PONTO_GUARDADO}`)
+    .split(/\n|;|,\s*(?=[a-zà-ú])|\.\s+(?=[a-zà-ú])|\s+e\s+(?=[a-zà-ú]{3,})|\s+depois\s+/i)
     .map((parte) =>
       parte
+        .split(PONTO_GUARDADO).join(".")
         .replace(/^[-•*\d.)\s]+/, "")
         .replace(/\s+/g, " ")
         .trim(),
@@ -141,8 +148,34 @@ export async function listChecklists(clientId: string): Promise<Checklist[]> {
  *
  * O corpo do registro é reescrito junto, porque é ele que a IA lê: sem isso,
  * o histórico continuaria dizendo que nada foi feito.
+ *
+ * Os toques na mesma lista entram numa fila: cada um parte do estado deixado
+ * pelo anterior. Antes, dois cliques seguidos partiam da mesma lista antiga e
+ * o segundo update gravava a lista sem o primeiro item (desmarcava o que
+ * acabou de ser marcado). Com a fila vazia, vale a lista que a tela mandou.
  */
-export async function toggleChecklistItem(
+const filaDoChecklist = new Map<string, Promise<Checklist>>();
+
+export function toggleChecklistItem(
+  checklist: Checklist,
+  itemId: string,
+): Promise<Checklist | null> {
+  const vez = filaDoChecklist.get(checklist.id) ?? Promise.resolve(checklist);
+  let base = checklist;
+  const resultado = vez.then((atual) => {
+    base = atual;
+    return gravarToque(atual, itemId);
+  });
+  // O próximo toque parte do que foi gravado; se este falhou, do que havia antes dele.
+  const depois = resultado.then((gravado) => gravado ?? base);
+  filaDoChecklist.set(checklist.id, depois);
+  void depois.then(() => {
+    if (filaDoChecklist.get(checklist.id) === depois) filaDoChecklist.delete(checklist.id);
+  });
+  return resultado;
+}
+
+async function gravarToque(
   checklist: Checklist,
   itemId: string,
 ): Promise<Checklist | null> {

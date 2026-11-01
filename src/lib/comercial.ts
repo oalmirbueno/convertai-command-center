@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { lerOrigemDoClique, type OrigemDoClique } from "../../supabase/functions/_shared/origem-clique";
+import { toBRDateKey } from "@/lib/dateBR";
 
 /**
  * O Departamento Comercial da Aceleriq.
@@ -350,7 +351,8 @@ export async function moverLead(input: {
   if (lead.stage === paraEstagio) return true;
   const { data: sessao } = await supabase.auth.getUser();
   const fechou = paraEstagio === "ganho" || paraEstagio === "perdido";
-  const { error } = await supabase
+  erroDoComercial = "";
+  const { data: linhas, error } = await supabase
     .from("commercial_leads")
     .update({
       stage: paraEstagio,
@@ -358,9 +360,13 @@ export async function moverLead(input: {
       lost_reason: paraEstagio === "perdido" ? motivo?.trim() || null : null,
       won_client_id: paraEstagio === "ganho" ? clienteGanho || null : null,
     } as never)
-    .eq("id", lead.id);
-  if (error) return false;
-  await supabase.from("commercial_lead_events").insert({
+    .eq("id", lead.id)
+    .select("id");
+  if (error) { erroDoComercial = error.message; return false; }
+  // Sem erro e sem linha = a politica de acesso recusou em silencio: o cartao
+  // nao pode ficar na coluna nova como se o banco tivesse aceitado.
+  if (!linhas || linhas.length === 0) { erroDoComercial = "Sua conta não tem permissão para mover este lead."; return false; }
+  const { error: erroDoEvento } = await supabase.from("commercial_lead_events").insert({
     lead_id: lead.id,
     kind: "stage",
     from_stage: lead.stage,
@@ -368,6 +374,9 @@ export async function moverLead(input: {
     note: motivo?.trim() || null,
     created_by: sessao?.user?.id || null,
   } as never);
+  // O lead ja mudou de etapa; sem o evento o historico do funil fica com um
+  // buraco. A tela avisa em vez de dizer que deu tudo certo.
+  if (erroDoEvento) { erroDoComercial = `O lead mudou de etapa, mas a passagem não ficou no histórico. ${erroDoEvento.message}`; return false; }
   return true;
 }
 
@@ -418,17 +427,25 @@ export async function arquivarLead(id: string): Promise<boolean> {
  * se digita diferente.
  */
 export async function importarLeadsDoQuiz(): Promise<number> {
-  const { data: quiz } = await supabase
+  // Leitura ou gravacao que falha sobe como erro (a tela mostra "Não foi
+  // possível trazer os leads."), nunca como "Nenhum diagnóstico novo".
+  const { data: quiz, error: erroDoQuiz } = await supabase
     .from("quiz_submissions")
     .select("id, lead_name, lead_email, lead_whatsapp, lead_company, submitted_at")
     .order("submitted_at", { ascending: false })
     .limit(200);
+  if (erroDoQuiz) throw new ErroDeLeitura("os diagnósticos", erroDoQuiz);
   if (!quiz || quiz.length === 0) return 0;
 
-  const { data: existentes } = await supabase
+  // So os leads destes diagnosticos: ler a tabela inteira batia no teto de
+  // 1.000 linhas do PostgREST, o lote levava repetidos e o indice unico
+  // recusava a gravacao toda.
+  const ids = (quiz as Array<{ id: unknown }>).map((linha) => String(linha.id));
+  const { data: existentes, error: erroDosExistentes } = await supabase
     .from("commercial_leads")
     .select("quiz_submission_id")
-    .not("quiz_submission_id", "is", null);
+    .in("quiz_submission_id", ids);
+  if (erroDosExistentes) throw new ErroDeLeitura("os negócios", erroDosExistentes);
   const jaTem = new Set(
     ((existentes || []) as Array<{ quiz_submission_id: string }>).map(
       (l) => l.quiz_submission_id,
@@ -452,7 +469,8 @@ export async function importarLeadsDoQuiz(): Promise<number> {
   const { error } = await supabase.from("commercial_leads").insert(
     novos.map((n) => ({ ...n, created_by: sessao?.user?.id || null })) as never,
   );
-  return error ? 0 : novos.length;
+  if (error) throw new Error(`Não foi possível gravar os leads do diagnóstico. ${error.message}`);
+  return novos.length;
 }
 
 /* ──────────────────────────────── Metas ─────────────────────────────────── */
@@ -560,7 +578,9 @@ export async function receitaDoMes(periodo: string): Promise<number> {
     .is("cancelled_at", null)
     .gte("competence", inicio)
     .lt("competence", fim);
-  if (error || !data) return 0;
+  // Falha nao vira "R$ 0": zero e dado, leitura que falhou e outra coisa.
+  if (error) throw new ErroDeLeitura("a receita do Financeiro", error);
+  if (!data) return 0;
   return (data as Array<{ amount: unknown }>).reduce(
     (soma, linha) => soma + numero(linha.amount),
     0,
@@ -584,7 +604,8 @@ export async function clientesRecorrentesDoMes(periodo: string): Promise<number>
     .not("client_id", "is", null)
     .gte("competence", periodo)
     .lt("competence", proximoMes(periodo));
-  if (error || !data) return 0;
+  if (error) throw new ErroDeLeitura("os clientes recorrentes do Financeiro", error);
+  if (!data) return 0;
   return new Set(
     (data as Array<{ client_id: unknown }>).map((linha) => String(linha.client_id)),
   ).size;
@@ -597,9 +618,25 @@ export function proximoMes(periodo: string): string {
     : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
 }
 
+/**
+ * O dia de São Paulo de um instante do banco (timestamptz em UTC).
+ *
+ * Comparar o texto UTC com o mês jogava o ganho de 31/10 às 22h30 (já
+ * 01/11 em UTC) para novembro. Data pura ("AAAA-MM-DD") já é o dia e passa
+ * como está; texto que não é data devolve null.
+ */
+export function diaEmSaoPaulo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const instante = new Date(iso);
+  if (isNaN(instante.getTime())) return null;
+  return toBRDateKey(instante);
+}
+
 const dentroDoMes = (iso: string | null, periodo: string) => {
-  if (!iso) return false;
-  return iso >= periodo && iso < proximoMes(periodo);
+  const dia = diaEmSaoPaulo(iso);
+  if (!dia) return false;
+  return dia >= periodo && dia < proximoMes(periodo);
 };
 
 /**
@@ -631,6 +668,28 @@ export function realizadoDoMes(input: {
     return leads.filter((lead) => dentroDoMes(lead.created_at, periodo)).length;
   }
   return 0;
+}
+
+/**
+ * As linhas de meta do mês (alvo e realizado), como a Visão geral mostra.
+ *
+ * `clientesRecorrentes` é obrigatório de propósito: a Visão geral esquecia
+ * de passar a contagem do Financeiro e "Clientes recorrentes ativos" ficava
+ * sempre em 0, enquanto a aba Metas mostrava o número certo.
+ */
+export function linhasDeMetaDoMes(input: {
+  metas: Array<{ metric: string; target: number }>;
+  leads: Lead[];
+  periodo: string;
+  receitaFinanceiro: number;
+  clientesRecorrentes: number;
+}) {
+  const { metas, leads, periodo, receitaFinanceiro, clientesRecorrentes } = input;
+  return METRICAS.map((metrica) => ({
+    ...metrica,
+    alvo: metas.find((m) => m.metric === metrica.id)?.target || 0,
+    feito: realizadoDoMes({ metrica: metrica.id, leads, periodo, receitaFinanceiro, clientesRecorrentes }),
+  }));
 }
 
 /* ────────────────────────────── Campanhas ───────────────────────────────── */
@@ -831,16 +890,34 @@ export interface Atividade {
   notes: string | null;
 }
 
-/** Todas as atividades abertas, de todos os leads: a agenda do comercial. */
+const COLUNAS_DA_ATIVIDADE = "id, lead_id, kind, title, due_at, done_at, owner_id, notes";
+
+/**
+ * Todas as atividades abertas, de todos os leads, mais as concluídas mais recentes: a agenda do comercial.
+ *
+ * Antes era uma leitura só, em ordem crescente com limite de 500: passando de 500 linhas (contando as
+ * concluídas), vinham as MAIS ANTIGAS e as de hoje e do futuro sumiam da Agenda, do funil ("sem próximo passo")
+ * e da ficha do lead. Agora as abertas vêm todas e as concluídas vêm das mais novas para trás.
+ */
 export async function listarAtividades(): Promise<Atividade[]> {
-  const { data, error } = await supabase
-    .from("commercial_activities")
-    .select("id, lead_id, kind, title, due_at, done_at, owner_id, notes")
-    .order("due_at", { ascending: true })
-    .limit(500);
-  if (error) throw new ErroDeLeitura("as atividades", error);
-  if (!data) return [];
-  return data as unknown as Atividade[];
+  const [abertas, feitas] = await Promise.all([
+    supabase
+      .from("commercial_activities")
+      .select(COLUNAS_DA_ATIVIDADE)
+      .is("done_at", null)
+      .order("due_at", { ascending: true })
+      .limit(1000),
+    supabase
+      .from("commercial_activities")
+      .select(COLUNAS_DA_ATIVIDADE)
+      .not("done_at", "is", null)
+      .order("due_at", { ascending: false })
+      .limit(500),
+  ]);
+  if (abertas.error) throw new ErroDeLeitura("as atividades", abertas.error);
+  if (feitas.error) throw new ErroDeLeitura("as atividades", feitas.error);
+  const todas = [...(abertas.data || []), ...(feitas.data || [])] as unknown as Atividade[];
+  return todas.sort((a, b) => (a.due_at < b.due_at ? -1 : a.due_at > b.due_at ? 1 : 0));
 }
 
 export async function salvarAtividade(input: {
@@ -1142,11 +1219,23 @@ export async function salvarDadosDaEmpresaDoLead(
 ): Promise<boolean> {
   const preenchidos = Object.entries(campos).filter(([, v]) => typeof v === "string");
   if (preenchidos.length === 0) return true;
-  const { data } = await supabase.from("commercial_leads").select("organization_id, company").eq("id", leadId).maybeSingle();
-  const linha = data as { organization_id?: string | null; company?: string | null } | null;
+  erroDoComercial = "";
+  const { data, error } = await supabase.from("commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
+  // Leitura que falhou nao e "lead sem ficha": devolver true dizia "salvo" sem gravar nada.
+  if (error) { erroDoComercial = error.message; return false; }
+  const linha = data as { organization_id?: string | null } | null;
   if (!linha?.organization_id) return true;
-  const id = await salvarEmpresa({ id: linha.organization_id, name: linha.company || "Empresa", ...Object.fromEntries(preenchidos) } as never);
-  return Boolean(id);
+  // Sem `name`: a ficha da empresa tem nome proprio, e mandar o texto do lead
+  // (ou "Empresa" quando vazio) renomeava a ficha a cada dado completado.
+  const limpo = (v: string) => v.trim() || null;
+  const { data: linhas, error: erroDaEmpresa } = await supabase
+    .from("commercial_organizations")
+    .update(Object.fromEntries(preenchidos.map(([campo, v]) => [campo, limpo(String(v))])) as never)
+    .eq("id", linha.organization_id)
+    .select("id");
+  if (erroDaEmpresa) { erroDoComercial = erroDaEmpresa.message; return false; }
+  if (!linhas || linhas.length === 0) { erroDoComercial = "Sua conta não tem permissão para editar esta empresa."; return false; }
+  return true;
 }
 
 /**

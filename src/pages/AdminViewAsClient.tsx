@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   CabecalhoDePagina,
   Carregando,
+  EstadoDeErro,
   EstadoVazio,
   Etapas,
   SeletorCompacto,
@@ -114,18 +115,33 @@ export default function AdminViewAsClient() {
   const { data: clients, isLoading: loadingClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // Falha de leitura (rede, banco) é diferente de "cliente não encontrado": não volta para /clientes,
+  // mostra o erro com "Tentar de novo" (que relê, somando uma tentativa).
+  const [erroDeLeitura, setErroDeLeitura] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setErroDeLeitura(false);
+    const falhou = () => {
+      if (cancelled) return;
+      setErroDeLeitura(true);
+      setLoading(false);
+    };
 
     if (projectId && !clientId) {
+      setLoading(true);
       (async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("projects")
           .select("client_id")
           .eq("id", projectId)
           .maybeSingle();
         if (cancelled) return;
+        if (error) {
+          falhou();
+          return;
+        }
         if (data?.client_id) {
           setSearchParams(
             (current) => {
@@ -138,7 +154,7 @@ export default function AdminViewAsClient() {
         } else {
           navigate("/clientes");
         }
-      })();
+      })().catch(falhou);
       return () => {
         cancelled = true;
       };
@@ -155,19 +171,23 @@ export default function AdminViewAsClient() {
       setLoading(true);
       setSelectedClient(null);
       (async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("profiles")
           .select(PROFILE_SAFE_SELECT)
           .eq("id", clientId)
           .maybeSingle();
         if (cancelled) return;
+        if (error) {
+          falhou();
+          return;
+        }
         if (!data) {
           navigate("/clientes");
           return;
         }
         setSelectedClient(data);
         setLoading(false);
-      })();
+      })().catch(falhou);
     }
 
     return () => {
@@ -178,6 +198,7 @@ export default function AdminViewAsClient() {
     navigate,
     projectId,
     setSearchParams,
+    tentativa,
   ]);
 
   const selectClient = (c: any) => {
@@ -259,6 +280,19 @@ export default function AdminViewAsClient() {
             ))}
           </ul>
         )}
+      </div>
+    );
+  }
+
+  if (erroDeLeitura) {
+    return (
+      <div className="min-w-0 space-y-5">
+        <CabecalhoDePagina titulo="Ver como cliente" voltar={{ para: "/clientes", rotulo: "Clientes" }} />
+        <EstadoDeErro
+          titulo="Não foi possível carregar o portal deste cliente."
+          descricao="A leitura falhou (conexão ou servidor). O cliente não foi alterado."
+          acao={<button type="button" className={botao.secundario} onClick={() => setTentativa((n) => n + 1)}>Tentar de novo</button>}
+        />
       </div>
     );
   }

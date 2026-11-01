@@ -230,9 +230,18 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
     const storageRef = storageRefFromFile({
       fileUrl: confirmDelete.original_file_url,
     });
-    const { error } = await supabase.from("contracts").delete().eq("id", confirmDelete.id);
+    // `.select("id")` devolve as linhas apagadas: a RLS que recusa não dá erro, só apaga 0 linhas. Sem a
+    // linha apagada, o PDF fica no storage e a tela não diz "Contrato removido".
+    const { data: apagados, error } = await supabase.from("contracts").delete().eq("id", confirmDelete.id).select("id");
     if (error) toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
-    else {
+    else if (!apagados || apagados.length === 0) {
+      toast({
+        title: "Não foi possível excluir o contrato",
+        description: "O banco não removeu o registro (sem permissão ou já alterado). Atualize a página e tente novamente.",
+        variant: "destructive",
+      });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+    } else {
       let storageError: string | null = null;
       if (storageRef) {
         const { error: removeError } = await supabase.storage

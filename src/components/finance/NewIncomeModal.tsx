@@ -83,17 +83,25 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   // Load existing one_off projects for selected client
   const [existingProjects, setExistingProjects] = useState<any[]>([]);
   useEffect(() => {
-    if (!clientId) { setExistingProjects([]); return; }
+    // Trocar rápido de cliente A para B: a resposta de A podia chegar depois da de B e a lista mostrava
+    // os projetos de A com B selecionado (e a entrada era vinculada ao projeto de outro cliente). A flag
+    // descarta a resposta de um cliente que já não é o escolhido, e a lista do anterior some na hora.
+    let cancelado = false;
+    setExistingProjects([]);
+    if (!clientId) return;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("projects")
         .select("id, name, project_type, billing_mode")
         .eq("client_id", clientId)
         .eq("billing_mode", "one_off")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
+      if (cancelado) return;
+      if (error) { toast.error("Não consegui carregar os projetos deste cliente."); return; }
       setExistingProjects(data || []);
     })();
+    return () => { cancelado = true; };
   }, [clientId]);
 
   const reset = () => {
@@ -331,7 +339,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
               largo
               apoio={willBecomeHybrid ? "Cliente recorrente: com um projeto avulso ele vira híbrido." : undefined}
             >
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={campo}>
+              <select value={clientId} onChange={(e) => { setClientId(e.target.value); setExistingProjectId(""); }} className={campo}>
                 <option value="">Selecionar cliente...</option>
                 {(clients || []).map((c: any) => (
                   <option key={c.id} value={c.id}>

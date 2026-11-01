@@ -71,6 +71,17 @@ type Publica = {
 
 type Agencia = { nome?: string; site?: string; email?: string; whatsapp?: string; instagram?: string };
 
+/**
+ * O dia de São Paulo de um instante gravado em UTC. O `slice(0, 10)` do texto
+ * dava o dia UTC: aceita em 31/10 às 22h aparecia como 01/11. Data pura
+ * ("AAAA-MM-DD") já é o dia e passa como está.
+ */
+function diaDoInstante(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const instante = new Date(iso);
+  return isNaN(instante.getTime()) ? iso.slice(0, 10) : hojeEmSaoPaulo(instante);
+}
+
 function sessaoDaAba(token: string): string {
   const chave = `proposta:sessao:${token.slice(0, 16)}`;
   try {
@@ -390,7 +401,7 @@ export default function PropostaPublica() {
   const blocoDeAceite =
     status === "aceita" ? (
       <div id="pd-aceite" className="pd-aceite" role="status">
-        <p className="pd-ok">Proposta aceita{quemAceitou ? ` por ${quemAceitou.nome}` : ""}{quemAceitou && quemAceitou.em ? ` em ${dataCurta(quemAceitou.em.slice(0, 10))}` : ""}.</p>
+        <p className="pd-ok">Proposta aceita{quemAceitou ? ` por ${quemAceitou.nome}` : ""}{quemAceitou && quemAceitou.em ? ` em ${dataCurta(diaDoInstante(quemAceitou.em))}` : ""}.</p>
         <p className="pd-pequeno">Obrigado. A Aceleriq entra em contato com o contrato e o kickoff.</p>
       </div>
     ) : motivo ? (
@@ -424,7 +435,7 @@ export default function PropostaPublica() {
           conteudo,
           itens,
           validade_ate: validade,
-          data: p.enviada_em ? p.enviada_em.slice(0, 10) : null,
+          data: p.enviada_em ? diaDoInstante(p.enviada_em) : null,
           pacotes: p.pacotes,
           pagamento: p.pagamento,
           visual: p.visual,

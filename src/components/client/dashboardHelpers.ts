@@ -102,22 +102,25 @@ export function useClientDashboardData(clientId: string) {
 
   const projectIds = (projects || []).map((p: any) => p.id);
 
-  const { data: milestones } = useQuery({
+  // Etapas e entregas: o erro da consulta é lançado (antes virava lista vazia e o cliente via "nada para
+  // aprovar" numa falha de rede). A tela não cai: mostra um aviso com "Tentar de novo" (errorAprovacoes).
+  const { data: milestones, isError: errorMilestones, refetch: refetchMilestones } = useQuery({
     queryKey: ["client-milestones-all", clientId, projectIds.join(",")],
     queryFn: async () => {
       if (!projectIds.length) return [];
-      const { data } = await supabase.from("milestones")
+      const { data, error } = await supabase.from("milestones")
         .select("id, project_id, title, status, target_date, project:projects!milestones_project_id_fkey(name)")
         .in("project_id", projectIds).is("deleted_at", null).order("target_date", { ascending: true });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
   });
 
-  const { data: pendingFiles } = useQuery({
+  const { data: pendingFiles, isError: errorPendingFiles, refetch: refetchPendingFiles } = useQuery({
     queryKey: ["client-pending-approvals", clientId],
     queryFn: async () => {
-      const { data } = await supabase.from("files")
+      const { data, error } = await supabase.from("files")
         .select("id, file_name, created_at, version, project:projects!files_project_id_fkey(name)")
         .eq("client_id", clientId)
         .eq("visibility", "approval")
@@ -127,15 +130,16 @@ export function useClientDashboardData(clientId: string) {
         .is("archived_at", null)
         .is("parent_file_id", null)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && !!clientId,
   });
 
-  const { data: deliveredFiles } = useQuery({
+  const { data: deliveredFiles, isError: errorDeliveredFiles, refetch: refetchDeliveredFiles } = useQuery({
     queryKey: ["client-delivered-files", clientId],
     queryFn: async () => {
-      const { data } = await supabase.from("files")
+      const { data, error } = await supabase.from("files")
         .select("id, file_name, created_at, version, approval_status, visibility, project_id, project:projects!files_project_id_fkey(name)")
         .eq("client_id", clientId)
         .in("visibility", ["client_shared", "approval"])
@@ -143,6 +147,7 @@ export function useClientDashboardData(clientId: string) {
         .is("archived_at", null)
         .is("parent_file_id", null)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && !!clientId,
@@ -232,6 +237,13 @@ export function useClientDashboardData(clientId: string) {
     /** Falha na consulta de projetos (a base da tela): mostra "Tentar de novo". */
     errorProjects: errorProjects && !projects,
     refetchProjects,
+    /** Falha em etapas ou entregas (sem dado anterior): aviso na tela, sem derrubar o resto do painel. */
+    errorAprovacoes: (errorMilestones && !milestones) || (errorPendingFiles && !pendingFiles) || (errorDeliveredFiles && !deliveredFiles),
+    refetchAprovacoes: () => {
+      if (errorMilestones) refetchMilestones();
+      if (errorPendingFiles) refetchPendingFiles();
+      if (errorDeliveredFiles) refetchDeliveredFiles();
+    },
     data: {
       projects: allProjects,
       activeProjects,

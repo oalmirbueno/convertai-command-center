@@ -565,10 +565,16 @@ function LegacyFinanceiro() {
     if (!rechargeModal || !rechargeForm.amount) { toast.error("Informe o valor"); return; }
     const amount = parseFloat(rechargeForm.amount);
     const periodLabel = rechargeForm.period === "mensal" ? "mensal" : "semanal";
-    await supabase.from("recharge_requests").insert({
+    const { error: erroDoPedido } = await supabase.from("recharge_requests").insert({
       client_id: rechargeModal.clientId, platform: rechargeModal.platform,
       amount, reason: rechargeForm.reason ? `${rechargeForm.reason} (${periodLabel})` : `Investimento ${periodLabel}`, requested_by: user?.id,
     });
+    // Pedido não gravado (RLS, rede): antes o cliente era notificado e o webhook disparava para um pedido
+    // que não existe, e ele não tinha o que confirmar. Para aqui e mantém o modal com o valor.
+    if (erroDoPedido) {
+      toast.error("Não consegui registrar a solicitação de recarga. Nada foi enviado ao cliente.");
+      return;
+    }
     // Notify the CLIENT
     await notifyUser(rechargeModal.clientId, `Recarga de ${fmt(amount)} (${periodLabel}) solicitada para ${rechargeModal.platform}. Por favor, confirme.`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
@@ -589,21 +595,68 @@ function LegacyFinanceiro() {
     setRechargeForm({ amount: "", reason: "", period: "semanal" });
   };
 
+  // Pedidos de recarga sendo concluídos agora: dois cliques rápidos não somam a recarga duas vezes.
+  const concluindoRecarga = useRef(new Set<string>());
+
   const handleCompleteRecharge = async (r: any) => {
-    // Update wallet balance
-    const wallet = (wallets || []).find((w: any) => w.client_id === r.client_id && w.platform === r.platform);
-    if (wallet) {
-      await supabase.from("ads_wallet").update({
-        balance: Number(wallet.balance) + Number(r.amount),
-        last_recharge_date: new Date().toISOString(),
-      }).eq("id", wallet.id);
+    if (concluindoRecarga.current.has(r.id)) return;
+    concluindoRecarga.current.add(r.id);
+    try {
+      const wallet = (wallets || []).find((w: any) => w.client_id === r.client_id && w.platform === r.platform);
+      let saldoAnterior: { balance: number; last_recharge_date: string | null } | null = null;
+      let novoSaldo = 0;
+      if (wallet) {
+        // O saldo vem do banco, não do cache da tela: se o cliente gastou ou outra recarga entrou desde
+        // que a lista carregou, somar em cima do wallet.balance antigo apagava esse movimento.
+        const { data: atual, error: erroDaLeitura } = await supabase
+          .from("ads_wallet").select("balance, last_recharge_date").eq("id", wallet.id).maybeSingle();
+        if (erroDaLeitura || !atual) {
+          toast.error("Não consegui ler o saldo atual da wallet. A recarga não foi concluída.");
+          return;
+        }
+        saldoAnterior = { balance: Number(atual.balance) || 0, last_recharge_date: atual.last_recharge_date ?? null };
+        novoSaldo = saldoAnterior.balance + Number(r.amount);
+        // Grava só se o saldo ainda é o que acabou de ser lido: um gasto ou outra recarga entre a leitura e a
+        // gravação seria apagado pela soma feita sobre o valor velho.
+        const { data: gravados, error: erroDoSaldo } = await supabase.from("ads_wallet").update({
+          balance: novoSaldo,
+          last_recharge_date: new Date().toISOString(),
+        }).eq("id", wallet.id).eq("balance", saldoAnterior.balance).select("id");
+        if (erroDoSaldo) {
+          toast.error("Não consegui atualizar o saldo da wallet. A recarga não foi concluída.");
+          return;
+        }
+        if (!gravados || gravados.length === 0) {
+          queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+          toast.error("O saldo da wallet mudou enquanto a recarga era concluída. Nada foi alterado; tente de novo.");
+          return;
+        }
+      }
+      // Só conclui o pedido que ainda está aprovado: se outra aba já concluiu, o update não acha linha
+      // e o saldo somado acima é desfeito, em vez de a recarga contar duas vezes.
+      const { data: concluidos, error: erroDoPedido } = await supabase
+        .from("recharge_requests").update({ status: "completed", approved_by: user?.id })
+        .eq("id", r.id).eq("status", "approved").select("id");
+      if (erroDoPedido || !concluidos || concluidos.length === 0) {
+        if (wallet && saldoAnterior) {
+          // Desfaz só se ninguém mexeu no saldo depois de nós.
+          await supabase.from("ads_wallet").update(saldoAnterior).eq("id", wallet.id).eq("balance", novoSaldo);
+        }
+        queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
+        queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+        toast.error(erroDoPedido
+          ? "Não consegui concluir o pedido de recarga. O saldo foi mantido como estava."
+          : "Este pedido não está mais aprovado (talvez já tenha sido concluído). O saldo foi mantido como estava.");
+        return;
+      }
+      // Notify client
+      await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída. Saldo atualizado`, "billing", "/financeiro");
+      queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+      toast.success("Saldo atualizado!");
+    } finally {
+      concluindoRecarga.current.delete(r.id);
     }
-    await supabase.from("recharge_requests").update({ status: "completed", approved_by: user?.id }).eq("id", r.id);
-    // Notify client
-    await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída. Saldo atualizado`, "billing", "/financeiro");
-    queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
-    queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
-    toast.success("Saldo atualizado!");
   };
 
   const handleSendReminder = async (client: any, via: "notification" | "whatsapp") => {
@@ -627,17 +680,37 @@ function LegacyFinanceiro() {
 
   const handleEditPlan = async () => {
     if (!editPlanModal) return;
-    if (planForm.renewal_date) {
-      await supabase.from("profiles").update({ plan_renewal_date: planForm.renewal_date }).eq("id", editPlanModal.id);
+    const valor = planForm.amount ? parseFloat(planForm.amount) : null;
+    // O valor mensal mora no perfil (plan_value): é dele que o gatilho de renovação tira o valor da
+    // próxima cobrança. Mudar só a cobrança fazia a mensalidade seguinte nascer com o valor antigo.
+    const perfil = {
+      ...(planForm.renewal_date ? { plan_renewal_date: planForm.renewal_date } : {}),
+      ...(valor !== null && Number.isFinite(valor) ? { plan_value: valor } : {}),
+    };
+    if (Object.keys(perfil).length > 0) {
+      const { error } = await supabase.from("profiles").update(perfil).eq("id", editPlanModal.id);
+      if (error) {
+        toast.error("Não consegui salvar o plano do cliente. Nada foi alterado.");
+        return;
+      }
     }
     if (planForm.amount || planForm.description) {
-      const billingRecord = (billing || []).find((b: any) => b.client_id === editPlanModal.id && b.type === "renewal");
+      // Só a renovação ainda em aberto acompanha o plano. Antes pegava qualquer "renewal" (podia ser uma
+      // já paga) e reescrevia o valor de um recebimento passado.
+      const billingRecord = (billing || [])
+        .filter((b: any) => b.client_id === editPlanModal.id && b.type === "renewal" && b.status === "pending")
+        .sort((a: { due_date?: string | null }, b: { due_date?: string | null }) => String(b.due_date || "").localeCompare(String(a.due_date || "")))[0];
       if (billingRecord) {
-        await supabase.from("billing").update({
-          ...(planForm.amount ? { amount: parseFloat(planForm.amount) } : {}),
+        const { error } = await supabase.from("billing").update({
+          ...(valor !== null && Number.isFinite(valor) ? { amount: valor } : {}),
           ...(planForm.description ? { description: planForm.description } : {}),
           ...(planForm.renewal_date ? { due_date: planForm.renewal_date } : {}),
-        }).eq("id", billingRecord.id);
+        }).eq("id", billingRecord.id).eq("status", "pending");
+        if (error) {
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+          toast.error("O plano foi salvo, mas não consegui atualizar a cobrança pendente. Tente salvar de novo.");
+          return;
+        }
       }
     }
     queryClient.invalidateQueries({ queryKey: ["billing"] });
@@ -704,13 +777,30 @@ function LegacyFinanceiro() {
           return;
         }
         if (remaining > 0 && payModal.clientId) {
-          await supabase.from("billing").insert({
+          const { error: insertError } = await supabase.from("billing").insert({
             client_id: payModal.clientId,
             type: currentBill.type || "renewal",
             amount: remaining,
             due_date: currentBill.due_date || today,
             description: `Saldo restante: ${fmt(remaining)}`,
           });
+          if (insertError) {
+            // A original já virou "partial" e o saldo só existe na linha nova: sem ela, o restante sumia de
+            // A receber, atrasados e régua (todos leem "pending") e a tela ainda dizia sucesso. Desfaz o parcial.
+            const { error: rollbackError } = await supabase.from("billing").update({
+              status: "pending",
+              paid_date: currentBill.paid_date ?? null,
+              paid_amount: currentBill.paid_amount ?? null,
+              description: currentBill.description ?? null,
+            }).eq("id", payModal.id).eq("status", "partial");
+            await queryClient.invalidateQueries({ queryKey: ["billing"] });
+            toast.error(
+              rollbackError
+                ? `Não consegui criar o saldo restante (${insertError.message}) nem desfazer o parcial. Confira esta cobrança.`
+                : `Não consegui registrar o saldo restante: ${insertError.message}. A cobrança voltou a pendente.`,
+            );
+            return;
+          }
         }
         await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label}, restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
