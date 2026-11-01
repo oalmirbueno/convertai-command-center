@@ -41,6 +41,7 @@ import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 import { createBilling } from "@/lib/createBilling";
+import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -1775,9 +1776,10 @@ function LegacyFinanceiro() {
               const sumBillingPaid = (rows: any[]) =>
                 (rows || []).filter((b: any) => b.status === "paid" || b.status === "partial")
                   .reduce((s: number, b: any) => s + receivedOf(b), 0);
+              // Em aberto de cobrança: só a pendente. A parcial já tem o saldo numa linha "pending" própria;
+              // somar o resto dela de novo contava o mesmo dinheiro duas vezes.
               const sumBillingOpen = (rows: any[]) =>
-                (rows || []).filter((b: any) => b.status === "pending" || b.status === "partial")
-                  .reduce((s: number, b: any) => s + Math.max(Number(b.amount) - Number(b.paid_amount || 0), 0), 0);
+                (rows || []).reduce((s: number, b: any) => s + saldoDaCobranca(b), 0);
               const sumInstallmentsPaid = (pps: any[]) =>
                 (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
                   .filter((i: any) => i.status === "paid" || i.status === "partial")
