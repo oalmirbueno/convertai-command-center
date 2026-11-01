@@ -6,7 +6,7 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Zap, ArrowRight } from "lucide-react";
-import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, Painel, Secao, botao, etiqueta, foco, juntar, lista, superficie, texto } from "@/components/sistema";
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -49,41 +49,47 @@ export default function ClientFinanceiro() {
   const queryClient = useQueryClient();
 
   // ===== QUERIES =====
-  const { data: billing, isLoading: loadingBilling } = useQuery({
+  // As leituras lançam o erro em vez de devolver []: uma falha (RLS, rede) virava "nenhuma cobrança",
+  // "nenhuma recarga" e, no refetch de 15 s, apagava a lista que já estava na tela. Com o erro, o
+  // react-query mantém o último dado bom e a tela avisa que não conseguiu carregar.
+  const { data: billing, isLoading: loadingBilling, isError: erroNoBilling } = useQuery({
     queryKey: ["billing-client", clientId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("billing")
         .select("*")
         .eq("client_id", clientId!)
         .order("due_date", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && !!clientId,
     refetchInterval: 15000,
   });
 
-  const { data: wallets } = useQuery({
+  const { data: wallets, isError: erroNasWallets } = useQuery({
     queryKey: ["ads-wallet-client", clientId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("ads_wallet")
         .select("*")
         .eq("client_id", clientId!);
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && !!clientId,
     refetchInterval: 15000,
   });
 
-  const { data: rechargeRequests } = useQuery({
+  const { data: rechargeRequests, isError: erroNasRecargas } = useQuery({
     queryKey: ["recharge-requests-client", clientId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("recharge_requests")
         .select("*")
         .eq("client_id", clientId!)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && !!clientId,
@@ -172,10 +178,20 @@ export default function ClientFinanceiro() {
       toast.error("O modo de visualização do cliente é somente leitura");
       return;
     }
-    await supabase
+    // Só confirma o que ainda está pendente e confere a linha gravada: antes o cliente via "Recarga
+    // confirmada" e a agência era avisada mesmo quando o update falhava (RLS, rede) ou o pedido já tinha
+    // sido recusado, e o status continuava "pending".
+    const { data: gravados, error } = await supabase
       .from("recharge_requests")
       .update({ status: "approved" })
-      .eq("id", requestId);
+      .eq("id", requestId)
+      .eq("status", "pending")
+      .select("id");
+    if (error || !gravados || gravados.length === 0) {
+      queryClient.invalidateQueries({ queryKey: ["recharge-requests-client"] });
+      toast.error(error ? "Não consegui confirmar a recarga. Tente de novo." : "Esta recarga não está mais aguardando sua confirmação.");
+      return;
+    }
     await notifyAdmin(
       `${profile?.company_name || profile?.full_name || "Cliente"} confirmou recarga de ${formatCurrency(amount)} para ${platformLabels[platform] || platform}`,
       "billing",
@@ -190,10 +206,18 @@ export default function ClientFinanceiro() {
       toast.error("O modo de visualização do cliente é somente leitura");
       return;
     }
-    await supabase
+    // Mesma guarda da confirmação: sem linha gravada, não avisa a agência nem diz que recusou.
+    const { data: gravados, error } = await supabase
       .from("recharge_requests")
       .update({ status: "rejected" })
-      .eq("id", requestId);
+      .eq("id", requestId)
+      .eq("status", "pending")
+      .select("id");
+    if (error || !gravados || gravados.length === 0) {
+      queryClient.invalidateQueries({ queryKey: ["recharge-requests-client"] });
+      toast.error(error ? "Não consegui recusar a recarga. Tente de novo." : "Esta recarga não está mais aguardando sua confirmação.");
+      return;
+    }
     await notifyAdmin(
       `${profile?.company_name || profile?.full_name || "Cliente"} recusou a recarga solicitada`,
       "billing",
@@ -236,6 +260,13 @@ export default function ClientFinanceiro() {
           )
         }
       />
+
+      {(erroNoBilling || erroNasWallets || erroNasRecargas) && (
+        <EstadoDeErro
+          titulo="Não consegui carregar parte do seu financeiro."
+          descricao="Os dados abaixo podem estar incompletos. A página tenta de novo sozinha em alguns segundos."
+        />
+      )}
 
       {/* ===== LOADING ===== */}
       {loadingBilling ? (

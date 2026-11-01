@@ -25,6 +25,7 @@ import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { useFinanceBoxes, boxesTotal, EMPTY_BOXES, type FinanceBoxes } from "@/hooks/useFinanceBoxes";
 import { DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier } from "@/lib/directorPlan";
 import { proximoVencimento } from "@/lib/tributos";
+import { todayBR } from "@/lib/dateBR";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -672,7 +673,8 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
       category: form.category || defaultCat,
       amount: parseFloat(form.amount) || 0,
       due_date: form.due_date,
-      paid_date: form.status === "paid" ? (form.paid_date || new Date().toISOString().slice(0, 10)) : null,
+      // Dia de São Paulo: toISOString() é UTC e, depois das 21h, gravava o pagamento como feito amanhã.
+      paid_date: form.status === "paid" ? (form.paid_date || todayBR()) : null,
       status: form.status || "pending",
       recurrence: form.recurrence || "none",
       supplier: form.supplier || null,
@@ -728,7 +730,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
       } else {
         const { data, error } = await (supabase as any).rpc("expense_pagar", {
           _expense_id: e.id,
-          _pago_em: new Date().toISOString().slice(0, 10),
+          _pago_em: todayBR(), // dia de São Paulo, não o de UTC (após 21h virava amanhã)
           _valor: null,
           _proximo_vencimento: null,
         });

@@ -13,6 +13,8 @@ import AreaTributaria from "@/components/finance/AreaTributaria";
 // Frente CFO (30/09): a trava do limite do mês nos custos fixos novos.
 import { useTravaDeGasto } from "@/components/cfo/TravaDeGasto";
 import { custoMensal, diasAteVencer, proximoVencimento } from "@/lib/tributos";
+import { todayBR } from "@/lib/dateBR";
+import { reajustarProLabore } from "@/lib/financeiro/reajusteDoProLabore";
 import {
   CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, RegiaoRolavel, Secao, SeletorCompacto,
   botao, campo, juntar, superficie, texto, useEstadoDaTela,
@@ -39,7 +41,9 @@ const catLabel = (v: string) => FIXED_COST_CATEGORIES.find((c) => c.value === v)
 const isProLaboreExpense = (e: any) =>
   /pr[oó][\s_-]?labore/i.test(`${e?.description || ""} ${e?.notes || ""}`);
 
-const todayKey = () => new Date().toISOString().slice(0, 10);
+// Dia de hoje em São Paulo. O toISOString() é UTC: depois das 21h já era o dia seguinte e o "_pago_em"
+// (e o vencimento padrão de um custo novo) saía com a data de amanhã.
+const todayKey = () => todayBR();
 const monthDay10 = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-10`;
@@ -203,8 +207,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
       // recorrência antiga e cria um novo lançamento a partir deste mês.
       const activeRow = proLaboreRows.find((e: any) => e.recurrence === "monthly");
       if (activeRow && Number(activeRow.amount) !== value) {
-        await supabase.from("expenses").update({ recurrence: "none" }).eq("id", activeRow.id);
-        await supabase.from("expenses").insert({
+        const erroDoReajuste = await reajustarProLabore(supabase, activeRow, {
           description: "Pró-labore Almir",
           category: "salarios",
           amount: value,
@@ -214,6 +217,9 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
           notes: "Reajustado pela escada do Plano Diretor",
         });
         invalidate();
+        // O valor da escada já foi salvo nas configurações; o que falhou foi o custo fixo. O modal fica
+        // aberto para tentar de novo (a linha antiga continua mensal, então o reajuste é refeito).
+        if (erroDoReajuste) { toast.error(erroDoReajuste); return; }
       }
       toast.success(`Pró-labore atualizado para ${fmt(value)}`);
       setProLaboreModal(false);

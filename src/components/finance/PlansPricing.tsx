@@ -19,6 +19,7 @@ import {
   botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
 } from "@/components/sistema";
 import { AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, TituloRecolhivel, botaoDeLinha, corDoTom } from "@/components/finance/pecasDoFinanceiro";
+import { aliquotaDigitadaEmFracao } from "@/lib/financeiro/aliquotaDigitada";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pctLabel = (v: number | null | undefined) =>
@@ -42,12 +43,8 @@ const normName = (s: string | null | undefined) => (s || "").trim().toLowerCase(
 const isProLaboreExpense = (e: any) =>
   /pr[oó][\s_-]?labore/i.test(`${e?.description || ""} ${e?.notes || ""}`);
 
-const parsePct = (s: string): number | null => {
-  if (!s.trim()) return null;
-  const v = parseFloat(s.replace(",", "."));
-  if (!Number.isFinite(v)) return null;
-  return v > 1 ? v / 100 : v;
-};
+// Os três campos "Alíquota (%)" são digitados em porcentagem (ver aliquotaDigitada.ts): "0,5" é meio por cento.
+const parsePct = aliquotaDigitadaEmFracao;
 
 const receivedAmountOf = (row: any): number => {
   const total = Number(row?.amount) || 0;
