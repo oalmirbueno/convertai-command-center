@@ -2420,7 +2420,29 @@ type ListTimelineItem =
       dateKey: string;
       sortKey: string;
       item: ScheduledEditorialItem;
+    }
+  | {
+      kind: "anchored";
+      dateKey: string;
+      sortKey: string;
+      post: EditorialPostBundle;
     };
+
+/* Mesma etapa do card ancorado do Mês e da Semana (AnchoredPostPill): conta
+   as publicações, não só o status de produção. */
+function etapaDoAncorado(post: EditorialPostBundle) {
+  const agregado = aggregateEditorialStatus(
+    post.publications.map(({ publication }) => publication),
+  );
+  const publicacaoComData = post.publications.find(
+    ({ publication }) => publication.scheduled_at,
+  );
+  return editorialVisualStage(
+    post.post.production_status,
+    agregado,
+    publicacaoComData?.publication.scheduled_at ?? null,
+  );
+}
 
 function ListView({
   anchorDate,
@@ -2435,6 +2457,7 @@ function ListView({
   canPublish,
   moving,
   idsNaGrade,
+  ancorasPorDia,
   onSelectPost,
   onCreateFromTask,
 }: {
@@ -2450,6 +2473,7 @@ function ListView({
   canPublish: boolean;
   moving: boolean;
   idsNaGrade: Set<string>;
+  ancorasPorDia: Map<string, EditorialPostBundle[]>;
   onSelectPost: (post: EditorialPostBundle) => void;
   onCreateFromTask: (
     task: EditorialInboxTask,
@@ -2474,6 +2498,28 @@ function ListView({
       (taskDateKey(left) || "").localeCompare(taskDateKey(right) || ""),
     );
   const undatedTasks = tasks.filter((task) => !taskDateKey(task));
+  const noMes = (dateKey: string | null): dateKey is string =>
+    Boolean(dateKey && dateKey >= monthStartKey && dateKey <= monthEndKey);
+  /* Com cliente "Todos" a consulta traz 45 dias de folga para cada lado; a
+     Lista recortava só as tarefas pelo mês e mostrava, em novembro, as
+     publicações de outubro e dezembro. O recorte vale para tudo. */
+  const publicacoesDoMes = items.filter((item) =>
+    noMes(scheduledDateKey(item.publication.publication.scheduled_at)),
+  );
+  /* O conteúdo ancorado no prazo da tarefa sai do backlog (idsNaGrade) e
+     ocupa o dia no Mês e na Semana; a Lista precisa dele na agenda, senão
+     ele sumia daqui. Quem já tem publicação datada aparece por ela. */
+  const postsComPublicacaoNaLista = new Set(
+    publicacoesDoMes.map((item) => item.post.post.id),
+  );
+  const ancoradosDoMes = [...ancorasPorDia.entries()].flatMap(
+    ([dateKey, bundles]) =>
+      noMes(dateKey)
+        ? bundles
+            .filter((bundle) => !postsComPublicacaoNaLista.has(bundle.post.id))
+            .map((bundle) => ({ dateKey, bundle }))
+        : [],
+  );
   const timelineItems = [
     ...datedTasks.map<ListTimelineItem>((task) => {
       const dateKey = taskDateKey(task) || "";
@@ -2484,7 +2530,13 @@ function ListView({
         task,
       };
     }),
-    ...items.flatMap<ListTimelineItem>((item) => {
+    ...ancoradosDoMes.map<ListTimelineItem>(({ dateKey, bundle }) => ({
+      kind: "anchored",
+      dateKey,
+      sortKey: `${dateKey}:0:${bundle.post.id}`,
+      post: bundle,
+    })),
+    ...publicacoesDoMes.flatMap<ListTimelineItem>((item) => {
       const scheduledAt = item.publication.publication.scheduled_at;
       const dateKey = scheduledDateKey(scheduledAt);
       return dateKey
@@ -2579,6 +2631,61 @@ function ListView({
                     className="w-fit border-violet-500/25 bg-violet-500/10 text-violet-500"
                   >
                     Abrir ou preparar
+                  </Badge>
+                </button>
+              );
+            }
+
+            if (timelineItem.kind === "anchored") {
+              const { post, dateKey } = timelineItem;
+              const dia = format(new Date(`${dateKey}T12:00:00`), "dd MMM", { locale: ptBR });
+              const etapa = etapaDoAncorado(post);
+              const nomeEtapa = EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa;
+              if (celular) {
+                return (
+                  <LinhaDeApp
+                    key={`anchored:${post.post.id}`}
+                    miniatura={<EditorialFileThumbnail post={post} className="h-11 w-11" />}
+                    titulo={post.post.title}
+                    apoio={[`${dia} · Prazo da tarefa`, clientNames.get(post.post.client_id)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    ponto={corDaEtapa(etapa).ponto}
+                    rotuloDoPonto={nomeEtapa}
+                    onClick={() => onSelectPost(post)}
+                  />
+                );
+              }
+              return (
+                <button
+                  key={`anchored:${post.post.id}`}
+                  type="button"
+                  onClick={() => onSelectPost(post)}
+                  aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
+                  className="flex w-full flex-col gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/40 sm:flex-row sm:items-center"
+                >
+                  <EditorialFileThumbnail post={post} className="h-14 w-14" />
+                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
+                    <p className="text-[13px] font-semibold text-foreground">{dia}</p>
+                    <p className="text-[12px] text-muted-foreground">Prazo da tarefa</p>
+                  </div>
+                  <span className={cn("h-9 w-1 shrink-0 rounded-full", corDaEtapa(etapa).ponto)} />
+                  <div className="min-w-0 flex-1">
+                    <ContentDirection
+                      theme={post.post.title}
+                      context={postContentContext(post, null)}
+                      className="text-[13px] text-foreground"
+                    />
+                    <p className="mt-1 truncate text-[12px] text-muted-foreground">
+                      {clientNames.get(post.post.client_id) || "Cliente"} ·{" "}
+                      {projectNames.get(post.post.project_id) || "Projeto"} · sem agendamento
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("w-fit", stageClasses[etapa] || stageClasses.draft)}
+                  >
+                    {nomeEtapa}
                   </Badge>
                 </button>
               );
@@ -3051,6 +3158,7 @@ function VistasDoCalendario({
     <ListView
       anchorDate={anchorDate}
       idsNaGrade={idsNaGrade}
+      ancorasPorDia={ancorasPorDia}
       posts={posts}
       items={items}
       tasks={tasks}

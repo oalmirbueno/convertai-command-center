@@ -109,10 +109,14 @@ function renderView({
   view,
   tasks = [task],
   posts = [],
+  ancorasPorDia,
+  idsNaGrade,
 }: {
   view: "board" | "month" | "week" | "list";
   tasks?: EditorialInboxTask[];
   posts?: EditorialPostBundle[];
+  ancorasPorDia?: Map<string, EditorialPostBundle[]>;
+  idsNaGrade?: Set<string>;
 }) {
   return render(
     <DndContext>
@@ -134,6 +138,8 @@ function renderView({
         onCreateFromTask={vi.fn()}
         onCreateOnDate={vi.fn()}
         onShowBacklog={vi.fn()}
+        ancorasPorDia={ancorasPorDia}
+        idsNaGrade={idsNaGrade}
       />
     </DndContext>,
   );
@@ -337,5 +343,98 @@ describe("editorial calendar on the phone", () => {
     fireEvent.click(within(abas).getByRole("button", { name: /Programado/ }));
     expect(screen.queryByText(task.title)).toBeNull();
     expect(screen.getByText("Nada nesta etapa")).toBeVisible();
+  });
+});
+
+// A Lista é a mesma agenda do Mês e da Semana, em ordem de data: o que está
+// num dia lá precisa estar no mesmo dia aqui, e só o mês escolhido aparece.
+describe("editorial calendar list keeps the month's agenda", () => {
+  const anchoredPost: EditorialPostBundle = {
+    ...scheduledPost,
+    post: { ...scheduledPost.post, id: "post-ancorado", title: "Post ancorado no prazo" },
+    publications: [],
+  };
+
+  it("shows a post anchored on the task deadline in the chronological agenda", () => {
+    renderView({
+      view: "list",
+      tasks: [],
+      posts: [anchoredPost],
+      ancorasPorDia: new Map([["2026-07-20", [anchoredPost]]]),
+      idsNaGrade: new Set(["post-ancorado"]),
+    });
+
+    // Fora do backlog (já ocupa um dia) e DENTRO da agenda, no dia herdado.
+    expect(screen.queryByText("Sem prazo ou agendamento")).toBeNull();
+    expect(screen.getByText("Agenda cronológica")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: /Abrir o conteúdo "Post ancorado no prazo"/,
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Prazo da tarefa")).toBeVisible();
+  });
+
+  it("does not list the anchored post twice when it already has a dated publication", () => {
+    renderView({
+      view: "list",
+      tasks: [],
+      posts: [scheduledPost],
+      ancorasPorDia: new Map([["2026-07-15", [scheduledPost]]]),
+      idsNaGrade: new Set(["post-1"]),
+    });
+
+    expect(screen.getAllByTitle(`Tema: ${scheduledPost.post.title}`)).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: /Abrir o conteúdo "Bastidores/ }),
+    ).toBeNull();
+  });
+
+  it("ignores anchors from other months", () => {
+    renderView({
+      view: "list",
+      tasks: [],
+      posts: [anchoredPost],
+      ancorasPorDia: new Map([["2026-08-03", [anchoredPost]]]),
+      idsNaGrade: new Set(["post-ancorado"]),
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /Abrir o conteúdo "Post ancorado no prazo"/ }),
+    ).toBeNull();
+  });
+
+  it("drops publications from the 45-day padding outside the visible month", () => {
+    const comData = (id: string, title: string, scheduledAt: string): EditorialPostBundle => ({
+      ...scheduledPost,
+      post: { ...scheduledPost.post, id, title },
+      publications: [
+        {
+          ...scheduledPost.publications[0],
+          publication: {
+            ...scheduledPost.publications[0].publication,
+            id: `pub-${id}`,
+            post_id: id,
+            scheduled_at: scheduledAt,
+          },
+        },
+      ],
+    });
+    renderView({
+      view: "list",
+      tasks: [],
+      posts: [
+        comData("junho", "Post de junho", "2026-06-20T15:00:00.000Z"),
+        comData("julho", "Post de julho", "2026-07-20T15:00:00.000Z"),
+        // 01/08 às 01:30 UTC ainda é 31/07 em São Paulo: fica.
+        comData("virada", "Post da virada", "2026-08-01T01:30:00.000Z"),
+        comData("agosto", "Post de agosto", "2026-08-10T15:00:00.000Z"),
+      ],
+    });
+
+    expect(screen.getByTitle("Tema: Post de julho")).toBeVisible();
+    expect(screen.getByTitle("Tema: Post da virada")).toBeVisible();
+    expect(screen.queryByTitle("Tema: Post de junho")).toBeNull();
+    expect(screen.queryByTitle("Tema: Post de agosto")).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import type {
 } from "@/hooks/useEditorialCalendar";
 import {
   EDITORIAL_DEFAULT_TIME_ZONE,
+  dateKeyInTimeZone,
   isoUtcToZonedDateTimeLocal,
   zonedDateTimeLocalToIso,
 } from "@/lib/editorialDate";
@@ -57,6 +58,50 @@ export function moveEditorialInstantToCalendarDate(
     `${targetDateKey}T${time}`,
     EDITORIAL_DEFAULT_TIME_ZONE,
   );
+}
+
+// Os campos opcionais do outro lado deixam ler `mensagem`/`scheduledAt`
+// depois do `if (!decisao.ok)` também sem strictNullChecks (tsconfig.app).
+export type DecisaoDoHorarioDoArrasto =
+  | { ok: true; scheduledAt: string; mensagem?: undefined }
+  | { ok: false; mensagem: string; scheduledAt?: undefined };
+
+/**
+ * O horário que a publicação arrastada para `targetDateKey` vai de fato
+ * receber.
+ *
+ * O arrasto preserva o horário original; para HOJE, se essa hora já passou,
+ * o banco recusava com "horário no passado" e parecia que o mover não
+ * funcionava. Dia passado: aviso claro. Hoje com hora vencida: empurra para
+ * daqui a 15 minutos — MAS, perto da meia-noite, esses 15 minutos caem
+ * amanhã, e o aviso dizia "movida para hoje" com a publicação agendada para
+ * o dia seguinte. Se o horário efetivo sai do dia de destino, recusa sem
+ * mover: quem arrastou escolhe outro dia.
+ */
+export function decidirHorarioDoArrasto(
+  scheduledAt: string,
+  targetDateKey: string,
+  now: Date = new Date(),
+): DecisaoDoHorarioDoArrasto {
+  const todayKey = dateKeyInTimeZone(now, EDITORIAL_DEFAULT_TIME_ZONE);
+  if (todayKey && targetDateKey < todayKey) {
+    return {
+      ok: false,
+      mensagem: "Não dá para agendar publicação em dia que já passou.",
+    };
+  }
+  let efetivo = scheduledAt;
+  if (new Date(scheduledAt).getTime() < now.getTime() + 5 * 60_000) {
+    efetivo = new Date(now.getTime() + 15 * 60_000).toISOString();
+  }
+  if (dateKeyInTimeZone(efetivo, EDITORIAL_DEFAULT_TIME_ZONE) !== targetDateKey) {
+    return {
+      ok: false,
+      mensagem:
+        "Não sobra horário hoje para agendar: o mais cedo possível já cai amanhã. Arraste para outro dia.",
+    };
+  }
+  return { ok: true, scheduledAt: efetivo };
 }
 
 export function buildEditorialPostMutationPayload(

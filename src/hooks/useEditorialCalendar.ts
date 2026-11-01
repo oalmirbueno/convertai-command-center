@@ -551,7 +551,10 @@ async function readEditorialCalendar(
         query = query.eq("platform", filters.platform);
       }
       if (forceClientView) {
-        query = query.in("status", ["scheduled", "published"]);
+        // Mesmo cronograma do cliente real (RLS e filtro abaixo): planejado,
+        // agendado e publicado. Sem "planned" aqui, o "Ver como cliente"
+        // escondia as planejadas que o cliente de verdade enxerga.
+        query = query.in("status", ["planned", "scheduled", "published"]);
       }
       if (filters.rangeStart && filters.rangeEnd) {
         if (filters.clientId) {
@@ -609,7 +612,7 @@ async function readEditorialCalendar(
         query = query.eq("platform", filters.platform);
       }
       if (forceClientView) {
-        query = query.in("status", ["scheduled", "published"]);
+        query = query.in("status", ["planned", "scheduled", "published"]);
       }
       return query;
     });

@@ -87,6 +87,7 @@ import {
 } from "@/lib/editorialDate";
 import {
   buildEditorialPostMutationPayload,
+  decidirHorarioDoArrasto,
   isEditorialPostPlanMutable,
   isEditorialPublicationDraggable,
   moveEditorialInstantToCalendarDate,
@@ -1340,19 +1341,14 @@ export default function EditorialCalendar() {
       ) {
         return;
       }
-      // O arrasto preserva o horário original; para HOJE, se essa hora já
-      // passou, o banco recusava com "horário no passado" e parecia que o
-      // mover não funcionava. Dia passado: aviso claro. Hoje com hora vencida:
-      // empurra para daqui a 15 minutos.
-      let effectiveScheduledAt = scheduledAt;
-      const todayKey = dateKeyInTimeZone(new Date().toISOString());
-      if (targetDateKey < todayKey) {
-        toast.error("Não dá para agendar publicação em dia que já passou.");
+      // Dia passado, hora de hoje vencida (empurra 15 min) e o empurrão que
+      // cairia amanhã (recusa sem mover): a regra mora em editorialDrag.
+      const decisao = decidirHorarioDoArrasto(scheduledAt, targetDateKey);
+      if (!decisao.ok) {
+        toast.error(decisao.mensagem);
         return;
       }
-      if (new Date(scheduledAt).getTime() < Date.now() + 5 * 60_000) {
-        effectiveScheduledAt = new Date(Date.now() + 15 * 60_000).toISOString();
-      }
+      const effectiveScheduledAt = decisao.scheduledAt;
       const moveKey = `publication:${visiblePublication.id}`;
       if (!beginEditorialMove(moveKey)) return;
       queryClient.setQueriesData(

@@ -25,7 +25,11 @@ export async function listEtapasFeitas(clientId: string, servico: string): Promi
     .eq("client_id", clientId)
     .eq("kind", KIND)
     .eq("metadata->>servico", servico);
-  if (error || !data) return new Set();
+  // Erro de leitura sobe para o useQuery: devolver vazio fazia a falha
+  // parecer "nenhuma etapa feita" — ficava em cache como dado bom, sem nova
+  // tentativa, e a conclusão gravava "0 de N etapas" na história.
+  if (error) throw error;
+  if (!data) return new Set();
   const feitas = new Set<number>();
   for (const linha of data as Array<{ metadata: { step?: number; done?: boolean } | null }>) {
     const step = Number(linha.metadata?.step);
@@ -158,17 +162,21 @@ export async function concluirEntrega(input: {
     const { data: session } = await supabase.auth.getUser();
     // Reabrir apaga o marco em vez de gravar "não concluído": um registro
     // dizendo que algo desaconteceu é ruído na história que a IA lê.
+    // O erro de cada escrita é conferido: antes o marco podia não ser gravado
+    // (ou não ser apagado) e a tela dizia "concluído"/"reaberto" mesmo assim.
+    // Com `false`, o chamador avisa e não relê; tocar de novo refaz tudo — a
+    // bandeira é idempotente e o marco só existe se a gravação deu certo.
     if (!concluir) {
-      await supabase
+      const { error: erroAoReabrir } = await supabase
         .from("project_memory")
         .delete()
         .eq("client_id", clientId)
         .eq("kind", "marco")
         .eq("metadata->>tipo", "entrega_concluida");
-      return true;
+      return !erroAoReabrir;
     }
 
-    await supabase.from("project_memory").insert({
+    const { error: erroDoMarco } = await supabase.from("project_memory").insert({
       client_id: clientId,
       kind: "marco",
       title: "Projeto concluído",
@@ -182,7 +190,7 @@ export async function concluirEntrega(input: {
       },
       created_by: session?.user?.id || null,
     } as never);
-    return true;
+    return !erroDoMarco;
   } catch {
     return false;
   }
