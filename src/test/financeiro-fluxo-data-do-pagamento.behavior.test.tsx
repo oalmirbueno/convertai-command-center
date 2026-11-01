@@ -56,7 +56,7 @@ describe("Fluxo de caixa: data do pagamento", () => {
   it("pagar às 23h30 de 01/11 em São Paulo grava 01/11, não o dia de UTC", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-02T02:30:00Z"));
-    render(<CashFlow />);
+    render(<CashFlow billing={[]} projectPayments={[]} />);
     fireEvent.click(screen.getAllByRole("button", { name: /^pagar$/i })[0]);
     await waitFor(() => expect(estado.rpc).toHaveBeenCalled());
     expect(estado.rpc.mock.calls[0][0]).toBe("expense_pagar");
@@ -66,7 +66,7 @@ describe("Fluxo de caixa: data do pagamento", () => {
   it("salvar despesa como Pago sem data, às 23h30 de 01/11, grava paid_date 01/11", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-02T02:30:00Z"));
-    render(<CashFlow />);
+    render(<CashFlow billing={[]} projectPayments={[]} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Editar Fornecedor X" })[0]);
     fireEvent.click(screen.getByRole("tab", { name: "Pago" }));
     fireEvent.click(screen.getByRole("button", { name: /^salvar$/i }));
