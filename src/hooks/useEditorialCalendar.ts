@@ -14,6 +14,7 @@ import {
 } from "@/lib/editorial";
 import {
   buildEditorialTaskLinkIndex,
+  indiceDoClienteAPartirDaResposta,
   type EditorialTaskLinkIndex,
   type EditorialTaskLinkRow,
 } from "@/lib/editorialTaskLinks";
@@ -280,6 +281,21 @@ export async function findEditorialPostIdByPrimaryFile(
     .limit(1)
     .maybeSingle();
   return (pub as { post_id: string } | null)?.post_id ?? null;
+}
+
+/**
+ * O vínculo tarefa -> conteúdo para o CLIENTE (só ids dos conteúdos dele), pela função
+ * editorial_client_task_links. A equipe continua lendo editorial_post_internal (useEditorialLinkedTaskIds).
+ */
+export function useEditorialClientTaskLinks(enabled: boolean) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["editorial-client-task-links", user?.id],
+    queryFn: async (): Promise<EditorialTaskLinkIndex> =>
+      indiceDoClienteAPartirDaResposta(await editorialDb.rpc("editorial_client_task_links")),
+    enabled: enabled && !!user,
+    refetchInterval: 30_000,
+  });
 }
 
 export function useEditorialLinkedTaskIds(

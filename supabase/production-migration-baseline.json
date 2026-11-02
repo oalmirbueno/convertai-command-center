@@ -2769,6 +2769,14 @@
       "remote_name": "renovacao_nasce_no_banco",
       "remote_statements_sha256": "7bc6060c2d56c881f78a56f2723f6b3d611a9fcd1d42769aba36232ce9e653d8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261101230000",
+      "path": "supabase/migrations/20261101230000_cliente_ve_vinculo_tarefa_conteudo.sql",
+      "local_sha256": "6758135252aa714dd33083e819ae93b71c8c9ab6b97197b3fd652567bf1bd3c2",
+      "remote_name": "cliente_ve_vinculo_tarefa_conteudo",
+      "remote_statements_sha256": "079c952c495d86358343c91e69b8a561123c2ab0b10d573422016adb8ea05e93",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
