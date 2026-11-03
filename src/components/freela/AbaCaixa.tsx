@@ -89,9 +89,9 @@ export default function AbaCaixa() {
             rotulo={moeda === "BRL" ? "Caixa em real (R$)" : "Caixa em dólar (US$)"}
             colunas={3}
             itens={[
-              { rotulo: "Em aberto", valor: fmtMoeda(t.aberto, moeda), ponto: "aviso" as const },
-              { rotulo: "Atrasado", valor: fmtMoeda(t.atrasado, moeda), ponto: "erro" as const },
-              { rotulo: "Recebido no mês", valor: fmtMoeda(t.recebidoNoMes, moeda), ponto: "ok" as const },
+              { rotulo: "Em aberto", valor: fmtMoeda(t.aberto, moeda), ponto: "alerta" as const },
+              { rotulo: "Atrasado", valor: fmtMoeda(t.atrasado, moeda), ponto: "perigo" as const },
+              { rotulo: "Recebido no mês", valor: fmtMoeda(t.recebidoNoMes, moeda), ponto: "verde" as const },
             ]}
           />
         );
