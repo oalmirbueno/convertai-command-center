@@ -2777,6 +2777,22 @@
       "remote_name": "cliente_ve_vinculo_tarefa_conteudo",
       "remote_statements_sha256": "079c952c495d86358343c91e69b8a561123c2ab0b10d573422016adb8ea05e93",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261103182042",
+      "path": "supabase/migrations/20261103182042_freela_mesa.sql",
+      "local_sha256": "353dcfcb2c60fb90ff72481cba671d63add9c4344a237e0a22a6bfadcdb663d7",
+      "remote_name": "freela_mesa",
+      "remote_statements_sha256": "eabc9d282c4b59560c23d75429fdf9f81f6d836172e47a58ab33ded4e68e52e5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261103182152",
+      "path": "supabase/migrations/20261103182152_freela_mesa_rls_membros.sql",
+      "local_sha256": "bd053dd537f32738f4f78acfa584bff6af03badca9fb8acbf4886376071e4b87",
+      "remote_name": "freela_mesa_rls_membros",
+      "remote_statements_sha256": "aa4ffb11d858078569c5410fc2698e1acb548c0e0f67102d3d35f5e2ed4dfded",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

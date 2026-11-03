@@ -89,6 +89,8 @@ export default function AbaProjetos() {
   }, [projetos, busca, filtroStatus, nomeDoContato]);
 
   const contatosAtivos = (contatos || []).filter((c) => !c.archived_at);
+  // O banco aceitaria trocar a moeda do projeto, e as parcelas ficariam na moeda antiga.
+  const temParcelas = !!editando && (parcelasPorProjeto.get(editando.id) || []).length > 0;
 
   const abrirNovo = () => {
     setEditando(null);
@@ -123,6 +125,10 @@ export default function AbaProjetos() {
     }
     if (!Number.isFinite(valor) || valor <= 0) {
       toast.error("Informe um valor fechado maior que zero.");
+      return;
+    }
+    if (temParcelas && editando && form.moeda !== editando.moeda) {
+      toast.error("Este projeto já tem parcelas: a moeda não muda mais.");
       return;
     }
     setSalvando(true);
@@ -430,8 +436,8 @@ export default function AbaProjetos() {
             <CampoDeFormulario rotulo="Valor fechado" obrigatorio>
               <input inputMode="decimal" value={form.valor_fechado} onChange={(e) => setForm({ ...form, valor_fechado: e.target.value })} className={campo} placeholder="3000" />
             </CampoDeFormulario>
-            <CampoDeFormulario rotulo="Moeda" obrigatorio apoio="As parcelas seguem esta moeda.">
-              <select value={form.moeda} onChange={(e) => setForm({ ...form, moeda: e.target.value })} className={campo}>
+            <CampoDeFormulario rotulo="Moeda" obrigatorio apoio={temParcelas ? "Já tem parcelas: a moeda não muda mais." : "As parcelas seguem esta moeda."}>
+              <select value={form.moeda} disabled={temParcelas} onChange={(e) => setForm({ ...form, moeda: e.target.value })} className={campo}>
                 <option value="BRL">Real (R$)</option>
                 <option value="USD">Dólar (US$)</option>
               </select>

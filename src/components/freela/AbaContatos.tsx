@@ -211,7 +211,7 @@ export default function AbaContatos() {
                   <div className="flex min-w-0 items-center gap-2">
                     <p className={juntar(texto.corpo, "truncate font-medium")}>{c.nome}</p>
                     {!!c.archived_at && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Arquivado</span>}
-                    {c.promoted_client_id && <span className={juntar(etiqueta, "bg-success/15 text-success")}>Cliente da agência</span>}
+                    {c.promoted_client_id && <span className={juntar(etiqueta, "bg-success/15 text-success")} title={c.promoted_client_id}>Cliente da agência · {c.promoted_client_id.slice(0, 8)}</span>}
                   </div>
                   <p className={juntar(texto.auxiliar, "truncate")}>
                     {[c.empresa, c.email, c.whatsapp, c.pais].filter(Boolean).join(" · ") || "Sem dados de contato"}

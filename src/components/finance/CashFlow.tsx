@@ -142,7 +142,7 @@ export default function CashFlow({ billing: cobrancas = [], projectPayments = []
   const billingFiltered = useMemo(() => {
     if (segment === "all") return billing || [];
     return (billing || []).filter((b: any) => {
-      const ct = b.client?.client_type || "recurring";
+      const ct = b.client?.client_type || (b.type === "freela" ? "one_off" : "recurring");
       if (segment === "recurring") return ct === "recurring" || ct === "hybrid";
       // avulso
       return ct === "one_off" || ct === "hybrid";
