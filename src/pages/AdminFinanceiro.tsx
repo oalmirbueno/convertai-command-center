@@ -681,7 +681,7 @@ function LegacyFinanceiro() {
   };
 
   const handleSendReminder = async (client: any, via: "notification" | "whatsapp") => {
-    const billingRecord = (billing || []).find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
+    const billingRecord = billingBRL.find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
     const renewalDate = client.plan_renewal_date ? formatAppDate(client.plan_renewal_date) : "em breve";
 
     if (via === "whatsapp") {
@@ -718,7 +718,7 @@ function LegacyFinanceiro() {
     if (planForm.amount || planForm.description) {
       // Só a renovação ainda em aberto acompanha o plano. Antes pegava qualquer "renewal" (podia ser uma
       // já paga) e reescrevia o valor de um recebimento passado.
-      const billingRecord = (billing || [])
+      const billingRecord = billingBRL
         .filter((b: any) => b.client_id === editPlanModal.id && b.type === "renewal" && b.status === "pending")
         .sort((a: { due_date?: string | null }, b: { due_date?: string | null }) => String(b.due_date || "").localeCompare(String(a.due_date || "")))[0];
       if (billingRecord) {
@@ -1707,7 +1707,7 @@ function LegacyFinanceiro() {
                               const renewalDate = parseAppDate(c.plan_renewal_date);
                               const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
                               const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
-                              const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
+                              const clientBilling = billingBRL.find((b: any) => b.client_id === c.id && b.type === "renewal");
                               const reminderCount = clientBilling?.reminder_count || 0;
                               const nome = c.company_name || c.full_name;
                               return (
@@ -1765,7 +1765,7 @@ function LegacyFinanceiro() {
                 !!c && !isInternalClient(c) && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
 
               const billingByClient = new Map<string, any[]>();
-              (billing || []).forEach((b: any) => {
+              billingBRL.forEach((b: any) => {
                 if (!b.client_id) return;
                 const c = (clients || []).find((cl: any) => cl.id === b.client_id);
                 if (!isAvulsoClient(c)) return;
