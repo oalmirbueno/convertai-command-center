@@ -1833,10 +1833,12 @@ export type Database = {
       billing: {
         Row: {
           amount: number
-          client_id: string
+          client_id: string | null
           created_at: string
+          currency: string | null
           description: string | null
           due_date: string
+          freela_parcela_id: string | null
           id: string
           paid_amount: number | null
           paid_date: string | null
@@ -1847,10 +1849,12 @@ export type Database = {
         }
         Insert: {
           amount: number
-          client_id: string
+          client_id?: string | null
           created_at?: string
+          currency?: string | null
           description?: string | null
           due_date: string
+          freela_parcela_id?: string | null
           id?: string
           paid_amount?: number | null
           paid_date?: string | null
@@ -1861,10 +1865,12 @@ export type Database = {
         }
         Update: {
           amount?: number
-          client_id?: string
+          client_id?: string | null
           created_at?: string
+          currency?: string | null
           description?: string | null
           due_date?: string
+          freela_parcela_id?: string | null
           id?: string
           paid_amount?: number | null
           paid_date?: string | null
@@ -8117,6 +8123,203 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      freela_contatos: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          empresa: string | null
+          id: string
+          moeda_preferida: string
+          nome: string
+          notes: string | null
+          pais: string | null
+          promoted_client_id: string | null
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          empresa?: string | null
+          id?: string
+          moeda_preferida?: string
+          nome: string
+          notes?: string | null
+          pais?: string | null
+          promoted_client_id?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          empresa?: string | null
+          id?: string
+          moeda_preferida?: string
+          nome?: string
+          notes?: string | null
+          pais?: string | null
+          promoted_client_id?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      freela_parcelas: {
+        Row: {
+          billing_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          moeda: string
+          numero: number
+          pago_em: string | null
+          projeto_id: string
+          status: string
+          updated_at: string
+          valor: number
+          vencimento: string
+        }
+        Insert: {
+          billing_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          moeda: string
+          numero: number
+          pago_em?: string | null
+          projeto_id: string
+          status?: string
+          updated_at?: string
+          valor: number
+          vencimento: string
+        }
+        Update: {
+          billing_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          moeda?: string
+          numero?: number
+          pago_em?: string | null
+          projeto_id?: string
+          status?: string
+          updated_at?: string
+          valor?: number
+          vencimento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "freela_parcelas_projeto_id_fkey"
+            columns: ["projeto_id"]
+            isOneToOne: false
+            referencedRelation: "freela_projetos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      freela_projetos: {
+        Row: {
+          contato_id: string
+          created_at: string
+          created_by: string | null
+          escopo: Json | null
+          id: string
+          moeda: string
+          prazo_date: string | null
+          promoted_client_id: string | null
+          proposta_id: string | null
+          status: string
+          titulo: string
+          updated_at: string
+          valor_fechado: number
+        }
+        Insert: {
+          contato_id: string
+          created_at?: string
+          created_by?: string | null
+          escopo?: Json | null
+          id?: string
+          moeda: string
+          prazo_date?: string | null
+          promoted_client_id?: string | null
+          proposta_id?: string | null
+          status?: string
+          titulo: string
+          updated_at?: string
+          valor_fechado: number
+        }
+        Update: {
+          contato_id?: string
+          created_at?: string
+          created_by?: string | null
+          escopo?: Json | null
+          id?: string
+          moeda?: string
+          prazo_date?: string | null
+          promoted_client_id?: string | null
+          proposta_id?: string | null
+          status?: string
+          titulo?: string
+          updated_at?: string
+          valor_fechado?: number
+        }
+        Relationships: []
+      }
+      freela_propostas: {
+        Row: {
+          contato_id: string
+          created_at: string
+          created_by: string | null
+          escopo: Json | null
+          id: string
+          link_externo: string | null
+          moeda: string
+          notes: string | null
+          status: string
+          titulo: string
+          updated_at: string
+          validade_ate: string | null
+          valor: number
+        }
+        Insert: {
+          contato_id: string
+          created_at?: string
+          created_by?: string | null
+          escopo?: Json | null
+          id?: string
+          link_externo?: string | null
+          moeda: string
+          notes?: string | null
+          status?: string
+          titulo: string
+          updated_at?: string
+          validade_ate?: string | null
+          valor: number
+        }
+        Update: {
+          contato_id?: string
+          created_at?: string
+          created_by?: string | null
+          escopo?: Json | null
+          id?: string
+          link_externo?: string | null
+          moeda?: string
+          notes?: string | null
+          status?: string
+          titulo?: string
+          updated_at?: string
+          validade_ate?: string | null
+          valor?: number
+        }
+        Relationships: []
       }
       ia_carteira_movimentos: {
         Row: {
@@ -15622,6 +15825,10 @@ export type Database = {
           status: string
           used_at: string
         }[]
+      }
+      freela_promover_a_cliente: {
+        Args: { p_contato_id: string; p_criar_org?: boolean }
+        Returns: string
       }
       get_admin_user_id: { Args: never; Returns: string }
       get_editorial_approval_preview: {
