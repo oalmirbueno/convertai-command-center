@@ -353,7 +353,7 @@ function LegacyFinanceiro() {
   // "A Receber" · from billing pending + active clients with plan_value not yet in billing
   const isInActivePeriod = (date?: string | null) => periodFilter === "all" || (!!date && isThisMonth(date));
   const hasPaidRenewalInActiveMonth = (clientId: string) =>
-    periodFilter === "month" && (billing || []).some((b: any) =>
+    periodFilter === "month" && billingBRL.some((b: any) =>
       b.client_id === clientId &&
       b.type === "renewal" &&
       (b.status === "paid" || b.status === "partial") &&
@@ -402,7 +402,7 @@ function LegacyFinanceiro() {
     return c === "investidor" || c.startsWith("inv_");
   };
   const allTimeReceivedCash =
-    (billing || [])
+    billingBRL
       .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial"))
       .reduce((s: number, b: any) => s + receivedOf(b), 0) +
     (projectPayments || []).reduce(
