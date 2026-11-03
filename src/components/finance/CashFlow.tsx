@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -109,7 +110,9 @@ interface Props {
   clientsReserveSuggestion?: number;
 }
 
-export default function CashFlow({ billing = [], projectPayments = [], clientsReserveSuggestion = 0 }: Props) {
+export default function CashFlow({ billing: cobrancas = [], projectPayments = [], clientsReserveSuggestion = 0 }: Props) {
+  // Soma de caixa só em real. Linha sem currency conta como BRL.
+  const billing = cobrancas.filter((b: any) => moedaDe(b) === "BRL");
   const qc = useQueryClient();
   const { pedirLiberacao, janela: janelaDaTrava } = useTravaDeGasto("caixa");
   // Período, segmento, blocos abertos e a lista escolhida em cada bloco
