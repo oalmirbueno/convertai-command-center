@@ -409,6 +409,9 @@ export function AppRoutes() {
             direto para ela, o voltar do navegador funciona e o link pode
             ser mandado para alguem. */}
         <Route path="/comercial/:aba" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
+        {/* Mesa Freela: cada área tem endereço próprio, como no Comercial. */}
+        <Route path="/freela" element={<ComercialRoute><AdminFreela /></ComercialRoute>} />
+        <Route path="/freela/:aba" element={<ComercialRoute><AdminFreela /></ComercialRoute>} />
         <Route path="/financeiro/projecao" element={<StaffRoute><AdminProjection /></StaffRoute>} />
         <Route path="/financeiro/cfo" element={<>{profile?.role === "admin" ? <FinanceiroCFO /> : <Navigate to="/financeiro" replace />}</>} />
         {/* Horas e custos (frente CR): tempo por cliente, custo de IA, entregas e capacidade. Só admin e gestor; o RPC repete a trava. */}
