@@ -1362,20 +1362,35 @@ function LegacyFinanceiro() {
                           <li key={b.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
                             <span className={juntar(etiqueta, "mr-3 hidden bg-muted text-muted-foreground sm:inline-flex")}>{typeIcon(b.type)}</span>
                             <div className="mr-3 min-w-0 flex-1">
-                              <p className={juntar(texto.corpo, "truncate font-medium")}>{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                              <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name} · vence {formatAppDate(b.due_date)}</p>
+                              <p className={juntar(texto.corpo, "truncate font-medium")}>{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : b.type === "freela" ? "Parcela freela" : "Serviço Extra")}</p>
+                              <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name || (ehCobrancaFreela(b) ? "Freela" : "Sem cliente")} · vence {formatAppDate(b.due_date)}</p>
                             </div>
                             <div className="mr-2 flex shrink-0 flex-col items-end">
-                              <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(Number(b.amount))}</span>
+                              <span className="text-[13px] font-medium tabular-nums text-foreground">
+                                {fmtMoeda(Number(b.amount), moedaDe(b))}
+                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">{simboloDaMoeda(moedaDe(b))}</span>
+                              </span>
                               <span className="mt-0.5">{statusBadge(b.status, b.due_date)}</span>
                             </div>
-                            <button type="button" onClick={() => handleMarkPaid(b.id)} className={juntar(acaoDaLinha, "text-success")} aria-label="Marcar como pago">
-                              <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                              <span className="hidden sm:inline">Marcar como pago</span>
-                            </button>
-                            <button type="button" onClick={() => openWhatsAppReminder(b.client, b)} className={juntar(botao.icone, "ml-1")} aria-label="Lembrar pelo WhatsApp">
-                              <MessageCircle className="h-4 w-4" aria-hidden="true" />
-                            </button>
+                            {/* Freela: a baixa é na mesa /freela (o front nunca escreve no billing do freela). */}
+                            {ehCobrancaFreela(b) ? (
+                              <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")} aria-label="Abrir o caixa do freela">
+                                <span className="hidden sm:inline">Ver no Freela</span>
+                                <CheckCircle2 className="h-3.5 w-3.5 sm:hidden" aria-hidden="true" />
+                              </Link>
+                            ) : (
+                              <>
+                                <button type="button" onClick={() => handleMarkPaid(b.id)} className={juntar(acaoDaLinha, "text-success")} aria-label="Marcar como pago">
+                                  <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                  <span className="hidden sm:inline">Marcar como pago</span>
+                                </button>
+                                {b.client && (
+                                  <button type="button" onClick={() => openWhatsAppReminder(b.client, b)} className={juntar(botao.icone, "ml-1")} aria-label="Lembrar pelo WhatsApp">
+                                    <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                )}
+                              </>
+                            )}
                           </li>
                         );
                       })}
