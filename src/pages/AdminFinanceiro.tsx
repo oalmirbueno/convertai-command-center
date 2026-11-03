@@ -1209,7 +1209,7 @@ function LegacyFinanceiro() {
         {(isAdmin || isManager) && (
           <TabsContent value="cashflow" className="mt-0 space-y-6">
             <CashFlow
-              billing={billing || []}
+              billing={billingBRL}
               projectPayments={projectPayments || []}
               clientsReserveSuggestion={activeMensalistas * (financeSettings?.defaultDirectCost ?? 275)}
             />
@@ -1218,7 +1218,7 @@ function LegacyFinanceiro() {
 
         {(isAdmin || isManager) && (
           <TabsContent value="capital" className="mt-0 space-y-6">
-            <InvestorCapital billing={billing || []} projectPayments={projectPayments || []} />
+            <InvestorCapital billing={billingBRL} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
@@ -1232,7 +1232,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="assistant" className="mt-0 space-y-6">
-            <CFOAssistant billing={billing || []} projectPayments={projectPayments || []} clients={clients || []} />
+            <CFOAssistant billing={billingBRL} projectPayments={projectPayments || []} clients={clients || []} />
           </TabsContent>
         )}
 
@@ -1244,7 +1244,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="plans" className="mt-0 space-y-6">
-            <PlansPricing billing={billing || []} projectPayments={projectPayments || []} />
+            <PlansPricing billing={billingBRL} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
