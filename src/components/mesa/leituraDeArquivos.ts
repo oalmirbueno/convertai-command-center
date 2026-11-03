@@ -278,7 +278,7 @@ function comoArquivo(bytes: Uint8Array | ArrayBuffer, nome: string): File | null
   const tipo = MIME_DA_IMAGEM[extensaoDe(nome)];
   if (!tipo) return null;
   try {
-    return new File([bytes], nome.split("/").pop() || nome, { type: tipo });
+    return new File([bytes as BlobPart], nome.split("/").pop() || nome, { type: tipo });
   } catch {
     return null;
   }
