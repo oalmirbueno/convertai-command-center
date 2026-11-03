@@ -273,6 +273,10 @@ function LegacyFinanceiro() {
   const [brandFilter, setBrandFilter] = useEstadoDaTela<BrandFilter>("financeiro:marca", "all", {
     validar: (v) => BRAND_FILTERS.some((f) => f.value === v),
   });
+  // Origem do lançamento: agência (planos, projetos, ads) ou freela (mesa /freela).
+  const [origem, setOrigem] = useEstadoDaTela<"todos" | "agencia" | "freela">("financeiro:origem", "todos", {
+    validar: (v) => v === "todos" || v === "agencia" || v === "freela",
+  });
   const [periodFilter, setPeriodFilter] = useEstadoDaTela<"month" | "all">("financeiro:periodo", "month", {
     validar: (v) => v === "month" || v === "all",
   });
@@ -324,9 +328,23 @@ function LegacyFinanceiro() {
   );
   const isPausedRenewal = (b: any) => b.type === "renewal" && pausedClientIds.has(b.client_id);
 
-  const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && !isPausedRenewal(b));
+  /* Freela: as linhas type='freela' chegam prontas do banco (gatilho das
+     parcelas), com moeda própria e client_id NULL. Duas réguas:
+     1) Soma em R$ só com linhas em BRL — o dólar do freela tem caixa próprio
+        em /freela/caixa e nunca entra em total de real. Linhas antigas sem
+        `currency` são BRL (o painel só trabalhava em real).
+     2) O filtro de origem escolhe o que entra nos números e listas da visão
+        geral. Com os dados de hoje (tudo agência em BRL), "Todos" e "Agência"
+        dão exatamente os mesmos números de antes. */
+  const ehCobrancaFreela = (b: any) => b?.type === "freela";
+  const billingBRL = (billing || []).filter((b: any) => moedaDe(b) === "BRL");
+  const billingDaOrigem = billingBRL.filter((b: any) =>
+    origem === "todos" ? true : origem === "freela" ? ehCobrancaFreela(b) : !ehCobrancaFreela(b),
+  );
+
+  const pendingBills = billingDaOrigem.filter((b: any) => b.status === "pending" && !isPausedRenewal(b));
   // "Recebido" inclui parcial: o valor recebido vem de paid_amount nesse caso.
-  const paidBills = (billing || []).filter((b: any) => b.status === "paid" || b.status === "partial");
+  const paidBills = billingDaOrigem.filter((b: any) => b.status === "paid" || b.status === "partial");
   const overdueBills = pendingBills.filter((b: any) => {
     const due = parseAppDate(b.due_date);
     return due ? due < todayStart : false;
