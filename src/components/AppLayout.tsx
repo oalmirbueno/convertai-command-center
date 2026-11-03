@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -134,7 +134,7 @@ export function tituloDaTela(pathname: string, paginas: Array<{ title: string; u
       if (!melhor || p.url.length > melhor.url.length) melhor = p;
     }
   }
-  if (melhor) return melhor.url === "/comercial" ? "Comercial" : melhor.title;
+  if (melhor) return melhor.url === "/comercial" ? "Comercial" : melhor.url === "/freela" ? "Freela" : melhor.title;
   return rotuloDoLugar(rota, "") || "Aceleriq";
 }
 
@@ -218,6 +218,17 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
       { title: "Campanhas", url: "/comercial/campanhas", icon: Megaphone, soGestao: true },
       { title: "Marketing", url: "/comercial/marketing", icon: Sparkles, soGestao: true },
+    ],
+  },
+  {
+    // Mesa Freela (MVP): o canal de aquisição ao lado da agência. Área própria,
+    // colada no Comercial; a mesma régua (só admin e manager) e a aba na URL.
+    label: "Freela",
+    items: [
+      { title: "Contatos", url: "/freela", icon: Users, soGestao: true, fimExato: true },
+      { title: "Propostas", url: "/freela/propostas", icon: FileSignature, soGestao: true },
+      { title: "Projetos", url: "/freela/projetos", icon: Briefcase, soGestao: true },
+      { title: "Caixa", url: "/freela/caixa", icon: CircleDollarSign, soGestao: true },
     ],
   },
   {

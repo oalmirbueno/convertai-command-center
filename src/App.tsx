@@ -67,6 +67,8 @@ const AdminFinanceiro = rotas.lazy(() => import("@/pages/AdminFinanceiro"));
 // Frente CFO (30/09): o campo próprio do agente financeiro. Só admin.
 const FinanceiroCFO = rotas.lazy(() => import("@/pages/FinanceiroCFO"));
 const AdminComercial = rotas.lazy(() => import("@/pages/AdminComercial"));
+// Mesa Freela (MVP): canal de aquisição ao lado da agência. Mesma régua do Comercial (admin e manager).
+const AdminFreela = rotas.lazy(() => import("@/pages/AdminFreela"));
 const AdminProjection = rotas.lazy(() => import("@/pages/AdminProjection"));
 const AdminExecucao = rotas.lazy(() => import("@/pages/AdminExecucao"));
 const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
@@ -407,6 +409,9 @@ export function AppRoutes() {
             direto para ela, o voltar do navegador funciona e o link pode
             ser mandado para alguem. */}
         <Route path="/comercial/:aba" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
+        {/* Mesa Freela: cada área tem endereço próprio, como no Comercial. */}
+        <Route path="/freela" element={<ComercialRoute><AdminFreela /></ComercialRoute>} />
+        <Route path="/freela/:aba" element={<ComercialRoute><AdminFreela /></ComercialRoute>} />
         <Route path="/financeiro/projecao" element={<StaffRoute><AdminProjection /></StaffRoute>} />
         <Route path="/financeiro/cfo" element={<>{profile?.role === "admin" ? <FinanceiroCFO /> : <Navigate to="/financeiro" replace />}</>} />
         {/* Horas e custos (frente CR): tempo por cliente, custo de IA, entregas e capacidade. Só admin e gestor; o RPC repete a trava. */}

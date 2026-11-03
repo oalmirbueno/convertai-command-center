@@ -42,6 +42,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 import { createBilling } from "@/lib/createBilling";
 import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
+import { fmtMoeda, moedaDe } from "@/lib/freela/freelaLib";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -190,6 +191,7 @@ function SeletorDeMes({ mes, ano, noMesAtual, onMudar, onHoje }: { mes: number; 
 const typeIcon = (type: string) => {
   if (type === "renewal") return "REC";
   if (type === "ads_recharge") return "ADS";
+  if (type === "freela") return "FRL";
   return "AVU";
 };
 
@@ -271,6 +273,10 @@ function LegacyFinanceiro() {
   const [brandFilter, setBrandFilter] = useEstadoDaTela<BrandFilter>("financeiro:marca", "all", {
     validar: (v) => BRAND_FILTERS.some((f) => f.value === v),
   });
+  // Origem do lançamento: agência (planos, projetos, ads) ou freela (mesa /freela).
+  const [origem, setOrigem] = useEstadoDaTela<"todos" | "agencia" | "freela">("financeiro:origem", "todos", {
+    validar: (v) => v === "todos" || v === "agencia" || v === "freela",
+  });
   const [periodFilter, setPeriodFilter] = useEstadoDaTela<"month" | "all">("financeiro:periodo", "month", {
     validar: (v) => v === "month" || v === "all",
   });
@@ -322,9 +328,23 @@ function LegacyFinanceiro() {
   );
   const isPausedRenewal = (b: any) => b.type === "renewal" && pausedClientIds.has(b.client_id);
 
-  const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && !isPausedRenewal(b));
+  /* Freela: as linhas type='freela' chegam prontas do banco (gatilho das
+     parcelas), com moeda própria e client_id NULL. Duas réguas:
+     1) Soma em R$ só com linhas em BRL — o dólar do freela tem caixa próprio
+        em /freela/caixa e nunca entra em total de real. Linhas antigas sem
+        `currency` são BRL (o painel só trabalhava em real).
+     2) O filtro de origem escolhe o que entra nos números e listas da visão
+        geral. Com os dados de hoje (tudo agência em BRL), "Todos" e "Agência"
+        dão exatamente os mesmos números de antes. */
+  const ehCobrancaFreela = (b: any) => b?.type === "freela";
+  const billingBRL = (billing || []).filter((b: any) => moedaDe(b) === "BRL");
+  const billingDaOrigem = billingBRL.filter((b: any) =>
+    origem === "todos" ? true : origem === "freela" ? ehCobrancaFreela(b) : !ehCobrancaFreela(b),
+  );
+
+  const pendingBills = billingDaOrigem.filter((b: any) => b.status === "pending" && !isPausedRenewal(b));
   // "Recebido" inclui parcial: o valor recebido vem de paid_amount nesse caso.
-  const paidBills = (billing || []).filter((b: any) => b.status === "paid" || b.status === "partial");
+  const paidBills = billingDaOrigem.filter((b: any) => b.status === "paid" || b.status === "partial");
   const overdueBills = pendingBills.filter((b: any) => {
     const due = parseAppDate(b.due_date);
     return due ? due < todayStart : false;
@@ -333,7 +353,7 @@ function LegacyFinanceiro() {
   // "A Receber" · from billing pending + active clients with plan_value not yet in billing
   const isInActivePeriod = (date?: string | null) => periodFilter === "all" || (!!date && isThisMonth(date));
   const hasPaidRenewalInActiveMonth = (clientId: string) =>
-    periodFilter === "month" && (billing || []).some((b: any) =>
+    periodFilter === "month" && billingBRL.some((b: any) =>
       b.client_id === clientId &&
       b.type === "renewal" &&
       (b.status === "paid" || b.status === "partial") &&
@@ -382,7 +402,7 @@ function LegacyFinanceiro() {
     return c === "investidor" || c.startsWith("inv_");
   };
   const allTimeReceivedCash =
-    (billing || [])
+    billingBRL
       .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial"))
       .reduce((s: number, b: any) => s + receivedOf(b), 0) +
     (projectPayments || []).reduce(
@@ -661,7 +681,7 @@ function LegacyFinanceiro() {
   };
 
   const handleSendReminder = async (client: any, via: "notification" | "whatsapp") => {
-    const billingRecord = (billing || []).find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
+    const billingRecord = billingBRL.find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
     const renewalDate = client.plan_renewal_date ? formatAppDate(client.plan_renewal_date) : "em breve";
 
     if (via === "whatsapp") {
@@ -698,7 +718,7 @@ function LegacyFinanceiro() {
     if (planForm.amount || planForm.description) {
       // Só a renovação ainda em aberto acompanha o plano. Antes pegava qualquer "renewal" (podia ser uma
       // já paga) e reescrevia o valor de um recebimento passado.
-      const billingRecord = (billing || [])
+      const billingRecord = billingBRL
         .filter((b: any) => b.client_id === editPlanModal.id && b.type === "renewal" && b.status === "pending")
         .sort((a: { due_date?: string | null }, b: { due_date?: string | null }) => String(b.due_date || "").localeCompare(String(a.due_date || "")))[0];
       if (billingRecord) {
@@ -929,7 +949,10 @@ function LegacyFinanceiro() {
   const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
     const client = (clients || []).find((c: any) => c.id === b.client_id);
     const due = parseAppDate(b.due_date);
-    return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "-", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
+    // Freela não tem cliente ligado (client_id NULL): aparece como "Freela" e
+    // a baixa é na mesa /freela (o front nunca escreve no billing do freela).
+    const freela = ehCobrancaFreela(b);
+    return { id: b.id, label: b.description || (freela ? "Parcela freela" : "Renovação Mensal"), client: b.client_id ? (client?.company_name || client?.full_name || "-") : "Freela", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type, freela };
   }) : [];
   const indivPendingItems = showIndiv ? filteredPayments.flatMap((pp: any) =>
     (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
@@ -1189,7 +1212,7 @@ function LegacyFinanceiro() {
         {(isAdmin || isManager) && (
           <TabsContent value="cashflow" className="mt-0 space-y-6">
             <CashFlow
-              billing={billing || []}
+              billing={billingBRL}
               projectPayments={projectPayments || []}
               clientsReserveSuggestion={activeMensalistas * (financeSettings?.defaultDirectCost ?? 275)}
             />
@@ -1198,7 +1221,7 @@ function LegacyFinanceiro() {
 
         {(isAdmin || isManager) && (
           <TabsContent value="capital" className="mt-0 space-y-6">
-            <InvestorCapital billing={billing || []} projectPayments={projectPayments || []} />
+            <InvestorCapital billing={billingBRL} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
@@ -1212,7 +1235,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="assistant" className="mt-0 space-y-6">
-            <CFOAssistant billing={billing || []} projectPayments={projectPayments || []} clients={clients || []} />
+            <CFOAssistant billing={billingBRL} projectPayments={projectPayments || []} clients={clients || []} />
           </TabsContent>
         )}
 
@@ -1224,7 +1247,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="plans" className="mt-0 space-y-6">
-            <PlansPricing billing={billing || []} projectPayments={projectPayments || []} />
+            <PlansPricing billing={billingBRL} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
@@ -1307,10 +1330,16 @@ function LegacyFinanceiro() {
                             <span className={juntar("text-[11px] tabular-nums", item.isOverdue ? "text-destructive" : "text-muted-foreground")}>
                               {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
                             </span>
-                          </div>
-                          <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
-                            Pagar
-                          </button>
+                           </div>
+                          {item.freela ? (
+                            <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")}>
+                              Ver no Freela
+                            </Link>
+                          ) : (
+                            <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
+                              Pagar
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ListaDoFinanceiro>
@@ -1333,20 +1362,32 @@ function LegacyFinanceiro() {
                           <li key={b.id} className="flex min-w-0 items-center px-3 py-2.5 sm:px-4">
                             <span className={juntar(etiqueta, "mr-3 hidden bg-muted text-muted-foreground sm:inline-flex")}>{typeIcon(b.type)}</span>
                             <div className="mr-3 min-w-0 flex-1">
-                              <p className={juntar(texto.corpo, "truncate font-medium")}>{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                              <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name} · vence {formatAppDate(b.due_date)}</p>
+                              <p className={juntar(texto.corpo, "truncate font-medium")}>{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : b.type === "freela" ? "Parcela freela" : "Serviço Extra")}</p>
+                              <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name || (ehCobrancaFreela(b) ? "Freela" : "Sem cliente")} · vence {formatAppDate(b.due_date)}</p>
                             </div>
                             <div className="mr-2 flex shrink-0 flex-col items-end">
-                              <span className="text-[13px] font-medium tabular-nums text-foreground">{fmt(Number(b.amount))}</span>
+                              <span className="text-[13px] font-medium tabular-nums text-foreground">{fmtMoeda(Number(b.amount), moedaDe(b))}</span>
                               <span className="mt-0.5">{statusBadge(b.status, b.due_date)}</span>
                             </div>
-                            <button type="button" onClick={() => handleMarkPaid(b.id)} className={juntar(acaoDaLinha, "text-success")} aria-label="Marcar como pago">
-                              <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                              <span className="hidden sm:inline">Marcar como pago</span>
-                            </button>
-                            <button type="button" onClick={() => openWhatsAppReminder(b.client, b)} className={juntar(botao.icone, "ml-1")} aria-label="Lembrar pelo WhatsApp">
-                              <MessageCircle className="h-4 w-4" aria-hidden="true" />
-                            </button>
+                            {/* Freela: a baixa é na mesa /freela (o front nunca escreve no billing do freela). */}
+                            {ehCobrancaFreela(b) ? (
+                              <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")} aria-label="Abrir o caixa do freela">
+                                <span className="hidden sm:inline">Ver no Freela</span>
+                                <CheckCircle2 className="h-3.5 w-3.5 sm:hidden" aria-hidden="true" />
+                              </Link>
+                            ) : (
+                              <>
+                                <button type="button" onClick={() => handleMarkPaid(b.id)} className={juntar(acaoDaLinha, "text-success")} aria-label="Marcar como pago">
+                                  <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                                  <span className="hidden sm:inline">Marcar como pago</span>
+                                </button>
+                                {b.client && (
+                                  <button type="button" onClick={() => openWhatsAppReminder(b.client, b)} className={juntar(botao.icone, "ml-1")} aria-label="Lembrar pelo WhatsApp">
+                                    <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                )}
+                              </>
+                            )}
                           </li>
                         );
                       })}
@@ -1687,7 +1728,7 @@ function LegacyFinanceiro() {
                               const renewalDate = parseAppDate(c.plan_renewal_date);
                               const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
                               const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
-                              const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
+                              const clientBilling = billingBRL.find((b: any) => b.client_id === c.id && b.type === "renewal");
                               const reminderCount = clientBilling?.reminder_count || 0;
                               const nome = c.company_name || c.full_name;
                               return (
@@ -1745,7 +1786,7 @@ function LegacyFinanceiro() {
                 !!c && !isInternalClient(c) && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
 
               const billingByClient = new Map<string, any[]>();
-              (billing || []).forEach((b: any) => {
+              billingBRL.forEach((b: any) => {
                 if (!b.client_id) return;
                 const c = (clients || []).find((cl: any) => cl.id === b.client_id);
                 if (!isAvulsoClient(c)) return;
