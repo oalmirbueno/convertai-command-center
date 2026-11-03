@@ -129,9 +129,10 @@ export async function getFinanceDashboard(input: EntradaFinanceira & { client_id
   const proximo = mesDe(fim);
 
   const [cobrancas, perfis, pagamentos, despesas, carteiras, config, planos] = await Promise.all([
+    // Os totais são em real: o dólar do freela tem caixa próprio em /freela/caixa.
     comPrazo(db().from('billing').select(
       'id, client_id, type, amount, paid_amount, status, due_date, paid_date, platform, description',
-    ).limit(READ_LIMITS.maxPageSize)),
+    ).eq('currency', 'BRL').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('profiles').select(
       'id, full_name, company_name, plan_name, plan_value, plan_status, plan_renewal_date, client_type, brand, services_config',
     ).limit(READ_LIMITS.maxPageSize)),
@@ -358,7 +359,7 @@ export async function getFinanceDashboard(input: EntradaFinanceira & { client_id
     ...abertasDoMes.map((r) => ({
       origem: 'cobranca',
       id: texto(r.id),
-      cliente: nomeDoCliente.get(String(r.client_id)) ?? '(sem nome)',
+      cliente: texto(r.type) === 'freela' ? 'Freela' : nomeDoCliente.get(String(r.client_id)) ?? '(sem nome)',
       descricao: texto(r.description),
       tipo: texto(r.type),
       valor: numero(r.amount),
@@ -382,7 +383,7 @@ export async function getFinanceDashboard(input: EntradaFinanceira & { client_id
   const listaRecebidos = [
     ...pagasDoMes.map((r) => ({
       origem: 'cobranca',
-      cliente: nomeDoCliente.get(String(r.client_id)) ?? '(sem nome)',
+      cliente: texto(r.type) === 'freela' ? 'Freela' : nomeDoCliente.get(String(r.client_id)) ?? '(sem nome)',
       descricao: texto(r.description),
       tipo: texto(r.type),
       valor: recebidoDe(r),

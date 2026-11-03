@@ -135,6 +135,8 @@ async function lerCobranca(competence: string) {
       db()
         .from('billing')
         .select('id, client_id, type, amount, paid_amount, status, due_date, paid_date, platform, description')
+        // Os totais são em real: o dólar do freela tem caixa próprio em /freela/caixa.
+        .eq('currency', 'BRL')
         .order('due_date', { ascending: false })
         .limit(READ_LIMITS.maxPageSize),
     ),
@@ -262,7 +264,7 @@ export async function getFinanceBilling(opts: {
     return {
       id: texto(r.id),
       cliente_id: texto(r.client_id),
-      cliente: cobranca.nomePorId.get(String(r.client_id)) ?? '(sem nome)',
+      cliente: texto(r.type) === 'freela' ? 'Freela' : cobranca.nomePorId.get(String(r.client_id)) ?? '(sem nome)',
       tipo: texto(r.type),
       descricao: texto(r.description),
       valor: numero(r.amount),

@@ -125,9 +125,10 @@ export async function getFinanceCashFlow(opts: { meses?: number; segmento?: stri
   }
 
   const [cobrancas, perfis, pagamentos, despesas, config] = await Promise.all([
+    // Os totais são em real: o dólar do freela tem caixa próprio em /freela/caixa.
     comPrazo(db().from('billing').select(
       'id, client_id, type, amount, paid_amount, status, due_date, paid_date, description',
-    ).limit(READ_LIMITS.maxPageSize)),
+    ).eq('currency', 'BRL').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('profiles').select('id, full_name, company_name, client_type, services_config').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('project_payments').select('id, client_id, installments:payment_installments(*)').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('expenses').select(
@@ -370,7 +371,7 @@ export async function getFinanceCapital(opts: { desde?: string }) {
     comPrazo(db().from('expenses').select(
       'id, description, supplier, category, amount, status, due_date, paid_date, notes',
     ).limit(READ_LIMITS.maxPageSize)),
-    comPrazo(db().from('billing').select('type, amount, paid_amount, status, due_date, paid_date').limit(READ_LIMITS.maxPageSize)),
+    comPrazo(db().from('billing').select('type, amount, paid_amount, status, due_date, paid_date').eq('currency', 'BRL').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('project_payments').select('installments:payment_installments(*)').limit(READ_LIMITS.maxPageSize)),
   ]);
   if (despesas.error) throw new Error(`expenses: ${despesas.error.message}`);
@@ -458,7 +459,7 @@ export async function getFinanceAdsInvestment(opts: { meses?: number }) {
 
   const [despesas, cobrancas, pagamentos, carteiras, recargas] = await Promise.all([
     comPrazo(db().from('expenses').select('category, amount, status, due_date, paid_date, description').limit(READ_LIMITS.maxPageSize)),
-    comPrazo(db().from('billing').select('type, amount, paid_amount, status, due_date, paid_date').limit(READ_LIMITS.maxPageSize)),
+    comPrazo(db().from('billing').select('type, amount, paid_amount, status, due_date, paid_date').eq('currency', 'BRL').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('project_payments').select('installments:payment_installments(*)').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('ads_wallet').select('client_id, platform, balance, last_recharge_date').limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('recharge_requests').select('client_id, platform, amount, status, created_at').limit(READ_LIMITS.maxPageSize)),

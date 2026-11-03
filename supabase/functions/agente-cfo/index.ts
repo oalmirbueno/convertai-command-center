@@ -121,7 +121,8 @@ async function lerRetrato(ch: Chamador, meses?: number): Promise<{ retrato: Retr
   const s = servico();
   const desde = new Date(Date.now() - 62 * 86_400_000).toISOString();
   const [cobrancas, pagamentos, despesas, clientes, config, perfil, metas, travas] = await Promise.all([
-    s.from("billing").select(COLUNAS.cobrancas).limit(5000),
+    // As contas do CFO são em real: o dólar do freela tem caixa próprio em /freela/caixa.
+    s.from("billing").select(COLUNAS.cobrancas).eq("currency", "BRL").limit(5000),
     s.from("project_payments").select(COLUNAS.pagamentos).limit(2000),
     s.from("expenses").select(COLUNAS.despesas).limit(5000),
     s.from("profiles").select(COLUNAS.clientes).limit(5000),

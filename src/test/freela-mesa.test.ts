@@ -54,6 +54,15 @@ describe("somas em real", () => {
   });
 });
 
+describe("somas em real no servidor", () => {
+  it("agente CFO e MCP financeiro só leem billing em real", () => {
+    expect(ler("supabase/functions/agente-cfo/index.ts")).toContain('select(COLUNAS.cobrancas).eq("currency", "BRL")');
+    expect(ler("supabase/functions/_shared/aceleriq-finance-services.ts")).toContain(".eq('currency', 'BRL')");
+    expect(ler("supabase/functions/mcp-server/modulos/aceleriq-finance-dashboard.ts")).toContain(".eq('currency', 'BRL')");
+    expect(ler("supabase/functions/mcp-server/modulos/aceleriq-finance-fluxo.ts").split(".eq('currency', 'BRL')")).toHaveLength(4);
+  });
+});
+
 describe("guardas da mesa", () => {
   it("projeto com parcelas não troca de moeda", () => {
     const s = ler("src/components/freela/AbaProjetos.tsx");
