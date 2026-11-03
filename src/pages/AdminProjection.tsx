@@ -12,6 +12,7 @@ import {
   botao, etiqueta, juntar, superficie, texto,
 } from "@/components/sistema";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { moedaDe } from "@/lib/freela/freelaLib";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -69,7 +70,10 @@ export default function AdminProjection() {
 
   // Current month revenue (for comparison)
   const currentMonthRevenue = useMemo(() => {
+    // Receita do mês é só BRL e só da agência. Freela (mesmo em real) e qualquer
+    // linha em dólar ficam de fora: a projeção compara planos e projetos.
     const billingRev = (billing || [])
+      .filter((b: any) => moedaDe(b) === "BRL" && b.type !== "freela")
       .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge")
       .filter((b: any) => {
         const d = new Date(b.paid_date || b.due_date);

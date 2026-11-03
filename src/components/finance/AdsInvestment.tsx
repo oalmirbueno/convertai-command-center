@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
@@ -37,7 +38,8 @@ interface Props {
   projectPayments: any[];
 }
 
-export default function AdsInvestment({ billing, projectPayments }: Props) {
+export default function AdsInvestment({ billing: cobrancas, projectPayments }: Props) {
+  const billing = (cobrancas || []).filter((b: any) => moedaDe(b) === "BRL");
   const { data: allExpenses = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {

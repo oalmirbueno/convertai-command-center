@@ -12,6 +12,7 @@ import {
   type Retrato,
 } from "../../../supabase/functions/agente-cfo/modulos/cfo-calculos";
 import { caixinhasDe, COLUNAS, hojeEmSaoPaulo, montarDadosDoCFO } from "../../../supabase/functions/agente-cfo/modulos/cfo-dados";
+import { moedaDe } from "@/lib/freela/freelaLib";
 
 /**
  * O CFO na tela (frente CFO, 30/09): a MESMA conta da função agente-cfo
@@ -30,7 +31,7 @@ const semTipo = supabase as any;
 export async function lerDadosDoCFO(userId: string): Promise<DadosDoCFO> {
   const desde = new Date(Date.now() - 62 * 86_400_000).toISOString();
   const [cobrancas, pagamentos, despesas, clientes, config, perfil, metas, travas] = await Promise.all([
-    semTipo.from("billing").select(COLUNAS.cobrancas).limit(5000),
+    semTipo.from("billing").select(`${COLUNAS.cobrancas}, currency`).limit(5000),
     semTipo.from("project_payments").select(COLUNAS.pagamentos).limit(2000),
     semTipo.from("expenses").select(COLUNAS.despesas).limit(5000),
     semTipo.from("profiles").select(COLUNAS.clientes).limit(5000),
@@ -41,9 +42,14 @@ export async function lerDadosDoCFO(userId: string): Promise<DadosDoCFO> {
   ]);
   const falha = [cobrancas, pagamentos, despesas, clientes, config, perfil].find((r: { error: unknown }) => r.error);
   if (falha) throw new Error(`Não consegui ler o financeiro: ${(falha.error as { message?: string }).message || "erro"}`);
+  // USD não entra em nenhuma soma de amount / paid_amount. Linha antiga sem
+  // currency continua BRL (moedaDe). O motor do CFO recebe só real.
+  const cobrancasEmReal = (Array.isArray(cobrancas.data) ? cobrancas.data : []).filter(
+    (b: { currency?: string | null }) => moedaDe(b) === "BRL",
+  );
   return montarDadosDoCFO({
     hoje: hojeEmSaoPaulo(),
-    cobrancas: cobrancas.data,
+    cobrancas: cobrancasEmReal,
     pagamentos: pagamentos.data,
     despesas: despesas.data,
     clientes: clientes.data,

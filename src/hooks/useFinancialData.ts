@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { moedaDe } from "@/lib/freela/freelaLib";
 
 export function useBilling(clientId?: string) {
   const { user } = useAuth();
@@ -32,10 +33,10 @@ export function useCobrancasPendentes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("billing")
-        .select("client_id, status, type, due_date, amount")
+        .select("client_id, status, type, due_date, amount, currency")
         .eq("status", "pending");
       if (error) throw error;
-      return data;
+      return (data || []).filter((b) => moedaDe(b) === "BRL");
     },
     enabled: !!user,
   });

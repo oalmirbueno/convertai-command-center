@@ -377,7 +377,7 @@ function LegacyFinanceiro() {
 
   const pendingTotal = periodFilter === "month"
     ? monthPendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0)
-    : pendingBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
+    : pendingBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0) + (origem === "freela" ? 0 : extraPending);
 
   const overdueTotal = periodFilter === "month"
     ? monthPendingBills.filter((b: any) => {
@@ -423,11 +423,12 @@ function LegacyFinanceiro() {
   // Divisão automática · valores realmente recebidos no mês selecionado (planos + projetos)
   const monthReceivedItems = [
     ...monthPaidBills.map((b: any) => ({ clientId: b.client_id || null, amount: receivedOf(b) })),
-    ...(projectPayments || []).flatMap((pp: any) =>
+    // Freela não mistura parcela de projeto da agência no recebido do mês.
+    ...(origem === "freela" ? [] : (projectPayments || []).flatMap((pp: any) =>
       (pp.installments || [])
         .filter((i: any) => (i.status === "paid" || i.status === "partial") && isThisMonth(i.paid_date || i.due_date))
         .map((i: any) => ({ clientId: pp.client_id || null, amount: receivedOf(i) }))
-    ),
+    )),
   ];
   const monthGrossReceived = monthReceivedItems.reduce((s, it) => s + it.amount, 0);
   const activeMensalistas = (clients || [])
@@ -500,6 +501,11 @@ function LegacyFinanceiro() {
     const bill = currentBill || localBill;
     if (!bill) {
       toast.error("Cobrança não encontrada");
+      return;
+    }
+    // Parcela freela só muda em freela_parcelas. O gatilho do banco espelha no billing.
+    if (ehCobrancaFreela(bill)) {
+      toast.info("A baixa do freela é no caixa da mesa Freela.");
       return;
     }
     if (bill.status === "paid") {
@@ -761,6 +767,11 @@ function LegacyFinanceiro() {
     const paidAmount = payType === "full" ? payModal.amount : (parseFloat(payPartialAmount) || 0);
 
     if (payModal.type === "billing") {
+      if (payModal.billingType === "freela") {
+        toast.info("A baixa do freela é no caixa da mesa Freela.");
+        setPayModal(null);
+        return;
+      }
       if (payType === "full") {
         await handleMarkPaid(payModal.id);
       } else {
@@ -909,17 +920,26 @@ function LegacyFinanceiro() {
     void paymentsQuery.refetch?.();
   };
 
-  const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
-  const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
-  const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
-  const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
-  const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
-  const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
+  const contaProjeto = origem !== "freela" && showIndiv;
+  const pendingVal = (showMonthly ? pendingTotal : 0) + (contaProjeto ? indivPending : 0);
+  const receivedVal = (showMonthly ? receivedTotal : 0) + (contaProjeto ? indivPaid : 0);
+  const overdueVal = (showMonthly ? overdueTotal : 0) + (contaProjeto ? indivOverdue : 0);
+  const subLabel = origem === "freela"
+    ? "Parcelas em real"
+    : brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
+  const recSub = origem === "freela"
+    ? "Parcelas em real"
+    : brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
+  const ovSub = origem === "freela"
+    ? "Parcelas em real"
+    : brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
   const noPeriodo = periodFilter === "month" ? "no mês" : "no geral";
   const nextMonthFull = MONTHS_FULL[nextMonth];
   const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
-  const receivedBreakdown = brandFilter === "all"
-    ? `Planos ${fmt(showMonthly ? receivedTotal : 0)} · Projetos ${fmt(showIndiv ? indivPaid : 0)}`
+  const receivedBreakdown = origem === "freela"
+    ? "Parcelas em real. Dólar fica no card do Freela."
+    : brandFilter === "all"
+    ? `Planos ${fmt(showMonthly ? receivedTotal : 0)} · Projetos ${fmt(contaProjeto ? indivPaid : 0)}`
     : recSub;
   const numeros: { rotulo: string; valor: string; sub?: string; icone: ReactNode; cor: string; ajuda?: string }[] = [
     {
@@ -933,7 +953,7 @@ function LegacyFinanceiro() {
     { rotulo: `Recebido ${noPeriodo}`, valor: fmt(receivedVal), sub: receivedBreakdown, icone: <TrendingUp className="h-3.5 w-3.5" />, cor: "text-success" },
     { rotulo: `A receber ${noPeriodo}`, valor: fmt(pendingVal), sub: subLabel, icone: <CreditCard className="h-3.5 w-3.5" />, cor: "text-warning" },
     { rotulo: "Atrasado", valor: fmt(overdueVal), sub: ovSub, icone: <CreditCard className="h-3.5 w-3.5" />, cor: "text-destructive" },
-    ...(periodFilter === "month" ? [{
+    ...(periodFilter === "month" && origem !== "freela" ? [{
       rotulo: "Receita esperada",
       valor: fmt((showMonthly ? expectedMonthlyRevenue : 0) + (showIndiv ? indivPendingMonth : 0)),
       sub: brandFilter === "all"
@@ -943,7 +963,36 @@ function LegacyFinanceiro() {
       cor: "text-info",
     }] : []),
   ];
-  const totalDeNumeros = numeros.length + 1; // + projeção
+  const mostraProjecao = origem !== "freela";
+  const totalDeNumeros = numeros.length + (mostraProjecao ? 1 : 0);
+
+  // Card do Freela: recebido no mês e em aberto, cada um em R$ e US$.
+  // O dólar nunca entra nos totais em real da faixa de cima.
+  const freelaDoCaixa = (billing || []).filter((b: any) => ehCobrancaFreela(b));
+  const mesDoFreela = periodFilter === "month" ? selMonth : thisMonth;
+  const anoDoFreela = periodFilter === "month" ? selYear : thisYear;
+  const nomeMesFreela = MONTHS_SHORT[mesDoFreela];
+  const somaFreela = (moeda: "BRL" | "USD", modo: "recebido" | "aberto") =>
+    freelaDoCaixa
+      .filter((b: any) => moedaDe(b) === moeda)
+      .reduce((s: number, b: any) => {
+        if (modo === "recebido") {
+          if (b.status !== "paid" && b.status !== "partial") return s;
+          const d = parseAppDate(b.paid_date || b.due_date);
+          if (!d || d.getMonth() !== mesDoFreela || d.getFullYear() !== anoDoFreela) return s;
+          return s + receivedOf(b);
+        }
+        if (b.status === "pending") return s + (Number(b.amount) || 0);
+        if (b.status === "partial") return s + Math.max((Number(b.amount) || 0) - (Number(b.paid_amount) || 0), 0);
+        return s;
+      }, 0);
+  const cardFreela = (rotulo: string, moeda: "BRL" | "USD", modo: "recebido" | "aberto") => ({
+    rotulo,
+    valor: billingLoading ? <span className="block h-6 w-24 animate-pulse rounded bg-muted" aria-label={`Carregando ${rotulo}`} /> : fmtMoeda(somaFreela(moeda, modo), moeda),
+    ponto: (modo === "recebido" ? "verde" : "alerta") as "verde" | "alerta",
+    para: "/freela/caixa",
+    dica: "Abrir o caixa do Freela",
+  });
 
   // A receber: cobranças pendentes, parcelas abertas e planos ativos ainda sem cobrança.
   const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
@@ -954,14 +1003,14 @@ function LegacyFinanceiro() {
     const freela = ehCobrancaFreela(b);
     return { id: b.id, label: b.description || (freela ? "Parcela freela" : "Renovação Mensal"), client: b.client_id ? (client?.company_name || client?.full_name || "-") : "Freela", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type, freela };
   }) : [];
-  const indivPendingItems = showIndiv ? filteredPayments.flatMap((pp: any) =>
+  const indivPendingItems = showIndiv && origem !== "freela" ? filteredPayments.flatMap((pp: any) =>
     (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
       id: i.id, label: `${pp.project?.name || "Projeto"} · ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
       client: pp.client?.company_name || pp.client?.full_name || "-", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
       brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
     }))
   ) : [];
-  const extraItems = showMonthly ? clientsWithPlanNotInBilling.map((c: any) => ({
+  const extraItems = showMonthly && origem !== "freela" ? clientsWithPlanNotInBilling.map((c: any) => ({
     id: `extra-${c.id}`, label: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
     client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
     brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
@@ -1005,8 +1054,8 @@ function LegacyFinanceiro() {
         .filter((b: any) => b.type !== "ads_recharge")
         .map((b: any) => ({
           id: `bill-${b.id}`,
-          label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
-          client: b.client?.company_name || b.client?.full_name || "-",
+          label: b.description || (ehCobrancaFreela(b) ? "Parcela freela" : b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
+          client: ehCobrancaFreela(b) ? "Freela" : (b.client?.company_name || b.client?.full_name || "-"),
           brand: "AcelerIQ",
           amount: receivedOf(b),
           totalAmount: Number(b.amount) || 0,
@@ -1071,16 +1120,16 @@ function LegacyFinanceiro() {
     let received = 0;
     let pending = 0;
     if (showMonthly) {
-      received += (billing || [])
+      received += billingDaOrigem
         .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge")
         .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
         .reduce((s: number, b: any) => s + receivedOf(b), 0);
-      pending += (billing || [])
+      pending += billingDaOrigem
         .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge" && !isPausedRenewal(b))
         .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
         .reduce((s: number, b: any) => s + Number(b.amount), 0);
     }
-    if (showIndiv) {
+    if (showIndiv && origem !== "freela") {
       filteredPayments.forEach((pp: any) => {
         (pp.installments || []).forEach((inst: any) => {
           const d = parseAppDate(inst.paid_date || inst.due_date);
@@ -1098,7 +1147,7 @@ function LegacyFinanceiro() {
   }
 
   // Proporção da receita: AcelerIQ x SiteBolt (tudo que já entrou)
-  const allPaymentsForPie = projectPayments || [];
+  const allPaymentsForPie = origem === "freela" ? [] : (projectPayments || []);
   const aceleriqReceived = paidBills
     .filter((b: any) => b.type !== "ads_recharge")
     .reduce((s: number, b: any) => s + receivedOf(b), 0);
@@ -1115,7 +1164,7 @@ function LegacyFinanceiro() {
         .filter((i: any) => i.status === "paid" || i.status === "partial")
         .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
   const pieData = [
-    { name: "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
+    { name: origem === "freela" ? "Freela (R$)" : "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
     { name: "SiteBolt", value: siteboltReceived, color: "hsl(var(--primary))" },
     ...(jointReceived > 0 ? [{ name: "AcelerIQ + SiteBolt", value: jointReceived, color: "hsl(var(--info))" }] : []),
   ].filter(d => d.value > 0);
@@ -1157,6 +1206,16 @@ function LegacyFinanceiro() {
                     valor={periodFilter}
                     onEscolher={(v) => setPeriodFilter(v === "all" ? "all" : "month")}
                     rotulo="Período"
+                  />
+                  <SeletorCompacto
+                    opcoes={[
+                      { valor: "todos", rotulo: "Todos" },
+                      { valor: "agencia", rotulo: "Agência" },
+                      { valor: "freela", rotulo: "Freela" },
+                    ]}
+                    valor={origem}
+                    onEscolher={(v) => setOrigem(v === "agencia" || v === "freela" ? v : "todos")}
+                    rotulo="Origem"
                   />
                   <SeletorCompacto
                     opcoes={BRAND_FILTERS.map((f) => ({ valor: f.value, rotulo: f.label }))}
@@ -1265,7 +1324,7 @@ function LegacyFinanceiro() {
             {/* Os números numa faixa só (antes, um cartão por número); o último leva à projeção. */}
             <FaixaDeNumeros
               rotulo="Números do financeiro"
-              colunas={totalDeNumeros === 6 ? 6 : 5}
+              colunas={totalDeNumeros >= 6 ? 6 : totalDeNumeros === 5 ? 5 : 4}
               itens={[
                 ...numeros.map((n) => ({
                   rotulo: n.rotulo,
@@ -1274,7 +1333,7 @@ function LegacyFinanceiro() {
                   ponto: pontoDaCor(n.cor),
                   lado: n.ajuda ? <AjudaRecolhida>{n.ajuda}</AjudaRecolhida> : undefined,
                 })),
-                {
+                ...(mostraProjecao ? [{
                   rotulo: "Próximo mês",
                   valor: fmt(nextMonthTotal),
                   apoio: `${nextMonthFull} ${nextYear}: ${nextMonthSub}`,
@@ -1282,7 +1341,18 @@ function LegacyFinanceiro() {
                   lado: <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />,
                   para: "/financeiro/projecao",
                   dica: `Projeção de ${nextMonthFull}: ${fmt(nextMonthTotal)}. Ver projeção`,
-                },
+                }] : []),
+              ]}
+            />
+
+            <FaixaDeNumeros
+              rotulo="Freela"
+              colunas={4}
+              itens={[
+                cardFreela(`Recebido em ${nomeMesFreela} (R$)`, "BRL", "recebido"),
+                cardFreela(`Recebido em ${nomeMesFreela} (US$)`, "USD", "recebido"),
+                cardFreela("Em aberto (R$)", "BRL", "aberto"),
+                cardFreela("Em aberto (US$)", "USD", "aberto"),
               ]}
             />
 
@@ -1575,7 +1645,7 @@ function LegacyFinanceiro() {
             />
           )}
 
-          {isAdmin && <AdsInvestment billing={billing || []} projectPayments={projectPayments || []} />}
+          {isAdmin && <AdsInvestment billing={billingBRL} projectPayments={projectPayments || []} />}
 
           <Secao
             titulo="Wallets de clientes"

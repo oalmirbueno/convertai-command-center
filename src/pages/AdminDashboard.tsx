@@ -24,6 +24,7 @@ import SecondBrainPulseWidget from "@/components/dashboard/SecondBrainPulseWidge
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
 import { appPublicUrl } from "@/lib/publicUrl";
 import { isInternalClient } from "@/lib/clientFlags";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import { acoesRapidasDoPapel } from "@/lib/acoesRapidasDoPapel";
 
 const statusDotColors: Record<string, string> = {
@@ -135,14 +136,16 @@ export default function AdminDashboard() {
       .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive" || isInternalClient(c))
       .map((c: any) => c.id)
   );
-  const pendingBills = (billing || []).filter(
+  // Totais do painel são em real. Dólar do freela não entra na soma.
+  const billingEmReal = (billing || []).filter((b: any) => moedaDe(b) === "BRL");
+  const pendingBills = billingEmReal.filter(
     (b: any) =>
       b.status === "pending" &&
       b.type !== "ads_recharge" &&
       !(b.type === "renewal" && pausedClientIds.has(b.client_id))
   );
   // Inclui parciais: a fatura original recebida em partes ainda conta no recebido pelo valor já pago.
-  const paidBills = (billing || []).filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge");
+  const paidBills = billingEmReal.filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge");
   const receivedOf = (b: any) => {
     const total = Number(b?.amount) || 0;
     const paid = Number(b?.paid_amount) || 0;

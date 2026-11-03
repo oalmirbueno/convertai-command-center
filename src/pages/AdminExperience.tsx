@@ -782,7 +782,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       const alerts: { kind: string; label: string }[] = [];
 
       const overdue = (billing || []).filter((b: any) => {
-        if (b.client_id !== client.id || b.status !== "pending" || b.type === "ads_recharge") return false;
+        if (b.client_id !== client.id || b.status !== "pending" || b.type === "ads_recharge" || b.type === "freela") return false;
         const due = new Date(`${b.due_date}T12:00:00`);
         return due < today;
       });

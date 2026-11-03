@@ -264,7 +264,7 @@ export default function AbaProjetos() {
       .from("freela_parcelas")
       .update({ status: "paga", pago_em: hoje })
       .eq("id", parcela.id)
-      .eq("status", "aberta")
+      .in("status", ["aberta", "atrasada"])
       .select();
     if (error) {
       toast.error(`Não consegui registrar o pagamento: ${error.message}`);
@@ -292,7 +292,7 @@ export default function AbaProjetos() {
       .from("freela_parcelas")
       .update({ status: "cancelada" })
       .eq("id", parcela.id)
-      .eq("status", "aberta")
+      .in("status", ["aberta", "atrasada"])
       .select();
     if (error) {
       toast.error(`Não consegui cancelar: ${error.message}`);

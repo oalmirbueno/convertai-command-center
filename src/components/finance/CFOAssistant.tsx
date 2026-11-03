@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import { toast } from "sonner";
 import {
   Brain, AlertTriangle, CheckCircle2, Target, FileDown,
@@ -65,7 +66,8 @@ interface Props {
   clients: any[];
 }
 
-export default function CFOAssistant({ billing, projectPayments, clients }: Props) {
+export default function CFOAssistant({ billing: cobrancas, projectPayments, clients }: Props) {
+  const billing = (cobrancas || []).filter((b: any) => moedaDe(b) === "BRL");
   const { data: settings } = useFinanceSettings();
   const { data: plans } = useFinancePlans();
   const { updateSettings } = useFinanceMutations();

@@ -14,6 +14,7 @@ import {
 } from "@/hooks/useFinanceV2";
 import { DIRECTOR_PLAN_CATALOG, ONE_OFF_CATALOG, DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { isInternalClient } from "@/lib/clientFlags";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import {
   CampoDeFormulario, Carregando, EstadoVazio, GrupoDeCampos, RegiaoRolavel, Secao,
   botao, campo, campoTexto, juntar, superficie, texto, useEstadoDaTela,
@@ -64,7 +65,8 @@ interface Props {
   projectPayments?: any[];
 }
 
-export default function PlansPricing({ billing = [], projectPayments = [] }: Props) {
+export default function PlansPricing({ billing: cobrancas = [], projectPayments = [] }: Props) {
+  const billing = cobrancas.filter((b: any) => moedaDe(b) === "BRL");
   const { data: plans, isLoading } = useFinancePlans();
   const { data: settings } = useFinanceSettings();
   const { data: clients } = useClients();

@@ -54,6 +54,7 @@ import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useBilling } from "@/hooks/useFinancialData";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
@@ -809,6 +810,8 @@ export default function Clients() {
   // KPIs calculados da MESMA fonte real do Financeiro (mensalistas + cobranças),
   // para os cards ficarem sempre sincronizados com a operação.
   const { data: kpiBilling } = useBilling();
+  // KPIs em real. Cobrança em dólar (freela) não infla o recebido nem o em aberto.
+  const kpiBillingEmReal = (kpiBilling || []).filter((b: any) => moedaDe(b) === "BRL");
   const { data: kpiPayments } = useQuery({
     queryKey: ["all-project-payments-finance"],
     queryFn: async () => {
@@ -858,7 +861,7 @@ export default function Clients() {
       .filter((client) => client.plan_status === "standby" || client.plan_status === "inactive" || isInternalClient(client))
       .map((client) => client.id)
   );
-  const kpiPendingBills = (kpiBilling || []).filter(
+  const kpiPendingBills = kpiBillingEmReal.filter(
     (b: any) =>
       b.status === "pending" &&
       b.type !== "ads_recharge" &&
@@ -877,7 +880,7 @@ export default function Clients() {
   const hojeIso = kpiToday
     ? `${kpiToday.getFullYear()}-${String(kpiToday.getMonth() + 1).padStart(2, "0")}-${String(kpiToday.getDate()).padStart(2, "0")}`
     : new Date().toISOString().slice(0, 10);
-  const situacoes = situacoesPorCliente((kpiBilling || []) as any[], hojeIso);
+  const situacoes = situacoesPorCliente(kpiBillingEmReal as any[], hojeIso);
   const billingReadByClient = new Map<string, { tone: "late" | "due" | "paid"; label: string; detail: string }>();
   situacoes.forEach((sit, id) => billingReadByClient.set(id, { tone: sit.tom, label: sit.rotulo, detail: sit.detalhe }));
   const passaNaCobranca = (c: any) => isInternalClient(c) ? filtroCobranca === "todas" : passaNoFiltroDaCobranca(situacoes.get(String(c.id)), filtroCobranca);
@@ -889,7 +892,7 @@ export default function Clients() {
   const avulsosVisiveis = typeFilter === "inactive" ? [] : avulsosList.filter(passaNaCobranca);
 
   // Recebido REAL no mês corrente (mensalidades + parcelas de projetos)
-  const receivedMonthBills = (kpiBilling || [])
+  const receivedMonthBills = kpiBillingEmReal
     .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge" && kpiInThisMonth(b.paid_date || b.due_date))
     .reduce((sum: number, b: any) => sum + kpiReceivedOf(b), 0);
   const receivedMonthInstallments = (kpiPayments || []).reduce(

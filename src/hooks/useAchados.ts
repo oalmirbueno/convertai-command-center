@@ -6,6 +6,7 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { useNow } from "@/hooks/useNow";
 import { useCobrancasPendentes } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
+import { moedaDe } from "@/lib/freela/freelaLib";
 import { addDays, localIso, mondayOf } from "@/lib/cycleWeek";
 import {
   contarLeadsDasAcoes,
@@ -245,7 +246,7 @@ export function useAchados({ clienteEmFoco = null, ativo = true, agora }: { clie
       anuncios: anuncios.data && Array.isArray(anuncios.data.dias) ? anuncios.data.dias : null,
       carteirasIa: gestao && Array.isArray(carteirasIa.data) ? carteirasIa.data : null,
       cobrancas: gestao && Array.isArray(cobrancas.data)
-        ? (cobrancas.data as Linha[]).filter((b) => !internos.has(String(b.client_id))).map((b) => ({ clienteId: String(b.client_id), status: String(b.status), tipo: (b.type as string) || null, vencimento: String(b.due_date || ""), valor: Number(b.amount) || 0 }))
+        ? (cobrancas.data as Linha[]).filter((b) => moedaDe(b) === "BRL" && b.type !== "freela" && b.client_id && !internos.has(String(b.client_id))).map((b) => ({ clienteId: String(b.client_id), status: String(b.status), tipo: (b.type as string) || null, vencimento: String(b.due_date || ""), valor: Number(b.amount) || 0 }))
         : null,
       rituaisFeitos: Array.isArray(rituais.data) ? rituais.data.map((r) => ({ clienteId: String(r.client_id), ritual: String(r.ritual_key) })) : null,
       clienteEmFoco,
