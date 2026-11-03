@@ -42,7 +42,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 import { createBilling } from "@/lib/createBilling";
 import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
-import { fmtMoeda, moedaDe, simboloDaMoeda } from "@/lib/freela/freelaLib";
+import { fmtMoeda, moedaDe } from "@/lib/freela/freelaLib";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -1366,10 +1366,7 @@ function LegacyFinanceiro() {
                               <p className={juntar(texto.auxiliar, "truncate", isOverdue && "text-destructive")}>{b.client?.company_name || b.client?.full_name || (ehCobrancaFreela(b) ? "Freela" : "Sem cliente")} · vence {formatAppDate(b.due_date)}</p>
                             </div>
                             <div className="mr-2 flex shrink-0 flex-col items-end">
-                              <span className="text-[13px] font-medium tabular-nums text-foreground">
-                                {fmtMoeda(Number(b.amount), moedaDe(b))}
-                                <span className="ml-1 text-[11px] font-normal text-muted-foreground">{simboloDaMoeda(moedaDe(b))}</span>
-                              </span>
+                              <span className="text-[13px] font-medium tabular-nums text-foreground">{fmtMoeda(Number(b.amount), moedaDe(b))}</span>
                               <span className="mt-0.5">{statusBadge(b.status, b.due_date)}</span>
                             </div>
                             {/* Freela: a baixa é na mesa /freela (o front nunca escreve no billing do freela). */}
