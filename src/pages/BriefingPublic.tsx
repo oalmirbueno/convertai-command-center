@@ -545,9 +545,10 @@ export default function BriefingPublic() {
         <EstadoDeErro className="mt-6" titulo="Não conseguimos enviar." descricao="Suas respostas continuam aqui, nada foi perdido. Confira a internet e envie de novo." />
       )}
 
+      {/* Grudada no pé da tela: no iPhone com a barrinha de início, o botão fica acima dela. */}
       <BarraDeAcoes
         fixa
-        className="mt-6"
+        className="mt-6 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
         inicio={
           <span className="flex min-w-0 items-center">
             <span className="mr-2 hidden h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">

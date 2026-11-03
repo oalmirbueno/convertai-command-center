@@ -96,6 +96,14 @@ const LARGURAS = {
  * Sem caixa em volta. No celular a coluna começa no topo e a página rola
  * normal (o teclado nunca prende o botão); do tablet para cima, `centralizar`
  * põe a coluna no meio da altura.
+ *
+ * A raiz não leva `overflow` (30/09): `overflow-x: hidden` faz o `overflow-y`
+ * virar `auto`, a raiz vira a área de rolagem da `BarraDeAcoes fixa` e ela
+ * para de grudar no pé da tela (quem rola é o documento). `overflow-x: clip`
+ * não existe no Safari 11, então quem não pode vazar para o lado é o
+ * conteúdo: coluna com `min-w-0` e `break-words` herdado (link, hashtag e
+ * e-mail sem espaço quebram na borda da caixa). `break-words` e não
+ * `anywhere`: funciona no Safari 11 e não espreme coluna de tabela.
  */
 export default function CascaPublica({
   titulo,
@@ -128,10 +136,10 @@ export default function CascaPublica({
   children?: ReactNode;
 }) {
   return (
-    <div className="dark min-h-screen overflow-x-hidden bg-background text-foreground">
+    <div className="dark min-h-screen bg-background text-foreground">
       <main
         className={juntar(
-          "mx-auto flex min-h-screen w-full min-w-0 flex-col px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-16",
+          "mx-auto flex min-h-screen w-full min-w-0 flex-col break-words px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-16",
           centralizar && "sm:justify-center",
           LARGURAS[largura],
         )}

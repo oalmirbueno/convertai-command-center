@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { arquivosEntregues, coresDoBrandbook, estadoDoModelo, SLOTS_DE_LOGO, type DadosDoBrandbook, type LogoDoBrandbook, type ModeloDoBrandbook, type TemaDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
-import { contraste, luminanciaRelativa, PERFIS, ROTULO_DO_PAPEL_DA_COR, textoCmyk, textoRgb, type FichaDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
+import { contraste, luminanciaRelativa, normalizarHex, PERFIS, ROTULO_DO_PAPEL_DA_COR, textoCmyk, textoRgb, type FichaDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
 
 /**
  * O brandbook desenhado em HTML (a prévia da etapa Guideline e a página
@@ -238,8 +238,11 @@ function Paginado({ dados, urlDe }: { dados: DadosDoBrandbook; urlDe: UrlDe }) {
         );
       case "versoes":
         return <div style={grade("repeat(auto-fit, minmax(120px, 1fr))", 10)}>{[dados.logos.secundario].concat(dados.logos.alternativas).filter(Boolean).slice(0, 4).map((l, i) => <Logo key={i} logo={l} urlDe={urlDe} fundo={PADRAO_CLARO} altura={120} rotulo="Versão" />)}</div>;
-      case "cromaticas":
-        return <div style={grade("1fr 1fr 1fr", 8)}>{["#FFFFFF", t.escura].concat(cores.slice(0, 4).map((c) => c.hex)).slice(0, 6).map((f) => <Logo key={f} logo={dados.logos.principal} urlDe={urlDe} fundo={f} altura={70} rotulo="Logo sobre cor" />)}</div>;
+      case "cromaticas": {
+        // A escura do tema costuma ser a cor mais escura da paleta, e o branco pode estar nela: cada cor entra uma vez (chave única).
+        const fundos = ["#FFFFFF", t.escura].concat(cores.map((c) => c.hex)).map((f) => normalizarHex(f) || f).filter((f, i, l) => l.indexOf(f) === i).slice(0, 6);
+        return <div style={grade("1fr 1fr 1fr", 8)}>{fundos.map((f) => <Logo key={f} logo={dados.logos.principal} urlDe={urlDe} fundo={f} altura={70} rotulo="Logo sobre cor" />)}</div>;
+      }
       case "icone":
         return <div style={grade("140px 1fr", 16)}><Logo logo={dados.logos.icone[0] || dados.logos.principal} urlDe={urlDe} fundo={t.acentoClaro} altura={140} rotulo="Ícone" />{txt(SLOTS_DE_LOGO[3].uso)}</div>;
       case "cores":
