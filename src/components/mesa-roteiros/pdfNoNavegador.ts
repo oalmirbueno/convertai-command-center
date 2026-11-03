@@ -26,7 +26,7 @@ export function montarPdf(cliente: string, itens: ItemDoPdf[]): { bytes: Uint8Ar
 }
 
 export function urlDoPdf(bytes: Uint8Array): string {
-  return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  return URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
 }
 
 /**

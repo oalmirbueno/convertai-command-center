@@ -75,7 +75,7 @@ const COR_DO_STATUS: Record<string, string> = {
 };
 
 function baixar(bytes: Uint8Array, nome: string) {
-  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = nome;

@@ -18,7 +18,7 @@ async function baixarBytes(caminho: string): Promise<Uint8Array | null> {
 }
 
 export function salvarArquivo(bytes: Uint8Array | Blob, nome: string, tipo: string) {
-  const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: tipo });
+  const blob = bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: tipo });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

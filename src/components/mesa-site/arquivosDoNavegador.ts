@@ -111,7 +111,7 @@ export async function montarZipDaImportacao(locais: ArquivoLocal[], analise: Ana
 
 /** sha256 em hexadecimal (a trava de concorrência do editor). */
 export async function sha256(bytes: Uint8Array): Promise<string> {
-  const d = await crypto.subtle.digest("SHA-256", bytes);
+  const d = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
   const v = new Uint8Array(d);
   let s = "";
   for (let i = 0; i < v.length; i++) s += (v[i] < 16 ? "0" : "") + v[i].toString(16);
