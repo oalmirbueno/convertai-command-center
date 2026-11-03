@@ -42,6 +42,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 import { createBilling } from "@/lib/createBilling";
 import { saldoDaCobranca } from "@/lib/clientes/situacaoDaCobranca";
+import { fmtMoeda, moedaDe, simboloDaMoeda } from "@/lib/freela/freelaLib";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -190,6 +191,7 @@ function SeletorDeMes({ mes, ano, noMesAtual, onMudar, onHoje }: { mes: number; 
 const typeIcon = (type: string) => {
   if (type === "renewal") return "REC";
   if (type === "ads_recharge") return "ADS";
+  if (type === "freela") return "FRL";
   return "AVU";
 };
 
