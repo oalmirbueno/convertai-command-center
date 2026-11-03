@@ -949,7 +949,10 @@ function LegacyFinanceiro() {
   const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
     const client = (clients || []).find((c: any) => c.id === b.client_id);
     const due = parseAppDate(b.due_date);
-    return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "-", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
+    // Freela não tem cliente ligado (client_id NULL): aparece como "Freela" e
+    // a baixa é na mesa /freela (o front nunca escreve no billing do freela).
+    const freela = ehCobrancaFreela(b);
+    return { id: b.id, label: b.description || (freela ? "Parcela freela" : "Renovação Mensal"), client: b.client_id ? (client?.company_name || client?.full_name || "-") : "Freela", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type, freela };
   }) : [];
   const indivPendingItems = showIndiv ? filteredPayments.flatMap((pp: any) =>
     (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
@@ -1327,10 +1330,16 @@ function LegacyFinanceiro() {
                             <span className={juntar("text-[11px] tabular-nums", item.isOverdue ? "text-destructive" : "text-muted-foreground")}>
                               {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
                             </span>
-                          </div>
-                          <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
-                            Pagar
-                          </button>
+                           </div>
+                          {item.freela ? (
+                            <Link to="/freela/caixa" className={juntar(acaoDaLinha, "text-primary")}>
+                              Ver no Freela
+                            </Link>
+                          ) : (
+                            <button type="button" onClick={() => void abrirPagamento(item)} className={juntar(acaoDaLinha, "text-success")}>
+                              Pagar
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ListaDoFinanceiro>
