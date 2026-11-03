@@ -67,6 +67,8 @@ const AdminFinanceiro = rotas.lazy(() => import("@/pages/AdminFinanceiro"));
 // Frente CFO (30/09): o campo próprio do agente financeiro. Só admin.
 const FinanceiroCFO = rotas.lazy(() => import("@/pages/FinanceiroCFO"));
 const AdminComercial = rotas.lazy(() => import("@/pages/AdminComercial"));
+// Mesa Freela (MVP): canal de aquisição ao lado da agência. Mesma régua do Comercial (admin e manager).
+const AdminFreela = rotas.lazy(() => import("@/pages/AdminFreela"));
 const AdminProjection = rotas.lazy(() => import("@/pages/AdminProjection"));
 const AdminExecucao = rotas.lazy(() => import("@/pages/AdminExecucao"));
 const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
