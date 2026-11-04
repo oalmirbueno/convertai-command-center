@@ -2793,6 +2793,22 @@
       "remote_name": "freela_mesa_rls_membros",
       "remote_statements_sha256": "aa4ffb11d858078569c5410fc2698e1acb548c0e0f67102d3d35f5e2ed4dfded",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104130000",
+      "path": "supabase/migrations/20261104130000_reagendar_post_aprovado_sem_trava.sql",
+      "local_sha256": "02cc94f18de354b635259773a17f8e3da197a258c37d3afd7ce6885f0206be38",
+      "remote_name": "reagendar_post_aprovado_sem_trava",
+      "remote_statements_sha256": "f6c8e0666e6dbf9bb83755f925163a5f9aab7c52397651c67176812cb2909a9b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104140829",
+      "path": "supabase/migrations/20261104140829_n8n_avisa_no_sino.sql",
+      "local_sha256": "89087042e498888e18f11a08482e8618b8aeb4e00a0bda5a504627d84a4cada0",
+      "remote_name": "n8n_avisa_no_sino",
+      "remote_statements_sha256": "67d73f3e2e333f9c53e78e240ffa276c0603ee3e8361dcfc509b363482549317",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
