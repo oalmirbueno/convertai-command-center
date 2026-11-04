@@ -180,7 +180,8 @@ describe("1. Amostra da tipografia anexada com papel e prioridade", () => {
     expect(g.indexOf("const cedem = tipografiaQueCede({")).toBeLessThan(g.indexOf("const escolhidosDaLamina = anexosDaLamina(candidatos, { base: temBase });"));
     // O bloco vai nos dois prompts (normal e replicar) e a versão guarda o registro.
     expect(g).toContain("    campanha ? blocoDaCampanha(campanha) : \"\",\n    // Frente T2: tipografia do cliente (amostras, família, peso e caixa por papel, âncora da série).\n    blocoDaTipografiaAqui,");
-    expect(g).toContain("      continuidade,\n      // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).\n      blocoDaTipografiaAqui,");
+    // 29/10: o mundo temático da capa entrou entre a continuidade e o bloco da tipografia no replicar.
+    expect(g).toContain("      continuidade,\n      ads ? \"\" : linhaDoMundoTematico({ ordem, total, tema: temaDoConteudo(t.direcao) }),\n      // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).\n      blocoDaTipografiaAqui,");
     expect(g).toContain("tipografia: registroDaTipografia,");
     expect(servidor).not.toContain("amostrasDasFontes(");
   });

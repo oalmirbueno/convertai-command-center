@@ -768,6 +768,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "editor-video/edicao-com-ia.ts#rostoRastrear/a.folego": "leituras",
   "estudio-arte/aprendizado-no-estudio.ts#lerVisaoDaEntrega": "leituras",
   "estudio-arte/index.ts#ajustarCard": "estudio.gerador",
+  // 29/10: a legenda do vídeo assiste o vídeo: os quadros e a fala transcrita viram descrição (leitura por visão, extração).
+  "estudio-arte/index.ts#assistirOVideo": "leituras",
   "estudio-arte/index.ts#conferirRosto": "estudio.conferencias",
   "estudio-arte/index.ts#depsDaAdaptacao/escreverCena": "estudio.gerador",
   "estudio-arte/index.ts#depsDaAdaptacao/lerPorVisao": "leituras",

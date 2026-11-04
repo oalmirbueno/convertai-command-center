@@ -10,6 +10,11 @@ import { describe, expect, it } from "vitest";
 const raiz = process.cwd();
 const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 const CONGELADO = "20260929010000_aviso_abre_o_conteudo.sql";
+// 04/11: 20261027110000 também nasceu quebrada ("Cobrança" na régua) e
+// 20261104150000 regrava app_private.cobranca_candidatos com o acento certo.
+const COBRANCA_CONGELADA = "20261027110000_cobranca_pausada_por_cliente.sql";
+const COBRANCA_CONSERTO = "supabase/migrations/20261104150000_conserto_acento_cobranca.sql";
+const CONGELADOS = [CONGELADO, COBRANCA_CONGELADA];
 const CONSERTO = "supabase/migrations/20260930294000_avisos_acento_corrigido.sql";
 
 // "Ã" (U+00C3) ou "Â" (U+00C2) seguido de um byte de continuação lido como
@@ -46,10 +51,23 @@ function corpos(sql: string): string[] {
 describe("acento dos avisos (E02)", () => {
   it("nenhuma migration nova tem texto com dupla codificação", () => {
     const quebrados = arquivos(resolve(raiz, "supabase/migrations"), [".sql"])
-      .filter((arq) => !arq.endsWith(CONGELADO))
+      .filter((arq) => !CONGELADOS.some((c) => arq.endsWith(c)))
       .filter((arq) => PAR_QUEBRADO.test(readFileSync(arq, "utf8")))
       .map((arq) => arq.slice(raiz.length + 1));
     expect(quebrados).toEqual([]);
+  });
+
+  it("regrava a régua de cobrança com o mesmo corpo de 27/10, só com o acento certo", () => {
+    const fn = (sql: string) => {
+      const a = sql.indexOf("CREATE OR REPLACE FUNCTION app_private.cobranca_candidatos");
+      return sql.slice(a, sql.indexOf("$function$;", a));
+    };
+    const antes = fn(ler(`supabase/migrations/${COBRANCA_CONGELADA}`));
+    const depois = fn(ler(COBRANCA_CONSERTO));
+    expect(antes).toContain("ELSE 'Cobran\u00c3\u00a7a' END");
+    expect(depois).toBe(consertar(antes));
+    expect(depois).toContain("ELSE 'Cobrança' END");
+    expect(ler(COBRANCA_CONSERTO)).toContain("REVOKE ALL ON FUNCTION app_private.cobranca_candidatos(date) FROM PUBLIC, anon, authenticated;");
   });
 
   it("nenhuma Edge Function nem tela tem texto com dupla codificação", () => {

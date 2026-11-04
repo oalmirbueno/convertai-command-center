@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
-import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, campo, juntar, rolagem, superficie, texto } from "@/components/sistema/estilos";
 import { resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { openFile } from "@/lib/fileActions";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -154,15 +154,17 @@ export default function AbaOrganizacao({ onAbrirMes }: { onAbrirMes: () => void 
       </div>
       {marca && <div className="flex items-center gap-1.5"><p className={texto.auxiliar}>Arquivos do painel: {marca.nome}</p><AjudaRecolhida rotulo="Pastas compartilhadas entre marcas">As pastas do Workspace são compartilhadas entre as marcas deste cliente.</AjudaRecolhida></div>}
       <div className="grid min-w-0 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-        {/* 22/10 (dono: "tá rolando inteiro"): no computador a lateral de pastas fica parada (cada lista de pastas rola sozinha); só a galeria rola com a página. */}
-        <aside aria-label="Pastas da organização" data-lateral-fixa="" className={juntar(superficie.painel, "min-w-0 self-start p-2 md:sticky md:top-[calc(env(safe-area-inset-top)+152px)] md:max-h-[calc(100dvh-env(safe-area-inset-top)-168px)] md:overflow-y-auto md:overscroll-contain")}>
+        {/* 22/10 (dono: "tá rolando inteiro"): no computador a lateral de pastas fica parada; só a galeria rola com a página.
+            28/10 (dono: a lateral rola até o fim): a lateral inteira é uma rolagem só (rolagem.lista, de 1024 px para cima),
+            sem lista rolando dentro dela e sem altura calc(100dvh) (SISTEMA.md 8). */}
+        <aside aria-label="Pastas da organização" data-lateral-fixa="" className={juntar(superficie.painel, "min-w-0 self-start p-2 md:sticky md:top-[calc(env(safe-area-inset-top)+152px)]", rolagem.lista)}>
           {linha("todos", "Todos os arquivos", itens.length)}
           {linha("workspace", "Workspace do cliente", itens.filter((i) => i.origem === "workspace").length)}
-          <div className="max-h-72 overflow-y-auto">{pastas.map((p) => linha(`workspace:${p.id}`, p.nome, contagens.get(p.id) || 0, true))}</div>
+          <div>{pastas.map((p) => linha(`workspace:${p.id}`, p.nome, contagens.get(p.id) || 0, true))}</div>
           <Button variant="ghost" size="sm" className="mt-1 h-8 w-full justify-start" onClick={() => setNovaPasta(true)} disabled={!consulta.isSuccess || !userId}><FolderPlus className="mr-2 h-3.5 w-3.5" />Nova pasta</Button>
           <div className="my-2 border-t border-border" />
           {linha("arquivos", "Arquivos do painel", itens.filter((i) => i.origem === "arquivos").length)}
-          <div className="max-h-48 overflow-y-auto">{pastasDosArquivos.map((p) => linha(`arquivos:${p}`, p, itens.filter((i) => i.origem === "arquivos" && i.pasta === p).length, true))}</div>
+          <div>{pastasDosArquivos.map((p) => linha(`arquivos:${p}`, p, itens.filter((i) => i.origem === "arquivos" && i.pasta === p).length, true))}</div>
         </aside>
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">

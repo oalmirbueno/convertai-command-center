@@ -2809,6 +2809,14 @@
       "remote_name": "n8n_avisa_no_sino",
       "remote_statements_sha256": "67d73f3e2e333f9c53e78e240ffa276c0603ee3e8361dcfc509b363482549317",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104150000",
+      "path": "supabase/migrations/20261104150000_conserto_acento_cobranca.sql",
+      "local_sha256": "d7b7225069ebcd7a1426e4cb1c1329dfa15baa79cf1da0160a4d15654ff46ba7",
+      "remote_name": "conserto_acento_cobranca",
+      "remote_statements_sha256": "2bed9f39db784b76d5e43745e3271206f89daeace49c72e8e987ecfef7738766",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -250,6 +250,6 @@ export function comporCena(img: HTMLImageElement, cantos: Ponto[], logos: LogoCa
     q,
     { luz },
   );
-  ctx.putImageData(new ImageData(out as ImageDataArray, W, H), 0, 0);
+  ctx.putImageData(new ImageData(out as Uint8ClampedArray<ArrayBuffer>, W, H), 0, 0);
   return c;
 }

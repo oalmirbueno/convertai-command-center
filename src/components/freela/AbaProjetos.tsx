@@ -524,7 +524,7 @@ export default function AbaProjetos() {
                 </ul>
               )}
 
-              <Painel titulo="Gerar parcelas iguais" descricao="Divide o valor fechado; a última recebe o arredondamento." className="text-[13px]">
+              <Painel titulo="Gerar parcelas iguais" ajuda="Divide o valor fechado; a última recebe o arredondamento." className="text-[13px]">
                 <div className="flex min-w-0 flex-wrap items-end gap-2">
                   <CampoDeFormulario rotulo="Quantidade">
                     <input inputMode="numeric" value={gerarN} onChange={(e) => setGerarN(e.target.value)} className={juntar(campo, "w-24")} />

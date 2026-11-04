@@ -132,9 +132,12 @@ describe("estudio-arte: ajuste e edicao dentro do gerador sobre a versao atual",
     expect(ajuste).toContain("editar: { bytes: atual, mascara: comMascara ?");
   });
 
-  it("ajuste por area: mascara so nas areas e os pixels de fora voltam da versao anterior", () => {
+  it("ajuste por area: mascara so nas areas e o ajuste e a imagem inteira do gerador", () => {
     expect(ajuste).toContain("normalizarAreas(corpo.areas)");
-    expect(ajuste).toContain("devolverOriginalForaDasAreas(atual, gerado.png, abertas");
+    expect(ajuste).toContain("mascara: comMascara ? await mascara(dims!.largura, dims!.altura, abertas) : undefined");
+    // 27/10 (dono: "sem colar nada por cima"): os pixels da versao anterior nao voltam mais fora das areas.
+    expect(ajuste).not.toContain("devolverOriginalForaDasAreas(");
+    expect(ajuste).toContain("let img = gerado;");
     expect(ajuste).toContain('tipo === "fundo"');
   });
 
