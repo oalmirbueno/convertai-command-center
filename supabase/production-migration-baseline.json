@@ -2813,9 +2813,9 @@
     {
       "version": "20261104180000",
       "path": "supabase/migrations/20261104180000_alcada_automatica.sql",
-      "local_sha256": "1fdad8a334edd932e69ff196861609cec7763a781e7cf32bffd44cbc66605f61",
+      "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
-      "remote_statements_sha256": "97732a70cd313ec177eefd8cc424b6132369aeac2d6e1dba8894f31eda229b98",
+      "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

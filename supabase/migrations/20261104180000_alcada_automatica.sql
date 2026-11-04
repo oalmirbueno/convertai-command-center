@@ -466,12 +466,14 @@ insert into public.operator_alcadas
    aumento_max_pct, exige_plano_aprovado, nota)
 values
   -- Pausar anúncio que queima verba, redistribuir dentro do teto (custo 0)
-  -- e subir orçamento ou limite de gasto até 20%, no máximo R$ 300 por vez.
-  (null, null, 'alterar_orcamento', true, 300, 1500, 20, false,
-   'Padrão 04/11: pausar, redistribuir e subir até 20% (máx. R$ 300 por vez, R$ 1.500 no mês por cliente).'),
+  -- e subir orçamento ou limite de gasto até 20%. O cliente recarrega R$ 120
+  -- no início do mês, então o teto padrão é esse; por cliente, troque com
+  -- operator_alcada_definir.
+  (null, null, 'alterar_orcamento', true, 120, 120, 20, false,
+   'Padrão 04/11: pausar, redistribuir e subir até 20% (máx. R$ 120 no mês por cliente, a recarga inicial).'),
   -- Ativar campanha montada a partir de plano aprovado.
-  (null, null, 'ativar_campanha', true, 500, 1500, null, true,
-   'Padrão 04/11: só campanha de plano aprovado (plano_ref), máx. R$ 500 por campanha.'),
+  (null, null, 'ativar_campanha', true, 120, 120, null, true,
+   'Padrão 04/11: só campanha de plano aprovado (plano_ref), dentro dos R$ 120 do mês por cliente.'),
   -- Publicar e agendar o que já está no plano ou calendário aprovado.
   (null, null, 'publicar', true, 0, null, null, true,
    'Padrão 04/11: só o que está no calendário ou plano aprovado (plano_ref), sem custo.'),

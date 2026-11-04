@@ -29,8 +29,8 @@ A diferença está na resposta:
 
 | Ação (`action_kind`) | Quando cabe |
 |---|---|
-| `alterar_orcamento` | Pausar anúncio que queima verba, redistribuir dentro do teto ou subir orçamento ou limite de gasto até **20%**, até **R$ 300** por vez e **R$ 1.500** no mês por cliente. |
-| `ativar_campanha` | Campanha montada a partir de plano aprovado, até **R$ 500**. |
+| `alterar_orcamento` | Pausar anúncio que queima verba, redistribuir dentro do teto ou subir orçamento ou limite de gasto até **20%**, dentro de **R$ 120** no mês por cliente (a recarga inicial). |
+| `ativar_campanha` | Campanha montada a partir de plano aprovado, dentro dos mesmos **R$ 120** do mês. |
 | `publicar` / `agendar` | O que já está no calendário ou plano aprovado, sem custo. |
 
 Para caber, o pedido precisa:
