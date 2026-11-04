@@ -102,7 +102,7 @@
     "https://deno.land/x/imagescript@1.3.0/v2/ops/rotate.mjs": "a1b65616717bd2eed8db406affea3263b4674dada46b56441ef38167a187455d",
     "https://deno.land/x/imagescript@1.3.0/v2/util/mem.mjs": "4968d400dae069b4bf0ef4767c1802fd2cc7d15d90eda4cfadf5b4cd19b96c6d",
     "https://esm.sh/@supabase/auth-js@2.65.0/denonext/auth-js.mjs": "b0dae93271b199b26f7990e9091ecd2556125f2bfe1c9a443893bf0519908858",
-    "https://esm.sh/@supabase/auth-js@2.71.1/denonext/auth-js.mjs": "a92d005e4a8a03063aa2c46d7d69161fa776ce1bacccc43daa70e28fe367068e",
+    "https://esm.sh/@supabase/auth-js@2.71.1/denonext/auth-js.mjs": "d55f67342e652b8bdce35b0ff13ad5cc294b7e96dbd68f859b464b07c6864967",
     "https://esm.sh/@supabase/functions-js@2.4.1/denonext/functions-js.mjs": "0dfa81270bba8ae5af371b273a564203b4625b3a18e70774235b0b46ef40d940",
     "https://esm.sh/@supabase/functions-js@2.4.6/denonext/functions-js.mjs": "d6cc049a0430f428ff0b71a0d3c48d45a243ddd48c68febcdb5cb8a02476a1dc",
     "https://esm.sh/@supabase/node-fetch@2.6.15/denonext/node-fetch.mjs": "0bae9052231f4f6dbccc7234d05ea96923dbf967be12f402764580b6bf9f713d",
