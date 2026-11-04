@@ -265,19 +265,20 @@ describe("o dado do funil não duplica nem se perde", () => {
 });
 
 const kanban = ler("src/components/comercial/FunilKanban.tsx");
+const quadro = ler("src/components/sistema/QuadroKanban.tsx");
 const pagina = ler("src/pages/AdminComercial.tsx");
 
 describe("o funil é um kanban de arrastar, não uma lista", () => {
   it("o cartão é arrastável e a coluna recebe", () => {
     expect(kanban).toContain("useDraggable({");
-    expect(kanban).toContain("useDroppable({ id: estagio })");
+    expect(quadro).toContain("useDroppable({ id })");
   });
 
   it("mouse e toque são sensores separados — senão o celular perde a rolagem", () => {
     // O cartão inteiro é arrastável: um sensor de ponteiro único capturaria
     // o toque e mataria o scroll da coluna.
-    expect(kanban).toContain("useSensor(MouseSensor, { activationConstraint: { distance: 3 } })");
-    expect(kanban).toContain("delay: 150, tolerance: 8");
+    expect(quadro).toContain("useSensor(MouseSensor, { activationConstraint: { distance: 3 } })");
+    expect(quadro).toContain("delay: 150, tolerance: 8");
   });
 
   it("o cartão sai do lugar antes da ida ao banco", () => {
@@ -292,12 +293,10 @@ describe("o funil é um kanban de arrastar, não uma lista", () => {
     expect(kanban).toContain("acabouDeArrastar");
   });
 
-  it("ganho e perdido são faixa, não coluna", () => {
-    // Coluna de fechado incha para sempre e empurra o trabalho de hoje para
-    // fora da tela.
-    expect(kanban).toContain("{arrastando && (");
-    expect(kanban).toContain('id="ganho"');
-    expect(kanban).toContain('id="perdido"');
+  it("ganho e perdido são colunas, como no funil do Freela", () => {
+    // 04/11/2026 (dono: "os kanban do freela e do crm idênticos"): antes eram faixa só durante o arrasto.
+    expect(kanban).toContain('const COLUNAS_DO_QUADRO: EstagioId[] = [...ESTAGIOS_ABERTOS, "ganho", "perdido"];');
+    expect(kanban).not.toContain("AlvoDeFechamento");
   });
 
   it("fechar pede contexto antes de gravar", () => {

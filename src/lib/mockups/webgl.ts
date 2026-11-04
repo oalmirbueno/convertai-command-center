@@ -342,7 +342,7 @@ function criarCanvas2d(): Compositor {
       destino.width = w;
       destino.height = h;
       const ctx = destino.getContext("2d");
-      if (ctx) ctx.putImageData(new ImageData(out as ImageDataArray, w, h), 0, 0);
+      if (ctx) ctx.putImageData(new ImageData(out as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
     },
   };
 }

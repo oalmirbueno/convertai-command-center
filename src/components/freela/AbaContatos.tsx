@@ -1,16 +1,16 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Archive, ArchiveRestore, Pencil, Plus, UserPlus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Archive, ArchiveRestore, KanbanSquare, Pencil, Plus, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto,
-  botao, campo, campoTexto, etiqueta, juntar, texto,
+  AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, RegiaoRolavel, SeletorCompacto, texto,
 } from "@/components/sistema";
-import { useFreelaContatos } from "./dadosFreela";
-import { normalizar, simboloDaMoeda } from "@/lib/freela/freelaLib";
+import { useFreelaContatos, useFreelaPropostas } from "./dadosFreela";
+import { normalizar, somaPorMoeda, totalEmTexto } from "@/lib/freela/freelaLib";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Contato = Tables<"freela_contatos">;
@@ -30,6 +30,7 @@ export default function AbaContatos() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const { data: contatos, isLoading, isError, refetch } = useFreelaContatos();
+  const { data: propostas } = useFreelaPropostas();
   const [busca, setBusca] = useState("");
   const [mostrarArquivados, setMostrarArquivados] = useState("ativos");
   const [dialogAberto, setDialogAberto] = useState(false);
@@ -151,6 +152,17 @@ export default function AbaContatos() {
     await queryClient.invalidateQueries({ queryKey: ["clients"] });
   };
 
+  const resumoDasPropostas = (contatoId: string) => {
+    const doContato = (propostas || []).filter((p) => p.contato_id === contatoId);
+    if (doContato.length === 0) return "Sem proposta ainda";
+    const abertas = doContato.filter((p) => ["rascunho", "enviada", "negociacao"].includes(p.status));
+    const fechadas = doContato.filter((p) => p.status === "aceita");
+    return [
+      abertas.length ? `${abertas.length} em aberto: ${totalEmTexto(somaPorMoeda(abertas))}` : null,
+      fechadas.length ? `${fechadas.length} fechada${fechadas.length > 1 ? "s" : ""}: ${totalEmTexto(somaPorMoeda(fechadas))}` : null,
+    ].filter(Boolean).join(" · ") || `${doContato.length} perdida${doContato.length > 1 ? "s" : ""}`;
+  };
+
   if (isLoading) return <Carregando forma="lista" linhas={4} rotulo="Carregando contatos" />;
   if (isError) {
     return (
@@ -162,40 +174,30 @@ export default function AbaContatos() {
   }
 
   return (
-    <div className="min-w-0 space-y-4">
-      <Secao
-        titulo="Contatos"
-        descricao={`${lista.length} ${lista.length === 1 ? "contato" : "contatos"}`}
-        ajuda="Pessoas e empresas atendidas por fora da agência. Daqui nascem as propostas; quando vira recorrente, promova a cliente."
-        acao={
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por nome, empresa, e-mail ou WhatsApp" rotulo="Buscar contato" className="min-w-[180px] flex-1 sm:max-w-[420px]" />
+        <SeletorCompacto
+          opcoes={[
+            { valor: "ativos", rotulo: "Ativos" },
+            { valor: "arquivados", rotulo: "Arquivados" },
+            { valor: "todos", rotulo: "Todos" },
+          ]}
+          valor={mostrarArquivados}
+          onEscolher={setMostrarArquivados}
+          rotulo="Mostrar"
+        />
+        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>{lista.length} {lista.length === 1 ? "contato" : "contatos"}</p>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <AjudaRecolhida rotulo="Sobre os contatos">Pessoas e empresas atendidas por fora da agência. Daqui nascem as propostas; quando fecha, vira cliente no funil.</AjudaRecolhida>
           <button type="button" onClick={abrirNovo} className={botao.primario}>
             <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
             <span className="hidden sm:inline">Novo contato</span>
           </button>
-        }
-        divisoria
-      >
-        <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-          <input
-            type="search"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome, empresa, e-mail ou WhatsApp"
-            aria-label="Buscar contato"
-            className={juntar(campo, "sm:max-w-xs")}
-          />
-          <SeletorCompacto
-            opcoes={[
-              { valor: "ativos", rotulo: "Ativos" },
-              { valor: "arquivados", rotulo: "Arquivados" },
-              { valor: "todos", rotulo: "Todos" },
-            ]}
-            valor={mostrarArquivados}
-            onEscolher={setMostrarArquivados}
-            rotulo="Mostrar"
-          />
         </div>
+      </div>
 
+      <RegiaoRolavel rotulo="Lista de contatos" memoria="freela:contatos" className="min-w-0 lg:pb-12 lg:pr-1">
         {lista.length === 0 ? (
           <EstadoVazio
             compacto
@@ -215,13 +217,18 @@ export default function AbaContatos() {
                   </div>
                   <p className={juntar(texto.auxiliar, "truncate")}>
                     {[c.empresa, c.email, c.whatsapp, c.pais].filter(Boolean).join(" · ") || "Sem dados de contato"}
-                    <span> · prefere {simboloDaMoeda(c.moeda_preferida)}</span>
                   </p>
+                  <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>{resumoDasPropostas(c.id)}</p>
                 </div>
+                {!c.archived_at && (
+                  <Link to="/freela/propostas" className={juntar(botao.barra, "inline-flex items-center")} aria-label={`Ver o funil de ${c.nome}`}>
+                    <KanbanSquare className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
+                    <span className="hidden sm:inline">Funil</span>
+                  </Link>
+                )}
                 {!c.promoted_client_id && !c.archived_at && (
-                  <button type="button" onClick={() => void promover(c)} className={botao.barra} aria-label={`Promover ${c.nome} a cliente`}>
-                    <UserPlus className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                    <span className="hidden sm:inline">Promover a cliente</span>
+                  <button type="button" onClick={() => void promover(c)} className={botao.barra} aria-label={`Promover ${c.nome} a cliente`} title="Promover a cliente">
+                    <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 )}
                 <button type="button" onClick={() => abrirEdicao(c)} className={botao.barra} aria-label={`Editar ${c.nome}`}>
@@ -239,7 +246,7 @@ export default function AbaContatos() {
             ))}
           </ul>
         )}
-      </Secao>
+      </RegiaoRolavel>
 
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
         <DialogContent className="max-w-lg">
@@ -273,12 +280,12 @@ export default function AbaContatos() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={campoTexto} />
             </CampoDeFormulario>
           </GrupoDeCampos>
-          <div className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="-mb-2 gap-2 py-2 sm:space-x-0">
             <button type="button" onClick={() => setDialogAberto(false)} className={botao.secundario}>Cancelar</button>
             <button type="button" onClick={() => void salvar()} disabled={salvando} className={botao.primario}>
               {salvando ? "Salvando..." : editando ? "Salvar" : "Criar contato"}
             </button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

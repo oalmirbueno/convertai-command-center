@@ -593,14 +593,16 @@ body[data-gaveta-aberta] [data-casca="flutuante"] {
   }
   /* Ações no pé, sempre à mão: o pé gruda na base da folha enquanto o resto
      rola, com o fundo da própria janela por trás. */
-  [data-dialogo-do-painel] [data-pe-do-dialogo] {
-    position: -webkit-sticky;
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-    background-color: hsl(var(--background));
-  }
-  [data-dialogo-do-painel].bg-card [data-pe-do-dialogo] {
-    background-color: hsl(var(--card));
-  }
+}
+
+/* 04/11/2026 (dono: "os pop-ups estão cortando embaixo"): a janela rola por dentro e o pé fica à mão em qualquer tela. */
+[data-dialogo-do-painel] [data-pe-do-dialogo] {
+  position: -webkit-sticky;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background-color: hsl(var(--background));
+}
+[data-dialogo-do-painel].bg-card [data-pe-do-dialogo] {
+  background-color: hsl(var(--card));
 }

@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AjudaRecolhida, CampoDeEscolha, CampoDeFormulario, SeletorCompacto, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import { projectTemplates } from "@/lib/projectTemplates";
 
-const PROJECT_TYPES = [
+export const PROJECT_TYPES = [
   { value: "social_media", label: "Social Media" },
   { value: "trafego", label: "Tráfego" },
   { value: "automation", label: "Automação" },

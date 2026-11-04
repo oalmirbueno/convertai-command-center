@@ -15,6 +15,7 @@ export { default as AjudaRecolhida } from "./AjudaRecolhida";
 export { texto, conversa, campo, campoTexto, botao, superficie, foco, etiqueta, larguraDaMesa, juntar, toqueCompacto, espaco, lista, rolagem, ESCALA_DE_FONTE } from "./estilos";
 export { default as AreaDeTrabalho, useAreaDeTrabalho, useLargo, abrirLateralDaArea, useAlturaQueCabe } from "./AreaDeTrabalho";
 export { default as RegiaoRolavel } from "./RegiaoRolavel";
+export { default as QuadroKanban, ColunaDoQuadro, classesDoCartao } from "./QuadroKanban";
 export { default as PainelDoAgente, CabecalhoDoAgente, MensagensDoAgente, CompositorDoAgente, BalaoDaConversa } from "./PainelDoAgente";
 export { default as SeletorCompacto, type OpcaoCompacta } from "./SeletorCompacto";
 export { useEstadoDaTela, lerEstadoDaTela, gravarEstadoDaTela, apagarEstadoDaTela } from "./useEstadoDaTela";

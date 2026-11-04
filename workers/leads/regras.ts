@@ -37,7 +37,7 @@ export function linhaDoCandidato(buscaId: string, c: Record<string, unknown>): R
     .slice(0, 40)
     .map((e) => {
       const o = e as Record<string, unknown>;
-      return { campo: txt(o.campo, 40), valor: txt(o.valor, 600), fonte: txt(o.fonte, 30), url: txt(o.url, 500) };
+      return { campo: txt(o.campo, 40), valor: txt(o.valor, 600), fonte: txt(o.fonte, 30), url: txt(o.url, 500), ...(txt(o.detalhe, 300) ? { detalhe: txt(o.detalhe, 300) } : {}) };
     });
   if (txt(c.cnpj, 20)) evidencias.push({ campo: "cnpj_numero", valor: txt(c.cnpj, 20), fonte: "site", url: txt(c.site, 500) });
   return {
@@ -80,6 +80,7 @@ export function entradaDoPython(b: Record<string, unknown>) {
 export function semSegredo(t: string): string {
   return String(t || "")
     .replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, "[chave]")
+    .replace(/apify_api_[A-Za-z0-9]+/g, "[chave]")
     .replace(/(apikey|authorization|bearer)[=:\s]+[^\s,;]+/gi, "$1 [chave]")
     .slice(0, 300);
 }

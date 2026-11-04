@@ -2,8 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CircleDollarSign, Pencil } from "lucide-react";
 import {
-  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, Secao, SeletorCompacto,
-  botao, campo, etiqueta, juntar, texto,
+  AjudaRecolhida, botao, campo, Carregando, EstadoDeErro, EstadoVazio, etiqueta, FaixaDeNumeros, juntar, RegiaoRolavel, SeletorCompacto, texto,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import { dataBR, fmtMoeda, hojeISO, ROTULO_STATUS_PARCELA, statusVisualDaParcela, type Moeda } from "@/lib/freela/freelaLib";
@@ -79,8 +78,9 @@ export default function AbaCaixa() {
   }
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
       {/* Um cartão por moeda: os números nunca se misturam. */}
+      <div className="mb-3 grid min-w-0 shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
       {(["BRL", "USD"] as Moeda[]).map((moeda) => {
         const t = totaisPorMoeda(moeda);
         return (
@@ -96,14 +96,9 @@ export default function AbaCaixa() {
           />
         );
       })}
+      </div>
 
-      <Secao
-        titulo="Parcelas"
-        descricao={`${lista.length} ${lista.length === 1 ? "parcela" : "parcelas"}`}
-        ajuda="O vencimento que passou e segue em aberto aparece como atrasado. Baixar ou cancelar uma parcela é na aba Projetos."
-        divisoria
-      >
-        <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
           <SeletorCompacto
             opcoes={[
               { valor: "todas", rotulo: "Todas" },
@@ -136,8 +131,11 @@ export default function AbaCaixa() {
               Limpar mês
             </button>
           )}
-        </div>
+          <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>{lista.length} {lista.length === 1 ? "parcela" : "parcelas"}</p>
+          <AjudaRecolhida className="ml-auto" rotulo="Sobre as parcelas">O vencimento que passou e segue em aberto aparece como atrasado. Baixar ou cancelar uma parcela é na aba Projetos.</AjudaRecolhida>
+      </div>
 
+      <RegiaoRolavel rotulo="Lista de parcelas" memoria="freela:caixa" className="min-w-0 lg:pb-12 lg:pr-1">
         {lista.length === 0 ? (
           <EstadoVazio
             compacto
@@ -176,7 +174,7 @@ export default function AbaCaixa() {
             })}
           </ul>
         )}
-      </Secao>
+      </RegiaoRolavel>
     </div>
   );
 }

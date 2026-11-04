@@ -338,8 +338,10 @@ function LegacyFinanceiro() {
         dão exatamente os mesmos números de antes. */
   const ehCobrancaFreela = (b: any) => b?.type === "freela";
   const billingBRL = (billing || []).filter((b: any) => moedaDe(b) === "BRL");
+  // 04/11/2026: cliente que veio do Freela tem cobrança comum (conta em tudo), e a origem dele segue sendo Freela.
+  const daOrigemFreela = (b: any) => ehCobrancaFreela(b) || b?.client?.origem_aquisicao === "freela";
   const billingDaOrigem = billingBRL.filter((b: any) =>
-    origem === "todos" ? true : origem === "freela" ? ehCobrancaFreela(b) : !ehCobrancaFreela(b),
+    origem === "todos" ? true : origem === "freela" ? daOrigemFreela(b) : !daOrigemFreela(b),
   );
 
   const pendingBills = billingDaOrigem.filter((b: any) => b.status === "pending" && !isPausedRenewal(b));
@@ -968,7 +970,7 @@ function LegacyFinanceiro() {
 
   // Card do Freela: recebido no mês e em aberto, cada um em R$ e US$.
   // O dólar nunca entra nos totais em real da faixa de cima.
-  const freelaDoCaixa = (billing || []).filter((b: any) => ehCobrancaFreela(b));
+  const freelaDoCaixa = (billing || []).filter((b: any) => daOrigemFreela(b));
   const mesDoFreela = periodFilter === "month" ? selMonth : thisMonth;
   const anoDoFreela = periodFilter === "month" ? selYear : thisYear;
   const nomeMesFreela = MONTHS_SHORT[mesDoFreela];

@@ -4,10 +4,9 @@ import { toast } from "sonner";
 import { CalendarClock, CheckCircle2, Pencil, Plus, Receipt } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, Secao, SeletorCompacto,
-  botao, campo, campoTexto, etiqueta, juntar, texto,
+  AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, Painel, RegiaoRolavel, SeletorCompacto, texto,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import {
@@ -329,40 +328,30 @@ export default function AbaProjetos() {
     : [];
 
   return (
-    <div className="min-w-0 space-y-4">
-      <Secao
-        titulo="Projetos"
-        descricao={`${lista.length} ${lista.length === 1 ? "projeto" : "projetos"}`}
-        ajuda="Cada projeto tem as suas parcelas, sempre na moeda fechada. Marcar paga aqui atualiza o caixa do freela e o financeiro."
-        acao={
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por título ou contato" rotulo="Buscar projeto" className="min-w-[180px] flex-1 sm:max-w-[420px]" />
+        <SeletorCompacto
+          opcoes={[
+            { valor: "todos", rotulo: "Todos" },
+            ...Object.entries(ROTULO_STATUS_PROJETO).map(([valor, rotulo]) => ({ valor, rotulo })),
+          ]}
+          valor={filtroStatus}
+          onEscolher={setFiltroStatus}
+          rotulo="Status do projeto"
+          listaQuandoNaoCabe
+        />
+        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>{lista.length} {lista.length === 1 ? "projeto" : "projetos"}</p>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <AjudaRecolhida rotulo="Sobre os projetos">Cada projeto tem as suas parcelas, sempre na moeda fechada. Marcar paga aqui atualiza o caixa do freela e o financeiro.</AjudaRecolhida>
           <button type="button" onClick={abrirNovo} className={botao.primario}>
             <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
             <span className="hidden sm:inline">Novo projeto</span>
           </button>
-        }
-        divisoria
-      >
-        <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-          <input
-            type="search"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por título ou contato"
-            aria-label="Buscar projeto"
-            className={juntar(campo, "sm:max-w-xs")}
-          />
-          <SeletorCompacto
-            opcoes={[
-              { valor: "todos", rotulo: "Todos" },
-              ...Object.entries(ROTULO_STATUS_PROJETO).map(([valor, rotulo]) => ({ valor, rotulo })),
-            ]}
-            valor={filtroStatus}
-            onEscolher={setFiltroStatus}
-            rotulo="Status do projeto"
-            listaQuandoNaoCabe
-          />
         </div>
+      </div>
 
+      <RegiaoRolavel rotulo="Lista de projetos" memoria="freela:projetos" className="min-w-0 lg:pb-12 lg:pr-1">
         {lista.length === 0 ? (
           <EstadoVazio
             compacto
@@ -412,7 +401,7 @@ export default function AbaProjetos() {
             })}
           </ul>
         )}
-      </Secao>
+      </RegiaoRolavel>
 
       {/* Projeto: cadastro */}
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
@@ -456,12 +445,12 @@ export default function AbaProjetos() {
               <textarea value={form.escopo} onChange={(e) => setForm({ ...form, escopo: e.target.value })} className={campoTexto} />
             </CampoDeFormulario>
           </GrupoDeCampos>
-          <div className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="-mb-2 gap-2 py-2 sm:space-x-0">
             <button type="button" onClick={() => setDialogAberto(false)} className={botao.secundario}>Cancelar</button>
             <button type="button" onClick={() => void salvar()} disabled={salvando} className={botao.primario}>
               {salvando ? "Salvando..." : editando ? "Salvar" : "Criar projeto"}
             </button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -524,7 +513,7 @@ export default function AbaProjetos() {
                 </ul>
               )}
 
-              <Painel titulo="Gerar parcelas iguais" descricao="Divide o valor fechado; a última recebe o arredondamento." className="text-[13px]">
+              <Painel titulo="Gerar parcelas iguais" ajuda="Divide o valor fechado; a última recebe o arredondamento." className="text-[13px]">
                 <div className="flex min-w-0 flex-wrap items-end gap-2">
                   <CampoDeFormulario rotulo="Quantidade">
                     <input inputMode="numeric" value={gerarN} onChange={(e) => setGerarN(e.target.value)} className={juntar(campo, "w-24")} />

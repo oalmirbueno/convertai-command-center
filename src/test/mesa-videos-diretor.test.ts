@@ -130,7 +130,8 @@ describe("catálogo de motores", () => {
       expect(m.preco, m.id).toBeTruthy();
       expect(m.preco!.fonte, m.id).toMatch(/^https:\/\//);
       // Frente VGN: parte do catálogo foi conferida de novo em 30/09 (ao vivo no fal).
-      expect(m.preco!.conferido_em, m.id).toMatch(/^2026-09-(26|30)$/);
+      // 27/10: o Kling 4.0 entrou no catálogo conferido ao vivo nesse dia.
+      expect(m.preco!.conferido_em, m.id).toMatch(m.id === "kling-4" ? /^2026-10-27$/ : /^2026-09-(26|30)$/);
       expect(Object.keys(m.endpoints).length, m.id).toBeGreaterThan(0);
     });
     const tem = (nome: string) => !!Deno_ok(nome);

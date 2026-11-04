@@ -17,8 +17,9 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 vi.mock("@/lib/comercial", () => ({ listarCampanhas: () => Promise.resolve([{ id: "11111111-1111-4111-8111-111111111111", name: "Halloween da casa" }]) }));
 
 import MaquinaDeLeads from "@/components/comercial/MaquinaDeLeads";
+import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import { custoDaAvaliacao, estadoDaBusca, telefoneLegivel } from "@/lib/comercial/maquinaApi";
-import { chavesDoContato, leadDoCandidato, NIVEIS_DE_ENCAIXE, normalizarBusca, notaDoEncaixe, perguntasDoJev } from "../../supabase/functions/comercial-leads/regras";
+import { chavesDoContato, fatosDoCandidato, leadDoCandidato, NIVEIS_DE_ENCAIXE, normalizarBusca, notaDoEncaixe, perguntasDoJev } from "../../supabase/functions/comercial-leads/regras";
 
 const BUSCA = "22222222-2222-4222-8222-222222222222";
 const CAMP = "11111111-1111-4111-8111-111111111111";
@@ -46,6 +47,14 @@ describe("regras da Máquina de leads", () => {
     expect(notaDoEncaixe(2).nota).toBe(5);
     expect(notaDoEncaixe(null)).toEqual({ nota: null, porque: null });
     expect(notaDoEncaixe(3).porque).toMatch(/^Bom encaixe:/);
+  });
+
+  it("fato visto no site entra como sugestão, com a prova; o resto das evidências não", () => {
+    const f = fatosDoCandidato(cand("a", { evidencias: [{ campo: "site", valor: "x" }, { campo: "fato_observado", valor: "o rodapé do site de vocês ainda mostra 2019", detalhe: "O aviso termina em 2019", url: "https://a.com" }] }) as never, "lead-1");
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ lead_id: "lead-1", campo: "presenca_digital", situacao: "sugestao", evidencia: "pagina_citada", fonte_url: "https://a.com" });
+    expect(f[0].detalhe).toContain("2019");
+    expect(fatosDoCandidato(cand("b") as never, "lead-1")).toEqual([]);
   });
 
   it("o lead do CRM: origem maquina_de_leads, contato, contexto com a fonte e o Mercúrio só quando pedido", () => {
@@ -89,7 +98,7 @@ const corpos = (acao: string) => mock.invoke.mock.calls.filter((c) => c[0] === "
 
 function montar(aoAbrirLead = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(h(QueryClientProvider, { client: qc }, h(MaquinaDeLeads, { aoAbrirLead })));
+  render(h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MaquinaDeLeads, { aoAbrirLead }))));
   return aoAbrirLead;
 }
 
@@ -153,6 +162,36 @@ describe("Máquina de leads (tela)", () => {
     const noCrm = await within(area).findAllByRole("button", { name: /^No CRM$/ });
     fireEvent.click(noCrm[0]);
     expect(abrir).toHaveBeenCalled();
+  });
+
+  it("Levar ao CRM funciona sem marcar: confirma e leva os novos da tela", async () => {
+    montar();
+    const area = await screen.findByRole("region", { name: /Candidatos de Pizzaria em Curitiba/ });
+    await within(area).findByText("Pizzaria a");
+    const botao = within(area).getByRole("button", { name: /^Levar ao CRM \(1\)$/ }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(false);
+    fireEvent.click(botao);
+    expect(corpos("importar")).toHaveLength(0);
+    fireEvent.click(await screen.findByRole("button", { name: "Levar ao CRM" }));
+    await waitFor(() => expect(corpos("importar")[0]).toMatchObject({ busca_id: BUSCA, candidato_ids: ["a"] }));
+  });
+
+  it("cada linha nova tem o próprio Levar ao CRM, e quem já está no CRM não tem", async () => {
+    montar();
+    const area = await screen.findByRole("region", { name: /Candidatos de Pizzaria em Curitiba/ });
+    fireEvent.click(await within(area).findByRole("button", { name: "Levar Pizzaria a ao CRM" }));
+    await waitFor(() => expect(corpos("importar")[0]).toMatchObject({ candidato_ids: ["a"] }));
+    expect(within(area).queryByRole("button", { name: "Levar Pizzaria b ao CRM" })).toBeNull();
+  });
+
+  it("lead que o banco recusa vira aviso, não silêncio", async () => {
+    const { toast } = await import("sonner");
+    const normal = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (f: string, a: any) => (a.body.acao === "importar" ? { data: { importados: [], repetidos: [] }, error: null } : normal(f, a)));
+    montar();
+    const area = await screen.findByRole("region", { name: /Candidatos de Pizzaria em Curitiba/ });
+    fireEvent.click(await within(area).findByRole("button", { name: "Levar Pizzaria a ao CRM" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("1 não entrou no CRM", expect.anything()));
   });
 
   it("descarta os marcados e volta pelo filtro Descartados", async () => {
