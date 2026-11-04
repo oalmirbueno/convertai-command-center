@@ -2793,6 +2793,14 @@
       "remote_name": "freela_mesa_rls_membros",
       "remote_statements_sha256": "aa4ffb11d858078569c5410fc2698e1acb548c0e0f67102d3d35f5e2ed4dfded",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104130000",
+      "path": "supabase/migrations/20261104130000_reagendar_post_aprovado_sem_trava.sql",
+      "local_sha256": "02cc94f18de354b635259773a17f8e3da197a258c37d3afd7ce6885f0206be38",
+      "remote_name": "reagendar_post_aprovado_sem_trava",
+      "remote_statements_sha256": "f6c8e0666e6dbf9bb83755f925163a5f9aab7c52397651c67176812cb2909a9b",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
