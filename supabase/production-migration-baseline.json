@@ -2825,6 +2825,14 @@
       "remote_name": "chaves_apify",
       "remote_statements_sha256": "a796f165080479bc161fbf47ea8119201c897c1b343effd746b48f4a072f2a2f",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104204245",
+      "path": "supabase/migrations/20261104204245_chaves_aisa.sql",
+      "local_sha256": "1b54d699ad6f0a30d2ae307e62ebc04554e2b20cd567226ed7cfb72a21f0e775",
+      "remote_name": "chaves_aisa",
+      "remote_statements_sha256": "c29cf84921449b59ec1169dc927ac93f96d117eae032fa520902e0ccf45602cc",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
