@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from apify import ErroDoApify, candidato_do_google, entrada_do_ator, lugares_do_google, notas_do_lugar, teto_em_dolar  # noqa: E402
+from apify import ErroDoApify, candidato_do_google, entrada_do_ator, extras_do_lugar, lugares_do_google, notas_do_lugar, teto_em_dolar  # noqa: E402
 from buscar import rodar  # noqa: E402
 
 LUGAR = {
@@ -45,12 +45,12 @@ class Falsa:
 class Teto(unittest.TestCase):
     def test_cobre_a_busca_e_respeita_o_maximo(self):
         self.assertEqual(teto_em_dolar(50, {}), 0.5)
-        self.assertAlmostEqual(teto_em_dolar(300, {}), 1.8)
+        self.assertAlmostEqual(teto_em_dolar(300, {}), 2.4)
         self.assertEqual(teto_em_dolar(300, {"APIFY_TETO_USD": "1"}), 1.0)
 
     def test_teto_invalido_nao_libera_gasto(self):
-        self.assertEqual(teto_em_dolar(300, {"APIFY_TETO_USD": "abc"}), 1.8)
-        self.assertEqual(teto_em_dolar(300, {"APIFY_TETO_USD": "9999"}), 1.8)
+        self.assertEqual(teto_em_dolar(300, {"APIFY_TETO_USD": "abc"}), 2.4)
+        self.assertEqual(teto_em_dolar(300, {"APIFY_TETO_USD": "9999"}), 2.4)
 
 
 class Entrada(unittest.TestCase):
@@ -108,7 +108,7 @@ class Rodada(unittest.TestCase):
         f = Falsa()
         itens = lugares_do_google({"nicho": "x", "cidade": "y"}, 300, {"APIFY_TOKEN": "tok"}, http=f, dormir=lambda s: None)
         self.assertEqual(len(itens), 1)
-        self.assertIn("maxTotalChargeUsd=1.8", f.pedidos[0][1])
+        self.assertIn("maxTotalChargeUsd=2.4", f.pedidos[0][1])
         self.assertNotIn("tok", f.pedidos[0][1], "o token não vai na URL")
 
     def test_falha_vira_erro_sem_token(self):
@@ -142,6 +142,32 @@ class BuscaInteira(unittest.TestCase):
             raise AssertionError("não devia chamar o Apify")
 
         rodar({"nicho": "x", "cidade": "y", "fontes": ["lista"], "urls": [], "limite": 5}, saida=io.StringIO(), lugares_google=nao_chame)
+
+
+class ContatosDaEmpresa(unittest.TestCase):
+    """04/11/2026: a rodada pede os contatos da empresa e pula quem fechou; o que falta não quebra."""
+
+    def test_pede_contatos_e_pula_fechados(self):
+        e = entrada_do_ator({"nicho": "x", "cidade": "Curitiba", "uf": "PR"}, 5)
+        self.assertIs(e["scrapeContacts"], True)
+        self.assertIs(e["skipClosedPlaces"], True)
+        self.assertEqual(e["maxReviews"], 0)
+
+    def test_email_instagram_e_whatsapp_dos_contatos(self):
+        c = candidato_do_google({"title": "Loja", "emails": ["a@loja.com.br"], "instagrams": ["https://www.instagram.com/lojax/"], "whatsapps": ["+5541999887766"]})
+        self.assertEqual(c["email"], "a@loja.com.br")
+        self.assertEqual(c["instagram"], "lojax")
+        self.assertEqual(c["whatsapp_bruto"], "+5541999887766")
+
+    def test_sem_contatos_nao_quebra(self):
+        c = candidato_do_google({"title": "Loja", "emails": [], "instagrams": None})
+        self.assertIsNone(c["email"])
+        self.assertIsNone(c["instagram"])
+
+    def test_extras(self):
+        x = extras_do_lugar({"neighborhood": "Batel", "openingHours": [{"day": "segunda", "hours": "8 às 18"}], "categories": ["Pizzaria", "Delivery"], "facebooks": ["https://facebook.com/l"], "linkedIns": []})
+        self.assertEqual(x, {"bairro": "Batel", "horario": "segunda: 8 às 18", "categorias": "Pizzaria, Delivery", "facebook": "https://facebook.com/l", "linkedin": None})
+        self.assertEqual(extras_do_lugar({}), {"bairro": None, "horario": None, "categorias": None, "facebook": None, "linkedin": None})
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@ from fontes import PAISES
 
 API = "https://api.apify.com/v2"
 ATOR = "compass~crawler-google-places"
-# Margem sobre os US$ 0,004 por lugar; o Apify exige no mínimo US$ 0,50 por rodada.
-USD_POR_LUGAR = 0.006
+# US$ 0,004 por lugar + US$ 0,002 dos contatos da empresa (plano grátis, 04/11/2026), com margem. Mínimo de US$ 0,50 por rodada.
+USD_POR_LUGAR = 0.008
 TETO_MINIMO_USD = 0.5
 ESPERA_ENTRE_CONSULTAS_S = 10
 PRAZO_DA_RODADA_S = 900
@@ -50,7 +50,9 @@ def entrada_do_ator(busca, limite):
         "language": "pt-BR",
         "maxReviews": 0,
         "maxImages": 0,
-        "scrapeContacts": False,
+        # 04/11/2026 (dono: "mais completo pro Apify"): e-mail e redes que a empresa publica. Fechado nem é cobrado.
+        "scrapeContacts": True,
+        "skipClosedPlaces": True,
     }
 
 
@@ -109,6 +111,38 @@ def _telefone_legivel(item):
     return "(%s) %s-%s" % (d[:2], d[2:-4], d[-4:]) if len(d) in (10, 11) else None
 
 
+def _primeiro(item, campo):
+    """O primeiro valor de uma lista de contatos do ator; lista vazia ou campo ausente dá None."""
+    valores = item.get(campo)
+    if not isinstance(valores, list):
+        return None
+    for v in valores:
+        v = v.get("value") if isinstance(v, dict) else v
+        if v and str(v).strip():
+            return str(v).strip()
+    return None
+
+
+def _horarios(item):
+    dias = item.get("openingHours")
+    if not isinstance(dias, list):
+        return None
+    texto = "; ".join("%s: %s" % (d.get("day"), d.get("hours")) for d in dias if isinstance(d, dict) and d.get("day") and d.get("hours"))
+    return texto[:400] or None
+
+
+def extras_do_lugar(item):
+    """O que não tem coluna própria e vai como evidência, com a origem. Campo que falta não quebra."""
+    categorias = item.get("categories")
+    return {
+        "bairro": item.get("neighborhood"),
+        "horario": _horarios(item),
+        "categorias": ", ".join(str(c) for c in categorias)[:300] if isinstance(categorias, list) and categorias else None,
+        "facebook": _primeiro(item, "facebooks"),
+        "linkedin": _primeiro(item, "linkedIns"),
+    }
+
+
 def candidato_do_google(item):
     """Um lugar vira candidato. Fechado ou sem nome fica de fora."""
     nome = str(item.get("title") or "").strip()
@@ -118,8 +152,10 @@ def candidato_do_google(item):
         "nome": nome[:200],
         "categoria": item.get("categoryName"),
         "site": _site_proprio(item.get("website")),
-        "telefone_bruto": _telefone_legivel(item),
-        "instagram": _instagram(item.get("website")),
+        "telefone_bruto": _telefone_legivel(item) or _primeiro(item, "phones"),
+        "whatsapp_bruto": _primeiro(item, "whatsapps"),
+        "email": _primeiro(item, "emails"),
+        "instagram": _instagram(_primeiro(item, "instagrams")) or _instagram(item.get("website")),
         "endereco": item.get("address"),
         "cidade": item.get("city"),
         "fonte_url": item.get("url"),

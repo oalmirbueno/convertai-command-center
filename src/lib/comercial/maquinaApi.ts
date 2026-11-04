@@ -52,6 +52,7 @@ export interface CandidatoDeLead {
   porque: string | null;
   situacao: "novo" | "importado" | "descartado";
   lead_id: string | null;
+  created_at?: string;
 }
 
 export interface NovaBusca {

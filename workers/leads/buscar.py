@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from apify import candidato_do_google, lugares_do_google, notas_do_lugar
+from apify import candidato_do_google, extras_do_lugar, lugares_do_google, notas_do_lugar
 from extrair import chave_do_candidato, eh_celular, extrair_da_pagina, telefone_de_texto
 from fontes import CREDITO_OSM, CacheDeCnpj, Educado, area_da_cidade, candidato_do_osm, dados_do_cnpj, lugares_do_osm
 from nichos import consulta_overpass, nicho_do_texto
@@ -99,6 +99,9 @@ def candidato_de_lugar_do_google(item):
     url = c["fonte_url"]
     if item.get("totalScore") is not None:
         c["evidencias"].append(_evidencia("avaliacoes", "%s (%s avaliações)" % (item.get("totalScore"), item.get("reviewsCount") or 0), "google_maps", url))
+    for campo, valor in extras_do_lugar(item).items():
+        if valor:
+            c["evidencias"].append(_evidencia(campo, valor, "google_maps", url))
     notas = notas_do_lugar(item)
     c["evidencias"].append(_evidencia("nota_dor", str(notas["dor"]), "google_maps", url))
     c["evidencias"].append(_evidencia("nota_oportunidade", str(notas["oportunidade"]), "google_maps", url))
