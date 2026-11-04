@@ -6,8 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, Secao, SeletorCompacto,
-  botao, campo, campoTexto, etiqueta, juntar, texto,
+  AjudaRecolhida, botao, campo, CampoDeBusca, CampoDeFormulario, campoTexto, Carregando, EstadoDeErro, EstadoVazio, etiqueta, GrupoDeCampos, juntar, Painel, RegiaoRolavel, SeletorCompacto, texto,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaParcelas, useFreelaProjetos } from "./dadosFreela";
 import {
@@ -329,40 +328,30 @@ export default function AbaProjetos() {
     : [];
 
   return (
-    <div className="min-w-0 space-y-4">
-      <Secao
-        titulo="Projetos"
-        descricao={`${lista.length} ${lista.length === 1 ? "projeto" : "projetos"}`}
-        ajuda="Cada projeto tem as suas parcelas, sempre na moeda fechada. Marcar paga aqui atualiza o caixa do freela e o financeiro."
-        acao={
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por título ou contato" rotulo="Buscar projeto" className="min-w-[180px] flex-1 sm:max-w-[420px]" />
+        <SeletorCompacto
+          opcoes={[
+            { valor: "todos", rotulo: "Todos" },
+            ...Object.entries(ROTULO_STATUS_PROJETO).map(([valor, rotulo]) => ({ valor, rotulo })),
+          ]}
+          valor={filtroStatus}
+          onEscolher={setFiltroStatus}
+          rotulo="Status do projeto"
+          listaQuandoNaoCabe
+        />
+        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>{lista.length} {lista.length === 1 ? "projeto" : "projetos"}</p>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <AjudaRecolhida rotulo="Sobre os projetos">Cada projeto tem as suas parcelas, sempre na moeda fechada. Marcar paga aqui atualiza o caixa do freela e o financeiro.</AjudaRecolhida>
           <button type="button" onClick={abrirNovo} className={botao.primario}>
             <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
             <span className="hidden sm:inline">Novo projeto</span>
           </button>
-        }
-        divisoria
-      >
-        <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-          <input
-            type="search"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por título ou contato"
-            aria-label="Buscar projeto"
-            className={juntar(campo, "sm:max-w-xs")}
-          />
-          <SeletorCompacto
-            opcoes={[
-              { valor: "todos", rotulo: "Todos" },
-              ...Object.entries(ROTULO_STATUS_PROJETO).map(([valor, rotulo]) => ({ valor, rotulo })),
-            ]}
-            valor={filtroStatus}
-            onEscolher={setFiltroStatus}
-            rotulo="Status do projeto"
-            listaQuandoNaoCabe
-          />
         </div>
+      </div>
 
+      <RegiaoRolavel rotulo="Lista de projetos" memoria="freela:projetos" className="min-w-0 lg:pb-12 lg:pr-1">
         {lista.length === 0 ? (
           <EstadoVazio
             compacto
@@ -412,7 +401,7 @@ export default function AbaProjetos() {
             })}
           </ul>
         )}
-      </Secao>
+      </RegiaoRolavel>
 
       {/* Projeto: cadastro */}
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>

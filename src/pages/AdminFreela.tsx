@@ -63,8 +63,8 @@ export default function AdminFreela() {
         />
       </header>
 
-      {/* 04/11/2026 (dono: "está com scroll infinito"): a página não rola; cada aba rola por dentro, e o funil por coluna. */}
-      <AreaDeTrabalho principalRolavel={aba !== "propostas"} rotuloDoPrincipal={`Freela: ${aba}`} memoriaDaRolagem={`freela:${aba}`}>
+      {/* 04/11/2026 (dono: "está com scroll infinito"; "o contatos está rodando junto, sendo que ele é fixo"): a barra de cada aba fica parada; só a lista rola, e o funil por coluna. */}
+      <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal={`Freela: ${aba}`}>
         <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a área" />}>
           {aba === "contatos" && <AbaContatos />}
           {aba === "propostas" && <AbaPropostas />}

@@ -285,6 +285,16 @@ const TESTADORES: Record<IdDoProvedor, Testador> = {
     return valida("Chave válida.", { sem_saldo_pela_api: true, ...(conta ? { conta: `@${conta}` } : {}) }, r.status);
   },
 
+  async aisa(v, buscar) {
+    // Consulta de saldo: gratuita pela documentação do Aisa. Vem em micro-dólares (1.000.000 = US$ 1).
+    const r = await pedir(buscar, "https://api.aisa.one/v1/credits/balance", { method: "GET", headers: { Authorization: `Bearer ${v.AISA_API_KEY}` } });
+    const base = porStatus(r.status);
+    if (!base) return semTeste(`O Aisa respondeu ${r.status}.`, r.status);
+    if (base.estado !== "valida") return base;
+    const micros = num(obj(r.json).available_balance_micros_usd);
+    return valida("Chave válida.", micros !== null ? { saldo_usd: micros / 1000000 } : { sem_saldo_pela_api: true }, r.status);
+  },
+
   async openart() {
     // Entrada pronta: o OpenArt ainda não tem API pública (só MCP com login da conta).
     return semTeste("O OpenArt ainda não tem API pública para testar. A chave fica guardada para quando entrar.");

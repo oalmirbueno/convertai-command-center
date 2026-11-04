@@ -4,6 +4,7 @@ import { Check, ExternalLink, Loader2, MessageCircle, Phone, Plus, Search, Spark
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AjudaRecolhida, AreaDeTrabalho, CampoDeBusca, RegiaoRolavel, botao, etiqueta, useLargo, campo, campoTexto, juntar, texto } from "@/components/sistema";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import { textoDoErro } from "@/lib/mesa/api";
 import { listarCampanhas } from "@/lib/comercial";
 import {
@@ -220,8 +221,9 @@ function DeOndeVeio({ c }: { c: CandidatoDeLead }) {
   );
 }
 
-function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbrirLead?: (leadId: string) => void }) {
+function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads; aoAbrirLead?: (leadId: string) => void; acoes?: ReactNode }) {
   const qc = useQueryClient();
+  const confirmar = useConfirm();
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [marcados, setMarcados] = useState<string[]>([]);
   const [mercurio, setMercurio] = useState(busca.entregar_ao_mercurio);
@@ -259,16 +261,31 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
     onError: (e) => toast.error("O Jev não avaliou", { description: textoDoErro(e) }),
   });
   const importar = useMutation({
-    mutationFn: () => importarParaOCrm(busca.id, novosEscolhidos.map((c) => c.id), mercurio),
-    onSuccess: (r) => {
+    mutationFn: (ids: string[]) => importarParaOCrm(busca.id, ids, mercurio),
+    onSuccess: (r, ids) => {
       reler();
       setMarcados([]);
       // A chave dos leads no Comercial é ["comercial-leads"]; ["comercial"] não a alcança e o CRM ficava sem os importados.
       void qc.invalidateQueries({ queryKey: ["comercial-leads"] });
-      toast.success(`${r.importados.length} no CRM`, { description: r.repetidos.length ? `${r.repetidos.length} já estavam no CRM e foram ligados ao lead de lá.` : mercurio ? "O Mercúrio faz o primeiro contato." : undefined });
+      // O servidor pula o lead que o banco recusa: a tela conta e avisa, em vez de dizer só "0 no CRM".
+      const faltaram = ids.length - r.importados.length - r.repetidos.length;
+      if (faltaram > 0) toast.error(`${faltaram} não entrou no CRM`, { description: "O candidato continua em Novos: tente de novo. Se repetir, me avise." });
+      if (r.importados.length || r.repetidos.length) toast.success(`${r.importados.length} no CRM`, { description: r.repetidos.length ? `${r.repetidos.length} já estavam no CRM e foram ligados ao lead de lá.` : mercurio ? "O Mercúrio faz o primeiro contato." : undefined });
     },
     onError: (e) => toast.error("Não levei ao CRM", { description: textoDoErro(e) }),
   });
+  // 04/11/2026 (dono: "tem que funcionar o botão levar ao CRM"): apagado até marcar parecia quebrado. Sem marcar, ele leva
+  // os novos que estão na tela, depois de confirmar; marcando, só os marcados.
+  const novosNaTela = visiveis.filter((c) => c.situacao === "novo");
+  const paraLevar = novosEscolhidos.length ? novosEscolhidos : novosNaTela;
+  const levarAoCrm = async () => {
+    if (!novosEscolhidos.length && !(await confirmar({
+      title: `Levar ${novosNaTela.length} ${novosNaTela.length === 1 ? "lead" : "leads"} ao CRM?`,
+      description: `Nenhum marcado: leva todos os novos que estão na tela agora.${mercurio ? " O Mercúrio faz o primeiro contato com eles." : ""}`,
+      confirmLabel: "Levar ao CRM",
+    }))) return;
+    importar.mutate(paraLevar.map((c) => c.id));
+  };
   const descartar = useMutation({
     mutationFn: (voltar: boolean) => descartarCandidatos(busca.id, escolhidos.map((c) => c.id), voltar),
     onSuccess: () => {
@@ -279,7 +296,14 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
   });
   const paraAvaliar = novosEscolhidos.length || visiveis.filter((c) => c.situacao === "novo").length;
   const todosMarcados = visiveis.length > 0 && escolhidos.length === visiveis.length;
-  if (lidos.isLoading) return <p className={texto.auxiliar}><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Lendo os candidatos…</p>;
+  if (lidos.isLoading) {
+    return (
+      <div className="flex min-w-0 items-center">
+        <p className={juntar(texto.auxiliar, "min-w-0 flex-1")}><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Lendo os candidatos…</p>
+        {acoes}
+      </div>
+    );
+  }
   return (
     <section className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>*+*]:mt-2" aria-label={`Candidatos de ${busca.nicho} em ${busca.cidade}`} data-candidatos-da-busca={busca.id}>
       <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
@@ -290,7 +314,8 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
             </Opcao>
           ))}
         </div>
-        <CampoDeBusca valor={busque} onMudar={setBusque} placeholder="Buscar por nome, categoria ou endereço" rotulo="Buscar nos candidatos" className="min-w-[180px] flex-1 sm:max-w-[320px]" />
+        <CampoDeBusca valor={busque} onMudar={setBusque} placeholder="Buscar por nome, categoria ou endereço" rotulo="Buscar nos candidatos" className="min-w-[180px] flex-1" />
+        {acoes}
       </div>
       <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2" role="group" aria-label="Filtros e ordem">
         <select value={ordem} onChange={(e) => setOrdem(e.target.value as OrdemDosCandidatos)} className={juntar(campo, "h-8 w-auto text-[12px]")} aria-label="Ordenar candidatos">
@@ -335,9 +360,9 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
           <input type="checkbox" checked={mercurio} onChange={(e) => setMercurio(e.target.checked)} aria-label="Mercúrio faz o primeiro contato" />
           Mercúrio contata
         </label>
-        <button type="button" className={botao.primario} onClick={() => importar.mutate()} disabled={!novosEscolhidos.length || importar.isPending}>
+        <button type="button" className={botao.primario} onClick={() => void levarAoCrm()} disabled={!paraLevar.length || importar.isPending} title={novosEscolhidos.length ? "Leva os marcados" : "Sem marcar, leva os novos que estão na tela"}>
           {importar.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-          Levar ao CRM{novosEscolhidos.length ? ` (${novosEscolhidos.length})` : ""}
+          Levar ao CRM{paraLevar.length ? ` (${paraLevar.length})` : ""}
         </button>
         {filtro === "descartado" ? (
           <button type="button" className={botao.icone} onClick={() => descartar.mutate(true)} disabled={!escolhidos.length || descartar.isPending} aria-label="Voltar os marcados" title="Voltar para os novos">
@@ -378,6 +403,12 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
                     </div>
                   </div>
                   <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-1 lg:col-start-auto lg:justify-end">
+                    {c.situacao === "novo" && (
+                      <button type="button" className={juntar(botao.barra, "w-full justify-center border border-border lg:order-last")} onClick={() => importar.mutate([c.id])} disabled={importar.isPending} aria-label={`Levar ${c.nome} ao CRM`}>
+                        <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                        Levar ao CRM
+                      </button>
+                    )}
                     <span className={juntar(etiqueta, COR_DO_NIVEL[estado.nivel])} title={estado.porque}>{estado.rotulo}</span>
                     {c.nota != null ? (
                       <span className={juntar(etiqueta, COR_DO_NIVEL[nivelDaNota(c.nota)], "font-semibold tabular-nums")} title={c.porque || undefined} aria-label={`Encaixe ${c.nota} de 10`}>
@@ -428,19 +459,22 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
       && (situacaoDasBuscas === "todas" || (situacaoDasBuscas === "andando" ? buscaAndando(b) : b.situacao === situacaoDasBuscas)))
     .slice()
     .sort((a, b) => ordemDasBuscas === "encontrados" ? b.encontrados - a.encontrados : String(b.created_at).localeCompare(String(a.created_at)));
+  const acoesDaMaquina = (
+    <div className="ml-auto flex shrink-0 items-center gap-2">
+      <AjudaRecolhida rotulo="Como a Máquina de leads funciona">
+        Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela.
+      </AjudaRecolhida>
+      <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)}>
+        <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+        Nova busca
+      </button>
+    </div>
+  );
   return (
     <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Máquina de leads">
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1" data-maquina-de-leads="">
-      <div className="mb-3 flex min-w-0 shrink-0 items-center gap-2">
-        <h2 className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>Máquina de leads</h2>
-        <AjudaRecolhida rotulo="Como a Máquina de leads funciona">
-          Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela.
-        </AjudaRecolhida>
-        <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)}>
-          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Nova busca
-        </button>
-      </div>
+      {/* 04/11/2026 (dono: "organize em uma linha, está muito vazio"): a aba já diz o nome; ajuda e Nova busca moram na linha dos filtros. */}
+      <h2 className="sr-only">Máquina de leads</h2>
       <Dialog open={novaAberta} onOpenChange={setNovaAberta}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -450,15 +484,19 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
           <FormularioDaBusca aoFechar={() => setNovaAberta(false)} aoCriar={(b) => { setNovaAberta(false); setAbertaId(b.id); }} />
         </DialogContent>
       </Dialog>
+      {!largo && !!lista.length && <div className="mb-3 flex min-w-0 items-center">{acoesDaMaquina}</div>}
       {buscas.isError && <p className={juntar(texto.auxiliar, "text-destructive")}>{textoDoErro(buscas.error)}</p>}
       {buscas.isLoading ? (
         <p className={texto.auxiliar}><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Lendo as buscas…</p>
       ) : !lista.length ? (
-        <p className={texto.auxiliar}>Nenhuma busca ainda. Comece em Nova busca.</p>
+        <div className="flex min-w-0 items-center">
+          <p className={juntar(texto.auxiliar, "min-w-0 flex-1")}>Nenhuma busca ainda. Comece em Nova busca.</p>
+          {acoesDaMaquina}
+        </div>
       ) : (
         <div className={juntar("grid min-w-0 grid-cols-1 gap-6", largo && "min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)]")}>
         <div className="flex min-w-0 flex-col lg:min-h-0">
-          <div className="mb-2 min-w-0 shrink-0 space-y-2">
+          <div className="mb-2 min-w-0 shrink-0 [&>*+*]:mt-2">
             <CampoDeBusca valor={filtroDasBuscas} onMudar={setFiltroDasBuscas} placeholder="Buscar nicho ou cidade" rotulo="Buscar nas buscas" />
             <div className="flex min-w-0 gap-2">
               <select value={ordemDasBuscas} onChange={(e) => setOrdemDasBuscas(e.target.value as "recentes" | "encontrados")} className={juntar(campo, "h-8 min-w-0 flex-1 text-[12px]")} aria-label="Ordenar buscas">
@@ -513,7 +551,7 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
         </div>
         {largo && (
           <div className="flex min-h-0 min-w-0 flex-col">
-            {aberta ? <CandidatosDaBusca key={aberta.id} busca={aberta} aoAbrirLead={aoAbrirLead} /> : <p className={texto.auxiliar}>Escolha uma busca à esquerda.</p>}
+            {aberta ? <CandidatosDaBusca key={aberta.id} busca={aberta} aoAbrirLead={aoAbrirLead} acoes={acoesDaMaquina} /> : <div className="flex min-w-0 items-center">{acoesDaMaquina}</div>}
           </div>
         )}
         </div>

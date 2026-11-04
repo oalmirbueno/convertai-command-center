@@ -148,7 +148,14 @@ describe("janelas enquadradas", () => {
 describe("telas sem rolagem infinita", () => {
   it("cada aba rola por dentro, e o funil por coluna", () => {
     const s = ler("src/pages/AdminFreela.tsx");
-    expect(s).toContain('<AreaDeTrabalho principalRolavel={aba !== "propostas"}');
+    expect(s).toContain("<AreaDeTrabalho principalRolavel={false}");
+    for (const aba of ["AbaContatos", "AbaProjetos", "AbaCaixa"]) {
+      const c = ler(`src/components/freela/${aba}.tsx`);
+      // A barra fica antes da região que rola: só a lista corre.
+      expect(c.indexOf('mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2')).toBeGreaterThan(0);
+      expect(c.indexOf("<RegiaoRolavel")).toBeGreaterThan(c.indexOf('mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2'));
+      expect(c).not.toContain("<Secao");
+    }
     expect(ler("src/components/sistema/QuadroKanban.tsx")).toContain("<RegiaoRolavel");
   });
 });

@@ -312,8 +312,8 @@ describe("catálogo, migration e função: só admin, só servidor", () => {
 
   it("catálogo = lista do _shared = CHECK do banco; os 12 provedores pedidos estão lá", () => {
     expect(SEGREDOS_DO_CATALOGO.slice().sort()).toEqual(NOMES_DAS_CHAVES.slice().sort());
-    // A lista vale pela migration mais nova que mexe no CHECK (a de 30/09 323000 abriu; a 328000 pôs a AWS; a 20261104184451 pôs o Apify).
-    const sqlDoCheck = ler("supabase/migrations/20261104184451_chaves_apify.sql");
+    // A lista vale pela migration mais nova que mexe no CHECK (a de 30/09 323000 abriu; a 328000 pôs a AWS; a 20261104184451 pôs o Apify; a 20261104204245 pôs o Aisa).
+    const sqlDoCheck = ler("supabase/migrations/20261104204245_chaves_aisa.sql");
     const doCheck = (sqlDoCheck.match(/nome IN \(([\s\S]*?)\)\);/) || ["", ""])[1].match(/'([A-Z_]+)'/g)!.map((x) => x.replace(/'/g, ""));
     expect(sql).toMatch(/nome IN \(/);
     expect(doCheck.sort()).toEqual(NOMES_DAS_CHAVES.slice().sort());

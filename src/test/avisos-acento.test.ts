@@ -11,9 +11,9 @@ const raiz = process.cwd();
 const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 const CONGELADO = "20260929010000_aviso_abre_o_conteudo.sql";
 // 04/11: 20261027110000 também nasceu quebrada ("Cobrança" na régua) e
-// 20261104190000 regrava app_private.cobranca_candidatos com o acento certo.
+// 20261104210000 regrava app_private.cobranca_candidatos com o acento certo.
 const COBRANCA_CONGELADA = "20261027110000_cobranca_pausada_por_cliente.sql";
-const COBRANCA_CONSERTO = "supabase/migrations/20261104190000_conserto_acento_cobranca.sql";
+const COBRANCA_CONSERTO = "supabase/migrations/20261104210000_conserto_acento_cobranca.sql";
 const CONGELADOS = [CONGELADO, COBRANCA_CONGELADA];
 const CONSERTO = "supabase/migrations/20260930294000_avisos_acento_corrigido.sql";
 
