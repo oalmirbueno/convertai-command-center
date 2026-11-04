@@ -2809,6 +2809,14 @@
       "remote_name": "n8n_avisa_no_sino",
       "remote_statements_sha256": "67d73f3e2e333f9c53e78e240ffa276c0603ee3e8361dcfc509b363482549317",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104180000",
+      "path": "supabase/migrations/20261104180000_alcada_automatica.sql",
+      "local_sha256": "1fdad8a334edd932e69ff196861609cec7763a781e7cf32bffd44cbc66605f61",
+      "remote_name": "alcada_automatica",
+      "remote_statements_sha256": "97732a70cd313ec177eefd8cc424b6132369aeac2d6e1dba8894f31eda229b98",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
