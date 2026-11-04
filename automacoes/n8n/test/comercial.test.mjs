@@ -42,7 +42,7 @@ test('modo seguro: ACQ-06/07 nascem em dry-run em todos os ambientes, mesmo com 
 
 test('transporte só liga com phone_number_id e modelo aprovado', () => {
   const base = (m) => cfg('production', (a) => { a.dry_run_por_workflow['ACQ-06'] = false; m && m(a.comercial); });
-  assert.equal(L.acqComTransporte(base(), 'ACQ-06', 'primeiro_contato').motivo, 'falta_phone_number_id');
+  assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = null; }), 'ACQ-06', 'primeiro_contato').motivo, 'falta_phone_number_id');
   assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; }), 'ACQ-06', 'primeiro_contato').motivo, 'modelo_nao_aprovado:primeiro_contato');
   assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; c.modelos.primeiro_contato.aprovado = true; }), 'ACQ-06', 'primeiro_contato').decisao, 'enviar');
   assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; }), 'ACQ-06', null).decisao, 'enviar', 'texto livre não depende de modelo');
@@ -62,6 +62,7 @@ test('número: Brasil com e sem 9, fixo, internacional e comparação com o wa_i
 test('fato observado: o gravado de propósito vence; Máquina sem site vira fato; com site e sem fato fica de fora', () => {
   assert.equal(L.acqComFatoObservado({ qualificacao: { fato_observado: 'o site não abre no celular.', fonte: 'maquina_de_leads' } }).texto, 'o site não abre no celular');
   assert.equal(L.acqComFatoObservado({ qualificacao: { fonte: 'maquina_de_leads', site: 'x.com' }, fatos: [{ campo: 'presenca_digital', valor: 'o último post no Instagram é de março', situacao: 'gravado' }] }).fonte, 'fato:presenca_digital');
+  assert.equal(L.acqComFatoObservado({ qualificacao: { fonte: 'maquina_de_leads', site: 'x.com' }, fatos: [{ campo: 'presenca_digital', valor: 'o rodapé do site ainda mostra 2019', situacao: 'sugestao' }] }), null, 'sugestão não confirmada não sai');
   assert.equal(L.acqComFatoObservado({ qualificacao: { fonte: 'maquina_de_leads', site: null, instagram: '@x' } }).fonte, 'maquina:sem_site_com_instagram');
   assert.equal(L.acqComFatoObservado({ qualificacao: { fonte: 'maquina_de_leads', site: 'https://x.com' } }), null);
   assert.equal(L.acqComParametro('linha 1\nlinha\t2     fim'), 'linha 1 linha 2 fim', 'sem quebra de linha nem 4+ espaços (regra da Meta)');
@@ -202,7 +203,7 @@ test('ACQ-06 ao vivo: manda o modelo com nome e fato, registra com o wamid e nã
   assert.equal(env.url, 'http://127.0.0.1:8792/graph/v21.0/100000000000001/messages');
   assert.equal(env.corpo.type, 'template');
   assert.equal(env.corpo.to, '5519998765432');
-  assert.equal(env.corpo.template.name, 'aceleriq_diagnostico_primeiro_contato');
+  assert.equal(env.corpo.template.name, 'aceleriq_primeiro_contato_mercurio');
   assert.deepEqual(env.corpo.template.components[0].parameters.map((p) => p.text), ['Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
   const saidas = W.m.mensagens.filter((x) => x.direcao === 'saida');
   assert.deepEqual(saidas.map((x) => x.id_externo).sort(), ['wamid.TESTE1', 'wamid.TESTE2']);

@@ -45,12 +45,12 @@
         "waba_id": null,
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_diagnostico_primeiro_contato",
+            "nome": "aceleriq_primeiro_contato_mercurio",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
-            "rodape": "Se não quiser receber mensagens, toque em Não tenho interesse.",
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
               "Não tenho interesse"
@@ -62,7 +62,7 @@
             "categoria": "MARKETING",
             "aprovado": false,
             "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
-            "rodape": "Para não receber mais mensagens, toque em Não tenho interesse.",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
               "Não tenho interesse"
@@ -109,12 +109,12 @@
         "waba_id": null,
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_diagnostico_primeiro_contato",
+            "nome": "aceleriq_primeiro_contato_mercurio",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
-            "rodape": "Se não quiser receber mensagens, toque em Não tenho interesse.",
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
               "Não tenho interesse"
@@ -126,7 +126,7 @@
             "categoria": "MARKETING",
             "aprovado": false,
             "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
-            "rodape": "Para não receber mais mensagens, toque em Não tenho interesse.",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
               "Não tenho interesse"
@@ -171,16 +171,16 @@
       "comercial": {
         "operador": "mercurio",
         "graph_url": "https://graph.facebook.com/v21.0",
-        "phone_number_id": null,
-        "waba_id": null,
+        "phone_number_id": "1382841941586124",
+        "waba_id": "2522709858221533",
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_diagnostico_primeiro_contato",
+            "nome": "aceleriq_primeiro_contato_mercurio",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
-            "rodape": "Se não quiser receber mensagens, toque em Não tenho interesse.",
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
               "Não tenho interesse"
@@ -192,7 +192,7 @@
             "categoria": "MARKETING",
             "aprovado": false,
             "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
-            "rodape": "Para não receber mais mensagens, toque em Não tenho interesse.",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
               "Não tenho interesse"

@@ -93,7 +93,8 @@ function acqComFatoObservado(item) {
   var f = limpar(q.fato_observado);
   if (f) return { texto: f, fonte: 'qualificacao.fato_observado' };
   var fatos = ((item && item.fatos) || []).filter(function (x) {
-    return x && ['presenca_digital', 'problema'].indexOf(x.campo) >= 0 && x.situacao !== 'descartado' && x.situacao !== 'contradito';
+    // Sugestão ainda não confirmada não vira mensagem: um fato errado dito ao dono da empresa queima o contato.
+    return x && ['presenca_digital', 'problema'].indexOf(x.campo) >= 0 && x.situacao === 'gravado';
   });
   for (var i = 0; i < fatos.length; i++) {
     var v = limpar(fatos[i].valor);

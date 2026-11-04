@@ -52,7 +52,8 @@ function acq06Candidatos(fila, cfg, agoraMs) {
     var n = acqComNumero(it.whatsapp);
     if (!n) return ign('sem_whatsapp');
     if (n.fixo) return ign('telefone_fixo');
-    if (it.origem === 'maquina_de_leads' && q.whatsapp_confirmado === false) return ign('whatsapp_nao_confirmado');
+    // 04/11/2026 (dono): celular da Máquina de leads entra mesmo sem WhatsApp confirmado. Sem WhatsApp, a Meta
+    // recusa e nada chega a ninguém; fixo já saiu acima.
     var nome = acqComNomeDoLead(it);
     if (!nome) return ign('sem_nome');
     var params, fato = null;

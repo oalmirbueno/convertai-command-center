@@ -34,7 +34,7 @@ Sem a credencial da Meta, o nó HTTP falha e nada é marcado como enviado.
 1. A cada 20 min em dia útil, lê `aceleriq_comercial_fila` (operador `mercurio`). Mercúrio desligado, fora de 9h-18h
    de São Paulo ou fim de semana: não faz nada.
 2. Pronto para primeiro contato = está na fila do Mercúrio (foi "entregue ao Mercúrio"), sem nenhuma mensagem
-   ainda, com WhatsApp (celular; fixo e `whatsapp_confirmado: false` ficam de fora), sem `nao_contatar`, sem
+   ainda, com celular (fixo fica de fora; celular sem WhatsApp confirmado entra desde 04/11), sem `nao_contatar`, sem
    `qualificacao.client_id` (lead de site de cliente) e **com fato observado** (ver abaixo). Ordem: nota de
    encaixe do Jev. Limite: o menor entre o `restam_hoje` do painel (teto de 20) e 5 por rodada.
 3. Antes de chamar a Meta, reivindica a tentativa do dia no Postgres (`acq_n8n.eventos`): uma tentativa por lead por
@@ -154,15 +154,15 @@ Ordem para ligar (cada passo pede o seu ok):
 
 ## Modelos de mensagem para submeter
 
-**1. `aceleriq_diagnostico_primeiro_contato`** (Marketing, Português BR)
+**1. `aceleriq_primeiro_contato_mercurio`** (Marketing, Português BR; em 04/11 substituiu `aceleriq_diagnostico_primeiro_contato`, porque o site diz que a Aceleriq não é agência)
 
 Corpo:
 
-> Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, agência de marketing digital. Olhei a
+> Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a
 > presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online,
 > mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?
 
-Rodapé: `Se não quiser receber mensagens, toque em Não tenho interesse.`
+Rodapé: `Para não receber mais, toque em Não tenho interesse.` (a Meta limita o rodapé a 60 caracteres)
 Botões de resposta rápida: `Quero o diagnóstico` · `Não tenho interesse`
 Exemplos para a Meta: {{1}} = `Pet Shop Exemplo`; {{2}} = `não encontrei um site próprio da empresa nas buscas`.
 
@@ -173,7 +173,7 @@ Corpo:
 > Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e
 > da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.
 
-Rodapé: `Para não receber mais mensagens, toque em Não tenho interesse.`
+Rodapé: `Para não receber mais, toque em Não tenho interesse.`
 Botões de resposta rápida: `Quero o diagnóstico` · `Não tenho interesse`
 Exemplo: {{1}} = `Pet Shop Exemplo`.
 

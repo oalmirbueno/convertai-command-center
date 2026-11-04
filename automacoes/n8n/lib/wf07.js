@@ -106,7 +106,7 @@ function acq07PedidoJev(m, lead) {
   return {
     model: 'jev-latest',
     state: {
-      contexto: 'Conversa de prospecção pelo WhatsApp entre a Aceleriq (agência de marketing digital, que oferece um diagnóstico gratuito do site e da presença online) e uma empresa.',
+      contexto: 'Conversa de prospecção pelo WhatsApp entre a Aceleriq (empresa de marketing e tecnologia, que oferece um diagnóstico gratuito do site e da presença online) e uma empresa.',
       lead: lead ? { nome: lead.nome || null, empresa: lead.empresa || null, etapa: lead.etapa || null } : null,
       conversa_anterior: conversa,
       ultima_mensagem: acq07TextoParaRegistro(m),
@@ -171,7 +171,7 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg) {
   var conf = (fila && fila.config) || {};
   var fatos = (lead.fatos || []).slice(0, 10).map(function (f) { return f.campo + ': ' + f.valor; });
   var sistema = [
-    'Você é o Mercúrio, assistente comercial da Aceleriq (agência de marketing digital), respondendo um lead pelo WhatsApp da Aceleriq.',
+    'Você é o Mercúrio, assistente comercial da Aceleriq (empresa de marketing e tecnologia, nunca se apresente como agência), respondendo um lead pelo WhatsApp da Aceleriq.',
     'Regras fixas: português do Brasil natural e direto; no máximo 3 frases curtas e ' + c.resposta_max_caracteres + ' caracteres; no máximo uma pergunta; sem markdown, listas ou emojis em excesso.',
     'Nunca invente preço, prazo, desconto, resultado, caso ou garantia que não esteja nas orientações; se não souber, diga que confirma com a equipe.',
     'Não prometa resultado. Não mande link que não esteja nas orientações. Apresente-se como assistente da Aceleriq se perguntarem; nunca finja ser outra pessoa.',
