@@ -7,8 +7,9 @@ Regras da casa, não negociáveis:
 - Ritmo: no mínimo PAUSA_POR_SITE segundos entre duas páginas do mesmo site, e o Nominatim no
   máximo 1 pedido por segundo (a política de uso dele).
 - Fontes: OpenStreetMap (Overpass e Nominatim, dados abertos ODbL, "© OpenStreetMap contributors"),
-  o site da própria empresa e a BrasilAPI (CNPJ público). Google, Google Maps, Instagram e LinkedIn
-  ficam de fora (os termos deles proíbem coleta automática).
+  o site da própria empresa e a BrasilAPI (CNPJ público). Este buscador não coleta direto do Google,
+  Google Maps, Instagram ou LinkedIn (os termos deles proíbem coleta automática). O Google Maps só entra
+  pelo provedor Apify (apify.py), fonte opcional e paga, por decisão do dono em 04/11/2026.
 """
 
 import json

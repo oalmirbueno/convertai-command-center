@@ -22,6 +22,7 @@ const FORMATOS: RegExp[] = [
   /\bsb_(?:secret|publishable)_[A-Za-z0-9_-]{8,}/g, // chaves novas do Supabase
   /\bsk-(?:ant-|or-|proj-)?[A-Za-z0-9_-]{16,}/g, // Anthropic, OpenRouter, OpenAI
   /\b(?:vercel|vc)_[A-Za-z0-9]{16,}/gi,
+  /\bapify_api_[A-Za-z0-9]{8,}/g,
 ];
 
 /** Valores conhecidos (o supervisor registra aqui toda chave que carrega). */

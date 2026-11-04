@@ -37,7 +37,7 @@ import type { Cofre } from "./segredos.ts";
  * Chaves de provedor que os workers usam (o resto do cofre do painel não desce para a máquina).
  * VERCEL_TEAM_ID é opcional (só conta de time na Vercel): ausente, o worker publica na conta pessoal.
  */
-export const CHAVES_DOS_WORKERS = ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "VERCEL_TOKEN", "VERCEL_TEAM_ID"];
+export const CHAVES_DOS_WORKERS = ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "VERCEL_TOKEN", "VERCEL_TEAM_ID", "APIFY_TOKEN"];
 export const VERSAO_DO_SUPERVISOR = "sup-1.0";
 /** No máximo uma abertura de navegador ou pasta a cada 10 s, e só por clique no menu. */
 export const FREIO_DE_ABERTURA_MS = 10_000;

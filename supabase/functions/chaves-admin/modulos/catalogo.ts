@@ -78,6 +78,7 @@ export const PROVEDORES: ProvedorDoPainel[] = [
   },
   { id: "resend", nome: "Resend", serve: "E-mails do painel", campos: [{ nome: "RESEND_API_KEY", rotulo: "Chave", exemplo: "re_…" }], onde: "resend.com/api-keys", saldoPelaApi: false, recarga: "https://resend.com/settings/billing", grupo: "servicos" },
   { id: "vercel", nome: "Vercel", serve: "Publicar os sites", campos: [{ nome: "VERCEL_TOKEN", rotulo: "Token" }], onde: "vercel.com/account/tokens", saldoPelaApi: false, recarga: "https://vercel.com/~/settings/billing", grupo: "servicos" },
+  { id: "apify", nome: "Apify", serve: "Busca de empresas no Google Maps (Máquina de leads)", campos: [{ nome: "APIFY_TOKEN", rotulo: "Token", exemplo: "apify_api_…" }], onde: "console.apify.com/settings/integrations", saldoPelaApi: false, recarga: "https://console.apify.com/billing", grupo: "servicos" },
   {
     id: "openart",
     nome: "OpenArt",

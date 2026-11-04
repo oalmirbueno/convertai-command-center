@@ -5,11 +5,12 @@
  * Unicode e sem grupo nomeado (Safari 11).
  */
 
-export const FONTES_DA_BUSCA = ["osm", "sites", "cnpj", "lista"] as const;
+export const FONTES_DA_BUSCA = ["osm", "google_maps", "sites", "cnpj", "lista"] as const;
 export type FonteDaBusca = (typeof FONTES_DA_BUSCA)[number];
 
 export const ROTULO_DA_FONTE: Record<FonteDaBusca, string> = {
   osm: "Mapa (OpenStreetMap)",
+  google_maps: "Google Maps (Apify, pago)",
   sites: "Site da empresa",
   cnpj: "CNPJ (BrasilAPI)",
   lista: "Sites que eu colar",

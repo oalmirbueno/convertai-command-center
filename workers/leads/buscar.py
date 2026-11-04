@@ -1,6 +1,6 @@
 """Uma busca da Máquina de leads (25/10/2026). Chamado pelo worker Node (principal.ts).
 
-Entrada (stdin, JSON): {id, nicho, cidade, uf, fontes: [osm|sites|cnpj|lista], limite, urls: [...]}.
+Entrada (stdin, JSON): {id, nicho, cidade, uf, fontes: [osm|google_maps|sites|cnpj|lista], limite, urls: [...]}.
 Saída (stdout, uma linha JSON por evento):
   {"tipo":"progresso","etapa":"...","feitos":n,"total":m}
   {"tipo":"candidato", nome, categoria, site, telefone, whatsapp, email, instagram, endereco, cidade,
@@ -17,11 +17,12 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from apify import candidato_do_google, lugares_do_google, notas_do_lugar
 from extrair import chave_do_candidato, eh_celular, extrair_da_pagina, telefone_de_texto
 from fontes import CREDITO_OSM, CacheDeCnpj, Educado, area_da_cidade, candidato_do_osm, dados_do_cnpj, lugares_do_osm
 from nichos import consulta_overpass, nicho_do_texto
 
-FONTES_ACEITAS = ("osm", "sites", "cnpj", "lista")
+FONTES_ACEITAS = ("osm", "google_maps", "sites", "cnpj", "lista")
 
 
 def emitir(evento, saida=sys.stdout):
@@ -89,7 +90,24 @@ def enriquecer_pelo_site(c, educado, max_paginas_extra=2):
             c["evidencias"].append(_evidencia("whatsapp_provavel", c["telefone"], "site", final))
 
 
-def rodar(busca, educado=None, saida=sys.stdout, cache=None):
+def candidato_de_lugar_do_google(item):
+    """O lugar vira candidato com a nota e a avaliação guardadas como evidência; None se fica de fora."""
+    b = candidato_do_google(item)
+    if not b:
+        return None
+    c = candidato_base(b, "google_maps")
+    url = c["fonte_url"]
+    if item.get("totalScore") is not None:
+        c["evidencias"].append(_evidencia("avaliacoes", "%s (%s avaliações)" % (item.get("totalScore"), item.get("reviewsCount") or 0), "google_maps", url))
+    notas = notas_do_lugar(item)
+    c["evidencias"].append(_evidencia("nota_dor", str(notas["dor"]), "google_maps", url))
+    c["evidencias"].append(_evidencia("nota_oportunidade", str(notas["oportunidade"]), "google_maps", url))
+    if not c["whatsapp"] and eh_celular(c["telefone"]):
+        c["evidencias"].append(_evidencia("whatsapp_provavel", c["telefone"], "google_maps", url))
+    return c
+
+
+def rodar(busca, educado=None, saida=sys.stdout, cache=None, lugares_google=None):
     educado = educado or Educado()
     fontes = [f for f in (busca.get("fontes") or ["osm", "sites"]) if f in FONTES_ACEITAS]
     limite = max(1, min(int(busca.get("limite") or 50), 300))
@@ -105,6 +123,14 @@ def rodar(busca, educado=None, saida=sys.stdout, cache=None):
                 candidatos.append(candidato_base(b, "osm"))
         # Primeiro quem tem como falar (telefone, site, e-mail).
         candidatos.sort(key=lambda c: -((2 if c["telefone"] or c["whatsapp"] else 0) + (1 if c["site"] else 0) + (1 if c["email"] else 0)))
+    if "google_maps" in fontes:
+        emitir({"tipo": "progresso", "etapa": "Buscando no Google Maps (Apify)", "feitos": 0, "total": limite}, saida)
+        aviso = lambda: emitir({"tipo": "progresso", "etapa": "Buscando no Google Maps (Apify)", "feitos": 0, "total": limite}, saida)  # noqa: E731
+        itens = lugares_google(busca, limite) if lugares_google else lugares_do_google(busca, limite, avisar=aviso)
+        for item in itens:
+            c = candidato_de_lugar_do_google(item)
+            if c:
+                candidatos.append(c)
     if "lista" in fontes:
         for url in (busca.get("urls") or [])[:300]:
             url = str(url).strip()

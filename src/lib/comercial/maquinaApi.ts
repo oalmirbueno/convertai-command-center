@@ -113,6 +113,7 @@ export function telefoneLegivel(t: string | null): string {
 
 export const ROTULO_DA_ORIGEM_DO_DADO: Record<string, string> = {
   osm: "OpenStreetMap",
+  google_maps: "Google Maps (Apify)",
   site: "site da empresa",
   lista: "site colado",
   brasilapi: "BrasilAPI (CNPJ)",

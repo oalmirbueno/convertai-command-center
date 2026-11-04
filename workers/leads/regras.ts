@@ -80,6 +80,7 @@ export function entradaDoPython(b: Record<string, unknown>) {
 export function semSegredo(t: string): string {
   return String(t || "")
     .replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, "[chave]")
+    .replace(/apify_api_[A-Za-z0-9]+/g, "[chave]")
     .replace(/(apikey|authorization|bearer)[=:\s]+[^\s,;]+/gi, "$1 [chave]")
     .slice(0, 300);
 }
