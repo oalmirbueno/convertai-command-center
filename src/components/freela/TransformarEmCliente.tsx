@@ -7,13 +7,12 @@ import { CampoDeFormulario, GrupoDeCampos, SeletorCompacto, botao, campo, juntar
 import { generatePassword } from "@/components/admin/CreateClientModal";
 import { PROJECT_TYPES } from "@/components/admin/CreateProjectModal";
 import { useFinancePlans } from "@/hooks/useFinanceV2";
+import { APP_PUBLIC_URL as PORTAL_URL } from "@/lib/publicUrl";
 import { fmtMoeda, hojeISO, somarMeses } from "@/lib/freela/freelaLib";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Proposta = Tables<"freela_propostas">;
 type Contato = Tables<"freela_contatos">;
-
-const PORTAL_URL = "https://aceleriq.online";
 
 /**
  * 04/11/2026 (dono: "eu aperto, transforma em cliente, já cria o projeto; me pergunta se foi pago ou vai pagar e qual

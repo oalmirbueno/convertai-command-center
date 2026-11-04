@@ -2809,6 +2809,14 @@
       "remote_name": "n8n_avisa_no_sino",
       "remote_statements_sha256": "67d73f3e2e333f9c53e78e240ffa276c0603ee3e8361dcfc509b363482549317",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104150000",
+      "path": "supabase/migrations/20261104150000_freela_funil_fechados_e_perdidos.sql",
+      "local_sha256": "897956343c03706a643b185dac145f80f1cb7b768647e7a7c70366d97f431bc0",
+      "remote_name": "freela_funil_fechados_e_perdidos",
+      "remote_statements_sha256": "ca54d0b7357ebba855f5e81739a704f562f4360548f1f72dcaddb064cf4cd0e5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
