@@ -59,8 +59,8 @@ export const ROTULO_STATUS_PROPOSTA: Record<string, string> = {
   rascunho: "Rascunho",
   enviada: "Enviada",
   negociacao: "Em negociação",
-  aceita: "Aceita",
-  perdida: "Perdida",
+  aceita: "Fechados",
+  perdida: "Perdidos",
 };
 
 export const ROTULO_STATUS_PROJETO: Record<string, string> = {
@@ -77,3 +77,36 @@ export const ROTULO_STATUS_PARCELA: Record<string, string> = {
   atrasada: "Atrasada",
   cancelada: "Cancelada",
 };
+
+/** As colunas do funil, na ordem. */
+export const ETAPAS_DO_FUNIL = ["rascunho", "enviada", "negociacao", "aceita", "perdida"];
+
+/** Motivos mais comuns de perda; o detalhe vai no texto livre. */
+export const MOTIVOS_DE_PERDA = ["Preço", "Sem orçamento agora", "Escolheu outro", "Prazo", "Parou de responder", "Outro"];
+
+/** Soma por moeda: real e dólar nunca se misturam. */
+export const somaPorMoeda = (linhas: { valor: number | string; moeda: string }[]): Record<Moeda, number> =>
+  linhas.reduce(
+    (t, l) => {
+      t[l.moeda === "USD" ? "USD" : "BRL"] += Number(l.valor) || 0;
+      return t;
+    },
+    { BRL: 0, USD: 0 } as Record<Moeda, number>,
+  );
+
+/** "R$ 1.000,00 · US$ 50,00"; mostra só a moeda que tem valor. */
+export const totalEmTexto = (t: Record<Moeda, number>): string => {
+  const partes = (["BRL", "USD"] as Moeda[]).filter((m) => t[m] > 0).map((m) => fmtMoeda(t[m], m));
+  return partes.length ? partes.join(" · ") : "vazio";
+};
+
+/** Link do WhatsApp com a mensagem pronta; quem envia é a pessoa. Número sem DDI vira Brasil. */
+export const linkDoWhatsApp = (numero: string | null | undefined, mensagem: string): string | null => {
+  const digitos = (numero || "").replace(/\D/g, "");
+  if (digitos.length < 10) return null;
+  const comPais = digitos.length <= 11 ? `55${digitos}` : digitos;
+  return `https://wa.me/${comPais}?text=${encodeURIComponent(mensagem)}`;
+};
+
+export const mensagemDeRetomada = (nome: string, titulo: string): string =>
+  `Oi, ${nome.split(" ")[0]}! Lembrei da nossa conversa sobre ${titulo}. Mudou alguma coisa por aí? Se fizer sentido, retomamos.`;

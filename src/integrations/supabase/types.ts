@@ -8275,6 +8275,11 @@ export type Database = {
       }
       freela_propostas: {
         Row: {
+          convertida_client_id: string | null
+          convertida_em: string | null
+          follow_up_em: string | null
+          motivo_perda: string | null
+          perdida_em: string | null
           contato_id: string
           created_at: string
           created_by: string | null
@@ -8290,6 +8295,11 @@ export type Database = {
           valor: number
         }
         Insert: {
+          convertida_client_id?: string | null
+          convertida_em?: string | null
+          follow_up_em?: string | null
+          motivo_perda?: string | null
+          perdida_em?: string | null
           contato_id: string
           created_at?: string
           created_by?: string | null
@@ -8305,6 +8315,11 @@ export type Database = {
           valor: number
         }
         Update: {
+          convertida_client_id?: string | null
+          convertida_em?: string | null
+          follow_up_em?: string | null
+          motivo_perda?: string | null
+          perdida_em?: string | null
           contato_id?: string
           created_at?: string
           created_by?: string | null
@@ -10848,6 +10863,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          origem_aquisicao: string | null
           avatar_url: string | null
           brand: Database["public"]["Enums"]["brand_type"] | null
           client_type: Database["public"]["Enums"]["client_type"]
@@ -10877,6 +10893,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          origem_aquisicao?: string | null
           avatar_url?: string | null
           brand?: Database["public"]["Enums"]["brand_type"] | null
           client_type?: Database["public"]["Enums"]["client_type"]
@@ -10906,6 +10923,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          origem_aquisicao?: string | null
           avatar_url?: string | null
           brand?: Database["public"]["Enums"]["brand_type"] | null
           client_type?: Database["public"]["Enums"]["client_type"]
@@ -15825,6 +15843,19 @@ export type Database = {
           status: string
           used_at: string
         }[]
+      }
+      freela_transformar_em_cliente: {
+        Args: {
+          p_modelo: string
+          p_pago?: boolean
+          p_plano_nome?: string
+          p_prazo?: string
+          p_proposta_id: string
+          p_tipo_projeto?: string
+          p_valor: number
+          p_vencimento?: string
+        }
+        Returns: Json
       }
       freela_promover_a_cliente: {
         Args: { p_contato_id: string; p_criar_org?: boolean }

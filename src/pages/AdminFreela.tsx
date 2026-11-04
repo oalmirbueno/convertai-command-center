@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Briefcase, CircleDollarSign, FileSignature, Users } from "lucide-react";
-import { CabecalhoDePagina, Carregando, Etapas, type ItemDeEtapa } from "@/components/sistema";
+import { AreaDeTrabalho, CabecalhoDePagina, Carregando, Etapas, type ItemDeEtapa } from "@/components/sistema";
 
 /**
  * Mesa Freela (MVP): o canal de aquisição ao lado da agência.
@@ -32,7 +32,7 @@ const AREAS: ItemDeEtapa[] = [
 
 const AJUDA_DA_ABA: Record<Aba, string> = {
   contatos: "Pessoas e empresas atendidas por fora da agência. Quando vira recorrente, promova a cliente.",
-  propostas: "Do rascunho ao aceite, sempre na moeda da proposta. Aceita vira projeto com um clique.",
+  propostas: "Arraste entre as etapas. Em Fechados, transforme em cliente; em Perdidos fica o motivo e a data de retomar.",
   projetos: "O trabalho fechado e as parcelas. Marcar paga aqui atualiza o caixa e o financeiro.",
   caixa: "Todas as parcelas, com os totais separados por moeda: real e dólar nunca se somam.",
 };
@@ -44,7 +44,7 @@ export default function AdminFreela() {
   const setAba = (proxima: Aba) => navigate(proxima === "contatos" ? "/freela" : `/freela/${proxima}`);
 
   return (
-    <div className="min-w-0 space-y-4 pb-4">
+    <div className="min-w-0 space-y-4">
       <header className="min-w-0">
         <CabecalhoDePagina
           titulo="Freela"
@@ -63,12 +63,15 @@ export default function AdminFreela() {
         />
       </header>
 
-      <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a área" />}>
-        {aba === "contatos" && <AbaContatos />}
-        {aba === "propostas" && <AbaPropostas />}
-        {aba === "projetos" && <AbaProjetos />}
-        {aba === "caixa" && <AbaCaixa />}
-      </Suspense>
+      {/* 04/11/2026 (dono: "está com scroll infinito"): a página não rola; cada aba rola por dentro, e o funil por coluna. */}
+      <AreaDeTrabalho principalRolavel={aba !== "propostas"} rotuloDoPrincipal={`Freela: ${aba}`} memoriaDaRolagem={`freela:${aba}`}>
+        <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a área" />}>
+          {aba === "contatos" && <AbaContatos />}
+          {aba === "propostas" && <AbaPropostas />}
+          {aba === "projetos" && <AbaProjetos />}
+          {aba === "caixa" && <AbaCaixa />}
+        </Suspense>
+      </AreaDeTrabalho>
     </div>
   );
 }

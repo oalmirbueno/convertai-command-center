@@ -2,16 +2,18 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowRight, ExternalLink, Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto,
-  botao, campo, campoTexto, etiqueta, juntar, texto,
+  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos,
+  botao, campo, campoTexto, juntar, texto,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaProjetos, useFreelaPropostas } from "./dadosFreela";
-import { dataBR, fmtMoeda, normalizar, ROTULO_STATUS_PROPOSTA } from "@/lib/freela/freelaLib";
+import { fmtMoeda, hojeISO, MOTIVOS_DE_PERDA, normalizar, ROTULO_STATUS_PROPOSTA, somaPorMoeda, somarMeses, totalEmTexto } from "@/lib/freela/freelaLib";
+import FunilDasPropostas from "./FunilDasPropostas";
+import TransformarEmCliente from "./TransformarEmCliente";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Proposta = Tables<"freela_propostas">;
@@ -28,15 +30,7 @@ const formVazio = {
   notes: "",
 };
 
-const corDoStatus: Record<string, string> = {
-  rascunho: "bg-muted text-muted-foreground",
-  enviada: "bg-info/15 text-info",
-  negociacao: "bg-warning/15 text-warning",
-  aceita: "bg-success/15 text-success",
-  perdida: "bg-destructive/15 text-destructive",
-};
-
-/** Propostas do freela: do rascunho ao aceite. Aceita vira projeto com um clique. */
+/** Funil do freela: do rascunho aos Fechados (viram cliente) e aos Perdidos (guardam o motivo para retomar). */
 export default function AbaPropostas() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -45,12 +39,14 @@ export default function AbaPropostas() {
   const { data: contatos } = useFreelaContatos();
   const { data: projetos } = useFreelaProjetos();
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("todas");
   const [filtroContato, setFiltroContato] = useState("todos");
   const [dialogAberto, setDialogAberto] = useState(false);
   const [editando, setEditando] = useState<Proposta | null>(null);
   const [form, setForm] = useState(formVazio);
   const [salvando, setSalvando] = useState(false);
+  const [transformando, setTransformando] = useState<Proposta | null>(null);
+  const [perdendo, setPerdendo] = useState<Proposta | null>(null);
+  const [perda, setPerda] = useState({ motivo: "", detalhe: "", retomar: "" });
 
   const nomeDoContato = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -66,12 +62,11 @@ export default function AbaPropostas() {
   const lista = useMemo(() => {
     const termo = normalizar(busca);
     return (propostas || []).filter((p) => {
-      if (filtroStatus !== "todas" && p.status !== filtroStatus) return false;
       if (filtroContato !== "todos" && p.contato_id !== filtroContato) return false;
       if (!termo) return true;
       return normalizar(p.titulo).includes(termo) || normalizar(nomeDoContato(p.contato_id)).includes(termo);
     });
-  }, [propostas, busca, filtroStatus, filtroContato, nomeDoContato]);
+  }, [propostas, busca, filtroContato, nomeDoContato]);
 
   const contatosAtivos = (contatos || []).filter((c) => !c.archived_at);
 
@@ -118,7 +113,7 @@ export default function AbaPropostas() {
       titulo,
       valor,
       moeda: form.moeda,
-      status: form.status,
+      ...(editando ? {} : { status: form.status }),
       link_externo: form.link_externo.trim() || null,
       validade_ate: form.validade_ate || null,
       escopo: form.escopo.trim() || null,
@@ -137,6 +132,7 @@ export default function AbaPropostas() {
         return;
       }
       toast.success("Proposta atualizada.");
+      if (form.status !== editando.status) void moverPara(data[0] as Proposta, form.status);
     } else {
       const { data, error } = await supabase.from("freela_propostas").insert(registro).select();
       setSalvando(false);
@@ -150,20 +146,60 @@ export default function AbaPropostas() {
     await queryClient.invalidateQueries({ queryKey: ["freela"] });
   };
 
-  const mudarStatus = async (p: Proposta, status: string) => {
-    if (status === p.status) return;
-    const { data, error } = await supabase.from("freela_propostas").update({ status }).eq("id", p.id).select();
+  const gravarEtapa = async (p: Proposta, campos: Partial<Proposta>, aviso: string) => {
+    const { data, error } = await supabase.from("freela_propostas").update(campos).eq("id", p.id).select();
     if (error) {
-      toast.error(`Não consegui mudar o status: ${error.message}`);
-      return;
+      toast.error(`Não consegui mover a proposta: ${error.message}`);
+      return false;
     }
-    if (!data || data.length === 0) {
-      await queryClient.invalidateQueries({ queryKey: ["freela"] });
-      toast.info("Essa proposta não está mais disponível. A lista foi atualizada.");
-      return;
-    }
-    toast.success(`Proposta marcada como ${ROTULO_STATUS_PROPOSTA[status] || status}.`);
     await queryClient.invalidateQueries({ queryKey: ["freela"] });
+    if (!data || data.length === 0) {
+      toast.info("Essa proposta não está mais disponível. A lista foi atualizada.");
+      return false;
+    }
+    toast.success(aviso);
+    return true;
+  };
+
+  /** Sair de Perdidos guarda o motivo nas anotações: a história de por que perdeu não some. */
+  const camposAoRetomar = (p: Proposta): Partial<Proposta> => ({
+    motivo_perda: null,
+    perdida_em: null,
+    follow_up_em: null,
+    notes: p.motivo_perda ? [p.notes, `Perdida antes: ${p.motivo_perda}`].filter(Boolean).join("\n") : p.notes,
+  });
+
+  const moverPara = async (p: Proposta, etapa: string) => {
+    if (etapa === p.status) return;
+    if (p.convertida_em) {
+      toast.info("Essa proposta já virou cliente.");
+      return;
+    }
+    if (etapa === "perdida") {
+      setPerda({ motivo: "", detalhe: "", retomar: somarMeses(hojeISO(), 1) });
+      setPerdendo(p);
+      return;
+    }
+    const campos = { status: etapa, ...(p.status === "perdida" ? camposAoRetomar(p) : {}) };
+    await gravarEtapa(p, campos, etapa === "aceita" ? "Fechada! Agora transforme em cliente." : `Movida para ${ROTULO_STATUS_PROPOSTA[etapa] || etapa}.`);
+  };
+
+  const retomar = (p: Proposta) => moverPara(p, "negociacao");
+
+  const confirmarPerda = async () => {
+    if (!perdendo) return;
+    if (!perda.motivo) {
+      toast.error("Escolha o motivo da perda.");
+      return;
+    }
+    const detalhe = perda.detalhe.trim();
+    const ok = await gravarEtapa(perdendo, {
+      status: "perdida",
+      motivo_perda: detalhe ? `${perda.motivo}: ${detalhe}` : perda.motivo,
+      perdida_em: new Date().toISOString(),
+      follow_up_em: perda.retomar || null,
+    }, "Guardada em Perdidos.");
+    if (ok) setPerdendo(null);
   };
 
   const virarProjeto = async (p: Proposta) => {
@@ -206,103 +242,82 @@ export default function AbaPropostas() {
     );
   }
 
-  return (
-    <div className="min-w-0 space-y-4">
-      <Secao
-        titulo="Propostas"
-        descricao={`${lista.length} ${lista.length === 1 ? "proposta" : "propostas"}`}
-        ajuda="Proposta aceita vira projeto com as parcelas. O valor fica sempre na moeda da proposta: real e dólar nunca se misturam."
-        acao={
-          <button type="button" onClick={abrirNovo} className={botao.primario}>
-            <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Nova proposta</span>
-          </button>
-        }
-        divisoria
-      >
-        <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-          <input
-            type="search"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por título ou contato"
-            aria-label="Buscar proposta"
-            className={juntar(campo, "sm:max-w-xs")}
-          />
-          <SeletorCompacto
-            opcoes={[
-              { valor: "todas", rotulo: "Todas" },
-              ...Object.entries(ROTULO_STATUS_PROPOSTA).map(([valor, rotulo]) => ({ valor, rotulo })),
-            ]}
-            valor={filtroStatus}
-            onEscolher={setFiltroStatus}
-            rotulo="Status da proposta"
-            listaQuandoNaoCabe
-          />
-          <select value={filtroContato} onChange={(e) => setFiltroContato(e.target.value)} className={juntar(campo, "w-auto")} aria-label="Filtrar por contato">
-            <option value="todos">Todos os contatos</option>
-            {(contatos || []).map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
-        </div>
+  const temFiltro = !!busca || filtroContato !== "todos";
+  const emAberto = lista.filter((p) => ["rascunho", "enviada", "negociacao"].includes(p.status));
 
-        {lista.length === 0 ? (
-          <EstadoVazio
-            compacto
-            titulo={busca || filtroStatus !== "todas" || filtroContato !== "todos" ? "Nenhuma proposta encontrada" : "Nenhuma proposta ainda"}
-            descricao="Cadastre a primeira proposta do freela."
-          />
-        ) : (
-          <ul className="divide-y divide-border">
-            {lista.map((p) => (
-              <li key={p.id} className="flex min-w-0 items-center gap-2 px-1 py-2.5">
-                <div className="mr-1 min-w-0 flex-1">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <p className={juntar(texto.corpo, "truncate font-medium")}>{p.titulo}</p>
-                    <span className={juntar(etiqueta, corDoStatus[p.status] || "bg-muted text-muted-foreground")}>
-                      {ROTULO_STATUS_PROPOSTA[p.status] || p.status}
-                    </span>
-                    {propostasComProjeto.has(p.id) && <span className={juntar(etiqueta, "bg-primary/10 text-primary")}>Virou projeto</span>}
-                  </div>
-                  <p className={juntar(texto.auxiliar, "truncate")}>
-                    {nomeDoContato(p.contato_id)}
-                    {" · "}<span className="tabular-nums text-foreground">{fmtMoeda(p.valor, p.moeda)}</span>
-                    {p.validade_ate && <> · válida até {dataBR(p.validade_ate)}</>}
-                    {p.link_externo && (
-                      <>
-                        {" · "}
-                        <a href={p.link_externo} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-primary hover:underline">
-                          link <ExternalLink className="ml-0.5 h-3 w-3" aria-hidden="true" />
-                        </a>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <select
-                  value={p.status}
-                  onChange={(e) => void mudarStatus(p, e.target.value)}
-                  className={juntar(campo, "h-8 w-auto shrink-0 text-[12px]")}
-                  aria-label={`Status de ${p.titulo}`}
-                >
-                  {Object.entries(ROTULO_STATUS_PROPOSTA).map(([valor, rotulo]) => (
-                    <option key={valor} value={valor}>{rotulo}</option>
-                  ))}
-                </select>
-                {p.status === "aceita" && !propostasComProjeto.has(p.id) && (
-                  <button type="button" onClick={() => void virarProjeto(p)} className={botao.barra} aria-label={`Virar projeto: ${p.titulo}`}>
-                    <ArrowRight className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                    <span className="hidden sm:inline">Virar projeto</span>
-                  </button>
-                )}
-                <button type="button" onClick={() => abrirEdicao(p)} className={botao.barra} aria-label={`Editar ${p.titulo}`}>
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Secao>
+  return (
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+      <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <input
+          type="search"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por título ou contato"
+          aria-label="Buscar proposta"
+          className={juntar(campo, "sm:max-w-xs")}
+        />
+        <select value={filtroContato} onChange={(e) => setFiltroContato(e.target.value)} className={juntar(campo, "w-auto")} aria-label="Filtrar por contato">
+          <option value="todos">Todos os contatos</option>
+          {(contatos || []).map((c) => (
+            <option key={c.id} value={c.id}>{c.nome}</option>
+          ))}
+        </select>
+        <p className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>Em aberto: {totalEmTexto(somaPorMoeda(emAberto))}</p>
+        <button type="button" onClick={abrirNovo} className={juntar(botao.primario, "ml-auto")}>
+          <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+          <span className="hidden sm:inline">Nova proposta</span>
+        </button>
+      </div>
+
+      {(propostas || []).length === 0 ? (
+        <EstadoVazio compacto titulo="Nenhuma proposta ainda" descricao="Cadastre a primeira proposta do freela." />
+      ) : lista.length === 0 && temFiltro ? (
+        <EstadoVazio compacto titulo="Nenhuma proposta encontrada" descricao="Tente outro termo ou contato." />
+      ) : (
+        <FunilDasPropostas
+          propostas={lista}
+          contatoDe={(id) => (contatos || []).find((c) => c.id === id)}
+          propostasComProjeto={propostasComProjeto}
+          onAbrir={abrirEdicao}
+          onMover={(p, etapa) => void moverPara(p, etapa)}
+          onTransformar={setTransformando}
+          onVirarProjeto={(p) => void virarProjeto(p)}
+          onRetomar={(p) => void retomar(p)}
+        />
+      )}
+
+      <TransformarEmCliente
+        proposta={transformando}
+        contato={transformando ? (contatos || []).find((c) => c.id === transformando.contato_id) || null : null}
+        onFechar={() => setTransformando(null)}
+      />
+
+      <Dialog open={!!perdendo} onOpenChange={(aberto) => { if (!aberto) setPerdendo(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Por que perdeu?</DialogTitle>
+            <DialogDescription>{perdendo?.titulo}. Fica na lista de Perdidos para tentar recuperar depois.</DialogDescription>
+          </DialogHeader>
+          <GrupoDeCampos colunas={1}>
+            <CampoDeFormulario rotulo="Motivo" obrigatorio>
+              <select value={perda.motivo} onChange={(e) => setPerda({ ...perda, motivo: e.target.value })} className={campo}>
+                <option value="">Escolha o motivo</option>
+                {MOTIVOS_DE_PERDA.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="O que aconteceu">
+              <textarea value={perda.detalhe} onChange={(e) => setPerda({ ...perda, detalhe: e.target.value })} className={campoTexto} placeholder="O que ele disse, o que faria voltar a conversa" />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Retomar em">
+              <input type="date" value={perda.retomar} onChange={(e) => setPerda({ ...perda, retomar: e.target.value })} className={campo} />
+            </CampoDeFormulario>
+          </GrupoDeCampos>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setPerdendo(null)} className={botao.secundario}>Cancelar</button>
+            <button type="button" onClick={() => void confirmarPerda()} className={botao.primario}>Marcar como perdida</button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
         <DialogContent className="max-w-lg">
@@ -338,9 +353,10 @@ export default function AbaPropostas() {
                 <option value="USD">Dólar (US$)</option>
               </select>
             </CampoDeFormulario>
-            <CampoDeFormulario rotulo="Status">
+            <CampoDeFormulario rotulo="Etapa">
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={campo}>
-                {Object.entries(ROTULO_STATUS_PROPOSTA).map(([valor, rotulo]) => (
+                {/* Proposta nova não nasce perdida: perder pede o motivo, e o motivo é pedido ao mover. */}
+                {Object.entries(ROTULO_STATUS_PROPOSTA).filter(([valor]) => editando || valor !== "perdida").map(([valor, rotulo]) => (
                   <option key={valor} value={valor}>{rotulo}</option>
                 ))}
               </select>

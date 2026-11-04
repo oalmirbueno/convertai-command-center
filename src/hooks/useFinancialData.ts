@@ -10,7 +10,7 @@ export function useBilling(clientId?: string) {
     queryFn: async () => {
       let query = supabase
         .from("billing")
-        .select("*, client:profiles!billing_client_id_fkey(full_name, company_name, client_type, brand)")
+        .select("*, client:profiles!billing_client_id_fkey(full_name, company_name, client_type, brand, origem_aquisicao)")
         .order("due_date", { ascending: false });
       if (clientId) query = query.eq("client_id", clientId);
       const { data, error } = await query;
