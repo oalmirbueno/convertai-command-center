@@ -22,6 +22,7 @@ import {
   type CandidatoParaImportar,
   chavesDoContato,
   estadoDoJev,
+  fatosDoCandidato,
   leadDoCandidato,
   normalizarBusca,
   notaDoEncaixe,
@@ -226,6 +227,11 @@ async function importar(ch: Chamador, corpo: Record<string, unknown>) {
     }
     const leadId = String((data as { id: string }).id);
     await servico().from("leads_candidatos").update({ situacao: "importado", lead_id: leadId }).eq("id", String(c.id));
+    const fatos = fatosDoCandidato(c as unknown as CandidatoParaImportar, leadId);
+    if (fatos.length) {
+      const { error: erroDosFatos } = await servico().from("commercial_facts").insert(fatos);
+      if (erroDosFatos) console.error("[comercial-leads] fatos não gravados", erroDosFatos.message.slice(0, 160));
+    }
     await servico().from("commercial_lead_events").insert({ lead_id: leadId, kind: "nota", note: `Entrou pela Máquina de leads (${busca.nicho} em ${busca.cidade}).${mercurio ? " O Mercúrio faz o primeiro contato." : ""}`, created_by: ch.userId });
     const kk = chavesDoContato({ whatsapp: novo.whatsapp, email: novo.email, company: novo.company });
     if (kk.fone) porFone.set(kk.fone, leadId);

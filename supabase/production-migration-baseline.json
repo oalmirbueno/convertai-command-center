@@ -2812,7 +2812,23 @@
     },
     {
       "version": "20261104150000",
-      "path": "supabase/migrations/20261104150000_conserto_acento_cobranca.sql",
+      "path": "supabase/migrations/20261104150000_freela_funil_fechados_e_perdidos.sql",
+      "local_sha256": "897956343c03706a643b185dac145f80f1cb7b768647e7a7c70366d97f431bc0",
+      "remote_name": "freela_funil_fechados_e_perdidos",
+      "remote_statements_sha256": "ca54d0b7357ebba855f5e81739a704f562f4360548f1f72dcaddb064cf4cd0e5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104184451",
+      "path": "supabase/migrations/20261104184451_chaves_apify.sql",
+      "local_sha256": "5f31ef662ac1593c792d2606690e70beff22df33b7388466fae70136358926d6",
+      "remote_name": "chaves_apify",
+      "remote_statements_sha256": "a796f165080479bc161fbf47ea8119201c897c1b343effd746b48f4a072f2a2f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104190000",
+      "path": "supabase/migrations/20261104190000_conserto_acento_cobranca.sql",
       "local_sha256": "d7b7225069ebcd7a1426e4cb1c1329dfa15baa79cf1da0160a4d15654ff46ba7",
       "remote_name": "conserto_acento_cobranca",
       "remote_statements_sha256": "2bed9f39db784b76d5e43745e3271206f89daeace49c72e8e987ecfef7738766",

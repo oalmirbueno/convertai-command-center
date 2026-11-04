@@ -18,7 +18,7 @@ vi.mock("@/lib/comercial", () => ({ listarCampanhas: () => Promise.resolve([{ id
 
 import MaquinaDeLeads from "@/components/comercial/MaquinaDeLeads";
 import { custoDaAvaliacao, estadoDaBusca, telefoneLegivel } from "@/lib/comercial/maquinaApi";
-import { chavesDoContato, leadDoCandidato, NIVEIS_DE_ENCAIXE, normalizarBusca, notaDoEncaixe, perguntasDoJev } from "../../supabase/functions/comercial-leads/regras";
+import { chavesDoContato, fatosDoCandidato, leadDoCandidato, NIVEIS_DE_ENCAIXE, normalizarBusca, notaDoEncaixe, perguntasDoJev } from "../../supabase/functions/comercial-leads/regras";
 
 const BUSCA = "22222222-2222-4222-8222-222222222222";
 const CAMP = "11111111-1111-4111-8111-111111111111";
@@ -46,6 +46,14 @@ describe("regras da Máquina de leads", () => {
     expect(notaDoEncaixe(2).nota).toBe(5);
     expect(notaDoEncaixe(null)).toEqual({ nota: null, porque: null });
     expect(notaDoEncaixe(3).porque).toMatch(/^Bom encaixe:/);
+  });
+
+  it("fato visto no site entra como sugestão, com a prova; o resto das evidências não", () => {
+    const f = fatosDoCandidato(cand("a", { evidencias: [{ campo: "site", valor: "x" }, { campo: "fato_observado", valor: "o rodapé do site de vocês ainda mostra 2019", detalhe: "O aviso termina em 2019", url: "https://a.com" }] }) as never, "lead-1");
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ lead_id: "lead-1", campo: "presenca_digital", situacao: "sugestao", evidencia: "pagina_citada", fonte_url: "https://a.com" });
+    expect(f[0].detalhe).toContain("2019");
+    expect(fatosDoCandidato(cand("b") as never, "lead-1")).toEqual([]);
   });
 
   it("o lead do CRM: origem maquina_de_leads, contato, contexto com a fonte e o Mercúrio só quando pedido", () => {

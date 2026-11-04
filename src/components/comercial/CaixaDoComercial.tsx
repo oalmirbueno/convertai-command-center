@@ -73,14 +73,14 @@ function ConfirmarPagamentoDoBolso({ pedidoId }: { pedidoId: string }) {
   };
   if (!aberto) {
     return (
-      <button type="button" onClick={() => setAberto(true)} className={juntar(botao.secundario, "lg:w-full")}>
+      <button type="button" onClick={() => setAberto(true)} className={juntar(botao.secundario, "w-full")}>
         <BadgeCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
         Confirmar pagamento do Bolso
       </button>
     );
   }
   return (
-    <div className="grid min-w-0 gap-2 lg:w-full">
+    <div className="grid min-w-0 gap-2">
       <label className={texto.auxiliar} htmlFor={`bolso-nota-${pedidoId}`}>
         Onde você viu o dinheiro? Comprovante em imagem não vale.
       </label>
@@ -126,69 +126,69 @@ function ItemDaCaixaNaLista({ item, destacado, aoAbrirLead, aoMudar }: { item: I
       id={`caixa-${item.id}`}
       data-item-da-caixa={item.id}
       data-tipo={item.tipo}
-      className={juntar("grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 border-t border-border py-4 first:border-t-0 lg:grid-cols-[minmax(0,1fr)_240px]", destacado && "-mx-3 rounded-md bg-primary/5 px-3 ring-1 ring-primary/40")}
+      className={juntar("grid min-w-0 grid-cols-1 gap-x-8 gap-y-4 border-t border-border py-5 first:border-t-0 first:pt-1 lg:grid-cols-[minmax(0,1fr)_220px]", destacado && "-mx-3 rounded-md bg-primary/5 px-3 ring-1 ring-primary/40")}
     >
       <div className="min-w-0">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className={juntar(texto.etiqueta, "rounded px-1.5 leading-5", item.tipo === "fechou" ? "bg-success/15 text-success" : "bg-primary/15 text-primary")}>
-          {item.tipo === "fechou" ? "Fechou" : "Avançou"}
-        </span>
-        <span className={juntar(texto.tituloSecao, "min-w-0 truncate")}>
-          {item.lead ? item.lead.company || item.lead.name : "Lead"}
-          {item.lead && item.lead.company && item.lead.name !== item.lead.company ? <span className="font-normal text-muted-foreground"> · {item.lead.name}</span> : null}
-        </span>
-        <span className={juntar(texto.auxiliar, "ml-auto shrink-0 tabular-nums")}>
-          {quando(item.created_at)}
-          {item.lead && item.lead.stage ? ` · ${rotuloDoEstagio(item.lead.stage)}` : ""}
-        </span>
-      </div>
-      <p className={juntar(texto.corpo, "mt-1 whitespace-pre-line")}>{item.resumo}</p>
-      {item.proximo_passo && (
-        <p className={juntar(texto.corpo, "mt-1")}>
-          <span className="font-medium">Próximo passo:</span> {item.proximo_passo}
+        <div className="flex min-w-0 items-center">
+          <span className={juntar(texto.etiqueta, "mr-2 shrink-0 rounded px-1.5 leading-5", item.tipo === "fechou" ? "bg-success/15 text-success" : "bg-primary/15 text-primary")}>
+            {item.tipo === "fechou" ? "Fechou" : "Avançou"}
+          </span>
+          <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>{item.lead ? item.lead.company || item.lead.name : "Lead"}</h3>
+        </div>
+        <p className={juntar(texto.auxiliar, "mt-1 truncate tabular-nums")}>
+          {[
+            item.lead && item.lead.company && item.lead.name !== item.lead.company ? item.lead.name : null,
+            item.lead && item.lead.stage ? rotuloDoEstagio(item.lead.stage) : null,
+            quando(item.created_at),
+          ].filter(Boolean).join(" · ")}
         </p>
-      )}
-      {dados.length > 0 && (
-        <dl className="mt-3 grid min-w-0 grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 2xl:grid-cols-3" aria-label="Dados levantados">
-          {dados.map((d) => (
-            <div key={d.chave} className={juntar(texto.auxiliar, "flex min-w-0")}>
-              <dt className="mr-1 shrink-0 text-muted-foreground">{d.chave}:</dt>
-              <dd className="min-w-0 break-words text-foreground">{d.valor}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+        <p className={juntar(texto.corpo, "mt-3 max-w-[72ch] whitespace-pre-line")}>{item.resumo}</p>
+        {item.proximo_passo && (
+          <p className={juntar(texto.corpo, "mt-3 max-w-[72ch] border-l-2 border-primary pl-3")}>
+            <span className="font-medium">Próximo passo:</span> {item.proximo_passo}
+          </p>
+        )}
+        {dados.length > 0 && (
+          <dl className="mt-4 grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dados levantados">
+            {dados.map((d) => (
+              <div key={d.chave} className="min-w-0">
+                <dt className={texto.auxiliar}>{d.chave}</dt>
+                <dd className={juntar(texto.corpo, "min-w-0 break-words")}>{d.valor}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
-      {/* As ações numa coluna fixa no largo (a mesma largura em todos os itens); em linha no celular. */}
-      <div className="flex min-w-0 flex-wrap content-start items-stretch gap-2 lg:flex-col">
+      {/* As ações numa coluna fixa no largo: a primeira é sempre continuar a conversa; a situação fica por último. */}
+      <div className="flex min-w-0 flex-col items-stretch [&>*+*]:mt-2 [&_a]:justify-center [&_button]:justify-center">
         {whatsapp ? (
-          <a href={whatsapp} target="_blank" rel="noreferrer" className={juntar(botao.primario, "lg:w-full")} aria-label={`Continuar no WhatsApp com ${nome || "o lead"}`}>
+          <a href={whatsapp} target="_blank" rel="noreferrer" className={juntar(botao.primario, "w-full")} aria-label={`Continuar no WhatsApp com ${nome || "o lead"}`}>
             <MessageCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Continuar no WhatsApp
           </a>
         ) : (
-          <span className={texto.auxiliar}>Sem telefone</span>
+          <span className={juntar(texto.auxiliar, "text-center")}>Sem telefone</span>
         )}
         {ligar && (
-          <a href={ligar} className={juntar(botao.secundario, "lg:w-full")} aria-label={`Ligar para ${nome || "o lead"}`}>
+          <a href={ligar} className={juntar(botao.secundario, "w-full")} aria-label={`Ligar para ${nome || "o lead"}`}>
             <Phone className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {telefone}
           </a>
         )}
         {aoAbrirLead && (
-          <button type="button" onClick={aoAbrirLead} className={juntar(botao.secundario, "lg:w-full")}>
+          <button type="button" onClick={aoAbrirLead} className={juntar(botao.secundario, "w-full")}>
             <ExternalLink className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Abrir o lead
           </button>
         )}
         {linkDaProposta && (
-          <a href={linkDaProposta} className={juntar(botao.secundario, "lg:w-full")}>
+          <a href={linkDaProposta} className={juntar(botao.secundario, "w-full")}>
             <FileText className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Abrir na Mesa Proposta
           </a>
         )}
         {pedidoDoBolso && <ConfirmarPagamentoDoBolso pedidoId={pedidoDoBolso} />}
-        <div className="flex min-w-0 gap-2 lg:w-full">
+        <div className="flex min-w-0 gap-2 border-t border-border pt-2">
           {item.situacao === "nova" && (
             <button type="button" disabled={mudando} onClick={() => void mudar("assumida")} className={juntar(botao.secundario, "flex-1")}>
               Assumir
@@ -262,14 +262,16 @@ function ConfigDoMercurio() {
           Primeiros contatos por dia
           <input type="number" min={0} max={500} value={atual.limite_primeiros_contatos_dia} onChange={(e) => mudar({ limite_primeiros_contatos_dia: Number(e.target.value) || 0 })} className={juntar(campo, "mt-1")} aria-label="Primeiros contatos por dia" />
         </label>
-        <label className={juntar(texto.rotulo, "block")}>
-          Começa às
-          <input type="time" value={atual.horario_inicio} onChange={(e) => mudar({ horario_inicio: e.target.value })} className={juntar(campo, "mt-1")} aria-label="Começa às" />
-        </label>
-        <label className={juntar(texto.rotulo, "block")}>
-          Para às
-          <input type="time" value={atual.horario_fim} onChange={(e) => mudar({ horario_fim: e.target.value })} className={juntar(campo, "mt-1")} aria-label="Para às" />
-        </label>
+        <div className="grid min-w-0 grid-cols-2 gap-3">
+          <label className={juntar(texto.rotulo, "block min-w-0")}>
+            Começa às
+            <input type="time" value={atual.horario_inicio} onChange={(e) => mudar({ horario_inicio: e.target.value })} className={juntar(campo, "mt-1")} aria-label="Começa às" />
+          </label>
+          <label className={juntar(texto.rotulo, "block min-w-0")}>
+            Para às
+            <input type="time" value={atual.horario_fim} onChange={(e) => mudar({ horario_fim: e.target.value })} className={juntar(campo, "mt-1")} aria-label="Para às" />
+          </label>
+        </div>
         <label className={juntar(texto.rotulo, "block")}>
           Orientações para o Mercúrio
           <textarea value={atual.orientacoes || ""} onChange={(e) => mudar({ orientacoes: e.target.value })} rows={3} placeholder="Tom, o que oferecer primeiro, o que nunca prometer" className={juntar(campoTexto, "mt-1 resize-y")} aria-label="Orientações para o Mercúrio" />
@@ -322,8 +324,8 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
   };
 
   return (
-    <AreaDeTrabalho rotuloDoPrincipal="Caixa do comercial" memoriaDaRolagem="comercial:caixa" lateral={<ConfigDoMercurio />} rotuloDaLateral="Mercúrio">
-    <section className="min-w-0 space-y-4" aria-label="Caixa do comercial">
+    <AreaDeTrabalho rotuloDoPrincipal="Caixa do comercial" memoriaDaRolagem="comercial:caixa" lateral={<ConfigDoMercurio />} rotuloDaLateral="Mercúrio" iconeDaLateral={<Settings2 className="h-4 w-4" />} memoria="comercial-caixa-mercurio" nasceRecolhida>
+    <section className="min-w-0 space-y-3" aria-label="Caixa do comercial">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SeletorCompacto
           rotulo="Situação na Caixa"

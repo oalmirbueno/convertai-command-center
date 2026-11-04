@@ -276,6 +276,15 @@ const TESTADORES: Record<IdDoProvedor, Testador> = {
     return valida("Chave válida.", { sem_saldo_pela_api: true, ...(conta ? { conta: `@${conta}` } : {}) }, r.status);
   },
 
+  async apify(v, buscar) {
+    const r = await pedir(buscar, "https://api.apify.com/v2/users/me", { method: "GET", headers: { Authorization: `Bearer ${v.APIFY_TOKEN}` } });
+    const base = porStatus(r.status);
+    if (!base) return semTeste(`O Apify respondeu ${r.status}.`, r.status);
+    if (base.estado !== "valida") return base;
+    const conta = curto(obj(obj(r.json).data).username);
+    return valida("Chave válida.", { sem_saldo_pela_api: true, ...(conta ? { conta: `@${conta}` } : {}) }, r.status);
+  },
+
   async openart() {
     // Entrada pronta: o OpenArt ainda não tem API pública (só MCP com login da conta).
     return semTeste("O OpenArt ainda não tem API pública para testar. A chave fica guardada para quando entrar.");

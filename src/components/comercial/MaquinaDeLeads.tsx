@@ -2,7 +2,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, Loader2, MessageCircle, Phone, Plus, Search, Sparkles, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
-import { AjudaRecolhida, AreaDeTrabalho, botao, useLargo, campo, campoTexto, juntar, superficie, texto } from "@/components/sistema";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AjudaRecolhida, AreaDeTrabalho, CampoDeBusca, RegiaoRolavel, botao, etiqueta, useLargo, campo, campoTexto, juntar, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { listarCampanhas } from "@/lib/comercial";
 import {
@@ -24,6 +25,10 @@ import {
   ROTULO_DA_ORIGEM_DO_DADO,
   telefoneLegivel,
 } from "@/lib/comercial/maquinaApi";
+import {
+  COR_DO_NIVEL, FILTROS_DE_CONTATO, type FiltroDeContato, type NivelDaSaude, ORDENS, type OrdemDosCandidatos,
+  dadosDoLugar, nivelDaNota, ordenarCandidatos, passaNoContato, saudeDoCandidato, tetoDoGoogleEmDolar,
+} from "@/lib/comercial/saudeDoLead";
 import { FONTES_DA_BUSCA, type FonteDaBusca, PAISES, ROTULO_DA_FONTE, UFS } from "../../../supabase/functions/comercial-leads/regras";
 
 /**
@@ -31,7 +36,10 @@ import { FONTES_DA_BUSCA, type FonteDaBusca, PAISES, ROTULO_DA_FONTE, UFS } from
  * intuitiva"). Nova busca (nicho, cidade, quantos, fontes, campanha e a chave "Entregar ao Mercúrio"), a
  * lista de buscas com o andamento ao vivo e, aberta uma busca, os candidatos com contato, fonte e a nota do
  * Jev, para avaliar, levar ao CRM ou descartar. Quem busca é o worker "leads" desta casa (workers/leads):
- * OpenStreetMap e o site da própria empresa, robots.txt respeitado e sem disfarce.
+ * OpenStreetMap, Google Maps pelo Apify (pago, com teto) e o site da própria empresa, robots.txt respeitado e sem disfarce.
+ *
+ * 04/11/2026 (dono: "mais organizada, está com scroll único, filtros para recentes, cores como saudável e nota"):
+ * buscas e candidatos rolam cada um por si, a nova busca abre em janela e os candidatos têm filtros e cores.
  */
 
 const SUGESTOES_DE_NICHO = ["Restaurante", "Pizzaria", "Hamburgueria", "Cafeteria", "Padaria", "Academia", "Clínica médica", "Dentista", "Fisioterapia", "Clínica de estética", "Salão de beleza", "Barbearia", "Advocacia", "Contabilidade", "Imobiliária", "Oficina mecânica", "Pet shop", "Veterinária", "Loja de roupas", "Ótica", "Móveis", "Informática", "Escola", "Pousada", "Arquitetura"];
@@ -85,7 +93,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
   const alternar = (f: FonteDaBusca) => setFontes((l) => (l.indexOf(f) >= 0 ? l.filter((x) => x !== f) : l.concat([f])));
   const pronta = fontes.length > 0 && (soLista ? urls.trim().length > 3 : nicho.trim().length >= 2 && cidade.trim().length >= 2);
   return (
-    <section className={juntar(superficie.poco, "min-w-0 space-y-4 p-4")} aria-label="Nova busca de leads" data-nova-busca="">
+    <section className="min-w-0 space-y-4" aria-label="Nova busca de leads" data-nova-busca="">
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px]">
         <label className={juntar(texto.rotulo, "block min-w-0")}>
           Nicho
@@ -120,12 +128,13 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
         <span className={juntar(texto.rotulo, "inline-flex items-center")}>
           Onde buscar
           <AjudaRecolhida className="ml-1" rotulo="De onde vêm os leads">
-            Mapa: negócios do OpenStreetMap (base aberta, com nome, telefone, site e endereço). Site da empresa: a máquina lê a página inicial e até 2 páginas de contato ou sobre, e pega WhatsApp, telefone, e-mail, Instagram e CNPJ que a própria empresa publicou. CNPJ: razão social e situação pela BrasilAPI. Sites que eu colar: os endereços que você colar passam pela mesma leitura. Respeita o robots.txt de cada site, vai devagar e não usa Google, Instagram nem LinkedIn (os termos deles proíbem). Cada dado guarda de onde veio.
+            Mapa: negócios do OpenStreetMap (base aberta, com nome, telefone, site e endereço). Site da empresa: a máquina lê a página inicial e até 2 páginas de contato ou sobre, e pega WhatsApp, telefone, e-mail, Instagram e CNPJ que a própria empresa publicou. CNPJ: razão social e situação pela BrasilAPI. Sites que eu colar: os endereços que você colar passam pela mesma leitura. Google Maps pelo Apify (pago, com teto de gasto em cada busca): traz telefone, site, avaliações, bairro, horários e os contatos que a empresa publica. Na leitura direta, respeita o robots.txt de cada site, vai devagar e não coleta Instagram nem LinkedIn. Cada dado guarda de onde veio.
           </AjudaRecolhida>
         </span>
         <div className="mt-1 flex min-w-0 flex-wrap gap-1" role="group" aria-label="Fontes da busca">
           {FONTES_DA_BUSCA.map((f) => <Opcao key={f} ativo={fontes.indexOf(f) >= 0} onClick={() => alternar(f)}>{ROTULO_DA_FONTE[f]}</Opcao>)}
         </div>
+        {fontes.indexOf("google_maps") >= 0 && <p className={juntar(texto.auxiliar, "mt-1")} data-teto-do-google="">Google Maps: gasta no máximo {usd(tetoDoGoogleEmDolar(limite))} nesta busca.</p>}
       </div>
       </div>
       {fontes.indexOf("lista") >= 0 && (
@@ -163,6 +172,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
 
 function ContatosDoCandidato({ c }: { c: CandidatoDeLead }) {
   const link = juntar(texto.auxiliar, "inline-flex max-w-full items-center gap-1 truncate text-primary hover:underline");
+  const lugar = dadosDoLugar(c);
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
       {c.whatsapp && (
@@ -180,6 +190,8 @@ function ContatosDoCandidato({ c }: { c: CandidatoDeLead }) {
       {c.site && <a className={link} href={c.site} target="_blank" rel="noreferrer">{c.site.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "").slice(0, 40)}</a>}
       {c.instagram && <a className={link} href={`https://instagram.com/${c.instagram}`} target="_blank" rel="noreferrer">@{c.instagram}</a>}
       {c.email && <a className={link} href={`mailto:${c.email}`}>{c.email}</a>}
+      {lugar.facebook && <a className={link} href={lugar.facebook} target="_blank" rel="noreferrer">Facebook</a>}
+      {lugar.linkedin && <a className={link} href={lugar.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
       {!c.whatsapp && !c.telefone && !c.site && !c.email && !c.instagram && <span className={texto.auxiliar}>Sem contato público</span>}
     </div>
   );
@@ -187,7 +199,7 @@ function ContatosDoCandidato({ c }: { c: CandidatoDeLead }) {
 
 function DeOndeVeio({ c }: { c: CandidatoDeLead }) {
   const [aberto, setAberto] = useState(false);
-  const lista = (c.evidencias || []).filter((e) => e.campo && e.campo !== "credito");
+  const lista = (c.evidencias || []).filter((e) => e.campo && e.campo !== "credito" && e.campo.indexOf("nota_") !== 0);
   return (
     <div className="min-w-0">
       <button type="button" className={juntar(texto.auxiliar, "hover:underline")} onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
@@ -219,7 +231,22 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
     refetchInterval: buscaAndando(busca) ? 5000 : false,
   });
   const todos = (lidos.data && lidos.data.candidatos) || [];
-  const visiveis = filtro === "todos" ? todos.filter((c) => c.situacao !== "descartado") : todos.filter((c) => c.situacao === filtro);
+  const [busque, setBusque] = useState("");
+  const [ordem, setOrdem] = useState<OrdemDosCandidatos>("recentes");
+  const [saude, setSaude] = useState<"todas" | NivelDaSaude>("todas");
+  const [contato, setContato] = useState<FiltroDeContato>("todos");
+  const [faixaDeNota, setFaixaDeNota] = useState<"todas" | "boa" | "sem">("todas");
+  const naSituacao = filtro === "todos" ? todos.filter((c) => c.situacao !== "descartado") : todos.filter((c) => c.situacao === filtro);
+  const termo = busque.trim().toLowerCase();
+  const visiveis = ordenarCandidatos(
+    naSituacao.filter((c) =>
+      (!termo || `${c.nome} ${c.categoria || ""} ${c.endereco || ""}`.toLowerCase().indexOf(termo) >= 0)
+      && (saude === "todas" || saudeDoCandidato(c).nivel === saude)
+      && passaNoContato(c, contato)
+      && (faixaDeNota === "todas" || (faixaDeNota === "boa" ? (c.nota ?? 0) >= 7 : c.nota == null))),
+    ordem,
+  );
+  const contagemDaSaude = (nivel: NivelDaSaude) => naSituacao.filter((c) => saudeDoCandidato(c).nivel === nivel).length;
   const escolhidos = visiveis.filter((c) => marcados.indexOf(c.id) >= 0);
   const novosEscolhidos = escolhidos.filter((c) => c.situacao === "novo");
   const reler = () => void qc.invalidateQueries({ queryKey: chavesDaMaquina.candidatos(busca.id) });
@@ -254,15 +281,47 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
   const todosMarcados = visiveis.length > 0 && escolhidos.length === visiveis.length;
   if (lidos.isLoading) return <p className={texto.auxiliar}><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Lendo os candidatos…</p>;
   return (
-    <section className="min-w-0 space-y-3" aria-label={`Candidatos de ${busca.nicho} em ${busca.cidade}`} data-candidatos-da-busca={busca.id}>
-      <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filtro dos candidatos">
-        {FILTROS.map((f) => (
-          <Opcao key={f.id} ativo={filtro === f.id} onClick={() => { setFiltro(f.id); setMarcados([]); }}>
-            {f.rotulo} {f.id === "todos" ? todos.filter((c) => c.situacao !== "descartado").length : todos.filter((c) => c.situacao === f.id).length}
-          </Opcao>
-        ))}
+    <section className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>*+*]:mt-2" aria-label={`Candidatos de ${busca.nicho} em ${busca.cidade}`} data-candidatos-da-busca={busca.id}>
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filtro dos candidatos">
+          {FILTROS.map((f) => (
+            <Opcao key={f.id} ativo={filtro === f.id} onClick={() => { setFiltro(f.id); setMarcados([]); }}>
+              {f.rotulo} {f.id === "todos" ? todos.filter((c) => c.situacao !== "descartado").length : todos.filter((c) => c.situacao === f.id).length}
+            </Opcao>
+          ))}
+        </div>
+        <CampoDeBusca valor={busque} onMudar={setBusque} placeholder="Buscar por nome, categoria ou endereço" rotulo="Buscar nos candidatos" className="min-w-[180px] flex-1 sm:max-w-[320px]" />
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2" role="group" aria-label="Filtros e ordem">
+        <select value={ordem} onChange={(e) => setOrdem(e.target.value as OrdemDosCandidatos)} className={juntar(campo, "h-8 w-auto text-[12px]")} aria-label="Ordenar candidatos">
+          {ORDENS.map((o) => <option key={o.id} value={o.id}>{o.rotulo}</option>)}
+        </select>
+        <select value={contato} onChange={(e) => setContato(e.target.value as FiltroDeContato)} className={juntar(campo, "h-8 w-auto text-[12px]")} aria-label="Filtrar por contato">
+          {FILTROS_DE_CONTATO.map((o) => <option key={o.id} value={o.id}>{o.rotulo}</option>)}
+        </select>
+        <select value={faixaDeNota} onChange={(e) => setFaixaDeNota(e.target.value as "todas" | "boa" | "sem")} className={juntar(campo, "h-8 w-auto text-[12px]")} aria-label="Filtrar por nota">
+          <option value="todas">Qualquer nota</option>
+          <option value="boa">Nota 7 ou mais</option>
+          <option value="sem">Sem nota</option>
+        </select>
+        <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="Filtrar por saúde">
+          {(["saudavel", "atencao", "fraco"] as NivelDaSaude[]).map((nivel) => (
+            <button
+              key={nivel}
+              type="button"
+              aria-pressed={saude === nivel}
+              onClick={() => setSaude(saude === nivel ? "todas" : nivel)}
+              className={juntar(etiqueta, COR_DO_NIVEL[nivel], "cursor-pointer tabular-nums", saude === nivel && "ring-1 ring-current")}
+            >
+              {nivel === "saudavel" ? "Saudáveis" : nivel === "atencao" ? "Atenção" : "Fracos"} {contagemDaSaude(nivel)}
+            </button>
+          ))}
+          <AjudaRecolhida rotulo="O que é saúde e nota">
+            Saúde olha se dá para falar com o negócio e se ele parece vivo: WhatsApp, telefone, site, e-mail, Instagram e as avaliações do Google. Nota é o encaixe de 0 a 10 com o seu cliente ideal, dada pelo Jev. Verde é bom, âmbar pede atenção e vermelho é fraco.
+          </AjudaRecolhida>
+        </div>
+      </div>
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-border pb-2">
         <label className={juntar(texto.auxiliar, "flex items-center gap-1.5")}>
           <input type="checkbox" checked={todosMarcados} onChange={(e) => setMarcados(e.target.checked ? visiveis.map((c) => c.id) : [])} aria-label="Marcar todos" />
           {escolhidos.length ? `${escolhidos.length} marcados` : "Marcar todos"}
@@ -291,41 +350,51 @@ function CandidatosDaBusca({ busca, aoAbrirLead }: { busca: BuscaDeLeads; aoAbri
         )}
       </div>
       {!visiveis.length ? (
-        <p className={texto.auxiliar}>{buscaAndando(busca) ? "Buscando: os candidatos aparecem aqui conforme a máquina acha." : "Nada aqui."}</p>
+        <p className={texto.auxiliar}>{buscaAndando(busca) ? "Buscando: os candidatos aparecem aqui conforme a máquina acha." : naSituacao.length ? "Nenhum candidato com esses filtros." : "Nada aqui."}</p>
       ) : (
-        <ul className="min-w-0" aria-label="Candidatos">
-          {visiveis.map((c) => (
-            <li key={c.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 border-t border-border py-3 first:border-t-0 lg:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1.4fr)_72px]" data-candidato={c.id} data-situacao={c.situacao}>
-              <input type="checkbox" className="mt-1" checked={marcados.indexOf(c.id) >= 0} onChange={(e) => setMarcados((l) => (e.target.checked ? l.concat([c.id]) : l.filter((x) => x !== c.id)))} aria-label={`Marcar ${c.nome}`} />
-              <div className="min-w-0 space-y-1">
-                <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.nome}</span>
-                {c.categoria && <span className={juntar(texto.auxiliar, "block truncate")}>{c.categoria}</span>}
-                {c.porque && <p className={texto.auxiliar}>{c.porque}</p>}
-              </div>
-              <div className="col-start-2 min-w-0 space-y-1 lg:col-start-auto">
-                <ContatosDoCandidato c={c} />
-                <div className="flex min-w-0 items-center gap-3">
-                  <DeOndeVeio c={c} />
-                  {c.situacao === "importado" && c.lead_id && (
-                    <button type="button" className={juntar(texto.auxiliar, "inline-flex items-center gap-1 font-medium text-primary hover:underline")} onClick={() => aoAbrirLead && aoAbrirLead(c.lead_id as string)} disabled={!aoAbrirLead}>
-                      No CRM
-                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="col-start-2 min-w-0 lg:col-start-auto lg:text-right">
-                {c.nota != null ? (
-                  <span className={juntar(texto.corpo, "font-semibold tabular-nums", c.nota >= 7 ? "text-primary" : c.nota >= 4 ? "text-foreground" : "text-muted-foreground")} title={c.porque || undefined} aria-label={`Encaixe ${c.nota} de 10`}>
-                    {c.nota.toFixed(1).replace(".", ",")}
-                  </span>
-                ) : (
-                  <span className={texto.auxiliar}>sem nota</span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <RegiaoRolavel rotulo="Lista de candidatos" memoria={`comercial:leads:${busca.id}`} className="min-w-0 lg:pb-12 lg:pr-1">
+          <ul className="min-w-0" aria-label="Candidatos">
+            {visiveis.map((c) => {
+              const estado = saudeDoCandidato(c);
+              const lugar = dadosDoLugar(c);
+              return (
+                <li key={c.id} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 border-t border-border py-3 first:border-t-0 lg:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1.4fr)_132px]" data-candidato={c.id} data-situacao={c.situacao} data-saude={estado.nivel}>
+                  <input type="checkbox" className="mt-1" checked={marcados.indexOf(c.id) >= 0} onChange={(e) => setMarcados((l) => (e.target.checked ? l.concat([c.id]) : l.filter((x) => x !== c.id)))} aria-label={`Marcar ${c.nome}`} />
+                  <div className="min-w-0 space-y-1">
+                    <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.nome}</span>
+                    {(c.categoria || lugar.bairro) && <span className={juntar(texto.auxiliar, "block truncate")}>{[c.categoria, lugar.bairro].filter(Boolean).join(" · ")}</span>}
+                    {c.porque && <p className={texto.auxiliar}>{c.porque}</p>}
+                  </div>
+                  <div className="col-start-2 min-w-0 space-y-1 lg:col-start-auto">
+                    <ContatosDoCandidato c={c} />
+                    <div className="flex min-w-0 items-center gap-3">
+                      <DeOndeVeio c={c} />
+                      {c.situacao === "importado" && c.lead_id && (
+                        <button type="button" className={juntar(texto.auxiliar, "inline-flex items-center gap-1 font-medium text-primary hover:underline")} onClick={() => aoAbrirLead && aoAbrirLead(c.lead_id as string)} disabled={!aoAbrirLead}>
+                          No CRM
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-start-2 flex min-w-0 flex-wrap items-center gap-1 lg:col-start-auto lg:justify-end">
+                    <span className={juntar(etiqueta, COR_DO_NIVEL[estado.nivel])} title={estado.porque}>{estado.rotulo}</span>
+                    {c.nota != null ? (
+                      <span className={juntar(etiqueta, COR_DO_NIVEL[nivelDaNota(c.nota)], "font-semibold tabular-nums")} title={c.porque || undefined} aria-label={`Encaixe ${c.nota} de 10`}>
+                        {c.nota.toFixed(1).replace(".", ",")}
+                      </span>
+                    ) : (
+                      <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>sem nota</span>
+                    )}
+                    {lugar.estrelas != null && (
+                      <span className={juntar(texto.auxiliar, "tabular-nums")} title={`${lugar.avaliacoes} avaliações no Google`}>★ {String(lugar.estrelas).replace(".", ",")} ({lugar.avaliacoes})</span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </RegiaoRolavel>
       )}
     </section>
   );
@@ -335,6 +404,9 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
   const qc = useQueryClient();
   const [novaAberta, setNovaAberta] = useState(false);
   const [abertaId, setAbertaId] = useState<string | null>(null);
+  const [filtroDasBuscas, setFiltroDasBuscas] = useState("");
+  const [ordemDasBuscas, setOrdemDasBuscas] = useState<"recentes" | "encontrados">("recentes");
+  const [situacaoDasBuscas, setSituacaoDasBuscas] = useState("todas");
   // No largo, a busca abre na coluna da direita; no celular, embaixo dela (uma só vez na página).
   const largo = useLargo();
   const buscas = useQuery({
@@ -350,38 +422,70 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
     onSuccess: () => void qc.invalidateQueries({ queryKey: chavesDaMaquina.buscas }),
     onError: (e) => toast.error("Não cancelei", { description: textoDoErro(e) }),
   });
+  const termoDaBusca = filtroDasBuscas.trim().toLowerCase();
+  const buscasVisiveis = lista
+    .filter((b) => (!termoDaBusca || `${b.nicho} ${b.cidade}`.toLowerCase().indexOf(termoDaBusca) >= 0)
+      && (situacaoDasBuscas === "todas" || (situacaoDasBuscas === "andando" ? buscaAndando(b) : b.situacao === situacaoDasBuscas)))
+    .slice()
+    .sort((a, b) => ordemDasBuscas === "encontrados" ? b.encontrados - a.encontrados : String(b.created_at).localeCompare(String(a.created_at)));
   return (
-    <AreaDeTrabalho rotuloDoPrincipal="Máquina de leads" memoriaDaRolagem="comercial:leads">
-    <div className="min-w-0 space-y-4" data-maquina-de-leads="">
-      <div className="flex min-w-0 items-center gap-2">
+    <AreaDeTrabalho principalRolavel={false} rotuloDoPrincipal="Máquina de leads">
+    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1" data-maquina-de-leads="">
+      <div className="mb-3 flex min-w-0 shrink-0 items-center gap-2">
         <h2 className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>Máquina de leads</h2>
         <AjudaRecolhida rotulo="Como a Máquina de leads funciona">
-          Diga o nicho e a cidade: a máquina desta casa acha os negócios no mapa aberto e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela.
+          Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela.
         </AjudaRecolhida>
-        {!novaAberta && (
-          <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Nova busca
-          </button>
-        )}
+        <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)}>
+          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Nova busca
+        </button>
       </div>
-      {novaAberta && <FormularioDaBusca aoFechar={() => setNovaAberta(false)} aoCriar={(b) => { setNovaAberta(false); setAbertaId(b.id); }} />}
+      <Dialog open={novaAberta} onOpenChange={setNovaAberta}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Nova busca de leads</DialogTitle>
+            <DialogDescription>Nicho, cidade e de onde buscar. Nada é enviado a ninguém.</DialogDescription>
+          </DialogHeader>
+          <FormularioDaBusca aoFechar={() => setNovaAberta(false)} aoCriar={(b) => { setNovaAberta(false); setAbertaId(b.id); }} />
+        </DialogContent>
+      </Dialog>
       {buscas.isError && <p className={juntar(texto.auxiliar, "text-destructive")}>{textoDoErro(buscas.error)}</p>}
       {buscas.isLoading ? (
         <p className={texto.auxiliar}><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />Lendo as buscas…</p>
       ) : !lista.length ? (
-        !novaAberta && <p className={texto.auxiliar}>Nenhuma busca ainda. Comece em Nova busca.</p>
+        <p className={texto.auxiliar}>Nenhuma busca ainda. Comece em Nova busca.</p>
       ) : (
-        <div className={juntar("grid min-w-0 grid-cols-1 gap-6", largo && "grid-cols-[320px_minmax(0,1fr)]")}>
-        <ul className="min-w-0 self-start" aria-label="Buscas de leads">
-          {lista.map((b) => {
+        <div className={juntar("grid min-w-0 grid-cols-1 gap-6", largo && "min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)]")}>
+        <div className="flex min-w-0 flex-col lg:min-h-0">
+          <div className="mb-2 min-w-0 shrink-0 space-y-2">
+            <CampoDeBusca valor={filtroDasBuscas} onMudar={setFiltroDasBuscas} placeholder="Buscar nicho ou cidade" rotulo="Buscar nas buscas" />
+            <div className="flex min-w-0 gap-2">
+              <select value={ordemDasBuscas} onChange={(e) => setOrdemDasBuscas(e.target.value as "recentes" | "encontrados")} className={juntar(campo, "h-8 min-w-0 flex-1 text-[12px]")} aria-label="Ordenar buscas">
+                <option value="recentes">Mais recentes</option>
+                <option value="encontrados">Mais leads</option>
+              </select>
+              <select value={situacaoDasBuscas} onChange={(e) => setSituacaoDasBuscas(e.target.value)} className={juntar(campo, "h-8 min-w-0 flex-1 text-[12px]")} aria-label="Situação das buscas">
+                <option value="todas">Todas</option>
+                <option value="andando">Andando</option>
+                <option value="pronta">Prontas</option>
+                <option value="falhou">Com falha</option>
+              </select>
+            </div>
+          </div>
+        <RegiaoRolavel rotulo="Lista de buscas" memoria="comercial:leads:buscas" className="min-w-0 lg:pb-12 lg:pr-1">
+        <ul className="min-w-0" aria-label="Buscas de leads">
+          {!buscasVisiveis.length && <li className={juntar(texto.auxiliar, "py-3")}>Nenhuma busca com esses filtros.</li>}
+          {buscasVisiveis.map((b) => {
             const andando = buscaAndando(b);
-            const abertaAqui = (abertaId || (lista[0] && lista[0].id)) === b.id;
+            const abertaAqui = !!aberta && aberta.id === b.id;
             return (
-              <li key={b.id} className={juntar("min-w-0 border-t border-border first:border-t-0", largo && abertaAqui && "-mx-2 rounded-md bg-muted/50 px-2")} data-busca={b.id} data-situacao={b.situacao}>
+              <li key={b.id} className={juntar("min-w-0 border-t border-border first:border-t-0", largo && abertaAqui && "rounded-md border-transparent bg-muted/50 px-2")} data-busca={b.id} data-situacao={b.situacao}>
                 <div className="flex min-w-0 items-center gap-2 py-2.5">
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setAbertaId(b.id)} aria-expanded={abertaAqui} aria-label={`Abrir a busca ${b.nicho} em ${b.cidade}`}>
-                    {andando ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden="true" /> : <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                    {andando
+                      ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
+                      : <span aria-hidden="true" className={juntar("ml-1 mr-1 h-2 w-2 shrink-0 rounded-full", b.situacao === "falhou" ? "bg-destructive" : b.situacao === "pronta" ? "bg-success" : "bg-muted-foreground")} />}
                     <span className="min-w-0 flex-1">
                       <span className={juntar(texto.corpo, "block truncate font-medium")}>{b.nicho} em {b.cidade}{b.uf ? `/${PAISES[b.uf] || b.uf}` : ""}</span>
                       <span className={juntar(texto.auxiliar, "block truncate", b.situacao === "falhou" && "text-destructive")}>
@@ -405,8 +509,10 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
             );
           })}
         </ul>
+        </RegiaoRolavel>
+        </div>
         {largo && (
-          <div className="min-w-0">
+          <div className="flex min-h-0 min-w-0 flex-col">
             {aberta ? <CandidatosDaBusca key={aberta.id} busca={aberta} aoAbrirLead={aoAbrirLead} /> : <p className={texto.auxiliar}>Escolha uma busca à esquerda.</p>}
           </div>
         )}

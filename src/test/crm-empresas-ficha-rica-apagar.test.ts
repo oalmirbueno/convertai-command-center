@@ -21,6 +21,7 @@ const lib = ler("src/lib/comercial.ts");
 const pagina = ler("src/pages/AdminComercial.tsx");
 const empresas = ler("src/components/comercial/EmpresasCRM.tsx");
 const kanban = ler("src/components/comercial/FunilKanban.tsx");
+const quadro = ler("src/components/sistema/QuadroKanban.tsx");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
 const servico = ler("supabase/functions/_shared/aceleriq-commercial-services.ts");
 
@@ -96,11 +97,11 @@ describe("o funil no celular", () => {
   it("mostra uma etapa por vez, escolhida nas Etapas com a contagem", () => {
     // A etapa escolhida fica guardada (sair e voltar mantém).
     expect(kanban).toContain('useEstadoDoComercial<EstagioId>("funil:etapa-no-celular", ESTAGIOS_ABERTOS[0]');
-    expect(kanban).toContain('rotulo="Etapas do funil"');
+    expect(quadro).toContain('rotulo="Etapas do funil"');
     // 16/10/2026: a faixa das etapas gruda no topo e tem toque de 44 px.
-    expect(kanban).toContain('className="sticky top-0 z-10 -mx-4 mb-2 border-b border-border bg-background px-4 sm:hidden [&_button]:h-11"');
-    expect(kanban).toContain('visivelNoCelular ? "flex" : "hidden"');
-    expect(kanban).toContain("sm:flex sm:w-[260px] sm:shrink-0");
+    expect(quadro).toContain('className="sticky top-0 z-10 -mx-4 mb-2 border-b border-border bg-background px-4 sm:hidden [&_button]:h-11"');
+    expect(quadro).toContain('visivelNoCelular ? "flex" : "hidden"');
+    expect(quadro).toContain("sm:flex sm:w-[260px] sm:shrink-0");
   });
 
   it("formulários de empresa e contato usam uma coluna no celular", () => {

@@ -18,6 +18,7 @@ const raiz = resolve(__dirname, "../..");
 const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8").replace(/\r\n/g, "\n");
 
 const kanban = ler("src/components/comercial/FunilKanban.tsx");
+const quadro = ler("src/components/sistema/QuadroKanban.tsx");
 const pagina = ler("src/pages/AdminComercial.tsx");
 const lib = ler("src/lib/comercial.ts");
 const tools = ler("supabase/functions/_shared/mcp-tools.ts");
@@ -33,19 +34,19 @@ describe("o funil rola por dentro da coluna", () => {
   // normal (sem caixa com rolagem própria prendendo o dedo).
   it("a coluna tem altura da área e a lista de cartões rola sozinha", () => {
     expect(kanban).toContain("<AreaDeTrabalho principalRolavel={false}");
-    expect(kanban).toContain("min-h-[12rem] w-full min-w-0 flex-col");
-    expect(kanban).toContain("lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1");
+    // 04/11/2026: a coluna mora no quadro único dos dois funis.
+    expect(quadro).toContain("min-h-[12rem] w-full min-w-0 flex-col");
+    expect(quadro).toContain("lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1");
     expect(kanban).toContain("memoria={`comercial:funil:${estagio}`}");
     // Sem dvh sozinho (Safari 11 não tem).
     expect(kanban).not.toContain("100dvh");
   });
 
-  it("o alvo de soltar fica fora da rolagem, sempre visível", () => {
-    const lista = kanban.indexOf("<RegiaoRolavel");
-    const alvo = kanban.indexOf('{isOver ? "soltar aqui"');
-    const fimDaLista = kanban.indexOf("</RegiaoRolavel>", lista);
-    expect(lista).toBeGreaterThan(0);
-    expect(alvo).toBeGreaterThan(fimDaLista);
+  it("a coluna inteira recebe o cartão, sem caixa fixa ocupando o pé", () => {
+    // 04/11/2026 (dono: "tirar o espaço vazio inferior"): o alvo é a própria coluna, que vai até o fim da área.
+    expect(quadro).toContain("const { setNodeRef, isOver } = useDroppable({ id });");
+    expect(quadro).not.toContain("soltar aqui");
+    expect(quadro).not.toContain('"relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1 lg:pb-12"');
   });
 });
 
