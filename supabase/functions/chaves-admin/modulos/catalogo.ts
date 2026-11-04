@@ -18,6 +18,8 @@ export type IdDoProvedor =
   | "typesafe"
   | "resend"
   | "vercel"
+  | "apify"
+  | "aisa"
   | "runway"
   | "heygen"
   | "higgsfield"

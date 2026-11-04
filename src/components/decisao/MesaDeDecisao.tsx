@@ -150,11 +150,16 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
     setAtualId(proximo.id);
   };
 
+  // O deslize de saída não pode disparar depois que a mesa fechou.
+  const saidaRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(saidaRef.current), []);
+
   /** Sai com um deslize curto e o próximo assume o mesmo lugar. */
   const tirarDaMesa = (alvo: ItemDaMesa, comoAprovado: boolean) => {
     setSaindo(comoAprovado ? "aprovado" : "outro");
     const proximo = fila[indice + 1] ?? fila[indice - 1] ?? null;
-    window.setTimeout(() => {
+    window.clearTimeout(saidaRef.current);
+    saidaRef.current = window.setTimeout(() => {
       setDecididos((s) => new Set(s).add(alvo.id));
       setAtualId(proximo?.id ?? null);
       setSaindo(null);

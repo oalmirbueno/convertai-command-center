@@ -166,7 +166,9 @@ describe("refazer_proposta_interno", () => {
     expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno"')).toBeGreaterThan(-1);
     expect(serve.indexOf('if (acao === ACAO_REFAZER_INTERNO || acao === "hypes_da_semana_interno" || acao === "campanha_reescrever_comercial_interno"')).toBeLessThan(serve.indexOf("await identificar(req, servico)"));
     // 22/10/2026: a reorganização de datas e fases da campanha também entra pela porta interna.
-    expect(serve).toContain('acao === "campanha_reorganizar_interno") {');
+    // 26/10: outras ações internas (ex.: agenda_sozinha_interno) entraram depois dela na mesma condição.
+    const portaInterna = serve.slice(serve.indexOf("if (acao === ACAO_REFAZER_INTERNO"), serve.indexOf(") {", serve.indexOf("if (acao === ACAO_REFAZER_INTERNO")));
+    expect(portaInterna).toContain('acao === "campanha_reorganizar_interno"');
     expect(serve).toContain('cronSecretDoPedido: req.headers.get("x-cron-secret")');
     expect(serve).toContain('cronSecret: await chave("CRON_SECRET")');
     const autor = fonte.slice(fonte.indexOf("async function chamadorDoAutor("), fonte.indexOf("async function refazerPropostaInterno("));

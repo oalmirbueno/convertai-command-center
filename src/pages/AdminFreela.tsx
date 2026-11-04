@@ -48,7 +48,7 @@ export default function AdminFreela() {
       <header className="min-w-0">
         <CabecalhoDePagina
           titulo="Freela"
-          descricao="Trabalhos por fora da agência, do contato ao recebimento."
+          descricao="Trabalhos por fora da agência"
           ajuda={AJUDA_DA_ABA[aba]}
           aoLado={
             <Etapas

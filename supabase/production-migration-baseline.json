@@ -2833,6 +2833,14 @@
       "remote_name": "chaves_aisa",
       "remote_statements_sha256": "c29cf84921449b59ec1169dc927ac93f96d117eae032fa520902e0ccf45602cc",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104210000",
+      "path": "supabase/migrations/20261104210000_conserto_acento_cobranca.sql",
+      "local_sha256": "d7b7225069ebcd7a1426e4cb1c1329dfa15baa79cf1da0160a4d15654ff46ba7",
+      "remote_name": "conserto_acento_cobranca",
+      "remote_statements_sha256": "2bed9f39db784b76d5e43745e3271206f89daeace49c72e8e987ecfef7738766",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

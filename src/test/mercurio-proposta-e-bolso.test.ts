@@ -243,9 +243,17 @@ describe("Aceleriq de Bolso pelo Mercúrio", () => {
 describe("banco: quem confirma e quem libera", () => {
   const sql = ler("supabase/migrations/20261028090000_mercurio_proposta_e_bolso.sql");
 
-  it("é a migration mais nova e só acrescenta", () => {
-    const nomes = readdirSync(resolve(__dirname, "../../supabase/migrations")).filter((n: string) => /^\d{14}_/.test(n)).sort();
-    expect(nomes[nomes.length - 1]).toBe("20261028090000_mercurio_proposta_e_bolso.sql");
+  it("vem depois das anteriores, nenhuma posterior refaz as funções dela, e só acrescenta", () => {
+    // Era "a mais nova"; migrations novas entram depois (append-only), então a garantia passa a ser
+    // a ordem sem colisão de timestamp e que nenhuma posterior redefine ou apaga as funções daqui.
+    const dir = resolve(__dirname, "../../supabase/migrations");
+    const NOME = "20261028090000_mercurio_proposta_e_bolso.sql";
+    const nomes = readdirSync(dir).filter((n: string) => /^\d{14}_/.test(n)).sort();
+    expect(nomes.filter((n: string) => n.slice(0, 14) === NOME.slice(0, 14))).toEqual([NOME]);
+    expect(nomes.indexOf(NOME)).toBeGreaterThan(nomes.indexOf("20261027235000_meta_usuario_do_sistema.sql"));
+    for (const n of nomes.slice(nomes.indexOf(NOME) + 1)) {
+      expect(readFileSync(resolve(dir, n), "utf8"), n).not.toMatch(/comercial_bolso_(confirmar_pagamento|liberar_por_agente)/);
+    }
     expect(sql).not.toMatch(/\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b|ALTER TABLE public\.(propostas|bolso_|vendas_|commercial_leads)/i);
   });
 

@@ -76,7 +76,7 @@ export function PreviaDaPauta({ caminho, bucket = "mesa", nome, video = false, c
     const observer = new ResizeObserver(medir); observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  return <div ref={area} className={`relative flex min-w-0 items-center justify-center overflow-hidden ${alta ? "h-[min(68vh,760px)] min-h-[320px] shrink-0" : compacta ? "h-64 shrink-0" : "min-h-[240px] flex-1"}`} data-previa-da-pauta="">
+  return <div ref={area} className={`relative flex min-w-0 items-center justify-center overflow-hidden ${alta ? "h-[68vh] max-h-[760px] min-h-[320px] shrink-0" : compacta ? "h-64 shrink-0" : "min-h-[240px] flex-1"}`} data-previa-da-pauta="">
     {url && <button type="button" aria-label="Ver grande" title="Ver grande" onClick={() => setGrande(true)} className="absolute right-2 top-2 z-10 rounded-md bg-card/90 p-2 hover:bg-card"><Maximize2 className="h-4 w-4" aria-hidden="true" /></button>}
     {isError ? <p role="alert">Não foi possível abrir este arquivo.</p> : !url ? <p role="status">Carregando prévia…</p> : video ?
       <video key={url} src={url} controls playsInline preload="metadata" aria-label={nome} className="h-full w-full rounded-lg object-contain" /> :
