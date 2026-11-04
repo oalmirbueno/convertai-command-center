@@ -14,6 +14,20 @@ const PASTA = path.resolve(raiz, arg('pasta', 'workflows'));
 const SOMENTE = arg('somente', null);
 const ORDEM = ['ACQ-00-Erros', 'ACQ-00-Ferramenta-Aceleriq', 'ACQ-01-Contexto-Rituais', 'ACQ-02-Despacho-Aprovado', 'ACQ-03-Post-No-Ar', 'ACQ-04-Conversas-Contexto', 'ACQ-05-Dia-Prioritario-Radar', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas'];
 const ID_LOCAL = { 'ACQ-00-Erros': 'AcqE00ErrosComum', 'ACQ-00-Ferramenta-Aceleriq': 'AcqF00Ferramenta' };
+// Nomes humanos na instância (04/11/2026). O casamento é por nome: sem isto, reimportar duplicaria.
+const NOME_REMOTO = {
+  'ACQ-00-Erros': 'Apoio: registro de falhas',
+  'ACQ-00-Ferramenta-Aceleriq': 'Apoio: ponte com o painel',
+  'ACQ-01-Contexto-Rituais': 'Rituais da semana e dossiê (o Hermes já faz)',
+  'ACQ-02-Despacho-Aprovado': 'Envio das mensagens aprovadas (o Hermes já faz)',
+  'ACQ-03-Post-No-Ar': 'Aviso de post no ar para o cliente',
+  'ACQ-04-Conversas-Contexto': 'Leitura das conversas dos grupos',
+  'ACQ-05-Dia-Prioritario-Radar': 'Lista do dia: o que fazer em cada cliente',
+  'ACQ-06-Comercial-Primeiro-Contato': 'Comercial: primeiro contato no WhatsApp',
+  'ACQ-07-Comercial-Respostas': 'Comercial: respostas no WhatsApp',
+};
+// Atualizar fluxo publicado só com pedido explícito; a nova versão só vale depois de publicar.
+const PERMITIR_ATIVO = process.argv.includes('--permitir-ativo');
 
 function envUser(n) {
   if (process.env[n]) return process.env[n];
@@ -56,18 +70,20 @@ async function main() {
   for (const nome of ORDEM) {
     if (SOMENTE && SOMENTE !== nome && !(nome in ID_LOCAL)) continue;
     const wf = JSON.parse(fs.readFileSync(path.join(PASTA, nome + '.json'), 'utf8'));
-    const existentes = ((await chamar('search_workflows', { query: nome, limit: 20 })).data || []).filter((w) => w.name === nome);
+    const nomeRemoto = NOME_REMOTO[nome] || nome;
+    const existentes = ((await chamar('search_workflows', { query: nomeRemoto, limit: 20 })).data || []).filter((w) => w.name === nomeRemoto);
     let id;
     if (existentes.length) {
       id = existentes[0].id;
-      if (existentes[0].active) throw new Error(nome + ' está ATIVO na homologação; o importador não mexe em workflow ativo.');
+      const vaiAtualizar = !SOMENTE || SOMENTE === nome;
+      if (existentes[0].active && vaiAtualizar && !PERMITIR_ATIVO) throw new Error(nome + ' está ATIVO na homologação; o importador não mexe em workflow ativo.');
     } else {
       const codigo = `import { workflow, sticky } from '@n8n/workflow-sdk';
-const nota = sticky('## ${nome}\\nImportado INATIVO (homologação) por automacoes/n8n/tools/importar-homologacao.mjs. Não publicar sem o plano de ativação.', [], { color: 3 });
-export default workflow('${nome.toLowerCase()}', '${nome}').add(nota);`;
+const nota = sticky('## ${nomeRemoto}\\nImportado INATIVO (homologação) por automacoes/n8n/tools/importar-homologacao.mjs. Não publicar sem o plano de ativação.', [], { color: 3 });
+export default workflow('${nome.toLowerCase()}', '${nomeRemoto}').add(nota);`;
       const v = await chamar('validate_workflow', { code: codigo });
       if (v.valid === false) throw new Error('validação SDK falhou: ' + JSON.stringify(v).slice(0, 500));
-      const c = await chamar('create_workflow_from_code', { code: codigo, name: nome, description: wf.meta.acq.descricao.slice(0, 250), skillsUsed: ['n8n-workflow-patterns', 'n8n-code-javascript', 'n8n-error-handling'] });
+      const c = await chamar('create_workflow_from_code', { code: codigo, name: nomeRemoto, description: wf.meta.acq.descricao.slice(0, 250), skillsUsed: ['n8n-workflow-patterns', 'n8n-code-javascript', 'n8n-error-handling'] });
       id = c.workflowId || c.id || (c.workflow && c.workflow.id);
       if (!id) throw new Error('create_workflow_from_code não devolveu id: ' + JSON.stringify(c).slice(0, 300));
     }
