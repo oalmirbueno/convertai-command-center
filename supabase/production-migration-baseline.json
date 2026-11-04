@@ -2817,6 +2817,14 @@
       "remote_name": "freela_funil_fechados_e_perdidos",
       "remote_statements_sha256": "ca54d0b7357ebba855f5e81739a704f562f4360548f1f72dcaddb064cf4cd0e5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261104184451",
+      "path": "supabase/migrations/20261104184451_chaves_apify.sql",
+      "local_sha256": "5f31ef662ac1593c792d2606690e70beff22df33b7388466fae70136358926d6",
+      "remote_name": "chaves_apify",
+      "remote_statements_sha256": "a796f165080479bc161fbf47ea8119201c897c1b343effd746b48f4a072f2a2f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
