@@ -17,6 +17,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 vi.mock("@/lib/comercial", () => ({ listarCampanhas: () => Promise.resolve([{ id: "11111111-1111-4111-8111-111111111111", name: "Halloween da casa" }]) }));
 
 import MaquinaDeLeads from "@/components/comercial/MaquinaDeLeads";
+import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import { custoDaAvaliacao, estadoDaBusca, telefoneLegivel } from "@/lib/comercial/maquinaApi";
 import { chavesDoContato, fatosDoCandidato, leadDoCandidato, NIVEIS_DE_ENCAIXE, normalizarBusca, notaDoEncaixe, perguntasDoJev } from "../../supabase/functions/comercial-leads/regras";
 
@@ -97,7 +98,7 @@ const corpos = (acao: string) => mock.invoke.mock.calls.filter((c) => c[0] === "
 
 function montar(aoAbrirLead = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(h(QueryClientProvider, { client: qc }, h(MaquinaDeLeads, { aoAbrirLead })));
+  render(h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(MaquinaDeLeads, { aoAbrirLead }))));
   return aoAbrirLead;
 }
 
@@ -161,6 +162,36 @@ describe("Máquina de leads (tela)", () => {
     const noCrm = await within(area).findAllByRole("button", { name: /^No CRM$/ });
     fireEvent.click(noCrm[0]);
     expect(abrir).toHaveBeenCalled();
+  });
+
+  it("Levar ao CRM funciona sem marcar: confirma e leva os novos da tela", async () => {
+    montar();
+    const area = await screen.findByRole("region", { name: /Candidatos de Pizzaria em Curitiba/ });
+    await within(area).findByText("Pizzaria a");
+    const botao = within(area).getByRole("button", { name: /^Levar ao CRM \(1\)$/ }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(false);
+    fireEvent.click(botao);
+    expect(corpos("importar")).toHaveLength(0);
+    fireEvent.click(await screen.findByRole("button", { name: "Levar ao CRM" }));
+    await waitFor(() => expect(corpos("importar")[0]).toMatchObject({ busca_id: BUSCA, candidato_ids: ["a"] }));
+  });
+
+  it("cada linha nova tem o próprio Levar ao CRM, e quem já está no CRM não tem", async () => {
+    montar();
+    const area = await screen.findByRole("region", { name: /Candidatos de Pizzaria em Curitiba/ });
+    fireEvent.click(await within(area).findByRole("button", { name: "Levar Pizzaria a ao CRM" }));
+    await waitFor(() => expect(corpos("importar")[0]).toMatchObject({ candidato_ids: ["a"] }));
+    expect(within(area).queryByRole("button", { name: "Levar Pizzaria b ao CRM" })).toBeNull();
+  });
+
+  it("lead que o banco recusa vira aviso, não silêncio", async () => {
+    const { toast } = await import("sonner");
+    const normal = mock.invoke.getMockImplementation()!;
+    mock.invoke.mockImplementation(async (f: string, a: any) => (a.body.acao === "importar" ? { data: { importados: [], repetidos: [] }, error: null } : normal(f, a)));
+    montar();
+    const area = await screen.findByRole("region", { name: /Candidatos de Pizzaria em Curitiba/ });
+    fireEvent.click(await within(area).findByRole("button", { name: "Levar Pizzaria a ao CRM" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("1 não entrou no CRM", expect.anything()));
   });
 
   it("descarta os marcados e volta pelo filtro Descartados", async () => {

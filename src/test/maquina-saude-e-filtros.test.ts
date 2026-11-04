@@ -69,6 +69,14 @@ describe("tela e motor", () => {
     expect(s).toContain('<RegiaoRolavel rotulo="Lista de candidatos"');
     expect(s).toContain("<Dialog open={novaAberta}");
   });
+  it("Levar ao CRM não fica apagado à toa: sem marcar leva os novos da tela, com confirmação, e tem botão em cada linha", () => {
+    const s = ler("src/components/comercial/MaquinaDeLeads.tsx");
+    expect(s).toContain("const paraLevar = novosEscolhidos.length ? novosEscolhidos : novosNaTela;");
+    expect(s).toContain("disabled={!paraLevar.length || importar.isPending}");
+    expect(s).toContain("if (!novosEscolhidos.length && !(await confirmar({");
+    expect(s).toContain("importar.mutate([c.id])");
+    expect(s).toContain("const faltaram = ids.length - r.importados.length - r.repetidos.length;");
+  });
   it("o teto mostrado é o mesmo do motor, que pede contatos e pula fechados", () => {
     const py = ler("workers/leads/apify.py");
     expect(py).toContain("USD_POR_LUGAR = 0.008");
