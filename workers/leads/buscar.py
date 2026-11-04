@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import time
 from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,6 +22,7 @@ from apify import candidato_do_google, extras_do_lugar, lugares_do_google, notas
 from extrair import chave_do_candidato, eh_celular, extrair_da_pagina, telefone_de_texto
 from fontes import CREDITO_OSM, CacheDeCnpj, Educado, area_da_cidade, candidato_do_osm, dados_do_cnpj, lugares_do_osm
 from nichos import consulta_overpass, nicho_do_texto
+from sinais import fato_da_avaliacao, fato_do_dominio_inexistente, fatos_do_site
 
 FONTES_ACEITAS = ("osm", "google_maps", "sites", "cnpj", "lista")
 
@@ -64,6 +66,8 @@ def enriquecer_pelo_site(c, educado, max_paginas_extra=2):
         return
     fila = [c["site"]]
     vistas = set()
+    lidas = []
+    principal = None
     while fila and len(vistas) < 1 + max_paginas_extra:
         url = fila.pop(0)
         if url in vistas:
@@ -72,8 +76,14 @@ def enriquecer_pelo_site(c, educado, max_paginas_extra=2):
         html, final = educado.pagina(url)
         if html is None:
             c["evidencias"].append(_evidencia("site", "não lido: " + final, "site", url))
+            if len(vistas) == 1 and "resolve host" in final:
+                principal = (None, url)
             continue
         a = extrair_da_pagina(html, final)
+        if len(vistas) == 1:
+            principal = (html, final)
+        else:
+            lidas.append(html)
         if len(vistas) == 1:
             fila.extend(u for u, _ in a["paginas_de_contato"][:max_paginas_extra])
             if c["nome"].startswith("http"):
@@ -88,6 +98,33 @@ def enriquecer_pelo_site(c, educado, max_paginas_extra=2):
         if not c.get("whatsapp") and c.get("telefone") and eh_celular(c["telefone"]):
             # Celular publicado no site: candidato a WhatsApp, marcado como suposição.
             c["evidencias"].append(_evidencia("whatsapp_provavel", c["telefone"], "site", final))
+    _guardar_fatos(c, principal, lidas, educado)
+
+
+def _guardar_fatos(c, principal, lidas, educado):
+    """O que o site mostra vira fato sugerido, com a prova; a equipe confirma antes de virar mensagem."""
+    fatos = []
+    if principal and principal[0] is None:
+        f = fato_do_dominio_inexistente(principal[1], educado.buscar)
+        if f:
+            fatos.append(f)
+    elif principal:
+        html, final = principal
+        https_ok = None
+        if urlparse(final).scheme == "http":
+            try:
+                status, _, depois = educado.buscar("https://%s/" % urlparse(final).netloc, 15)
+                https_ok = status < 400 and urlparse(depois).scheme == "https"
+            except Exception:  # noqa: BLE001
+                https_ok = False
+        fatos.extend(fatos_do_site(html, final, time.gmtime().tm_year, outras_paginas=lidas, https_funciona=https_ok))
+    avaliacao = next((e for e in c["evidencias"] if e.get("campo") == "avaliacoes"), None)
+    if avaliacao:
+        f = fato_da_avaliacao(avaliacao.get("valor"), avaliacao.get("url"))
+        if f:
+            fatos.append(f)
+    for f in fatos:
+        c["evidencias"].append(dict(_evidencia("fato_observado", f["texto"], "site", f["url"]), detalhe=f["prova"]))
 
 
 def candidato_de_lugar_do_google(item):

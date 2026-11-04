@@ -156,6 +156,24 @@ export function chavesDoContato(c: { whatsapp?: string | null; telefone?: string
   return { fone: fone.length === 8 ? fone : "", email: String(c.email || "").trim().toLowerCase(), nome };
 }
 
+/** Os fatos que o worker viu no site viram sugestão no lead: a equipe confirma antes de o Mercúrio usar. */
+export function fatosDoCandidato(c: CandidatoParaImportar, leadId: string) {
+  const lista = Array.isArray(c.evidencias) ? (c.evidencias as Array<Record<string, unknown>>) : [];
+  return lista
+    .filter((e) => e && e.campo === "fato_observado" && typeof e.valor === "string" && e.valor.trim())
+    .slice(0, 5)
+    .map((e) => ({
+      lead_id: leadId,
+      campo: "presenca_digital",
+      valor: String(e.valor).trim().slice(0, 1000),
+      evidencia: "pagina_citada",
+      detalhe: `Lido pela Máquina de leads. ${String(e.detalhe || "")}`.trim().slice(0, 500),
+      fonte_url: typeof e.url === "string" ? e.url.slice(0, 500) : null,
+      situacao: "sugestao",
+      operador_slug: "mercurio",
+    }));
+}
+
 /** O lead novo do CRM (commercial_leads) a partir do candidato. O contexto vai na qualificação, com a fonte. */
 export function leadDoCandidato(c: CandidatoParaImportar, busca: { id: string; nicho: string; cidade: string; uf: string | null; campanha_id: string | null }, o: { mercurio: boolean; criadoPor: string | null }) {
   const contato = c.whatsapp || c.telefone || null;

@@ -11,6 +11,6 @@
     "worker": "node principal.ts",
     "uma-vez": "node principal.ts --uma-vez",
     "python": "python -m pip install -r requirements.txt",
-    "teste": "node --test testes/regras.test.ts && python testes/test_leads.py && python testes/test_apify.py"
+    "teste": "node --test testes/regras.test.ts && python testes/test_leads.py && python testes/test_apify.py && python testes/test_sinais.py"
   }
 }
