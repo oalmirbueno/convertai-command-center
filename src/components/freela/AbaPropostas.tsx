@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos,
+  CampoDeBusca, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos,
   botao, campo, campoTexto, juntar, texto,
 } from "@/components/sistema";
 import { useFreelaContatos, useFreelaProjetos, useFreelaPropostas } from "./dadosFreela";
@@ -248,14 +248,7 @@ export default function AbaPropostas() {
   return (
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
       <div className="mb-2 flex min-w-0 shrink-0 flex-wrap items-center gap-2">
-        <input
-          type="search"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por título ou contato"
-          aria-label="Buscar proposta"
-          className={juntar(campo, "sm:max-w-xs")}
-        />
+        <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar por título ou contato" rotulo="Buscar no funil" className="min-w-[180px] flex-1 sm:max-w-[320px]" />
         <select value={filtroContato} onChange={(e) => setFiltroContato(e.target.value)} className={juntar(campo, "w-auto")} aria-label="Filtrar por contato">
           <option value="todos">Todos os contatos</option>
           {(contatos || []).map((c) => (
@@ -312,10 +305,10 @@ export default function AbaPropostas() {
               <input type="date" value={perda.retomar} onChange={(e) => setPerda({ ...perda, retomar: e.target.value })} className={campo} />
             </CampoDeFormulario>
           </GrupoDeCampos>
-          <div className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="-mb-2 gap-2 py-2 sm:space-x-0">
             <button type="button" onClick={() => setPerdendo(null)} className={botao.secundario}>Cancelar</button>
             <button type="button" onClick={() => void confirmarPerda()} className={botao.primario}>Marcar como perdida</button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -374,12 +367,12 @@ export default function AbaPropostas() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={campoTexto} />
             </CampoDeFormulario>
           </GrupoDeCampos>
-          <div className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="-mb-2 gap-2 py-2 sm:space-x-0">
             <button type="button" onClick={() => setDialogAberto(false)} className={botao.secundario}>Cancelar</button>
             <button type="button" onClick={() => void salvar()} disabled={salvando} className={botao.primario}>
               {salvando ? "Salvando..." : editando ? "Salvar" : "Criar proposta"}
             </button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

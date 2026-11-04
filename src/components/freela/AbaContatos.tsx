@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Archive, ArchiveRestore, KanbanSquare, Pencil, Plus, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto,
   botao, campo, campoTexto, etiqueta, juntar, texto,
@@ -291,12 +291,12 @@ export default function AbaContatos() {
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={campoTexto} />
             </CampoDeFormulario>
           </GrupoDeCampos>
-          <div className="mt-4 flex justify-end gap-2">
+          <DialogFooter className="-mb-2 gap-2 py-2 sm:space-x-0">
             <button type="button" onClick={() => setDialogAberto(false)} className={botao.secundario}>Cancelar</button>
             <button type="button" onClick={() => void salvar()} disabled={salvando} className={botao.primario}>
               {salvando ? "Salvando..." : editando ? "Salvar" : "Criar contato"}
             </button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

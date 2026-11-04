@@ -57,7 +57,7 @@ describe("quadro do funil", () => {
   it("proposta que virou cliente não oferece de novo e não arrasta", () => {
     montar([proposta("a", "aceita", { convertida_em: "2026-11-04T10:00:00Z" })]);
     expect(screen.queryByRole("button", { name: "Transformar em cliente" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Arrastar/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Abrir proposta Trabalho a" }).hasAttribute("data-arrasta")).toBe(false);
     expect(screen.getByText("Virou cliente")).toBeTruthy();
   });
 
@@ -123,10 +123,32 @@ describe("caixinha separada no valor geral", () => {
   });
 });
 
+describe("os dois funis usam o mesmo quadro", () => {
+  it("colunas, arrasto e moldura do cartão moram num lugar só", () => {
+    for (const funil of ["src/components/freela/FunilDasPropostas.tsx", "src/components/comercial/FunilKanban.tsx"]) {
+      const s = ler(funil);
+      expect(s).toContain("<QuadroKanban");
+      expect(s).toContain("<ColunaDoQuadro");
+      expect(s).toContain("classesDoCartao(");
+      expect(s).not.toContain("DndContext");
+    }
+  });
+});
+
+describe("janelas enquadradas", () => {
+  it("nunca maiores que a tela, sem vazar para o lado", () => {
+    for (const janela of ["src/components/ui/dialog.tsx", "src/components/ui/alert-dialog.tsx"]) {
+      const s = ler(janela);
+      expect(s).toContain("max-h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden [&>*]:min-w-0");
+      expect(s).toContain("w-[calc(100vw-2rem)]");
+    }
+  });
+});
+
 describe("telas sem rolagem infinita", () => {
   it("cada aba rola por dentro, e o funil por coluna", () => {
     const s = ler("src/pages/AdminFreela.tsx");
     expect(s).toContain('<AreaDeTrabalho principalRolavel={aba !== "propostas"}');
-    expect(ler("src/components/freela/FunilDasPropostas.tsx")).toContain("<RegiaoRolavel");
+    expect(ler("src/components/sistema/QuadroKanban.tsx")).toContain("<RegiaoRolavel");
   });
 });

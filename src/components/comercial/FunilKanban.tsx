@@ -1,18 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+import { useDraggable, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDownWideNarrow, Bot, ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, Thermometer, ThumbsDown, Trophy } from "lucide-react";
 import { toast } from "sonner";
@@ -21,13 +9,13 @@ import {
   AreaDeTrabalho,
   CampoDeFormulario,
   Carregando,
+  ColunaDoQuadro,
   EstadoVazio,
-  Etapas,
-  RegiaoRolavel,
+  QuadroKanban,
   SeletorCompacto,
   botao,
   campo,
-  foco,
+  classesDoCartao,
   juntar,
   texto,
 } from "@/components/sistema";
@@ -125,6 +113,9 @@ export const passaNoFiltroDeQuemAtende = (lead: { agente_slug?: string | null },
 /** Lista vazia estável: um `[]` novo a cada render refaria as temperaturas. */
 const SEM_EVENTOS: EventoDoLead[] = [];
 
+/** 04/11/2026: Ganho e Perdido são colunas, como Fechados e Perdidos no funil do Freela. */
+const COLUNAS_DO_QUADRO: EstagioId[] = [...ESTAGIOS_ABERTOS, "ganho", "perdido"];
+
 export default function FunilKanban({
   leads,
   atividades,
@@ -155,7 +146,7 @@ export default function FunilKanban({
   // No celular o quadro mostra UMA etapa por vez, escolhida nas Etapas: seis
   // colunas estreitas rolando de lado nao se leem em 380px de tela.
   const [etapaNoCelular, setEtapaNoCelular] = useEstadoDoComercial<EstagioId>("funil:etapa-no-celular", ESTAGIOS_ABERTOS[0], {
-    validar: umaDe(ESTAGIOS_ABERTOS),
+    validar: umaDe(COLUNAS_DO_QUADRO),
   });
   const [fechamento, setFechamento] = useState<{
     lead: Lead;
@@ -163,12 +154,6 @@ export default function FunilKanban({
   } | null>(null);
   // Guarda o clique: sem isto, soltar o cartão no mesmo lugar abre o lead.
   const acabouDeArrastar = useRef(false);
-
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
-    useSensor(KeyboardSensor),
-  );
 
   const agoraIso = new Date().toISOString();
   const termo = busca.trim().toLowerCase();
@@ -187,7 +172,7 @@ export default function FunilKanban({
 
   const porEstagio = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
-    for (const estagio of ESTAGIOS_ABERTOS) mapa.set(estagio, []);
+    for (const estagio of COLUNAS_DO_QUADRO) mapa.set(estagio, []);
     for (const lead of leads) {
       if (!mapa.has(lead.stage)) continue;
       if (classe === "sem" ? lead.classe !== null : classe !== "todas" && lead.classe !== classe) {
@@ -286,9 +271,8 @@ export default function FunilKanban({
     await aplicarMovimento(lead, destino as EstagioId);
   };
 
-  // Só os abertos contam: o quadro só mostra o que ainda está em jogo, e
-  // contador que soma ganho e perdido promete cartão que não aparece.
-  const abertos = leads.filter((lead) => (ESTAGIOS_ABERTOS as string[]).indexOf(lead.stage) >= 0);
+  // O contador promete o que o quadro mostra: desde 04/11/2026 Ganho e Perdido são colunas e também contam.
+  const abertos = leads.filter((lead) => (COLUNAS_DO_QUADRO as string[]).indexOf(lead.stage) >= 0);
 
   // A régua da visão: cada opção separa uma classe, e "sem classe" empurra
   // para a mão o que ainda não foi confirmado: não confirmado é estado
@@ -397,79 +381,36 @@ export default function FunilKanban({
             }
           />
         ) : (
-          <DndContext sensors={sensors} onDragStart={aoIniciar} onDragEnd={aoTerminar}>
-            {/* lg:pb-12: o botão flutuante do painel (canto de baixo) não cobre o alvo de soltar da última coluna. */}
-            <div className="relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1 lg:pb-12">
-              {/* A faixa de fechar só existe enquanto há cartão na mão. No
-                  computador ela cobre o topo das colunas (nada se mexe de
-                  lugar durante o arrasto); no celular gruda no topo da tela. */}
-              {arrastando && (
-                <div className="sticky top-2 z-20 mb-2 grid grid-cols-2 gap-2 lg:absolute lg:inset-x-0 lg:top-0 lg:mb-0">
-                  <AlvoDeFechamento
-                    id="ganho"
-                    rotulo="Soltar para ganhar"
-                    icone={<Trophy className="mr-2 h-4 w-4" aria-hidden="true" />}
-                    tom="success"
-                  />
-                  <AlvoDeFechamento
-                    id="perdido"
-                    rotulo="Soltar para perder"
-                    icone={<ThumbsDown className="mr-2 h-4 w-4" aria-hidden="true" />}
-                    tom="destructive"
-                  />
-                </div>
-              )}
-
-              {/* Celular: uma etapa por vez, com a contagem de cada uma.
-                  16/10/2026: a faixa gruda no topo enquanto a lista rola, de
-                  ponta a ponta (-mx-4 = respiro da página) e com toque de 44 px. */}
-              <Etapas
-                className="sticky top-0 z-10 -mx-4 mb-2 border-b border-border bg-background px-4 sm:hidden [&_button]:h-11"
-                rotulo="Etapas do funil"
-                itens={ESTAGIOS_ABERTOS.map((estagio) => ({
-                  valor: estagio,
-                  rotulo: rotuloDoEstagio(estagio),
-                  contador: (porEstagio.get(estagio) || []).length,
-                }))}
-                valor={etapaNoCelular}
-                onEscolher={(v) => setEtapaNoCelular(v as EstagioId)}
+          <QuadroKanban
+            aoIniciar={aoIniciar}
+            aoTerminar={(e) => void aoTerminar(e)}
+            aoCancelar={() => setArrastando(null)}
+            etapas={COLUNAS_DO_QUADRO.map((estagio) => ({
+              valor: estagio,
+              rotulo: rotuloDoEstagio(estagio),
+              contador: (porEstagio.get(estagio) || []).length,
+            }))}
+            etapaNoCelular={etapaNoCelular}
+            aoEscolherEtapa={(v) => setEtapaNoCelular(v as EstagioId)}
+            fantasma={arrastando ? { titulo: arrastando.name, apoio: arrastando.company } : null}
+          >
+            {COLUNAS_DO_QUADRO.map((estagio) => (
+              <Coluna
+                key={estagio}
+                visivelNoCelular={etapaNoCelular === estagio}
+                estagio={estagio}
+                leads={porEstagio.get(estagio) || []}
+                agendaDe={agendaDe}
+                temperaturaDe={temperaturaDe}
+                resumoDe={resumoDe}
+                arrastandoAlgo={Boolean(arrastando)}
+                onAbrir={(lead) => {
+                  if (acabouDeArrastar.current) return;
+                  onAbrir(lead);
+                }}
               />
-
-              <div className="min-w-0 sm:-mx-1 sm:flex sm:overflow-x-auto sm:px-1 sm:pb-2 lg:min-h-0 lg:flex-1 sm:[&>*+*]:ml-3 [scrollbar-width:thin]">
-                {ESTAGIOS_ABERTOS.map((estagio) => (
-                  <Coluna
-                    key={estagio}
-                    visivelNoCelular={etapaNoCelular === estagio}
-                    estagio={estagio}
-                    leads={porEstagio.get(estagio) || []}
-                    agendaDe={agendaDe}
-                    temperaturaDe={temperaturaDe}
-                    resumoDe={resumoDe}
-                    arrastandoAlgo={Boolean(arrastando)}
-                    onAbrir={(lead) => {
-                      if (acabouDeArrastar.current) return;
-                      onAbrir(lead);
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <DragOverlay dropAnimation={null}>
-              {arrastando && (
-                <div className="w-[230px] rotate-2 rounded-md border border-primary bg-card p-2.5 shadow-sm">
-                  <p className="truncate text-[13px] font-medium text-foreground">
-                    {arrastando.name}
-                  </p>
-                  {arrastando.company && (
-                    <p className={juntar(texto.auxiliar, "truncate")}>
-                      {arrastando.company}
-                    </p>
-                  )}
-                </div>
-              )}
-            </DragOverlay>
-          </DndContext>
+            ))}
+          </QuadroKanban>
         )}
       </AreaDeTrabalho>
 
@@ -516,7 +457,6 @@ function Coluna({
   arrastandoAlgo: boolean;
   onAbrir: (lead: Lead) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: estagio });
   const emJogo = leads.reduce(
     (soma, lead) => soma + lead.monthly_value * 12 + lead.one_off_value,
     0,
@@ -531,66 +471,32 @@ function Coluna({
   const rotulo = rotuloDoEstagio(estagio);
 
   return (
-    <section
-      ref={setNodeRef}
-      aria-label={rotulo}
-      // A lista de cartões rola por dentro da coluna (de 1024 px para cima):
-      // com dez leads em "Novo" a coluna empurrava a pagina inteira e as
-      // outras sumiam da tela.
-      className={juntar(
-        visivelNoCelular ? "flex" : "hidden",
-        "min-h-[12rem] w-full min-w-0 flex-col rounded-lg border p-1.5 transition-colors sm:flex sm:w-[260px] sm:shrink-0 lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1",
-        // 16/10/2026: no celular a coluna é só a lista (sem moldura nem altura mínima).
-        "max-sm:min-h-0 max-sm:p-0",
-        isOver ? "border-primary bg-primary/[0.06]" : arrastandoAlgo ? "border-dashed border-border" : "border-transparent",
-      )}
+    <ColunaDoQuadro
+      id={estagio}
+      rotulo={rotulo}
+      ajuda={ajuda}
+      contagem={leads.length}
+      resumo={
+        estagio === "ganho" || estagio === "perdido"
+          ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
+          : `${emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}${leads.length > 0 ? ` · ${qualificadas}/${leads.length} qualificadas` : ""}`
+      }
+      visivelNoCelular={visivelNoCelular}
+      arrastandoAlgo={arrastandoAlgo}
+      memoria={`comercial:funil:${estagio}`}
+      vazio="Nenhum lead nesta etapa."
     >
-      {/* No celular o nome e a contagem já estão nas Etapas logo acima. */}
-      <div className="hidden h-7 shrink-0 items-center px-1 sm:flex">
-        <h3 title={ajuda} className={juntar(texto.rotulo, "min-w-0 truncate text-foreground")}>
-          {rotulo}
-        </h3>
-        <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{leads.length}</span>
-      </div>
-      {/* 16/10/2026: no celular o placar da etapa sai (menos número na tela). */}
-      <p className={juntar(texto.auxiliar, "shrink-0 truncate px-1 tabular-nums max-sm:hidden")}>
-        {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}
-        {leads.length > 0 && ` · ${qualificadas}/${leads.length} qualificadas`}
-      </p>
-      {leads.length === 0 && (
-        <p className={juntar(texto.auxiliar, "py-8 text-center sm:hidden")}>Nenhum lead nesta etapa.</p>
-      )}
-
-      <RegiaoRolavel
-        rotulo={`Leads em ${rotulo}`}
-        memoria={`comercial:funil:${estagio}`}
-        className="mt-2 space-y-1.5 lg:pr-1 max-sm:mt-0 max-sm:space-y-2"
-      >
-        {leads.map((lead) => (
-          <Cartao
-            key={lead.id}
-            lead={lead}
-            agenda={agendaDe(lead)}
-            temperatura={temperaturaDe(lead)}
-            resumo={resumoDe(lead)}
-            onAbrir={onAbrir}
-          />
-        ))}
-      </RegiaoRolavel>
-      {/* O alvo de soltar fica fora da rolagem: sempre visivel no pe da coluna.
-          16/10/2026: no celular sai (lá se move pela faixa de ganho/perda ou
-          pelo "Mover para" dentro do lead). */}
-      <div className="mt-1.5 shrink-0 max-sm:hidden">
-        <div
-          className={juntar(
-            "rounded-md border border-dashed px-2 py-2 text-center text-[11px] transition-colors",
-            isOver ? "border-primary text-primary" : "border-border text-muted-foreground",
-          )}
-        >
-          {isOver ? "soltar aqui" : leads.length === 0 ? "vazio" : "arraste para cá"}
-        </div>
-      </div>
-    </section>
+      {leads.map((lead) => (
+        <Cartao
+          key={lead.id}
+          lead={lead}
+          agenda={agendaDe(lead)}
+          temperatura={temperaturaDe(lead)}
+          resumo={resumoDe(lead)}
+          onAbrir={onAbrir}
+        />
+      ))}
+    </ColunaDoQuadro>
   );
 }
 
@@ -613,7 +519,8 @@ function Cartao({
     id: `lead:${lead.id}`,
     data: { lead },
   });
-  const atrasado = estaAtrasado(agenda);
+  const fechado = lead.stage === "ganho" || lead.stage === "perdido";
+  const atrasado = !fechado && estaAtrasado(agenda);
 
   return (
     <div
@@ -627,12 +534,7 @@ function Cartao({
       onKeyDown={(evento) => {
         if (evento.key === "Enter") onAbrir(lead);
       }}
-      className={juntar(
-        "w-full cursor-grab rounded-md border bg-card p-2.5 text-left transition-colors active:cursor-grabbing max-sm:rounded-lg max-sm:px-3",
-        foco,
-        isDragging && "opacity-40",
-        atrasado ? "border-warning/50" : "border-border hover:border-muted-foreground/30",
-      )}
+      className={classesDoCartao(isDragging, atrasado)}
     >
       {/* 16/10/2026: no celular o cartão vira item de lista de app: inicial
           num círculo, nome, uma linha de apoio (empresa ou valor) e o sinal à
@@ -682,7 +584,9 @@ function Cartao({
           {/* O compromisso marcado, não uma anotação: é o que diz se este
               lead tem alguém cuidando dele. Com o quando, para não precisar
               abrir o lead para saber se é hoje. */}
-          {agenda.proxima ? (
+          {fechado ? (
+            lead.lost_reason ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground max-sm:hidden">{lead.lost_reason}</p> : null
+          ) : agenda.proxima ? (
             <p
               className={juntar(
                 "mt-1 truncate text-[11px] leading-4 max-sm:hidden",
@@ -709,39 +613,6 @@ function Cartao({
           )}
         </span>
       </div>
-    </div>
-  );
-}
-
-/* ──────────────────────── Faixa de ganho e perda ────────────────────────── */
-
-function AlvoDeFechamento({
-  id,
-  rotulo,
-  icone,
-  tom,
-}: {
-  id: "ganho" | "perdido";
-  rotulo: string;
-  icone: React.ReactNode;
-  tom: "success" | "destructive";
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  const cor =
-    tom === "success"
-      ? isOver
-        ? "border-success bg-success text-white"
-        : "border-success/50 bg-card text-success"
-      : isOver
-        ? "border-destructive bg-destructive text-white"
-        : "border-destructive/50 bg-card text-destructive";
-  return (
-    <div
-      ref={setNodeRef}
-      className={juntar("flex h-12 items-center justify-center rounded-md border-2 border-dashed text-[13px] font-semibold transition-colors", cor)}
-    >
-      {icone}
-      {rotulo}
     </div>
   );
 }

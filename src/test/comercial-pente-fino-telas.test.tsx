@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Lead } from "@/lib/comercial";
 
 afterEach(cleanup);
@@ -75,7 +75,7 @@ function comProvedores(no: React.ReactNode) {
 }
 
 describe("10. os contadores dos filtros do funil contam só o que o quadro mostra", () => {
-  it("com 1 aberto, 1 ganho e 1 perdido, 'Todas' e 'Todos' dizem 1", () => {
+  it("com 1 aberto, 1 ganho e 1 perdido, 'Todas' e 'Todos' dizem 3 (as três estão no quadro)", () => {
     comProvedores(
       <FunilKanban
         leads={[
@@ -95,17 +95,20 @@ describe("10. os contadores dos filtros do funil contam só o que o quadro mostr
     );
     const filtros = screen.getByRole("group", { name: "Filtros do funil" });
     // Quem atende (lista): o botão mostra a opção escolhida e o contador dela.
-    expect(within(filtros).getByRole("button", { name: "Quem atende: Todos" }).textContent).toBe("Todos1");
+    expect(within(filtros).getByRole("button", { name: "Quem atende: Todos" }).textContent).toBe("Todos3");
     // Classe: a opção "Todas" (segmentada ou em lista) mostra o contador.
     const classe = within(filtros).queryByRole("tablist", { name: "Classe" });
     const todas = classe
       ? within(classe).getByRole("tab", { name: /Todas/ })
       : within(filtros).getByRole("button", { name: /^Classe:/ });
-    expect(todas.textContent).toBe("Todas1");
+    expect(todas.textContent).toBe("Todas3");
   });
 });
 
 describe("7. a configuração do Mercúrio não mostra o padrão como real", () => {
+  // O Mercúrio nasce recolhido (04/11/2026); aqui a pessoa já o deixou aberto.
+  beforeEach(() => window.localStorage.setItem("area:comercial-caixa-mercurio:recolhida", "0"));
+
   it("leitura que falha mostra o erro e trava campos e Salvar", async () => {
     config.ler.mockRejectedValue(new Error("falhou"));
     comProvedores(<CaixaDoComercial leads={[]} onAbrirLead={() => {}} />);

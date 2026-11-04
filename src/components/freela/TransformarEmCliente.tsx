@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CampoDeFormulario, GrupoDeCampos, SeletorCompacto, botao, campo, juntar, texto } from "@/components/sistema";
 import { generatePassword } from "@/components/admin/CreateClientModal";
 import { PROJECT_TYPES } from "@/components/admin/CreateProjectModal";
@@ -145,7 +145,7 @@ export default function TransformarEmCliente({ proposta, contato, onFechar }: {
 
   return (
     <Dialog open={!!proposta} onOpenChange={(aberto) => { if (!aberto && !salvando) onFechar(); }}>
-      <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Transformar em cliente</DialogTitle>
           <DialogDescription>
@@ -226,12 +226,12 @@ export default function TransformarEmCliente({ proposta, contato, onFechar }: {
           Enviar agora o convite de acesso por e-mail
         </label>
 
-        <div className="mt-4 flex justify-end gap-2">
+        <DialogFooter className="-mb-2 gap-2 py-2 sm:space-x-0">
           <button type="button" onClick={onFechar} disabled={salvando} className={botao.secundario}>Cancelar</button>
           <button type="button" onClick={() => void confirmar()} disabled={salvando} className={botao.primario}>
             {salvando ? "Transformando..." : "Transformar em cliente"}
           </button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
