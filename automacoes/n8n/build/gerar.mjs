@@ -20,7 +20,7 @@ if (arg('jev-url', null)) AMBIENTES.ambientes[AMBIENTE].jev_url = arg('jev-url')
 export const IDS = {
   f00: 'AcqF00Ferramenta', e00: 'AcqE00ErrosComum', w01: 'Acq01ContextoRit', w02: 'Acq02DespachoApr',
   w03: 'Acq03PostNoArPub', w04: 'Acq04ConversasCt', w05: 'Acq05DiaPrioRadr',
-  w06: 'Acq06ComercialPC', w07: 'Acq07ComercialRs',
+  w06: 'Acq06ComercialPC', w07: 'Acq07ComercialRs', w08: 'Acq08ComercialRp',
 };
 // Credenciais só por referência (nome). Os ids são os da instância local de teste; na importação
 // em outra instância o n8n pede para escolher a credencial pelo nome.
@@ -1000,38 +1000,87 @@ n.status.forEach((s) => {
 });
 return out;`);
   const rv = pg(wf, 'Reivindicar mensagens', SQL_EVENTO_E_INCIDENTE(W, false));
+  const sm = code(wf, 'Separar mensagens', ['comercial', 'wf07'], `
+const sep = $('Conferir e separar').all();
+const out = [];
+$input.all().forEach((i, idx) => { const s = sep[idx].json; if (s.tipo === 'mensagem' && i.json.evento && i.json.evento.novo === true) out.push({ json: { m: s.m, _ctx: s._ctx, audio: !!s.m.midia_id && (s.m.midia === 'audio' || s.m.midia === 'voice'), url_midia: String(acqComCfg(CFG).graph_url).replace(/\\/+$/, '') + '/' + s.m.midia_id }, pairedItem: { item: idx } }); });
+return out;`);
+  const ea = se(wf, 'É áudio?', '={{ $json.audio === true }}');
+  const bm = wf.no('Achar o áudio na Meta', 'n8n-nodes-base.httpRequest', 4.5, { method: 'GET', url: '={{ $json.url_midia }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth', options: { timeout: 20000 } },
+    { credentials: CRED.meta, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 2000 }, 2);
+  const ba = wf.no('Baixar o áudio', 'n8n-nodes-base.httpRequest', 4.5, { method: 'GET', url: '={{ $json.url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth', options: { timeout: 30000, response: { response: { responseFormat: 'file', outputPropertyName: 'data' } } } },
+    { credentials: CRED.meta, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 2000 }, 2);
+  const pt = code(wf, 'Pedir transcrição', ['comercial', 'wf07'], `
+const out = [];
+const itens = $input.all();
+for (let idx = 0; idx < itens.length; idx++) {
+  let b64 = null;
+  try { b64 = (await this.helpers.getBinaryDataBuffer(idx, 'data')).toString('base64'); } catch (x) { b64 = null; }
+  out.push({ json: { llm: b64 ? acq07PedidoTranscricao(b64, CFG) : { model: acqComCfg(CFG).transcricao_modelo, messages: [{ role: 'user', content: 'Responda só: [inaudível]' }], max_tokens: 5 }, llm_url: acqComCfg(CFG).llm_url }, pairedItem: { item: idx } });
+}
+return out;`, {}, 2);
+  const tr = wf.no('Transcrever o áudio', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Mercurio (n8n)' }] },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
+    options: { timeout: 60000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
+  }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 }, 2);
+  const lt = code(wf, 'Ler transcrição', ['comercial', 'wf07'], `
+const orig = $('Separar mensagens').all().filter((x) => x.json.audio === true);
+return $input.all().map((i, idx) => {
+  const b = orig[idx].json;
+  const t = acq07LerTranscricao(i.json);
+  return { json: { m: Object.assign({}, b.m, { texto: t, transcrito: !!t }), _ctx: b._ctx }, pairedItem: { item: idx } };
+});`, {}, 2);
+  const gt = code(wf, 'Guardar texto', ['comercial', 'wf07'], `
+return $input.all().map((i, idx) => ({ json: { pg: acqComPgEvento(acq07EventoTexto(i.json.m, i.json._ctx), null, AMBIENTE, { m: i.json.m, de8: acq07De8(i.json.m.de), _ctx: i.json._ctx }) }, pairedItem: { item: idx } }));`);
+  const gx = pg(wf, 'Gravar texto', SQL_EVENTO_E_INCIDENTE(W, true));
+  const es = wf.no('Esperar a pessoa terminar', 'n8n-nodes-base.wait', 1.1, { amount: 15, unit: 'seconds' }, { webhookId: 'acq07-espera-0000-4000-a000-000000000007', notes: 'Quem manda três mensagens seguidas recebe uma resposta só. Se chegar outra nesse tempo, a execução da mais nova responde por todas.' });
+  const jm = wf.no('Juntar mensagens', 'n8n-nodes-base.postgres', 2.7, { operation: 'executeQuery',
+    query: `select (select e.entity_id from acq_n8n.eventos e where e.workflow_id = 'ACQ-07' and e.tipo = 'comercial_entrada_recebida' and e.payload->>'de8' = $1 order by e.occurred_at desc, e.entity_id desc limit 1) as mais_nova,
+  coalesce((select json_agg(t.payload order by t.occurred_at) from acq_n8n.eventos t where t.workflow_id = 'ACQ-07' and t.tipo = 'comercial_entrada_texto' and t.payload->>'de8' = $1
+    and t.occurred_at > ($2::timestamptz - interval '30 minutes')
+    and not exists (select 1 from acq_n8n.eventos d where d.workflow_id = 'ACQ-07' and d.tipo like 'comercial_entrada_%' and d.payload ? 'wamids' and d.payload->'wamids' ? (t.payload->'m'->>'wamid'))), '[]'::json) as mensagens,
+  $3::jsonb as ctx`,
+    options: { queryReplacement: '={{ [$json.ctx.de8, $json.ctx.m.em, JSON.stringify($json.ctx)] }}' } },
+    { credentials: CRED.pg, retryOnFail: true, maxTries: 3, waitBetweenTries: 2000 });
   const pr = code(wf, 'Preparar rodada', ['comercial', 'wf07'], `
 ${PEDIDO(W)}
-const sep = $('Conferir e separar').all();
-const ctx = sep[0].json._ctx;
-const novas = [];
-$input.all().forEach((i, idx) => { const s = sep[idx].json; if (s.tipo === 'mensagem' && i.json.evento && i.json.evento.novo === true) novas.push(s.m); });
-if (!novas.length) return [];
-return [{ json: pedido({ ref: 'fila', ferramenta: 'aceleriq_comercial_fila', argumentos: { operador: acqComCfg(CFG).operador, limit: 100 } }, ctx.run_id,
-  { _ctx: Object.assign({}, ctx, { mensagens: novas }) }) }];`);
+const out = [];
+$input.all().forEach((i, idx) => {
+  const l = acq07Lote(i.json.ctx.m, { mais_nova: i.json.mais_nova, mensagens: i.json.mensagens });
+  if (!l.seguir) return;
+  const ctx = i.json.ctx._ctx;
+  out.push({ json: pedido({ ref: 'fila', ferramenta: 'aceleriq_comercial_fila', argumentos: { operador: acqComCfg(CFG).operador, limit: 100 } }, ctx.run_id, { _ctx: Object.assign({}, ctx, { m: l.m }) }), pairedItem: { item: idx } });
+});
+return out.slice(0, 1);`);
   const lf = ferramenta(wf, 'Ler fila do Mercúrio');
-  const re = code(wf, 'Registrar entradas', ['comercial', 'wf07'], `
+  const pl = code(wf, 'Pedir lead', ['comercial', 'wf07'], `
 ${PEDIDO(W)}
 const ctx = $('Preparar rodada').first().json._ctx;
 const f = $input.first().json;
 const fila = f.ok ? f.resultado : null;
-return ctx.mensagens.map((m) => {
-  const lead = fila ? acq07AcharLead(m, fila) : null;
-  const p = acq07PedidoEntrada(m, lead, CFG);
-  return { json: p ? pedido(p, ctx.run_id) : pedido({ ref: 'entrada|' + m.wamid + '|sem_lead', ferramenta: 'nenhuma', argumentos: {} }, ctx.run_id) };
-});`);
+const noFila = fila ? acq07AcharLead(ctx.m, fila) : null;
+return [{ json: pedido(noFila || !fila ? { ref: 'lead|' + ctx.m.wamid, ferramenta: 'nenhuma', argumentos: {} } : acq07PedidoAcharLead(ctx.m, CFG), ctx.run_id) }];`);
+  const al = ferramenta(wf, 'Achar ou criar lead');
+  const re = code(wf, 'Registrar entradas', ['comercial', 'wf07'], `
+${PEDIDO(W)}
+const ctx = $('Preparar rodada').first().json._ctx;
+const f = $('Ler fila do Mercúrio').first().json;
+const fila = f.ok ? f.resultado : null;
+const lead = (fila ? acq07AcharLead(ctx.m, fila) : null) || acq07LeadDoResultado($input.first().json, ctx.m);
+const peds = acq07PedidoEntrada(ctx.m, lead);
+return (peds.length ? peds : [{ ref: 'entrada|' + ctx.m.wamid + '|sem_lead', ferramenta: 'nenhuma', argumentos: {} }]).map((p) => ({ json: pedido(p, ctx.run_id) }));`);
   const ge = ferramenta(wf, 'Gravar entradas no painel');
   const pj = code(wf, 'Pedido ao Jev', ['comercial', 'wf07'], `
 const ctx = $('Preparar rodada').first().json._ctx;
 const f = $('Ler fila do Mercúrio').first().json;
 const fila = f.ok ? f.resultado : null;
+const lead = (fila ? acq07AcharLead(ctx.m, fila) : null) || acq07LeadDoResultado($('Achar ou criar lead').first().json, ctx.m);
 const regs = $input.all().map((i) => i.json);
-return ctx.mensagens.map((m, idx) => {
-  const lead = fila ? acq07AcharLead(m, fila) : null;
-  const reg = regs.filter((r) => String(r.ref || '') === 'entrada|' + m.wamid)[0];
-  return { json: { mensagem: m, lead: lead, registro_entrada: reg ? { ok: reg.ok === true, simulado: reg.simulado === true, resultado: reg.resultado || null, erro: reg.erro || null } : null,
-    jev: acq07PedidoJev(m, lead), jev_url: CFG.jev_url }, pairedItem: { item: idx } };
-});`);
+const reg = regs.filter((r) => String(r.ref || '').indexOf('entrada|' + ctx.m.wamid) === 0)[0];
+return [{ json: { mensagem: ctx.m, lead: lead, registro_entrada: reg && reg.ferramenta !== 'nenhuma' ? { ok: reg.ok === true, simulado: reg.simulado === true, resultado: reg.resultado || null, erro: reg.erro || null } : null,
+  jev: acq07PedidoJev(ctx.m, lead), jev_url: CFG.jev_url } }];`);
   const jv = wf.no('Classificar com Jev', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.jev_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
     sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.jev) }}',
@@ -1039,17 +1088,14 @@ return ctx.mensagens.map((m, idx) => {
   }, { credentials: CRED.jev, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 3, waitBetweenTries: 3000 });
   const dc = code(wf, 'Decidir', ['comercial', 'wf07'], `
 const ctx = $('Preparar rodada').first().json._ctx;
-const base = $('Pedido ao Jev').all();
+const b = $('Pedido ao Jev').first().json;
 const f = $('Ler fila do Mercúrio').first().json;
 const fila = f.ok ? f.resultado : null;
-return $input.all().map((i, idx) => {
-  const b = base[idx].json;
-  const julg = acq07LerJev(i.json);
-  const reg = b.registro_entrada && b.registro_entrada.ok && !b.registro_entrada.simulado ? b.registro_entrada.resultado : null;
-  const d = acq07Decidir(b.mensagem, b.lead, reg, julg, fila, CFG, ctx.agoraMs);
-  return { json: { mensagem: b.mensagem, lead: b.lead, registro_entrada: b.registro_entrada, julgamento: julg, decisao: d,
-    llm: d.responder ? acq07PedidoLLM(b.mensagem, b.lead, d, fila, CFG) : null, llm_url: acqComCfg(CFG).llm_url }, pairedItem: { item: idx } };
-});`);
+const julg = acq07LerJev($input.first().json);
+const reg = b.registro_entrada && b.registro_entrada.ok && !b.registro_entrada.simulado ? b.registro_entrada.resultado : null;
+const d = acq07Decidir(b.mensagem, b.lead, reg, julg, fila, CFG, ctx.agoraMs);
+return [{ json: { mensagem: b.mensagem, lead: b.lead, registro_entrada: b.registro_entrada, julgamento: julg, decisao: d,
+  llm: d.responder ? acq07PedidoLLM(b.mensagem, b.lead, d, fila, CFG) : null, llm_url: acqComCfg(CFG).llm_url } }];`);
   const qr = se(wf, 'Mercúrio responde?', '={{ $json.decisao.responder === true }}');
   const llm = wf.no('Mercúrio redige (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
@@ -1057,25 +1103,51 @@ return $input.all().map((i, idx) => {
     sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.llm) }}',
     options: { timeout: 60000, response: { response: { fullResponse: false, responseFormat: 'json' } } },
   }, { credentials: CRED.llm, onError: 'continueRegularOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 3000 });
-  const mr = code(wf, 'Montar resposta', ['comercial', 'wf07'], `
+  const mr = code(wf, 'Conferir texto', ['comercial', 'wf07'], `
+${PEDIDO(W)}
+const ctx = $('Preparar rodada').first().json._ctx;
 const f = $('Ler fila do Mercúrio').first().json;
-const orient = f.ok && f.resultado && f.resultado.config ? f.resultado.config.orientacoes : '';
+const conf = f.ok && f.resultado && f.resultado.config ? f.resultado.config : {};
+const b = $('Decidir').first().json;
+const resp = acq07LerLLM($input.first().json, CFG, conf.orientacoes || '', { mensagens: ((b.lead && b.lead.mensagens) || []).concat([{ direcao: 'entrada', texto: b.mensagem.texto }]) });
+const it = Object.assign({}, b, { llm: null, resposta: resp });
+const p = acq07PedidoCobranca(it, CFG);
+return [{ json: pedido(p || { ref: 'cobranca|' + b.mensagem.wamid, ferramenta: 'nenhuma', argumentos: {} }, ctx.run_id, { _it: it }) }];`);
+  const gc = ferramenta(wf, 'Gerar Pix no Asaas');
+  const me = code(wf, 'Montar envio', ['comercial', 'wf07'], `
 const C = acqComCfg(CFG);
-return $input.all().map((i, idx) => {
-  const b = $('Decidir').itemMatching(idx).json;
-  const resp = acq07LerLLM(i.json, CFG, orient);
-  const tr = acqComTransporte(CFG, ${JSON.stringify(W)}, null);
-  const envio = !resp.ok ? { decisao: 'sem_texto', motivo: resp.motivo }
-    : { decisao: tr.decisao, motivo: tr.motivo, url: String(C.graph_url).replace(/\\/+$/, '') + '/' + C.phone_number_id + '/messages', payload: acqComPayloadTexto(b.mensagem.de, resp.texto) };
-  return { json: Object.assign({}, b, { llm: null, resposta: resp, envio: envio, enviar: envio.decisao === 'enviar' }), pairedItem: { item: idx } };
-});`);
+const it = $('Conferir texto').first().json._it;
+const cob = acq07PartesDaCobranca(it, $input.first().json);
+const d = Object.assign({}, it.decisao);
+if (cob.caixa) { d.caixa = true; d.motivo_caixa = String(cob.motivo).slice(0, 200); d.motivos = d.motivos.concat(['cobranca_nao_gerada']); }
+const resp = it.resposta;
+if (!resp.ok && it.decisao.modo !== 'menu') { d.caixa = true; d.motivo_caixa = 'o texto automático foi bloqueado (' + String(resp.motivo).split(':')[0] + ')'; d.motivos = d.motivos.concat(['texto_de_reserva']); }
+const textos = resp.ok ? resp.partes.concat(cob.partes) : d.caixa ? [ACQ07_TEXTO_DE_RESERVA] : [];
+const tr = acqComTransporte(CFG, ${JSON.stringify(W)}, null);
+const url = String(C.graph_url).replace(/\\/+$/, '') + '/' + C.phone_number_id + '/messages';
+const envio = !textos.length ? { decisao: 'sem_texto', motivo: resp.motivo }
+  : { decisao: tr.decisao, motivo: tr.motivo, url: url, textos: textos, para: it.mensagem.de };
+return [{ json: Object.assign({}, it, { decisao: d, envio: envio, enviar: envio.decisao === 'enviar' }) }];`);
   const ev = se(wf, 'Enviar de verdade?', '={{ $json.enviar === true }}');
-  const hm = httpMeta(wf, 'Enviar resposta (Cloud API)');
+  const dg = wf.no('Marcar lida e digitando', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.envio.url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: $json.mensagem.wamid, typing_indicator: { type: "text" } }) }}',
+    options: { timeout: 10000, response: { response: { fullResponse: true, neverError: true, responseFormat: 'json' } } },
+  }, { credentials: CRED.meta, onError: 'continueRegularOutput' });
+  const sp = code(wf, 'Separar partes', ['comercial'], `
+const b = $('Montar envio').first().json;
+return b.envio.textos.map((t, i) => ({ json: { i: i, envio: { url: b.envio.url, payload: acqComPayloadTexto(b.envio.para, t) } } }));`);
+  const hm = wf.no('Enviar partes (Cloud API)', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.envio.url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.envio.payload) }}',
+    options: { batching: { batch: { batchSize: 1, batchInterval: 3500 } }, timeout: 20000, response: { response: { fullResponse: true, neverError: true, responseFormat: 'json' } } },
+  }, { credentials: CRED.meta, onError: 'continueRegularOutput', retryOnFail: false, notes: 'Uma mensagem por vez, com pausa, como alguém digitando. Uma tentativa só: timeout vira envio incerto.' });
   const cl = code(wf, 'Classificar envio', ['comercial'], `
-return $input.all().map((i, idx) => {
-  const b = $('Montar resposta').itemMatching(idx).json;
-  return { json: Object.assign({}, b, { meta: acqComClassificarMeta(i.json) }), pairedItem: { item: idx } };
-});`);
+const b = $('Montar envio').first().json;
+const metas = $input.all().map((i) => acqComClassificarMeta(i.json));
+const ruim = metas.filter((x) => x.resultado !== 'aceita')[0];
+const meta = ruim ? Object.assign({}, ruim, { wamids: metas.map((x) => x.wamid).filter(Boolean) }) : { resultado: 'aceita', wamid: metas[0].wamid, wamids: metas.map((x) => x.wamid) };
+return [{ json: Object.assign({}, b, { meta: meta }) }];`);
   const df = code(wf, 'Desfecho', ['comercial', 'wf07'], `
 const ctx = $('Preparar rodada').first().json._ctx;
 return $input.all().map((i) => {
@@ -1102,17 +1174,70 @@ return out;`, {}, 1);
   wf.cadeia(wg, sg, cv, tc);
   wf.liga(tc, rc, 0); wf.liga(tc, rr, 1);
   wf.liga(wp, lb); wf.liga(ti, lb);
-  wf.cadeia(lb, ls, cs, rv, pr, lf, re, ge, pj, jv, dc, qr);
+  wf.cadeia(lb, ls, cs, rv, sm, ea);
+  wf.liga(ea, bm, 0); wf.liga(ea, gt, 1);
+  wf.cadeia(bm, ba, pt, tr, lt, gt);
+  wf.cadeia(gt, gx, es, jm, pr, lf, pl, al, re, ge, pj, jv, dc, qr);
   wf.liga(qr, llm, 0); wf.liga(qr, df, 1);
-  wf.cadeia(llm, mr, ev);
-  wf.liga(ev, hm, 0); wf.liga(ev, df, 1);
-  wf.cadeia(hm, cl, df);
+  wf.cadeia(llm, mr, gc, me, ev);
+  wf.liga(ev, dg, 0); wf.liga(ev, df, 1);
+  wf.cadeia(dg, sp, hm, cl, df);
   wf.cadeia(df, gd, pe, gp, rs, gr);
   return wf;
 }
 
+// ================================================================ ACQ-08 (comercial: repasse no WhatsApp da Aceleriq)
+function acq08() {
+  const W = 'ACQ-08';
+  const wf = new Wf(IDS.w08, 'ACQ-08-Comercial-Repasses', 'Lê a Caixa do comercial e avisa o WhatsApp da Aceleriq com o contexto: reunião para confirmar, lead que quer falar e Pix confirmado para o onboarding.');
+  const t1 = cron(wf, 'A cada 2 minutos', '0 */2 * * * *', 0);
+  const t2 = manual(wf, 'Executar manualmente', 1);
+  const t3 = wf.no('Entrada interna', 'n8n-nodes-base.executeWorkflowTrigger', 1.2, { inputSource: 'passthrough' }, { col: 0, notes: 'Entrada: { agora?: ISO } (teste).' }, 2);
+  const p = code(wf, 'Preparar rodada', ['comercial', 'wf07'], `
+${PEDIDO(W)}
+const e = $input.first().json || {};
+const agoraMs = e.agora ? Date.parse(e.agora) : Date.now();
+const run = acqRunId(${JSON.stringify(W)}, agoraMs, Math.random());
+return [{ json: pedido({ ref: 'repasses', ferramenta: 'aceleriq_comercial_repasses', argumentos: { limit: 10 } }, run, { _ctx: { run_id: run, agoraMs: agoraMs } }) }];`);
+  const lr = ferramenta(wf, 'Ler repasses');
+  const me = code(wf, 'Montar repasses', ['comercial', 'wf07'], `
+const ctx = $('Preparar rodada').first().json._ctx;
+const r = $input.first().json;
+const itens = (r.ok && r.resultado && r.resultado.itens) || [];
+const tr = acqComTransporte(CFG, ${JSON.stringify(W)}, 'repasse_equipe');
+const out = [];
+itens.forEach((h) => acq08Envios(h, CFG).forEach((e) => out.push({ json: { h: h, alvo: e.alvo, envio: { url: e.url, payload: e.payload, texto: e.texto, decisao: tr.decisao, motivo: tr.motivo }, enviar: tr.decisao === 'enviar', _ctx: ctx } })));
+return out;`);
+  const ev = se(wf, 'Enviar de verdade?', '={{ $json.enviar === true }}');
+  const hm = httpMeta(wf, 'Enviar repasse (Cloud API)');
+  const cl = code(wf, 'Classificar envio', ['comercial'], `
+return $input.all().map((i, idx) => { const b = $('Enviar de verdade?').itemMatching(idx).json; return { json: Object.assign({}, b, { meta: acqComClassificarMeta(i.json) }), pairedItem: { item: idx } }; });`);
+  const df = code(wf, 'Desfecho', ['comercial', 'wf07'], `
+return $input.all().map((i) => {
+  const b = i.json;
+  const est = b.meta ? b.meta.resultado : b.envio.decisao;
+  const ev = acq08Evento(b.h, b.alvo, est, b.meta || null, b._ctx);
+  const inc = est === 'simular' || est === 'aceita' ? null : b.alvo === 'lead' && est === 'recusada' ? null : { key: 'ACQ-08|' + est + '|' + (b.meta && b.meta.codigo || b.envio.motivo || 'x'), sev: est === 'bloquear' ? 'aviso' : 'alto', titulo: 'Repasse no WhatsApp não saiu (' + est + '): continua na Caixa', detalhe: { handoff: b.h.id, motivo: b.envio.motivo || (b.meta && b.meta.motivo) || null } };
+  const marcar = b.alvo === 'equipe' && est === 'aceita' ? { ref: 'marcar|' + b.h.id + '|' + b.h.lead_id, ferramenta: 'aceleriq_comercial_repasse_marcar', argumentos: { id: b.h.id, wamid: b.meta.wamid } } : null;
+  return { json: { pg: acqComPgEvento(ev, inc, AMBIENTE, { marcar: marcar, run_id: b._ctx.run_id }) } };
+});`, {}, 1);
+  const gd = pg(wf, 'Gravar desfecho', SQL_EVENTO_E_INCIDENTE(W, true), {}, 1);
+  const pm = code(wf, 'Pedir marcação', [], `
+${PEDIDO(W)}
+const out = [];
+$input.all().forEach((i) => { if (i.json.ctx && i.json.ctx.marcar) out.push({ json: pedido(i.json.ctx.marcar, i.json.ctx.run_id) }); });
+return out;`, {}, 1);
+  const gm = ferramenta(wf, 'Marcar repasse no painel', {}, 1);
+  wf.liga(t1, p); wf.liga(t2, p); wf.liga(t3, p);
+  wf.cadeia(p, lr, me, ev);
+  wf.liga(ev, hm, 0); wf.liga(ev, df, 1);
+  wf.cadeia(hm, cl, df);
+  wf.cadeia(df, gd, pm, gm);
+  return wf;
+}
+
 export function gerarTodos() {
-  return [acq00(), acq00Erros(), acq01(), acq02(), acq03(), acq04(), acq05(), acq06(), acq07()];
+  return [acq00(), acq00Erros(), acq01(), acq02(), acq03(), acq04(), acq05(), acq06(), acq07(), acq08()];
 }
 
 if (process.argv[1] && process.argv[1].endsWith('gerar.mjs')) {

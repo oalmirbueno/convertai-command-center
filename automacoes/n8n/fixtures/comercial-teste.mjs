@@ -97,6 +97,21 @@ export function criarMundo(opcoes = {}) {
       const h = Object.assign({ id: 'h' + (m.handoffs.length + 1) }, a); m.handoffs.push(h);
       return { item: h, avisado: true };
     },
+    aceleriq_comercial_entrada_nova(a) {
+      m.entradas_novas = (m.entradas_novas || []).concat([a]);
+      if (m.numero_de_cliente) return { lead_id: LEADS.pronto, criado: false, so_registrar: true, motivo: 'ja_e_cliente' };
+      const id = 'novo-' + m.leads.length;
+      const novo = { id, name: a.nome_perfil || 'Novo', company: null, whatsapp: a.whatsapp, stage: 'novo', origin: a.anuncio ? 'anuncio' : 'whatsapp', qualificacao: a.anuncio ? { anuncio: a.anuncio } : {}, agente_slug: 'mercurio' };
+      m.leads.push(novo);
+      return { lead_id: id, criado: true, so_registrar: false, item: { lead_id: id, nome: novo.name, empresa: null, whatsapp: a.whatsapp, etapa: 'novo', origem: novo.origin, qualificacao: novo.qualificacao, mensagens: [], fatos: [] } };
+    },
+    aceleriq_comercial_cobrar(a) {
+      m.cobrancas = (m.cobrancas || []).concat([a]);
+      if (m.sem_asaas) return { cobranca: null, nova: false, sem_asaas: true, aviso: 'sem chave' };
+      return { cobranca: { id: 'c1', plano_nome: 'Start Assistido', valor: 1394, pix_copia_e_cola: '000201PIXTESTE', link: 'https://asaas.test/i/1' }, nova: true };
+    },
+    aceleriq_comercial_repasses() { return { itens: m.repasses || [], total: (m.repasses || []).length }; },
+    aceleriq_comercial_repasse_marcar(a) { m.repassados = (m.repassados || []).concat([a.id]); return { id: a.id, marcado: true }; },
     aceleriq_update_opportunity(a) {
       const l = lead(a.opportunity_id); if (!l) throw new Error('write:not_found lead');
       if (a.qualificacao) l.qualificacao = Object.assign({}, l.qualificacao, a.qualificacao);
@@ -125,7 +140,9 @@ export function criarMundo(opcoes = {}) {
     else if (/depois|agora nao|mes que vem/.test(t)) c = 'nao_agora';
     else if (/\?/.test(t)) c = 'pergunta';
     const probs = { interessado: 0.02, pergunta: 0.02, nao_agora: 0.02, pare: 0.02, outro: 0.02 }; probs[c] = 0.92;
-    return { statusCode: 200, body: { model: 'jev-teste', answers: { intencao: { type: 'choice', choice: c, confidence: 0.9, probabilities: probs }, avancou: { type: 'noul', noul: av } } } };
+    const extra = m.jevExtra || {};
+    const responder = (id, v) => ({ type: 'choice', choice: v, confidence: 0.9 });
+    return { statusCode: 200, body: { model: 'jev-teste', answers: { remetente: responder('remetente', extra.remetente || 'humano'), etapa: responder('etapa', extra.etapa || (av > 0.5 ? 'apresentar' : 'descobrir')), objecao: responder('objecao', extra.objecao || 'nenhuma'), plano: responder('plano', extra.plano || 'nenhum'), intencao: { type: 'choice', choice: c, confidence: 0.9, probabilities: probs }, avancou: { type: 'noul', noul: av } } } };
   }
 
   function llm(corpo) {
@@ -134,6 +151,8 @@ export function criarMundo(opcoes = {}) {
   }
 
   function meta(url, corpo) {
+    if (corpo && corpo.status === 'read') { m.meta.digitando = (m.meta.digitando || 0) + 1; return { statusCode: 200, body: { success: true } }; }
+    if (!corpo) return url.includes('/arquivo') ? { statusCode: 200, body: { arquivo: 'audio-falso' } } : { statusCode: 200, body: { url: 'http://127.0.0.1:8792/graph/arquivo' } };
     m.meta.enviadas.push({ url, corpo });
     if (m.meta.modo === 'timeout') throw new Error('ETIMEDOUT: tempo esgotado (teste)');
     if (m.meta.modo === '400') return { statusCode: 400, body: { error: { message: '(#132001) Template name does not exist in the translation', type: 'OAuthException', code: 132001 } } };
@@ -147,7 +166,7 @@ export function criarMundo(opcoes = {}) {
     m.chamadas_http = (m.chamadas_http || []).concat([{ url, credencial }]);
     if (url.indexOf('http://127.0.0.1:8791/mcp') === 0) return mcp(corpo);
     if (url.indexOf('http://127.0.0.1:8791/jev') === 0) return jev(corpo);
-    if (url.indexOf('http://127.0.0.1:8791/llm') === 0) return llm(corpo);
+    if (url.indexOf('http://127.0.0.1:8791/llm') === 0) return JSON.stringify(corpo || {}).includes('input_audio') ? { statusCode: 200, body: { choices: [{ message: { content: m.transcricao || 'quanto custa o plano' } }] } } : llm(corpo);
     if (url.indexOf('http://127.0.0.1:8792/graph/') === 0) return meta(url, corpo);
     throw new Error('URL fora do mundo de teste (bloqueada): ' + url);
   }

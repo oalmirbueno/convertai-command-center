@@ -1,6 +1,6 @@
 {
   "_doc": "Allowlist de ferramentas do MCP Aceleriq (2.10.0) por workflow. 'leitura' nunca altera o painel. 'escrita' só roda fora do dry-run, no ambiente que a liberar explicitamente. 'geracao' não altera o painel, mas gasta modelo pago: roda de verdade também no dry-run, sem nova tentativa automática e com tempo longo. Ferramentas fora desta lista são recusadas pelo adaptador (ACQ-00). Comercial (ACQ-06/07): ferramentas aceleriq_comercial_* e aceleriq_update_opportunity não têm client_id (lead não é cliente) e por isso entram em multi_cliente; as de idempotencia_propria têm esquema estrito e deduplicam sozinhas (id_externo, janela de 6 h da Caixa, qualificação que soma), então não recebem idempotency_key.",
-  "mcp_versao_conferida": "2.10.0 (comercial conferido no 2.23.0)",
+  "mcp_versao_conferida": "2.10.0 (comercial conferido no 2.24.0)",
   "leitura": [
     "aceleriq_health",
     "aceleriq_capabilities",
@@ -21,7 +21,8 @@
     "aceleriq_operator_digest",
     "aceleriq_mesa_ads_saude",
     "aceleriq_agent_conversations",
-    "aceleriq_comercial_fila"
+    "aceleriq_comercial_fila",
+    "aceleriq_comercial_repasses"
   ],
   "escrita": [
     "aceleriq_upsert_current_dossier",
@@ -37,7 +38,10 @@
     "aceleriq_aviso_publicacao_preparar",
     "aceleriq_comercial_registrar_mensagem",
     "aceleriq_comercial_avisar_caixa",
-    "aceleriq_update_opportunity"
+    "aceleriq_update_opportunity",
+    "aceleriq_comercial_entrada_nova",
+    "aceleriq_comercial_cobrar",
+    "aceleriq_comercial_repasse_marcar"
   ],
   "geracao": [
     "aceleriq_ritual_redigir"
@@ -125,7 +129,13 @@
       "aceleriq_comercial_fila",
       "aceleriq_comercial_registrar_mensagem",
       "aceleriq_comercial_avisar_caixa",
-      "aceleriq_update_opportunity"
+      "aceleriq_update_opportunity",
+      "aceleriq_comercial_entrada_nova",
+      "aceleriq_comercial_cobrar"
+    ],
+    "ACQ-08": [
+      "aceleriq_comercial_repasses",
+      "aceleriq_comercial_repasse_marcar"
     ]
   },
   "multi_cliente": [
@@ -137,11 +147,18 @@
     "aceleriq_comercial_fila",
     "aceleriq_comercial_registrar_mensagem",
     "aceleriq_comercial_avisar_caixa",
-    "aceleriq_update_opportunity"
+    "aceleriq_update_opportunity",
+    "aceleriq_comercial_entrada_nova",
+    "aceleriq_comercial_cobrar",
+    "aceleriq_comercial_repasses",
+    "aceleriq_comercial_repasse_marcar"
   ],
   "idempotencia_propria": [
     "aceleriq_comercial_registrar_mensagem",
     "aceleriq_comercial_avisar_caixa",
-    "aceleriq_update_opportunity"
+    "aceleriq_update_opportunity",
+    "aceleriq_comercial_entrada_nova",
+    "aceleriq_comercial_cobrar",
+    "aceleriq_comercial_repasse_marcar"
   ]
 }

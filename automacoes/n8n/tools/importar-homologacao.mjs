@@ -12,7 +12,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : d; };
 const PASTA = path.resolve(raiz, arg('pasta', 'workflows'));
 const SOMENTE = arg('somente', null);
-const ORDEM = ['ACQ-00-Erros', 'ACQ-00-Ferramenta-Aceleriq', 'ACQ-01-Contexto-Rituais', 'ACQ-02-Despacho-Aprovado', 'ACQ-03-Post-No-Ar', 'ACQ-04-Conversas-Contexto', 'ACQ-05-Dia-Prioritario-Radar', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas'];
+const ORDEM = ['ACQ-00-Erros', 'ACQ-00-Ferramenta-Aceleriq', 'ACQ-01-Contexto-Rituais', 'ACQ-02-Despacho-Aprovado', 'ACQ-03-Post-No-Ar', 'ACQ-04-Conversas-Contexto', 'ACQ-05-Dia-Prioritario-Radar', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas', 'ACQ-08-Comercial-Repasses'];
 const ID_LOCAL = { 'ACQ-00-Erros': 'AcqE00ErrosComum', 'ACQ-00-Ferramenta-Aceleriq': 'AcqF00Ferramenta' };
 // Nomes humanos na instância (04/11/2026). O casamento é por nome: sem isto, reimportar duplicaria.
 const NOME_REMOTO = {
@@ -25,6 +25,7 @@ const NOME_REMOTO = {
   'ACQ-05-Dia-Prioritario-Radar': 'Lista do dia: o que fazer em cada cliente',
   'ACQ-06-Comercial-Primeiro-Contato': 'Comercial: primeiro contato no WhatsApp',
   'ACQ-07-Comercial-Respostas': 'Comercial: respostas no WhatsApp',
+  'ACQ-08-Comercial-Repasses': 'Comercial: repasse no WhatsApp da Aceleriq',
 };
 // Atualizar fluxo publicado só com pedido explícito; a nova versão só vale depois de publicar.
 const PERMITIR_ATIVO = process.argv.includes('--permitir-ativo');

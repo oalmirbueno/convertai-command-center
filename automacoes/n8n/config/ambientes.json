@@ -27,7 +27,10 @@
         "aceleriq_browser_act",
         "aceleriq_comercial_registrar_mensagem",
         "aceleriq_comercial_avisar_caixa",
-        "aceleriq_update_opportunity"
+        "aceleriq_update_opportunity",
+        "aceleriq_comercial_entrada_nova",
+        "aceleriq_comercial_cobrar",
+        "aceleriq_comercial_repasse_marcar"
       ],
       "operador": "n8n-teste",
       "lote_clientes": 2,
@@ -36,7 +39,8 @@
       "provedor_mensagens": "teste",
       "dry_run_por_workflow": {
         "ACQ-06": true,
-        "ACQ-07": true
+        "ACQ-07": true,
+        "ACQ-08": true
       },
       "comercial": {
         "operador": "mercurio",
@@ -67,6 +71,13 @@
               "Quero o diagnóstico",
               "Não tenho interesse"
             ]
+          },
+          "repasse_equipe": {
+            "nome": "aceleriq_repasse_equipe",
+            "idioma": "pt_BR",
+            "categoria": "UTILITY",
+            "aprovado": false,
+            "corpo": "Repasse do Mercúrio: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
           }
         },
         "max_por_rodada": 5,
@@ -76,10 +87,12 @@
         },
         "llm_url": "http://127.0.0.1:8791/llm",
         "llm_modelo": "anthropic/claude-sonnet-5.5",
-        "resposta_max_caracteres": 700,
+        "resposta_max_caracteres": 900,
         "janela_horas": 24,
         "limiar_pare": 0.4,
-        "exigir_assinatura": true
+        "exigir_assinatura": true,
+        "transcricao_modelo": "google/gemini-2.5-flash",
+        "numero_equipe": "5541997483429"
       }
     },
     "pilot": {
@@ -100,7 +113,8 @@
       "provedor_mensagens": "oficial_pendente",
       "dry_run_por_workflow": {
         "ACQ-06": true,
-        "ACQ-07": true
+        "ACQ-07": true,
+        "ACQ-08": true
       },
       "comercial": {
         "operador": "mercurio",
@@ -131,6 +145,13 @@
               "Quero o diagnóstico",
               "Não tenho interesse"
             ]
+          },
+          "repasse_equipe": {
+            "nome": "aceleriq_repasse_equipe",
+            "idioma": "pt_BR",
+            "categoria": "UTILITY",
+            "aprovado": false,
+            "corpo": "Repasse do Mercúrio: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
           }
         },
         "max_por_rodada": 5,
@@ -140,10 +161,12 @@
         },
         "llm_url": "https://openrouter.ai/api/v1/chat/completions",
         "llm_modelo": "anthropic/claude-sonnet-5.5",
-        "resposta_max_caracteres": 700,
+        "resposta_max_caracteres": 900,
         "janela_horas": 24,
         "limiar_pare": 0.4,
-        "exigir_assinatura": true
+        "exigir_assinatura": true,
+        "transcricao_modelo": "google/gemini-2.5-flash",
+        "numero_equipe": "5541997483429"
       }
     },
     "production": {
@@ -166,7 +189,8 @@
       "provedor_mensagens": "oficial_pendente",
       "dry_run_por_workflow": {
         "ACQ-06": true,
-        "ACQ-07": true
+        "ACQ-07": true,
+        "ACQ-08": true
       },
       "comercial": {
         "operador": "mercurio",
@@ -197,6 +221,13 @@
               "Quero o diagnóstico",
               "Não tenho interesse"
             ]
+          },
+          "repasse_equipe": {
+            "nome": "aceleriq_repasse_equipe",
+            "idioma": "pt_BR",
+            "categoria": "UTILITY",
+            "aprovado": false,
+            "corpo": "Repasse do Mercúrio: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
           }
         },
         "max_por_rodada": 5,
@@ -206,10 +237,12 @@
         },
         "llm_url": "https://openrouter.ai/api/v1/chat/completions",
         "llm_modelo": "anthropic/claude-sonnet-5.5",
-        "resposta_max_caracteres": 700,
+        "resposta_max_caracteres": 900,
         "janela_horas": 24,
         "limiar_pare": 0.4,
-        "exigir_assinatura": true
+        "exigir_assinatura": true,
+        "transcricao_modelo": "google/gemini-2.5-flash",
+        "numero_equipe": "5541997483429"
       }
     }
   }

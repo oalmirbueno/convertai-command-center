@@ -117,6 +117,7 @@ export function criarSimulador({ workflows, http, pg }) {
             if (no.onError !== 'continueRegularOutput') throw e;
             json = { error: { message: e.message, httpCode: e.httpCode || null } };
           }
+          if (resp.responseFormat === 'file' && !json.error) { out.push(item({}, x, no.name, { [resp.outputPropertyName || 'data']: { data: Buffer.from(String(json.arquivo || '')).toString('base64') } })); continue; }
           out.push(item(json, x, no.name));
         }
         return [out];
@@ -143,6 +144,7 @@ export function criarSimulador({ workflows, http, pg }) {
         respostas.push({ no: no.name, corpo: avaliar(p.responseBody, ent[0], ent), codigo: (p.options && p.options.responseCode) || 200 });
         return [ent.map((x) => item(x.json, x, no.name))];
       }
+      if (tipo === 'n8n-nodes-base.wait') return [ent.map((x) => item(x.json, x, no.name, x.binary))];
       if (tipo === 'n8n-nodes-base.noOp') return [ent.map((x) => item(x.json, x, no.name))];
       throw new Error('tipo de nó não simulado: ' + tipo);
     }

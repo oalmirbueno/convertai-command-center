@@ -205,3 +205,22 @@ O simulador não é o n8n: os fluxos ainda não rodaram no n8n de verdade (ver "
   automática.
 - **Limites da Meta:** número novo começa com limite diário de conversas iniciadas pela empresa e modelos de
   marketing têm limite de frequência por usuário (erro 131049 chega como status `failed` e vira incidente).
+
+## O SDR completo (05/11/2026)
+
+O ACQ-07 agora conduz a venda sozinho e o ACQ-08 repassa para a Aceleriq:
+
+- **Áudio:** baixa da Meta e transcreve pelo OpenRouter (`transcricao_modelo`), com a credencial que já existe.
+- **Mensagens seguidas:** espera 15 s; só a execução da mensagem mais nova responde, levando as anteriores.
+- **Quem escreveu:** o Jev separa pessoa, resposta automática (não responde) e menu de robô (escolhe a opção, no máximo duas vezes).
+- **Etapa da venda:** o Jev escolhe a etapa e a objeção; o modelo escreve de 1 a 4 mensagens curtas, com a base `comercial.mercurio` de /base-dos-agentes.
+- **Conferência do texto:** JSON quebrado, link ou valor fora das orientações e a palavra "agência" nunca saem. O lead recebe uma frase de reserva e o Almir assume na Caixa.
+- **Anúncio:** número desconhecido vira lead por `aceleriq_comercial_entrada_nova`, com os dados do anúncio. Número de cliente ou de lead com a equipe só registra.
+- **Reunião:** o Mercúrio anota o horário e nunca diz que está marcada; o Almir confirma.
+- **Fechamento direto:** plano da tabela, nome e CPF ou CNPJ geram o Pix no Asaas pelo painel. Só o webhook `comercial-asaas-webhook`, depois de conferir no Asaas, cria o repasse de onboarding.
+- **Repasse (ACQ-08):** a cada 2 min, o modelo `aceleriq_repasse_equipe` vai para `comercial.numero_equipe` com o contexto. Só marca como repassado se a Meta aceitar.
+
+Simulação: `node tools/simular-conversas.mjs saida.json` usa o Jev e o modelo reais, e não toca na Meta, no Asaas nem no CRM.
+Não existe agenda automática: quem confirma a reunião é o Almir, por decisão dele.
+
+Para ligar também é preciso: `dry_run_por_workflow["ACQ-08"] = false`, `"aprovado": true` em `repasse_equipe` e as escritas `aceleriq_comercial_entrada_nova`, `aceleriq_comercial_cobrar` e `aceleriq_comercial_repasse_marcar` em `escritas_liberadas`.

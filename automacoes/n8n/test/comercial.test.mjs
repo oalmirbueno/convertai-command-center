@@ -131,43 +131,81 @@ test('webhook: verify token, assinatura HMAC e normalização (texto, botão, st
   assert.equal(L.acq07EventoStatus(Object.assign({}, s, { status: 'read' }), { run_id: 'r', agoraMs: TER_10H }), null);
 });
 
-test('decisão: pare nunca responde; quem avança vai para a Caixa; fora da janela não há texto livre', () => {
+test('decisão: pare nunca responde; a Caixa é só para reunião, pessoa ou fora da tabela; robô não vira conversa', () => {
   const c = cfg('test');
   const fila = { config: { ativo: true }, itens: [] };
   const lead = { lead_id: LEADS.pronto, mensagens: [{ direcao: 'saida', texto: 'modelo' }], qualificacao: {} };
   const msg = (texto, extra) => Object.assign({ wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto }, extra || {});
-  const j = (intencao, extra) => Object.assign({ intencao, confianca: 0.9, p_pare: intencao === 'pare' ? 0.9 : 0.02, p_avancou: 0.05 }, extra || {});
+  const j = (intencao, extra) => Object.assign({ intencao, confianca: 0.9, p_pare: intencao === 'pare' ? 0.9 : 0.02, remetente: 'humano', etapa: 'descobrir', objecao: 'nenhuma', plano: 'nenhum' }, extra || {});
   assert.equal(L.acq07Decidir(msg('me esquece'), lead, null, j('pare'), fila, c, TER_10H).acao, 'parar');
   assert.equal(L.acq07Decidir(msg('x'), lead, null, j('outro', { p_pare: 0.45 }), fila, c, TER_10H).acao, 'parar', 'na dúvida sobre parar, para');
   assert.equal(L.acq07Decidir(msg('Não tenho interesse', { botao: 'Não tenho interesse' }), lead, null, null, fila, c, TER_10H).acao, 'parar');
   assert.equal(L.acq07Decidir(msg('pare'), lead, { pediu_para_parar: true }, j('outro'), fila, c, TER_10H).acao, 'parar');
-  const quer = L.acq07Decidir(msg('quero sim'), lead, null, j('interessado'), fila, c, TER_10H);
-  assert.equal(quer.caixa, true); assert.equal(quer.responder, true);
-  const preco = L.acq07Decidir(msg('quanto custa?'), lead, null, j('pergunta', { p_avancou: 0.8 }), fila, c, TER_10H);
-  assert.equal(preco.caixa, true);
-  assert.equal(L.acq07Decidir(msg('valeu'), lead, null, j('outro'), fila, c, TER_10H).responder, false);
+  const preco = L.acq07Decidir(msg('quanto custa?'), lead, null, j('pergunta', { etapa: 'apresentar' }), fila, c, TER_10H);
+  assert.equal(preco.caixa, false, 'preço o Mercúrio responde'); assert.equal(preco.responder, true);
+  const reuniao = L.acq07Decidir(msg('pode ser terça às 15h'), lead, null, j('interessado', { etapa: 'confirmar_reuniao' }), fila, c, TER_10H);
+  assert.equal(reuniao.caixa, true); assert.equal(reuniao.responder, true);
+  assert.equal(L.acq07Decidir(msg('quero falar com o dono'), lead, null, j('pergunta', { etapa: 'passar_humano' }), fila, c, TER_10H).caixa, true);
+  assert.equal(L.acq07Decidir(msg('valeu'), lead, null, j('outro', { etapa: 'encerrar' }), fila, c, TER_10H).responder, false);
   const velho = L.acq07Decidir(msg('quero', { em: new Date(TER_10H - 30 * 3600000).toISOString() }), lead, null, j('interessado'), fila, c, TER_10H);
-  assert.equal(velho.responder, false); assert.equal(velho.caixa, true); assert.ok(velho.motivos.includes('fora_da_janela_de_24h'));
+  assert.equal(velho.responder, false); assert.ok(velho.motivos.includes('fora_da_janela_de_24h'));
+  assert.equal(L.acq07Decidir(msg('Em breve retornamos'), lead, null, j('outro', { remetente: 'resposta_automatica' }), fila, c, TER_10H).responder, false);
+  assert.equal(L.acq07Decidir(msg('Digite 1 para vendas'), lead, null, j('outro', { remetente: 'menu_de_robo' }), fila, c, TER_10H).modo, 'menu');
+  const preso = Object.assign({}, lead, { mensagens: [{ direcao: 'saida', texto: '1' }, { direcao: 'saida', texto: '2' }] });
+  assert.equal(L.acq07Decidir(msg('Digite 1'), preso, null, j('outro', { remetente: 'menu_de_robo' }), fila, c, TER_10H).responder, false, 'não fica preso com o robô');
   assert.equal(L.acq07Decidir(msg('oi'), Object.assign({}, lead, { qualificacao: { nao_contatar: 'sim' } }), null, j('interessado'), fila, c, TER_10H).acao, 'nada');
   assert.equal(L.acq07Decidir(msg('oi'), lead, null, null, fila, c, TER_10H).motivos[0], 'classificacao_indisponivel');
-  assert.equal(L.acq07Decidir(msg('oi'), null, null, j('interessado'), fila, c, TER_10H).motivos[0], 'numero_sem_lead_do_mercurio');
+  assert.equal(L.acq07Decidir(msg('oi'), null, null, j('interessado'), fila, c, TER_10H).motivos[0], 'lead_indisponivel');
+  assert.equal(L.acq07Decidir(msg('oi'), { so_registrar: true, motivo: 'ja_e_cliente' }, null, j('interessado'), fila, c, TER_10H).responder, false);
+  const faltando = L.acq07Decidir(msg('quero fechar'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido' }), fila, c, TER_10H);
+  assert.equal(faltando.cobrar, false); assert.deepEqual(faltando.faltam, ['CPF ou CNPJ']);
+  const pronto = L.acq07Decidir(msg('meu cpf é 529.982.247-25'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido' }), fila, c, TER_10H);
+  assert.equal(pronto.cobrar, true); assert.equal(pronto.documento, '52998224725');
+  assert.equal(L.acq07Decidir(msg('meu cpf é 111.111.111-11'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido' }), fila, c, TER_10H).cobrar, false, 'documento errado não cobra');
 });
 
-test('texto do Mercúrio: sem link fora das orientações, sem texto vazio, cortado em frase inteira', () => {
+test('juntar mensagens: só a mais nova responde, levando as anteriores; áudio entra como texto', () => {
+  const a = { wamid: 'a', de: '5541999990000', em: '2026-11-03T13:00:00Z', texto: 'oi' };
+  const b = { wamid: 'b', de: '5541999990000', em: '2026-11-03T13:00:05Z', texto: 'quanto custa', transcrito: true };
+  assert.equal(L.acq07Lote(a, { mais_nova: 'b', mensagens: [{ m: a }, { m: b }] }).seguir, false);
+  const l = L.acq07Lote(b, { mais_nova: 'b', mensagens: [{ m: a }, { m: b }] });
+  assert.equal(l.seguir, true); assert.equal(l.m.texto, 'oi\nquanto custa'); assert.deepEqual(l.m.wamids, ['a', 'b']);
+  assert.equal(L.acq07De8('5541999990000'), L.acq07De8('554199990000'), 'com ou sem o 9');
+  assert.equal(L.acq07TextoParaRegistro(b), '[áudio] quanto custa');
+  assert.equal(L.acq07LerTranscricao({ choices: [{ message: { content: '[inaudível]' } }] }), null);
+  assert.equal(L.acq07LerTranscricao({ choices: [{ message: { content: 'quero saber o preço' } }] }), 'quero saber o preço');
+});
+
+test('webhook: áudio traz o id da mídia e anúncio traz a origem', () => {
+  const corpo = webhookMeta({ wamid: 'x', de: '5541999990000', quando: TER_10H, tipo: 'audio' });
+  corpo.entry[0].changes[0].value.messages[0].referral = { source_type: 'ad', source_id: '123', headline: 'Diagnóstico grátis', source_url: 'https://fb.me/x' };
+  const m = L.acq07Normalizar(corpo, null).mensagens[0];
+  assert.equal(m.midia_id, 'midia-1'); assert.equal(m.anuncio.titulo, 'Diagnóstico grátis');
+});
+test('texto do Mercúrio: quebra em mensagens e bloqueia link, preço inventado e a palavra agência', () => {
   const c = cfg('test');
   const r = (t) => ({ choices: [{ message: { content: t } }] });
+  const j = (o) => r(JSON.stringify(o));
   assert.equal(L.acq07LerLLM(r('Veja em https://golpe.exemplo agora.'), c, 'orientações sem link').ok, false);
   assert.equal(L.acq07LerLLM(r('Agende em https://aceleriq.com/agenda.'), c, 'Agenda: https://aceleriq.com/agenda').ok, true);
   assert.equal(L.acq07LerLLM(r('   '), c, '').ok, false);
   assert.equal(L.acq07LerLLM({ error: { message: 'sem credencial' } }, c, '').ok, false);
-  const longo = L.acq07LerLLM(r('Frase um curta. ' + 'x'.repeat(800)), c, '');
-  assert.equal(longo.ok, false);
+  assert.equal(L.acq07LerLLM(r('x'.repeat(1000)), c, '').ok, false);
+  const ok = L.acq07LerLLM(j({ mensagens: ['Oi!', 'Como vocês conseguem clientes hoje?'], quando_reuniao: 'terça 15h', resumo_para_almir: 'Pet shop.', nome_cobranca: 'Pet LTDA' }), c, '');
+  assert.deepEqual(ok.partes, ['Oi!', 'Como vocês conseguem clientes hoje?']);
+  assert.equal(ok.quando_reuniao, 'terça 15h'); assert.equal(ok.nome_cobranca, 'Pet LTDA');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['a', 'b', 'c', 'd', 'e', 'f'] }), c, '').partes.length, 4, 'no máximo 4');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Fica R$ 500 por mês'] }), c, 'Plano: R$ 847 por mês').motivo, 'valor_fora_das_orientacoes');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Começa em R$ 847 por mês'] }), c, 'Plano: R$ 847 por mês').ok, true);
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Somos uma agência'] }), c, '').motivo, 'disse_agencia');
+  assert.equal(L.acq07LerLLM(r('{"mensagens":["Oi, Funciona'), c, '').motivo, 'llm_json_quebrado', 'JSON cortado nunca vai para o lead');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Entendi, R$ 400 por mês não cobre'] }), c, 'Plano: R$ 847', { mensagens: [{ direcao: 'entrada', texto: 'só posso 400' }] }).ok, true, 'pode repetir o valor do lead');
   const pedido = L.acq07PedidoLLM({ wamid: 'w', texto: 'quanto custa?' }, { nome: 'Pet', etapa: 'contato', mensagens: [{ direcao: 'saida', texto: 'modelo' }], fatos: [] },
-    { intencao: 'pergunta', caixa: true }, { config: { orientacoes: 'ORIENTACAO-UNICA' } }, c);
+    { intencao: 'pergunta', etapa: 'apresentar' }, { config: { orientacoes: 'ORIENTACAO-UNICA', conhecimento: [{ titulo: 'SPIN', tecnica: 'TECNICA-UNICA', quando_usar: 'sempre', exemplo: '' }] } }, c);
   assert.match(pedido.messages[0].content, /ORIENTACAO-UNICA/);
+  assert.match(pedido.messages[0].content, /TECNICA-UNICA/);
   assert.equal(pedido.messages[pedido.messages.length - 1].content, 'quanto custa?');
 });
-
 // ------------------------------------------------------------------ fluxos no simulador
 let P, WF;
 before(async () => {
@@ -179,10 +217,10 @@ before(async () => {
 after(async () => { if (P) await P.parar(); });
 beforeEach(async () => { if (P) await P.admin.query('truncate acq_n8n.eventos, acq_n8n.incidentes, acq_n8n.cursores restart identity cascade'); });
 
-const ligarTransporte = (a) => { const t = a.ambientes.test; t.dry_run_por_workflow = { 'ACQ-06': false, 'ACQ-07': false }; t.comercial.phone_number_id = '100000000000001';
+const ligarTransporte = (a) => { const t = a.ambientes.test; t.dry_run_por_workflow = { 'ACQ-06': false, 'ACQ-07': false, 'ACQ-08': false }; t.comercial.modelos.repasse_equipe.aprovado = true; t.comercial.phone_number_id = '100000000000001';
   t.comercial.modelos.primeiro_contato.aprovado = true; t.comercial.modelos.retomada.aprovado = true; };
 function montar(W, aoVivo, extra) {
-  const ws = ['ACQ-00-Ferramenta-Aceleriq', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas'].map((n) => (aoVivo || extra) ? comConfig(WF[n], (a) => { if (aoVivo) ligarTransporte(a); if (extra) extra(a); }) : WF[n]);
+  const ws = ['ACQ-00-Ferramenta-Aceleriq', 'ACQ-06-Comercial-Primeiro-Contato', 'ACQ-07-Comercial-Respostas', 'ACQ-08-Comercial-Repasses'].map((n) => (aoVivo || extra) ? comConfig(WF[n], (a) => { if (aoVivo) ligarTransporte(a); if (extra) extra(a); }) : WF[n]);
   return criarSimulador({ workflows: ws, http: W.http, pg: P.admin });
 }
 const eventos = async (wf) => (await P.admin.query('select tipo, idempotency_key, payload from acq_n8n.eventos where workflow_id = $1 order by id', [wf])).rows;
@@ -283,6 +321,7 @@ function postAssinado(corpoObj, segredo = 'segredo-app') {
   const sig = 'sha256=' + crypto.createHmac('sha256', segredo).update(bruto, 'utf8').digest('hex');
   return [{ json: { headers: { 'x-hub-signature-256': sig, 'content-type': 'application/json' }, params: {}, query: {}, body: JSON.parse(bruto) }, binary: { data: { data: Buffer.from(bruto, 'utf8').toString('base64'), mimeType: 'application/json' } } }];
 }
+const eventoRecebida = (wamid, de, em) => L.acq07EventoEntrada({ wamid, de, em: new Date(em).toISOString(), tipo: 'text', texto: 'x' }, { run_id: 'teste-grupo' });
 const conversaAberta = (W) => W.m.mensagens.push({ lead_id: LEADS.pronto, direcao: 'saida', texto: 'Oi, Pet Shop Exemplo (modelo)', enviada_em: new Date(TER_10H - 3600000).toISOString(), id_externo: 'wamid.ANTES' });
 // O webhook usa o relógio de verdade (Date.now()) para a janela de 24 h: a mensagem chega "agora".
 const msg = (wamid, texto, extra) => webhookMeta(Object.assign({ wamid, de: NUM, texto, quando: Date.now() - 60000 }, extra || {}));
@@ -296,28 +335,120 @@ test('ACQ-07 GET: devolve o challenge só com o verify token certo', async () =>
   assert.equal(nao.respostas[0].codigo, 403);
 });
 
-test('ACQ-07 POST ao vivo: lead interessado → entrada registrada, Caixa avisada, Mercúrio responde e a saída fica com o wamid', async () => {
+test('ACQ-07 ao vivo: registra a entrada, responde em partes com o wamid de cada uma e não repete', async () => {
   await segredos();
   const W = criarMundo(); conversaAberta(W); W.m.agoraMs = TER_10H;
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Que bom que respondeu!', 'Como os clientes chegam até vocês hoje?'], resumo_para_almir: 'Pet shop.' });
   const S = montar(W, true);
   await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN1', 'Quero sim, pode preparar o diagnóstico')));
   const ent = W.m.mensagens.filter((x) => x.direcao === 'entrada');
   assert.equal(ent.length, 1); assert.equal(ent[0].id_externo, 'wamid.IN1');
-  assert.equal(W.m.handoffs.length, 1); assert.equal(W.m.handoffs[0].tipo, 'avancou');
+  assert.equal(W.m.handoffs.length, 0, 'interesse o Mercúrio conduz sozinho');
   assert.equal(W.m.llm.chamadas, 1);
   assert.match(W.m.llm.ultimo.messages[0].content, /Diagnóstico gratuito do site/);
-  assert.equal(W.m.meta.enviadas.length, 1);
-  assert.equal(W.m.meta.enviadas[0].corpo.type, 'text');
+  assert.equal(W.m.meta.digitando, 1, 'marca como lida e digitando');
+  assert.deepEqual(W.m.meta.enviadas.map((e) => e.corpo.text.body), ['Que bom que respondeu!', 'Como os clientes chegam até vocês hoje?']);
   assert.equal(W.m.meta.enviadas[0].corpo.to, NUM, 'responde no wa_id que escreveu');
-  const saida = W.m.mensagens.filter((x) => x.direcao === 'saida' && x.id_externo === 'wamid.TESTE1');
-  assert.equal(saida.length, 1);
+  assert.deepEqual(W.m.mensagens.filter((x) => x.direcao === 'saida' && /wamid\.TESTE/.test(x.id_externo)).map((x) => x.id_externo), ['wamid.TESTE1', 'wamid.TESTE2']);
   assert.ok(W.m.chamadas_http.filter((c) => c.url.includes('/llm')).every((c) => c.credencial === 'ACQ OpenRouter (Mercúrio)'));
   assert.ok(W.m.chamadas_http.filter((c) => c.url.includes('/jev')).every((c) => c.credencial === 'TypeSafe Jev (servidor)'));
-  // a Meta reenvia o mesmo webhook: nada se repete
   await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN1', 'Quero sim, pode preparar o diagnóstico')));
-  assert.equal(W.m.meta.enviadas.length, 1); assert.equal(W.m.handoffs.length, 1); assert.equal(W.m.llm.chamadas, 1);
+  assert.equal(W.m.meta.enviadas.length, 2, 'a Meta reenvia o webhook e nada se repete'); assert.equal(W.m.llm.chamadas, 1);
 });
 
+test('ACQ-07: áudio vira texto, chega à conversa e recebe resposta', async () => {
+  await segredos();
+  const W = criarMundo(); conversaAberta(W); W.m.transcricao = 'quanto custa o plano de vocês';
+  const S = montar(W, true);
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.AUD', null, { tipo: 'audio' })));
+  assert.equal(W.m.mensagens.find((x) => x.id_externo === 'wamid.AUD').texto, '[áudio] quanto custa o plano de vocês');
+  assert.ok(W.m.meta.enviadas.length >= 1);
+  assert.ok(W.m.chamadas_http.some((c) => c.url.includes('/graph/') && c.url.includes('midia-1')), 'baixou da Meta');
+});
+
+test('ACQ-07: mensagens seguidas têm uma resposta só, e a mais antiga não responde', async () => {
+  await segredos();
+  const W = criarMundo(); conversaAberta(W);
+  const S = montar(W, true);
+  const agora = Date.now();
+  // a segunda chegou enquanto a primeira esperava: a execução da primeira não responde.
+  await P.admin.query("select acq_n8n.registrar_evento($1::jsonb, 'test')", [JSON.stringify(eventoRecebida('wamid.NOVA', NUM, agora))]);
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.VELHA', 'oi', { quando: agora - 5000 })));
+  assert.equal(W.m.llm.chamadas, 0);
+  assert.equal(W.m.meta.enviadas.length, 0);
+});
+
+test('ACQ-07: quem chama por anúncio vira lead e é atendido; número de cliente só registra', async () => {
+  await segredos();
+  const W = criarMundo(); const S = montar(W, true);
+  const corpo = msg('wamid.AD', 'Oi, vi o anúncio', { de: '5521988887777' });
+  corpo.entry[0].changes[0].value.messages[0].referral = { source_type: 'ad', source_id: '9', headline: 'Diagnóstico grátis' };
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(corpo));
+  assert.equal(W.m.entradas_novas[0].anuncio.titulo, 'Diagnóstico grátis');
+  assert.equal(W.m.entradas_novas[0].nome_perfil, 'Contato Teste');
+  assert.equal(W.m.mensagens.filter((x) => x.id_externo === 'wamid.AD').length, 1);
+  assert.ok(W.m.meta.enviadas.length >= 1, 'responde');
+  assert.match(W.m.llm.ultimo.messages[0].content, /Chegou por um anúncio/);
+
+  const W2 = criarMundo(); W2.m.numero_de_cliente = true; const S2 = montar(W2, true);
+  await S2.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.CL', 'Oi, é sobre meu post', { de: '5521977776666' })));
+  assert.equal(W2.m.meta.enviadas.length, 0); assert.equal(W2.m.llm.chamadas, 0);
+});
+
+test('ACQ-07: reunião vai para a Caixa com o contexto e o horário, sem dizer que está marcada pelo sistema', async () => {
+  await segredos();
+  const W = criarMundo(); conversaAberta(W); W.m.jevExtra = { etapa: 'confirmar_reuniao' };
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Anotei, terça às 15h.', 'O Almir te chama aqui para confirmar.'], quando_reuniao: 'terça às 15h', resumo_para_almir: 'Pet shop sem site, quer mais clientes.' });
+  const S = montar(W, true);
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.RE', 'Pode ser terça às 15h')));
+  assert.equal(W.m.handoffs.length, 1);
+  assert.equal(W.m.handoffs[0].resumo, 'Pet shop sem site, quer mais clientes.');
+  assert.match(W.m.handoffs[0].proximo_passo, /confirmar a reunião \(terça às 15h\)/);
+  assert.equal(W.m.handoffs[0].dados.reuniao, 'terça às 15h');
+});
+
+test('ACQ-07: fechamento gera o Pix pelo painel e manda o copia e cola; sem Asaas, passa para o Almir', async () => {
+  await segredos();
+  const W = criarMundo(); conversaAberta(W); W.m.jevExtra = { etapa: 'fechar_agora', plano: 'start_assistido' };
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Fechado, plano Start Assistido.'], nome_cobranca: 'Pet LTDA', resumo_para_almir: 'Fechou.' });
+  const S = montar(W, true);
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.PX', 'Pode fechar, CNPJ 11.222.333/0001-81')));
+  assert.equal(W.m.cobrancas[0].documento, '11222333000181');
+  assert.equal(W.m.cobrancas[0].nome, 'Pet LTDA');
+  const textos = W.m.meta.enviadas.map((e) => e.corpo.text.body);
+  assert.ok(textos.includes('000201PIXTESTE'), 'copia e cola em mensagem própria');
+  assert.ok(textos.some((t) => /Pix de R\$ 1394,00/.test(t)));
+  assert.ok(!textos.some((t) => /confirmado/i.test(t)), 'nunca diz que foi pago');
+  assert.equal(W.m.handoffs.length, 0, 'só repassa depois do Pix confirmado');
+
+  const W2 = criarMundo(); conversaAberta(W2); W2.m.sem_asaas = true; W2.m.jevExtra = { etapa: 'fechar_agora', plano: 'start_assistido' };
+  W2.m.llm.texto = W.m.llm.texto;
+  await montar(W2, true).executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.PY', 'Pode fechar, CNPJ 11.222.333/0001-81')));
+  assert.equal(W2.m.handoffs.length, 1);
+  assert.match(W2.m.handoffs[0].proximo_passo, /Fechar com o lead/);
+});
+
+test('ACQ-08: repasse vai para o WhatsApp da Aceleriq com o contexto; Pix confirmado também avisa o lead; só marca se a Meta aceitar', async () => {
+  const W = criarMundo();
+  W.m.repasses = [{ id: 'h1', lead_id: LEADS.pronto, tipo: 'fechou', resumo: 'Fechou o Start. Pix confirmado.', proximo_passo: 'Fazer o onboarding e criar o grupo do cliente.', telefone: NUM, dados: { pagamento_confirmado: true }, commercial_leads: { name: 'Pet', company: 'Pet Shop', whatsapp: NUM } }];
+  const S = montar(W, true);
+  const rodar = () => S.executar('Acq08ComercialRp', 'Entrada interna', [{ json: { agora: new Date(TER_10H).toISOString() } }]);
+  await rodar();
+  const [equipe, lead] = W.m.meta.enviadas;
+  assert.equal(equipe.corpo.to, '5541997483429');
+  assert.equal(equipe.corpo.template.name, 'aceleriq_repasse_equipe');
+  assert.deepEqual(equipe.corpo.template.components[0].parameters.map((p) => p.text).slice(0, 2), ['Pix confirmado, fazer onboarding', 'Pet Shop']);
+  assert.match(lead.corpo.text.body, /Pagamento confirmado/);
+  assert.deepEqual(W.m.repassados, ['h1']);
+
+  const W2 = criarMundo(); W2.m.repasses = W.m.repasses; W2.m.meta.modo = '400';
+  await montar(W2, true).executar('Acq08ComercialRp', 'Entrada interna', [{ json: { agora: new Date(TER_10H).toISOString() } }]);
+  assert.equal((W2.m.repassados || []).length, 0, 'recusado continua pendente');
+
+  const W3 = criarMundo(); W3.m.repasses = W.m.repasses;
+  await montar(W3, false).executar('Acq08ComercialRp', 'Entrada interna', [{ json: { agora: new Date(TER_10H).toISOString() } }]);
+  assert.equal(W3.m.meta.enviadas.length, 0, 'em simulação não sai nada'); assert.equal((W3.m.repassados || []).length, 0);
+});
 test('ACQ-07 dry-run: classifica e redige, mas não chama a Meta nem grava no painel', async () => {
   await segredos();
   const W = criarMundo(); conversaAberta(W);
@@ -330,9 +461,8 @@ test('ACQ-07 dry-run: classifica e redige, mas não chama a Meta nem grava no pa
   const d = ev.find((e) => e.idempotency_key === 'ACQ-07|desfecho|wamid.IN2');
   assert.equal(d.tipo, 'comercial_entrada_responder_simular');
   assert.match(d.payload.resposta.texto, /diagnóstico/);
-  assert.ok(ev.some((e) => e.tipo === 'comercial_escrita_caixa_simulada'));
+  assert.ok(ev.some((e) => e.tipo === 'comercial_escrita_saida_simulada'));
 });
-
 test('ACQ-07: assinatura errada ou sem app secret não processa nada', async () => {
   const W = criarMundo(); conversaAberta(W); const S = montar(W, true);
   await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN3', 'Quero')));
@@ -366,19 +496,21 @@ test('ACQ-07: "pare" grava nao_contatar e não responde; botão "Não tenho inte
   assert.equal(W3.m.meta.enviadas.length, 0);
 });
 
-test('ACQ-07: número sem lead, Jev fora e link inventado não geram resposta', async () => {
+test('ACQ-07: painel fora, Jev fora e link inventado não geram resposta', async () => {
   await segredos();
   const W = criarMundo(); conversaAberta(W); const S = montar(W, true);
+  W.m.falhas.aceleriq_comercial_entrada_nova = 'erro de teste';
   await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN8', 'Oi, quem é?', { de: '5521988887777' })));
   assert.equal(W.m.meta.enviadas.length, 0);
   assert.ok((await incidentes()).some((i) => i.incident_key === 'ACQ-07|sem_lead|88887777'));
+  delete W.m.falhas.aceleriq_comercial_entrada_nova;
   W.m.jevFalha = true;
   await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN9', 'Quero')));
   assert.equal(W.m.meta.enviadas.length, 0);
   assert.equal(W.m.mensagens.filter((x) => x.id_externo === 'wamid.IN9').length, 1, 'a entrada fica registrada mesmo assim');
   W.m.jevFalha = false; W.m.llm.texto = 'Veja nossos preços em https://site-inventado.exemplo agora.';
-  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN10', 'Quanto custa?')));
-  assert.equal(W.m.meta.enviadas.length, 0);
-  assert.equal(W.m.handoffs.length, 1, 'a Caixa é avisada mesmo sem resposta automática');
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.IN10', 'Quanto custa?', { quando: Date.now() })));
+  assert.deepEqual(W.m.meta.enviadas.map((e) => e.corpo.text.body), [L.ACQ07_TEXTO_DE_RESERVA], 'o texto bloqueado não sai, e o lead não fica sem resposta');
+  assert.ok(W.m.handoffs.some((h) => /bloqueado \(link_fora_das_orientacoes\)/.test(h.proximo_passo)), 'o Almir assume');
   assert.ok((await incidentes()).some((i) => i.incident_key.startsWith('ACQ-07|resposta_nao_redigida|link_fora_das_orientacoes')));
 });
