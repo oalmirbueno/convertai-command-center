@@ -283,6 +283,8 @@ const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Onde Estamos", url: "/onde-estamos", icon: HeartPulse },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
+  // 05/11/2026 (dono): tudo o que a Aceleriq entrega fica documentado aqui; escondido em "Mais", parecia que tinha sumido.
+  { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Agenda", url: "/calendario", icon: CalendarDays },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
 ];
@@ -293,7 +295,6 @@ const clientMoreNav: NavItem[] = [
   { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
-  { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Perfil", url: "/perfil", icon: UserCircle },
 ];

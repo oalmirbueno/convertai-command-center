@@ -29,7 +29,6 @@ import {
   CLASSES_DO_LEAD,
   agendaDoLead,
   dinheiro,
-  entradaRecebida,
   leadQualificado,
   moverLead,
   rotuloDaClasse,
@@ -39,7 +38,7 @@ import {
 import { CampoDeBusca } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
 import Termometro from "./Termometro";
-import { resumoDaOportunidade, valorDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
+import { resumoDaOportunidade, totalDoGanho, valorDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
 import JanelaDoGanho from "./JanelaDoGanho";
 import {
   FAIXAS_DO_FILTRO,
@@ -470,9 +469,8 @@ function Coluna({
   arrastandoAlgo: boolean;
   onAbrir: (lead: Lead) => void;
 }) {
-  // No ganho conta só a entrada que já entrou; nas outras colunas a entrada ainda é promessa inteira.
   const emJogo = leads.reduce(
-    (soma, lead) => soma + lead.monthly_value * 12 + (estagio === "ganho" ? entradaRecebida(lead) : lead.one_off_value),
+    (soma, lead) => soma + lead.monthly_value * 12 + lead.one_off_value,
     0,
   );
   // Qualificada = classe + dono + próximo passo agendado. O placar fica no
@@ -491,7 +489,9 @@ function Coluna({
       ajuda={ajuda}
       contagem={leads.length}
       resumo={
-        estagio === "ganho" || estagio === "perdido"
+        estagio === "ganho"
+          ? totalDoGanho(leads)
+          : estagio === "perdido"
           ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
           : `${emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}${leads.length > 0 ? ` · ${qualificadas}/${leads.length} qualificadas` : ""}`
       }

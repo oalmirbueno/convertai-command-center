@@ -934,7 +934,8 @@ export const dinheiro = (valor: number) =>
   valor.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: Number.isInteger(valor) ? 0 : 2,
+    maximumFractionDigits: 2,
   });
 
 /* ────────────────────────────── Atividades ──────────────────────────────── */
