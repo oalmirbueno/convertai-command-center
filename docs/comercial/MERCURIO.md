@@ -71,6 +71,8 @@ O papel do Hermes é deixar a prospecção mais certeira, pesquisando antes do n
    "reparei que": precisa começar em minúscula, ser uma frase só e ser verdade verificável.
 4. Prova primária (`site_oficial_da_empresa`, `perfil_oficial_instagram`) grava sozinha e o n8n já pode usar.
 
+Agenda e voz: `aceleriq_comercial_horarios`, `aceleriq_comercial_marcar_reuniao` e `aceleriq_comercial_falar`.
+
 Ferramentas novas: `aceleriq_comercial_entrada_nova` (quem chamou sozinho vira lead), `aceleriq_comercial_cobrar` (Pix no
 Asaas, valor da tabela), `aceleriq_comercial_repasses` e `aceleriq_comercial_repasse_marcar` (aviso no WhatsApp da
 Aceleriq). O repasse para onboarding só nasce quando o Asaas confirma o pagamento.

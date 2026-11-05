@@ -14,6 +14,7 @@ describe("Fechamento pelo Asaas", () => {
   it("o valor vem da tabela: entrada mais a primeira mensalidade", () => {
     expect(valorDoFechamento(planoPorId("start_assistido")!)).toBe(1244);
     expect(valorDoFechamento(planoPorId("crescimento")!)).toBe(3994);
+    expect(valorDoFechamento(planoPorId("crescimento")!, true)).toBe(4291);
     expect(planoPorId("inventado")).toBeNull();
   });
 

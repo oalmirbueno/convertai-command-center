@@ -12,7 +12,8 @@
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { db, isUuid, READ_LIMITS } from '../../_shared/aceleriq-read-services.ts';
 import { chave } from '../../_shared/chaves.ts';
-import { criarCobrancaPix, documentoValido, ErroDoAsaas, planoPorId, valorDoFechamento } from '../../_shared/comercial-asaas.ts';
+import { ADICIONAL_GOOGLE, criarCobrancaPix, documentoValido, ErroDoAsaas, planoPorId, valorDoFechamento } from '../../_shared/comercial-asaas.ts';
+import { diaDoHorario, horarioDaGrade, horariosLivres, rotuloDoHorario, type Intervalo } from '../../_shared/comercial-agenda.ts';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
@@ -77,7 +78,7 @@ function itemDoLead(l: Record<string, unknown>) {
   };
 }
 
-export async function comercialCobrar(input: { lead_id: string; plano: string; nome: string; documento: string; email?: string; operador?: string }, ctx: AuthContext) {
+export async function comercialCobrar(input: { lead_id: string; plano: string; nome: string; documento: string; email?: string; com_google?: boolean; operador?: string }, ctx: AuthContext) {
   soDaCasa(ctx);
   if (!isUuid(input.lead_id)) throw new Error('lead_id must be a UUID');
   const plano = planoPorId(input.plano);
@@ -97,24 +98,78 @@ export async function comercialCobrar(input: { lead_id: string; plano: string; n
   let token = '';
   try { token = await chave('ASAAS_API_KEY'); } catch { token = ''; }
   if (!token) return { cobranca: null, nova: false, sem_asaas: true, aviso: 'A chave do Asaas ainda nao esta no cofre: passe para a equipe fechar.' };
-  const valor = valorDoFechamento(plano);
+  const comGoogle = input.com_google === true && plano.mensal > 0;
+  const valor = valorDoFechamento(plano, comGoogle);
+  const nomeDoPacote = comGoogle ? `${plano.nome} + ${ADICIONAL_GOOGLE.nome}` : plano.nome;
   const venc = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
   let criada;
   try {
     criada = await criarCobrancaPix(token, fetch, { nome, documento, email, telefone: digitos((lead as Record<string, unknown>).whatsapp).replace(/^55/, '') || null, valor,
-      descricao: `Aceleriq: plano ${plano.nome}, entrada e primeira mensalidade`, referencia: `lead:${input.lead_id}`, vencimento: venc });
+      descricao: plano.mensal > 0 ? `Aceleriq: ${nomeDoPacote}, entrada e primeira mensalidade` : `Aceleriq: ${plano.nome}`, referencia: `lead:${input.lead_id}`, vencimento: venc });
   } catch (e) {
     if (e instanceof ErroDoAsaas) return { cobranca: null, nova: false, erro_asaas: true, aviso: e.message };
     throw e;
   }
   const { data, error } = await comPrazo(db().from('comercial_cobrancas').insert({
-    lead_id: input.lead_id, plano: plano.id, plano_nome: plano.nome, valor, nome, documento_final: documento.slice(-4), email,
+    lead_id: input.lead_id, plano: plano.id, plano_nome: nomeDoPacote, valor, nome, documento_final: documento.slice(-4), email,
     asaas_cliente_id: criada.cliente_id, asaas_pagamento_id: criada.pagamento_id, link: criada.link, pix_copia_e_cola: criada.pix_copia_e_cola,
     vencimento: venc, operador_slug: texto(input.operador, 40) || 'mercurio',
   }).select('*').single());
   if (error) throw new Error(`comercial_cobrancas: ${error.message}`);
-  await db().from('commercial_lead_events').insert({ lead_id: input.lead_id, kind: 'agente', note: `Pix gerado no Asaas: ${plano.nome}, R$ ${valor}. Aguardando pagamento.` });
+  await db().from('commercial_lead_events').insert({ lead_id: input.lead_id, kind: 'agente', note: `Pix gerado no Asaas: ${nomeDoPacote}, R$ ${valor}. Aguardando pagamento.` });
   return { cobranca: data, nova: true };
+}
+
+async function diasComReuniao(): Promise<string[]> {
+  const { data, error } = await comPrazo(db().from('comercial_reunioes').select('dia').eq('situacao', 'marcada').gte('dia', new Date(Date.now() - 86400000).toISOString().slice(0, 10)));
+  if (error) throw new Error(`comercial_reunioes: ${error.message}`);
+  return ((data ?? []) as Array<{ dia: string }>).map((r) => r.dia);
+}
+
+/** Os horários livres do Almir. ocupados: o que o n8n leu do Google Agenda. */
+export async function comercialHorarios(input: { ocupados?: Intervalo[]; maximo?: number }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const ocupados = Array.isArray(input.ocupados) ? input.ocupados.slice(0, 200) : [];
+  return { horarios: horariosLivres(Date.now(), ocupados, await diasComReuniao(), Math.min(Number(input.maximo) || 4, 6)), google_lido: Array.isArray(input.ocupados) };
+}
+
+export async function comercialMarcarReuniao(input: { lead_id: string; inicio: string; resumo?: string; operador?: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  if (!isUuid(input.lead_id)) throw new Error('lead_id must be a UUID');
+  if (!horarioDaGrade(input.inicio)) return { marcada: false, motivo: 'fora_da_agenda' };
+  const inicio = new Date(input.inicio).toISOString();
+  const { data: lead } = await comPrazo(db().from('commercial_leads').select('id, name, company, whatsapp').eq('id', input.lead_id).maybeSingle());
+  if (!lead) throw new Error('Lead nao encontrado.');
+  const l = lead as Record<string, string | null>;
+  const { data, error } = await comPrazo(db().from('comercial_reunioes').insert({ lead_id: input.lead_id, inicio, dia: diaDoHorario(inicio), resumo: texto(input.resumo, 2000), operador_slug: texto(input.operador, 40) || 'mercurio' }).select('id').single());
+  if (error) {
+    if (/duplicate|unique/i.test(error.message)) return { marcada: false, motivo: 'dia_ocupado' };
+    throw new Error(`comercial_reunioes: ${error.message}`);
+  }
+  const titulo = `Reunião: ${l.company || l.name}`;
+  await db().from('commercial_activities').insert({ lead_id: input.lead_id, kind: 'ligacao', title: titulo, due_at: inicio, notes: texto(input.resumo, 2000) });
+  await db().from('commercial_lead_events').insert({ lead_id: input.lead_id, kind: 'agente', note: `Reunião marcada para ${rotuloDoHorario(inicio)}.` });
+  return { marcada: true, id: (data as { id: string }).id, inicio, fim: new Date(Date.parse(inicio) + 3600000).toISOString(), rotulo: rotuloDoHorario(inicio), titulo };
+}
+
+const VOZ_PADRAO = 'xNGAXaCH8MaasNuo7Hr7';
+
+/** Nota de voz: OGG Opus mono, o formato que o WhatsApp mostra como áudio gravado. */
+export async function comercialFalar(input: { texto: string; voz?: string; modelo?: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  const t = texto(input.texto, 900);
+  if (!t) throw new Error('texto: vazio.');
+  const voz = /^[A-Za-z0-9]{10,40}$/.test(String(input.voz || '')) ? String(input.voz) : VOZ_PADRAO;
+  const k = await chave('ELEVENLABS_API_KEY');
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voz}?output_format=opus_48000_64`, {
+    method: 'POST', headers: { 'xi-api-key': k, 'content-type': 'application/json' },
+    body: JSON.stringify({ text: t, model_id: texto(input.modelo, 40) || 'eleven_v4', language_code: 'pt' }),
+  });
+  if (!r.ok) throw new Error(`ElevenLabs respondeu ${r.status}.`);
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return { audio_base64: btoa(bin), mime: 'audio/ogg', bytes: bytes.length };
 }
 
 export async function comercialRepasses(input: { limit?: number }, ctx: AuthContext) {

@@ -20,12 +20,16 @@ export const PLANOS_DE_FECHAMENTO: PlanoDeFechamento[] = [
   { id: "crescimento", nome: "Crescimento", mensal: 2997, entrada: 997, meses: 6 },
   { id: "estrutura", nome: "Estrutura", mensal: 4497, entrada: 1497, meses: 12 },
   { id: "engenharia", nome: "Engenharia / OS", mensal: 6997, entrada: 2497, meses: 12 },
+  { id: "google_avulso", nome: "Perfil Google", mensal: 0, entrada: 297, meses: 0 },
 ];
+
+/** Perfil Google: R$ 297, adicional de um plano mensal ou avulso, pelo mesmo valor (dono, 05/11). */
+export const ADICIONAL_GOOGLE = { id: "google", nome: "Perfil Google", valor: 297 };
 
 export const planoPorId = (id: unknown) => PLANOS_DE_FECHAMENTO.find((p) => p.id === id) || null;
 
-/** O primeiro Pix: entrada mais a primeira mensalidade. */
-export const valorDoFechamento = (p: PlanoDeFechamento) => p.entrada + p.mensal;
+/** O primeiro Pix: entrada, primeira mensalidade e o adicional, quando vier junto. */
+export const valorDoFechamento = (p: PlanoDeFechamento, comGoogle = false) => p.entrada + p.mensal + (comGoogle && p.mensal > 0 ? ADICIONAL_GOOGLE.valor : 0);
 
 const digitos = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 

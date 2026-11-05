@@ -89,7 +89,7 @@ import {
   comercialRegistrarMensagem,
 } from './aceleriq-commercial-services.ts';
 import { comercialBolsoLiberar, comercialBolsoPedir, comercialPedirProposta } from '../mcp-server/modulos/comercial-conduzir.ts';
-import { comercialCobrar, comercialEntradaNova, comercialRepasseMarcar, comercialRepasses } from '../mcp-server/modulos/comercial-fechar.ts';
+import { comercialCobrar, comercialEntradaNova, comercialFalar, comercialHorarios, comercialMarcarReuniao, comercialRepasseMarcar, comercialRepasses } from '../mcp-server/modulos/comercial-fechar.ts';
 import { TIPOS_DE_EVIDENCIA, type TipoDeEvidencia } from './comercial-evidencia.ts';
 import {
   getFinanceAdsInvestment,
@@ -394,6 +394,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_comercial_cobrar: 'commercial:write',
   aceleriq_comercial_repasses: 'commercial:read',
   aceleriq_comercial_repasse_marcar: 'commercial:write',
+  aceleriq_comercial_horarios: 'commercial:read',
+  aceleriq_comercial_marcar_reuniao: 'commercial:write',
+  aceleriq_comercial_falar: 'commercial:write',
   aceleriq_comercial_bolso_liberar: 'commercial:write',
   aceleriq_get_workspace_node: 'workspace:read',
 };
@@ -4810,16 +4813,41 @@ const comercialEntradaNovaTool = ferramentaDoCrm(
 const comercialCobrarTool = ferramentaDoCrm(
   'aceleriq_comercial_cobrar', 'Gerar o Pix do fechamento no Asaas',
   'Gera o Pix de um plano da tabela (entrada mais a primeira mensalidade; o valor vem da tabela). Precisa de nome e CPF ou CNPJ validos. Repetir devolve a cobranca aberta. O repasse para o onboarding so nasce quando o Asaas confirmar o pagamento: nunca diga que foi pago antes disso.',
-  true, z.object({ lead_id: UUID, plano: z.string().min(3).max(40), nome: z.string().min(3).max(120), documento: z.string().min(11).max(20), email: z.string().max(200).optional(), operador: OPERADOR }).strict(),
+  true, z.object({ lead_id: UUID, plano: z.string().min(3).max(40), nome: z.string().min(3).max(120), documento: z.string().min(11).max(20), email: z.string().max(200).optional(), com_google: z.boolean().optional(), operador: OPERADOR }).strict(),
   { type: 'object', properties: {
     lead_id: { type: 'string' },
-    plano: { type: 'string', description: 'start_assistido, essencial, presenca, crescimento, estrutura ou engenharia.' },
+    com_google: { type: 'boolean', description: 'Soma o Perfil Google como adicional de R$ 297 ao plano mensal.' },
+    plano: { type: 'string', description: 'start_assistido, essencial, presenca, crescimento, estrutura, engenharia ou google_avulso.' },
     nome: { type: 'string', description: 'Nome ou razao social da cobranca.' },
     documento: { type: 'string', description: 'CPF ou CNPJ.' },
     email: { type: 'string' },
     operador: { type: 'string' },
   }, required: ['lead_id', 'plano', 'nome', 'documento'], additionalProperties: false },
   comercialCobrar,
+);
+
+const comercialHorariosTool = ferramentaDoCrm(
+  'aceleriq_comercial_horarios', 'Horarios livres para reuniao com o Almir',
+  'Devolve os proximos horarios livres: uma reuniao por dia, terca e quinta as 11h ou 16h, quarta as 11h. Mande em ocupados o que estiver no Google Agenda.',
+  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: z.number().int().min(1).max(6).optional() }).strict(),
+  { type: 'object', properties: { ocupados: { type: 'array', items: { type: 'object', properties: { inicio: { type: 'string' }, fim: { type: 'string' } }, required: ['inicio', 'fim'], additionalProperties: false } }, maximo: { type: 'number' } }, additionalProperties: false },
+  comercialHorarios,
+);
+
+const comercialMarcarReuniaoTool = ferramentaDoCrm(
+  'aceleriq_comercial_marcar_reuniao', 'Marcar reuniao com o Almir',
+  'Marca a reuniao em um horario devolvido por aceleriq_comercial_horarios. O banco garante uma por dia: se responder marcada=false, ofereca outro horario.',
+  true, z.object({ lead_id: UUID, inicio: z.string().min(10).max(40), resumo: z.string().max(2000).optional(), operador: OPERADOR }).strict(),
+  { type: 'object', properties: { lead_id: { type: 'string' }, inicio: { type: 'string', description: 'ISO do horario escolhido.' }, resumo: { type: 'string' }, operador: { type: 'string' } }, required: ['lead_id', 'inicio'], additionalProperties: false },
+  comercialMarcarReuniao,
+);
+
+const comercialFalarTool = ferramentaDoCrm(
+  'aceleriq_comercial_falar', 'Gerar nota de voz do executivo',
+  'Transforma o texto em nota de voz (OGG Opus) pela ElevenLabs. Tem custo por caractere.',
+  true, z.object({ texto: z.string().min(1).max(900), voz: z.string().max(40).optional(), modelo: z.string().max(40).optional() }).strict(),
+  { type: 'object', properties: { texto: { type: 'string' }, voz: { type: 'string' }, modelo: { type: 'string' } }, required: ['texto'], additionalProperties: false },
+  comercialFalar,
 );
 
 const comercialRepassesTool = ferramentaDoCrm(
@@ -4962,6 +4990,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   comercialCobrarTool,
   comercialRepassesTool,
   comercialRepasseMarcarTool,
+  comercialHorariosTool,
+  comercialMarcarReuniaoTool,
+  comercialFalarTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,
