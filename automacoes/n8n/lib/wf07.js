@@ -6,7 +6,7 @@
 
 var ACQ07_BOTOES_PARE = ['nao tenho interesse', 'parar', 'parar promocoes', 'nao quero receber', 'sair'];
 var ACQ07_PLANOS = ['start_assistido', 'essencial', 'presenca', 'crescimento', 'estrutura', 'engenharia', 'google_avulso'];
-var ACQ07_MAX_PARTES = 4;
+var ACQ07_MAX_PARTES = 3;
 
 // GET de verificação da Meta: hub.mode=subscribe e hub.verify_token igual ao guardado.
 function acq07Verificacao(query, segredos) {
@@ -277,7 +277,7 @@ function acq07ForaDoTeste(m, cfg) {
 }
 
 // Regras: o Jev julga, o código decide. registro: resultado de registrar_mensagem (pode trazer pediu_para_parar).
-function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
+function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs, orcamento) {
   var c = acqComCfg(cfg);
   var d = { acao: 'nada', responder: false, caixa: false, parar: false, cobrar: false, motivos: [], intencao: julg ? julg.intencao : null, etapa: julg ? julg.etapa : null, objecao: julg ? julg.objecao : null, modo: 'venda', faltam: [], plano: null, agenda: false, voz: false };
   var conf = (fila && fila.config) || {};
@@ -294,6 +294,8 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
   var idadeH = (agoraMs - Date.parse(m.em)) / 3600000;
   var janela = isFinite(idadeH) && idadeH >= 0 && idadeH < Number(c.janela_horas);
   if (!janela) { d.motivos.push('fora_da_janela_de_24h'); return d; }
+  // Teto do mês: não gasta com resposta automática; o Almir assume. Quem veio de anúncio está na janela grátis da Meta.
+  if (orcamento && !orcamento.pode_responder && !(lead.qualificacao && lead.qualificacao.anuncio)) { d.caixa = true; d.acao = 'caixa'; d.motivos.push('teto_do_mes'); return d; }
   if (julg.remetente === 'resposta_automatica') { d.motivos.push('resposta_automatica_do_lead'); return d; }
   if (julg.remetente === 'menu_de_robo') {
     var tentativas = (lead.mensagens || []).filter(function (x) { return x.direcao === 'saida' && String(x.texto || '').length <= 3; }).length;

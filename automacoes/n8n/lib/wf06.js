@@ -11,11 +11,12 @@ var ACQ06_TIPOS_QUE_BLOQUEIAM = {
 };
 
 // fila: resultado de aceleriq_comercial_fila. Devolve a regra da rodada e os candidatos em ordem.
-function acq06Candidatos(fila, cfg, agoraMs) {
+function acq06Candidatos(fila, cfg, agoraMs, orcamento) {
   var c = acqComCfg(cfg);
   var conf = (fila && fila.config) || {};
   var out = { pode: false, motivo: null, limite: 0, candidatos: [], ignorados: [] };
   if (!fila || !conf.ativo) { out.motivo = 'mercurio_desligado'; return out; }
+  if (orcamento && !orcamento.pode_prospectar) { out.motivo = 'teto_do_mes'; return out; }
   var h = acqComHorarioDaFila(conf);
   var agora = acqComNoHorario(agoraMs, h[0], h[1]);
   if (!agora.dia_util) { out.motivo = 'fim_de_semana'; return out; }
@@ -23,6 +24,7 @@ function acq06Candidatos(fila, cfg, agoraMs) {
   var restam = Math.max(0, Number(conf.restam_hoje) || 0);
   out.limite = Math.min(restam, Math.max(0, Number(c.max_por_rodada) || 0));
   var limiteRetomada = Math.max(0, (Number(c.max_por_rodada) || 0));
+  if (orcamento) { out.limite = Math.min(out.limite, orcamento.modelos_restantes); limiteRetomada = Math.min(limiteRetomada, orcamento.modelos_restantes); }
   var itens = ((fila && fila.itens) || []).slice().sort(function (a, b) {
     var na = Number(a && a.qualificacao && a.qualificacao.encaixe_jev), nb = Number(b && b.qualificacao && b.qualificacao.encaixe_jev);
     return (isFinite(nb) ? nb : -1) - (isFinite(na) ? na : -1);

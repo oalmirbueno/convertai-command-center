@@ -223,4 +223,6 @@ O ACQ-07 agora conduz a venda sozinho e o ACQ-08 repassa para a Aceleriq:
 Simulação: `node tools/simular-conversas.mjs saida.json` usa o Jev e o modelo reais, e não toca na Meta, no Asaas nem no CRM.
 Não existe agenda automática: quem confirma a reunião é o Almir, por decisão dele.
 
+**Orçamento do mês** (`acqComOrcamento`): a Meta dá 1.000 mensagens de atendimento grátis por número e por mês desde 01/10/2026, e cada balão conta. A prospecção para em 800, o que guarda 200 para quem já está conversando. Em 1.000, ninguém recebe resposta automática e o lead vai para a Caixa; quem veio de anúncio segue, pela janela grátis. Modelos de prospecção são pagos por entrega e têm teto próprio: `teto_modelos_mes`, 300.
+
 Para ligar também é preciso: `dry_run_por_workflow["ACQ-08"] = false`, `"aprovado": true` em `repasse_equipe` e as escritas `aceleriq_comercial_entrada_nova`, `aceleriq_comercial_cobrar` e `aceleriq_comercial_repasse_marcar` em `escritas_liberadas`.

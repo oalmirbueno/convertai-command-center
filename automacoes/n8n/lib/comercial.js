@@ -15,6 +15,10 @@ var ACQ_COM_PADRAO = {
   llm_modelo: 'anthropic/claude-sonnet-5.5',
   transcricao_modelo: 'google/gemini-2.5-flash',
   numero_equipe: null,
+  // Meta: 1.000 mensagens de atendimento grátis por número e por mês, desde 01/10/2026; cada balão conta. Modelo é sempre pago.
+  teto_atendimento_mes: 1000,
+  reserva_para_conversas: 200,
+  teto_modelos_mes: 300,
   executivo: { nome: 'Rafael', cargo: 'executivo de negócios' },
   voz_id: 'FB9t7w9dj2IYiysoM5p6',
   voz_modelo: 'eleven_v4',
@@ -103,6 +107,16 @@ function acqComPrimeiroNome(item) {
 }
 
 function acq07NormalNome(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+// O que ainda cabe no mês. A prospecção para antes do teto, para sobrar mensagem para quem já está conversando.
+function acqComOrcamento(contagem, cfg) {
+  var c = acqComCfg(cfg);
+  var atendimento = Number(contagem && contagem.atendimento) || 0, modelos = Number(contagem && contagem.modelos) || 0;
+  return { atendimento: atendimento, modelos: modelos,
+    pode_responder: atendimento < Number(c.teto_atendimento_mes),
+    pode_prospectar: atendimento < Number(c.teto_atendimento_mes) - Number(c.reserva_para_conversas) && modelos < Number(c.teto_modelos_mes),
+    modelos_restantes: Math.max(0, Number(c.teto_modelos_mes) - modelos) };
+}
 
 // O fato observado que vai no primeiro contato. Ordem: o que alguém gravou de propósito
 // (qualificacao.fato_observado), fato com prova sobre presença digital ou problema, a presença

@@ -857,6 +857,7 @@ return [{ json: { incidentes: incs, resolver: resolver, pg: [JSON.stringify(incs
 }
 
 // ================================================================ ACQ-06 (comercial: primeiro contato)
+const SQL_CONTAGEM_DO_MES = "select coalesce((select sum(case when e.payload->'meta' ? 'wamids' then jsonb_array_length(e.payload->'meta'->'wamids') else 1 end) from acq_n8n.eventos e where e.workflow_id = 'ACQ-07' and e.tipo like 'comercial_entrada_%_aceita' and e.registrado_em >= date_trunc('month', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'), 0)::int as atendimento,\n  (select count(*) from acq_n8n.eventos e where e.workflow_id = 'ACQ-06' and e.tipo like 'comercial_%_aceito' and e.registrado_em >= date_trunc('month', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo')::int as modelos";
 const SQL_EVENTO_E_INCIDENTE = (wfId, comContexto) => `select case when $1::text is not null then acq_n8n.registrar_evento($1::jsonb, $2) end as evento,
   case when $3::text is not null then acq_n8n.incidente_registrar($3, '${wfId}', null, $4, $5, $6::jsonb) end as incidente${comContexto ? ',\n  $7::jsonb as ctx' : ''}`;
 const pgLiteral = (wf, nome, query, extra = {}, lane = 0) =>
@@ -883,11 +884,12 @@ const run = acqRunId(${JSON.stringify(W)}, agoraMs, Math.random());
 return [{ json: pedido({ ref: 'fila', ferramenta: 'aceleriq_comercial_fila', argumentos: { operador: acqComCfg(CFG).operador, limit: 100 } }, run,
   { _ctx: { run_id: run, agoraMs: agoraMs, hoje: acqAgoraSP(agoraMs).data } }) }];`);
   const lf = ferramenta(wf, 'Ler fila do Mercúrio');
+  const cm = pgLiteral(wf, 'Contar envios do mês', SQL_CONTAGEM_DO_MES);
   const es = code(wf, 'Escolher leads', ['comercial', 'wf06'], `
 const ctx = $('Preparar rodada').first().json._ctx;
-const r = $input.first().json;
+const r = $('Ler fila do Mercúrio').first().json;
 if (!r.ok) throw new Error('ACQ-06: fila do comercial indisponível (' + (r.erro && r.erro.tipo) + '): ' + (r.erro && r.erro.mensagem));
-const esc = acq06Candidatos(r.resultado, CFG, ctx.agoraMs);
+const esc = acq06Candidatos(r.resultado, CFG, ctx.agoraMs, acqComOrcamento($input.first().json, CFG));
 return esc.candidatos.map((cand) => {
   const tr = acqComTransporte(CFG, ${JSON.stringify(W)}, cand.tipo);
   return { json: { cand: cand, transporte: tr, rodada: { motivo: esc.motivo, limite: esc.limite, ignorados: esc.ignorados.length },
@@ -941,7 +943,7 @@ $input.all().forEach((i) => {
 return out;`);
   const gr = pg(wf, 'Gravar desfecho do registro', SQL_EVENTO_E_INCIDENTE(W, false));
   [t1, t2, t3].forEach((x) => wf.liga(x, p));
-  wf.cadeia(p, lf, es, rv, me, ev);
+  wf.cadeia(p, lf, cm, es, rv, me, ev);
   wf.liga(ev, hm, 0); wf.liga(ev, sem, 1);
   wf.cadeia(hm, cl, de);
   wf.liga(sem, de);
@@ -1080,12 +1082,13 @@ const lead = (fila ? acq07AcharLead(ctx.m, fila) : null) || acq07LeadDoResultado
 const peds = acq07PedidoEntrada(ctx.m, lead);
 return (peds.length ? peds : [{ ref: 'entrada|' + ctx.m.wamid + '|sem_lead', ferramenta: 'nenhuma', argumentos: {} }]).map((p) => ({ json: pedido(p, ctx.run_id) }));`);
   const ge = ferramenta(wf, 'Gravar entradas no painel');
+  const cm = pgLiteral(wf, 'Contar envios do mês', SQL_CONTAGEM_DO_MES);
   const pj = code(wf, 'Pedido ao Jev', ['comercial', 'wf07'], `
 const ctx = $('Preparar rodada').first().json._ctx;
 const f = $('Ler fila do Mercúrio').first().json;
 const fila = f.ok ? f.resultado : null;
 const lead = (fila ? acq07AcharLead(ctx.m, fila) : null) || acq07LeadDoResultado($('Achar ou criar lead').first().json, ctx.m);
-const regs = $input.all().map((i) => i.json);
+const regs = $('Gravar entradas no painel').all().map((i) => i.json);
 const reg = regs.filter((r) => String(r.ref || '').indexOf('entrada|' + ctx.m.wamid) === 0)[0];
 return [{ json: { mensagem: ctx.m, lead: lead, registro_entrada: reg && reg.ferramenta !== 'nenhuma' ? { ok: reg.ok === true, simulado: reg.simulado === true, resultado: reg.resultado || null, erro: reg.erro || null } : null,
   jev: acq07PedidoJev(ctx.m, lead), jev_url: CFG.jev_url } }];`);
@@ -1101,7 +1104,7 @@ const f = $('Ler fila do Mercúrio').first().json;
 const fila = f.ok ? f.resultado : null;
 const julg = acq07LerJev($input.first().json);
 const reg = b.registro_entrada && b.registro_entrada.ok && !b.registro_entrada.simulado ? b.registro_entrada.resultado : null;
-const d = acq07Decidir(b.mensagem, b.lead, reg, julg, fila, CFG, ctx.agoraMs);
+const d = acq07Decidir(b.mensagem, b.lead, reg, julg, fila, CFG, ctx.agoraMs, acqComOrcamento($('Contar envios do mês').first().json, CFG));
 return [{ json: { mensagem: b.mensagem, lead: b.lead, registro_entrada: b.registro_entrada, julgamento: julg, decisao: d, agora: new Date(ctx.agoraMs).toISOString(), ate: new Date(ctx.agoraMs + 21 * 86400000).toISOString(), google_url: acqComCfg(CFG).google_url, google_id: acqComCfg(CFG).google_agenda_id } }];`);
   const qr = se(wf, 'Mercúrio responde?', '={{ $json.decisao.responder === true }}');
   const ag = se(wf, 'Precisa de agenda?', '={{ $json.decisao.agenda === true }}');
@@ -1246,7 +1249,7 @@ return out;`, {}, 1);
   wf.cadeia(lb, ls, cs, rv, sm, ea);
   wf.liga(ea, bm, 0); wf.liga(ea, gt, 1);
   wf.cadeia(bm, ba, pt, tr, lt, gt);
-  wf.cadeia(gt, gx, es, jm, pr, lf, pl, al, re, ge, pj, jv, dc, qr);
+  wf.cadeia(gt, gx, es, jm, pr, lf, pl, al, re, ge, cm, pj, jv, dc, qr);
   wf.liga(qr, ag, 0); wf.liga(qr, df, 1);
   wf.liga(ag, gf, 0); wf.liga(ag, pz, 1);
   wf.cadeia(gf, ph, lh, pz, llm, mr, gc, me, cg);

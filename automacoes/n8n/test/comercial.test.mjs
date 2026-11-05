@@ -206,6 +206,23 @@ test('Plano Começo: fecha com o Almir, sem Pix', () => {
   assert.equal(d.cobrar, false); assert.equal(d.caixa, true); assert.equal(d.etapa, 'passar_humano'); assert.deepEqual(d.faltam, []);
 });
 
+test('teto do mês: prospecção para antes, resposta para no limite, anúncio segue na janela grátis', () => {
+  const c = cfg('test');
+  assert.deepEqual(L.acqComOrcamento({ atendimento: 100, modelos: 10 }, c), { atendimento: 100, modelos: 10, pode_responder: true, pode_prospectar: true, modelos_restantes: 290 });
+  assert.equal(L.acqComOrcamento({ atendimento: 800, modelos: 0 }, c).pode_prospectar, false, 'guarda 200 para quem está conversando');
+  assert.equal(L.acqComOrcamento({ atendimento: 800, modelos: 0 }, c).pode_responder, true);
+  assert.equal(L.acqComOrcamento({ atendimento: 1000, modelos: 0 }, c).pode_responder, false);
+  assert.equal(L.acqComOrcamento({ atendimento: 0, modelos: 300 }, c).pode_prospectar, false);
+  const fila = { config: { ativo: true }, itens: [] };
+  const msg = { wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto: 'oi' };
+  const j = { intencao: 'pergunta', confianca: 0.9, p_pare: 0.02, remetente: 'humano', etapa: 'descobrir', objecao: 'nenhuma', plano: 'nenhum', entendeu_necessidade: true };
+  const sem = L.acqComOrcamento({ atendimento: 1000 }, c);
+  const d = L.acq07Decidir(msg, { lead_id: 'x', mensagens: [], qualificacao: {} }, null, Object.assign({}, j), fila, c, TER_10H, sem);
+  assert.equal(d.responder, false); assert.equal(d.caixa, true); assert.ok(d.motivos.includes('teto_do_mes'));
+  assert.equal(L.acq07Decidir(msg, { lead_id: 'x', mensagens: [], qualificacao: { anuncio: { titulo: 'x' } } }, null, Object.assign({}, j), fila, c, TER_10H, sem).responder, true);
+  assert.equal(L.acq06Candidatos({ config: { ativo: true, horario: '09:00 a 18:00', restam_hoje: 20 }, itens: [] }, c, TER_10H, { pode_prospectar: false }).motivo, 'teto_do_mes');
+});
+
 test('juntar mensagens: só a mais nova responde, levando as anteriores; áudio entra como texto', () => {
   const a = { wamid: 'a', de: '5541999990000', em: '2026-11-03T13:00:00Z', texto: 'oi' };
   const b = { wamid: 'b', de: '5541999990000', em: '2026-11-03T13:00:05Z', texto: 'quanto custa', transcrito: true };
@@ -236,7 +253,7 @@ test('texto do Mercúrio: quebra em mensagens e bloqueia link, preço inventado 
   const ok = L.acq07LerLLM(j({ mensagens: ['Oi!', 'Como vocês conseguem clientes hoje?'], horario_escolhido: '2026-11-10T14:00:00.000Z', resumo_para_almir: 'Pet shop.', nome_cobranca: 'Pet LTDA' }), c, '');
   assert.deepEqual(ok.partes, ['Oi!', 'Como vocês conseguem clientes hoje?']);
   assert.equal(ok.horario_escolhido, '2026-11-10T14:00:00.000Z'); assert.equal(ok.nome_cobranca, 'Pet LTDA');
-  assert.equal(L.acq07LerLLM(j({ mensagens: ['a', 'b', 'c', 'd', 'e', 'f'] }), c, '').partes.length, 4, 'no máximo 4');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['a', 'b', 'c', 'd', 'e', 'f'] }), c, '').partes.length, 3, 'no máximo 3: cada balão conta no limite da Meta');
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Fica R$ 500 por mês'] }), c, 'Plano: R$ 847 por mês').motivo, 'valor_fora_das_orientacoes');
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Começa em R$ 847 por mês'] }), c, 'Plano: R$ 847 por mês').ok, true);
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Somos uma agência'] }), c, '').motivo, 'disse_agencia');
