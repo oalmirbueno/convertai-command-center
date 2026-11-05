@@ -15,7 +15,12 @@ var ACQ_COM_PADRAO = {
   llm_modelo: 'anthropic/claude-sonnet-5.5',
   transcricao_modelo: 'google/gemini-2.5-flash',
   numero_equipe: null,
-  resposta_max_caracteres: 900,
+  executivo: { nome: 'Rafael', cargo: 'executivo de negócios' },
+  voz_id: 'xNGAXaCH8MaasNuo7Hr7',
+  voz_modelo: 'eleven_v4',
+  google_url: 'https://www.googleapis.com/calendar/v3',
+  google_agenda_id: 'primary',
+  resposta_max_caracteres: 1400,
   janela_horas: 24,
   limiar_pare: 0.4,
   exigir_assinatura: true,
@@ -84,6 +89,20 @@ function acqComNomeDoLead(item) {
   var n = acqComParametro(item && (item.empresa || item.nome), 60);
   return n.length >= 2 ? n : null;
 }
+
+// Primeiro nome da pessoa, quando se sabe. Nome de empresa não é nome de gente: sem nome, o modelo diz "pessoal".
+function acqComPrimeiroNome(item) {
+  var q = (item && item.qualificacao) || {};
+  var c = acqComParametro(q.contato_nome || q.nome_contato || '', 60);
+  var n = c || acqComParametro(item && item.nome, 60);
+  if (!n) return null;
+  if (!c && item.empresa && acq07NormalNome(n) === acq07NormalNome(item.empresa)) return null;
+  if (!/^[A-Za-zÀ-ÿ'-]+( [A-Za-zÀ-ÿ'-]+){0,3}$/.test(n)) return null;
+  if (/\b(cl[ií]nica|studio|est[uú]dio|barbearia|sal[aã]o|loja|pet|academia|restaurante|cantina|consult[oó]rio|escrit[oó]rio|contabilidade|im[oó]veis|ltda|me|eireli|instituto|centro|grupo|whatsapp)\b/i.test(n)) return null;
+  return n.split(' ')[0];
+}
+
+function acq07NormalNome(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 
 // O fato observado que vai no primeiro contato. Ordem: o que alguém gravou de propósito
 // (qualificacao.fato_observado), fato com prova sobre presença digital ou problema, a presença

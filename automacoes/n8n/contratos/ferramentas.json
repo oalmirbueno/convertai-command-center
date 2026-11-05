@@ -22,7 +22,8 @@
     "aceleriq_mesa_ads_saude",
     "aceleriq_agent_conversations",
     "aceleriq_comercial_fila",
-    "aceleriq_comercial_repasses"
+    "aceleriq_comercial_repasses",
+    "aceleriq_comercial_horarios"
   ],
   "escrita": [
     "aceleriq_upsert_current_dossier",
@@ -41,10 +42,12 @@
     "aceleriq_update_opportunity",
     "aceleriq_comercial_entrada_nova",
     "aceleriq_comercial_cobrar",
-    "aceleriq_comercial_repasse_marcar"
+    "aceleriq_comercial_repasse_marcar",
+    "aceleriq_comercial_marcar_reuniao"
   ],
   "geracao": [
-    "aceleriq_ritual_redigir"
+    "aceleriq_ritual_redigir",
+    "aceleriq_comercial_falar"
   ],
   "condicionais": {
     "aceleriq_browser_session": {
@@ -131,7 +134,10 @@
       "aceleriq_comercial_avisar_caixa",
       "aceleriq_update_opportunity",
       "aceleriq_comercial_entrada_nova",
-      "aceleriq_comercial_cobrar"
+      "aceleriq_comercial_cobrar",
+      "aceleriq_comercial_horarios",
+      "aceleriq_comercial_marcar_reuniao",
+      "aceleriq_comercial_falar"
     ],
     "ACQ-08": [
       "aceleriq_comercial_repasses",
@@ -151,7 +157,10 @@
     "aceleriq_comercial_entrada_nova",
     "aceleriq_comercial_cobrar",
     "aceleriq_comercial_repasses",
-    "aceleriq_comercial_repasse_marcar"
+    "aceleriq_comercial_repasse_marcar",
+    "aceleriq_comercial_horarios",
+    "aceleriq_comercial_marcar_reuniao",
+    "aceleriq_comercial_falar"
   ],
   "idempotencia_propria": [
     "aceleriq_comercial_registrar_mensagem",
@@ -159,6 +168,7 @@
     "aceleriq_update_opportunity",
     "aceleriq_comercial_entrada_nova",
     "aceleriq_comercial_cobrar",
-    "aceleriq_comercial_repasse_marcar"
+    "aceleriq_comercial_repasse_marcar",
+    "aceleriq_comercial_marcar_reuniao"
   ]
 }

@@ -91,8 +91,12 @@ test('primeiro contato: só lead pronto, ordenado pelo encaixe, dentro do horár
   assert.equal(motivos[LEADS.fixo], 'telefone_fixo');
   assert.equal(motivos[LEADS.comSite], 'sem_fato_observado');
   const p = r.candidatos[0];
-  assert.deepEqual(p.params, ['Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
-  assert.match(p.texto, /^Oi, Pet Shop Exemplo, tudo bem\? Aqui é o Mercúrio/);
+  assert.deepEqual(p.params, ['pessoal', 'Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
+  assert.match(p.texto, /^Oi, pessoal, tudo bem\? Aqui é o Rafael, executivo de negócios da Aceleriq/);
+  assert.equal(L.acqComPrimeiroNome({ nome: 'Renata Souza', empresa: 'Bella Forma' }), 'Renata');
+  assert.equal(L.acqComPrimeiroNome({ nome: 'Bella Forma', empresa: 'Bella Forma' }), null);
+  assert.equal(L.acqComPrimeiroNome({ nome: 'Clínica Sorriso' }), null, 'nome de empresa não é nome de gente');
+  assert.equal(L.acqComPrimeiroNome({ nome: 'Pet', empresa: 'x', qualificacao: { contato_nome: 'Carla' } }), 'Carla');
   assert.doesNotMatch(p.texto, /\{\{/);
   assert.equal(L.acq06Candidatos(fila(TER_20H), c, TER_20H).motivo, 'fora_do_horario');
   assert.equal(L.acq06Candidatos(fila(SAB_10H), c, SAB_10H).motivo, 'fim_de_semana');
@@ -143,8 +147,8 @@ test('decisão: pare nunca responde; a Caixa é só para reunião, pessoa ou for
   assert.equal(L.acq07Decidir(msg('pare'), lead, { pediu_para_parar: true }, j('outro'), fila, c, TER_10H).acao, 'parar');
   const preco = L.acq07Decidir(msg('quanto custa?'), lead, null, j('pergunta', { etapa: 'apresentar' }), fila, c, TER_10H);
   assert.equal(preco.caixa, false, 'preço o Mercúrio responde'); assert.equal(preco.responder, true);
-  const reuniao = L.acq07Decidir(msg('pode ser terça às 15h'), lead, null, j('interessado', { etapa: 'confirmar_reuniao' }), fila, c, TER_10H);
-  assert.equal(reuniao.caixa, true); assert.equal(reuniao.responder, true);
+  const reuniao = L.acq07Decidir(msg('pode ser terça às 11h'), lead, null, j('interessado', { etapa: 'confirmar_reuniao' }), fila, c, TER_10H);
+  assert.equal(reuniao.agenda, true); assert.equal(reuniao.caixa, false, 'a Caixa nasce quando a reunião é marcada'); assert.equal(reuniao.responder, true);
   assert.equal(L.acq07Decidir(msg('quero falar com o dono'), lead, null, j('pergunta', { etapa: 'passar_humano' }), fila, c, TER_10H).caixa, true);
   assert.equal(L.acq07Decidir(msg('valeu'), lead, null, j('outro', { etapa: 'encerrar' }), fila, c, TER_10H).responder, false);
   const velho = L.acq07Decidir(msg('quero', { em: new Date(TER_10H - 30 * 3600000).toISOString() }), lead, null, j('interessado'), fila, c, TER_10H);
@@ -161,6 +165,7 @@ test('decisão: pare nunca responde; a Caixa é só para reunião, pessoa ou for
   assert.equal(faltando.cobrar, false); assert.deepEqual(faltando.faltam, ['CPF ou CNPJ']);
   const pronto = L.acq07Decidir(msg('meu cpf é 529.982.247-25'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido' }), fila, c, TER_10H);
   assert.equal(pronto.cobrar, true); assert.equal(pronto.documento, '52998224725');
+  assert.equal(L.acq07Decidir(msg('quero com o google, cpf 529.982.247-25'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido', quer_google: true }), fila, c, TER_10H).com_google, true);
   assert.equal(L.acq07Decidir(msg('meu cpf é 111.111.111-11'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido' }), fila, c, TER_10H).cobrar, false, 'documento errado não cobra');
 });
 
@@ -190,14 +195,19 @@ test('texto do Mercúrio: quebra em mensagens e bloqueia link, preço inventado 
   assert.equal(L.acq07LerLLM(r('Agende em https://aceleriq.com/agenda.'), c, 'Agenda: https://aceleriq.com/agenda').ok, true);
   assert.equal(L.acq07LerLLM(r('   '), c, '').ok, false);
   assert.equal(L.acq07LerLLM({ error: { message: 'sem credencial' } }, c, '').ok, false);
-  assert.equal(L.acq07LerLLM(r('x'.repeat(1000)), c, '').ok, false);
-  const ok = L.acq07LerLLM(j({ mensagens: ['Oi!', 'Como vocês conseguem clientes hoje?'], quando_reuniao: 'terça 15h', resumo_para_almir: 'Pet shop.', nome_cobranca: 'Pet LTDA' }), c, '');
+  assert.equal(L.acq07LerLLM(r('x'.repeat(1500)), c, '').ok, false);
+  const ok = L.acq07LerLLM(j({ mensagens: ['Oi!', 'Como vocês conseguem clientes hoje?'], horario_escolhido: '2026-11-10T14:00:00.000Z', resumo_para_almir: 'Pet shop.', nome_cobranca: 'Pet LTDA' }), c, '');
   assert.deepEqual(ok.partes, ['Oi!', 'Como vocês conseguem clientes hoje?']);
-  assert.equal(ok.quando_reuniao, 'terça 15h'); assert.equal(ok.nome_cobranca, 'Pet LTDA');
+  assert.equal(ok.horario_escolhido, '2026-11-10T14:00:00.000Z'); assert.equal(ok.nome_cobranca, 'Pet LTDA');
   assert.equal(L.acq07LerLLM(j({ mensagens: ['a', 'b', 'c', 'd', 'e', 'f'] }), c, '').partes.length, 4, 'no máximo 4');
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Fica R$ 500 por mês'] }), c, 'Plano: R$ 847 por mês').motivo, 'valor_fora_das_orientacoes');
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Começa em R$ 847 por mês'] }), c, 'Plano: R$ 847 por mês').ok, true);
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Somos uma agência'] }), c, '').motivo, 'disse_agencia');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Sou o assistente da Aceleriq'] }), c, '').motivo, 'nome_interno');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Aqui é o Mercúrio'] }), c, '').motivo, 'nome_interno');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Não sou robô, pode ficar tranquila'] }), c, '').motivo, 'negou_ser_ia', 'nunca nega ser IA');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Sou uma pessoa de verdade'] }), c, '').motivo, 'negou_ser_ia');
+  assert.equal(L.acq07LerLLM(j({ mensagens: ['Sou o Rafael, atendo aqui com apoio de inteligência artificial'] }), c, '').ok, true);
   assert.equal(L.acq07LerLLM(r('{"mensagens":["Oi, Funciona'), c, '').motivo, 'llm_json_quebrado', 'JSON cortado nunca vai para o lead');
   assert.equal(L.acq07LerLLM(j({ mensagens: ['Entendi, R$ 400 por mês não cobre'] }), c, 'Plano: R$ 847', { mensagens: [{ direcao: 'entrada', texto: 'só posso 400' }] }).ok, true, 'pode repetir o valor do lead');
   const pedido = L.acq07PedidoLLM({ wamid: 'w', texto: 'quanto custa?' }, { nome: 'Pet', etapa: 'contato', mensagens: [{ direcao: 'saida', texto: 'modelo' }], fatos: [] },
@@ -251,8 +261,8 @@ test('ACQ-06 ao vivo: manda o modelo com nome e fato, registra com o wamid e nã
   assert.equal(env.url, 'http://127.0.0.1:8792/graph/v21.0/100000000000001/messages');
   assert.equal(env.corpo.type, 'template');
   assert.equal(env.corpo.to, '5519998765432');
-  assert.equal(env.corpo.template.name, 'aceleriq_primeiro_contato_mercurio');
-  assert.deepEqual(env.corpo.template.components[0].parameters.map((p) => p.text), ['Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
+  assert.equal(env.corpo.template.name, 'aceleriq_primeiro_contato_executivo');
+  assert.deepEqual(env.corpo.template.components[0].parameters.map((p) => p.text), ['pessoal', 'Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
   const saidas = W.m.mensagens.filter((x) => x.direcao === 'saida');
   assert.deepEqual(saidas.map((x) => x.id_externo).sort(), ['wamid.TESTE1', 'wamid.TESTE2']);
   assert.match(saidas[0].texto, /reparei que/);
@@ -395,22 +405,68 @@ test('ACQ-07: quem chama por anúncio vira lead e é atendido; número de client
   assert.equal(W2.m.meta.enviadas.length, 0); assert.equal(W2.m.llm.chamadas, 0);
 });
 
-test('ACQ-07: reunião vai para a Caixa com o contexto e o horário, sem dizer que está marcada pelo sistema', async () => {
+test('ACQ-07: marca a reunião num horário livre, cria no Google e repassa pronta; dia ocupado não marca', async () => {
   await segredos();
   const W = criarMundo(); conversaAberta(W); W.m.jevExtra = { etapa: 'confirmar_reuniao' };
-  W.m.llm.texto = JSON.stringify({ mensagens: ['Anotei, terça às 15h.', 'O Almir te chama aqui para confirmar.'], quando_reuniao: 'terça às 15h', resumo_para_almir: 'Pet shop sem site, quer mais clientes.' });
+  W.m.google_busy = [{ start: '2026-11-12T14:00:00Z', end: '2026-11-12T15:00:00Z' }];
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Fechado, ficou marcado terça às 11h.', 'O Almir chega sabendo de tudo.'], horario_escolhido: '2026-11-10T14:00:00.000Z', resumo_para_almir: 'Pet shop sem site, quer mais clientes, plano Essencial.' });
   const S = montar(W, true);
-  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.RE', 'Pode ser terça às 15h')));
+  await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.RE', 'Pode ser terça às 11h')));
+  assert.deepEqual(W.m.ocupados, [{ inicio: '2026-11-12T14:00:00Z', fim: '2026-11-12T15:00:00Z' }], 'olhou o Google antes');
+  assert.match(W.m.llm.ultimo.messages[0].content, /terça, 10\/11, às 11h/);
+  assert.equal(W.m.reunioes[0].inicio, '2026-11-10T14:00:00.000Z');
+  assert.ok(W.m.google.some((g) => g.url.endsWith('/events') && g.corpo.start.dateTime === '2026-11-10T14:00:00.000Z'), 'criou o evento');
   assert.equal(W.m.handoffs.length, 1);
-  assert.equal(W.m.handoffs[0].resumo, 'Pet shop sem site, quer mais clientes.');
-  assert.match(W.m.handoffs[0].proximo_passo, /confirmar a reunião \(terça às 15h\)/);
-  assert.equal(W.m.handoffs[0].dados.reuniao, 'terça às 15h');
+  assert.equal(W.m.handoffs[0].resumo, 'Pet shop sem site, quer mais clientes, plano Essencial.');
+  assert.match(W.m.handoffs[0].proximo_passo, /Reunião marcada para terça, 10\/11, às 11h/);
+
+  const W2 = criarMundo(); conversaAberta(W2); W2.m.jevExtra = { etapa: 'confirmar_reuniao' }; W2.m.dia_ocupado = true; W2.m.llm.texto = W.m.llm.texto;
+  await montar(W2, true).executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.RF', 'Pode ser terça às 11h')));
+  assert.equal(W2.m.handoffs.length, 0);
+  assert.ok(!(W2.m.google || []).some((g) => g.url.endsWith('/events')));
+  assert.ok(W2.m.meta.enviadas.some((e) => /acabou de ser ocupado/.test(e.corpo.text.body)));
+
+  const W3 = criarMundo(); conversaAberta(W3); W3.m.jevExtra = { etapa: 'confirmar_reuniao' };
+  W3.m.llm.texto = JSON.stringify({ mensagens: ['Combinado'], horario_escolhido: '2026-12-25T14:00:00.000Z' });
+  await montar(W3, true).executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.RG', 'Pode ser no natal')));
+  assert.equal((W3.m.reunioes || []).length, 0, 'horário fora da lista não marca');
+});
+
+test('ACQ-07: plano divergente não gera Pix e vai para o Almir; horário escolhido com despedida marca a reunião', async () => {
+  await segredos();
+  const W = criarMundo(); conversaAberta(W); W.m.jevExtra = { etapa: 'fechar_agora', plano: 'essencial' };
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Fechado, plano de R$ 847.'], nome_cobranca: 'Pet LTDA', plano_combinado: 'start_assistido' });
+  W.m.config.orientacoes += ' R$ 847';
+  await montar(W, true).executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.PD', 'Pode fechar, CNPJ 11.222.333/0001-81')));
+  assert.equal((W.m.cobrancas || []).length, 0, 'não cobra');
+  assert.ok(W.m.meta.enviadas.some((e) => /conferir o valor/.test(e.corpo.text.body)));
+  assert.match(W.m.handoffs[0].proximo_passo, /plano divergente/);
+
+  const W2 = criarMundo(); conversaAberta(W2); W2.m.jevExtra = { etapa: 'encerrar', escolheu_horario: true };
+  W2.m.llm.texto = JSON.stringify({ mensagens: ['Marcado.'], horario_escolhido: '2026-11-10T14:00:00.000Z', resumo_para_almir: 'x' });
+  await montar(W2, true).executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.HD', 'pode ser terça, obrigado, até lá', { quando: Date.now() })));
+  assert.equal(W2.m.reunioes.length, 1);
+});
+
+test('ACQ-07: quem manda áudio recebe áudio; o Pix continua em texto', async () => {
+  await segredos();
+  const W = criarMundo(); conversaAberta(W); W.m.jevExtra = { etapa: 'fechar_agora', plano: 'start_assistido', quer_google: true };
+  W.m.transcricao = 'pode fechar meu cnpj é 11.222.333/0001-81';
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Fechado, plano Start.', 'O Google entra como adicional.'], nome_cobranca: 'Pet LTDA', plano_combinado: 'start_assistido' });
+  await montar(W, true).executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.AV', null, { tipo: 'audio' })));
+  assert.equal(W.m.falas[0].texto, 'Fechado, plano Start. O Google entra como adicional.');
+  assert.equal(W.m.falas[0].modelo, 'eleven_v4');
+  assert.equal(W.m.meta.midias, 1);
+  assert.equal(W.m.meta.enviadas[0].corpo.type, 'audio');
+  assert.equal(W.m.meta.enviadas[0].corpo.audio.voice, true);
+  assert.ok(W.m.meta.enviadas.some((e) => e.corpo.text && e.corpo.text.body === '000201PIXTESTE'));
+  assert.equal(W.m.cobrancas[0].com_google, true);
 });
 
 test('ACQ-07: fechamento gera o Pix pelo painel e manda o copia e cola; sem Asaas, passa para o Almir', async () => {
   await segredos();
   const W = criarMundo(); conversaAberta(W); W.m.jevExtra = { etapa: 'fechar_agora', plano: 'start_assistido' };
-  W.m.llm.texto = JSON.stringify({ mensagens: ['Fechado, plano Start Assistido.'], nome_cobranca: 'Pet LTDA', resumo_para_almir: 'Fechou.' });
+  W.m.llm.texto = JSON.stringify({ mensagens: ['Fechado, plano Start Assistido.'], nome_cobranca: 'Pet LTDA', plano_combinado: 'start_assistido', resumo_para_almir: 'Fechou.' });
   const S = montar(W, true);
   await S.executar('Acq07ComercialRs', 'WhatsApp: mensagens (POST)', postAssinado(msg('wamid.PX', 'Pode fechar, CNPJ 11.222.333/0001-81')));
   assert.equal(W.m.cobrancas[0].documento, '11222333000181');

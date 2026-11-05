@@ -69,7 +69,7 @@ export function criarSimulador({ workflows, http, pg }) {
       const ent = no.executeOnce ? entrada.slice(0, 1) : entrada;
       if (tipo === 'n8n-nodes-base.code') {
         const $input = { all: () => ent.map((x) => ({ json: copia(x.json), binary: x.binary })), first: () => ({ json: copia(ent[0].json), binary: ent[0].binary }) };
-        const ctx = { helpers: { getBinaryDataBuffer: async (i, prop) => {
+        const ctx = { helpers: { prepareBinaryData: async (buf, fileName, mimeType) => ({ data: Buffer.from(buf).toString('base64'), fileName, mimeType }), getBinaryDataBuffer: async (i, prop) => {
           const b = ent[i] && ent[i].binary && ent[i].binary[prop];
           if (!b || !b.data) throw new Error('sem binário ' + prop);
           return Buffer.from(b.data, 'base64');
@@ -103,7 +103,7 @@ export function criarSimulador({ workflows, http, pg }) {
         const out = [];
         for (const x of ent) {
           const url = avaliar(p.url, x, ent);
-          const corpo = p.sendBody ? JSON.parse(avaliar(p.jsonBody, x, ent)) : undefined;
+          const corpo = p.sendBody && p.jsonBody ? JSON.parse(avaliar(p.jsonBody, x, ent)) : undefined;
           const cred = no.credentials ? Object.values(no.credentials)[0].name : null;
           const resp = (p.options && p.options.response && p.options.response.response) || {};
           let json;

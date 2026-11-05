@@ -15,6 +15,21 @@ const C = L.acqComCfg(CFG);
 const OR = env('OPENROUTER_API_KEY'), TS = env('TYPESAFE_API_KEY'), SU = env('SUPABASE_URL'), SK = env('SUPABASE_SERVICE_ROLE_KEY');
 const MODELO_LEAD = 'anthropic/claude-sonnet-5.5';
 const AGORA = () => Date.now();
+const SP = 3 * 3600000;
+const GRADE = { 2: [11, 16], 3: [11], 4: [11, 16] };
+const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+function agendaLivre(reservas) {
+  const out = []; const base = Date.now();
+  for (let i = 1; i < 21 && out.length < 4; i++) {
+    const d = new Date(base + i * 86400000 - SP);
+    const hs = GRADE[d.getUTCDay()]; if (!hs) continue;
+    const ini = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hs[0]) + SP).toISOString();
+    if (reservas.some((r) => r.slice(0, 10) === ini.slice(0, 10))) continue;
+    out.push({ inicio: ini, rotulo: DIAS[d.getUTCDay()] + ', ' + String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0') + ', às ' + hs[0] + 'h' });
+  }
+  return out;
+}
+const reservas = [];
 const PIX = { start_assistido: ['Start Assistido', 1244], essencial: ['Essencial', 1794], presenca: ['Presença', 2794], crescimento: ['Crescimento', 3994], estrutura: ['Estrutura', 5994], engenharia: ['Engenharia / OS', 9494] };
 let custo = 0;
 
@@ -51,8 +66,12 @@ Nunca escreva tags, XML ou comentários, só o JSON. Responda em JSON: {"mensage
   const msgs = [{ role: 'system', content: sistema }];
   conversa.forEach((x) => msgs.push({ role: x.direcao === 'saida' ? 'user' : 'assistant', content: x.texto }));
   if (!conversa.length) msgs.push({ role: 'user', content: '(Você abre a conversa agora.)' });
-  const r = await modelo({ model: MODELO_LEAD, messages: msgs, max_tokens: 2000, temperature: 0.9 });
-  const t = String(r.choices?.[0]?.message?.content || '');
+  let t = '';
+  for (let i = 0; i < 4; i++) {
+    const r = await modelo({ model: MODELO_LEAD, messages: msgs, max_tokens: 2000, temperature: 0.9 });
+    t = String(r.choices?.[0]?.message?.content || '');
+    if (t.trim() && !/<invoke|<parameter|```/.test(t)) break;
+  }
   try { return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch { return { mensagens: [t.trim()].filter(Boolean), fim: !t.trim() }; }
 }
 
@@ -62,7 +81,7 @@ async function simular(p, fila) {
   const add = (quem, texto, extra) => { linhas.push({ quem, texto, ...(extra || {}) }); if (quem === 'lead' || quem === 'mercurio') lead.mensagens.push({ direcao: quem === 'lead' ? 'entrada' : 'saida', texto }); };
   const repasses = [];
   let pix = null;
-  if (p.fato) add('mercurio', L.acqComTextoDoModelo(C.modelos.primeiro_contato, [p.empresa, p.fato]), { modelo: true });
+  if (p.fato) add('mercurio', L.acqComTextoDoModelo(C.modelos.primeiro_contato, [L.acqComPrimeiroNome(lead) || 'pessoal', p.empresa, p.fato]), { modelo: true });
   const roteiro = (p.primeiras || []).slice();
   for (let turno = 0; turno < (p.turnos || 14); turno++) {
     let fala;
@@ -76,22 +95,34 @@ async function simular(p, fila) {
     const m = L.acq07Lote(lista[lista.length - 1], { mais_nova: lista[lista.length - 1].wamid, mensagens: lista.map((x) => ({ m: x })) }).m;
     m.botao = fala.botao || null;
     const antes = { ...lead, mensagens: lead.mensagens.slice(0, -partes.length) };
+    const horarios = agendaLivre(reservas);
     const julg = L.acq07LerJev(await jev(L.acq07PedidoJev(m, antes)));
     const d = L.acq07Decidir(m, antes, null, julg, fila, CFG, AGORA());
     linhas.push({ quem: 'jev', texto: julg ? `${julg.remetente} · ${julg.intencao} · etapa ${julg.etapa} · objeção ${julg.objecao} · plano ${julg.plano}` : 'indisponível', acao: d.acao, motivos: d.motivos });
     if (d.parar) { linhas.push({ quem: 'sistema', texto: 'Marcou nao_contatar. O Mercúrio não responde mais.' }); break; }
     let resposta = null, textos = [];
     if (d.responder) {
-      resposta = L.acq07LerLLM(await modelo(L.acq07PedidoLLM(m, antes, d, fila, CFG)), CFG, fila.config.orientacoes, lead);
+      resposta = L.acq07LerLLM(await modelo(L.acq07PedidoLLM(m, antes, d, fila, CFG, d.agenda ? horarios : [])), CFG, fila.config.orientacoes, lead);
       if (!resposta.ok) { linhas.push({ quem: 'sistema', texto: 'Texto bloqueado pela conferência: ' + resposta.motivo }); if (d.modo !== 'menu') { d.caixa = true; d.motivo_caixa = 'o texto automático foi bloqueado'; textos = [L.ACQ07_TEXTO_DE_RESERVA]; } }
       else textos = resposta.partes.slice();
     }
     const it = { mensagem: m, lead: antes, decisao: d, resposta };
-    if (d.cobrar && resposta && resposta.ok) {
-      const [plano_nome, valor] = PIX[d.plano];
+    if (d.agenda && resposta && resposta.ok && resposta.horario_escolhido) {
+      const h = horarios.filter((x) => x.inicio === resposta.horario_escolhido)[0];
+      if (h) { reservas.push(h.inicio); d.caixa = true; d.reuniao = { marcada: true, inicio: h.inicio, rotulo: h.rotulo }; linhas.push({ quem: 'sistema', texto: 'Reunião marcada na agenda (falsa): ' + h.rotulo + '.' }); }
+    }
+    if (d.voz && resposta && resposta.ok) linhas.push({ quem: 'sistema', texto: 'As mensagens abaixo seriam enviadas como áudio, na voz da ElevenLabs.' });
+    if (d.cobrar && resposta && resposta.ok && !L.acq07PlanoConfere(d, resposta)) {
+      const cob = L.acq07PartesDaCobranca(it, null);
+      textos = textos.concat(cob.partes); d.caixa = true; d.motivo_caixa = cob.motivo;
+      linhas.push({ quem: 'sistema', texto: 'Pix segurado: ' + cob.motivo });
+    } else if (d.cobrar && resposta && resposta.ok) {
+      const [plano_nome, valorBase] = PIX[d.plano];
+      const valor = valorBase + (d.com_google ? 297 : 0);
       const pedido = L.acq07PedidoCobranca(it, CFG);
-      pix = { plano_nome, valor, nome: pedido.argumentos.nome, documento_final: pedido.argumentos.documento.slice(-4) };
-      const cob = L.acq07PartesDaCobranca(it, { ok: true, resultado: { cobranca: { id: 'sim', plano_nome, valor, pix_copia_e_cola: '00020126...SIMULADO', link: 'https://www.asaas.com/i/SIMULADO' } } });
+      pix = { plano_nome: d.com_google ? plano_nome + ' + Perfil Google' : plano_nome, valor, nome: pedido.argumentos.nome, documento_final: pedido.argumentos.documento.slice(-4) };
+      const comG = d.com_google === true;
+      const cob = L.acq07PartesDaCobranca(it, { ok: true, resultado: { cobranca: { id: 'sim', plano_nome: comG ? plano_nome + ' + Perfil Google' : plano_nome, valor, pix_copia_e_cola: '00020126...SIMULADO', link: 'https://www.asaas.com/i/SIMULADO' } } });
       textos = textos.concat(cob.partes);
       linhas.push({ quem: 'sistema', texto: `Pix falso gerado: ${plano_nome}, ${L.acq07Reais(valor)}, para ${pix.nome} (documento final ${pix.documento_final}).` });
     }

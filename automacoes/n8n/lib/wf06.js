@@ -60,9 +60,9 @@ function acq06Candidatos(fila, cfg, agoraMs) {
     if (tipo === 'primeiro_contato') {
       fato = acqComFatoObservado(it);
       if (!fato) return ign('sem_fato_observado');
-      params = [nome, fato.texto];
+      params = [acqComPrimeiroNome(it) || 'pessoal', nome, fato.texto];
     } else {
-      params = [nome];
+      params = [acqComPrimeiroNome(it) || 'pessoal'];
     }
     var modelo = c.modelos[tipo] || {};
     var cand = { lead_id: it.lead_id, tipo: tipo, numero: n.numero, nome: nome, fato: fato, params: params, lead_frio: it.lead_frio === true, etapa: it.etapa,

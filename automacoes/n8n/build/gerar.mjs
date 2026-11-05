@@ -32,6 +32,7 @@ export const CRED = {
   jev: { httpBearerAuth: { id: 'AcqCredTs0000001', name: 'TypeSafe Jev (servidor)' } },
   // Comercial (ACQ-06/07): token do usuário do sistema da BM e chave do OpenRouter, colados pelo Almir no n8n.
   meta: { httpBearerAuth: { id: 'AcqCredMeta00001', name: 'ACQ WhatsApp Cloud API (Meta)' } },
+  google: { googleCalendarOAuth2Api: { id: 'AcqCredGoogle001', name: 'ACQ Google Agenda' } },
   llm: { httpBearerAuth: { id: 'AcqCredLlm000001', name: 'ACQ OpenRouter (Mercúrio)' } },
 };
 
@@ -1094,9 +1095,30 @@ const fila = f.ok ? f.resultado : null;
 const julg = acq07LerJev($input.first().json);
 const reg = b.registro_entrada && b.registro_entrada.ok && !b.registro_entrada.simulado ? b.registro_entrada.resultado : null;
 const d = acq07Decidir(b.mensagem, b.lead, reg, julg, fila, CFG, ctx.agoraMs);
-return [{ json: { mensagem: b.mensagem, lead: b.lead, registro_entrada: b.registro_entrada, julgamento: julg, decisao: d,
-  llm: d.responder ? acq07PedidoLLM(b.mensagem, b.lead, d, fila, CFG) : null, llm_url: acqComCfg(CFG).llm_url } }];`);
+return [{ json: { mensagem: b.mensagem, lead: b.lead, registro_entrada: b.registro_entrada, julgamento: julg, decisao: d, agora: new Date(ctx.agoraMs).toISOString(), ate: new Date(ctx.agoraMs + 21 * 86400000).toISOString(), google_url: acqComCfg(CFG).google_url, google_id: acqComCfg(CFG).google_agenda_id } }];`);
   const qr = se(wf, 'Mercúrio responde?', '={{ $json.decisao.responder === true }}');
+  const ag = se(wf, 'Precisa de agenda?', '={{ $json.decisao.agenda === true }}');
+  const gf = wf.no('Ler Google Agenda', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.google_url + "/freeBusy" }}', authentication: 'predefinedCredentialType', nodeCredentialType: 'googleCalendarOAuth2Api',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify({ timeMin: $json.agora, timeMax: $json.ate, timeZone: "America/Sao_Paulo", items: [{ id: $json.google_id }] }) }}',
+    options: { timeout: 15000 },
+  }, { credentials: CRED.google, onError: 'continueRegularOutput', notes: 'Sem a credencial do Google, a agenda segue só com as reuniões do painel, uma por dia.' });
+  const ph = code(wf, 'Pedir horários', ['comercial', 'wf07'], `
+${PEDIDO(W)}
+const ctx = $('Preparar rodada').first().json._ctx;
+const b = $('Decidir').first().json;
+const g = $input.first().json;
+const cal = g && g.calendars ? g.calendars[b.google_id] : null;
+const ocupados = cal && Array.isArray(cal.busy) ? cal.busy.map((x) => ({ inicio: x.start, fim: x.end })) : null;
+return [{ json: pedido({ ref: 'horarios|' + b.mensagem.wamid, ferramenta: 'aceleriq_comercial_horarios', argumentos: ocupados ? { ocupados: ocupados } : {} }, ctx.run_id) }];`);
+  const lh = ferramenta(wf, 'Ler horários');
+  const pz = code(wf, 'Preparar redação', ['comercial', 'wf07'], `
+const b = $('Decidir').first().json;
+const f = $('Ler fila do Mercúrio').first().json;
+const fila = f.ok ? f.resultado : null;
+const r = $('Ler horários').isExecuted ? $('Ler horários').first().json : null;
+const horarios = (r && r.ok && r.resultado && r.resultado.horarios) || [];
+return [{ json: Object.assign({}, b, { horarios: horarios, llm: acq07PedidoLLM(b.mensagem, b.lead, b.decisao, fila, CFG, horarios), llm_url: acqComCfg(CFG).llm_url }) }];`);
   const llm = wf.no('Mercúrio redige (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
     sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Mercurio (n8n)' }] },
@@ -1108,35 +1130,75 @@ ${PEDIDO(W)}
 const ctx = $('Preparar rodada').first().json._ctx;
 const f = $('Ler fila do Mercúrio').first().json;
 const conf = f.ok && f.resultado && f.resultado.config ? f.resultado.config : {};
-const b = $('Decidir').first().json;
+const b = $('Preparar redação').first().json;
 const resp = acq07LerLLM($input.first().json, CFG, conf.orientacoes || '', { mensagens: ((b.lead && b.lead.mensagens) || []).concat([{ direcao: 'entrada', texto: b.mensagem.texto }]) });
 const it = Object.assign({}, b, { llm: null, resposta: resp });
-const p = acq07PedidoCobranca(it, CFG);
+const p = acq07PedidoCobranca(it, CFG) || acq07PedidoReuniao(it, CFG, b.horarios);
 return [{ json: pedido(p || { ref: 'cobranca|' + b.mensagem.wamid, ferramenta: 'nenhuma', argumentos: {} }, ctx.run_id, { _it: it }) }];`);
-  const gc = ferramenta(wf, 'Gerar Pix no Asaas');
+  const gc = ferramenta(wf, 'Gerar Pix ou marcar reunião');
   const me = code(wf, 'Montar envio', ['comercial', 'wf07'], `
 const C = acqComCfg(CFG);
 const it = $('Conferir texto').first().json._it;
-const cob = acq07PartesDaCobranca(it, $input.first().json);
+const res = $input.first().json;
+const ehReuniao = String(res.ref || '').indexOf('reuniao|') === 0;
+const hEscolhido = (it.horarios || []).filter((h) => it.resposta && h.inicio === it.resposta.horario_escolhido)[0];
+const reuniao = ehReuniao ? acq07ResultadoReuniao(res, hEscolhido) : null;
+const cob = ehReuniao ? { partes: reuniao && reuniao.marcada ? [] : (reuniao ? reuniao.partes : []), caixa: false } : acq07PartesDaCobranca(it, res);
 const d = Object.assign({}, it.decisao);
+if (reuniao && reuniao.marcada) { d.caixa = true; d.reuniao = reuniao; d.motivos = d.motivos.concat(['reuniao_marcada']); }
 if (cob.caixa) { d.caixa = true; d.motivo_caixa = String(cob.motivo).slice(0, 200); d.motivos = d.motivos.concat(['cobranca_nao_gerada']); }
 const resp = it.resposta;
 if (!resp.ok && it.decisao.modo !== 'menu') { d.caixa = true; d.motivo_caixa = 'o texto automático foi bloqueado (' + String(resp.motivo).split(':')[0] + ')'; d.motivos = d.motivos.concat(['texto_de_reserva']); }
 const textos = resp.ok ? resp.partes.concat(cob.partes) : d.caixa ? [ACQ07_TEXTO_DE_RESERVA] : [];
 const tr = acqComTransporte(CFG, ${JSON.stringify(W)}, null);
 const url = String(C.graph_url).replace(/\\/+$/, '') + '/' + C.phone_number_id + '/messages';
+const falado = d.voz && resp.ok ? resp.partes.join(' ') : '';
+const voz = falado && falado.length <= 900 && !/https?:|www\\./i.test(falado) ? falado : null;
 const envio = !textos.length ? { decisao: 'sem_texto', motivo: resp.motivo }
-  : { decisao: tr.decisao, motivo: tr.motivo, url: url, textos: textos, para: it.mensagem.de };
-return [{ json: Object.assign({}, it, { decisao: d, envio: envio, enviar: envio.decisao === 'enviar' }) }];`);
+  : { decisao: tr.decisao, motivo: tr.motivo, url: url, media_url: url.replace(/messages$/, 'media'), textos: textos, para: it.mensagem.de, voz: voz, quantas_voz: voz ? resp.partes.length : 0 };
+const google = reuniao && reuniao.marcada && !reuniao.simulada && envio.decisao === 'enviar';
+return [{ json: Object.assign({}, it, { decisao: d, envio: envio, enviar: envio.decisao === 'enviar', criar_google: !!google, evento_google: google ? acq07EventoDoGoogle(reuniao, it.lead, resp.resumo, CFG) : null, google_url: C.google_url, google_id: C.google_agenda_id }) }];`);
+  const cg = se(wf, 'Criar no Google?', '={{ $json.criar_google === true }}');
+  const eg = wf.no('Criar evento no Google', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: '={{ $json.google_url + "/calendars/" + encodeURIComponent($json.google_id) + "/events" }}', authentication: 'predefinedCredentialType', nodeCredentialType: 'googleCalendarOAuth2Api',
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.evento_google) }}', options: { timeout: 15000 },
+  }, { credentials: CRED.google, onError: 'continueRegularOutput' });
+  const rt = code(wf, 'Retomar envio', [], `
+return [{ json: $('Montar envio').first().json }];`);
   const ev = se(wf, 'Enviar de verdade?', '={{ $json.enviar === true }}');
   const dg = wf.no('Marcar lida e digitando', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.envio.url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
     sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: $json.mensagem.wamid, typing_indicator: { type: "text" } }) }}',
     options: { timeout: 10000, response: { response: { fullResponse: true, neverError: true, responseFormat: 'json' } } },
   }, { credentials: CRED.meta, onError: 'continueRegularOutput' });
+  const iv = se(wf, 'Responder em áudio?', "={{ !!$('Montar envio').first().json.envio.voz }}");
+  const pv = code(wf, 'Pedir voz', ['comercial'], `
+${PEDIDO(W)}
+const ctx = $('Preparar rodada').first().json._ctx;
+const C = acqComCfg(CFG);
+return [{ json: pedido({ ref: 'voz|' + $('Montar envio').first().json.mensagem.wamid, ferramenta: 'aceleriq_comercial_falar', argumentos: { texto: $('Montar envio').first().json.envio.voz, voz: C.voz_id, modelo: C.voz_modelo } }, ctx.run_id) }];`);
+  const gv = ferramenta(wf, 'Gerar voz (ElevenLabs)');
+  const pa = code(wf, 'Preparar áudio', [], `
+const r = $input.first().json;
+const b64 = r.ok && r.resultado && r.resultado.audio_base64;
+if (!b64) return [{ json: { sem_audio: true }, binary: { data: await this.helpers.prepareBinaryData(Buffer.from(''), 'vazio.ogg', 'audio/ogg') } }];
+return [{ json: { sem_audio: false }, binary: { data: await this.helpers.prepareBinaryData(Buffer.from(b64, 'base64'), 'voz.ogg', 'audio/ogg') } }];`);
+  const sa = wf.no('Subir áudio na Meta', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'POST', url: "={{ $('Montar envio').first().json.envio.media_url }}", authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
+    sendBody: true, contentType: 'multipart-form-data', bodyParameters: { parameters: [{ parameterType: 'formBinaryData', name: 'file', inputDataFieldName: 'data' }, { name: 'messaging_product', value: 'whatsapp' }, { name: 'type', value: 'audio/ogg' }] },
+    options: { timeout: 30000 },
+  }, { credentials: CRED.meta, onError: 'continueRegularOutput' });
   const sp = code(wf, 'Separar partes', ['comercial'], `
 const b = $('Montar envio').first().json;
-return b.envio.textos.map((t, i) => ({ json: { i: i, envio: { url: b.envio.url, payload: acqComPayloadTexto(b.envio.para, t) } } }));`);
+const idAudio = $('Subir áudio na Meta').isExecuted ? ($('Subir áudio na Meta').first().json || {}).id : null;
+const out = [];
+let resto = b.envio.textos;
+if (idAudio) {
+  out.push({ json: { i: 0, envio: { url: b.envio.url, payload: { messaging_product: 'whatsapp', recipient_type: 'individual', to: b.envio.para, type: 'audio', audio: { id: idAudio, voice: true } } } } });
+  resto = b.envio.textos.slice(b.envio.quantas_voz);
+}
+resto.forEach((t) => out.push({ json: { i: out.length, envio: { url: b.envio.url, payload: acqComPayloadTexto(b.envio.para, t) } } }));
+return out;`);
   const hm = wf.no('Enviar partes (Cloud API)', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.envio.url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
     sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.envio.payload) }}',
@@ -1178,10 +1240,15 @@ return out;`, {}, 1);
   wf.liga(ea, bm, 0); wf.liga(ea, gt, 1);
   wf.cadeia(bm, ba, pt, tr, lt, gt);
   wf.cadeia(gt, gx, es, jm, pr, lf, pl, al, re, ge, pj, jv, dc, qr);
-  wf.liga(qr, llm, 0); wf.liga(qr, df, 1);
-  wf.cadeia(llm, mr, gc, me, ev);
+  wf.liga(qr, ag, 0); wf.liga(qr, df, 1);
+  wf.liga(ag, gf, 0); wf.liga(ag, pz, 1);
+  wf.cadeia(gf, ph, lh, pz, llm, mr, gc, me, cg);
+  wf.liga(cg, eg, 0); wf.liga(cg, ev, 1);
+  wf.cadeia(eg, rt, ev);
   wf.liga(ev, dg, 0); wf.liga(ev, df, 1);
-  wf.cadeia(dg, sp, hm, cl, df);
+  wf.cadeia(dg, iv);
+  wf.liga(iv, pv, 0); wf.liga(iv, sp, 1);
+  wf.cadeia(pv, gv, pa, sa, sp, hm, cl, df);
   wf.cadeia(df, gd, pe, gp, rs, gr);
   return wf;
 }

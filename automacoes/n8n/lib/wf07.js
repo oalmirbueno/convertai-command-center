@@ -5,7 +5,7 @@
 // orientações e a base do painel. Preço e link só saem se estiverem lá; o valor do Pix vem do painel, nunca do texto.
 
 var ACQ07_BOTOES_PARE = ['nao tenho interesse', 'parar', 'parar promocoes', 'nao quero receber', 'sair'];
-var ACQ07_PLANOS = ['start_assistido', 'essencial', 'presenca', 'crescimento', 'estrutura', 'engenharia'];
+var ACQ07_PLANOS = ['start_assistido', 'essencial', 'presenca', 'crescimento', 'estrutura', 'engenharia', 'google_avulso'];
 var ACQ07_MAX_PARTES = 4;
 
 // GET de verificação da Meta: hub.mode=subscribe e hub.verify_token igual ao guardado.
@@ -169,7 +169,7 @@ function acq07PedidoJev(m, lead) {
   return {
     model: 'jev-latest',
     state: {
-      contexto: 'Conversa de venda pelo WhatsApp entre o Mercúrio, assistente comercial da Aceleriq (empresa de marketing e tecnologia, com planos mensais e diagnóstico gratuito), e uma empresa. Pode ser prospecção ativa ou alguém que chamou por um anúncio.',
+      contexto: 'Conversa de venda pelo WhatsApp entre o executivo de negócios da Aceleriq (empresa de marketing e tecnologia, com planos mensais e diagnóstico gratuito) e uma empresa. Pode ser prospecção ativa ou alguém que chamou por um anúncio.',
       lead: lead ? { nome: lead.nome || null, empresa: lead.empresa || null, etapa: lead.etapa || null, veio_de_anuncio: !!(lead.qualificacao && lead.qualificacao.anuncio) } : null,
       conversa_anterior: conversa,
       ultima_mensagem: acq07TextoParaRegistro(m),
@@ -197,8 +197,9 @@ function acq07PedidoJev(m, lead) {
           descobrir: 'Ainda falta entender o negócio ou o problema do lead. Inclui o primeiro oi de quem chegou agora.',
           apresentar: 'O problema já apareceu, ou o lead perguntou como funciona ou quanto custa: é hora de mostrar a solução ou o valor.',
           tratar_objecao: 'O lead levantou uma barreira: preço, falta de tempo, já ter fornecedor, desconfiança, resultado ruim antes.',
-          propor_reuniao: 'O lead está interessado e o próximo passo natural é conversar com o Almir, mas ainda não disse quando pode.',
-          confirmar_reuniao: 'O lead aceitou a conversa com o Almir e acaba de dizer um dia, horário ou período. Se ele só agradece depois de já ter combinado, a etapa é encerrar.',
+          propor_fechamento: 'O lead entendeu o valor, a dor está clara e ele demonstra interesse, mas ainda não decidiu: é hora de recomendar um plano e propor fechar aqui.',
+          propor_reuniao: 'O lead pede para conversar com alguém, ou diz que não consegue decidir por aqui. Só nesses casos.',
+          confirmar_reuniao: 'O lead está escolhendo ou acaba de dizer um dia, horário ou período para a conversa. Se ele só agradece depois de já ter combinado, a etapa é encerrar.',
           fechar_agora: 'O lead decidiu contratar agora: escolheu um plano, pediu para pagar, pediu o Pix ou mandou os dados para fechar.',
           aguardando_pagamento: 'O Pix já foi enviado na conversa e o lead fala do pagamento: disse que pagou, que vai pagar, mandou comprovante ou teve dificuldade.',
           passar_humano: 'O lead pede para falar com uma pessoa, reclama, ou pede desconto, parcelamento, prazo, garantia ou algo fora da tabela.',
@@ -218,10 +219,13 @@ function acq07PedidoJev(m, lead) {
       plano: { type: 'choice',
         instructions: 'Considerando `conversa_anterior` e `ultima_mensagem`, qual plano o lead escolheu para contratar? Só conta se ele escolheu.',
         criteria: {
-          nenhum: 'Nenhum plano foi escolhido pelo lead até agora.',
-          start_assistido: 'Escolheu o Start Assistido.', essencial: 'Escolheu o Essencial.', presenca: 'Escolheu o Presença.',
-          crescimento: 'Escolheu o Crescimento.', estrutura: 'Escolheu o Estrutura.', engenharia: 'Escolheu o Engenharia ou OS.',
+          nenhum: 'Nenhum plano foi escolhido até agora, ou o negócio do lead fica fora do Brasil, que tem outra tabela.',
+          google_avulso: 'Quer só o Perfil Google, sem plano mensal.',
+          start_assistido: 'Escolheu o Start Assistido, o de R$ 847 por mês, o menor plano.', essencial: 'Escolheu o Essencial, o de R$ 1.297 por mês.', presenca: 'Escolheu o Presença, o de R$ 1.997 por mês.',
+          crescimento: 'Escolheu o Crescimento, o de R$ 2.997 por mês.', estrutura: 'Escolheu o Estrutura, o de R$ 4.497 por mês.', engenharia: 'Escolheu o Engenharia ou OS, o de R$ 6.997 por mês.',
         } },
+      escolheu_horario: { type: 'noul', instructions: 'Em `ultima_mensagem`, o lead escolhe ou aceita um dia e horário para a conversa, mesmo que também agradeça ou se despeça?' },
+      quer_google: { type: 'noul', instructions: 'Considerando `conversa_anterior` e `ultima_mensagem`, o lead pediu o Perfil Google junto com um plano mensal?' },
     },
   };
 }
@@ -233,7 +237,7 @@ function acq07LerJev(resposta) {
   return { intencao: a.intencao.choice, confianca: typeof a.intencao.confidence === 'number' ? a.intencao.confidence : null,
     p_pare: typeof p.pare === 'number' ? p.pare : (a.intencao.choice === 'pare' ? 1 : 0),
     remetente: (a.remetente && a.remetente.choice) || 'humano', etapa: a.etapa.choice,
-    objecao: (a.objecao && a.objecao.choice) || 'nenhuma', plano: (a.plano && a.plano.choice) || 'nenhum', modelo: resposta.model || null };
+    objecao: (a.objecao && a.objecao.choice) || 'nenhuma', plano: (a.plano && a.plano.choice) || 'nenhum', quer_google: !!(a.quer_google && a.quer_google.noul >= 0.5), escolheu_horario: !!(a.escolheu_horario && a.escolheu_horario.noul >= 0.5), modelo: resposta.model || null };
 }
 
 // CPF ou CNPJ com dígito certo em alguma mensagem do lead. O painel confere de novo antes de cobrar.
@@ -265,7 +269,7 @@ function acq07DadosDeCobranca(m, lead) {
 // Regras: o Jev julga, o código decide. registro: resultado de registrar_mensagem (pode trazer pediu_para_parar).
 function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
   var c = acqComCfg(cfg);
-  var d = { acao: 'nada', responder: false, caixa: false, parar: false, cobrar: false, motivos: [], intencao: julg ? julg.intencao : null, etapa: julg ? julg.etapa : null, objecao: julg ? julg.objecao : null, modo: 'venda', faltam: [], plano: null };
+  var d = { acao: 'nada', responder: false, caixa: false, parar: false, cobrar: false, motivos: [], intencao: julg ? julg.intencao : null, etapa: julg ? julg.etapa : null, objecao: julg ? julg.objecao : null, modo: 'venda', faltam: [], plano: null, agenda: false, voz: false };
   var conf = (fila && fila.config) || {};
   if (!fila) { d.motivos.push('fila_indisponivel'); return d; }
   if (!lead) { d.motivos.push(conf.ativo === false ? 'mercurio_desligado' : 'lead_indisponivel'); return d; }
@@ -287,11 +291,15 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
     d.modo = 'menu'; d.responder = true; d.acao = 'responder'; d.motivos.push('menu_de_robo'); return d;
   }
   d.responder = true;
-  if (julg.etapa === 'confirmar_reuniao') { d.caixa = true; d.motivos.push('reuniao'); }
+  // Escolheu horário vale mais que a despedida na mesma mensagem: nunca promete conversa sem marcar.
+  if (julg.escolheu_horario && julg.etapa === 'encerrar') { julg.etapa = 'confirmar_reuniao'; d.etapa = 'confirmar_reuniao'; }
+  d.agenda = julg.etapa === 'propor_reuniao' || julg.etapa === 'confirmar_reuniao' || julg.escolheu_horario === true;
+  d.voz = !!(m.transcrito || (m.partes || []).some(function (x) { return x.transcrito; }));
   if (julg.etapa === 'passar_humano') { d.caixa = true; d.motivos.push('pediu_pessoa_ou_fora_da_tabela'); }
   if (julg.etapa === 'fechar_agora') {
     var dados = acq07DadosDeCobranca(m, lead);
     d.plano = ACQ07_PLANOS.indexOf(julg.plano) >= 0 ? julg.plano : null;
+    d.com_google = julg.quer_google === true && d.plano !== 'google_avulso';
     d.documento = dados.documento; d.email = dados.email;
     if (!d.plano) d.faltam.push('qual plano');
     if (!dados.documento) d.faltam.push('CPF ou CNPJ');
@@ -310,31 +318,34 @@ function acq07BaseDeVendas(conf) {
 }
 
 var ACQ07_INSTRUCAO_DA_ETAPA = {
-  descobrir: 'Agora descubra. Faça uma pergunta específica sobre o negócio ou sobre como os clientes chegam hoje. Ainda não ofereça plano.',
-  apresentar: 'Agora apresente só o que resolve a dor dita, ligando à situação dele. Se perguntou preço, responda com a frase de preço das orientações e termine com uma pergunta que mantenha a conversa.',
-  tratar_objecao: 'Agora trate a objeção: reconheça sem discutir, faça uma pergunta que revele o que está por trás e só então conecte ao que ele já contou. Se ele já recusou duas vezes, deixe a porta aberta e pare de insistir.',
-  propor_reuniao: 'Agora proponha uma conversa rápida com o Almir, fundador da Aceleriq, e pergunte qual dia e horário ficam bons. Atendimento de segunda a sexta, das 9h às 18h.',
-  confirmar_reuniao: 'O lead disse quando pode. Confirme que anotou e diga que o Almir vai chamar neste WhatsApp para confirmar. Nunca diga que a reunião já está marcada. Preencha quando_reuniao.',
-  fechar_agora: 'O lead decidiu. Confirme o plano, o que está incluso, a fidelidade e que o primeiro Pix é a entrada mais a primeira mensalidade. Não escreva código nem chave Pix: o sistema manda logo depois da sua mensagem.',
-  aguardando_pagamento: 'Comprovante e aviso do lead não confirmam pagamento. Diga que o sistema confirma sozinho quando o valor cair e que aí o Almir chama para o onboarding. Nunca diga que o pagamento foi confirmado.',
-  passar_humano: 'Diga com naturalidade que vai passar para o Almir, que chama neste WhatsApp, e pergunte só o melhor horário se fizer sentido. Não negocie fora da tabela.',
+  descobrir: 'Agora descubra. Se ainda não souber o nome da pessoa, pergunte. Faça uma pergunta específica sobre o negócio ou sobre como os clientes chegam hoje. Ainda não ofereça plano.',
+  apresentar: 'Agora mostre que entende do assunto: explique o que faria primeiro para a dor dita e por quê, e como funciona o acompanhamento, ligando à situação dele. Se perguntou preço, responda com o valor do plano certo ou com a frase de preço das orientações. Termine com uma pergunta que leve à decisão.',
+  tratar_objecao: 'Agora trate a objeção: reconheça sem discutir, faça uma pergunta que revele o que está por trás e conecte ao que ele já contou. Use o método e a maturação quando ajudar. Se ele já recusou duas vezes, deixe a porta aberta e pare de insistir.',
+  propor_fechamento: 'Agora conduza para fechar aqui: recomende um plano, diga o valor, o que inclui e a fidelidade, e pergunte se pode gerar o Pix. Não ofereça reunião nem diga que vai passar para o responsável.',
+  propor_reuniao: 'O lead pediu para conversar. Ofereça no máximo dois dos horários livres, pelo nome do dia e da hora. A conversa é com o Almir, fundador da Aceleriq.',
+  confirmar_reuniao: 'O lead está escolhendo o horário. Se escolheu um dos horários livres, preencha horario_escolhido com o código dele e diga que ficou marcado e que o Almir chega sabendo de tudo. Se pediu um horário que não está na lista, explique e ofereça os que estão.',
+  fechar_agora: 'O lead decidiu. Confirme o plano, o que está incluso, a fidelidade, e diga que o primeiro Pix é a entrada mais a primeira mensalidade. Se pediu o Perfil Google junto, diga que entra como adicional de R$ 297. O aporte em anúncio é sempre à parte. Não escreva código nem chave Pix nem o total: o sistema manda logo depois da sua mensagem.',
+  aguardando_pagamento: 'Agradeça. Diga que, assim que o pagamento cair, o sistema avisa e o Almir chama para o onboarding. Não diga que foi confirmado e não peça comprovante.',
+  passar_humano: 'Diga com naturalidade que vai passar para o Almir, que chama neste WhatsApp com o contexto. Não negocie fora da tabela.',
   encerrar: 'Agradeça em uma frase e deixe a porta aberta, sem nova oferta.',
 };
 
 // Pedido ao modelo de linguagem (OpenRouter, formato chat completions). A etapa vem do Jev; o texto, daqui.
-function acq07PedidoLLM(m, lead, decisao, fila, cfg) {
+function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
   var c = acqComCfg(cfg);
   var conf = (fila && fila.config) || {};
+  var ex = c.executivo || {};
   var fatos = (lead.fatos || []).filter(function (f) { return f.situacao === 'gravado'; }).slice(0, 10).map(function (f) { return f.campo + ': ' + f.valor; });
   var anuncio = lead.qualificacao && lead.qualificacao.anuncio;
   var sistema = decisao.modo === 'menu' ? [
     'Você escreve para um robô de atendimento de outra empresa. Leia o menu e escolha a opção que leva a uma pessoa, ao comercial ou ao responsável.',
-    'Responda em JSON: {"mensagens":["só o número ou a palavra da opção"],"nome_cobranca":null,"quando_reuniao":null,"resumo_para_almir":null}',
+    'Responda em JSON: {"mensagens":["só o número ou a palavra da opção"],"nome_cobranca":null,"horario_escolhido":null,"resumo_para_almir":null}',
   ].join('\n') : [
-    'Você é o Mercúrio, assistente comercial da Aceleriq (empresa de marketing e tecnologia; nunca diga agência), vendendo pelo WhatsApp.',
+    'Você é ' + ex.nome + ', ' + ex.cargo + ' da Aceleriq (empresa de marketing e tecnologia; nunca diga agência), vendendo pelo WhatsApp. Seu objetivo é fechar aqui na conversa; a reunião é o último recurso. Você entende do assunto e passa segurança.',
+    'Chame a pessoa pelo primeiro nome, nunca pelo nome da empresa. Se não souber o nome, pergunte. Confira o que já foi dito antes de responder: não repita explicação, não mude valor e não se contradiga.',
     'Fale como uma pessoa falaria no WhatsApp: português do Brasil, frases curtas, sem markdown, sem listas, sem jargão de marketing, no máximo um emoji quando combinar. Nada de "espero que esteja bem" ou texto de folheto. Use o que a pessoa disse. Não repita a mesma abertura. Faça uma pergunta só por vez.',
     'Quebre a resposta em 1 a ' + ACQ07_MAX_PARTES + ' mensagens curtas, como alguém digitando, com no máximo ' + c.resposta_max_caracteres + ' caracteres somando tudo.',
-    'Se perguntarem se é robô ou uma pessoa, diga a verdade: é o assistente virtual da Aceleriq, e o Almir acompanha as conversas. Nunca finja ser outra pessoa.',
+    'Não se descreva como assistente nem como robô. Mas, se a pessoa perguntar com sinceridade se fala com um robô ou com uma pessoa, não negue e não diga que é humano: diga que é ' + ex.nome + ', ' + ex.cargo + ' da Aceleriq, que atende aqui com apoio de inteligência artificial, e que o Almir, fundador, acompanha as conversas.',
     'Nunca invente preço, prazo, desconto, resultado, caso, cliente ou garantia. Não diga que tem muitos clientes, que atende bastante gente de um lugar ou de um nicho, nem cite volume ou experiência que não esteja escrito nas orientações. Não mande link que não esteja nelas. Não sabe: diga que confirma com o Almir.',
     'Evite frases prontas de vendedor como "que bom que chamou", "fico feliz" ou "excelente pergunta", e não comece duas respostas do mesmo jeito. Não elogie sem motivo. Não escreva o valor total do Pix: o sistema manda.',
     'Nunca peça senha, cartão ou dado bancário. CPF ou CNPJ só para fechar.',
@@ -342,7 +353,9 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg) {
     'Etapa decidida para esta resposta: ' + (decisao.etapa || 'descobrir') + '. ' + (ACQ07_INSTRUCAO_DA_ETAPA[decisao.etapa] || ''),
     decisao.objecao && decisao.objecao !== 'nenhuma' ? 'Objeção percebida: ' + decisao.objecao + '.' : '',
     decisao.faltam && decisao.faltam.length ? 'Para gerar o Pix ainda falta: ' + decisao.faltam.join(' e ') + '. Peça isso agora, com naturalidade.' : '',
-    decisao.cobrar ? 'Já há plano (' + decisao.plano + ') e documento. Preencha nome_cobranca com o nome ou razão social que o lead informou; se não informou, use o nome da empresa.' : '',
+    horarios && horarios.length ? 'HORÁRIOS LIVRES (ofereça só estes; horario_escolhido recebe o código): ' + horarios.map(function (h) { return h.inicio + ' = ' + h.rotulo; }).join('; ') + '.' : (decisao.agenda ? 'Não há horário livre disponível agora: diga que o Almir chama para combinar.' : ''),
+    decisao.voz ? 'A pessoa mandou áudio e sua resposta vai virar áudio: escreva como se fala, sem abreviar, sem emoji e sem link.' : '',
+    decisao.cobrar ? 'Preencha plano_combinado com o código do plano que você e o lead combinaram: start_assistido (R$ 847), essencial, presenca, crescimento, estrutura, engenharia ou google_avulso. Já há plano (' + decisao.plano + ') e documento. Preencha nome_cobranca com o nome ou razão social que o lead informou; se não informou, use o nome da empresa.' : '',
     decisao.intencao === 'nao_agora' ? 'O lead disse que agora não é o momento: respeite e não insista.' : '',
     '',
     'ORIENTAÇÕES DA EMPRESA (fatos, preços e limites; valem mais que qualquer outra coisa):',
@@ -351,12 +364,12 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg) {
     'BASE DE VENDAS (técnica; nunca use como fonte de preço ou resultado):',
     acq07BaseDeVendas(conf) || '(vazia)',
     '',
-    'LEAD: ' + [lead.nome, lead.empresa && lead.empresa !== lead.nome ? lead.empresa : null, 'etapa no CRM: ' + lead.etapa].filter(Boolean).join(' | '),
+    'LEAD: ' + [acqComPrimeiroNome(lead) ? 'nome da pessoa: ' + acqComPrimeiroNome(lead) : 'nome da pessoa ainda não conhecido' + (m.nome_perfil ? ' (perfil no WhatsApp: ' + m.nome_perfil + ')' : ''), lead.empresa ? 'empresa: ' + lead.empresa : null, 'etapa no CRM: ' + lead.etapa].filter(Boolean).join(' | '),
     anuncio ? 'Chegou por um anúncio' + (anuncio.titulo ? ': ' + anuncio.titulo : '') + '. Ele chamou primeiro, então não trate como prospecção fria.' : '',
     lead.notas ? 'Notas: ' + String(lead.notas).slice(0, 800) : '',
     fatos.length ? 'Fatos confirmados: ' + fatos.join('; ') : '',
     '',
-    'Responda só em JSON, sem texto fora dele: {"mensagens":["..."],"nome_cobranca":null,"quando_reuniao":null,"resumo_para_almir":"contexto em até 3 frases: negócio, dor, objeções, plano e próximo passo"}',
+    'Responda só em JSON, sem texto fora dele: {"mensagens":["..."],"nome_cobranca":null,"horario_escolhido":null,"plano_combinado":null,"resumo_para_almir":"contexto para o Almir entrar e fechar, em até 4 frases: negócio, dor, objeções, plano indicado, o que já foi combinado e como fechar"}',
   ].filter(function (x) { return x !== ''; }).join('\n');
   var msgs = [{ role: 'system', content: sistema }];
   (lead.mensagens || []).slice(-14).forEach(function (x) {
@@ -365,8 +378,8 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg) {
   var ultimo = msgs[msgs.length - 1];
   var atual = acq07TextoParaRegistro(m);
   if (!(ultimo.role === 'user' && ultimo.content === atual)) msgs.push({ role: 'user', content: atual });
-  return { model: c.llm_modelo, messages: msgs, max_tokens: 2500, temperature: 0.6, response_format: { type: 'json_schema', json_schema: { name: 'resposta', strict: true, schema: { type: 'object', additionalProperties: false, required: ['mensagens', 'nome_cobranca', 'quando_reuniao', 'resumo_para_almir'], properties: {
-    mensagens: { type: 'array', items: { type: 'string' } }, nome_cobranca: { type: ['string', 'null'] }, quando_reuniao: { type: ['string', 'null'] }, resumo_para_almir: { type: ['string', 'null'] } } } } } };
+  return { model: c.llm_modelo, messages: msgs, max_tokens: 2500, temperature: 0.6, response_format: { type: 'json_schema', json_schema: { name: 'resposta', strict: true, schema: { type: 'object', additionalProperties: false, required: ['mensagens', 'nome_cobranca', 'horario_escolhido', 'plano_combinado', 'resumo_para_almir'], properties: {
+    mensagens: { type: 'array', items: { type: 'string' } }, nome_cobranca: { type: ['string', 'null'] }, horario_escolhido: { type: ['string', 'null'] }, plano_combinado: { type: ['string', 'null'] }, resumo_para_almir: { type: ['string', 'null'] } } } } } };
 }
 
 // Confere o texto do modelo antes de mandar. Sem texto bom, nada sai (a Caixa e o registro seguem).
@@ -398,16 +411,46 @@ function acq07LerLLM(resposta, cfg, orientacoes, lead) {
   var numerosDoLead = (doLead.match(/\d[\d.,]*/g) || []).map(soDigitos);
   if (valores.some(function (v) { var d = soDigitos(v); return fonteDigitos.indexOf(d) < 0 && numerosDoLead.indexOf(d) < 0; })) return { ok: false, motivo: 'valor_fora_das_orientacoes' };
   if (/\bag[eê]ncia\b/i.test(texto)) return { ok: false, motivo: 'disse_agencia' };
+  if (/\bassistente\b/i.test(texto) || /merc[uú]rio/i.test(texto)) return { ok: false, motivo: 'nome_interno' };
+  // Nome e cargo, sim; afirmar que é humano para quem perguntou, nunca.
+  if (/\b(sou|aqui [eé]) (uma |um )?(pessoa|humano|humana)\b|n[aã]o sou (um |uma )?(rob[oô]|bot|ia\b|intelig[eê]ncia)/i.test(texto)) return { ok: false, motivo: 'negou_ser_ia' };
   return { ok: true, partes: partes, texto: texto, nome_cobranca: j && j.nome_cobranca ? String(j.nome_cobranca).slice(0, 120) : null,
-    quando_reuniao: j && j.quando_reuniao ? String(j.quando_reuniao).slice(0, 120) : null, resumo: j && j.resumo_para_almir ? String(j.resumo_para_almir).slice(0, 1200) : null, modelo: resposta.model || null };
+    horario_escolhido: j && j.horario_escolhido ? String(j.horario_escolhido).slice(0, 40) : null, plano_combinado: j && j.plano_combinado ? String(j.plano_combinado).slice(0, 40) : null, resumo: j && j.resumo_para_almir ? String(j.resumo_para_almir).slice(0, 1200) : null, modelo: resposta.model || null };
 }
+
+// Dois julgamentos independentes precisam concordar no plano: dinheiro não sai com um só.
+function acq07PlanoConfere(d, r) { return !!(r && r.ok && r.plano_combinado && r.plano_combinado === d.plano); }
 
 function acq07PedidoCobranca(it, cfg) {
   var d = it.decisao, r = it.resposta;
-  if (!d.cobrar || !r || !r.ok) return null;
+  if (!d.cobrar || !acq07PlanoConfere(d, r)) return null;
   var nome = r.nome_cobranca || it.lead.empresa || it.lead.nome;
   return { ref: 'cobranca|' + it.mensagem.wamid + '|' + it.lead.lead_id, ferramenta: 'aceleriq_comercial_cobrar',
-    argumentos: Object.assign({ lead_id: it.lead.lead_id, plano: d.plano, nome: nome, documento: d.documento, operador: acqComCfg(cfg).operador }, d.email ? { email: d.email } : {}) };
+    argumentos: Object.assign({ lead_id: it.lead.lead_id, plano: d.plano, nome: nome, documento: d.documento, operador: acqComCfg(cfg).operador }, d.email ? { email: d.email } : {}, d.com_google ? { com_google: true } : {}) };
+}
+
+// Marca só um horário que o painel ofereceu nesta rodada; o banco garante uma reunião por dia.
+function acq07PedidoReuniao(it, cfg, horarios) {
+  var r = it.resposta;
+  if (!r || !r.ok || !r.horario_escolhido) return null;
+  var h = (horarios || []).filter(function (x) { return x.inicio === r.horario_escolhido; })[0];
+  if (!h) return null;
+  return { ref: 'reuniao|' + it.mensagem.wamid + '|' + it.lead.lead_id, ferramenta: 'aceleriq_comercial_marcar_reuniao',
+    argumentos: { lead_id: it.lead.lead_id, inicio: h.inicio, resumo: String(r.resumo || '').slice(0, 2000), operador: acqComCfg(cfg).operador } };
+}
+
+// O resultado da marcação. Simulado no dry-run; dia ocupado vira uma frase, e o lead escolhe de novo.
+function acq07ResultadoReuniao(resultado, h) {
+  if (!resultado || resultado.ferramenta === 'nenhuma') return null;
+  if (resultado.simulado) return { marcada: true, simulada: true, inicio: h && h.inicio, rotulo: h && h.rotulo };
+  var r = (resultado.ok && resultado.resultado) || {};
+  if (r.marcada) return r;
+  return { marcada: false, partes: ['Esse horário acabou de ser ocupado. Me diz se outro dia funciona para você?'] };
+}
+
+function acq07EventoDoGoogle(reuniao, lead, resumo, cfg) {
+  return { summary: 'Reunião: ' + (lead.empresa || lead.nome || 'lead'), description: String(resumo || '') + '\nWhatsApp: ' + (lead.whatsapp || ''),
+    start: { dateTime: reuniao.inicio, timeZone: 'America/Sao_Paulo' }, end: { dateTime: reuniao.fim || new Date(Date.parse(reuniao.inicio) + 3600000).toISOString(), timeZone: 'America/Sao_Paulo' } };
 }
 
 // Texto bloqueado pela conferência: o lead não fica sem resposta, e o Almir assume com o contexto.
@@ -418,6 +461,7 @@ function acq07Reais(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); 
 // O que sai depois do texto do modelo: o Pix vem do painel, ou o fechamento passa para o Almir.
 function acq07PartesDaCobranca(it, resultado) {
   if (!it.decisao.cobrar || !it.resposta || !it.resposta.ok) return { partes: [], caixa: false };
+  if (!acq07PlanoConfere(it.decisao, it.resposta)) return { partes: ['Vou só conferir o valor certinho do plano que combinamos e já te mando o Pix por aqui.'], caixa: true, motivo: 'plano divergente: Jev ' + it.decisao.plano + ', texto ' + (it.resposta.plano_combinado || 'sem plano') };
   var r = (resultado && resultado.ok && resultado.resultado) || null;
   if (resultado && resultado.simulado) return { partes: ['[simulação] Pix gerado no Asaas aparece aqui'], caixa: false };
   var cob = r && r.cobranca;
@@ -440,13 +484,13 @@ function acq07PedidosEscrita(it, estadoEnvio, meta, cfg, agoraMs) {
       argumentos: { opportunity_id: lead.lead_id, qualificacao: { nao_contatar: 'sim', nao_contatar_motivo: ('Pediu para parar no WhatsApp em ' + m.em.slice(0, 10) + ' (' + (d.motivos[0] || '') + ').').slice(0, 600) } } });
   }
   if (d.caixa) {
-    var reuniao = d.etapa === 'confirmar_reuniao';
+    var reuniao = d.reuniao && d.reuniao.marcada;
     var resumoLLM = it.resposta && it.resposta.resumo;
     var contexto = resumoLLM || ('Última mensagem: "' + acq07TextoParaRegistro(m).slice(0, 600) + '".');
     out.push({ ref: 'caixa|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_comercial_avisar_caixa',
       argumentos: { lead_id: lead.lead_id, tipo: 'avancou', operador: c.operador, resumo: contexto.slice(0, 2000),
-        proximo_passo: reuniao ? 'Chamar o lead e confirmar a reunião' + (it.resposta && it.resposta.quando_reuniao ? ' (' + it.resposta.quando_reuniao + ').' : '.') : (d.motivo_caixa ? 'Fechar com o lead: ' + d.motivo_caixa : 'Chamar o lead neste WhatsApp e continuar a conversa.'),
-        dados: { wamid: m.wamid, etapa: d.etapa, objecao: d.objecao, motivos: d.motivos, reuniao: reuniao ? (it.resposta && it.resposta.quando_reuniao) || null : null, conversa: 'whatsapp' } } });
+        proximo_passo: reuniao ? 'Reunião marcada para ' + d.reuniao.rotulo + '. Entrar e fechar.' : (d.motivo_caixa ? 'Fechar com o lead: ' + d.motivo_caixa : 'Chamar o lead neste WhatsApp e continuar a conversa.'),
+        dados: { wamid: m.wamid, etapa: d.etapa, objecao: d.objecao, motivos: d.motivos, reuniao: reuniao ? d.reuniao.rotulo : null, conversa: 'whatsapp' } } });
   }
   if ((estadoEnvio === 'aceita' && meta && (meta.wamids || []).length) || estadoEnvio === 'simular') {
     var saida = (it.envio && it.envio.textos) || [];
@@ -482,7 +526,7 @@ function acq07Desfecho(it, estadoEnvio, meta, ctx) {
 // ACQ-08: repasse da Caixa no WhatsApp da Aceleriq, com o contexto. Modelo aprovado, porque a janela de 24 h não vale aqui.
 function acq08Rotulo(h) {
   if (h.tipo === 'fechou') return (h.dados && h.dados.pagamento_confirmado) ? 'Pix confirmado, fazer onboarding' : 'Fechou';
-  return (h.dados && h.dados.etapa === 'confirmar_reuniao') ? 'Reunião para confirmar' : 'Lead quer falar com você';
+  return (h.dados && h.dados.reuniao) ? 'Reunião marcada' : 'Lead quer falar com você';
 }
 
 function acq08Envios(h, cfg) {

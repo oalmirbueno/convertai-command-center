@@ -30,7 +30,8 @@
         "aceleriq_update_opportunity",
         "aceleriq_comercial_entrada_nova",
         "aceleriq_comercial_cobrar",
-        "aceleriq_comercial_repasse_marcar"
+        "aceleriq_comercial_repasse_marcar",
+        "aceleriq_comercial_marcar_reuniao"
       ],
       "operador": "n8n-teste",
       "lote_clientes": 2,
@@ -49,11 +50,11 @@
         "waba_id": null,
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_primeiro_contato_mercurio",
+            "nome": "aceleriq_primeiro_contato_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da {{2}} na internet e reparei que {{3}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
             "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
@@ -61,11 +62,11 @@
             ]
           },
           "retomada": {
-            "nome": "aceleriq_retomada_conversa",
+            "nome": "aceleriq_retomada_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "corpo": "Oi, {{1}}! Aqui é o Rafael, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
             "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
@@ -77,7 +78,7 @@
             "idioma": "pt_BR",
             "categoria": "UTILITY",
             "aprovado": false,
-            "corpo": "Repasse do Mercúrio: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
+            "corpo": "Repasse do executivo: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
           }
         },
         "max_por_rodada": 5,
@@ -87,12 +88,19 @@
         },
         "llm_url": "http://127.0.0.1:8791/llm",
         "llm_modelo": "anthropic/claude-sonnet-5.5",
-        "resposta_max_caracteres": 900,
+        "resposta_max_caracteres": 1400,
         "janela_horas": 24,
         "limiar_pare": 0.4,
         "exigir_assinatura": true,
         "transcricao_modelo": "google/gemini-2.5-flash",
-        "numero_equipe": "5541997483429"
+        "numero_equipe": "5541997483429",
+        "executivo": {
+          "nome": "Rafael",
+          "cargo": "executivo de negócios"
+        },
+        "voz_id": "xNGAXaCH8MaasNuo7Hr7",
+        "voz_modelo": "eleven_v4",
+        "google_url": "http://127.0.0.1:8793/google"
       }
     },
     "pilot": {
@@ -123,11 +131,11 @@
         "waba_id": null,
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_primeiro_contato_mercurio",
+            "nome": "aceleriq_primeiro_contato_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da {{2}} na internet e reparei que {{3}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
             "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
@@ -135,11 +143,11 @@
             ]
           },
           "retomada": {
-            "nome": "aceleriq_retomada_conversa",
+            "nome": "aceleriq_retomada_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "corpo": "Oi, {{1}}! Aqui é o Rafael, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
             "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
@@ -151,7 +159,7 @@
             "idioma": "pt_BR",
             "categoria": "UTILITY",
             "aprovado": false,
-            "corpo": "Repasse do Mercúrio: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
+            "corpo": "Repasse do executivo: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
           }
         },
         "max_por_rodada": 5,
@@ -161,12 +169,18 @@
         },
         "llm_url": "https://openrouter.ai/api/v1/chat/completions",
         "llm_modelo": "anthropic/claude-sonnet-5.5",
-        "resposta_max_caracteres": 900,
+        "resposta_max_caracteres": 1400,
         "janela_horas": 24,
         "limiar_pare": 0.4,
         "exigir_assinatura": true,
         "transcricao_modelo": "google/gemini-2.5-flash",
-        "numero_equipe": "5541997483429"
+        "numero_equipe": "5541997483429",
+        "executivo": {
+          "nome": "Rafael",
+          "cargo": "executivo de negócios"
+        },
+        "voz_id": "xNGAXaCH8MaasNuo7Hr7",
+        "voz_modelo": "eleven_v4"
       }
     },
     "production": {
@@ -199,11 +213,11 @@
         "waba_id": "2522709858221533",
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_primeiro_contato_mercurio",
+            "nome": "aceleriq_primeiro_contato_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Mercúrio, assistente comercial da Aceleriq, de marketing e tecnologia. Olhei a presença de vocês na internet e reparei que {{2}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da {{2}} na internet e reparei que {{3}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
             "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
@@ -211,11 +225,11 @@
             ]
           },
           "retomada": {
-            "nome": "aceleriq_retomada_conversa",
+            "nome": "aceleriq_retomada_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
             "aprovado": false,
-            "corpo": "Oi, {{1}}! Aqui é o Mercúrio, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "corpo": "Oi, {{1}}! Aqui é o Rafael, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
             "rodape": "Para não receber mais, toque em Não tenho interesse.",
             "botoes": [
               "Quero o diagnóstico",
@@ -227,7 +241,7 @@
             "idioma": "pt_BR",
             "categoria": "UTILITY",
             "aprovado": false,
-            "corpo": "Repasse do Mercúrio: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
+            "corpo": "Repasse do executivo: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
           }
         },
         "max_por_rodada": 5,
@@ -237,12 +251,18 @@
         },
         "llm_url": "https://openrouter.ai/api/v1/chat/completions",
         "llm_modelo": "anthropic/claude-sonnet-5.5",
-        "resposta_max_caracteres": 900,
+        "resposta_max_caracteres": 1400,
         "janela_horas": 24,
         "limiar_pare": 0.4,
         "exigir_assinatura": true,
         "transcricao_modelo": "google/gemini-2.5-flash",
-        "numero_equipe": "5541997483429"
+        "numero_equipe": "5541997483429",
+        "executivo": {
+          "nome": "Rafael",
+          "cargo": "executivo de negócios"
+        },
+        "voz_id": "xNGAXaCH8MaasNuo7Hr7",
+        "voz_modelo": "eleven_v4"
       }
     }
   }

@@ -110,6 +110,9 @@ export function criarMundo(opcoes = {}) {
       if (m.sem_asaas) return { cobranca: null, nova: false, sem_asaas: true, aviso: 'sem chave' };
       return { cobranca: { id: 'c1', plano_nome: 'Start Assistido', valor: 1394, pix_copia_e_cola: '000201PIXTESTE', link: 'https://asaas.test/i/1' }, nova: true };
     },
+    aceleriq_comercial_horarios(a) { m.ocupados = a.ocupados || null; return { horarios: m.horarios || [{ inicio: '2026-11-10T14:00:00.000Z', rotulo: 'terça, 10/11, às 11h' }, { inicio: '2026-11-11T14:00:00.000Z', rotulo: 'quarta, 11/11, às 11h' }] }; },
+    aceleriq_comercial_marcar_reuniao(a) { m.reunioes = (m.reunioes || []).concat([a]); return m.dia_ocupado ? { marcada: false, motivo: 'dia_ocupado' } : { marcada: true, id: 'r1', inicio: a.inicio, fim: '2026-11-10T15:00:00.000Z', rotulo: 'terça, 10/11, às 11h', titulo: 'Reunião' }; },
+    aceleriq_comercial_falar(a) { m.falas = (m.falas || []).concat([a]); return { audio_base64: 'T2dnUw==', mime: 'audio/ogg', bytes: 4 }; },
     aceleriq_comercial_repasses() { return { itens: m.repasses || [], total: (m.repasses || []).length }; },
     aceleriq_comercial_repasse_marcar(a) { m.repassados = (m.repassados || []).concat([a.id]); return { id: a.id, marcado: true }; },
     aceleriq_update_opportunity(a) {
@@ -142,7 +145,7 @@ export function criarMundo(opcoes = {}) {
     const probs = { interessado: 0.02, pergunta: 0.02, nao_agora: 0.02, pare: 0.02, outro: 0.02 }; probs[c] = 0.92;
     const extra = m.jevExtra || {};
     const responder = (id, v) => ({ type: 'choice', choice: v, confidence: 0.9 });
-    return { statusCode: 200, body: { model: 'jev-teste', answers: { remetente: responder('remetente', extra.remetente || 'humano'), etapa: responder('etapa', extra.etapa || (av > 0.5 ? 'apresentar' : 'descobrir')), objecao: responder('objecao', extra.objecao || 'nenhuma'), plano: responder('plano', extra.plano || 'nenhum'), intencao: { type: 'choice', choice: c, confidence: 0.9, probabilities: probs }, avancou: { type: 'noul', noul: av } } } };
+    return { statusCode: 200, body: { model: 'jev-teste', answers: { quer_google: { type: 'noul', noul: extra.quer_google ? 0.9 : 0.05 }, escolheu_horario: { type: 'noul', noul: extra.escolheu_horario ? 0.9 : 0.05 }, remetente: responder('remetente', extra.remetente || 'humano'), etapa: responder('etapa', extra.etapa || (av > 0.5 ? 'apresentar' : 'descobrir')), objecao: responder('objecao', extra.objecao || 'nenhuma'), plano: responder('plano', extra.plano || 'nenhum'), intencao: { type: 'choice', choice: c, confidence: 0.9, probabilities: probs }, avancou: { type: 'noul', noul: av } } } };
   }
 
   function llm(corpo) {
@@ -151,6 +154,7 @@ export function criarMundo(opcoes = {}) {
   }
 
   function meta(url, corpo) {
+    if (url.endsWith('/media')) { m.meta.midias = (m.meta.midias || 0) + 1; return { statusCode: 200, body: { id: 'midia-voz' } }; }
     if (corpo && corpo.status === 'read') { m.meta.digitando = (m.meta.digitando || 0) + 1; return { statusCode: 200, body: { success: true } }; }
     if (!corpo) return url.includes('/arquivo') ? { statusCode: 200, body: { arquivo: 'audio-falso' } } : { statusCode: 200, body: { url: 'http://127.0.0.1:8792/graph/arquivo' } };
     m.meta.enviadas.push({ url, corpo });
@@ -167,6 +171,7 @@ export function criarMundo(opcoes = {}) {
     if (url.indexOf('http://127.0.0.1:8791/mcp') === 0) return mcp(corpo);
     if (url.indexOf('http://127.0.0.1:8791/jev') === 0) return jev(corpo);
     if (url.indexOf('http://127.0.0.1:8791/llm') === 0) return JSON.stringify(corpo || {}).includes('input_audio') ? { statusCode: 200, body: { choices: [{ message: { content: m.transcricao || 'quanto custa o plano' } }] } } : llm(corpo);
+    if (url.indexOf('http://127.0.0.1:8793/google') === 0) { m.google = (m.google || []).concat([{ url, corpo }]); return url.endsWith('/freeBusy') ? { statusCode: 200, body: { calendars: { primary: { busy: m.google_busy || [] } } } } : { statusCode: 200, body: { id: 'ev1' } }; }
     if (url.indexOf('http://127.0.0.1:8792/graph/') === 0) return meta(url, corpo);
     throw new Error('URL fora do mundo de teste (bloqueada): ' + url);
   }
