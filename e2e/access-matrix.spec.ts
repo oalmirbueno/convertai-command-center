@@ -270,6 +270,9 @@ for (const role of USER_ROLES) {
         await observation.drain();
         await page.goto("/comercial");
         await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/dashboard");
+        // React Router 7 navigates inside a transition: the address changes before the lazy
+        // dashboard renders, and a logout in that gap would still see /comercial as "next".
+        await expect(page.getByRole("heading", { name: "Dashboard", exact: true, level: 1 })).toBeVisible();
       }
     }
 
