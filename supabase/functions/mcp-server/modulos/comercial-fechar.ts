@@ -153,7 +153,7 @@ export async function comercialMarcarReuniao(input: { lead_id: string; inicio: s
   return { marcada: true, id: (data as { id: string }).id, inicio, fim: new Date(Date.parse(inicio) + 3600000).toISOString(), rotulo: rotuloDoHorario(inicio), titulo };
 }
 
-const VOZ_PADRAO = 'xNGAXaCH8MaasNuo7Hr7';
+const VOZ_PADRAO = 'FB9t7w9dj2IYiysoM5p6';
 
 /** Nota de voz: OGG Opus mono, o formato que o WhatsApp mostra como áudio gravado. */
 export async function comercialFalar(input: { texto: string; voz?: string; modelo?: string }, ctx: AuthContext) {
