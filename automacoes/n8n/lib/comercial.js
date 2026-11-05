@@ -89,7 +89,12 @@ function acqComNomeDoLead(item) {
 // Lead com site e sem fato gravado fica de fora: sem fato não há mensagem personalizada.
 function acqComFatoObservado(item) {
   var q = (item && item.qualificacao) || {};
-  var limpar = function (t) { var x = acqComParametro(t, 220).replace(/[.!;:,\s]+$/, ''); return x.length >= 8 && x.length <= 200 ? x : null; };
+  // O texto entra depois de "reparei que": começa em minúscula, é uma frase só e não tem cara de anotação interna.
+  var limpar = function (t) {
+    var x = acqComParametro(t, 220).replace(/[.!;:,\s]+$/, '');
+    if (x.length < 8 || x.length > 200) return null;
+    return /^[a-zà-ú]/.test(x) && !/[;@]|\. |https?:|auditad|não testad/i.test(x) ? x : null;
+  };
   var f = limpar(q.fato_observado);
   if (f) return { texto: f, fonte: 'qualificacao.fato_observado' };
   var fatos = ((item && item.fatos) || []).filter(function (x) {
@@ -100,8 +105,6 @@ function acqComFatoObservado(item) {
     var v = limpar(fatos[i].valor);
     if (v) return { texto: v, fonte: 'fato:' + fatos[i].campo };
   }
-  var p = limpar(q.presenca_digital);
-  if (p) return { texto: p, fonte: 'qualificacao.presenca_digital' };
   if (q.fonte === 'maquina_de_leads' && !q.site) {
     return q.instagram
       ? { texto: 'vocês têm Instagram, mas não encontrei um site próprio da empresa', fonte: 'maquina:sem_site_com_instagram' }

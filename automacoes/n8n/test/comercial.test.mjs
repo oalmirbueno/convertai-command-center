@@ -59,6 +59,16 @@ test('número: Brasil com e sem 9, fixo, internacional e comparação com o wa_i
   assert.equal(L.acqComMesmoNumero('(19) 99876-5432', '5511998765432'), false, 'DDD diferente');
 });
 
+test('fato observado: nota interna nunca vira frase para o lead', () => {
+  const site = { fonte: 'maquina_de_leads', site: 'x.com' };
+  assert.equal(L.acqComFatoObservado({ qualificacao: { ...site, presenca_digital: 'Site com agenda online,Instagram e WhatsApp publicados;não testados. Google não auditado.' } }), null, 'anotação da ficha não é fato');
+  assert.equal(L.acqComFatoObservado({ qualificacao: { ...site, presenca_digital: 'o site parece antigo' } }), null, 'nem quando parece frase');
+  assert.equal(L.acqComFatoObservado({ qualificacao: site, fatos: [{ campo: 'presenca_digital', valor: 'Site e @x publicados. Google não auditado.', situacao: 'gravado' }] }), null, 'fato gravado em forma de nota fica de fora');
+  assert.equal(L.acqComFatoObservado({ qualificacao: site, fatos: [{ campo: 'presenca_digital', valor: 'o rodapé tem data; o resto não', situacao: 'gravado' }] }), null);
+  assert.equal(L.acqComFatoObservado({ qualificacao: site, fatos: [{ campo: 'presenca_digital', valor: 'o endereço do site de vocês no Google não está abrindo', situacao: 'gravado' }] }).texto, 'o endereço do site de vocês no Google não está abrindo');
+  assert.equal(L.acqComFatoObservado({ qualificacao: site, fatos: [{ campo: 'presenca_digital', valor: 'vocês têm nota 4,8 no Google, mas só 32 avaliações', situacao: 'gravado' }] }).texto, 'vocês têm nota 4,8 no Google, mas só 32 avaliações');
+});
+
 test('fato observado: o gravado de propósito vence; Máquina sem site vira fato; com site e sem fato fica de fora', () => {
   assert.equal(L.acqComFatoObservado({ qualificacao: { fato_observado: 'o site não abre no celular.', fonte: 'maquina_de_leads' } }).texto, 'o site não abre no celular');
   assert.equal(L.acqComFatoObservado({ qualificacao: { fonte: 'maquina_de_leads', site: 'x.com' }, fatos: [{ campo: 'presenca_digital', valor: 'o último post no Instagram é de março', situacao: 'gravado' }] }).fonte, 'fato:presenca_digital');

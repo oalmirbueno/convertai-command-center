@@ -45,10 +45,11 @@ Sem a credencial da Meta, o nó HTTP falha e nada é marcado como enviado.
    (incidente alto, nunca reenvia sozinho). Meta aceitou e o painel falhou = incidente alto, sem reenvio.
 
 **Fato observado**, nesta ordem: `qualificacao.fato_observado` (texto livre que a equipe ou o Hermes gravar);
-fato com prova de campo `presenca_digital` ou `problema` (`aceleriq_comercial_registrar_fato`);
-`qualificacao.presenca_digital`; e, para lead da Máquina sem site nas fontes, "não encontrei um site próprio da
-empresa nas buscas" (ou "vocês têm Instagram, mas não encontrei um site próprio da empresa"). Lead **com** site e
-sem fato gravado fica de fora: sem fato não há mensagem personalizada.
+fato **gravado** de campo `presenca_digital` ou `problema` (`aceleriq_comercial_registrar_fato`); e, para lead da
+Máquina sem site nas fontes, "não encontrei um site próprio da empresa nas buscas" (ou "vocês têm Instagram, mas não
+encontrei um site próprio da empresa"). O texto entra depois de "reparei que": precisa começar em minúscula e ser uma
+frase só. `qualificacao.presenca_digital` é anotação interna e nunca vai para o lead (a simulação de 05/11 mostrou
+isso virando mensagem). Lead **com** site e sem fato gravado fica de fora: sem fato não há mensagem personalizada.
 
 **ACQ-07 (respostas)**
 1. `GET`: responde o `hub.challenge` só se o `hub.verify_token` bater com o guardado.
