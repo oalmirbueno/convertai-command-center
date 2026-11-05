@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { horarioDaGrade, horariosLivres, rotuloDoHorario } from "../../supabase/functions/_shared/comercial-agenda";
-import { ADICIONAL_GOOGLE, planoPorId, valorDoFechamento } from "../../supabase/functions/_shared/comercial-asaas";
+import { horarioDaGrade, horariosLivres, rotuloDoHorario } from "../../supabase/functions/mcp-server/modulos/comercial-agenda";
+import { ADICIONAL_GOOGLE, planoPorId, valorDoFechamento } from "../../supabase/functions/mcp-server/modulos/comercial-asaas";
 
 // quinta, 05/11/2026, 08h em São Paulo
 const AGORA = Date.parse("2026-11-05T11:00:00Z");

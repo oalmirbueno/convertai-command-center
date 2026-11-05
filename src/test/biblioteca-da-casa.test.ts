@@ -12,7 +12,14 @@ const MIGRATION = "supabase/migrations/20261023110000_biblioteca_da_casa.sql";
 describe("Biblioteca da casa", () => {
   it("todo agente da Base tem de 5 a 15 documentos da casa, versão 2026-10-23", () => {
     expect(VERSAO_DA_BIBLIOTECA).toBe("2026-10-23");
-    expect(Object.keys(BIBLIOTECA_DA_CASA).sort()).toEqual(AGENTES_COM_BASE.map((a) => a.chave).sort());
+    // Agentes que entraram na Base depois desta versão da biblioteca: a base deles é o que o dono ensina
+    // em /base-dos-agentes até sair uma versão nova (seed em migration nova). Lista fechada: agente novo
+    // fora dela e sem documento da casa reprova.
+    const DEPOIS_DA_VERSAO = ["comercial.mercurio"]; // 05/11: o vendedor do WhatsApp.
+    expect(Object.keys(BIBLIOTECA_DA_CASA).sort()).toEqual(
+      AGENTES_COM_BASE.map((a) => a.chave).filter((c) => !DEPOIS_DA_VERSAO.includes(c)).sort(),
+    );
+    for (const c of DEPOIS_DA_VERSAO) expect(AGENTES_COM_BASE.map((a) => a.chave), c).toContain(c);
     for (const [agente, docs] of Object.entries(BIBLIOTECA_DA_CASA)) {
       expect(docs.length, agente).toBeGreaterThanOrEqual(5);
       expect(docs.length, agente).toBeLessThanOrEqual(15);
