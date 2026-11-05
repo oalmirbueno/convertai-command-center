@@ -595,6 +595,9 @@ function Cartao({
           {/* O compromisso marcado, não uma anotação: é o que diz se este
               lead tem alguém cuidando dele. Com o quando, para não precisar
               abrir o lead para saber se é hoje. */}
+          {lead.stage === "ganho" && !lead.won_client_id && (
+            <p className="mt-1 text-[11px] font-medium leading-4 text-warning" data-falta-cadastrar="">Falta cadastrar o cliente</p>
+          )}
           {fechado ? (
             lead.lost_reason ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground max-sm:hidden">{lead.lost_reason}</p> : null
           ) : agenda.proxima ? (

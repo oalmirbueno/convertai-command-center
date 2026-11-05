@@ -55,7 +55,7 @@ function rpcRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-const SERVICES = [
+export const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
   { key: "social", label: "Social Media" },
   { key: "videos_ia", label: "Vídeos com IA" },

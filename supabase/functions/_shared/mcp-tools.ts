@@ -4521,7 +4521,7 @@ const updateOpportunityTool = ferramentaDoCrm(
 
 const moveOpportunityTool = ferramentaDoCrm(
   'aceleriq_move_opportunity', 'Mover negocio de etapa',
-  'Move a oportunidade no funil e registra a passagem na historia. Perdido EXIGE reason (o motivo ensina o proximo). Ganho e perdido carimbam a data de fechamento; em ganho, won_client_id liga o negocio ao cadastro do cliente. Reabrir (voltar para etapa aberta) limpa o fechamento.',
+  'Move a oportunidade no funil e registra a passagem na historia. Perdido EXIGE reason (o motivo ensina o proximo). Ganho e perdido carimbam a data de fechamento; ganho EXIGE won_client_id de um cliente ja cadastrado; sem cadastro, peca ao dono para marcar pela janela de ganho do CRM. Reabrir (voltar para etapa aberta) limpa o fechamento.',
   true, z.object({ opportunity_id: UUID, stage: z.enum(ETAPAS_DO_FUNIL), reason: z.string().max(1000).optional(), won_client_id: UUID.nullable().optional() }).strict(),
   { type: 'object', properties: {
     opportunity_id: { type: 'string', description: 'UUID da oportunidade.' },

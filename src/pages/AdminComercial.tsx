@@ -1412,6 +1412,12 @@ export function EditorDeLead({
           {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
           {/* De qual anúncio veio (origem do clique gravada pelo formulário do site). */}
           {lead && <OrigemDoLead lead={lead} />}
+          {lead && lead.stage === "ganho" && !lead.won_client_id && (
+            <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-3 py-2" data-ganho-sem-cadastro="">
+              <p className={juntar(texto.corpo, "mr-3 min-w-0")}>Ganho sem cadastro: o cliente não está em Clientes nem no Financeiro.</p>
+              <button type="button" onClick={() => setJanelaDoGanho(true)} className={botao.primario}>Cadastrar cliente</button>
+            </div>
+          )}
           {/* 25/10/2026: a campanha da Meta ligada sem link de anúncio (ligada pelo agente ou pela campanha). */}
           {lead && lead.ads_campaign_id && !lead.origem_clique && <CampanhaDaMetaDoLead campaignId={lead.ads_campaign_id} />}
         </DialogHeader>
@@ -1626,7 +1632,7 @@ export function EditorDeLead({
                   aria-label="Motivo da perda"
                   className={juntar(campo, "mt-2")}
                 />
-                {lead.stage === "ganho" && (valoresDoFormulario.one_off_value > 0 || valoresDoFormulario.monthly_value > 0) && (
+                {lead.stage === "ganho" && lead.won_client_id && (valoresDoFormulario.one_off_value > 0 || valoresDoFormulario.monthly_value > 0) && (
                   <div className="mt-3 min-w-0" data-como-foi-o-ganho="">
                     <h3 className={juntar(texto.tituloSecao, "mb-2")}>Como foi o ganho</h3>
                     <CamposDoGanho entrada={valoresDoFormulario.one_off_value} mensalidade={valoresDoFormulario.monthly_value} mes={mesDoFechamento} estado={comoFoi} onMudar={setComoFoi} />

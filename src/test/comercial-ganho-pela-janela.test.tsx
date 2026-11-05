@@ -28,6 +28,7 @@ vi.mock("@/lib/comercial", async (original) => ({
   moverLead: estado.mover,
 }));
 vi.mock("@/components/comercial/AtividadesDoLead", () => ({ default: () => null }));
+vi.mock("@/hooks/useFinanceV2", async (original) => ({ ...(await original<typeof import("@/hooks/useFinanceV2")>()), useFinancePlans: () => ({ data: [] }) }));
 
 import { EditorDeLead } from "@/pages/AdminComercial";
 
@@ -90,33 +91,12 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Ganho pela janela do lead", () => {
-  const abrirGanho = async () => {
+  it("abre a mesma janela do quadro, sem marcar nada antes de confirmar", async () => {
     abrir();
     irParaEtapa();
     fireEvent.click(await screen.findByRole("button", { name: /^ganho$/i }));
-    await screen.findByRole("button", { name: "Confirmar e cadastrar" });
-  };
-
-  it("abre a mesma janela do quadro, já no novo cadastro, sem marcar nada antes de confirmar", async () => {
-    await abrirGanho();
+    await screen.findByRole("button", { name: "Criar cliente e marcar ganho" });
     expect(estado.mover).not.toHaveBeenCalled();
-  });
-
-  it("marca como ganho ligado ao cliente escolhido no painel", async () => {
-    await abrirGanho();
-    fireEvent.click(screen.getByText("Já é cliente"));
-    fireEvent.change(await screen.findByRole("combobox", { name: /cliente no painel/i }), { target: { value: "c-padaria" } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar ganho" }));
-    await waitFor(() => expect(estado.mover).toHaveBeenCalledOnce());
-    expect(estado.mover.mock.calls[0][0]).toMatchObject({ paraEstagio: "ganho", clienteGanho: "c-padaria" });
-  });
-
-  it("Depois: o ganho segue sem cliente e sem Financeiro", async () => {
-    await abrirGanho();
-    fireEvent.click(screen.getByText("Depois"));
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar ganho" }));
-    await waitFor(() => expect(estado.mover).toHaveBeenCalledOnce());
-    expect(estado.mover.mock.calls[0][0]).toMatchObject({ paraEstagio: "ganho", clienteGanho: null });
   });
 
   it("mover para outra etapa não pede cadastro nem manda cliente", async () => {
@@ -125,5 +105,15 @@ describe("Ganho pela janela do lead", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^negociação$/i }));
     await waitFor(() => expect(estado.mover).toHaveBeenCalledOnce());
     expect(estado.mover.mock.calls[0][0].clienteGanho).toBeUndefined();
+  });
+});
+
+describe("Ganho que ficou sem cadastro", () => {
+  it("a ficha avisa e o botão abre a janela de cadastro", async () => {
+    lead.stage = "ganho";
+    abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Cadastrar cliente" }));
+    await screen.findByRole("button", { name: "Criar cliente e marcar ganho" });
+    lead.stage = "proposta";
   });
 });

@@ -678,10 +678,12 @@ export function mesDoGanho(lead: Pick<Lead, "stage" | "closed_at">, hoje: string
 
 export function estadoDoGanho(lead: ValoresDoGanho, mes: string): EstadoDoGanho {
   const parcelada = faltaDaEntrada(lead) > 0;
+  const recebido = entradaRecebida(lead);
   return {
     entrada: parcelada ? "parcelada" : "avista",
-    recebido: String(parcelada ? entradaRecebida(lead) : Math.round((lead.one_off_value / 2) * 100) / 100),
-    parcelas: String(lead.entrada_parcelas || 1),
+    recebido: String(parcelada ? recebido : Math.round((lead.one_off_value / 2) * 100) / 100),
+    // Na tela é o total de vezes (entrada + o que falta), que é como se combina com o cliente.
+    parcelas: String(parcelada ? (lead.entrada_parcelas || 1) + (recebido > 0 ? 1 : 0) : 2),
     inicio: lead.mensalidade_inicio && lead.mensalidade_inicio >= proximoMes(mes) ? "proximo" : "este",
   };
 }
@@ -697,11 +699,13 @@ export function fechamentoDoEstado(
     return { entrada_recebida: null, entrada_parcelas: null, mensalidade_inicio };
   }
   const recebido = Number(String(estado.recebido).replace(",", "."));
-  const parcelas = Number(estado.parcelas);
-  if (!Number.isFinite(recebido) || recebido < 0) return { erro: "Informe quanto já entrou da entrada." };
-  if (recebido >= lead.one_off_value) return { erro: "O recebido não fica abaixo da entrada: se pagou tudo, marque À vista." };
-  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 36) return { erro: "O resto vem em 1 a 36 vezes." };
-  return { entrada_recebida: recebido, entrada_parcelas: parcelas, mensalidade_inicio };
+  const vezes = Number(estado.parcelas);
+  if (!Number.isFinite(recebido) || recebido < 0) return { erro: "Informe quanto já entrou." };
+  if (recebido >= lead.one_off_value) return { erro: "Se já pagou tudo, marque À vista." };
+  if (!Number.isInteger(vezes) || vezes < 1 || vezes > 36) return { erro: "Parcelado vai de 1 a 36 vezes." };
+  const faltam = recebido > 0 ? vezes - 1 : vezes;
+  if (faltam < 1) return { erro: "Com entrada e resto a receber, são pelo menos 2 vezes." };
+  return { entrada_recebida: recebido, entrada_parcelas: faltam, mensalidade_inicio };
 }
 
 export const ganhoRecusado = (f: FechamentoDoGanho | { erro: string }): f is { erro: string } => "erro" in f;

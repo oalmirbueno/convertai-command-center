@@ -181,6 +181,10 @@ export async function moveOpportunity(input: { opportunity_id: string; stage: st
   if (para === 'perdido' && (!motivo || motivo.length < 3)) {
     throw new Error('reason: diga em uma linha por que foi perdido. E o que ensina o proximo.');
   }
+  // 05/11/2026: ganho sem cliente não aparece em Clientes nem no Financeiro; o banco também recusa.
+  if (para === 'ganho' && !input.won_client_id) {
+    throw new Error('won_client_id: ganho exige o cliente cadastrado. Peca ao dono para marcar pela janela de ganho do CRM, que pede o tipo, os valores e cria o cliente.');
+  }
   if (para === 'ganho' && input.won_client_id) await exigirPerfil(input.won_client_id, 'won_client_id');
   const fechou = para === 'ganho' || para === 'perdido';
   const { data, error } = await comPrazo(db().from('commercial_leads').update({

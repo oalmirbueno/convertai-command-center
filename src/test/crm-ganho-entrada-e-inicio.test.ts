@@ -26,15 +26,18 @@ describe("entrada", () => {
 
   it("à vista grava nulo; parcelada guarda o recebido; conta que não fecha é recusada", () => {
     expect(fechamentoDoEstado(lead(), avista, NOV)).toEqual({ entrada_recebida: null, entrada_parcelas: null, mensalidade_inicio: NOV });
-    expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada" }, NOV)).toEqual({ entrada_recebida: 500, entrada_parcelas: 2, mensalidade_inicio: NOV });
+    expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada" }, NOV)).toEqual({ entrada_recebida: 500, entrada_parcelas: 1, mensalidade_inicio: NOV });
     expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada", recebido: "1000" }, NOV)).toHaveProperty("erro");
     expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada", recebido: "-1" }, NOV)).toHaveProperty("erro");
     expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada", parcelas: "0" }, NOV)).toHaveProperty("erro");
+    // Entrada paga e 1 vez não fecha; nada pago em 1 vez é uma parcela a receber.
+    expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada", parcelas: "1" }, NOV)).toHaveProperty("erro");
+    expect(fechamentoDoEstado(lead(), { ...avista, entrada: "parcelada", recebido: "0", parcelas: "1" }, NOV)).toMatchObject({ entrada_recebida: 0, entrada_parcelas: 1 });
   });
 
   it("reabre o ganho com o que foi salvo", () => {
-    expect(estadoDoGanho(lead({ entrada_recebida: 400, entrada_parcelas: 3, mensalidade_inicio: "2026-12-01" }), NOV)).toEqual({ entrada: "parcelada", recebido: "400", parcelas: "3", inicio: "proximo" });
-    expect(estadoDoGanho(lead(), NOV)).toEqual({ entrada: "avista", recebido: "500", parcelas: "1", inicio: "este" });
+    expect(estadoDoGanho(lead({ entrada_recebida: 400, entrada_parcelas: 3, mensalidade_inicio: "2026-12-01" }), NOV)).toEqual({ entrada: "parcelada", recebido: "400", parcelas: "4", inicio: "proximo" });
+    expect(estadoDoGanho(lead(), NOV)).toEqual({ entrada: "avista", recebido: "500", parcelas: "2", inicio: "este" });
   });
 });
 
