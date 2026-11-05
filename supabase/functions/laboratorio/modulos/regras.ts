@@ -618,7 +618,7 @@ export function montarPromptDaImagem(o: {
 // ------------------------------------------------------------------ custo (plano puro)
 
 export const MODELO_TEXTO_PADRAO = "openrouter:anthropic/claude-opus-5.5";
-export const MODELO_IMAGEM_PADRAO = "openrouter:openai/gpt-image-2.5-sunburst";
+export const MODELO_IMAGEM_PADRAO = "openrouter:openai/gpt-image-2.6-sunburst";
 
 export type Chamada = { tipo: "texto" | "imagem"; modelo_id: string; tokens_entrada: number; tokens_saida: number; imagens: number; qualidade: QualidadeLab | null; imagens_entrada?: number; buscas_web?: number };
 

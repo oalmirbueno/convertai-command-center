@@ -152,7 +152,7 @@ export interface MotorDaRodada {
 }
 
 export const MOTORES_DA_RODADA: MotorDaRodada[] = [
-  { chave: "gpt-image-2.5", rotulo: "GPT Image 2.5", procura: ["gpt-image-2.5-sunburst", "gpt-image-2.5"], resolucao: null, padrao: true },
+  { chave: "gpt-image-2.6", rotulo: "GPT Image 2.6", procura: ["gpt-image-2.6-sunburst", "gpt-image-2.5-sunburst", "gpt-image-2.5"], resolucao: null, padrao: true },
   { chave: "nano-banana-pro", rotulo: "Nano Banana Pro", procura: ["gemini-3-pro-image", "nano-banana-pro"], resolucao: "2K", padrao: true },
   { chave: "seedream-5-pro", rotulo: "Seedream 5.0 Pro", procura: ["seedream-5-0-pro", "seedream-5.0-pro"], resolucao: "2K", padrao: true },
   { chave: "mai-image-2.6", rotulo: "MAI-Image-2.6", procura: ["mai-image-2.6", "mai-image-2-6"], resolucao: null, padrao: true },

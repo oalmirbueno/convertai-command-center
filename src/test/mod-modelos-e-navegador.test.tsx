@@ -105,8 +105,8 @@ describe("lote novo (MOD2, lista pública do OpenRouter lida ao vivo em 30/09)",
     expect((imagens.find((x) => x.id === "inclusionai/ming-image-0.1-design") as Img).precos.every((p) => p.cost_usd === 0)).toBe(true);
     expect((imagens.find((x) => x.id === "meta/muse-image") as Img).endpoints).toBe(0);
     for (const fora of ["openrouter:recraft/recraft-v4.1-flash", "openrouter:inclusionai/ming-image-0.1-design", "openrouter:meta/muse-image"]) expect(MODELOS_DO_LOTE_NOVO).not.toContain(fora);
-    // O padrão do papel imagem não muda.
-    expect(melhorDoPapel("imagem")).toBe("openrouter:openai/gpt-image-2.5-sunburst");
+    // O padrão do papel imagem: GPT Image 2.6 Sunburst desde 05/11/2026.
+    expect(melhorDoPapel("imagem")).toBe("openrouter:openai/gpt-image-2.6-sunburst");
   });
 
   it("vezesOPreco: Luna para Sonnet 5.5 é 20 vezes o preço por token; imagem não compara", () => {

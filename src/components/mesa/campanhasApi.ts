@@ -508,7 +508,7 @@ export async function cancelarFilaDasPecas(trabalhoIds: string[]): Promise<void>
  * 22/10/2026 (dono: "o selo gerado pelo GPT Image 2.5"): o modelo do selo, na ordem, o primeiro ativo no catálogo
  * (ia_modelos). Configurável aqui; sem nenhum deles, o padrão de imagem da casa.
  */
-export const MODELOS_DO_SELO = ["openai:gpt-image-2.5-sunburst", "openai:gpt-image-2.5-flare", "openrouter:openai/gpt-image-2.5-sunburst"];
+export const MODELOS_DO_SELO = ["openrouter:openai/gpt-image-2.6-sunburst", "openai:gpt-image-2.5-sunburst", "openai:gpt-image-2.5-flare", "openrouter:openai/gpt-image-2.5-sunburst"];
 
 export function modeloDoSelo(catalogo: { id: string; tipo?: string; ativo?: boolean; padrao_para?: string[] }[]): string | null {
   for (const id of MODELOS_DO_SELO) {

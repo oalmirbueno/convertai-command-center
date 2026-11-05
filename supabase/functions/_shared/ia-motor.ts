@@ -240,6 +240,8 @@ export type EntradaImagem = {
    * calado para fundo opaco.
    */
   fundo?: "transparente";
+  /** Sem ele, PNG como sempre. GIF só existe no GPT Image 2.6 pelo OpenRouter: quem pede usa mesmoModelo (sem reserva em PNG). */
+  formatoSaida?: "gif";
   /**
    * Resolução pedida (Mesa Foto: 1K, 2K, 4K). Vai ao provedor só quando o
    * modelo aceita (capacidades.resolucoes); aceita outra: a mais perto abaixo,
@@ -1507,7 +1509,7 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
     // GPT Image: como sempre foi (tamanho em pixels e qualidade da OpenAI).
     corpo.size = tamanho;
     corpo.quality = QUALIDADE_OPENAI[e.qualidade] ?? "medium";
-    corpo.output_format = "png";
+    corpo.output_format = e.formatoSaida ?? "png";
   } else {
     corpo.aspect_ratio = proporcaoEntre(tamanho, caps.proporcoes);
     const r = resolucaoParaModelo(caps, e.resolucao ?? null);
@@ -1561,8 +1563,9 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
   };
 }
 
-/** Tipo da imagem pelos primeiros bytes (PNG, JPEG, WebP); PNG quando não dá para saber. */
+/** Tipo da imagem pelos primeiros bytes (PNG, JPEG, WebP, GIF); PNG quando não dá para saber. */
 function mimePelosBytes(b: Uint8Array): string {
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return "image/gif";
   if (b[0] === 0xff && b[1] === 0xd8) return "image/jpeg";
   if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) return "image/webp";
   return "image/png";
