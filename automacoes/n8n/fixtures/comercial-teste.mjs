@@ -145,7 +145,7 @@ export function criarMundo(opcoes = {}) {
     const probs = { interessado: 0.02, pergunta: 0.02, nao_agora: 0.02, pare: 0.02, outro: 0.02 }; probs[c] = 0.92;
     const extra = m.jevExtra || {};
     const responder = (id, v) => ({ type: 'choice', choice: v, confidence: 0.9 });
-    return { statusCode: 200, body: { model: 'jev-teste', answers: { quer_google: { type: 'noul', noul: extra.quer_google ? 0.9 : 0.05 }, escolheu_horario: { type: 'noul', noul: extra.escolheu_horario ? 0.9 : 0.05 }, remetente: responder('remetente', extra.remetente || 'humano'), etapa: responder('etapa', extra.etapa || (av > 0.5 ? 'apresentar' : 'descobrir')), objecao: responder('objecao', extra.objecao || 'nenhuma'), plano: responder('plano', extra.plano || 'nenhum'), intencao: { type: 'choice', choice: c, confidence: 0.9, probabilities: probs }, avancou: { type: 'noul', noul: av } } } };
+    return { statusCode: 200, body: { model: 'jev-teste', answers: { quer_google: { type: 'noul', noul: extra.quer_google ? 0.9 : 0.05 }, escolheu_horario: { type: 'noul', noul: extra.escolheu_horario ? 0.9 : 0.05 }, entendeu_necessidade: { type: 'noul', noul: extra.entendeu_necessidade === false ? 0.1 : 0.9 }, insiste_no_preco: { type: 'noul', noul: extra.insiste_no_preco ? 0.9 : 0.05 }, remetente: responder('remetente', extra.remetente || 'humano'), etapa: responder('etapa', extra.etapa || (av > 0.5 ? 'apresentar' : 'descobrir')), objecao: responder('objecao', extra.objecao || 'nenhuma'), plano: responder('plano', extra.plano || 'nenhum'), intencao: { type: 'choice', choice: c, confidence: 0.9, probabilities: probs }, avancou: { type: 'noul', noul: av } } } };
   }
 
   function llm(corpo) {

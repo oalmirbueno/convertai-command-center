@@ -169,6 +169,20 @@ test('decisão: pare nunca responde; a Caixa é só para reunião, pessoa ou for
   assert.equal(L.acq07Decidir(msg('meu cpf é 111.111.111-11'), lead, null, j('interessado', { etapa: 'fechar_agora', plano: 'start_assistido' }), fila, c, TER_10H).cobrar, false, 'documento errado não cobra');
 });
 
+test('primeiro acolhe: sem entender a necessidade não apresenta preço, a não ser que a pessoa insista ou decida', () => {
+  const c = cfg('test');
+  const fila = { config: { ativo: true }, itens: [] };
+  const lead = { lead_id: LEADS.pronto, mensagens: [{ direcao: 'saida', texto: 'oi' }], qualificacao: {} };
+  const msg = { wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto: 'como funciona e quanto custa?' };
+  assert.equal(L.acq07Decidir(msg, { lead_id: 'x', mensagens: [], qualificacao: {} }, null, { intencao: 'pergunta', confianca: 0.9, p_pare: 0.02, remetente: 'humano', etapa: 'apresentar', objecao: 'preco', plano: 'nenhum', entendeu_necessidade: true, insiste_no_preco: false }, fila, c, TER_10H).etapa, 'acolher', 'a primeira resposta sempre acolhe');
+  const j = (extra) => Object.assign({ intencao: 'pergunta', confianca: 0.9, p_pare: 0.02, remetente: 'humano', etapa: 'apresentar', objecao: 'nenhuma', plano: 'nenhum', entendeu_necessidade: false, insiste_no_preco: false }, extra);
+  assert.equal(L.acq07Decidir(msg, lead, null, j({}), fila, c, TER_10H).etapa, 'acolher');
+  assert.equal(L.acq07Decidir(msg, lead, null, j({ insiste_no_preco: true }), fila, c, TER_10H).etapa, 'apresentar');
+  assert.equal(L.acq07Decidir(msg, lead, null, j({ entendeu_necessidade: true }), fila, c, TER_10H).etapa, 'apresentar');
+  assert.equal(L.acq07Decidir(msg, lead, null, j({ etapa: 'fechar_agora' }), fila, c, TER_10H).etapa, 'fechar_agora');
+  assert.match(L.acq07PedidoLLM(msg, { nome: 'x', etapa: 'novo', mensagens: [], fatos: [] }, L.acq07Decidir(msg, lead, null, j({}), fila, c, TER_10H), fila, c).messages[0].content, /Agora acolha/);
+});
+
 test('juntar mensagens: só a mais nova responde, levando as anteriores; áudio entra como texto', () => {
   const a = { wamid: 'a', de: '5541999990000', em: '2026-11-03T13:00:00Z', texto: 'oi' };
   const b = { wamid: 'b', de: '5541999990000', em: '2026-11-03T13:00:05Z', texto: 'quanto custa', transcrito: true };

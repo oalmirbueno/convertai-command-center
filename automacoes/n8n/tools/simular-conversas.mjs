@@ -155,7 +155,7 @@ const [saida, so] = process.argv.slice(2);
 const [conf] = await rest('commercial_agente_config?slug=eq.mercurio&select=ativo,orientacoes');
 const conhecimento = await rest("agente_base_fichas?agente=eq.comercial.mercurio&ativa=eq.true&client_id=is.null&select=titulo,tecnica,quando_usar,exemplo");
 const fila = { config: { ativo: true, orientacoes: conf.orientacoes, conhecimento }, itens: [] };
-const lista = so ? PERSONAS.filter((p) => p.id === so) : PERSONAS;
+const lista = so ? PERSONAS.filter((p) => so.split(',').includes(p.id)) : PERSONAS;
 const out = await Promise.all(lista.map((p) => simular(p, fila).catch((e) => ({ id: p.id, titulo: p.titulo, erro: String(e.message) }))));
 fs.writeFileSync(saida, JSON.stringify({ gerado_em: new Date().toISOString(), modelo: C.llm_modelo, fichas: conhecimento.length, custo_usd: Math.round(custo * 1000) / 1000, conversas: out }, null, 1));
 console.log('custo US$', custo.toFixed(3));

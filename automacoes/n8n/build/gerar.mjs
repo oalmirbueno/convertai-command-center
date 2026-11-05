@@ -1153,7 +1153,7 @@ const textos = resp.ok ? resp.partes.concat(cob.partes) : d.caixa ? [ACQ07_TEXTO
 const tr = acqComTransporte(CFG, ${JSON.stringify(W)}, null);
 const url = String(C.graph_url).replace(/\\/+$/, '') + '/' + C.phone_number_id + '/messages';
 const falado = d.voz && resp.ok ? resp.partes.join(' ') : '';
-const voz = falado && falado.length <= 900 && !/https?:|www\\./i.test(falado) ? falado : null;
+const voz = falado && falado.length <= 600 && !/https?:|www\\./i.test(falado) ? falado : null;
 const envio = !textos.length ? { decisao: 'sem_texto', motivo: resp.motivo }
   : { decisao: tr.decisao, motivo: tr.motivo, url: url, media_url: url.replace(/messages$/, 'media'), textos: textos, para: it.mensagem.de, voz: voz, quantas_voz: voz ? resp.partes.length : 0 };
 const google = reuniao && reuniao.marcada && !reuniao.simulada && envio.decisao === 'enviar';

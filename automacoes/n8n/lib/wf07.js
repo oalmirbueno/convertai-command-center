@@ -225,6 +225,8 @@ function acq07PedidoJev(m, lead) {
           crescimento: 'Escolheu o Crescimento, o de R$ 2.997 por mês.', estrutura: 'Escolheu o Estrutura, o de R$ 4.497 por mês.', engenharia: 'Escolheu o Engenharia ou OS, o de R$ 6.997 por mês.',
         } },
       escolheu_horario: { type: 'noul', instructions: 'Em `ultima_mensagem`, o lead escolhe ou aceita um dia e horário para a conversa, mesmo que também agradeça ou se despeça?' },
+      entendeu_necessidade: { type: 'noul', instructions: 'Considerando `conversa_anterior` e `ultima_mensagem`, o vendedor já sabe qual é o negócio do lead e o que ele precisa ou o que o incomoda?' },
+      insiste_no_preco: { type: 'noul', instructions: 'O lead já tinha perguntado o preço antes em `conversa_anterior` e pergunta de novo em `ultima_mensagem`, ou diz que só quer saber o valor?' },
       quer_google: { type: 'noul', instructions: 'Considerando `conversa_anterior` e `ultima_mensagem`, o lead pediu o Perfil Google junto com um plano mensal?' },
     },
   };
@@ -237,7 +239,7 @@ function acq07LerJev(resposta) {
   return { intencao: a.intencao.choice, confianca: typeof a.intencao.confidence === 'number' ? a.intencao.confidence : null,
     p_pare: typeof p.pare === 'number' ? p.pare : (a.intencao.choice === 'pare' ? 1 : 0),
     remetente: (a.remetente && a.remetente.choice) || 'humano', etapa: a.etapa.choice,
-    objecao: (a.objecao && a.objecao.choice) || 'nenhuma', plano: (a.plano && a.plano.choice) || 'nenhum', quer_google: !!(a.quer_google && a.quer_google.noul >= 0.5), escolheu_horario: !!(a.escolheu_horario && a.escolheu_horario.noul >= 0.5), modelo: resposta.model || null };
+    objecao: (a.objecao && a.objecao.choice) || 'nenhuma', plano: (a.plano && a.plano.choice) || 'nenhum', quer_google: !!(a.quer_google && a.quer_google.noul >= 0.5), escolheu_horario: !!(a.escolheu_horario && a.escolheu_horario.noul >= 0.5), entendeu_necessidade: !a.entendeu_necessidade || a.entendeu_necessidade.noul >= 0.5, insiste_no_preco: !!(a.insiste_no_preco && a.insiste_no_preco.noul >= 0.5), modelo: resposta.model || null };
 }
 
 // CPF ou CNPJ com dígito certo em alguma mensagem do lead. O painel confere de novo antes de cobrar.
@@ -291,6 +293,9 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
     d.modo = 'menu'; d.responder = true; d.acao = 'responder'; d.motivos.push('menu_de_robo'); return d;
   }
   d.responder = true;
+  // Primeiro acolhe e entende. Preço e plano só depois, a não ser que a pessoa insista ou já queira fechar.
+  var primeiraResposta = !(lead.mensagens || []).some(function (x) { return x.direcao === 'saida'; });
+  if ((julg.entendeu_necessidade === false || primeiraResposta) && !julg.insiste_no_preco && ['apresentar', 'propor_fechamento', 'tratar_objecao'].indexOf(julg.etapa) >= 0) { julg.etapa = 'acolher'; d.etapa = 'acolher'; }
   // Escolheu horário vale mais que a despedida na mesma mensagem: nunca promete conversa sem marcar.
   if (julg.escolheu_horario && julg.etapa === 'encerrar') { julg.etapa = 'confirmar_reuniao'; d.etapa = 'confirmar_reuniao'; }
   d.agenda = julg.etapa === 'propor_reuniao' || julg.etapa === 'confirmar_reuniao' || julg.escolheu_horario === true;
@@ -318,8 +323,9 @@ function acq07BaseDeVendas(conf) {
 }
 
 var ACQ07_INSTRUCAO_DA_ETAPA = {
+  acolher: 'Agora acolha. Receba bem, com calma e profissionalismo, agradeça o contato e entenda o que a pessoa precisa. Use no máximo duas mensagens curtas e uma pergunta só, sobre o negócio dela ou o que a trouxe aqui; se não souber o nome, pergunte. Não fale de plano, preço, método, painel nem diga o que faria. Se ela perguntou o preço, diga com naturalidade que passa, e que para indicar o certo precisa entender o caso dela.',
   descobrir: 'Agora descubra. Se ainda não souber o nome da pessoa, pergunte. Faça uma pergunta específica sobre o negócio ou sobre como os clientes chegam hoje. Ainda não ofereça plano.',
-  apresentar: 'Agora mostre que entende do assunto: explique o que faria primeiro para a dor dita e por quê, e como funciona o acompanhamento, ligando à situação dele. Se perguntou preço, responda com o valor do plano certo ou com a frase de preço das orientações. Termine com uma pergunta que leve à decisão.',
+  apresentar: 'Agora mostre que entende do assunto: explique o que faria primeiro para a dor dita e por quê, e como funciona o acompanhamento, ligando à situação dele. Se perguntou preço, responda com o valor do plano certo ou com a frase de preço das orientações. Uma ideia por vez: no máximo três mensagens curtas, sem despejar tudo. Fale do painel e dos rituais só se ajudar nesta resposta. Termine com uma pergunta que leve à decisão.',
   tratar_objecao: 'Agora trate a objeção: reconheça sem discutir, faça uma pergunta que revele o que está por trás e conecte ao que ele já contou. Use o método e a maturação quando ajudar. Se ele já recusou duas vezes, deixe a porta aberta e pare de insistir.',
   propor_fechamento: 'Agora conduza para fechar aqui: recomende um plano, diga o valor, o que inclui e a fidelidade, e pergunte se pode gerar o Pix. Não ofereça reunião nem diga que vai passar para o responsável.',
   propor_reuniao: 'O lead pediu para conversar. Ofereça no máximo dois dos horários livres, pelo nome do dia e da hora. A conversa é com o Almir, fundador da Aceleriq.',
@@ -354,7 +360,7 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
     decisao.objecao && decisao.objecao !== 'nenhuma' ? 'Objeção percebida: ' + decisao.objecao + '.' : '',
     decisao.faltam && decisao.faltam.length ? 'Para gerar o Pix ainda falta: ' + decisao.faltam.join(' e ') + '. Peça isso agora, com naturalidade.' : '',
     horarios && horarios.length ? 'HORÁRIOS LIVRES (ofereça só estes; horario_escolhido recebe o código): ' + horarios.map(function (h) { return h.inicio + ' = ' + h.rotulo; }).join('; ') + '.' : (decisao.agenda ? 'Não há horário livre disponível agora: diga que o Almir chama para combinar.' : ''),
-    decisao.voz ? 'A pessoa mandou áudio e sua resposta vai virar áudio. Escreva como alguém fala no WhatsApp: frases curtas, tom de conversa, com expressões como olha, viu, né e pontuação que dá pausa. Sem abreviar, sem emoji, sem link. Valores por extenso.' : '',
+    decisao.voz ? 'A pessoa mandou áudio e sua resposta vai virar áudio. Escreva como alguém fala no WhatsApp: frases curtas, tom de conversa, com expressões como olha, viu, né e pontuação que dá pausa. Sem abreviar, sem emoji, sem link. Valores por extenso. No máximo quatro frases curtas, como um áudio de 30 segundos.' : '',
     decisao.cobrar ? 'Preencha plano_combinado com o código do plano que você e o lead combinaram: start_assistido (R$ 847), essencial, presenca, crescimento, estrutura, engenharia ou google_avulso. Já há plano (' + decisao.plano + ') e documento. Preencha nome_cobranca com o nome ou razão social que o lead informou; se não informou, use o nome da empresa.' : '',
     decisao.intencao === 'nao_agora' ? 'O lead disse que agora não é o momento: respeite e não insista.' : '',
     '',

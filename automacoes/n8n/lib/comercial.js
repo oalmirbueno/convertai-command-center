@@ -16,7 +16,7 @@ var ACQ_COM_PADRAO = {
   transcricao_modelo: 'google/gemini-2.5-flash',
   numero_equipe: null,
   executivo: { nome: 'Rafael', cargo: 'executivo de negócios' },
-  voz_id: 'xNGAXaCH8MaasNuo7Hr7',
+  voz_id: 'FB9t7w9dj2IYiysoM5p6',
   voz_modelo: 'eleven_v4',
   google_url: 'https://www.googleapis.com/calendar/v3',
   google_agenda_id: 'primary',
