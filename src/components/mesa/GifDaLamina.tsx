@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Clapperboard, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { botao, juntar } from "@/components/sistema";
+import { AjudaRecolhida, botao, juntar } from "@/components/sistema";
 import { downloadFile } from "@/lib/fileActions";
 import { chamarFuncao, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { CUSTO_ESTIMADO_DO_GIF_USD, type GifDaLamina as Gif } from "../../../supabase/functions/estudio-arte/gif-da-arte";
@@ -20,8 +20,13 @@ export default function GifDaLamina({ trabalhoId, ordem, gifs, ocupado, onPronto
   const { data: url } = useUrlDaMesa(ultimo?.storage_path);
   return (
     <section className="min-w-0 border-t pt-3" aria-label="GIF desta arte" data-gif-da-lamina={ordem}>
-      <p className="mb-2 text-[12px] font-medium">GIF desta arte</p>
-      <p className="mb-2 text-[11px] leading-4 text-muted-foreground">Sai parecido com a arte, não igual: usa o texto e a direção dela. Confira o texto antes de usar.</p>
+      {/* Só o título; o aviso de que sai parecido, não igual, fica no "?" (SISTEMA.md, seção 5). */}
+      <div className="mb-2 flex min-w-0 items-center">
+        <p className="min-w-0 truncate text-[12px] font-medium">GIF desta arte</p>
+        <AjudaRecolhida className="ml-1" rotulo="Sobre o GIF desta arte">
+          Sai parecido com a arte, não igual: usa o texto e a direção dela. Confira o texto antes de usar.
+        </AjudaRecolhida>
+      </div>
       <div className="flex min-w-0 items-center">
         <Input value={movimento} onChange={(e) => setMovimento(e.target.value)} maxLength={300} placeholder="Movimento (opcional). Ex.: o produto gira devagar" className="mr-2 h-8 min-w-0 flex-1 text-[13px]" aria-label="Movimento do GIF" />
         <BotaoComCusto

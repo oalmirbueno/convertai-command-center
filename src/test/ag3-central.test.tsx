@@ -21,6 +21,9 @@ vi.mock("@/components/central/agenteCentralApi", () => ({
   salvarEPublicarRitual: mock.publicar,
   reescreverRitual: mock.reescrever,
   criarTarefaDoRitual: vi.fn(),
+  // 05/11: a rodada do "Atualizar todos" no servidor; sem nada lá, a tela segue com a cópia local.
+  lerRodadaDoServidor: vi.fn(async () => null),
+  gravarRodadaNoServidor: vi.fn(async () => true),
 }));
 
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";

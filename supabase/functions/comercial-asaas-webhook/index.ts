@@ -5,7 +5,7 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { chave } from "../_shared/chaves.ts";
-import { pagamentoConfirmado } from "../_shared/comercial-asaas.ts";
+import { pagamentoConfirmado } from "../mcp-server/modulos/comercial-asaas.ts";
 
 const responder = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
 

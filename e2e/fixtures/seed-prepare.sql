@@ -45,6 +45,8 @@ BEGIN
       ('auth.users','public','handle_new_user'),
       ('profiles','public','notify_ops_sync'),('profiles','public','update_updated_at_column'),
       ('profiles','app_private','capture_legacy_first_access_token'),('profiles','app_private','guard_profile_editable_fields'),
+      -- AFTER UPDATE OF plan_value only; rewrites pending billing and the won CRM lead, no outbound call.
+      ('profiles','public','plano_mudou_atualiza_cobranca_e_crm'),
       ('projects','public','notify_ops_sync'),('projects','public','update_updated_at_column'),
       ('tasks','public','notify_ops_sync'),('tasks','public','update_updated_at_column'),
       ('tasks','public','update_milestone_progress'),('tasks','public','editorial_lock_task_sync_trigger'),

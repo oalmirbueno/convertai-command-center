@@ -19,6 +19,7 @@ export type IdDoProvedor =
   | "resend"
   | "vercel"
   | "apify"
+  | "asaas"
   | "aisa"
   | "runway"
   | "heygen"
