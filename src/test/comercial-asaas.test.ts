@@ -23,6 +23,8 @@ describe("Fechamento pelo Asaas", () => {
     expect(valorDoFechamento(planoPorId("start_assistido")!)).toBe(1244);
     expect(valorDoFechamento(planoPorId("crescimento")!)).toBe(3994);
     expect(valorDoFechamento(planoPorId("crescimento")!, true)).toBe(4291);
+    expect(valorDoFechamento(planoPorId("start_assistido")!, false, true)).toBe(1116.95);
+    expect(valorDoFechamento(planoPorId("google_avulso")!, false, true)).toBe(297);
     expect(planoPorId("inventado")).toBeNull();
   });
 

@@ -4813,10 +4813,11 @@ const comercialEntradaNovaTool = ferramentaDoCrm(
 const comercialCobrarTool = ferramentaDoCrm(
   'aceleriq_comercial_cobrar', 'Gerar o Pix do fechamento no Asaas',
   'Gera o Pix de um plano da tabela (entrada mais a primeira mensalidade; o valor vem da tabela). Precisa de nome e CPF ou CNPJ validos. Repetir devolve a cobranca aberta. O repasse para o onboarding so nasce quando o Asaas confirmar o pagamento: nunca diga que foi pago antes disso.',
-  true, z.object({ lead_id: UUID, plano: z.string().min(3).max(40), nome: z.string().min(3).max(120), documento: z.string().min(11).max(20), email: z.string().max(200).optional(), com_google: z.boolean().optional(), operador: OPERADOR }).strict(),
+  true, z.object({ lead_id: UUID, plano: z.string().min(3).max(40), nome: z.string().min(3).max(120), documento: z.string().min(11).max(20), email: z.string().max(200).optional(), com_google: z.boolean().optional(), com_desconto: z.boolean().optional(), operador: OPERADOR }).strict(),
   { type: 'object', properties: {
     lead_id: { type: 'string' },
     com_google: { type: 'boolean', description: 'Soma o Perfil Google como adicional de R$ 297 ao plano mensal.' },
+    com_desconto: { type: 'boolean', description: '15% na mensalidade dos 3 primeiros meses, para quem fecha pelo menos 3 meses. Use so se foi oferecido na conversa.' },
     plano: { type: 'string', description: 'start_assistido, essencial, presenca, crescimento, estrutura, engenharia ou google_avulso.' },
     nome: { type: 'string', description: 'Nome ou razao social da cobranca.' },
     documento: { type: 'string', description: 'CPF ou CNPJ.' },

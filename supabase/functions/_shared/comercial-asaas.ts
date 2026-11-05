@@ -28,8 +28,13 @@ export const ADICIONAL_GOOGLE = { id: "google", nome: "Perfil Google", valor: 29
 
 export const planoPorId = (id: unknown) => PLANOS_DE_FECHAMENTO.find((p) => p.id === id) || null;
 
-/** O primeiro Pix: entrada, primeira mensalidade e o adicional, quando vier junto. */
-export const valorDoFechamento = (p: PlanoDeFechamento, comGoogle = false) => p.entrada + p.mensal + (comGoogle && p.mensal > 0 ? ADICIONAL_GOOGLE.valor : 0);
+/** Até 15% na mensalidade dos 3 primeiros meses, para quem fecha pelo menos 3 meses (dono, 05/11). A entrada não muda. */
+export const DESCONTO_PRIMEIROS_MESES = 0.15;
+export const mensalComDesconto = (p: PlanoDeFechamento) => Math.round(p.mensal * (1 - DESCONTO_PRIMEIROS_MESES) * 100) / 100;
+
+/** O primeiro Pix: entrada, primeira mensalidade (com ou sem desconto) e o adicional, quando vier junto. */
+export const valorDoFechamento = (p: PlanoDeFechamento, comGoogle = false, comDesconto = false) =>
+  Math.round((p.entrada + (comDesconto && p.mensal > 0 ? mensalComDesconto(p) : p.mensal) + (comGoogle && p.mensal > 0 ? ADICIONAL_GOOGLE.valor : 0)) * 100) / 100;
 
 const digitos = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 

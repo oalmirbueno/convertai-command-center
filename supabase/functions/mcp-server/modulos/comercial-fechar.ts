@@ -79,7 +79,7 @@ function itemDoLead(l: Record<string, unknown>) {
   };
 }
 
-export async function comercialCobrar(input: { lead_id: string; plano: string; nome: string; documento: string; email?: string; com_google?: boolean; operador?: string }, ctx: AuthContext) {
+export async function comercialCobrar(input: { lead_id: string; plano: string; nome: string; documento: string; email?: string; com_google?: boolean; com_desconto?: boolean; operador?: string }, ctx: AuthContext) {
   soDaCasa(ctx);
   if (!isUuid(input.lead_id)) throw new Error('lead_id must be a UUID');
   const plano = planoPorId(input.plano);
@@ -100,8 +100,9 @@ export async function comercialCobrar(input: { lead_id: string; plano: string; n
   try { token = await chave('ASAAS_API_KEY'); } catch { token = ''; }
   if (!token) return { cobranca: null, nova: false, sem_asaas: true, aviso: 'A chave do Asaas ainda nao esta no cofre: passe para a equipe fechar.' };
   const comGoogle = input.com_google === true && plano.mensal > 0;
-  const valor = valorDoFechamento(plano, comGoogle);
-  const nomeDoPacote = comGoogle ? `${plano.nome} + ${ADICIONAL_GOOGLE.nome}` : plano.nome;
+  const comDesconto = input.com_desconto === true && plano.mensal > 0;
+  const valor = valorDoFechamento(plano, comGoogle, comDesconto);
+  const nomeDoPacote = (comGoogle ? `${plano.nome} + ${ADICIONAL_GOOGLE.nome}` : plano.nome) + (comDesconto ? ' (15% nos 3 primeiros meses)' : '');
   const venc = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
   let criada;
   try {
