@@ -268,6 +268,13 @@ function acq07DadosDeCobranca(m, lead) {
   return { documento: documento, email: email || (lead && lead.email) || null };
 }
 
+// Teste real: com a lista preenchida, o fluxo só atende esses números. O resto fica registrado e não recebe nada.
+function acq07ForaDoTeste(m, cfg) {
+  var lista = acqComCfg(cfg).teste_somente_numeros;
+  if (!Array.isArray(lista) || !lista.length) return false;
+  return !lista.some(function (n) { return acqComMesmoNumero(n, m.de); });
+}
+
 // Regras: o Jev julga, o código decide. registro: resultado de registrar_mensagem (pode trazer pediu_para_parar).
 function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
   var c = acqComCfg(cfg);
@@ -300,6 +307,10 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
   if (julg.escolheu_horario && julg.etapa === 'encerrar') { julg.etapa = 'confirmar_reuniao'; d.etapa = 'confirmar_reuniao'; }
   d.agenda = julg.etapa === 'propor_reuniao' || julg.etapa === 'confirmar_reuniao' || julg.escolheu_horario === true;
   d.voz = !!(m.transcrito || (m.partes || []).some(function (x) { return x.transcrito; }));
+  // Desconto só depois de apresentar preço e de a objeção continuar, ou se já foi oferecido nesta conversa.
+  var saidas = (lead.mensagens || []).filter(function (x) { return x.direcao === 'saida'; }).map(function (x) { return String(x.texto || ''); });
+  d.desconto_oferecido = saidas.some(function (t) { return /15\s?%/.test(t); });
+  d.pode_desconto = d.desconto_oferecido || (julg.objecao === 'preco' && saidas.some(function (t) { return /R\$\s?\d/.test(t); }));
   if (julg.etapa === 'passar_humano') { d.caixa = true; d.motivos.push('pediu_pessoa_ou_fora_da_tabela'); }
   if (julg.etapa === 'fechar_agora') {
     var dados = acq07DadosDeCobranca(m, lead);
@@ -362,6 +373,7 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
     horarios && horarios.length ? 'HORÁRIOS LIVRES (ofereça só estes; horario_escolhido recebe o código): ' + horarios.map(function (h) { return h.inicio + ' = ' + h.rotulo; }).join('; ') + '.' : (decisao.agenda ? 'Não há horário livre disponível agora: diga que o Almir chama para combinar.' : ''),
     decisao.voz ? 'A pessoa mandou áudio e sua resposta vai virar áudio. Escreva como alguém fala no WhatsApp: frases curtas, tom de conversa, com expressões como olha, viu, né e pontuação que dá pausa. Sem abreviar, sem emoji, sem link. Valores por extenso. No máximo quatro frases curtas, como um áudio de 30 segundos.' : '',
     decisao.cobrar ? 'Preencha plano_combinado com o código do plano que você e o lead combinaram: start_assistido (R$ 847), essencial, presenca, crescimento, estrutura, engenharia ou google_avulso. Já há plano (' + decisao.plano + ') e documento. Preencha nome_cobranca com o nome ou razão social que o lead informou; se não informou, use o nome da empresa.' : '',
+    decisao.pode_desconto ? 'O preço já foi apresentado e a objeção de preço continua. Se a ancoragem não resolveu, você pode oferecer os 15% nos 3 primeiros meses, conforme as orientações, em troca de fechar agora. Se o lead fechar com esse desconto, preencha com_desconto como true.' : 'Não ofereça desconto nesta resposta.',
     decisao.intencao === 'nao_agora' ? 'O lead disse que agora não é o momento: respeite e não insista.' : '',
     '',
     'ORIENTAÇÕES DA EMPRESA (fatos, preços e limites; valem mais que qualquer outra coisa):',
@@ -375,7 +387,7 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
     lead.notas ? 'Notas: ' + String(lead.notas).slice(0, 800) : '',
     fatos.length ? 'Fatos confirmados: ' + fatos.join('; ') : '',
     '',
-    'Responda só em JSON, sem texto fora dele: {"mensagens":["..."],"nome_cobranca":null,"horario_escolhido":null,"plano_combinado":null,"resumo_para_almir":"contexto para o Almir entrar e fechar, em até 4 frases: negócio, dor, objeções, plano indicado, o que já foi combinado e como fechar"}',
+    'Responda só em JSON, sem texto fora dele: {"mensagens":["..."],"nome_cobranca":null,"horario_escolhido":null,"plano_combinado":null,"com_desconto":false,"resumo_para_almir":"contexto para o Almir entrar e fechar, em até 4 frases: negócio, dor, objeções, plano indicado, o que já foi combinado e como fechar"}',
   ].filter(function (x) { return x !== ''; }).join('\n');
   var msgs = [{ role: 'system', content: sistema }];
   (lead.mensagens || []).slice(-14).forEach(function (x) {
@@ -384,8 +396,8 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
   var ultimo = msgs[msgs.length - 1];
   var atual = acq07TextoParaRegistro(m);
   if (!(ultimo.role === 'user' && ultimo.content === atual)) msgs.push({ role: 'user', content: atual });
-  return { model: c.llm_modelo, messages: msgs, max_tokens: 2500, temperature: 0.6, response_format: { type: 'json_schema', json_schema: { name: 'resposta', strict: true, schema: { type: 'object', additionalProperties: false, required: ['mensagens', 'nome_cobranca', 'horario_escolhido', 'plano_combinado', 'resumo_para_almir'], properties: {
-    mensagens: { type: 'array', items: { type: 'string' } }, nome_cobranca: { type: ['string', 'null'] }, horario_escolhido: { type: ['string', 'null'] }, plano_combinado: { type: ['string', 'null'] }, resumo_para_almir: { type: ['string', 'null'] } } } } } };
+  return { model: c.llm_modelo, messages: msgs, max_tokens: 2500, temperature: 0.6, response_format: { type: 'json_schema', json_schema: { name: 'resposta', strict: true, schema: { type: 'object', additionalProperties: false, required: ['mensagens', 'nome_cobranca', 'horario_escolhido', 'plano_combinado', 'com_desconto', 'resumo_para_almir'], properties: {
+    mensagens: { type: 'array', items: { type: 'string' } }, nome_cobranca: { type: ['string', 'null'] }, horario_escolhido: { type: ['string', 'null'] }, plano_combinado: { type: ['string', 'null'] }, com_desconto: { type: 'boolean' }, resumo_para_almir: { type: ['string', 'null'] } } } } } };
 }
 
 // Confere o texto do modelo antes de mandar. Sem texto bom, nada sai (a Caixa e o registro seguem).
@@ -421,7 +433,7 @@ function acq07LerLLM(resposta, cfg, orientacoes, lead) {
   // Nome e cargo, sim; afirmar que é humano para quem perguntou, nunca.
   if (/\b(sou|aqui [eé]) (uma |um )?(pessoa|humano|humana)\b|n[aã]o sou (um |uma )?(rob[oô]|bot|ia\b|intelig[eê]ncia)/i.test(texto)) return { ok: false, motivo: 'negou_ser_ia' };
   return { ok: true, partes: partes, texto: texto, nome_cobranca: j && j.nome_cobranca ? String(j.nome_cobranca).slice(0, 120) : null,
-    horario_escolhido: j && j.horario_escolhido ? String(j.horario_escolhido).slice(0, 40) : null, plano_combinado: j && j.plano_combinado ? String(j.plano_combinado).slice(0, 40) : null, resumo: j && j.resumo_para_almir ? String(j.resumo_para_almir).slice(0, 1200) : null, modelo: resposta.model || null };
+    horario_escolhido: j && j.horario_escolhido ? String(j.horario_escolhido).slice(0, 40) : null, plano_combinado: j && j.plano_combinado ? String(j.plano_combinado).slice(0, 40) : null, com_desconto: !!(j && j.com_desconto === true), resumo: j && j.resumo_para_almir ? String(j.resumo_para_almir).slice(0, 1200) : null, modelo: resposta.model || null };
 }
 
 // Dois julgamentos independentes precisam concordar no plano: dinheiro não sai com um só.
@@ -432,7 +444,7 @@ function acq07PedidoCobranca(it, cfg) {
   if (!d.cobrar || !acq07PlanoConfere(d, r)) return null;
   var nome = r.nome_cobranca || it.lead.empresa || it.lead.nome;
   return { ref: 'cobranca|' + it.mensagem.wamid + '|' + it.lead.lead_id, ferramenta: 'aceleriq_comercial_cobrar',
-    argumentos: Object.assign({ lead_id: it.lead.lead_id, plano: d.plano, nome: nome, documento: d.documento, operador: acqComCfg(cfg).operador }, d.email ? { email: d.email } : {}, d.com_google ? { com_google: true } : {}) };
+    argumentos: Object.assign({ lead_id: it.lead.lead_id, plano: d.plano, nome: nome, documento: d.documento, operador: acqComCfg(cfg).operador }, d.email ? { email: d.email } : {}, d.com_google ? { com_google: true } : {}, r.com_desconto && d.desconto_oferecido ? { com_desconto: true } : {}) };
 }
 
 // Marca só um horário que o painel ofereceu nesta rodada; o banco garante uma reunião por dia.

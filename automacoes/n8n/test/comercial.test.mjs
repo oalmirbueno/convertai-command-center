@@ -183,6 +183,23 @@ test('primeiro acolhe: sem entender a necessidade não apresenta preço, a não 
   assert.match(L.acq07PedidoLLM(msg, { nome: 'x', etapa: 'novo', mensagens: [], fatos: [] }, L.acq07Decidir(msg, lead, null, j({}), fila, c, TER_10H), fila, c).messages[0].content, /Agora acolha/);
 });
 
+test('teste real: com a lista preenchida, só esses números são atendidos; desconto só depois da objeção', () => {
+  const c = cfg('test', (e) => { e.comercial.teste_somente_numeros = ['5541988488435']; });
+  assert.equal(L.acq07ForaDoTeste({ de: '554188488435' }, c), false, 'o próprio número, com ou sem o 9');
+  assert.equal(L.acq07ForaDoTeste({ de: '5541999990000' }, c), true);
+  assert.equal(L.acq07ForaDoTeste({ de: '5541999990000' }, cfg('test')), false, 'sem lista, atende todos');
+  const fila = { config: { ativo: true }, itens: [] };
+  const msg = { wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto: 'tá caro' };
+  const j = { intencao: 'pergunta', confianca: 0.9, p_pare: 0.02, remetente: 'humano', etapa: 'tratar_objecao', objecao: 'preco', plano: 'nenhum', entendeu_necessidade: true };
+  const sem = L.acq07Decidir(msg, { lead_id: 'x', mensagens: [{ direcao: 'saida', texto: 'oi' }], qualificacao: {} }, null, Object.assign({}, j), fila, c, TER_10H);
+  assert.equal(sem.pode_desconto, false, 'antes de apresentar preço não');
+  const com = L.acq07Decidir(msg, { lead_id: 'x', mensagens: [{ direcao: 'saida', texto: 'R$ 847 por mês' }], qualificacao: {} }, null, Object.assign({}, j), fila, c, TER_10H);
+  assert.equal(com.pode_desconto, true);
+  const it = (texto, r) => ({ mensagem: { wamid: 'w' }, lead: { lead_id: 'x', empresa: 'E' }, decisao: { cobrar: true, plano: 'start_assistido', documento: '1', desconto_oferecido: /15%/.test(texto) }, resposta: Object.assign({ ok: true, plano_combinado: 'start_assistido' }, r) });
+  assert.equal(L.acq07PedidoCobranca(it('sem', { com_desconto: true }), c).argumentos.com_desconto, undefined, 'não cobra com desconto que não foi oferecido');
+  assert.equal(L.acq07PedidoCobranca(it('15%', { com_desconto: true }), c).argumentos.com_desconto, true);
+});
+
 test('juntar mensagens: só a mais nova responde, levando as anteriores; áudio entra como texto', () => {
   const a = { wamid: 'a', de: '5541999990000', em: '2026-11-03T13:00:00Z', texto: 'oi' };
   const b = { wamid: 'b', de: '5541999990000', em: '2026-11-03T13:00:05Z', texto: 'quanto custa', transcrito: true };

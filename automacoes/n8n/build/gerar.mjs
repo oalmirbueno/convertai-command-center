@@ -16,6 +16,13 @@ if (!AMBIENTES.ambientes[AMBIENTE]) throw new Error('ambiente desconhecido ' + A
 // --mcp-url só para rodar o piloto contra o replay local do snapshot (as regras do ambiente não mudam).
 if (arg('mcp-url', null)) AMBIENTES.ambientes[AMBIENTE].mcp_url = arg('mcp-url');
 if (arg('jev-url', null)) AMBIENTES.ambientes[AMBIENTE].jev_url = arg('jev-url');
+// Teste real: liga só o ACQ-07 e só para este número. O config do repositório continua travado.
+if (arg('teste-real', null)) {
+  const e = AMBIENTES.ambientes[AMBIENTE];
+  e.dry_run_por_workflow['ACQ-07'] = false;
+  e.comercial.teste_somente_numeros = [arg('teste-real')];
+  e.escritas_liberadas = e.escritas_liberadas.concat(['aceleriq_comercial_registrar_mensagem', 'aceleriq_comercial_avisar_caixa', 'aceleriq_update_opportunity', 'aceleriq_comercial_entrada_nova', 'aceleriq_comercial_cobrar', 'aceleriq_comercial_marcar_reuniao']);
+}
 
 export const IDS = {
   f00: 'AcqF00Ferramenta', e00: 'AcqE00ErrosComum', w01: 'Acq01ContextoRit', w02: 'Acq02DespachoApr',
@@ -992,7 +999,7 @@ if (b.doWebhook && C.exigir_assinatura !== false) {
 }
 const n = acq07Normalizar(b.body, C.phone_number_id);
 const out = [];
-n.mensagens.forEach((m) => out.push({ json: { tipo: 'mensagem', m: m, _ctx: ctx, pg: acqComPgEvento(acq07EventoEntrada(m, ctx), null, AMBIENTE) } }));
+n.mensagens.forEach((m) => { if (!acq07ForaDoTeste(m, CFG)) out.push({ json: { tipo: 'mensagem', m: m, _ctx: ctx, pg: acqComPgEvento(acq07EventoEntrada(m, ctx), null, AMBIENTE) } }); });
 n.status.forEach((s) => {
   const ev = acq07EventoStatus(s, ctx);
   const erro = s.erros[0] || {};
