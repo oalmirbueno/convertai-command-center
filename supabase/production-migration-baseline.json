@@ -2897,6 +2897,14 @@
       "remote_name": "crm_ganho_exige_cliente",
       "remote_statements_sha256": "6c9ce2f93141fd2aa98549d45d1cc0e670556393e64bbdc6ddc6f317bd5d7ed7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105190000",
+      "path": "supabase/migrations/20261105190000_plano_mudou_atualiza_tudo.sql",
+      "local_sha256": "dbffefc87fccda508cbd44afdeebfce02546079443fee129a40c7244bce74685",
+      "remote_name": "plano_mudou_atualiza_tudo",
+      "remote_statements_sha256": "f7fbb4b01eec25954e4cdc16c38680f6bb3c29ce8fc41622035988936c02b015",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
