@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
   // Só um aviso vence a corrida entre PAYMENT_RECEIVED e PAYMENT_CONFIRMED.
   const { data: virou } = await db.from("comercial_cobrancas").update({ situacao: "paga", paga_em: new Date().toISOString() }).eq("id", cob.id).neq("situacao", "paga").select("id").maybeSingle();
   if (!virou) return responder({ ok: true, repetido: true });
-  const { data: lead } = await db.from("commercial_leads").select("id, name, company, whatsapp, stage").eq("id", cob.lead_id).maybeSingle();
+  const { data: lead } = await db.from("commercial_leads").select("id, name, company, whatsapp, stage, won_client_id").eq("id", cob.lead_id).maybeSingle();
   const empresa = lead?.company || lead?.name || "Lead";
   await db.from("commercial_handoffs").insert({
     lead_id: cob.lead_id, tipo: "fechou", operador_slug: cob.operador_slug || "mercurio", telefone: lead?.whatsapp || null,
@@ -51,9 +51,14 @@ Deno.serve(async (req) => {
     proximo_passo: "Fazer o onboarding e criar o grupo do cliente.",
     dados: { cobranca_id: cob.id, plano: cob.plano, valor: cob.valor, asaas_pagamento_id: pagamentoId, pagamento_confirmado: true },
   });
+  // 05/11/2026 (dono): ganho só com o cliente cadastrado; o banco recusa sem ele. O Pix fica na história até a janela de ganho.
   if (lead && lead.stage !== "ganho") {
-    await db.from("commercial_leads").update({ stage: "ganho" }).eq("id", lead.id);
-    await db.from("commercial_lead_events").insert({ lead_id: lead.id, kind: "stage", from_stage: lead.stage, to_stage: "ganho", note: "Pix confirmado no Asaas." });
+    if (lead.won_client_id) {
+      await db.from("commercial_leads").update({ stage: "ganho" }).eq("id", lead.id);
+      await db.from("commercial_lead_events").insert({ lead_id: lead.id, kind: "stage", from_stage: lead.stage, to_stage: "ganho", note: "Pix confirmado no Asaas." });
+    } else {
+      await db.from("commercial_lead_events").insert({ lead_id: lead.id, kind: "nota", note: "Pix confirmado no Asaas. Falta marcar o ganho no CRM, que cadastra o cliente." });
+    }
   }
   return responder({ ok: true, pago: true });
 });
