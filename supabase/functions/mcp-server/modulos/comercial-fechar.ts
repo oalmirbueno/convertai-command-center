@@ -13,6 +13,7 @@ import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { db, isUuid, READ_LIMITS } from '../../_shared/aceleriq-read-services.ts';
 import { chave } from '../../_shared/chaves.ts';
 import { ADICIONAL_GOOGLE, criarCobrancaPix, documentoValido, ErroDoAsaas, planoPorId, valorDoFechamento } from '../../_shared/comercial-asaas.ts';
+import { AJUSTES_DA_VOZ, textoFalado } from '../../_shared/comercial-voz.ts';
 import { diaDoHorario, horarioDaGrade, horariosLivres, rotuloDoHorario, type Intervalo } from '../../_shared/comercial-agenda.ts';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
@@ -157,13 +158,13 @@ const VOZ_PADRAO = 'xNGAXaCH8MaasNuo7Hr7';
 /** Nota de voz: OGG Opus mono, o formato que o WhatsApp mostra como áudio gravado. */
 export async function comercialFalar(input: { texto: string; voz?: string; modelo?: string }, ctx: AuthContext) {
   soDaCasa(ctx);
-  const t = texto(input.texto, 900);
+  const t = textoFalado(texto(input.texto, 900) || '');
   if (!t) throw new Error('texto: vazio.');
   const voz = /^[A-Za-z0-9]{10,40}$/.test(String(input.voz || '')) ? String(input.voz) : VOZ_PADRAO;
   const k = await chave('ELEVENLABS_API_KEY');
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voz}?output_format=opus_48000_64`, {
     method: 'POST', headers: { 'xi-api-key': k, 'content-type': 'application/json' },
-    body: JSON.stringify({ text: t, model_id: texto(input.modelo, 40) || 'eleven_v4', language_code: 'pt' }),
+    body: JSON.stringify({ text: t, model_id: texto(input.modelo, 40) || 'eleven_v4', language_code: 'pt', voice_settings: AJUSTES_DA_VOZ }),
   });
   if (!r.ok) throw new Error(`ElevenLabs respondeu ${r.status}.`);
   const bytes = new Uint8Array(await r.arrayBuffer());

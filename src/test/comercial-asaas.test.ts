@@ -7,8 +7,16 @@ import {
   planoPorId,
   valorDoFechamento,
 } from "../../supabase/functions/_shared/comercial-asaas";
+import { textoFalado } from "../../supabase/functions/_shared/comercial-voz";
 
 const resp = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status });
+
+describe("Fala do executivo", () => {
+  it("na voz o nome é Acelériq", () => {
+    expect(textoFalado("Aqui é o Rafael, da Aceleriq.")).toBe("Aqui é o Rafael, da Acelériq.");
+    expect(textoFalado("ACELERIQ")).toBe("Acelériq");
+  });
+});
 
 describe("Fechamento pelo Asaas", () => {
   it("o valor vem da tabela: entrada mais a primeira mensalidade", () => {
