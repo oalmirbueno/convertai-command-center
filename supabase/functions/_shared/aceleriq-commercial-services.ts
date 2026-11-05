@@ -442,12 +442,20 @@ export function resumoDaConfig(cfg: Record<string, unknown> | null, feitosHoje: 
 }
 
 /** A fila do agente comercial: os leads que ele atende, com conversa, fatos e a regra do dia. */
+/** O que o dono ensinou ao Mercúrio em /base-dos-agentes: técnica de venda, objeções e nichos. */
+async function baseDoComercial(): Promise<Array<{ titulo: string; tecnica: string; quando_usar: string; exemplo: string }>> {
+  const { data, error } = await comPrazo(db().from('agente_base_fichas').select('titulo, tecnica, quando_usar, exemplo')
+    .eq('agente', 'comercial.mercurio').eq('ativa', true).is('client_id', null).order('criado_em', { ascending: true }).limit(80));
+  if (error) { console.error('[comercial] base', error.message.slice(0, 160)); return []; }
+  return (data ?? []) as Array<{ titulo: string; tecnica: string; quando_usar: string; exemplo: string }>;
+}
+
 export async function comercialFila(input: { operador?: string; limit?: number }, ctx: AuthContext) {
   soDaCasa(ctx);
   const slug = slugDoOperador(input.operador);
   const agora = agoraEmSaoPaulo();
-  const [cfg, feitos] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso)]);
-  const regra = resumoDaConfig(cfg, feitos, agora);
+  const [cfg, feitos, base] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso), baseDoComercial()]);
+  const regra = { ...resumoDaConfig(cfg, feitos, agora), conhecimento: base };
   if (!regra.ativo) {
     return { operador: slug, config: regra, itens: [], total: 0, aviso: `O ${slug} esta desligado no painel (Comercial). Nao envie mensagem; so registre o que chegar.` };
   }

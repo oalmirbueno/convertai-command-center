@@ -26,6 +26,8 @@ const LIGACOES: Record<string, string[]> = {
   "identidade.diretor": ["supabase/functions/mesa-identidade/diretor.ts", "supabase/functions/mesa-identidade/estrategia-acoes.ts", "supabase/functions/mesa-identidade/projeto-acoes.ts"],
   "site.agente": ["supabase/functions/mesa-site/index.ts", "supabase/functions/mesa-site/estrutura.ts"],
   "proposta.redator": ["supabase/functions/mesa-proposta/index.ts", "supabase/functions/mesa-proposta/evolucao.ts"],
+  // 05/11: a fila do comercial entrega as fichas ao n8n, sem gerar texto no painel.
+  "comercial.mercurio": [],
   // 20/10: a aba Stories da Mesa.
   "stories.roteirista": ["supabase/functions/mesa-stories/index.ts"],
 };
@@ -40,6 +42,10 @@ describe("base dos agentes", () => {
         expect(fonte, `${arq} lê ${chave}`).toContain(`agente: "${chave}"`);
       }
     }
+  });
+
+  it("a fila do comercial entrega as fichas do Mercúrio", () => {
+    expect(ler("supabase/functions/_shared/aceleriq-commercial-services.ts")).toContain(".eq('agente', 'comercial.mercurio')");
   });
 
   it("o gerador de imagem do Estúdio continua sem a base: ela vai para o diretor, que escreve o pedido de imagem", () => {

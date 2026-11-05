@@ -8,6 +8,7 @@ import {
   confirmarPagamentoDoBolso,
   dadosLegiveis,
   linkDaPropostaNaCaixa,
+  listarCobrancas,
   pedidoDoBolsoNaCaixa,
   lerConfigDoMercurio,
   linkDeLigar,
@@ -289,6 +290,29 @@ function ConfigDoMercurio() {
   );
 }
 
+/** O Pix do fechamento direto. Some enquanto não houver cobrança: quem confirma é o Asaas. */
+function CobrancasDoMercurio() {
+  const q = useQuery({ queryKey: ["comercial-cobrancas"], queryFn: listarCobrancas, refetchInterval: 60_000 });
+  const lista = q.data || [];
+  if (!lista.length) return null;
+  return (
+    <section className="min-w-0 space-y-1 border-b border-border pb-3" aria-label="Cobranças do Mercúrio">
+      <h3 className="text-sm font-medium">Pix do Mercúrio</h3>
+      <ul className="min-w-0">
+        {lista.map((c) => (
+          <li key={c.id} className="flex min-w-0 flex-wrap items-baseline gap-x-3 py-1 text-sm">
+            <span className="min-w-0 truncate font-medium">{c.lead?.company || c.lead?.name || c.nome}</span>
+            <span className="text-muted-foreground">{c.plano_nome}</span>
+            <span className="tabular-nums">{Number(c.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+            <span className={c.situacao === "paga" ? "text-primary" : "text-muted-foreground"}>{c.situacao === "paga" ? "Pago, confirmado no Asaas" : c.situacao === "aguardando" ? "Aguardando pagamento" : "Cancelada"}</span>
+            {c.link ? <a className="underline" href={c.link} target="_blank" rel="noreferrer">Ver cobrança</a> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: { leads: Lead[]; onAbrirLead: (lead: Lead) => void; itemDestacado?: string | null }) {
   const qc = useQueryClient();
   const caixa = useCaixaDoComercial();
@@ -326,6 +350,7 @@ export default function CaixaDoComercial({ leads, onAbrirLead, itemDestacado }: 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Caixa do comercial" memoriaDaRolagem="comercial:caixa" lateral={<ConfigDoMercurio />} rotuloDaLateral="Mercúrio" iconeDaLateral={<Settings2 className="h-4 w-4" />} memoria="comercial-caixa-mercurio" nasceRecolhida>
     <section className="min-w-0 space-y-3" aria-label="Caixa do comercial">
+      <CobrancasDoMercurio />
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SeletorCompacto
           rotulo="Situação na Caixa"

@@ -89,6 +89,7 @@ import {
   comercialRegistrarMensagem,
 } from './aceleriq-commercial-services.ts';
 import { comercialBolsoLiberar, comercialBolsoPedir, comercialPedirProposta } from '../mcp-server/modulos/comercial-conduzir.ts';
+import { comercialCobrar, comercialEntradaNova, comercialRepasseMarcar, comercialRepasses } from '../mcp-server/modulos/comercial-fechar.ts';
 import { TIPOS_DE_EVIDENCIA, type TipoDeEvidencia } from './comercial-evidencia.ts';
 import {
   getFinanceAdsInvestment,
@@ -389,6 +390,10 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_comercial_maquina_buscar: 'commercial:write',
   aceleriq_comercial_pedir_proposta: 'commercial:write',
   aceleriq_comercial_bolso_pedir: 'commercial:write',
+  aceleriq_comercial_entrada_nova: 'commercial:write',
+  aceleriq_comercial_cobrar: 'commercial:write',
+  aceleriq_comercial_repasses: 'commercial:read',
+  aceleriq_comercial_repasse_marcar: 'commercial:write',
   aceleriq_comercial_bolso_liberar: 'commercial:write',
   aceleriq_get_workspace_node: 'workspace:read',
 };
@@ -4788,6 +4793,51 @@ const comercialPedirPropostaTool = ferramentaDoCrm(
   comercialPedirProposta,
 );
 
+// ─── 05/11/2026 (MCP 2.24): lead que chega sozinho, Pix no Asaas e repasse no WhatsApp da Aceleriq.
+const comercialEntradaNovaTool = ferramentaDoCrm(
+  'aceleriq_comercial_entrada_nova', 'Quem chamou no WhatsApp comercial: achar ou criar o lead',
+  'Acha o lead pelo numero em todo o CRM ou cria um novo do Mercurio (anuncio, indicacao). Devolve so_registrar=true quando o numero e de cliente, de lead com a equipe ou com outro agente: ai nao responda.',
+  true, z.object({ whatsapp: z.string().min(8).max(40), nome_perfil: z.string().max(120).optional(), anuncio: z.record(z.unknown()).optional(), operador: OPERADOR }).strict(),
+  { type: 'object', properties: {
+    whatsapp: { type: 'string', description: 'Numero que chamou.' },
+    nome_perfil: { type: 'string', description: 'Nome do perfil no WhatsApp.' },
+    anuncio: { type: 'object', description: 'Dados do anuncio que trouxe a conversa, quando houver.' },
+    operador: { type: 'string', description: 'Slug do agente. Padrao: mercurio.' },
+  }, required: ['whatsapp'], additionalProperties: false },
+  comercialEntradaNova,
+);
+
+const comercialCobrarTool = ferramentaDoCrm(
+  'aceleriq_comercial_cobrar', 'Gerar o Pix do fechamento no Asaas',
+  'Gera o Pix de um plano da tabela (entrada mais a primeira mensalidade; o valor vem da tabela). Precisa de nome e CPF ou CNPJ validos. Repetir devolve a cobranca aberta. O repasse para o onboarding so nasce quando o Asaas confirmar o pagamento: nunca diga que foi pago antes disso.',
+  true, z.object({ lead_id: UUID, plano: z.string().min(3).max(40), nome: z.string().min(3).max(120), documento: z.string().min(11).max(20), email: z.string().max(200).optional(), operador: OPERADOR }).strict(),
+  { type: 'object', properties: {
+    lead_id: { type: 'string' },
+    plano: { type: 'string', description: 'start_assistido, essencial, presenca, crescimento, estrutura ou engenharia.' },
+    nome: { type: 'string', description: 'Nome ou razao social da cobranca.' },
+    documento: { type: 'string', description: 'CPF ou CNPJ.' },
+    email: { type: 'string' },
+    operador: { type: 'string' },
+  }, required: ['lead_id', 'plano', 'nome', 'documento'], additionalProperties: false },
+  comercialCobrar,
+);
+
+const comercialRepassesTool = ferramentaDoCrm(
+  'aceleriq_comercial_repasses', 'Repasses da Caixa ainda nao avisados no WhatsApp',
+  'Lista os itens novos da Caixa que ainda nao foram avisados no WhatsApp da Aceleriq, com o lead e o contexto.',
+  false, z.object({ limit: z.number().int().min(1).max(30).optional() }).strict(),
+  { type: 'object', properties: { limit: { type: 'number' } }, additionalProperties: false },
+  comercialRepasses,
+);
+
+const comercialRepasseMarcarTool = ferramentaDoCrm(
+  'aceleriq_comercial_repasse_marcar', 'Marcar o repasse como avisado no WhatsApp',
+  'Marca o item da Caixa como avisado no WhatsApp da Aceleriq. Chame so depois de a Meta aceitar a mensagem.',
+  true, z.object({ id: UUID, wamid: z.string().max(200).optional() }).strict(),
+  { type: 'object', properties: { id: { type: 'string' }, wamid: { type: 'string' } }, required: ['id'], additionalProperties: false },
+  comercialRepasseMarcar,
+);
+
 const comercialBolsoPedirTool = ferramentaDoCrm(
   'aceleriq_comercial_bolso_pedir', 'Aceleriq de Bolso: registrar o pedido de acesso',
   'Registra que o lead quer o Aceleriq de Bolso (acesso anual, R$ 97 pela politica comercial aprovada, com os creditos iniciais dela), ligado ao lead e ao e-mail da conta da area de membros, e avisa a Caixa. Devolve o checkout: com ligado=true mande o url ao lead; com ligado=false NAO mande link de pagamento (a equipe combina e o Almir confirma). Nao libera nada: liberar e aceleriq_comercial_bolso_liberar, depois do pagamento confirmado. Um pedido aberto por lead (chamar de novo devolve o mesmo).',
@@ -4907,6 +4957,11 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   comercialPedirPropostaTool,
   comercialBolsoPedirTool,
   comercialBolsoLiberarTool,
+  // MCP 2.24: entrada nova, Pix no Asaas e repasse.
+  comercialEntradaNovaTool,
+  comercialCobrarTool,
+  comercialRepassesTool,
+  comercialRepasseMarcarTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,
