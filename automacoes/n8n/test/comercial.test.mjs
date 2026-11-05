@@ -200,6 +200,12 @@ test('teste real: com a lista preenchida, só esses números são atendidos; des
   assert.equal(L.acq07PedidoCobranca(it('15%', { com_desconto: true }), c).argumentos.com_desconto, true);
 });
 
+test('Plano Começo: fecha com o Almir, sem Pix', () => {
+  const d = L.acq07Decidir({ wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto: 'quero o de 550' }, { lead_id: 'x', mensagens: [{ direcao: 'saida', texto: 'oi' }], qualificacao: {} }, null,
+    { intencao: 'interessado', confianca: 0.9, p_pare: 0.02, remetente: 'humano', etapa: 'fechar_agora', objecao: 'nenhuma', plano: 'comeco', entendeu_necessidade: true }, { config: { ativo: true }, itens: [] }, cfg('test'), TER_10H);
+  assert.equal(d.cobrar, false); assert.equal(d.caixa, true); assert.equal(d.etapa, 'passar_humano'); assert.deepEqual(d.faltam, []);
+});
+
 test('juntar mensagens: só a mais nova responde, levando as anteriores; áudio entra como texto', () => {
   const a = { wamid: 'a', de: '5541999990000', em: '2026-11-03T13:00:00Z', texto: 'oi' };
   const b = { wamid: 'b', de: '5541999990000', em: '2026-11-03T13:00:05Z', texto: 'quanto custa', transcrito: true };

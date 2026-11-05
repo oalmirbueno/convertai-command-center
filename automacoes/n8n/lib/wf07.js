@@ -220,6 +220,7 @@ function acq07PedidoJev(m, lead) {
         instructions: 'Considerando `conversa_anterior` e `ultima_mensagem`, qual plano o lead escolheu para contratar? Só conta se ele escolheu.',
         criteria: {
           nenhum: 'Nenhum plano foi escolhido até agora, ou o negócio do lead fica fora do Brasil, que tem outra tabela.',
+          comeco: 'Escolheu o Plano Começo, de R$ 550 nos 3 primeiros meses, para quem está começando.',
           google_avulso: 'Quer só o Perfil Google, sem plano mensal.',
           start_assistido: 'Escolheu o Start Assistido, o de R$ 847 por mês, o menor plano.', essencial: 'Escolheu o Essencial, o de R$ 1.297 por mês.', presenca: 'Escolheu o Presença, o de R$ 1.997 por mês.',
           crescimento: 'Escolheu o Crescimento, o de R$ 2.997 por mês.', estrutura: 'Escolheu o Estrutura, o de R$ 4.497 por mês.', engenharia: 'Escolheu o Engenharia ou OS, o de R$ 6.997 por mês.',
@@ -312,6 +313,8 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs) {
   d.desconto_oferecido = saidas.some(function (t) { return /15\s?%/.test(t); });
   d.pode_desconto = d.desconto_oferecido || (julg.objecao === 'preco' && saidas.some(function (t) { return /R\$\s?\d/.test(t); }));
   if (julg.etapa === 'passar_humano') { d.caixa = true; d.motivos.push('pediu_pessoa_ou_fora_da_tabela'); }
+  // O Plano Começo fecha com o Almir: não gera Pix e não fica pedindo documento.
+  if (julg.plano === 'comeco' && julg.etapa === 'fechar_agora') { julg.etapa = 'passar_humano'; d.etapa = 'passar_humano'; d.caixa = true; d.motivos.push('plano_comeco'); }
   if (julg.etapa === 'fechar_agora') {
     var dados = acq07DadosDeCobranca(m, lead);
     d.plano = ACQ07_PLANOS.indexOf(julg.plano) >= 0 ? julg.plano : null;
