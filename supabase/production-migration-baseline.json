@@ -2843,8 +2843,72 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
-      "version": "20261104220000",
-      "path": "supabase/migrations/20261104220000_alcada_automatica.sql",
+      "version": "20261105143742",
+      "path": "supabase/migrations/20261105143742_comercial_asaas_e_repasse.sql",
+      "local_sha256": "db24faab6ac8de6ac704303e8c05081f5226cb7a9209b8f3d3fa1d1479cc1285",
+      "remote_name": "comercial_asaas_e_repasse",
+      "remote_statements_sha256": "a2a65e9d8304e3e85f04acf6af3fe367e0c093b1e758e02d29dac095e3eb1f96",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105150000",
+      "path": "supabase/migrations/20261105150000_gpt_image_26_padrao.sql",
+      "local_sha256": "af63aa5775e4d49031bc1da19d7c8518354c5d9953e623ee015227af1f472053",
+      "remote_name": "gpt_image_26_padrao",
+      "remote_statements_sha256": "4b5108edc7457b5692719115b8d2075ca5e27d717201ad162b599f430c9e2435",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105150100",
+      "path": "supabase/migrations/20261105150100_agente_central_rodada_por_pessoa.sql",
+      "local_sha256": "2fb77215b9275d7ab43d443b6fd87564b28fbebd83e77fa05118233923844642",
+      "remote_name": "agente_central_rodada_por_pessoa",
+      "remote_statements_sha256": "e0f120420aeba3e8ba565115d7e8d42928e8039a7ec68c10bb287ac961dd2a63",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105160000",
+      "path": "supabase/migrations/20261105160000_crm_ganho_entrada_e_inicio.sql",
+      "local_sha256": "70243a158ca43d252ef9d9577b493d8f91ab5f52cae8bfa727761b3731301f20",
+      "remote_name": "crm_ganho_entrada_e_inicio",
+      "remote_statements_sha256": "bd7532acab3800ca93a254c61aeea09e031ca7c3fede393476bd89dc1ab6bccf",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105161501",
+      "path": "supabase/migrations/20261105161501_comercial_reunioes.sql",
+      "local_sha256": "fccf2ec5612e33b507f3bc2e4986242ae7b7b4579fc0f14980a3fe5a46716b70",
+      "remote_name": "comercial_reunioes",
+      "remote_statements_sha256": "f8282725f6532efdd93e14cba6e0cd8c1a143f88f340a27a7d90ec8c4e7974f3",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105170000",
+      "path": "supabase/migrations/20261105170000_crm_ganho_cadastra_cliente.sql",
+      "local_sha256": "87f6ad8233146c054e1855fcf3edc464d844c99bda4ddba3e34b539413728e18",
+      "remote_name": "crm_ganho_cadastra_cliente",
+      "remote_statements_sha256": "6d7b5895bca5b129b4d89c5fe18ddc49bd6fc335c7b19e20286324754ddbd0c4",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105180000",
+      "path": "supabase/migrations/20261105180000_crm_ganho_exige_cliente.sql",
+      "local_sha256": "d3cb99105d89ab60a7927b8fbf5b9197d6abe1f08b16e40d33e1d8a9e1f94b1b",
+      "remote_name": "crm_ganho_exige_cliente",
+      "remote_statements_sha256": "6c9ce2f93141fd2aa98549d45d1cc0e670556393e64bbdc6ddc6f317bd5d7ed7",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105190000",
+      "path": "supabase/migrations/20261105190000_plano_mudou_atualiza_tudo.sql",
+      "local_sha256": "dbffefc87fccda508cbd44afdeebfce02546079443fee129a40c7244bce74685",
+      "remote_name": "plano_mudou_atualiza_tudo",
+      "remote_statements_sha256": "f7fbb4b01eec25954e4cdc16c38680f6bb3c29ce8fc41622035988936c02b015",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105200000",
+      "path": "supabase/migrations/20261105200000_alcada_automatica.sql",
       "local_sha256": "84bc33d7e620a7adb0013825326785a30602f5881e05428dd0b5b5387622cea9",
       "remote_name": "alcada_automatica",
       "remote_statements_sha256": "a5d4043f0144bdc821a94804cc65c54b67d44668537a4c768621d3d53db63eaf",

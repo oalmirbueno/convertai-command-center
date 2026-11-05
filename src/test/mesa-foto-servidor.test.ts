@@ -1225,12 +1225,12 @@ describe("personas: rodada, folha, status e aviso de realismo", () => {
   it("rodada padrão do dono: Sunburst alta, Nano Banana Pro 2K, Seedream 5.0 Pro 2K e MAI-Image-2.6 ligados", () => {
     const ligados = RODADA_PADRAO.filter((r) => r.padrao);
     expect(ligados.map((r) => r.modelo_imagem_id)).toEqual([
-      "openrouter:openai/gpt-image-2.5-sunburst",
+      "openrouter:openai/gpt-image-2.6-sunburst",
       "openrouter:google/gemini-3-pro-image",
       "openrouter:bytedance-seed/seedream-5-0-pro",
       "openrouter:microsoft/mai-image-2.6",
     ]);
-    expect(padraoDoMotor("openrouter:openai/gpt-image-2.5-sunburst")).toEqual({ qualidade: "alta", resolucao: null });
+    expect(padraoDoMotor("openrouter:openai/gpt-image-2.6-sunburst")).toEqual({ qualidade: "alta", resolucao: null });
     expect(padraoDoMotor("openrouter:google/gemini-3-pro-image").resolucao).toBe("2K");
     expect(RODADA_PADRAO.filter((r) => !r.padrao).length).toBeGreaterThanOrEqual(3);
   });

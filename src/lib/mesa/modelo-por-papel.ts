@@ -34,6 +34,7 @@ export const SOL_6 = "openrouter:openai/gpt-6-sol";
 export const LUNA_6 = "openrouter:openai/gpt-6-luna";
 export const GEMINI_38_FLASH = "openrouter:google/gemini-3.8-flash";
 export const DEEPSEEK_41_FLASH = "openrouter:deepseek/deepseek-v4.1-flash";
+export const GPT_IMAGE_26 = "openrouter:openai/gpt-image-2.6-sunburst";
 export const GPT_IMAGE_25 = "openrouter:openai/gpt-image-2.5-sunburst";
 export const MAI_IMAGE_26_FLASH = "openrouter:microsoft/mai-image-2.6-flash";
 export const QWEN_IMAGE_3 = "openrouter:qwen/qwen-image-3";
@@ -82,7 +83,7 @@ export const MODELOS_DE_TEXTO_DO_LOTE_NOVO: string[] = [
  * Lote novo de imagem (MOD2, 01/10; GET https://openrouter.ai/api/v1/images/models).
  * Critério: edita com referência (as mesas mandam logo, produto e foto real como
  * referência), preço por imagem até US$ 0,08 e algo que o ligado ainda não cobre.
- * O padrão do papel "imagem" continua no GPT Image 2.5 Sunburst; estes aparecem
+ * O padrão do papel "imagem" é o GPT Image 2.6 Sunburst (05/11/2026); estes aparecem
  * no seletor para escolher na hora. GPT Image 2.5 Flare/Sunburst (09/09) e
  * MAI-Image 2.6 (04/09) já estavam ligados.
  * - MAI-Image 2.6 Flash (04/09): mesma família do 2.6 pela metade do preço (US$ 0,021), edita com 5 referências;
@@ -125,8 +126,8 @@ export const RECOMENDACOES_POR_PAPEL: RecomendacaoDoPapel[] = [
   {
     papel: "imagem",
     tipo: "imagem",
-    candidatos: [GPT_IMAGE_25, GPT_IMAGE_25_DIRETO],
-    porque: "GPT Image 2.5 Sunburst segue o gerador mais novo da OpenAI (09/09) e o que respeita texto e referências.",
+    candidatos: [GPT_IMAGE_26, GPT_IMAGE_25, GPT_IMAGE_25_DIRETO],
+    porque: "GPT Image 2.6 Sunburst é o gerador mais novo da OpenAI (05/11), pelo OpenRouter, e o que respeita texto e referências.",
   },
   {
     papel: "leitura",

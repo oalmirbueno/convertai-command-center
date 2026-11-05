@@ -220,3 +220,5 @@ project_id = "aceleriq-os"
 
   [functions.meta-usuario-do-sistema]
     verify_jwt = true
+  [functions.comercial-asaas-webhook]
+    verify_jwt = false

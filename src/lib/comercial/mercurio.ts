@@ -118,6 +118,30 @@ export async function listarCaixa(): Promise<ItemDaCaixa[]> {
   return ((data || []) as Array<Record<string, unknown>>).map(normalizarItemDaCaixa);
 }
 
+export interface CobrancaDoComercial {
+  id: string;
+  plano_nome: string;
+  valor: number;
+  nome: string;
+  situacao: "aguardando" | "paga" | "cancelada";
+  link: string | null;
+  vencimento: string | null;
+  paga_em: string | null;
+  created_at: string;
+  lead: { name: string; company: string | null } | null;
+}
+
+/** O Pix do fechamento direto: quem está aguardando e quem pagou (o Asaas confirma, o painel só mostra). */
+export async function listarCobrancas(): Promise<CobrancaDoComercial[]> {
+  const { data, error } = await db
+    .from("comercial_cobrancas")
+    .select("id, plano_nome, valor, nome, situacao, link, vencimento, paga_em, created_at, lead:commercial_leads(name, company)")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) throw new ErroDoComercial("Não foi possível ler as cobranças.", error);
+  return (data || []) as unknown as CobrancaDoComercial[];
+}
+
 export async function mudarSituacaoDaCaixa(id: string, situacao: SituacaoDaCaixa): Promise<void> {
   const agora = new Date().toISOString();
   const corpo: Record<string, unknown> = { situacao };

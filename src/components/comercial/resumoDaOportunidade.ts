@@ -2,6 +2,9 @@ import {
   CHANCE_POR_ESTAGIO,
   agendaDoLead,
   dinheiro,
+  entradaRecebida,
+  faltaDaEntrada,
+  nomeDoMes,
   rotuloDaAtividade,
   rotuloDoEstagio,
   type Atividade,
@@ -41,11 +44,27 @@ const inicioDoDia = (data: Date) => new Date(data.getFullYear(), data.getMonth()
 const diaEMes = (data: Date) =>
   `${String(data.getDate()).padStart(2, "0")}/${String(data.getMonth() + 1).padStart(2, "0")}`;
 
+/**
+ * Total da coluna Ganho (05/11/2026; dono: "o valor tem que ser com base no cadastro do cliente"): projeto e mensalidade
+ * como foram cadastrados, separados. Mensalidade x 12 somada à entrada dava um número que não existe em lugar nenhum.
+ */
+export function totalDoGanho(leads: Array<Pick<Lead, "monthly_value" | "one_off_value">>): string {
+  const projeto = leads.reduce((soma, l) => soma + l.one_off_value, 0);
+  const mensal = leads.reduce((soma, l) => soma + l.monthly_value, 0);
+  if (!projeto && !mensal) return "vazio";
+  return [projeto ? dinheiro(projeto) : "", mensal ? `${dinheiro(mensal)}/mês` : ""].filter(Boolean).join(" + ");
+}
+
 export function valorDaOportunidade(lead: Lead): string {
   if (lead.monthly_value === 0 && lead.one_off_value === 0) return "sem valor definido";
+  const falta = faltaDaEntrada(lead);
   return [
-    lead.monthly_value > 0 ? `${dinheiro(lead.monthly_value)}/mês` : "",
-    lead.one_off_value > 0 ? `${dinheiro(lead.one_off_value)} entrada` : "",
+    lead.monthly_value > 0 ? `${dinheiro(lead.monthly_value)}/mês${lead.mensalidade_inicio ? ` desde ${nomeDoMes(lead.mensalidade_inicio)}` : ""}` : "",
+    lead.one_off_value > 0
+      ? falta > 0
+        ? `${dinheiro(entradaRecebida(lead))} de ${dinheiro(lead.one_off_value)} de entrada, falta ${dinheiro(falta)} em ${lead.entrada_parcelas || 1}x`
+        : `${dinheiro(lead.one_off_value)} entrada`
+      : "",
   ]
     .filter(Boolean)
     .join(" + ");

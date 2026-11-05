@@ -89,7 +89,9 @@ describe("estudio-arte: uma lamina por chamada", () => {
     // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada); + 1 do modo recorte (25/09).
     // A tela dupla (modo "continuar") saiu em 25/09: com o panorama ela nunca rodava.
     // + 1 do Template (21/10): a foto sem texto do "Gerar" no Template (gerarFoto), uma por pedido, fora de laço.
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(8);
+    // + 1 do GIF da lâmina (05/11): um por pedido, fora de laço, sem criar versão (gifDaLamina).
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(9);
+    expect(corpoDe("gifDaLamina").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     expect(fonte).toContain("gerarFoto: async (ch, t, e) => {\n      const img = await chamarImagem({");
     expect(corpoDe("garantirFundoContinuo").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     const g = corpoDe("gerarCard");

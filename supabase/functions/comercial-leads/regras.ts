@@ -156,7 +156,7 @@ export function chavesDoContato(c: { whatsapp?: string | null; telefone?: string
   return { fone: fone.length === 8 ? fone : "", email: String(c.email || "").trim().toLowerCase(), nome };
 }
 
-/** Os fatos que o worker viu no site viram sugestão no lead: a equipe confirma antes de o Mercúrio usar. */
+/** Os fatos que o worker viu no site entram gravados: são regra fixa e conferível, e o n8n roda sem esperar confirmação (dono, 05/11). */
 export function fatosDoCandidato(c: CandidatoParaImportar, leadId: string) {
   const lista = Array.isArray(c.evidencias) ? (c.evidencias as Array<Record<string, unknown>>) : [];
   return lista
@@ -166,10 +166,10 @@ export function fatosDoCandidato(c: CandidatoParaImportar, leadId: string) {
       lead_id: leadId,
       campo: "presenca_digital",
       valor: String(e.valor).trim().slice(0, 1000),
-      evidencia: "pagina_citada",
+      evidencia: "site_oficial_da_empresa",
       detalhe: `Lido pela Máquina de leads. ${String(e.detalhe || "")}`.trim().slice(0, 500),
       fonte_url: typeof e.url === "string" ? e.url.slice(0, 500) : null,
-      situacao: "sugestao",
+      situacao: "gravado",
       operador_slug: "mercurio",
     }));
 }

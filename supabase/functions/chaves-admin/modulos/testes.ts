@@ -285,6 +285,17 @@ const TESTADORES: Record<IdDoProvedor, Testador> = {
     return valida("Chave válida.", { sem_saldo_pela_api: true, ...(conta ? { conta: `@${conta}` } : {}) }, r.status);
   },
 
+  async asaas(v, buscar) {
+    const base = v.ASAAS_API_KEY.includes("_hmlg_") ? "https://api-sandbox.asaas.com" : "https://api.asaas.com";
+    const r = await pedir(buscar, base + "/v3/finance/balance", { method: "GET", headers: { access_token: v.ASAAS_API_KEY, "User-Agent": "Aceleriq-Comercial/1.0" } });
+    const status = porStatus(r.status);
+    if (!status) return semTeste(`O Asaas respondeu ${r.status}.`, r.status);
+    if (status.estado !== "valida") return status;
+    const saldo = num(obj(r.json).balance);
+    const numeros: NumerosDoProvedor = saldo !== null ? { saldo_texto: `R$ ${saldo.toFixed(2)}` } : { sem_saldo_pela_api: true };
+    return valida(v.ASAAS_API_KEY.includes("_hmlg_") ? "Chave de teste válida." : "Chave válida.", numeros, r.status);
+  },
+
   async aisa(v, buscar) {
     // Consulta de saldo: gratuita pela documentação do Aisa. Vem em micro-dólares (1.000.000 = US$ 1).
     const r = await pedir(buscar, "https://api.aisa.one/v1/credits/balance", { method: "GET", headers: { Authorization: `Bearer ${v.AISA_API_KEY}` } });

@@ -36,6 +36,8 @@ import EmpresasCRM from "@/components/comercial/EmpresasCRM";
 import MarketingDaCasa from "@/components/comercial/MarketingDaCasa";
 import AgendaComercial from "@/components/comercial/AgendaComercial";
 import AtividadesDoLead from "@/components/comercial/AtividadesDoLead";
+import CamposDoGanho from "@/components/comercial/CamposDoGanho";
+import JanelaDoGanho from "@/components/comercial/JanelaDoGanho";
 import Termometro from "@/components/comercial/Termometro";
 import { listarEventosDoFunil } from "@/components/comercial/eventosDoFunil";
 import { resumoDaOportunidade } from "@/components/comercial/resumoDaOportunidade";
@@ -98,6 +100,10 @@ import {
   clientesRecorrentesDoMes,
   listarMetas,
   moverLead,
+  estadoDoGanho,
+  fechamentoDoEstado,
+  ganhoRecusado,
+  mesDoGanho,
   nomeDaCampanhaDaMeta,
   previsaoDoMes,
   primeiroDiaDoMes,
@@ -1278,7 +1284,23 @@ export function EditorDeLead({
   const [motivo, setMotivo] = useEstadoDoComercial(`rascunho:motivo:${lead?.id || "novo"}`, "", { validar: ehTexto });
   // Cliente do painel para o "Ganho" pela janela. Sem isto o ganho daqui gravava won_client_id nulo:
   // a ponte com o Financeiro e o "Gerar proposta" ficavam sem cliente (o quadro já perguntava).
-  const [clienteGanho, setClienteGanho] = useState(lead?.won_client_id || "");
+  const [janelaDoGanho, setJanelaDoGanho] = useState(false);
+  // 05/11/2026: entrada parcelada e início da mensalidade, ao fechar e para corrigir um ganho que já existe.
+  const mesDoFechamento = mesDoGanho(lead || { stage: "novo", closed_at: null }, diaEmSaoPaulo(new Date().toISOString()) || new Date().toISOString().slice(0, 10));
+  const [comoFoi, setComoFoi] = useState(() => estadoDoGanho({ one_off_value: Number(lead?.one_off_value) || 0, entrada_recebida: lead?.entrada_recebida, entrada_parcelas: lead?.entrada_parcelas, mensalidade_inicio: lead?.mensalidade_inicio }, mesDoFechamento));
+  const [corrigindoGanho, setCorrigindoGanho] = useState(false);
+  const valoresDoFormulario = { one_off_value: Number(form.one_off_value) || 0, monthly_value: Number(form.monthly_value) || 0 };
+  const corrigirGanho = async () => {
+    if (!lead) return;
+    const fechado = fechamentoDoEstado(valoresDoFormulario, comoFoi, mesDoFechamento);
+    if (ganhoRecusado(fechado)) return void toast.error(fechado.erro);
+    setCorrigindoGanho(true);
+    const id = await salvarLead({ id: lead.id, name: lead.name, ...fechado });
+    setCorrigindoGanho(false);
+    if (!id) return void toast.error(`Não foi possível salvar.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
+    await onSalvo();
+    toast.success("Ganho atualizado.");
+  };
   // O que estava no banco quando o editor abriu: e contra isto que se sabe se
   // ha edicao por salvar (a barra de salvar avisa, e fechar nao perde nada).
   const [formInicial] = useState(() => JSON.stringify(formDoBanco()));
@@ -1361,7 +1383,9 @@ export function EditorDeLead({
       const salvou = await salvar({ manterAberto: true });
       if (!salvou) return;
     }
-    if (await moverLead({ lead, paraEstagio: para, motivo, clienteGanho: para === "ganho" ? clienteGanho || null : null })) {
+    // O ganho pede o cadastro: a mesma janela do quadro.
+    if (para === "ganho") return void setJanelaDoGanho(true);
+    if (await moverLead({ lead, paraEstagio: para, motivo })) {
       setMotivo("");
       await onSalvo();
       toast.success(`Movido para ${rotuloDoEstagio(para)}.`);
@@ -1388,6 +1412,12 @@ export function EditorDeLead({
           {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
           {/* De qual anúncio veio (origem do clique gravada pelo formulário do site). */}
           {lead && <OrigemDoLead lead={lead} />}
+          {lead && lead.stage === "ganho" && !lead.won_client_id && (
+            <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-3 py-2" data-ganho-sem-cadastro="">
+              <p className={juntar(texto.corpo, "mr-3 min-w-0")}>Ganho sem cadastro: o cliente não está em Clientes nem no Financeiro.</p>
+              <button type="button" onClick={() => setJanelaDoGanho(true)} className={botao.primario}>Cadastrar cliente</button>
+            </div>
+          )}
           {/* 25/10/2026: a campanha da Meta ligada sem link de anúncio (ligada pelo agente ou pela campanha). */}
           {lead && lead.ads_campaign_id && !lead.origem_clique && <CampanhaDaMetaDoLead campaignId={lead.ads_campaign_id} />}
         </DialogHeader>
@@ -1602,21 +1632,15 @@ export function EditorDeLead({
                   aria-label="Motivo da perda"
                   className={juntar(campo, "mt-2")}
                 />
-                {/* Cliente do ganho: o mesmo elo que o diálogo do quadro pede ao fechar. */}
-                {lead.stage !== "ganho" && (
-                  <select
-                    value={clienteGanho}
-                    onChange={(e) => setClienteGanho(e.target.value)}
-                    aria-label="Cliente no painel (ao marcar como ganho)"
-                    className={juntar(campo, "mt-2")}
-                  >
-                    <option value="">Cliente no painel (ao marcar como ganho): ainda não cadastrei</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                      </option>
-                    ))}
-                  </select>
+                {lead.stage === "ganho" && lead.won_client_id && (valoresDoFormulario.one_off_value > 0 || valoresDoFormulario.monthly_value > 0) && (
+                  <div className="mt-3 min-w-0" data-como-foi-o-ganho="">
+                    <h3 className={juntar(texto.tituloSecao, "mb-2")}>Como foi o ganho</h3>
+                    <CamposDoGanho entrada={valoresDoFormulario.one_off_value} mensalidade={valoresDoFormulario.monthly_value} mes={mesDoFechamento} estado={comoFoi} onMudar={setComoFoi} />
+                    <p className={juntar(texto.auxiliar, "mt-2")}>Corrige os números do CRM. Cobrança já lançada se ajusta no Financeiro.</p>
+                    <button type="button" onClick={() => void corrigirGanho()} disabled={corrigindoGanho} className={juntar(botao.secundario, "mt-2")}>
+                      {corrigindoGanho ? "Salvando..." : "Salvar como foi o ganho"}
+                    </button>
+                  </div>
                 )}
               </section>
 
@@ -1746,6 +1770,18 @@ export function EditorDeLead({
           </div>
         </div>
       </DialogContent>
+      {janelaDoGanho && lead && (
+        <JanelaDoGanho
+          lead={{ ...lead, ...valoresDoFormulario }}
+          clientes={clientes}
+          onCancelar={() => setJanelaDoGanho(false)}
+          onConcluido={async () => {
+            setJanelaDoGanho(false);
+            await onSalvo();
+            onFechar();
+          }}
+        />
+      )}
     </Dialog>
   );
 }

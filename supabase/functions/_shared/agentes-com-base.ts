@@ -126,6 +126,14 @@ export const AGENTES_COM_BASE: AgenteComBase[] = [
     papel: "Escreve as propostas comerciais da agência: diagnóstico, solução, escopo, investimento e respostas às objeções.",
     tema: "propostas comerciais de agência de marketing que fecham: estrutura, diagnóstico, ancoragem de preço, prova, escopo, garantias e objeções",
   },
+  // 05/11: o vendedor do WhatsApp. A fila do comercial entrega as fichas ao n8n.
+  {
+    chave: "comercial.mercurio",
+    nome: "Mercúrio, vendedor",
+    mesa: "Comercial",
+    papel: "Conversa com os leads no WhatsApp: descobre a dor, trata objeção, marca reunião com o Almir e fecha plano com Pix.",
+    tema: "venda consultiva pelo WhatsApp para pequenos negócios: perguntas de descoberta, objeções de preço e tempo, fechamento e conversa natural",
+  },
   // 20/10: a aba Stories da Mesa.
   {
     chave: "stories.roteirista",

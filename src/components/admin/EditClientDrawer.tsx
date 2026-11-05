@@ -34,6 +34,7 @@ import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
+import MudarPlano from "@/components/admin/MudarPlano";
 import GerarLinkDoBriefing from "@/components/briefing/GerarLinkDoBriefing";
 import { estadoDoLink, modeloDeFabrica } from "../../../supabase/functions/_shared/briefing-modelos";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
@@ -796,6 +797,7 @@ export default function EditClientDrawer({
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
+          {isAdmin && <MudarPlano key={client.id} client={client as never} onSalvo={(p) => { setPlanName(p.nome); setPlanValue(String(p.valor)); setPlanStatus("active"); }} />}
           <div className="border-b border-border px-2 sm:px-3">
             <Etapas itens={abas} valor={abaAberta} onEscolher={(v) => setAba(v as AbaDaFicha)} rotulo="Partes da ficha do cliente" />
           </div>

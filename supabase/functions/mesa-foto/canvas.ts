@@ -144,8 +144,8 @@ import { descricaoParaEscolha, ESQUEMA_DA_MONTAGEM, limparMontagem, LISTA_DE_FOR
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 
 export const REF_CANVAS = "foto_canvas";
-/** Padrão do Canvas (pesquisa, seção 4.3): GPT Image 2.5 Sunburst em qualidade alta. */
-export const MOTOR_PADRAO_DO_CANVAS = "openrouter:openai/gpt-image-2.5-sunburst";
+/** Padrão do Canvas: GPT Image 2.6 Sunburst em qualidade alta (05/11/2026). */
+export const MOTOR_PADRAO_DO_CANVAS = "openrouter:openai/gpt-image-2.6-sunburst";
 const LADO_REFERENCIA = 1024;
 const QUALIDADES: Qualidade[] = ["baixa", "media", "alta"];
 

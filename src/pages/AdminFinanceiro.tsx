@@ -1,6 +1,7 @@
 import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
+import { useFreelaContatos } from "@/components/freela/dadosFreela";
 import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -201,6 +202,9 @@ function LegacyFinanceiro() {
   const isManager = profile?.role === "manager";
   const queryClient = useQueryClient();
   const billingQuery = useBilling();
+  // Cliente que veio do Freela. profiles só libera colunas de uma lista (20260809044000): origem_aquisicao fora dela
+  // derrubava toda leitura de cobranças com 403. A origem vem dos contatos promovidos, que o admin já lê.
+  const { data: contatosDoFreela } = useFreelaContatos();
   const { data: billing, isLoading: billingLoading } = billingQuery;
   const walletsQuery = useAdsWallet();
   const { data: wallets } = walletsQuery;
@@ -339,7 +343,8 @@ function LegacyFinanceiro() {
   const ehCobrancaFreela = (b: any) => b?.type === "freela";
   const billingBRL = (billing || []).filter((b: any) => moedaDe(b) === "BRL");
   // 04/11/2026: cliente que veio do Freela tem cobrança comum (conta em tudo), e a origem dele segue sendo Freela.
-  const daOrigemFreela = (b: any) => ehCobrancaFreela(b) || b?.client?.origem_aquisicao === "freela";
+  const clientesDoFreela = new Set((contatosDoFreela || []).map((c) => c.promoted_client_id).filter(Boolean));
+  const daOrigemFreela = (b: any) => ehCobrancaFreela(b) || clientesDoFreela.has(b?.client_id);
   const billingDaOrigem = billingBRL.filter((b: any) =>
     origem === "todos" ? true : origem === "freela" ? daOrigemFreela(b) : !daOrigemFreela(b),
   );

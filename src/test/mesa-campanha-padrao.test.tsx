@@ -282,7 +282,9 @@ describe("as peças levam o padrão e a referência, sem colagem", () => {
 
 describe("selo pela referência, no GPT Image 2.5", () => {
   it("o modelo do selo é o GPT Image 2.5 do catálogo; sem ele, o padrão de imagem (nunca um id inventado)", () => {
-    expect(MODELOS_DO_SELO[0]).toBe("openai:gpt-image-2.5-sunburst");
+    // 05/11/2026: o 2.6 entra na frente; o 2.5 fica de reserva.
+    expect(MODELOS_DO_SELO[0]).toBe("openrouter:openai/gpt-image-2.6-sunburst");
+    expect(MODELOS_DO_SELO[1]).toBe("openai:gpt-image-2.5-sunburst");
     const comGpt25 = catalogo.concat([{ ...catalogo[1], id: "openai:gpt-image-2.5-sunburst", modelo_api: "gpt-image-2.5-sunburst", padrao_para: [] }]);
     expect(modeloDoSelo(comGpt25)).toBe("openai:gpt-image-2.5-sunburst");
     expect(modeloDoSelo(catalogo)).toBe("openai:gpt-image-2");

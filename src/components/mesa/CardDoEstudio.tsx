@@ -296,6 +296,7 @@ export default function CardDoEstudio({
   refinarTexto,
   instrucaoInicial,
   onDesfazerVersao,
+  gif,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -337,6 +338,8 @@ export default function CardDoEstudio({
   instrucaoInicial?: string | null;
   /** Frente RO, fase 2: "Desfazer" o último ajuste (a lâmina volta para a versão anterior; a nova fica guardada). */
   onDesfazerVersao?: (versao: number) => Promise<unknown>;
+  /** 05/11/2026: "Fazer GIF"; quem não passa (Estúdio Ads) segue igual. */
+  gif?: ReactNode;
 }) {
   const { clientId } = useMesa();
   // Frente RO, fase 2: imagens no Ajustar e a proposta para o pedido vago.
@@ -804,6 +807,8 @@ export default function CardDoEstudio({
           )}
         </section>
       )}
+
+      {ordenadas.length > 0 && gif}
 
       {/* Versões: clique mostra a versão na lâmina grande */}
       {ordenadas.length > 0 && aba === "versoes" && (

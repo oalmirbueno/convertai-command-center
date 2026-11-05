@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useDraggable, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDownWideNarrow, Bot, ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, Thermometer, ThumbsDown, Trophy } from "lucide-react";
+import { ArrowDownWideNarrow, Bot, ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, Thermometer, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -38,7 +38,8 @@ import {
 import { CampoDeBusca } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
 import Termometro from "./Termometro";
-import { resumoDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
+import { resumoDaOportunidade, totalDoGanho, valorDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
+import JanelaDoGanho from "./JanelaDoGanho";
 import {
   FAIXAS_DO_FILTRO,
   LIMITES_DA_TEMPERATURA,
@@ -233,10 +234,9 @@ export default function FunilKanban({
     lead: Lead,
     destino: EstagioId,
     motivo?: string,
-    clienteGanho?: string | null,
   ) => {
     moverNaTela(lead.id, destino);
-    const ok = await moverLead({ lead, paraEstagio: destino, motivo, clienteGanho });
+    const ok = await moverLead({ lead, paraEstagio: destino, motivo });
     await onMovido();
     if (!ok) {
       toast.error("Não foi possível mover o lead.");
@@ -414,21 +414,33 @@ export default function FunilKanban({
         )}
       </AreaDeTrabalho>
 
-      {fechamento && (
-        <DialogoDeFechamento
+      {fechamento && fechamento.destino === "ganho" && (
+        <JanelaDoGanho
           lead={fechamento.lead}
-          destino={fechamento.destino}
           clientes={clientes}
+          onCancelar={async () => {
+            setFechamento(null);
+            await onMovido();
+          }}
+          onConcluido={async () => {
+            setFechamento(null);
+            await onMovido();
+          }}
+        />
+      )}
+      {fechamento && fechamento.destino === "perdido" && (
+        <DialogoDePerda
+          lead={fechamento.lead}
           onCancelar={async () => {
             setFechamento(null);
             // O cartão pode ter sido movido na tela por outro caminho; a
             // recarga garante que ele volte para onde o banco diz.
             await onMovido();
           }}
-          onConfirmar={async (motivo, clienteGanho) => {
+          onConfirmar={async (motivo) => {
             const alvo = fechamento;
             setFechamento(null);
-            await aplicarMovimento(alvo.lead, alvo.destino, motivo, clienteGanho);
+            await aplicarMovimento(alvo.lead, alvo.destino, motivo);
           }}
         />
       )}
@@ -477,7 +489,9 @@ function Coluna({
       ajuda={ajuda}
       contagem={leads.length}
       resumo={
-        estagio === "ganho" || estagio === "perdido"
+        estagio === "ganho"
+          ? totalDoGanho(leads)
+          : estagio === "perdido"
           ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
           : `${emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}${leads.length > 0 ? ` · ${qualificadas}/${leads.length} qualificadas` : ""}`
       }
@@ -571,11 +585,8 @@ function Cartao({
           <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
             {rotuloDaClasse(lead.classe)}
           </p>
-          <p className={juntar("mt-1 truncate text-[12px] font-medium tabular-nums text-primary", lead.company ? "max-sm:hidden" : "max-sm:mt-0")}>
-            {lead.monthly_value > 0 && `${dinheiro(lead.monthly_value)}/mês`}
-            {lead.monthly_value > 0 && lead.one_off_value > 0 && " + "}
-            {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} entrada`}
-            {lead.monthly_value === 0 && lead.one_off_value === 0 && "sem valor definido"}
+          <p className={juntar("mt-1 truncate text-[12px] font-medium tabular-nums text-primary", lead.company ? "max-sm:hidden" : "max-sm:mt-0")} title={valorDaOportunidade(lead)}>
+            {valorDaOportunidade(lead)}
           </p>
           {/* Resumo rápido: chance da etapa e há quanto tempo está nela. */}
           <p className="mt-0.5 truncate text-[11px] tabular-nums leading-4 text-muted-foreground max-sm:hidden" title={`Chance de fechar nesta etapa: ${resumo.chance}%`}>
@@ -584,6 +595,9 @@ function Cartao({
           {/* O compromisso marcado, não uma anotação: é o que diz se este
               lead tem alguém cuidando dele. Com o quando, para não precisar
               abrir o lead para saber se é hoje. */}
+          {lead.stage === "ganho" && !lead.won_client_id && (
+            <p className="mt-1 text-[11px] font-medium leading-4 text-warning" data-falta-cadastrar="">Falta cadastrar o cliente</p>
+          )}
           {fechado ? (
             lead.lost_reason ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground max-sm:hidden">{lead.lost_reason}</p> : null
           ) : agenda.proxima ? (
@@ -619,71 +633,37 @@ function Cartao({
 
 /* ───────────────────────── Diálogo de fechamento ────────────────────────── */
 
-function DialogoDeFechamento({
+function DialogoDePerda({
   lead,
-  destino,
-  clientes,
   onCancelar,
   onConfirmar,
 }: {
   lead: Lead;
-  destino: "ganho" | "perdido";
-  clientes: Array<{ id: string; nome: string }>;
   onCancelar: () => void;
-  onConfirmar: (motivo: string, clienteGanho: string | null) => void;
+  onConfirmar: (motivo: string) => void;
 }) {
   const [motivo, setMotivo] = useState("");
-  const [cliente, setCliente] = useState("nenhum");
-  const ganhou = destino === "ganho";
-  const valor =
-    lead.monthly_value === 0 && lead.one_off_value === 0
-      ? "Sem valor definido: a meta de mensalidade nova não conta nada por ele."
-      : [
-          lead.monthly_value > 0 ? `${dinheiro(lead.monthly_value)}/mês` : "",
-          lead.one_off_value > 0 ? `${dinheiro(lead.one_off_value)} de entrada` : "",
-        ]
-          .filter(Boolean)
-          .join(" + ");
 
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && onCancelar()}>
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center text-[15px]">
-            {ganhou ? (
-              <Trophy className="mr-2 h-4 w-4 text-success" aria-hidden="true" />
-            ) : (
-              <ThumbsDown className="mr-2 h-4 w-4 text-destructive" aria-hidden="true" />
-            )}
-            {ganhou ? "Fechou com" : "Perdeu"} {lead.name}
+            <ThumbsDown className="mr-2 h-4 w-4 text-destructive" aria-hidden="true" />
+            Perdeu {lead.name}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {ganhou ? (
-            // O elo com o cadastro é o que deixa o financeiro responder
-            // depois quanto aquele lead virou de verdade.
-            <CampoDeFormulario rotulo="Cliente no painel" apoio={valor}>
-              <select value={cliente} onChange={(e) => setCliente(e.target.value)} className={campo}>
-                <option value="nenhum">Ainda não cadastrei</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
-            </CampoDeFormulario>
-          ) : (
-            <CampoDeFormulario rotulo="Por que não seguiu?" obrigatorio ajuda="É a única linha que ensina o próximo lead.">
-              <input
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Preço, prazo, escolheu outro, sumiu"
-                className={campo}
-                autoFocus
-              />
-            </CampoDeFormulario>
-          )}
+          <CampoDeFormulario rotulo="Por que não seguiu?" obrigatorio ajuda="É a única linha que ensina o próximo lead.">
+            <input
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Preço, prazo, escolheu outro, sumiu"
+              className={campo}
+              autoFocus
+            />
+          </CampoDeFormulario>
 
           <div className="flex items-center justify-end [&>*+*]:ml-2">
             <button type="button" onClick={onCancelar} className={botao.secundario}>
@@ -692,15 +672,15 @@ function DialogoDeFechamento({
             <button
               type="button"
               onClick={() => {
-                if (!ganhou && motivo.trim().length < 3) {
+                if (motivo.trim().length < 3) {
                   toast.error("Escreva o motivo em uma linha.");
                   return;
                 }
-                onConfirmar(motivo, cliente === "nenhum" ? null : cliente);
+                onConfirmar(motivo);
               }}
-              className={ganhou ? juntar(botao.primario, "bg-success hover:bg-success/90") : juntar(botao.primario, "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+              className={juntar(botao.primario, "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
             >
-              {ganhou ? "Confirmar ganho" : "Confirmar perda"}
+              Confirmar perda
             </button>
           </div>
         </div>

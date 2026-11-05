@@ -14,16 +14,13 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { botao, campoTexto, conversa, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import {
-  aplicarRespostas, criarTarefaDoRitual, tarefasAbertasDoCliente, listarClientesDoAgente, prepararCliente, reescreverRitual, salvarEPublicarRitual,
-  type Aplicado, type ClienteDoAgente,
-} from "./agenteCentralApi";
+import { aplicarRespostas, criarTarefaDoRitual, tarefasAbertasDoCliente, listarClientesDoAgente, prepararCliente, reescreverRitual, salvarEPublicarRitual, type Aplicado, type ClienteDoAgente, gravarRodadaNoServidor, lerRodadaDoServidor } from "./agenteCentralApi";
 import { avisoDeRepeticao, tarefasSugeridas, type TarefaSugerida } from "./ritualAvisos";
 import { acharTarefaParecida } from "@/lib/tarefaParecida";
 // 23/10: na hora de copiar, a saudação vale o horário do envio (e o https e o painel continuam garantidos).
 import { textoNaHoraDoEnvio } from "../../../supabase/functions/ritual-writer/modulos/acabamento";
 import {
-  comVersaoGuardada, etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, rodadaRetomada, seloDaRodada,
+  aVersaoDoServidorGanha, comVersaoGuardada, etapaSugerida, gravarLocal, lerLocal, perguntasSemResposta, rodadaDeOutroAparelho, rodadaRetomada, seloDaRodada,
   type EtapaDoAgente, type ItemDaRodada, type Rodada, type Rodando, type Situacao,
 } from "./rodadaDoAgente";
 
@@ -393,8 +390,58 @@ export default function AgenteDaCentral() {
     gravarLocal(rodada);
   }, [rodada]);
 
+  // 05/11/2026 (dono: "no mobile não está sincronizado com o desktop"): a rodada também mora no servidor. Cada mudança
+  // sobe um instante depois; ao abrir, ao voltar para a aba e a cada 20 s, este aparelho adota a versão mais nova, menos
+  // enquanto ele mesmo está trabalhando.
+  const jaNoServidorRef = useRef<string | null>(null);
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    const texto = JSON.stringify(rodada);
+    if (texto === jaNoServidorRef.current) return;
+    const t = window.setTimeout(() => {
+      const atual = rodadaRef.current ? { ...rodadaRef.current, atualizadaEm: rodadaRef.current.atualizadaEm || new Date().toISOString() } : null;
+      void gravarRodadaNoServidor(userId, atual).then((ok) => {
+        if (ok) jaNoServidorRef.current = texto;
+      });
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [rodada, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let vivo = true;
+    const conferir = async () => {
+      if (Object.keys(ocupadosRef.current).length) return;
+      const lida = await lerRodadaDoServidor(userId);
+      if (!vivo || !lida || Object.keys(ocupadosRef.current).length) return;
+      const doServidor = (lida.rodada as Rodada | null) ?? null;
+      const comData = doServidor && { ...doServidor, atualizadaEm: doServidor.atualizadaEm || lida.atualizadaEm };
+      if (comData && aVersaoDoServidorGanha(rodadaRef.current, comData)) {
+        const adotada = rodadaDeOutroAparelho(comData);
+        jaNoServidorRef.current = JSON.stringify(adotada);
+        setRodada(adotada);
+      } else if (!doServidor && rodadaRef.current && lida.atualizadaEm > String(rodadaRef.current.atualizadaEm || "")) {
+        // O outro aparelho recomeçou: esta rodada não vale mais.
+        jaNoServidorRef.current = "null";
+        setRodada(null);
+      }
+    };
+    void conferir();
+    const aoVoltar = () => { if (document.visibilityState === "visible") void conferir(); };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("focus", aoVoltar);
+    const relogio = window.setInterval(aoVoltar, 20_000);
+    return () => {
+      vivo = false;
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("focus", aoVoltar);
+      window.clearInterval(relogio);
+    };
+  }, [userId]);
+
   const atualizarItem = (clientId: string, mudar: (item: ItemDaRodada) => ItemDaRodada) => {
-    setRodada((r) => (r ? { ...r, itens: r.itens.map((i) => (i.cliente.id === clientId ? mudar(i) : i)) } : r));
+    setRodada((r) => (r ? { ...r, atualizadaEm: new Date().toISOString(), itens: r.itens.map((i) => (i.cliente.id === clientId ? mudar(i) : i)) } : r));
   };
 
   const marcarOcupados = (ids: string[], qual: Ocupacao | null) => {
@@ -449,6 +496,7 @@ export default function AgenteDaCentral() {
         publicar: true,
         contextoGeral: "",
         iniciadaEm: new Date().toISOString(),
+        atualizadaEm: new Date().toISOString(),
         itens: clientes.map(novoItem),
       });
     } catch (e) {
@@ -504,7 +552,7 @@ export default function AgenteDaCentral() {
     const atual = rodadaRef.current;
     if (!atual || Object.values(ocupadosRef.current).includes("lendo")) return;
     const ritual = ritualEscolhido;
-    setRodada({ ...atual, ritual });
+    setRodada({ ...atual, ritual, atualizadaEm: new Date().toISOString() });
     const alvos = atual.itens.filter((i) => i.incluir && !i.preparo && !ocupadosRef.current[i.cliente.id]).map((i) => i.cliente);
     if (!alvos.length) { toast.info("Todos os clientes marcados já foram lidos."); return; }
     const falhas = await lerClientes(alvos, ritual, false);
@@ -762,7 +810,7 @@ export default function AgenteDaCentral() {
       <textarea
         value={rodada?.contextoGeral ?? ""}
         disabled={aplicandoAlgum}
-        onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value } : r))}
+        onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value, atualizadaEm: new Date().toISOString() } : r))}
         placeholder="Contexto que vale para todos (opcional)"
         aria-label="Contexto que vale para todos"
         rows={2}
@@ -770,12 +818,12 @@ export default function AgenteDaCentral() {
       />
       <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
         <input type="checkbox" checked={rodada?.publicar ?? false} disabled={aplicandoAlgum}
-          onChange={(e) => setRodada((r) => r ? { ...r, publicar: e.target.checked } : r)} />
+          onChange={(e) => setRodada((r) => r ? { ...r, publicar: e.target.checked, atualizadaEm: new Date().toISOString() } : r)} />
         Publicar a atualização no portal ao salvar
       </label>
       <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
         <input type="checkbox" checked={rodada?.pesquisar ?? false} disabled={aplicandoAlgum}
-          onChange={(e) => setRodada((r) => r ? { ...r, pesquisar: e.target.checked } : r)} />
+          onChange={(e) => setRodada((r) => r ? { ...r, pesquisar: e.target.checked, atualizadaEm: new Date().toISOString() } : r)} />
         Complementar respostas com pesquisa na internet quando útil
       </label>
       <ul className="space-y-2">
@@ -1018,7 +1066,7 @@ export default function AgenteDaCentral() {
               className="mr-2 h-4 w-4 accent-primary"
               checked={rodada.publicar}
               disabled={aplicandoAlgum}
-              onChange={(e) => setRodada((r) => (r ? { ...r, publicar: e.target.checked } : r))}
+              onChange={(e) => setRodada((r) => (r ? { ...r, publicar: e.target.checked, atualizadaEm: new Date().toISOString() } : r))}
             />
             Publicar no portal ao aplicar
           </label>

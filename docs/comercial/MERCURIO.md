@@ -56,3 +56,23 @@ O Mercúrio conduz até o contrato; quem aprova é o Almir, na Caixa e na Mesa P
 - Para ligar ou desligar você num lead: `aceleriq_comercial_atribuir_agente` com o motivo.
 - Novos leads para prospectar: `aceleriq_comercial_maquina_buscar` (nicho e cidade) e
   `aceleriq_comercial_maquina_candidatos`. Quem importa para o CRM é a equipe, na tela.
+
+## WhatsApp oficial, n8n e o Hermes (05/11/2026, MCP 2.24)
+
+O WhatsApp comercial (+55 41 99739-2161) é operado pelo n8n: os fluxos ACQ-06 (primeiro contato), ACQ-07 (respostas) e
+ACQ-08 (repasse) rodam sozinhos. **O Hermes não manda mensagem nem e-mail de prospecção por conta própria:** dois caminhos
+falando com o mesmo lead queimam o contato.
+
+O papel do Hermes é deixar a prospecção mais certeira, pesquisando antes do n8n:
+
+1. Ler a fila com `aceleriq_comercial_fila` e os candidatos com `aceleriq_comercial_maquina_candidatos`.
+2. Para cada lead sem fato, olhar o site, o Google e o Instagram da empresa.
+3. Gravar o que viu com `aceleriq_comercial_registrar_fato`, campo `presenca_digital`, com a prova. O texto entra depois de
+   "reparei que": precisa começar em minúscula, ser uma frase só e ser verdade verificável.
+4. Prova primária (`site_oficial_da_empresa`, `perfil_oficial_instagram`) grava sozinha e o n8n já pode usar.
+
+Agenda e voz: `aceleriq_comercial_horarios`, `aceleriq_comercial_marcar_reuniao` e `aceleriq_comercial_falar`.
+
+Ferramentas novas: `aceleriq_comercial_entrada_nova` (quem chamou sozinho vira lead), `aceleriq_comercial_cobrar` (Pix no
+Asaas, valor da tabela), `aceleriq_comercial_repasses` e `aceleriq_comercial_repasse_marcar` (aviso no WhatsApp da
+Aceleriq). O repasse para onboarding só nasce quando o Asaas confirma o pagamento.

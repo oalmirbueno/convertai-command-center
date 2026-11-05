@@ -44,7 +44,7 @@ export const APROVADAS_PARA_PRONTO = 3;
 export type MotorDoClone = { modelo_imagem_id: string; rotulo: string; resolucao: "1K" | "2K" | "4K" | null; qualidade: "baixa" | "media" | "alta"; padrao: boolean; nota: string };
 export const MOTORES_DO_CLONE: MotorDoClone[] = [
   { modelo_imagem_id: "openrouter:google/gemini-3-pro-image", rotulo: "Nano Banana Pro 2K", resolucao: "2K", qualidade: "alta", padrao: true, nota: "Melhor fidelidade de rosto; até 5 fotos da pessoa." },
-  { modelo_imagem_id: "openrouter:openai/gpt-image-2.5-sunburst", rotulo: "GPT Image 2.5 Sunburst", resolucao: null, qualidade: "alta", padrao: false, nota: "Topo em edição; pode recusar rosto de pessoa real." },
+  { modelo_imagem_id: "openrouter:openai/gpt-image-2.6-sunburst", rotulo: "GPT Image 2.6 Sunburst", resolucao: null, qualidade: "alta", padrao: false, nota: "Topo em edição; pode recusar rosto de pessoa real." },
   { modelo_imagem_id: "openrouter:google/gemini-3.1-flash-image", rotulo: "Nano Banana 2 (rascunho)", resolucao: "1K", qualidade: "alta", padrao: false, nota: "Rascunho barato; até 4 fotos da pessoa." },
 ];
 export const MOTOR_PADRAO_DO_CLONE = MOTORES_DO_CLONE[0];

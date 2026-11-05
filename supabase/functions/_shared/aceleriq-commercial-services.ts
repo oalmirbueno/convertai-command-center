@@ -181,6 +181,10 @@ export async function moveOpportunity(input: { opportunity_id: string; stage: st
   if (para === 'perdido' && (!motivo || motivo.length < 3)) {
     throw new Error('reason: diga em uma linha por que foi perdido. E o que ensina o proximo.');
   }
+  // 05/11/2026: ganho sem cliente não aparece em Clientes nem no Financeiro; o banco também recusa.
+  if (para === 'ganho' && !input.won_client_id) {
+    throw new Error('won_client_id: ganho exige o cliente cadastrado. Peca ao dono para marcar pela janela de ganho do CRM, que pede o tipo, os valores e cria o cliente.');
+  }
   if (para === 'ganho' && input.won_client_id) await exigirPerfil(input.won_client_id, 'won_client_id');
   const fechou = para === 'ganho' || para === 'perdido';
   const { data, error } = await comPrazo(db().from('commercial_leads').update({
@@ -442,12 +446,20 @@ export function resumoDaConfig(cfg: Record<string, unknown> | null, feitosHoje: 
 }
 
 /** A fila do agente comercial: os leads que ele atende, com conversa, fatos e a regra do dia. */
+/** O que o dono ensinou ao Mercúrio em /base-dos-agentes: técnica de venda, objeções e nichos. */
+async function baseDoComercial(): Promise<Array<{ titulo: string; tecnica: string; quando_usar: string; exemplo: string }>> {
+  const { data, error } = await comPrazo(db().from('agente_base_fichas').select('titulo, tecnica, quando_usar, exemplo')
+    .eq('agente', 'comercial.mercurio').eq('ativa', true).is('client_id', null).order('criado_em', { ascending: true }).limit(80));
+  if (error) { console.error('[comercial] base', error.message.slice(0, 160)); return []; }
+  return (data ?? []) as Array<{ titulo: string; tecnica: string; quando_usar: string; exemplo: string }>;
+}
+
 export async function comercialFila(input: { operador?: string; limit?: number }, ctx: AuthContext) {
   soDaCasa(ctx);
   const slug = slugDoOperador(input.operador);
   const agora = agoraEmSaoPaulo();
-  const [cfg, feitos] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso)]);
-  const regra = resumoDaConfig(cfg, feitos, agora);
+  const [cfg, feitos, base] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso), baseDoComercial()]);
+  const regra = { ...resumoDaConfig(cfg, feitos, agora), conhecimento: base };
   if (!regra.ativo) {
     return { operador: slug, config: regra, itens: [], total: 0, aviso: `O ${slug} esta desligado no painel (Comercial). Nao envie mensagem; so registre o que chegar.` };
   }

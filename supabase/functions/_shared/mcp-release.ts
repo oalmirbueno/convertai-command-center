@@ -7,4 +7,5 @@
 // 2.22.0 (27/10/2026): lembrete de aprovacao e regua de cobranca: aceleriq_mensagens_automaticas_fila (so o que o dono aprovou, so na janela 9h-18h dia util) e aceleriq_mensagens_automaticas_marcar_enviado.
 // 2.22.0 (27/10/2026, mesma versao): torneira das tarefas (aceleriq_create_task de agente so com cliente, dono e prazo) e aceleriq_ads_boletim aceita nivel medio/baixo/alto (vira atencao/info/critico).
 // 2.23.0 (28/10/2026): o Mercurio conduz ate o contrato com aprovacao humana: aceleriq_comercial_pedir_proposta (rascunho na Mesa Proposta, BRL/USD/EUR, preco do catalogo), aceleriq_comercial_bolso_pedir (anual do Aceleriq de Bolso, checkout pronto) e aceleriq_comercial_bolso_liberar (so com pagamento confirmado por pessoa ou gateway; comprovante nunca libera).
-export const MCP_VERSION = '2.23.0';
+// 2.24.0 (05/11/2026): lead que chega sozinho (aceleriq_comercial_entrada_nova), Pix no Asaas (aceleriq_comercial_cobrar), repasse no WhatsApp (aceleriq_comercial_repasses e _repasse_marcar) e a base do Mercurio na fila.
+export const MCP_VERSION = '2.24.0';

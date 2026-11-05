@@ -69,6 +69,7 @@ import {
 import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "./CardDoEstudio";
+import GifDaLamina from "./GifDaLamina";
 import DiretorDoEstudio from "./DiretorDoEstudio";
 import { desfazerVersaoDaLamina } from "./diretorDoEstudioApi";
 import type { ExecutorDoPasso } from "./PlanoDoDiretor";
@@ -1938,6 +1939,7 @@ export function DetalheDoItem({
       partesCorrigir={() => partesAjustar().concat(partesConferir())}
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
+      gif={<GifDaLamina trabalhoId={trabalho.id} ordem={cardSelecionado.ordem} gifs={(trabalho.direcao as any)?.gifs || []} ocupado={laminaOcupada(cardSelecionado.ordem)} onPronto={atualizar} />}
       semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
       instrucaoInicial={instrucaoDoCliente && instrucaoDoCliente.ordem === cardSelecionado.ordem ? instrucaoDoCliente.texto : null}
       refinarTexto={

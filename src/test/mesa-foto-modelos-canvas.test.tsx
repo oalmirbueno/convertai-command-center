@@ -436,7 +436,7 @@ describe("modelos: normalizadores tolerantes e regras da persona", () => {
   it("motores da rodada: os padrões da pesquisa que estão no catálogo, com a resolução; os que faltam são avisados", () => {
     const { opcoes, faltando } = motoresDaRodada(catalogo);
     expect(opcoes.filter((o) => o.padrao).map((o) => [o.id, o.rotulo, o.resolucao])).toEqual([
-      [GPT, "GPT Image 2.5", null],
+      [GPT, "GPT Image 2.6", null],
       [NANO, "Nano Banana Pro", "2K"],
       [SEEDREAM, "Seedream 5.0 Pro", "2K"],
     ]);
@@ -557,7 +557,7 @@ describe("aba Modelos", () => {
     const colunas = screen.getByRole("list", { name: "Candidatas por motor" });
     expect(within(colunas).getByText("Motor A")).toBeTruthy();
     expect(within(colunas).getByText("Motor B")).toBeTruthy();
-    expect(within(colunas).queryByText("GPT Image 2.5")).toBeNull();
+    expect(within(colunas).queryByText("GPT Image 2.6")).toBeNull();
   });
 
   it("folha de 6 vistas com o motor da âncora, e Detalhar em 4K vira versão nova com antes e depois", async () => {

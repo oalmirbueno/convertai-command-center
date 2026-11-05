@@ -47,6 +47,8 @@ export function comVersaoGuardada(item: ItemDaRodada): VersaoAnterior[] {
 }
 
 export interface Rodada {
+  /** 05/11/2026: quando mudou por último, para saber qual aparelho tem a versão mais nova. */
+  atualizadaEm?: string;
   pesquisar?: boolean;
   ritual: string;
   publicar: boolean;
@@ -99,6 +101,25 @@ export function rodadaRetomada(r: Rodada | null): Rodada | null {
       return i;
     }),
   };
+}
+
+/** Quanto tempo sem notícia até entender que o outro aparelho parou no meio. */
+export const OUTRO_APARELHO_PAROU_MS = 5 * 60_000;
+
+/**
+ * Rodada que veio de outro aparelho (05/11/2026). Enquanto ele trabalha, "Lendo" e "Aplicando" são verdade e ficam como
+ * estão; sem notícia há 5 minutos, ele parou no meio e vale a mesma regra de quem reabre a página.
+ */
+export function rodadaDeOutroAparelho(r: Rodada, agora = Date.now()): Rodada {
+  const quando = r.atualizadaEm ? new Date(r.atualizadaEm).getTime() : 0;
+  return agora - quando > OUTRO_APARELHO_PAROU_MS ? (rodadaRetomada(r) as Rodada) : r;
+}
+
+/** Qual das duas versões vale: a mais nova. Sem data, vale a que tem data. */
+export function aVersaoDoServidorGanha(local: Rodada | null, servidor: Rodada | null): boolean {
+  if (!servidor) return false;
+  if (!local) return true;
+  return String(servidor.atualizadaEm || "") > String(local.atualizadaEm || "");
 }
 
 /** Perguntas de um cliente ainda sem resposta. */

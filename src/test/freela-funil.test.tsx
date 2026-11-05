@@ -117,9 +117,10 @@ describe("transformar em cliente no banco", () => {
 describe("caixinha separada no valor geral", () => {
   it("cliente que veio do Freela fica na origem Freela e a cobrança dele é comum", () => {
     const s = ler("src/pages/AdminFinanceiro.tsx");
-    expect(s).toContain('const daOrigemFreela = (b: any) => ehCobrancaFreela(b) || b?.client?.origem_aquisicao === "freela";');
+    expect(s).toContain("const daOrigemFreela = (b: any) => ehCobrancaFreela(b) || clientesDoFreela.has(b?.client_id);");
     expect(s).toContain('origem === "freela" ? daOrigemFreela(b) : !daOrigemFreela(b)');
-    expect(ler("src/hooks/useFinancialData.ts")).toContain("origem_aquisicao)");
+    // 05/11/2026: profiles só libera colunas de uma lista; pedir coluna fora dela derrubou o Financeiro inteiro com 403.
+    expect(ler("src/hooks/useFinancialData.ts")).not.toContain("origem_aquisicao");
   });
 });
 

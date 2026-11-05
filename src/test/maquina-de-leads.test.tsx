@@ -49,10 +49,10 @@ describe("regras da Máquina de leads", () => {
     expect(notaDoEncaixe(3).porque).toMatch(/^Bom encaixe:/);
   });
 
-  it("fato visto no site entra como sugestão, com a prova; o resto das evidências não", () => {
+  it("fato visto no site entra gravado, com a prova; o resto das evidências não", () => {
     const f = fatosDoCandidato(cand("a", { evidencias: [{ campo: "site", valor: "x" }, { campo: "fato_observado", valor: "o rodapé do site de vocês ainda mostra 2019", detalhe: "O aviso termina em 2019", url: "https://a.com" }] }) as never, "lead-1");
     expect(f).toHaveLength(1);
-    expect(f[0]).toMatchObject({ lead_id: "lead-1", campo: "presenca_digital", situacao: "sugestao", evidencia: "pagina_citada", fonte_url: "https://a.com" });
+    expect(f[0]).toMatchObject({ lead_id: "lead-1", campo: "presenca_digital", situacao: "gravado", evidencia: "site_oficial_da_empresa", fonte_url: "https://a.com" });
     expect(f[0].detalhe).toContain("2019");
     expect(fatosDoCandidato(cand("b") as never, "lead-1")).toEqual([]);
   });

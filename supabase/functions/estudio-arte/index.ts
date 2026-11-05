@@ -728,6 +728,7 @@ import {
   sugestaoDeDividirEmDuas,
 } from "./texto-da-lamina.ts";
 import { aplicarPosicao, blocoDoArranjoDividido, planoDePosicoes, posicaoGravada, zonaExtraDoTexto } from "./posicao-na-serie.ts";
+import { MAX_GIFS_POR_TRABALHO, MODELO_DO_GIF, promptDoGif, quadrosDoGif, tamanhoDoGif, type GifDaLamina } from "./gif-da-arte.ts";
 // Frente FS (29/09): nenhuma falha termina em silêncio (log com motivo; saldo, cota e chave sobem; aviso onde muda o resultado).
 import { erroQueSobe, nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) na direção e na conversa do diretor. Nunca no gerador nem na legenda.
@@ -1083,6 +1084,8 @@ type Direcao = {
   conteudo_revisado?: { genericas: number[]; reescritas: number[]; em: string } | null;
   /** Frente AG: pergunta pendente de um ajuste (a resposta "sim" retoma o pedido). */
   duvida_do_ajuste?: DuvidaGuardada | null;
+  /** 05/11/2026: os GIFs feitos a partir das lâminas (peças a mais; a lâmina não muda). */
+  gifs?: GifDaLamina[];
 };
 
 type Reabertura = {
@@ -7557,6 +7560,55 @@ Escreva sem travessão.`;
  * pedido não vai para a memória do diretor e a versão nova leva a marca
  * autocorrecao { rodada, motivos }.
  */
+/** gif_card { trabalho_id, ordem, movimento? }: GIF novo com o texto e a direção da lâmina (sem a arte como base: gif-da-arte.ts). */
+async function gifDaLamina(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  const card = cardDaDirecao(t, ordem);
+  const base = versaoAtual(t, ordem);
+  const movimento = texto(corpo.movimento, 300) || null;
+  const kit = await lerKit(t.client_id, t);
+  const img = await chamarImagem({
+    clientId: t.client_id,
+    modeloId: MODELO_DO_GIF,
+    prompt: promptDoGif({
+      texto: card.texto_exato,
+      cena: card.ilustracao,
+      composicao: card.composicao,
+      conceito: t.direcao.conceito,
+      cores: Array.isArray(kit?.paleta) ? (kit.paleta as { nome?: string; hex?: string }[]).filter((c) => c?.hex).map((c) => `${c.nome || "cor"} ${c.hex}`).join(", ") : null,
+      movimento,
+    }),
+    referencias: [],
+    qualidade: "baixa",
+    tamanho: tamanhoDoGif(quadroDoCard(t, card).tamanho),
+    tamanhoFixo: true,
+    mesmoModelo: true,
+    formatoSaida: "gif",
+    referencia: { tipo: "estudio_trabalho", id: t.id },
+    criadoPor: ch.userId,
+    tarefa: "estudio",
+    agente: "gerador_imagem",
+  });
+  const quadros = quadrosDoGif(img.png);
+  if (!quadros) {
+    await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + img.custoUsd) }));
+    throw new ErroEstudio(502, "gif_nao_veio", "O gerador não devolveu um GIF. A arte não mudou; a chamada foi cobrada.");
+  }
+  const caminho = `${t.client_id}/estudio/${t.id}/card-${ordem}-gif-${crypto.randomUUID().slice(0, 8)}.gif`;
+  const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(img.png)], { type: "image/gif" }), { contentType: "image/gif", upsert: false });
+  if (error) {
+    await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + img.custoUsd) }));
+    throw new ErroEstudio(503, "armazenamento_falhou", "O GIF foi gerado, mas não foi possível guardá-lo.");
+  }
+  const gif: GifDaLamina = { ordem, versao: base?.versao ?? null, storage_path: caminho, quadros, movimento, custo_usd: img.custoUsd, criado_em: new Date().toISOString() };
+  const trabalho = await mutarTrabalho(t.id, (x) => ({
+    direcao: { ...x.direcao, gifs: [...(x.direcao.gifs ?? []), gif].slice(-MAX_GIFS_POR_TRABALHO) },
+    custo_usd: arred(num(x.custo_usd) + img.custoUsd),
+  }));
+  return json({ trabalho, gif, url: await urlAssinada(caminho), custo_usd: img.custoUsd, saldo_usd: img.saldoUsd });
+}
+
 async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: MarcaDeAutocorrecao | null = null) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   // Frente FS (29/09): o que falhou no ajuste e muda a arte vai para a versão e para a resposta.
@@ -12008,6 +12060,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   gerar_card: gerarCard,
   conferir_card: conferirCard,
   ajustar_card: (ch, corpo) => ajustarCard(ch, corpo),
+  gif_card: gifDaLamina,
   // Frente AG: texto e cor aplicados na conversa aparecem só na área do texto (sem refazer a lâmina).
   ajustar_texto: ajustarTextoDaLamina,
   corrigir_card: corrigirCard,
@@ -12107,6 +12160,8 @@ ACOES_LONGAS.add("template_imagem");
 // 22/10: o carrossel estilo X (texto de todas as lâminas e o Jev) e o vídeo real baixado também passam de 150 s.
 ACOES_LONGAS.add("template_carrossel");
 ACOES_LONGAS.add("template_video_aplicar");
+// 05/11: GIF é uma imagem com vários quadros, pode passar de 150 s.
+ACOES_LONGAS.add("gif_card");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

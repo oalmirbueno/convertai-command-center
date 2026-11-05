@@ -462,7 +462,8 @@ export default function AdminFiles() {
   const [uploadType, setUploadType] = useState<string>(
     folderDefinition(initialFolder).defaultKind,
   );
-  const [uploadPostSaveAction, setUploadPostSaveAction] = useState<UploadPostSaveAction>("draft");
+  // 05/11/2026 (dono: "tudo que a gente sobe tem que aparecer para o cliente"): quem pode liberar já começa em Disponibilizar.
+  const [uploadPostSaveAction, setUploadPostSaveAction] = useState<UploadPostSaveAction>(canReviewAndRelease ? "client_shared" : "draft");
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
@@ -1323,7 +1324,7 @@ export default function AdminFiles() {
     setUploadName("");
     setUploadProject("");
     setUploadType("criativo");
-    setUploadPostSaveAction("draft");
+    setUploadPostSaveAction(canReviewAndRelease ? "client_shared" : "draft");
     setUploadProgress(0);
     setUploadCaption("");
     setUploadCarousel("");

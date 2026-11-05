@@ -97,7 +97,7 @@ export type MotorDaRodada = { modelo_imagem_id: string; rotulo: string; qualidad
  * candidata por chamada (uma chamada por gerador, em paralelo).
  */
 export const RODADA_PADRAO: MotorDaRodada[] = [
-  { modelo_imagem_id: "openrouter:openai/gpt-image-2.5-sunburst", rotulo: "GPT Image 2.5 Sunburst", qualidade: "alta", resolucao: null, padrao: true },
+  { modelo_imagem_id: "openrouter:openai/gpt-image-2.6-sunburst", rotulo: "GPT Image 2.6 Sunburst", qualidade: "alta", resolucao: null, padrao: true },
   { modelo_imagem_id: "openrouter:google/gemini-3-pro-image", rotulo: "Nano Banana Pro 2K", qualidade: "alta", resolucao: "2K", padrao: true },
   { modelo_imagem_id: "openrouter:bytedance-seed/seedream-5-0-pro", rotulo: "Seedream 5.0 Pro 2K", qualidade: "alta", resolucao: "2K", padrao: true },
   { modelo_imagem_id: "openrouter:microsoft/mai-image-2.6", rotulo: "MAI-Image-2.6", qualidade: "alta", resolucao: null, padrao: true },

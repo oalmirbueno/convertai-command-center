@@ -367,3 +367,26 @@ export async function criarTarefaDoRitual(input: {
   });
   return "criada";
 }
+
+/**
+ * A rodada do "Atualizar todos" no servidor (05/11/2026): o que celular e computador da mesma pessoa compartilham. Falha
+ * aqui nunca derruba a tela: o aparelho segue com a cópia local e tenta de novo na próxima mudança.
+ */
+export async function lerRodadaDoServidor(userId: string): Promise<{ rodada: unknown; atualizadaEm: string } | null> {
+  try {
+    const { data, error } = await (supabase as never as { from: (t: string) => any }).from("agente_central_rodadas").select("rodada, atualizada_em").eq("user_id", userId).maybeSingle();
+    if (error || !data) return null;
+    return { rodada: data.rodada, atualizadaEm: data.atualizada_em };
+  } catch {
+    return null;
+  }
+}
+
+export async function gravarRodadaNoServidor(userId: string, rodada: unknown): Promise<boolean> {
+  try {
+    const { error } = await (supabase as never as { from: (t: string) => any }).from("agente_central_rodadas").upsert({ user_id: userId, rodada, atualizada_em: new Date().toISOString() });
+    return !error;
+  } catch {
+    return false;
+  }
+}
