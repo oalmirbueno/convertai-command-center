@@ -354,7 +354,7 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
     decisao.objecao && decisao.objecao !== 'nenhuma' ? 'Objeção percebida: ' + decisao.objecao + '.' : '',
     decisao.faltam && decisao.faltam.length ? 'Para gerar o Pix ainda falta: ' + decisao.faltam.join(' e ') + '. Peça isso agora, com naturalidade.' : '',
     horarios && horarios.length ? 'HORÁRIOS LIVRES (ofereça só estes; horario_escolhido recebe o código): ' + horarios.map(function (h) { return h.inicio + ' = ' + h.rotulo; }).join('; ') + '.' : (decisao.agenda ? 'Não há horário livre disponível agora: diga que o Almir chama para combinar.' : ''),
-    decisao.voz ? 'A pessoa mandou áudio e sua resposta vai virar áudio: escreva como se fala, sem abreviar, sem emoji e sem link.' : '',
+    decisao.voz ? 'A pessoa mandou áudio e sua resposta vai virar áudio. Escreva como alguém fala no WhatsApp: frases curtas, tom de conversa, com expressões como olha, viu, né e pontuação que dá pausa. Sem abreviar, sem emoji, sem link. Valores por extenso.' : '',
     decisao.cobrar ? 'Preencha plano_combinado com o código do plano que você e o lead combinaram: start_assistido (R$ 847), essencial, presenca, crescimento, estrutura, engenharia ou google_avulso. Já há plano (' + decisao.plano + ') e documento. Preencha nome_cobranca com o nome ou razão social que o lead informou; se não informou, use o nome da empresa.' : '',
     decisao.intencao === 'nao_agora' ? 'O lead disse que agora não é o momento: respeite e não insista.' : '',
     '',
