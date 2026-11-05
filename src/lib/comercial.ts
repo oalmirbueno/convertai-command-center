@@ -180,6 +180,12 @@ export interface Lead {
   stage: string;
   monthly_value: number;
   one_off_value: number;
+  /** 05/11/2026: quanto da entrada já entrou. Nulo = a entrada inteira. */
+  entrada_recebida?: number | null;
+  /** Em quantas vezes vem o que falta da entrada. */
+  entrada_parcelas?: number | null;
+  /** Primeiro dia do mês da primeira mensalidade. Nulo = o mês do fechamento. */
+  mensalidade_inicio?: string | null;
   owner_id: string | null;
   next_action: string | null;
   next_action_at: string | null;
@@ -267,6 +273,7 @@ export async function listarLeads(): Promise<Lead[]> {
     ...(linha as unknown as Lead),
     monthly_value: numero(linha.monthly_value),
     one_off_value: numero(linha.one_off_value),
+    entrada_recebida: linha.entrada_recebida == null ? null : numero(linha.entrada_recebida),
     classe: typeof linha.classe === "string" ? linha.classe : null,
     qualificacao: qualificacaoLimpa(linha.qualificacao),
     origem_clique: lerOrigemDoClique(linha.origem_clique),
@@ -293,6 +300,9 @@ export async function salvarLead(
     stage: lead.stage || "novo",
     monthly_value: numero(lead.monthly_value),
     one_off_value: numero(lead.one_off_value),
+    entrada_recebida: lead.entrada_recebida ?? null,
+    entrada_parcelas: lead.entrada_parcelas ?? null,
+    mensalidade_inicio: lead.mensalidade_inicio ?? null,
     next_action: lead.next_action?.trim() || null,
     next_action_at: lead.next_action_at || null,
     expected_close_date: lead.expected_close_date || null,
@@ -346,8 +356,9 @@ export async function moverLead(input: {
   paraEstagio: EstagioId;
   motivo?: string;
   clienteGanho?: string | null;
+  fechamento?: FechamentoDoGanho;
 }): Promise<boolean> {
-  const { lead, paraEstagio, motivo, clienteGanho } = input;
+  const { lead, paraEstagio, motivo, clienteGanho, fechamento } = input;
   if (lead.stage === paraEstagio) return true;
   const { data: sessao } = await supabase.auth.getUser();
   const fechou = paraEstagio === "ganho" || paraEstagio === "perdido";
@@ -359,6 +370,10 @@ export async function moverLead(input: {
       closed_at: fechou ? new Date().toISOString() : null,
       lost_reason: paraEstagio === "perdido" ? motivo?.trim() || null : null,
       won_client_id: paraEstagio === "ganho" ? clienteGanho || null : null,
+      // Saiu do ganho: o que foi combinado naquele fechamento não vale mais.
+      entrada_recebida: paraEstagio === "ganho" ? fechamento?.entrada_recebida ?? null : null,
+      entrada_parcelas: paraEstagio === "ganho" ? fechamento?.entrada_parcelas ?? null : null,
+      mensalidade_inicio: paraEstagio === "ganho" ? fechamento?.mensalidade_inicio ?? null : null,
     } as never)
     .eq("id", lead.id)
     .select("id");
@@ -633,6 +648,68 @@ export function diaEmSaoPaulo(iso: string | null | undefined): string | null {
   return toBRDateKey(instante);
 }
 
+/* ──────────────────────── Como o ganho foi de verdade ───────────────────── */
+
+export type FechamentoDoGanho = Pick<Lead, "entrada_recebida" | "entrada_parcelas" | "mensalidade_inicio">;
+
+/** O que a tela do ganho edita. Texto, como os campos do formulário. */
+export interface EstadoDoGanho {
+  entrada: "avista" | "parcelada";
+  recebido: string;
+  parcelas: string;
+  inicio: "este" | "proximo";
+}
+
+type ValoresDoGanho = Pick<Lead, "one_off_value"> & Partial<FechamentoDoGanho>;
+
+/** Quanto da entrada já entrou; sem dado, a entrada inteira (como era antes). */
+export const entradaRecebida = (lead: ValoresDoGanho) =>
+  lead.entrada_recebida == null ? lead.one_off_value : Math.min(lead.entrada_recebida, lead.one_off_value);
+
+export const faltaDaEntrada = (lead: ValoresDoGanho) => Math.max(0, lead.one_off_value - entradaRecebida(lead));
+
+/** O mês de referência das opções: o do fechamento, ou o de hoje para quem ainda vai fechar. */
+const mesDe = (dia: string) => `${dia.slice(0, 7)}-01`;
+
+export function mesDoGanho(lead: Pick<Lead, "stage" | "closed_at">, hoje: string): string {
+  const fechado = lead.stage === "ganho" ? diaEmSaoPaulo(lead.closed_at) : null;
+  return mesDe(fechado || hoje);
+}
+
+export function estadoDoGanho(lead: ValoresDoGanho, mes: string): EstadoDoGanho {
+  const parcelada = faltaDaEntrada(lead) > 0;
+  return {
+    entrada: parcelada ? "parcelada" : "avista",
+    recebido: String(parcelada ? entradaRecebida(lead) : Math.round((lead.one_off_value / 2) * 100) / 100),
+    parcelas: String(lead.entrada_parcelas || 1),
+    inicio: lead.mensalidade_inicio && lead.mensalidade_inicio >= proximoMes(mes) ? "proximo" : "este",
+  };
+}
+
+/** Do que a tela preencheu para o que o banco guarda; { erro } quando não fecha a conta. */
+export function fechamentoDoEstado(
+  lead: Pick<Lead, "one_off_value" | "monthly_value">,
+  estado: EstadoDoGanho,
+  mes: string,
+): FechamentoDoGanho | { erro: string } {
+  const mensalidade_inicio = lead.monthly_value > 0 ? (estado.inicio === "proximo" ? proximoMes(mes) : mes) : null;
+  if (!(lead.one_off_value > 0) || estado.entrada === "avista") {
+    return { entrada_recebida: null, entrada_parcelas: null, mensalidade_inicio };
+  }
+  const recebido = Number(String(estado.recebido).replace(",", "."));
+  const parcelas = Number(estado.parcelas);
+  if (!Number.isFinite(recebido) || recebido < 0) return { erro: "Informe quanto já entrou da entrada." };
+  if (recebido >= lead.one_off_value) return { erro: "O recebido não fica abaixo da entrada: se pagou tudo, marque À vista." };
+  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 36) return { erro: "O resto vem em 1 a 36 vezes." };
+  return { entrada_recebida: recebido, entrada_parcelas: parcelas, mensalidade_inicio };
+}
+
+export const ganhoRecusado = (f: FechamentoDoGanho | { erro: string }): f is { erro: string } => "erro" in f;
+
+/** Mês curto ("nov") de uma data "AAAA-MM-01". */
+export const nomeDoMes = (mes: string) =>
+  new Date(`${mes.slice(0, 10)}T12:00:00Z`).toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" }).replace(".", "");
+
 const dentroDoMes = (iso: string | null, periodo: string) => {
   const dia = diaEmSaoPaulo(iso);
   if (!dia) return false;
@@ -661,7 +738,12 @@ export function realizadoDoMes(input: {
     (lead) => lead.stage === "ganho" && dentroDoMes(lead.closed_at, periodo),
   );
   if (metrica === "mrr_novo") {
-    return ganhosDoMes.reduce((soma, lead) => soma + lead.monthly_value, 0);
+    // 05/11/2026: conta no mês em que a mensalidade começa; sem essa data, no mês do fechamento.
+    return leads
+      .filter((lead) => lead.stage === "ganho" && (lead.mensalidade_inicio
+        ? lead.mensalidade_inicio >= periodo && lead.mensalidade_inicio < proximoMes(periodo)
+        : dentroDoMes(lead.closed_at, periodo)))
+      .reduce((soma, lead) => soma + lead.monthly_value, 0);
   }
   if (metrica === "fechamentos") return ganhosDoMes.length;
   if (metrica === "leads") {
@@ -774,7 +856,7 @@ export function kpisDaCampanha(campanha: Campanha, leads: Lead[]): KpiDaCampanha
   const ganhos = daCampanha.filter((lead) => lead.stage === "ganho");
   const investido = campanha.spent > 0 ? campanha.spent : 0;
   const mrrGanho = ganhos.reduce((soma, lead) => soma + lead.monthly_value, 0);
-  const entradaGanha = ganhos.reduce((soma, lead) => soma + lead.one_off_value, 0);
+  const entradaGanha = ganhos.reduce((soma, lead) => soma + entradaRecebida(lead), 0);
   const retorno = mrrGanho * 12 + entradaGanha;
   return {
     leads: daCampanha.length,

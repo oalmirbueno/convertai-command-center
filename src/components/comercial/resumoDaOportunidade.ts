@@ -2,6 +2,9 @@ import {
   CHANCE_POR_ESTAGIO,
   agendaDoLead,
   dinheiro,
+  entradaRecebida,
+  faltaDaEntrada,
+  nomeDoMes,
   rotuloDaAtividade,
   rotuloDoEstagio,
   type Atividade,
@@ -43,9 +46,14 @@ const diaEMes = (data: Date) =>
 
 export function valorDaOportunidade(lead: Lead): string {
   if (lead.monthly_value === 0 && lead.one_off_value === 0) return "sem valor definido";
+  const falta = faltaDaEntrada(lead);
   return [
-    lead.monthly_value > 0 ? `${dinheiro(lead.monthly_value)}/mês` : "",
-    lead.one_off_value > 0 ? `${dinheiro(lead.one_off_value)} entrada` : "",
+    lead.monthly_value > 0 ? `${dinheiro(lead.monthly_value)}/mês${lead.mensalidade_inicio ? ` desde ${nomeDoMes(lead.mensalidade_inicio)}` : ""}` : "",
+    lead.one_off_value > 0
+      ? falta > 0
+        ? `${dinheiro(entradaRecebida(lead))} de ${dinheiro(lead.one_off_value)} de entrada, falta ${dinheiro(falta)} em ${lead.entrada_parcelas || 1}x`
+        : `${dinheiro(lead.one_off_value)} entrada`
+      : "",
   ]
     .filter(Boolean)
     .join(" + ");
