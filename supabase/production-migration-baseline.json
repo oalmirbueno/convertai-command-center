@@ -2857,6 +2857,22 @@
       "remote_name": "agente_central_rodada_por_pessoa",
       "remote_statements_sha256": "e0f120420aeba3e8ba565115d7e8d42928e8039a7ec68c10bb287ac961dd2a63",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105160000",
+      "path": "supabase/migrations/20261105160000_crm_ganho_entrada_e_inicio.sql",
+      "local_sha256": "70243a158ca43d252ef9d9577b493d8f91ab5f52cae8bfa727761b3731301f20",
+      "remote_name": "crm_ganho_entrada_e_inicio",
+      "remote_statements_sha256": "bd7532acab3800ca93a254c61aeea09e031ca7c3fede393476bd89dc1ab6bccf",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105170000",
+      "path": "supabase/migrations/20261105170000_crm_ganho_cadastra_cliente.sql",
+      "local_sha256": "87f6ad8233146c054e1855fcf3edc464d844c99bda4ddba3e34b539413728e18",
+      "remote_name": "crm_ganho_cadastra_cliente",
+      "remote_statements_sha256": "6d7b5895bca5b129b4d89c5fe18ddc49bd6fc335c7b19e20286324754ddbd0c4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
