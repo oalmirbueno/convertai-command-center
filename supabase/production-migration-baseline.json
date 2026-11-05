@@ -2889,6 +2889,14 @@
       "remote_name": "crm_ganho_cadastra_cliente",
       "remote_statements_sha256": "6d7b5895bca5b129b4d89c5fe18ddc49bd6fc335c7b19e20286324754ddbd0c4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261105180000",
+      "path": "supabase/migrations/20261105180000_crm_ganho_exige_cliente.sql",
+      "local_sha256": "d3cb99105d89ab60a7927b8fbf5b9197d6abe1f08b16e40d33e1d8a9e1f94b1b",
+      "remote_name": "crm_ganho_exige_cliente",
+      "remote_statements_sha256": "6c9ce2f93141fd2aa98549d45d1cc0e670556393e64bbdc6ddc6f317bd5d7ed7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
