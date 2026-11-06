@@ -21,7 +21,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: mock.invoke }, from: mock.from, rpc: vi.fn() },
 }));
 
-import { decidirGet, descobertaDoMcp, getPedeStream } from "../../supabase/functions/_shared/mcp-descoberta";
+import { decidirGet, descobertaDoMcp, getPedeStream } from "../../supabase/functions/mcp-server/modulos/mcp-descoberta";
 import { respostaDePonteAposentada } from "../../supabase/functions/_shared/ponte-ops-aposentada";
 import { comOrigemDoPainel, origemDoPainelPermitida, origensDoPainel } from "../../supabase/functions/_shared/origem-do-painel";
 import { emailDoLeadValido as emailNoServidor, ERRO_EMAIL_INVALIDO } from "../../supabase/functions/submit-quiz/email-do-lead";

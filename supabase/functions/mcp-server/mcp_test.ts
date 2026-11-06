@@ -1267,7 +1267,7 @@ Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (J
 });
 
 Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a descoberta publica', async () => {
-  const { decidirGet, descobertaDoMcp, getPedeStream } = await import('../_shared/mcp-descoberta.ts');
+  const { decidirGet, descobertaDoMcp, getPedeStream } = await import('./modulos/mcp-descoberta.ts');
   assertEquals(decidirGet({ authorization: null, accept: '*/*' }), 'desafio_oauth');
   assertEquals(decidirGet({ authorization: 'Bearer x', accept: 'text/event-stream' }), 'sem_stream');
   assertEquals(decidirGet({ authorization: 'Bearer x', accept: 'application/json, text/event-stream' }), 'sem_stream');

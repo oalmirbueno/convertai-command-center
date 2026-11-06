@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { horarioDaGrade, horariosLivres, rotuloDoHorario } from "../../supabase/functions/_shared/comercial-agenda";
+import { horarioDaGrade, horariosLivres, rotuloDoHorario } from "../../supabase/functions/mcp-server/modulos/comercial-agenda";
 import { ADICIONAL_GOOGLE, planoPorId, valorDoFechamento } from "../../supabase/functions/_shared/comercial-asaas";
 
 // quinta, 05/11/2026, 08h em São Paulo
