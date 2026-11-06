@@ -8,6 +8,7 @@
 var ACQ06_TIPOS_QUE_BLOQUEIAM = {
   primeiro_contato: ['comercial_primeiro_contato_aceito', 'comercial_primeiro_contato_incerto'],
   retomada: ['comercial_retomada_aceito', 'comercial_retomada_incerto'],
+  despedida: ['comercial_despedida_aceito', 'comercial_despedida_incerto'],
 };
 
 // fila: resultado de aceleriq_comercial_fila. Devolve a regra da rodada e os candidatos em ordem.
@@ -41,9 +42,21 @@ function acq06Candidatos(fila, cfg, agoraMs, orcamento) {
     var entradas = msgs.filter(function (m) { return m.direcao === 'entrada'; });
     var saidas = msgs.filter(function (m) { return m.direcao === 'saida'; });
     var tipo = null;
+    // Robô de atendimento do lead não conta como resposta (o ACQ-07 marca qualificacao.so_robo).
+    var humano = entradas.length > 0 && q.so_robo !== true;
+    var toques = saidas.filter(function (s) { return acqComEhModelo(s.texto, cfg); }).length;
+    if (!toques && (it.primeiro_contato_feito || saidas.length)) toques = 1;
     if (!it.primeiro_contato_feito && saidas.length === 0) {
       if (entradas.length) return ign('conversa_aberta_pelo_lead');
       tipo = 'primeiro_contato';
+    } else if (c.cadencia.ativa) {
+      if (humano || toques < 1 || toques > 2) return;
+      var ultimaSaida = saidas.reduce(function (m, s) { var t = Date.parse(s.enviada_em); return isFinite(t) && t > m ? t : m; }, -Infinity);
+      var ultimaEntrada = entradas.reduce(function (m, s) { var t = Date.parse(s.enviada_em); return isFinite(t) && t > m ? t : m; }, -Infinity);
+      var desde = Math.max(ultimaSaida, ultimaEntrada);
+      if (acqComDiasUteis(desde, agoraMs) < Number(c.cadencia.dias_uteis[toques - 1])) return;
+      tipo = toques === 1 ? 'retomada' : 'despedida';
+      if (!(c.modelos[tipo] && c.modelos[tipo].aprovado === true)) return ign('modelo_nao_aprovado:' + tipo);
     } else if (c.retomada.ativa && entradas.length === 0 && saidas.length === 1) {
       var ult = Date.parse(saidas[saidas.length - 1].enviada_em);
       if (!isFinite(ult) || agoraMs - ult < Number(c.retomada.dias_sem_resposta) * 86400000) return;

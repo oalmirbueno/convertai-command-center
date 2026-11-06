@@ -70,6 +70,13 @@
             "categoria": "UTILITY",
             "aprovado": false,
             "corpo": "Repasse do executivo: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
+          },
+          "despedida": {
+            "nome": "aceleriq_despedida_rafael",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}! Última mensagem por aqui, prometo. Se em algum momento fizer sentido olhar com calma o site e a presença online de vocês, o diagnóstico continua gratuito, é só me chamar aqui. Abraço, Rafael da Aceleriq."
           }
         },
         "max_por_rodada": 5,
@@ -141,6 +148,13 @@
             "categoria": "UTILITY",
             "aprovado": false,
             "corpo": "Repasse do executivo: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
+          },
+          "despedida": {
+            "nome": "aceleriq_despedida_rafael",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}! Última mensagem por aqui, prometo. Se em algum momento fizer sentido olhar com calma o site e a presença online de vocês, o diagnóstico continua gratuito, é só me chamar aqui. Abraço, Rafael da Aceleriq."
           }
         },
         "max_por_rodada": 5,
@@ -225,6 +239,13 @@
             "categoria": "UTILITY",
             "aprovado": false,
             "corpo": "Repasse do executivo: {{1}}.\n\nLead: {{2}}\nContexto: {{3}}\nPróximo passo: {{4}}\nWhatsApp do lead: {{5}}\n\nDetalhes na Caixa do comercial."
+          },
+          "despedida": {
+            "nome": "aceleriq_despedida_rafael",
+            "idioma": "pt_BR",
+            "categoria": "MARKETING",
+            "aprovado": false,
+            "corpo": "Oi, {{1}}! Última mensagem por aqui, prometo. Se em algum momento fizer sentido olhar com calma o site e a presença online de vocês, o diagnóstico continua gratuito, é só me chamar aqui. Abraço, Rafael da Aceleriq."
           }
         },
         "max_por_rodada": 5,
@@ -245,7 +266,14 @@
           "cargo": "executivo de negócios"
         },
         "voz_id": "FB9t7w9dj2IYiysoM5p6",
-        "voz_modelo": "eleven_v4"
+        "voz_modelo": "eleven_v4",
+        "cadencia": {
+          "ativa": true,
+          "dias_uteis": [
+            3,
+            4
+          ]
+        }
       }
     }
   }

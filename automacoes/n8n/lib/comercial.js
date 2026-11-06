@@ -11,6 +11,8 @@ var ACQ_COM_PADRAO = {
   modelos: {},
   max_por_rodada: 5,
   retomada: { ativa: false, dias_sem_resposta: 4 },
+  // Cadência (06/11, dono: 3 toques): abertura, retomada depois de 3 dias úteis e despedida depois de mais 4, só para quem não teve resposta de pessoa.
+  cadencia: { ativa: false, dias_uteis: [3, 4] },
   llm_url: 'https://openrouter.ai/api/v1/chat/completions',
   llm_modelo: 'anthropic/claude-sonnet-5.5',
   transcricao_modelo: 'google/gemini-2.5-flash',
@@ -34,6 +36,7 @@ function acqComCfg(cfg) {
   var c = Object.assign({}, ACQ_COM_PADRAO, (cfg && cfg.comercial) || {});
   c.modelos = c.modelos || {};
   c.retomada = Object.assign({}, ACQ_COM_PADRAO.retomada, c.retomada || {});
+  c.cadencia = Object.assign({}, ACQ_COM_PADRAO.cadencia, c.cadencia || {});
   return c;
 }
 
@@ -149,6 +152,27 @@ function acqComFatoObservado(item) {
 }
 
 // Texto do modelo com as variáveis, exatamente como o lead vai ler (é o que vai para a conversa).
+// Dias úteis (seg a sex, horário de São Paulo) entre dois instantes: quantos dias úteis completos já passaram.
+function acqComDiasUteis(deMs, ateMs) {
+  if (!isFinite(deMs) || !isFinite(ateMs) || ateMs <= deMs) return 0;
+  var dia = function (ms) { var d = new Date(ms - 3 * 3600000); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
+  var n = 0, d0 = dia(deMs), d1 = dia(ateMs);
+  for (var t = d0 + 86400000; t <= d1; t += 86400000) { var w = new Date(t).getUTCDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
+
+// A mensagem saiu de um modelo da Meta? Confere os trechos fixos do corpo (entre as variáveis), na ordem.
+function acqComEhModelo(texto, cfg) {
+  var c = acqComCfg(cfg), t = String(texto || '');
+  var corpos = Object.keys(c.modelos).map(function (k) { return c.modelos[k] && c.modelos[k].corpo; }).concat(c.modelos_historicos || []).filter(Boolean);
+  return corpos.some(function (corpo) {
+    var partes = String(corpo).split(/\{\{\d+\}\}/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 12; });
+    if (!partes.length) return false;
+    var pos = 0;
+    return partes.every(function (p) { var i = t.indexOf(p, pos); if (i < 0) return false; pos = i + p.length; return true; });
+  });
+}
+
 function acqComTextoDoModelo(modelo, params) {
   var corpo = String((modelo && modelo.corpo) || '');
   return corpo.replace(/\{\{(\d+)\}\}/g, function (_, n) { return params[Number(n) - 1] === undefined ? '' : params[Number(n) - 1]; });

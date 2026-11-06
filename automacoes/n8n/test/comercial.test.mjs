@@ -238,6 +238,34 @@ test('link do lead: acha, abre, lê a loja e vira fato no CRM', () => {
   assert.deepEqual(esc.filter((x) => x.ferramenta === 'aceleriq_comercial_registrar_fato').map((x) => x.argumentos.campo), ['site', 'presenca_digital']);
 });
 
+test('cadência de 3 toques: retomada em 3 dias úteis, despedida em mais 4, robô não conta, pessoa para tudo', () => {
+  const c = cfg('test', (e) => { e.comercial.cadencia = { ativa: true, dias_uteis: [3, 4] }; e.comercial.modelos.retomada.aprovado = true; e.comercial.modelos.despedida = { nome: 'x_despedida', aprovado: true, corpo: 'Oi, {{1}}! Última mensagem por aqui, prometo. Se em algum momento fizer sentido, é só me chamar aqui.' }; });
+  const C = L.acqComCfg(c);
+  assert.equal(L.acqComDiasUteis(Date.parse('2026-11-06T15:00:00Z'), Date.parse('2026-11-11T15:00:00Z')), 3, 'sex → qua: seg, ter, qua');
+  const abertura = L.acqComTextoDoModelo(C.modelos.primeiro_contato, ['pessoal', 'Clínica X', 'o rodapé do site ainda mostra 2020']);
+  assert.equal(L.acqComEhModelo(abertura, c), true); assert.equal(L.acqComEhModelo('Rafael aqui, com quem eu falo?', c), false);
+  const fila = (msgs, q) => ({ config: { ativo: true, horario: '09:00 a 18:00', restam_hoje: 10 }, itens: [{ lead_id: LEADS.pronto, nome: 'Clínica X', whatsapp: '5541999990000', etapa: 'contato', primeiro_contato_feito: true, qualificacao: q || {}, mensagens: msgs, fatos: [] }] });
+  const s1 = { direcao: 'saida', texto: abertura, enviada_em: '2026-11-02T13:00:00Z' };
+  const qua = Date.parse('2026-11-04T13:00:00Z'), qui = Date.parse('2026-11-05T13:00:00Z');
+  assert.equal(L.acq06Candidatos(fila([s1]), c, qua).candidatos.length, 0, 'só 2 dias úteis');
+  const r2 = L.acq06Candidatos(fila([s1]), c, qui).candidatos[0];
+  assert.equal(r2.tipo, 'retomada'); assert.deepEqual(r2.params, ['pessoal']);
+  const robo = { direcao: 'entrada', texto: 'Olá! Em instantes um profissional irá te atender.', enviada_em: '2026-11-02T13:01:00Z' };
+  assert.equal(L.acq06Candidatos(fila([s1, robo], { so_robo: true }), c, qui).candidatos[0].tipo, 'retomada', 'robô não conta como resposta');
+  assert.equal(L.acq06Candidatos(fila([s1, robo]), c, qui).candidatos.length, 0, 'resposta sem marca de robô é pessoa: para');
+  const s2 = { direcao: 'saida', texto: L.acqComTextoDoModelo(C.modelos.retomada, ['pessoal']), enviada_em: '2026-11-05T13:00:00Z' };
+  assert.equal(L.acq06Candidatos(fila([s1, s2]), c, Date.parse('2026-11-10T13:00:00Z')).candidatos.length, 0, 'só 3 dias úteis depois do toque 2');
+  assert.equal(L.acq06Candidatos(fila([s1, s2]), c, Date.parse('2026-11-11T13:00:00Z')).candidatos[0].tipo, 'despedida');
+  const s3 = { direcao: 'saida', texto: L.acqComTextoDoModelo(C.modelos.despedida, ['pessoal']), enviada_em: '2026-11-11T13:00:00Z' };
+  assert.equal(L.acq06Candidatos(fila([s1, s2, s3]), c, Date.parse('2026-11-30T13:00:00Z')).candidatos.length, 0, 'três toques e acabou');
+  const semDesp = cfg('test', (e) => { e.comercial.cadencia = { ativa: true, dias_uteis: [3, 4] }; e.comercial.modelos.retomada.aprovado = true; });
+  assert.deepEqual(L.acq06Candidatos(fila([s1, s2]), semDesp, Date.parse('2026-11-11T13:00:00Z')).ignorados.map((x) => x.motivo), ['modelo_nao_aprovado:despedida']);
+  const esc = L.acq07PedidosEscrita({ mensagem: { wamid: 'w', em: '2026-11-02T13:01:00Z' }, lead: { lead_id: LEADS.pronto, qualificacao: {}, mensagens: [] }, decisao: { motivos: [] }, julgamento: { remetente: 'resposta_automatica' } }, null, null, c, Date.now());
+  assert.deepEqual(esc.map((x) => x.argumentos.qualificacao), [{ so_robo: true }]);
+  const esc2 = L.acq07PedidosEscrita({ mensagem: { wamid: 'w2', em: '2026-11-02T14:00:00Z' }, lead: { lead_id: LEADS.pronto, qualificacao: { so_robo: true }, mensagens: [] }, decisao: { motivos: [] }, julgamento: { remetente: 'humano' } }, null, null, c, Date.now());
+  assert.deepEqual(esc2.map((x) => x.argumentos.qualificacao), [{ so_robo: false }]);
+});
+
 test('motor de referências: o Jev escolhe as provas do lead e elas entram no texto', () => {
   const c = cfg('test');
   const provas = [

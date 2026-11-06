@@ -633,6 +633,15 @@ function acq07PedidosEscrita(it, estadoEnvio, meta, cfg, agoraMs) {
     out.push({ ref: 'parar|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_update_opportunity',
       argumentos: { opportunity_id: lead.lead_id, qualificacao: { nao_contatar: 'sim', nao_contatar_motivo: ('Pediu para parar no WhatsApp em ' + m.em.slice(0, 10) + ' (' + (d.motivos[0] || '') + ').').slice(0, 600) } } });
   }
+  // Cadência (06/11): robô de atendimento não conta como resposta. Marca e desmarca qualificacao.so_robo.
+  var rem = it.julgamento && it.julgamento.remetente, qual = lead.qualificacao || {};
+  if (rem && !/^simulado/.test(String(lead.lead_id))) {
+    // Robô só marca se ninguém foi visto antes; pessoa sempre desmarca (e uma pessoa vista não volta a ser robô).
+    var soRobo = rem !== 'humano';
+    if (soRobo ? qual.so_robo === undefined : qual.so_robo === true) {
+      out.push({ ref: 'so-robo|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_update_opportunity', argumentos: { opportunity_id: lead.lead_id, qualificacao: { so_robo: soRobo } } });
+    }
+  }
   // O que foi lido no link vira ficha no CRM: o site (o lead mandou) e o retrato da página.
   var pg = it.pagina;
   if (pg && pg.ok && !/^simulado/.test(String(lead.lead_id))) {
