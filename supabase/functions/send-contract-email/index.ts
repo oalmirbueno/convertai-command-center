@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
       <div style="font-size:12px;color:#6b6b6b;margin:0 0 8px;">
         <a href="${PORTAL_URL}" style="color:#0D0D0D;text-decoration:none;">${PORTAL_HOST}</a>
         ·
-        <a href="mailto:contato@aceleriq.com.br" style="color:#0D0D0D;text-decoration:none;">contato@aceleriq.com.br</a>
+        <a href="mailto:contato@aceleriq.com" style="color:#0D0D0D;text-decoration:none;">contato@aceleriq.com</a>
       </div>
       <div style="font-size:11px;color:#9a9a9a;margin:8px 0 0;">
         © ${year} AcelerIQ. Todos os direitos reservados.
