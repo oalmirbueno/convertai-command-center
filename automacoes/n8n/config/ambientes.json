@@ -194,18 +194,30 @@
         "waba_id": "2522709858221533",
         "modelos": {
           "primeiro_contato": {
-            "nome": "aceleriq_contato_rafael",
+            "nome": "aceleriq_primeiro_contato_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
-            "aprovado": false,
-            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Rafael, da Aceleriq. Dei uma olhada na {{2}} na internet e reparei que {{3}}. A gente faz um diagnóstico gratuito da presença online, mostrando o que dá para melhorar para atrair mais clientes. Quer que eu prepare o de vocês?"
+            "aprovado": true,
+            "corpo": "Oi, {{1}}, tudo bem? Aqui é o Rafael, executivo de negócios da Aceleriq, de marketing e tecnologia. Olhei a presença da {{2}} na internet e reparei que {{3}}. Fazemos um diagnóstico gratuito do site e da presença online, mostrando o que pode melhorar para atrair mais clientes. Posso preparar o de vocês?",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ],
+            "proximo_sem_botoes": "aceleriq_contato_rafael (em análise na Meta desde 05/11)"
           },
           "retomada": {
-            "nome": "aceleriq_retomada_rafael",
+            "nome": "aceleriq_retomada_executivo",
             "idioma": "pt_BR",
             "categoria": "MARKETING",
-            "aprovado": false,
-            "corpo": "Oi, {{1}}! Rafael da Aceleriq de novo. Ainda faz sentido aquele diagnóstico gratuito da presença online de vocês? Se agora não for o momento, sem problema, é só me falar."
+            "aprovado": true,
+            "corpo": "Oi, {{1}}! Aqui é o Rafael, da Aceleriq. Falei com vocês há alguns dias sobre o diagnóstico gratuito do site e da presença online. Ainda faz sentido para vocês? Se não for o momento, tudo bem, é só me avisar.",
+            "rodape": "Para não receber mais, toque em Não tenho interesse.",
+            "botoes": [
+              "Quero o diagnóstico",
+              "Não tenho interesse"
+            ],
+            "proximo_sem_botoes": "aceleriq_retomada_rafael (em análise na Meta desde 05/11)"
           },
           "repasse_equipe": {
             "nome": "aceleriq_repasse_equipe",

@@ -17,6 +17,13 @@ if (!AMBIENTES.ambientes[AMBIENTE]) throw new Error('ambiente desconhecido ' + A
 if (arg('mcp-url', null)) AMBIENTES.ambientes[AMBIENTE].mcp_url = arg('mcp-url');
 if (arg('jev-url', null)) AMBIENTES.ambientes[AMBIENTE].jev_url = arg('jev-url');
 // Teste real: liga só o ACQ-07 e só para este número. O config do repositório continua travado.
+// Ao vivo (06/11, dono: "modo real, vamos ganhar cliente"): liga os fluxos pedidos para todos. O repositório continua travado.
+const ESCRITAS_DO_COMERCIAL = ['aceleriq_comercial_registrar_mensagem', 'aceleriq_comercial_avisar_caixa', 'aceleriq_update_opportunity', 'aceleriq_comercial_entrada_nova', 'aceleriq_comercial_cobrar', 'aceleriq_comercial_marcar_reuniao', 'aceleriq_comercial_registrar_fato'];
+if (arg('ao-vivo', null)) {
+  const e = AMBIENTES.ambientes[AMBIENTE];
+  for (const w of arg('ao-vivo').split(',')) e.dry_run_por_workflow[w.trim()] = false;
+  e.escritas_liberadas = e.escritas_liberadas.concat(ESCRITAS_DO_COMERCIAL.filter((t) => !e.escritas_liberadas.includes(t)));
+}
 if (arg('teste-real', null)) {
   const e = AMBIENTES.ambientes[AMBIENTE];
   e.dry_run_por_workflow['ACQ-07'] = false;
