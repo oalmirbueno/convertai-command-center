@@ -1098,7 +1098,7 @@ const lead = (fila ? acq07AcharLead(ctx.m, fila) : null) || acq07LeadDoResultado
 const regs = $('Gravar entradas no painel').all().map((i) => i.json);
 const reg = regs.filter((r) => String(r.ref || '').indexOf('entrada|' + ctx.m.wamid) === 0)[0];
 return [{ json: { mensagem: ctx.m, lead: lead, registro_entrada: reg && reg.ferramenta !== 'nenhuma' ? { ok: reg.ok === true, simulado: reg.simulado === true, resultado: reg.resultado || null, erro: reg.erro || null } : null,
-  jev: acq07PedidoJev(ctx.m, lead), jev_url: CFG.jev_url } }];`);
+  jev: acq07PedidoJev(ctx.m, lead, fila && fila.config ? fila.config.provas : []), jev_url: CFG.jev_url } }];`);
   const jv = wf.no('Classificar com Jev', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.jev_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
     sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.jev) }}',
@@ -1112,6 +1112,7 @@ const fila = f.ok ? f.resultado : null;
 const julg = acq07LerJev($input.first().json);
 const reg = b.registro_entrada && b.registro_entrada.ok && !b.registro_entrada.simulado ? b.registro_entrada.resultado : null;
 const d = acq07Decidir(b.mensagem, b.lead, reg, julg, fila, CFG, ctx.agoraMs, acqComOrcamento($('Contar envios do mês').first().json, CFG));
+d.provas = acq07ProvasEscolhidas($input.first().json, fila && fila.config ? fila.config.provas : []);
 return [{ json: { mensagem: b.mensagem, lead: b.lead, registro_entrada: b.registro_entrada, julgamento: julg, decisao: d, agora: new Date(ctx.agoraMs).toISOString(), ate: new Date(ctx.agoraMs + 21 * 86400000).toISOString(), google_url: acqComCfg(CFG).google_url, google_id: acqComCfg(CFG).google_agenda_id } }];`);
   const qr = se(wf, 'Mercúrio responde?', '={{ $json.decisao.responder === true }}');
   const ag = se(wf, 'Precisa de agenda?', '={{ $json.decisao.agenda === true }}');
@@ -1159,7 +1160,7 @@ const ctx = $('Preparar rodada').first().json._ctx;
 const f = $('Ler fila do Mercúrio').first().json;
 const conf = f.ok && f.resultado && f.resultado.config ? f.resultado.config : {};
 const b = $('Ler página').first().json;
-const resp = acq07LerLLM($input.first().json, CFG, (conf.orientacoes || '') + '\\n' + (b.pagina && b.pagina.ok ? b.pagina.texto + ' ' + b.pagina.precos.join(' ') + ' ' + b.pagina.url : ''), { mensagens: ((b.lead && b.lead.mensagens) || []).concat([{ direcao: 'entrada', texto: b.mensagem.texto }]) });
+const resp = acq07LerLLM($input.first().json, CFG, (conf.orientacoes || '') + '\\n' + (b.pagina && b.pagina.ok ? b.pagina.texto + ' ' + b.pagina.precos.join(' ') + ' ' + b.pagina.url : '') + '\\n' + ((b.decisao && b.decisao.provas) || []).map((p) => p.texto + ' ' + p.link).join('\\n'), { mensagens: ((b.lead && b.lead.mensagens) || []).concat([{ direcao: 'entrada', texto: b.mensagem.texto }]) });
 const it = Object.assign({}, b, { llm: null, resposta: resp });
 const p = acq07PedidoCobranca(it, CFG) || acq07PedidoReuniao(it, CFG, b.horarios);
 return [{ json: pedido(p || { ref: 'cobranca|' + b.mensagem.wamid, ferramenta: 'nenhuma', argumentos: {} }, ctx.run_id, { _it: it }) }];`);

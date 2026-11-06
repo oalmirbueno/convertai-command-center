@@ -43,7 +43,7 @@ test('modo seguro: ACQ-06/07 nascem em dry-run em todos os ambientes, mesmo com 
 test('transporte só liga com phone_number_id e modelo aprovado', () => {
   const base = (m) => cfg('production', (a) => { a.dry_run_por_workflow['ACQ-06'] = false; m && m(a.comercial); });
   assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = null; }), 'ACQ-06', 'primeiro_contato').motivo, 'falta_phone_number_id');
-  assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; }), 'ACQ-06', 'primeiro_contato').motivo, 'modelo_nao_aprovado:primeiro_contato');
+  assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; c.modelos.primeiro_contato.aprovado = false; }), 'ACQ-06', 'primeiro_contato').motivo, 'modelo_nao_aprovado:primeiro_contato');
   assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; c.modelos.primeiro_contato.aprovado = true; }), 'ACQ-06', 'primeiro_contato').decisao, 'enviar');
   assert.equal(L.acqComTransporte(base((c) => { c.phone_number_id = '123'; }), 'ACQ-06', null).decisao, 'enviar', 'texto livre não depende de modelo');
 });
@@ -236,6 +236,29 @@ test('link do lead: acha, abre, lê a loja e vira fato no CRM', () => {
   assert.equal(L.acq07LerLLM(r('Olha https://golpe.exemplo.com'), c, fonte, lead).motivo, 'link_fora_das_orientacoes');
   const esc = L.acq07PedidosEscrita({ mensagem: depois, lead: lead, decisao: { motivos: [] }, pagina: p }, 'aceita', { wamids: [] }, c, Date.parse(m.em));
   assert.deepEqual(esc.filter((x) => x.ferramenta === 'aceleriq_comercial_registrar_fato').map((x) => x.argumentos.campo), ['site', 'presenca_digital']);
+});
+
+test('motor de referências: o Jev escolhe as provas do lead e elas entram no texto', () => {
+  const c = cfg('test');
+  const provas = [
+    { id: 'a', titulo: 'Ajenda: da mensagem solta ao horário acompanhado', texto: 'O cliente agenda pelo link sem aplicativo.', empresa: 'Ajenda', link: 'https://aceleriq.com/portfolio/cases/ajenda-processos', nicho: 'salão, barbearia, pilates' },
+    { id: 'b', titulo: 'Stop Info: três entradas', texto: 'Três portais de entrada.', empresa: 'Stop Info', link: 'https://aceleriq.com/portfolio/cases/stop-info', nicho: 'assistência técnica, loja' },
+    { id: 'c', titulo: 'ACERBI: presença local', texto: 'O perfil chegou a 500 seguidores.', empresa: 'ACERBI', link: 'https://aceleriq.com/portfolio/cases/acerbi', nicho: 'associação' },
+  ];
+  const m = { wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto: 'tem algum cliente parecido comigo?' };
+  const pj = L.acq07PedidoJev(m, { mensagens: [{ direcao: 'entrada', texto: 'tenho um studio de pilates' }] }, provas);
+  assert.deepEqual(Object.keys(pj.questions.prova.criteria), ['nenhuma', 'p1', 'p2', 'p3']);
+  assert.match(pj.questions.prova.criteria.p1, /serve para: salão, barbearia, pilates/);
+  assert.equal(L.acq07PedidoJev(m, { mensagens: [] }, []).questions.prova, undefined, 'sem provas, sem pergunta');
+  const jev = { answers: { prova: { choice: 'p1', probabilities: { p1: 0.6, p3: 0.25, p2: 0.1, nenhuma: 0.05 } } } };
+  assert.deepEqual(L.acq07ProvasEscolhidas(jev, provas).map((p) => p.id), ['a', 'c']);
+  assert.deepEqual(L.acq07ProvasEscolhidas({ answers: { prova: { choice: 'nenhuma', probabilities: { nenhuma: 0.9, p1: 0.1 } } } }, provas), []);
+  const fila = { config: { ativo: true, orientacoes: 'Start R$ 847' }, itens: [] };
+  const pedido = L.acq07PedidoLLM(m, { nome: 'Ana', etapa: 'contato', qualificacao: {}, mensagens: [] }, { etapa: 'tratar_objecao', faltam: [], provas: L.acq07ProvasEscolhidas(jev, provas) }, fila, c, []);
+  assert.match(pedido.messages[0].content, /REFERÊNCIAS QUE COMBINAM/); assert.match(pedido.messages[0].content, /ajenda-processos/);
+  const r = (t) => ({ choices: [{ message: { content: JSON.stringify({ mensagens: [t] }) } }] });
+  const fonte = 'Start R$ 847\n' + provas.map((p) => p.texto + ' ' + p.link).join('\n');
+  assert.equal(L.acq07LerLLM(r('Olha esse caso: https://aceleriq.com/portfolio/cases/ajenda-processos'), c, fonte, { mensagens: [] }).ok, true);
 });
 
 test('botão do nosso modelo é pessoa e o texto nunca ecoa o lead', () => {

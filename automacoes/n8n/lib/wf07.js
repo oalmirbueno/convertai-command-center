@@ -162,11 +162,11 @@ function acq07PedidoEntrada(m, lead) {
 }
 
 // Uma chamada ao Jev por lote: quem escreveu, intenção, etapa da venda, objeção e plano. Perguntas independentes sobre o mesmo estado.
-function acq07PedidoJev(m, lead) {
+function acq07PedidoJev(m, lead, provas) {
   var conversa = ((lead && lead.mensagens) || []).slice(-14).map(function (x) {
     return { quem: x.direcao === 'saida' ? 'aceleriq' : 'lead', texto: String(x.texto || '').slice(0, 600) };
   });
-  return {
+  var pedido = {
     model: 'jev-latest',
     state: {
       contexto: 'Conversa de venda pelo WhatsApp entre o executivo de negócios da Aceleriq (empresa de marketing e tecnologia, com planos mensais e diagnóstico gratuito) e uma empresa. Pode ser prospecção ativa ou alguém que chamou por um anúncio.',
@@ -231,6 +231,31 @@ function acq07PedidoJev(m, lead) {
       quer_google: { type: 'noul', instructions: 'Considerando `conversa_anterior` e `ultima_mensagem`, o lead pediu o Perfil Google junto com um plano mensal?' },
     },
   };
+  // Motor de referências (06/11, dono): o Jev escolhe, entre as provas autorizadas, as que mais combinam com o negócio do lead.
+  var criterios = acq07CriteriosDasProvas(provas);
+  if (criterios) pedido.questions.prova = { type: 'choice', instructions: 'Pelo que `conversa_anterior` e `ultima_mensagem` mostram do negócio do lead (ramo, porte, problema, momento), qual destes trabalhos da Aceleriq seria a referência mais parecida e convincente para ele?', criteria: criterios };
+  return pedido;
+}
+
+// Provas viram opções do Jev: p1..pN mais "nenhuma". Máximo de 20 para a pergunta ficar leve.
+function acq07CriteriosDasProvas(provas) {
+  var lista = (provas || []).filter(function (p) { return p && p.titulo; }).slice(0, 20);
+  if (!lista.length) return null;
+  var c = { nenhuma: 'Ainda não dá para saber o negócio do lead, ou nenhum destes trabalhos tem relação com ele.' };
+  lista.forEach(function (p, i) { c['p' + (i + 1)] = (p.titulo + (p.nicho ? ' (serve para: ' + p.nicho + ')' : '')).slice(0, 220); });
+  return c;
+}
+
+// As duas provas mais prováveis segundo o Jev (sem "nenhuma" e com chance mínima).
+function acq07ProvasEscolhidas(resposta, provas) {
+  var a = resposta && resposta.answers && resposta.answers.prova;
+  var lista = (provas || []).filter(function (p) { return p && p.titulo; }).slice(0, 20);
+  if (!a || !lista.length) return [];
+  var prob = a.probabilities || {};
+  if (!Object.keys(prob).length && a.choice) prob[a.choice] = 1;
+  return Object.keys(prob).filter(function (k) { return /^p\d+$/.test(k) && prob[k] >= 0.15; })
+    .sort(function (x, y) { return prob[y] - prob[x]; }).slice(0, 2)
+    .map(function (k) { return lista[Number(k.slice(1)) - 1]; }).filter(Boolean);
 }
 
 function acq07LerJev(resposta) {
@@ -439,6 +464,13 @@ function acq07BlocoDaPagina(p) {
     'Texto da página (início): ' + p.texto.slice(0, 1800)].filter(Boolean).join('\n');
 }
 
+// As provas escolhidas no prompt: só o que está cadastrado e autorizado; nada de número inventado.
+function acq07BlocoDasProvas(provas) {
+  if (!provas || !provas.length) return '';
+  return ['REFERÊNCIAS QUE COMBINAM COM ESTE LEAD (trabalhos reais da Aceleriq, autorizados; use quando a pessoa pedir referência, exemplo ou prova, duvidar, ou para dar segurança antes do preço; cite com as palavras daqui, sem aumentar, e pode mandar o link):']
+    .concat(provas.map(function (p) { return '- ' + p.titulo + (p.empresa ? ' [' + p.empresa + ']' : '') + ': ' + p.texto + (p.link ? ' Link: ' + p.link : ''); })).join('\n');
+}
+
 // Pedido ao modelo de linguagem (OpenRouter, formato chat completions). A etapa vem do Jev; o texto, daqui.
 function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios, pagina) {
   var c = acqComCfg(cfg);
@@ -480,6 +512,7 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios, pagina) {
     fatos.length ? 'Fatos confirmados: ' + fatos.join('; ') : '',
     'Quando a pessoa manda link de site ou loja, o sistema abre a página e te mostra o que viu. Nunca diga que não consegue abrir link, ver site ou acessar a internet; se não houver bloco do que você viu, comente só o que a conversa já disse.',
     acq07BlocoDaPagina(pagina),
+    acq07BlocoDasProvas(decisao.provas),
     '',
     'Responda só em JSON, sem texto fora dele: {"mensagens":["..."],"nome_cobranca":null,"horario_escolhido":null,"plano_combinado":null,"com_desconto":false,"resumo_para_almir":"contexto para o Almir entrar e fechar, em até 4 frases: negócio, dor, objeções, plano indicado, o que já foi combinado e como fechar"}',
   ].filter(function (x) { return x !== ''; }).join('\n');
