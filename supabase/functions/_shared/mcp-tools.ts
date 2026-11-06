@@ -4830,7 +4830,7 @@ const comercialCobrarTool = ferramentaDoCrm(
 const comercialHorariosTool = ferramentaDoCrm(
   'aceleriq_comercial_horarios', 'Horarios livres para reuniao com o Almir',
   'Devolve os proximos horarios livres: uma reuniao por dia, terca e quinta as 11h ou 16h, quarta as 11h. Mande em ocupados o que estiver no Google Agenda.',
-  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: z.number().int().min(1).max(6).optional() }).strict(),
+  false, z.object({ ocupados: z.array(z.object({ inicio: z.string(), fim: z.string() }).strict()).max(200).optional(), maximo: limite(6) }).strict(),
   { type: 'object', properties: { ocupados: { type: 'array', items: { type: 'object', properties: { inicio: { type: 'string' }, fim: { type: 'string' } }, required: ['inicio', 'fim'], additionalProperties: false } }, maximo: { type: 'number' } }, additionalProperties: false },
   comercialHorarios,
 );
@@ -4854,7 +4854,7 @@ const comercialFalarTool = ferramentaDoCrm(
 const comercialRepassesTool = ferramentaDoCrm(
   'aceleriq_comercial_repasses', 'Repasses da Caixa ainda nao avisados no WhatsApp',
   'Lista os itens novos da Caixa que ainda nao foram avisados no WhatsApp da Aceleriq, com o lead e o contexto.',
-  false, z.object({ limit: z.number().int().min(1).max(30).optional() }).strict(),
+  false, z.object({ limit: limite(30) }).strict(),
   { type: 'object', properties: { limit: { type: 'number' } }, additionalProperties: false },
   comercialRepasses,
 );

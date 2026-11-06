@@ -297,10 +297,10 @@ function CobrancasDoMercurio() {
   if (!lista.length) return null;
   return (
     <section className="min-w-0 space-y-1 border-b border-border pb-3" aria-label="Cobranças do Mercúrio">
-      <h3 className="text-sm font-medium">Pix do Mercúrio</h3>
+      <h3 className="text-[13px] font-medium">Pix do Mercúrio</h3>
       <ul className="min-w-0">
         {lista.map((c) => (
-          <li key={c.id} className="flex min-w-0 flex-wrap items-baseline gap-x-3 py-1 text-sm">
+          <li key={c.id} className="flex min-w-0 flex-wrap items-baseline gap-x-3 py-1 text-[13px]">
             <span className="min-w-0 truncate font-medium">{c.lead?.company || c.lead?.name || c.nome}</span>
             <span className="text-muted-foreground">{c.plano_nome}</span>
             <span className="tabular-nums">{Number(c.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>

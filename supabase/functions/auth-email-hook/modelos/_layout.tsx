@@ -13,7 +13,7 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-import { EMAIL_APP_URL, EMAIL_LOGO_URL } from '../email-config.ts'
+import { EMAIL_APP_URL, EMAIL_LOGO_URL } from '../../_shared/email-config.ts'
 
 interface EmailLayoutProps {
   preview: string

@@ -41,7 +41,7 @@ import {
   type JsonRpcResponse,
 } from "./modulos/mcp-response.ts";
 import { getMcpRuntimeConfig } from "../_shared/mcp-runtime.ts";
-import { decidirGet, descobertaDoMcp } from "../_shared/mcp-descoberta.ts";
+import { decidirGet, descobertaDoMcp } from "./modulos/mcp-descoberta.ts";
 import { bridgeStatusPublic } from "../_shared/second-brain-github.ts";
 import { executarFerramenta, resultadoDeErro, segundoPlanoPadrao } from "./modulos/executar-ferramenta.ts";
 import { anexarAviso, depoisDaAutoria, prepararAutoria } from "./modulos/autoria.ts";
@@ -383,7 +383,7 @@ Deno.serve(async (req) => {
     return jsonResponse(rpcError(null, RpcErrors.invalidRequest, "Unsupported MCP-Protocol-Version"), 400);
   }
 
-  // GET, três respostas (ver _shared/mcp-descoberta.ts):
+  // GET, três respostas (ver modulos/mcp-descoberta.ts):
   // - sem Authorization → OAuth challenge (RFC 9728). Precisa ser 401 com
   //   WWW-Authenticate para que clientes como ChatGPT Work descubram o
   //   Protected Resource Metadata. Um 200 com o mesmo header é ignorado pelo

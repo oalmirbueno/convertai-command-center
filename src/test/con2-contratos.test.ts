@@ -221,7 +221,8 @@ describe("CON2: cláusulas extras que o dono liga ou desliga", () => {
   });
 
   it("o seed da migration tem o mesmo texto do arquivo (fonte única)", () => {
-    const sql = ler("supabase/migrations/20260930195200_contratos_extras_e_aditivo_v1.sql");
+    // No Windows (core.autocrlf) o SQL chega com CRLF; o texto multilinha é o mesmo.
+    const sql = ler("supabase/migrations/20260930195200_contratos_extras_e_aditivo_v1.sql").replace(/\r\n/g, "\n");
     for (const m of MODELOS_EXTRAS_V1) {
       expect(sql).toContain(`'${m.chave}'`);
       for (const c of m.clausulas) expect(sql, `${m.chave}:${c.chave}`).toContain(`'${c.texto.replace(/'/g, "''")}'`);

@@ -225,12 +225,19 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_comercial_avisar_caixa',
     'aceleriq_comercial_bolso_liberar',
     'aceleriq_comercial_bolso_pedir',
+    'aceleriq_comercial_cobrar',
+    'aceleriq_comercial_entrada_nova',
+    'aceleriq_comercial_falar',
     'aceleriq_comercial_fila',
+    'aceleriq_comercial_horarios',
     'aceleriq_comercial_maquina_buscar',
     'aceleriq_comercial_maquina_candidatos',
+    'aceleriq_comercial_marcar_reuniao',
     'aceleriq_comercial_pedir_proposta',
     'aceleriq_comercial_registrar_fato',
     'aceleriq_comercial_registrar_mensagem',
+    'aceleriq_comercial_repasse_marcar',
+    'aceleriq_comercial_repasses',
     'aceleriq_complete_commercial_activity',
     'aceleriq_complete_task',
     'aceleriq_create_commercial_activity',
@@ -1260,7 +1267,7 @@ Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (J
 });
 
 Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a descoberta publica', async () => {
-  const { decidirGet, descobertaDoMcp, getPedeStream } = await import('../_shared/mcp-descoberta.ts');
+  const { decidirGet, descobertaDoMcp, getPedeStream } = await import('./modulos/mcp-descoberta.ts');
   assertEquals(decidirGet({ authorization: null, accept: '*/*' }), 'desafio_oauth');
   assertEquals(decidirGet({ authorization: 'Bearer x', accept: 'text/event-stream' }), 'sem_stream');
   assertEquals(decidirGet({ authorization: 'Bearer x', accept: 'application/json, text/event-stream' }), 'sem_stream');

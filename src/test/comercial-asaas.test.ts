@@ -7,7 +7,7 @@ import {
   planoPorId,
   valorDoFechamento,
 } from "../../supabase/functions/_shared/comercial-asaas";
-import { textoFalado } from "../../supabase/functions/_shared/comercial-voz";
+import { textoFalado } from "../../supabase/functions/mcp-server/modulos/comercial-voz";
 
 const resp = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status });
 

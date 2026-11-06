@@ -22,6 +22,9 @@ vi.mock("@/components/central/agenteCentralApi", () => ({
   salvarEPublicarRitual: mock.publicar,
   reescreverRitual: mock.reescrever,
   criarTarefaDoRitual: vi.fn(),
+  // Sincronia da rodada entre aparelhos (945e5c9b): servidor sem rodada guardada.
+  lerRodadaDoServidor: vi.fn(async () => null),
+  gravarRodadaNoServidor: vi.fn(async () => true),
 }));
 
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
