@@ -13,13 +13,14 @@ export interface PlanoDeFechamento {
 }
 
 /** Tabela do treino do Mercúrio (seção 3). O Start é o valor da frase de preço que o lead ouve: R$ 847 por mês (dono, a confirmar). */
+/** Não existe entrada: o primeiro Pix é a primeira mensalidade, paga adiantada (dono, 06/11). `entrada` fica só para o avulso. */
 export const PLANOS_DE_FECHAMENTO: PlanoDeFechamento[] = [
-  { id: "start_assistido", nome: "Start Assistido", mensal: 847, entrada: 397, meses: 3 },
-  { id: "essencial", nome: "Essencial", mensal: 1297, entrada: 497, meses: 6 },
-  { id: "presenca", nome: "Presença", mensal: 1997, entrada: 797, meses: 6 },
-  { id: "crescimento", nome: "Crescimento", mensal: 2997, entrada: 997, meses: 6 },
-  { id: "estrutura", nome: "Estrutura", mensal: 4497, entrada: 1497, meses: 12 },
-  { id: "engenharia", nome: "Engenharia / OS", mensal: 6997, entrada: 2497, meses: 12 },
+  { id: "start_assistido", nome: "Start Assistido", mensal: 847, entrada: 0, meses: 3 },
+  { id: "essencial", nome: "Essencial", mensal: 1297, entrada: 0, meses: 6 },
+  { id: "presenca", nome: "Presença", mensal: 1997, entrada: 0, meses: 6 },
+  { id: "crescimento", nome: "Crescimento", mensal: 2997, entrada: 0, meses: 6 },
+  { id: "estrutura", nome: "Estrutura", mensal: 4497, entrada: 0, meses: 12 },
+  { id: "engenharia", nome: "Engenharia / OS", mensal: 6997, entrada: 0, meses: 12 },
   { id: "google_avulso", nome: "Perfil Google", mensal: 0, entrada: 297, meses: 0 },
 ];
 
@@ -28,11 +29,11 @@ export const ADICIONAL_GOOGLE = { id: "google", nome: "Perfil Google", valor: 29
 
 export const planoPorId = (id: unknown) => PLANOS_DE_FECHAMENTO.find((p) => p.id === id) || null;
 
-/** Até 15% na mensalidade dos 3 primeiros meses, para quem fecha pelo menos 3 meses (dono, 05/11). A entrada não muda. */
+/** Até 15% na mensalidade dos 3 primeiros meses, para quem fecha pelo menos 3 meses (dono, 05/11). */
 export const DESCONTO_PRIMEIROS_MESES = 0.15;
 export const mensalComDesconto = (p: PlanoDeFechamento) => Math.round(p.mensal * (1 - DESCONTO_PRIMEIROS_MESES) * 100) / 100;
 
-/** O primeiro Pix: entrada, primeira mensalidade (com ou sem desconto) e o adicional, quando vier junto. */
+/** O primeiro Pix: primeira mensalidade adiantada (com ou sem desconto) e o adicional, quando vier junto. */
 export const valorDoFechamento = (p: PlanoDeFechamento, comGoogle = false, comDesconto = false) =>
   Math.round((p.entrada + (comDesconto && p.mensal > 0 ? mensalComDesconto(p) : p.mensal) + (comGoogle && p.mensal > 0 ? ADICIONAL_GOOGLE.valor : 0)) * 100) / 100;
 
