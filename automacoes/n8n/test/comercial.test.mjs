@@ -206,6 +206,38 @@ test('Plano Começo: fecha com o Almir, sem Pix', () => {
   assert.equal(d.cobrar, false); assert.equal(d.caixa, true); assert.equal(d.etapa, 'passar_humano'); assert.deepEqual(d.faltam, []);
 });
 
+test('link do lead: acha, abre, lê a loja e vira fato no CRM', () => {
+  const c = cfg('test');
+  assert.deepEqual(L.acq07LinksDoTexto('Somos drop https://Gatum.com.br, me chama em contato@gatum.com.br ou instagram.com/gatum').map((l) => [l.host, l.rede_social]), [['gatum.com.br', false], ['instagram.com', true]]);
+  assert.equal(L.acq07LinksDoTexto('vê loja.exemplo.com.br/produtos.')[0].url, 'https://loja.exemplo.com.br/produtos');
+  const m = { wamid: 'w1', de: '554198848435', em: '2026-11-06T14:48:00Z', texto: 'Somos drop https://Gatum.com.br' };
+  assert.equal(L.acq07LinkParaAbrir(m, { mensagens: [], fatos: [] }).host, 'gatum.com.br');
+  const depois = { wamid: 'w2', de: m.de, em: m.em, texto: 'Você conseguiu analisar a loja?' };
+  const lead = { lead_id: '40bcf663-9e4c-4b46-9cbf-c8f9efe855a4', mensagens: [{ direcao: 'entrada', texto: m.texto }], fatos: [] };
+  assert.equal(L.acq07LinkParaAbrir(depois, lead).host, 'gatum.com.br', 'link de antes ainda não lido');
+  assert.equal(L.acq07LinkParaAbrir(depois, Object.assign({}, lead, { fatos: [{ campo: 'site', valor: 'https://gatum.com.br' }] })), null, 'já lido não abre de novo');
+  const html = '<html><head><title>GATUM | Tudo para gatos</title><meta name="description" content="Loja para gatos"><script src="https://cdn.shopify.com/x.js"></script></head><body>'
+    + '<a href="/products/arranhador-torre">Arranhador Torre</a><span>R$ 129,90</span><a href="/products/fonte-agua">Fonte de Água</a><span>R$ 89,90</span>'
+    + '<p>Pague com Pix ou cartão em até 6x. Frete grátis acima de R$ 199,00. Checkout seguro Yampi.</p><a href="https://instagram.com/gatum.br">ig</a></body></html>';
+  const p = L.acq07LerPagina({ statusCode: 200, body: html }, { url: 'https://gatum.com.br', host: 'gatum.com.br' });
+  assert.equal(p.ok, true); assert.deepEqual(p.plataforma, ['Shopify']); assert.deepEqual(p.checkout, ['Yampi']);
+  assert.deepEqual(p.produtos, ['Arranhador Torre', 'Fonte de Água']); assert.ok(p.precos.includes('R$ 129,90'));
+  assert.ok(p.pagamento.includes('Pix') && p.frete.includes('frete grátis')); assert.ok(p.contato.includes('Instagram @gatum.br'));
+  assert.ok(p.resumo.length <= 600 && /Shopify/.test(p.resumo));
+  assert.equal(L.acq07LerPagina({ error: { message: 'timeout' } }, { url: 'https://x.com.br', host: 'x.com.br' }).ok, false);
+  assert.equal(L.acq07LerPagina({}, null), null);
+  const fila = { config: { ativo: true, orientacoes: 'Start R$ 847' }, itens: [] };
+  const pedido = L.acq07PedidoLLM(depois, Object.assign({ nome: 'Almir', etapa: 'contato', qualificacao: {} }, lead), { etapa: 'descobrir', faltam: [] }, fila, c, [], p);
+  assert.match(pedido.messages[0].content, /O QUE VOCÊ VIU AGORA NO LINK/); assert.match(pedido.messages[0].content, /Arranhador Torre/);
+  assert.match(pedido.messages[0].content, /Nunca diga que não consegue abrir link/);
+  const r = (t) => ({ choices: [{ message: { content: JSON.stringify({ mensagens: [t] }) } }] });
+  const fonte = 'Start R$ 847\n' + p.texto + ' ' + p.precos.join(' ') + ' ' + p.url;
+  assert.equal(L.acq07LerLLM(r('Vi o Arranhador Torre a R$ 129,90 na gatum.com.br'), c, fonte, lead).ok, true, 'preço e link da própria loja passam');
+  assert.equal(L.acq07LerLLM(r('Olha https://golpe.exemplo.com'), c, fonte, lead).motivo, 'link_fora_das_orientacoes');
+  const esc = L.acq07PedidosEscrita({ mensagem: depois, lead: lead, decisao: { motivos: [] }, pagina: p }, 'aceita', { wamids: [] }, c, Date.parse(m.em));
+  assert.deepEqual(esc.filter((x) => x.ferramenta === 'aceleriq_comercial_registrar_fato').map((x) => x.argumentos.campo), ['site', 'presenca_digital']);
+});
+
 test('botão do nosso modelo é pessoa e o texto nunca ecoa o lead', () => {
   const c = cfg('test');
   const fila = { config: { ativo: true }, itens: [] };

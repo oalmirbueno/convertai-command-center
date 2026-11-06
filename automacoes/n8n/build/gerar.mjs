@@ -21,7 +21,7 @@ if (arg('teste-real', null)) {
   const e = AMBIENTES.ambientes[AMBIENTE];
   e.dry_run_por_workflow['ACQ-07'] = false;
   e.comercial.teste_somente_numeros = [arg('teste-real')];
-  e.escritas_liberadas = e.escritas_liberadas.concat(['aceleriq_comercial_registrar_mensagem', 'aceleriq_comercial_avisar_caixa', 'aceleriq_update_opportunity', 'aceleriq_comercial_entrada_nova', 'aceleriq_comercial_cobrar', 'aceleriq_comercial_marcar_reuniao']);
+  e.escritas_liberadas = e.escritas_liberadas.concat(['aceleriq_comercial_registrar_mensagem', 'aceleriq_comercial_avisar_caixa', 'aceleriq_update_opportunity', 'aceleriq_comercial_entrada_nova', 'aceleriq_comercial_cobrar', 'aceleriq_comercial_marcar_reuniao', 'aceleriq_comercial_registrar_fato']);
 }
 
 export const IDS = {
@@ -1128,7 +1128,18 @@ const f = $('Ler fila do Mercúrio').first().json;
 const fila = f.ok ? f.resultado : null;
 const r = $('Ler horários').isExecuted ? $('Ler horários').first().json : null;
 const horarios = (r && r.ok && r.resultado && r.resultado.horarios) || [];
-return [{ json: Object.assign({}, b, { horarios: horarios, llm: acq07PedidoLLM(b.mensagem, b.lead, b.decisao, fila, CFG, horarios), llm_url: acqComCfg(CFG).llm_url }) }];`);
+return [{ json: Object.assign({}, b, { horarios: horarios, link: acq07LinkParaAbrir(b.mensagem, b.lead), llm_url: acqComCfg(CFG).llm_url }) }];`);
+  const ab = wf.no('Abrir link do lead', 'n8n-nodes-base.httpRequest', 4.5, {
+    method: 'GET', url: '={{ $json.link ? $json.link.url : "https://invalid.invalid/" }}',
+    sendHeaders: true, headerParameters: { parameters: [{ name: 'User-Agent', value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' }, { name: 'Accept-Language', value: 'pt-BR,pt;q=0.9' }] },
+    options: { timeout: 12000, redirect: { redirect: { followRedirects: true, maxRedirects: 5 } }, response: { response: { fullResponse: true, neverError: true, responseFormat: 'text' } } },
+  }, { onError: 'continueRegularOutput', notes: 'Abre o site ou a loja que o lead mandou. Sem link, a chamada cai e o fluxo segue.' });
+  const lp = code(wf, 'Ler página', ['comercial', 'wf07'], `
+const b = $('Preparar redação').first().json;
+const f = $('Ler fila do Mercúrio').first().json;
+const fila = f.ok ? f.resultado : null;
+const pagina = acq07LerPagina($input.first().json, b.link);
+return [{ json: Object.assign({}, b, { pagina: pagina, llm: acq07PedidoLLM(b.mensagem, b.lead, b.decisao, fila, CFG, b.horarios, pagina) }) }];`);
   const llm = wf.no('Mercúrio redige (OpenRouter)', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.llm_url }}', authentication: 'genericCredentialType', genericAuthType: 'httpBearerAuth',
     sendHeaders: true, headerParameters: { parameters: [{ name: 'X-Title', value: 'Aceleriq Mercurio (n8n)' }] },
@@ -1140,8 +1151,8 @@ ${PEDIDO(W)}
 const ctx = $('Preparar rodada').first().json._ctx;
 const f = $('Ler fila do Mercúrio').first().json;
 const conf = f.ok && f.resultado && f.resultado.config ? f.resultado.config : {};
-const b = $('Preparar redação').first().json;
-const resp = acq07LerLLM($input.first().json, CFG, conf.orientacoes || '', { mensagens: ((b.lead && b.lead.mensagens) || []).concat([{ direcao: 'entrada', texto: b.mensagem.texto }]) });
+const b = $('Ler página').first().json;
+const resp = acq07LerLLM($input.first().json, CFG, (conf.orientacoes || '') + '\\n' + (b.pagina && b.pagina.ok ? b.pagina.texto + ' ' + b.pagina.precos.join(' ') + ' ' + b.pagina.url : ''), { mensagens: ((b.lead && b.lead.mensagens) || []).concat([{ direcao: 'entrada', texto: b.mensagem.texto }]) });
 const it = Object.assign({}, b, { llm: null, resposta: resp });
 const p = acq07PedidoCobranca(it, CFG) || acq07PedidoReuniao(it, CFG, b.horarios);
 return [{ json: pedido(p || { ref: 'cobranca|' + b.mensagem.wamid, ferramenta: 'nenhuma', argumentos: {} }, ctx.run_id, { _it: it }) }];`);
@@ -1252,7 +1263,7 @@ return out;`, {}, 1);
   wf.cadeia(gt, gx, es, jm, pr, lf, pl, al, re, ge, cm, pj, jv, dc, qr);
   wf.liga(qr, ag, 0); wf.liga(qr, df, 1);
   wf.liga(ag, gf, 0); wf.liga(ag, pz, 1);
-  wf.cadeia(gf, ph, lh, pz, llm, mr, gc, me, cg);
+  wf.cadeia(gf, ph, lh, pz, ab, lp, llm, mr, gc, me, cg);
   wf.liga(cg, eg, 0); wf.liga(cg, ev, 1);
   wf.cadeia(eg, rt, ev);
   wf.liga(ev, dg, 0); wf.liga(ev, df, 1);

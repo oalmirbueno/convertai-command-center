@@ -354,8 +354,93 @@ var ACQ07_INSTRUCAO_DA_ETAPA = {
   encerrar: 'Agradeça em uma frase e deixe a porta aberta, sem nova oferta.',
 };
 
+// ---- Links que o lead manda (06/11, dono: "ele tem que abrir e analisar, não dizer que não conseguiu").
+var ACQ07_LINK_RE = /(?:https?:\/\/|www\.)[^\s<>"']+|[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com\.br|net\.br|org\.br|com|net|store|shop|online|site|app|br)(?:\/[^\s<>"']*)?/gi;
+var ACQ07_REDES = /(^|\.)(instagram\.com|facebook\.com|fb\.com|tiktok\.com|youtube\.com|youtu\.be|wa\.me|whatsapp\.com|linktr\.ee|x\.com|twitter\.com)$/;
+
+function acq07LinksDoTexto(t) {
+  var s = String(t || ''), out = [], mm;
+  ACQ07_LINK_RE.lastIndex = 0;
+  while ((mm = ACQ07_LINK_RE.exec(s))) {
+    if (mm.index > 0 && s.charAt(mm.index - 1) === '@') continue;
+    var u = mm[0].replace(/[).,!?;:]+$/, '');
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    var host = u.replace(/^https?:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+    if (!host || /aceleriq/.test(host) || out.some(function (x) { return x.host === host; })) continue;
+    out.push({ url: 'https://' + host + u.replace(/^https?:\/\/[^/?#]+/i, ''), host: host, rede_social: ACQ07_REDES.test(host) });
+  }
+  return out;
+}
+
+// O link a abrir agora: o da rodada; senão, o último da conversa que ainda não virou fato no CRM.
+function acq07LinkParaAbrir(m, lead) {
+  var daRodada = [];
+  (m.partes && m.partes.length ? m.partes : [m]).forEach(function (p) { daRodada = daRodada.concat(acq07LinksDoTexto(p.texto)); });
+  var abrivel = function (l) { return !l.rede_social; };
+  var agora = daRodada.filter(abrivel)[0];
+  if (agora) return agora;
+  var lidos = ((lead && lead.fatos) || []).map(function (f) { return String((f.valor || '') + ' ' + (f.fonte_url || '')).toLowerCase(); }).join(' ');
+  var antes = [];
+  ((lead && lead.mensagens) || []).filter(function (x) { return x.direcao === 'entrada'; }).slice(-12).forEach(function (x) { antes = antes.concat(acq07LinksDoTexto(x.texto)); });
+  antes = antes.filter(abrivel).filter(function (l) { return lidos.indexOf(l.host) < 0; });
+  return antes.length ? antes[antes.length - 1] : null;
+}
+
+function acq07TextoDoHtml(h) {
+  return String(h || '').replace(/<(script|style|svg|noscript|template)[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>|<\/(p|div|li|h\d|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(Number(n)); }).replace(/[ \t\r]+/g, ' ').replace(/\n\s*/g, '\n').replace(/\n{2,}/g, '\n').trim();
+}
+
+// Lê o que a página mostra. resp: saída do nó HTTP (texto ou {body,statusCode}). Nunca lança.
+function acq07LerPagina(resp, link) {
+  if (!link) return null;
+  var r = resp || {};
+  var html = typeof r === 'string' ? r : (typeof r.body === 'string' ? r.body : typeof r.data === 'string' ? r.data : '');
+  var status = Number(r.statusCode) || (html ? 200 : 0);
+  var base = { url: link.url, host: link.host, ok: false };
+  if (!html || status >= 400 || html.length < 200) return Object.assign(base, { motivo: r.error ? String(r.error.message || r.error).slice(0, 160) : 'pagina_vazia_ou_status_' + status });
+  var meta = function (nome) { var x = html.match(new RegExp('<meta[^>]+(?:name|property)=["\']' + nome + '["\'][^>]*content=["\']([^"\']*)', 'i')) || html.match(new RegExp('<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:name|property)=["\']' + nome + '["\']', 'i')); return x ? acq07TextoDoHtml(x[1]).slice(0, 300) : null; };
+  var titulo = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1];
+  var texto = acq07TextoDoHtml(html);
+  var baixo = (html + ' ' + texto).toLowerCase();
+  var tem = function (lista) { return lista.filter(function (p) { return baixo.indexOf(p[0]) >= 0; }).map(function (p) { return p[1]; }).filter(function (v, i, a) { return a.indexOf(v) === i; }); };
+  var plataforma = tem([['cdn.shopify', 'Shopify'], ['myshopify', 'Shopify'], ['nuvemshop', 'Nuvemshop'], ['tiendanube', 'Nuvemshop'], ['woocommerce', 'WooCommerce'], ['vtex', 'VTEX'], ['tray.com', 'Tray'], ['lojaintegrada', 'Loja Integrada'], ['wixstatic', 'Wix'], ['wordpress', 'WordPress'], ['bagy', 'Bagy']]);
+  var checkout = tem([['yampi', 'Yampi'], ['cartpanda', 'CartPanda'], ['appmax', 'Appmax'], ['pagar.me', 'Pagar.me'], ['mercadopago', 'Mercado Pago'], ['pagseguro', 'PagSeguro'], ['ticto', 'Ticto'], ['kiwify', 'Kiwify']]);
+  var pagamento = tem([['pix', 'Pix'], ['boleto', 'boleto'], ['cartão', 'cartão'], ['cartao', 'cartão'], ['parcel', 'parcelamento']]);
+  var frete = tem([['frete grátis', 'frete grátis'], ['frete gratis', 'frete grátis'], ['calcular frete', 'cálculo de frete'], ['correios', 'Correios'], ['melhor envio', 'Melhor Envio'], ['rastre', 'rastreio'], ['dias úteis', 'prazo em dias úteis']]);
+  var precos = (texto.match(/R\$\s?\d{1,5}(?:\.\d{3})*,\d{2}/g) || []).filter(function (v, i, a) { return a.indexOf(v) === i && !/^R\$\s?0,00$/.test(v); }).slice(0, 8);
+  var produtos = [], pm, reP = /<a[^>]+href=["'][^"']*\/(?:products|produtos|produto|p)\/[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+  while ((pm = reP.exec(html)) && produtos.length < 10) { var n = acq07TextoDoHtml(pm[1]).replace(/\s+/g, ' ').slice(0, 80); if (n.length > 3 && !/^R\$/.test(n) && produtos.indexOf(n) < 0) produtos.push(n); }
+  var contato = [];
+  if (/wa\.me\/|api\.whatsapp\.com/i.test(html)) contato.push('botão de WhatsApp');
+  var ig = html.match(/instagram\.com\/([a-z0-9_.]{2,30})/i); if (ig && !/^(p|reel|explore)$/i.test(ig[1])) contato.push('Instagram @' + ig[1]);
+  var politicas = tem([['troca', 'trocas'], ['devolu', 'devolução'], ['privacidade', 'privacidade'], ['termos', 'termos'], ['rastrei', 'rastreio de pedido']]);
+  var p = Object.assign(base, { ok: true, titulo: titulo ? acq07TextoDoHtml(titulo).slice(0, 160) : null, descricao: meta('description') || meta('og:description'),
+    plataforma: plataforma, checkout: checkout, pagamento: pagamento, frete: frete, precos: precos, produtos: produtos, contato: contato, politicas: politicas,
+    texto: texto.slice(0, 2500) });
+  p.resumo = [p.host + (p.titulo ? ' (' + p.titulo + ')' : ''), plataforma.length ? 'plataforma ' + plataforma.join('/') : null, checkout.length ? 'checkout ' + checkout.join('/') : null,
+    produtos.length ? produtos.length + ' produtos na página inicial, ex.: ' + produtos.slice(0, 3).join(', ') : 'nenhum produto listado na página inicial',
+    precos.length ? 'preços de ' + precos[0] + (precos.length > 1 ? ' a ' + precos[precos.length - 1] : '') : null,
+    pagamento.length ? 'pagamento: ' + pagamento.join(', ') : null, frete.length ? 'frete: ' + frete.join(', ') : null, contato.length ? contato.join(', ') : 'sem WhatsApp nem Instagram no site'].filter(Boolean).join('; ').slice(0, 600);
+  return p;
+}
+
+// O bloco do prompt com o que foi visto no link. Também serve de fonte para as travas de preço e link.
+function acq07BlocoDaPagina(p) {
+  if (!p) return '';
+  if (!p.ok) return 'A pessoa mandou o link ' + p.url + ', mas a página não carregou agora (' + p.motivo + '). Diga isso com naturalidade, sem dizer que você não acessa a internet, e siga a conversa.';
+  return ['O QUE VOCÊ VIU AGORA NO LINK QUE A PESSOA MANDOU (' + p.url + '; é fato, use com detalhes concretos, sem inventar o que não está aqui):',
+    p.titulo ? 'Título: ' + p.titulo : '', p.descricao ? 'Descrição: ' + p.descricao : '',
+    'Plataforma: ' + (p.plataforma.join(', ') || 'não identificada') + (p.checkout.length ? ' | checkout: ' + p.checkout.join(', ') : ''),
+    'Produtos na página: ' + (p.produtos.join('; ') || 'nenhum listado'), 'Preços que aparecem: ' + (p.precos.join(', ') || 'nenhum'),
+    'Pagamento citado: ' + (p.pagamento.join(', ') || 'nada citado') + ' | Frete: ' + (p.frete.join(', ') || 'nada citado'),
+    'Contato: ' + (p.contato.join(', ') || 'nenhum') + ' | Políticas: ' + (p.politicas.join(', ') || 'nenhuma'),
+    'Texto da página (início): ' + p.texto.slice(0, 1800)].filter(Boolean).join('\n');
+}
+
 // Pedido ao modelo de linguagem (OpenRouter, formato chat completions). A etapa vem do Jev; o texto, daqui.
-function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
+function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios, pagina) {
   var c = acqComCfg(cfg);
   var conf = (fila && fila.config) || {};
   var ex = c.executivo || {};
@@ -393,6 +478,8 @@ function acq07PedidoLLM(m, lead, decisao, fila, cfg, horarios) {
     anuncio ? 'Chegou por um anúncio' + (anuncio.titulo ? ': ' + anuncio.titulo : '') + '. Ele chamou primeiro, então não trate como prospecção fria.' : '',
     lead.notas ? 'Notas: ' + String(lead.notas).slice(0, 800) : '',
     fatos.length ? 'Fatos confirmados: ' + fatos.join('; ') : '',
+    'Quando a pessoa manda link de site ou loja, o sistema abre a página e te mostra o que viu. Nunca diga que não consegue abrir link, ver site ou acessar a internet; se não houver bloco do que você viu, comente só o que a conversa já disse.',
+    acq07BlocoDaPagina(pagina),
     '',
     'Responda só em JSON, sem texto fora dele: {"mensagens":["..."],"nome_cobranca":null,"horario_escolhido":null,"plano_combinado":null,"com_desconto":false,"resumo_para_almir":"contexto para o Almir entrar e fechar, em até 4 frases: negócio, dor, objeções, plano indicado, o que já foi combinado e como fechar"}',
   ].filter(function (x) { return x !== ''; }).join('\n');
@@ -429,7 +516,8 @@ function acq07LerLLM(resposta, cfg, orientacoes, lead) {
   // Repetir o valor que o próprio lead disse não é inventar preço.
   var doLead = ((lead && lead.mensagens) || []).filter(function (x) { return x.direcao !== 'saida'; }).map(function (x) { return String(x.texto || ''); }).join(' ');
   var links = texto.match(/https?:\/\/\S+|www\.\S+/gi) || [];
-  if (links.some(function (l) { return fonte.indexOf(l.replace(/[).,!?]+$/, '')) < 0; })) return { ok: false, motivo: 'link_fora_das_orientacoes' };
+  var doLeadMin = doLead.toLowerCase();
+  if (links.some(function (l) { var limpo = l.replace(/[).,!?]+$/, ''), host = limpo.replace(/^https?:\/\//i, '').split(/[/?#]/)[0].toLowerCase(); return fonte.indexOf(limpo) < 0 && !(host && doLeadMin.indexOf(host) >= 0); })) return { ok: false, motivo: 'link_fora_das_orientacoes' };
   var valores = texto.match(/(?:R\$|US\$|€)\s?\d[\d.,]*/g) || [];
   var soDigitos = function (v) { return v.replace(/[^\d]/g, '').replace(/00$/, ''); };
   var fonteDigitos = (fonte.match(/(?:R\$|US\$|€)\s?\d[\d.,]*/g) || []).map(soDigitos);
@@ -512,10 +600,24 @@ function acq07PedidosEscrita(it, estadoEnvio, meta, cfg, agoraMs) {
     out.push({ ref: 'parar|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_update_opportunity',
       argumentos: { opportunity_id: lead.lead_id, qualificacao: { nao_contatar: 'sim', nao_contatar_motivo: ('Pediu para parar no WhatsApp em ' + m.em.slice(0, 10) + ' (' + (d.motivos[0] || '') + ').').slice(0, 600) } } });
   }
+  // O que foi lido no link vira ficha no CRM: o site (o lead mandou) e o retrato da página.
+  var pg = it.pagina;
+  if (pg && pg.ok && !/^simulado/.test(String(lead.lead_id))) {
+    out.push({ ref: 'fato-site|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_comercial_registrar_fato',
+      argumentos: { lead_id: lead.lead_id, campo: 'site', valor: pg.url.slice(0, 200), operador: c.operador,
+        evidencias: [{ tipo: 'lead_confirmou_na_conversa', detalhe: ('O lead mandou o link no WhatsApp em ' + String(m.em).slice(0, 10) + '.').slice(0, 500), fonte_url: pg.url.slice(0, 500) }] } });
+    out.push({ ref: 'fato-pagina|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_comercial_registrar_fato',
+      argumentos: { lead_id: lead.lead_id, campo: 'presenca_digital', valor: pg.resumo, operador: c.operador,
+        evidencias: [{ tipo: 'site_oficial_da_empresa', detalhe: ('Página aberta pelo executivo em ' + String(m.em).slice(0, 10) + (pg.titulo ? ': ' + pg.titulo : '') + '.').slice(0, 500), fonte_url: pg.url.slice(0, 500) }] } });
+  }
   if (d.caixa) {
     var reuniao = d.reuniao && d.reuniao.marcada;
     var resumoLLM = it.resposta && it.resposta.resumo;
     var contexto = resumoLLM || ('Última mensagem: "' + acq07TextoParaRegistro(m).slice(0, 600) + '".');
+    // O repasse leva o que já se sabe do lead: os fatos do CRM e o que foi visto no site (06/11, dono).
+    var sabidos = ((lead.fatos || []).filter(function (f) { return f.situacao === 'gravado'; }).map(function (f) { return f.campo + ': ' + f.valor; }));
+    if (pg && pg.ok) sabidos.push('site lido agora: ' + pg.resumo);
+    if (sabidos.length) contexto += '\n\nO que já sabemos: ' + sabidos.slice(0, 8).join('; ');
     out.push({ ref: 'caixa|' + m.wamid + '|' + lead.lead_id, ferramenta: 'aceleriq_comercial_avisar_caixa',
       argumentos: { lead_id: lead.lead_id, tipo: 'avancou', operador: c.operador, resumo: contexto.slice(0, 2000),
         proximo_passo: reuniao ? 'Reunião marcada para ' + d.reuniao.rotulo + '. Entrar e fechar.' : (d.motivo_caixa ? 'Fechar com o lead: ' + d.motivo_caixa : 'Chamar o lead neste WhatsApp e continuar a conversa.'),

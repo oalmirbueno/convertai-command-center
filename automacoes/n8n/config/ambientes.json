@@ -31,7 +31,8 @@
         "aceleriq_comercial_entrada_nova",
         "aceleriq_comercial_cobrar",
         "aceleriq_comercial_repasse_marcar",
-        "aceleriq_comercial_marcar_reuniao"
+        "aceleriq_comercial_marcar_reuniao",
+        "aceleriq_comercial_registrar_fato"
       ],
       "operador": "n8n-teste",
       "lote_clientes": 2,
