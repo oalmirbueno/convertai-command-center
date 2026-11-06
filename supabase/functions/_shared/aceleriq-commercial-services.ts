@@ -454,12 +454,23 @@ async function baseDoComercial(): Promise<Array<{ titulo: string; tecnica: strin
   return (data ?? []) as Array<{ titulo: string; tecnica: string; quando_usar: string; exemplo: string }>;
 }
 
+/** As provas autorizadas da Biblioteca da agência (Mesa Proposta): o executivo escolhe as que combinam com o lead (dono, 06/11). */
+async function provasDoComercial(): Promise<Array<{ id: string; titulo: string; texto: string; empresa: string; link: string; nicho: string }>> {
+  const { data, error } = await comPrazo(db().from('proposta_provas').select('id, tipo, titulo, texto, nome, empresa, link, nicho')
+    .eq('autorizado', true).is('arquivado_em', null).order('criado_em', { ascending: true }).limit(40));
+  if (error) { console.error('[comercial] provas', error.message.slice(0, 160)); return []; }
+  return ((data ?? []) as Array<Record<string, string | null>>).map((p) => ({
+    id: String(p.id), titulo: String(p.titulo || (p.tipo === 'depoimento' ? 'Depoimento de ' + (p.nome || '') : '')).slice(0, 160),
+    texto: String(p.texto || '').slice(0, 600), empresa: String(p.empresa || ''), link: String(p.link || ''), nicho: String(p.nicho || ''),
+  }));
+}
+
 export async function comercialFila(input: { operador?: string; limit?: number }, ctx: AuthContext) {
   soDaCasa(ctx);
   const slug = slugDoOperador(input.operador);
   const agora = agoraEmSaoPaulo();
-  const [cfg, feitos, base] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso), baseDoComercial()]);
-  const regra = { ...resumoDaConfig(cfg, feitos, agora), conhecimento: base };
+  const [cfg, feitos, base, provas] = await Promise.all([configDoAgente(slug), primeirosContatosHoje(slug, agora.inicioDoDiaIso), baseDoComercial(), provasDoComercial()]);
+  const regra = { ...resumoDaConfig(cfg, feitos, agora), conhecimento: base, provas };
   if (!regra.ativo) {
     return { operador: slug, config: regra, itens: [], total: 0, aviso: `O ${slug} esta desligado no painel (Comercial). Nao envie mensagem; so registre o que chegar.` };
   }
