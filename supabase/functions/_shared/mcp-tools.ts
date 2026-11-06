@@ -4006,7 +4006,7 @@ const operatorRequestApprovalTool: ToolDefinition = {
   name: 'aceleriq_operator_request_approval',
   title: 'Pedir aprovacao humana com explicacao completa',
   description:
-    'Cria um pedido de aprovacao EXPLICADO para uma acao que exige humano: publicar, agendar, enviar mensagem, contatar cliente, gastar, alterar financeiro, alterar responsavel e afins. Exige o_que e por_que; payload fica congelado por versao — a acao executada depois tem que ser EXATAMENTE o payload aprovado, e mudanca de plano e outra aprovacao com versao nova. O dono do painel e notificado com deep-link. NADA e executado por esta chamada: ela so pergunta.',
+    'Cria um pedido de aprovacao EXPLICADO para uma acao que exige humano: publicar, agendar, enviar mensagem, contatar cliente, gastar, alterar financeiro, alterar responsavel e afins. Exige o_que e por_que; payload fica congelado por versao — a acao executada depois tem que ser EXATAMENTE o payload aprovado, e mudanca de plano e outra aprovacao com versao nova. O dono do painel e notificado com deep-link. NADA e executado por esta chamada. ALCADA AUTOMATICA: se a acao cabe na faixa pre-aprovada do cliente (alterar_orcamento ate o aumento e o valor permitidos, publicar/agendar/ativar_campanha de plano aprovado com plano_ref no payload, reversivel, custo_previsto informado), a resposta ja volta status "aprovado" com aprovado_por "alcada": execute AGORA esse payload e prove com operator_ordem_executada. Fora da faixa volta "pendente" com o motivo em fora_da_alcada.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -4017,12 +4017,12 @@ const operatorRequestApprovalTool: ToolDefinition = {
       action_kind: { type: 'string', description: 'publicar, agendar, enviar_mensagem, contatar_cliente, criar_proposta, enviar_contrato, ativar_campanha, alterar_orcamento, gastar, alterar_financeiro, alterar_permissoes, exportar_dados, excluir_dados, mudar_estrategia, alterar_responsavel ou promover_autonomia.' },
       o_que: { type: 'string', description: 'O que sera feito, em uma frase concreta.' },
       por_que: { type: 'string', description: 'Por que fazer; qual problema resolve.' },
-      payload: { type: 'object', description: 'A acao exata, em dados: destino, conteudo, valores. E o que sera executado se aprovado.' },
+      payload: { type: 'object', description: 'A acao exata, em dados: destino, conteudo, valores. E o que sera executado se aprovado. Para a alcada: client_id (quando a tarefa nao tem projeto), aumento_pct (quanto sobe orcamento ou limite, 0 para pausar ou redistribuir) e plano_ref (qual plano ou calendario aprovado a acao cumpre).' },
       dados_usados: { type: 'string', description: 'Quais dados serao usados.' },
       destino: { type: 'string', description: 'Para onde os dados ou a acao vao.' },
       impacto: { type: 'string', description: 'Impacto esperado.' },
       risco: { type: 'string', description: 'O que pode dar errado.' },
-      custo_previsto: { type: 'number', description: 'Custo em reais, quando houver.' },
+      custo_previsto: { type: 'number', description: 'Custo em reais, quando houver. Obrigatorio (0 se nao custa) para alterar_orcamento e ativar_campanha entrarem na alcada.' },
       prazo: { type: 'string', description: 'Data-limite (YYYY-MM-DD), quando houver.' },
       reversivel: { type: 'boolean', description: 'A acao pode ser desfeita? Default true.' },
       evidencia: { type: 'string', description: 'URL ou texto que fundamenta a recomendacao.' },

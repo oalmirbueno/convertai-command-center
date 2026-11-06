@@ -1200,6 +1200,11 @@ export async function exigirVinculoExistente(linkId: string, operador: string | 
  * versao e notifica os admins com deep-link. A resposta repete a regra
  * de ouro para o proprio agente: nada executa ate um humano aprovar, e o
  * executado tem que ser exatamente o payload aprovado.
+ *
+ * Alcada automatica (2026-11-04): quando a acao cabe na faixa que o dono
+ * pre-aprovou para o cliente (tabela operator_alcadas), o RPC ja devolve
+ * status "aprovado" com aprovado_por "alcada" e a ordem aparece na hora em
+ * operator_ordens_abertas. A resposta passa intacta para o agente.
  */
 export async function operatorRequestApproval(input: {
   operator: string;
