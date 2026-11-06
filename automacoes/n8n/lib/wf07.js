@@ -178,7 +178,7 @@ function acq07PedidoJev(m, lead) {
       remetente: { type: 'choice',
         instructions: 'Quem produziu `ultima_mensagem`?',
         criteria: {
-          humano: 'Uma pessoa escrevendo ou falando, mesmo que de forma curta ou informal.',
+          humano: 'Uma pessoa escrevendo ou falando, mesmo que de forma curta ou informal. Começar com [botão] quer dizer que a pessoa tocou num botão da nossa mensagem: é humano.',
           resposta_automatica: 'Mensagem automática de ausência, saudação padrão ou "em breve retornamos", sem opções para escolher.',
           menu_de_robo: 'Robô de atendimento mostrando um menu de opções numeradas ou pedindo para digitar uma opção.',
         } },
@@ -296,6 +296,8 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs, orcamento) {
   if (!janela) { d.motivos.push('fora_da_janela_de_24h'); return d; }
   // Teto do mês: não gasta com resposta automática; o Almir assume. Quem veio de anúncio está na janela grátis da Meta.
   if (orcamento && !orcamento.pode_responder && !(lead.qualificacao && lead.qualificacao.anuncio)) { d.caixa = true; d.acao = 'caixa'; d.motivos.push('teto_do_mes'); return d; }
+  // Botão de resposta rápida é a pessoa tocando no nosso modelo, nunca menu de robô (05/11: o Jev chamou de menu e o fluxo devolveu o botão).
+  if (m.botao && julg.remetente !== 'humano') { julg.remetente = 'humano'; d.motivos.push('botao_e_pessoa'); }
   if (julg.remetente === 'resposta_automatica') { d.motivos.push('resposta_automatica_do_lead'); return d; }
   if (julg.remetente === 'menu_de_robo') {
     var tentativas = (lead.mensagens || []).filter(function (x) { return x.direcao === 'saida' && String(x.texto || '').length <= 3; }).length;
@@ -434,6 +436,10 @@ function acq07LerLLM(resposta, cfg, orientacoes, lead) {
   var numerosDoLead = (doLead.match(/\d[\d.,]*/g) || []).map(soDigitos);
   if (valores.some(function (v) { var d = soDigitos(v); return fonteDigitos.indexOf(d) < 0 && numerosDoLead.indexOf(d) < 0; })) return { ok: false, motivo: 'valor_fora_das_orientacoes' };
   if (/\bag[eê]ncia\b/i.test(texto)) return { ok: false, motivo: 'disse_agencia' };
+  // Nunca devolve à pessoa o que ela mesma acabou de mandar (05/11: o botão voltou igual).
+  var normal = function (t) { return acq07SemAcento(String(t || '').replace(/^\[[^\]]*\]\s*/, '')).replace(/[^a-z0-9]+/g, ' ').trim(); };
+  var entradas = ((lead && lead.mensagens) || []).filter(function (x) { return x.direcao === 'entrada'; }).slice(-3).map(function (x) { return normal(x.texto); });
+  if (partes.some(function (p) { var n = normal(p); return n.length > 3 && entradas.indexOf(n) >= 0; })) return { ok: false, motivo: 'eco_do_lead' };
   if (/\bassistente\b/i.test(texto) || /merc[uú]rio/i.test(texto)) return { ok: false, motivo: 'nome_interno' };
   // Nome e cargo, sim; afirmar que é humano para quem perguntou, nunca.
   if (/\b(sou|aqui [eé]) (uma |um )?(pessoa|humano|humana)\b|n[aã]o sou (um |uma )?(rob[oô]|bot|ia\b|intelig[eê]ncia)/i.test(texto)) return { ok: false, motivo: 'negou_ser_ia' };

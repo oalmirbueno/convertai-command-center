@@ -92,7 +92,7 @@ test('primeiro contato: só lead pronto, ordenado pelo encaixe, dentro do horár
   assert.equal(motivos[LEADS.comSite], 'sem_fato_observado');
   const p = r.candidatos[0];
   assert.deepEqual(p.params, ['pessoal', 'Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
-  assert.match(p.texto, /^Oi, pessoal, tudo bem\? Aqui é o Rafael, executivo de negócios da Aceleriq/);
+  assert.match(p.texto, /^Oi, pessoal, tudo bem\? Aqui é o Rafael, da Aceleriq\. Dei uma olhada na/);
   assert.equal(L.acqComPrimeiroNome({ nome: 'Renata Souza', empresa: 'Bella Forma' }), 'Renata');
   assert.equal(L.acqComPrimeiroNome({ nome: 'Bella Forma', empresa: 'Bella Forma' }), null);
   assert.equal(L.acqComPrimeiroNome({ nome: 'Clínica Sorriso' }), null, 'nome de empresa não é nome de gente');
@@ -206,6 +206,20 @@ test('Plano Começo: fecha com o Almir, sem Pix', () => {
   assert.equal(d.cobrar, false); assert.equal(d.caixa, true); assert.equal(d.etapa, 'passar_humano'); assert.deepEqual(d.faltam, []);
 });
 
+test('botão do nosso modelo é pessoa e o texto nunca ecoa o lead', () => {
+  const c = cfg('test');
+  const fila = { config: { ativo: true }, itens: [] };
+  const msg = { wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), tipo: 'button', botao: 'Quero o diagnóstico', texto: 'Quero o diagnóstico' };
+  const j = { intencao: 'interessado', confianca: 1, p_pare: 0, remetente: 'menu_de_robo', etapa: 'descobrir', objecao: 'nenhuma', plano: 'nenhum', entendeu_necessidade: false };
+  const d = L.acq07Decidir(msg, { lead_id: 'x', mensagens: [], qualificacao: {} }, null, Object.assign({}, j), fila, c, TER_10H);
+  assert.equal(d.modo, 'venda'); assert.equal(d.responder, true); assert.ok(d.motivos.includes('botao_e_pessoa'));
+  const r = (m) => ({ choices: [{ message: { content: JSON.stringify({ mensagens: m }) } }] });
+  const lead = { mensagens: [{ direcao: 'entrada', texto: '[botão] Quero o diagnóstico' }] };
+  assert.equal(L.acq07LerLLM(r(['Quero o diagnóstico']), c, '', lead).motivo, 'eco_do_lead');
+  assert.equal(L.acq07LerLLM(r(['Boa, Almir! Me conta: hoje os clientes chegam como?']), c, '', lead).ok, true);
+  assert.equal(L.acq07LerLLM(r(['Sim']), c, '', { mensagens: [{ direcao: 'entrada', texto: 'Sim' }] }).ok, true, 'resposta curta igual não é eco');
+});
+
 test('teto do mês: prospecção para antes, resposta para no limite, anúncio segue na janela grátis', () => {
   const c = cfg('test');
   assert.deepEqual(L.acqComOrcamento({ atendimento: 100, modelos: 10 }, c), { atendimento: 100, modelos: 10, pode_responder: true, pode_prospectar: true, modelos_restantes: 290 });
@@ -315,7 +329,7 @@ test('ACQ-06 ao vivo: manda o modelo com nome e fato, registra com o wamid e nã
   assert.equal(env.url, 'http://127.0.0.1:8792/graph/v21.0/100000000000001/messages');
   assert.equal(env.corpo.type, 'template');
   assert.equal(env.corpo.to, '5519998765432');
-  assert.equal(env.corpo.template.name, 'aceleriq_primeiro_contato_executivo');
+  assert.equal(env.corpo.template.name, 'aceleriq_contato_rafael');
   assert.deepEqual(env.corpo.template.components[0].parameters.map((p) => p.text), ['pessoal', 'Pet Shop Exemplo', 'vocês têm Instagram, mas não encontrei um site próprio da empresa']);
   const saidas = W.m.mensagens.filter((x) => x.direcao === 'saida');
   assert.deepEqual(saidas.map((x) => x.id_externo).sort(), ['wamid.TESTE1', 'wamid.TESTE2']);
