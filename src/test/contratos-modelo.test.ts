@@ -261,7 +261,9 @@ describe("contratos: conteúdo obrigatório e texto limpo", () => {
   });
 
   it("o seed da migration tem o mesmo texto do arquivo (fonte única)", () => {
-    const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20260930030200_contratos_modelo_v1.sql"), "utf8");
+    const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20260930030200_contratos_modelo_v1.sql"), "utf8")
+      // No Windows (core.autocrlf) o SQL chega com CRLF; o texto multilinha é o mesmo.
+      .replace(/\r\n/g, "\n");
     for (const m of MODELOS_V1) {
       expect(sql).toContain(`'${m.chave}'`);
       for (const c of m.clausulas) expect(sql, `${m.chave}:${c.chave}`).toContain(`'${c.texto.replace(/'/g, "''")}'`);
