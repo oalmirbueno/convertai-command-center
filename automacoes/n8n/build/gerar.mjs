@@ -1052,7 +1052,7 @@ return $input.all().map((i, idx) => {
   const gt = code(wf, 'Guardar texto', ['comercial', 'wf07'], `
 return $input.all().map((i, idx) => ({ json: { pg: acqComPgEvento(acq07EventoTexto(i.json.m, i.json._ctx), null, AMBIENTE, { m: i.json.m, de8: acq07De8(i.json.m.de), _ctx: i.json._ctx }) }, pairedItem: { item: idx } }));`);
   const gx = pg(wf, 'Gravar texto', SQL_EVENTO_E_INCIDENTE(W, true));
-  const es = wf.no('Esperar a pessoa terminar', 'n8n-nodes-base.wait', 1.1, { amount: 15, unit: 'seconds' }, { webhookId: 'acq07-espera-0000-4000-a000-000000000007', notes: 'Quem manda três mensagens seguidas recebe uma resposta só. Se chegar outra nesse tempo, a execução da mais nova responde por todas.' });
+  const es = wf.no('Esperar a pessoa terminar', 'n8n-nodes-base.wait', 1.1, { amount: 8, unit: 'seconds' }, { webhookId: 'acq07-espera-0000-4000-a000-000000000007', notes: 'Quem manda três mensagens seguidas recebe uma resposta só. Se chegar outra nesse tempo, a execução da mais nova responde por todas.' });
   const jm = wf.no('Juntar mensagens', 'n8n-nodes-base.postgres', 2.7, { operation: 'executeQuery',
     query: `select (select e.entity_id from acq_n8n.eventos e where e.workflow_id = 'ACQ-07' and e.tipo = 'comercial_entrada_recebida' and e.payload->>'de8' = $1 order by e.occurred_at desc, e.entity_id desc limit 1) as mais_nova,
   coalesce((select json_agg(t.payload order by t.occurred_at) from acq_n8n.eventos t where t.workflow_id = 'ACQ-07' and t.tipo = 'comercial_entrada_texto' and t.payload->>'de8' = $1
@@ -1186,7 +1186,7 @@ const voz = falado && falado.length <= 600 && !/https?:|www\\./i.test(falado) ? 
 const envio = !textos.length ? { decisao: 'sem_texto', motivo: resp.motivo }
   : { decisao: tr.decisao, motivo: tr.motivo, url: url, media_url: url.replace(/messages$/, 'media'), textos: textos, para: it.mensagem.de, voz: voz, quantas_voz: voz ? resp.partes.length : 0 };
 const google = reuniao && reuniao.marcada && !reuniao.simulada && envio.decisao === 'enviar';
-return [{ json: Object.assign({}, it, { decisao: d, envio: envio, enviar: envio.decisao === 'enviar', criar_google: !!google, evento_google: google ? acq07EventoDoGoogle(reuniao, it.lead, resp.resumo, CFG) : null, google_url: C.google_url, google_id: C.google_agenda_id }) }];`);
+return [{ json: Object.assign({}, it, { decisao: d, envio: envio, pausa_s: acq07PausaHumana(it.mensagem.wamid, d.etapa), enviar: envio.decisao === 'enviar', criar_google: !!google, evento_google: google ? acq07EventoDoGoogle(reuniao, it.lead, resp.resumo, CFG) : null, google_url: C.google_url, google_id: C.google_agenda_id }) }];`);
   const cg = se(wf, 'Criar no Google?', '={{ $json.criar_google === true }}');
   const eg = wf.no('Criar evento no Google', 'n8n-nodes-base.httpRequest', 4.5, {
     method: 'POST', url: '={{ $json.google_url + "/calendars/" + encodeURIComponent($json.google_id) + "/events" }}', authentication: 'predefinedCredentialType', nodeCredentialType: 'googleCalendarOAuth2Api',
@@ -1200,6 +1200,7 @@ return [{ json: $('Montar envio').first().json }];`);
     sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: '={{ JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: $json.mensagem.wamid, typing_indicator: { type: "text" } }) }}',
     options: { timeout: 10000, response: { response: { fullResponse: true, neverError: true, responseFormat: 'json' } } },
   }, { credentials: CRED.meta, onError: 'continueRegularOutput' });
+  const ph2 = wf.no('Pausa humana', 'n8n-nodes-base.wait', 1.1, { amount: "={{ Math.max(1, Number($('Montar envio').first().json.pausa_s) || 1) }}", unit: 'seconds' }, { webhookId: 'acq07-pausa-0000-4000-a000-000000000007', notes: 'Depois de marcar como lida e digitando: na hora quase sempre, às vezes alguns segundos, de vez em quando um ou dois minutos (acq07PausaHumana).' });
   const iv = se(wf, 'Responder em áudio?', "={{ !!$('Montar envio').first().json.envio.voz }}");
   const pv = code(wf, 'Pedir voz', ['comercial'], `
 ${PEDIDO(W)}
@@ -1275,7 +1276,7 @@ return out;`, {}, 1);
   wf.liga(cg, eg, 0); wf.liga(cg, ev, 1);
   wf.cadeia(eg, rt, ev);
   wf.liga(ev, dg, 0); wf.liga(ev, df, 1);
-  wf.cadeia(dg, iv);
+  wf.cadeia(dg, ph2, iv);
   wf.liga(iv, pv, 0); wf.liga(iv, sp, 1);
   wf.cadeia(pv, gv, pa, sa, sp, hm, cl, df);
   wf.cadeia(df, gd, pe, gp, rs, gr);

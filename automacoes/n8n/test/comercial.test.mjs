@@ -142,7 +142,9 @@ test('decisão: pare nunca responde; a Caixa é só para reunião, pessoa ou for
   const msg = (texto, extra) => Object.assign({ wamid: 'w', de: '551998765432', em: new Date(TER_10H).toISOString(), texto }, extra || {});
   const j = (intencao, extra) => Object.assign({ intencao, confianca: 0.9, p_pare: intencao === 'pare' ? 0.9 : 0.02, remetente: 'humano', etapa: 'descobrir', objecao: 'nenhuma', plano: 'nenhum' }, extra || {});
   assert.equal(L.acq07Decidir(msg('me esquece'), lead, null, j('pare'), fila, c, TER_10H).acao, 'parar');
-  assert.equal(L.acq07Decidir(msg('x'), lead, null, j('outro', { p_pare: 0.45 }), fila, c, TER_10H).acao, 'parar', 'na dúvida sobre parar, para');
+  // 07/11: "na dúvida, para" calou a Priscila ("stop info.com"). Agora só para com frase de saída (ou botão).
+  assert.equal(L.acq07Decidir(msg('x'), lead, null, j('outro', { p_pare: 0.45 }), fila, c, TER_10H).acao, 'responder', 'dúvida sem frase de saída segue a conversa');
+  assert.equal(L.acq07Decidir(msg('não quero, pode parar'), lead, null, j('outro', { p_pare: 0.45 }), fila, c, TER_10H).acao, 'parar');
   assert.equal(L.acq07Decidir(msg('Não tenho interesse', { botao: 'Não tenho interesse' }), lead, null, null, fila, c, TER_10H).acao, 'parar');
   assert.equal(L.acq07Decidir(msg('pare'), lead, { pediu_para_parar: true }, j('outro'), fila, c, TER_10H).acao, 'parar');
   const preco = L.acq07Decidir(msg('quanto custa?'), lead, null, j('pergunta', { etapa: 'apresentar' }), fila, c, TER_10H);
@@ -236,6 +238,26 @@ test('link do lead: acha, abre, lê a loja e vira fato no CRM', () => {
   assert.equal(L.acq07LerLLM(r('Olha https://golpe.exemplo.com'), c, fonte, lead).motivo, 'link_fora_das_orientacoes');
   const esc = L.acq07PedidosEscrita({ mensagem: depois, lead: lead, decisao: { motivos: [] }, pagina: p }, 'aceita', { wamids: [] }, c, Date.parse(m.em));
   assert.deepEqual(esc.filter((x) => x.ferramenta === 'aceleriq_comercial_registrar_fato').map((x) => x.argumentos.campo), ['site', 'presenca_digital']);
+});
+
+test('"stop info.com" não é pedido para parar; frase de saída é; pausa humana varia', () => {
+  const c = cfg('test');
+  const fila = { config: { ativo: true }, itens: [] };
+  const lead = { lead_id: 'x', mensagens: [{ direcao: 'entrada', texto: 'tem site próprio' }], qualificacao: {} };
+  const jp = (p) => ({ intencao: 'pare', confianca: p, p_pare: p, remetente: 'humano', etapa: 'descobrir', objecao: 'nenhuma', plano: 'nenhum', entendeu_necessidade: false });
+  const m = (t) => ({ wamid: 'w' + t.length, de: '554196932016', em: new Date(TER_10H).toISOString(), texto: t });
+  const d1 = L.acq07Decidir(m('stop info.com'), lead, null, jp(0.95), fila, c, TER_10H);
+  assert.equal(d1.parar, false); assert.equal(d1.responder, true); assert.ok(d1.motivos.some((x) => /^pare_nao_confirmado/.test(x)));
+  assert.equal(L.acq07Decidir(m('a loja se chama Stop Informática'), lead, null, jp(0.95), fila, c, TER_10H).parar, false);
+  assert.equal(L.acq07Decidir(m('Vocês são chatos, me esquece'), lead, null, jp(0.6), fila, c, TER_10H).parar, true);
+  assert.equal(L.acq07Decidir(m('não quero mais receber, tira meu número'), lead, null, jp(0.5), fila, c, TER_10H).parar, true);
+  assert.equal(L.acq07Decidir(m('ok'), lead, null, jp(0.45), fila, c, TER_10H).parar, false, 'Jev em dúvida sem frase não cala o Rafael');
+  const pausas = Array.from({ length: 400 }, (_, i) => L.acq07PausaHumana('wamid.' + i, 'descobrir'));
+  const na_hora = pausas.filter((p) => p === 0).length, demora = pausas.filter((p) => p >= 40).length;
+  assert.ok(na_hora > 200 && na_hora < 320, 'maioria na hora: ' + na_hora);
+  assert.ok(demora > 15 && demora < 70, 'algumas com um ou dois minutos: ' + demora);
+  assert.ok(pausas.every((p) => p <= 100));
+  assert.equal(L.acq07PausaHumana('wamid.1', 'fechar_agora'), 0, 'fechamento responde na hora');
 });
 
 test('cadência de 3 toques: retomada em 3 dias úteis, despedida em mais 4, robô não conta, pessoa para tudo', () => {

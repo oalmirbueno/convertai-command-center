@@ -188,7 +188,7 @@ function acq07PedidoJev(m, lead, provas) {
           interessado: 'Mostra interesse em seguir: aceita o diagnóstico, pede para mandar ou preparar, diz que quer saber mais ou que topa conversar.',
           pergunta: 'Faz uma pergunta sobre a Aceleriq, o diagnóstico, o serviço, o preço ou como funciona, sem decidir nada ainda.',
           nao_agora: 'Diz que agora não é o momento, que vai pensar, que está ocupado ou pede para falar depois, sem pedir para parar de receber mensagens.',
-          pare: 'Pede para não receber mais mensagens, manda parar, sair ou descadastrar, ou reclama do contato. Uma objeção de preço ou um "não preciso agora" não é pedido para parar.',
+          pare: 'Pede para não receber mais mensagens, manda parar, sair ou descadastrar, ou reclama do contato. Nome de empresa, marca, site ou link com a palavra stop não é pedido para parar. Uma objeção de preço ou um "não preciso agora" não é pedido para parar.',
           outro: 'Cumprimento, agradecimento, emoji, confirmação curta ou assunto sem relação com a conversa comercial.',
         } },
       etapa: { type: 'choice',
@@ -302,6 +302,30 @@ function acq07ForaDoTeste(m, cfg) {
 }
 
 // Regras: o Jev julga, o código decide. registro: resultado de registrar_mensagem (pode trazer pediu_para_parar).
+// Pedido para parar só vale com frase de saída de verdade. Link, site ou marca com "stop" nunca é pedido para parar.
+var ACQ07_PARE_RE = /\b(pare|para de|parem|parar|chega|sai(r|a) d|me tir[ae]|tir[ae] (meu|o meu|esse) (numero|contato)|remov|descadastr|bloque|nao (quero mais|quero receber|tenho interesse|me mand|mand[ae] mais|me chame|me liga)|sem interesse|me esquec|chat[oa]s?|spam|denunci|incomod|que saco)/;
+function acq07PareConfirmado(m, julg) {
+  var bruto = String((m && m.texto) || '');
+  if (acq07LinksDoTexto(bruto).length) return false;
+  var t = acq07SemAcento(bruto).toLowerCase();
+  if (ACQ07_PARE_RE.test(t)) return true;
+  return Number(julg && julg.p_pare) >= 0.9 && !/\bstop\b/.test(t);
+}
+
+// Tempo de resposta de gente (07/11, dono): quase sempre na hora, às vezes uns segundos, de vez em quando um ou dois minutos.
+// Determinístico pelo wamid (testável). Fechamento, Pix e reunião respondem sempre na hora.
+function acq07PausaHumana(semente, etapa) {
+  if (['fechar_agora', 'aguardando_pagamento', 'confirmar_reuniao', 'propor_reuniao'].indexOf(etapa) >= 0) return 0;
+  var h = 2166136261, s = String(semente || '');
+  for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  var mix = function (x) { x ^= x >>> 16; x = Math.imul(x, 0x85ebca6b) >>> 0; x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35) >>> 0; x ^= x >>> 16; return x >>> 0; };
+  var a = mix(h), b = mix(a ^ 0x9e3779b9);
+  var u = a / 4294967296, f = b / 4294967296;
+  if (u < 0.65) return 0;
+  if (u < 0.9) return Math.round(6 + 19 * f);
+  return Math.round(40 + 60 * f);
+}
+
 function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs, orcamento) {
   var c = acqComCfg(cfg);
   var d = { acao: 'nada', responder: false, caixa: false, parar: false, cobrar: false, motivos: [], intencao: julg ? julg.intencao : null, etapa: julg ? julg.etapa : null, objecao: julg ? julg.objecao : null, modo: 'venda', faltam: [], plano: null, agenda: false, voz: false };
@@ -314,7 +338,11 @@ function acq07Decidir(m, lead, registro, julg, fila, cfg, agoraMs, orcamento) {
   if (registro && registro.pediu_para_parar) { d.acao = 'parar'; d.motivos.push('painel_detectou_pedido_para_parar'); return d; }
   if (m.botao && ACQ07_BOTOES_PARE.indexOf(botao) >= 0) { d.acao = 'parar'; d.parar = true; d.motivos.push('botao_nao_tenho_interesse'); return d; }
   if (!julg) { d.motivos.push('classificacao_indisponivel'); return d; }
-  if (julg.intencao === 'pare' || julg.p_pare >= c.limiar_pare) { d.acao = 'parar'; d.parar = true; d.motivos.push('jev_pare:' + julg.p_pare); return d; }
+  if (julg.intencao === 'pare' || julg.p_pare >= c.limiar_pare) {
+    if (acq07PareConfirmado(m, julg)) { d.acao = 'parar'; d.parar = true; d.motivos.push('jev_pare:' + julg.p_pare); return d; }
+    // 07/11: "stop info.com" (site da loja) virou pedido para parar e calou o Rafael. Sem frase de saída, segue a conversa.
+    d.motivos.push('pare_nao_confirmado:' + julg.p_pare); julg.intencao = julg.intencao === 'pare' ? 'outro' : julg.intencao; d.intencao = julg.intencao;
+  }
   if (conf.ativo === false) { d.motivos.push('mercurio_desligado'); return d; }
   var idadeH = (agoraMs - Date.parse(m.em)) / 3600000;
   var janela = isFinite(idadeH) && idadeH >= 0 && idadeH < Number(c.janela_horas);
