@@ -14,30 +14,79 @@ export interface ClienteComFoto {
   avatar_url?: string | null;
 }
 
+export interface LogoAssinada {
+  ref: string;
+  url: string;
+  ate: number;
+}
+
 export interface FotosDaCarteira {
   avatar: Map<string, string>;
   instagram: Map<string, string>;
   logos: Map<string, string>;
+  assinadas?: Map<string, LogoAssinada>;
 }
 
-/** A URL assinada da logo vale 2 h: folga larga sobre os 30 min em que a consulta fica fresca. */
-const VALIDADE_DA_LOGO_S = 7200;
+/**
+ * 09/11/2026 (dono: "demora muito para carregar a logo"): cada abertura assinava um link novo, então o navegador nunca
+ * aproveitava o que já tinha baixado. A logo agora vale 7 dias, o link é reaproveitado enquanto o arquivo for o mesmo e a
+ * última carteira fica guardada neste aparelho: a tela abre com as logos e confere o banco por trás.
+ */
+const VALIDADE_DA_LOGO_S = 7 * 24 * 3600;
+const FOLGA_DO_LINK_MS = 24 * 3600_000;
+const chaveGuardada = (userId: string) => `fotos-dos-clientes:v1:${userId}`;
+
+export function lerCarteiraGuardada(userId?: string | null, agora = Date.now()): { fotos: FotosDaCarteira; salvoEm: number } | null {
+  if (!userId) return null;
+  try {
+    const bruto = window.localStorage.getItem(chaveGuardada(userId));
+    if (!bruto) return null;
+    const g = JSON.parse(bruto) as { salvoEm: number; avatar: [string, string][]; instagram: [string, string][]; logos: [string, LogoAssinada][] };
+    const validas = g.logos.filter(([, l]) => l.ate > agora);
+    return {
+      salvoEm: g.salvoEm,
+      fotos: {
+        avatar: new Map(g.avatar),
+        instagram: new Map(g.instagram),
+        logos: new Map(validas.map(([id, l]) => [id, l.url])),
+        assinadas: new Map(validas),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function guardarCarteira(userId: string | null | undefined, fotos: FotosDaCarteira) {
+  if (!userId) return;
+  try {
+    window.localStorage.setItem(chaveGuardada(userId), JSON.stringify({
+      salvoEm: Date.now(),
+      avatar: [...fotos.avatar],
+      instagram: [...fotos.instagram],
+      logos: [...(fotos.assinadas ?? new Map())],
+    }));
+  } catch { /* sem espaço ou modo privado: só perde o atalho */ }
+}
 
 /**
  * As fotos da carteira inteira, numa leva so (todas em paralelo): a foto de
- * cadastro, a identidade do Instagram (a mesma de /metricas) e as logos dos
- * arquivos de TODOS os clientes, porque o link do Instagram vence e a logo e
- * o que sobra. As logos sao assinadas em lote por bucket, pedindo a
- * miniatura (.mini.jpg) antes do original; nunca a transformacao de imagem
- * do Storage (cota estourada em 26/09/2026).
+ * cadastro, a identidade do Instagram (a mesma de /metricas) e a logo de cada
+ * cliente. A logo oficial do Kit de Marca vem primeiro; sem ela, a dos
+ * arquivos pelo nome, porque o link do Instagram vence e a logo e o que
+ * sobra. As logos sao assinadas em lote por bucket, pedindo a miniatura
+ * (.mini.jpg) antes do original; nunca a transformacao de imagem do Storage
+ * (cota estourada em 26/09/2026).
  */
-export async function carregarFotosDaCarteira(): Promise<FotosDaCarteira> {
+export async function carregarFotosDaCarteira(userId?: string | null): Promise<FotosDaCarteira> {
   const avatar = new Map<string, string>();
   const instagram = new Map<string, string>();
   const logos = new Map<string, string>();
+  const assinadas = new Map<string, LogoAssinada>();
   const db = supabase as any;
+  const anteriores = lerCarteiraGuardada(userId)?.fotos.assinadas;
 
-  const [perfis, identidades, arquivos] = await Promise.all([
+  const [perfis, identidades, arquivos, kits] = await Promise.all([
     db.from("profiles").select("id, avatar_url").not("avatar_url", "is", null),
     db.from("social_client_identity")
       .select("client_id, external_account_id, username, profile_picture_url, captured_at")
@@ -50,11 +99,62 @@ export async function carregarFotosDaCarteira(): Promise<FotosDaCarteira> {
       .or("file_name.ilike.%logo%,file_name.ilike.%marca%")
       .order("created_at", { ascending: false })
       .limit(1000),
+    db.from("cliente_kit_marca").select("client_id, logo_path, logo_file_id"),
   ]);
 
   for (const p of (perfis?.data ?? []) as Array<{ id: string; avatar_url: string | null }>) {
     if (p.avatar_url && p.avatar_url.trim()) avatar.set(p.id, p.avatar_url);
   }
+
+  // A logo: primeiro a do Kit de Marca, que alguém escolheu; o nome do arquivo é só o plano B.
+  const linhasDoKit = (kits?.data ?? []) as Array<{ client_id: string; logo_path: string | null; logo_file_id: string | null }>;
+  const idsDoKit = linhasDoKit.filter((k) => !k.logo_path && k.logo_file_id).map((k) => k.logo_file_id as string);
+  const arquivosDoKit = new Map<string, ArquivoDeLogo>();
+  if (idsDoKit.length > 0) {
+    const { data } = await db.from("files").select("id, client_id, file_name, file_url, storage_bucket, storage_path, mime_type, created_at").in("id", idsDoKit);
+    for (const a of (data ?? []) as ArquivoDeLogo[]) arquivosDoKit.set(a.id, a);
+  }
+  const porClienteArq = new Map<string, ArquivoDeLogo[]>();
+  for (const a of (arquivos?.data ?? []) as ArquivoDeLogo[]) {
+    porClienteArq.set(a.client_id, [...(porClienteArq.get(a.client_id) ?? []), a]);
+  }
+  const doKit = new Map(linhasDoKit.map((k) => [k.client_id, k]));
+  const porBucket = new Map<string, Array<{ clientId: string; path: string }>>();
+  const validoAte = Date.now() + VALIDADE_DA_LOGO_S * 1000;
+  const incluir = (clientId: string, bucket: string, path: string) => {
+    const ref = `${bucket}/${path}`;
+    const antes = anteriores?.get(clientId);
+    if (antes && antes.ref === ref && antes.ate - Date.now() > FOLGA_DO_LINK_MS) {
+      logos.set(clientId, antes.url);
+      assinadas.set(clientId, antes);
+      return;
+    }
+    porBucket.set(bucket, [...(porBucket.get(bucket) ?? []), { clientId, path }]);
+  };
+  for (const clientId of new Set([...doKit.keys(), ...porClienteArq.keys()])) {
+    const kit = doKit.get(clientId);
+    if (kit?.logo_path) {
+      incluir(clientId, "mesa", kit.logo_path);
+      continue;
+    }
+    const escolhido = (kit?.logo_file_id ? arquivosDoKit.get(kit.logo_file_id) : null) ?? escolherArquivoDeLogo(porClienteArq.get(clientId) ?? []);
+    if (!escolhido) continue;
+    const ref = storageRefFromFile({ fileUrl: escolhido.file_url, storageBucket: escolhido.storage_bucket, storagePath: escolhido.storage_path });
+    if (ref) incluir(clientId, ref.bucket, ref.path);
+    else if (isDirectFileUrl(escolhido.file_url)) logos.set(clientId, escolhido.file_url);
+  }
+  // Em paralelo com a escolha do Instagram: a logo não espera a contagem de posts.
+  const assinando = Promise.all([...porBucket.entries()].map(async ([bucket, itens]) => {
+    try {
+      const urls = await urlsLevesEmLote(bucket, itens.map((i) => i.path), VALIDADE_DA_LOGO_S);
+      for (const i of itens) {
+        const url = urls[i.path];
+        if (!url) continue;
+        logos.set(i.clientId, url);
+        assinadas.set(i.clientId, { ref: `${bucket}/${i.path}`, url, ate: validoAte });
+      }
+    } catch { /* bucket ilegivel: esses clientes ficam com o que sobrar */ }
+  }));
 
   const porCliente = new Map<string, IdentidadeCandidata[]>();
   for (const i of (identidades?.data ?? []) as IdentidadeCandidata[]) {
@@ -81,27 +181,11 @@ export async function carregarFotosDaCarteira(): Promise<FotosDaCarteira> {
     );
     if (principal?.profile_picture_url) instagram.set(clientId, principal.profile_picture_url);
   }
+  await assinando;
 
-  const porClienteArq = new Map<string, ArquivoDeLogo[]>();
-  for (const a of (arquivos?.data ?? []) as ArquivoDeLogo[]) {
-    porClienteArq.set(a.client_id, [...(porClienteArq.get(a.client_id) ?? []), a]);
-  }
-  const porBucket = new Map<string, Array<{ clientId: string; path: string }>>();
-  for (const [clientId, lista] of porClienteArq) {
-    const escolhido = escolherArquivoDeLogo(lista);
-    if (!escolhido) continue;
-    const ref = storageRefFromFile({ fileUrl: escolhido.file_url, storageBucket: escolhido.storage_bucket, storagePath: escolhido.storage_path });
-    if (ref) porBucket.set(ref.bucket, [...(porBucket.get(ref.bucket) ?? []), { clientId, path: ref.path }]);
-    else if (isDirectFileUrl(escolhido.file_url)) logos.set(clientId, escolhido.file_url);
-  }
-  await Promise.all([...porBucket.entries()].map(async ([bucket, itens]) => {
-    try {
-      const urls = await urlsLevesEmLote(bucket, itens.map((i) => i.path), VALIDADE_DA_LOGO_S);
-      for (const i of itens) if (urls[i.path]) logos.set(i.clientId, urls[i.path]);
-    } catch { /* bucket ilegivel: esses clientes ficam com o que sobrar */ }
-  }));
-
-  return { avatar, instagram, logos };
+  const fotos = { avatar, instagram, logos, assinadas };
+  guardarCarteira(userId, fotos);
+  return fotos;
 }
 
 /**
@@ -114,11 +198,14 @@ export async function carregarFotosDaCarteira(): Promise<FotosDaCarteira> {
  */
 export function useFotosDosClientes(clientes: readonly ClienteComFoto[] = []) {
   const { user } = useAuth();
+  const guardada = useMemo(() => lerCarteiraGuardada(user?.id), [user?.id]);
   const { data } = useQuery({
     queryKey: ["fotos-dos-clientes", user?.id],
     enabled: !!user,
     staleTime: 30 * 60_000,
-    queryFn: carregarFotosDaCarteira,
+    queryFn: () => carregarFotosDaCarteira(user?.id),
+    initialData: guardada?.fotos,
+    initialDataUpdatedAt: guardada?.salvoEm,
   });
 
   const avatarDaTela = useMemo(() => {

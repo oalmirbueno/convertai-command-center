@@ -42,8 +42,8 @@ vi.mock("@/integrations/supabase/client", () => {
 });
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u-1" }, profile: { role: "admin" } }) }));
 
-import { candidatasDaFoto, linkDaMetaVencido, vencimentoDoLinkDaMeta } from "@/lib/fotoDoCliente";
-import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
+import { candidatasDaFoto, ehArquivoDeLogo, escolherArquivoDeLogo, linkDaMetaVencido, vencimentoDoLinkDaMeta } from "@/lib/fotoDoCliente";
+import { carregarFotosDaCarteira, lerCarteiraGuardada, useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import LogoDoCliente from "@/components/admin/LogoDoCliente";
 
@@ -51,7 +51,7 @@ const AGORA = Date.parse("2026-10-26T12:00:00Z");
 const hex = (ms: number) => Math.floor(ms / 1000).toString(16);
 const ig = (venceEm: number) => `https://scontent.cdninstagram.com/v/t51/foto.jpg?stp=dst&oh=00_ab&oe=${hex(venceEm)}&_nc_sid=1`;
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 describe("o link da Meta vence", () => {
   it("le o oe= em hexadecimal como segundos", () => {
@@ -173,5 +173,65 @@ describe("useFotosDosClientes", () => {
       h(LogoDoCliente, { url: ig(Date.now() - 1000), nome: "Mirante", clienteId: "c1", tamanho: 32 })));
     const img = await screen.findByRole("img", { name: "Logo de Mirante" }) as HTMLImageElement;
     expect(img.src).toBe("https://assinada/c1/logo%20principal.png.mini.jpg");
+  });
+});
+
+describe("a logo certa (09/11/2026: a Stop mostrava um mouse)", () => {
+  const arq = (file_name: string, created_at = "2026-01-01") => ({ id: file_name, client_id: "c", file_name, file_url: "x", mime_type: "image/png", created_at });
+
+  it("Catálogo não é logo, nem peça que fala de marca", () => {
+    for (const nome of ["NTC NTOBX003, Catálogo essencial v1", "Se o cliente marca horario .png", "Faça um arte para a pari si com a logo e com essas...", "V4-ARTE-01-MARCA-DIRECT-V4.png", "Previa da Logo sem contato.png", "Ajenda_Prancha_Conferencia_Logos_HQ.png", "Sua agenda pode ter sua marca.png"]) {
+      expect(ehArquivoDeLogo(nome), nome).toBe(false);
+    }
+  });
+
+  it("os nomes reais de logo continuam valendo", () => {
+    for (const nome of ["Logo Mirante Luz.png", "softy-logo-vertical.png", "03-01_VERZELO_Logotipo_Simplificado_Oficial_Colorido_4K.png", "RD_AR_Logo_Aprovada_RD_AR.png", "Opção de Logo Aprovado.jpeg", "Doces-em-Ordem-v2-marca-horizontal.png"]) {
+      expect(ehArquivoDeLogo(nome), nome).toBe(true);
+    }
+  });
+
+  it("só catálogo: fica sem logo de arquivo; logo de verdade vence a marca", () => {
+    expect(escolherArquivoDeLogo([arq("NTC NTOBX003, Catálogo essencial v1")])).toBeNull();
+    expect(escolherArquivoDeLogo([arq("Empresa-marca.png", "2026-09-01"), arq("Empresa Logo.png", "2026-01-01")])?.file_name).toBe("Empresa Logo.png");
+  });
+
+  const carteira = () => {
+    banco.tabelas = [];
+    banco.assinaturas = [];
+    banco.linhas = {
+      files: [{ id: "f", client_id: "stop", file_name: "Logo antiga.png", file_url: "", storage_bucket: "files", storage_path: "stop/antiga.png", mime_type: "image/png" }],
+      cliente_kit_marca: [{ client_id: "stop", logo_path: "stop/marca/logo.png", logo_file_id: null }],
+    };
+  };
+
+  it("a logo do Kit de Marca vem antes de qualquer arquivo", async () => {
+    carteira();
+    const f = await carregarFotosDaCarteira("u-1");
+    expect(f.logos.get("stop")).toBe("https://assinada/stop/marca/logo.png.mini.jpg");
+    expect(banco.assinaturas.map((a) => a.bucket)).toEqual(["mesa"]);
+  });
+
+  it("abrir de novo aproveita o mesmo link e já começa com as logos guardadas", async () => {
+    carteira();
+    const primeira = await carregarFotosDaCarteira("u-1");
+    expect(lerCarteiraGuardada("u-1")?.fotos.logos.get("stop")).toBe(primeira.logos.get("stop"));
+    banco.assinaturas = [];
+    const segunda = await carregarFotosDaCarteira("u-1");
+    expect(banco.assinaturas).toEqual([]);
+    expect(segunda.logos.get("stop")).toBe(primeira.logos.get("stop"));
+  });
+
+  it("logo trocada no Kit assina o arquivo novo na hora", async () => {
+    carteira();
+    await carregarFotosDaCarteira("u-1");
+    banco.linhas.cliente_kit_marca = [{ client_id: "stop", logo_path: "stop/marca/nova.png", logo_file_id: null }];
+    const f = await carregarFotosDaCarteira("u-1");
+    expect(f.logos.get("stop")).toBe("https://assinada/stop/marca/nova.png.mini.jpg");
+  });
+
+  it("link perto de vencer não é usado", () => {
+    window.localStorage.setItem("fotos-dos-clientes:v1:u-1", JSON.stringify({ salvoEm: 1, avatar: [], instagram: [], logos: [["a", { ref: "m/a", url: "velha", ate: 10 }]] }));
+    expect(lerCarteiraGuardada("u-1", 100)?.fotos.logos.size).toBe(0);
   });
 });

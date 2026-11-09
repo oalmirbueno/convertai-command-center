@@ -38,9 +38,20 @@ const PESOS: Array<[RegExp, number]> = [
   [/pret[ao]\b|black|monocrom/i, -25],
 ];
 
+/* 09/11/2026 (dono: "a Stop está puxando um mouse como logo"): "logo" tem de ser palavra. O arquivo era
+   "Catálogo essencial", foto de mouse. Sem \\p{L}: o piso do painel é Safari 11. */
+const LOGO_NO_NOME = /(^|[^a-zà-ÿ0-9])logo(tipo|marca|s)?([^a-zà-ÿ]|$)/i;
+const MARCA_NO_NOME = /(^|[-_.])marca([-_.]|$)/i;
+const PECA_NO_NOME = /(^|[^a-zà-ÿ])(arte|post|carrossel|cat[aá]logo|fa[cç]a|crie|gere|pr[eé]via|prancha|moodboard|mockup)([^a-zà-ÿ]|$)/i;
+
+/** O nome diz que o arquivo é a logo, e não uma peça que fala de logo ou de marca. */
+export function ehArquivoDeLogo(nome: string): boolean {
+  return !PECA_NO_NOME.test(nome) && (LOGO_NO_NOME.test(nome) || MARCA_NO_NOME.test(nome));
+}
+
 /** Quanto mais alto, melhor esta logo serve como foto redonda no painel. */
 export function pontuarLogo(nome: string): number {
-  let total = 0;
+  let total = LOGO_NO_NOME.test(nome) ? 0 : -30;
   for (const [re, peso] of PESOS) if (re.test(nome)) total += peso;
   if (/\.png$/i.test(nome)) total += 5;
   if (/\.svg$/i.test(nome)) total -= 100; // nao renderiza em <img> com seguranca em todo lugar
@@ -48,7 +59,7 @@ export function pontuarLogo(nome: string): number {
 }
 
 export function escolherArquivoDeLogo(arquivos: readonly ArquivoDeLogo[]): ArquivoDeLogo | null {
-  const imagens = arquivos.filter((a) => !a.mime_type || /^image\//i.test(a.mime_type));
+  const imagens = arquivos.filter((a) => (!a.mime_type || /^image\//i.test(a.mime_type)) && ehArquivoDeLogo(a.file_name));
   if (imagens.length === 0) return null;
   return [...imagens].sort((a, b) => {
     const d = pontuarLogo(b.file_name) - pontuarLogo(a.file_name);
