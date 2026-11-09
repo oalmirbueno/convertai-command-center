@@ -9,6 +9,8 @@ import {
   stripRefreshParam,
 } from "./lib/appRefresh";
 import { preCarregarTelaDoEndereco } from "./lib/preCargaDoBoot";
+import { registrarServiceWorker } from "./lib/registrarServiceWorker";
+import "./styles/fontes.css";
 import "./index.css";
 import "./styles/responsive.css";
 
@@ -30,6 +32,7 @@ stripRefreshParam();
 // O código da tela do endereço começa a baixar junto com o login, e não
 // depois dele (src/lib/preCargaDoBoot.ts).
 preCarregarTelaDoEndereco();
+registrarServiceWorker();
 
 // Marca da publicação. Trocar este valor muda o nome do arquivo principal e
 // tira o painel de uma cópia travada na CDN (25/09: index-aIxjy7UY.js parou de

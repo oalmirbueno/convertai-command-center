@@ -27,6 +27,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.remove("light", "dark");
     root.classList.add(theme);
     localStorage.setItem(STORAGE_KEY, theme);
+    // A barra do sistema (Android, app instalado) acompanha o tema: no claro ela ficava preta sobre a tela clara.
+    const fundo = getComputedStyle(root).getPropertyValue("--background").trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && fundo) meta.setAttribute("content", `hsl(${fundo.split(/\s+/).join(", ")})`);
   }, [theme]);
 
   const setTheme = (t: Theme) => setThemeState(t);

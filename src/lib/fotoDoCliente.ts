@@ -41,7 +41,7 @@ const PESOS: Array<[RegExp, number]> = [
 ];
 
 /* 09/11/2026 (dono: "a Stop está puxando um mouse como logo"): "logo" tem de ser palavra. O arquivo era
-   "Catálogo essencial", foto de mouse. Sem \\p{L}: o piso do painel é Safari 11. */
+   "Catálogo essencial", foto de mouse. Sem classe Unicode de letra: o piso do painel é Safari 11. */
 const LOGO_NO_NOME = /(^|[^a-zà-ÿ0-9])logo(tipo|marca|s)?([^a-zà-ÿ]|$)/i;
 const MARCA_NO_NOME = /(^|[-_.])marca([-_.]|$)/i;
 const PECA_NO_NOME = /(^|[^a-zà-ÿ])(arte|post|carrossel|cat[aá]logo|fa[cç]a|crie|gere|pr[eé]via|prancha|moodboard|mockup)([^a-zà-ÿ]|$)/i;
