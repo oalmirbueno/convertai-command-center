@@ -25,6 +25,8 @@ export interface FotosDaCarteira {
   instagram: Map<string, string>;
   logos: Map<string, string>;
   assinadas?: Map<string, LogoAssinada>;
+  /** Clientes cuja logo é clara (precisa de fundo escuro). */
+  logosClaras?: Set<string>;
 }
 
 /**
@@ -41,7 +43,7 @@ export function lerCarteiraGuardada(userId?: string | null, agora = Date.now()):
   try {
     const bruto = window.localStorage.getItem(chaveGuardada(userId));
     if (!bruto) return null;
-    const g = JSON.parse(bruto) as { salvoEm: number; avatar: [string, string][]; instagram: [string, string][]; logos: [string, LogoAssinada][] };
+    const g = JSON.parse(bruto) as { salvoEm: number; avatar: [string, string][]; instagram: [string, string][]; logos: [string, LogoAssinada][]; claras?: string[] };
     const validas = g.logos.filter(([, l]) => l.ate > agora);
     return {
       salvoEm: g.salvoEm,
@@ -50,6 +52,7 @@ export function lerCarteiraGuardada(userId?: string | null, agora = Date.now()):
         instagram: new Map(g.instagram),
         logos: new Map(validas.map(([id, l]) => [id, l.url])),
         assinadas: new Map(validas),
+        logosClaras: new Set(g.claras ?? []),
       },
     };
   } catch {
@@ -65,6 +68,7 @@ function guardarCarteira(userId: string | null | undefined, fotos: FotosDaCartei
       avatar: [...fotos.avatar],
       instagram: [...fotos.instagram],
       logos: [...(fotos.assinadas ?? new Map())],
+      claras: [...(fotos.logosClaras ?? new Set())],
     }));
   } catch { /* sem espaço ou modo privado: só perde o atalho */ }
 }
@@ -99,7 +103,7 @@ export async function carregarFotosDaCarteira(userId?: string | null): Promise<F
       .or("file_name.ilike.%logo%,file_name.ilike.%marca%")
       .order("created_at", { ascending: false })
       .limit(1000),
-    db.from("cliente_kit_marca").select("client_id, logo_path, logo_file_id"),
+    db.from("cliente_kit_marca").select("client_id, logo_path, logo_file_id, logo_tom"),
   ]);
 
   for (const p of (perfis?.data ?? []) as Array<{ id: string; avatar_url: string | null }>) {
@@ -107,7 +111,8 @@ export async function carregarFotosDaCarteira(userId?: string | null): Promise<F
   }
 
   // A logo: primeiro a do Kit de Marca, que alguém escolheu; o nome do arquivo é só o plano B.
-  const linhasDoKit = (kits?.data ?? []) as Array<{ client_id: string; logo_path: string | null; logo_file_id: string | null }>;
+  const linhasDoKit = (kits?.data ?? []) as Array<{ client_id: string; logo_path: string | null; logo_file_id: string | null; logo_tom?: string | null }>;
+  const logosClaras = new Set(linhasDoKit.filter((k) => k.logo_tom === "clara" && (k.logo_path || k.logo_file_id)).map((k) => k.client_id));
   const idsDoKit = linhasDoKit.filter((k) => !k.logo_path && k.logo_file_id).map((k) => k.logo_file_id as string);
   const arquivosDoKit = new Map<string, ArquivoDeLogo>();
   if (idsDoKit.length > 0) {
@@ -183,7 +188,7 @@ export async function carregarFotosDaCarteira(userId?: string | null): Promise<F
   }
   await assinando;
 
-  const fotos = { avatar, instagram, logos, assinadas };
+  const fotos = { avatar, instagram, logos, assinadas, logosClaras };
   guardarCarteira(userId, fotos);
   return fotos;
 }
@@ -221,6 +226,7 @@ export function useFotosDosClientes(clientes: readonly ClienteComFoto[] = []) {
     return candidatasDaFoto({
       avatarUrl: (avatarProprio && avatarProprio.trim()) || avatarDaTela.get(id) || data?.avatar.get(id) || null,
       logoUrl: data?.logos.get(id) ?? null,
+      logoClara: data?.logosClaras?.has(id) ?? false,
       instagramUrl: data?.instagram.get(id) ?? null,
     });
   }, [data, avatarDaTela]);

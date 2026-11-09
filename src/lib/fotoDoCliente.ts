@@ -13,6 +13,8 @@
 export interface FotoDoCliente {
   url: string;
   tipo: "foto" | "instagram" | "logo";
+  /** Logo clara (cliente_kit_marca.logo_tom): no fundo branco as letras somem. */
+  fundo?: "escuro";
 }
 
 export interface ArquivoDeLogo {
@@ -109,12 +111,13 @@ export function juntarCandidatas(
 export function candidatasDaFoto(input: {
   avatarUrl?: string | null;
   logoUrl?: string | null;
+  logoClara?: boolean;
   instagramUrl?: string | null;
   agora?: number;
 }): FotoDoCliente[] {
   return juntarCandidatas([[
     input.avatarUrl ? { url: input.avatarUrl, tipo: "foto" } : null,
-    input.logoUrl ? { url: input.logoUrl, tipo: "logo" } : null,
+    input.logoUrl ? { url: input.logoUrl, tipo: "logo", ...(input.logoClara ? { fundo: "escuro" as const } : {}) } : null,
     input.instagramUrl ? { url: input.instagramUrl, tipo: "instagram" } : null,
   ]], input.agora);
 }

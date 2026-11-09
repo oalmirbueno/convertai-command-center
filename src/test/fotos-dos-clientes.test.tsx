@@ -230,6 +230,19 @@ describe("a logo certa (09/11/2026: a Stop mostrava um mouse)", () => {
     expect(f.logos.get("stop")).toBe("https://assinada/stop/marca/nova.png.mini.jpg");
   });
 
+  it("logo clara ganha fundo escuro; as outras seguem no branco", async () => {
+    expect(candidatasDaFoto({ logoUrl: "l", logoClara: true })).toEqual([{ url: "l", tipo: "logo", fundo: "escuro" }]);
+    const { container, unmount } = render(h(FotoDoCliente, { nome: "Softy", fotos: [{ url: "https://x/l.png", tipo: "logo", fundo: "escuro" }] }));
+    expect(container.querySelector(".bg-neutral-900")).toBeTruthy();
+    unmount();
+    const outro = render(h(FotoDoCliente, { nome: "Stop", fotos: [{ url: "https://x/l.png", tipo: "logo" }] }));
+    expect(outro.container.querySelector(".bg-white")).toBeTruthy();
+    carteira();
+    banco.linhas.cliente_kit_marca = [{ client_id: "stop", logo_path: "stop/marca/logo.png", logo_file_id: null, logo_tom: "clara" }];
+    expect((await carregarFotosDaCarteira("u-1")).logosClaras?.has("stop")).toBe(true);
+    expect(lerCarteiraGuardada("u-1")?.fotos.logosClaras?.has("stop")).toBe(true);
+  });
+
   it("link perto de vencer não é usado", () => {
     window.localStorage.setItem("fotos-dos-clientes:v1:u-1", JSON.stringify({ salvoEm: 1, avatar: [], instagram: [], logos: [["a", { ref: "m/a", url: "velha", ate: 10 }]] }));
     expect(lerCarteiraGuardada("u-1", 100)?.fotos.logos.size).toBe(0);
