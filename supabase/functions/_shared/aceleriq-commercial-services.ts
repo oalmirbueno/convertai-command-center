@@ -485,12 +485,17 @@ export async function comercialFila(input: { operador?: string; limit?: number }
   if (!ids.length) return { operador: slug, config: regra, itens: [], total: 0 };
   const campanhasInternas = Array.from(new Set(lista.map((l) => l.campaign_id).filter(Boolean))) as string[];
   const campanhasMeta = Array.from(new Set(lista.map((l) => l.ads_campaign_id).filter(Boolean))) as string[];
-  const [msgs, fatos, internas, meta] = await Promise.all([
+  const [msgs, fatos, internas, meta, caixa, reunioes, cobrancas] = await Promise.all([
     comPrazo(db().from('commercial_lead_messages').select('lead_id, direcao, canal, texto, enviada_em, operador_slug').in('lead_id', ids).order('enviada_em', { ascending: false }).limit(Math.min(2000, ids.length * 20))),
     comPrazo(db().from('commercial_facts').select('lead_id, campo, valor, evidencia, situacao, created_at').in('lead_id', ids).neq('situacao', 'descartado').order('created_at', { ascending: false }).limit(500)),
     campanhasInternas.length ? comPrazo(db().from('commercial_campaigns').select('id, name, channel').in('id', campanhasInternas)) : Promise.resolve({ data: [] }),
     campanhasMeta.length ? comPrazo(db().from('ads_campaigns').select('campaign_id, name, status').in('campaign_id', campanhasMeta)) : Promise.resolve({ data: [] }),
+    comPrazo(db().from('commercial_handoffs').select('lead_id').in('lead_id', ids).is('concluida_em', null)),
+    comPrazo(db().from('comercial_reunioes').select('lead_id').in('lead_id', ids).gte('inicio', new Date().toISOString())),
+    comPrazo(db().from('comercial_cobrancas').select('lead_id').in('lead_id', ids).eq('situacao', 'aguardando')),
   ]);
+  // Lead com a Caixa aberta, reunião marcada ou Pix esperando está com o Almir: o executivo não retoma sozinho.
+  const emFechamento = new Set([caixa, reunioes, cobrancas].flatMap((r) => ((r as { data: Array<{ lead_id: string }> | null }).data ?? []).map((x) => String(x.lead_id))));
   const porLead = new Map<string, Array<Record<string, unknown>>>();
   for (const m of ((msgs as { data: Array<Record<string, unknown>> | null }).data ?? [])) {
     const k = String(m.lead_id);
@@ -518,6 +523,7 @@ export async function comercialFila(input: { operador?: string; limit?: number }
       lead_frio: ORIGENS_FRIAS.indexOf(String(l.origin)) >= 0,
       primeiro_contato_feito: conversa.some((m) => m.direcao === 'saida'),
       nao_contatar: naoContatar(l),
+      em_fechamento: emFechamento.has(String(l.id)),
       classe: l.classe ?? null,
       qualificacao: l.qualificacao ?? {},
       proxima_acao: l.next_action ?? null,
