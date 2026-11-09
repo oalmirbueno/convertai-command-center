@@ -1001,6 +1001,15 @@ function LegacyFinanceiro() {
     dica: "Abrir o caixa do Freela",
   });
 
+  const linhasDoFreela: Array<[string, "BRL" | "USD", "recebido" | "aberto"]> = [
+    [`Recebido em ${nomeMesFreela} (R$)`, "BRL", "recebido"],
+    [`Recebido em ${nomeMesFreela} (US$)`, "USD", "recebido"],
+    ["Em aberto (R$)", "BRL", "aberto"],
+    ["Em aberto (US$)", "USD", "aberto"],
+  ];
+  const todosOsCardsDoFreela = linhasDoFreela.map(([r, moeda, modo]) => cardFreela(r, moeda, modo));
+  const cardsDoFreela = linhasDoFreela.filter(([, moeda, modo]) => somaFreela(moeda, modo) > 0).map(([r, moeda, modo]) => cardFreela(r, moeda, modo));
+
   // A receber: cobranças pendentes, parcelas abertas e planos ativos ainda sem cobrança.
   const monthlyPendingItems = showMonthly ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
     const client = (clients || []).find((c: any) => c.id === b.client_id);
@@ -1352,16 +1361,19 @@ function LegacyFinanceiro() {
               ]}
             />
 
-            <FaixaDeNumeros
-              rotulo="Freela"
-              colunas={4}
-              itens={[
-                cardFreela(`Recebido em ${nomeMesFreela} (R$)`, "BRL", "recebido"),
-                cardFreela(`Recebido em ${nomeMesFreela} (US$)`, "USD", "recebido"),
-                cardFreela("Em aberto (R$)", "BRL", "aberto"),
-                cardFreela("Em aberto (US$)", "USD", "aberto"),
-              ]}
-            />
+            {/* 09/11/2026 (dono: "mais clean"): quatro zeros do Freela eram só ruído. Aparece o que tem valor; sem
+                movimento, uma linha leva ao caixa do Freela. */}
+            {billingLoading || cardsDoFreela.length > 0 ? (
+              <FaixaDeNumeros
+                rotulo="Freela"
+                colunas={billingLoading ? 4 : (Math.max(2, cardsDoFreela.length) as 2 | 3 | 4)}
+                itens={billingLoading ? todosOsCardsDoFreela : cardsDoFreela}
+              />
+            ) : (
+              <p className={texto.auxiliar} data-freela-sem-movimento="">
+                <Link to="/freela/caixa" className="underline-offset-2 hover:text-foreground hover:underline">Freela sem movimento em {nomeMesFreela}</Link>
+              </p>
+            )}
 
             <ManagementSummary
               monthLabel={`${MONTHS_FULL[selMonth]} ${selYear}`}

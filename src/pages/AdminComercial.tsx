@@ -615,7 +615,7 @@ export default function AdminComercial() {
               valor: carregandoLeads ? "…" : String(resumo.abertos),
               apoio: resumo.abertos === 1 ? "lead em conversa" : "leads em conversa",
             },
-            { rotulo: "Em jogo", valor: carregandoLeads ? "…" : dinheiro(resumo.valorEmJogo), apoio: "mensalidade x 12 + entrada" },
+            { rotulo: "Em jogo", valor: carregandoLeads ? "…" : dinheiro(resumo.valorEmJogo), apoio: "em 12 meses", dica: "Mensalidade x 12 + entrada dos negócios abertos" },
             {
               rotulo: "Previsão do mês",
               valor: carregandoLeads ? "…" : dinheiro(previsao.ponderado),
@@ -807,15 +807,15 @@ function VisaoGeral({
             {
               rotulo: "Em conversa",
               valor: carregando ? "…" : String(resumo.abertos),
-              apoio: resumo.abertos === 1 ? "lead aberto no funil" : "leads abertos no funil",
+              apoio: resumo.abertos === 1 ? "lead aberto" : "leads abertos",
             },
-            { rotulo: "Em jogo", valor: carregando ? "…" : dinheiro(resumo.valorEmJogo), apoio: "mensalidade x 12 + entrada" },
+            { rotulo: "Em jogo", valor: carregando ? "…" : dinheiro(resumo.valorEmJogo), apoio: "em 12 meses", dica: "Mensalidade x 12 + entrada dos negócios abertos" },
             {
               rotulo: "Previsão do mês",
               valor: carregando ? "…" : dinheiro(previsao.ponderado),
               apoio: previsao.semData > 0 ? `${previsao.leads} com data, ${previsao.semData} sem` : `${previsao.leads} com data prevista`,
             },
-            { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: "lida do Financeiro" },
+            { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: "do Financeiro" },
           ]}
         />
 

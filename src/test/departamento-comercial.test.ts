@@ -301,7 +301,9 @@ describe("o funil é um kanban de arrastar, não uma lista", () => {
 
   it("fechar pede contexto antes de gravar", () => {
     expect(kanban).toContain("setFechamento({ lead, destino })");
-    expect(kanban).toContain("Confirmar ganho");
+    // 05/11/2026: o ganho abre a JanelaDoGanho (cadastra o cliente); a perda segue pedindo o motivo.
+    expect(kanban).toContain("<JanelaDoGanho");
+    expect(kanban).toContain("Confirmar perda");
     expect(kanban).toContain("motivo.trim().length < 3");
   });
 

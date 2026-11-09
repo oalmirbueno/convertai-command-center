@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import {
+  Rows3,
   UserPlus,
   Link2,
   CalendarClock,
@@ -701,6 +702,9 @@ export default function Clients() {
   const [typeFilter, setTypeFilter] = useEstadoDaTela("filtro:tipo", "all", { validar: validarOpcao(TYPE_TABS) });
   const [serviceFilter, setServiceFilter] = useEstadoDaTela("filtro:servico", "all", { validar: validarOpcao(SERVICE_FILTERS) });
   const [search, setSearch] = useEstadoDaTela("busca", "", { validar: (v) => typeof v === "string" });
+  // 09/11/2026 (dono: "mais clean no desktop"): a grade financeira de cada cliente fica recolhida; o valor e a
+  // situação da cobrança seguem na linha. O botão da barra abre para todos e a escolha fica lembrada.
+  const [financeiroAberto, setFinanceiroAberto] = useEstadoDaTela<boolean>("lista:financeiro-aberto", false, { validar: (v) => typeof v === "boolean" });
   const [filtroCobranca, setFiltroCobranca] = useEstadoDaTela<FiltroDaCobranca>("filtro:cobranca", "todas", { validar: (v) => FILTROS_DA_COBRANCA.some((f) => f.valor === v) });
 
   useEffect(() => {
@@ -1169,7 +1173,8 @@ export default function Clients() {
     const apoioNoCelular = internal
       ? planName
       : [planName, isAdmin ? statusMeta.label : statusLabel[c.plan_status || "active"]].filter(Boolean).join(" · ");
-    const financeiroNaLinha = isAdmin && !isMobile;
+    const resumoNaLinha = isAdmin && !isMobile && !internal;
+    const financeiroNaLinha = isAdmin && !isMobile && financeiroAberto;
 
     return (
       <li
@@ -1238,6 +1243,12 @@ export default function Clients() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          )}
+          {resumoNaLinha && !financeiroNaLinha && (
+            <span className="ml-3 hidden shrink-0 items-center md:inline-flex" data-resumo-da-cobranca={c.id}>
+              <span className="text-[13px] font-medium tabular-nums text-foreground">{formatCurrency(financial?.finalAmount ?? null)}</span>
+              <span className={juntar(etiqueta, "ml-2 border", statusMeta.className)}>{statusMeta.label}</span>
+            </span>
           )}
           <span className="ml-3 hidden w-16 shrink-0 text-right text-[12px] tabular-nums text-muted-foreground lg:inline" title="Projetos">
             {c.projectCount ?? 0} {Number(c.projectCount) === 1 ? "projeto" : "projetos"}
@@ -1435,6 +1446,18 @@ export default function Clients() {
   ) : null;
   const acoesDoAdmin = isAdmin ? (
     <>
+      {!isMobile && (
+        <button
+          type="button"
+          onClick={() => setFinanceiroAberto((v) => !v)}
+          aria-pressed={financeiroAberto}
+          className={juntar(botao.icone, financeiroAberto && "bg-muted text-foreground")}
+          aria-label={financeiroAberto ? "Recolher os detalhes financeiros da lista" : "Mostrar plano, custo e margem de cada cliente"}
+          title={financeiroAberto ? "Recolher os detalhes financeiros" : "Mostrar plano, custo e margem de cada cliente"}
+        >
+          <Rows3 className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
       <button type="button" onClick={() => navigate("/ver-como-cliente")} className={botao.icone} aria-label="Ver como cliente" title="Ver como cliente">
         <Eye className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -1566,6 +1589,7 @@ export default function Clients() {
                 <SeletorCompacto
                   rotulo="Situação da cobrança"
                   modo="segmentado"
+                  listaQuandoNaoCabe
                   valor={filtroCobranca}
                   onEscolher={(v) => setFiltroCobranca(v as FiltroDaCobranca)}
                   opcoes={FILTROS_DA_COBRANCA.map((f) => ({ valor: f.valor, rotulo: f.rotulo, contador: f.valor === "todas" ? null : contagemDaCobranca(f.valor) }))}
