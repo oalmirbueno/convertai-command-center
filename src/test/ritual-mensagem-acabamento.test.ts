@@ -15,7 +15,7 @@ import {
   frasesQueSumiram,
   pedidoMexeNoTexto,
 } from "../../supabase/functions/ritual-writer/modulos/ajuste";
-import { avisoDeFidelidade, escreverRitual, montarPedidoAoEscritor, pontosDaVersao, SYSTEM_PROMPT } from "../../supabase/functions/ritual-writer/escritor";
+import { avisoDeFidelidade, escreverRitual, linhasDoTexto, montarPedidoAoEscritor, pontosDaVersao, SYSTEM_PROMPT } from "../../supabase/functions/ritual-writer/escritor";
 
 /**
  * 23/10/2026 (dono): "No ritual das mensagens está de forma rápida, mas a mensagem está muito ruim. Eu peço
@@ -265,5 +265,55 @@ describe("conversa que complementa (ajuste sobre o texto atual)", () => {
       expect(f).not.toMatch(/\\p\{/);
       expect(f).not.toMatch(/\(\?<[a-z]/i);
     }
+  });
+});
+
+/**
+ * 10/11/2026 (dono, ao ver a mensagem da semana num parágrafo corrido): "o texto sempre com hierarquia,
+ * negrito com espaçamento, quebra de linhas e nunca usar travessão". O roteiro pede; o código garante o que
+ * dá para garantir sem inventar: bloco separado por linha em branco, negrito de WhatsApp e nenhum travessão.
+ */
+describe("hierarquia, negrito, espaçamento e sem travessão", () => {
+  const EM = String.fromCharCode(0x2014);
+  const EN = String.fromCharCode(0x2013);
+  const op = { ritual: "meio_semana", agora: new Date("2026-11-11T21:00:00Z"), contato: "Priscila", negocio: "Stop Informatica" };
+
+  it("cada bloco fica separado por uma linha em branco e o título em negrito fica colado no texto dele", () => {
+    const { texto } = acabamentoDoRitual(
+      "Boa noite, Priscila. Meio da semana por aqui.\n*Anúncios*\nOs anúncios abriram 6 conversas para a Stop.\n*Black Stop*\nA lista VIP está sendo aberta.\n\n\n*Até sexta*\nA gente prepara os conteúdos da oferta.",
+      op,
+    );
+    expect(texto).toBe(
+      "Boa noite, Priscila. Meio da semana por aqui.\n\n*Anúncios*\nOs anúncios abriram 6 conversas para a Stop.\n\n*Black Stop*\nA lista VIP está sendo aberta.\n\n*Até sexta*\nA gente prepara os conteúdos da oferta.\n\n" + LINHA_DO_PAINEL,
+    );
+    // Idempotente: passar de novo (na hora de copiar) não muda nada.
+    expect(acabamentoDoRitual(texto, op).texto).toBe(texto);
+  });
+
+  it("linhas coladas sem título ganham a linha em branco; itens de lista ficam juntos", () => {
+    const { texto } = acabamentoDoRitual("Boa noite, Priscila. Meio da semana por aqui.\nOs anúncios abriram 6 conversas.\nAté sexta sai o vídeo.\n- arte da vitrine\n- vídeo da oferta", op);
+    expect(texto).toContain("por aqui.\n\nOs anúncios abriram 6 conversas.\n\nAté sexta sai o vídeo.\n- arte da vitrine\n- vídeo da oferta\n\n");
+  });
+
+  it("nenhum travessão sobra e o negrito de markdown vira o do WhatsApp", () => {
+    const r = acabamentoDoRitual(`Boa noite, Priscila. Meio da semana por aqui.\n\n**Anúncios**\nForam 6 conversas ${EM} contra nenhuma antes, de 04${EN}10/11.`, op);
+    expect(r.texto).not.toContain(EM);
+    expect(r.texto).not.toContain(EN);
+    expect(r.texto).toContain("*Anúncios*\nForam 6 conversas, contra nenhuma antes, de 04 a 10/11.");
+    expect(r.texto).not.toContain("**");
+  });
+
+  it("mensagem da semana sem nenhum negrito vira aviso para a equipe (o código não inventa título)", () => {
+    const sem = acabamentoDoRitual("Boa noite, Priscila. Meio da semana por aqui.\n\nOs anúncios abriram 6 conversas.", op);
+    expect(sem.acertos.join(" ")).toMatch(/negrito/i);
+    const com = acabamentoDoRitual("Boa noite, Priscila. Meio da semana por aqui.\n\n*Anúncios*\nOs anúncios abriram 6 conversas.", op);
+    expect(com.acertos.join(" ")).not.toMatch(/negrito/i);
+  });
+
+  it("o roteiro pede blocos com título em negrito e o limite de linhas não conta os títulos", () => {
+    expect(SYSTEM_PROMPT).toContain("título curto em negrito de WhatsApp");
+    expect(SYSTEM_PROMPT).not.toContain("SEM títulos de bloco");
+    expect(SYSTEM_PROMPT).not.toContain("sem títulos de bloco");
+    expect(linhasDoTexto("Boa tarde, Ana.\n\n*Anúncios*\nSeis conversas.\n\n*Até sexta*\nSai o vídeo.")).toBe(3);
   });
 });

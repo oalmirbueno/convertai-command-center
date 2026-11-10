@@ -65,7 +65,7 @@ REGRAS ABSOLUTAS:
 7. Quando houver material esperando o aval dele, esse é o ponto mais importante da mensagem, e ele é apresentado como algo PRONTO que só precisa do sinal verde.
 8. Português claro do Brasil. SEM TRAVESSÃO (use vírgula ou ponto). Sem jargão ("sinergia", "otimização", "estratégia robusta", "engajamento"). Sem elogio vazio ("grande semana!", "estamos animados").
 9. Trate por "você" e chame a agência de "a gente".
-10. FORMATO DE WHATSAPP, pronto para colar no grupo, lido em 20 segundos no celular. Nas mensagens da semana (segunda, quarta, sexta): de 3 a 6 linhas no total, até 600 caracteres, uma ideia por linha, linhas separadas por linha em branco, SEM títulos de bloco e sem listas longas. No balanço do mês e no marco de 90 dias: até 14 linhas, com títulos curtos em negrito de WhatsApp (*assim*) e os números do período. Sem markdown de cabeçalho (#), sem emoji, sem tabela.
+10. FORMATO DE WHATSAPP, pronto para colar no grupo, lido em 20 segundos no celular. Nas mensagens da semana (segunda, quarta, sexta), SEMPRE com hierarquia (10/11, o dono: "hierarquia, negrito com espaçamento, quebra de linhas"): a primeira linha é só a saudação com o momento da semana; depois vêm 2 ou 3 blocos, separados por uma linha em branco. Cada bloco abre com um título curto em negrito de WhatsApp, sozinho na linha (*assim*, de 1 a 4 palavras, nomeando o assunto DESTE bloco NESTA semana, como *Anúncios*, *Lista VIP da Black* ou *Até sexta*), e na linha de baixo traz uma ou duas frases. Os títulos mudam com o assunto: nunca títulos fixos de formulário (*Onde estamos*, *O que avançou*, *Próximos passos*) e nunca a mesma sequência de títulos de uma mensagem do bloco JÁ DITO. Ao todo, até 6 linhas de texto (os títulos não contam), até 650 caracteres, sem parágrafo corrido e sem listas longas. No balanço do mês e no marco de 90 dias: até 14 linhas, com títulos curtos em negrito de WhatsApp (*assim*) e os números do período. Sem markdown de cabeçalho (#), sem emoji, sem tabela.
 11. O título tem no máximo 60 caracteres e nomeia o fato novo desta mensagem. Nunca genérico, e nunca parecido com um título do bloco JÁ DITO (nada de "Semana fecha com anúncios em alta" de novo).
 12. NÚMEROS E VENDAS: no máximo UM número por mensagem da semana, o que mais mudou, com a comparação e o que ele significa na prática. Prefira o número que mostra avanço. Número que caiu nunca abre a mensagem e nunca vem com percentual de queda ("caiu 45%", "63% menos"): se ele importa, diga o que a gente já está fazendo por causa dele. Número que já foi dito numa mensagem anterior e não mudou NÃO volta (o "custo de R$ 2 por contato" toda semana cansa). Venda registrada é o resultado mais importante: quando houver, é ela o número da mensagem.
 13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê", "o que mudou desde o último ritual" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
@@ -85,8 +85,8 @@ REGRAS ABSOLUTAS:
 27. CONTEXTO DO NEGÓCIO: use o que os fatos dizem do negócio (o que ele vende, para quem, a época do ano, a pergunta que o público faz) para explicar POR QUE cada coisa importa para ele. Uma mensagem sem nenhum porquê ligado ao negócio dele está errada.
 28. POSITIVO E MOTIVADOR, SEM INFLAR (23/10, o dono: "trazer sempre de forma positiva; motivar o cliente a continuar, mostrar que o negócio está avançando"): a mensagem mostra que o negócio dele está andando e que a próxima etapa já está à vista. Cada frase é conversa de gente, não relatório: nada de frase que só existe para registrar ("segue em andamento", "a gente segue acompanhando"). Positivo é escolher o que andou e o que vem, nunca inventar.
 
-COMO MONTAR A MENSAGEM DA SEMANA (o resumo de segunda, quarta e sexta; até 6 linhas, sem títulos de bloco; não é um formulário):
-1. Saudação de agora + nome + o momento da semana, numa frase só, já puxando o ÂNGULO DESTA MENSAGEM que vem no fim do pedido.
+COMO MONTAR A MENSAGEM DA SEMANA (o resumo de segunda, quarta e sexta; até 6 linhas de texto, em blocos com título em negrito e linha em branco entre eles, como manda a regra 10; os itens abaixo dizem o CONTEÚDO, não os títulos; não é um formulário):
+1. Saudação de agora + nome + o momento da semana, numa linha só dela, já puxando o ÂNGULO DESTA MENSAGEM que vem no fim do pedido.
 2. ONDE ESTAMOS: um diagnóstico de uma frase do ponto em que o negócio está (o que a gente está construindo com ele agora e por quê), tirado do ESTADO REAL, da fase do método e dos fatos.
 3. O QUE AVANÇOU: os principais pontos desde a última mensagem (um ou dois, com nome e para que servem; no máximo um número).
 4. O QUE VEM À FRENTE: o próximo passo concreto e o degrau seguinte (olhe mais à frente: data que chega, sazonalidade, o que a próxima peça destrava).
@@ -305,8 +305,9 @@ export function limiteDoRitual(ritual: string): { linhas: number; caracteres: nu
   return ritual === "radar_aceleriq" || ritual === "marco_90" ? { linhas: 14, caracteres: 1800 } : { linhas: 6, caracteres: 650 };
 }
 
+/** Linhas de texto: o título em negrito de um bloco (*Anúncios*) não conta (10/11). */
 export function linhasDoTexto(body: string): number {
-  return String(body ?? "").split(/\r?\n/).filter((l) => l.trim()).length;
+  return String(body ?? "").split(/\r?\n/).filter((l) => l.trim() && !/^\*[^*\n]{2,60}\*:?$/.test(l.trim())).length;
 }
 
 /** O aviso para a equipe quando o escritor diz que nada mudou desde a última mensagem enviada. */
@@ -522,7 +523,9 @@ export async function escreverRitual(
       if (!lido) continue;
       // Regras fixas por código: https, saudação pelo horário, momento da semana e linha do painel.
       const acabado = acabamentoDoRitual(lido.body, { ritual: p.ritual, agora, contato: p.contactName, negocio: p.clientName });
-      candidatas.push({ lido: { ...lido, body: acabado.texto }, saida });
+      // 10/11: mensagem sem título em negrito vira aviso para a equipe (o código não inventa título).
+      const semNegrito = acabado.acertos.filter((a) => /negrito/i.test(a));
+      candidatas.push({ lido: { ...lido, body: acabado.texto, alertas: [...semNegrito, ...lido.alertas] }, saida });
     } catch {
       // JSON inválido: essa versão não entra na escolha.
     }

@@ -43,7 +43,7 @@ const acabado = (b: string) => acabamentoDoRitual(b, { ritual: "prova_movimento"
 
 describe("ritual curto e sem repetir", () => {
   it("o roteiro pede até 6 linhas na semana e o bloco JÁ DITO entra antes dos fatos", () => {
-    expect(SYSTEM_PROMPT).toContain("de 3 a 6 linhas no total, até 600 caracteres");
+    expect(SYSTEM_PROMPT).toContain("até 6 linhas de texto (os títulos não contam), até 650 caracteres");
     expect(SYSTEM_PROMPT).toContain("no máximo UM número por mensagem da semana");
     expect(SYSTEM_PROMPT).toContain('"sem_novidade":false');
     expect(SYSTEM_PROMPT).not.toContain("Entre 10 e 18 linhas");
