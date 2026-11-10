@@ -1,3 +1,4 @@
+import { assinarCaminhos } from "@/lib/assinaturasEmLote";
 import { supabase } from "@/integrations/supabase/client";
 // Endereço do worker já montado pelo Vite (worker clássico, sem import.meta: o Safari 11.0 não tem).
 import urlDoWorkerDasCopias from "./miniaturas.worker.ts?worker&url";
@@ -454,9 +455,8 @@ export async function urlLeve(bucket: string, caminho: string, expiraEm = 3600):
   if (guardado && guardado.ate > Date.now()) return guardado.valor;
   const querMini = podeTerMiniatura(caminho);
   const caminhos = querMini ? [caminhoDaMiniatura(caminho), caminho] : [caminho];
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrls(caminhos, expiraEm);
-  if (error) throw error;
-  const linhas = (data || []) as LinhaAssinada[];
+  // 10/11/2026: em lote com os outros pedidos do mesmo instante (src/lib/assinaturasEmLote.ts).
+  const linhas = (await assinarCaminhos(bucket, caminhos, expiraEm)) as LinhaAssinada[];
   const achar = (p: string) => linhas.find((l) => l.path === p && !!l.signedUrl && !l.error)?.signedUrl || null;
   const mini = querMini ? achar(caminhoDaMiniatura(caminho)) : null;
   const original = achar(caminho);

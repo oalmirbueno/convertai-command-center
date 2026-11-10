@@ -1,3 +1,4 @@
+import { assinarCaminho } from "@/lib/assinaturasEmLote";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { useSearchParams } from "react-router-dom";
@@ -919,11 +920,11 @@ export default function Workspace() {
 
   async function signedUrl(path: string) {
     if (signedUrls[path]) return signedUrls[path];
-    const { data, error } = await supabase.storage.from("workspace").createSignedUrl(path, 3600);
-    if (error) throw error;
-    if (data?.signedUrl) {
-      setSignedUrls(p => ({ ...p, [path]: data.signedUrl }));
-      return data.signedUrl;
+    const linha = await assinarCaminho("workspace", path, 3600);
+    if (linha.signedUrl && !linha.error) {
+      const url = linha.signedUrl;
+      setSignedUrls(p => ({ ...p, [path]: url }));
+      return url;
     }
     throw new Error("URL do arquivo indisponível.");
   }
