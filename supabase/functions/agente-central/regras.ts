@@ -10,13 +10,17 @@
  *   ...texto da equipe (intocado)...
  *   ## Leitura da Central (agente, DD/MM/AAAA)      <- substituída a cada rodada
  *   ## Confirmado pelo dono (agente da Central)     <- acumula (últimas 12)
+ *   ## Conversas do grupo de WhatsApp               <- n8n, uma só, imediatamente antes dos avanços
  *   ## Avanços recentes (automático, ...)           <- do banco, sempre por último
  *
- * A seção de avanços TEM que ficar por último: dossie_registrar_avancos_interno
- * corta tudo a partir do marcador dela e reescreve.
+ * A seção de avanços fica por último. O que o n8n grava depois dela (em
+ * especial "Conversas do grupo de WhatsApp") não faz parte do bloco
+ * automático: a rotina e esta composição tiram essa cauda, evitam seção
+ * repetida e recolocam o WhatsApp imediatamente antes dos avanços.
  */
 
 export const MARCADOR_AVANCOS = "## Avanços recentes (automático";
+export const MARCADOR_WHATSAPP = "## Conversas do grupo de WhatsApp";
 export const MARCADOR_LEITURA = "## Leitura da Central (agente";
 export const MARCADOR_CONFIRMADO = "## Confirmado pelo dono (agente da Central)";
 export const MAX_CONFIRMACOES = 12;
@@ -141,16 +145,91 @@ function removerSecao(texto: string, marcador: string): { resto: string; corpo: 
   return { resto: `${texto.slice(0, i).trimEnd()}${fim < texto.length ? `\n\n${texto.slice(fim).trimStart()}` : ""}`, corpo: texto.slice(i, fim) };
 }
 
+function tituloDa(secao: string): string {
+  return secao.split(/\r?\n/, 1)[0].replace(/\r$/, "");
+}
+
+/** O título com data ou travessão continua sendo a mesma seção do n8n. */
+export function ehSecaoWhatsapp(titulo: string): boolean {
+  if (!titulo.startsWith(MARCADOR_WHATSAPP)) return false;
+  if (titulo.length === MARCADOR_WHATSAPP.length) return true;
+  return !/^[\p{L}\p{N}]/u.test(titulo.slice(MARCADOR_WHATSAPP.length));
+}
+
+function localizarSecao(texto: string, chave: string, whatsapp: boolean): { start: number; end: number } | null {
+  const agulha = whatsapp ? MARCADOR_WHATSAPP : chave;
+  let de = 0;
+  while (de < texto.length) {
+    const pos = texto.indexOf(agulha, de);
+    if (pos < 0) return null;
+    if (pos === 0 || texto[pos - 1] === "\n") {
+      const nl = texto.indexOf("\n", pos);
+      const titulo = (nl < 0 ? texto.slice(pos) : texto.slice(pos, nl)).replace(/\r$/, "");
+      if (whatsapp ? ehSecaoWhatsapp(titulo) : titulo === chave) {
+        const linhaFim = nl < 0 ? texto.length : nl;
+        const prox = texto.slice(linhaFim).search(/\n## /);
+        return { start: pos, end: prox < 0 ? texto.length : linhaFim + prox + 1 };
+      }
+    }
+    de = pos + 1;
+  }
+  return null;
+}
+
+function semTrecho(texto: string, loc: { start: number; end: number }, troca = ""): string {
+  const prefixo = texto.slice(0, loc.start).replace(/[ \t\r\n]+$/g, "");
+  const sufixo = texto.slice(loc.end).replace(/^[ \t\r\n]+/g, "");
+  return [prefixo, troca.trim(), sufixo].filter((p) => p.length > 0).join("\n\n");
+}
+
+/** Separa o bloco automático do que foi anexado depois dele. */
+export function separarBlocoAutomatico(texto: string): { antes: string; avancos: string; externas: string[] } {
+  const pos = texto.indexOf(MARCADOR_AVANCOS);
+  if (pos < 0) return { antes: texto.replace(/[ \t\r\n]+$/g, ""), avancos: "", externas: [] };
+  const partes = texto.slice(pos).split(/\n(?=## )/);
+  return {
+    antes: texto.slice(0, pos).replace(/[ \t\r\n]+$/g, ""),
+    avancos: (partes[0] ?? "").trim(),
+    externas: partes.slice(1).map((p) => p.trim()).filter((p) => p && !tituloDa(p).startsWith(MARCADOR_AVANCOS)),
+  };
+}
+
+/**
+ * Uma única seção de WhatsApp, a mais nova, e as outras seções de fora do
+ * bloco automático sem duplicar o mesmo título.
+ */
+export function mesclarSecoesExternas(antes: string, externas: string[]): { corpo: string; whatsapp: string } {
+  let corpo = antes.trim();
+  let whatsapp = "";
+  const outras: string[] = [];
+  for (const secao of externas) {
+    if (ehSecaoWhatsapp(tituloDa(secao))) whatsapp = secao.trim();
+    else outras.push(secao.trim());
+  }
+  const copias: string[] = [];
+  for (let passos = 0; passos < 30; passos += 1) {
+    const loc = localizarSecao(corpo, MARCADOR_WHATSAPP, true);
+    if (!loc) break;
+    copias.push(corpo.slice(loc.start, loc.end).trim());
+    corpo = semTrecho(corpo, loc);
+  }
+  if (!whatsapp && copias.length) whatsapp = copias[copias.length - 1];
+  for (const secao of outras) {
+    const loc = localizarSecao(corpo, tituloDa(secao), false);
+    corpo = loc ? semTrecho(corpo, loc, secao) : [corpo, secao].filter((p) => p.length > 0).join("\n\n");
+  }
+  return { corpo: corpo.trim(), whatsapp: whatsapp.trim() };
+}
+
 /**
  * Monta o conteúdo novo do dossiê: o texto da equipe intocado, a leitura
  * nova no lugar da antiga, as confirmações novas em cima das antigas (até
- * 12) e a seção de avanços automáticos por último, como estava.
+ * 12), a conversa de WhatsApp numa seção só e os avanços automáticos por último.
  */
 export function comporDossie(atual: string, novo: { leitura?: string | null; confirmacoes?: string[] }): string {
-  const texto = String(atual ?? "");
-  const pos = texto.indexOf(MARCADOR_AVANCOS);
-  let humano = (pos >= 0 ? texto.slice(0, pos) : texto).trimEnd();
-  const avancos = pos >= 0 ? texto.slice(pos).trim() : "";
+  const separado = separarBlocoAutomatico(String(atual ?? ""));
+  const mesclado = mesclarSecoesExternas(separado.antes, separado.externas);
+  let humano = mesclado.corpo;
 
   const semLeitura = removerSecao(humano, MARCADOR_LEITURA);
   const leituraAntiga = semLeitura.corpo.trim();
@@ -172,7 +251,8 @@ export function comporDossie(atual: string, novo: { leitura?: string | null; con
     humano,
     leitura,
     unicas.length ? [MARCADOR_CONFIRMADO, ...unicas].join("\n") : "",
-    avancos,
+    mesclado.whatsapp,
+    separado.avancos,
   ].filter((p) => p && p.trim()).join("\n\n");
 }
 
