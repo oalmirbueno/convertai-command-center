@@ -1,5 +1,5 @@
 export type ReviewDecision = "aprovado" | "rejeitado" | "alteracoes_pedidas" | "comentario";
-export type ReviewLane = "decisao" | "revisar" | "aguardando" | "enviado";
+export type ReviewLane = "decisao" | "revisar" | "aguardando" | "enviado" | "vencido";
 export interface ReviewReport {
   id: string; client_id: string; project_id?: string | null; title: string;
   summary?: string | null; next_steps?: string | null; highlights?: string | null; created_at: string;
@@ -10,7 +10,7 @@ export interface ReviewDestination { channel: "portal" | "whatsapp"; recipient: 
 export interface CentralApproval {
   id: string; report_id: string; client_id: string; payload_version: number;
   payload_hash: string; status: string; created_at: string; decision_note?: string | null;
-  valid_until?: string | null;
+  valid_until?: string | null; decided_at?: string | null;
   /** Envio registrado (pelo painel ou pelo Hermes). Sem isto, a mensagem conta como nao enviada. */
   executed_at?: string | null; execution_evidence?: string | null;
   current_report?: ReviewReport | null;
@@ -49,10 +49,17 @@ export function reviewLane(report: ReviewReport, approval?: CentralApproval): Re
   // Enviado e o fim da linha: a mensagem chegou ao cliente e o registro diz quando.
   if (approval?.executed_at) return "enviado";
   if (approval && approval.payload_version !== report.review_version) return "decisao";
-  if (approval?.valid_until && Date.parse(approval.valid_until) <= Date.now()) return "decisao";
+  // 10/11/2026: pedido que passou do prazo sem envio tem faixa própria. Antes caía em "Precisa decisão" e o
+  // aprovado vencido (SKC, 07 a 09/11) parecia pedir uma decisão que já tinha sido dada.
+  if (reviewExpired(approval)) return ["aprovado", "pendente", "adiado"].includes(approval!.status) ? "vencido" : "decisao";
   if (approval && ["aprovado", "adiado"].includes(approval.status)) return "aguardando";
   if (approval && ["rejeitado", "alteracoes_pedidas", "expirado"].includes(approval.status)) return "decisao";
   return reviewAlerts(report).length || !report.summary?.trim() || !report.next_steps?.trim() ? "decisao" : "revisar";
+}
+
+/** O prazo do pedido passou e nada foi enviado. Enviado nunca vence. */
+export function reviewExpired(approval?: Pick<CentralApproval, "valid_until" | "executed_at"> | null): boolean {
+  return !!approval && !approval.executed_at && !!approval.valid_until && Date.parse(approval.valid_until) <= Date.now();
 }
 
 export function reviewContentComplete(report: Pick<ReviewReport, "summary" | "next_steps">): boolean {

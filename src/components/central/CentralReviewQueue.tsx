@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, ChevronDown, Copy, Link2, Users } from "lucide-react";
 import { callReviewRpc, prepareCentralReview, saveCentralReviewDraft, useCentralReviews } from "@/hooks/useCentralReviews";
-import { centralReviewError, centralReviewLink, latestReviewReports, reviewAlerts, reviewContentComplete, reviewDecisionArgs, reviewLane } from "@/lib/centralReview";
+import { centralReviewError, centralReviewLink, latestReviewReports, reviewAlerts, reviewContentComplete, reviewDecisionArgs, reviewExpired, reviewLane } from "@/lib/centralReview";
 import type { CentralApproval, ReviewClient, ReviewDecision, ReviewDestination, ReviewDraftEdits, ReviewLane, ReviewReport } from "@/lib/centralReview";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { proximoPassoDoTexto } from "@/lib/ritualTexto";
@@ -12,7 +12,7 @@ import { AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, MenuMais, Seleto
 import { useEstadoDaTela } from "@/components/central/useEstadoDaTela";
 
 const LANES: { value: ReviewLane; label: string }[] = [
-  { value: "decisao", label: "Precisa decisão" }, { value: "revisar", label: "Pronto para revisar" }, { value: "aguardando", label: "Aprovados · a enviar" }, { value: "enviado", label: "Enviados" },
+  { value: "decisao", label: "Precisa decisão" }, { value: "revisar", label: "Pronto para revisar" }, { value: "aguardando", label: "Aprovados · a enviar" }, { value: "enviado", label: "Enviados" }, { value: "vencido", label: "Venceram" },
 ];
 const STATUS: Record<string, string> = { pendente: "Preparado · aguardando revisão", aprovado: "Aprovado · envio não realizado", rejeitado: "Rejeitado", alteracoes_pedidas: "Ajuste solicitado", adiado: "Adiado", expirado: "Desatualizado · nova revisão necessária" };
 const RITUAL: Record<string, string> = { rota_semana: "Rota da semana", meio_semana: "Meio da semana", prova_movimento: "Prova de movimento" };
@@ -23,10 +23,12 @@ const viaHermes = (note?: string | null) => typeof note === "string" && note.sta
 const nomeDoRitual = (tipo: unknown) => typeof tipo === "string" ? RITUAL[tipo] ?? tipo : "Ritual";
 function statusLabel(approval: CentralApproval): string {
   if (approval.executed_at) return `Enviado · registrado em ${quando(approval.executed_at)}`;
+  if (reviewExpired(approval)) return approval.status === "aprovado" ? `Aprovado, mas não enviado no prazo · venceu em ${quando(approval.valid_until)}` : `Venceu sem decisão em ${quando(approval.valid_until)}`;
   return STATUS[approval.status] || approval.status;
 }
 function tomDoStatus(approval?: CentralApproval): string {
   if (approval?.executed_at) return "text-success";
+  if (reviewExpired(approval)) return "text-destructive";
   if (approval?.status === "aprovado") return "text-primary";
   if (approval && ["rejeitado", "expirado"].includes(approval.status)) return "text-destructive";
   return approval ? "text-warning" : "text-muted-foreground";
@@ -205,11 +207,13 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
   const source = showingSnapshot ? approval?.payload.source : (report.metrics?.central_review_source as Record<string, unknown> | undefined);
   const destination = approval?.payload.destination;
   const alerts = reviewAlerts(frozen);
-  const expired = !!approval?.valid_until && Date.parse(approval.valid_until) <= Date.now();
+  const expired = reviewExpired(approval);
+  const aprovadoVencido = expired && approval?.status === "aprovado";
   const decidable = approval && sameVersion && currentReport?.status === "draft" && !expired && ["pendente", "adiado"].includes(approval.status);
   // Aprovado e ainda nao enviado: e a vez de quem tem o canal. O texto e o
   // congelado no pedido, nunca o rascunho editado depois.
-  const sendable = !!approval && approval.status === "aprovado" && !approval.executed_at;
+  // Aprovado que venceu não se envia mais: o texto é de outro dia e o ritual seguinte pode já ter saído.
+  const sendable = !!approval && approval.status === "aprovado" && !approval.executed_at && !expired;
   const mensagemParaEnviar = approval ? [approval.payload.report.summary ?? "", approval.payload.report.next_steps ? `\n${approval.payload.report.next_steps}` : ""].join("").trim() : "";
   const copyMessage = async () => {
     try { await navigator.clipboard.writeText(mensagemParaEnviar); toast.success("Mensagem aprovada copiada."); }
@@ -237,7 +241,8 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
     </header>}
     {approval?.executed_at && <p className="text-[13px] text-foreground"><strong className="font-medium text-success">Enviado.</strong> {approval.execution_evidence || "Sem detalhe do envio."}</p>}
     {approval && !sameVersion && <p role="note" className="text-[13px] text-warning">Este pedido corresponde a outra versão. {currentReport ? `A versão atual é ${currentReport.review_version}. Prepare um novo pedido após conferir a edição.` : "A versão atual não está disponível; atualize a fila antes de decidir."}</p>}
-    {expired && <p role="note" className="flex items-center text-[13px] text-warning">O prazo deste pedido venceu. Prepare uma nova revisão.<AjudaRecolhida className="ml-1.5" rotulo="Por que preparar de novo">A nova revisão confere a fonte e o destinatário outra vez antes de decidir.</AjudaRecolhida></p>}
+    {aprovadoVencido && <p role="note" className="text-[13px] text-destructive" data-aprovado-vencido="">Aprovado em {quando(approval?.decided_at)}, mas não foi enviado até {quando(approval?.valid_until)}. Não envie este texto: ele é de outro dia. Se ainda fizer sentido, prepare uma nova revisão.</p>}
+    {expired && !aprovadoVencido && <p role="note" className="flex items-center text-[13px] text-warning">O prazo deste pedido venceu. Prepare uma nova revisão.<AjudaRecolhida className="ml-1.5" rotulo="Por que preparar de novo">A nova revisão confere a fonte e o destinatário outra vez antes de decidir.</AjudaRecolhida></p>}
     {alerts.length > 0 && <div role="note" className="rounded-md bg-warning/10 px-3 py-2.5 text-[13px]"><strong className="font-medium text-warning">Pontos que precisam de decisão</strong><ul className="mt-1 list-disc pl-5">{alerts.map((alert, index) => <li key={index}>{alert}</li>)}</ul></div>}
     {!editing && <div className="min-w-0 space-y-3">
       <div className="min-w-0"><h4 className={rotuloDeBloco}>Mensagem</h4><p className={juntar(texto.corpo, "mt-1 max-w-[72ch] whitespace-pre-wrap")}>{frozen.summary || "Mensagem ausente: volte ao rascunho antes de aprovar."}</p></div>

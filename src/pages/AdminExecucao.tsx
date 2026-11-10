@@ -14,6 +14,7 @@ import {
   FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
+import { ordemParaGravar, passoNoGrupo, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import ListaPaginada from "@/components/execucao/ListaPaginada";
 import TarefaDaExecucao from "@/components/execucao/TarefaDaExecucao";
@@ -67,6 +68,7 @@ const CentralPerformanceMeta = lazyDiscreto("execucao/performance", () => import
 const OrganogramaAgentes = lazyDiscreto("execucao/hierarquia", () => import("@/components/execucao/OrganogramaAgentes"), sempre);
 const RelatorioVisual = lazyDiscreto("execucao/relatorios", () => import("@/components/execucao/RelatorioVisual"), sempre);
 const PerfilDoAgente = lazyDiscreto("execucao/perfil-do-agente", () => import("@/components/execucao/PerfilDoAgente"), (p) => Boolean(p.operador));
+const EditarAgente = lazyDiscreto("execucao/editar-agente", () => import("@/components/execucao/EditarAgente"), (p) => Boolean(p.agente));
 const DiarioDaExecucao = lazyDiscreto("execucao/diario", () => import("@/components/execucao/DiarioDaExecucao"), (p) => p.aberto);
 const DefinirResponsavel = lazyDiscreto("execucao/responsavel", () => import("@/components/execucao/DefinirResponsavel"), (p) => p.aberto);
 const TaskDetailDrawer = lazyDiscreto("execucao/tarefa", () => import("@/components/admin/TaskDetailDrawer"), sempre);
@@ -153,6 +155,9 @@ type Operador = {
   area: string | null;
   parent_slug: string | null;
   last_run_at: string | null;
+  /** Onde o agente roda: hermes, grok ou paperclip (10/11/2026). */
+  origem?: string | null;
+  display_order?: number | null;
 };
 
 /**
@@ -312,6 +317,8 @@ export default function AdminExecucao() {
   const { data: equipe = [] } = useTeamMembers();
   const { data: projetos = [] } = useProjects();
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
+  // Hierarquia editável (10/11/2026): o agente na janela de editar.
+  const [agenteEmEdicao, setAgenteEmEdicao] = useState<Operador | null>(null);
   // Ida e volta (16/10): o diário aberto pelo perfil do agente devolve para o perfil ao fechar.
   const [voltarAoAgente, setVoltarAoAgente] = useState<Operador | null>(null);
   const [abaDoAgente, setAbaDoAgente] = useState<string | null>(null);
@@ -381,7 +388,7 @@ export default function AdminExecucao() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("internal_operators")
-        .select("id, slug, display_name, role, status, scope, is_coordinator, last_run_at, area, parent_slug")
+        .select("id, slug, display_name, role, status, scope, is_coordinator, last_run_at, area, parent_slug, origem, display_order")
         // A ordem do organograma sai do banco: o Hermes reordena por RPC e
         // o painel obedece, sem deploy no meio.
         .order("display_order", { ascending: true })
@@ -1197,10 +1204,31 @@ export default function AdminExecucao() {
         agora: agora ? agora.texto : null,
         agoraDesde: agora ? agora.desde : null,
         ultimaVez: o.last_run_at,
+        funcao: o.role,
+        origem: o.origem ?? null,
+        aposentado: ["retired", "inactive"].includes(o.status),
       };
     }),
     [operadores, vinculosAtivos, agoraDoAgente],
   );
+
+  /** Grava a ordem (e a área de quem mudou de área) e relê os agentes. Só o admin passa no banco. */
+  const moverAgentes = async (itens: ItemDeOrdem[]) => {
+    if (itens.length === 0) return;
+    const { error } = await (supabase as any).rpc("operadores_reordenar", { _itens: itens });
+    if (error) { toast.error(String(error.message || "").includes("SO_ADMIN") ? "Só o administrador organiza os agentes." : "Não foi possível mover o agente."); return; }
+    await queryClient.invalidateQueries({ queryKey: ["operadores-internos"] });
+  };
+  /** As setas da janela de editar (o arrastar do celular): um passo dentro do grupo à vista. */
+  const moverNaArea = async (id: string, sentido: -1 | 1) => {
+    const o = operadores.find((x) => x.id === id);
+    if (!o) return;
+    const aVista = operadores.filter((x) => !["retired", "inactive"].includes(x.status) || x.id === id);
+    const grupo = o.is_coordinator ? aVista.filter((x) => x.is_coordinator) : aVista.filter((x) => !x.is_coordinator && (x.area?.trim() || "") === (o.area?.trim() || ""));
+    const lista = passoNoGrupo(grupo, id, sentido);
+    if (!lista) { toast.info(sentido < 0 ? "Já é o primeiro da área." : "Já é o último da área."); return; }
+    await moverAgentes(ordemParaGravar(lista, id));
+  };
 
   /** A última ação real de cada agente, com prova (lateral). */
   const funcionando = useMemo(
@@ -1897,6 +1925,9 @@ export default function AdminExecucao() {
       nos={nosDoOrganograma}
       movimentos={movimentosDoOrganograma}
       nomeDoDono={profile?.full_name || "Você"}
+      podeOrganizar={profile?.role === "admin"}
+      aoEditar={(no) => { const op = operadores.find((o) => o.id === no.id); if (op) setAgenteEmEdicao(op); }}
+      aoMover={(itens) => void moverAgentes(itens)}
       aoAbrir={(no) => {
         const op = operadores.find((o) => o.id === no.id);
         if (op) setAgenteAberto(op);
@@ -2378,6 +2409,14 @@ export default function AdminExecucao() {
           )}
         />
       )}
+
+      <EditarAgente
+        agente={agenteEmEdicao}
+        todos={operadores}
+        aoFechar={() => setAgenteEmEdicao(null)}
+        aoMudar={() => queryClient.invalidateQueries({ queryKey: ["operadores-internos"] })}
+        aoMoverNaArea={moverNaArea}
+      />
 
       <DefinirResponsavel
         taskId={responsavelAberto?.taskId ?? null}

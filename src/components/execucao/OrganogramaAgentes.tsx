@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Crown, Expand, Minimize, Minus, Network, Plus, ScanSearch } from "lucide-react";
+import { Bot, Crown, Expand, Eye, EyeOff, Minimize, Minus, Network, Pencil, Plus, ScanSearch } from "lucide-react";
 import { Secao, juntar, superficie, useEstadoDaTela } from "@/components/sistema";
 import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
 import { cn } from "@/lib/utils";
+import { SEM_AREA, colocarNoGrupo, ordemParaGravar, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
 
 /**
  * A pirâmide da casa: quem manda, quem coordena, quem executa.
@@ -32,6 +33,11 @@ import { cn } from "@/lib/utils";
  * Uma honestidade que o desenho precisa carregar: o painel NÃO dispara o
  * agente sozinho. Não existe canal do painel para dentro do Hermes; o que
  * existe é o comando pronto para colar no grupo.
+ *
+ * ORGANIZAR PELO PAINEL (10/11, pedido do dono): o cartão diz nome, função, origem (Hermes, Grok ou
+ * Paperclip), estado e última execução. O admin tem o lápis em cada cartão (editar, aposentar, apagar)
+ * e arrasta um cartão para cima de outro para reordenar ou mudar de área; no celular, onde não há
+ * arrastar, as setas ficam na janela de editar. Aposentado fica escondido até pedir para ver.
  */
 
 export interface NoDoOrganograma {
@@ -53,7 +59,20 @@ export interface NoDoOrganograma {
   agoraDesde?: string | null;
   /** A última execução do agente, para quem está parado. */
   ultimaVez?: string | null;
+  /** A função em poucas palavras (o `papel` é o texto longo do que ele faz). */
+  funcao?: string | null;
+  /** Onde o agente roda. */
+  origem?: "hermes" | "grok" | "paperclip" | string | null;
+  /** Aposentado: fora da hierarquia até o filtro mostrar. */
+  aposentado?: boolean;
 }
+
+const NOME_DA_ORIGEM: Record<string, string> = { hermes: "Hermes", grok: "Grok", paperclip: "Paperclip" };
+const COR_DA_ORIGEM: Record<string, string> = {
+  hermes: "bg-info/15 text-info",
+  grok: "bg-primary/15 text-primary",
+  paperclip: "bg-warning/15 text-warning",
+};
 
 /** Uma linha da faixa "Movimentação agora". */
 export interface MovimentoDoOrganograma {
@@ -120,27 +139,41 @@ export default function OrganogramaAgentes({
   aoAbrir,
   nomeDoDono,
   movimentos = [],
+  podeOrganizar = false,
+  aoEditar,
+  aoMover,
 }: {
   nos: NoDoOrganograma[];
   aoAbrir: (no: NoDoOrganograma) => void;
   nomeDoDono: string;
   movimentos?: MovimentoDoOrganograma[];
+  /** Admin: mostra o lápis e deixa arrastar. */
+  podeOrganizar?: boolean;
+  aoEditar?: (no: NoDoOrganograma) => void;
+  /** A ordem nova do grupo (e a área de quem mudou de área). */
+  aoMover?: (itens: ItemDeOrdem[]) => void;
 }) {
-  const coordenadores = nos.filter((n) => n.nivel === "coordenador");
-  const operadores = nos.filter((n) => n.nivel === "operador");
+  // Aposentado fica fora até pedir (a escolha fica guardada).
+  const [verAposentados, setVerAposentados] = useEstadoDaTela<boolean>("execucao:organograma:aposentados", false, {
+    validar: (v) => typeof v === "boolean",
+  });
+  const aposentados = nos.filter((n) => n.aposentado).length;
+  const aVista = verAposentados ? nos : nos.filter((n) => !n.aposentado);
+  const coordenadores = aVista.filter((n) => n.nivel === "coordenador");
+  const operadores = aVista.filter((n) => n.nivel === "operador");
 
   // Agrupa por função, preservando a ordem em que os agentes chegaram (a
   // consulta já vem ordenada por display_order). Quem ainda não tem área
   // vai para o fim, num grupo com nome honesto em vez de sumir da tela.
   const porArea = new Map<string, NoDoOrganograma[]>();
   for (const o of operadores) {
-    const chave = o.area?.trim() || "Sem área definida";
+    const chave = o.area?.trim() || SEM_AREA;
     const atual = porArea.get(chave);
     if (atual) atual.push(o);
     else porArea.set(chave, [o]);
   }
   const areas = [...porArea.entries()].sort(([a], [b]) =>
-    a === "Sem área definida" ? 1 : b === "Sem área definida" ? -1 : a.localeCompare(b, "pt-BR"),
+    a === SEM_AREA ? 1 : b === SEM_AREA ? -1 : a.localeCompare(b, "pt-BR"),
   );
 
   const total = operadores.length + coordenadores.length;
@@ -204,6 +237,29 @@ export default function OrganogramaAgentes({
     setZoom(limitarZoom(Math.min(1, porLargura, porAltura)));
   };
 
+  // Arrastar (só admin, só no computador: o celular usa as setas da janela de editar).
+  const [arrastando, setArrastando] = useState<string | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
+  const organiza = podeOrganizar && Boolean(aoMover);
+  const grupoDe = (no: NoDoOrganograma) => (no.nivel === "coordenador" ? coordenadores : porArea.get(no.area?.trim() || SEM_AREA) ?? []);
+  const soltar = (alvoId: string | null, areaDoAlvo?: string) => {
+    const movido = nos.find((n) => n.id === arrastando);
+    setArrastando(null);
+    setSobre(null);
+    if (!movido || !aoMover) return;
+    if (alvoId) {
+      const alvo = nos.find((n) => n.id === alvoId);
+      // Coordenador reordena entre coordenadores e agente entre agentes; trocar de linha é pela janela de editar.
+      if (!alvo || alvo.id === movido.id || alvo.nivel !== movido.nivel) return;
+      const mudouDeArea = movido.nivel === "operador" && (alvo.area?.trim() || SEM_AREA) !== (movido.area?.trim() || SEM_AREA);
+      aoMover(ordemParaGravar(colocarNoGrupo(grupoDe(alvo), movido, alvo.id), movido.id, mudouDeArea ? alvo.area?.trim() || SEM_AREA : undefined));
+      return;
+    }
+    if (!areaDoAlvo || movido.nivel !== "operador") return;
+    if ((movido.area?.trim() || SEM_AREA) === areaDoAlvo) return;
+    aoMover(ordemParaGravar(colocarNoGrupo(porArea.get(areaDoAlvo) ?? [], movido, null), movido.id, areaDoAlvo));
+  };
+
   const Caixa = ({
     no,
     destaque,
@@ -213,6 +269,7 @@ export default function OrganogramaAgentes({
     destaque?: "dono" | "gateway";
     acento?: string;
   }) => {
+    const arrastavel = organiza && !destaque;
     const numeros = [
       { valor: no.emAndamento ?? 0, cor: "text-info", titulo: "em andamento" },
       { valor: no.feitas ?? 0, cor: "text-success", titulo: "feitas" },
@@ -223,6 +280,15 @@ export default function OrganogramaAgentes({
     const parado = !destaque && !trabalha && no.ativo !== false;
 
     return (
+      <div
+        className={cn("group/caixa relative min-w-0", arrastando === no.id && "opacity-50", sobre === no.id && arrastando !== no.id && "rounded-lg ring-2 ring-primary")}
+        data-agente={destaque ? undefined : no.id}
+        draggable={arrastavel || undefined}
+        onDragStart={arrastavel ? (e) => { setArrastando(no.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", no.id); } catch { /* navegador antigo */ } } : undefined}
+        onDragOver={arrastavel ? (e) => { if (!arrastando || arrastando === no.id) return; e.preventDefault(); e.stopPropagation(); if (sobre !== no.id) setSobre(no.id); } : undefined}
+        onDrop={arrastavel ? (e) => { e.preventDefault(); e.stopPropagation(); soltar(no.id); } : undefined}
+        onDragEnd={arrastavel ? () => { setArrastando(null); setSobre(null); } : undefined}
+      >
       <button
         type="button"
         onClick={() => aoAbrir(no)}
@@ -233,6 +299,7 @@ export default function OrganogramaAgentes({
         className={juntar(
           superficie.painel,
           "group relative w-full overflow-hidden text-left transition-colors",
+          arrastavel && "lg:cursor-grab",
           "hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           destaque === "dono" ? "border-primary/50" : destaque === "gateway" ? "border-info/50" : trabalha ? "border-info/60" : "",
         )}
@@ -298,6 +365,11 @@ export default function OrganogramaAgentes({
                   coordena
                 </span>
               )}
+              {!destaque && no.origem && (
+                <span className={cn("shrink-0 rounded px-1.5 py-px text-[11px] font-medium", COR_DA_ORIGEM[no.origem] ?? "bg-secondary text-muted-foreground")} data-origem={no.origem}>
+                  {NOME_DA_ORIGEM[no.origem] ?? no.origem}
+                </span>
+              )}
             </div>
             {trabalha && no.agora ? (
               <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-foreground" data-agora="">
@@ -305,13 +377,17 @@ export default function OrganogramaAgentes({
               </p>
             ) : (
               <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-muted-foreground">
-                {no.papel}
+                {no.funcao || no.papel}
               </p>
             )}
             {trabalha && no.agoraDesde ? (
               <p className="mt-1 text-[11px] tabular-nums text-info">trabalhando · {haQuanto(no.agoraDesde, agora)}</p>
             ) : parado && no.ultimaVez ? (
               <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">livre · última vez {haQuanto(no.ultimaVez, agora)}</p>
+            ) : !destaque && !trabalha ? (
+              <p className="mt-1 text-[11px] text-muted-foreground" data-sem-execucao={no.ultimaVez ? undefined : ""}>
+                {no.ultimaVez ? `última execução ${haQuanto(no.ultimaVez, agora)}` : "sem execução ainda"}
+              </p>
             ) : null}
             {no.chefe && (
               <p className="mt-1 flex items-center truncate text-[11px] text-muted-foreground">
@@ -335,7 +411,7 @@ export default function OrganogramaAgentes({
 
         {no.ativo === false && (
           <div className="border-t border-border bg-secondary px-3 py-1 pl-4 text-[11px] font-medium text-muted-foreground">
-            pausado
+            {no.aposentado ? "aposentado" : "pausado"}
           </div>
         )}
 
@@ -346,6 +422,19 @@ export default function OrganogramaAgentes({
           </span>
         )}
       </button>
+      {/* O lápis é irmão do cartão (botão dentro de botão não existe): sempre à vista no toque, no passar do mouse no computador. */}
+      {podeOrganizar && aoEditar && !destaque && (
+        <button
+          type="button"
+          onClick={() => aoEditar(no)}
+          aria-label={`Editar ${no.nome}`}
+          title={`Editar ${no.nome}`}
+          className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-card text-muted-foreground transition-opacity hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:opacity-0 lg:group-hover/caixa:opacity-100"
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+      </div>
     );
   };
 
@@ -405,6 +494,9 @@ export default function OrganogramaAgentes({
       ajuda={
         <>
           Toque em qualquer um para ver o contexto e copiar o comando de acionamento.
+          O cartão mostra a função, a origem (Hermes, Grok ou Paperclip) e a última execução.
+          Quem é administrador edita pelo lápis e, no computador, arrasta um cartão para cima de outro
+          para reordenar ou mudar de área. Aposentados ficam escondidos até você pedir para ver.
           Quem organiza esta hierarquia é o Hermes, pelo próprio MCP, e o painel
           redesenha na hora. Quem está trabalhando pulsa e mostra o que faz agora;
           a tela se atualiza sozinha a cada 10 segundos. No computador, use o zoom
@@ -421,7 +513,23 @@ export default function OrganogramaAgentes({
         className={cn("min-w-0", telaCheia && "overflow-auto bg-background p-6")}
       >
         {/* Zoom e tela cheia: só no computador (no celular a tela já é a pirâmide em pé). */}
-        <div className="mb-3 hidden items-center justify-end lg:flex" role="toolbar" aria-label="Zoom da hierarquia">
+        <div className="mb-3 flex min-w-0 items-center" data-barra-da-hierarquia="">
+        {aposentados > 0 && (
+          <div className="flex">
+            <button
+              type="button"
+              className={cn(botaoDoPalco, "px-2 text-[12px]")}
+              aria-pressed={verAposentados}
+              onClick={() => setVerAposentados((v) => !v)}
+              title={verAposentados ? "Esconder os aposentados" : "Mostrar os aposentados"}
+              data-filtro-aposentados=""
+            >
+              {verAposentados ? <EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> : <Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
+              {verAposentados ? "Esconder aposentados" : `Ver aposentados (${aposentados})`}
+            </button>
+          </div>
+        )}
+        <div className="ml-auto hidden items-center lg:flex" role="toolbar" aria-label="Zoom da hierarquia">
           <button type="button" className={botaoDoPalco} onClick={() => setZoom((z) => limitarZoom(z - 0.1))} disabled={zoom <= ZOOM_MIN} aria-label="Diminuir o zoom" title="Diminuir o zoom">
             <Minus className="h-4 w-4" />
           </button>
@@ -437,6 +545,7 @@ export default function OrganogramaAgentes({
           <button type="button" className={cn(botaoDoPalco, "ml-1")} onClick={alternarTelaCheia} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia" : "Tela cheia"}>
             {telaCheia ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
           </button>
+        </div>
         </div>
 
         <div ref={conteudoRef} className="min-w-0" style={{ zoom }}>
@@ -515,7 +624,13 @@ export default function OrganogramaAgentes({
                 const emAndamento = doGrupo.reduce((s, o) => s + (o.emAndamento ?? 0), 0);
                 const fechada = Boolean(fechadas[area]);
                 return (
-                  <section key={area} aria-label={area} className="min-w-0">
+                  <section
+                    key={area}
+                    aria-label={area}
+                    className={cn("min-w-0", sobre === `area:${area}` && "rounded-lg ring-2 ring-primary/60")}
+                    onDragOver={organiza ? (e) => { if (!arrastando) return; e.preventDefault(); if (sobre !== `area:${area}`) setSobre(`area:${area}`); } : undefined}
+                    onDrop={organiza ? (e) => { e.preventDefault(); soltar(null, area); } : undefined}
+                  >
                     <div className={cn("flex min-w-0 items-center", !fechada && "mb-2")}>
                       <span className={cn("mr-2 h-3.5 w-1 shrink-0 rounded-full", acento)} aria-hidden />
                       <TituloRecolhivel
