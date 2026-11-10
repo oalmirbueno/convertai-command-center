@@ -2905,6 +2905,14 @@
       "remote_name": "plano_mudou_atualiza_tudo",
       "remote_statements_sha256": "f7fbb4b01eec25954e4cdc16c38680f6bb3c29ce8fc41622035988936c02b015",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110120000",
+      "path": "supabase/migrations/20261110120000_dossie_preserva_conversas_whatsapp.sql",
+      "local_sha256": "2000536dfbaf9af51b0dc6cea04f85701a878b7c2c24e7d79288dde9e3a94bfa",
+      "remote_name": "dossie_preserva_conversas_whatsapp",
+      "remote_statements_sha256": "7fccbf2d4768206ccaedb0808921362a11406db686c3d57a925e8daa76a8af6d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
