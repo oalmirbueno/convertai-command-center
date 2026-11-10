@@ -3863,7 +3863,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado; lembrete de aprovação e cobrança aprovados pelo dono: aceleriq_mensagens_automaticas_fila, aceleriq_mensagens_automaticas_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
-  { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft, aceleriq_workspace_mover_arquivo, aceleriq_workspace_criar_arquivo' },
+  { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
   { area: 'Arquivos', rota: '/arquivos', para: 'Acervo de arquivos por cliente e projeto.', pelo_mcp: 'aceleriq_list_files, aceleriq_upload_file, aceleriq_update_file_metadata' },
   { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes. Pedidos de acesso dos agentes aparecem na Execucao (/execucao?acesso=<id>).', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas); no login: aceleriq_acesso_usar, aceleriq_acesso_pedir e aceleriq_acesso_estado' },
   { area: 'Financeiro', rota: '/financeiro', para: 'Caixa, mensalidades, custos, investimentos.', pelo_mcp: 'aceleriq_get_finance_dashboard e as demais aceleriq_*finance*' },
@@ -5089,7 +5089,6 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   ...FERRAMENTAS_DO_PAINEL_INTEIRO,
   // MCP 2.19: ações feitas nos anúncios e boletim do período (modulos/anuncios-registro.ts).
   ...FERRAMENTAS_DE_ANUNCIOS,
-  // MCP 2.25: mover/criar arquivo no Workspace e gravar perfis do Instagram.
   ...FERRAMENTAS_DE_WORKSPACE_E_PERFIS,
 ];
 
