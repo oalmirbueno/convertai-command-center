@@ -22,6 +22,13 @@ export const BUCKET_WORKSPACE = "workspace";
 export const PREFIXO_VIRTUAL = "virt:";
 export const PREFIXO_PASTA_ARQUIVOS = "virt:folder:";
 
+/** Mesma régua da consulta de órfãos: interno, sem aprovação e sem trava. */
+export const MENSAGEM_ARQUIVO_PROTEGIDO =
+  "Este arquivo está em aprovação ou já foi liberado ao cliente; não pode ser movido para o Workspace.";
+
+export const COLUNAS_DO_ARQUIVO =
+  "id, client_id, file_name, folder, storage_bucket, storage_path, mime_type, size_bytes, parent_file_id, visibility, agency_approval_status, approval_status, locked_at";
+
 export class ErroDeMovimento extends Error {
   destinoGravado: boolean;
   constructor(message: string, destinoGravado = false) {
@@ -80,7 +87,54 @@ export type ArquivoDeOrigem = {
   size_bytes: number | null;
   parent_file_id: string | null;
   tem_filhos: boolean;
+  visibility: string | null;
+  agency_approval_status: string | null;
+  approval_status: string | null;
+  locked_at: string | null;
 };
+
+function textoOuNulo(valor: unknown): string | null {
+  if (valor == null) return null;
+  const texto = String(valor);
+  return texto === "" ? null : texto;
+}
+
+/** Monta o arquivo a partir da linha lida. Campo ausente vira null (a régua trata null como o padrão). */
+export function arquivoDeLinha(row: Record<string, unknown>, temFilhos: boolean): ArquivoDeOrigem {
+  return {
+    id: String(row.id),
+    client_id: String(row.client_id),
+    file_name: String(row.file_name || ""),
+    folder: textoOuNulo(row.folder),
+    storage_bucket: textoOuNulo(row.storage_bucket),
+    storage_path: textoOuNulo(row.storage_path),
+    mime_type: textoOuNulo(row.mime_type),
+    size_bytes: row.size_bytes == null || row.size_bytes === "" ? null : Number(row.size_bytes),
+    parent_file_id: textoOuNulo(row.parent_file_id),
+    tem_filhos: temFilhos,
+    visibility: textoOuNulo(row.visibility),
+    agency_approval_status: textoOuNulo(row.agency_approval_status),
+    approval_status: textoOuNulo(row.approval_status),
+    locked_at: textoOuNulo(row.locked_at),
+  };
+}
+
+/**
+ * Recusa antes de copiar ou gravar. Igual à consulta de órfãos:
+ * bucket mcp-files, visibility internal, aprovação no padrão e locked_at nulo.
+ * Null nesses status conta como o padrão (coalesce).
+ */
+export function recusarSeNaoPodeSairDeArquivos(arquivo: ArquivoDeOrigem): void {
+  if (arquivo.storage_bucket !== BUCKET_ARQUIVOS) {
+    throw new ErroDeMovimento("Este arquivo não está no acervo de Em Arquivos; nada foi alterado.");
+  }
+  const liberado = (arquivo.visibility ?? "internal") !== "internal";
+  const agencia = (arquivo.agency_approval_status ?? "not_requested") !== "not_requested";
+  const cliente = (arquivo.approval_status ?? "none") !== "none";
+  if (arquivo.locked_at || liberado || agencia || cliente) {
+    throw new ErroDeMovimento(MENSAGEM_ARQUIVO_PROTEGIDO);
+  }
+}
 
 export type NoDeWorkspace = {
   id: string;
@@ -186,6 +240,7 @@ export async function promoverArquivoParaPasta(
   userId: string | null,
   portas: PortasDoMovimento,
 ): Promise<ResultadoDoMovimento> {
+  recusarSeNaoPodeSairDeArquivos(arquivo);
   if (arquivo.parent_file_id || arquivo.tem_filhos) {
     throw new ErroDeMovimento("Mova o arquivo raiz. Slides de carrossel acompanham o arquivo principal, e este lote não os separa.");
   }

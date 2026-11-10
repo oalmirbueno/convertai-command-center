@@ -4,7 +4,8 @@ import {
   BUCKET_WORKSPACE,
   ErroDeMovimento,
   executarMovimento,
-  type ArquivoDeOrigem,
+  COLUNAS_DO_ARQUIVO,
+  arquivoDeLinha,
   type LinhaDeArquivo,
   type LinhaDeNo,
   type NoDeWorkspace,
@@ -62,7 +63,7 @@ function portas(): PortasDoMovimento {
     async lerArquivo(id) {
       const { data, error } = await (supabase as any)
         .from("staff_files_secure")
-        .select("id, client_id, file_name, folder, storage_bucket, storage_path, mime_type, size_bytes, parent_file_id")
+        .select(COLUNAS_DO_ARQUIVO)
         .eq("id", id)
         .maybeSingle();
       if (error) falha(error.message);
@@ -73,19 +74,7 @@ function portas(): PortasDoMovimento {
         .eq("parent_file_id", id)
         .limit(1);
       if (filhos.error) falha(filhos.error.message);
-      const arquivo: ArquivoDeOrigem = {
-        id: data.id,
-        client_id: data.client_id,
-        file_name: data.file_name,
-        folder: data.folder ?? null,
-        storage_bucket: data.storage_bucket ?? null,
-        storage_path: data.storage_path ?? null,
-        mime_type: data.mime_type ?? null,
-        size_bytes: data.size_bytes == null ? null : Number(data.size_bytes),
-        parent_file_id: data.parent_file_id ?? null,
-        tem_filhos: (filhos.data || []).length > 0,
-      };
-      return arquivo;
+      return arquivoDeLinha(data as Record<string, unknown>, (filhos.data || []).length > 0);
     },
     async lerNo(id) {
       const { data, error } = await supabase.from("workspace_nodes").select(COLUNAS_DO_NO).eq("id", id).maybeSingle();

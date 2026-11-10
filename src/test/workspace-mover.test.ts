@@ -5,7 +5,9 @@ import { planejarPerfis } from "../../supabase/functions/mcp-server/modulos/perf
 import {
   BUCKET_ARQUIVOS,
   BUCKET_WORKSPACE,
+  COLUNAS_DO_ARQUIVO,
   ErroDeMovimento,
+  MENSAGEM_ARQUIVO_PROTEGIDO,
   caminhoNoWorkspace,
   classificarDestino,
   executarMovimento,
@@ -30,8 +32,18 @@ function arquivo(parcial: Partial<ArquivoDeOrigem> = {}): ArquivoDeOrigem {
     size_bytes: 1200,
     parent_file_id: null,
     tem_filhos: false,
+    visibility: "internal",
+    agency_approval_status: "not_requested",
+    approval_status: "none",
+    locked_at: null,
     ...parcial,
   };
+}
+
+async function naoSai(parcial: Partial<ArquivoDeOrigem>) {
+  const ctx = portas({ arquivo: arquivo(parcial) });
+  await expect(executarMovimento(pedidoVirtual, ctx.portas)).rejects.toThrow(MENSAGEM_ARQUIVO_PROTEGIDO);
+  expect(ctx.chamadas.some((c) => /^(copiar|criarNo|retirarArquivo|moverNo|apagarBlob):/.test(c))).toBe(false);
 }
 
 function pasta(): NoDeWorkspace {
@@ -196,6 +208,50 @@ describe("mover de Em Arquivos para uma pasta do Workspace", () => {
     expect(ctx.chamadas.some((c) => c.startsWith("criarNo:"))).toBe(false);
     expect(ctx.chamadas).toContain(`moverNo:cccccccc-cccc-4ccc-8ccc-cccccccccccc:${PASTA}`);
     expect(ctx.chamadas.some((c) => c.startsWith("retirarArquivo:"))).toBe(true);
+  });
+
+  it("arquivo aprovado não sai de Em Arquivos", async () => {
+    await naoSai({ approval_status: "approved" });
+    await naoSai({ agency_approval_status: "approved" });
+  });
+
+  it("arquivo travado não sai", async () => {
+    await naoSai({ locked_at: "2026-11-10T17:11:40Z" });
+  });
+
+  it("arquivo liberado ao cliente não sai", async () => {
+    await naoSai({ visibility: "client_shared" });
+  });
+
+  it("arquivo interno, sem aprovação, move normal", async () => {
+    const ctx = portas({
+      arquivo: arquivo({
+        visibility: null,
+        agency_approval_status: null,
+        approval_status: null,
+        locked_at: null,
+      }),
+    });
+    const r = await executarMovimento(pedidoVirtual, ctx.portas);
+    expect(r.mudou).toBe(true);
+    expect(ctx.chamadas.some((c) => c.startsWith("copiar:"))).toBe(true);
+    expect(ctx.chamadas.some((c) => c.startsWith("criarNo:"))).toBe(true);
+  });
+
+  it("arquivo fora do bucket mcp-files não sai", async () => {
+    const ctx = portas({ arquivo: arquivo({ storage_bucket: "files" }) });
+    await expect(executarMovimento(pedidoVirtual, ctx.portas)).rejects.toThrow("não está no acervo de Em Arquivos");
+    expect(ctx.chamadas.some((c) => c.startsWith("copiar:"))).toBe(false);
+  });
+
+  it("painel e MCP leem trava, visibilidade e aprovação", () => {
+    const painel = readFileSync(resolve(process.cwd(), "src/lib/workspaceMoverCliente.ts"), "utf8");
+    const mcp = readFileSync(resolve(process.cwd(), "supabase/functions/mcp-server/modulos/workspace-e-perfis.ts"), "utf8");
+    expect(painel).toContain("COLUNAS_DO_ARQUIVO");
+    expect(mcp).toContain("COLUNAS_DO_ARQUIVO");
+    for (const campo of ["visibility", "agency_approval_status", "approval_status", "locked_at"]) {
+      expect(COLUNAS_DO_ARQUIVO).toContain(campo);
+    }
   });
 });
 

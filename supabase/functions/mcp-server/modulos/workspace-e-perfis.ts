@@ -16,9 +16,10 @@ import {
   BUCKET_WORKSPACE,
   ErroDeMovimento,
   caminhoNoWorkspace,
+  COLUNAS_DO_ARQUIVO,
+  arquivoDeLinha,
   executarMovimento,
   extensaoDe,
-  type ArquivoDeOrigem,
   type LinhaDeNo,
   type NoDeWorkspace,
   type PortasDoMovimento,
@@ -78,26 +79,13 @@ function portas(banco: SupabaseClient): PortasDoMovimento {
   return {
     async lerArquivo(id) {
       const { data, error } = await banco.from('files')
-        .select('id, client_id, file_name, folder, storage_bucket, storage_path, mime_type, size_bytes, parent_file_id')
+        .select(COLUNAS_DO_ARQUIVO)
         .eq('id', id).maybeSingle();
       if (error) falha(error.message);
       if (!data) return null;
       const filhos = await banco.from('files').select('id').eq('parent_file_id', id).limit(1);
       if (filhos.error) falha(filhos.error.message);
-      const row = data as Record<string, unknown>;
-      const arquivo: ArquivoDeOrigem = {
-        id: String(row.id),
-        client_id: String(row.client_id),
-        file_name: String(row.file_name || ''),
-        folder: (row.folder as string | null) ?? null,
-        storage_bucket: (row.storage_bucket as string | null) ?? null,
-        storage_path: (row.storage_path as string | null) ?? null,
-        mime_type: (row.mime_type as string | null) ?? null,
-        size_bytes: row.size_bytes == null ? null : Number(row.size_bytes),
-        parent_file_id: (row.parent_file_id as string | null) ?? null,
-        tem_filhos: ((filhos.data || []) as unknown[]).length > 0,
-      };
-      return arquivo;
+      return arquivoDeLinha(data as Record<string, unknown>, ((filhos.data || []) as unknown[]).length > 0);
     },
     async lerNo(id) {
       const { data, error } = await banco.from('workspace_nodes').select(COLUNAS_DO_NO).eq('id', id).maybeSingle();
@@ -366,7 +354,7 @@ const moverTool: ToolDefinition = {
   name: 'aceleriq_workspace_mover_arquivo',
   title: 'Mover arquivo no Workspace',
   description:
-    'Move um arquivo do Workspace para uma pasta (pasta_id) ou para a raiz (pasta_id null). Se arquivo_id for de Em Arquivos (public.files), copia o blob de mcp-files para o bucket workspace, grava workspace_nodes na pasta e só então tira da origem. Não diz sucesso se a pasta não gravou. Exige files:write e o cliente no escopo.',
+    'Move um arquivo do Workspace para uma pasta (pasta_id) ou para a raiz (pasta_id null). Se arquivo_id for de Em Arquivos, só segue com blob em mcp-files, interno, sem aprovação e sem trava; senão recusa antes de copiar. Copia para o bucket workspace, grava workspace_nodes e só então tira da origem. Exige files:write e o cliente no escopo.',
   scopes: ['files:write'],
   annotations: ESCRITA,
   inputSchema: {
