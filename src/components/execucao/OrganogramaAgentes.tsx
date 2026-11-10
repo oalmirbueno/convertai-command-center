@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Crown, Expand, Eye, EyeOff, Minimize, Minus, Network, Pencil, Plus, ScanSearch } from "lucide-react";
+import { Bot, Crown, Expand, Eye, EyeOff, Minimize, Minus, Network, Pencil, Plus, ScanSearch, UserPlus } from "lucide-react";
 import { Secao, juntar, superficie, useEstadoDaTela } from "@/components/sistema";
 import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
 import { cn } from "@/lib/utils";
-import { SEM_AREA, colocarNoGrupo, ordemParaGravar, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
+import { ORIGENS, SEM_AREA, classeDaOrigem, colocarNoGrupo, nomeDaOrigem, ordemParaGravar, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
 
 /**
  * A pirâmide da casa: quem manda, quem coordena, quem executa.
@@ -63,16 +63,13 @@ export interface NoDoOrganograma {
   funcao?: string | null;
   /** Onde o agente roda. */
   origem?: "hermes" | "grok" | "paperclip" | string | null;
-  /** Aposentado: fora da hierarquia até o filtro mostrar. */
+  /** Aposentado ou excluído: fora da hierarquia até o filtro mostrar. */
   aposentado?: boolean;
+  /** Excluído pelo admin (tinha histórico, então o registro ficou guardado). */
+  excluido?: boolean;
+  /** É o próprio Hermes (a porta de entrada): ocupa a caixa do Hermes em vez de aparecer de novo embaixo. */
+  porta?: boolean;
 }
-
-const NOME_DA_ORIGEM: Record<string, string> = { hermes: "Hermes", grok: "Grok", paperclip: "Paperclip" };
-const COR_DA_ORIGEM: Record<string, string> = {
-  hermes: "bg-info/15 text-info",
-  grok: "bg-primary/15 text-primary",
-  paperclip: "bg-warning/15 text-warning",
-};
 
 /** Uma linha da faixa "Movimentação agora". */
 export interface MovimentoDoOrganograma {
@@ -142,6 +139,7 @@ export default function OrganogramaAgentes({
   podeOrganizar = false,
   aoEditar,
   aoMover,
+  aoCriar,
 }: {
   nos: NoDoOrganograma[];
   aoAbrir: (no: NoDoOrganograma) => void;
@@ -152,13 +150,21 @@ export default function OrganogramaAgentes({
   aoEditar?: (no: NoDoOrganograma) => void;
   /** A ordem nova do grupo (e a área de quem mudou de área). */
   aoMover?: (itens: ItemDeOrdem[]) => void;
+  /** Admin: abre o cadastro de um agente novo. */
+  aoCriar?: () => void;
 }) {
+  // Filtro por origem (Hermes, Grok, n8n...): um toque mostra só aquela, outro toque volta a todas.
+  const [origemEscolhida, setOrigemEscolhida] = useState<string | null>(null);
   // Aposentado fica fora até pedir (a escolha fica guardada).
   const [verAposentados, setVerAposentados] = useEstadoDaTela<boolean>("execucao:organograma:aposentados", false, {
     validar: (v) => typeof v === "boolean",
   });
   const aposentados = nos.filter((n) => n.aposentado).length;
-  const aVista = verAposentados ? nos : nos.filter((n) => !n.aposentado);
+  // O Hermes do banco ocupa a caixa do Hermes: antes ele aparecia duas vezes (a caixa fixa e o coordenador).
+  const porta = nos.find((n) => n.porta && !n.aposentado) ?? null;
+  const semPorta = nos.filter((n) => n !== porta);
+  const ativosPorOrigem = ORIGENS.map((o) => ({ ...o, quantos: semPorta.filter((n) => !n.aposentado && (n.origem || "hermes") === o.valor).length })).filter((o) => o.quantos > 0);
+  const aVista = (verAposentados ? semPorta : semPorta.filter((n) => !n.aposentado)).filter((n) => !origemEscolhida || (n.origem || "hermes") === origemEscolhida);
   const coordenadores = aVista.filter((n) => n.nivel === "coordenador");
   const operadores = aVista.filter((n) => n.nivel === "operador");
 
@@ -370,8 +376,8 @@ export default function OrganogramaAgentes({
                 </span>
               )}
               {!destaque && no.origem && (
-                <span className={cn("shrink-0 rounded px-1.5 py-px text-[11px] font-medium", COR_DA_ORIGEM[no.origem] ?? "bg-secondary text-muted-foreground")} data-origem={no.origem}>
-                  {NOME_DA_ORIGEM[no.origem] ?? no.origem}
+                <span className={cn("shrink-0 rounded px-1.5 py-px text-[11px] font-medium", classeDaOrigem(no.origem))} data-origem={no.origem}>
+                  {nomeDaOrigem(no.origem)}
                 </span>
               )}
               </div>
@@ -416,7 +422,7 @@ export default function OrganogramaAgentes({
 
         {no.ativo === false && (
           <div className="border-t border-border bg-secondary px-3 py-1 pl-4 text-[11px] font-medium text-muted-foreground">
-            {no.aposentado ? "aposentado" : "pausado"}
+            {no.excluido ? "excluído" : no.aposentado ? "aposentado" : "pausado"}
           </div>
         )}
 
@@ -518,7 +524,28 @@ export default function OrganogramaAgentes({
         className={cn("min-w-0", telaCheia && "overflow-auto bg-background p-6")}
       >
         {/* Zoom e tela cheia: só no computador (no celular a tela já é a pirâmide em pé). */}
-        <div className="mb-3 flex min-w-0 items-center" data-barra-da-hierarquia="">
+        <div className="mb-3 flex min-w-0 flex-wrap items-center" data-barra-da-hierarquia="">
+        {podeOrganizar && aoCriar && (
+          <button type="button" className={cn(botaoDoPalco, "mr-1 px-2 text-[12px] text-foreground")} onClick={aoCriar} data-novo-agente="">
+            <UserPlus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Novo agente
+          </button>
+        )}
+        {ativosPorOrigem.length > 1 && (
+          <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar por origem" data-filtro-origem="">
+            {ativosPorOrigem.map((o) => (
+              <button
+                key={o.valor}
+                type="button"
+                aria-pressed={origemEscolhida === o.valor}
+                onClick={() => setOrigemEscolhida((atual) => (atual === o.valor ? null : o.valor))}
+                title={origemEscolhida === o.valor ? "Mostrar todas as origens" : `Mostrar só ${o.rotulo}`}
+                className={cn("mr-1 flex h-7 items-center rounded-md px-1.5 text-[11px] font-medium transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", o.classe, origemEscolhida && origemEscolhida !== o.valor && "opacity-40")}
+              >
+                {o.rotulo}<span className="ml-1 tabular-nums opacity-80">{o.quantos}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {aposentados > 0 && (
           <div className="flex">
             <button
@@ -526,7 +553,7 @@ export default function OrganogramaAgentes({
               className={cn(botaoDoPalco, "px-2 text-[12px]")}
               aria-pressed={verAposentados}
               onClick={() => setVerAposentados((v) => !v)}
-              title={verAposentados ? "Esconder os aposentados" : "Mostrar os aposentados"}
+              title={verAposentados ? "Esconder os aposentados e excluídos" : "Mostrar os aposentados e excluídos"}
               data-filtro-aposentados=""
             >
               {verAposentados ? <EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> : <Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
@@ -593,12 +620,9 @@ export default function OrganogramaAgentes({
             <Tronco vivo={vivo} />
             <div className="w-full max-w-[16rem]">
               <Caixa
-                no={{
-                  id: "hermes",
-                  nome: "Hermes",
-                  papel: "Porta de entrada · recebe, organiza e responde no grupo",
-                  nivel: "gateway",
-                }}
+                no={porta
+                  ? { ...porta, nome: "Hermes", papel: "Porta de entrada · recebe, organiza e responde no grupo", funcao: null, nivel: "gateway", chefe: null }
+                  : { id: "hermes", nome: "Hermes", papel: "Porta de entrada · recebe, organiza e responde no grupo", nivel: "gateway" }}
                 destaque="gateway"
               />
             </div>

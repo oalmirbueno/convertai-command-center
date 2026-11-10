@@ -41,3 +41,27 @@ export function ordemParaGravar(lista: { id: string }[], movidoId: string, area?
     ...(n.id === movidoId && area !== undefined ? { area: area === SEM_AREA ? null : area } : {}),
   }));
 }
+
+/** Onde o agente roda. A ordem é a da legenda da hierarquia. */
+export const ORIGENS: { valor: string; rotulo: string; classe: string }[] = [
+  { valor: "hermes", rotulo: "Hermes", classe: "bg-info/15 text-info" },
+  { valor: "grok", rotulo: "Grok", classe: "bg-primary/15 text-primary" },
+  { valor: "paperclip", rotulo: "Paperclip", classe: "bg-warning/15 text-warning" },
+  { valor: "n8n", rotulo: "n8n", classe: "bg-destructive/15 text-destructive" },
+  { valor: "claude_code", rotulo: "Claude Code", classe: "bg-success/15 text-success" },
+  { valor: "codex", rotulo: "Codex", classe: "bg-secondary text-foreground" },
+  { valor: "chatgpt", rotulo: "ChatGPT", classe: "bg-secondary text-foreground" },
+];
+export const nomeDaOrigem = (o?: string | null) => ORIGENS.find((x) => x.valor === o)?.rotulo ?? (o || "Hermes");
+export const classeDaOrigem = (o?: string | null) => ORIGENS.find((x) => x.valor === o)?.classe ?? "bg-secondary text-muted-foreground";
+
+/** O identificador do agente novo, a partir do nome: sem acento, minúsculo, com hífen, e único. */
+export function slugDoNome(nome: string, usados: string[]): string {
+  const base = nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "agente";
+  let slug = base;
+  for (let n = 2; usados.includes(slug); n += 1) slug = `${base}-${n}`;
+  return slug;
+}
+
+/** O formulário vazio do agente novo (sem id: é assim que a janela sabe que é cadastro). */
+export const AGENTE_NOVO = { id: "", slug: "", display_name: "", role: "", scope: "", status: "active", area: null as string | null, parent_slug: null as string | null, origem: "hermes" as string | null, is_coordinator: false };

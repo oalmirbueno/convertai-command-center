@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Pencil, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, botao, campo, juntar, texto } from "@/components/sistema";
+import { ORIGENS, nomeDaOrigem, slugDoNome } from "@/lib/hierarquiaDosAgentes";
 
 /**
  * Editar, aposentar e apagar um agente da hierarquia (10/11/2026, pedido do dono).
@@ -13,8 +14,12 @@ import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, botao, campo, juntar, 
  * Aposentar e apagar são coisas diferentes, e a janela mostra as duas separadas:
  * - APOSENTAR tira o agente da hierarquia (o filtro esconde aposentados) e guarda todo o histórico.
  *   Volta com um clique.
- * - APAGAR DE VEZ só existe para quem não deixou rastro (cadastro errado, duplicado). A auditoria dos
- *   agentes é imutável: quem já trabalhou não pode ser apagado, e a janela diz quantos registros ele tem.
+ * - EXCLUIR existe para todos (pedido do dono, 10/11: "poder excluir cada um ali"). Quem não deixou
+ *   rastro é apagado de vez. Quem já trabalhou tem auditoria imutável: ele sai da hierarquia como
+ *   "excluído" e o registro do que fez fica guardado; dá para restaurar em "Ver aposentados".
+ *
+ * CRIAR (mesmo pedido: "criar lá por dentro, fácil, intuitivo e completo"): a mesma janela, vazia. O
+ * identificador nasce do nome e a referência da origem; nada de campo técnico para preencher.
  */
 
 export type AgenteEditavel = {
@@ -30,12 +35,6 @@ export type AgenteEditavel = {
   is_coordinator: boolean;
 };
 
-export const ORIGENS: { valor: string; rotulo: string }[] = [
-  { valor: "hermes", rotulo: "Hermes" },
-  { valor: "grok", rotulo: "Grok" },
-  { valor: "paperclip", rotulo: "Paperclip" },
-];
-export const nomeDaOrigem = (o?: string | null) => ORIGENS.find((x) => x.valor === o)?.rotulo ?? "Hermes";
 
 const ESTADOS = [
   { valor: "active", rotulo: "Ativo" },
@@ -64,6 +63,7 @@ function mensagemDoErro(e: unknown): string {
   if (m.includes("OPERADOR_COM_CHAVE")) return "Há uma credencial ligada a este agente. Aposente em vez de apagar.";
   if (m.includes("SO_ADMIN")) return "Só o administrador organiza os agentes.";
   if (m.includes("internal_operators_origem_check")) return "Origem inválida.";
+  if (m.includes("internal_operators_slug_key")) return "Já existe um agente com esse nome. Mude o nome.";
   return m || "Não foi possível salvar.";
 }
 
@@ -91,7 +91,7 @@ export default function EditarAgente({
     setF(agente);
     setHistorico(null);
     setConfirmando(false);
-    if (!agente) return;
+    if (!agente || !agente.id) return;
     let vivo = true;
     void (supabase as any).rpc("operador_historico", { _id: agente.id }).then(({ data }: { data: Historico | null }) => {
       if (vivo && data) setHistorico(data);
@@ -108,6 +108,7 @@ export default function EditarAgente({
   }, [agente, todos]);
 
   if (!agente || !f) return null;
+  const novo = !agente.id;
 
   const rastro = historico ? historico.execucoes + historico.tarefas + historico.auditoria + historico.participacoes + historico.aprovacoes + historico.propostas + historico.entregas : null;
   const podeApagar = rastro === 0 && historico?.chaves === 0;
@@ -119,6 +120,30 @@ export default function EditarAgente({
     setOcupado(true);
     try { await acao(); } catch (e) { toast.error(mensagemDoErro(e)); } finally { setOcupado(false); }
   };
+
+  const criar = () => rodar(async () => {
+    const slug = slugDoNome(f.display_name, todos.map((a) => a.slug));
+    const origem = f.origem || "hermes";
+    const ordem = todos.filter((a) => (a.area?.trim() || "") === (f.area?.trim() || "")).length * 10 + 100;
+    const { error } = await (supabase as any).from("internal_operators").insert({
+      slug,
+      display_name: f.display_name.trim(),
+      role: f.role.trim(),
+      scope: f.scope.trim() || f.role.trim(),
+      status: "active",
+      area: f.area?.trim() || null,
+      parent_slug: f.parent_slug || null,
+      origem,
+      is_coordinator: f.is_coordinator,
+      hermes_profile_ref: `${origem}:${slug}`,
+      permissions: {},
+      display_order: ordem,
+    });
+    if (error) throw error;
+    toast.success(`${f.display_name.trim()} entrou na hierarquia.`);
+    await aoMudar();
+    aoFechar();
+  });
 
   const salvar = () => rodar(async () => {
     const { error } = await (supabase as any).from("internal_operators").update({
@@ -146,6 +171,15 @@ export default function EditarAgente({
   });
 
   const apagar = () => rodar(async () => {
+    if (!podeApagar) {
+      // Tem histórico (auditoria imutável) ou credencial: sai da hierarquia e o registro fica guardado.
+      const { error: erro } = await (supabase as any).from("internal_operators").update({ status: "inactive" }).eq("id", agente.id);
+      if (erro) throw erro;
+      toast.success(`${agente.display_name} excluído da hierarquia. O histórico dele continua guardado.`);
+      await aoMudar();
+      aoFechar();
+      return;
+    }
     const { data, error } = await (supabase as any).rpc("operador_apagar_de_vez", { _id: agente.id });
     if (error) throw error;
     const remanejados = Number(data?.subordinados_remanejados ?? 0);
@@ -160,22 +194,24 @@ export default function EditarAgente({
     <JanelaCentral
       aberta
       onFechar={aoFechar}
-      titulo={`Editar ${agente.display_name}`}
-      icone={<Pencil className="h-4 w-4" aria-hidden="true" />}
-      descricao={`${nomeDaOrigem(agente.origem)} · ${agente.slug}`}
-      ajuda="O que você muda aqui aparece na hierarquia na hora. O identificador (slug) não muda: é por ele que o agente se apresenta ao painel."
+      titulo={novo ? "Novo agente" : `Editar ${agente.display_name}`}
+      icone={novo ? <UserPlus className="h-4 w-4" aria-hidden="true" /> : <Pencil className="h-4 w-4" aria-hidden="true" />}
+      descricao={novo ? (f.display_name.trim() ? `${nomeDaOrigem(f.origem)} · ${slugDoNome(f.display_name, todos.map((a) => a.slug))}` : "Diga o nome, a função e onde ele roda") : `${nomeDaOrigem(agente.origem)} · ${agente.slug}`}
+      ajuda={novo
+        ? "O agente entra na hierarquia na hora. Isto é o cadastro no painel: a credencial para ele agir pelo MCP continua sendo ligada à parte, por você."
+        : "O que você muda aqui aparece na hierarquia na hora. O identificador (slug) não muda: é por ele que o agente se apresenta ao painel."}
       largura="md"
-      data-editar-agente={agente.slug}
+      data-editar-agente={novo ? "novo" : agente.slug}
       rodape={
         <div className="flex w-full min-w-0 flex-wrap items-center">
-          {aoMoverNaArea && (
+          {aoMoverNaArea && !novo && (
             <span className="mr-auto flex items-center">
               <button type="button" className={botao.icone} disabled={ocupado} onClick={() => void aoMoverNaArea(agente.id, -1)} aria-label="Subir na área" title="Subir na área"><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
               <button type="button" className={botao.icone} disabled={ocupado} onClick={() => void aoMoverNaArea(agente.id, 1)} aria-label="Descer na área" title="Descer na área"><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
             </span>
           )}
-          <button type="button" className={botao.secundario} onClick={aoFechar}>Cancelar</button>
-          <button type="button" className={juntar(botao.primario, "ml-2")} disabled={ocupado || !mudou || !valido} onClick={() => void salvar()}>{ocupado ? "Salvando…" : "Salvar"}</button>
+          <button type="button" className={juntar(botao.secundario, novo && "ml-auto")} onClick={aoFechar}>Cancelar</button>
+          <button type="button" className={juntar(botao.primario, "ml-2", novo && "ml-auto")} disabled={ocupado || !valido || (!novo && !mudou)} onClick={() => void (novo ? criar() : salvar())}>{ocupado ? "Salvando…" : novo ? "Criar agente" : "Salvar"}</button>
         </div>
       }
     >
@@ -195,16 +231,16 @@ export default function EditarAgente({
             {superiores.map((s) => <option key={s.slug} value={s.slug}>{s.display_name}</option>)}
           </select>
         </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Origem" ajuda="Onde o agente roda: no Hermes, como bot do Grok ou no time do Paperclip.">
+        <CampoDeFormulario rotulo="Origem" ajuda="Onde o agente roda: Hermes, bot do Grok, time do Paperclip, automação do n8n, Claude Code, Codex ou ChatGPT.">
           <select className={campo} value={f.origem ?? "hermes"} onChange={(e) => setF({ ...f, origem: e.target.value })}>
             {ORIGENS.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
           </select>
         </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Status">
+        {!novo && <CampoDeFormulario rotulo="Status">
           <select className={campo} value={f.status === "inactive" ? "retired" : f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
             {ESTADOS.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
           </select>
-        </CampoDeFormulario>
+        </CampoDeFormulario>}
         <CampoDeFormulario rotulo="O que faz" largo>
           <textarea className={juntar(campo, "min-h-[84px] py-2")} value={f.scope} maxLength={600} onChange={(e) => setF({ ...f, scope: e.target.value })} />
         </CampoDeFormulario>
@@ -215,7 +251,7 @@ export default function EditarAgente({
       </GrupoDeCampos>
       <datalist id="areas-dos-agentes">{areas.map((a) => <option key={a} value={a} />)}</datalist>
 
-      <div className="mt-5 border-t border-border pt-4" data-zona-de-saida="">
+      {!novo && <div className="mt-5 border-t border-border pt-4" data-zona-de-saida="">
         <p className={juntar(texto.rotulo, "mb-2")}>Tirar da hierarquia</p>
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
           {aposentado ? (
@@ -225,21 +261,21 @@ export default function EditarAgente({
               <Archive className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Aposentar
             </button>
           )}
-          {podeApagar && !confirmando && (
+          {historico !== null && !confirmando && agente.status !== "inactive" && (
             <button type="button" className={botao.perigo} disabled={ocupado} onClick={() => setConfirmando(true)}>
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Apagar de vez
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Excluir
             </button>
           )}
         </div>
         {confirmando && (
-          <div role="alertdialog" aria-label="Confirmar apagar de vez" className="mt-3 rounded-md bg-destructive/10 px-3 py-2.5 text-[13px]">
+          <div role="alertdialog" aria-label="Confirmar excluir" className="mt-3 rounded-md bg-destructive/10 px-3 py-2.5 text-[13px]">
             <p className="text-foreground">
-              Apagar <strong className="font-medium">{agente.display_name}</strong> de vez? Não dá para desfazer.
+              Excluir <strong className="font-medium">{agente.display_name}</strong>? {podeApagar ? "Ele é apagado de vez." : "Ele sai da hierarquia."}
               {historico && historico.subordinados > 0 ? ` ${historico.subordinados === 1 ? "Quem responde" : `Os ${historico.subordinados} que respondem`} a ele passa a responder ao superior dele.` : ""}
             </p>
             <div className="-m-1 mt-1 flex flex-wrap [&>*]:m-1">
-              <button type="button" className={botao.perigo} disabled={ocupado} onClick={() => void apagar()}>{ocupado ? "Apagando…" : "Sim, apagar de vez"}</button>
-              <button type="button" className={botao.secundario} disabled={ocupado} onClick={() => setConfirmando(false)}>Não apagar</button>
+              <button type="button" className={botao.perigo} disabled={ocupado} onClick={() => void apagar()}>{ocupado ? "Excluindo…" : "Sim, excluir"}</button>
+              <button type="button" className={botao.secundario} disabled={ocupado} onClick={() => setConfirmando(false)}>Não excluir</button>
             </div>
           </div>
         )}
@@ -247,12 +283,12 @@ export default function EditarAgente({
           {historico === null
             ? "Conferindo o histórico do agente…"
             : podeApagar
-              ? "Aposentar esconde e guarda o histórico. Este agente ainda não tem histórico, então também pode ser apagado de vez."
+              ? "Aposentar esconde e deixa pronto para voltar. Excluir apaga este agente de vez: ele ainda não tem histórico."
               : rastro && rastro > 0
-                ? `Este agente tem ${rastro} ${rastro === 1 ? "registro" : "registros"} de trabalho e auditoria, que são imutáveis: ele pode ser aposentado (some da hierarquia, o histórico fica), não apagado.`
-                : "Há uma credencial ligada a este agente: ele pode ser aposentado, não apagado."}
+                ? `Excluir tira o agente da hierarquia. Os ${rastro} ${rastro === 1 ? "registro" : "registros"} de trabalho e auditoria dele são imutáveis e ficam guardados; dá para restaurar em "Ver aposentados".`
+                : "Excluir tira o agente da hierarquia. A credencial ligada a ele não é apagada; dá para restaurar em \"Ver aposentados\"."}
         </p>
-      </div>
+      </div>}
     </JanelaCentral>
   );
 }

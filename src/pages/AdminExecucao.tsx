@@ -14,7 +14,7 @@ import {
   FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import type { MovimentoDoOrganograma, NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
-import { ordemParaGravar, passoNoGrupo, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
+import { AGENTE_NOVO, ordemParaGravar, passoNoGrupo, type ItemDeOrdem } from "@/lib/hierarquiaDosAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import ListaPaginada from "@/components/execucao/ListaPaginada";
 import TarefaDaExecucao from "@/components/execucao/TarefaDaExecucao";
@@ -1207,6 +1207,8 @@ export default function AdminExecucao() {
         funcao: o.role,
         origem: o.origem ?? null,
         aposentado: ["retired", "inactive"].includes(o.status),
+        excluido: o.status === "inactive",
+        porta: o.slug === "default",
       };
     }),
     [operadores, vinculosAtivos, agoraDoAgente],
@@ -1928,6 +1930,7 @@ export default function AdminExecucao() {
       podeOrganizar={profile?.role === "admin"}
       aoEditar={(no) => { const op = operadores.find((o) => o.id === no.id); if (op) setAgenteEmEdicao(op); }}
       aoMover={(itens) => void moverAgentes(itens)}
+      aoCriar={() => setAgenteEmEdicao({ ...AGENTE_NOVO, last_run_at: null })}
       aoAbrir={(no) => {
         const op = operadores.find((o) => o.id === no.id);
         if (op) setAgenteAberto(op);

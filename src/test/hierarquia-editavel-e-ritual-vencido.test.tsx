@@ -176,3 +176,78 @@ describe("ritual aprovado que vence sem envio", () => {
     expect(RITUAL).not.toMatch(/whatsapp_send|evolution|net\.http_post/i);
   });
 });
+
+// Segunda rodada (10/11, dono): os dois Mercúrios, Rafael do n8n, Claude Code, Codex e Dot; criar e
+// excluir pelo painel; o Hermes não aparece repetido.
+describe("elenco completo, criar e excluir", () => {
+  const ELENCO = ler("supabase/migrations/20261110234000_agentes_origens_novas_e_elenco.sql");
+  const EDITAR = ler("src/components/execucao/EditarAgente.tsx");
+
+  it("o identificador nasce do nome, sem acento e sem repetir", async () => {
+    const { slugDoNome } = await import("@/lib/hierarquiaDosAgentes");
+    expect(slugDoNome("Mercúrio (Grok)", [])).toBe("mercurio-grok");
+    expect(slugDoNome("Rafael", ["rafael", "rafael-2"])).toBe("rafael-3");
+    expect(slugDoNome("  ", [])).toBe("agente");
+  });
+
+  it("o Hermes do banco ocupa a caixa do Hermes e não aparece de novo entre os coordenadores", () => {
+    const comHermes: NoDoOrganograma[] = [...nos, { id: "h", nome: "Hermes Core", papel: "orquestra", funcao: "Orquestração central", nivel: "coordenador", ativo: true, area: "Core", origem: "hermes", porta: true }];
+    const aoAbrir = vi.fn();
+    render(h(OrganogramaAgentes, { nos: comHermes, nomeDoDono: "Almir", aoAbrir }));
+    expect(screen.queryByText("Hermes Core")).toBeNull();
+    expect(document.querySelector('[data-coordenadores] [data-agente="h"]')).toBeNull();
+    fireEvent.click(screen.getByTitle("Porta de entrada · recebe, organiza e responde no grupo"));
+    expect(aoAbrir).toHaveBeenCalledWith(expect.objectContaining({ id: "h" }));
+  });
+
+  it("um toque na origem mostra só aquela; outro toque volta a todas", () => {
+    montar();
+    const grupo = screen.getByRole("group", { name: "Filtrar por origem" });
+    const grok = [...grupo.querySelectorAll("button")].find((b) => /^Grok/.test(b.textContent || ""))!;
+    expect(grok.textContent).toBe("Grok3");
+    fireEvent.click(grok);
+    expect(screen.queryByText("Clio")).toBeNull();
+    expect(screen.getByText("Elo")).toBeTruthy();
+    fireEvent.click(grok);
+    expect(screen.getByText("Clio")).toBeTruthy();
+  });
+
+  it("só o admin vê Novo agente, e ele abre o cadastro", () => {
+    const aoCriar = vi.fn();
+    montar({ podeOrganizar: true, aoEditar: () => undefined, aoMover: () => undefined, aoCriar });
+    fireEvent.click(screen.getByRole("button", { name: "Novo agente" }));
+    expect(aoCriar).toHaveBeenCalled();
+  });
+  it("sem ser admin não há Novo agente", () => {
+    montar({ aoCriar: () => undefined });
+    expect(screen.queryByRole("button", { name: "Novo agente" })).toBeNull();
+  });
+
+  it("excluído aparece com o nome certo quando se pede para ver", () => {
+    const comExcluido: NoDoOrganograma[] = [...nos, { id: "x", nome: "Antigo", papel: "x", nivel: "operador", ativo: false, aposentado: true, excluido: true, area: "Operações", origem: "hermes" }];
+    render(h(OrganogramaAgentes, { nos: comExcluido, nomeDoDono: "Almir", aoAbrir: () => undefined }));
+    fireEvent.click(screen.getByRole("button", { name: /Ver aposentados \(2\)/ }));
+    expect(document.querySelector('[data-agente="x"]')?.textContent).toContain("excluído");
+  });
+
+  it("excluir vale para todos: sem rastro apaga, com rastro tira da hierarquia e guarda o histórico", () => {
+    expect(EDITAR).toContain('rpc("operador_apagar_de_vez"');
+    expect(EDITAR).toContain('update({ status: "inactive" })');
+    expect(EDITAR).toContain("Sim, excluir");
+    expect(EDITAR).not.toMatch(/operator_audit_log/);
+  });
+  it("criar não pede campo técnico: slug e referência saem do nome e da origem", () => {
+    expect(EDITAR).toContain("slugDoNome(f.display_name");
+    expect(EDITAR).toContain("hermes_profile_ref: `${origem}:${slug}`");
+    expect(EDITAR).toContain("Criar agente");
+  });
+
+  it("o banco aceita as origens novas e cadastra o elenco sem sobrescrever", () => {
+    for (const o of ["n8n", "claude_code", "codex", "chatgpt"]) expect(ELENCO).toContain(`'${o}'`);
+    for (const a of ["mercurio-grok", "rafael", "claude-code", "codex", "dot"]) expect(ELENCO).toContain(`('${a}',`);
+    expect(ELENCO).toContain("UPDATE public.internal_operators SET origem = 'hermes' WHERE slug = 'mercurio';");
+    expect(ELENCO).toContain("ON CONFLICT (slug) DO NOTHING");
+    expect(ELENCO).toContain("operador_marcar_execucao('rafael'");
+    expect(ELENCO).not.toMatch(/operator_key_bindings|GRANT /);
+  });
+});
