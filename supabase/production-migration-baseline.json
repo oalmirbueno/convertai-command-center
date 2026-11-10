@@ -2913,6 +2913,14 @@
       "remote_name": "dossie_preserva_conversas_whatsapp",
       "remote_statements_sha256": "7fccbf2d4768206ccaedb0808921362a11406db686c3d57a925e8daa76a8af6d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110210000",
+      "path": "supabase/migrations/20261110210000_lembrete_com_link_da_peca.sql",
+      "local_sha256": "d06aa0250d6b952d852eb15ae3ff6578d011ef543b60785471183947f1454d2d",
+      "remote_name": "lembrete_com_link_da_peca",
+      "remote_statements_sha256": "d7456d4d1968c17aa8d539c6ef425aab0e6937177a5190756918df492ef48aff",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
