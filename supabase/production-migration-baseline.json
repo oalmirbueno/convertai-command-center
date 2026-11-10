@@ -2921,6 +2921,14 @@
       "remote_name": "lembrete_com_link_da_peca",
       "remote_statements_sha256": "d7456d4d1968c17aa8d539c6ef425aab0e6937177a5190756918df492ef48aff",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110230000",
+      "path": "supabase/migrations/20261110230000_lembrete_sem_duplicar_email_e_whatsapp.sql",
+      "local_sha256": "7606bd2439d6ce10935a0c387c8a1916526a57b03529b9557561b0f48cf8ac8a",
+      "remote_name": "lembrete_sem_duplicar_email_e_whatsapp",
+      "remote_statements_sha256": "1297f5af871aa21bc8b066aa24b76b820f6428eba26700e8853412ab7ef2682e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
