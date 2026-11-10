@@ -27,13 +27,15 @@ export function useCentralReviewPendentes(ativo = true) {
       const { data, error } = await (supabase as any)
         .from("operator_approvals")
         // Só o título do relatório, não o payload inteiro (o relatório completo vinha a cada minuto).
-        .select("id, client_id, o_que, status, created_at, titulo:payload->report->>title")
+        .select("id, client_id, o_que, status, created_at, valid_until, titulo:payload->report->>title")
         .eq("origin", "central")
         .in("status", ["pendente", "adiado"])
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) return [] as RevisaoPendente[];
-      return ((data ?? []) as Array<Record<string, any>>).map((a) => ({
+      // 10/11/2026: pedido que passou do prazo não espera mais decisão (o topo dizia "8 esperam" com a mesa vazia).
+      const agora = Date.now();
+      return ((data ?? []) as Array<Record<string, any>>).filter((a) => !a.valid_until || Date.parse(String(a.valid_until)) > agora).map((a) => ({
         id: String(a.id),
         client_id: a.client_id ? String(a.client_id) : null,
         titulo: String(a.titulo || a.o_que || "mensagem"),

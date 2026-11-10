@@ -360,6 +360,10 @@ export default function OrganogramaAgentes({
               <p className="truncate text-[13px] font-semibold leading-tight text-foreground">
                 {no.nome}
               </p>
+            </div>
+            {/* As etiquetas ficam na linha de baixo: ao lado do nome elas espremiam o nome do coordenador até uma letra. */}
+            {!destaque && (no.nivel === "coordenador" || no.origem) && (
+              <div className="mt-1 flex flex-wrap items-center [&>*]:mr-1.5" data-etiquetas="">
               {no.nivel === "coordenador" && (
                 <span className="shrink-0 rounded bg-primary/20 px-1.5 py-px text-[11px] font-medium text-primary">
                   coordena
@@ -370,7 +374,8 @@ export default function OrganogramaAgentes({
                   {NOME_DA_ORIGEM[no.origem] ?? no.origem}
                 </span>
               )}
-            </div>
+              </div>
+            )}
             {trabalha && no.agora ? (
               <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-foreground" data-agora="">
                 <span className="font-medium text-info">Agora: </span>{no.agora}
