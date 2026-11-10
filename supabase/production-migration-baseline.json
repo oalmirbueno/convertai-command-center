@@ -2945,6 +2945,14 @@
       "remote_name": "ritual_vencido_e_vigia_do_envio",
       "remote_statements_sha256": "a499d753b6db5578c7abeb81123044869f8a186babaeebd93faa84fad957d934",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110234000",
+      "path": "supabase/migrations/20261110234000_agentes_origens_novas_e_elenco.sql",
+      "local_sha256": "6cdd63951e64f33e639c85fa174a754b036bb03ded32fb534e5b41d819217476",
+      "remote_name": "agentes_origens_novas_e_elenco",
+      "remote_statements_sha256": "765cbc87a88f4bc7f372bcf432f2e6640e685a3db31b55b8413ed0dee3e91ab6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
