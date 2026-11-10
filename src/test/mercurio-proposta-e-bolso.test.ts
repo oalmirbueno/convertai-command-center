@@ -277,7 +277,7 @@ describe("MCP 2.23 com as ferramentas do Mercúrio até o contrato", () => {
   const novas = ["aceleriq_comercial_pedir_proposta", "aceleriq_comercial_bolso_pedir", "aceleriq_comercial_bolso_liberar"];
 
   it("cada ferramenta existe com escopo de escrita do comercial, no guia e no roteiro; versão 2.23", () => {
-    expect(MCP_VERSION).toBe("2.24.0");
+    expect(MCP_VERSION).toBe("2.25.0");
     const tools = ler("supabase/functions/_shared/mcp-tools.ts");
     const lista = tools.slice(tools.indexOf("const RAW_TOOLS: readonly ToolDefinition[] = ["));
     const doc = ler("docs/comercial/MERCURIO.md");

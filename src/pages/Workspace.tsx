@@ -36,6 +36,7 @@ import {
   handoffWorkspaceFileToFiles,
   suggestedFileType,
 } from "@/lib/workspaceFileHandoff";
+import { ErroDeMovimento, moverPeloPainel } from "@/lib/workspaceMoverCliente";
 import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
 import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
@@ -1569,33 +1570,36 @@ export default function Workspace() {
   }
 
   async function moveNode(n: Node, targetParentId: string | null) {
-    if (n.__virtual) {
-      // Virtual file: change files.folder to match target virtual folder or clear
-      if (n.kind === "file" && n.__file_id) {
-        let newFolder: string | null = null;
-        if (targetParentId && targetParentId.startsWith(VIRT_PREFIX + "folder:")) {
-          newFolder = targetParentId.substring((VIRT_PREFIX + "folder:").length);
-        }
-        await (supabase as any).from("files").update({ folder: newFolder }).eq("id", n.__file_id);
-        toast({ title: "Movido" }); invalidate(); return;
-      }
-      toast({ title: "Ação não suportada", description: "Pastas virtuais não podem ser movidas.", variant: "destructive" });
-      return;
+    try {
+      const resultado = await moverPeloPainel({
+        virtual: !!n.__virtual,
+        kind: n.kind,
+        id: n.id,
+        fileId: n.__file_id || null,
+        clientId,
+        userId: user?.id || null,
+        scope,
+        nome: n.name,
+        mime: n.mime,
+        sizeBytes: n.size_bytes,
+        storagePath: n.storage_path,
+        targetParentId,
+        parentIdAtual: n.parent_id,
+        ehDescendente: (origemId, destinoId) => isDescendant(origemId, destinoId),
+      });
+      if (!resultado.mudou) return;
+      toast({ title: "Movido" });
+      invalidate();
+    } catch (erro) {
+      const destinoGravado = erro instanceof ErroDeMovimento && erro.destinoGravado;
+      const mensagem = erro instanceof Error ? erro.message : "Tente novamente.";
+      toast({
+        title: destinoGravado ? "Entrou na pasta, mas continua na origem" : "Erro ao mover",
+        description: mensagem,
+        variant: "destructive",
+      });
+      if (destinoGravado) invalidate();
     }
-    if (targetParentId && isVirt(targetParentId)) {
-      toast({ title: "Destino inválido", description: "Não é possível mover para pastas de Arquivos.", variant: "destructive" });
-      return;
-    }
-    if (n.kind === "folder" && isDescendant(n.id, targetParentId)) {
-      toast({ title: "Movimento inválido", description: "Não pode mover para dentro de si mesma.", variant: "destructive" });
-      return;
-    }
-    if (n.parent_id === targetParentId) return;
-    const { error } = await supabase.from("workspace_nodes")
-      .update({ parent_id: targetParentId }).eq("id", n.id);
-    if (error) { toast({ title: "Erro ao mover", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Movido" });
-    invalidate();
   }
 
   async function createFolderAndMove() {
