@@ -62,7 +62,8 @@ describe("as contas do lembrete e da cobrança", () => {
     expect(t).toContain("• Post 5 (há 3 dias)");
     expect(t).not.toContain("Post 6");
     expect(t).toContain("• e mais 1");
-    expect(t).toContain("https://aceleriq.online/aprovacoes");
+    // Link direto da peça mais antiga: a tela do cliente abre nela (/aprovacoes?peca=).
+    expect(t).toContain("https://aceleriq.online/aprovacoes?peca=f0");
   });
 
   it("texto da cobrança: valor, vencimento, Pix e link; variável sem valor nunca vai para o cliente", () => {

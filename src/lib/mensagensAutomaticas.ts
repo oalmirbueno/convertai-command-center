@@ -178,7 +178,8 @@ export function textoDoLembrete(modelo: string, cliente: string, itens: ItemDoLe
     cliente,
     pecas: `${itens.length} ${itens.length === 1 ? "peça" : "peças"}`,
     lista: linhas.join("\n"),
-    link: LINK_DAS_APROVACOES,
+    // Link direto: abre a peça mais antiga da lista (igual a app_private.lembrete_texto).
+    link: itens[0]?.fileId ? `${LINK_DAS_APROVACOES}?peca=${itens[0].fileId}` : LINK_DAS_APROVACOES,
   });
 }
 

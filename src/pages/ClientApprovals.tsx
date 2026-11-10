@@ -313,6 +313,25 @@ export default function ClientApprovals() {
   };
   const deslizarNaFila = useSwipe(() => irPara(posicao - 1), () => irPara(posicao + 1));
   const decisaoTravadaNoCelular = isReadOnly || previaDoAtual.isFetching || previaDoAtual.isError;
+  // Link direto do lembrete no WhatsApp (10/11/2026): /aprovacoes?peca=<id> abre
+  // aquela peça primeiro. Vale uma vez, quando a lista chega; depois a tela segue normal.
+  const pecaDoLink = useRef<string | null>(new URLSearchParams(window.location.search).get("peca"));
+  useEffect(() => {
+    const id = pecaDoLink.current;
+    if (!id || !approvalFiles.length) return;
+    pecaDoLink.current = null;
+    const alvo = approvalFiles.find((f: any) => f.id === id);
+    if (!alvo) return;
+    if (filtro !== "todos") setFiltro("todos");
+    if (pequena) {
+      const fila = approvalFiles.filter((f: any) => f.approval_status === "pending")
+        .concat(approvalFiles.filter((f: any) => f.approval_status !== "pending"));
+      setPosicaoNaFila(Math.max(0, fila.findIndex((f: any) => f.id === id)));
+    } else {
+      setPreviewFile(alvo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvalFiles.length, pequena]);
   const abrirComTeclado = (e: { key: string; preventDefault: () => void }, f: any) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
