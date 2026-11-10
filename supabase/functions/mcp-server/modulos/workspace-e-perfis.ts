@@ -133,8 +133,8 @@ function portas(banco: SupabaseClient): PortasDoMovimento {
       const { data, error } = await banco.from('files').update({ folder: pasta }).eq('id', arquivoId).select('id');
       if (error || !(data || []).length) falha(error?.message || 'A pasta de Arquivos não confirmou o arquivo.');
     },
-    async criarArquivo(_linha: LinhaDeArquivo) {
-      falha('Este caminho grava em Arquivos pelo painel. Pelo MCP, mova para uma pasta do Workspace.');
+    async criarArquivo(_linha: LinhaDeArquivo): Promise<{ id: string }> {
+      throw new ErroDeMovimento('Este caminho grava em Arquivos pelo painel. Pelo MCP, mova para uma pasta do Workspace.');
     },
     async definirPastaDoArquivo(arquivoId, pasta) {
       const { data, error } = await banco.from('files').update({ folder: pasta }).eq('id', arquivoId).select('id');
