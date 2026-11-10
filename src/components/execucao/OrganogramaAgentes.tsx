@@ -316,7 +316,7 @@ export default function OrganogramaAgentes({
           aria-hidden
         />
 
-        <div className="flex items-start p-3 pl-4">
+        <div className={cn("flex items-start p-3 pl-4", podeOrganizar && !destaque && "pr-8")}>
           <span
             className={cn(
               "relative mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold",

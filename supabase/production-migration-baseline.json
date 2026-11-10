@@ -2929,6 +2929,22 @@
       "remote_name": "lembrete_sem_duplicar_email_e_whatsapp",
       "remote_statements_sha256": "1297f5af871aa21bc8b066aa24b76b820f6428eba26700e8853412ab7ef2682e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110233000",
+      "path": "supabase/migrations/20261110233000_agentes_origem_execucao_e_organizacao.sql",
+      "local_sha256": "f9583c1c7b0e21cd8b4d0a7d412510a3969e6d994f3a7165cc2e3126862ba430",
+      "remote_name": "agentes_origem_execucao_e_organizacao",
+      "remote_statements_sha256": "82ed484a967231e4392a70f1e2d6dc075838ef4d6c17682989bd292ac3fa51ce",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261110233100",
+      "path": "supabase/migrations/20261110233100_ritual_vencido_e_vigia_do_envio.sql",
+      "local_sha256": "af5eaef01e894e9b6b8147532ca59091412f67af33e07be70915824a23bce686",
+      "remote_name": "ritual_vencido_e_vigia_do_envio",
+      "remote_statements_sha256": "a499d753b6db5578c7abeb81123044869f8a186babaeebd93faa84fad957d934",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

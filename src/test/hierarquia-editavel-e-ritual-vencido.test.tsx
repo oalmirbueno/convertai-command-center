@@ -11,8 +11,8 @@ import { reviewExpired, reviewLane, type CentralApproval, type ReviewReport } fr
 // 10/11/2026 (dono): editar, apagar e organizar os agentes; origem e última execução no cartão; filtro de
 // aposentados; e o ritual aprovado que venceu sem envio (SKC, 07 a 09/11).
 const ler = (c: string) => readFileSync(resolve(process.cwd(), c), "utf8");
-const AGENTES = ler("supabase/migrations/20261110130000_agentes_origem_execucao_e_organizacao.sql");
-const RITUAL = ler("supabase/migrations/20261110130100_ritual_vencido_e_vigia_do_envio.sql");
+const AGENTES = ler("supabase/migrations/20261110233000_agentes_origem_execucao_e_organizacao.sql");
+const RITUAL = ler("supabase/migrations/20261110233100_ritual_vencido_e_vigia_do_envio.sql");
 
 const nos: NoDoOrganograma[] = [
   { id: "j", nome: "Jori", papel: "coordena os bots", funcao: "Coordenação", nivel: "coordenador", ativo: true, area: "Coordenação", origem: "grok" },

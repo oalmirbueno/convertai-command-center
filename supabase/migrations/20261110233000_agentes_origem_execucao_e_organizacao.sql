@@ -42,6 +42,29 @@ BEGIN
   END IF;
 END $$;
 
+-- Agente que se cadastra sozinho (aceleriq_operator_register) não informa a origem: ela sai da referência
+-- ("grok:...") ou do superior (time do Paperclip). Depois disso, quem manda é a edição no painel.
+CREATE OR REPLACE FUNCTION app_private.operador_origem_no_cadastro()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $$
+BEGIN
+  IF NEW.origem IS NULL OR NEW.origem = 'hermes' THEN
+    NEW.origem := CASE
+      WHEN NEW.hermes_profile_ref LIKE 'grok:%' THEN 'grok'
+      WHEN NEW.parent_slug = 'paperclip' THEN 'paperclip'
+      ELSE 'hermes'
+    END;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS operador_origem_no_cadastro ON public.internal_operators;
+CREATE TRIGGER operador_origem_no_cadastro
+  BEFORE INSERT ON public.internal_operators
+  FOR EACH ROW EXECUTE FUNCTION app_private.operador_origem_no_cadastro();
+
 -- ───────────────────────── b) registro da execução ─────────────────────────
 -- Marca a última execução. Só grava se a anterior tiver mais de 5 minutos (ou não existir), para um
 -- agente que chama o MCP dezenas de vezes por minuto não virar dezenas de gravações.
