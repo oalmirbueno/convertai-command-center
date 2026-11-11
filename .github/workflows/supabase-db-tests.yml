@@ -65,10 +65,6 @@ jobs:
         id: compat_dependencies
         run: npm ci --prefix integrations/lovable-mcp-compat
 
-      - name: Install Chromium for isolated profile E2E
-        id: e2e_browser
-        run: npx playwright install --with-deps chromium
-
       - name: Verify append-only migration ledger
         shell: bash
         env:
@@ -241,6 +237,13 @@ jobs:
           fi
           git diff --quiet -- supabase/migrations
 
+
+      # Chromium fica depois do pgTAP. Uma falha de DNS no apt
+      # (archive/security.ubuntu.com) não pode pular a aplicação das migrations.
+      - name: Install Chromium for isolated profile E2E
+        id: e2e_browser
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
+        run: npx playwright install --with-deps chromium
 
       # Run the real profile matrix as soon as its database is ready. The
       # slower unit/type/build checks below still run even if a browser case
