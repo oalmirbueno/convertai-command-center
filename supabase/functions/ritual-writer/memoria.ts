@@ -394,7 +394,7 @@ export function montarContextoDeContinuidade(e: EntradaDaContinuidade): string {
       const mem = ultimoEnviado.memoria ?? extrairMemoriaDoRitual(ultimoEnviado.texto, ultimoEnviado.proximo_passo);
       if (mem.promessas.length) {
         partes.push([
-          `PROMESSAS DO ÚLTIMO RITUAL ENVIADO (${dataHora(ultimoEnviado.quando)}). Retome CADA uma dizendo o que andou, com o fato que prova; se os fatos não mostram o andamento, trate como acompanhamento, nunca como atraso:`,
+          `PROMESSAS DO ÚLTIMO RITUAL ENVIADO (${dataHora(ultimoEnviado.quando)}). Retome cada uma SÓ com o fato que prova o que andou (estado real, o que mudou ou o cérebro do cliente). Se um registro diz que a promessa foi trocada, adiada ou cancelada, diga isso em uma frase, com o que entra no lugar e a nova data. Promessa sem nenhum fato novo fica de FORA desta mensagem: nunca escreva que ela está em andamento, avançando ou sendo acompanhada sem registro que prove, e nunca a trate como atraso:`,
           ...mem.promessas.map((p) => `- ${cortar(p, 220)}`),
         ].join("\n"));
       }
