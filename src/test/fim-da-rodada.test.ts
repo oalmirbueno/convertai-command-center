@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { ModuleKind, transpileModule } from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import * as travaDoDono from "../../supabase/functions/_shared/trava-do-dono";
+import * as tetoDeOperadores from "../../supabase/functions/_shared/teto-de-operadores";
 import * as freshness from "../../supabase/functions/_shared/operator-freshness";
 import * as progresso from "../../supabase/functions/_shared/operator-progress-detail";
 import * as guardaDoVinculo from "../../supabase/functions/_shared/vinculo-guard";
@@ -47,6 +48,7 @@ function relatoCom(resposta: Record<string, unknown>, opcoes: { vinculoMudou?: b
     "./arquivos-da-execucao.ts": { organizarArquivosDaExecucao: async () => ({ organizados: 0, avisos: [] }) },
     "./vinculo-guard.ts": guardaDoVinculo,
     "./trava-do-dono.ts": travaDoDono,
+    "./teto-de-operadores.ts": tetoDeOperadores,
     "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
     "./jev.ts": { jevPerguntar: async () => { throw new Error("sem Jev neste teste"); } },
   };
