@@ -2985,6 +2985,14 @@
       "remote_name": "cancelada_troca_de_conta_e_cadeia_longa",
       "remote_statements_sha256": "72313b1683d030cfdc6f9c20599a3dbd6a640d7566afca03fce529913604580e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111160000",
+      "path": "supabase/migrations/20261111160000_perfis_carrossel_laminas_e_molde.sql",
+      "local_sha256": "3244139ae3e754071cb7e4596789f83767567f91bea3a71629c60155670c35f7",
+      "remote_name": "perfis_carrossel_laminas_e_molde",
+      "remote_statements_sha256": "b4624cc0b1a36bc91f53d3528c58c8fc25805710d8e2a49e7f7bac86acfd504a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

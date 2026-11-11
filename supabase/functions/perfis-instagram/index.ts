@@ -35,6 +35,7 @@
  * - monitorar { client_id, perfil_id, ligado }: só concorrente.
  * - moldes_ler { client_id, perfil_id, quantos? }: lê lâmina a lâmina os carrosséis que mais performaram e ainda não têm molde (visão + Jev).
  * - moldes { client_id, perfil_id? }: os moldes já lidos do cliente, os que servem primeiro. Sem IA.
+ * - moldes_do_agendador { perfil_id, quantos? }: só o cron (x-cron-secret). Lê os moldes de um perfil de referência, com o mesmo teto.
  * - executar_acao_agente / desfazer_acao_agente { client_id, mensagem_id, acao_id, descartar? }
  * - rodada_semanal: só o cron (x-cron-secret). No máximo 1 rodada por perfil por semana,
  *   sem nova tentativa imediata, com teto de custo; conflito é resposta normal.
@@ -1448,6 +1449,40 @@ async function moldesLer(ch: Chamador, corpo: Record<string, unknown>) {
   }
 }
 
+/** Só o agendador: os moldes de um perfil de referência, sem sessão de pessoa (acervo lido aos poucos, mesmo teto e mesmo registro). */
+async function moldesDoAgendador(corpo: Record<string, unknown>) {
+  const inicio = Date.now();
+  const id = idDe(corpo.perfil_id, "perfil_id");
+  const { data, error } = await servico().from("cliente_perfis_instagram").select("*").eq("id", id).eq("papel", "referencia").is("arquivado_em", null).maybeSingle();
+  if (error) falhaDoBanco(error, "Não foi possível ler o perfil agora.");
+  if (!data) return json({ error: "perfil_inexistente", mensagem: "Perfil de referência não encontrado." }, 404);
+  const perfil = data as Perfil;
+  let r: ResultadoDosMoldes | null = null;
+  let erro: string | null = null;
+  try {
+    const { tokens, motivo } = await tokensDoInstagram(perfil.client_id);
+    if (!tokens.length) throw new Error(motivo || "Sem conexão do Instagram para ler os carrosséis.");
+    r = await lerMoldesDoPerfil(perfil, await contextoDoCliente(perfil.client_id), tokens, null, { quantos: Number(corpo.quantos) });
+  } catch (e) {
+    erro = e instanceof Error ? e.message.slice(0, 400) : "Falha na leitura dos moldes.";
+  }
+  await registrarRodada({
+    clientId: perfil.client_id,
+    perfilId: perfil.id,
+    tipo: "molde",
+    status: erro ? "erro" : r && r.jevErro === "teto" ? "teto" : r && r.lidos ? "ok" : "sem_novidade",
+    lidos: r ? r.lidos : 0,
+    custo: r ? r.custo : 0,
+    criadoPor: null,
+    inicio,
+    erro: erro || (r ? r.jevErro : null),
+    resumo: r ? `${r.lidos} carrosséis lidos lâmina a lâmina; ${r.pendentes} na fila.` : null,
+  });
+  await auditar(null, "perfis_moldes_do_agendador", { perfil_id: perfil.id, lidos: r ? r.lidos : 0 }, !erro, inicio, perfil.id, erro || undefined);
+  if (erro || !r) return json({ error: "molde_falhou", mensagem: erro }, 502);
+  return json({ perfil: `@${perfil.handle}`, lidos: r.lidos, pendentes: r.pendentes, fora_da_janela: r.fora_da_janela, abaixo_da_mediana: r.abaixo_da_mediana, jev_erro: r.jevErro, custo_usd: arred(r.custo) });
+}
+
 /** Os moldes já lidos do cliente (de um perfil ou de todos), os que servem e mais performaram primeiro. Sem IA. */
 async function moldes(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
@@ -2395,6 +2430,10 @@ Deno.serve(async (req) => {
       // Só o cron: segredo do cron no cabeçalho; a chave de serviço fica só aqui dentro.
       if (!ehCron(req)) return json({ error: "somente_cron", mensagem: "A rodada semanal é só do agendamento." }, 403);
       return await rodadaSemanal();
+    }
+    if (acao === "moldes_do_agendador") {
+      if (!ehCron(req)) return json({ error: "somente_cron", mensagem: "Esta leitura é só do agendamento." }, 403);
+      return await respostaComFolego(() => moldesDoAgendador(corpo).catch(respostaDeErro), corsHeaders);
     }
     const chamador = await identificar(req);
     const fn = ACOES[acao];
