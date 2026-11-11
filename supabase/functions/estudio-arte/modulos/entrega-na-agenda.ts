@@ -180,12 +180,20 @@ export function arquivoEditavel(f: { locked_at?: string | null; visibility?: str
   return !f.locked_at && f.visibility === "internal" && (f.agency_approval_status || "not_requested") === "not_requested" && (f.approval_status || "none") === "none";
 }
 
-/** A publicação da peça: a do Instagram viva (a que o motor publica). Na falta, qualquer viva. */
+/**
+ * A publicação da peça: a do Instagram viva (a que o motor publica). Na falta,
+ * qualquer viva. Se só restou cancelada, devolve essa da mesma conta: o
+ * reagendar reabre a linha em vez de tratar como "sem conta".
+ */
 export function publicacaoDaPeca(pubs: PublicacaoExistente[] | null | undefined): PublicacaoExistente | null {
-  const vivas = (pubs || []).filter((p) => p.status !== "cancelled");
+  const lista = pubs || [];
+  const vivas = lista.filter((p) => p.status !== "cancelled");
   const peso = (s: string) => (s === "published" ? 0 : s === "scheduled" ? 1 : s === "failed" ? 2 : 3);
-  const ordenar = (lista: PublicacaoExistente[]) => lista.slice().sort((a, b) => peso(a.status) - peso(b.status));
-  return ordenar(vivas.filter((p) => p.platform === "instagram"))[0] || ordenar(vivas)[0] || null;
+  const ordenar = (itens: PublicacaoExistente[]) => itens.slice().sort((a, b) => peso(a.status) - peso(b.status));
+  const viva = ordenar(vivas.filter((p) => p.platform === "instagram"))[0] || ordenar(vivas)[0] || null;
+  if (viva) return viva;
+  const canceladas = lista.filter((p) => p.status === "cancelled");
+  return canceladas.find((p) => p.platform === "instagram") || canceladas[0] || null;
 }
 
 /** O post já saiu do plano (agendado, publicado ou em falha do motor)? Aí a Mesa não troca a arte sozinha. */
@@ -381,7 +389,7 @@ export function payloadComData(
   entrega?: { delivery_mode: "manual" | "automatic"; asset_file_ids: string[] } | null,
 ): Record<string, unknown> {
   const publicacoes = post.publications
-    .filter((p) => p.status === "planned")
+    .filter((p) => p.status === "planned" || p.id === publicacaoId)
     .map((p) => ({
       // Arte já aprovada: o save vai pelo caminho aprovado da Agenda, que com
       // delivery_mode e asset_file_ids congela as lâminas na ordem e agenda.
@@ -551,7 +559,8 @@ export type CodigoDoEstado =
   | "agendado"
   | "publicando"
   | "publicado"
-  | "falhou";
+  | "falhou"
+  | "publicacao_cancelada";
 
 export type TomDoEstado = "neutro" | "andamento" | "ok" | "alerta" | "erro";
 
@@ -622,6 +631,9 @@ export function estadoDaPublicacao(e: EntradaDoEstado): EstadoDaPublicacao {
   }
   if (p?.status === "scheduled" && quandoPub) {
     return { codigo: "agendado", rotulo: "agendado", tom: "ok", detalhe: `Aprovado, agendado para ${f(quandoPub)}.`, quando: quandoPub, link: null };
+  }
+  if (p?.status === "cancelled") {
+    return { codigo: "publicacao_cancelada", rotulo: "cancelada", tom: "alerta", detalhe: "Publicação cancelada. Confirme a data para agendar de novo.", quando: null, link: null };
   }
   if (t.entrega_status === "reprovado") {
     // Reprovado e entregue de novo: o ajuste foi feito, falta reenviar ao cliente.
@@ -775,7 +787,7 @@ export interface PerfilDaPeca {
   handle: string | null;
   /** Instagram ligado com automação: o painel publica sozinho. */
   automatico: boolean;
-  /** Já tem publicação planejada, agendada ou publicada no post da peça. */
+  /** Já tem publicação nesta conta, inclusive a que foi cancelada e pode reabrir. */
   escolhido: boolean;
 }
 
@@ -820,9 +832,11 @@ export async function payloadComPerfis(
 ): Promise<Record<string, unknown>> {
   const sementes = sementesDaPeca(a.trabalhoId, a.rodada);
   const planejadas = post.publications.filter((p) => p.status === "planned");
+  const canceladas = post.publications.filter((p) => p.status === "cancelled");
   const publicacoes: Record<string, unknown>[] = [];
   for (const perfil of a.perfis) {
-    const existente = planejadas.find((p) => p.external_account_id === perfil.id && !!p.idempotency_key);
+    const existente = planejadas.find((p) => p.external_account_id === perfil.id && !!p.idempotency_key)
+      || canceladas.find((p) => p.external_account_id === perfil.id && !!p.id);
     const entrega = a.assetFileIds && a.assetFileIds.length && a.quando
       ? {
         delivery_mode: perfil.platform === "instagram" && perfil.automatico ? "automatic" : "manual",

@@ -79,6 +79,7 @@ export function traduzirErroDaAgenda(bruto: unknown): string {
   if (/not linked to the project|account is inactive/i.test(m)) return "A conta do Instagram não está ligada a este projeto. Ligue a conta na Agenda.";
   if (/scheduled time cannot be in the past/i.test(m)) return "O horário já passou. Escolha outro.";
   if (/requires ready content and approved/i.test(m)) return "A arte ainda não está aprovada pelo cliente.";
+  if (/cancelled plan was not approved/i.test(m)) return "A publicação cancelada não reabriu: a arte não está aprovada para publicar.";
   if (/immutable|create a revision/i.test(m)) return "A arte aprovada não muda no mesmo post. Entregue de novo para nascer a revisão.";
   if (/scheduled or terminal publications cannot be edited|failed or published/i.test(m)) return "A publicação já está agendada ou saiu. Mude pela Agenda.";
   if (/files must be readable|files are unavailable|file is unavailable/i.test(m)) return "Os arquivos da entrega não estão disponíveis para a Agenda.";
@@ -345,8 +346,43 @@ async function postEPublicacao(ctx: ContextoDaAgenda, t: TrabalhoParaAgenda) {
   const post = await postAtualDaPeca(ctx.db, t);
   if (!post) throw new ErroDaAgenda(409, "fora_da_agenda", "Esta peça ainda não está na Agenda. Use Levar para a Agenda.");
   const pub = publicacaoDaPeca(post.publications);
-  if (!pub) throw new ErroDaAgenda(409, "sem_conta", "O post não tem publicação no Instagram. Ligue a conta do projeto na Agenda.");
+  if (!pub) {
+    const cancelada = (post.publications || []).some((p) => p.status === "cancelled");
+    if (cancelada) {
+      throw new ErroDaAgenda(409, "publicacao_cancelada", "A publicação no Instagram foi cancelada. Escolha a conta de novo para agendar.");
+    }
+    throw new ErroDaAgenda(409, "sem_conta", "O post não tem publicação no Instagram. Ligue a conta do projeto na Agenda.");
+  }
   return { post, pub };
+}
+
+/** Reabre a publicação cancelada da conta antes de gravar a data de novo. */
+async function reabrirCanceladas(
+  ctx: ContextoDaAgenda,
+  post: PostExistente,
+  contas: string[],
+): Promise<PostExistente> {
+  let atual = post;
+  for (const pub of post.publications) {
+    if (pub.status !== "cancelled") continue;
+    if (contas.length && !contas.includes(pub.external_account_id || "") && !contas.includes(pub.id)) continue;
+    const reabrir = await ctx.doChamador.rpc("transition_editorial_publication", {
+      p_publication_id: pub.id,
+      p_action: "reopen",
+      p_expected_version: pub.version,
+    });
+    if (reabrir.error) {
+      throw new ErroDaAgenda(409, "publicacao_cancelada", `A publicação cancelada não voltou a ser agendável. ${traduzirErroDaAgenda(reabrir.error)}`);
+    }
+    const versao = Number((reabrir.data as { version?: number } | null)?.version) || pub.version + 1;
+    atual = {
+      ...atual,
+      publications: atual.publications.map((p) => p.id === pub.id
+        ? { ...p, status: "planned", version: versao, published_at: null, permalink: null }
+        : p),
+    };
+  }
+  return atual;
 }
 
 /**
@@ -368,7 +404,11 @@ export async function confirmarDataDaPeca(
     const comPerfis = await confirmarComPerfis(ctx, t, { ...pedido, perfis: pedido.perfis }, agora);
     if (comPerfis) return comPerfis;
   }
-  const { post, pub } = await postEPublicacao(ctx, t);
+  let { post, pub } = await postEPublicacao(ctx, t);
+  if (pub.status === "cancelled") {
+    post = await reabrirCanceladas(ctx, post, [pub.id, pub.external_account_id || ""]);
+    pub = post.publications.find((p) => p.id === pub.id) || pub;
+  }
   if (pub.status === "published") throw new ErroDaAgenda(409, "ja_publicado", "Esta peça já foi publicada.");
   if (pub.status === "failed") throw new ErroDaAgenda(409, "publicacao_falhou", "A publicação falhou. Use Tentar de novo.");
   const raiz = await lerArquivo(ctx.db, post.primary_file_id);
@@ -496,7 +536,7 @@ export async function perfisDaPeca(
   ]);
   const conexao: Record<string, ConexaoDaConta> = {};
   for (const c of conexoes) conexao[c.external_account_id] = c;
-  const vivas = new Set((post?.publications || []).filter((p) => p.status !== "cancelled").map((p) => p.external_account_id || ""));
+  const vivas = new Set((post?.publications || []).map((p) => p.external_account_id || ""));
   type Conta = { id: string; platform: string; display_name: string | null; handle: string | null };
   const perfis: PerfilDaPeca[] = ((contasRes.data as Conta[] | null) ?? []).map((c) => {
     const cx = conexao[c.id];
@@ -536,7 +576,9 @@ async function confirmarComPerfis(
   pedido: { quando: string | null; agoraMesmo?: boolean; mutationId: string; perfis: string[] },
   agora: Date,
 ): Promise<ResultadoDaData | null> {
-  const { perfis, post } = await perfisDaPeca(ctx.db, t, ctx.doChamador);
+  const lidos = await perfisDaPeca(ctx.db, t, ctx.doChamador);
+  const perfis = lidos.perfis;
+  let post = lidos.post;
   if (!post) throw new ErroDaAgenda(409, "fora_da_agenda", "Esta peça ainda não está na Agenda. Use Levar para a Agenda.");
   const ids = perfisValidos(pedido.perfis, perfis);
   if (!ids.length) {
@@ -563,6 +605,7 @@ async function confirmarComPerfis(
   }
   const problema = problemaNoHorario(quando, agora, { agoraMesmo: !!pedido.agoraMesmo });
   if (problema) throw new ErroDaAgenda(400, "horario_invalido", problema);
+  post = await reabrirCanceladas(ctx, post, ids);
   const assinadas = aprovado && raiz ? await laminasComAssinatura(ctx.db, raiz.id) : false;
   const escolhidos = ids.map((id) => {
     const p = perfis.find((x) => x.id === id) as PerfilDaPeca;

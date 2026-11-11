@@ -462,6 +462,17 @@ describe("ações de publicação da peça", () => {
     ]);
     expect(p?.id).toBe("ig");
   });
+
+  it("publicacaoDaPeca devolve a cancelada da mesma conta quando não há viva", () => {
+    const p = publicacaoDaPeca([
+      pubPlanejada({ id: "fb-cancelada", platform: "facebook", status: "cancelled" }),
+      pubPlanejada({ id: "ig-cancelada", status: "cancelled" }),
+    ]);
+    expect(p?.id).toBe("ig-cancelada");
+    const estado = estadoDaPublicacao({ trabalho: { status: "entregue", post_id: "p1" }, publicacao: p, agora: new Date() });
+    expect(estado.codigo).toBe("publicacao_cancelada");
+    expect(estado.detalhe).toMatch(/Publicação cancelada/);
+  });
 });
 
 // ------------------------------------------------------------------ 6. ajuste pedido pelo cliente

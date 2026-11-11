@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useToast } from "@/hooks/use-toast";
+import { mensagemDaRetirada, podeRetirarDaAprovacao, retirarDaAprovacao } from "@/lib/fileApprovalActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1632,6 +1633,41 @@ export default function Workspace() {
     [projects, clientId],
   );
 
+  function arquivoPendenteDoNo(n: Node | null) {
+    if (!n || n.kind !== "file") return null;
+    const id = n.__virtual ? n.__file_id : n.sent_for_approval_file_id;
+    if (!id) return null;
+    const linha = ((clientFiles || []) as Array<{ id: string; parent_file_id?: string | null; archived_at?: string | null; locked_at?: string | null; visibility?: string | null; approval_status?: string | null }>).find((f) => f.id === id);
+    if (linha) return linha;
+    if (n.__virtual && n.__visibility === "approval" && n.__approval_status === "pending") {
+      return { id, parent_file_id: null, archived_at: null, locked_at: null, visibility: "approval", approval_status: "pending" };
+    }
+    return null;
+  }
+
+  async function retirarNoDaAprovacao(n: Node | null) {
+    const arquivo = arquivoPendenteDoNo(n);
+    if (!arquivo || !podeRetirarDaAprovacao(arquivo)) return;
+    const segue = await confirmDialog({
+      title: "Retirar da aprovação?",
+      description: "O pedido pendente do cliente é cancelado. O arquivo fica interno e invisível para ele. Nada é apagado.",
+      confirmLabel: "Retirar da aprovação",
+    });
+    if (!segue) return;
+    try {
+      await retirarDaAprovacao(arquivo.id);
+      toast({ title: "Arquivo retirado da aprovação", description: "Voltou ao rascunho interno. O cliente não vê mais." });
+      setSelected(null);
+      invalidate();
+    } catch (erro) {
+      toast({
+        title: "Não foi possível retirar da aprovação",
+        description: mensagemDaRetirada(erro),
+        variant: "destructive",
+      });
+    }
+  }
+
   function canSendToFiles(n: Node | null) {
     return !!n
       && !n.__virtual
@@ -2875,6 +2911,11 @@ export default function Workspace() {
                   {canSendToFiles(selected) && (
                     <Button size="sm" onClick={() => openHandoff(selected)} className="h-9">
                       <Send className="mr-1.5 h-3.5 w-3.5" /> Enviar para Arquivos
+                    </Button>
+                  )}
+                  {(profile?.role === "admin" || profile?.role === "manager") && podeRetirarDaAprovacao(arquivoPendenteDoNo(selected)) && (
+                    <Button size="sm" variant="outline" onClick={() => void retirarNoDaAprovacao(selected)} className="h-9">
+                      Retirar da aprovação
                     </Button>
                   )}
                   <div className="flex-1" />

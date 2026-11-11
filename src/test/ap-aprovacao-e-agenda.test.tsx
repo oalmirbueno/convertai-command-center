@@ -295,6 +295,23 @@ describe("B. aprovou → Agenda com data, perfil e se vai postar", () => {
     expect(((db.chamadas[0].args.p_payload as Linha).publications as Linha[])[0].delivery_mode).toBe("manual");
   });
 
+  it("publicação cancelada reabre e o save reusa o mesmo id, sem chave nova", async () => {
+    const db = bancoFalso(tabelas([planejada("pub1", IG, { status: "cancelled", idempotency_key: "99999999-9999-4999-8999-999999999991" })], aprovado));
+    await confirmarDataDaPeca(
+      { db: db.cliente, doChamador: db.cliente, userId: "u" },
+      trabalho,
+      { quando: "2026-10-01T14:30:00.000Z", mutationId: "m-reabre", perfis: [IG] },
+      agora,
+    );
+    expect(db.chamadas.map((c) => c.nome)).toEqual(["transition_editorial_publication", "save_editorial_post"]);
+    expect(db.chamadas[0].args).toMatchObject({ p_publication_id: "pub1", p_action: "reopen", p_expected_version: 1 });
+    const pubs = (db.chamadas[1].args.p_payload as Linha).publications as Linha[];
+    expect(pubs).toHaveLength(1);
+    expect(pubs[0].id).toBe("pub1");
+    expect(pubs[0].idempotency_key).toBe("99999999-9999-4999-8999-999999999991");
+    expect(pubs[0].external_account_id).toBe(IG);
+  });
+
   it("payloadComPerfis e perfisValidos: sem repetir, só da lista", async () => {
     expect(perfisValidos([IG, IG, "x", FB], [{ id: IG }, { id: FB }])).toEqual([IG, FB]);
     const post = { id: P1, version: 1, client_id: "c1", project_id: "pr1", primary_file_id: F1, title: "t", content_type: "static", objective: null, default_caption: "leg", production_status: "ready", internal: null, publications: [] } as PostExistente;
