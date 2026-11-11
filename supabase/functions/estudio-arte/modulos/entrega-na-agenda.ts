@@ -105,6 +105,25 @@ export interface PostExistente {
    * conta). Ausente: só as canceladas do próprio post contam.
    */
   contas_canceladas_por_pessoa?: string[];
+  /** Contas que a cadeia lida decidiu como livres (linha viva ou só limpa). */
+  contas_livres_na_cadeia?: string[];
+  /**
+   * A busca bateu no teto sem chegar ao fim da cadeia. Falha fechada: conta
+   * que a parte lida não decidiu conta como cancelada (o banco faz igual).
+   */
+  cadeia_incompleta?: boolean;
+}
+
+/**
+ * A conta está travada pela cadeia de revisões? Cancelada por pessoa, ou não
+ * decidida numa busca incompleta (falha fechada, a mesma regra do banco).
+ */
+export function contaTravadaNaCadeia(
+  post: Pick<PostExistente, "contas_canceladas_por_pessoa" | "contas_livres_na_cadeia" | "cadeia_incompleta">,
+  contaId: string,
+): boolean {
+  if (post.contas_canceladas_por_pessoa?.includes(contaId)) return true;
+  return !!post.cadeia_incompleta && !(post.contas_livres_na_cadeia ?? []).includes(contaId);
 }
 
 export interface ContaDoProjeto {
@@ -328,7 +347,7 @@ export async function planoDaSincronizacao(
   // lista, vale qualquer cancelada do próprio post.
   const canceladaPorPessoa = (contaId: string) =>
     existente.contas_canceladas_por_pessoa
-      ? existente.contas_canceladas_por_pessoa.includes(contaId)
+      ? contaTravadaNaCadeia(existente, contaId)
       : existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === contaId);
 
   const podeTrocarNoMesmo = !existente.primary_file_id || mesmaArte || opcoes.arquivoAtualEditavel;

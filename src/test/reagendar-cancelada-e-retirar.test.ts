@@ -9,8 +9,8 @@ import {
   validadeDoLink,
   type NoParaLink,
 } from "../../supabase/functions/mcp-server/modulos/workspace-link-regras";
-import { payloadComPerfis, planoDaSincronizacao, type PecaEntregue, type PostExistente } from "../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
-import { contasCanceladasPorPessoa } from "../../supabase/functions/estudio-arte/agenda-da-entrega";
+import { contaTravadaNaCadeia, payloadComPerfis, planoDaSincronizacao, type PecaEntregue, type PostExistente } from "../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
+import { MAX_CADEIA_DE_REVISOES, contasCanceladasPorPessoa } from "../../supabase/functions/estudio-arte/agenda-da-entrega";
 
 const ler = (caminho: string) => readFileSync(resolve(process.cwd(), caminho), "utf8");
 
@@ -291,7 +291,7 @@ describe("rodada 4: só cancelamento de pessoa trava, na cadeia de revisões", (
       editorial_publications: [{ id: "p1", post_id: B, status: "cancelled", external_account_id: CONTA }],
       editorial_events: [evento("p1", "removed_from_plan")],
     });
-    expect(await contasCanceladasPorPessoa(db, B, null)).toEqual([]);
+    expect((await contasCanceladasPorPessoa(db, B, null))?.canceladas).toEqual([]);
     // Revisão de um post sem planejada, com a conta só limpa: a revisão cria a publicação.
     const plano = await planoDaSincronizacao(peca, post({ publications: [pub()], contas_canceladas_por_pessoa: [] }), {
       conta: { id: CONTA, platform: "instagram" },
@@ -308,9 +308,9 @@ describe("rodada 4: só cancelamento de pessoa trava, na cadeia de revisões", (
       editorial_publications: [{ id: "p1", post_id: B, status: "cancelled", external_account_id: CONTA }],
       editorial_events: [evento("p1", "removed_from_plan"), evento("p1", null)],
     });
-    expect(await contasCanceladasPorPessoa(db, B, null)).toEqual([CONTA]);
+    expect((await contasCanceladasPorPessoa(db, B, null))?.canceladas).toEqual([CONTA]);
     const semEvento = leitor({ editorial_publications: [{ id: "p1", post_id: B, status: "cancelled", external_account_id: CONTA }] });
-    expect(await contasCanceladasPorPessoa(semEvento, B, null)).toEqual([CONTA]);
+    expect((await contasCanceladasPorPessoa(semEvento, B, null))?.canceladas).toEqual([CONTA]);
   });
 
   it("B2: A cancelada de propósito → B sem publicação → a revisão C não cria a conta", async () => {
@@ -319,7 +319,7 @@ describe("rodada 4: só cancelamento de pessoa trava, na cadeia de revisões", (
       editorial_publications: [{ id: "pa", post_id: A, status: "cancelled", external_account_id: CONTA }],
       editorial_events: [evento("pa", null)],
     });
-    const naCadeia = await contasCanceladasPorPessoa(db, B, A);
+    const naCadeia = (await contasCanceladasPorPessoa(db, B, A))?.canceladas;
     expect(naCadeia).toEqual([CONTA]);
     const opcoes = { conta: { id: CONTA, platform: "instagram" }, arquivoAtualEditavel: false };
     const revisao = await planoDaSincronizacao(peca, post({ contas_canceladas_por_pessoa: naCadeia ?? [] }), opcoes);
@@ -343,7 +343,80 @@ describe("rodada 4: só cancelamento de pessoa trava, na cadeia de revisões", (
       ],
       editorial_events: [evento("pa", null), evento("pb", "removed_from_plan")],
     });
-    expect(await contasCanceladasPorPessoa(db, "a3333333-3333-4333-8333-333333333333", B)).toEqual([]);
+    expect((await contasCanceladasPorPessoa(db, "a3333333-3333-4333-8333-333333333333", B))?.canceladas).toEqual([]);
+  });
+
+  // Cadeia de n posts: post(0) é o mais novo; post(n-1) é a raiz.
+  const idDoPost = (i: number) => `c${String(i).padStart(7, "0")}-0000-4000-8000-000000000000`;
+  const cadeiaLonga = (n: number) => Array.from({ length: n }, (_, i) => ({
+    post_id: idDoPost(i),
+    revision_of_post_id: i + 1 < n ? idDoPost(i + 1) : null,
+  }));
+
+  it("cadeia longa: a cancelada na raiz segue travando além do teto antigo (64)", async () => {
+    const n = 100;
+    const db = leitor({
+      editorial_post_internal: cadeiaLonga(n),
+      editorial_publications: [{ id: "raiz", post_id: idDoPost(n - 1), status: "cancelled", external_account_id: CONTA }],
+      editorial_events: [evento("raiz", null)],
+    });
+    const lido = await contasCanceladasPorPessoa(db, idDoPost(0), idDoPost(1));
+    expect(lido).toEqual({ canceladas: [CONTA], livres: [], incompleta: false });
+  });
+
+  it("busca que bate no teto falha fechada: a conta não decidida conta como travada", async () => {
+    const OUTRA = "e2222222-2222-4222-8222-222222222222";
+    const db = leitor({
+      editorial_post_internal: cadeiaLonga(5),
+      editorial_publications: [
+        { id: "raiz", post_id: idDoPost(4), status: "cancelled", external_account_id: CONTA },
+        { id: "viva", post_id: idDoPost(0), status: "planned", external_account_id: OUTRA },
+      ],
+      editorial_events: [evento("raiz", null)],
+    });
+    // Teto 2: lê os níveis 0, 1 e 2; a raiz (nível 4) fica de fora.
+    const curto = await contasCanceladasPorPessoa(db, idDoPost(0), idDoPost(1), 2);
+    expect(curto).toEqual({ canceladas: [], livres: [OUTRA], incompleta: true });
+    const comCurto = post({ contas_canceladas_por_pessoa: curto!.canceladas, contas_livres_na_cadeia: curto!.livres, cadeia_incompleta: true });
+    expect(contaTravadaNaCadeia(comCurto, CONTA)).toBe(true);
+    expect(contaTravadaNaCadeia(comCurto, OUTRA)).toBe(false);
+    // O plano da entrega não cria a conta que a busca incompleta não decidiu.
+    const plano = await planoDaSincronizacao(peca, comCurto, { conta: { id: CONTA, platform: "instagram" }, arquivoAtualEditavel: false });
+    expect(plano.payload?.publications).toEqual([]);
+    expect(plano.aviso).toMatch(/cancelada/);
+    // Teto que cobre a cadeia: mesma resposta, completa.
+    expect(await contasCanceladasPorPessoa(db, idDoPost(0), idDoPost(1), 4)).toEqual({ canceladas: [CONTA], livres: [OUTRA], incompleta: false });
+    // Sem nada cancelado, a busca completa libera; a incompleta não.
+    const limpa = leitor({ editorial_post_internal: cadeiaLonga(5), editorial_publications: [] });
+    expect((await contasCanceladasPorPessoa(limpa, idDoPost(0), idDoPost(1), 4))?.incompleta).toBe(false);
+    const incompleta = await contasCanceladasPorPessoa(limpa, idDoPost(0), idDoPost(1), 2);
+    expect(contaTravadaNaCadeia(post({ contas_canceladas_por_pessoa: incompleta!.canceladas, contas_livres_na_cadeia: incompleta!.livres, cadeia_incompleta: incompleta!.incompleta }), CONTA)).toBe(true);
+    expect(MAX_CADEIA_DE_REVISOES).toBe(256);
+  });
+
+  it("ciclo na cadeia encerra a busca sem marcar incompleta", async () => {
+    const db = leitor({
+      editorial_post_internal: [{ post_id: A, revision_of_post_id: B }, { post_id: B, revision_of_post_id: A }],
+      editorial_publications: [],
+    });
+    expect(await contasCanceladasPorPessoa(db, B, A, 1)).toEqual({ canceladas: [], livres: [], incompleta: false });
+  });
+
+  it("a migration de ajuste trava a troca de conta e percorre a cadeia inteira", () => {
+    const sql = ler("supabase/migrations/20261111150100_cancelada_troca_de_conta_e_cadeia_longa.sql");
+    expect(sql).not.toContain("\r");
+    expect(sql).toContain("FUNCTION public.editorial_conta_cancelada_na_cadeia(");
+    expect(sql).toContain("NOT (internal.revision_of_post_id = ANY(cadeia.caminho))");
+    expect(sql).toContain("ELSE (SELECT incompleta.valor FROM incompleta)");
+    expect(sql).toContain("_existing_publication.external_account_id IS DISTINCT FROM _account.id");
+    expect(sql).toContain("'public.save_editorial_post_unlocked(jsonb,integer)'");
+    expect(sql).toContain("'public.save_approved_editorial_post_unlocked(jsonb,integer)'");
+    expect(sql).toContain("REVOKE ALL ON FUNCTION public.editorial_conta_cancelada_na_cadeia(uuid, uuid, uuid, integer)");
+    expect(sql).toContain("REVOKE ALL ON FUNCTION public.editorial_conta_cancelada_por_pessoa(uuid, uuid, uuid)");
+    expect(sql).not.toMatch(/GRANT EXECUTE/i);
+    expect(sql).toContain("SET search_path TO ''");
+    // A 150000 continua igual: a correção é aditiva.
+    expect(ler("supabase/migrations/20261111150000_cancelada_so_por_pessoa_na_cadeia.sql")).toContain("cadeia.nivel < 64");
   });
 
   it("o admin que marca a conta cancelada na cadeia manda reabrir_cancelada só nela", async () => {

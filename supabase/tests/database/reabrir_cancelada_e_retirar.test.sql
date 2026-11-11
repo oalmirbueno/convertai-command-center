@@ -6,6 +6,9 @@
 --   B  (d2): revisão de P1 sem publicação. C (d5): revisão de B (B2).
 --   P2 (d3, e2) → R2 (d4): revisão normal do Estúdio (B1).
 --   P3 (d6, e3): arte aprovada pelo cliente (save aprovado, RPC, B3).
+--   C ganha o Facebook antes; um save tenta trocar a conta dele para o
+--   Instagram cancelado em A (troca de conta).
+--   Q1 (d7, e4) → Q2 (d8, aprovada): troca de conta pelo save aprovado.
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
@@ -122,7 +125,8 @@ INSERT INTO public.tasks (id, project_id, title, status, priority, assigned_to, 
 VALUES
   ('97000000-0000-0000-0000-0000000000e1', '97000000-0000-0000-0000-0000000000b1', 'Peça cancelada', 'backlog', 'medium', '97000000-0000-0000-0000-000000000003', 'portal'),
   ('97000000-0000-0000-0000-0000000000e2', '97000000-0000-0000-0000-0000000000b1', 'Peça com revisão normal', 'backlog', 'medium', '97000000-0000-0000-0000-000000000003', 'portal'),
-  ('97000000-0000-0000-0000-0000000000e3', '97000000-0000-0000-0000-0000000000b1', 'Peça aprovada', 'backlog', 'medium', '97000000-0000-0000-0000-000000000003', 'portal');
+  ('97000000-0000-0000-0000-0000000000e3', '97000000-0000-0000-0000-0000000000b1', 'Peça aprovada', 'backlog', 'medium', '97000000-0000-0000-0000-000000000003', 'portal'),
+  ('97000000-0000-0000-0000-0000000000e4', '97000000-0000-0000-0000-0000000000b1', 'Peça com troca de conta', 'backlog', 'medium', '97000000-0000-0000-0000-000000000003', 'portal');
 
 INSERT INTO public.external_accounts (id, client_id, platform, display_name, handle, created_by)
 VALUES
@@ -160,7 +164,9 @@ FROM (VALUES
   ('97000000-0000-0000-0000-0000000000d3'::uuid, 'peca-normal.png'),
   ('97000000-0000-0000-0000-0000000000d4'::uuid, 'peca-normal-revisao.png'),
   ('97000000-0000-0000-0000-0000000000d5'::uuid, 'parasi-revisao-2.png'),
-  ('97000000-0000-0000-0000-0000000000d6'::uuid, 'parasi-aprovada.png')
+  ('97000000-0000-0000-0000-0000000000d6'::uuid, 'parasi-aprovada.png'),
+  ('97000000-0000-0000-0000-0000000000d7'::uuid, 'troca-de-conta.png'),
+  ('97000000-0000-0000-0000-0000000000d8'::uuid, 'troca-de-conta-aprovada.png')
 ) AS fixture(id, nome);
 
 INSERT INTO storage.objects (bucket_id, name)
@@ -344,6 +350,29 @@ SELECT is(
   'a outra conta da cadeia não trava (Facebook segue planejado em A)'
 );
 
+-- Cadeia longa: a busca com teto 1 lê só B; A fica de fora. Sem decidir a
+-- conta, ela conta como travada (falha fechada), mesmo a livre.
+SELECT is(
+  public.editorial_conta_cancelada_na_cadeia(NULL, pg_temp.id_de('B'), '97000000-0000-0000-0000-0000000000c2', 1),
+  true,
+  'cadeia longa: busca que bate no teto sem decidir a conta trava (falha fechada)'
+);
+SELECT is(
+  public.editorial_conta_cancelada_na_cadeia(NULL, pg_temp.id_de('B'), '97000000-0000-0000-0000-0000000000c1', 1),
+  true,
+  'cadeia longa: a cancelada além do teto não some da trava'
+);
+SELECT is(
+  public.editorial_conta_cancelada_na_cadeia(NULL, pg_temp.id_de('B'), '97000000-0000-0000-0000-0000000000c2', 2),
+  false,
+  'cadeia longa: com a busca completa, a conta livre não trava'
+);
+SELECT ok(
+  NOT has_function_privilege('authenticated', 'public.editorial_conta_cancelada_na_cadeia(uuid,uuid,uuid,integer)', 'EXECUTE')
+    AND NOT has_function_privilege('anon', 'public.editorial_conta_cancelada_na_cadeia(uuid,uuid,uuid,integer)', 'EXECUTE'),
+  'a busca com teto não é chamável por fora'
+);
+
 SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000003');
 
 SELECT throws_ok(
@@ -400,6 +429,8 @@ SELECT throws_ok(
   'B2: nem admin cria em C sem a marca'
 );
 
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000003');
+
 SELECT lives_ok(
   $sql$
     SELECT public.save_editorial_post(jsonb_build_object(
@@ -414,13 +445,125 @@ SELECT lives_ok(
       'content_type', 'static',
       'production_status', 'ready',
       'publications', jsonb_build_array(jsonb_build_object(
-        'external_account_id', '97000000-0000-0000-0000-0000000000c1',
-        'caption', 'revisao C',
+        'external_account_id', '97000000-0000-0000-0000-0000000000c2',
+        'caption', 'revisao C facebook',
         'scheduled_timezone', 'America/Sao_Paulo',
-        'idempotency_key', '97000000-0000-0000-0000-000000000308',
-        'reabrir_cancelada', true
+        'idempotency_key', '97000000-0000-0000-0000-000000000313'
       ))
     ), NULL)
+  $sql$,
+  'a revisão C nasce só com o Facebook planejado'
+);
+
+RESET ROLE;
+SELECT pg_temp.guardar_post('C', '97000000-0000-0000-0000-0000000000d5');
+
+SELECT is(
+  public.editorial_conta_cancelada_na_cadeia(pg_temp.id_de('C'), NULL, '97000000-0000-0000-0000-0000000000c2', 1),
+  false,
+  'cadeia longa: conta decidida dentro do teto segue a linha achada'
+);
+
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000003');
+
+-- Troca de conta: o id do Facebook de C com a conta Instagram, sem marca.
+SELECT throws_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'id', pg_temp.id_de('C'),
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d5',
+      'task_id', '97000000-0000-0000-0000-0000000000e1',
+      'idempotency_key', pg_temp.id_de('C_key'),
+      'mutation_id', '97000000-0000-0000-0000-000000000215',
+      'title', 'Para Si revisão C',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array(jsonb_build_object(
+        'id', pg_temp.id_de('C_c2'),
+        'external_account_id', '97000000-0000-0000-0000-0000000000c1',
+        'caption', 'troca para o instagram',
+        'scheduled_timezone', 'America/Sao_Paulo',
+        'idempotency_key', pg_temp.id_de('C_c2_key')
+      ))
+    ), (SELECT version FROM public.editorial_posts WHERE id = pg_temp.id_de('C')))
+  $sql$,
+  'P0001',
+  'cancelled publication stays cancelled until an admin or manager reopens it',
+  'troca de conta: designer não leva a publicação para a conta cancelada em A'
+);
+
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+
+SELECT throws_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'id', pg_temp.id_de('C'),
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d5',
+      'task_id', '97000000-0000-0000-0000-0000000000e1',
+      'idempotency_key', pg_temp.id_de('C_key'),
+      'mutation_id', '97000000-0000-0000-0000-000000000216',
+      'title', 'Para Si revisão C',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array(jsonb_build_object(
+        'id', pg_temp.id_de('C_c2'),
+        'external_account_id', '97000000-0000-0000-0000-0000000000c1',
+        'caption', 'troca para o instagram',
+        'scheduled_timezone', 'America/Sao_Paulo',
+        'idempotency_key', pg_temp.id_de('C_c2_key')
+      ))
+    ), (SELECT version FROM public.editorial_posts WHERE id = pg_temp.id_de('C')))
+  $sql$,
+  'P0001',
+  'cancelled publication stays cancelled until an admin or manager reopens it',
+  'troca de conta: nem admin troca sem a marca'
+);
+
+RESET ROLE;
+
+SELECT is(
+  (SELECT external_account_id::text || ' ' || status
+    FROM public.editorial_publications WHERE id = pg_temp.id_de('C_c2')),
+  '97000000-0000-0000-0000-0000000000c2 planned',
+  'troca de conta: a publicação de C segue no Facebook'
+);
+
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+
+SELECT lives_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'id', pg_temp.id_de('C'),
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d5',
+      'task_id', '97000000-0000-0000-0000-0000000000e1',
+      'idempotency_key', pg_temp.id_de('C_key'),
+      'mutation_id', '97000000-0000-0000-0000-000000000217',
+      'title', 'Para Si revisão C',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array(
+        jsonb_build_object(
+          'id', pg_temp.id_de('C_c2'),
+          'external_account_id', '97000000-0000-0000-0000-0000000000c2',
+          'caption', 'revisao C facebook',
+          'scheduled_timezone', 'America/Sao_Paulo',
+          'idempotency_key', pg_temp.id_de('C_c2_key')
+        ),
+        jsonb_build_object(
+          'external_account_id', '97000000-0000-0000-0000-0000000000c1',
+          'caption', 'revisao C',
+          'scheduled_timezone', 'America/Sao_Paulo',
+          'idempotency_key', '97000000-0000-0000-0000-000000000308',
+          'reabrir_cancelada', true
+        )
+      )
+    ), (SELECT version FROM public.editorial_posts WHERE id = pg_temp.id_de('C')))
   $sql$,
   'B2: admin com a marca na publicação traz a conta de volta em C'
 );
@@ -878,6 +1021,181 @@ SELECT is(
     FROM public.editorial_publications WHERE id = pg_temp.id_de('P3_c1')),
   'scheduled true',
   'B3: a marca chegou à trava e a conta voltou agendada'
+);
+
+-- ---------------------------------------------------------------------------
+-- 6. Troca de conta pelo save aprovado: Q1 (Instagram cancelado de propósito)
+--    → Q2 (arte aprovada, só Facebook). O id do Facebook com a conta
+--    Instagram, sem marca, é recusado.
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+
+SELECT lives_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d7',
+      'task_id', '97000000-0000-0000-0000-0000000000e4',
+      'idempotency_key', '97000000-0000-0000-0000-000000000110',
+      'mutation_id', '97000000-0000-0000-0000-000000000218',
+      'title', 'Troca de conta',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array(
+        jsonb_build_object(
+          'external_account_id', '97000000-0000-0000-0000-0000000000c1',
+          'caption', 'instagram',
+          'scheduled_timezone', 'America/Sao_Paulo',
+          'idempotency_key', '97000000-0000-0000-0000-000000000314'
+        ),
+        jsonb_build_object(
+          'external_account_id', '97000000-0000-0000-0000-0000000000c2',
+          'caption', 'facebook',
+          'scheduled_timezone', 'America/Sao_Paulo',
+          'idempotency_key', '97000000-0000-0000-0000-000000000315'
+        )
+      )
+    ), NULL)
+  $sql$,
+  'Q1 nasce com Instagram e Facebook'
+);
+
+RESET ROLE;
+SELECT pg_temp.guardar_post('Q1', '97000000-0000-0000-0000-0000000000d7');
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+
+SELECT lives_ok(
+  $sql$
+    SELECT public.transition_editorial_publication(
+      pg_temp.id_de('Q1_c1'),
+      'cancel',
+      (SELECT version FROM public.editorial_publications WHERE id = pg_temp.id_de('Q1_c1')),
+      NULL, NULL, NULL, NULL, NULL,
+      'cancelada de proposito'
+    )
+  $sql$,
+  'admin cancela o Instagram de Q1 de propósito'
+);
+
+-- O que agenda-da-entrega.ts faz antes de nascer a revisão.
+SELECT lives_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'id', pg_temp.id_de('Q1'),
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d7',
+      'task_id', '97000000-0000-0000-0000-0000000000e4',
+      'idempotency_key', pg_temp.id_de('Q1_key'),
+      'mutation_id', '97000000-0000-0000-0000-000000000219',
+      'title', 'Troca de conta',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array()
+    ), (SELECT version FROM public.editorial_posts WHERE id = pg_temp.id_de('Q1')))
+  $sql$,
+  'Q1 limpa o plano antes da revisão'
+);
+
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000003');
+SELECT lives_ok(
+  $sql$ SELECT public.request_file_agency_review('97000000-0000-0000-0000-0000000000d8') $sql$,
+  'Q2: designer pede a revisão da agência'
+);
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+SELECT lives_ok(
+  $sql$ SELECT public.review_file_agency('97000000-0000-0000-0000-0000000000d8', 'approved', NULL) $sql$,
+  'Q2: admin aprova na agência'
+);
+SELECT lives_ok(
+  $sql$ SELECT public.release_file_to_client('97000000-0000-0000-0000-0000000000d8', 'approval') $sql$,
+  'Q2: admin libera para o cliente'
+);
+SELECT pg_temp.act_as('97000000-0000-0000-0000-00000000000a');
+SELECT lives_ok(
+  $sql$ SELECT public.decide_file_approval('97000000-0000-0000-0000-0000000000d8', 1, 'approved', NULL) $sql$,
+  'Q2: cliente aprova a arte'
+);
+
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+
+SELECT lives_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d8',
+      'task_id', '97000000-0000-0000-0000-0000000000e4',
+      'idempotency_key', '97000000-0000-0000-0000-000000000111',
+      'mutation_id', '97000000-0000-0000-0000-000000000220',
+      'revision_of_post_id', pg_temp.id_de('Q1'),
+      'title', 'Troca de conta aprovada',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array(jsonb_build_object(
+        'external_account_id', '97000000-0000-0000-0000-0000000000c2',
+        'scheduled_at', now() + interval '3 days',
+        'scheduled_timezone', 'America/Sao_Paulo',
+        'idempotency_key', '97000000-0000-0000-0000-000000000316'
+      ))
+    ), NULL)
+  $sql$,
+  'Q2 (arte aprovada, revisão de Q1) nasce só com o Facebook'
+);
+
+RESET ROLE;
+SELECT pg_temp.guardar_post('Q2', '97000000-0000-0000-0000-0000000000d8');
+
+SELECT is(
+  public.editorial_conta_cancelada_por_pessoa(pg_temp.id_de('Q2'), NULL, '97000000-0000-0000-0000-0000000000c1'),
+  true,
+  'Q2: o Instagram cancelado em Q1 segue travado pela cadeia'
+);
+
+SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
+
+SELECT throws_ok(
+  $sql$
+    SELECT public.save_editorial_post(jsonb_build_object(
+      'id', pg_temp.id_de('Q2'),
+      'client_id', '97000000-0000-0000-0000-00000000000a',
+      'project_id', '97000000-0000-0000-0000-0000000000b1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d8',
+      'task_id', '97000000-0000-0000-0000-0000000000e4',
+      'idempotency_key', pg_temp.id_de('Q2_key'),
+      'mutation_id', '97000000-0000-0000-0000-000000000221',
+      'title', 'Troca de conta aprovada',
+      'content_type', 'static',
+      'production_status', 'ready',
+      'publications', jsonb_build_array(jsonb_build_object(
+        'id', pg_temp.id_de('Q2_c2'),
+        'external_account_id', '97000000-0000-0000-0000-0000000000c1',
+        'scheduled_at', now() + interval '3 days',
+        'scheduled_timezone', 'America/Sao_Paulo',
+        'idempotency_key', pg_temp.id_de('Q2_c2_key')
+      ))
+    ), (SELECT version FROM public.editorial_posts WHERE id = pg_temp.id_de('Q2')))
+  $sql$,
+  'P0001',
+  'cancelled publication stays cancelled until an admin or manager reopens it',
+  'troca de conta (save aprovado): nem admin troca sem a marca'
+);
+
+RESET ROLE;
+
+SELECT is(
+  (SELECT external_account_id::text FROM public.editorial_publications WHERE id = pg_temp.id_de('Q2_c2')),
+  '97000000-0000-0000-0000-0000000000c2',
+  'troca de conta (save aprovado): a publicação de Q2 segue no Facebook'
+);
+
+SELECT ok(
+  pg_get_functiondef('public.save_editorial_post_unlocked(jsonb,integer)'::regprocedure)
+    LIKE '%_existing_publication.external_account_id IS DISTINCT FROM _account.id%editorial_conta_cancelada_por_pessoa(_post_id, _revision_of_post_id, _account.id)%UPDATE public.editorial_publications%'
+  AND pg_get_functiondef('public.save_approved_editorial_post_unlocked(jsonb,integer)'::regprocedure)
+    LIKE '%_existing_publication.external_account_id IS DISTINCT FROM _account.id%editorial_conta_cancelada_por_pessoa(_post_id, _revision_of_post_id, _account.id)%UPDATE public.editorial_publications%',
+  'os dois saves conferem a conta de destino antes da troca'
 );
 
 SELECT ok(

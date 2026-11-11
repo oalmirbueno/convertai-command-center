@@ -2977,6 +2977,14 @@
       "remote_name": "cancelada_so_por_pessoa_na_cadeia",
       "remote_statements_sha256": "075678f6b8f0fc0fd36edaeff17c98bfc893444f9eedabae097da4feaceadfb2",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111150100",
+      "path": "supabase/migrations/20261111150100_cancelada_troca_de_conta_e_cadeia_longa.sql",
+      "local_sha256": "3e2c3bb9b1a69cddc97d77a3b9f62580b64677ad971f927fa02b3818c6521bbe",
+      "remote_name": "cancelada_troca_de_conta_e_cadeia_longa",
+      "remote_statements_sha256": "72313b1683d030cfdc6f9c20599a3dbd6a640d7566afca03fce529913604580e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
