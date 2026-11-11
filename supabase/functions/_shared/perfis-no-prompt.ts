@@ -23,6 +23,8 @@
 
 import { linhaDaMarca } from "./heranca-da-marca.ts";
 import { normalizarDiretrizes, perfilExcluido } from "./diretrizes-da-marca.ts";
+// 11/11: o molde do carrossel (só a estrutura) entra nos posts que mais funcionaram.
+import { type MoldeNaPauta, moldeParaAPauta } from "../perfis-instagram/modulos/molde-do-carrossel.ts";
 
 // deno-lint-ignore no-explicit-any
 type Banco = { from: (tabela: string) => any };
@@ -46,6 +48,7 @@ export type PostDoPerfil = {
   vezes_a_mediana: number | null;
   fora_da_curva: boolean;
   link: string | null;
+  molde?: MoldeNaPauta | null;
 };
 
 export type PerfilNoPrompt = {
@@ -72,6 +75,7 @@ export function postDaLinha(l: Record<string, unknown>): PostDoPerfil {
     vezes_a_mediana: numero(l.vezes_a_mediana),
     fora_da_curva: l.fora_da_curva === true,
     link: typeof l.permalink === "string" ? l.permalink : null,
+    molde: moldeParaAPauta(l.molde),
   };
 }
 
@@ -118,7 +122,7 @@ export async function lerPerfisParaOPrompt(db: Banco, clientId: string, marca: M
     const ha120 = new Date(Date.now() - 120 * DIA_MS).toISOString();
     const { data: posts, error } = await db
       .from("cliente_perfis_posts")
-      .select("perfil_id, publicado_em, formato, formato_editorial, pilar, leitura, legenda, vezes_a_mediana, fora_da_curva, permalink")
+      .select("perfil_id, publicado_em, formato, formato_editorial, pilar, leitura, legenda, vezes_a_mediana, fora_da_curva, permalink, molde")
       .eq("client_id", clientId)
       .in("perfil_id", escolhidos.map((p) => String(p.id)))
       .is("arquivado_em", null)
@@ -150,6 +154,7 @@ const postCurto = (p: PostDoPerfil, foco: FocoDosPerfis) => ({
   ...(p.pilar && foco !== "arte" ? { pilar: p.pilar } : {}),
   ...(p.leitura ? { como_e_a_imagem: p.leitura } : {}),
   ...(p.legenda && foco !== "arte" ? { legenda: p.legenda } : {}),
+  ...(p.molde && foco === "conteudo" ? { molde_do_carrossel: p.molde } : {}),
   ...(p.vezes_a_mediana ? { desempenho: `${p.vezes_a_mediana.toFixed(1).replace(".", ",")}x a mediana do perfil` } : {}),
 });
 
@@ -159,7 +164,8 @@ const COMO_USAR: Record<FocoDosPerfis, string> = {
   conteudo: `COMO USAR NO CONTEÚDO
 - Referências são a BASE do gosto: pilares, formatos, ganchos e ritmo que funcionam nelas guiam as pautas, adaptados ao negócio e à oferta deste cliente.
 - Concorrentes: leia o que postaram nos últimos ${DIAS_DA_NOVIDADE} dias ("postou_agora") e decida por pauta: ANTECIPAR (o assunto que eles vão puxar e ainda não puxaram), RESPONDER com ângulo melhor ou mais completo, OCUPAR o espaço que nenhum deles cobre, ou LIDERAR com um formato que funcionou neles e o cliente ainda não usa. Diga qual perfil e qual movimento no campo gancho_do_momento (quando existir): "Concorrente @perfil: antecipar" (ou responder, ocupar, liderar).
-- MISTURE, nunca copie: junte o detalhe de um perfil com o de outro e com a base de conhecimento e o que o cliente já publicou (ex.: o formato de @a com o gancho de @b no pilar do cliente). Nunca o texto, o gancho literal nem a sequência de um post específico.`,
+- MISTURE, nunca copie: junte o detalhe de um perfil com o de outro e com a base de conhecimento e o que o cliente já publicou (ex.: o formato de @a com o gancho de @b no pilar do cliente). Nunca o texto, o gancho literal nem a sequência de um post específico.
+- "molde_do_carrossel" é a ESTRUTURA de um carrossel que funcionou (tipo, fórmula do gancho, o papel de cada lâmina, chamada final), sem o texto dele. Em pauta de carrossel, aproveite um molde quando couber: mesma quantidade e mesmo papel das lâminas, com assunto, palavras e oferta do cliente.`,
   arte: `COMO USAR NA ARTE
 - Referências são o GOSTO visual: tratamento, tipografia, composição, ritmo do carrossel e formatos delas valem como direção, sempre dentro do kit da marca.
 - MISTURE, nunca copie: combine um detalhe de uma referência (ex.: o recorte, o grid) com outro de outra (a textura, a escala do título) e com a base de conhecimento e as artes já feitas do cliente, para cada peça sair nova sem sair do gosto. Nunca o layout inteiro de um post específico.

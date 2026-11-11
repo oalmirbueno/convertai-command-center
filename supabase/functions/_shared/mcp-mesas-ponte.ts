@@ -64,7 +64,11 @@ export const ACOES_LONGAS_DA_PONTE: ReadonlySet<string> = new Set([
 ]);
 
 /** RPCs do banco que a ponte pode chamar como a pessoa. */
-export const RPCS_DA_PONTE = ['mesa_enviar_para_aprovacao'] as const;
+export const RPCS_DA_PONTE = [
+  'mesa_enviar_para_aprovacao',
+  'transition_editorial_publication',
+  'withdraw_file_client_approval',
+] as const;
 export type RpcDaPonte = (typeof RPCS_DA_PONTE)[number];
 
 export function acaoPermitida(funcao: string, acao: string): funcao is FuncaoDaMesa {

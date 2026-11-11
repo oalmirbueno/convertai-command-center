@@ -33,6 +33,9 @@
  * - ideias_resposta { client_id, perfil_id }: 1 a 3 ideias adaptadas ao cliente (com anti-cópia).
  * - comparar { client_id, perfil_id }: perfil x cliente, com os números do cliente.
  * - monitorar { client_id, perfil_id, ligado }: só concorrente.
+ * - moldes_ler { client_id, perfil_id, quantos? }: lê lâmina a lâmina os carrosséis que mais performaram e ainda não têm molde (visão + Jev).
+ * - moldes { client_id, perfil_id? }: os moldes já lidos do cliente, os que servem primeiro. Sem IA.
+ * - moldes_do_agendador { perfil_id, quantos? }: só o cron (x-cron-secret). Lê os moldes de um perfil de referência, com o mesmo teto.
  * - executar_acao_agente / desfazer_acao_agente { client_id, mensagem_id, acao_id, descartar? }
  * - rodada_semanal: só o cron (x-cron-secret). No máximo 1 rodada por perfil por semana,
  *   sem nova tentativa imediata, com teto de custo; conflito é resposta normal.
@@ -122,6 +125,24 @@ import {
   TETO_DE_CUSTO_DA_RODADA_USD,
   cabeNoTeto,
 } from "./modulos/perfis-instagram.ts";
+// Molde do carrossel (11/11): todas as lâminas lidas e a estrutura (gancho, promessa, esqueleto, chamada final).
+import {
+  candidatosAoMolde,
+  ESQUEMA_DO_CARROSSEL,
+  JANELA_DA_API,
+  type LaminaGuardada,
+  type LaminaLida,
+  laminasDoCarrossel,
+  lerRespostasDoMolde,
+  type MoldeDoCarrossel,
+  moldeParaAPauta,
+  normalizarLeituraDoCarrossel,
+  perguntasDoMolde,
+  quantosCarrosseis,
+  ROTULO_DA_ESTRUTURA,
+  SISTEMA_DO_CARROSSEL,
+  TETO_DO_MOLDE_USD,
+} from "./modulos/molde-do-carrossel.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) na conversa dos perfis. A leitura dos posts fica sem.
@@ -412,6 +433,9 @@ type Post = {
   lido_em: string | null;
   arquivado_em: string | null;
   criado_em: string;
+  laminas?: LaminaLida[] | null;
+  molde?: MoldeDoCarrossel | null;
+  molde_em?: string | null;
 };
 
 /** Perfil do cliente (sempre preso ao client_id; o acesso já foi conferido). */
@@ -627,6 +651,12 @@ const extensao = (mime: string) => (mime === "image/png" ? "png" : mime === "ima
 
 /** Baixa a imagem da CDN do Instagram e guarda no bucket mesa. Null quando não deu (o post fica sem imagem). */
 async function guardarImagem(url: string | undefined, caminhoSemExtensao: string): Promise<string | null> {
+  const r = await baixarEGuardar(url, caminhoSemExtensao);
+  return r ? r.caminho : null;
+}
+
+/** O mesmo, devolvendo também os bytes (a leitura do carrossel usa sem baixar de novo do bucket). */
+async function baixarEGuardar(url: string | undefined | null, caminhoSemExtensao: string): Promise<{ caminho: string; bytes: Uint8Array; mime: string } | null> {
   if (!url || !/^https:\/\//i.test(url)) return null;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -640,7 +670,7 @@ async function guardarImagem(url: string | undefined, caminhoSemExtensao: string
     if (!mime) return null;
     const caminho = `${caminhoSemExtensao}.${extensao(mime)}`;
     const { error } = await servico().storage.from(BUCKET).upload(caminho, new Blob([bytes], { type: mime }), { contentType: mime, upsert: true, cacheControl: "86400" });
-    return error ? null : caminho;
+    return error ? null : { caminho, bytes, mime };
   } catch {
     return null;
   }
@@ -1252,6 +1282,223 @@ async function lerPostsDoPerfil(perfil: Perfil, ctx: ContextoDoCliente, criadoPo
   });
   const { count } = await servico().from("cliente_perfis_posts").select("id", { count: "exact", head: true }).eq("perfil_id", perfil.id).is("arquivado_em", null).is("lido_em", null).not("midia_caminho", "is", null);
   return { lidos: comImagem.length, restantes: count ?? 0, custo, jevErro };
+}
+
+// ------------------------------------------------------------------ molde do carrossel
+
+type ResultadoDosMoldes = { lidos: number; pendentes: number; fora_da_janela: number; abaixo_da_mediana: number; custo: number; jevErro: string | null; posts: Post[] };
+
+/**
+ * Lê lâmina a lâmina os carrosséis que mais performaram e ainda não têm molde.
+ * As lâminas vêm de novo da API (o endereço da imagem vence), ficam no bucket e
+ * vão ao modelo de leitura numa chamada por carrossel; o Jev julga a estrutura,
+ * se serve ao cliente e se ensina a fazer sozinho, tudo numa chamada.
+ */
+async function lerMoldesDoPerfil(perfil: Perfil, ctx: ContextoDoCliente, tokens: TokenDoInstagram[], criadoPor: string | null, opcoes: { quantos?: number; teto?: number } = {}): Promise<ResultadoDosMoldes> {
+  const vazio: ResultadoDosMoldes = { lidos: 0, pendentes: 0, fora_da_janela: 0, abaixo_da_mediana: 0, custo: 0, jevErro: null, posts: [] };
+  const { data, error } = await servico().from("cliente_perfis_posts").select("*")
+    .eq("perfil_id", perfil.id).eq("formato", "carrossel").eq("origem", "api").is("arquivado_em", null).is("molde_em", null).limit(200);
+  if (error) falhaDoBanco(error, "Não foi possível ler os carrosséis agora.");
+  const semMolde = (data as Post[] | null) ?? [];
+  if (!semMolde.length) return vazio;
+
+  const { d } = await descobrirComReserva(tokens, perfil.handle, JANELA_DA_API);
+  const filhos = new Map<string, MidiaDaApi>();
+  for (const m of (d.media && Array.isArray(d.media.data) ? d.media.data : [])) if (m && m.id) filhos.set(String(m.id), m);
+  const quantos = quantosCarrosseis(opcoes.quantos);
+  const escolha = candidatosAoMolde(semMolde, Array.from(filhos.keys()), quantos);
+  const teto = opcoes.teto ?? TETO_DO_MOLDE_USD;
+  const leitor = await modeloDeLeitura();
+  const pasta = `${perfil.client_id}/perfis/${perfil.id}`;
+  const agora = () => new Date().toISOString();
+
+  let custo = 0;
+  let jevErro: string | null = null;
+  const lidos: Array<{ p: Post; laminas: LaminaLida[]; molde: MoldeDoCarrossel }> = [];
+  for (const p of escolha.escolhidos) {
+    const m = filhos.get(p.ig_media_id)!;
+    const todas = m.children && Array.isArray(m.children.data) ? m.children.data : [];
+    const paraBaixar = laminasDoCarrossel(todas);
+    const baixadas: Array<{ caminho: string; bytes: Uint8Array; mime: string } | null> = paraBaixar.map(() => null);
+    await emLotes(paraBaixar, 4, async (l, i) => {
+      if (l.url) baixadas[i] = await baixarEGuardar(l.url, `${pasta}/${String(m.id).replace(/[^\w-]/g, "")}/l${String(l.ordem).padStart(2, "0")}`);
+    });
+    const guardadas: LaminaGuardada[] = paraBaixar.map((l, i) => ({ ordem: l.ordem, tipo: l.tipo, caminho: baixadas[i] ? baixadas[i]!.caminho : null }));
+    const imagens: ImagemEntrada[] = [];
+    const enviadas: number[] = [];
+    paraBaixar.forEach((l, i) => {
+      const b = baixadas[i];
+      // Arquivo cortado derruba o pedido inteiro no provedor: fica de fora.
+      if (!b || b.bytes.byteLength > MAX_BYTES_ANEXO_DO_ESTILO || defeitoDaImagem(b.bytes, MAX_BYTES_ANEXO_DO_ESTILO)) return;
+      imagens.push({ bytes: b.bytes, mime: b.mime, nome: `lamina-${l.ordem}.${extensao(b.mime)}` });
+      enviadas.push(l.ordem);
+    });
+    if (imagens.length < 2) {
+      // Carrossel só de vídeo ou sem imagem que abra: marca para não voltar toda rodada.
+      await servico().from("cliente_perfis_posts").update({ laminas: guardadas, molde: null, molde_em: agora() }).eq("id", p.id).eq("perfil_id", perfil.id);
+      continue;
+    }
+    const estimativa = estimarComModelo(leitor, { tokensEntrada: 1200 * imagens.length + 900, tokensSaida: 220 * imagens.length + 500 });
+    if (!cabeNoTeto(custo, estimativa, teto)) {
+      jevErro = "teto";
+      break;
+    }
+    const r = await chamarTexto({
+      clientId: perfil.client_id,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      raciocinio: raciocinioBaixo(leitor),
+      sistema: SISTEMA_DO_CARROSSEL,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Leia as ${imagens.length} lâminas anexadas, na ordem (imagem 1 a ${imagens.length}), de um carrossel do perfil @${perfil.handle}. LEGENDA DO POST (dado): ${umaLinha(p.legenda, 600) || "sem legenda"}`,
+        imagens,
+      }],
+      esquemaJson: ESQUEMA_DO_CARROSSEL,
+      maxTokensSaida: 300 * imagens.length + 700,
+      referencia: { tipo: REF_CONVERSA, id: perfil.id },
+      criadoPor,
+    });
+    custo += r.custoUsd;
+    const n = normalizarLeituraDoCarrossel(r.json, guardadas, enviadas, todas.length);
+    lidos.push({ p, laminas: n.laminas, molde: n.molde });
+  }
+
+  if (lidos.length) {
+    try {
+      const state = {
+        cliente: ctx.estado,
+        carrosseis: lidos.map((x) => ({
+          legenda: umaLinha(x.p.legenda, 400) || "sem legenda",
+          tema: x.molde.tema,
+          promessa: x.molde.promessa,
+          esqueleto: x.molde.esqueleto,
+          laminas: x.laminas.filter((l) => l.texto).map((l) => ({ funcao: l.funcao || "outro", texto: umaLinha(l.texto, 220) })),
+        })),
+      };
+      const jr = await jevPerguntar({ state, questions: perguntasDoMolde(lidos.length) as Record<string, PerguntaJev> });
+      const cobrado = await cobrarJev(jr, { clientId: perfil.client_id, tarefa: "verificacao", referencia: { tipo: REF_CONVERSA, id: perfil.id }, criadoPor });
+      custo += cobrado?.custoUsd ?? 0;
+      lerRespostasDoMolde(jr.answers, lidos.length).forEach((j, i) => Object.assign(lidos[i].molde, j));
+    } catch (e) {
+      jevErro = jevErro || (e instanceof JevErro ? e.codigo : "jev_falhou");
+      console.error("[perfis-instagram] jev do molde falhou", { codigo: jevErro });
+    }
+    await emLotes(lidos, 4, async (x) => {
+      const quando = agora();
+      const { error: e2 } = await servico().from("cliente_perfis_posts").update({ laminas: x.laminas, molde: x.molde, molde_em: quando }).eq("id", x.p.id).eq("perfil_id", perfil.id);
+      if (e2) falhaDoBanco(e2, "Não foi possível guardar o molde do carrossel.");
+      x.p.laminas = x.laminas;
+      x.p.molde = x.molde;
+      x.p.molde_em = quando;
+    });
+  }
+  const naFila = semMolde.length - escolha.foraDaJanela - escolha.abaixoDaMediana;
+  return { lidos: lidos.length, pendentes: Math.max(0, naFila - lidos.length), fora_da_janela: escolha.foraDaJanela, abaixo_da_mediana: escolha.abaixoDaMediana, custo, jevErro, posts: lidos.map((x) => x.p) };
+}
+
+/** O molde como a tela e os agentes veem: a leitura da equipe (com o gancho) e o que pode ir à pauta (só estrutura). */
+function moldeParaATela(p: Post, handle: string) {
+  const m = (p.molde ?? null) as MoldeDoCarrossel | null;
+  if (!m) return null;
+  return {
+    post_id: p.id,
+    perfil: `@${handle}`,
+    link: p.permalink,
+    publicado_em: p.publicado_em,
+    curtidas: p.curtidas,
+    comentarios: p.comentarios,
+    vezes_a_mediana: p.vezes_a_mediana,
+    fora_da_curva: p.fora_da_curva,
+    estrutura: m.estrutura ? ROTULO_DA_ESTRUTURA[m.estrutura] ?? m.estrutura : null,
+    serve: m.serve,
+    ensina_sozinho: m.ensina_sozinho,
+    tema: m.tema,
+    gancho_original: m.gancho,
+    formula_do_gancho: m.formula_do_gancho,
+    promessa: m.promessa,
+    chamada_final: m.chamada_final,
+    esqueleto: m.esqueleto,
+    laminas_total: m.laminas_total,
+    laminas_lidas: m.laminas_lidas,
+    laminas: (p.laminas ?? []).map((l) => ({ ordem: l.ordem, tipo: l.tipo, funcao: l.funcao, visual: l.visual, hierarquia: l.hierarquia, texto: l.texto, caminho: l.caminho })),
+    vai_para_pauta: !!moldeParaAPauta(m),
+  };
+}
+
+async function moldesLer(ch: Chamador, corpo: Record<string, unknown>) {
+  const inicio = Date.now();
+  const clientId = String(corpo.client_id ?? "");
+  await garantirAcesso(ch, clientId);
+  const perfil = await carregarPerfil(clientId, corpo.perfil_id);
+  const { tokens, motivo } = await tokensDoInstagram(clientId);
+  if (!tokens.length) throw new ErroHttp(409, "instagram_da_agencia_desconectado", motivo || "Conecte o Instagram da agência para ler os carrosséis pela API.");
+  const ctx = await contextoDoCliente(clientId, await marcaDoCorpo(clientId, corpo));
+  try {
+    const r = await lerMoldesDoPerfil(perfil, ctx, tokens, ch.userId, { quantos: Number(corpo.quantos) });
+    await registrarRodada({ clientId, perfilId: perfil.id, tipo: "molde", status: r.jevErro === "teto" ? "teto" : r.lidos ? "ok" : "sem_novidade", lidos: r.lidos, custo: r.custo, criadoPor: ch.userId, inicio, erro: r.jevErro, resumo: `${r.lidos} carrosséis lidos lâmina a lâmina; ${r.pendentes} na fila.` });
+    await auditar(ch, "perfis_moldes_ler", { client_id: clientId, perfil_id: perfil.id, lidos: r.lidos }, true, inicio, perfil.id);
+    return json({ lidos: r.lidos, pendentes: r.pendentes, fora_da_janela: r.fora_da_janela, abaixo_da_mediana: r.abaixo_da_mediana, jev_erro: r.jevErro, moldes: r.posts.map((p) => moldeParaATela(p, perfil.handle)).filter(Boolean), custo_usd: arred(r.custo) });
+  } catch (e) {
+    if (e instanceof ErroDoInstagram) {
+      await registrarRodada({ clientId, perfilId: perfil.id, tipo: "molde", status: "erro", erro: e.message, criadoPor: ch.userId, inicio });
+      throw new ErroHttp(e.tipo === "perfil" ? 422 : 502, `instagram_${e.tipo}`, e.message);
+    }
+    throw e;
+  }
+}
+
+/** Só o agendador: os moldes de um perfil de referência, sem sessão de pessoa (acervo lido aos poucos, mesmo teto e mesmo registro). */
+async function moldesDoAgendador(corpo: Record<string, unknown>) {
+  const inicio = Date.now();
+  const id = idDe(corpo.perfil_id, "perfil_id");
+  const { data, error } = await servico().from("cliente_perfis_instagram").select("*").eq("id", id).eq("papel", "referencia").is("arquivado_em", null).maybeSingle();
+  if (error) falhaDoBanco(error, "Não foi possível ler o perfil agora.");
+  if (!data) return json({ error: "perfil_inexistente", mensagem: "Perfil de referência não encontrado." }, 404);
+  const perfil = data as Perfil;
+  let r: ResultadoDosMoldes | null = null;
+  let erro: string | null = null;
+  try {
+    const { tokens, motivo } = await tokensDoInstagram(perfil.client_id);
+    if (!tokens.length) throw new Error(motivo || "Sem conexão do Instagram para ler os carrosséis.");
+    r = await lerMoldesDoPerfil(perfil, await contextoDoCliente(perfil.client_id), tokens, null, { quantos: Number(corpo.quantos) });
+  } catch (e) {
+    erro = e instanceof Error ? e.message.slice(0, 400) : "Falha na leitura dos moldes.";
+  }
+  await registrarRodada({
+    clientId: perfil.client_id,
+    perfilId: perfil.id,
+    tipo: "molde",
+    status: erro ? "erro" : r && r.jevErro === "teto" ? "teto" : r && r.lidos ? "ok" : "sem_novidade",
+    lidos: r ? r.lidos : 0,
+    custo: r ? r.custo : 0,
+    criadoPor: null,
+    inicio,
+    erro: erro || (r ? r.jevErro : null),
+    resumo: r ? `${r.lidos} carrosséis lidos lâmina a lâmina; ${r.pendentes} na fila.` : null,
+  });
+  await auditar(null, "perfis_moldes_do_agendador", { perfil_id: perfil.id, lidos: r ? r.lidos : 0 }, !erro, inicio, perfil.id, erro || undefined);
+  if (erro || !r) return json({ error: "molde_falhou", mensagem: erro }, 502);
+  return json({ perfil: `@${perfil.handle}`, lidos: r.lidos, pendentes: r.pendentes, fora_da_janela: r.fora_da_janela, abaixo_da_mediana: r.abaixo_da_mediana, jev_erro: r.jevErro, custo_usd: arred(r.custo) });
+}
+
+/** Os moldes já lidos do cliente (de um perfil ou de todos), os que servem e mais performaram primeiro. Sem IA. */
+async function moldes(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await garantirAcesso(ch, clientId);
+  let q = servico().from("cliente_perfis_posts").select("*").eq("client_id", clientId).is("arquivado_em", null).not("molde", "is", null);
+  if (corpo.perfil_id) q = q.eq("perfil_id", idDe(corpo.perfil_id, "perfil_id"));
+  const [postsR, perfisR] = await Promise.all([
+    q.order("molde_em", { ascending: false }).limit(120),
+    servico().from("cliente_perfis_instagram").select("id, handle").eq("client_id", clientId),
+  ]);
+  if (postsR.error) falhaDoBanco(postsR.error, "Não foi possível ler os moldes agora.");
+  const handles = new Map((((perfisR.data as Array<{ id: string; handle: string }> | null) ?? [])).map((p) => [p.id, p.handle]));
+  const lista = (((postsR.data as Post[] | null) ?? []).map((p) => moldeParaATela(p, handles.get(p.perfil_id) || "perfil")).filter(Boolean)) as Array<NonNullable<ReturnType<typeof moldeParaATela>>>;
+  const forca = (m: (typeof lista)[number]) => (m.vai_para_pauta ? 1000 : 0) + (m.serve ?? 0) * 10 + Math.min(50, m.vezes_a_mediana ?? 1);
+  lista.sort((a, b) => forca(b) - forca(a));
+  return json({ moldes: lista, total: lista.length, para_pauta: lista.filter((m) => m.vai_para_pauta).length, custo_usd: 0 });
 }
 
 async function gerarResumo(perfil: Perfil, criadoPor: string | null): Promise<{ resumo: Record<string, unknown>; custo: number }> {
@@ -2035,7 +2282,17 @@ async function rodadaDeUmPerfil(perfil: Perfil): Promise<{ ok: boolean; fora: nu
       if (total && (novos.length || lidos || !resumoEmDia(perfil, Math.min(40, total))) && custo < TETO_DE_CUSTO_DA_RODADA_USD) {
         custo += (await gerarResumo(perfil, null)).custo;
       }
-      if (!novos.length && !lidos) status = status === "teto" ? "teto" : "sem_novidade";
+      // 11/11: um carrossel por semana ganha o molde (lâmina a lâmina), o que mais performou primeiro. Falha aqui não derruba a rodada.
+      let moldesLidos = 0;
+      if (custo < TETO_DE_CUSTO_DA_RODADA_USD) {
+        const mo = await lerMoldesDoPerfil(perfil, ctx, tokens, null, { quantos: 1, teto: TETO_DE_CUSTO_DA_RODADA_USD - custo })
+          .catch((e) => (registrarFalha("perfis-instagram: molde da rodada falhou", e, { perfil_id: perfil.id }), null));
+        if (mo) {
+          custo += mo.custo;
+          moldesLidos = mo.lidos;
+        }
+      }
+      if (!novos.length && !lidos && !moldesLidos) status = status === "teto" ? "teto" : "sem_novidade";
     } else if (!novos.length) {
       status = "sem_novidade";
     } else {
@@ -2151,12 +2408,14 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   plano_igual: planoIgual,
   ideias_resposta: ideiasResposta,
   comparar,
+  moldes_ler: moldesLer,
+  moldes,
   executar_acao_agente: executarAcao,
   desfazer_acao_agente: desfazerAcao,
 };
 
 /** Ações que podem passar de 150 s (API do Instagram, IA): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["capturar", "ler", "resumo", "conversar", "plano_igual", "ideias_resposta", "comparar", "executar_acao_agente", "desfazer_acao_agente"]);
+const ACOES_LONGAS = new Set(["capturar", "ler", "resumo", "conversar", "plano_igual", "ideias_resposta", "comparar", "moldes_ler", "executar_acao_agente", "desfazer_acao_agente"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -2171,6 +2430,10 @@ Deno.serve(async (req) => {
       // Só o cron: segredo do cron no cabeçalho; a chave de serviço fica só aqui dentro.
       if (!ehCron(req)) return json({ error: "somente_cron", mensagem: "A rodada semanal é só do agendamento." }, 403);
       return await rodadaSemanal();
+    }
+    if (acao === "moldes_do_agendador") {
+      if (!ehCron(req)) return json({ error: "somente_cron", mensagem: "Esta leitura é só do agendamento." }, 403);
+      return await respostaComFolego(() => moldesDoAgendador(corpo).catch(respostaDeErro), corsHeaders);
     }
     const chamador = await identificar(req);
     const fn = ACOES[acao];

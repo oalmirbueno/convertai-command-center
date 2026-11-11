@@ -414,7 +414,9 @@ export function JanelaDaAprovada({
                       />
                       <span className="min-w-0 flex-1 truncate">{rotuloDoPerfil(p)}</span>
                       <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">
-                        {p.platform === "instagram" && p.automatico ? "publica sozinho" : "a equipe posta"}
+                        {p.cancelada
+                          ? `publicação cancelada${p.motivoCancelamento ? `: ${p.motivoCancelamento}` : ""}`
+                          : p.platform === "instagram" && p.automatico ? "publica sozinho" : "a equipe posta"}
                       </span>
                     </label>
                   </li>

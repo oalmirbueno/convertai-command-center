@@ -2953,6 +2953,46 @@
       "remote_name": "agentes_origens_novas_e_elenco",
       "remote_statements_sha256": "765cbc87a88f4bc7f372bcf432f2e6640e685a3db31b55b8413ed0dee3e91ab6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111143000",
+      "path": "supabase/migrations/20261111143000_reabrir_publicacao_cancelada.sql",
+      "local_sha256": "3b9b83b76b1dea190eda8c70656c886233902fb5de55ff9a4d9728770cbf89cd",
+      "remote_name": "reabrir_publicacao_cancelada",
+      "remote_statements_sha256": "5a1fa3b466aee3fa1bb5519ee86c25a7c489cd9b29a22180a4a0572571029fa1",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111143100",
+      "path": "supabase/migrations/20261111143100_retirar_arquivo_da_aprovacao.sql",
+      "local_sha256": "1caf73a155670807c540b8d2c2a419ccacef52e65d2d94cb38874cfc0a333879",
+      "remote_name": "retirar_arquivo_da_aprovacao",
+      "remote_statements_sha256": "0bf9a81e98721de6f83158a935eaed9e7860185a565671fac5361921c9b704a8",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111150000",
+      "path": "supabase/migrations/20261111150000_cancelada_so_por_pessoa_na_cadeia.sql",
+      "local_sha256": "549a5337460fe1399d5d481526c8b0425f98dad2882c154d5baf37ec2a680951",
+      "remote_name": "cancelada_so_por_pessoa_na_cadeia",
+      "remote_statements_sha256": "075678f6b8f0fc0fd36edaeff17c98bfc893444f9eedabae097da4feaceadfb2",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111150100",
+      "path": "supabase/migrations/20261111150100_cancelada_troca_de_conta_e_cadeia_longa.sql",
+      "local_sha256": "3e2c3bb9b1a69cddc97d77a3b9f62580b64677ad971f927fa02b3818c6521bbe",
+      "remote_name": "cancelada_troca_de_conta_e_cadeia_longa",
+      "remote_statements_sha256": "72313b1683d030cfdc6f9c20599a3dbd6a640d7566afca03fce529913604580e",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111160000",
+      "path": "supabase/migrations/20261111160000_perfis_carrossel_laminas_e_molde.sql",
+      "local_sha256": "3244139ae3e754071cb7e4596789f83767567f91bea3a71629c60155670c35f7",
+      "remote_name": "perfis_carrossel_laminas_e_molde",
+      "remote_statements_sha256": "b4624cc0b1a36bc91f53d3528c58c8fc25805710d8e2a49e7f7bac86acfd504a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

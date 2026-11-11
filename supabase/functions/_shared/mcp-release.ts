@@ -8,4 +8,5 @@
 // 2.22.0 (27/10/2026, mesma versao): torneira das tarefas (aceleriq_create_task de agente so com cliente, dono e prazo) e aceleriq_ads_boletim aceita nivel medio/baixo/alto (vira atencao/info/critico).
 // 2.23.0: Mercurio: pedir_proposta, bolso_pedir, bolso_liberar.
 // 2.24.0 (05/11/2026): lead que chega sozinho (aceleriq_comercial_entrada_nova), Pix no Asaas (aceleriq_comercial_cobrar), repasse no WhatsApp (aceleriq_comercial_repasses e _repasse_marcar) e a base do Mercurio na fila.
-export const MCP_VERSION = '2.25.0';
+// 2.26.0 (11/11/2026): link assinado do Workspace, reagendar publicação cancelada e retirar arquivo da aprovação do cliente.
+export const MCP_VERSION = '2.26.0';

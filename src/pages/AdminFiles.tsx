@@ -64,9 +64,13 @@ import {
   type FolderId,
 } from "@/lib/fileTaxonomy";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl, fileExtension, mensagemDaFuncao } from "@/lib/fileUrls";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import {
+  mensagemDaRetirada,
+  podeRetirarDaAprovacao,
   releaseFileToClient,
   requestFileAgencyReview,
+  retirarDaAprovacao,
   reviewFileAgency,
   type FileReleaseMode,
 } from "@/lib/fileApprovalActions";
@@ -395,6 +399,7 @@ function SelectDeCampo({
 
 export default function AdminFiles() {
   const { user, profile, loading: loadingAuth } = useAuth();
+  const confirmDialog = useConfirm();
   const isStaff = profile?.role === "admin"
     || ["design", "traffic", "manager"].includes(profile?.role || "");
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
@@ -893,6 +898,35 @@ export default function AdminFiles() {
       toast({
         title: "Não foi possível aprovar internamente",
         description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRetirarDaAprovacao = async (file: {
+    id: string;
+    parent_file_id?: string | null;
+    archived_at?: string | null;
+    locked_at?: string | null;
+    visibility?: string | null;
+    approval_status?: string | null;
+  } | null | undefined) => {
+    if (!file || !canReviewAndRelease || !podeRetirarDaAprovacao(file)) return;
+    const segue = await confirmDialog({
+      title: "Retirar da aprovação?",
+      description: "O pedido pendente do cliente é cancelado. O arquivo fica interno e invisível para ele. Nada é apagado.",
+      confirmLabel: "Retirar da aprovação",
+    });
+    if (!segue) return;
+    try {
+      await retirarDaAprovacao(file.id);
+      await invalidateFileViews();
+      setPreviewFile(null);
+      toast({ title: "Arquivo retirado da aprovação", description: "Voltou ao rascunho interno. O cliente não vê mais." });
+    } catch (error: unknown) {
+      toast({
+        title: "Não foi possível retirar da aprovação",
+        description: mensagemDaRetirada(error),
         variant: "destructive",
       });
     }
@@ -1844,6 +1878,16 @@ export default function AdminFiles() {
             >
               <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Baixar
             </button>
+            {canReviewAndRelease && podeRetirarDaAprovacao(previewFile) && (
+              <button
+                type="button"
+                className={juntar(botao.secundario, "m-1")}
+                disabled={acting}
+                onClick={() => runActing(() => handleRetirarDaAprovacao(previewFile))}
+              >
+                Retirar da aprovação
+              </button>
+            )}
             {isEditableFile(previewFile) && (
               <>
                 <button

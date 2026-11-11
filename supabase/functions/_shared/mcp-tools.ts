@@ -62,6 +62,7 @@ import { navegadorDoPcTool } from '../mcp-server/modulos/mcp-navegador-do-pc.ts'
 import { FERRAMENTAS_DO_PAINEL_INTEIRO, ligarCatalogo } from '../mcp-server/modulos/painel-inteiro.ts';
 import { FERRAMENTAS_DE_ANUNCIOS } from '../mcp-server/modulos/anuncios-registro.ts';
 import { FERRAMENTAS_DE_WORKSPACE_E_PERFIS } from '../mcp-server/modulos/workspace-e-perfis.ts';
+import { FERRAMENTA_DE_REAGENDAR } from '../mcp-server/modulos/reagendar-publicacao.ts';
 import {
   CLASSES_DO_LEAD,
   ETAPAS_DO_FUNIL,
@@ -370,6 +371,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_list_workspace_nodes: 'workspace:read',
   aceleriq_workspace_mover_arquivo: 'files:write',
   aceleriq_workspace_criar_arquivo: 'files:write',
+  aceleriq_workspace_link_arquivo: 'workspace:read',
+  aceleriq_workspace_retirar_aprovacao: 'files:write',
+  aceleriq_reagendar_publicacao: 'editorial:write',
   aceleriq_perfis_instagram_gravar: 'clients:write',
   aceleriq_list_opportunities: 'commercial:read',
   aceleriq_get_opportunity: 'commercial:read',
@@ -5090,6 +5094,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // MCP 2.19: ações feitas nos anúncios e boletim do período (modulos/anuncios-registro.ts).
   ...FERRAMENTAS_DE_ANUNCIOS,
   ...FERRAMENTAS_DE_WORKSPACE_E_PERFIS,
+  ...FERRAMENTA_DE_REAGENDAR,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so
