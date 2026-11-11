@@ -88,8 +88,12 @@ VALUES
   ('97000000-0000-0000-0000-00000000000a', '97000000-0000-0000-0000-0000000000b1', '97000000-0000-0000-0000-0000000000c1', '97000000-0000-0000-0000-000000000001'),
   ('97000000-0000-0000-0000-00000000000a', '97000000-0000-0000-0000-0000000000b1', '97000000-0000-0000-0000-0000000000c2', '97000000-0000-0000-0000-000000000001');
 
-INSERT INTO public.files (id, project_id, client_id, uploaded_by, file_name, file_url, file_type, folder, status, storage_bucket, storage_path)
-VALUES (
+INSERT INTO public.files (
+  id, project_id, client_id, uploaded_by, file_name, file_url, file_type, folder, status,
+  storage_bucket, storage_path, visibility, agency_approval_status, approval_status, locked_at
+)
+VALUES
+(
   '97000000-0000-0000-0000-0000000000d1',
   '97000000-0000-0000-0000-0000000000b1',
   '97000000-0000-0000-0000-00000000000a',
@@ -100,11 +104,34 @@ VALUES (
   'entregas',
   'ready',
   'files',
-  '97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d1/1/parasi.png'
+  '97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d1/1/parasi.png',
+  'internal',
+  'not_requested',
+  'none',
+  NULL
+),
+(
+  '97000000-0000-0000-0000-0000000000d2',
+  '97000000-0000-0000-0000-0000000000b1',
+  '97000000-0000-0000-0000-00000000000a',
+  '97000000-0000-0000-0000-000000000003',
+  'parasi-revisao.png',
+  'files://97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d2/1/parasi-revisao.png',
+  'image/png',
+  'entregas',
+  'ready',
+  'files',
+  '97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d2/1/parasi-revisao.png',
+  'internal',
+  'not_requested',
+  'none',
+  NULL
 );
 
 INSERT INTO storage.objects (bucket_id, name)
-VALUES ('files', '97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d1/1/parasi.png');
+VALUES
+  ('files', '97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d1/1/parasi.png'),
+  ('files', '97000000-0000-0000-0000-00000000000a/97000000-0000-0000-0000-0000000000d2/1/parasi-revisao.png');
 
 SELECT pg_temp.act_as('97000000-0000-0000-0000-000000000001');
 
@@ -227,7 +254,7 @@ SELECT throws_ok(
     SELECT public.save_editorial_post(jsonb_build_object(
       'client_id', '97000000-0000-0000-0000-00000000000a',
       'project_id', '97000000-0000-0000-0000-0000000000b1',
-      'primary_file_id', '97000000-0000-0000-0000-0000000000d1',
+      'primary_file_id', '97000000-0000-0000-0000-0000000000d2',
       'idempotency_key', '97000000-0000-0000-0000-000000000102',
       'mutation_id', '97000000-0000-0000-0000-000000000204',
       'revision_of_post_id', (SELECT post_id FROM public.editorial_publications WHERE external_account_id = '97000000-0000-0000-0000-0000000000c1' AND status = 'cancelled' LIMIT 1),
