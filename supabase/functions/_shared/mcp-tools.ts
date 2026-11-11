@@ -3699,7 +3699,7 @@ const operatorRegisterTool: ToolDefinition = {
   name: 'aceleriq_operator_register',
   title: 'Cadastrar operador interno',
   description:
-    'Cria um operador interno novo (Hermes) no painel: slug, nome exibido, funcao, escopo e permissoes descritivas. O elenco NAO e fixo - alem de Vertice, Registro, Prisma e Augusto, cadastre quantos precisar. Chamar duas vezes com o mesmo slug devolve o existente em vez de duplicar. O nascimento entra na trilha de auditoria imutavel. Operador NAO tem e-mail, senha nem cliente atribuido, e nunca ocupa o assigned_to de uma tarefa: quem responde pelo trabalho continua sendo gente. IMPORTANTE: reportar execucao com slug desconhecido continua sendo ERRO e nunca cria operador - assim um slug digitado errado vira erro, e nao um operador fantasma.',
+    'Cria um operador interno novo (Hermes) no painel: slug, nome exibido, funcao, escopo e permissoes descritivas. O elenco NAO e fixo - alem de Vertice, Registro, Prisma e Augusto, cadastre quantos precisar. Chamar duas vezes com o mesmo slug devolve o existente em vez de duplicar. O nascimento entra na trilha de auditoria imutavel. Operador NAO tem e-mail, senha nem cliente atribuido, e nunca ocupa o assigned_to de uma tarefa: quem responde pelo trabalho continua sendo gente. IMPORTANTE: reportar execucao com slug desconhecido continua sendo ERRO e nunca cria operador - assim um slug digitado errado vira erro, e nao um operador fantasma. TETO: no maximo 40 operadores ATIVOS; pausados e aposentados nao contam. Para liberar vaga, pause ou aposente um operador ativo com aceleriq_operator_organize.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -3752,7 +3752,7 @@ const operatorOrganizeTool: ToolDefinition = {
   name: 'aceleriq_operator_organize',
   title: 'Organizar o agente no organograma',
   description:
-    'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia, e troca-lo renomearia o passado. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui - assigned_to continua intocavel.',
+    'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia, e troca-lo renomearia o passado. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui - assigned_to continua intocavel. TETO: reativar (status active para quem esta paused ou retired) e recusado se passar de 40 operadores ativos; pausar ou aposentar quem esta ativo libera vaga, aposentar quem ja esta aposentado nao libera.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
   inputSchema: {

@@ -9,6 +9,7 @@ import * as seguranca from "../../supabase/functions/_shared/mcp-security";
 import * as guardaDoCliente from "../../supabase/functions/_shared/mcp-client-id-guard";
 import * as rodadaEProva from "../../supabase/functions/mcp-server/modulos/rodada-e-prova";
 import * as travaDoDono from "../../supabase/functions/_shared/trava-do-dono";
+import * as tetoDeOperadores from "../../supabase/functions/_shared/teto-de-operadores";
 import * as freshness from "../../supabase/functions/_shared/operator-freshness";
 import * as guardaDoVinculo from "../../supabase/functions/_shared/vinculo-guard";
 
@@ -291,6 +292,7 @@ function relato(responder: (q: Consulta) => Resposta, resposta: Record<string, u
     "./operator-progress-detail.ts": progresso,
     "./vinculo-guard.ts": guardaDoVinculo,
     "./trava-do-dono.ts": travaDoDono,
+    "./teto-de-operadores.ts": tetoDeOperadores,
     "./jev.ts": { jevPerguntar: async () => { throw new Error("sem Jev"); } },
     "../mcp-server/modulos/rodada-e-prova.ts": rodadaEProva,
   });
