@@ -158,6 +158,9 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_get_agenda_status',
   'aceleriq_create_report_draft',
   'aceleriq_update_project',
+  'aceleriq_workspace_link_arquivo',
+  'aceleriq_workspace_retirar_aprovacao',
+  'aceleriq_reagendar_publicacao',
 ] as const;
 
 const CLIENT_SCOPED_LEGACY_TOOL_SET = new Set<string>(CLIENT_SCOPED_LEGACY_TOOLS);

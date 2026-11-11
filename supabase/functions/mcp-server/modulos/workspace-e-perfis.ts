@@ -10,8 +10,18 @@ import { z } from 'https://esm.sh/zod@3.23.8';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import type { ToolDefinition } from '../../_shared/mcp-tools.ts';
 import type { AuthContext } from '../../_shared/mcp-auth.ts';
+import { DataScopeError } from '../../_shared/mcp-auth.ts';
 import { db } from '../../_shared/aceleriq-read-services.ts';
 import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
+import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
+import { LIMITS } from './mcp-files-services.ts';
+import {
+  conferenciaDoLink,
+  podeRetirarDaAprovacao,
+  referenciaDeAuditoria,
+  validadeDoLink,
+  type NoParaLink,
+} from './workspace-link-regras.ts';
 import {
   BUCKET_WORKSPACE,
   ErroDeMovimento,
@@ -426,4 +436,151 @@ const perfisTool: ToolDefinition = {
   },
 };
 
-export const FERRAMENTAS_DE_WORKSPACE_E_PERFIS: readonly ToolDefinition[] = [moverTool, criarTool, perfisTool];
+const LEITURA = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false };
+const ESCRITA_CONFIRMADA = { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false };
+
+async function principalEhAdmin(ctx: AuthContext, banco: SupabaseClient): Promise<boolean> {
+  if (ctx.scopes?.includes("admin")) return true;
+  const userId = ctx.dataScope?.principalUserId;
+  if (!userId) return false;
+  const { data } = await banco.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").limit(1);
+  return Array.isArray(data) && data.length > 0;
+}
+
+const linkSchema = z.object({
+  node_id: UUID,
+  validade_seg: z.number().int().min(60).max(3600).optional(),
+  baixar: z.boolean().optional(),
+}).strict();
+
+export async function linkDoArquivoNoWorkspace(
+  input: z.infer<typeof linkSchema>,
+  ctx: AuthContext,
+  banco: SupabaseClient = db(),
+) {
+  const { data, error } = await banco.from('workspace_nodes')
+    .select('id, kind, scope, client_id, name, mime, size_bytes, storage_path, thumb_path')
+    .eq('id', input.node_id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const no = (data as NoParaLink | null) ?? null;
+  const confere = conferenciaDoLink(
+    no,
+    (clientId) => dataScopeAllowsClient(ctx.dataScope, clientId),
+    await principalEhAdmin(ctx, banco),
+  );
+  if (!confere.ok) {
+    if (confere.fora) throw new DataScopeError(confere.mensagem);
+    throw new Error(confere.mensagem);
+  }
+  const ttl = validadeDoLink(input.validade_seg, LIMITS.signedDownloadTtlSec);
+  const caminho = confere.no.storage_path as string;
+  const opcoes = input.baixar ? { download: confere.no.name || true } : undefined;
+  const assinado = await banco.storage.from(BUCKET_WORKSPACE).createSignedUrl(caminho, ttl, opcoes);
+  if (assinado.error || !assinado.data?.signedUrl) {
+    throw new Error(assinado.error?.message || 'Não foi possível assinar o arquivo do Workspace.');
+  }
+  let thumb_url: string | undefined;
+  if (confere.no.thumb_path) {
+    const thumb = await banco.storage.from(BUCKET_WORKSPACE).createSignedUrl(confere.no.thumb_path, ttl);
+    if (!thumb.error && thumb.data?.signedUrl) thumb_url = thumb.data.signedUrl;
+  }
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = referenciaDeAuditoria(confere.no.id);
+  return {
+    signed_url: assinado.data.signedUrl,
+    expires_at: new Date(Date.now() + ttl * 1000).toISOString(),
+    name: confere.no.name,
+    mime: confere.no.mime,
+    size_bytes: confere.no.size_bytes,
+    ...(thumb_url ? { thumb_url } : {}),
+  };
+}
+
+const linkTool: ToolDefinition = {
+  name: 'aceleriq_workspace_link_arquivo',
+  title: 'Link assinado de arquivo do Workspace',
+  description:
+    'Devolve uma URL assinada de um arquivo do bucket privado workspace. validade_seg de 60 a 3600 (padrão MCP_FILE_DOWNLOAD_TTL, 600). Nó global só para admin. Exige workspace:read e o cliente no escopo. A auditoria grava o id do nó, não a URL.',
+  scopes: ['workspace:read'],
+  annotations: LEITURA,
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['node_id'],
+    properties: {
+      node_id: { type: 'string', format: 'uuid' },
+      validade_seg: { type: 'integer', minimum: 60, maximum: 3600 },
+      baixar: { type: 'boolean', description: 'Quando verdadeiro, a URL pede download com o nome do arquivo.' },
+    },
+  },
+  handler: async (input, ctx) => {
+    const parsed = linkSchema.safeParse(input ?? {});
+    if (!parsed.success) throw erroDeEntrada(parsed.error);
+    return await linkDoArquivoNoWorkspace(parsed.data, ctx);
+  },
+};
+
+const retirarSchema = z.object({
+  file_id: UUID,
+  confirmar: z.literal(true),
+  idempotency_key: z.string().trim().min(8).max(120),
+}).strict();
+
+export async function retirarArquivoDaAprovacao(
+  input: z.infer<typeof retirarSchema>,
+  ctx: AuthContext,
+  banco: SupabaseClient = db(),
+) {
+  const { data, error } = await banco.from('files')
+    .select('id, client_id, parent_file_id, visibility, approval_status, agency_approval_status, locked_at, archived_at')
+    .eq('id', input.file_id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const arquivo = data as {
+    id: string;
+    client_id: string;
+    parent_file_id: string | null;
+    visibility: string | null;
+    approval_status: string | null;
+    locked_at: string | null;
+    archived_at: string | null;
+  } | null;
+  if (!arquivo) throw new Error('Arquivo não encontrado.');
+  if (!dataScopeAllowsClient(ctx.dataScope, arquivo.client_id)) {
+    throw new DataScopeError('resource is outside this MCP principal data scope');
+  }
+  if (!podeRetirarDaAprovacao(arquivo)) {
+    throw new Error('Só dá para retirar o que ainda espera o cliente e está visível para ele.');
+  }
+  return await umaVez('aceleriq_workspace_retirar_aprovacao', ctx, input.idempotency_key, async () => {
+    if (ctx.resultRefHolder) ctx.resultRefHolder.value = `files:${arquivo.id}`;
+    const resultado = await rpcComoPessoa('withdraw_file_client_approval', { p_file_id: arquivo.id }, ctx);
+    return { ref: `files:${arquivo.id}`, resultado: { arquivo: resultado, client_id: arquivo.client_id } };
+  });
+}
+
+const retirarTool: ToolDefinition = {
+  name: 'aceleriq_workspace_retirar_aprovacao',
+  title: 'Retirar arquivo da aprovação',
+  description:
+    'Cancela a aprovação pendente do cliente em um arquivo (Workspace/Estúdio já enviado). O arquivo fica interno, invisível para o cliente, sem apagar o blob. Efeito visível ao cliente: exige confirmar=true e idempotency_key. Exige files:write e o cliente no escopo. Só admin ou gestor na função do banco.',
+  scopes: ['files:write'],
+  annotations: ESCRITA_CONFIRMADA,
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['file_id', 'confirmar', 'idempotency_key'],
+    properties: {
+      file_id: { type: 'string', format: 'uuid', description: 'Id em public.files da raiz que está com approval_status pending e visibility approval.' },
+      confirmar: { type: 'boolean', const: true, description: 'Tem que ser true: o cliente deixa de ver o arquivo.' },
+      idempotency_key: { type: 'string', description: 'Chave estável de 8 a 120 caracteres. Repetir não retira de novo.' },
+    },
+  },
+  handler: async (input, ctx) => {
+    const parsed = retirarSchema.safeParse(input ?? {});
+    if (!parsed.success) throw erroDeEntrada(parsed.error);
+    return await retirarArquivoDaAprovacao(parsed.data, ctx);
+  },
+};
+
+export const FERRAMENTAS_DE_WORKSPACE_E_PERFIS: readonly ToolDefinition[] = [moverTool, criarTool, perfisTool, linkTool, retirarTool];

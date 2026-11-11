@@ -16,8 +16,11 @@ import {
   motivoDaRecusaDaAprovacao,
   NOTA_DO_AVAL,
   podeAprovarPeloCliente,
+  mensagemDaRetirada,
+  podeRetirarDaAprovacao,
   recordOfflineClientApproval,
   releaseFileToClient,
+  retirarDaAprovacao,
   reviewFileAgency,
   type FileApprovalDecision,
   type FileReleaseMode,
@@ -313,6 +316,38 @@ export default function AdminApprovals() {
       queryClient.invalidateQueries({ queryKey: ["all-files"] }),
       queryClient.invalidateQueries({ queryKey: ["files"] }),
     ]);
+  };
+
+  const handleRetirarDaAprovacao = async (file: {
+    id: string;
+    parent_file_id?: string | null;
+    archived_at?: string | null;
+    locked_at?: string | null;
+    visibility?: string | null;
+    approval_status?: string | null;
+  } | null | undefined) => {
+    if (!file || !canReviewAndRelease || !podeRetirarDaAprovacao(file)) return;
+    const segue = await confirmDialog({
+      title: "Retirar da aprovação?",
+      description: "O pedido pendente do cliente é cancelado. O arquivo fica interno e invisível para ele. Nada é apagado.",
+      confirmLabel: "Retirar da aprovação",
+    });
+    if (!segue) return;
+    setSubmitting(true);
+    try {
+      await retirarDaAprovacao(file.id);
+      await refreshApprovalQueues();
+      setPreviewFile(null);
+      toast({ title: "Arquivo retirado da aprovação", description: "Voltou ao rascunho interno. O cliente não vê mais." });
+    } catch (error: unknown) {
+      toast({
+        title: "Não foi possível retirar da aprovação",
+        description: mensagemDaRetirada(error),
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleAgencyReview = async (
@@ -865,6 +900,16 @@ export default function AdminApprovals() {
             )}
             {/* Cliente que aprova pelo grupo e não entra no painel: a equipe
                 registra o aceite aqui para nada ficar travado. */}
+            {canReviewAndRelease && podeRetirarDaAprovacao(previewFile) && (
+              <button
+                type="button"
+                className={botao.secundario}
+                disabled={submitting}
+                onClick={() => void handleRetirarDaAprovacao(previewFile)}
+              >
+                Retirar da aprovação
+              </button>
+            )}
             {queue === "client"
               && previewFile?.approval_status === "pending"
               && canReviewAndRelease && (
