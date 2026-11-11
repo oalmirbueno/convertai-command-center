@@ -255,6 +255,7 @@ SELECT throws_ok(
       'client_id', '97000000-0000-0000-0000-00000000000a',
       'project_id', '97000000-0000-0000-0000-0000000000b1',
       'primary_file_id', '97000000-0000-0000-0000-0000000000d2',
+      'task_id', '97000000-0000-0000-0000-0000000000e1',
       'idempotency_key', '97000000-0000-0000-0000-000000000102',
       'mutation_id', '97000000-0000-0000-0000-000000000204',
       'revision_of_post_id', (SELECT post_id FROM public.editorial_publications WHERE external_account_id = '97000000-0000-0000-0000-0000000000c1' AND status = 'cancelled' LIMIT 1),
