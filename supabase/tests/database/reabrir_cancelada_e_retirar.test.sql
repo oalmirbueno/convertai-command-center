@@ -207,7 +207,7 @@ SELECT throws_ok(
       ), %s)
     $sql$,
     (SELECT post_id::text FROM public.editorial_publications WHERE external_account_id = '97000000-0000-0000-0000-0000000000c1' LIMIT 1),
-    (SELECT version::text FROM public.editorial_posts p JOIN public.editorial_publications pub ON pub.post_id = p.id WHERE pub.external_account_id = '97000000-0000-0000-0000-0000000000c1' LIMIT 1)
+    (SELECT p.version::text FROM public.editorial_posts p JOIN public.editorial_publications pub ON pub.post_id = p.id WHERE pub.external_account_id = '97000000-0000-0000-0000-0000000000c1' LIMIT 1)
   ),
   'P0001',
   'cancelled publication stays cancelled until an admin or manager reopens it',
@@ -240,7 +240,7 @@ SELECT throws_ok(
       ), %s)
     $sql$,
     (SELECT post_id::text FROM public.editorial_publications WHERE external_account_id = '97000000-0000-0000-0000-0000000000c1' LIMIT 1),
-    (SELECT version::text FROM public.editorial_posts p JOIN public.editorial_publications pub ON pub.post_id = p.id WHERE pub.external_account_id = '97000000-0000-0000-0000-0000000000c1' LIMIT 1)
+    (SELECT p.version::text FROM public.editorial_posts p JOIN public.editorial_publications pub ON pub.post_id = p.id WHERE pub.external_account_id = '97000000-0000-0000-0000-0000000000c1' LIMIT 1)
   ),
   'P0001',
   'cancelled publication stays cancelled until an admin or manager reopens it',
