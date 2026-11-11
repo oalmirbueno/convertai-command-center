@@ -19,6 +19,8 @@ export const MAX_LAMINAS_LIDAS = 10;
 /** Carrosséis por chamada da tela (cada um é uma leitura de visão). */
 export const CARROSSEIS_POR_CHAMADA = 2;
 export const MAX_CARROSSEIS_POR_CHAMADA = 3;
+/** Candidatos a mais na fila, para o carrossel só de vídeo não gastar a vez. */
+export const RESERVA_DE_CANDIDATOS = 3;
 /** Quantos posts recentes a API devolve com as lâminas (o endereço das imagens vence, por isso relê). */
 export const JANELA_DA_API = 40;
 /** Teto de custo de uma chamada de moldes. */

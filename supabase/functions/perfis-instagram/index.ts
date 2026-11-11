@@ -139,6 +139,7 @@ import {
   normalizarLeituraDoCarrossel,
   perguntasDoMolde,
   quantosCarrosseis,
+  RESERVA_DE_CANDIDATOS,
   ROTULO_DA_ESTRUTURA,
   SISTEMA_DO_CARROSSEL,
   TETO_DO_MOLDE_USD,
@@ -1306,7 +1307,8 @@ async function lerMoldesDoPerfil(perfil: Perfil, ctx: ContextoDoCliente, tokens:
   const filhos = new Map<string, MidiaDaApi>();
   for (const m of (d.media && Array.isArray(d.media.data) ? d.media.data : [])) if (m && m.id) filhos.set(String(m.id), m);
   const quantos = quantosCarrosseis(opcoes.quantos);
-  const escolha = candidatosAoMolde(semMolde, Array.from(filhos.keys()), quantos);
+  // Reserva na fila: carrossel só de vídeo é marcado e a vez passa para o seguinte.
+  const escolha = candidatosAoMolde(semMolde, Array.from(filhos.keys()), quantos + RESERVA_DE_CANDIDATOS);
   const teto = opcoes.teto ?? TETO_DO_MOLDE_USD;
   const leitor = await modeloDeLeitura();
   const pasta = `${perfil.client_id}/perfis/${perfil.id}`;
@@ -1315,7 +1317,9 @@ async function lerMoldesDoPerfil(perfil: Perfil, ctx: ContextoDoCliente, tokens:
   let custo = 0;
   let jevErro: string | null = null;
   const lidos: Array<{ p: Post; laminas: LaminaLida[]; molde: MoldeDoCarrossel }> = [];
+  let semImagem = 0;
   for (const p of escolha.escolhidos) {
+    if (lidos.length >= quantos) break;
     const m = filhos.get(p.ig_media_id)!;
     const todas = m.children && Array.isArray(m.children.data) ? m.children.data : [];
     const paraBaixar = laminasDoCarrossel(todas);
@@ -1336,6 +1340,7 @@ async function lerMoldesDoPerfil(perfil: Perfil, ctx: ContextoDoCliente, tokens:
     if (imagens.length < 2) {
       // Carrossel só de vídeo ou sem imagem que abra: marca para não voltar toda rodada.
       await servico().from("cliente_perfis_posts").update({ laminas: guardadas, molde: null, molde_em: agora() }).eq("id", p.id).eq("perfil_id", perfil.id);
+      semImagem++;
       continue;
     }
     const estimativa = estimarComModelo(leitor, { tokensEntrada: 1200 * imagens.length + 900, tokensSaida: 220 * imagens.length + 500 });
@@ -1395,7 +1400,7 @@ async function lerMoldesDoPerfil(perfil: Perfil, ctx: ContextoDoCliente, tokens:
     });
   }
   const naFila = semMolde.length - escolha.foraDaJanela - escolha.abaixoDaMediana;
-  return { lidos: lidos.length, pendentes: Math.max(0, naFila - lidos.length), fora_da_janela: escolha.foraDaJanela, abaixo_da_mediana: escolha.abaixoDaMediana, custo, jevErro, posts: lidos.map((x) => x.p) };
+  return { lidos: lidos.length, pendentes: Math.max(0, naFila - lidos.length - semImagem), fora_da_janela: escolha.foraDaJanela, abaixo_da_mediana: escolha.abaixoDaMediana, custo, jevErro, posts: lidos.map((x) => x.p) };
 }
 
 /** O molde como a tela e os agentes veem: a leitura da equipe (com o gancho) e o que pode ir à pauta (só estrutura). */

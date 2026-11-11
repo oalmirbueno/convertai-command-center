@@ -10,7 +10,7 @@ import {
   perguntasDoMolde,
   quantosCarrosseis,
 } from "../../supabase/functions/perfis-instagram/modulos/molde-do-carrossel";
-import { blocoDosPerfis, postDaLinha } from "../../supabase/functions/_shared/perfis-no-prompt";
+import { blocoDosPerfis, moldesDoPerfil, postDaLinha } from "../../supabase/functions/_shared/perfis-no-prompt";
 
 /**
  * 11/11/2026, dono: "crie algo para a Aceleriq para esse template, só que melhore". O carrossel da referência é
@@ -125,15 +125,22 @@ describe("molde na pauta: só a estrutura", () => {
   });
 
   it("o agente do Mês recebe o molde no post que funcionou, e o diretor de arte não", () => {
+    // O molde vai mesmo quando o post dele não está entre os que mais funcionaram.
+    const comMolde = postDaLinha({ publicado_em: "2026-11-01T10:00:00Z", formato: "carrossel", legenda: "legenda", vezes_a_mediana: 1.2, molde });
+    const fraco = postDaLinha({ formato: "carrossel", vezes_a_mediana: 9, molde: { ...molde, serve: 1 } });
+    expect(fraco.molde).toBeNull();
     const perfil = {
       handle: "ref", nome: null, papel: "referencia" as const, seguidores: 1000, resumo: null, novidades: [],
-      melhores: [postDaLinha({ publicado_em: "2026-11-01T10:00:00Z", formato: "carrossel", legenda: "legenda", vezes_a_mediana: 5, fora_da_curva: true, molde })],
+      melhores: [postDaLinha({ formato: "reel", legenda: "outro post", vezes_a_mediana: 30, fora_da_curva: true })],
+      moldes: moldesDoPerfil([fraco, comMolde]),
     };
+    expect(perfil.moldes).toHaveLength(1);
+    expect(perfil.moldes[0].desempenho).toBe("1,2x a mediana do perfil");
     const conteudo = blocoDosPerfis([perfil], "conteudo");
-    expect(conteudo).toContain("molde_do_carrossel");
+    expect(conteudo).toContain("moldes_de_carrossel");
     expect(conteudo).toContain("abre com superlativo");
     expect(conteudo).not.toContain("MAIS CARA");
-    expect(blocoDosPerfis([perfil], "arte")).not.toContain("molde_do_carrossel");
+    expect(blocoDosPerfis([perfil], "arte")).not.toContain("moldes_de_carrossel");
   });
 });
 
@@ -141,6 +148,8 @@ describe("ligação na função", () => {
   const fonte = readFileSync("supabase/functions/perfis-instagram/index.ts", "utf8");
   it("as ações existem, a leitura respeita o teto e a rodada da semana lê um carrossel", () => {
     expect(fonte).toContain("moldes_ler: moldesLer,");
+    expect(fonte).toContain("if (lidos.length >= quantos) break;");
+    expect(fonte).toContain('if (acao === "moldes_do_agendador") {');
     expect(fonte).toContain("if (!cabeNoTeto(custo, estimativa, teto))");
     expect(fonte).toContain("lerMoldesDoPerfil(perfil, ctx, tokens, null, { quantos: 1, teto: TETO_DE_CUSTO_DA_RODADA_USD - custo })");
     expect(fonte).toContain('tipo: "molde"');

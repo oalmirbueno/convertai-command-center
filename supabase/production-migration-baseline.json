@@ -2993,6 +2993,14 @@
       "remote_name": "perfis_carrossel_laminas_e_molde",
       "remote_statements_sha256": "b4624cc0b1a36bc91f53d3528c58c8fc25805710d8e2a49e7f7bac86acfd504a",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111170000",
+      "path": "supabase/migrations/20261111170000_perfis_moldes_resumo_e_vigia.sql",
+      "local_sha256": "52fe6a207ac7548ddf53cc321070ec7b0ced2c3fe1eeb7abf9534bbd71d2120d",
+      "remote_name": "perfis_moldes_resumo_e_vigia",
+      "remote_statements_sha256": "facfcdff0375279745d1414dc9c54ace731b406b0929c1be15c845b63dd253f6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
