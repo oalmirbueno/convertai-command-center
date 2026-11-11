@@ -322,11 +322,16 @@ export async function planoDaSincronizacao(
   if (podeTrocarNoMesmo) {
     const publicacoes: Record<string, unknown>[] = reaproveitadas.filter((p) => !!p.idempotency_key);
     const temInstagram = planejadas.some((p) => p.platform === "instagram");
-    if (!temInstagram && opcoes.conta) publicacoes.push(await novaPublicacao(opcoes.conta));
+    const instagramCancelado = !!opcoes.conta && existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === opcoes.conta!.id);
+    // Conta cancelada de propósito (ex.: Para Si) não ganha publicação nova nem reabre aqui.
+    if (!temInstagram && opcoes.conta && !instagramCancelado) publicacoes.push(await novaPublicacao(opcoes.conta));
+    const avisoCancelada = instagramCancelado
+      ? "A publicação desta conta foi cancelada. Ela não volta na entrega: um admin ou gestor marca a conta na hora de confirmar a data."
+      : null;
     return {
       acao: "atualizar",
       motivo: null,
-      aviso: semConta && !temInstagram ? semConta : null,
+      aviso: avisoCancelada || (semConta && !temInstagram ? semConta : null),
       expectedVersion: existente.version,
       payload: {
         ...base,
@@ -389,7 +394,7 @@ export function payloadComData(
   entrega?: { delivery_mode: "manual" | "automatic"; asset_file_ids: string[] } | null,
 ): Record<string, unknown> {
   const publicacoes = post.publications
-    .filter((p) => p.status === "planned" || p.id === publicacaoId)
+    .filter((p) => p.status === "planned")
     .map((p) => ({
       // Arte já aprovada: o save vai pelo caminho aprovado da Agenda, que com
       // delivery_mode e asset_file_ids congela as lâminas na ordem e agenda.
@@ -787,8 +792,11 @@ export interface PerfilDaPeca {
   handle: string | null;
   /** Instagram ligado com automação: o painel publica sozinho. */
   automatico: boolean;
-  /** Já tem publicação nesta conta, inclusive a que foi cancelada e pode reabrir. */
+  /** Já tem publicação viva nesta conta. Cancelada fica desmarcada. */
   escolhido: boolean;
+  /** A conta tem publicação cancelada de propósito. A tela não marca sozinha. */
+  cancelada?: boolean;
+  motivoCancelamento?: string | null;
 }
 
 /** Nome do perfil para a tela: "@handle" quando há, senão o nome. */
@@ -832,11 +840,9 @@ export async function payloadComPerfis(
 ): Promise<Record<string, unknown>> {
   const sementes = sementesDaPeca(a.trabalhoId, a.rodada);
   const planejadas = post.publications.filter((p) => p.status === "planned");
-  const canceladas = post.publications.filter((p) => p.status === "cancelled");
   const publicacoes: Record<string, unknown>[] = [];
   for (const perfil of a.perfis) {
-    const existente = planejadas.find((p) => p.external_account_id === perfil.id && !!p.idempotency_key)
-      || canceladas.find((p) => p.external_account_id === perfil.id && !!p.id);
+    const existente = planejadas.find((p) => p.external_account_id === perfil.id && !!p.idempotency_key);
     const entrega = a.assetFileIds && a.assetFileIds.length && a.quando
       ? {
         delivery_mode: perfil.platform === "instagram" && perfil.automatico ? "automatic" : "manual",

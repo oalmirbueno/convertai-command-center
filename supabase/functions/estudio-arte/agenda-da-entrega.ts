@@ -79,6 +79,8 @@ export function traduzirErroDaAgenda(bruto: unknown): string {
   if (/not linked to the project|account is inactive/i.test(m)) return "A conta do Instagram não está ligada a este projeto. Ligue a conta na Agenda.";
   if (/scheduled time cannot be in the past/i.test(m)) return "O horário já passou. Escolha outro.";
   if (/requires ready content and approved/i.test(m)) return "A arte ainda não está aprovada pelo cliente.";
+  if (/cancelled publication stays cancelled|only a cancelled publication can be rescheduled/i.test(m)) return "A publicação foi cancelada de propósito. Um admin ou gestor marca a conta de novo para agendar.";
+  if (/only an assigned manager or admin can reopen/i.test(m)) return "Só admin ou gestor reabre uma publicação cancelada.";
   if (/cancelled plan was not approved/i.test(m)) return "A publicação cancelada não reabriu: a arte não está aprovada para publicar.";
   if (/immutable|create a revision/i.test(m)) return "A arte aprovada não muda no mesmo post. Entregue de novo para nascer a revisão.";
   if (/scheduled or terminal publications cannot be edited|failed or published/i.test(m)) return "A publicação já está agendada ou saiu. Mude pela Agenda.";
@@ -356,33 +358,33 @@ async function postEPublicacao(ctx: ContextoDaAgenda, t: TrabalhoParaAgenda) {
   return { post, pub };
 }
 
-/** Reabre a publicação cancelada da conta antes de gravar a data de novo. */
-async function reabrirCanceladas(
+/** Reabre e grava a data na mesma função do banco. Sem estado parcial. */
+async function reagendarCanceladas(
   ctx: ContextoDaAgenda,
   post: PostExistente,
   contas: string[],
-): Promise<PostExistente> {
-  let atual = post;
+  quando: string,
+  versaoInicial: number,
+): Promise<{ post_version: number; publicacao_id: string; status: string }> {
+  let versao = versaoInicial;
+  let ultimo = { publicacao_id: "", status: "scheduled" };
   for (const pub of post.publications) {
     if (pub.status !== "cancelled") continue;
-    if (contas.length && !contas.includes(pub.external_account_id || "") && !contas.includes(pub.id)) continue;
-    const reabrir = await ctx.doChamador.rpc("transition_editorial_publication", {
+    if (!contas.includes(pub.external_account_id || "") && !contas.includes(pub.id)) continue;
+    const r = await ctx.doChamador.rpc("reagendar_publicacao_cancelada", {
       p_publication_id: pub.id,
-      p_action: "reopen",
-      p_expected_version: pub.version,
+      p_expected_post_version: versao,
+      p_scheduled_at: quando,
+      p_timezone: pub.scheduled_timezone || FUSO_PADRAO,
     });
-    if (reabrir.error) {
-      throw new ErroDaAgenda(409, "publicacao_cancelada", `A publicação cancelada não voltou a ser agendável. ${traduzirErroDaAgenda(reabrir.error)}`);
+    if (r.error) {
+      throw new ErroDaAgenda(409, "publicacao_cancelada", `A publicação cancelada não voltou a ser agendável. ${traduzirErroDaAgenda(r.error)}`);
     }
-    const versao = Number((reabrir.data as { version?: number } | null)?.version) || pub.version + 1;
-    atual = {
-      ...atual,
-      publications: atual.publications.map((p) => p.id === pub.id
-        ? { ...p, status: "planned", version: versao, published_at: null, permalink: null }
-        : p),
-    };
+    const data = r.data as { post_version?: number; publication_id?: string; status?: string } | null;
+    versao = Number(data?.post_version) || versao;
+    ultimo = { publicacao_id: String(data?.publication_id || pub.id), status: String(data?.status || "scheduled") };
   }
-  return atual;
+  return { post_version: versao, ...ultimo };
 }
 
 /**
@@ -404,10 +406,9 @@ export async function confirmarDataDaPeca(
     const comPerfis = await confirmarComPerfis(ctx, t, { ...pedido, perfis: pedido.perfis }, agora);
     if (comPerfis) return comPerfis;
   }
-  let { post, pub } = await postEPublicacao(ctx, t);
+  const { post, pub } = await postEPublicacao(ctx, t);
   if (pub.status === "cancelled") {
-    post = await reabrirCanceladas(ctx, post, [pub.id, pub.external_account_id || ""]);
-    pub = post.publications.find((p) => p.id === pub.id) || pub;
+    throw new ErroDaAgenda(409, "publicacao_cancelada", "A publicação desta conta foi cancelada. Marque a conta de novo para agendar.");
   }
   if (pub.status === "published") throw new ErroDaAgenda(409, "ja_publicado", "Esta peça já foi publicada.");
   if (pub.status === "failed") throw new ErroDaAgenda(409, "publicacao_falhou", "A publicação falhou. Use Tentar de novo.");
@@ -536,7 +537,21 @@ export async function perfisDaPeca(
   ]);
   const conexao: Record<string, ConexaoDaConta> = {};
   for (const c of conexoes) conexao[c.external_account_id] = c;
-  const vivas = new Set((post?.publications || []).map((p) => p.external_account_id || ""));
+  const canceladas = (post?.publications || []).filter((p) => p.status === "cancelled");
+  const vivas = new Set((post?.publications || []).filter((p) => p.status !== "cancelled").map((p) => p.external_account_id || ""));
+  const motivoPorConta: Record<string, string> = {};
+  if (canceladas.length) {
+    const { data } = await db.from("editorial_publication_internal")
+      .select("publication_id, failure_reason")
+      .in("publication_id", canceladas.map((p) => p.id));
+    const porId: Record<string, string> = {};
+    for (const linha of (data as { publication_id: string; failure_reason: string | null }[] | null) ?? []) {
+      if (linha.failure_reason) porId[linha.publication_id] = linha.failure_reason;
+    }
+    for (const pub of canceladas) {
+      if (pub.external_account_id && porId[pub.id]) motivoPorConta[pub.external_account_id] = porId[pub.id];
+    }
+  }
   type Conta = { id: string; platform: string; display_name: string | null; handle: string | null };
   const perfis: PerfilDaPeca[] = ((contasRes.data as Conta[] | null) ?? []).map((c) => {
     const cx = conexao[c.id];
@@ -549,6 +564,8 @@ export async function perfisDaPeca(
       handle: c.handle ? String(c.handle) : null,
       automatico,
       escolhido: vivas.has(c.id),
+      cancelada: canceladas.some((p) => p.external_account_id === c.id),
+      motivoCancelamento: motivoPorConta[c.id] || null,
     };
   });
   // Instagram primeiro (é o que o painel publica sozinho), depois as páginas.
@@ -605,12 +622,32 @@ async function confirmarComPerfis(
   }
   const problema = problemaNoHorario(quando, agora, { agoraMesmo: !!pedido.agoraMesmo });
   if (problema) throw new ErroDaAgenda(400, "horario_invalido", problema);
-  post = await reabrirCanceladas(ctx, post, ids);
   const assinadas = aprovado && raiz ? await laminasComAssinatura(ctx.db, raiz.id) : false;
   const escolhidos = ids.map((id) => {
     const p = perfis.find((x) => x.id === id) as PerfilDaPeca;
     return { id: p.id, platform: p.platform, automatico: p.automatico && assinadas && t.file_ids.length <= 10 };
   });
+  const canceladasEscolhidas = post.publications.filter((p) => p.status === "cancelled" && ids.includes(p.external_account_id || ""));
+  if (canceladasEscolhidas.length) {
+    if (!quando) throw new ErroDaAgenda(400, "horario_invalido", "Escolha data e hora para reabrir a publicação cancelada.");
+    let versao = post.version;
+    const restamPlanejadas = post.publications.some((p) => p.status === "planned");
+    if (restamPlanejadas) {
+      const payloadPlanejado = await payloadComPerfis(post, {
+        trabalhoId: t.id,
+        rodada: Math.max(1, Number(t.entrega_rodada) || 1),
+        perfis: escolhidos.filter((p) => !canceladasEscolhidas.some((c) => c.external_account_id === p.id)),
+        quando,
+        mutationId: pedido.mutationId,
+        assetFileIds: aprovado ? t.file_ids.slice() : null,
+      });
+      const salvo = await ctx.doChamador.rpc("save_editorial_post", { p_payload: payloadPlanejado, p_expected_version: versao });
+      if (salvo.error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(salvo.error));
+      versao = Number((salvo.data as { version?: number } | null)?.version) || versao;
+    }
+    const reaberto = await reagendarCanceladas(ctx, post, ids, quando, versao);
+    return { post_id: post.id, publicacao_id: reaberto.publicacao_id, quando, status: reaberto.status };
+  }
   const payload = await payloadComPerfis(post, {
     trabalhoId: t.id,
     rodada: Math.max(1, Number(t.entrega_rodada) || 1),

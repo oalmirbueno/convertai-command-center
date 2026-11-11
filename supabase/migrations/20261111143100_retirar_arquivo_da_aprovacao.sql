@@ -36,11 +36,7 @@ DECLARE
   _actor uuid := auth.uid();
   _file public.files%ROWTYPE;
 BEGIN
-  IF _actor IS NULL
-    OR NOT (
-      public.has_role(_actor, 'admin'::public.app_role)
-      OR public.has_role(_actor, 'manager'::public.app_role)
-    ) THEN
+  IF _actor IS NULL THEN
     RAISE EXCEPTION 'somente admin ou gestor retira da aprovacao do cliente';
   END IF;
 
@@ -50,7 +46,7 @@ BEGIN
     AND parent_file_id IS NULL
   FOR UPDATE;
 
-  IF NOT FOUND OR NOT public.can_access_client(_file.client_id) THEN
+  IF NOT FOUND OR NOT public.can_manage_client(_file.client_id) THEN
     RAISE EXCEPTION 'arquivo nao encontrado ou sem acesso';
   END IF;
   IF _file.archived_at IS NOT NULL THEN
@@ -114,3 +110,45 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.withdraw_file_client_approval(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.withdraw_file_client_approval(uuid) TO authenticated;
+
+-- A Mesa deixa de esperar o cliente, e o Workspace solta o vínculo.
+-- Idempotente: se o evento já está no gatilho, não refaz.
+DO $mesa$
+DECLARE
+  _def text;
+  _novo text;
+BEGIN
+  _def := replace(pg_get_functiondef('public.mesa_entrega_acompanha_aprovacao()'::regprocedure), E'\r\n', E'\n');
+  IF position('approval_withdrawn' IN _def) > 0 THEN
+    RETURN;
+  END IF;
+  _novo := replace(
+    _def,
+    $a$'client_approved', 'client_approved_offline', 'client_rejected'$a$,
+    $b$'client_approved', 'client_approved_offline', 'client_rejected', 'approval_withdrawn'$b$
+  );
+  IF _novo = _def THEN
+    RAISE EXCEPTION 'mesa: lista de eventos nao encontrada';
+  END IF;
+  _def := _novo;
+  _novo := replace(
+    _def,
+    $a$    ELSE
+      -- Aprovado (no painel ou registrado pela equipe como aprovação fora dele).$a$,
+    $b$    ELSIF NEW.event_type = 'approval_withdrawn' THEN
+      UPDATE public.estudio_trabalhos
+         SET entrega_status = NULL, entrega_aviso = NULL
+       WHERE id = _t.id
+         AND entrega_status = 'aguardando_cliente';
+      UPDATE public.workspace_nodes
+         SET sent_for_approval_file_id = NULL
+       WHERE sent_for_approval_file_id = NEW.file_id;
+    ELSE
+      -- Aprovado (no painel ou registrado pela equipe como aprovação fora dele).$b$
+  );
+  IF _novo = _def THEN
+    RAISE EXCEPTION 'mesa: ramo de aprovado nao encontrado';
+  END IF;
+  EXECUTE _novo;
+END
+$mesa$;

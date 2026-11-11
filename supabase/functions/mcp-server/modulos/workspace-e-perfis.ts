@@ -13,7 +13,7 @@ import type { AuthContext } from '../../_shared/mcp-auth.ts';
 import { DataScopeError } from '../../_shared/mcp-auth.ts';
 import { db } from '../../_shared/aceleriq-read-services.ts';
 import { dataScopeAllowsClient } from '../../_shared/mcp-security.ts';
-import { rpcComoPessoa } from '../../_shared/mcp-mesas-acoes.ts';
+import { rpcComoPessoa, umaVez } from '../../_shared/mcp-mesas-acoes.ts';
 import { LIMITS } from './mcp-files-services.ts';
 import {
   conferenciaDoLink,
@@ -437,6 +437,15 @@ const perfisTool: ToolDefinition = {
 };
 
 const LEITURA = { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false };
+const ESCRITA_CONFIRMADA = { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false };
+
+async function principalEhAdmin(ctx: AuthContext, banco: SupabaseClient): Promise<boolean> {
+  if (ctx.scopes?.includes("admin")) return true;
+  const userId = ctx.dataScope?.principalUserId;
+  if (!userId) return false;
+  const { data } = await banco.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").limit(1);
+  return Array.isArray(data) && data.length > 0;
+}
 
 const linkSchema = z.object({
   node_id: UUID,
@@ -458,7 +467,7 @@ export async function linkDoArquivoNoWorkspace(
   const confere = conferenciaDoLink(
     no,
     (clientId) => dataScopeAllowsClient(ctx.dataScope, clientId),
-    !!ctx.dataScope?.unrestricted,
+    await principalEhAdmin(ctx, banco),
   );
   if (!confere.ok) {
     if (confere.fora) throw new DataScopeError(confere.mensagem);
@@ -511,7 +520,11 @@ const linkTool: ToolDefinition = {
   },
 };
 
-const retirarSchema = z.object({ file_id: UUID }).strict();
+const retirarSchema = z.object({
+  file_id: UUID,
+  confirmar: z.literal(true),
+  idempotency_key: z.string().trim().min(8).max(120),
+}).strict();
 
 export async function retirarArquivoDaAprovacao(
   input: z.infer<typeof retirarSchema>,
@@ -539,24 +552,28 @@ export async function retirarArquivoDaAprovacao(
   if (!podeRetirarDaAprovacao(arquivo)) {
     throw new Error('Só dá para retirar o que ainda espera o cliente e está visível para ele.');
   }
-  if (ctx.resultRefHolder) ctx.resultRefHolder.value = `files:${arquivo.id}`;
-  const resultado = await rpcComoPessoa('withdraw_file_client_approval', { p_file_id: arquivo.id }, ctx);
-  return { ok: true, arquivo: resultado, client_id: arquivo.client_id };
+  return await umaVez('aceleriq_workspace_retirar_aprovacao', ctx, input.idempotency_key, async () => {
+    if (ctx.resultRefHolder) ctx.resultRefHolder.value = `files:${arquivo.id}`;
+    const resultado = await rpcComoPessoa('withdraw_file_client_approval', { p_file_id: arquivo.id }, ctx);
+    return { ref: `files:${arquivo.id}`, resultado: { arquivo: resultado, client_id: arquivo.client_id } };
+  });
 }
 
 const retirarTool: ToolDefinition = {
   name: 'aceleriq_workspace_retirar_aprovacao',
   title: 'Retirar arquivo da aprovação',
   description:
-    'Cancela a aprovação pendente do cliente em um arquivo (Workspace/Estúdio já enviado). O arquivo fica interno, invisível para o cliente, sem apagar o blob. Exige files:write e o cliente no escopo. Só admin ou gestor na função do banco.',
+    'Cancela a aprovação pendente do cliente em um arquivo (Workspace/Estúdio já enviado). O arquivo fica interno, invisível para o cliente, sem apagar o blob. Efeito visível ao cliente: exige confirmar=true e idempotency_key. Exige files:write e o cliente no escopo. Só admin ou gestor na função do banco.',
   scopes: ['files:write'],
-  annotations: ESCRITA,
+  annotations: ESCRITA_CONFIRMADA,
   inputSchema: {
     type: 'object',
     additionalProperties: false,
-    required: ['file_id'],
+    required: ['file_id', 'confirmar', 'idempotency_key'],
     properties: {
       file_id: { type: 'string', format: 'uuid', description: 'Id em public.files da raiz que está com approval_status pending e visibility approval.' },
+      confirmar: { type: 'boolean', const: true, description: 'Tem que ser true: o cliente deixa de ver o arquivo.' },
+      idempotency_key: { type: 'string', description: 'Chave estável de 8 a 120 caracteres. Repetir não retira de novo.' },
     },
   },
   handler: async (input, ctx) => {

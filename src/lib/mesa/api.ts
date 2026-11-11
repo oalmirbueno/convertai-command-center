@@ -646,6 +646,8 @@ export interface PerfilDaPecaNaTela {
   handle: string | null;
   automatico: boolean;
   escolhido: boolean;
+  cancelada?: boolean;
+  motivoCancelamento?: string | null;
 }
 
 /** Perfis e páginas do projeto da peça (a marca: Acerbi e CME separadas). */

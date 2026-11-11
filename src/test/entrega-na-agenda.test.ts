@@ -551,7 +551,7 @@ describe("contratos", () => {
   it("nada publica direto na Meta: só as RPCs da Agenda (o ciclo do banco publica)", () => {
     expect(agenda).not.toMatch(/graph\.facebook\.com|media_publish|autopublish_jobs/);
     const rpcs = agenda.match(/rpc\("([a-z_]+)"/g) || [];
-    for (const r of rpcs) expect(['rpc("save_editorial_post"', 'rpc("transition_editorial_publication"', 'rpc("archive_editorial_post"']).toContain(r);
+    for (const r of rpcs) expect(['rpc("save_editorial_post"', 'rpc("transition_editorial_publication"', 'rpc("archive_editorial_post"', 'rpc("reagendar_publicacao_cancelada"']).toContain(r);
   });
 
   it("a Agenda abre o item certo: o card do post da peça mostra a publicação da Mesa", () => {

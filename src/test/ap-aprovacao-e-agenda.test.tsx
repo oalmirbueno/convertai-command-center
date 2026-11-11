@@ -295,21 +295,23 @@ describe("B. aprovou → Agenda com data, perfil e se vai postar", () => {
     expect(((db.chamadas[0].args.p_payload as Linha).publications as Linha[])[0].delivery_mode).toBe("manual");
   });
 
-  it("publicação cancelada reabre e o save reusa o mesmo id, sem chave nova", async () => {
-    const db = bancoFalso(tabelas([planejada("pub1", IG, { status: "cancelled", idempotency_key: "99999999-9999-4999-8999-999999999991" })], aprovado));
+  it("publicação cancelada só reagenda se a conta for marcada, numa RPC só", async () => {
+    const db = bancoFalso(tabelas([planejada("pub1", IG, { status: "cancelled" })], aprovado));
+    const perfis = await (await import("../../supabase/functions/estudio-arte/agenda-da-entrega")).perfisDaPeca(db.cliente, trabalho);
+    expect(perfis.perfis.find((p) => p.id === IG)?.escolhido).toBe(false);
+    expect(perfis.perfis.find((p) => p.id === IG)?.cancelada).toBe(true);
     await confirmarDataDaPeca(
       { db: db.cliente, doChamador: db.cliente, userId: "u" },
       trabalho,
       { quando: "2026-10-01T14:30:00.000Z", mutationId: "m-reabre", perfis: [IG] },
       agora,
     );
-    expect(db.chamadas.map((c) => c.nome)).toEqual(["transition_editorial_publication", "save_editorial_post"]);
-    expect(db.chamadas[0].args).toMatchObject({ p_publication_id: "pub1", p_action: "reopen", p_expected_version: 1 });
-    const pubs = (db.chamadas[1].args.p_payload as Linha).publications as Linha[];
-    expect(pubs).toHaveLength(1);
-    expect(pubs[0].id).toBe("pub1");
-    expect(pubs[0].idempotency_key).toBe("99999999-9999-4999-8999-999999999991");
-    expect(pubs[0].external_account_id).toBe(IG);
+    expect(db.chamadas.map((c) => c.nome)).toEqual(["reagendar_publicacao_cancelada"]);
+    expect(db.chamadas[0].args).toMatchObject({
+      p_publication_id: "pub1",
+      p_expected_post_version: 4,
+      p_scheduled_at: "2026-10-01T14:30:00.000Z",
+    });
   });
 
   it("payloadComPerfis e perfisValidos: sem repetir, só da lista", async () => {
