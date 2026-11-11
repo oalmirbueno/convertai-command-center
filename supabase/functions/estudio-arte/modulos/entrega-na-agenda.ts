@@ -99,6 +99,12 @@ export interface PostExistente {
     revision_of_post_id: string | null;
   } | null;
   publications: PublicacaoExistente[];
+  /**
+   * Contas canceladas por pessoa neste post ou nas revisões anteriores (a
+   * mesma regra do banco: a limpeza da revisão, removed_from_plan, não
+   * conta). Ausente: só as canceladas do próprio post contam.
+   */
+  contas_canceladas_por_pessoa?: string[];
 }
 
 export interface ContaDoProjeto {
@@ -318,11 +324,23 @@ export async function planoDaSincronizacao(
     scheduled_timezone: p.scheduled_timezone || FUSO_PADRAO,
   }));
 
+  // Cancelada por pessoa na cadeia de revisões (o banco recusa igual). Sem a
+  // lista, vale qualquer cancelada do próprio post.
+  const canceladaPorPessoa = (contaId: string) =>
+    existente.contas_canceladas_por_pessoa
+      ? existente.contas_canceladas_por_pessoa.includes(contaId)
+      : existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === contaId);
+
   const podeTrocarNoMesmo = !existente.primary_file_id || mesmaArte || opcoes.arquivoAtualEditavel;
   if (podeTrocarNoMesmo) {
     const publicacoes: Record<string, unknown>[] = reaproveitadas.filter((p) => !!p.idempotency_key);
     const temInstagram = planejadas.some((p) => p.platform === "instagram");
-    const instagramCancelado = !!opcoes.conta && existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === opcoes.conta!.id);
+    // No mesmo post, qualquer linha cancelada da conta fica como está (a chave
+    // estável da peça cairia nela); na cadeia, só a cancelada por pessoa.
+    const instagramCancelado = !!opcoes.conta && (
+      existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === opcoes.conta!.id) ||
+      canceladaPorPessoa(opcoes.conta.id)
+    );
     // Conta cancelada de propósito (ex.: Para Si) não ganha publicação nova nem reabre aqui.
     if (!temInstagram && opcoes.conta && !instagramCancelado) publicacoes.push(await novaPublicacao(opcoes.conta));
     const avisoCancelada = instagramCancelado
@@ -349,9 +367,10 @@ export async function planoDaSincronizacao(
   // post aprovado ou em aprovação. Nasce a revisão do mesmo item, com a mesma
   // conta e a mesma data (se havia), e a anterior vira histórico.
   // Conta cancelada de propósito (Para Si) não ganha publicação nova neste
-  // post de revisão: o banco também recusa, olhando o post anterior.
+  // post de revisão, nem em revisão de revisão: o banco também recusa,
+  // subindo a cadeia. A limpeza do anterior (removed_from_plan) não conta.
   const anterior = publicacaoDaPeca(planejadas);
-  const contaCancelada = !!opcoes.conta && existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === opcoes.conta!.id);
+  const contaCancelada = !!opcoes.conta && canceladaPorPessoa(opcoes.conta.id);
   const contaDaRevisao = anterior && anterior.external_account_id
     ? { id: anterior.external_account_id, platform: anterior.platform }
     : contaCancelada
@@ -844,6 +863,8 @@ export async function payloadComPerfis(
     quando: string | null;
     mutationId: string;
     assetFileIds?: string[] | null;
+    /** Contas canceladas na cadeia que o admin/gestor marcou de novo: vão com reabrir_cancelada. */
+    reabrir?: string[] | null;
   },
 ): Promise<Record<string, unknown>> {
   const sementes = sementesDaPeca(a.trabalhoId, a.rodada);
@@ -857,8 +878,10 @@ export async function payloadComPerfis(
         asset_file_ids: a.assetFileIds.slice(0, MAX_MIDIAS_DO_CARROSSEL),
       }
       : {};
+    const marca = !existente && a.reabrir?.includes(perfil.id) ? { reabrir_cancelada: true } : {};
     publicacoes.push({
       ...entrega,
+      ...marca,
       id: existente ? existente.id : null,
       idempotency_key: existente ? existente.idempotency_key : await uuidEstavel(sementes.publicacao(perfil.id)),
       external_account_id: perfil.id,

@@ -118,11 +118,73 @@ export async function lerPostDaAgenda(db: SupabaseClient, postId: string): Promi
     for (const l of (data as { publication_id: string; idempotency_key: string }[] | null) ?? []) chaves[l.publication_id] = l.idempotency_key;
   }
   const p = postRes.data as Omit<PostExistente, "internal" | "publications">;
+  const internal = (internoRes.data as PostExistente["internal"]) ?? null;
+  const naCadeia = await contasCanceladasPorPessoa(db, p.id, internal?.revision_of_post_id || null);
   return {
     ...p,
-    internal: (internoRes.data as PostExistente["internal"]) ?? null,
+    internal,
     publications: pubs.map((x) => ({ ...x, idempotency_key: chaves[x.id] ?? null })),
+    ...(naCadeia ? { contas_canceladas_por_pessoa: naCadeia } : {}),
   };
+}
+
+/** Motivos da limpeza automática do plano: não são cancelamento de pessoa. */
+const MOTIVOS_DA_LIMPEZA = ["removed_from_plan", "removed_from_approved_media_plan"];
+const MAX_CADEIA_DE_REVISOES = 64;
+
+/**
+ * Contas canceladas por pessoa no post ou nas revisões anteriores. A mesma
+ * regra de editorial_conta_cancelada_por_pessoa no banco: em cada conta decide
+ * o post mais novo da cadeia que tem linha nela; conta como pessoa o último
+ * publication_cancelled sem motivo de limpeza (cancelada sem evento também).
+ * Falha de leitura: null (o plano usa só as canceladas do próprio post).
+ */
+export async function contasCanceladasPorPessoa(
+  db: SupabaseClient,
+  postId: string,
+  revisaoDe: string | null,
+): Promise<string[] | null> {
+  const cadeia = [postId];
+  let anterior = revisaoDe;
+  while (anterior && UUID.test(anterior) && !cadeia.includes(anterior) && cadeia.length < MAX_CADEIA_DE_REVISOES) {
+    cadeia.push(anterior);
+    const { data, error } = await db.from("editorial_post_internal")
+      .select("post_id, revision_of_post_id")
+      .eq("post_id", anterior)
+      .maybeSingle();
+    if (error) return null;
+    anterior = (data as { revision_of_post_id: string | null } | null)?.revision_of_post_id || null;
+  }
+  const { data: pubs, error: erroPubs } = await db.from("editorial_publications")
+    .select("id, post_id, status, external_account_id")
+    .in("post_id", cadeia);
+  if (erroPubs) return null;
+  type Linha = { id: string; post_id: string; status: string; external_account_id: string | null };
+  const linhas = (pubs as Linha[] | null) ?? [];
+  const decide = new Map<string, Linha>();
+  for (const id of cadeia) {
+    for (const l of linhas) {
+      if (l.post_id === id && l.external_account_id && !decide.has(l.external_account_id)) decide.set(l.external_account_id, l);
+    }
+  }
+  const canceladas = [...decide.values()].filter((l) => l.status === "cancelled");
+  if (!canceladas.length) return [];
+  const { data: eventos, error: erroEventos } = await db.from("editorial_events")
+    .select("publication_id, metadata, created_at")
+    .eq("event_type", "publication_cancelled")
+    .in("publication_id", canceladas.map((l) => l.id));
+  if (erroEventos) return null;
+  type Evento = { publication_id: string; metadata: { reason?: unknown } | null; created_at: string };
+  const daLimpeza = (e: Evento) => MOTIVOS_DA_LIMPEZA.includes(String(e.metadata?.reason ?? ""));
+  const ultimo: Record<string, Evento> = {};
+  for (const e of (eventos as Evento[] | null) ?? []) {
+    const atual = ultimo[e.publication_id];
+    const maisNovo = !atual || e.created_at > atual.created_at || (e.created_at === atual.created_at && !daLimpeza(e));
+    if (maisNovo) ultimo[e.publication_id] = e;
+  }
+  return canceladas
+    .filter((l) => !ultimo[l.id] || !daLimpeza(ultimo[l.id]))
+    .map((l) => l.external_account_id as string);
 }
 
 /**
@@ -564,7 +626,9 @@ export async function perfisDaPeca(
       handle: c.handle ? String(c.handle) : null,
       automatico,
       escolhido: vivas.has(c.id),
-      cancelada: canceladas.some((p) => p.external_account_id === c.id),
+      // Cancelada aqui ou numa revisão anterior (sem linha viva neste post).
+      cancelada: canceladas.some((p) => p.external_account_id === c.id) ||
+        (!vivas.has(c.id) && !!post?.contas_canceladas_por_pessoa?.includes(c.id)),
       motivoCancelamento: motivoPorConta[c.id] || null,
     };
   });
@@ -628,11 +692,16 @@ async function confirmarComPerfis(
     return { id: p.id, platform: p.platform, automatico: p.automatico && assinadas && t.file_ids.length <= 10 };
   });
   const canceladasEscolhidas = post.publications.filter((p) => p.status === "cancelled" && ids.includes(p.external_account_id || ""));
+  // Cancelada numa revisão anterior, sem linha neste post: o admin/gestor que
+  // marca a conta aqui é a marca explícita (o banco confere o papel).
+  const reabrir = (post.contas_canceladas_por_pessoa ?? []).filter(
+    (id) => ids.includes(id) && !post!.publications.some((p) => p.external_account_id === id),
+  );
   if (canceladasEscolhidas.length) {
     if (!quando) throw new ErroDaAgenda(400, "horario_invalido", "Escolha data e hora para reabrir a publicação cancelada.");
     let versao = post.version;
     const restamPlanejadas = post.publications.some((p) => p.status === "planned");
-    if (restamPlanejadas) {
+    if (restamPlanejadas || reabrir.length) {
       const payloadPlanejado = await payloadComPerfis(post, {
         trabalhoId: t.id,
         rodada: Math.max(1, Number(t.entrega_rodada) || 1),
@@ -640,6 +709,7 @@ async function confirmarComPerfis(
         quando,
         mutationId: pedido.mutationId,
         assetFileIds: aprovado ? t.file_ids.slice() : null,
+        reabrir,
       });
       const salvo = await ctx.doChamador.rpc("save_editorial_post", { p_payload: payloadPlanejado, p_expected_version: versao });
       if (salvo.error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(salvo.error));
@@ -655,6 +725,7 @@ async function confirmarComPerfis(
     quando,
     mutationId: pedido.mutationId,
     assetFileIds: aprovado ? t.file_ids.slice() : null,
+    reabrir,
   });
   const { error } = await ctx.doChamador.rpc("save_editorial_post", { p_payload: payload, p_expected_version: post.version });
   if (error) throw new ErroDaAgenda(409, "agenda_recusou", traduzirErroDaAgenda(error));

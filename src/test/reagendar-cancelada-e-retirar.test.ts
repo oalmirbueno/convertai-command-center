@@ -10,6 +10,7 @@ import {
   type NoParaLink,
 } from "../../supabase/functions/mcp-server/modulos/workspace-link-regras";
 import { payloadComPerfis, planoDaSincronizacao, type PecaEntregue, type PostExistente } from "../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
+import { contasCanceladasPorPessoa } from "../../supabase/functions/estudio-arte/agenda-da-entrega";
 
 const ler = (caminho: string) => readFileSync(resolve(process.cwd(), caminho), "utf8");
 
@@ -198,5 +199,175 @@ describe("reaproveitar publicação cancelada", () => {
     });
     const pubs = payload.publications as Array<{ id: string | null }>;
     expect(pubs[0].id).toBeNull();
+  });
+});
+
+describe("rodada 4: só cancelamento de pessoa trava, na cadeia de revisões", () => {
+  const CONTA = "e1111111-1111-4111-8111-111111111111";
+  const A = "a1111111-1111-4111-8111-111111111111";
+  const B = "a2222222-2222-4222-8222-222222222222";
+  const peca: PecaEntregue = {
+    trabalhoId: "11111111-1111-4111-8111-111111111111",
+    clientId: "c",
+    projectId: "p",
+    taskId: "t",
+    titulo: "Novo",
+    fileIds: ["f2"],
+    legenda: "outra",
+    rodada: 3,
+  };
+  const pub = (extra: Record<string, unknown> = {}) => ({
+    id: "b1111111-1111-4111-8111-111111111111",
+    version: 4,
+    status: "cancelled",
+    platform: "instagram",
+    external_account_id: CONTA,
+    file_id: null,
+    caption: "leg",
+    first_comment: null,
+    alt_text: null,
+    scheduled_at: null,
+    scheduled_timezone: "America/Sao_Paulo",
+    idempotency_key: "d1111111-1111-4111-8111-111111111111",
+    ...extra,
+  });
+  const post = (extra: Partial<PostExistente> = {}): PostExistente => ({
+    id: B,
+    version: 2,
+    client_id: "c",
+    project_id: "p",
+    primary_file_id: "f1",
+    title: "Velho",
+    content_type: "static",
+    objective: null,
+    default_caption: "leg",
+    production_status: "ready",
+    internal: { idempotency_key: "k", task_id: "t", responsible_id: null, internal_notes: null, revision_of_post_id: A },
+    publications: [],
+    ...extra,
+  });
+
+  /** Leitura de mentira com as mesmas formas que o supabase-js devolve. */
+  const leitor = (tabelas: Record<string, Record<string, unknown>[]>) => {
+    const consulta = (t: string) => {
+      let linhas = (tabelas[t] || []).slice();
+      const q: Record<string, unknown> = {
+        select: () => q,
+        eq: (c: string, v: unknown) => { linhas = linhas.filter((l) => l[c] === v); return q; },
+        in: (c: string, vs: unknown[]) => { linhas = linhas.filter((l) => vs.includes(l[c])); return q; },
+        maybeSingle: async () => ({ data: linhas[0] ?? null, error: null }),
+        then: (ok: (r: { data: unknown[]; error: null }) => unknown) => Promise.resolve({ data: linhas, error: null }).then(ok),
+      };
+      return q;
+    };
+    return { from: consulta } as never;
+  };
+  const evento = (publication_id: string, reason: string | null, created_at = "2026-11-11T10:00:00Z") => ({
+    publication_id,
+    event_type: "publication_cancelled",
+    metadata: reason ? { reason } : { failure_reason: "cancelada de proposito" },
+    created_at,
+  });
+
+  it("a migration nova filtra o motivo da limpeza, sobe a cadeia e preserva a marca no save aprovado", () => {
+    const sql = ler("supabase/migrations/20261111150000_cancelada_so_por_pessoa_na_cadeia.sql");
+    expect(sql).toContain("FUNCTION public.editorial_conta_cancelada_por_pessoa(");
+    expect(sql).toContain("WITH RECURSIVE cadeia");
+    expect(sql).toContain("internal.revision_of_post_id");
+    expect(sql).toContain("'removed_from_plan', 'removed_from_approved_media_plan'");
+    expect(sql).toContain("event.event_type = 'publication_cancelled'");
+    expect(sql).toContain("save_editorial_post_unlocked(jsonb,integer)");
+    expect(sql).toContain("save_approved_editorial_post_unlocked(jsonb,integer)");
+    expect(sql).toContain("CASE WHEN source.value->>'reabrir_cancelada' = 'true' THEN true END");
+    expect(sql).toContain("REVOKE ALL ON FUNCTION public.editorial_conta_cancelada_por_pessoa(uuid, uuid, uuid)");
+    expect(sql).not.toMatch(/GRANT EXECUTE ON FUNCTION public\.editorial_conta_cancelada_por_pessoa/i);
+    // A 143000 continua igual: a correção é aditiva.
+    expect(ler("supabase/migrations/20261111143000_reabrir_publicacao_cancelada.sql")).not.toContain("editorial_conta_cancelada_por_pessoa");
+  });
+
+  it("B1: a limpeza da revisão (removed_from_plan) não conta como cancelamento de pessoa", async () => {
+    const db = leitor({
+      editorial_post_internal: [{ post_id: B, revision_of_post_id: null }],
+      editorial_publications: [{ id: "p1", post_id: B, status: "cancelled", external_account_id: CONTA }],
+      editorial_events: [evento("p1", "removed_from_plan")],
+    });
+    expect(await contasCanceladasPorPessoa(db, B, null)).toEqual([]);
+    // Revisão de um post sem planejada, com a conta só limpa: a revisão cria a publicação.
+    const plano = await planoDaSincronizacao(peca, post({ publications: [pub()], contas_canceladas_por_pessoa: [] }), {
+      conta: { id: CONTA, platform: "instagram" },
+      arquivoAtualEditavel: false,
+    });
+    expect(plano.acao).toBe("revisao");
+    expect((plano.payload?.publications as Array<{ external_account_id: string }>)[0].external_account_id).toBe(CONTA);
+    expect(plano.aviso).toBeNull();
+  });
+
+  it("cancelamento de pessoa conta, e o mais novo decide (empate: a pessoa)", async () => {
+    const db = leitor({
+      editorial_post_internal: [],
+      editorial_publications: [{ id: "p1", post_id: B, status: "cancelled", external_account_id: CONTA }],
+      editorial_events: [evento("p1", "removed_from_plan"), evento("p1", null)],
+    });
+    expect(await contasCanceladasPorPessoa(db, B, null)).toEqual([CONTA]);
+    const semEvento = leitor({ editorial_publications: [{ id: "p1", post_id: B, status: "cancelled", external_account_id: CONTA }] });
+    expect(await contasCanceladasPorPessoa(semEvento, B, null)).toEqual([CONTA]);
+  });
+
+  it("B2: A cancelada de propósito → B sem publicação → a revisão C não cria a conta", async () => {
+    const db = leitor({
+      editorial_post_internal: [{ post_id: A, revision_of_post_id: null }, { post_id: B, revision_of_post_id: A }],
+      editorial_publications: [{ id: "pa", post_id: A, status: "cancelled", external_account_id: CONTA }],
+      editorial_events: [evento("pa", null)],
+    });
+    const naCadeia = await contasCanceladasPorPessoa(db, B, A);
+    expect(naCadeia).toEqual([CONTA]);
+    const opcoes = { conta: { id: CONTA, platform: "instagram" }, arquivoAtualEditavel: false };
+    const revisao = await planoDaSincronizacao(peca, post({ contas_canceladas_por_pessoa: naCadeia ?? [] }), opcoes);
+    expect(revisao.acao).toBe("revisao");
+    expect(revisao.payload?.revision_of_post_id).toBe(B);
+    expect(revisao.payload?.publications).toEqual([]);
+    expect(revisao.aviso).toMatch(/cancelada/);
+    // B ainda editável: atualiza o mesmo post, também sem a conta.
+    const mesmo = await planoDaSincronizacao(peca, post({ contas_canceladas_por_pessoa: naCadeia ?? [] }), { ...opcoes, arquivoAtualEditavel: true });
+    expect(mesmo.acao).toBe("atualizar");
+    expect(mesmo.payload?.publications).toEqual([]);
+    expect(mesmo.aviso).toMatch(/cancelada/);
+  });
+
+  it("na cadeia, o post mais novo com linha na conta decide (o admin reabriu em B)", async () => {
+    const db = leitor({
+      editorial_post_internal: [{ post_id: B, revision_of_post_id: A }],
+      editorial_publications: [
+        { id: "pa", post_id: A, status: "cancelled", external_account_id: CONTA },
+        { id: "pb", post_id: B, status: "cancelled", external_account_id: CONTA },
+      ],
+      editorial_events: [evento("pa", null), evento("pb", "removed_from_plan")],
+    });
+    expect(await contasCanceladasPorPessoa(db, "a3333333-3333-4333-8333-333333333333", B)).toEqual([]);
+  });
+
+  it("o admin que marca a conta cancelada na cadeia manda reabrir_cancelada só nela", async () => {
+    const payload = await payloadComPerfis(post(), {
+      trabalhoId: "w1",
+      rodada: 1,
+      perfis: [
+        { id: CONTA, platform: "instagram", automatico: false },
+        { id: "e2222222-2222-4222-8222-222222222222", platform: "facebook", automatico: false },
+      ],
+      quando: "2026-11-12T14:00:00.000Z",
+      mutationId: "m",
+      reabrir: [CONTA],
+    });
+    const pubs = payload.publications as Array<Record<string, unknown>>;
+    expect(pubs[0].reabrir_cancelada).toBe(true);
+    expect(pubs[1]).not.toHaveProperty("reabrir_cancelada");
+    const semMarca = await payloadComPerfis(post(), {
+      trabalhoId: "w1",
+      rodada: 1,
+      perfis: [{ id: CONTA, platform: "instagram", automatico: false }],
+      quando: "2026-11-12T14:00:00.000Z",
+      mutationId: "m",
+    });
+    expect((semMarca.publications as Array<Record<string, unknown>>)[0]).not.toHaveProperty("reabrir_cancelada");
   });
 });

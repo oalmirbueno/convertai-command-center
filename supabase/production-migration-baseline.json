@@ -2969,6 +2969,14 @@
       "remote_name": "retirar_arquivo_da_aprovacao",
       "remote_statements_sha256": "0bf9a81e98721de6f83158a935eaed9e7860185a565671fac5361921c9b704a8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261111150000",
+      "path": "supabase/migrations/20261111150000_cancelada_so_por_pessoa_na_cadeia.sql",
+      "local_sha256": "549a5337460fe1399d5d481526c8b0425f98dad2882c154d5baf37ec2a680951",
+      "remote_name": "cancelada_so_por_pessoa_na_cadeia",
+      "remote_statements_sha256": "075678f6b8f0fc0fd36edaeff17c98bfc893444f9eedabae097da4feaceadfb2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
