@@ -200,6 +200,18 @@ describe("entregar cria ou atualiza o mesmo item da Agenda", () => {
     expect(r.payload?.idempotency_key).not.toBe(r1.payload?.idempotency_key);
   });
 
+  it("revisão com a conta só cancelada não cria publicação nova (Para Si)", async () => {
+    const existente = postExistente({
+      primary_file_id: "velho",
+      publications: [pubPlanejada({ status: "cancelled", scheduled_at: "2026-10-01T14:30:00.000Z" })],
+    });
+    const r = await planoDaSincronizacao(peca({ rodada: 2, fileIds: ["n1"] }), existente, { conta, arquivoAtualEditavel: false });
+    expect(r.acao).toBe("revisao");
+    expect(r.payload?.revision_of_post_id).toBe(existente.id);
+    expect(r.payload?.publications).toEqual([]);
+    expect(r.aviso).toMatch(/cancelada/);
+  });
+
   it("post já agendado ou publicado com outra arte: não troca sozinho (trava contra publicar a peça errada)", async () => {
     for (const status of ["scheduled", "published"]) {
       const existente = postExistente({ primary_file_id: "outra", publications: [pubPlanejada({ status })] });
@@ -414,6 +426,7 @@ describe("ações de publicação da peça", () => {
       transition_editorial_publication: (args) => {
         // O banco de mentira acompanha a transição para a releitura.
         tabelas.editorial_publications[0].status = args.p_action === "cancel" ? "cancelled" : "planned";
+        if (args.p_action === "reopen") tabelas.editorial_publications[0].scheduled_at = null;
         tabelas.editorial_publications[0].version = Number(tabelas.editorial_publications[0].version) + 1;
         return { data: { version: tabelas.editorial_publications[0].version } };
       },
@@ -422,9 +435,7 @@ describe("ações de publicação da peça", () => {
     expect(db.chamadas.map((c) => `${c.nome}:${c.args.p_action || ""}`)).toEqual([
       "transition_editorial_publication:cancel",
       "transition_editorial_publication:reopen",
-      "save_editorial_post:",
     ]);
-    expect(((db.chamadas[2].args.p_payload as Linha).publications as Linha[])[0].scheduled_at).toBeNull();
     expect(r.quando).toBeNull();
   });
 

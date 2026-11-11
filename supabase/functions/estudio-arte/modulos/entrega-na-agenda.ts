@@ -348,10 +348,15 @@ export async function planoDaSincronizacao(
   // A arte anterior já entrou na aprovação: a Agenda não troca o arquivo de um
   // post aprovado ou em aprovação. Nasce a revisão do mesmo item, com a mesma
   // conta e a mesma data (se havia), e a anterior vira histórico.
+  // Conta cancelada de propósito (Para Si) não ganha publicação nova neste
+  // post de revisão: o banco também recusa, olhando o post anterior.
   const anterior = publicacaoDaPeca(planejadas);
+  const contaCancelada = !!opcoes.conta && existente.publications.some((p) => p.status === "cancelled" && p.external_account_id === opcoes.conta!.id);
   const contaDaRevisao = anterior && anterior.external_account_id
     ? { id: anterior.external_account_id, platform: anterior.platform }
-    : opcoes.conta;
+    : contaCancelada
+      ? null
+      : opcoes.conta;
   const publicacoes: Record<string, unknown>[] = [];
   if (contaDaRevisao) {
     const p = await novaPublicacao(contaDaRevisao);
@@ -361,10 +366,13 @@ export async function planoDaSincronizacao(
     }
     publicacoes.push(p);
   }
+  const avisoCancelada = contaCancelada
+    ? "A publicação desta conta foi cancelada. A revisão não cria outra: um admin ou gestor marca a conta na hora de confirmar a data."
+    : null;
   return {
     acao: "revisao",
     motivo: null,
-    aviso: contaDaRevisao ? null : semConta,
+    aviso: avisoCancelada || (contaDaRevisao ? null : semConta),
     expectedVersion: null,
     postAnteriorId: existente.id,
     payload: {

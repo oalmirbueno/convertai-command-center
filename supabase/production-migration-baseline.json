@@ -2957,17 +2957,17 @@
     {
       "version": "20261111143000",
       "path": "supabase/migrations/20261111143000_reabrir_publicacao_cancelada.sql",
-      "local_sha256": "be99ebdb54c9e27303a2b7883db2d58f4b30135ec1ff935ca197e851d5b9773b",
+      "local_sha256": "3b9b83b76b1dea190eda8c70656c886233902fb5de55ff9a4d9728770cbf89cd",
       "remote_name": "reabrir_publicacao_cancelada",
-      "remote_statements_sha256": "3af338b1c74a296a7c9b9bcda88a3e380f3fc378d71f6abf20a8115a9c0ecc95",
+      "remote_statements_sha256": "5a1fa3b466aee3fa1bb5519ee86c25a7c489cd9b29a22180a4a0572571029fa1",
       "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20261111143100",
       "path": "supabase/migrations/20261111143100_retirar_arquivo_da_aprovacao.sql",
-      "local_sha256": "5f72d5f5e805f02dee231b0080c19d3cc3533bc4cf04bac2d4cde8e60300180a",
+      "local_sha256": "1caf73a155670807c540b8d2c2a419ccacef52e65d2d94cb38874cfc0a333879",
       "remote_name": "retirar_arquivo_da_aprovacao",
-      "remote_statements_sha256": "1927f8083cf63aaf84a14f2d8356f6faab48e52b26ebfb46c6665fafacc9e623",
+      "remote_statements_sha256": "0bf9a81e98721de6f83158a935eaed9e7860185a565671fac5361921c9b704a8",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

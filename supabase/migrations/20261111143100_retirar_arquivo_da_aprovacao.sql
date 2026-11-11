@@ -149,6 +149,26 @@ BEGIN
   IF _novo = _def THEN
     RAISE EXCEPTION 'mesa: ramo de aprovado nao encontrado';
   END IF;
+  _def := _novo;
+  _novo := replace(
+    _def,
+    $a$    IF _t.id IS NULL THEN
+      RETURN NEW;
+    END IF;$a$,
+    $b$    IF _t.id IS NULL THEN
+      -- Arquivo enviado só pelo Workspace: não há trabalho do Estúdio,
+      -- mas o vínculo da aprovação tem que sair mesmo assim.
+      IF NEW.event_type = 'approval_withdrawn' THEN
+        UPDATE public.workspace_nodes
+           SET sent_for_approval_file_id = NULL
+         WHERE sent_for_approval_file_id = NEW.file_id;
+      END IF;
+      RETURN NEW;
+    END IF;$b$
+  );
+  IF _novo = _def THEN
+    RAISE EXCEPTION 'mesa: retorno sem trabalho nao encontrado';
+  END IF;
   EXECUTE _novo;
 END
 $mesa$;

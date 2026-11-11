@@ -4,9 +4,11 @@
 -- reabrir_cancelada = true E editorial_can_publish_client (admin/gestor).
 -- Sem a marca, o erro é explícito. A UNIQUE não muda.
 --
--- O reopen limpa scheduled_at (o promotor não agenda a data antiga),
--- não estende a aprovação se o cancelamento não saiu de 'scheduled',
--- guarda o motivo no evento e não apaga failure_reason.
+-- O reopen de cancelada zera scheduled_at e NÃO religa o selo: a data
+-- nova tem que vir de uma pessoa (a RPC da Agenda). A impressão digital
+-- é refeita, senão as outras contas do mesmo post deixam de agendar.
+-- Falha ("Tentar de novo") não zera scheduled_at: retry_autopublish usa
+-- essa data. O motivo fica no evento e failure_reason não é apagado.
 -- A Agenda reagenda numa função só, depois de validar o horário.
 
 DO $mig$
@@ -43,31 +45,27 @@ BEGIN
     END IF;$a$,
     $b$    IF _publication.status NOT IN ('failed', 'cancelled') THEN RAISE EXCEPTION 'only failed or cancelled publications can be reopened'; END IF;
     _event_type := 'publication_reopened'; _to_status := 'planned';
-    -- Não estende a aprovação: o selo só volta se o cancelamento saiu de
-    -- uma publicação já agendada. A data antiga sai. O motivo fica na linha
-    -- e no evento (failure_reason não é zerado).
-    _snapshot_extended := false;
-    _reason := COALESCE(_reason, _internal.failure_reason);
-    UPDATE public.editorial_publications SET status = 'planned', scheduled_at = NULL, published_at = NULL, permalink = NULL, external_post_id = NULL WHERE id = _publication.id RETURNING * INTO _publication;
-    UPDATE public.editorial_publication_internal SET
-      included_in_approval_snapshot = CASE
-        WHEN EXISTS (
-          SELECT 1 FROM public.editorial_events AS ev
-          WHERE ev.publication_id = _publication.id
-            AND ev.event_type = 'publication_cancelled'
-            AND ev.from_status = 'scheduled'
-            AND ev.created_at = (
-              SELECT max(ev2.created_at) FROM public.editorial_events AS ev2
-              WHERE ev2.publication_id = _publication.id
-                AND ev2.event_type = 'publication_cancelled'
-            )
-        ) THEN true
-        ELSE included_in_approval_snapshot
-      END,
-      updated_by = _actor
-    WHERE publication_id = _publication.id;
-    IF _snapshot_extended THEN
+    IF _publication.status = 'cancelled' THEN
+      -- Cancelada: a data antiga sai e o selo fica desligado. O robô
+      -- "agenda sozinha" exige o selo para agendar, então a data nova
+      -- só entra pela RPC humana. A impressão digital é refeita porque
+      -- a publicação volta a contar; sem isso as outras contas do post
+      -- caem em "requires ready content and approved immutable files".
+      -- O motivo fica na linha (failure_reason não é zerado).
+      _snapshot_extended := false;
+      _reason := COALESCE(_reason, _internal.failure_reason);
+      UPDATE public.editorial_publications SET status = 'planned', scheduled_at = NULL, published_at = NULL, permalink = NULL, external_post_id = NULL WHERE id = _publication.id RETURNING * INTO _publication;
+      UPDATE public.editorial_publication_internal SET included_in_approval_snapshot = false, updated_by = _actor WHERE publication_id = _publication.id;
       UPDATE public.editorial_post_internal SET approval_fingerprint = public.editorial_compute_approval_fingerprint(_post.id), updated_by = _actor WHERE post_id = _post.id;
+    ELSE
+      -- Falha: "Tentar de novo" (retry_autopublish) agenda com scheduled_at.
+      -- Não zera a data. O selo volta como antes.
+      _snapshot_extended := NOT _internal.included_in_approval_snapshot;
+      UPDATE public.editorial_publications SET status = 'planned', published_at = NULL, permalink = NULL, external_post_id = NULL WHERE id = _publication.id RETURNING * INTO _publication;
+      UPDATE public.editorial_publication_internal SET included_in_approval_snapshot = true, failure_code = NULL, failure_reason = NULL, updated_by = _actor WHERE publication_id = _publication.id;
+      IF _snapshot_extended THEN
+        UPDATE public.editorial_post_internal SET approval_fingerprint = public.editorial_compute_approval_fingerprint(_post.id), updated_by = _actor WHERE post_id = _post.id;
+      END IF;
     END IF;$b$
   );
   IF _novo = _def THEN
@@ -109,9 +107,15 @@ BEGIN
     $b$    IF NOT _recovered AND _existing_publication.id IS NULL
       AND EXISTS (
         SELECT 1 FROM public.editorial_publications AS cancelled_row
-        WHERE cancelled_row.post_id = _post_id
-          AND cancelled_row.external_account_id = _account.id
+        WHERE cancelled_row.external_account_id = _account.id
           AND cancelled_row.status = 'cancelled'
+          AND (
+            cancelled_row.post_id = _post_id
+            OR (
+              _revision_of_post_id IS NOT NULL
+              AND cancelled_row.post_id = _revision_of_post_id
+            )
+          )
       ) THEN
       IF COALESCE(_plan->>'reabrir_cancelada', '') IS DISTINCT FROM 'true'
         OR NOT public.editorial_can_publish_client(_client_id) THEN
@@ -233,9 +237,15 @@ BEGIN
     $b$    IF NOT _recovered AND _existing_publication.id IS NULL
       AND EXISTS (
         SELECT 1 FROM public.editorial_publications AS cancelled_row
-        WHERE cancelled_row.post_id = _post_id
-          AND cancelled_row.external_account_id = _account.id
+        WHERE cancelled_row.external_account_id = _account.id
           AND cancelled_row.status = 'cancelled'
+          AND (
+            cancelled_row.post_id = _post_id
+            OR (
+              _revision_of_post_id IS NOT NULL
+              AND cancelled_row.post_id = _revision_of_post_id
+            )
+          )
       ) THEN
       IF COALESCE(_plan->>'reabrir_cancelada', '') IS DISTINCT FROM 'true'
         OR NOT public.editorial_can_publish_client(_client_id) THEN

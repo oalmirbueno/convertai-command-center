@@ -104,6 +104,8 @@ describe("reaproveitar publicação cancelada", () => {
     expect(sql).toContain("editorial_can_publish_client");
     expect(sql).toContain("cancelled publication stays cancelled");
     expect(sql).toContain("scheduled_at = NULL");
+    expect(sql).toContain("_revision_of_post_id");
+    expect(sql).toContain("included_in_approval_snapshot = false");
     expect(sql).toContain("reagendar_publicacao_cancelada");
     expect(sql).toContain("FOR UPDATE OF publication");
     expect(sql).toContain("editorial_file_is_publishable_media");
