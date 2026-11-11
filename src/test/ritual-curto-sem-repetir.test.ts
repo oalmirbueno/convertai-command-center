@@ -42,15 +42,16 @@ const pedido = { ritual: "prova_movimento", clientName: "Mirante", contactName: 
 const acabado = (b: string) => acabamentoDoRitual(b, { ritual: "prova_movimento", agora, contato: "Simone", negocio: "Mirante" }).texto;
 
 describe("ritual curto e sem repetir", () => {
-  it("o roteiro pede até 6 linhas na semana e o bloco JÁ DITO entra antes dos fatos", () => {
-    expect(SYSTEM_PROMPT).toContain("até 6 linhas de texto (os títulos não contam), até 650 caracteres");
-    expect(SYSTEM_PROMPT).toContain("no máximo UM número por mensagem da semana");
+  it("o roteiro pede até 8 linhas na semana e o bloco JÁ DITO entra antes dos fatos", () => {
+    expect(SYSTEM_PROMPT).toContain("até 8 linhas de texto (os títulos não contam), até 900 caracteres");
+    expect(SYSTEM_PROMPT).toContain("NÚMEROS DO PERFIL E DOS ANÚNCIOS, SEMPRE PELO LADO POSITIVO");
+    expect(SYSTEM_PROMPT).toContain("Número que caiu fica de fora");
     expect(SYSTEM_PROMPT).toContain('"sem_novidade":false');
     expect(SYSTEM_PROMPT).not.toContain("Entre 10 e 18 linhas");
     const usuario = montarPedidoAoEscritor(pedido);
     expect(usuario.indexOf("JÁ DITO A ESTE CLIENTE")).toBeGreaterThan(-1);
     expect(usuario.indexOf("JÁ DITO A ESTE CLIENTE")).toBeLessThan(usuario.indexOf("FATOS DO PAINEL"));
-    expect(limiteDoRitual("rota_semana")).toEqual({ linhas: 6, caracteres: 650 });
+    expect(limiteDoRitual("rota_semana")).toEqual({ linhas: 8, caracteres: 900 });
     expect(limiteDoRitual("radar_aceleriq").linhas).toBe(14);
   });
 
@@ -112,7 +113,7 @@ describe("ritual curto e sem repetir", () => {
     const longa = Array.from({ length: 12 }, (_, i) => `Linha ${i}.`).join("\n");
     const r2 = await escreverRitual({ ...pedido, textoAtual: "x" }, vi.fn().mockResolvedValue(resposta(longa)) as never, vi.fn());
     // 23/10: a linha do painel entra pelo acabamento: 12 linhas da IA + 1.
-    expect(r2?.alertas.join(" ")).toContain("A mensagem saiu com 13 linhas (o combinado é até 6)");
+    expect(r2?.alertas.join(" ")).toContain("A mensagem saiu com 13 linhas (o combinado é até 8)");
   });
 });
 
