@@ -40,6 +40,11 @@
  *   quem chamou), pasta materiais, carrossel com pai e filhos "(n/N)", legenda
  *   no pai, ligado ao projeto do item. Nao pede aprovacao (isso e da Entrega).
  * - referencias { subacao: importar_pinterest | sincronizar_workspace | ler }.
+ * - importar_arte_final { trabalho_id, ordem, versao_esperada, pedido_id,
+ *   imagem_base64 } (12/11/2026): arte final pronta (só PNG, feita
+ *   fora) vira a nova versão da lâmina pelo mesmo salvarNaMesa + mutarTrabalho
+ *   do gerar_card, sem IA e sem custo. Trabalho entregue ou em aprovação
+ *   recusa com 409 (modulos/arte-final-importada.ts).
  * - conversar { trabalho_id, mensagem, ordem? }: conversa com o diretor de
  *   arte dentro do Estúdio (pedido do dono em 24/09). O diretor lê o conteúdo
  *   inteiro do trabalho, a marca, as referências e o acervo, olha a lâmina em
@@ -595,6 +600,7 @@ import { acoesDaPublicacaoDaPeca, dataDoConteudo, horaComEspacoNoDia, type Traba
 // Frente EN (28/09): entregar com três opções (pronto para agendar, aprovação, só Arquivos).
 import { acoesDaEntregaComOpcoes, type TrabalhoDaEntrega } from "./entrega-com-opcoes.ts";
 import { acoesDoTemplateProfile, type TemplateProfile } from "./modulos/template-profile.ts";
+import { acoesDaArteImportada, gravacaoNaoOcorreuNoMutar } from "./modulos/arte-final-importada.ts";
 // 22/10/2026: o padrão visual da campanha (referência da campanha lida uma vez; toda peça e o selo seguem).
 import { blocoDoPadrao, normalizarPadrao, referenciasDaPecaComPadrao } from "../_shared/padrao-da-campanha.ts";
 import { linhaDoTomParaAPeca, tomDaCampanha } from "../agente-calendario/modulos/tom-da-campanha.ts";
@@ -11941,6 +11947,22 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
       ...t.direcao,
       cards: t.direcao.cards.map((c) => c.ordem === ordem ? { ...c, texto_exato: novoTexto, blocos: blocosDoTexto(novoTexto, c.funcao) } : c),
     }),
+  }),
+  // 12/11/2026: arte final pronta (feita fora) entra na lâmina pelo mesmo caminho de gravação do Gerar, sem IA.
+  ...acoesDaArteImportada<Chamador, Trabalho>({
+    erro: (status, codigo, mensagem, detalhes) => new ErroEstudio(status, codigo, mensagem, detalhes),
+    json,
+    trabalhoComAcesso,
+    mutarTrabalho,
+    salvarImagem: (t, ordem, proxima, bytes, mime) => salvarNaMesa(t, ordem, proxima, bytes, mime),
+    descartarUpload: async (caminho) => { await servico().storage.from("mesa").remove([caminho]); },
+    gravacaoNaoOcorreu: (e) => e instanceof ErroEstudio && gravacaoNaoOcorreuNoMutar(e),
+    quadro: (t) => {
+      const formato = formatoDoPost(t.direcao.formato);
+      return { formato, ...QUADRO_DO_POST[formato].final };
+    },
+    ehPostDeFotos: (t) => ehPostDeFotos(t.direcao),
+    statusDepoisDeGerar: (t, ordem) => t.direcao.cards.every((c) => c.ordem === ordem || t.cards.some((v) => v.ordem === c.ordem)) ? "pronto" : "gerando",
   }),
   // 21/10: "Gerar" no Template. Texto pelo redator do refino (base de copy, voz e cérebro); foto pelo gerador do trabalho, sem texto.
   ...acoesDaGeracaoDoTemplate<Chamador, Trabalho>({

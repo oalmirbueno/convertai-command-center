@@ -119,6 +119,7 @@ import { useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
 import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
+import EstudioArteFinalPronta, { arteFinalTravada } from "./EstudioArteFinalPronta";
 import EstudioRefinarTexto from "./EstudioRefinarTexto";
 import OpcoesDaCopy, { NotaDaCopy, opcoesDaResposta, type OpcaoDaCopy } from "@/components/sistema/OpcoesDaCopy";
 import EstudioTextoDaLamina from "./EstudioTextoDaLamina";
@@ -1939,6 +1940,20 @@ export function DetalheDoItem({
       partesCorrigir={() => partesAjustar().concat(partesConferir())}
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
+      arteFinal={
+        <EstudioArteFinalPronta
+          key={`arte-final-${trabalho.id}-${cardSelecionado.ordem}`}
+          trabalhoId={trabalho.id}
+          ordem={cardSelecionado.ordem}
+          versaoAtual={Math.max(0, ...(trabalho.cards || []).filter((v) => v.ordem === cardSelecionado.ordem).map((v) => v.versao))}
+          bloqueado={arteFinalTravada(trabalho) || laminaOcupada(cardSelecionado.ordem)}
+          motivoDoBloqueio={arteFinalTravada(trabalho) ? "Trabalho entregue ou em aprovação: reabra para corrigir antes de trocar a arte." : "Espere a lâmina terminar."}
+          onGravado={(r) => {
+            gravarTrabalhoNoCache(queryClient, clientId, r.trabalho);
+            atualizar();
+          }}
+        />
+      }
       gif={<GifDaLamina trabalhoId={trabalho.id} ordem={cardSelecionado.ordem} gifs={(trabalho.direcao as any)?.gifs || []} ocupado={laminaOcupada(cardSelecionado.ordem)} onPronto={atualizar} />}
       semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
       instrucaoInicial={instrucaoDoCliente && instrucaoDoCliente.ordem === cardSelecionado.ordem ? instrucaoDoCliente.texto : null}

@@ -297,6 +297,7 @@ export default function CardDoEstudio({
   instrucaoInicial,
   onDesfazerVersao,
   gif,
+  arteFinal,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -340,6 +341,8 @@ export default function CardDoEstudio({
   onDesfazerVersao?: (versao: number) => Promise<unknown>;
   /** 05/11/2026: "Fazer GIF"; quem não passa (Estúdio Ads) segue igual. */
   gif?: ReactNode;
+  /** 12/11/2026: "Enviar arte final pronta" (arquivo feito fora entra direto na lâmina, sem Gerar). Separado da referência. */
+  arteFinal?: ReactNode;
 }) {
   const { clientId } = useMesa();
   // Frente RO, fase 2: imagens no Ajustar e a proposta para o pedido vago.
@@ -807,6 +810,8 @@ export default function CardDoEstudio({
           )}
         </section>
       )}
+
+      {arteFinal}
 
       {ordenadas.length > 0 && gif}
 
