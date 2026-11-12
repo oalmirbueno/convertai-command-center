@@ -3001,6 +3001,14 @@
       "remote_name": "perfis_moldes_resumo_e_vigia",
       "remote_statements_sha256": "facfcdff0375279745d1414dc9c54ace731b406b0929c1be15c845b63dd253f6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261112130000",
+      "path": "supabase/migrations/20261112130000_aviso_de_peca_nova_no_grupo.sql",
+      "local_sha256": "49b0040f6db96a10fb5fd0bfc1bbf664049238be3e9410fdb7ec6e72ac6b24c8",
+      "remote_name": "aviso_de_peca_nova_no_grupo",
+      "remote_statements_sha256": "968012ed0e33492a4497940a016df89b78ec0abc6e870f351475816ec2a71835",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
