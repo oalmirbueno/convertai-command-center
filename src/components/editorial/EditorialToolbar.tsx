@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   CalendarPlus2,
@@ -28,6 +28,84 @@ import { Etapas, botao, campo, juntar, texto } from "@/components/sistema";
 import { useCelular } from "@/hooks/useCelular";
 
 export type EditorialView = "board" | "month" | "week" | "list";
+
+/**
+ * Campo da busca com o texto local (12/11/2026, "Softy" virou "Sy —
+ * criativosy"). A busca mora no endereço (?q=) e o React Router 7 aplica
+ * toda mudança de endereço dentro de startTransition: o input controlado
+ * direto pelo endereço ficava um passo atrás da digitação, o React devolvia
+ * o valor antigo ao campo e letras sumiam ou o cursor pulava para o fim.
+ * Aqui o que se digita aparece na hora e segue para o endereço a cada tecla.
+ *
+ * Eco x mudança de fora, sem comparar só o texto: cada tecla abre uma
+ * revisão local pendente (o último texto enviado). Enquanto ela está
+ * pendente e o campo em foco, valores do endereço diferentes dela são ecos
+ * atrasados (ou ambíguos) e não voltam ao campo; quando o endereço chega no
+ * último texto enviado, a revisão fecha. Com nada pendente, toda mudança do
+ * endereço vale, mesmo em foco e mesmo que repita um texto já enviado (enviar
+ * B, depois C, navegação de fora volta B: o campo mostra B). Ao sair do
+ * campo, ele assume o endereço. "Limpar filtros" manda um sinal explícito
+ * (versaoDoReset): fecha a pendência e assume o endereço, mesmo que ele já
+ * estivesse vazio durante a digitação pendente.
+ */
+export function CampoDeBusca({
+  valor,
+  onMudar,
+  versaoDoReset = 0,
+  className,
+}: {
+  valor: string;
+  onMudar: (valor: string) => void;
+  /** Incrementada pelo pai em "Limpar filtros". */
+  versaoDoReset?: number;
+  className?: string;
+}) {
+  const [texto, setTexto] = useState(valor);
+  const ref = useRef<HTMLInputElement>(null);
+  // Último texto enviado que o endereço ainda não confirmou (null = nada pendente).
+  const pendente = useRef<string | null>(null);
+  const valorAtual = useRef(valor);
+  valorAtual.current = valor;
+  useEffect(() => {
+    if (pendente.current !== null) {
+      if (valor === pendente.current) {
+        pendente.current = null;
+        return;
+      }
+      const emFoco = typeof document !== "undefined" && ref.current !== null && document.activeElement === ref.current;
+      if (emFoco) return;
+      pendente.current = null;
+    }
+    setTexto(valor);
+  }, [valor]);
+  const resetVisto = useRef(versaoDoReset);
+  useEffect(() => {
+    if (resetVisto.current === versaoDoReset) return;
+    resetVisto.current = versaoDoReset;
+    pendente.current = null;
+    setTexto(valorAtual.current);
+  }, [versaoDoReset]);
+  return (
+    <input
+      ref={ref}
+      type="search"
+      value={texto}
+      onChange={(event) => {
+        const novo = event.target.value;
+        setTexto(novo);
+        pendente.current = novo;
+        onMudar(novo);
+      }}
+      onBlur={() => {
+        pendente.current = null;
+        setTexto(valorAtual.current);
+      }}
+      placeholder="Buscar conteúdo"
+      aria-label="Buscar conteúdo, legenda ou conta"
+      className={className}
+    />
+  );
+}
 
 interface SelectOption {
   value: string;
@@ -217,6 +295,12 @@ export default function EditorialToolbar({
       responsibleId,
     ].some(isActiveFilter);
   const celular = useCelular();
+  // Sinal explícito para a busca local: "Limpar filtros" ressincroniza o campo.
+  const [versaoDoReset, setVersaoDoReset] = useState(0);
+  const limparFiltros = () => {
+    setVersaoDoReset((v) => v + 1);
+    onClearFilters();
+  };
 
   // O corpo do "Filtros" é o mesmo no computador e no celular (16/10/2026).
   const cabecalhoDosFiltros = (
@@ -225,7 +309,7 @@ export default function EditorialToolbar({
       <button
         type="button"
         className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-        onClick={onClearFilters}
+        onClick={limparFiltros}
         disabled={!hasAnyActiveFilter}
       >
         <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -319,12 +403,10 @@ export default function EditorialToolbar({
               {cabecalhoDosFiltros}
               <div className="relative mb-3 min-w-0">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => onSearchChange(event.target.value)}
-                  placeholder="Buscar conteúdo"
-                  aria-label="Buscar conteúdo, legenda ou conta"
+                <CampoDeBusca
+                  valor={search}
+                  onMudar={onSearchChange}
+                  versaoDoReset={versaoDoReset}
                   className={juntar(campo, "h-11 pl-9")}
                 />
               </div>
@@ -472,12 +554,10 @@ export default function EditorialToolbar({
       <div className="mb-2 ml-auto flex w-full min-w-0 items-center sm:w-auto sm:flex-1 sm:justify-end">
         <div className="relative mr-2 min-w-0 flex-1 lg:w-[200px] lg:flex-none">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar conteúdo"
-            aria-label="Buscar conteúdo, legenda ou conta"
+          <CampoDeBusca
+            valor={search}
+            onMudar={onSearchChange}
+            versaoDoReset={versaoDoReset}
             className={juntar(campo, "pl-9")}
           />
         </div>
@@ -531,7 +611,7 @@ export default function EditorialToolbar({
         {hasAnyActiveFilter && (
           <button
             type="button"
-            onClick={onClearFilters}
+            onClick={limparFiltros}
             className={botao.icone}
             aria-label="Limpar filtros"
             title="Limpar filtros"
