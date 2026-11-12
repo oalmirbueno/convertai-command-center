@@ -16,13 +16,27 @@ export type ClienteDaCarteira = {
   entrou: string; // ISO
   tipo: "recurring" | "hybrid" | "one_off";
   ativo: boolean;
+  /** Serviços contratados, pelo nome que a equipe usa (Social, Tráfego, Site...). */
+  servicos?: string[];
+  plano?: string | null;
+  /** Valor da mensalidade (0 quando não tem). */
+  mensal?: number;
+  /** Valor contratado em projeto avulso (0 quando não tem). */
+  avulso?: number;
+  /** Quando saiu (plano inativo): a data do último pagamento, que é o que o cadastro permite saber. */
+  saiuEm?: string | null;
 };
 
 export type Recebimento = { data: string; valor: number; clienteId?: string | null };
 
 export type Periodo = "tudo" | "12m" | "6m" | "3m" | "ano";
 export type Grao = "mes" | "semana";
-export type TipoDoFiltro = "todos" | "recurring" | "hybrid" | "one_off";
+/** "mensal" = quem tem mensalidade; "avulso" = quem contratou projeto avulso. O híbrido entra nos dois. */
+export type TipoDoFiltro = "todos" | "mensal" | "avulso";
+
+export const temMensalidade = (c: ClienteDaCarteira) => (c.mensal ?? 0) > 0 || c.tipo === "recurring" || c.tipo === "hybrid";
+export const temAvulso = (c: ClienteDaCarteira) => (c.avulso ?? 0) > 0 || c.tipo === "one_off" || c.tipo === "hybrid";
+export const doTipo = (c: ClienteDaCarteira, tipo: TipoDoFiltro) => tipo === "todos" || (tipo === "mensal" ? temMensalidade(c) : temAvulso(c));
 
 export type Balde = {
   chave: string; // 2026-07 ou 2026-07-06 (segunda da semana)
@@ -66,6 +80,24 @@ export function nomeDoMes(chave: string): string {
   const [a, m] = chave.split("-").map(Number);
   const nomes = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
   return `${nomes[m - 1]} de ${a}`;
+}
+
+/** Em que mês (ou semana) cai aquela data. */
+export function chaveDaData(iso: string, grao: Grao): string | null {
+  return chaveDe(iso, grao);
+}
+
+/** "05/11/2026", no fuso de São Paulo. */
+export function dataCurta(iso: string): string {
+  const d = diaEmSaoPaulo(iso);
+  return d ? `${dois(d.d)}/${dois(d.m)}/${d.a}` : "";
+}
+
+/** Quantos dos que entraram contrataram cada serviço, do mais pedido para o menos. */
+export function servicosDeQuemEntrou(clientes: ClienteDaCarteira[]): Array<{ servico: string; quantos: number }> {
+  const conta = new Map<string, number>();
+  for (const c of clientes) for (const s of c.servicos ?? []) conta.set(s, (conta.get(s) ?? 0) + 1);
+  return [...conta.entries()].map(([servico, quantos]) => ({ servico, quantos })).sort((a, b) => b.quantos - a.quantos || a.servico.localeCompare(b.servico, "pt-BR"));
 }
 
 function chaveDe(iso: string, grao: Grao): string | null {
@@ -120,8 +152,8 @@ export function serieDoCrescimento(
 ): Balde[] {
   const hoje = opcoes.hoje ?? new Date();
   const chaveDeHoje = chaveDe(hoje.toISOString(), opcoes.grao)!;
-  const doTipo = clientes.filter((c) => opcoes.tipo === "todos" || c.tipo === opcoes.tipo);
-  const idsDoTipo = new Set(doTipo.map((c) => c.id));
+  const filtrados = clientes.filter((c) => doTipo(c, opcoes.tipo));
+  const idsDoTipo = new Set(filtrados.map((c) => c.id));
   const dinheiro = recebimentos.filter((r) => opcoes.tipo === "todos" || (r.clienteId && idsDoTipo.has(r.clienteId)));
 
   const mapa = new Map<string, Balde>();
@@ -133,7 +165,7 @@ export function serieDoCrescimento(
     }
     return b;
   };
-  for (const c of doTipo) {
+  for (const c of filtrados) {
     const k = chaveDe(c.entrou, opcoes.grao);
     if (!k) continue;
     const b = balde(k);
@@ -169,13 +201,15 @@ export type ResumoDoCrescimento = {
   mesComMenosEntradas: Balde | null;
   mesComMaiorRecebido: Balde | null;
   mediaPorMes: number;
+  /** Quantos meses fechados entraram na média (o mês corrente fica de fora). */
+  mesesNaMedia: number;
 };
 
 /** Os números de cima e os destaques. Sempre sobre o histórico inteiro, por mês. */
 export function resumoDoCrescimento(clientes: ClienteDaCarteira[], recebimentos: Recebimento[], tipo: TipoDoFiltro = "todos", hoje: Date = new Date()): ResumoDoCrescimento {
   const meses = serieDoCrescimento(clientes, recebimentos, { periodo: "tudo", grao: "mes", tipo, hoje });
   const semanas = serieDoCrescimento(clientes, recebimentos, { periodo: "3m", grao: "semana", tipo, hoje });
-  const doTipo = clientes.filter((c) => tipo === "todos" || c.tipo === tipo);
+  const filtrados = clientes.filter((c) => doTipo(c, tipo));
   const chaveMes = chaveDe(hoje.toISOString(), "mes")!;
   const chaveSemana = chaveDe(hoje.toISOString(), "semana")!;
   const i = meses.findIndex((b) => b.chave === chaveMes);
@@ -188,8 +222,8 @@ export function resumoDoCrescimento(clientes: ClienteDaCarteira[], recebimentos:
   const maisEntradas = maior(meses, "entraram");
   const maiorRecebido = maior(meses, "recebido");
   return {
-    ativos: doTipo.filter((c) => c.ativo).length,
-    total: doTipo.length,
+    ativos: filtrados.filter((c) => c.ativo).length,
+    total: filtrados.length,
     entraramNoMes: esteMes?.entraram ?? 0,
     entraramNoMesPassado: mesPassado?.entraram ?? 0,
     entraramNaSemana: semanas.find((b) => b.chave === chaveSemana)?.entraram ?? 0,
@@ -198,6 +232,81 @@ export function resumoDoCrescimento(clientes: ClienteDaCarteira[], recebimentos:
     mesComMaisEntradas: maisEntradas && maisEntradas.entraram > 0 ? maisEntradas : null,
     mesComMenosEntradas: fechados.length > 1 ? menor(fechados) : null,
     mesComMaiorRecebido: maiorRecebido && maiorRecebido.recebido > 0 ? maiorRecebido : null,
+    mesesNaMedia: fechados.length,
     mediaPorMes: fechados.length ? Math.round((fechados.reduce((s, b) => s + b.entraram, 0) / fechados.length) * 10) / 10 : 0,
+  };
+}
+
+const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/** Em que dia da semana os clientes entram: os sete dias (segunda primeiro) e o melhor. */
+export function entradasPorDiaDaSemana(clientes: ClienteDaCarteira[]): { dias: Array<{ dia: string; quantos: number }>; melhor: { dia: string; quantos: number; parte: number } | null } {
+  const conta = [0, 0, 0, 0, 0, 0, 0];
+  let total = 0;
+  for (const c of clientes) {
+    const d = diaEmSaoPaulo(c.entrou);
+    if (!d) continue;
+    conta[new Date(Date.UTC(d.a, d.m - 1, d.d)).getUTCDay()] += 1;
+    total += 1;
+  }
+  const ordem = [1, 2, 3, 4, 5, 6, 0];
+  const dias = ordem.map((i) => ({ dia: DIAS[i], quantos: conta[i] }));
+  const melhor = dias.reduce<{ dia: string; quantos: number } | null>((m, x) => (!m || x.quantos > m.quantos ? x : m), null);
+  return { dias, melhor: melhor && melhor.quantos > 0 ? { ...melhor, parte: Math.round((melhor.quantos / total) * 100) } : null };
+}
+
+/** O que entrou em valor: mensalidades novas (por mês) e avulsos contratados. */
+export function valorDeQuemEntrou(clientes: ClienteDaCarteira[]): { mensalidades: number; mensalPorMes: number; avulsos: number; avulsoTotal: number } {
+  const comMensal = clientes.filter((c) => (c.mensal ?? 0) > 0);
+  const comAvulso = clientes.filter((c) => (c.avulso ?? 0) > 0);
+  const soma = (l: ClienteDaCarteira[], k: "mensal" | "avulso") => Math.round(l.reduce((s, c) => s + (c[k] ?? 0), 0) * 100) / 100;
+  return { mensalidades: comMensal.length, mensalPorMes: soma(comMensal, "mensal"), avulsos: comAvulso.length, avulsoTotal: soma(comAvulso, "avulso") };
+}
+
+export type MesDeSaida = { chave: string; rotulo: string; base: number; sairam: number; nomes: string[]; perdido: number; churn: number };
+export type ResumoDasSaidas = {
+  meses: MesDeSaida[];
+  /** Mensalistas que saíram (plano inativo), do mais recente para o mais antigo. */
+  quemSaiu: ClienteDaCarteira[];
+  /** Avulsos concluídos: não são perda, o projeto acabou. */
+  avulsosConcluidos: ClienteDaCarteira[];
+  mensalistasQueJaPassaram: number;
+  mediaDeSaidasPorMes: number;
+  churnMedio: number;
+  mensalidadePerdida: number;
+  /** Quanto tempo, em meses, ficou quem saiu. */
+  permanenciaMedia: number;
+};
+
+/**
+ * Saídas e churn, só de quem tinha mensalidade. A cada mês: a base é quem tinha mensalidade no começo
+ * do mês e ainda não tinha saído; o churn é quem saiu no mês dividido pela base. As médias usam só mês
+ * fechado. Avulso concluído fica numa lista à parte: projeto que terminou não é cliente perdido.
+ */
+export function resumoDasSaidas(clientes: ClienteDaCarteira[], hoje: Date = new Date()): ResumoDasSaidas {
+  const mensalistas = clientes.filter((c) => (c.mensal ?? 0) > 0 || c.tipo === "recurring" || c.tipo === "hybrid");
+  const quemSaiu = mensalistas.filter((c) => !c.ativo && c.saiuEm).sort((a, b) => (String(a.saiuEm) < String(b.saiuEm) ? 1 : -1));
+  const avulsosConcluidos = clientes.filter((c) => !c.ativo && !mensalistas.includes(c));
+  const chaveHoje = chaveDe(hoje.toISOString(), "mes")!;
+  const entradas = mensalistas.map((c) => chaveDe(c.entrou, "mes")).filter(Boolean) as string[];
+  if (entradas.length === 0) return { meses: [], quemSaiu, avulsosConcluidos, mensalistasQueJaPassaram: 0, mediaDeSaidasPorMes: 0, churnMedio: 0, mensalidadePerdida: 0, permanenciaMedia: 0 };
+  const primeira = entradas.sort()[0];
+  const meses: MesDeSaida[] = chavesSeguidas(primeira, chaveHoje, "mes").map((chave) => {
+    const base = mensalistas.filter((c) => (chaveDe(c.entrou, "mes") || "") < chave && !(c.saiuEm && !c.ativo && (chaveDe(c.saiuEm, "mes") || "") < chave)).length;
+    const doMes = quemSaiu.filter((c) => chaveDe(String(c.saiuEm), "mes") === chave);
+    return { chave, rotulo: rotuloDoMes(chave), base, sairam: doMes.length, nomes: doMes.map((c) => c.nome), perdido: doMes.reduce((s, c) => s + (c.mensal ?? 0), 0), churn: base > 0 ? Math.round((doMes.length / base) * 1000) / 10 : 0 };
+  });
+  const fechados = meses.filter((m) => m.chave < chaveHoje);
+  const comBase = fechados.filter((m) => m.base > 0);
+  const mesesEntre = (a: string, b: string) => { const x = diaEmSaoPaulo(a); const y = diaEmSaoPaulo(b); return x && y ? Math.max(0, (y.a - x.a) * 12 + (y.m - x.m) + (y.d - x.d) / 30) : 0; };
+  return {
+    meses,
+    quemSaiu,
+    avulsosConcluidos,
+    mensalistasQueJaPassaram: mensalistas.length,
+    mediaDeSaidasPorMes: fechados.length ? Math.round((fechados.reduce((s, m) => s + m.sairam, 0) / fechados.length) * 10) / 10 : 0,
+    churnMedio: comBase.length ? Math.round((comBase.reduce((s, m) => s + m.churn, 0) / comBase.length) * 10) / 10 : 0,
+    mensalidadePerdida: Math.round(quemSaiu.reduce((s, c) => s + (c.mensal ?? 0), 0) * 100) / 100,
+    permanenciaMedia: quemSaiu.length ? Math.round((quemSaiu.reduce((s, c) => s + mesesEntre(c.entrou, String(c.saiuEm)), 0) / quemSaiu.length) * 10) / 10 : 0,
   };
 }

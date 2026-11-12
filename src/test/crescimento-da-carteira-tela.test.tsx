@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const clientes = [
   { id: "a", company_name: "SKC", created_at: "2026-02-10T12:00:00Z", client_type: "recurring", plan_status: "active", services_config: {} },
   { id: "b", company_name: "Verzelo", created_at: "2026-07-03T12:00:00Z", client_type: "hybrid", plan_status: "active", services_config: {} },
-  { id: "c", company_name: "Prix", created_at: "2026-11-05T12:00:00Z", client_type: "hybrid", plan_status: "active", services_config: {} },
+  { id: "c", company_name: "Prix", created_at: "2026-11-05T12:00:00Z", client_type: "hybrid", plan_status: "active", plan_value: 39.9, plan_name: "Pro", services_config: { social: true, trafego: true } },
   { id: "d", company_name: "Avulso X", created_at: "2026-09-05T12:00:00Z", client_type: "one_off", plan_status: "inactive", services_config: {} },
   { id: "i", company_name: "Aceleriq", created_at: "2026-02-01T12:00:00Z", client_type: "recurring", plan_status: "active", services_config: { internal_company: true } },
 ];
@@ -22,9 +22,14 @@ vi.mock("@/integrations/supabase/client", () => {
 
 (globalThis as any).ResizeObserver = (globalThis as any).ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
 
-import ConteudoDoCrescimento from "@/components/clientes/CrescimentoDaCarteira";
+import ConteudoDoCrescimento, { umMesDepois } from "@/components/clientes/CrescimentoDaCarteira";
 
 describe("janela do crescimento da carteira", () => {
+  it("a saída é o fim do último mês pago", () => {
+    expect(umMesDepois("2026-08-11")).toBe("2026-09-11");
+    expect(umMesDepois("2026-12-20")).toBe("2027-01-20");
+    expect(umMesDepois("2026-01-31")).toBe("2026-02-28");
+  });
   it("abre sem travar, mostra os números, os destaques e a lista de quem entrou", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(h(QueryClientProvider, { client: qc }, h(ConteudoDoCrescimento)));
@@ -35,7 +40,16 @@ describe("janela do crescimento da carteira", () => {
     const linha = screen.getByRole("button", { name: /novembro de 2026/ });
     expect(linha.textContent).toContain("Prix");
     fireEvent.click(linha);
-    expect(document.querySelector("[data-quem-entrou]")?.textContent).toContain("Prix (Híbrido)");
+    const quem = document.querySelector("[data-quem-entrou]")?.textContent || "";
+    expect(quem).toContain("05/11/2026");
+    expect(quem).toContain("Prix");
+    expect(quem).toContain("Mensalidade");
+    expect(quem).toContain("Social, Tráfego");
+    expect(document.querySelector('[data-destaque="Média mensal de entradas"]')?.textContent).toContain("por mês");
+    expect(document.querySelector('[data-destaque="Melhor dia da semana"]')).toBeTruthy();
+    expect(document.querySelector("[data-valor-do-periodo]")?.textContent).toContain("Mensalidades novas");
+    expect(document.querySelector("[data-saidas]")?.textContent).toContain("Churn médio por mês");
+    expect(document.querySelector("[data-avulsos-concluidos]")?.textContent).toContain("Avulsos concluídos (1)");
     fireEvent.click(screen.getByText("Por semana"));
     expect(document.querySelector("[data-total-do-periodo]")?.textContent).toContain("entrada");
   }, 20000);
