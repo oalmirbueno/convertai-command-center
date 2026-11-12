@@ -1,5 +1,6 @@
 import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import BotaoDoCrescimento from "@/components/clientes/BotaoDoCrescimento";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useFreelaContatos } from "@/components/freela/dadosFreela";
 import { useQuery } from "@tanstack/react-query";
@@ -1206,6 +1207,7 @@ function LegacyFinanceiro() {
           (mostrarMes || isAdmin || opcoesDasAbas.length > 1) ? (
             <>
               {/* Seletores pequenos moram na linha do título (nada de linha própria). */}
+              {isAdmin && <BotaoDoCrescimento />}
               {opcoesDasAbas.length > 1 && (
                 <SeletorCompacto
                   opcoes={opcoesDasAbas}

@@ -53,6 +53,7 @@ import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
+import BotaoDoCrescimento from "@/components/clientes/BotaoDoCrescimento";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useBilling } from "@/hooks/useFinancialData";
 import { moedaDe } from "@/lib/freela/freelaLib";
@@ -1446,6 +1447,7 @@ export default function Clients() {
   ) : null;
   const acoesDoAdmin = isAdmin ? (
     <>
+      <BotaoDoCrescimento />
       {!isMobile && (
         <button
           type="button"
