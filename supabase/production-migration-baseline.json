@@ -3009,6 +3009,14 @@
       "remote_name": "aviso_de_peca_nova_no_grupo",
       "remote_statements_sha256": "968012ed0e33492a4497940a016df89b78ec0abc6e870f351475816ec2a71835",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261112150000",
+      "path": "supabase/migrations/20261112150000_aviso_inclui_pecas_antigas.sql",
+      "local_sha256": "40b2284cc950c5d35dc0c8a9aa42b6e1ce027340012a03b81db9a96a4462e7ea",
+      "remote_name": "aviso_inclui_pecas_antigas",
+      "remote_statements_sha256": "53ca0fc7e98a02b80208449d39de1158878367d218ef2c3611decfa88a0cb78a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
