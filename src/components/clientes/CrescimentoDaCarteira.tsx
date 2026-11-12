@@ -160,13 +160,13 @@ export function ConteudoDoCrescimento() {
                 labelFormatter={(r: any, itens: any) => (grao === "mes" && itens?.[0]?.payload?.chave ? nomeDoMes(itens[0].payload.chave) : `semana de ${r}`)}
               />
               <Bar yAxisId="clientes" dataKey="entraram" name="Entraram" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={false} />
-              <Line yAxisId="dinheiro" type="monotone" dataKey="recebido" name="Recebido" stroke="hsl(var(--success))" strokeWidth={2} dot={{ r: 2.5 }} isAnimationActive={false} />
+              <Line yAxisId="dinheiro" type="linear" dataKey="recebido" name="Recebido" stroke="hsl(var(--info))" strokeWidth={2} dot={{ r: 2.5 }} isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
         <p className={juntar(texto.auxiliar, "mt-1 flex flex-wrap items-center [&>*]:mr-3")}>
           <span className="inline-flex items-center"><span className="mr-1.5 h-2 w-2 rounded-sm bg-primary" aria-hidden />clientes que entraram</span>
-          <span className="inline-flex items-center"><span className="mr-1.5 h-0.5 w-3 bg-success" aria-hidden />valor recebido</span>
+          <span className="inline-flex items-center"><span className="mr-1.5 h-0.5 w-3 bg-info" aria-hidden />valor recebido</span>
           <span>Toque numa barra para ver quem entrou.</span>
         </p>
       </div>
