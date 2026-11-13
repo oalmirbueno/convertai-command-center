@@ -50,6 +50,7 @@ const AdminMembros = rotas.lazy(() => import("@/pages/AdminMembros"));
 const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
 // 13/11/2026: o produto CRM e E-mail (um lugar à parte), a página de venda e a administração dele.
 const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
+const ProdutoFormulario = rotas.lazy(() => import("@/pages/ProdutoFormulario"));
 const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
 const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
@@ -380,6 +381,7 @@ export function AppRoutes() {
       <Route path="/crm" element={<ProdutoLanding />} />
       {/* A chegada vem antes do cadastro: ramo, objetivo, empresa e funil; o acesso é o último passo. */}
       <Route path="/crm/comecar" element={<ProdutoComecar />} />
+      <Route path="/f/:token" element={<ProdutoFormulario />} />
       <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />

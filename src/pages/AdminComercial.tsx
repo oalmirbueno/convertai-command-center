@@ -45,6 +45,8 @@ import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/tem
 import { FaixaDeNumeros } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
+import CamposDoNegocio from "@/components/produto/CamposDoNegocio";
+import { rotulosDeValor } from "@/lib/produto/nichos";
 import { escopoDoCrm, naConta } from "@/lib/comercial/escopo";
 import OrigemDoLead from "@/components/ads/OrigemDoLead";
 import CaixaDoComercial, { novosNaCaixa, useCaixaDoComercial } from "@/components/comercial/CaixaDoComercial";
@@ -207,8 +209,25 @@ const TITULO_DA_ABA_NA_CONTA: Partial<Record<Aba, string>> = {
   campanhas: "O que a empresa investe para aparecer, e quantos clientes aquilo virou. O lead aponta para a campanha, então o custo por cliente sai sozinho.",
 };
 
+/** No CRM da empresa: quem está logado, e se ele só pode pegar negócio para si (vendedor em empresa que separa por vendedor). */
+const donoPadraoNaConta = (): string => {
+  const e = escopoDoCrm();
+  return e.modo === "conta" && e.euId ? e.euId : "";
+};
+const soPegaParaSi = (): boolean => {
+  const e = escopoDoCrm();
+  return e.modo === "conta" && e.papel === "usuario" && e.distribuiLivre === false;
+};
+const rotulosDeValorNaConta = () => {
+  const e = escopoDoCrm();
+  return rotulosDeValor({ nicho: (e.modo === "conta" && e.nicho ? e.nicho : undefined) as never });
+};
+
 /** As áreas que existem no CRM da empresa: a Caixa e o Marketing são só da casa. */
-const AREAS_FORA_DA_CONTA: Aba[] = ["caixa", "marketing"];
+const AREAS_FORA_DA_CONTA: Aba[] = ["visao", "caixa", "marketing"];
+
+/** O nome de cada área no CRM da empresa (o menu lateral do produto leva a cada uma). */
+const NOME_DA_AREA_NA_CONTA: Partial<Record<Aba, string>> = { crm: "Funil", leads: "Máquina de leads", agenda: "Agenda", metas: "Metas", campanhas: "Campanhas" };
 
 const ehPeriodo = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-01$/.test(v);
 
@@ -277,6 +296,7 @@ export default function AdminComercial() {
    * mandado para alguém.
    */
   const { aba: abaDaUrl } = useParams<{ aba?: string }>();
+  const [busca] = useSearchParams();
   // 13/11/2026: a mesma tela é o CRM que a empresa cliente assina. Lá não há
   // Caixa nem Marketing da casa, e Campanhas depende do plano.
   const escopo = escopoDoCrm();
@@ -286,13 +306,12 @@ export default function AdminComercial() {
     : AREAS;
   // A porta de entrada é a visão geral: quem clica em "Comercial" quer o
   // estado do departamento, não uma das áreas escolhida por ele.
-  const aba: Aba = areas.some((a) => a.valor === abaDaUrl) ? (abaDaUrl as Aba) : "visao";
+  const aba: Aba = areas.some((a) => a.valor === abaDaUrl) ? (abaDaUrl as Aba) : conta ? "crm" : "visao";
   const setAba = (proxima: Aba) =>
     conta
-      ? navigate(proxima === "visao" ? conta.base : `${conta.base}/${proxima}`)
+      ? navigate(proxima === "visao" ? "/app" : `${conta.base}/${proxima}`)
       : navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
   // 25/10/2026: o link do sino abre a Caixa com ?item=<id> destacado.
-  const [busca] = useSearchParams();
   const itemDaCaixa = busca.get("item");
   const caixa = useCaixaDoComercial(!conta);
   const novosDaCaixa = novosNaCaixa(caixa.data);
@@ -301,7 +320,8 @@ export default function AdminComercial() {
   const mesDeHoje = primeiroDiaDoMes(new Date());
   const [periodo, setPeriodo] = useEstadoDoComercial(`periodo:${mesDeHoje}`, mesDeHoje, { validar: ehPeriodo, esperaMs: 0 });
   const [leadAberto, setLeadAberto] = useState<Lead | null>(null);
-  const [novoLead, setNovoLead] = useState(false);
+  // No produto, "/app/crm/crm?novo=1" (o botão Negócio do painel) já abre o cadastro.
+  const [novoLead, setNovoLead] = useState(() => !!conta && busca.get("novo") === "1");
   const [campanhaAberta, setCampanhaAberta] = useState<Campanha | "nova" | null>(null);
   const [pedidoDeEmpresa, setPedidoDeEmpresa] = useState(0);
   // Os filtros do CRM sobem para a linha do título quando cabem (16/10/2026:
@@ -555,17 +575,17 @@ export default function AdminComercial() {
              tudo para achar o que importa naquela. ── */}
       <header className="min-w-0">
         <CabecalhoDePagina
-          titulo={conta ? "CRM" : "Comercial"}
+          titulo={conta ? NOME_DA_AREA_NA_CONTA[aba] || "CRM" : "Comercial"}
           // 16/10/2026: no celular o cabeçalho fica só com título, "?" e ações.
           descricao={abasNoTitulo ? descricao : undefined}
           ajuda={TITULO_DA_ABA[aba]}
           // No CRM da empresa a explicação da aba não fala da casa, do Mercúrio nem do Financeiro.
           {...(conta && TITULO_DA_ABA_NA_CONTA[aba] ? { ajuda: TITULO_DA_ABA_NA_CONTA[aba] } : {})}
-          aoLado={abasNoTitulo ? abasDasAreas : undefined}
+          aoLado={abasNoTitulo && !conta ? abasDasAreas : undefined}
           acoes={acoes}
         />
         {/* Celular: as áreas logo abaixo do título, numa linha que rola. */}
-        {!abasNoTitulo && <div className="mt-2 min-w-0 border-b border-border pb-1">{abasDasAreas}</div>}
+        {!abasNoTitulo && !conta && <div className="mt-2 min-w-0 border-b border-border pb-1">{abasDasAreas}</div>}
       </header>
 
       {leituraFalhou && (
@@ -1258,6 +1278,7 @@ type FormDoLead = {
   one_off_value: string;
   expected_close_date: string;
   owner_id: string;
+  campos: Record<string, unknown>;
   notes: string;
   classe: string;
   qualificacao: Record<string, string>;
@@ -1297,7 +1318,8 @@ export function EditorDeLead({
     monthly_value: String(lead?.monthly_value || ""),
     one_off_value: String(lead?.one_off_value || ""),
     expected_close_date: lead?.expected_close_date || "",
-    owner_id: lead?.owner_id || "",
+    owner_id: lead?.owner_id || (naConta() && !lead ? donoPadraoNaConta() : ""),
+    campos: ((lead as { campos?: Record<string, unknown> | null } | null)?.campos || {}) as Record<string, unknown>,
     notes: lead?.notes || "",
     classe: lead?.classe || "",
     qualificacao: { ...(lead?.qualificacao || {}) } as Record<string, string>,
@@ -1382,6 +1404,7 @@ export function EditorDeLead({
       one_off_value: Number(form.one_off_value) || 0,
       expected_close_date: form.expected_close_date || null,
       owner_id: form.owner_id || null,
+      ...(naConta() ? { campos: form.campos } : {}),
       notes: form.notes,
       classe: form.classe || null,
       qualificacao: form.qualificacao,
@@ -1531,6 +1554,7 @@ export function EditorDeLead({
             {/* A classe é a primeira pergunta: com quem estamos falando. O
                 vazio é "não confirmado" de propósito, nunca preenchido por
                 padrão: classe chutada mente melhor que campo em branco. */}
+            {!naConta() && (
             <CampoDeFormulario rotulo="Classe da oportunidade">
               <select
                 value={form.classe || "nao_confirmado"}
@@ -1545,17 +1569,18 @@ export function EditorDeLead({
                 ))}
               </select>
             </CampoDeFormulario>
+            )}
             {/* Dono e data prevista: sem o primeiro, dois ligam para o mesmo
                 lead ou nenhum liga; sem o segundo, não existe previsão, só
                 a soma do funil inteiro, inclusive o que fecha ano que vem. */}
-            <CampoDeFormulario rotulo="Dono">
+            <CampoDeFormulario rotulo={naConta() ? "Responsável" : "Dono"} ajuda={naConta() && soPegaParaSi() ? "Quem repassa para outra pessoa é o gerente." : undefined}>
               <select
                 value={form.owner_id || "ninguem"}
                 onChange={(e) => setForm({ ...form, owner_id: e.target.value === "ninguem" ? "" : e.target.value })}
                 className={campo}
               >
-                <option value="ninguem">Sem dono</option>
-                {equipe.map((pessoa) => (
+                <option value="ninguem">{naConta() ? "Sem responsável" : "Sem dono"}</option>
+                {equipe.filter((pessoa) => !soPegaParaSi() || pessoa.id === donoPadraoNaConta() || pessoa.id === form.owner_id).map((pessoa) => (
                   <option key={pessoa.id} value={pessoa.id}>
                     {pessoa.nome}
                   </option>
@@ -1564,10 +1589,10 @@ export function EditorDeLead({
             </CampoDeFormulario>
             {/* Separados porque é assim que a casa vende: somar os dois faria
                 a meta de mensalidade nova mentir sempre que houvesse projeto. */}
-            <CampoDeFormulario rotulo="Mensalidade (R$)">
+            <CampoDeFormulario rotulo={naConta() ? `${rotulosDeValorNaConta().mensal} (R$)` : "Mensalidade (R$)"}>
               <input type="number" min="0" step="50" value={form.monthly_value} onChange={(e) => setForm({ ...form, monthly_value: e.target.value })} className={campo} />
             </CampoDeFormulario>
-            <CampoDeFormulario rotulo="Entrada / projeto (R$)">
+            <CampoDeFormulario rotulo={naConta() ? `${rotulosDeValorNaConta().avulso} (R$)` : "Entrada / projeto (R$)"}>
               <input type="number" min="0" step="50" value={form.one_off_value} onChange={(e) => setForm({ ...form, one_off_value: e.target.value })} className={campo} />
             </CampoDeFormulario>
             <CampoDeFormulario rotulo="Previsão de fechamento">
@@ -1623,6 +1648,7 @@ export function EditorDeLead({
             ))}
           </GrupoDeCampos>
           )}
+          {parte === "negocio" && naConta() && <CamposDoNegocio valores={form.campos} aoMudar={(campos) => setForm({ ...form, campos })} />}
 
           {parte === "notas" && (
           <GrupoDeCampos colunas={1}>

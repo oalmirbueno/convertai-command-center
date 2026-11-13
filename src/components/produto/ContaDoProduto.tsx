@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CreditCard, KanbanSquare, KeyRound, Palette, Plug, Receipt, RefreshCw, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Building2, CreditCard, KanbanSquare, KeyRound, ListPlus, Palette, Plug, Receipt, RefreshCw, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   assinar,
   cancelarAssinatura,
   convidar,
   diaLegivel,
+  ehGestor,
   fraseDoErro,
   lerPrecos,
   listarCobrancas,
@@ -45,9 +46,10 @@ import EscolhaDePlano from "./EscolhaDePlano";
 import AparenciaDaConta from "./AparenciaDaConta";
 import FunilDaConta from "./FunilDaConta";
 import ConexoesDaConta from "./ConexoesDaConta";
+import CamposDaConta from "./CamposDaConta";
 import { senhaAceita } from "./CriarSenha";
 
-type Parte = "equipe" | "funil" | "conexoes" | "plano" | "faturas" | "empresa" | "aparencia" | "acesso";
+type Parte = "funil" | "campos" | "conexoes" | "plano" | "faturas" | "empresa" | "aparencia" | "acesso";
 
 const COR_DA_COBRANCA: Record<string, string> = {
   paga: "bg-primary/10 text-primary",
@@ -65,26 +67,29 @@ const ROTULO_DA_COBRANCA: Record<string, string> = { paga: "Paga", aberta: "Em a
 export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) {
   const conta = estado.conta!;
   const admin = !!estado.eu && estado.eu.papel === "admin";
+  const gestor = !!estado.eu && ehGestor(estado.eu.papel);
   const [busca, setBusca] = useSearchParams();
   const partes = useMemo(
     () => [
-      { valor: "equipe", rotulo: "Equipe", icone: <Users className="h-3.5 w-3.5" /> },
       ...(admin
         ? [
-            { valor: "funil", rotulo: "Funil", icone: <KanbanSquare className="h-3.5 w-3.5" /> },
-            { valor: "conexoes", rotulo: "Conexões", icone: <Plug className="h-3.5 w-3.5" /> },
             { valor: "plano", rotulo: "Plano", icone: <CreditCard className="h-3.5 w-3.5" /> },
+            { valor: "funil", rotulo: "Funil", icone: <KanbanSquare className="h-3.5 w-3.5" /> },
+            { valor: "campos", rotulo: "Campos", icone: <ListPlus className="h-3.5 w-3.5" /> },
+            { valor: "conexoes", rotulo: "Conexões", icone: <Plug className="h-3.5 w-3.5" /> },
             { valor: "faturas", rotulo: "Faturas", icone: <Receipt className="h-3.5 w-3.5" /> },
             { valor: "empresa", rotulo: "Empresa", icone: <Building2 className="h-3.5 w-3.5" /> },
             { valor: "aparencia", rotulo: "Aparência", icone: <Palette className="h-3.5 w-3.5" /> },
           ]
-        : []),
+        : gestor
+          ? [{ valor: "campos", rotulo: "Campos", icone: <ListPlus className="h-3.5 w-3.5" /> }]
+          : []),
       { valor: "acesso", rotulo: "Meu acesso", icone: <KeyRound className="h-3.5 w-3.5" /> },
     ],
-    [admin],
+    [admin, gestor],
   );
   const pedida = busca.get("parte") || "";
-  const parte: Parte = partes.some((p) => p.valor === pedida) ? (pedida as Parte) : "equipe";
+  const parte: Parte = partes.some((p) => p.valor === pedida) ? (pedida as Parte) : admin ? "plano" : "acesso";
   const irPara = (p: string) => {
     const nova = new URLSearchParams(busca);
     nova.set("parte", p);
@@ -92,10 +97,12 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
     setBusca(nova, { replace: true });
   };
 
+  // A equipe ganhou área própria (ranking, estrutura e perfis).
+  if (pedida === "equipe") return <Navigate to="/app/equipe" replace />;
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1320px]" data-conta-do-produto="">
       <CabecalhoDePagina
-        titulo="Conta"
+        titulo="Configurações"
         descricao={conta.nome}
         // No celular as partes ficam num seletor; do tablet para cima, na coluna da esquerda.
         acoes={<div className="md:hidden"><SeletorCompacto rotulo="Partes da conta" opcoes={partes} valor={parte} onEscolher={irPara} modo="lista" /></div>}
@@ -122,7 +129,7 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
           </ul>
         </nav>
         <div key={parte} className="produto-entra min-w-0">
-          {parte === "equipe" && <Equipe estado={estado} admin={admin} />}
+          {parte === "campos" && gestor && <CamposDaConta estado={estado} />}
           {parte === "funil" && admin && <FunilDaConta estado={estado} />}
           {parte === "conexoes" && admin && <ConexoesDaConta />}
           {parte === "plano" && admin && <Plano estado={estado} />}
@@ -133,158 +140,6 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
         </div>
       </div>
     </div>
-  );
-}
-
-// ------------------------------------------------------------------ equipe
-
-function Equipe({ estado, admin }: { estado: EstadoDoProduto; admin: boolean }) {
-  const conta = estado.conta!;
-  const reler = useRelerProduto();
-  const [convidando, setConvidando] = useState(false);
-  const [email, setEmail] = useState("");
-  const [nome, setNome] = useState("");
-  const [papel, setPapel] = useState<"usuario" | "admin">("usuario");
-  const [enviando, setEnviando] = useState(false);
-  const [saindo, setSaindo] = useState<MembroDaConta | null>(null);
-  const ocupados = estado.equipe.length;
-  const cheio = ocupados >= conta.usuarios_contratados;
-
-  const enviar = async () => {
-    setEnviando(true);
-    try {
-      const r = await convidar({ email: email.trim(), nome: nome.trim(), papel });
-      await reler();
-      setConvidando(false);
-      setEmail("");
-      setNome("");
-      setPapel("usuario");
-      toast.success(r.enviado ? "Convite enviado por e-mail." : "Pessoa adicionada. O e-mail não saiu agora: reenvie o convite.");
-    } catch (e) {
-      toast.error(fraseDoErro(e, "Não foi possível convidar."));
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  const mudar = async (m: MembroDaConta, p: { papel?: "admin" | "usuario"; remover?: boolean }, feito: string) => {
-    try {
-      await mudarMembro(m.id, p);
-      await reler();
-      toast.success(feito);
-    } catch (e) {
-      toast.error(fraseDoErro(e));
-    }
-  };
-
-  return (
-    <Secao
-      titulo="Equipe"
-      descricao={`${ocupados} de ${conta.usuarios_contratados} ${conta.usuarios_contratados === 1 ? "usuário" : "usuários"}`}
-      ajuda="Cada pessoa entra com o próprio e-mail e senha. Quem administra convida, muda o papel e remove. Ao remover alguém, os negócios dessa pessoa ficam sem responsável para você redistribuir."
-      acao={
-        admin ? (
-          <button type="button" className={botao.primario} onClick={() => setConvidando(true)} disabled={cheio} title={cheio ? "Aumente os usuários no Plano para convidar" : undefined} data-convidar="">
-            <UserPlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Convidar
-          </button>
-        ) : undefined
-      }
-    >
-      {admin && cheio && <p className={juntar(texto.auxiliar, "mb-2")}>Todos os lugares estão em uso. Para convidar, aumente os usuários em Plano.</p>}
-      <ul className={juntar(lista.aberta, lista.divisoria)} data-lista-da-equipe="">
-        {estado.equipe.map((m) => (
-          <li key={m.id} className={lista.linha}>
-            <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">
-              {(m.nome || m.email || "?").charAt(0).toUpperCase()}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className={juntar(texto.corpo, "block truncate font-medium")}>{m.nome || m.email || "Sem nome"}</span>
-              {m.email && <span className={juntar(texto.auxiliar, "block truncate")}>{m.email}</span>}
-            </span>
-            {m.estado === "convidado" && <span className={juntar(etiqueta, "ml-2 bg-warning/10 text-warning")}>Convite enviado</span>}
-            <span className={juntar(etiqueta, "ml-2", m.papel === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{m.papel === "admin" ? "Administra" : "Usuário"}</span>
-            {admin && (
-              <MenuMais
-                className="ml-1"
-                rotulo={`Ações de ${m.nome || m.email || "membro"}`}
-                itens={[
-                  m.estado === "convidado" && {
-                    rotulo: "Reenviar convite",
-                    icone: <RefreshCw className="h-4 w-4" />,
-                    aoEscolher: () => void reenviarConvite(m.id).then((r) => (r.enviado ? toast.success("Convite reenviado.") : toast.error("O e-mail não saiu agora. Tente de novo."))).catch((e) => toast.error(fraseDoErro(e))),
-                  },
-                  m.papel === "usuario"
-                    ? { rotulo: "Tornar administrador", icone: <Shield className="h-4 w-4" />, aoEscolher: () => void mudar(m, { papel: "admin" }, "Agora administra a empresa.") }
-                    : { rotulo: "Tornar usuário", icone: <Users className="h-4 w-4" />, aoEscolher: () => void mudar(m, { papel: "usuario" }, "Agora é usuário.") },
-                  { rotulo: "Remover da empresa", icone: <Trash2 className="h-4 w-4" />, perigo: true, separadorAntes: true, aoEscolher: () => setSaindo(m) },
-                ]}
-              />
-            )}
-          </li>
-        ))}
-      </ul>
-
-      <JanelaCentral
-        aberta={convidando}
-        onFechar={() => setConvidando(false)}
-        largura="sm"
-        titulo="Convidar para a equipe"
-        ajuda="A pessoa recebe um e-mail com o botão de entrar. Na primeira vez ela escolhe a própria senha."
-        rodape={
-          <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || email.trim().length < 5}>
-            {enviando ? "Enviando..." : "Enviar convite"}
-          </button>
-        }
-      >
-        <GrupoDeCampos colunas={1}>
-          <CampoDeFormulario rotulo="E-mail" obrigatorio>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} autoComplete="off" inputMode="email" />
-          </CampoDeFormulario>
-          <CampoDeFormulario rotulo="Nome">
-            <input value={nome} onChange={(e) => setNome(e.target.value)} className={campo} maxLength={120} />
-          </CampoDeFormulario>
-          <CampoDeFormulario rotulo="Papel" ajuda="Quem administra convida pessoas, muda o plano e vê as faturas. O usuário trabalha no CRM.">
-            <SeletorCompacto
-              rotulo="Papel"
-              modo="segmentado"
-              opcoes={[
-                { valor: "usuario", rotulo: "Usuário" },
-                { valor: "admin", rotulo: "Administrador" },
-              ]}
-              valor={papel}
-              onEscolher={(v) => setPapel(v as "usuario" | "admin")}
-            />
-          </CampoDeFormulario>
-        </GrupoDeCampos>
-      </JanelaCentral>
-
-      <JanelaCentral
-        aberta={!!saindo}
-        onFechar={() => setSaindo(null)}
-        largura="sm"
-        titulo={saindo ? `Remover ${saindo.nome || saindo.email || "esta pessoa"}?` : "Remover"}
-        descricao="Ela perde o acesso na hora"
-        rodape={
-          <>
-            <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={() => setSaindo(null)}>Cancelar</button>
-            <button
-              type="button"
-              className={botao.perigo}
-              onClick={() => {
-                const m = saindo;
-                setSaindo(null);
-                if (m) void mudar(m, { remover: true }, "Pessoa removida.");
-              }}
-            >
-              Remover
-            </button>
-          </>
-        }
-      >
-        <p className={texto.corpo}>Os negócios e compromissos em aberto dela ficam sem responsável. O lugar volta a ficar livre.</p>
-      </JanelaCentral>
-    </Secao>
   );
 }
 

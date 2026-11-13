@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Briefcase, Building2, Check, Factory, GraduationCap, HeartPulse, Megaphone, Minus, Plus, Shapes, ShoppingBag, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, Briefcase, Building2, Check, Factory, GraduationCap, HeartPulse, PiggyBank, Megaphone, Minus, Plus, Shapes, ShoppingBag, Wrench } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { criarConta, fraseDoErro, listarPlanos, reais } from "@/lib/produto/api";
 import { ETAPAS_DO_FUNIL, NICHOS, NOME_PADRAO_DA_ETAPA, OBJETIVOS, perfilDoNicho, type EtapaId, type NichoId, type ObjetivoId } from "@/lib/produto/nichos";
@@ -21,6 +21,7 @@ import "./produto.css";
 
 const ICONE_DO_NICHO: Record<NichoId, ReactNode> = {
   imobiliaria: <Building2 className="h-5 w-5" aria-hidden="true" />,
+  consorcio: <PiggyBank className="h-5 w-5" aria-hidden="true" />,
   saude: <HeartPulse className="h-5 w-5" aria-hidden="true" />,
   servicos: <Wrench className="h-5 w-5" aria-hidden="true" />,
   varejo: <ShoppingBag className="h-5 w-5" aria-hidden="true" />,

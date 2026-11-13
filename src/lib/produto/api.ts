@@ -18,7 +18,11 @@ const db = supabase as unknown as {
 };
 
 export type EstadoDaConta = "teste" | "ativa" | "atrasada" | "suspensa" | "cancelada" | "cortesia";
-export type PapelNaConta = "admin" | "usuario";
+export type PapelNaConta = "admin" | "gerente" | "usuario";
+
+/** O nome de cada cargo na tela. Por dentro o vendedor é "usuario". */
+export const ROTULO_DO_PAPEL: Record<PapelNaConta, string> = { admin: "Administrador", gerente: "Gerente", usuario: "Vendedor" };
+export const ehGestor = (papel: PapelNaConta | null | undefined): boolean => papel === "admin" || papel === "gerente";
 
 export interface MembroDaConta {
   id: string;
@@ -28,6 +32,14 @@ export interface MembroDaConta {
   papel: PapelNaConta;
   estado: "convidado" | "ativo" | "removido";
   entrou_em: string | null;
+  /** O título que a empresa dá à pessoa (Corretor, SDR, Consultora). */
+  cargo: string;
+  /** O membro que lidera esta pessoa (só vendedor tem gerente). */
+  gerente_id: string | null;
+  foto: string | null;
+  sobre: string;
+  telefone: string | null;
+  meta_mensal: number | null;
 }
 
 export interface ItemDaMensalidade {
@@ -69,7 +81,10 @@ export interface EstadoDoProduto {
     email_cobranca: string | null;
     telefone: string | null;
   } | null;
-  eu: { membro_id: string; papel: PapelNaConta; nome: string; email: string } | null;
+  eu: { membro_id: string; papel: PapelNaConta; nome: string; email: string; cargo: string; gerente_id: string | null } | null;
+  /** A pessoa enxerga os negócios de todo mundo (admin, ou empresa que não separa por vendedor). */
+  ve_tudo: boolean;
+  avisos_novos: number;
   plano: { id: string; nome: string; preco_usuario: number; limites: LimitesDoPlano; email_caixas_incluidas: number } | null;
   liberada: boolean;
   crm: boolean;
@@ -153,7 +168,9 @@ function lerEstado(d: any): EstadoDoProduto {
           perfil: lerPerfil(conta.perfil),
         }
       : null,
-    eu: d && d.eu ? d.eu : null,
+    eu: d && d.eu ? { ...d.eu, cargo: d.eu.cargo || "", gerente_id: d.eu.gerente_id || null } : null,
+    ve_tudo: d ? d.ve_tudo !== false : true,
+    avisos_novos: numero(d && d.avisos_novos),
     plano: d && d.plano
       ? { id: String(d.plano.id), nome: String(d.plano.nome), preco_usuario: numero(d.plano.preco_usuario), limites: limitesDoPlano(d.plano.limites), email_caixas_incluidas: numero(d.plano.email_caixas_incluidas) }
       : null,
@@ -164,7 +181,15 @@ function lerEstado(d: any): EstadoDoProduto {
     pagamentos_ativos: !!(d && d.pagamentos_ativos),
     tolerancia_dias: numero(d && d.tolerancia_dias),
     teste_dias: numero(d && d.teste_dias),
-    equipe: lista<MembroDaConta>(d && d.equipe),
+    equipe: lista<any>(d && d.equipe).map((m) => ({
+      ...m,
+      cargo: m.cargo || "",
+      gerente_id: m.gerente_id || null,
+      foto: m.foto || null,
+      sobre: m.sobre || "",
+      telefone: m.telefone || null,
+      meta_mensal: m.meta_mensal === null || m.meta_mensal === undefined ? null : numero(m.meta_mensal),
+    })) as MembroDaConta[],
     maquina_no_mes: numero(d && d.maquina_no_mes),
     assinatura: ass
       ? {
@@ -259,7 +284,7 @@ export async function salvarConta(dados: Partial<{ nome: string; documento: stri
   if (error) throw error;
 }
 
-export const convidar = (p: { email: string; nome?: string; papel?: PapelNaConta }) =>
+export const convidar = (p: { email: string; nome?: string; papel?: PapelNaConta; gerente_id?: string | null; cargo?: string }) =>
   chamar<{ membro_id: string; enviado: boolean }>({ acao: "convidar", ...p });
 export const reenviarConvite = (membroId: string) => chamar<{ enviado: boolean }>({ acao: "reenviar_convite", membro_id: membroId });
 
@@ -269,6 +294,70 @@ export async function mudarMembro(membroId: string, p: { papel?: PapelNaConta; r
 }
 
 /** Assina (abre o checkout) ou, em teste e cortesia, só guarda o plano e os usuários (`so_guardar`). */
+/** O perfil de uma pessoa: cada um edita o próprio; o admin define gerente e meta; o gerente, a meta da equipe. */
+export async function salvarPerfilDoMembro(membroId: string, dados: Partial<{ nome: string; cargo: string; telefone: string; sobre: string; foto: string | null; meta_mensal: number; gerente_id: string | null }>): Promise<void> {
+  const { error } = await db.rpc("produto_membro_perfil", { _membro: membroId, _dados: dados });
+  if (error) throw error;
+}
+
+/** O gestor passa negócios para alguém da equipe (ou deixa sem responsável). Devolve quantos mudaram. */
+export async function repassarNegocios(leads: string[], para: string | null, nota = ""): Promise<number> {
+  const { data, error } = await db.rpc("crm_repassar", { _leads: leads, _para: para, _nota: nota });
+  if (error) throw error;
+  return numero(data);
+}
+
+export interface LinhaDoRanking {
+  membro_id: string;
+  user_id: string;
+  nome: string;
+  cargo: string;
+  papel: PapelNaConta;
+  foto: string | null;
+  gerente_id: string | null;
+  meta_mensal: number;
+  ganhos: number;
+  vendido: number;
+  /** Nulos quando a pessoa não pode ver o detalhe do colega. */
+  abertos: number | null;
+  em_jogo: number | null;
+  perdidos: number | null;
+  atrasadas: number | null;
+}
+
+const ouNulo = (v: unknown): number | null => (v === null || v === undefined ? null : numero(v));
+
+/** O ranking do mês (o mês é o primeiro dia, "2026-11-01"; vazio = mês atual). */
+export async function lerRanking(mes?: string): Promise<LinhaDoRanking[]> {
+  const { data, error } = await db.rpc("crm_ranking", mes ? { _mes: mes } : {});
+  if (error) throw error;
+  return lista<any>(data).map((r) => ({
+    membro_id: String(r.membro_id), user_id: String(r.user_id), nome: r.nome || "Sem nome", cargo: r.cargo || "", papel: r.papel, foto: r.foto || null,
+    gerente_id: r.gerente_id || null, meta_mensal: numero(r.meta_mensal), ganhos: numero(r.ganhos), vendido: numero(r.vendido),
+    abertos: ouNulo(r.abertos), em_jogo: ouNulo(r.em_jogo), perdidos: ouNulo(r.perdidos), atrasadas: ouNulo(r.atrasadas),
+  }));
+}
+
+export interface AvisoDoCrm {
+  id: string;
+  titulo: string;
+  texto: string;
+  lead_id: string | null;
+  lido_em: string | null;
+  criado_em: string;
+}
+
+export async function listarAvisos(): Promise<AvisoDoCrm[]> {
+  const { data, error } = await db.from("crm_avisos").select("id, titulo, texto, lead_id, lido_em, criado_em").order("criado_em", { ascending: false }).limit(30);
+  if (error) throw error;
+  return lista<AvisoDoCrm>(data);
+}
+
+export async function marcarAvisosLidos(): Promise<void> {
+  const { error } = await db.from("crm_avisos").update({ lido_em: new Date().toISOString() }).is("lido_em", null);
+  if (error) throw error;
+}
+
 export const assinar = (p: { plano_id: string; usuarios: number; so_guardar?: boolean }) => chamar<{ link?: string; atualizado?: boolean; agendado?: boolean; a_partir_de?: string | null; valor?: number }>({ acao: "assinar", ...p });
 export const cancelarAssinatura = () => chamar<{ cancelada: boolean; acesso_ate: string }>({ acao: "cancelar" });
 export const pedirEmail = (p: { dominio?: string; caixas?: number; observacao?: string }) => chamar<{ ok: boolean }>({ acao: "pedir_email", ...p });
@@ -617,6 +706,7 @@ export const casa = {
   convidar: (p: { conta_id: string; email: string; nome?: string; papel?: PapelNaConta }) => chamar<{ membro_id: string; enviado: boolean }>({ acao: "admin_convidar", ...p }),
   sincronizar: (contaId: string) => chamar<{ valor: number }>({ acao: "admin_sincronizar", conta_id: contaId }),
   testarAsaas: () => chamar<{ ok: boolean; ambiente?: string; link?: string; expira_em?: string; etapa?: string; mensagem?: string }>({ acao: "admin_testar_asaas" }),
+  gerarCheckout: (contaId: string) => chamar<{ link?: string; atualizado?: boolean; agendado?: boolean; valor?: number }>({ acao: "admin_gerar_checkout", conta_id: contaId }),
   cobrarMigracao: (contaId: string, valor?: number) => chamar<{ link: string | null; valor: number }>({ acao: "admin_cobrar_migracao", conta_id: contaId, valor }),
   async salvarConta(id: string, dados: Record<string, unknown>): Promise<void> {
     const { error } = await db.from("produto_contas").update({ ...dados, atualizado_em: new Date().toISOString() }).eq("id", id);

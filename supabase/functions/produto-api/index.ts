@@ -16,6 +16,8 @@
  *   POST   /v1/compromissos               { negocio_id, titulo, quando, tipo?, notas? }
  *   POST   /v1/compromissos/:id/concluir
  *
+ * Captação (sem chave, pelo link do formulário): GET e POST /captar/<token>. Regras em modulos/captacao.ts.
+ *
  * MCP (Claude, ChatGPT): POST /mcp com a chave no cabeçalho, ou POST /mcp/<chave> para os conectores
  * que só aceitam um endereço. As ferramentas chamam as mesmas operações do REST.
  *
@@ -25,6 +27,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { criarOperacoes, ErroDaApi, type Operacoes } from "./modulos/operacoes.ts";
 import { responderMcp } from "./modulos/mcp.ts";
+import { captar } from "./modulos/captacao.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -171,6 +174,11 @@ if (import.meta.main) {
     try {
       if (partes[0] === "mcp") return await mcp(req, partes[1]);
       if (partes[0] === "v1") return await rest(req, partes.slice(1), url.searchParams);
+      // Formulário público de captação: sem chave, a empresa vem do token do link (modulos/captacao.ts).
+      if (partes[0] === "captar") {
+        const r = await captar(servico(), req, partes[1] || "");
+        return json(r.corpo, r.status);
+      }
       if (!partes.length) return json({ api: "Aceleriq CRM", versao: "v1", documentacao: "Conta, Conexões, dentro do produto." });
       throw new ErroDaApi(404, "rota_inexistente", "Esse endereço não existe na API.");
     } catch (e) {

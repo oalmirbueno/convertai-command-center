@@ -239,6 +239,25 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
     }
   };
 
+  const gerarCheckout = async () => {
+    setCobrando(true);
+    try {
+      const r = await casa.gerarCheckout(conta.id);
+      if (r.link) {
+        try {
+          await navigator.clipboard.writeText(r.link);
+          toast.success(`Link de pagamento de ${reais(r.valor || 0)} por mês copiado. Vale por 24 horas.`);
+        } catch {
+          window.prompt("Copie o link de pagamento:", r.link);
+        }
+      } else toast.success(r.agendado ? "A redução entra na próxima cobrança." : "Assinatura atualizada no Asaas.");
+    } catch (e) {
+      toast.error(fraseDoErro(e, "Não foi possível gerar o link."));
+    } finally {
+      setCobrando(false);
+    }
+  };
+
   const cobrarMigracao = async () => {
     setCobrando(true);
     try {
@@ -387,6 +406,9 @@ function FichaDaConta({ conta, planos, onFechar, onMudou }: { conta: ContaNaCasa
         <section aria-label="Cobranças da empresa">
           <div className="mb-1 flex min-w-0 items-center">
             <h3 className={juntar(texto.tituloSecao, "min-w-0 flex-1")}>Cobranças</h3>
+            <button type="button" className={juntar(botao.primario, "mr-2 h-8")} onClick={() => void gerarCheckout()} disabled={cobrando} title="Cria o checkout da assinatura no cartão com o plano e os usuários desta empresa e copia o link" data-gerar-checkout="">
+              Link de pagamento
+            </button>
             <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void cobrarMigracao()} disabled={cobrando} title="Cria a cobrança avulsa da migração do e-mail no Asaas" data-cobrar-migracao="">
               {cobrando ? "Criando..." : `Cobrar a migração${config.data ? ` (${reais(config.data.email_migracao)})` : ""}`}
             </button>
