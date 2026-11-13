@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { tabelaDoCrm } from "@/lib/comercial/escopo";
 import { ErroDeLeitura } from "@/lib/comercial";
 import type { EventoDoLead } from "./temperatura";
 
@@ -15,7 +16,7 @@ export const TETO_DE_EVENTOS = 1000;
 
 export async function listarEventosDoFunil(): Promise<EventoDoLead[]> {
   const { data, error } = await supabase
-    .from("commercial_lead_events")
+    .from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events")
     .select("lead_id, kind, from_stage, to_stage, note, created_at")
     .order("created_at", { ascending: false })
     .limit(TETO_DE_EVENTOS);

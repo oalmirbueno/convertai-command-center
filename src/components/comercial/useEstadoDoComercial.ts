@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useEstadoDaTela } from "@/components/sistema";
+import { escopoDoCrm } from "@/lib/comercial/escopo";
 
 /**
  * O useEstadoDaTela do sistema com a rota fixa do Comercial (opção `rota`,
@@ -17,7 +18,10 @@ export function useEstadoDoComercial<T>(
   inicial: T,
   opcoes: { validar?: (v: unknown) => boolean; esperaMs?: number } = {},
 ): [T, Dispatch<SetStateAction<T>>, () => void] {
-  return useEstadoDaTela<T>(chave, inicial, { validar: opcoes.validar, esperaMs: opcoes.esperaMs, rota: ROTA });
+  // O CRM de uma empresa guarda o estado da tela separado do Comercial da casa.
+  const escopo = escopoDoCrm();
+  const rota = escopo.modo === "conta" ? `${escopo.base}:${escopo.contaId}` : ROTA;
+  return useEstadoDaTela<T>(chave, inicial, { validar: opcoes.validar, esperaMs: opcoes.esperaMs, rota });
 }
 
 /** Validação de opção fechada (aba, filtro): valor fora da lista cai no inicial. */

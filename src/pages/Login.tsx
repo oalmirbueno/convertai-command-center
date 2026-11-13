@@ -40,7 +40,8 @@ export default function Login() {
   const { user, profile, loading, loginWithCredentials, signup } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<Mode>("login");
+  // A página de venda do CRM manda com ?modo=cadastro: a tela já abre em "Criar conta".
+  const [mode, setMode] = useState<Mode>(() => (new URLSearchParams(location.search).get("modo") === "cadastro" ? "signup" : "login"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

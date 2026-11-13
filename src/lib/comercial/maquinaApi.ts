@@ -1,3 +1,4 @@
+import { naConta } from "@/lib/comercial/escopo";
 import { chamarFuncao, CUSTO_DA_CONFERENCIA_DO_JEV_USD } from "@/lib/mesa/api";
 import type { FonteDaBusca } from "../../../supabase/functions/comercial-leads/regras";
 
@@ -71,7 +72,8 @@ export const chavesDaMaquina = {
   candidatos: (id: string) => ["comercial", "maquina-de-leads", "candidatos", id] as const,
 };
 
-const chamar = <T>(corpo: Record<string, unknown>) => chamarFuncao<T>("comercial-leads", corpo);
+// No CRM da empresa a função resolve a conta pelo login; daqui vai só o aviso do escopo.
+const chamar = <T>(corpo: Record<string, unknown>) => chamarFuncao<T>("comercial-leads", naConta() ? { ...corpo, escopo: "conta" } : corpo);
 
 export const listarBuscas = () => chamar<{ buscas: BuscaDeLeads[] }>({ acao: "listar_buscas" }).then((r) => r.buscas || []);
 export const criarBusca = (b: NovaBusca) => chamar<{ busca: BuscaDeLeads }>({ acao: "criar_busca", ...b }).then((r) => r.busca);

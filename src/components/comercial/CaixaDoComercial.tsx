@@ -34,8 +34,8 @@ import {
 export const CHAVE_DA_CAIXA = ["comercial-caixa"];
 
 /** Quantos itens novos (para o contador da aba e o aviso da visão geral). */
-export function useCaixaDoComercial() {
-  return useQuery({ queryKey: CHAVE_DA_CAIXA, queryFn: listarCaixa, refetchOnWindowFocus: true, refetchInterval: 60_000 });
+export function useCaixaDoComercial(ligada = true) {
+  return useQuery({ queryKey: CHAVE_DA_CAIXA, queryFn: listarCaixa, refetchOnWindowFocus: true, refetchInterval: 60_000, enabled: ligada });
 }
 
 export const novosNaCaixa = (itens: ItemDaCaixa[] | undefined) => (itens || []).filter((i) => i.situacao === "nova").length;

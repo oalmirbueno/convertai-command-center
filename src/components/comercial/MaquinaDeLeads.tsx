@@ -7,6 +7,7 @@ import { AjudaRecolhida, AreaDeTrabalho, CampoDeBusca, RegiaoRolavel, botao, eti
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { textoDoErro } from "@/lib/mesa/api";
 import { listarCampanhas } from "@/lib/comercial";
+import { escopoDoCrm } from "@/lib/comercial/escopo";
 import {
   avaliarComJev,
   buscaAndando,
@@ -77,6 +78,11 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
   const [urls, setUrls] = useState("");
   const [campanha, setCampanha] = useState("");
   const [mercurio, setMercurio] = useState(false);
+  // No CRM da empresa: sem agente da casa, e o plano diz as fontes e o tamanho da busca.
+  const escopo = escopoDoCrm();
+  const conta = escopo.modo === "conta" ? escopo : null;
+  const fontesDaTela = conta && !conta.limites.maquina_google_maps ? FONTES_DA_BUSCA.filter((x) => x !== "google_maps") : FONTES_DA_BUSCA;
+  const quantos = conta ? QUANTOS.filter((q) => q <= conta.limites.maquina_limite_por_busca) : QUANTOS;
   const campanhas = useQuery({ queryKey: ["comercial", "campanhas", "para-busca"], queryFn: listarCampanhas, staleTime: 60_000 });
   const soLista = fontes.length === 1 && fontes[0] === "lista";
   const criar = useMutation({
@@ -122,7 +128,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
       <div className="min-w-0">
         <span className={texto.rotulo}>Quantos</span>
         <div className="mt-1 flex min-w-0 flex-wrap gap-1" role="group" aria-label="Quantos leads">
-          {QUANTOS.map((q) => <Opcao key={q} ativo={limite === q} onClick={() => setLimite(q)}>{q}</Opcao>)}
+          {(quantos.length ? quantos : QUANTOS.slice(0, 1)).map((q) => <Opcao key={q} ativo={limite === q} onClick={() => setLimite(q)}>{q}</Opcao>)}
         </div>
       </div>
       <div className="min-w-0">
@@ -133,9 +139,9 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
           </AjudaRecolhida>
         </span>
         <div className="mt-1 flex min-w-0 flex-wrap gap-1" role="group" aria-label="Fontes da busca">
-          {FONTES_DA_BUSCA.map((f) => <Opcao key={f} ativo={fontes.indexOf(f) >= 0} onClick={() => alternar(f)}>{ROTULO_DA_FONTE[f]}</Opcao>)}
+          {fontesDaTela.map((f) => <Opcao key={f} ativo={fontes.indexOf(f) >= 0} onClick={() => alternar(f)}>{ROTULO_DA_FONTE[f]}</Opcao>)}
         </div>
-        {fontes.indexOf("google_maps") >= 0 && <p className={juntar(texto.auxiliar, "mt-1")} data-teto-do-google="">Google Maps: gasta no máximo {usd(tetoDoGoogleEmDolar(limite))} nesta busca.</p>}
+        {!conta && fontes.indexOf("google_maps") >= 0 && <p className={juntar(texto.auxiliar, "mt-1")} data-teto-do-google="">Google Maps: gasta no máximo {usd(tetoDoGoogleEmDolar(limite))} nesta busca.</p>}
       </div>
       </div>
       {fontes.indexOf("lista") >= 0 && (
@@ -152,6 +158,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
             {(campanhas.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
+        {!conta && (
         <label className={juntar(texto.corpo, "flex min-w-0 items-center gap-2 self-end pb-2")}>
           <input type="checkbox" checked={mercurio} onChange={(e) => setMercurio(e.target.checked)} aria-label="Entregar ao Mercúrio" />
           Entregar ao Mercúrio
@@ -159,6 +166,7 @@ function FormularioDaBusca({ aoCriar, aoFechar }: { aoCriar: (b: BuscaDeLeads) =
             Marcar é a sua autorização para o Mercúrio, o agente comercial, fazer o primeiro contato com os leads que você levar ao CRM desta busca. Ele respeita o teto diário de primeiros contatos e o horário configurado, registra cada mensagem no lead e avisa na Caixa do comercial quem avançou ou fechou. Sem marcar, os leads entram no CRM só para a equipe.
           </AjudaRecolhida>
         </label>
+        )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
         <button type="button" className={botao.discreto} onClick={aoFechar}>Cancelar</button>
@@ -227,6 +235,7 @@ function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads;
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [marcados, setMarcados] = useState<string[]>([]);
   const [mercurio, setMercurio] = useState(busca.entregar_ao_mercurio);
+  const daConta = escopoDoCrm().modo === "conta";
   const lidos = useQuery({
     queryKey: chavesDaMaquina.candidatos(busca.id),
     queryFn: () => lerCandidatos(busca.id),
@@ -352,14 +361,18 @@ function CandidatosDaBusca({ busca, aoAbrirLead, acoes }: { busca: BuscaDeLeads;
           {escolhidos.length ? `${escolhidos.length} marcados` : "Marcar todos"}
         </label>
         <span className="flex-1" />
+        {!daConta && (
         <button type="button" className={botao.secundario} onClick={() => avaliar.mutate()} disabled={!paraAvaliar || avaliar.isPending} title="O Jev dá a nota de encaixe de 0 a 10 contra o perfil de cliente ideal">
           {avaliar.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />}
           Avaliar com Jev · {usd(custoDaAvaliacao(paraAvaliar))}
         </button>
+        )}
+        {!daConta && (
         <label className={juntar(texto.corpo, "flex items-center gap-1.5")}>
           <input type="checkbox" checked={mercurio} onChange={(e) => setMercurio(e.target.checked)} aria-label="Mercúrio faz o primeiro contato" />
           Mercúrio contata
         </label>
+        )}
         <button type="button" className={botao.primario} onClick={() => void levarAoCrm()} disabled={!paraLevar.length || importar.isPending} title={novosEscolhidos.length ? "Leva os marcados" : "Sem marcar, leva os novos que estão na tela"}>
           {importar.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />}
           Levar ao CRM{paraLevar.length ? ` (${paraLevar.length})` : ""}
@@ -459,12 +472,25 @@ export default function MaquinaDeLeads({ aoAbrirLead }: { aoAbrirLead?: (leadId:
       && (situacaoDasBuscas === "todas" || (situacaoDasBuscas === "andando" ? buscaAndando(b) : b.situacao === situacaoDasBuscas)))
     .slice()
     .sort((a, b) => ordemDasBuscas === "encontrados" ? b.encontrados - a.encontrados : String(b.created_at).localeCompare(String(a.created_at)));
+  // No CRM da empresa: quantas buscas do plano já foram usadas no mês.
+  const escopoDaMaquina = escopoDoCrm();
+  const contaDaMaquina = escopoDaMaquina.modo === "conta" ? escopoDaMaquina : null;
+  const inicioDoMes = `${new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 7)}-01T00:00:00-03:00`;
+  const usadasNoMes = contaDaMaquina ? lista.filter((b) => b.situacao !== "cancelada" && new Date(b.created_at).getTime() >= new Date(inicioDoMes).getTime()).length : 0;
+  const semBuscas = !!contaDaMaquina && usadasNoMes >= contaDaMaquina.limites.maquina_buscas_mes;
   const acoesDaMaquina = (
     <div className="ml-auto flex shrink-0 items-center gap-2">
+      {contaDaMaquina && (
+        <span className={juntar(texto.auxiliar, "tabular-nums", semBuscas && "text-warning")} data-buscas-do-plano="">
+          {usadasNoMes} de {contaDaMaquina.limites.maquina_buscas_mes} buscas no mês
+        </span>
+      )}
       <AjudaRecolhida rotulo="Como a Máquina de leads funciona">
-        Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela.
+        {contaDaMaquina
+          ? "Diga o nicho e a cidade: a máquina acha os negócios no mapa e lê o site de cada um atrás do contato que a própria empresa publicou. Você escolhe os melhores e leva ao CRM, já no seu nome. O plano diz quantas buscas cabem no mês; o contador zera no dia 1. Nada é enviado a ninguém nesta tela."
+          : "Diga o nicho e a cidade: a máquina acha os negócios no mapa aberto ou no Google Maps e lê o site de cada um atrás do contato que a própria empresa publicou. Depois, o Jev dá a nota de encaixe com o perfil de cliente ideal, você leva os melhores ao CRM e, se quiser, entrega ao Mercúrio para o primeiro contato. Nada é enviado a ninguém nesta tela."}
       </AjudaRecolhida>
-      <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)}>
+      <button type="button" className={botao.primario} onClick={() => setNovaAberta(true)} disabled={semBuscas} title={semBuscas ? "As buscas do mês acabaram" : undefined}>
         <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
         Nova busca
       </button>

@@ -1,3 +1,4 @@
+import AtalhoDoProduto from "@/components/produto/AtalhoDoProduto";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
 import TituloMembros from "@/components/membros/TituloMembros";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -706,6 +707,11 @@ function ConteudoAreaDeMembros() {
                       <ArrowRight size={17} /> Painel Aceleriq
                     </Link>
                   )}
+                  {!teste && (
+                    <Link to="/app" className="membros-acao" data-caminho-do-produto="">
+                      <ArrowRight size={17} /> CRM e E-mail
+                    </Link>
+                  )}
                   <button className="membros-acao" onClick={() => void logout()} aria-label="Sair da conta">
                     <LogOut size={17} /> Sair da conta
                   </button>
@@ -746,6 +752,8 @@ function ConteudoAreaDeMembros() {
             <BotaoPomodoro compacto={recolhida} />
           </aside>
           <main ref={conteudo} id="biblioteca" className={`membros-conteudo ${estudioAtivo ? "membros-conteudo-estudio" : "space-y-8"}`}>
+            {/* O CRM e o E-mail moram em outro lugar (/app); quem tem empresa lá ganha o atalho aqui. */}
+            {secaoAtual === "inicio" && !teste && <AtalhoDoProduto />}
             {estudioAtivo && <EstudioBolso />}
             {secaoAtual === "creditos" && comBolso && <CreditosBolso />}
             {secaoAtual === "ferramentas" && (

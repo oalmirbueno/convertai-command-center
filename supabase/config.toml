@@ -222,3 +222,7 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.comercial-asaas-webhook]
     verify_jwt = false
+  [functions.produto]
+    verify_jwt = true
+  [functions.produto-asaas-webhook]
+    verify_jwt = false

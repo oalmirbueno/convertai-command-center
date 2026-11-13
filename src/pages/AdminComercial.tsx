@@ -45,6 +45,7 @@ import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/tem
 import { FaixaDeNumeros } from "@/components/sistema";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
+import { escopoDoCrm, naConta } from "@/lib/comercial/escopo";
 import OrigemDoLead from "@/components/ads/OrigemDoLead";
 import CaixaDoComercial, { novosNaCaixa, useCaixaDoComercial } from "@/components/comercial/CaixaDoComercial";
 import ConversaDoLead from "@/components/comercial/ConversaDoLead";
@@ -197,6 +198,17 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
+/** O que cada aba é no CRM da empresa cliente (sem a casa, o Mercúrio e o Financeiro). */
+const TITULO_DA_ABA_NA_CONTA: Partial<Record<Aba, string>> = {
+  visao: "O seu comercial num relance: funil, semana, metas e campanhas. Cada linha abre a sua área.",
+  leads: "A máquina de leads: busca empresas do nicho na cidade, levanta o contato com prova e põe no CRM o que você escolher.",
+  metas: "O alvo do mês e quanto já saiu. A receita é a soma dos negócios que você marcou como ganhos no mês.",
+  campanhas: "O que a empresa investe para aparecer, e quantos clientes aquilo virou. O lead aponta para a campanha, então o custo por cliente sai sozinho.",
+};
+
+/** As áreas que existem no CRM da empresa: a Caixa e o Marketing são só da casa. */
+const AREAS_FORA_DA_CONTA: Aba[] = ["caixa", "marketing"];
+
 const ehPeriodo = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-01$/.test(v);
 
 /** A janela tem pelo menos `px` de largura? Atualiza ao redimensionar e girar. */
@@ -264,15 +276,23 @@ export default function AdminComercial() {
    * mandado para alguém.
    */
   const { aba: abaDaUrl } = useParams<{ aba?: string }>();
+  // 13/11/2026: a mesma tela é o CRM que a empresa cliente assina. Lá não há
+  // Caixa nem Marketing da casa, e Campanhas depende do plano.
+  const escopo = escopoDoCrm();
+  const conta = escopo.modo === "conta" ? escopo : null;
+  const base = conta ? conta.base : "/comercial";
+  const areas = conta
+    ? AREAS.filter((a) => AREAS_FORA_DA_CONTA.indexOf(a.valor) < 0 && (a.valor !== "campanhas" || conta.limites.campanhas))
+    : AREAS;
   // A porta de entrada é a visão geral: quem clica em "Comercial" quer o
   // estado do departamento, não uma das áreas escolhida por ele.
-  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "visao";
+  const aba: Aba = areas.some((a) => a.valor === abaDaUrl) ? (abaDaUrl as Aba) : "visao";
   const setAba = (proxima: Aba) =>
-    navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
+    navigate(proxima === "visao" ? base : `${base}/${proxima}`);
   // 25/10/2026: o link do sino abre a Caixa com ?item=<id> destacado.
   const [busca] = useSearchParams();
   const itemDaCaixa = busca.get("item");
-  const caixa = useCaixaDoComercial();
+  const caixa = useCaixaDoComercial(!conta);
   const novosDaCaixa = novosNaCaixa(caixa.data);
   // O mês escolhido fica guardado enquanto o mês do calendário for o mesmo:
   // sair e voltar mantém; no mês seguinte a tela abre no mês novo.
@@ -308,13 +328,13 @@ export default function AdminComercial() {
   const { data: clientesBrutos } = useClients();
   const clientes = useMemo(
     () =>
-      ((clientesBrutos || []) as Array<Record<string, unknown>>)
+      ((conta ? [] : clientesBrutos || []) as Array<Record<string, unknown>>)
         .map((c) => ({
           id: String(c.id),
           nome: String(c.company_name || c.full_name || "Cliente"),
         }))
         .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
-    [clientesBrutos],
+    [clientesBrutos, conta],
   );
 
   const { data: atividades = [], isError: erroNasAtividades } = useQuery({
@@ -328,14 +348,16 @@ export default function AdminComercial() {
   });
   // Quem pode ser dono de um lead: funil de time sem dono é funil de
   // ninguém; dois ligam para o mesmo lead, ou nenhum liga.
-  const { data: equipeBruta } = useTeamMembers();
+  const { data: equipeBruta } = useTeamMembers(!conta);
   const equipe = useMemo(
     () =>
-      ((equipeBruta || []) as Array<Record<string, unknown>>).map((m) => ({
-        id: String(m.id),
-        nome: String(m.full_name || m.email || "Sem nome"),
-      })),
-    [equipeBruta],
+      conta
+        ? conta.equipe
+        : ((equipeBruta || []) as Array<Record<string, unknown>>).map((m) => ({
+            id: String(m.id),
+            nome: String(m.full_name || m.email || "Sem nome"),
+          })),
+    [equipeBruta, conta],
   );
 
   const { data: empresas = [], isError: erroNasEmpresas } = useQuery({
@@ -475,7 +497,7 @@ export default function AdminComercial() {
       {/* Os filtros do CRM (Negócios | Empresas, classe e busca) entram aqui
           quando cabem na linha do título. */}
       {aba === "crm" && filtrosNaLinha && <div ref={setLinhaDosFiltros} className="flex min-w-0 items-center" />}
-      {aba === "crm" && visaoDoCrm === "negocios" && (
+      {aba === "crm" && visaoDoCrm === "negocios" && !conta && (
         <BotaoDoCabecalho
           icone={<Download className="h-4 w-4" aria-hidden="true" />}
           texto="Trazer do diagnóstico"
@@ -514,7 +536,7 @@ export default function AdminComercial() {
     <Etapas
       soIcone
       rotulo="Áreas do Comercial"
-      itens={AREAS.map((a) => (a.valor === "caixa" ? { ...a, contador: novosDaCaixa } : a))}
+      itens={areas.map((a) => (a.valor === "caixa" ? { ...a, contador: novosDaCaixa } : a))}
       valor={aba}
       onEscolher={(v) => setAba(v as Aba)}
       className="min-w-0 flex-1"
@@ -529,10 +551,10 @@ export default function AdminComercial() {
              tudo para achar o que importa naquela. ── */}
       <header className="min-w-0">
         <CabecalhoDePagina
-          titulo="Comercial"
+          titulo={conta ? "CRM" : "Comercial"}
           // 16/10/2026: no celular o cabeçalho fica só com título, "?" e ações.
           descricao={abasNoTitulo ? descricao : undefined}
-          ajuda={TITULO_DA_ABA[aba]}
+          ajuda={(conta && TITULO_DA_ABA_NA_CONTA[aba]) || TITULO_DA_ABA[aba]}
           aoLado={abasNoTitulo ? abasDasAreas : undefined}
           acoes={acoes}
         />
@@ -542,7 +564,7 @@ export default function AdminComercial() {
 
       {leituraFalhou && (
         <EstadoDeErro
-          titulo="Não foi possível carregar o Comercial."
+          titulo={conta ? "Não foi possível carregar o CRM." : "Não foi possível carregar o Comercial."}
           descricao="O que aparece abaixo pode estar incompleto."
           acao={
             <button type="button" onClick={() => void recarregar()} className={juntar(botao.secundario, "h-8")}>
@@ -553,7 +575,7 @@ export default function AdminComercial() {
       )}
 
       {/* 25/10/2026: o que o Mercúrio levou adiante é a primeira coisa do Comercial. */}
-      {aba === "visao" && novosDaCaixa > 0 && (
+      {aba === "visao" && !conta && novosDaCaixa > 0 && (
         <button
           type="button"
           onClick={() => setAba("caixa")}
@@ -568,7 +590,7 @@ export default function AdminComercial() {
         </button>
       )}
 
-      {aba === "caixa" && <CaixaDoComercial leads={leads} onAbrirLead={setLeadAberto} itemDestacado={itemDaCaixa} />}
+      {aba === "caixa" && !conta && <CaixaDoComercial leads={leads} onAbrirLead={setLeadAberto} itemDestacado={itemDaCaixa} />}
 
       {aba === "leads" && (
         <Suspense fallback={<Carregando />}>
@@ -688,7 +710,7 @@ export default function AdminComercial() {
         />
       )}
 
-      {aba === "marketing" && (
+      {aba === "marketing" && !conta && (
         <MarketingDaCasa leads={leads} campanhas={campanhas} periodo={periodo} />
       )}
 
@@ -815,7 +837,7 @@ function VisaoGeral({
               valor: carregando ? "…" : dinheiro(previsao.ponderado),
               apoio: previsao.semData > 0 ? `${previsao.leads} com data, ${previsao.semData} sem` : `${previsao.leads} com data prevista`,
             },
-            { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: "do Financeiro" },
+            { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: naConta() ? "dos ganhos" : "do Financeiro" },
           ]}
         />
 
@@ -1383,8 +1405,9 @@ export function EditorDeLead({
       const salvou = await salvar({ manterAberto: true });
       if (!salvou) return;
     }
-    // O ganho pede o cadastro: a mesma janela do quadro.
-    if (para === "ganho") return void setJanelaDoGanho(true);
+    // O ganho pede o cadastro: a mesma janela do quadro. No CRM da empresa
+    // não há cadastro da casa: o ganho é só a etapa, com os valores do negócio.
+    if (para === "ganho" && !naConta()) return void setJanelaDoGanho(true);
     if (await moverLead({ lead, paraEstagio: para, motivo })) {
       setMotivo("");
       await onSalvo();
@@ -1400,7 +1423,8 @@ export function EditorDeLead({
    * de aba não perde nada, e salvar continua mandando só o que mudou.
    */
   const [parte, setParte] = useState<ParteDoLead>("contato");
-  const partes = PARTES_DO_LEAD.filter((p) => lead || !p.soComLead);
+  // No CRM da empresa não existe o agente da casa.
+  const partes = PARTES_DO_LEAD.filter((p) => (lead || !p.soComLead) && !(naConta() && p.valor === "agente"));
 
   return (
     <Dialog open onOpenChange={(aberto) => { if (!aberto) void fechar(); }}>
@@ -1411,8 +1435,8 @@ export function EditorDeLead({
           {lead && <p className={texto.auxiliar}>{rotuloDoEstagio(lead.stage)}{lead.company ? ` · ${lead.company}` : ""}</p>}
           {lead && <ResumoNoTopoDoLead lead={lead} atividades={atividades} eventos={eventos} />}
           {/* De qual anúncio veio (origem do clique gravada pelo formulário do site). */}
-          {lead && <OrigemDoLead lead={lead} />}
-          {lead && lead.stage === "ganho" && !lead.won_client_id && (
+          {lead && !naConta() && <OrigemDoLead lead={lead} />}
+          {lead && !naConta() && lead.stage === "ganho" && !lead.won_client_id && (
             <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-3 py-2" data-ganho-sem-cadastro="">
               <p className={juntar(texto.corpo, "mr-3 min-w-0")}>Ganho sem cadastro: o cliente não está em Clientes nem no Financeiro.</p>
               <button type="button" onClick={() => setJanelaDoGanho(true)} className={botao.primario}>Cadastrar cliente</button>
@@ -1591,6 +1615,7 @@ export function EditorDeLead({
           {lead && parte === "andamento" && (
             <>
               {/* Frente PRO: a proposta deste lead na Mesa Proposta (com o cliente quando o lead já tem ficha). */}
+              {!naConta() && (
               <section className="flex min-w-0 items-center justify-between" aria-label="Proposta">
                 <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Proposta</h3>
                 <Link
@@ -1600,7 +1625,8 @@ export function EditorDeLead({
                   Gerar proposta
                 </Link>
               </section>
-              <section className="border-t border-border pt-4" aria-label="Mover de etapa">
+              )}
+              <section className={juntar(!naConta() && "border-t border-border pt-4")} aria-label="Mover de etapa">
                 <h3 className={juntar(texto.tituloSecao, "mb-2")}>Mover para</h3>
                 <div className="-m-1 flex flex-wrap [&>*]:m-1">
                   {ESTAGIOS.filter((e) => e.id !== lead.stage).map((estagio) => (
@@ -1932,12 +1958,14 @@ function EditorDeCampanha({
             <input value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="O que esta campanha precisa entregar" className={campo} />
           </CampoDeFormulario>
         </GrupoDeCampos>
+        {!naConta() && (
         <CampanhasDaMeta
           selecionadas={form.meta_campaign_ids || []}
           aoMudar={(ids) => setForm({ ...form, meta_campaign_ids: ids })}
           mercurioAtivo={!!form.mercurio_ativo}
           aoMudarMercurio={(v) => setForm({ ...form, mercurio_ativo: v })}
         />
+        )}
         <div className="flex items-center justify-end [&>*+*]:ml-2">
           <button type="button" onClick={onFechar} className={botao.secundario}>
             Cancelar

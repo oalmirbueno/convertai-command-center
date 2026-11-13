@@ -4,6 +4,7 @@ import ProjectView from "@/components/client/ProjectView";
 import ClientJourneyDashboard from "@/components/client/ClientJourneyDashboard";
 import { useClientDashboardData } from "@/components/client/dashboardHelpers";
 import { Carregando, useEstadoDaTela } from "@/components/sistema";
+import AtalhoDoProduto from "@/components/produto/AtalhoDoProduto";
 
 interface ClientDashboardProps {
   /** When set, renders as if viewing a specific client (admin impersonation) */
@@ -39,11 +40,15 @@ export default function ClientDashboard({ impersonateClientId, impersonateClient
   }
 
   return (
-    <ClientJourneyDashboard
-      clientId={clientId!}
-      clientName={clientName}
-      onSelectProject={(project: any) => setProjetoAberto(project?.id || "")}
-      isImpersonation={!!impersonateClientId}
-    />
+    <>
+      {/* Quem assina o CRM ou o E-mail entra neles por aqui (produto à parte, em /app). */}
+      {!impersonateClientId && <AtalhoDoProduto className="mb-4" />}
+      <ClientJourneyDashboard
+        clientId={clientId!}
+        clientName={clientName}
+        onSelectProject={(project: any) => setProjetoAberto(project?.id || "")}
+        isImpersonation={!!impersonateClientId}
+      />
+    </>
   );
 }

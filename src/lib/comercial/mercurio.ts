@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { tabelaDoCrm } from "@/lib/comercial/escopo";
 
 /**
  * O comercial com o Mercúrio (25/10/2026). Contrato do banco:
@@ -221,7 +222,7 @@ export const CANAIS_DA_CONVERSA = ["whatsapp", "instagram", "email", "telefone",
 
 export async function listarMensagens(leadId: string): Promise<MensagemDoLead[]> {
   const { data, error } = await db
-    .from("commercial_lead_messages")
+    .from(tabelaDoCrm("commercial_lead_messages") as "commercial_lead_messages")
     .select("id, lead_id, direcao, canal, texto, enviada_em, operador_slug, autor_id")
     .eq("lead_id", leadId)
     .order("enviada_em", { ascending: true })
@@ -235,7 +236,7 @@ export async function registrarMensagem(p: { leadId: string; direcao: "entrada" 
   if (!texto) throw new ErroDoComercial("Escreva a mensagem.");
   const autor = p.direcao === "saida" ? await eu() : null;
   const canal = (CANAIS_DA_CONVERSA as readonly string[]).indexOf(p.canal) >= 0 ? p.canal : "whatsapp";
-  const { error } = await db.from("commercial_lead_messages").insert({ lead_id: p.leadId, direcao: p.direcao, canal, texto: texto.slice(0, 8000), autor_id: autor });
+  const { error } = await db.from(tabelaDoCrm("commercial_lead_messages") as "commercial_lead_messages").insert({ lead_id: p.leadId, direcao: p.direcao, canal, texto: texto.slice(0, 8000), autor_id: autor });
   if (error) throw new ErroDoComercial("Não foi possível registrar a mensagem.", error);
 }
 
@@ -302,22 +303,22 @@ export function rotuloDoCampoDoFato(campo: string): string {
 export async function confirmarFato(fato: FatoDoLead, leadId: string): Promise<void> {
   const destino = destinoDoFato(fato.campo);
   if (destino && destino.tabela === "commercial_leads") {
-    const { error } = await db.from("commercial_leads").update({ [destino.coluna]: fato.valor }).eq("id", leadId);
+    const { error } = await db.from(tabelaDoCrm("commercial_leads") as "commercial_leads").update({ [destino.coluna]: fato.valor }).eq("id", leadId);
     if (error) throw new ErroDoComercial("Não foi possível gravar no lead.", error);
   } else if (destino && destino.tabela === "commercial_organizations") {
     let org = fato.organization_id;
     if (!org) {
-      const { data } = await db.from("commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
+      const { data } = await db.from(tabelaDoCrm("commercial_leads") as "commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
       org = (data && (data as { organization_id?: string | null }).organization_id) || null;
     }
     if (!org) throw new ErroDoComercial("Este lead ainda não tem a ficha da empresa. Preencha a Empresa no lead.");
-    const { error } = await db.from("commercial_organizations").update({ [destino.coluna]: fato.valor }).eq("id", org);
+    const { error } = await db.from(tabelaDoCrm("commercial_organizations") as "commercial_organizations").update({ [destino.coluna]: fato.valor }).eq("id", org);
     if (error) throw new ErroDoComercial("Não foi possível gravar na empresa.", error);
   } else if (destino && destino.tabela === "qualificacao") {
-    const { data, error: erroLer } = await db.from("commercial_leads").select("qualificacao").eq("id", leadId).maybeSingle();
+    const { data, error: erroLer } = await db.from(tabelaDoCrm("commercial_leads") as "commercial_leads").select("qualificacao").eq("id", leadId).maybeSingle();
     if (erroLer) throw new ErroDoComercial("Não foi possível ler a qualificação.", erroLer);
     const atual = objeto(data && (data as { qualificacao?: unknown }).qualificacao);
-    const { error } = await db.from("commercial_leads").update({ qualificacao: { ...atual, [destino.chave]: fato.valor } }).eq("id", leadId);
+    const { error } = await db.from(tabelaDoCrm("commercial_leads") as "commercial_leads").update({ qualificacao: { ...atual, [destino.chave]: fato.valor } }).eq("id", leadId);
     if (error) throw new ErroDoComercial("Não foi possível gravar na qualificação.", error);
   }
   await decidirFato(fato.id, "gravado");
@@ -331,7 +332,7 @@ export async function decidirFato(id: string, situacao: "gravado" | "descartado"
 /* ──────────────────────────── Mercúrio no lead ────────────────────────── */
 
 export async function mercurioNoLead(leadId: string, atende: boolean): Promise<void> {
-  const { error } = await db.from("commercial_leads").update({ agente_slug: atende ? SLUG_DO_MERCURIO : null }).eq("id", leadId);
+  const { error } = await db.from(tabelaDoCrm("commercial_leads") as "commercial_leads").update({ agente_slug: atende ? SLUG_DO_MERCURIO : null }).eq("id", leadId);
   if (error) throw new ErroDoComercial("Não foi possível mudar quem atende o lead.", error);
 }
 
@@ -343,7 +344,7 @@ export interface EventoDoAgente {
 
 export async function historiaDoAgente(leadId: string): Promise<EventoDoAgente[]> {
   const { data, error } = await db
-    .from("commercial_lead_events")
+    .from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events")
     .select("id, note, created_at")
     .eq("lead_id", leadId)
     .eq("kind", "agente")
@@ -454,7 +455,7 @@ export const rotuloDoStatusDaMeta = (s: string) => ROTULO_DO_STATUS_DA_META[Stri
 /** As campanhas da Meta e a chave do Mercúrio de uma campanha da casa. */
 export async function salvarMetaDaCampanha(campanhaId: string, p: { meta_campaign_ids: string[]; mercurio_ativo: boolean }): Promise<void> {
   const ids = Array.from(new Set(p.meta_campaign_ids.map((x) => String(x).trim()).filter(Boolean))).slice(0, 100);
-  const { error } = await db.from("commercial_campaigns").update({ meta_campaign_ids: ids, mercurio_ativo: !!p.mercurio_ativo }).eq("id", campanhaId);
+  const { error } = await db.from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns").update({ meta_campaign_ids: ids, mercurio_ativo: !!p.mercurio_ativo }).eq("id", campanhaId);
   if (error) throw new ErroDoComercial("Não foi possível ligar as campanhas da Meta.", error);
 }
 

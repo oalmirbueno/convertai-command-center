@@ -39,6 +39,8 @@ const AreaDoCFO = lazy(() => import("@/components/cfo/AreaDoCFO"));
 import { useFinanceSettings } from "@/hooks/useFinanceV2";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
+import FaturamentoDoProduto from "@/components/produto/casa/FaturamentoDoProduto";
+import { Boxes } from "lucide-react";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
@@ -109,6 +111,8 @@ const ABAS_DO_FINANCEIRO: { valor: string; rotulo: string; papeis: PapelDaAba; i
   { valor: "renewals", rotulo: "Mensalidades", papeis: "admin", icone: <Repeat className="h-3.5 w-3.5" /> },
   { valor: "fixedcosts", rotulo: "Custos fixos", papeis: "admin", icone: <Receipt className="h-3.5 w-3.5" /> },
   { valor: "plans", rotulo: "Planos e preços", papeis: "admin", icone: <Tag className="h-3.5 w-3.5" /> },
+  // 13/11/2026: o faturamento e o custo do produto CRM e E-mail (assinaturas pelo Asaas).
+  { valor: "produto", rotulo: "CRM e E-mail", papeis: "admin", icone: <Boxes className="h-3.5 w-3.5" /> },
   { valor: "capital", rotulo: "Capital", papeis: "gestao", icone: <Landmark className="h-3.5 w-3.5" /> },
   { valor: "ads", rotulo: "Ads Wallet", papeis: "todos", icone: <Wallet className="h-3.5 w-3.5" /> },
   { valor: "audit", rotulo: "Histórico", papeis: "admin", icone: <History className="h-3.5 w-3.5" /> },
@@ -1325,6 +1329,12 @@ function LegacyFinanceiro() {
         {isAdmin && (
           <TabsContent value="plans" className="mt-0 space-y-6">
             <PlansPricing billing={billingBRL} projectPayments={projectPayments || []} />
+          </TabsContent>
+        )}
+
+        {isAdmin && aba === "produto" && (
+          <TabsContent value="produto" className="mt-0 space-y-6">
+            <FaturamentoDoProduto />
           </TabsContent>
         )}
 

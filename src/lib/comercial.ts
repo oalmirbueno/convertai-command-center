@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { lerOrigemDoClique, type OrigemDoClique } from "../../supabase/functions/_shared/origem-clique";
 import { toBRDateKey } from "@/lib/dateBR";
+import { naConta, tabelaDoCrm } from "./comercial/escopo";
 
 /**
  * O Departamento Comercial da Aceleriq.
@@ -263,7 +264,7 @@ export class ErroDeLeitura extends Error {
 
 export async function listarLeads(): Promise<Lead[]> {
   const { data, error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .select("*")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
@@ -321,7 +322,7 @@ export async function salvarLead(
     const mandados = new Set(Object.keys(lead));
     const parcial = Object.fromEntries(Object.entries(corpo).filter(([campo]) => mandados.has(campo)));
     const { data: linhas, error } = await supabase
-      .from("commercial_leads")
+      .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
       .update(parcial as never)
       .eq("id", lead.id)
       .select("id");
@@ -331,7 +332,7 @@ export async function salvarLead(
     return lead.id;
   }
   const { data, error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .insert({
       ...corpo,
       quiz_submission_id: lead.quiz_submission_id || null,
@@ -364,7 +365,7 @@ export async function moverLead(input: {
   const fechou = paraEstagio === "ganho" || paraEstagio === "perdido";
   erroDoComercial = "";
   const { data: linhas, error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .update({
       stage: paraEstagio,
       closed_at: fechou ? new Date().toISOString() : null,
@@ -381,7 +382,7 @@ export async function moverLead(input: {
   // Sem erro e sem linha = a politica de acesso recusou em silencio: o cartao
   // nao pode ficar na coluna nova como se o banco tivesse aceitado.
   if (!linhas || linhas.length === 0) { erroDoComercial = "Sua conta não tem permissão para mover este lead."; return false; }
-  const { error: erroDoEvento } = await supabase.from("commercial_lead_events").insert({
+  const { error: erroDoEvento } = await supabase.from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events").insert({
     lead_id: lead.id,
     kind: "stage",
     from_stage: lead.stage,
@@ -399,7 +400,7 @@ export async function anotarNoLead(leadId: string, nota: string): Promise<boolea
   const texto = nota.trim();
   if (texto.length < 2) return false;
   const { data: sessao } = await supabase.auth.getUser();
-  const { error } = await supabase.from("commercial_lead_events").insert({
+  const { error } = await supabase.from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events").insert({
     lead_id: leadId,
     kind: "nota",
     note: texto.slice(0, 2000),
@@ -410,7 +411,7 @@ export async function anotarNoLead(leadId: string, nota: string): Promise<boolea
 
 export async function historicoDoLead(leadId: string) {
   const { data, error } = await supabase
-    .from("commercial_lead_events")
+    .from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events")
     .select("id, kind, from_stage, to_stage, note, created_at")
     .eq("lead_id", leadId)
     .order("created_at", { ascending: false })
@@ -428,7 +429,7 @@ export async function historicoDoLead(leadId: string) {
 
 export async function arquivarLead(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .update({ archived_at: new Date().toISOString() } as never)
     .eq("id", id);
   return !error;
@@ -457,7 +458,7 @@ export async function importarLeadsDoQuiz(): Promise<number> {
   // recusava a gravacao toda.
   const ids = (quiz as Array<{ id: unknown }>).map((linha) => String(linha.id));
   const { data: existentes, error: erroDosExistentes } = await supabase
-    .from("commercial_leads")
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
     .select("quiz_submission_id")
     .in("quiz_submission_id", ids);
   if (erroDosExistentes) throw new ErroDeLeitura("os negócios", erroDosExistentes);
@@ -481,7 +482,7 @@ export async function importarLeadsDoQuiz(): Promise<number> {
   if (novos.length === 0) return 0;
 
   const { data: sessao } = await supabase.auth.getUser();
-  const { error } = await supabase.from("commercial_leads").insert(
+  const { error } = await supabase.from(tabelaDoCrm("commercial_leads") as "commercial_leads").insert(
     novos.map((n) => ({ ...n, created_by: sessao?.user?.id || null })) as never,
   );
   if (error) throw new Error(`Não foi possível gravar os leads do diagnóstico. ${error.message}`);
@@ -535,7 +536,7 @@ export const primeiroDiaDoMes = (data: Date) =>
 
 export async function listarMetas(periodo: string): Promise<Meta[]> {
   const { data, error } = await supabase
-    .from("commercial_goals")
+    .from(tabelaDoCrm("commercial_goals") as "commercial_goals")
     .select("id, period, metric, target, notes")
     .eq("period", periodo);
   if (error) throw new ErroDeLeitura("as metas", error);
@@ -556,7 +557,7 @@ export async function salvarMeta(input: {
   const { data: sessao } = await supabase.auth.getUser();
   // onConflict na chave (period, metric): editar a meta do mês é o caso
   // comum, e sem isto o segundo salvar estouraria na chave única.
-  const { error } = await supabase.from("commercial_goals").upsert(
+  const { error } = await supabase.from(tabelaDoCrm("commercial_goals") as "commercial_goals").upsert(
     {
       period: periodo,
       metric: metrica,
@@ -569,7 +570,7 @@ export async function salvarMeta(input: {
 }
 
 export async function apagarMeta(id: string): Promise<boolean> {
-  const { error } = await supabase.from("commercial_goals").delete().eq("id", id);
+  const { error } = await supabase.from(tabelaDoCrm("commercial_goals") as "commercial_goals").delete().eq("id", id);
   return !error;
 }
 
@@ -584,6 +585,7 @@ export async function apagarMeta(id: string): Promise<boolean> {
  * fora — é lançamento que deixou de existir.
  */
 export async function receitaDoMes(periodo: string): Promise<number> {
+  if (naConta()) return (await ganhosDaContaNoMes(periodo)).receita;
   const inicio = periodo;
   const fim = proximoMes(periodo);
   const { data, error } = await supabase
@@ -610,6 +612,7 @@ export async function receitaDoMes(periodo: string): Promise<number> {
  * régua de "alvo é dado próprio, realizado é lido do Financeiro".
  */
 export async function clientesRecorrentesDoMes(periodo: string): Promise<number> {
+  if (naConta()) return (await ganhosDaContaNoMes(periodo)).recorrentes;
   const { data, error } = await supabase
     .from("financial_entries")
     .select("client_id")
@@ -624,6 +627,27 @@ export async function clientesRecorrentesDoMes(periodo: string): Promise<number>
   return new Set(
     (data as Array<{ client_id: unknown }>).map((linha) => String(linha.client_id)),
   ).size;
+}
+
+/**
+ * No CRM da empresa cliente não existe o Financeiro da casa: o realizado do
+ * mês é o que ela mesma marcou como ganho (entrada mais a primeira
+ * mensalidade), pela data do fechamento.
+ */
+async function ganhosDaContaNoMes(periodo: string): Promise<{ receita: number; recorrentes: number }> {
+  const { data, error } = await supabase
+    .from(tabelaDoCrm("commercial_leads") as "commercial_leads")
+    .select("monthly_value, one_off_value, closed_at")
+    .eq("stage", "ganho")
+    .is("archived_at", null)
+    .gte("closed_at", `${periodo}T00:00:00-03:00`)
+    .lt("closed_at", `${proximoMes(periodo)}T00:00:00-03:00`);
+  if (error) throw new ErroDeLeitura("os ganhos do mês", error);
+  const linhas = (data || []) as Array<{ monthly_value: unknown; one_off_value: unknown }>;
+  return {
+    receita: linhas.reduce((soma, l) => soma + numero(l.monthly_value) + numero(l.one_off_value), 0),
+    recorrentes: linhas.filter((l) => numero(l.monthly_value) > 0).length,
+  };
 }
 
 export function proximoMes(periodo: string): string {
@@ -782,7 +806,7 @@ export function linhasDeMetaDoMes(input: {
 
 export async function listarCampanhas(): Promise<Campanha[]> {
   const { data, error } = await supabase
-    .from("commercial_campaigns")
+    .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
     .select("*")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
@@ -817,20 +841,20 @@ export async function salvarCampanha(
   };
   if (campanha.id) {
     const { error } = await supabase
-      .from("commercial_campaigns")
+      .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
       .update(corpo as never)
       .eq("id", campanha.id);
     return !error;
   }
   const { error } = await supabase
-    .from("commercial_campaigns")
+    .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never);
   return !error;
 }
 
 export async function arquivarCampanha(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("commercial_campaigns")
+    .from(tabelaDoCrm("commercial_campaigns") as "commercial_campaigns")
     .update({ archived_at: new Date().toISOString() } as never)
     .eq("id", id);
   return !error;
@@ -989,13 +1013,13 @@ const COLUNAS_DA_ATIVIDADE = "id, lead_id, kind, title, due_at, done_at, owner_i
 export async function listarAtividades(): Promise<Atividade[]> {
   const [abertas, feitas] = await Promise.all([
     supabase
-      .from("commercial_activities")
+      .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
       .select(COLUNAS_DA_ATIVIDADE)
       .is("done_at", null)
       .order("due_at", { ascending: true })
       .limit(1000),
     supabase
-      .from("commercial_activities")
+      .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
       .select(COLUNAS_DA_ATIVIDADE)
       .not("done_at", "is", null)
       .order("due_at", { ascending: false })
@@ -1034,13 +1058,13 @@ export async function salvarAtividade(input: {
   };
   if (input.id) {
     const { error } = await supabase
-      .from("commercial_activities")
+      .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
       .update(corpo as never)
       .eq("id", input.id);
     return !error;
   }
   const { error } = await supabase
-    .from("commercial_activities")
+    .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never);
   return !error;
 }
@@ -1058,14 +1082,14 @@ export async function concluirAtividade(
 ): Promise<boolean> {
   const { data: sessao } = await supabase.auth.getUser();
   const { error } = await supabase
-    .from("commercial_activities")
+    .from(tabelaDoCrm("commercial_activities") as "commercial_activities")
     .update({ done_at: concluir ? new Date().toISOString() : null } as never)
     .eq("id", atividade.id);
   if (error) return false;
   // So o compromisso ligado a um lead vira linha na historia dele; o
   // proprio nao tem onde ser registrado, nem precisa.
   if (concluir && atividade.lead_id) {
-    await supabase.from("commercial_lead_events").insert({
+    await supabase.from(tabelaDoCrm("commercial_lead_events") as "commercial_lead_events").insert({
       lead_id: atividade.lead_id,
       kind: "atividade",
       note: `${rotuloDaAtividade(atividade.kind)}: ${atividade.title}`,
@@ -1076,7 +1100,7 @@ export async function concluirAtividade(
 }
 
 export async function apagarAtividade(id: string): Promise<boolean> {
-  const { error } = await supabase.from("commercial_activities").delete().eq("id", id);
+  const { error } = await supabase.from(tabelaDoCrm("commercial_activities") as "commercial_activities").delete().eq("id", id);
   return !error;
 }
 
@@ -1221,7 +1245,7 @@ export interface Contato {
 
 export async function listarEmpresas(): Promise<Empresa[]> {
   const { data, error } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .select("id, name, segment, site, city, notes, client_id, owner_id, instagram, phone, address, cnpj, size")
     .is("archived_at", null)
     .order("name");
@@ -1232,7 +1256,7 @@ export async function listarEmpresas(): Promise<Empresa[]> {
 
 export async function listarContatos(): Promise<Contato[]> {
   const { data, error } = await supabase
-    .from("commercial_contacts")
+    .from(tabelaDoCrm("commercial_contacts") as "commercial_contacts")
     .select("id, organization_id, name, role, email, whatsapp, is_primary, notes")
     .is("archived_at", null)
     .order("name");
@@ -1268,7 +1292,7 @@ export async function salvarEmpresa(
     const mandados = new Set(Object.keys(empresa));
     const parcial = Object.fromEntries(Object.entries(corpo).filter(([campo]) => mandados.has(campo)));
     const { data: linhas, error } = await supabase
-      .from("commercial_organizations")
+      .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
       .update(parcial as never)
       .eq("id", empresa.id)
       .select("id");
@@ -1278,7 +1302,7 @@ export async function salvarEmpresa(
   }
   // Mesmo nome = mesma ficha: criar de novo abriria duas historias para a mesma empresa.
   const { data: existente } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .select("id")
     .ilike("name", nome.replace(/[%_]/g, ""))
     .is("archived_at", null)
@@ -1288,7 +1312,7 @@ export async function salvarEmpresa(
     return null;
   }
   const { data, error } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
     .select("id")
     .single();
@@ -1307,7 +1331,7 @@ export async function salvarDadosDaEmpresaDoLead(
   const preenchidos = Object.entries(campos).filter(([, v]) => typeof v === "string");
   if (preenchidos.length === 0) return true;
   erroDoComercial = "";
-  const { data, error } = await supabase.from("commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
+  const { data, error } = await supabase.from(tabelaDoCrm("commercial_leads") as "commercial_leads").select("organization_id").eq("id", leadId).maybeSingle();
   // Leitura que falhou nao e "lead sem ficha": devolver true dizia "salvo" sem gravar nada.
   if (error) { erroDoComercial = error.message; return false; }
   const linha = data as { organization_id?: string | null } | null;
@@ -1316,7 +1340,7 @@ export async function salvarDadosDaEmpresaDoLead(
   // (ou "Empresa" quando vazio) renomeava a ficha a cada dado completado.
   const limpo = (v: string) => v.trim() || null;
   const { data: linhas, error: erroDaEmpresa } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .update(Object.fromEntries(preenchidos.map(([campo, v]) => [campo, limpo(String(v))])) as never)
     .eq("id", linha.organization_id)
     .select("id");
@@ -1332,7 +1356,7 @@ export async function salvarDadosDaEmpresaDoLead(
  */
 export async function apagarLead(id: string): Promise<boolean> {
   erroDoComercial = "";
-  const { data, error } = await supabase.from("commercial_leads").delete().eq("id", id).select("id");
+  const { data, error } = await supabase.from(tabelaDoCrm("commercial_leads") as "commercial_leads").delete().eq("id", id).select("id");
   if (error) { erroDoComercial = error.message; return false; }
   if (!data || data.length === 0) { erroDoComercial = "Sua conta não tem permissão para apagar este lead."; return false; }
   return true;
@@ -1355,13 +1379,13 @@ export async function salvarContato(
   };
   if (contato.id) {
     const { error } = await supabase
-      .from("commercial_contacts")
+      .from(tabelaDoCrm("commercial_contacts") as "commercial_contacts")
       .update(corpo as never)
       .eq("id", contato.id);
     return error ? null : contato.id;
   }
   const { data, error } = await supabase
-    .from("commercial_contacts")
+    .from(tabelaDoCrm("commercial_contacts") as "commercial_contacts")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
     .select("id")
     .single();
@@ -1371,7 +1395,7 @@ export async function salvarContato(
 
 export async function arquivarEmpresa(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("commercial_organizations")
+    .from(tabelaDoCrm("commercial_organizations") as "commercial_organizations")
     .update({ archived_at: new Date().toISOString() } as never)
     .eq("id", id);
   return !error;

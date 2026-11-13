@@ -18,6 +18,7 @@ import { PaginaMesaSite } from "@/lib/mesa/preCarga";
 import { PaginaLaboratorio } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useProduto } from "@/hooks/useProduto";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
@@ -47,6 +48,10 @@ const Login = rotas.lazy(() => import("@/pages/Login"));
 const AreaDeMembros = rotas.lazy(() => import("@/pages/AreaDeMembros"));
 const AdminMembros = rotas.lazy(() => import("@/pages/AdminMembros"));
 const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
+// 13/11/2026: o produto CRM e E-mail (um lugar à parte), a página de venda e a administração dele.
+const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
+const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
+const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
 const ClientDashboard = rotas.lazy(() => import("@/pages/ClientDashboard"));
@@ -252,10 +257,21 @@ function StaffRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Quem não tem papel no painel: se a pessoa é de uma empresa do CRM e E-mail
+ * (ou foi convidada), o lugar dela é o produto; senão, a área de membros.
+ */
+function DestinoDeQuemNaoEDoPainel() {
+  const produto = useProduto();
+  if (produto.isLoading) return <LoadingScreen />;
+  const noProduto = !!produto.data && (!!produto.data.conta || !!produto.data.convite);
+  return <Navigate to={noProduto ? "/app" : "/membros"} replace />;
+}
+
 /** A biblioteca não concede entrada no painel. A barreira de dados também existe no banco. */
 export function OperationalRoute({children}:{children:ReactNode}) {
   const {profile}=useAuth();
-  if (!profile || !["admin","client","design","traffic","manager"].includes(profile.role)) return <Navigate to="/membros" replace/>;
+  if (!profile || !["admin","client","design","traffic","manager"].includes(profile.role)) return <DestinoDeQuemNaoEDoPainel />;
   return <>{children}</>;
 }
 
@@ -359,6 +375,11 @@ export function AppRoutes() {
       <Route path="/membros" element={<ProtectedRoute><AreaDeMembros /></ProtectedRoute>} />
       <Route path="/membros/administrar" element={<ProtectedRoute>{profile?.role==="admin"?<AdminMembros/>:<Navigate to="/membros" replace/>}</ProtectedRoute>} />
       <Route path="/solucoes" element={<SolucoesAceleriq />} />
+      {/* O produto CRM e E-mail roda fora do AppLayout e da área de membros: casca, menu e endereço próprios. */}
+      <Route path="/crm" element={<ProdutoLanding />} />
+      <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
+      <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
+      <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/oauth/meta/callback" element={<ProtectedRoute><MetaOAuthCallback /></ProtectedRoute>} />
 
       {/* Ciclo roda fora do AppLayout: é um aplicativo à parte, abre em tela
@@ -404,6 +425,7 @@ export function AppRoutes() {
         <Route path="/timeline" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/ver-como-cliente" element={<StaffRoute><AdminViewAsClient /></StaffRoute>} />
         <Route path="/financeiro" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</>} />
+        <Route path="/produto" element={<>{profile?.role === "admin" ? <AdminProduto /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/comercial" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
         {/* Cada area do departamento tem endereco proprio: o menu aponta
             direto para ela, o voltar do navegador funciona e o link pode

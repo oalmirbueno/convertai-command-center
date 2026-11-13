@@ -40,6 +40,7 @@ import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
 import Termometro from "./Termometro";
 import { resumoDaOportunidade, totalDoGanho, valorDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
 import JanelaDoGanho from "./JanelaDoGanho";
+import { naConta } from "@/lib/comercial/escopo";
 import {
   FAIXAS_DO_FILTRO,
   LIMITES_DA_TEMPERATURA,
@@ -264,7 +265,8 @@ export default function FunilKanban({
     // Fechar pede contexto: o motivo da perda é o que ensina o próximo lead,
     // e o cliente do ganho é a ponte para o financeiro responder quanto
     // aquele lead virou.
-    if (destino === "ganho" || destino === "perdido") {
+    // No CRM da empresa o ganho não cria cadastro na casa: move direto.
+    if (destino === "perdido" || (destino === "ganho" && !naConta())) {
       setFechamento({ lead, destino });
       return;
     }
@@ -315,6 +317,7 @@ export default function FunilKanban({
           valor={classe}
           onEscolher={setClasse}
         />
+        {!naConta() && (
         <SeletorCompacto
           rotulo="Quem atende"
           modo="lista"
@@ -327,6 +330,7 @@ export default function FunilKanban({
           valor={quemAtende}
           onEscolher={setQuemAtende}
         />
+        )}
         <SeletorCompacto
           rotulo="Temperatura"
           modo="lista"
@@ -367,13 +371,15 @@ export default function FunilKanban({
           <EstadoVazio
             icone={<KanbanSquare className="h-5 w-5" />}
             titulo="O funil está vazio"
-            descricao="Cadastre quem já está em conversa ou traga quem preencheu o diagnóstico."
+            descricao={naConta() ? "Cadastre quem já está em conversa ou busque empresas na Máquina de leads." : "Cadastre quem já está em conversa ou traga quem preencheu o diagnóstico."}
             acao={
               // 16/10/2026: só o ícone (os mesmos do título), nome no title.
               <div className="flex flex-wrap items-center justify-center [&>*]:m-1">
+                {!naConta() && (
                 <button type="button" onClick={onImportar} disabled={importando} className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Trazer do diagnóstico" title="Trazer do diagnóstico">
                   <Download className="h-4 w-4" aria-hidden="true" />
                 </button>
+                )}
                 <button type="button" onClick={onNovo} className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo lead" title="Novo lead">
                   <Plus className="h-4 w-4" aria-hidden="true" />
                 </button>

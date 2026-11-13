@@ -16,7 +16,7 @@ import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, Re
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  LayoutGrid, GraduationCap, BookOpen, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
+  LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
   HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign,
@@ -236,6 +236,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Equipe", url: "/equipe", icon: UsersRound },
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+      // 13/11/2026: a administração do produto CRM e E-mail (empresas, migração, preços e faturamento).
+      { title: "CRM e E-mail", url: "/produto", icon: Boxes, soAdmin: true },
       // Horas e custos (frente CR): tempo por cliente, custo de IA e capacidade. Só admin e gestor.
       { title: "Horas e custos", url: "/horas", icon: Timer, soGestao: true },
       { title: "Arquivos", url: "/arquivos", icon: FileArchive },
@@ -290,6 +292,8 @@ const clientMainNav: NavItem[] = [
 ];
 
 const clientMoreNav: NavItem[] = [
+  // 13/11/2026: o produto CRM e E-mail é um lugar à parte; daqui o cliente entra nele.
+  { title: "CRM e E-mail", url: "/app", icon: Boxes },
   { title: "Área de membros", url: "/membros", icon: BookOpen },
   { title: "Novidades", url: "/novidades", icon: Sparkles },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
