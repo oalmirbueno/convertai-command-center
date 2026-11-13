@@ -10,7 +10,9 @@
   // aceleriq.online e www servidos por este Worker (Custom Domains; a Cloudflare cria o DNS).
   "routes": [
     { "pattern": "aceleriq.online", "custom_domain": true },
-    { "pattern": "www.aceleriq.online", "custom_domain": true }
+    { "pattern": "www.aceleriq.online", "custom_domain": true },
+    // Página de venda do CRM (a raiz deste endereço abre /crm).
+    { "pattern": "crm.aceleriq.online", "custom_domain": true }
   ],
   // Só /assets/* passa pelo código (config/painel-worker.js): pedaço que falta vira 404 sem cache,
   // nunca o index.html guardado por 1 ano.
