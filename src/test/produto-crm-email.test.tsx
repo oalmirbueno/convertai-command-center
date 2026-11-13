@@ -6,6 +6,8 @@ import { chaveDoEscopo, definirEscopoDoCrm, limitesDoPlano, naConta, tabelaDoCrm
 import { avisoDaConta, diasAte, mensalidadePrevista, type EstadoDoProduto, type PlanoDoProduto } from "@/lib/produto/api";
 import EscolhaDePlano from "@/components/produto/EscolhaDePlano";
 import { precisaCriarSenha, senhaAceita } from "@/components/produto/CriarSenha";
+import { resumirCrm } from "@/components/produto/InicioDoProduto";
+import { CORES_DA_EMPRESA, lerAparencia, variaveisDaCor } from "@/lib/produto/aparencia";
 import { registrosParaPublicar } from "@/components/produto/casa/EmailDaCasa";
 import { nomeDoMes, resultadoDoMes, somarMeses } from "@/components/produto/casa/FaturamentoDoProduto";
 import { situacaoDaConta } from "@/components/produto/casa/ContasDaCasa";
@@ -130,7 +132,7 @@ function estado(parte: Partial<EstadoDoProduto["conta"]> & { estado: NonNullable
   return {
     conta: {
       id: "c", nome: "Empresa", plano_id: "starter", usuarios_contratados: 2, crm_ativo: true, email_ativo: false, email_caixas_contratadas: 0,
-      teste_ate: null, atrasada_desde: null, acesso_ate: null, visibilidade: "todos", documento: null, email_cobranca: null, telefone: null, ...parte,
+      teste_ate: null, atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, documento: null, email_cobranca: null, telefone: null, ...parte,
     },
     eu: { membro_id: "m", papel, nome: "Ana", email: "ana@exemplo.com" },
     plano: null, liberada, crm: liberada, email: false, dono_da_casa: false, pagamentos_ativos: true, tolerancia_dias: 5, teste_dias: 7,
@@ -335,6 +337,77 @@ describe("primeira entrada", () => {
     expect(senhaAceita("curta1A")).toBe(false);
     expect(senhaAceita("semnumeroABC")).toBe(false);
     expect(senhaAceita("Empresa2026ok")).toBe(true);
+  });
+});
+
+describe("personalização da empresa", () => {
+  it("verde ou nada escolhido não mexe no tema do painel", () => {
+    expect(variaveisDaCor(undefined, "dark")).toEqual({});
+    expect(variaveisDaCor("verde", "light")).toEqual({});
+  });
+
+  it("cada cor tem um tom para o escuro e outro para o claro, com texto legível no botão", () => {
+    const azul = CORES_DA_EMPRESA.filter((c) => c.id === "azul")[0];
+    expect(variaveisDaCor("azul", "dark")["--primary"]).toBe(azul.escuro);
+    expect(variaveisDaCor("azul", "light")["--primary"]).toBe(azul.claro);
+    expect(variaveisDaCor("azul", "light")["--primary-foreground"]).toBe("0 0% 100%");
+    expect(variaveisDaCor("laranja", "dark")["--primary-foreground"]).toBe("0 0% 5%");
+    expect(CORES_DA_EMPRESA.map((c) => c.id)).toEqual(["verde", "azul", "roxo", "laranja", "rosa", "ciano"]);
+  });
+
+  it("só entra cor da lista e logo que é imagem", () => {
+    expect(lerAparencia({ cor: "roxo", nome_curto: "  Imob  ", logo: "data:image/png;base64,AAAA" })).toEqual({ cor: "roxo", nome_curto: "Imob", logo: "data:image/png;base64,AAAA" });
+    expect(lerAparencia({ cor: "vermelho", logo: "javascript:alert(1)" })).toEqual({});
+    expect(lerAparencia({ logo: "data:text/html;base64,AAAA" })).toEqual({});
+    expect(lerAparencia(null)).toEqual({});
+  });
+
+  it("o banco aceita a mesma lista de cores da tela", () => {
+    const sql = ler("supabase/migrations/20261113120000_produto_crm_e_email.sql");
+    expect(sql).toContain("('verde', 'azul', 'roxo', 'laranja', 'rosa', 'ciano')");
+    expect(sql).toContain("produto_aparencia_valida");
+  });
+
+  it("o topo do produto tem o botão de tema e não usa a tag header, que o tema claro do painel pinta de branco", () => {
+    const casca = ler("src/pages/ProdutoApp.tsx");
+    expect(casca).toContain("data-trocar-tema");
+    expect(casca).toContain('role="banner"');
+    expect(casca.indexOf("<header ")).toBe(-1);
+  });
+});
+
+describe("resumo do início", () => {
+  const agora = new Date("2026-11-13T15:00:00-03:00").getTime();
+  const lead = (id: string, stage: string, mensal: number, extra: Partial<{ closed_at: string; owner_id: string | null }> = {}) => ({
+    id, name: `Pessoa ${id}`, company: `Empresa ${id}`, stage, monthly_value: mensal, one_off_value: 0,
+    closed_at: extra.closed_at || null, owner_id: extra.owner_id === undefined ? "u1" : extra.owner_id, created_at: `2026-11-0${id}T10:00:00-03:00`,
+  });
+  const leads = [lead("1", "novo", 100), lead("2", "novo", 200, { owner_id: null }), lead("3", "proposta", 300), lead("4", "ganho", 500, { closed_at: "2026-11-10T10:00:00-03:00" }), lead("5", "perdido", 900)];
+  const compromissos = [
+    { id: "a", title: "Ligar", due_at: "2026-11-12T10:00:00-03:00", lead_id: "1" },
+    { id: "b", title: "Reunião", due_at: "2026-11-13T16:00:00-03:00", lead_id: "3" },
+    { id: "c", title: "Amanhã", due_at: "2026-11-14T09:00:00-03:00", lead_id: null },
+  ];
+
+  it("separa aberto de fechado, soma o valor do ano e conta o ganho do mês", () => {
+    const r = resumirCrm(leads, compromissos, true, agora);
+    expect(r.abertos).toBe(3);
+    expect(r.emJogo).toBe((100 + 200 + 300) * 12);
+    expect(r.ganhosNoMes).toBe(1);
+    expect(r.semDono).toBe(1);
+    expect(r.etapas.map((e) => e.quantos)).toEqual([2, 0, 0, 1, 0]);
+  });
+
+  it("para hoje: o atrasado vem primeiro e o de amanhã fica de fora", () => {
+    const r = resumirCrm(leads, compromissos, false, agora);
+    expect(r.atrasados).toBe(1);
+    expect(r.hoje).toBe(1);
+    expect(r.compromissos.map((c) => c.id)).toEqual(["a", "b"]);
+    expect(r.compromissos[0]).toMatchObject({ atrasado: true, lead: "Empresa 1" });
+  });
+
+  it("os mais novos primeiro", () => {
+    expect(resumirCrm(leads, [], false, agora).recentes.map((l) => l.id)).toEqual(["5", "4", "3", "2", "1"]);
   });
 });
 

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { limitesDoPlano, type LimitesDoPlano } from "@/lib/comercial/escopo";
+import { lerAparencia, type AparenciaDaEmpresa } from "./aparencia";
 
 /**
  * Produto CRM e E-mail: o que a tela lê e pede.
@@ -60,6 +61,7 @@ export interface EstadoDoProduto {
     atrasada_desde: string | null;
     acesso_ate: string | null;
     visibilidade: "todos" | "proprios";
+    aparencia: AparenciaDaEmpresa;
     documento: string | null;
     email_cobranca: string | null;
     telefone: string | null;
@@ -144,6 +146,7 @@ function lerEstado(d: any): EstadoDoProduto {
           ...conta,
           usuarios_contratados: numero(conta.usuarios_contratados),
           email_caixas_contratadas: numero(conta.email_caixas_contratadas),
+          aparencia: lerAparencia(conta.aparencia),
         }
       : null,
     eu: d && d.eu ? d.eu : null,
@@ -236,7 +239,7 @@ export async function criarConta(p: { nome: string; documento?: string; telefone
   return String(data);
 }
 
-export async function salvarConta(dados: Partial<{ nome: string; documento: string; telefone: string; email_cobranca: string; visibilidade: "todos" | "proprios" }>): Promise<void> {
+export async function salvarConta(dados: Partial<{ nome: string; documento: string; telefone: string; email_cobranca: string; visibilidade: "todos" | "proprios"; aparencia: AparenciaDaEmpresa }>): Promise<void> {
   const { error } = await db.rpc("produto_conta_salvar", { _dados: dados });
   if (error) throw error;
 }

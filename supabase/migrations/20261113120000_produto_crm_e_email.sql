@@ -86,11 +86,16 @@ create table if not exists public.produto_contas (
   atrasada_desde timestamptz,
   acesso_ate timestamptz,
   visibilidade text not null default 'todos' check (visibilidade in ('todos', 'proprios')),
+  -- Personalizacao da empresa: cor de destaque, logo (imagem pequena embutida) e nome curto do topo.
+  aparencia jsonb not null default '{}'::jsonb check (pg_column_size(aparencia) < 200000),
   origem text not null default 'painel' check (origem in ('site', 'painel')),
   observacao text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
 );
+
+alter table public.produto_contas
+  add column if not exists aparencia jsonb not null default '{}'::jsonb;
 
 create index if not exists produto_contas_por_estado on public.produto_contas (estado, criado_em desc);
 create index if not exists produto_contas_por_cliente on public.produto_contas (client_id) where client_id is not null;
@@ -698,6 +703,7 @@ begin
       'email_ativo', _conta.email_ativo, 'email_caixas_contratadas', _conta.email_caixas_contratadas,
       'teste_ate', _conta.teste_ate, 'atrasada_desde', _conta.atrasada_desde, 'acesso_ate', _conta.acesso_ate,
       'visibilidade', _conta.visibilidade,
+      'aparencia', _conta.aparencia,
       'documento', case when _admin then _conta.documento end,
       'email_cobranca', case when _admin then _conta.email_cobranca end,
       'telefone', case when _admin then _conta.telefone end
@@ -950,6 +956,24 @@ begin
 end;
 $$;
 
+-- So entra o que a tela de personalizacao oferece: cor da lista, logo em imagem pequena e nome curto.
+create or replace function public.produto_aparencia_valida(_a jsonb)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'cor', case when _a ->> 'cor' in ('verde', 'azul', 'roxo', 'laranja', 'rosa', 'ciano') then _a ->> 'cor' end,
+    'nome_curto', nullif(left(btrim(coalesce(_a ->> 'nome_curto', '')), 40), ''),
+    'logo', case when _a ->> 'logo' ~ '^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$' and length(_a ->> 'logo') <= 160000
+                 then _a ->> 'logo' end
+  ))
+$$;
+
+revoke all on function public.produto_aparencia_valida(jsonb) from public, anon;
+grant execute on function public.produto_aparencia_valida(jsonb) to authenticated, service_role;
+
 create or replace function public.produto_conta_salvar(_dados jsonb)
 returns void
 language plpgsql
@@ -969,6 +993,7 @@ begin
     email_cobranca = case when _dados ? 'email_cobranca' and lower(btrim(_dados ->> 'email_cobranca')) ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
                           then lower(btrim(_dados ->> 'email_cobranca')) else email_cobranca end,
     visibilidade = case when _dados ->> 'visibilidade' in ('todos', 'proprios') then _dados ->> 'visibilidade' else visibilidade end,
+    aparencia = case when _dados ? 'aparencia' then public.produto_aparencia_valida(_dados -> 'aparencia') else aparencia end,
     atualizado_em = now()
   where id = _conta;
 end;

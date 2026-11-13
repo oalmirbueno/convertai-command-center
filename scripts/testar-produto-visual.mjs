@@ -32,7 +32,7 @@ const equipe = [
   { id: "m3", user_id: null, nome: "Camila Rocha", email: "camila@imobiliariaexemplo.com.br", papel: "usuario", estado: "convidado", entrou_em: null },
 ];
 const estadoDoProduto = (parte = {}) => ({
-  conta: { id: CONTA, nome: "Imobiliária Exemplo", estado: "teste", plano_id: "pro", usuarios_contratados: 4, crm_ativo: true, email_ativo: true, email_caixas_contratadas: 6, teste_ate: dia(5), atrasada_desde: null, acesso_ate: null, visibilidade: "todos", documento: "12345678000195", email_cobranca: "financeiro@imobiliariaexemplo.com.br", telefone: "41999990000", ...(parte.conta || {}) },
+  conta: { id: CONTA, nome: "Imobiliária Exemplo", estado: "teste", plano_id: "pro", usuarios_contratados: 4, crm_ativo: true, email_ativo: true, email_caixas_contratadas: 6, teste_ate: dia(5), atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, documento: "12345678000195", email_cobranca: "financeiro@imobiliariaexemplo.com.br", telefone: "41999990000", ...(parte.conta || {}) },
   eu: { membro_id: "m1", papel: "admin", nome: "Priscila Souza", email: "priscila@imobiliariaexemplo.com.br", ...(parte.eu || {}) },
   plano: { id: "pro", nome: "Pro", preco_usuario: 79.9, limites: planos[1].limites, email_caixas_incluidas: 5 },
   liberada: true, crm: true, email: true, dono_da_casa: false, pagamentos_ativos: true, tolerancia_dias: 5, teste_dias: 7,
@@ -105,8 +105,16 @@ const erros = [];
 const resultados = [];
 const browser = await chromium.launch({ headless: true });
 
-async function abrir({ nome, caminho, largura, papel = "member", estado = estadoDoProduto(), espera, depois }) {
-  const contexto = await browser.newContext({ viewport: { width: largura, height: largura < 500 ? 844 : 900 }, reducedMotion: "reduce", serviceWorkers: "block", colorScheme: "dark" });
+async function abrir({ nome, caminho, largura, papel = "member", estado = estadoDoProduto(), espera, depois, tema = "dark" }) {
+  const contexto = await browser.newContext({ viewport: { width: largura, height: largura < 500 ? 844 : 900 }, reducedMotion: "reduce", serviceWorkers: "block", colorScheme: tema });
+  // O tema do painel fica guardado no aparelho: aqui o teste escolhe antes de a página abrir.
+  await contexto.addInitScript((t) => {
+    try {
+      localStorage.setItem("aceleriq_theme", t);
+    } catch {
+      /* sem armazenamento */
+    }
+  }, tema);
   const pagina = await contexto.newPage();
   pagina.on("console", (m) => {
     if (m.type() === "error" && !/favicon|Failed to load resource|net::ERR/.test(m.text())) erros.push(`${nome}@${largura}: ${m.text().slice(0, Number(process.env.PRODUTO_DETALHE) || 240)}`);
@@ -179,6 +187,11 @@ const telas = [
   { nome: "11-teste-vencido", caminho: "/app/crm", espera: "[data-aviso-da-conta]", estado: estadoDoProduto({ conta: { teste_ate: dia(-1) }, raiz: { liberada: false, crm: false, email: false } }) },
   { nome: "12-usuario-comum", caminho: "/app/conta", espera: "[data-lista-da-equipe]", estado: estadoDoProduto({ eu: { papel: "usuario", membro_id: "m2" }, raiz: { assinatura: null } }) },
   { nome: "13-venda", caminho: "/crm", espera: "[data-pagina-de-venda]" },
+  { nome: "14-aparencia", caminho: "/app/conta?parte=aparencia", espera: "[data-aparencia-da-conta]" },
+  { nome: "15-inicio-claro", caminho: "/app", espera: "[data-inicio-do-produto]", tema: "light" },
+  { nome: "16-crm-claro", caminho: "/app/crm/crm", espera: "[data-produto-conteudo] header", tema: "light" },
+  { nome: "17-inicio-azul", caminho: "/app", espera: "[data-inicio-do-produto]", estado: estadoDoProduto({ conta: { aparencia: { cor: "azul", nome_curto: "Imob Exemplo" } } }) },
+  { nome: "18-conta-plano-claro", caminho: "/app/conta?parte=plano", espera: "[data-escolha-de-plano]", tema: "light", estado: estadoDoProduto({ conta: { aparencia: { cor: "roxo" } } }) },
   { nome: "20-casa-empresas", caminho: "/produto", papel: "admin", espera: "[data-lista-de-contas]" },
   { nome: "21-casa-ficha", caminho: "/produto", papel: "admin", espera: "[data-lista-de-contas]", depois: async (p) => { await p.click(`[data-conta="${CONTA}"]`); await p.waitForSelector("[data-salvar-conta]", { timeout: 10000 }); await p.waitForTimeout(500); } },
   { nome: "22-casa-email", caminho: "/produto?area=email", papel: "admin", espera: "[data-passo-a-passo]" },

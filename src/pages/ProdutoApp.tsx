@@ -1,9 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Home, KanbanSquare, LayoutGrid, LogOut, Mail, BookOpen, Settings2, UserRound } from "lucide-react";
+import { Building2, Home, KanbanSquare, LayoutGrid, LogOut, Mail, BookOpen, Moon, Palette, Settings2, Sun, UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useProduto } from "@/hooks/useProduto";
+import { variaveisDaCor } from "@/lib/produto/aparencia";
+import "@/components/produto/produto.css";
 import { definirEscopoDoCrm, type EscopoDoCrm } from "@/lib/comercial/escopo";
 import { avisoDaConta, type EstadoDoProduto } from "@/lib/produto/api";
 import { Carregando, EstadoDeErro, MenuMais, botao, foco, juntar, texto } from "@/components/sistema";
@@ -79,6 +82,7 @@ export default function ProdutoApp() {
   const { secao: secaoDaUrl } = useParams<{ secao?: string }>();
   const navigate = useNavigate();
   const { user, profile, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const produto = useProduto();
   const estado = produto.data;
 
@@ -93,7 +97,8 @@ export default function ProdutoApp() {
         temPainel && { rotulo: papelNoPainel === "client" ? "Painel do cliente" : "Painel da agência", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => navigate("/dashboard") },
         { rotulo: "Área de membros", icone: <BookOpen className="h-4 w-4" />, aoEscolher: () => navigate("/membros") },
         estado && estado.dono_da_casa && { rotulo: "Administrar o produto", icone: <Settings2 className="h-4 w-4" />, aoEscolher: () => navigate("/produto") },
-        { rotulo: "Meu acesso", icone: <UserRound className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=acesso"), separadorAntes: true },
+        estado && estado.conta && estado.eu && estado.eu.papel === "admin" && { rotulo: "Personalizar", icone: <Palette className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=aparencia"), separadorAntes: true },
+        { rotulo: "Meu acesso", icone: <UserRound className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=acesso"), separadorAntes: !(estado && estado.conta && estado.eu && estado.eu.papel === "admin") },
         { rotulo: "Sair", icone: <LogOut className="h-4 w-4" />, aoEscolher: () => void logout() },
       ]}
     />
@@ -117,13 +122,22 @@ export default function ProdutoApp() {
 
   const aviso = estado ? avisoDaConta(estado) : null;
   const comMenu = !!(estado && estado.conta);
+  // A personalização da empresa: cor de destaque (um tom por tema), logo e nome curto.
+  const aparencia = estado && estado.conta ? estado.conta.aparencia : {};
+  const cores = variaveisDaCor(aparencia.cor, theme) as CSSProperties;
+  const nomeNoTopo = estado && estado.conta ? aparencia.nome_curto || estado.conta.nome : "";
 
   return (
-    <div className="min-h-screen bg-background text-foreground" data-produto-app="">
-      <header className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background pt-[env(safe-area-inset-top)]" data-produto-topo="">
+    <div className="min-h-screen bg-background text-foreground" style={cores} data-produto-app="" data-cor-da-empresa={aparencia.cor || "verde"}>
+      {/* Não é <header>: o tema claro do painel pinta de branco os links de "header nav", e aqui o topo é claro. */}
+      <div role="banner" className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background pt-[env(safe-area-inset-top)]" data-produto-topo="">
         <div className="mx-auto flex h-[52px] w-full max-w-[1840px] min-w-0 items-center px-4 md:px-6">
-          <Link to="/app" className={juntar("mr-4 flex shrink-0 items-center rounded-md", foco)} aria-label="Início do CRM e E-mail">
-            <MarcaAceleriq altura={20} />
+          <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md", foco)} aria-label="Início do CRM e E-mail">
+            {aparencia.logo ? (
+              <img src={aparencia.logo} alt={nomeNoTopo} className="h-7 w-auto max-w-[140px] object-contain" data-logo-da-empresa="" />
+            ) : (
+              <MarcaAceleriq altura={20} className="logo-do-topo" />
+            )}
           </Link>
           {comMenu && (
             <nav className="hidden min-w-0 flex-1 items-center md:flex" aria-label="Áreas do produto">
@@ -145,12 +159,15 @@ export default function ProdutoApp() {
             </nav>
           )}
           <span className="min-w-0 flex-1 md:hidden" />
-          {estado && estado.conta && (
-            <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 max-w-[220px] truncate lg:block")} title={estado.conta.nome}>{estado.conta.nome}</span>
+          {nomeNoTopo && !aparencia.logo && (
+            <span className={juntar(texto.auxiliar, "mr-2 hidden min-w-0 max-w-[220px] truncate lg:block")} title={nomeNoTopo}>{nomeNoTopo}</span>
           )}
+          <button type="button" className={juntar(botao.icone, "mr-1")} onClick={toggleTheme} aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"} data-trocar-tema="">
+            {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+          </button>
           {menuDaPessoa}
         </div>
-      </header>
+      </div>
 
       <main
         className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+56px)] top-[calc(env(safe-area-inset-top)+52px)] mx-auto w-full max-w-[1840px] overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:static md:overflow-visible md:px-6 md:pb-10 md:pt-[calc(env(safe-area-inset-top)+72px)]"
@@ -165,7 +182,9 @@ export default function ProdutoApp() {
             )}
           </div>
         )}
-        {corpo}
+        <div key={estado && !estado.conta ? "primeiros-passos" : secao} className="produto-entra min-w-0">
+          {corpo}
+        </div>
       </main>
 
       {comMenu && (

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CreditCard, KeyRound, Receipt, RefreshCw, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Building2, CreditCard, KeyRound, Palette, Receipt, RefreshCw, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   assinar,
@@ -41,9 +41,10 @@ import {
 } from "@/components/sistema";
 import { CampoDeSenha } from "@/components/publico/CascaPublica";
 import EscolhaDePlano from "./EscolhaDePlano";
+import AparenciaDaConta from "./AparenciaDaConta";
 import { senhaAceita } from "./CriarSenha";
 
-type Parte = "equipe" | "plano" | "faturas" | "empresa" | "acesso";
+type Parte = "equipe" | "plano" | "faturas" | "empresa" | "aparencia" | "acesso";
 
 const COR_DA_COBRANCA: Record<string, string> = {
   paga: "bg-primary/10 text-primary",
@@ -70,6 +71,7 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
             { valor: "plano", rotulo: "Plano", icone: <CreditCard className="h-3.5 w-3.5" /> },
             { valor: "faturas", rotulo: "Faturas", icone: <Receipt className="h-3.5 w-3.5" /> },
             { valor: "empresa", rotulo: "Empresa", icone: <Building2 className="h-3.5 w-3.5" /> },
+            { valor: "aparencia", rotulo: "Aparência", icone: <Palette className="h-3.5 w-3.5" /> },
           ]
         : []),
       { valor: "acesso", rotulo: "Meu acesso", icone: <KeyRound className="h-3.5 w-3.5" /> },
@@ -86,17 +88,43 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
   };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[1040px] space-y-5" data-conta-do-produto="">
+    <div className="mx-auto w-full min-w-0 max-w-[1320px]" data-conta-do-produto="">
       <CabecalhoDePagina
         titulo="Conta"
         descricao={conta.nome}
-        acoes={<SeletorCompacto rotulo="Partes da conta" opcoes={partes} valor={parte} onEscolher={irPara} listaQuandoNaoCabe />}
+        // No celular as partes ficam num seletor; do tablet para cima, na coluna da esquerda.
+        acoes={<div className="md:hidden"><SeletorCompacto rotulo="Partes da conta" opcoes={partes} valor={parte} onEscolher={irPara} modo="lista" /></div>}
       />
-      {parte === "equipe" && <Equipe estado={estado} admin={admin} />}
-      {parte === "plano" && admin && <Plano estado={estado} />}
-      {parte === "faturas" && admin && <Faturas contaId={conta.id} />}
-      {parte === "empresa" && admin && <Empresa estado={estado} />}
-      {parte === "acesso" && <MeuAcesso estado={estado} />}
+      <div className="mt-5 grid min-w-0 grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-[190px_minmax(0,1fr)]">
+        <nav className="hidden min-w-0 md:block" aria-label="Partes da conta" data-partes-da-conta="">
+          <ul className="space-y-0.5">
+            {partes.map((p) => (
+              <li key={p.valor}>
+                <button
+                  type="button"
+                  onClick={() => irPara(p.valor)}
+                  aria-current={parte === p.valor ? "page" : undefined}
+                  className={juntar(
+                    "toque-compacto flex h-9 w-full min-w-0 items-center rounded-md px-2.5 text-left text-[13px] font-medium transition-colors",
+                    parte === p.valor ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  <span className="mr-2 shrink-0">{p.icone}</span>
+                  <span className="min-w-0 truncate">{p.rotulo}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div key={parte} className="produto-entra min-w-0">
+          {parte === "equipe" && <Equipe estado={estado} admin={admin} />}
+          {parte === "plano" && admin && <Plano estado={estado} />}
+          {parte === "faturas" && admin && <Faturas contaId={conta.id} />}
+          {parte === "empresa" && admin && <Empresa estado={estado} />}
+          {parte === "aparencia" && admin && <AparenciaDaConta estado={estado} />}
+          {parte === "acesso" && <MeuAcesso estado={estado} />}
+        </div>
+      </div>
     </div>
   );
 }
@@ -342,7 +370,7 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
   const podeEnviar = !!escolhido && (assinando || cortesia ? mudou : true);
 
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="grid min-w-0 grid-cols-1 items-start gap-x-10 gap-y-6 xl:grid-cols-[minmax(0,1fr)_340px]">
       <Secao
         titulo="Assinatura"
         descricao={situacao}

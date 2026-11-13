@@ -91,7 +91,7 @@ function OfertaDeEmail({ estado }: { estado: EstadoDoProduto }) {
   };
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[860px] space-y-5" data-oferta-de-email="">
+    <div className="produto-entra-em-ordem mx-auto w-full min-w-0 max-w-[1080px] space-y-6" data-oferta-de-email="">
       <CabecalhoDePagina
         titulo="E-mail profissional"
         descricao={inclusoNoPlano ? "Mensalidade incluída no seu plano" : c ? `A partir de ${reais(c.email_mensal)} por mês` : undefined}
@@ -183,7 +183,7 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
   }
   const dominio = dominios.filter((d) => d.id === escolhido)[0] || dominios[0];
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[1040px] space-y-6" data-email-contratado="">
+    <div className="produto-entra-em-ordem mx-auto w-full min-w-0 max-w-[1320px] space-y-6" data-email-contratado="">
       <CabecalhoDePagina
         titulo="E-mail profissional"
         descricao={`${dominio.dominio} · ${ROTULO_DO_ESTADO_DO_DOMINIO[dominio.estado]}`}
@@ -196,8 +196,10 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
           </>
         }
       />
+      {/* Do notebook para cima: as caixas à esquerda; a saúde do domínio e a migração ao lado. */}
+      <div className="grid min-w-0 grid-cols-1 items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
       <Caixas dominio={dominio} caixas={caixas.filter((c) => c.dominio_id === dominio.id)} admin={admin} limite={conta.email_caixas_contratadas} aoMudar={() => void qc.invalidateQueries({ queryKey: chave })} />
-      {dominio.estado !== "concluido" && <Andamento etapas={etapas.filter((e) => e.dominio_id === dominio.id)} />}
+      <div className="min-w-0 space-y-6">
       <ChecagemDoDominio
         dominio={dominio}
         aoConferir={(c) =>
@@ -206,6 +208,9 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
           )
         }
       />
+      {dominio.estado !== "concluido" && <Andamento etapas={etapas.filter((e) => e.dominio_id === dominio.id)} />}
+      </div>
+      </div>
     </div>
   );
 }
