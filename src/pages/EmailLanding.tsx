@@ -70,6 +70,12 @@ const TEXTO = {
   semCobranca: "Enviar o pedido não gera cobrança. A Aceleriq confirma os detalhes com você antes.",
 };
 
+/** As outras mensagens da caixa de entrada do herói: só cenário, sem nome de empresa real. */
+const CAIXA = [
+  { de: "Financeiro", assunto: "Nota fiscal de outubro disponível", hora: "09:12" },
+  { de: "Transportadora", assunto: "Seu pedido saiu para entrega", hora: "Ontem" },
+];
+
 const DORES = [
   {
     icone: AtSign,
@@ -195,10 +201,9 @@ export default function EmailLanding() {
                 <Wrench size={14} strokeWidth={TRACO} aria-hidden="true" />
                 Migração feita pela Aceleriq
               </span>
-              {/* Título principal: role=heading nível 1 (a catraca do painel reserva a tag h1 ao cabeçalho do sistema). */}
-              <div role="heading" aria-level={1} className="el-h1">
+              <h1 className="el-h1">
                 E-mail com o nome da sua empresa, <em>chegando na caixa de entrada.</em>
-              </div>
+              </h1>
               <p className="el-sub">{TEXTO.promessa}</p>
               <div className="el-acoes">
                 <Pedir para={destino} />
@@ -216,7 +221,9 @@ export default function EmailLanding() {
                     <i />
                     <i />
                     <Inbox size={15} strokeWidth={TRACO} />
-                    <span>Caixa de entrada do seu cliente</span>
+                    <span>Caixa de entrada</span>
+                    <span className="el-espaco" />
+                    <em>3 novas</em>
                   </div>
                   <div className="el-janela-corpo">
                     <div className="el-chegada">
@@ -226,22 +233,21 @@ export default function EmailLanding() {
                         <span className="el-mono">marina@suaempresa.com.br</span>
                         <p>Proposta comercial, conforme combinamos</p>
                       </div>
-                      <span className="el-entregue">Entregue</span>
+                      <span className="el-entregue">Agora</span>
                     </div>
-                    <div className="el-linha-velha">
-                      <b />
-                      <span>
-                        <u />
-                        <u />
-                      </span>
-                    </div>
-                    <div className="el-linha-velha">
-                      <b />
-                      <span>
-                        <u />
-                        <u />
-                      </span>
-                    </div>
+                    {CAIXA.map((m) => (
+                      <div key={m.de} className="el-linha">
+                        <span className="el-linha-avatar">{m.de.charAt(0)}</span>
+                        <div className="el-linha-texto">
+                          <strong>{m.de}</strong>
+                          <span>{m.assunto}</span>
+                        </div>
+                        <time>{m.hora}</time>
+                      </div>
+                    ))}
+                    <p className="el-dns-rotulo">
+                      Domínio suaempresa.com.br <b>verificado</b>
+                    </p>
                     <ul className="el-dns">
                       {["MX", "SPF", "DKIM", "DMARC"].map((r) => (
                         <li key={r}>

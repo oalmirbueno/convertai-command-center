@@ -203,7 +203,7 @@ export default function EmailPedir() {
   if (loading) {
     return (
       <Cartao etapa={1}>
-        <div role="heading" aria-level={1} className="el-pedir-titulo">Pedir o e-mail profissional</div>
+        <h1 className="el-pedir-titulo">Pedir o e-mail profissional</h1>
         <p className="el-pedir-apoio">Abrindo.</p>
       </Cartao>
     );
@@ -216,7 +216,7 @@ export default function EmailPedir() {
           <span className="el-feito-icone" aria-hidden="true">
             <Check size={28} strokeWidth={2.4} />
           </span>
-          <div role="heading" aria-level={1} className="el-pedir-titulo">Pedido recebido</div>
+          <h1 className="el-pedir-titulo">Pedido recebido</h1>
           <p className="el-pedir-apoio">{TEXTO.recebido}</p>
           <ul className="el-depois">
             <li>
@@ -249,7 +249,7 @@ export default function EmailPedir() {
     return (
       <Cartao etapa={2}>
         <div data-confirmar-email="">
-          <div role="heading" aria-level={1} className="el-pedir-titulo">Confirme o seu e-mail</div>
+          <h1 className="el-pedir-titulo">Confirme o seu e-mail</h1>
           <p className="el-pedir-apoio">{`Enviamos um link para ${email.trim()}. ${TEXTO.confirmar}`}</p>
           <div className="el-pedir-acoes">
             <Link to={`/login?next=${encodeURIComponent(VOLTA)}`} className="el-botao-vazio">
@@ -265,7 +265,7 @@ export default function EmailPedir() {
     return (
       <Cartao etapa={2}>
         <div data-passo-do-pedido="acesso">
-          <div role="heading" aria-level={1} className="el-pedir-titulo">Crie o seu acesso</div>
+          <h1 className="el-pedir-titulo">Crie o seu acesso</h1>
           <p className="el-pedir-apoio">
             É por ele que você acompanha a migração. Já tem acesso? <Link to={`/login?next=${encodeURIComponent(VOLTA)}`}>Entrar</Link>
           </p>
@@ -314,7 +314,7 @@ export default function EmailPedir() {
     if (estado.isLoading || (!e && !estado.isError)) {
       return (
         <Cartao etapa={3}>
-          <div role="heading" aria-level={1} className="el-pedir-titulo">Confira e envie</div>
+          <h1 className="el-pedir-titulo">Confira e envie</h1>
           <p className="el-pedir-apoio">Abrindo a sua conta.</p>
         </Cartao>
       );
@@ -322,7 +322,7 @@ export default function EmailPedir() {
     if (estado.isError || !e) {
       return (
         <Cartao etapa={3}>
-          <div role="heading" aria-level={1} className="el-pedir-titulo">Não foi possível abrir a sua conta</div>
+          <h1 className="el-pedir-titulo">Não foi possível abrir a sua conta</h1>
           <p className="el-pedir-apoio">O pedido continua preenchido.</p>
           <div className="el-pedir-acoes">
             <button type="button" className="el-botao-vazio" onClick={() => void estado.refetch()}>
@@ -336,7 +336,7 @@ export default function EmailPedir() {
       return (
         <Cartao etapa={3}>
           <div data-email-ja-contratado="">
-            <div role="heading" aria-level={1} className="el-pedir-titulo">A sua empresa já tem o e-mail profissional</div>
+            <h1 className="el-pedir-titulo">A sua empresa já tem o e-mail profissional</h1>
             <p className="el-pedir-apoio">{TEXTO.jaTem}</p>
             <div className="el-pedir-acoes">
               <Link to="/app/email" className="el-botao">
@@ -354,7 +354,7 @@ export default function EmailPedir() {
       return (
         <Cartao etapa={3}>
           <div data-pedido-so-do-admin="">
-            <div role="heading" aria-level={1} className="el-pedir-titulo">Quem administra a empresa faz o pedido</div>
+            <h1 className="el-pedir-titulo">Quem administra a empresa faz o pedido</h1>
             <p className="el-pedir-apoio">{`O seu acesso em ${e.conta.nome} é de usuário. ${TEXTO.soAdmin}`}</p>
             <div className="el-pedir-acoes">
               <Link to="/app" className="el-botao-vazio">
@@ -368,7 +368,7 @@ export default function EmailPedir() {
     return (
       <Cartao etapa={3}>
         <div data-passo-do-pedido="enviar">
-          <div role="heading" aria-level={1} className="el-pedir-titulo">Confira e envie</div>
+          <h1 className="el-pedir-titulo">Confira e envie</h1>
           <p className="el-pedir-apoio">{TEXTO.envio}</p>
           {!e.conta && (
             <label className="el-campo">
@@ -431,7 +431,7 @@ export default function EmailPedir() {
   return (
     <Cartao etapa={1}>
       <div data-passo-do-pedido="pedido">
-        <div role="heading" aria-level={1} className="el-pedir-titulo">Pedir o e-mail profissional</div>
+        <h1 className="el-pedir-titulo">Pedir o e-mail profissional</h1>
         <p className="el-pedir-apoio">Duas informações e a Aceleriq já consegue preparar a migração.</p>
         <label className="el-campo">
           <span>Domínio da empresa</span>
