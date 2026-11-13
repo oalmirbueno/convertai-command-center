@@ -3041,6 +3041,30 @@
       "remote_name": "produto_precos_na_pagina_publica",
       "remote_statements_sha256": "485d3f4f34a0f1ae4dffc4b58a77e1a98fd0100ed9ae80f8bf06e2227aadd63a",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113200000",
+      "path": "supabase/migrations/20261113200000_crm_cargos_campos_e_automacoes.sql",
+      "local_sha256": "89104a021d2e1a3c92479fb608f6177dd5ecf7b4bbad92930e786833c15d4f0c",
+      "remote_name": "crm_cargos_campos_e_automacoes",
+      "remote_statements_sha256": "c461b6f0a468677bd3ceb0b2ee7682bad5274ec006594af07c131d8249ae353f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113210000",
+      "path": "supabase/migrations/20261113210000_crm_captacao_e_rastreamento.sql",
+      "local_sha256": "a4aad4d0917fd2bbcdff86d980aea5460901d85e273f9da8a472f8cbf153fe0b",
+      "remote_name": "crm_captacao_e_rastreamento",
+      "remote_statements_sha256": "652099d6949e62e5a9c8dda696a1d5b0249a0b135f3a07726c40616b87081d33",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113220000",
+      "path": "supabase/migrations/20261113220000_crm_espaco.sql",
+      "local_sha256": "807f6ef625e50fe72adee8091febd5941cd43f27483aac68696dfbe29f42c138",
+      "remote_name": "crm_espaco",
+      "remote_statements_sha256": "5bd43227e22e475423bd7ca0a3799bef68ed80b326950c2e934dfa50bad5a5d3",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

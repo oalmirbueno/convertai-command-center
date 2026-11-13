@@ -26,6 +26,14 @@ export type EscopoDoCrm =
       maquinaNoMes: number;
       /** Os nomes que a empresa deu às etapas do funil (o que faltar usa o padrão). */
       rotulos?: Record<string, string>;
+      /** O nível de quem está logado: admin, gerente ou usuario (vendedor). */
+      papel?: "admin" | "gerente" | "usuario";
+      /** O usuário logado. */
+      euId?: string | null;
+      /** A empresa não separa por vendedor: qualquer um muda o responsável. */
+      distribuiLivre?: boolean;
+      /** O ramo da empresa (define os rótulos de valor e os campos sugeridos). */
+      nicho?: string | null;
     };
 
 export interface LimitesDoPlano {

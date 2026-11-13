@@ -28,15 +28,16 @@ const planos = [
 const config = { id: true, pagamentos_ativos: true, teste_dias: 7, tolerancia_dias: 5, email_migracao: 597, email_mensal: 39.9, email_caixas_no_mensal: 5, email_caixa_extra: 14.9, custo_fixo_mensal: 60, custo_email_caixa_extra: 7, custo_lugar_google_usd: 0.004, dolar: 5.6, imposto_pct: 6 };
 const equipe = [
   { id: "m1", user_id: EU, nome: "Priscila Souza", email: "priscila@imobiliariaexemplo.com.br", papel: "admin", estado: "ativo", entrou_em: dia(-20) },
-  { id: "m2", user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nome: "Rafael Lima", email: "rafael@imobiliariaexemplo.com.br", papel: "usuario", estado: "ativo", entrou_em: dia(-12) },
-  { id: "m3", user_id: null, nome: "Camila Rocha", email: "camila@imobiliariaexemplo.com.br", papel: "usuario", estado: "convidado", entrou_em: null },
+  { id: "m2", user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nome: "Rafael Lima", email: "rafael@imobiliariaexemplo.com.br", papel: "gerente", cargo: "Gerente comercial", estado: "ativo", entrou_em: dia(-12) },
+  { id: "m4", user_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome: "Marina Alves", email: "marina@imobiliariaexemplo.com.br", papel: "usuario", cargo: "Corretora", gerente_id: "m2", meta_mensal: 30000, estado: "ativo", entrou_em: dia(-9) },
+  { id: "m3", user_id: null, nome: "Camila Rocha", email: "camila@imobiliariaexemplo.com.br", papel: "usuario", gerente_id: "m2", estado: "convidado", entrou_em: null },
 ];
 const estadoDoProduto = (parte = {}) => ({
   conta: { id: CONTA, nome: "Imobiliária Exemplo", estado: "teste", plano_id: "pro", usuarios_contratados: 4, crm_ativo: true, email_ativo: true, email_caixas_contratadas: 6, teste_ate: dia(5), atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, perfil: { nicho: "imobiliaria", objetivo: "organizar", etapas: { novo: "Interessado", contato: "Atendimento", diagnostico: "Visita", negociacao: "Documentação", ganho: "Fechado" } }, documento: "12345678000195", email_cobranca: "financeiro@imobiliariaexemplo.com.br", telefone: "41999990000", ...(parte.conta || {}) },
   eu: { membro_id: "m1", papel: "admin", nome: "Priscila Souza", email: "priscila@imobiliariaexemplo.com.br", ...(parte.eu || {}) },
   plano: { id: "pro", nome: "Pro", preco_usuario: 79.9, limites: planos[1].limites, email_caixas_incluidas: 5 },
   liberada: true, crm: true, email: true, dono_da_casa: false, pagamentos_ativos: true, tolerancia_dias: 5, teste_dias: 7,
-  equipe, maquina_no_mes: 3,
+  equipe, maquina_no_mes: 3, ve_tudo: true, avisos_novos: 2,
   assinatura: { estado: "sem", valor_mensal: 0, proximo_vencimento: null, cartao_final: null, cartao_bandeira: null, itens: [], checkout_link: null },
   ...(parte.raiz || {}),
 });
@@ -93,7 +94,26 @@ const custos = [
 ];
 const buscas = [{ id: "b1", nicho: "dentista", cidade: "Curitiba", uf: "PR", fontes: ["osm", "sites"], limite: 50, situacao: "pronta", erro: null, encontrados: 38, progresso: {}, campanha_id: null, entregar_ao_mercurio: false, criado_por: EU, pego_em: dia(-1), terminado_em: dia(-1), created_at: dia(-1), urls: [] }];
 
+const ranking = [
+  { membro_id: "m4", user_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome: "Marina Alves", cargo: "Corretora", papel: "usuario", foto: null, gerente_id: "m2", meta_mensal: 30000, ganhos: 3, vendido: 24600, abertos: 5, em_jogo: 61200, perdidos: 1, atrasadas: 0 },
+  { membro_id: "m1", user_id: EU, nome: "Priscila Souza", cargo: "Diretora", papel: "admin", foto: null, gerente_id: null, meta_mensal: 0, ganhos: 2, vendido: 15840, abertos: 4, em_jogo: 38400, perdidos: 0, atrasadas: 2 },
+  { membro_id: "m2", user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nome: "Rafael Lima", cargo: "Gerente comercial", papel: "gerente", foto: null, gerente_id: null, meta_mensal: 20000, ganhos: 1, vendido: 6480, abertos: 3, em_jogo: 22300, perdidos: 2, atrasadas: 1 },
+];
+const camposDaEmpresa = [
+  { id: "f1", chave: "finalidade", rotulo: "Finalidade", tipo: "lista", opcoes: ["Compra", "Locação", "Temporada"], grupo: "Imóvel", no_cartao: true, obrigatorio: false, ordem: 0, ativo: true },
+  { id: "f2", chave: "bairro", rotulo: "Bairro de interesse", tipo: "texto", opcoes: [], grupo: "Imóvel", no_cartao: true, obrigatorio: false, ordem: 1, ativo: true },
+];
+const automacoes = [
+  { id: "a1", nome: "Rodízio de negócios novos", gatilho: "negocio_criado", condicao: { sem_dono: true }, acao: "atribuir_rodizio", parametros: {}, ativa: true, execucoes: 14, ultima_em: dia(-1), criado_em: dia(-10) },
+  { id: "a2", nome: "Retorno da proposta", gatilho: "etapa_mudou", condicao: { etapa: "proposta" }, acao: "criar_tarefa", parametros: { titulo: "Ligar sobre a proposta", em_dias: 2, tipo: "ligacao" }, ativa: true, execucoes: 6, ultima_em: dia(-2), criado_em: dia(-10) },
+];
+const avisos = [
+  { id: "v1", titulo: "Negócio novo para você", texto: "Padaria Sol Nascente", lead_id: null, lido_em: null, criado_em: dia(0) },
+  { id: "v2", titulo: "Parado há 5 dias", texto: "Clínica Vida", lead_id: null, lido_em: null, criado_em: dia(-1) },
+];
+
 const tabelas = {
+  crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
   produto_chaves_api: [
     { id: "ch1", nome: "Claude", prefixo: "acq_3e1b0e92", criado_em: dia(-6), ultimo_uso_em: dia(0), revogada_em: null },
@@ -136,6 +156,8 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       if (rpc[1] === "produto_estado") return json(estado);
       if (rpc[1] === "produto_admin_contas") return json(contasDaCasa);
       if (rpc[1] === "produto_faturamento") return json(faturamento);
+      if (rpc[1] === "crm_ranking") return json(ranking);
+      if (rpc[1] === "crm_origens") return json([]);
       return json(null);
     }
     const tabela = /\/rest\/v1\/([a-z_]+)/.exec(url.pathname);
@@ -183,7 +205,14 @@ const telas = [
   { nome: "03-crm-visao", caminho: "/app/crm", espera: "[data-produto-conteudo] header" },
   { nome: "04-crm-maquina", caminho: "/app/crm/leads", espera: "[data-maquina-de-leads]" },
   { nome: "05-email", caminho: "/app/email", espera: "[data-email-contratado]" },
-  { nome: "06-conta-equipe", caminho: "/app/conta?parte=equipe", espera: "[data-lista-da-equipe]" },
+  { nome: "06-equipe", caminho: "/app/equipe", espera: "[data-ranking]" },
+  { nome: "06b-equipe-claro", caminho: "/app/equipe", espera: "[data-ranking]", tema: "light" },
+  { nome: "06c-perfil", caminho: "/app/equipe", espera: "[data-ranking]", depois: async (p) => { await p.click('[data-pessoa="m4"]'); await p.waitForSelector("[data-salvar-perfil]"); } },
+  { nome: "30-automacoes", caminho: "/app/automacoes", espera: "[data-produto-lateral]" },
+  { nome: "31-captacao", caminho: "/app/captacao", espera: "[data-produto-lateral]" },
+  { nome: "32-espaco", caminho: "/app/espaco", espera: "[data-produto-conteudo]" },
+  { nome: "33-campos", caminho: "/app/conta?parte=campos", espera: "[data-campos-da-conta]" },
+  { nome: "34-vendedor", caminho: "/app", espera: "[data-inicio-do-produto]", estado: estadoDoProduto({ eu: { papel: "usuario", membro_id: "m4", nome: "Marina Alves" }, raiz: { ve_tudo: false } }) },
   { nome: "07-conta-plano", caminho: "/app/conta?parte=plano", espera: "[data-escolha-de-plano]" },
   { nome: "08-conta-faturas", caminho: "/app/conta?parte=faturas", espera: "[data-faturas]" },
   { nome: "09-oferta-de-email", caminho: "/app/email", espera: "[data-oferta-de-email]", estado: estadoDoProduto({ conta: { email_ativo: false, plano_id: "starter" }, raiz: { email: false, plano: { id: "starter", nome: "Starter", preco_usuario: 49.9, limites: planos[0].limites, email_caixas_incluidas: 0 } } }) },
@@ -191,7 +220,7 @@ const telas = [
   { nome: "10b-onboarding-funil", caminho: "/app", espera: "[data-onboarding-do-produto]", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 }, depois: async (p) => { await p.click('[data-opcao="saude"]'); await p.click('[data-opcao="organizar"]'); await p.fill('input[autocomplete="organization"]', "Clínica Vida"); await p.click("[data-avancar]"); await p.waitForSelector("[data-funil-do-onboarding]"); await p.waitForTimeout(400); } },
   { nome: "10c-onboarding-claro", caminho: "/app", espera: "[data-onboarding-do-produto]", tema: "light", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 } },
   { nome: "11-teste-vencido", caminho: "/app/crm", espera: "[data-aviso-da-conta]", estado: estadoDoProduto({ conta: { teste_ate: dia(-1) }, raiz: { liberada: false, crm: false, email: false } }) },
-  { nome: "12-usuario-comum", caminho: "/app/conta", espera: "[data-lista-da-equipe]", estado: estadoDoProduto({ eu: { papel: "usuario", membro_id: "m2" }, raiz: { assinatura: null } }) },
+  { nome: "12-usuario-comum", caminho: "/app/equipe", espera: "[data-ranking]", estado: estadoDoProduto({ eu: { papel: "usuario", membro_id: "m2" }, raiz: { assinatura: null } }) },
   { nome: "13-venda", caminho: "/crm", espera: "[data-pagina-de-venda]" },
   { nome: "14-aparencia", caminho: "/app/conta?parte=aparencia", espera: "[data-aparencia-da-conta]" },
   { nome: "14b-funil", caminho: "/app/conta?parte=funil", espera: "[data-funil-da-conta]" },

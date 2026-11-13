@@ -170,6 +170,8 @@ export const leadQualificado = (lead: Lead, temProximoPasso: boolean) =>
   Boolean(lead.classe) && Boolean(lead.owner_id) && temProximoPasso;
 
 export interface Lead {
+  /** Campos próprios da empresa cliente (só no CRM da conta). */
+  campos?: Record<string, unknown> | null;
   id: string;
   name: string;
   company: string | null;
@@ -313,6 +315,8 @@ export async function salvarLead(
     notes: lead.notes?.trim() || null,
     classe: lead.classe || null,
     qualificacao: qualificacaoLimpa(lead.qualificacao),
+    // Os campos próprios da empresa só existem no CRM da conta (crm_leads.campos).
+    ...(naConta() && lead.campos && typeof lead.campos === "object" ? { campos: lead.campos } : {}),
   };
   erroDoComercial = "";
   if (lead.id) {

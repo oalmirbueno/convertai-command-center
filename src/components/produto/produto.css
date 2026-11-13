@@ -120,3 +120,121 @@
     transition: none;
   }
 }
+
+/*
+ * Rodada 2 (13/11): a cor de cada etapa do funil e o cartao do painel.
+ * As cores valem nos dois temas (meio tom, legivel sobre claro e escuro).
+ */
+[data-produto-app] {
+  --etapa-novo: hsl(205 85% 55%);
+  --etapa-contato: hsl(188 80% 45%);
+  --etapa-diagnostico: hsl(258 75% 66%);
+  --etapa-proposta: hsl(40 92% 52%);
+  --etapa-negociacao: hsl(24 92% 56%);
+  --etapa-ganho: hsl(var(--primary));
+  --etapa-perdido: hsl(0 72% 58%);
+}
+
+.produto-cartao {
+  background-color: hsl(var(--card) / 0.72);
+  border: 1px solid hsl(var(--border) / 0.85);
+  transition: border-color 180ms ease;
+}
+.produto-cartao:hover {
+  border-color: hsl(var(--primary) / 0.28);
+}
+.light .produto-cartao {
+  background-color: hsl(var(--card));
+  box-shadow: 0 1px 2px hsl(220 20% 20% / 0.04);
+}
+
+/* O item do menu lateral: liso, com um traco na cor de destaque quando ativo. */
+.produto-item-do-menu {
+  position: relative;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.produto-item-do-menu[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background-color: hsl(var(--primary));
+}
+
+/* A fatia do funil no painel: cresce da esquerda quando a tela abre. */
+@keyframes produto-cresce {
+  from {
+    transform: scaleX(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.produto-fatia {
+  transform-origin: left center;
+  animation: produto-cresce 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .produto-cartao,
+  .produto-item-do-menu {
+    transition: none;
+  }
+  .produto-fatia {
+    animation: none;
+  }
+}
+
+/*
+ * O funil do produto: cada coluna com a cor da etapa (so no produto; o
+ * Comercial da casa segue liso). O topo da coluna vira uma faixa colorida com
+ * o nome e a contagem, e o total fica logo abaixo, maior.
+ */
+[data-produto-app] [data-coluna-do-quadro] {
+  --cor-da-coluna: hsl(var(--muted-foreground));
+}
+[data-produto-app] [data-coluna-do-quadro="novo"] { --cor-da-coluna: var(--etapa-novo); }
+[data-produto-app] [data-coluna-do-quadro="contato"] { --cor-da-coluna: var(--etapa-contato); }
+[data-produto-app] [data-coluna-do-quadro="diagnostico"] { --cor-da-coluna: var(--etapa-diagnostico); }
+[data-produto-app] [data-coluna-do-quadro="proposta"] { --cor-da-coluna: var(--etapa-proposta); }
+[data-produto-app] [data-coluna-do-quadro="negociacao"] { --cor-da-coluna: var(--etapa-negociacao); }
+[data-produto-app] [data-coluna-do-quadro="ganho"] { --cor-da-coluna: var(--etapa-ganho); }
+[data-produto-app] [data-coluna-do-quadro="perdido"] { --cor-da-coluna: var(--etapa-perdido); }
+
+@media (min-width: 640px) {
+  [data-produto-app] [data-coluna-do-quadro] {
+    background-color: hsl(var(--card) / 0.45);
+    border-radius: 12px;
+  }
+  [data-produto-app] [data-coluna-do-quadro] > div:first-child {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background-color: var(--cor-da-coluna);
+  }
+  [data-produto-app] [data-coluna-do-quadro] > div:first-child h3,
+  [data-produto-app] [data-coluna-do-quadro] > div:first-child span {
+    color: #fff;
+    font-weight: 600;
+  }
+  [data-produto-app] [data-coluna-do-quadro] > div:first-child span {
+    margin-left: auto;
+    padding: 0 6px;
+    border-radius: 999px;
+    background-color: rgb(0 0 0 / 0.18);
+    line-height: 18px;
+  }
+  [data-produto-app] [data-coluna-do-quadro] > p:first-of-type {
+    margin-top: 8px;
+    padding: 0 6px;
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+  }
+}

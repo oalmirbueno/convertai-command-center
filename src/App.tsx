@@ -51,6 +51,7 @@ const AdminMembros = rotas.lazy(() => import("@/pages/AdminMembros"));
 const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
 // 13/11/2026: o produto CRM e E-mail (um lugar à parte), a página de venda e a administração dele.
 const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
+const ProdutoFormulario = rotas.lazy(() => import("@/pages/ProdutoFormulario"));
 const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
 // crm.aceleriq.online mostra só a página de venda; qualquer outro caminho abre no endereço do produto.
 const NO_SUBDOMINIO_DE_VENDA = typeof window !== "undefined" && ehSubdominioDeVenda(window.location.hostname);
@@ -388,6 +389,7 @@ export function AppRoutes() {
       <Route path="/crm" element={<ProdutoLanding />} />
       {/* A chegada vem antes do cadastro: ramo, objetivo, empresa e funil; o acesso é o último passo. */}
       <Route path="/crm/comecar" element={<ProdutoComecar />} />
+      <Route path="/f/:token" element={<ProdutoFormulario />} />
       {/* A venda do E-mail profissional (produto à parte do CRM) e o pedido curto que sai dela. */}
       <Route path="/email" element={<EmailLanding />} />
       <Route path="/email/pedir" element={<EmailPedir />} />
