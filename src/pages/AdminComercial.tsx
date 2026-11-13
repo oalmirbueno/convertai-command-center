@@ -280,7 +280,6 @@ export default function AdminComercial() {
   // Caixa nem Marketing da casa, e Campanhas depende do plano.
   const escopo = escopoDoCrm();
   const conta = escopo.modo === "conta" ? escopo : null;
-  const base = conta ? conta.base : "/comercial";
   const areas = conta
     ? AREAS.filter((a) => AREAS_FORA_DA_CONTA.indexOf(a.valor) < 0 && (a.valor !== "campanhas" || conta.limites.campanhas))
     : AREAS;
@@ -288,7 +287,9 @@ export default function AdminComercial() {
   // estado do departamento, não uma das áreas escolhida por ele.
   const aba: Aba = areas.some((a) => a.valor === abaDaUrl) ? (abaDaUrl as Aba) : "visao";
   const setAba = (proxima: Aba) =>
-    navigate(proxima === "visao" ? base : `${base}/${proxima}`);
+    conta
+      ? navigate(proxima === "visao" ? conta.base : `${conta.base}/${proxima}`)
+      : navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
   // 25/10/2026: o link do sino abre a Caixa com ?item=<id> destacado.
   const [busca] = useSearchParams();
   const itemDaCaixa = busca.get("item");
@@ -554,7 +555,9 @@ export default function AdminComercial() {
           titulo={conta ? "CRM" : "Comercial"}
           // 16/10/2026: no celular o cabeçalho fica só com título, "?" e ações.
           descricao={abasNoTitulo ? descricao : undefined}
-          ajuda={(conta && TITULO_DA_ABA_NA_CONTA[aba]) || TITULO_DA_ABA[aba]}
+          ajuda={TITULO_DA_ABA[aba]}
+          // No CRM da empresa a explicação da aba não fala da casa, do Mercúrio nem do Financeiro.
+          {...(conta && TITULO_DA_ABA_NA_CONTA[aba] ? { ajuda: TITULO_DA_ABA_NA_CONTA[aba] } : {})}
           aoLado={abasNoTitulo ? abasDasAreas : undefined}
           acoes={acoes}
         />

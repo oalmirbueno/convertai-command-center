@@ -601,7 +601,7 @@ function Cartao({
           {/* O compromisso marcado, não uma anotação: é o que diz se este
               lead tem alguém cuidando dele. Com o quando, para não precisar
               abrir o lead para saber se é hoje. */}
-          {lead.stage === "ganho" && !lead.won_client_id && (
+          {lead.stage === "ganho" && !lead.won_client_id && !naConta() && (
             <p className="mt-1 text-[11px] font-medium leading-4 text-warning" data-falta-cadastrar="">Falta cadastrar o cliente</p>
           )}
           {fechado ? (

@@ -41,7 +41,7 @@ export default function EscolhaDePlano({
               aria-checked={marcado}
               onClick={() => onPlano(p.id)}
               data-plano={p.id}
-              className={juntar(superficie.painel, "min-w-0 p-4 text-left transition-colors", foco, marcado ? "border-primary" : "hover:border-muted-foreground/40")}
+              className={juntar(superficie.painel, "flex min-w-0 flex-col items-stretch justify-start p-4 text-left transition-colors", foco, marcado ? "border-primary" : "hover:border-muted-foreground/40")}
             >
               <span className="flex min-w-0 items-center">
                 <span className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate")}>{p.nome}</span>

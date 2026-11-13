@@ -109,7 +109,7 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
   const contexto = await browser.newContext({ viewport: { width: largura, height: largura < 500 ? 844 : 900 }, reducedMotion: "reduce", serviceWorkers: "block", colorScheme: "dark" });
   const pagina = await contexto.newPage();
   pagina.on("console", (m) => {
-    if (m.type() === "error" && !/favicon|Failed to load resource|net::ERR/.test(m.text())) erros.push(`${nome}@${largura}: ${m.text().slice(0, 240)}`);
+    if (m.type() === "error" && !/favicon|Failed to load resource|net::ERR/.test(m.text())) erros.push(`${nome}@${largura}: ${m.text().slice(0, Number(process.env.PRODUTO_DETALHE) || 240)}`);
   });
   pagina.on("pageerror", (e) => erros.push(`${nome}@${largura}: ${String(e.message).slice(0, 240)}`));
   await pagina.route("**/src/contexts/AuthContext.tsx*", (r) => r.fulfill({ contentType: "text/javascript", body: auth(papel) }));
@@ -129,7 +129,13 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
     const tabela = /\/rest\/v1\/([a-z_]+)/.exec(url.pathname);
     if (tabela) {
       if (pedido.method() !== "GET") return json([]);
-      const linhas = tabelas[tabela[1]] || [];
+      // Os filtros mais comuns valem aqui também, senão duas leituras da mesma tabela devolvem as mesmas linhas.
+      let linhas = tabelas[tabela[1]] || [];
+      url.searchParams.forEach((valor, coluna) => {
+        if (valor === "is.null") linhas = linhas.filter((l) => l[coluna] === null || l[coluna] === undefined);
+        else if (valor === "not.is.null") linhas = linhas.filter((l) => l[coluna] !== null && l[coluna] !== undefined);
+        else if (valor.indexOf("eq.") === 0 && coluna !== "select") linhas = linhas.filter((l) => !(coluna in l) || String(l[coluna]) === valor.slice(3));
+      });
       const um = (pedido.headers().accept || "").indexOf("vnd.pgrst.object") >= 0;
       return json(um ? linhas[0] || null : linhas);
     }
@@ -145,6 +151,12 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
     erros.push(`${nome}@${largura}: não apareceu ${espera}`);
   }
   await pagina.waitForTimeout(900);
+  // O tour de boas-vindas do painel abre para o perfil sintético: sai da frente.
+  const pular = pagina.getByText("Pular tour");
+  if (await pular.count()) {
+    await pular.first().click();
+    await pagina.waitForTimeout(400);
+  }
   if (depois) await depois(pagina);
   const medida = await pagina.evaluate(() => ({ larguraDoDocumento: document.documentElement.scrollWidth, janela: window.innerWidth }));
   if (medida.larguraDoDocumento > medida.janela + 1) erros.push(`${nome}@${largura}: a página transborda para o lado (${medida.larguraDoDocumento} > ${medida.janela})`);
@@ -172,7 +184,7 @@ const telas = [
   { nome: "22-casa-email", caminho: "/produto?area=email", papel: "admin", espera: "[data-passo-a-passo]" },
   { nome: "23-casa-precos", caminho: "/produto?area=precos", papel: "admin", espera: "[data-planos-do-produto]" },
   { nome: "24-casa-faturamento", caminho: "/produto?area=faturamento", papel: "admin", espera: "[data-faturamento-por-conta]" },
-  { nome: "25-financeiro", caminho: "/financeiro?aba=produto", papel: "admin", espera: "body" },
+  { nome: "25-financeiro", caminho: "/financeiro", papel: "admin", espera: "body", depois: async (p) => { await p.getByRole("button", { name: /Visão geral/ }).first().click(); await p.getByText("CRM e E-mail", { exact: true }).last().click(); await p.waitForSelector("[data-faturamento-do-produto]", { timeout: 15000 }); await p.waitForTimeout(500); } },
 ];
 
 try {

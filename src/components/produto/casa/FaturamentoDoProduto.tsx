@@ -97,10 +97,14 @@ export default function FaturamentoDoProduto({ compacto = false }: { compacto?: 
           rotulo="Faturamento do produto"
           itens={[
             { rotulo: "Receita recorrente", valor: reais(f.mrr), apoio: "por mês" },
-            { rotulo: "Recebido no mês", valor: reais(f.recebido), apoio: f.a_receber > 0 ? `${reais(f.a_receber)} a receber` : "confirmado no Asaas", ponto: "verde" },
+            {
+              rotulo: "Recebido no mês",
+              valor: reais(f.recebido),
+              apoio: [f.a_receber > 0 ? `${reais(f.a_receber)} a receber` : "", f.atrasado > 0 ? `${reais(f.atrasado)} em atraso` : ""].filter(Boolean).join(" · ") || "confirmado no Asaas",
+              ponto: f.atrasado > 0 ? "alerta" : "verde",
+            },
             { rotulo: "Custo do mês", valor: reais(f.custo_total), apoio: `taxas ${reais(f.taxas)} · imposto ${reais(f.imposto)}` },
             { rotulo: "Resultado", valor: reais(resultado), apoio: margem == null ? "sem recebimento no mês" : `${margem}% de margem`, ponto: resultado >= 0 ? "verde" : "perigo" },
-            ...(f.atrasado > 0 ? [{ rotulo: "Em atraso", valor: reais(f.atrasado), apoio: `${f.contas.atrasadas} ${f.contas.atrasadas === 1 ? "empresa" : "empresas"}`, ponto: "alerta" as const }] : []),
           ]}
         />
       </Secao>
