@@ -3025,6 +3025,14 @@
       "remote_name": "produto_crm_e_email",
       "remote_statements_sha256": "6bf121bec76f470b0c428b7a791abe736af4e2247e0a7c546da3102bc462220f",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113150000",
+      "path": "supabase/migrations/20261113150000_aprovacao_so_peca_que_vale.sql",
+      "local_sha256": "a7ac0091a750ac0c4dde7b749cdc2bab396d2741481efae9f90a62065dd7641f",
+      "remote_name": "aprovacao_so_peca_que_vale",
+      "remote_statements_sha256": "35e8eaf9e94227e2afe6b0b66ab82ab94c52b2d3398a7a477ec390f2875e1890",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
