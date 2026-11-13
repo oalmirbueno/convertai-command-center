@@ -76,9 +76,7 @@ function Avancar({ children, onClick, disabled, dado }: { children: ReactNode; o
   return (
     <button type="button" className="el-botao" onClick={onClick} disabled={disabled} {...{ [dado]: "" }}>
       {children}
-      <span className="el-botao-seta" aria-hidden="true">
-        <ArrowRight size={18} strokeWidth={2} />
-      </span>
+      <ArrowRight className="el-botao-seta" size={18} strokeWidth={2} aria-hidden="true" />
     </button>
   );
 }
@@ -235,9 +233,7 @@ export default function EmailPedir() {
           <div className="el-pedir-acoes">
             <Link to="/app/email" className="el-botao" data-acompanhar-pedido="">
               Acompanhar no painel
-              <span className="el-botao-seta" aria-hidden="true">
-                <ArrowRight size={18} strokeWidth={2} />
-              </span>
+              <ArrowRight className="el-botao-seta" size={18} strokeWidth={2} aria-hidden="true" />
             </Link>
           </div>
         </div>
@@ -341,9 +337,7 @@ export default function EmailPedir() {
             <div className="el-pedir-acoes">
               <Link to="/app/email" className="el-botao">
                 Abrir o painel
-                <span className="el-botao-seta" aria-hidden="true">
-                  <ArrowRight size={18} strokeWidth={2} />
-                </span>
+                <ArrowRight className="el-botao-seta" size={18} strokeWidth={2} aria-hidden="true" />
               </Link>
             </div>
           </div>

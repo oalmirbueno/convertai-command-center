@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowRight, AtSign, Check, Globe, Inbox, Laptop, MailWarning, Minus, MonitorSmartphone, Plus, ShieldCheck, Smartphone, UserX, Wrench } from "lucide-react";
+import { ArrowDown, ArrowRight, AtSign, Check, Globe, Inbox, Laptop, Mail, MailWarning, Minus, MonitorSmartphone, Plus, ShieldCheck, Smartphone, UserX } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lerPrecos, reais } from "@/lib/produto/api";
 import { CAIXAS_MAXIMO, CAIXAS_MINIMO, caixasValidas, contaDoEmail, precosProntos } from "@/lib/produto/venda-email";
@@ -51,9 +51,7 @@ function Pedir({ para, children = "Pedir meu e-mail", cheio = false }: { para: s
   return (
     <Link to={para} className={cheio ? "el-botao el-botao-cheio" : "el-botao"} data-pedir-email-profissional="">
       {children}
-      <span className="el-botao-seta" aria-hidden="true">
-        <ArrowRight size={18} strokeWidth={2} />
-      </span>
+      <ArrowRight className="el-botao-seta" size={18} strokeWidth={2} aria-hidden="true" />
     </Link>
   );
 }
@@ -70,10 +68,19 @@ const TEXTO = {
   semCobranca: "Enviar o pedido não gera cobrança. A Aceleriq confirma os detalhes com você antes.",
 };
 
-/** As outras mensagens da caixa de entrada do herói: só cenário, sem nome de empresa real. */
+/** A caixa de entrada do herói: só cenário, sem nome de empresa real. */
 const CAIXA = [
-  { de: "Financeiro", assunto: "Nota fiscal de outubro disponível", hora: "09:12" },
-  { de: "Transportadora", assunto: "Seu pedido saiu para entrega", hora: "Ontem" },
+  { de: "Marina, da Sua Empresa", endereco: "marina@suaempresa.com.br", assunto: "Proposta comercial, conforme combinamos", trecho: "Olá! Segue a proposta com os valores e o prazo que conversamos.", hora: "10:24" },
+  { de: "Financeiro", endereco: "", assunto: "Nota fiscal de outubro disponível", trecho: "A nota do mês já pode ser baixada pelo portal.", hora: "09:12" },
+  { de: "Transportadora", endereco: "", assunto: "Seu pedido saiu para entrega", trecho: "Previsão de chegada ainda hoje, em horário comercial.", hora: "Ontem" },
+  { de: "Contabilidade", endereco: "", assunto: "Documentos do mês", trecho: "Precisamos dos extratos até sexta para fechar o período.", hora: "Ontem" },
+];
+
+/** O que cada registro de proteção faz, em uma linha. */
+const PROTECAO = [
+  { sigla: "SPF", faz: "diz quem pode enviar em nome do seu domínio" },
+  { sigla: "DKIM", faz: "assina cada mensagem para provar a origem" },
+  { sigla: "DMARC", faz: "barra quem tenta se passar pela sua empresa" },
 ];
 
 const DORES = [
@@ -197,10 +204,6 @@ export default function EmailLanding() {
         <section className="el-heroi">
           <div className="el-caixa el-heroi-grade">
             <div className="el-entra">
-              <span className="el-selo">
-                <Wrench size={14} strokeWidth={TRACO} aria-hidden="true" />
-                Migração feita pela Aceleriq
-              </span>
               <h1 className="el-h1">
                 E-mail com o nome da sua empresa, <em>chegando na caixa de entrada.</em>
               </h1>
@@ -214,54 +217,47 @@ export default function EmailLanding() {
             </div>
 
             <div className="el-cena el-entra" style={{ animationDelay: "160ms" }} aria-hidden="true">
-              <div className="el-moldura">
-                <div className="el-moldura-dentro">
-                  <div className="el-janela-topo">
-                    <i />
-                    <i />
-                    <i />
-                    <Inbox size={15} strokeWidth={TRACO} />
-                    <span>Caixa de entrada</span>
-                    <span className="el-espaco" />
-                    <em>3 novas</em>
+              <div className="el-tela">
+                <div className="el-tela-topo">
+                  <i />
+                  <i />
+                  <i />
+                  <span className="el-tela-endereco">Caixa de entrada</span>
+                </div>
+                <div className="el-tela-corpo">
+                  <div className="el-tela-lado">
+                    <b>
+                      Entrada <em>3</em>
+                    </b>
+                    <span>Enviados</span>
+                    <span>Rascunhos</span>
+                    <span>Arquivo</span>
                   </div>
-                  <div className="el-janela-corpo">
-                    <div className="el-chegada">
-                      <span className="el-avatar">M</span>
-                      <div className="el-chegada-texto">
-                        <strong>Marina, da Sua Empresa</strong>
-                        <span className="el-mono">marina@suaempresa.com.br</span>
-                        <p>Proposta comercial, conforme combinamos</p>
-                      </div>
-                      <span className="el-entregue">Agora</span>
-                    </div>
-                    {CAIXA.map((m) => (
-                      <div key={m.de} className="el-linha">
-                        <span className="el-linha-avatar">{m.de.charAt(0)}</span>
-                        <div className="el-linha-texto">
+                  <div className="el-tela-lista">
+                    {CAIXA.map((m, i) => (
+                      <div key={m.de} className={i === 0 ? "el-msg el-msg-nova" : "el-msg"}>
+                        <span className="el-msg-avatar">{m.de.charAt(0)}</span>
+                        <div className="el-msg-texto">
                           <strong>{m.de}</strong>
-                          <span>{m.assunto}</span>
+                          {m.endereco && <span className="el-msg-endereco">{m.endereco}</span>}
+                          <span className="el-msg-assunto">{m.assunto}</span>
+                          <span className="el-msg-trecho">{m.trecho}</span>
                         </div>
                         <time>{m.hora}</time>
                       </div>
                     ))}
-                    <p className="el-dns-rotulo">
-                      Domínio suaempresa.com.br <b>verificado</b>
-                    </p>
-                    <ul className="el-dns">
-                      {["MX", "SPF", "DKIM", "DMARC"].map((r) => (
-                        <li key={r}>
-                          <span className="el-ponto">
-                            <span>
-                              <Check size={12} strokeWidth={3} />
-                            </span>
-                          </span>
-                          <b>{r}</b>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 </div>
+              </div>
+              <div className="el-aviso">
+                <span className="el-aviso-icone">
+                  <Mail size={18} strokeWidth={TRACO} />
+                </span>
+                <div>
+                  <strong>Marina, da Sua Empresa</strong>
+                  <span>Proposta comercial, conforme combinamos</span>
+                </div>
+                <time>agora</time>
               </div>
             </div>
           </div>
@@ -346,13 +342,15 @@ export default function EmailLanding() {
                     </span>
                     <h3>Proteção contra spam e falsificação</h3>
                     <p>{TEXTO.protecao}</p>
-                    <ul className="el-selos">
-                      {["SPF", "DKIM", "DMARC"].map((s) => (
-                        <li key={s}>
+                    <ul className="el-checagens">
+                      {PROTECAO.map((r) => (
+                        <li key={r.sigla}>
                           <i aria-hidden="true">
                             <Check size={12} strokeWidth={3} />
                           </i>
-                          {s}
+                          <span>
+                            <b>{r.sigla}</b> {r.faz}
+                          </span>
                         </li>
                       ))}
                     </ul>
