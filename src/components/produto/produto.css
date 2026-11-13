@@ -238,3 +238,64 @@
     color: hsl(var(--foreground));
   }
 }
+
+/*
+ * Menu lateral: recolhe para uma faixa de icones com transicao curta, e a
+ * rolagem dele (e das listas do produto) usa uma barra fina que so aparece
+ * ao passar o mouse. A rolagem da pagina fica suave e nao "puxa" o fundo.
+ */
+.produto-lateral {
+  transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: width;
+}
+.produto-conteudo {
+  transition: padding-left 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.produto-rolagem {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.produto-rolagem:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+}
+.produto-rolagem::-webkit-scrollbar {
+  width: 6px;
+}
+.produto-rolagem::-webkit-scrollbar-thumb {
+  border-radius: 6px;
+  background-color: transparent;
+}
+.produto-rolagem:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.35);
+}
+[data-produto-app] {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+html:has([data-produto-app]) {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+html:has([data-produto-app])::-webkit-scrollbar {
+  width: 10px;
+}
+html:has([data-produto-app])::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  background-color: hsl(var(--muted-foreground) / 0.3);
+}
+html:has([data-produto-app])::-webkit-scrollbar-track {
+  background: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  .produto-lateral,
+  .produto-conteudo {
+    transition: none;
+  }
+  html:has([data-produto-app]) {
+    scroll-behavior: auto;
+  }
+}
