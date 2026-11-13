@@ -230,3 +230,5 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.produto-api]
     verify_jwt = false
+  [functions.produto-conversoes]
+    verify_jwt = true

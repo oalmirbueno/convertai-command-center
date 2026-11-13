@@ -64,22 +64,22 @@ type Metrica =
  * O que cada número conta está em `medir` abaixo e em src/components/sistema/regras.ts.
  */
 const TETO: Record<Metrica, number> = {
-  fonteForaDaEscala: 48, // 18/10 (onda visual): fontes trocadas pelo vizinho da escala; sobra o Dashboard, o sistema e o 16 px que evita zoom no iPhone
+  fonteForaDaEscala: 51, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 48
   fonteComNomeDoTailwind: 33, // 18/10 (onda visual): text-xs/sm/lg viraram px da escala; sobra só o Dashboard
-  translucidoEmBloco: 5, // 18/10: catraca baixada (rodada de padronização)
-  rolagemPresaNoCelular: 6, // 18/10: catraca baixada (rodada de padronização)
+  translucidoEmBloco: 6, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 5
+  rolagemPresaNoCelular: 8, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 6
   rolagemDentroDeRolagem: 2, // 28/09: ondas 1 e 2 da padronização somadas
   alturaFixaDaJanela: 0, // 28/09: ondas 1 e 2 da padronização somadas
-  cartaoFeitoAMao: 3, // 18/10 (onda visual): cartões com função usam superficie.painel; sobra só o Dashboard
+  cartaoFeitoAMao: 4, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 3
   secaoEmCartao: 0,
   cartaoDentroDeCartao: 6, // 18/10 (onda visual): dentro de cartão, raio de controle (rounded-md) ou poço
   paragrafoFixo: 27, // 28/10: topo do Bolso sem parágrafo repetido de atualização
   descricaoExplicativa: 1, // 28/09: ondas 1 e 2 da padronização somadas
-  cantoForaDoToken: 0, // 18/10 (onda visual): balões e esqueleto em rounded-xl
+  cantoForaDoToken: 1, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 0
   tituloQueQuebra: 1, // 24/10: catraca baixada (roteiro unificado)
-  sombraForte: 14, // 18/10 (onda visual): sombra forte só no que flutua (menu, janela, painel solto)
-  caixaAlta: 21, // 18/10 (onda visual): rótulos sem caixa alta; ficam siglas, iniciais, hex, extensão, campo, primeira letra (first-letter) e o Dashboard
-  h1FeitoAMao: 10, // 28/09: ondas 1 e 2 da padronização somadas
+  sombraForte: 15, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 14
+  caixaAlta: 22, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 21
+  h1FeitoAMao: 11, // 13/11 (produto CRM, rodada 2, pedido do dono: painel em cartoes, menu lateral e numeros grandes); antes 10
 };
 
 const METRICAS = Object.keys(TETO) as Metrica[];

@@ -40,7 +40,7 @@ import { ehTexto, umaDe, useEstadoDoComercial } from "./useEstadoDoComercial";
 import Termometro from "./Termometro";
 import { resumoDaOportunidade, totalDoGanho, valorDaOportunidade, type ResumoDaOportunidade } from "./resumoDaOportunidade";
 import JanelaDoGanho from "./JanelaDoGanho";
-import { naConta } from "@/lib/comercial/escopo";
+import { naConta, escopoDoCrm } from "@/lib/comercial/escopo";
 import {
   FAIXAS_DO_FILTRO,
   LIMITES_DA_TEMPERATURA,
@@ -116,6 +116,14 @@ export const passaNoFiltroDeQuemAtende = (lead: { agente_slug?: string | null },
 const SEM_EVENTOS: EventoDoLead[] = [];
 
 /** 04/11/2026: Ganho e Perdido são colunas, como Fechados e Perdidos no funil do Freela. */
+/** No CRM da empresa o cartão mostra quem cuida do negócio. */
+function nomeDoResponsavelNaConta(id: string | null): string {
+  const e = escopoDoCrm();
+  if (!id) return "Sem responsável";
+  const pessoa = e.modo === "conta" ? e.equipe.filter((p) => p.id === id)[0] : null;
+  return pessoa ? pessoa.nome : "Responsável fora da equipe";
+}
+
 const COLUNAS_DO_QUADRO: EstagioId[] = [...ESTAGIOS_ABERTOS, "ganho", "perdido"];
 
 export default function FunilKanban({
@@ -310,6 +318,8 @@ export default function FunilKanban({
       aria-label="Filtros do funil"
     >
         {filtrosAntes}
+        {/* A classe (cliente atual, upsell, novo prospect) é um conceito da casa: no CRM da empresa não aparece. */}
+        {!naConta() && (
         <SeletorCompacto
           rotulo="Classe"
           icone={<ListFilter className="h-3.5 w-3.5" />}
@@ -317,6 +327,7 @@ export default function FunilKanban({
           valor={classe}
           onEscolher={setClasse}
         />
+        )}
         {!naConta() && (
         <SeletorCompacto
           rotulo="Quem atende"
@@ -499,6 +510,8 @@ function Coluna({
           ? totalDoGanho(leads)
           : estagio === "perdido"
           ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
+          : naConta()
+          ? emJogo > 0 ? dinheiro(emJogo) : "vazio"
           : `${emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}${leads.length > 0 ? ` · ${qualificadas}/${leads.length} qualificadas` : ""}`
       }
       visivelNoCelular={visivelNoCelular}
@@ -588,9 +601,15 @@ function Cartao({
           {lead.company && (
             <p className={juntar(texto.auxiliar, "truncate")}>{lead.company}</p>
           )}
+          {naConta() ? (
+            <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.owner_id ? "text-muted-foreground" : "font-medium text-warning")} data-responsavel-no-cartao="">
+              {nomeDoResponsavelNaConta(lead.owner_id)}
+            </p>
+          ) : (
           <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
             {rotuloDaClasse(lead.classe)}
           </p>
+          )}
           <p className={juntar("mt-1 truncate text-[12px] font-medium tabular-nums text-primary", lead.company ? "max-sm:hidden" : "max-sm:mt-0")} title={valorDaOportunidade(lead)}>
             {valorDaOportunidade(lead)}
           </p>

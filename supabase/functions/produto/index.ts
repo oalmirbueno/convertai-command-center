@@ -183,7 +183,9 @@ async function convidar(ch: Chamador, corpo: Record<string, unknown>) {
   const { data, error } = await comoAPessoa(ch.token).rpc("produto_convidar", {
     _email: texto(corpo.email, 254),
     _nome: texto(corpo.nome, 120),
-    _papel: corpo.papel === "admin" ? "admin" : "usuario",
+    _papel: corpo.papel === "admin" ? "admin" : corpo.papel === "gerente" ? "gerente" : "usuario",
+    _gerente: typeof corpo.gerente_id === "string" && corpo.gerente_id ? uuidDe(corpo.gerente_id, "gerente") : null,
+    _cargo: texto(corpo.cargo, 60),
   });
   if (error || typeof data !== "string") throw erroDoBanco(error, "Não foi possível convidar agora.");
   return json({ membro_id: data, enviado: await enviarConvite(data, ch.userId) });
@@ -256,8 +258,12 @@ async function pagamentosLigados(): Promise<boolean> {
  * Sem assinatura: grava a escolha e devolve o link do checkout.
  * Com assinatura: muda o valor no Asaas e só então vale aqui.
  */
-async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
-  const contaId = exigirAdminDaConta(ch);
+/**
+ * `pelaCasa`: o admin da Aceleriq gera o link de pagamento de uma empresa (para mandar ao cliente).
+ * Vale com a cobrança geral desligada (é uma venda fechada à mão) e o link dura 24 horas.
+ */
+async function assinar(ch: Chamador, corpo: Record<string, unknown>, pelaCasa?: string) {
+  const contaId = pelaCasa || exigirAdminDaConta(ch);
   const conta = await lerConta(contaId);
   const planoId = texto(corpo.plano_id, 40) || conta.plano_id;
   const usuarios = Math.floor(Number(corpo.usuarios) || conta.usuarios_contratados);
@@ -285,7 +291,7 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
     await registrar(contaId, ch.userId, "plano_mudou", { plano: planoId, usuarios });
     return json({ atualizado: true });
   }
-  if (!(await pagamentosLigados())) throw new ErroHttp(409, "pagamentos_desligados", "A assinatura pelo cartão ainda não foi aberta. Fale com a Aceleriq para liberar.");
+  if (!pelaCasa && !(await pagamentosLigados())) throw new ErroHttp(409, "pagamentos_desligados", "A assinatura pelo cartão ainda não foi aberta. Fale com a Aceleriq para liberar.");
   const documento = documentoValido(conta.documento);
   if (!documento) throw new ErroHttp(400, "sem_documento", "Preencha o CPF ou o CNPJ da empresa antes de assinar.");
 
@@ -311,7 +317,7 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
     }
 
     const clienteId = a.asaas_cliente_id || (await clienteNoAsaas(token, fetch, { nome: conta.nome, documento, email: conta.email_cobranca, telefone: conta.telefone }));
-    const checkout = await criarCheckoutDaAssinatura(token, fetch, { clienteId, itens, referencia: `conta:${contaId}`, voltarPara: `${app()}/app/conta`, agora: new Date() });
+    const checkout = await criarCheckoutDaAssinatura(token, fetch, { clienteId, itens, referencia: `conta:${contaId}`, voltarPara: `${app()}/app/conta`, agora: new Date(), imagemBase64: Deno.env.get("PRODUTO_CHECKOUT_IMAGEM_BASE64") || undefined, ...(pelaCasa ? { minutos: 1440 } : {}) });
     const { error } = await servico().from("produto_assinaturas").upsert({
       conta_id: contaId,
       asaas_cliente_id: clienteId,
@@ -457,7 +463,7 @@ async function adminConvidar(ch: Chamador, corpo: Record<string, unknown>) {
   if (ja && ja.length) throw new ErroHttp(409, "email_em_uso", "Esse e-mail já está numa empresa do produto.");
   if ((count || 0) >= conta.usuarios_contratados) throw new ErroHttp(409, "sem_lugar", `Os ${conta.usuarios_contratados} usuários da empresa estão em uso. Aumente os usuários antes.`);
   const { data, error } = await servico().from("produto_membros").insert({
-    conta_id: contaId, email, nome: texto(corpo.nome, 120), papel: corpo.papel === "admin" ? "admin" : "usuario", estado: "convidado", convidado_por: ch.userId,
+    conta_id: contaId, email, nome: texto(corpo.nome, 120), papel: corpo.papel === "admin" ? "admin" : corpo.papel === "gerente" ? "gerente" : "usuario", estado: "convidado", convidado_por: ch.userId,
   }).select("id").single();
   if (error || !data) throw erroDoBanco(error, "Não foi possível convidar agora.");
   const id = String((data as { id: string }).id);
@@ -530,6 +536,12 @@ async function adminTestarAsaas(ch: Chamador) {
   }
 }
 
+/** O admin da casa gera o link do checkout da assinatura de uma empresa, com o plano e os usuários dela (ou os que vierem). */
+async function adminGerarCheckout(ch: Chamador, corpo: Record<string, unknown>) {
+  exigirDono(ch);
+  return assinar(ch, corpo, uuidDe(corpo.conta_id, "conta"));
+}
+
 async function adminCobrarMigracao(ch: Chamador, corpo: Record<string, unknown>) {
   exigirDono(ch);
   const contaId = uuidDe(corpo.conta_id, "conta");
@@ -574,6 +586,7 @@ const ACOES: Record<string, Acao> = {
   admin_convidar: adminConvidar,
   admin_sincronizar: adminSincronizar,
   admin_cobrar_migracao: adminCobrarMigracao,
+  admin_gerar_checkout: adminGerarCheckout,
   admin_testar_asaas: (ch) => adminTestarAsaas(ch),
 };
 

@@ -21,7 +21,7 @@ afterEach(() => definirEscopoDoCrm(null));
 
 describe("CRM por ramo", () => {
   it("a tela e o banco aceitam os mesmos ramos, objetivos e etapas", () => {
-    const sql = ler("supabase/migrations/20261113120000_produto_crm_e_email.sql");
+    const sql = ler("supabase/migrations/20261113200000_crm_cargos_campos_e_automacoes.sql");
     expect(sql).toContain(`(${NICHOS.map((n) => `'${n.id}'`).join(", ")})`);
     expect(sql).toContain(`(${OBJETIVOS.map((o) => `'${o.id}'`).join(", ")})`);
     expect(sql).toContain(`(${ETAPAS_DO_FUNIL.map((e) => `'${e}'`).join(", ")})`);
