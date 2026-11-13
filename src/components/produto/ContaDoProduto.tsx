@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CreditCard, KeyRound, Palette, Receipt, RefreshCw, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Building2, CreditCard, KanbanSquare, KeyRound, Palette, Plug, Receipt, RefreshCw, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   assinar,
@@ -42,9 +42,11 @@ import {
 import { CampoDeSenha } from "@/components/publico/CascaPublica";
 import EscolhaDePlano from "./EscolhaDePlano";
 import AparenciaDaConta from "./AparenciaDaConta";
+import FunilDaConta from "./FunilDaConta";
+import ConexoesDaConta from "./ConexoesDaConta";
 import { senhaAceita } from "./CriarSenha";
 
-type Parte = "equipe" | "plano" | "faturas" | "empresa" | "aparencia" | "acesso";
+type Parte = "equipe" | "funil" | "conexoes" | "plano" | "faturas" | "empresa" | "aparencia" | "acesso";
 
 const COR_DA_COBRANCA: Record<string, string> = {
   paga: "bg-primary/10 text-primary",
@@ -68,6 +70,8 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
       { valor: "equipe", rotulo: "Equipe", icone: <Users className="h-3.5 w-3.5" /> },
       ...(admin
         ? [
+            { valor: "funil", rotulo: "Funil", icone: <KanbanSquare className="h-3.5 w-3.5" /> },
+            { valor: "conexoes", rotulo: "Conexões", icone: <Plug className="h-3.5 w-3.5" /> },
             { valor: "plano", rotulo: "Plano", icone: <CreditCard className="h-3.5 w-3.5" /> },
             { valor: "faturas", rotulo: "Faturas", icone: <Receipt className="h-3.5 w-3.5" /> },
             { valor: "empresa", rotulo: "Empresa", icone: <Building2 className="h-3.5 w-3.5" /> },
@@ -118,6 +122,8 @@ export default function ContaDoProduto({ estado }: { estado: EstadoDoProduto }) 
         </nav>
         <div key={parte} className="produto-entra min-w-0">
           {parte === "equipe" && <Equipe estado={estado} admin={admin} />}
+          {parte === "funil" && admin && <FunilDaConta estado={estado} />}
+          {parte === "conexoes" && admin && <ConexoesDaConta />}
           {parte === "plano" && admin && <Plano estado={estado} />}
           {parte === "faturas" && admin && <Faturas contaId={conta.id} />}
           {parte === "empresa" && admin && <Empresa estado={estado} />}

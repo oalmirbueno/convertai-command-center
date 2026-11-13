@@ -49,3 +49,74 @@
     transition: none;
   }
 }
+
+/*
+ * Vidro leve (13/11, pedido do dono para o produto): o fundo ganha dois
+ * brilhos suaves na cor de destaque e o topo, a barra de baixo e o cartão do
+ * onboarding ficam foscos. Só gradiente e um desfoque pequeno, em poucas
+ * camadas, para não pesar no celular. Sem suporte a desfoque, vira cor lisa.
+ */
+.produto-fundo {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(900px 520px at 12% -8%, hsl(var(--primary) / 0.1), transparent 62%),
+    radial-gradient(820px 520px at 100% 0%, hsl(var(--primary) / 0.06), transparent 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+.light .produto-fundo {
+  background-image:
+    radial-gradient(900px 520px at 12% -8%, hsl(var(--primary) / 0.09), transparent 62%),
+    radial-gradient(820px 520px at 100% 0%, hsl(var(--primary) / 0.05), transparent 60%);
+}
+
+.produto-vidro {
+  background-color: hsl(var(--background) / 0.72);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  backdrop-filter: saturate(140%) blur(14px);
+}
+
+.produto-vidro-cartao {
+  background-color: hsl(var(--card) / 0.66);
+  border: 1px solid hsl(var(--border) / 0.9);
+  -webkit-backdrop-filter: saturate(140%) blur(18px);
+  backdrop-filter: saturate(140%) blur(18px);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .produto-vidro {
+    background-color: hsl(var(--background));
+  }
+  .produto-vidro-cartao {
+    background-color: hsl(var(--card));
+  }
+}
+
+/* A opção de escolha do onboarding: leve, com a cor de destaque quando marcada. */
+.produto-opcao {
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--card) / 0.5);
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+.produto-opcao:hover {
+  border-color: hsl(var(--primary) / 0.5);
+}
+.produto-opcao:active {
+  transform: scale(0.985);
+}
+.produto-opcao[aria-checked="true"] {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+.produto-progresso > span {
+  transition: width 320ms ease, background-color 320ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .produto-opcao,
+  .produto-progresso > span {
+    transition: none;
+  }
+}

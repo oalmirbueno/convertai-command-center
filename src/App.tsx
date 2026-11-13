@@ -51,6 +51,7 @@ const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
 // 13/11/2026: o produto CRM e E-mail (um lugar à parte), a página de venda e a administração dele.
 const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
 const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
+const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
@@ -377,6 +378,8 @@ export function AppRoutes() {
       <Route path="/solucoes" element={<SolucoesAceleriq />} />
       {/* O produto CRM e E-mail roda fora do AppLayout e da área de membros: casca, menu e endereço próprios. */}
       <Route path="/crm" element={<ProdutoLanding />} />
+      {/* A chegada vem antes do cadastro: ramo, objetivo, empresa e funil; o acesso é o último passo. */}
+      <Route path="/crm/comecar" element={<ProdutoComecar />} />
       <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />

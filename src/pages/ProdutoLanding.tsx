@@ -31,7 +31,7 @@ export default function ProdutoLanding() {
     if (lista.length && !lista.some((p) => p.id === plano)) setPlano(lista[0].id);
   }, [lista, plano]);
   const escolhido = lista.filter((p) => p.id === plano)[0] || null;
-  const destino = user ? "/app" : "/login?next=%2Fapp&modo=cadastro";
+  const destino = user ? "/app" : "/crm/comecar";
 
   return (
     <CascaPublica

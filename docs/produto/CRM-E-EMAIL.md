@@ -28,6 +28,21 @@ A Máquina de leads usa a mesma fila e o mesmo motor. A busca da empresa leva `c
 
 O admin da Aceleriq não lê o CRM dos clientes: vê só contagens (negócios, último uso).
 
+## Chegada, ramo e aparência
+
+- **Chegada antes do cadastro** (`/crm/comecar`, e dentro de `/app` para quem já tem login): ramo, objetivo, empresa e funil, uma pergunta por tela. O acesso é o último passo. As respostas ficam guardadas no aparelho, então confirmar o e-mail e voltar não faz perguntar de novo.
+- **CRM por ramo:** o ramo dá ao funil os nomes que ele usa (a imobiliária tem "Visita", a clínica tem "Avaliação"). As sete etapas são as mesmas por dentro; o nome que a equipe lê pode ser trocado em Conta, Funil (`src/lib/produto/nichos.ts`).
+- **Aparência** (Conta, Aparência): logo, nome do topo e cor de destaque da empresa. O tema claro ou escuro é de cada pessoa (botão no topo).
+- **Visual:** fundo com brilho suave e vidro leve no topo, na barra de baixo e no cartão da chegada (`src/components/produto/produto.css`), com saída lisa para navegador sem desfoque.
+
+## Conexões: API, Claude e ChatGPT
+
+- Em Conta, Conexões, quem administra cria chaves de API (até 10 ativas). A chave aparece inteira uma vez; no banco fica só o resumo sha256 (`produto_chaves_api`).
+- **API REST** em `/functions/v1/produto-api/v1` (função `produto-api`, pública só com chave): negócios, empresas, compromissos e funil. Cada chave faz 120 chamadas por minuto. Negócio repetido (mesmo e-mail ou WhatsApp em aberto) não é duplicado.
+- **Claude e ChatGPT** entram pela porta MCP em `/functions/v1/produto-api/mcp/<chave>`: 11 ferramentas para ler o funil, criar, mover e anotar negócios e marcar compromissos. Nenhuma apaga dados.
+- A chave vai no endereço só para os assistentes, porque os conectores deles pedem um endereço. Quem tem o endereço tem o acesso: uma chave por conexão, e revogar quando não usar mais.
+- Não testado com o Claude e o ChatGPT de verdade: o protocolo foi conferido por teste, mas a conexão real só existe depois de publicar a função.
+
 ## Planos e preços (valores iniciais, editáveis em Preços)
 
 - **Starter**: R$ 49,90 por usuário. CRM completo e 5 buscas por mês na Máquina de leads.
@@ -46,7 +61,7 @@ A mensalidade é calculada no banco (`produto_itens_da_conta`) e a tela mostra a
 
 ### Para ligar a cobrança
 
-1. Aplicar a migration `20261113120000_produto_crm_e_email.sql` e publicar as funções `produto`, `produto-asaas-webhook`, `comercial-leads` e `send-transactional-email`.
+1. Aplicar a migration `20261113120000_produto_crm_e_email.sql` e publicar as funções `produto`, `produto-api`, `produto-asaas-webhook`, `comercial-leads` e `send-transactional-email`.
 2. Conferir a chave `ASAAS_API_KEY` e o `ASAAS_WEBHOOK_TOKEN` em Configurações, Chaves e custos (são os mesmos do Comercial).
 3. No Asaas, em Integrações, Webhooks, criar um webhook para `https://jjjtkowvxemvituvywvf.supabase.co/functions/v1/produto-asaas-webhook`, com o mesmo token, versão 3 e os eventos de cobrança (PAYMENT), assinatura (SUBSCRIPTION) e checkout (CHECKOUT).
 4. Fazer uma assinatura de teste com uma chave de sandbox (`_hmlg_`) e conferir: checkout abre, pagamento confirma, empresa vira Ativa, a troca de usuários muda o valor.

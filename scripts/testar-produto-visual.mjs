@@ -32,7 +32,7 @@ const equipe = [
   { id: "m3", user_id: null, nome: "Camila Rocha", email: "camila@imobiliariaexemplo.com.br", papel: "usuario", estado: "convidado", entrou_em: null },
 ];
 const estadoDoProduto = (parte = {}) => ({
-  conta: { id: CONTA, nome: "Imobiliária Exemplo", estado: "teste", plano_id: "pro", usuarios_contratados: 4, crm_ativo: true, email_ativo: true, email_caixas_contratadas: 6, teste_ate: dia(5), atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, documento: "12345678000195", email_cobranca: "financeiro@imobiliariaexemplo.com.br", telefone: "41999990000", ...(parte.conta || {}) },
+  conta: { id: CONTA, nome: "Imobiliária Exemplo", estado: "teste", plano_id: "pro", usuarios_contratados: 4, crm_ativo: true, email_ativo: true, email_caixas_contratadas: 6, teste_ate: dia(5), atrasada_desde: null, acesso_ate: null, visibilidade: "todos", aparencia: {}, perfil: { nicho: "imobiliaria", objetivo: "organizar", etapas: { novo: "Interessado", contato: "Atendimento", diagnostico: "Visita", negociacao: "Documentação", ganho: "Fechado" } }, documento: "12345678000195", email_cobranca: "financeiro@imobiliariaexemplo.com.br", telefone: "41999990000", ...(parte.conta || {}) },
   eu: { membro_id: "m1", papel: "admin", nome: "Priscila Souza", email: "priscila@imobiliariaexemplo.com.br", ...(parte.eu || {}) },
   plano: { id: "pro", nome: "Pro", preco_usuario: 79.9, limites: planos[1].limites, email_caixas_incluidas: 5 },
   liberada: true, crm: true, email: true, dono_da_casa: false, pagamentos_ativos: true, tolerancia_dias: 5, teste_dias: 7,
@@ -95,6 +95,10 @@ const buscas = [{ id: "b1", nicho: "dentista", cidade: "Curitiba", uf: "PR", fon
 
 const tabelas = {
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
+  produto_chaves_api: [
+    { id: "ch1", nome: "Claude", prefixo: "acq_3e1b0e92", criado_em: dia(-6), ultimo_uso_em: dia(0), revogada_em: null },
+    { id: "ch2", nome: "Site", prefixo: "acq_a91f77c0", criado_em: dia(-3), ultimo_uso_em: null, revogada_em: null },
+  ],
   produto_planos: planos, produto_config: [config], produto_cobrancas: cobrancas, produto_email_dominios: [dominio], produto_email_caixas: caixas, produto_email_etapas: etapas, produto_custos: custos,
 };
 
@@ -183,11 +187,16 @@ const telas = [
   { nome: "07-conta-plano", caminho: "/app/conta?parte=plano", espera: "[data-escolha-de-plano]" },
   { nome: "08-conta-faturas", caminho: "/app/conta?parte=faturas", espera: "[data-faturas]" },
   { nome: "09-oferta-de-email", caminho: "/app/email", espera: "[data-oferta-de-email]", estado: estadoDoProduto({ conta: { email_ativo: false, plano_id: "starter" }, raiz: { email: false, plano: { id: "starter", nome: "Starter", preco_usuario: 49.9, limites: planos[0].limites, email_caixas_incluidas: 0 } } }) },
-  { nome: "10-abrir-empresa", caminho: "/app", espera: "[data-primeiros-passos]", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 } },
+  { nome: "10-abrir-empresa", caminho: "/app", espera: "[data-onboarding-do-produto]", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 } },
+  { nome: "10b-onboarding-funil", caminho: "/app", espera: "[data-onboarding-do-produto]", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 }, depois: async (p) => { await p.click('[data-opcao="saude"]'); await p.click('[data-opcao="organizar"]'); await p.fill('input[autocomplete="organization"]', "Clínica Vida"); await p.click("[data-avancar]"); await p.waitForSelector("[data-funil-do-onboarding]"); await p.waitForTimeout(400); } },
+  { nome: "10c-onboarding-claro", caminho: "/app", espera: "[data-onboarding-do-produto]", tema: "light", estado: { conta: null, convite: null, dono_da_casa: false, pagamentos_ativos: true, teste_dias: 7 } },
   { nome: "11-teste-vencido", caminho: "/app/crm", espera: "[data-aviso-da-conta]", estado: estadoDoProduto({ conta: { teste_ate: dia(-1) }, raiz: { liberada: false, crm: false, email: false } }) },
   { nome: "12-usuario-comum", caminho: "/app/conta", espera: "[data-lista-da-equipe]", estado: estadoDoProduto({ eu: { papel: "usuario", membro_id: "m2" }, raiz: { assinatura: null } }) },
   { nome: "13-venda", caminho: "/crm", espera: "[data-pagina-de-venda]" },
   { nome: "14-aparencia", caminho: "/app/conta?parte=aparencia", espera: "[data-aparencia-da-conta]" },
+  { nome: "14b-funil", caminho: "/app/conta?parte=funil", espera: "[data-funil-da-conta]" },
+  { nome: "14c-conexoes", caminho: "/app/conta?parte=conexoes", espera: "[data-chaves-de-api]" },
+  { nome: "14d-conexoes-claro", caminho: "/app/conta?parte=conexoes", espera: "[data-chaves-de-api]", tema: "light" },
   { nome: "15-inicio-claro", caminho: "/app", espera: "[data-inicio-do-produto]", tema: "light" },
   { nome: "16-crm-claro", caminho: "/app/crm/crm", espera: "[data-produto-conteudo] header", tema: "light" },
   { nome: "17-inicio-azul", caminho: "/app", espera: "[data-inicio-do-produto]", estado: estadoDoProduto({ conta: { aparencia: { cor: "azul", nome_curto: "Imob Exemplo" } } }) },

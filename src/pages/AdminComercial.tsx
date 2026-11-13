@@ -1649,7 +1649,7 @@ export function EditorDeLead({
                       )}
                     >
                       <ArrowRight className="mr-1 h-3 w-3" aria-hidden="true" />
-                      {estagio.label}
+                      {rotuloDoEstagio(estagio.id)}
                     </button>
                   ))}
                 </div>

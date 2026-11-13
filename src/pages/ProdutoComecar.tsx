@@ -1,0 +1,29 @@
+import { type CSSProperties } from "react";
+import { Navigate } from "react-router-dom";
+import { Moon, Sun } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { botao } from "@/components/sistema";
+import OnboardingDoProduto from "@/components/produto/OnboardingDoProduto";
+import "@/components/produto/produto.css";
+
+/**
+ * A chegada ao CRM para quem ainda não tem login (endereço /crm/comecar): as
+ * perguntas vêm antes do cadastro. Quem já está logado vai direto ao produto,
+ * que mostra a mesma chegada se a pessoa ainda não tiver empresa.
+ */
+export default function ProdutoComecar() {
+  const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  if (user) return <Navigate to="/app" replace />;
+  return (
+    <div className="produto-fundo min-h-screen px-4 pb-10 pt-4 text-foreground sm:px-6" style={{} as CSSProperties} data-produto-comecar="">
+      <div className="mx-auto flex w-full max-w-[560px] justify-end">
+        <button type="button" className={botao.icone} onClick={toggleTheme} aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"} title={theme === "dark" ? "Tema claro" : "Tema escuro"}>
+          {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+        </button>
+      </div>
+      <OnboardingDoProduto modo="publico" />
+    </div>
+  );
+}

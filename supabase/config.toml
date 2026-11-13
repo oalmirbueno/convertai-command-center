@@ -226,3 +226,5 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.produto-asaas-webhook]
     verify_jwt = false
+  [functions.produto-api]
+    verify_jwt = false

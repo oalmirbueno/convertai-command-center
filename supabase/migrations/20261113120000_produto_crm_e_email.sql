@@ -88,6 +88,8 @@ create table if not exists public.produto_contas (
   visibilidade text not null default 'todos' check (visibilidade in ('todos', 'proprios')),
   -- Personalizacao da empresa: cor de destaque, logo (imagem pequena embutida) e nome curto do topo.
   aparencia jsonb not null default '{}'::jsonb check (pg_column_size(aparencia) < 200000),
+  -- O que a empresa respondeu ao chegar: nicho, objetivo e os nomes das etapas do funil dela.
+  perfil jsonb not null default '{}'::jsonb check (pg_column_size(perfil) < 8000),
   origem text not null default 'painel' check (origem in ('site', 'painel')),
   observacao text,
   criado_em timestamptz not null default now(),
@@ -95,7 +97,8 @@ create table if not exists public.produto_contas (
 );
 
 alter table public.produto_contas
-  add column if not exists aparencia jsonb not null default '{}'::jsonb;
+  add column if not exists aparencia jsonb not null default '{}'::jsonb,
+  add column if not exists perfil jsonb not null default '{}'::jsonb;
 
 create index if not exists produto_contas_por_estado on public.produto_contas (estado, criado_em desc);
 create index if not exists produto_contas_por_cliente on public.produto_contas (client_id) where client_id is not null;
@@ -704,6 +707,7 @@ begin
       'teste_ate', _conta.teste_ate, 'atrasada_desde', _conta.atrasada_desde, 'acesso_ate', _conta.acesso_ate,
       'visibilidade', _conta.visibilidade,
       'aparencia', _conta.aparencia,
+      'perfil', _conta.perfil,
       'documento', case when _admin then _conta.documento end,
       'email_cobranca', case when _admin then _conta.email_cobranca end,
       'telefone', case when _admin then _conta.telefone end
@@ -795,7 +799,8 @@ grant execute on function public.produto_valor_da_conta(uuid) to service_role;
 
 -- A pessoa abre a propria empresa (periodo de teste) e vira a administradora.
 create or replace function public.produto_criar_conta(_nome text, _documento text default null, _telefone text default null,
-                                                      _plano text default 'starter', _usuarios integer default 1)
+                                                      _plano text default 'starter', _usuarios integer default 1,
+                                                      _perfil jsonb default '{}'::jsonb)
 returns uuid
 language plpgsql
 security definer
@@ -823,11 +828,12 @@ begin
   select * into _cfg from public.produto_config where id;
 
   insert into public.produto_contas (nome, documento, telefone, email_cobranca, responsavel_id, plano_id,
-                                     usuarios_contratados, estado, teste_ate, origem)
+                                     usuarios_contratados, estado, teste_ate, origem, perfil)
   values (left(btrim(_nome), 120), nullif(regexp_replace(coalesce(_documento, ''), '\D', '', 'g'), ''),
           nullif(btrim(coalesce(_telefone, '')), ''), lower(_usuario.email), _eu, _p.id,
           greatest(_p.minimo_usuarios, least(500, coalesce(_usuarios, 1))),
-          'teste', now() + make_interval(days => _cfg.teste_dias), 'site')
+          'teste', now() + make_interval(days => _cfg.teste_dias), 'site',
+          public.produto_perfil_valido(coalesce(_perfil, '{}'::jsonb)))
   returning id into _id;
 
   insert into public.produto_membros (conta_id, user_id, email, nome, papel, estado, entrou_em)
@@ -956,6 +962,28 @@ begin
 end;
 $$;
 
+-- O perfil da empresa: nicho e objetivo de listas fechadas, e um nome proprio (curto) para cada etapa do funil.
+create or replace function public.produto_perfil_valido(_p jsonb)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'nicho', case when _p ->> 'nicho' in ('imobiliaria', 'saude', 'servicos', 'varejo', 'agencia', 'educacao', 'b2b', 'outro') then _p ->> 'nicho' end,
+    'objetivo', case when _p ->> 'objetivo' in ('organizar', 'prospectar', 'equipe', 'pos_venda') then _p ->> 'objetivo' end,
+    'etapas', (
+      select case when count(*) > 0 then jsonb_object_agg(e.chave, left(btrim(e.valor), 24)) end
+        from jsonb_each_text(case when jsonb_typeof(_p -> 'etapas') = 'object' then _p -> 'etapas' else '{}'::jsonb end) as e(chave, valor)
+       where e.chave in ('novo', 'contato', 'diagnostico', 'proposta', 'negociacao', 'ganho', 'perdido')
+         and length(btrim(e.valor)) between 2 and 24
+    )
+  ))
+$$;
+
+revoke all on function public.produto_perfil_valido(jsonb) from public, anon;
+grant execute on function public.produto_perfil_valido(jsonb) to authenticated, service_role;
+
 -- So entra o que a tela de personalizacao oferece: cor da lista, logo em imagem pequena e nome curto.
 create or replace function public.produto_aparencia_valida(_a jsonb)
 returns jsonb
@@ -994,6 +1022,7 @@ begin
                           then lower(btrim(_dados ->> 'email_cobranca')) else email_cobranca end,
     visibilidade = case when _dados ->> 'visibilidade' in ('todos', 'proprios') then _dados ->> 'visibilidade' else visibilidade end,
     aparencia = case when _dados ? 'aparencia' then public.produto_aparencia_valida(_dados -> 'aparencia') else aparencia end,
+    perfil = case when _dados ? 'perfil' then public.produto_perfil_valido(_dados -> 'perfil') else perfil end,
     atualizado_em = now()
   where id = _conta;
 end;
@@ -1172,7 +1201,7 @@ do $$
 declare _f text;
 begin
   foreach _f in array array[
-    'produto_estado()', 'produto_criar_conta(text, text, text, text, integer)', 'produto_aceitar_convite()',
+    'produto_estado()', 'produto_criar_conta(text, text, text, text, integer, jsonb)', 'produto_aceitar_convite()',
     'produto_convidar(text, text, text)', 'produto_membro_mudar(uuid, text, boolean)', 'produto_conta_salvar(jsonb)',
     'produto_email_pedir_caixa(text, text)', 'produto_admin_contas()', 'produto_faturamento(date)'
   ] loop
@@ -1242,3 +1271,114 @@ drop trigger if exists produto_caixa_pedida_avisa_trg on public.produto_email_ca
 create trigger produto_caixa_pedida_avisa_trg
   after insert on public.produto_email_caixas
   for each row execute function public.produto_caixa_pedida_avisa();
+
+-- ---------------------------------------------------------------------------
+-- 12. Chaves de API da empresa (para o site, automacoes, Claude e ChatGPT)
+-- ---------------------------------------------------------------------------
+create table if not exists public.produto_chaves_api (
+  id uuid primary key default gen_random_uuid(),
+  conta_id uuid not null references public.produto_contas(id) on delete cascade,
+  nome text not null check (length(btrim(nome)) between 2 and 60),
+  -- Os primeiros caracteres, para a pessoa reconhecer a chave. A chave inteira nunca e guardada.
+  prefixo text not null,
+  hash text not null unique,
+  criado_por uuid,
+  criado_em timestamptz not null default now(),
+  ultimo_uso_em timestamptz,
+  revogada_em timestamptz
+);
+
+create index if not exists produto_chaves_api_da_conta on public.produto_chaves_api (conta_id, criado_em desc);
+
+alter table public.produto_chaves_api enable row level security;
+revoke all on public.produto_chaves_api from anon, authenticated;
+-- A tela le a lista sem a coluna do hash.
+grant select (id, conta_id, nome, prefixo, criado_por, criado_em, ultimo_uso_em, revogada_em) on public.produto_chaves_api to authenticated;
+
+drop policy if exists "produto chaves do admin da conta" on public.produto_chaves_api;
+create policy "produto chaves do admin da conta" on public.produto_chaves_api
+  for select to authenticated using (public.produto_sou_admin_da_conta(conta_id));
+
+-- Cria a chave e devolve o texto dela UMA vez. No banco fica so o resumo (sha256).
+create or replace function public.produto_chave_criar(_nome text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _conta uuid := public.produto_minha_conta();
+  _chave text := 'acq_' || replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  _id uuid;
+begin
+  if _conta is null or not public.produto_sou_admin_da_conta(_conta) then
+    raise exception 'Só quem administra a empresa cria chaves.' using errcode = '42501';
+  end if;
+  if length(btrim(coalesce(_nome, ''))) < 2 then
+    raise exception 'Dê um nome à chave, para saber onde ela é usada.' using errcode = 'P0001';
+  end if;
+  if (select count(*) from public.produto_chaves_api k where k.conta_id = _conta and k.revogada_em is null) >= 10 then
+    raise exception 'A empresa já tem 10 chaves ativas. Revogue uma antes de criar outra.' using errcode = 'P0001';
+  end if;
+  insert into public.produto_chaves_api (conta_id, nome, prefixo, hash, criado_por)
+  values (_conta, left(btrim(_nome), 60), left(_chave, 12), encode(sha256(convert_to(_chave, 'UTF8')), 'hex'), auth.uid())
+  returning id into _id;
+  insert into public.produto_historico (conta_id, ator, acao, detalhe)
+  values (_conta, auth.uid(), 'chave_criada', jsonb_build_object('chave', _id));
+  return jsonb_build_object('id', _id, 'chave', _chave);
+end;
+$$;
+
+create or replace function public.produto_chave_revogar(_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _k public.produto_chaves_api;
+begin
+  select * into _k from public.produto_chaves_api where id = _id for update;
+  if _k.id is null or not public.produto_sou_admin_da_conta(_k.conta_id) then
+    raise exception 'Só quem administra a empresa revoga chaves.' using errcode = '42501';
+  end if;
+  update public.produto_chaves_api set revogada_em = coalesce(revogada_em, now()) where id = _id;
+  insert into public.produto_historico (conta_id, ator, acao, detalhe)
+  values (_k.conta_id, auth.uid(), 'chave_revogada', jsonb_build_object('chave', _id));
+end;
+$$;
+
+-- A funcao da API confere a chave pelo resumo: devolve a empresa so se a chave vale e o CRM esta liberado.
+create or replace function public.produto_chave_usar(_hash text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _k public.produto_chaves_api;
+  _c public.produto_contas;
+begin
+  select * into _k from public.produto_chaves_api where hash = _hash and revogada_em is null;
+  if _k.id is null then
+    return jsonb_build_object('ok', false, 'motivo', 'chave_invalida');
+  end if;
+  select * into _c from public.produto_contas where id = _k.conta_id;
+  if _c.id is null or not _c.crm_ativo or not public.produto_conta_liberada(_c.id) then
+    return jsonb_build_object('ok', false, 'motivo', 'conta_bloqueada');
+  end if;
+  -- O ultimo uso e anotado no maximo uma vez por minuto, para a API nao escrever a cada chamada.
+  if _k.ultimo_uso_em is null or _k.ultimo_uso_em < now() - interval '1 minute' then
+    update public.produto_chaves_api set ultimo_uso_em = now() where id = _k.id;
+  end if;
+  return jsonb_build_object('ok', true, 'conta_id', _c.id, 'conta', _c.nome, 'chave_id', _k.id, 'criado_por', _k.criado_por,
+                            'etapas', coalesce(_c.perfil -> 'etapas', '{}'::jsonb));
+end;
+$$;
+
+revoke all on function public.produto_chave_criar(text) from public, anon;
+grant execute on function public.produto_chave_criar(text) to authenticated;
+revoke all on function public.produto_chave_revogar(uuid) from public, anon;
+grant execute on function public.produto_chave_revogar(uuid) to authenticated;
+revoke all on function public.produto_chave_usar(text) from public, anon, authenticated;
+grant execute on function public.produto_chave_usar(text) to service_role;

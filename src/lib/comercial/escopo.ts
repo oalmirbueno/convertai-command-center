@@ -24,6 +24,8 @@ export type EscopoDoCrm =
       /** O que o plano da empresa libera. */
       limites: LimitesDoPlano;
       maquinaNoMes: number;
+      /** Os nomes que a empresa deu às etapas do funil (o que faltar usa o padrão). */
+      rotulos?: Record<string, string>;
     };
 
 export interface LimitesDoPlano {
@@ -89,6 +91,11 @@ export function tabelaDoCrm(nome: string): string {
   const gemea = TABELAS_DA_CONTA[nome];
   if (!gemea) throw new Error(`"${nome}" não existe no CRM da empresa.`);
   return gemea;
+}
+
+/** O nome próprio de uma etapa no CRM da empresa; vazio quando ela usa o padrão (ou na casa). */
+export function rotuloDaEtapaNoEscopo(id: string): string {
+  return atual.modo === "conta" && atual.rotulos && atual.rotulos[id] ? atual.rotulos[id] : "";
 }
 
 /** Chave de cache: o mesmo navegador pode abrir o CRM da casa e o de uma conta. */

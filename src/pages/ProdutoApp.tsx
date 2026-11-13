@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Home, KanbanSquare, LayoutGrid, LogOut, Mail, BookOpen, Moon, Palette, Settings2, Sun, UserRound } from "lucide-react";
+import { Building2, Home, KanbanSquare, LayoutGrid, LogOut, Mail, BookOpen, Moon, Palette, Plug, Settings2, Sun, UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useProduto } from "@/hooks/useProduto";
@@ -53,8 +53,9 @@ function CrmDaEmpresa({ estado }: { estado: EstadoDoProduto }) {
       equipe: estado.equipe.filter((m) => m.estado === "ativo" && m.user_id).map((m) => ({ id: String(m.user_id), nome: m.nome || m.email || "Sem nome" })),
       limites: estado.plano ? estado.plano.limites : { maquina_buscas_mes: 0, maquina_google_maps: false, maquina_limite_por_busca: 50, privacidade_por_vendedor: false, campanhas: false },
       maquinaNoMes: estado.maquina_no_mes,
+      rotulos: conta.perfil.etapas || {},
     }),
-    [conta.id, estado.equipe, estado.plano, estado.maquina_no_mes],
+    [conta.id, conta.perfil, estado.equipe, estado.plano, estado.maquina_no_mes],
   );
   // Antes do primeiro desenho: o que estiver guardado do Comercial da casa sai, e o escopo passa a ser a empresa.
   useState(() => {
@@ -97,7 +98,8 @@ export default function ProdutoApp() {
         temPainel && { rotulo: papelNoPainel === "client" ? "Painel do cliente" : "Painel da agência", icone: <LayoutGrid className="h-4 w-4" />, aoEscolher: () => navigate("/dashboard") },
         { rotulo: "Área de membros", icone: <BookOpen className="h-4 w-4" />, aoEscolher: () => navigate("/membros") },
         estado && estado.dono_da_casa && { rotulo: "Administrar o produto", icone: <Settings2 className="h-4 w-4" />, aoEscolher: () => navigate("/produto") },
-        estado && estado.conta && estado.eu && estado.eu.papel === "admin" && { rotulo: "Personalizar", icone: <Palette className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=aparencia"), separadorAntes: true },
+        estado && estado.conta && estado.eu && estado.eu.papel === "admin" && { rotulo: "Conexões", icone: <Plug className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=conexoes"), separadorAntes: true },
+        estado && estado.conta && estado.eu && estado.eu.papel === "admin" && { rotulo: "Personalizar", icone: <Palette className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=aparencia") },
         { rotulo: "Meu acesso", icone: <UserRound className="h-4 w-4" />, aoEscolher: () => navigate("/app/conta?parte=acesso"), separadorAntes: !(estado && estado.conta && estado.eu && estado.eu.papel === "admin") },
         { rotulo: "Sair", icone: <LogOut className="h-4 w-4" />, aoEscolher: () => void logout() },
       ]}
@@ -128,9 +130,9 @@ export default function ProdutoApp() {
   const nomeNoTopo = estado && estado.conta ? aparencia.nome_curto || estado.conta.nome : "";
 
   return (
-    <div className="min-h-screen bg-background text-foreground" style={cores} data-produto-app="" data-cor-da-empresa={aparencia.cor || "verde"}>
+    <div className="produto-fundo min-h-screen text-foreground" style={cores} data-produto-app="" data-cor-da-empresa={aparencia.cor || "verde"}>
       {/* Não é <header>: o tema claro do painel pinta de branco os links de "header nav", e aqui o topo é claro. */}
-      <div role="banner" className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background pt-[env(safe-area-inset-top)]" data-produto-topo="">
+      <div role="banner" className="produto-vidro fixed inset-x-0 top-0 z-30 border-b border-border pt-[env(safe-area-inset-top)]" data-produto-topo="">
         <div className="mx-auto flex h-[52px] w-full max-w-[1840px] min-w-0 items-center px-4 md:px-6">
           <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md", foco)} aria-label="Início do CRM e E-mail">
             {aparencia.logo ? (
@@ -188,7 +190,7 @@ export default function ProdutoApp() {
       </main>
 
       {comMenu && (
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="Áreas do produto" data-produto-barra="">
+        <nav className="produto-vidro fixed inset-x-0 bottom-0 z-30 border-t border-border pb-[env(safe-area-inset-bottom)] md:hidden" aria-label="Áreas do produto" data-produto-barra="">
           <ul className="grid h-14 grid-cols-4">
             {SECOES.map((s) => (
               <li key={s.valor} className="min-w-0">

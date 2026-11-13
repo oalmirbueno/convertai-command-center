@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { limitesDoPlano, type LimitesDoPlano } from "@/lib/comercial/escopo";
 import { lerAparencia, type AparenciaDaEmpresa } from "./aparencia";
+import { lerPerfil, type PerfilDaEmpresa } from "./nichos";
 
 /**
  * Produto CRM e E-mail: o que a tela lê e pede.
@@ -62,6 +63,7 @@ export interface EstadoDoProduto {
     acesso_ate: string | null;
     visibilidade: "todos" | "proprios";
     aparencia: AparenciaDaEmpresa;
+    perfil: PerfilDaEmpresa;
     documento: string | null;
     email_cobranca: string | null;
     telefone: string | null;
@@ -147,6 +149,7 @@ function lerEstado(d: any): EstadoDoProduto {
           usuarios_contratados: numero(conta.usuarios_contratados),
           email_caixas_contratadas: numero(conta.email_caixas_contratadas),
           aparencia: lerAparencia(conta.aparencia),
+          perfil: lerPerfil(conta.perfil),
         }
       : null,
     eu: d && d.eu ? d.eu : null,
@@ -227,19 +230,20 @@ async function chamar<T>(corpo: Record<string, unknown>): Promise<T> {
 
 // ------------------------------------------------------------------ a empresa
 
-export async function criarConta(p: { nome: string; documento?: string; telefone?: string; plano?: string; usuarios?: number }): Promise<string> {
+export async function criarConta(p: { nome: string; documento?: string; telefone?: string; plano?: string; usuarios?: number; perfil?: PerfilDaEmpresa }): Promise<string> {
   const { data, error } = await db.rpc("produto_criar_conta", {
     _nome: p.nome,
     _documento: p.documento || null,
     _telefone: p.telefone || null,
     _plano: p.plano || "starter",
     _usuarios: p.usuarios || 1,
+    _perfil: p.perfil || {},
   });
   if (error) throw error;
   return String(data);
 }
 
-export async function salvarConta(dados: Partial<{ nome: string; documento: string; telefone: string; email_cobranca: string; visibilidade: "todos" | "proprios"; aparencia: AparenciaDaEmpresa }>): Promise<void> {
+export async function salvarConta(dados: Partial<{ nome: string; documento: string; telefone: string; email_cobranca: string; visibilidade: "todos" | "proprios"; aparencia: AparenciaDaEmpresa; perfil: PerfilDaEmpresa }>): Promise<void> {
   const { error } = await db.rpc("produto_conta_salvar", { _dados: dados });
   if (error) throw error;
 }
@@ -257,6 +261,41 @@ export async function mudarMembro(membroId: string, p: { papel?: PapelNaConta; r
 export const assinar = (p: { plano_id: string; usuarios: number; so_guardar?: boolean }) => chamar<{ link?: string; atualizado?: boolean; valor?: number }>({ acao: "assinar", ...p });
 export const cancelarAssinatura = () => chamar<{ cancelada: boolean; acesso_ate: string }>({ acao: "cancelar" });
 export const pedirEmail = (p: { dominio?: string; caixas?: number; observacao?: string }) => chamar<{ ok: boolean }>({ acao: "pedir_email", ...p });
+
+// ------------------------------------------------------------------ conexões (API, Claude, ChatGPT)
+
+export interface ChaveDeApi {
+  id: string;
+  nome: string;
+  prefixo: string;
+  criado_em: string;
+  ultimo_uso_em: string | null;
+  revogada_em: string | null;
+}
+
+export async function listarChaves(): Promise<ChaveDeApi[]> {
+  const { data, error } = await db.from("produto_chaves_api").select("id, nome, prefixo, criado_em, ultimo_uso_em, revogada_em").order("criado_em", { ascending: false });
+  if (error) throw error;
+  return lista<ChaveDeApi>(data);
+}
+
+/** Cria a chave. O texto dela só existe nesta resposta: no banco fica o resumo. */
+export async function criarChave(nome: string): Promise<{ id: string; chave: string }> {
+  const { data, error } = await db.rpc("produto_chave_criar", { _nome: nome });
+  if (error) throw error;
+  return { id: String(data.id), chave: String(data.chave) };
+}
+
+export async function revogarChave(id: string): Promise<void> {
+  const { error } = await db.rpc("produto_chave_revogar", { _id: id });
+  if (error) throw error;
+}
+
+/** O endereço da API do CRM (o mesmo servidor do painel). */
+export function enderecoDaApi(): string {
+  const base = String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+  return `${base}/functions/v1/produto-api`;
+}
 
 // ------------------------------------------------------------------ catálogo
 
