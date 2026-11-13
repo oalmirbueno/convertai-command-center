@@ -5,7 +5,7 @@
  * Compatibilidade (piso Safari 11 / Chrome 64): sem `gap` em flex (margem),
  * grade com `grid-gap` antes de `gap`, sem clamp(), sem `inset`, sem
  * aspect-ratio. O desfoque fica só na barra fixa e some onde não existe.
- * Movimento: só transform e opacity, e nada se mexe para quem pede menos movimento.
+ * Movimento: só transform e opacity, com versão suave para quem pede menos movimento.
  */
 .el {
   --el-fundo: #050806;
@@ -1301,12 +1301,42 @@
   }
 }
 
+/*
+ * Quem pede menos movimento (inclusive o Windows com "efeitos de animação"
+ * desligados) vê a versão suave: nada fica se mexendo sem parar no fundo, o
+ * deslocamento encurta e o e-mail chega só clareando. A página não fica parada.
+ */
+@keyframes el-chega-suave {
+  0% {
+    opacity: 0;
+  }
+  9%,
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .el *,
-  .el *::before,
-  .el *::after {
-    animation: none !important;
-    transition: none !important;
+  .el-brilho,
+  .el-cena .el-moldura {
+    animation: none;
+  }
+  .el-chegada {
+    animation-name: el-chega-suave;
+  }
+  .el-anim .el-r {
+    transform: translate3d(0, 12px, 0);
+    transition-duration: 600ms;
+  }
+  .el-entra {
+    animation-duration: 600ms;
+  }
+  .el-botao:hover,
+  .el-botao-vazio:hover,
+  .el-cartao:hover {
+    transform: none;
   }
 }
 

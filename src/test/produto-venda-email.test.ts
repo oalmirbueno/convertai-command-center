@@ -99,7 +99,7 @@ describe("venda do e-mail: convenções da página", () => {
     expect(gridGaps.length).toBe(gaps.length);
   });
 
-  it("o movimento para para quem pede menos movimento e a entrada por rolagem depende do JS", () => {
+  it("quem pede menos movimento recebe a versão suave e a entrada por rolagem depende do JS", () => {
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(css).toMatch(/\.el-anim \.el-r\s*\{/);
     expect(css).not.toMatch(/^\.el-r\s*\{/m);
