@@ -601,6 +601,8 @@ export type RecebidoDoMes = {
   avulsos: number;
   /** Parcelas de projeto fechado. */
   projetos: number;
+  /** Assinaturas do produto CRM e E-mail pagas no Asaas (valor cheio, antes da taxa). */
+  crmEmail: number;
   /** Tudo que entrou: a soma das três origens. */
   total: number;
   /** Clientes distintos com mensalidade recebida no mês. */
@@ -658,10 +660,34 @@ async function recebidasNoMes(
 
 const centavos = (valor: number) => Math.round(valor * 100) / 100;
 
+/**
+ * O que o produto CRM e E-mail recebeu (13/11/2026): cobrança do Asaas paga,
+ * pelo dia do pagamento em São Paulo. Mesma régua da função
+ * produto_faturamento, que alimenta a aba "CRM e E-mail" do Financeiro.
+ * Sem `desde`, soma tudo o que já foi pago.
+ */
+async function pagoNoProduto(desde?: string, ate?: string): Promise<Array<{ valor: unknown; valor_liquido: unknown }>> {
+  // As tabelas do produto ainda não estão nos tipos gerados do banco.
+  type Consulta = PromiseLike<{ data: unknown; error: { message: string } | null }> & {
+    gte: (c: string, v: string) => Consulta;
+    lt: (c: string, v: string) => Consulta;
+  };
+  const semTipo = supabase as unknown as {
+    from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => Consulta } };
+  };
+  let q = semTipo.from("produto_cobrancas").select("valor, valor_liquido").eq("estado", "paga");
+  if (desde) q = q.gte("pago_em", `${desde}T00:00:00-03:00`);
+  if (ate) q = q.lt("pago_em", `${ate}T00:00:00-03:00`);
+  const { data, error } = await q;
+  if (error) throw new ErroDeLeitura("o recebido do CRM e E-mail", error);
+  return (data || []) as unknown as Array<{ valor: unknown; valor_liquido: unknown }>;
+}
+
 export async function recebidoDoMes(periodo: string): Promise<RecebidoDoMes> {
-  const [cobrancas, parcelas] = await Promise.all([
+  const [cobrancas, parcelas, doProduto] = await Promise.all([
     recebidasNoMes("billing", "amount, paid_amount, status, type, client_id, currency", periodo),
     recebidasNoMes("payment_installments", "amount, paid_amount, status", periodo),
+    pagoNoProduto(periodo, proximoMes(periodo)),
   ]);
   let mensalidades = 0;
   let avulsos = 0;
@@ -675,11 +701,13 @@ export async function recebidoDoMes(periodo: string): Promise<RecebidoDoMes> {
     } else avulsos += valor;
   }
   const projetos = parcelas.reduce((soma, p) => soma + recebidoDe(p), 0);
+  const crmEmail = doProduto.reduce((soma, c) => soma + numero(c.valor), 0);
   return {
     mensalidades: centavos(mensalidades),
     avulsos: centavos(avulsos),
     projetos: centavos(projetos),
-    total: centavos(mensalidades + avulsos + projetos),
+    crmEmail: centavos(crmEmail),
+    total: centavos(mensalidades + avulsos + projetos + crmEmail),
     clientesRecorrentes: recorrentes.size,
   };
 }
@@ -720,6 +748,56 @@ async function ganhosDaContaNoMes(periodo: string): Promise<{ receita: number; r
     receita: linhas.reduce((soma, l) => soma + numero(l.monthly_value) + numero(l.one_off_value), 0),
     recorrentes: linhas.filter((l) => numero(l.monthly_value) > 0).length,
   };
+}
+
+/**
+ * O que SAIU no mês e o saldo em caixa de hoje, com a mesma conta do bloco
+ * "Caixa da Aceleriq" no Fluxo de Caixa do Financeiro (13/11/2026):
+ *
+ * - Saiu: despesa paga, no mês da data do pagamento (ou do vencimento, sem
+ *   data). Aporte de investidor (categoria `investidor` ou `inv_*`) é capital,
+ *   não despesa, e fica de fora.
+ * - Saldo: saldo inicial conciliado (`financial_settings.opening_balance`)
+ *   + tudo que já entrou − tudo que já saiu. Não depende do mês escolhido.
+ *   Do CRM e E-mail entra o valor líquido (o Asaas repassa já sem a taxa).
+ */
+export type CaixaDaCasa = { saiuNoMes: number; saldo: number };
+
+const ehAporteDeInvestidor = (categoria: unknown) => {
+  const c = typeof categoria === "string" ? categoria : "";
+  return c === "investidor" || c.startsWith("inv_");
+};
+
+export async function caixaDaCasa(periodo: string): Promise<CaixaDaCasa> {
+  const fim = proximoMes(periodo);
+  const [ajuste, cobrancas, parcelas, despesas, doProduto] = await Promise.all([
+    supabase.from("financial_settings").select("opening_balance").eq("settings_key", "default").maybeSingle(),
+    supabase.from("billing").select("amount, paid_amount, status, type, currency").in("status", ["paid", "partial"]),
+    supabase.from("payment_installments").select("amount, paid_amount, status").in("status", ["paid", "partial"]),
+    supabase.from("expenses").select("amount, category, paid_date, due_date").eq("status", "paid"),
+    pagoNoProduto(),
+  ]);
+  const erro = ajuste.error || cobrancas.error || parcelas.error || despesas.error;
+  if (erro) throw new ErroDeLeitura("o caixa do Financeiro", erro);
+
+  const entrou =
+    ((cobrancas.data || []) as LinhaRecebida[])
+      .filter((c) => c.type !== "ads_recharge" && c.currency !== "USD")
+      .reduce((soma, c) => soma + recebidoDe(c), 0) +
+    ((parcelas.data || []) as LinhaRecebida[]).reduce((soma, p) => soma + recebidoDe(p), 0) +
+    doProduto.reduce((soma, c) => soma + numero(c.valor_liquido ?? c.valor), 0);
+
+  let saiu = 0;
+  let saiuNoMes = 0;
+  for (const d of (despesas.data || []) as Array<{ amount: unknown; category: unknown; paid_date: string | null; due_date: string | null }>) {
+    if (ehAporteDeInvestidor(d.category)) continue;
+    const valor = numero(d.amount);
+    saiu += valor;
+    const dia = d.paid_date || d.due_date || "";
+    if (dia >= periodo && dia < fim) saiuNoMes += valor;
+  }
+  const abertura = numero((ajuste.data as { opening_balance?: unknown } | null)?.opening_balance);
+  return { saiuNoMes: centavos(saiuNoMes), saldo: centavos(abertura + entrou - saiu) };
 }
 
 export function proximoMes(periodo: string): string {

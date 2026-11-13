@@ -3035,6 +3035,14 @@
       "remote_hash_mode": "supabase_cli_split"
     },
     {
+      "version": "20261113180000",
+      "path": "supabase/migrations/20261113180000_produto_precos_na_pagina_publica.sql",
+      "local_sha256": "4659cebd389e51d79a9fe9007857642e5a92dff188f27f8a8164c28ab5539f8e",
+      "remote_name": "produto_precos_na_pagina_publica",
+      "remote_statements_sha256": "485d3f4f34a0f1ae4dffc4b58a77e1a98fd0100ed9ae80f8bf06e2227aadd63a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
       "version": "20261113200000",
       "path": "supabase/migrations/20261113200000_crm_cargos_campos_e_automacoes.sql",
       "local_sha256": "89104a021d2e1a3c92479fb608f6177dd5ecf7b4bbad92930e786833c15d4f0c",

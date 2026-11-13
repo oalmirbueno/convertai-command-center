@@ -40,6 +40,7 @@ import { useFinanceSettings } from "@/hooks/useFinanceV2";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
 import FaturamentoDoProduto from "@/components/produto/casa/FaturamentoDoProduto";
+import { DinheiroDoMesLido } from "@/components/comercial/DinheiroDoMes";
 import { Boxes } from "lucide-react";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
@@ -1372,6 +1373,9 @@ function LegacyFinanceiro() {
                 }] : []),
               ]}
             />
+
+            {/* 13/11/2026 (dono): entrou, saiu, saldo e de onde entrou, com o CRM e E-mail junto. */}
+            <DinheiroDoMesLido periodo={`${selYear}-${String(selMonth + 1).padStart(2, "0")}-01`} />
 
             {/* 09/11/2026 (dono: "mais clean"): quatro zeros do Freela eram só ruído. Aparece o que tem valor; sem
                 movimento, uma linha leva ao caixa do Freela. */}
