@@ -10,13 +10,14 @@ import {
   convidar,
   diaLegivel,
   fraseDoErro,
-  lerConfig,
+  lerPrecos,
   listarCobrancas,
   listarPlanos,
   mensalidadePrevista,
   mudarMembro,
   reais,
   reenviarConvite,
+  sairDaEmpresa,
   salvarConta,
   type EstadoDoProduto,
   type MembroDaConta,
@@ -295,7 +296,7 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
   const reler = useRelerProduto();
   const [busca, setBusca] = useSearchParams();
   const planos = useQuery({ queryKey: ["produto", "planos"], queryFn: () => listarPlanos(), staleTime: 300_000 });
-  const config = useQuery({ queryKey: ["produto", "config"], queryFn: lerConfig, staleTime: 300_000 });
+  const config = useQuery({ queryKey: ["produto", "precos"], queryFn: lerPrecos, staleTime: 300_000 });
   const [plano, setPlano] = useState(conta.plano_id);
   const [usuarios, setUsuarios] = useState(conta.usuarios_contratados);
   const [enviando, setEnviando] = useState(false);
@@ -332,6 +333,7 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
   const assinando = !!ass && (ass.estado === "ativa" || ass.estado === "atrasada");
   const cortesia = conta.estado === "cortesia";
   const emTeste = conta.estado === "teste" && !assinando;
+  const temAssinatura = !!ass && (ass.estado === "ativa" || ass.estado === "atrasada");
 
   const enviar = async (soGuardar = false) => {
     setEnviando(true);
@@ -342,7 +344,8 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
         return;
       }
       await reler();
-      toast.success("Plano atualizado.");
+      if (r.agendado) toast.success(`A redução entra na próxima cobrança${r.a_partir_de ? `, em ${diaLegivel(r.a_partir_de)}` : ""}. Até lá fica o plano de hoje.`);
+      else toast.success("Plano atualizado.");
     } catch (e) {
       toast.error(fraseDoErro(e, "Não foi possível concluir."));
     } finally {
@@ -387,6 +390,11 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
           ) : undefined
         }
       >
+        {ass && ass.troca_agendada && (
+          <p className={juntar(texto.corpo, "mb-3")} data-troca-agendada="">
+            Na próxima cobrança passa para {ass.troca_agendada.usuarios} {ass.troca_agendada.usuarios === 1 ? "usuário" : "usuários"}, {reais(ass.troca_agendada.valor)} por mês.
+          </p>
+        )}
         {ass && ass.cartao_final && (
           <p className={juntar(texto.corpo, "mb-3")}>
             Cartão {ass.cartao_bandeira ? `${ass.cartao_bandeira} ` : ""}final {ass.cartao_final}
@@ -440,7 +448,7 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
                 Guardar escolha
               </button>
             )}
-            <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || !podeEnviar || (!cortesia && !estado.pagamentos_ativos)} data-assinar="">
+            <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || !podeEnviar || cortesia || (!estado.pagamentos_ativos && !temAssinatura)} title={cortesia ? "Em cortesia, fale com a Aceleriq para mudar o plano" : undefined} data-assinar="">
               {enviando ? "Abrindo..." : rotuloDoBotao}
             </button>
           </div>
@@ -569,6 +577,18 @@ function Empresa({ estado }: { estado: EstadoDoProduto }) {
 // ------------------------------------------------------------------ meu acesso
 
 function MeuAcesso({ estado }: { estado: EstadoDoProduto }) {
+  const reler = useRelerProduto();
+  const [saindo, setSaindo] = useState(false);
+  const sair = async () => {
+    try {
+      await sairDaEmpresa();
+      setSaindo(false);
+      await reler();
+      toast.success("Você saiu da empresa.");
+    } catch (e) {
+      toast.error(fraseDoErro(e, "Não foi possível sair agora."));
+    }
+  };
   const [senha, setSenha] = useState("");
   const [salvando, setSalvando] = useState(false);
   const trocar = async () => {
@@ -589,7 +609,26 @@ function MeuAcesso({ estado }: { estado: EstadoDoProduto }) {
         <button type="button" className={juntar(botao.secundario, "mt-3")} onClick={() => void trocar()} disabled={salvando || !senha}>
           {salvando ? "Salvando..." : "Trocar senha"}
         </button>
+        <div className="mt-8 border-t border-border pt-4">
+          <button type="button" className={juntar(botao.discreto, "-ml-2 text-destructive hover:text-destructive")} onClick={() => setSaindo(true)} data-sair-da-empresa="">
+            Sair desta empresa
+          </button>
+        </div>
       </div>
+      <JanelaCentral
+        aberta={saindo}
+        onFechar={() => setSaindo(false)}
+        largura="sm"
+        titulo="Sair da empresa?"
+        rodape={
+          <>
+            <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={() => setSaindo(false)}>Ficar</button>
+            <button type="button" className={botao.perigo} onClick={() => void sair()}>Sair</button>
+          </>
+        }
+      >
+        <p className={texto.corpo}>Você perde o acesso ao CRM desta empresa. Os seus negócios ficam sem responsável para a equipe redistribuir.</p>
+      </JanelaCentral>
     </Secao>
   );
 }

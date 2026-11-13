@@ -41,6 +41,9 @@ const idValido = (v: unknown) => {
   return v;
 };
 
+/** O valor de um filtro do PostgREST, entre aspas: vírgula, parêntese e ponto do usuário ficam sendo texto. */
+export const valorDoFiltro = (v: string) => `"${v.replace(/[\\"]/g, "\\$&")}"`;
+
 /** Aceita o id da etapa ("proposta") ou o nome dela, o padrão ou o que a empresa deu ("Visita"). */
 export function etapaDe(v: unknown, proprias: Record<string, string>): string | null {
   const t = texto(v, 40).toLowerCase();
@@ -81,7 +84,10 @@ export function camposDoNegocio(d: Record<string, unknown>): Record<string, unkn
   const c: Record<string, unknown> = {};
   if ("nome" in d) c.name = texto(d.nome, 200);
   if ("empresa" in d) c.company = texto(d.empresa, 200) || null;
-  if ("email" in d) c.email = texto(d.email, 254).toLowerCase() || null;
+  if ("email" in d) {
+    const email = texto(d.email, 254).toLowerCase();
+    c.email = /^[^@\s,()"]+@[^@\s,()"]+\.[^@\s,()"]+$/.test(email) ? email : null;
+  }
   if ("whatsapp" in d || "telefone" in d) c.whatsapp = texto(d.whatsapp || d.telefone, 30) || null;
   if ("origem" in d) c.origin = ORIGENS.indexOf(texto(d.origem, 30)) >= 0 ? texto(d.origem, 30) : "site";
   if ("valor_mensal" in d) c.monthly_value = dinheiro(d.valor_mensal) ?? 0;
@@ -133,8 +139,11 @@ export function criarOperacoes(db: SupabaseClient, ctx: Contexto) {
         if (!etapa) throw new ErroDaApi(400, "etapa_invalida", `Etapa desconhecida. Use uma de: ${ETAPAS.join(", ")}.`);
         q = q.eq("stage", etapa);
       } else if (p.abertos === true || p.abertos === "true") q = q.not("stage", "in", "(ganho,perdido)");
-      const busca = texto(p.busca, 80).replace(/[%,()]/g, " ").trim();
-      if (busca) q = q.or(`name.ilike.%${busca}%,company.ilike.%${busca}%,email.ilike.%${busca}%`);
+      const busca = texto(p.busca, 80).replace(/[%_*]/g, " ").trim();
+      if (busca) {
+        const termo = valorDoFiltro(`%${busca}%`);
+        q = q.or(`name.ilike.${termo},company.ilike.${termo},email.ilike.${termo}`);
+      }
       const { data, error, count } = await q.order("updated_at", { ascending: false }).range((pagina - 1) * limite, pagina * limite - 1);
       if (error) throw falha(error, "listar os negócios");
       return { total: count || 0, pagina, limite, negocios: ((data || []) as Array<Record<string, unknown>>).map((l) => negocioParaFora(l, ctx.etapas)) };
@@ -153,7 +162,7 @@ export function criarOperacoes(db: SupabaseClient, ctx: Contexto) {
       if (!etapa) throw new ErroDaApi(400, "etapa_invalida", `Etapa desconhecida. Use uma de: ${ETAPAS.join(", ")}.`);
       const dono = await responsavelPorEmail(p.responsavel_email);
       // O mesmo e-mail ou WhatsApp já em aberto: devolve o que existe em vez de duplicar (formulário enviado duas vezes).
-      const chaves = [campos.email ? `email.eq.${campos.email}` : "", campos.whatsapp ? `whatsapp.eq.${String(campos.whatsapp).replace(/[,()]/g, "")}` : ""].filter(Boolean);
+      const chaves = [campos.email ? `email.eq.${valorDoFiltro(String(campos.email))}` : "", campos.whatsapp ? `whatsapp.eq.${valorDoFiltro(String(campos.whatsapp))}` : ""].filter(Boolean);
       if (chaves.length && p.permitir_repetido !== true) {
         const { data: ja } = await db.from("crm_leads").select(COLUNAS).eq("conta_id", ctx.contaId).is("archived_at", null).not("stage", "in", "(ganho,perdido)").or(chaves.join(",")).limit(1);
         if (ja && ja.length) return { negocio: negocioParaFora(ja[0] as Record<string, unknown>, ctx.etapas), repetido: true };

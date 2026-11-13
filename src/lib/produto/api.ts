@@ -39,6 +39,7 @@ export interface ItemDaMensalidade {
 }
 
 export interface AssinaturaDaConta {
+  troca_agendada: { plano_id: string; usuarios: number; valor: number } | null;
   estado: "sem" | "aguardando" | "ativa" | "atrasada" | "cancelada";
   valor_mensal: number;
   proximo_vencimento: string | null;
@@ -174,6 +175,7 @@ function lerEstado(d: any): EstadoDoProduto {
           cartao_bandeira: ass.cartao_bandeira || null,
           itens: lista<ItemDaMensalidade>(ass.itens),
           checkout_link: ass.checkout_link || null,
+          troca_agendada: ass.troca_agendada && typeof ass.troca_agendada === "object" ? { plano_id: String(ass.troca_agendada.plano_id || ""), usuarios: numero(ass.troca_agendada.usuarios), valor: numero(ass.troca_agendada.valor) } : null,
         }
       : null,
     convite: d && d.convite ? d.convite : null,
@@ -185,18 +187,27 @@ function lerEstado(d: any): EstadoDoProduto {
  * entrou é colocado na empresa aqui (o banco confere o e-mail confirmado).
  */
 export async function carregarProduto(): Promise<EstadoDoProduto> {
-  let { data, error } = await db.rpc("produto_estado");
+  const { data, error } = await db.rpc("produto_estado");
   if (error) throw error;
-  if (data && !data.conta && data.convite) {
-    const aceite = await db.rpc("produto_aceitar_convite");
-    if (!aceite.error && aceite.data) {
-      const de_novo = await db.rpc("produto_estado");
-      if (de_novo.error) throw de_novo.error;
-      data = de_novo.data;
-      error = null;
-    }
-  }
   return lerEstado(data);
+}
+
+/** A pessoa convidada aceita e entra na empresa (o banco confere o e-mail confirmado). */
+export async function aceitarConvite(): Promise<void> {
+  const { error } = await db.rpc("produto_aceitar_convite");
+  if (error) throw error;
+}
+
+/** A pessoa convidada recusa: o lugar volta para a empresa. */
+export async function recusarConvite(): Promise<void> {
+  const { error } = await db.rpc("produto_recusar_convite");
+  if (error) throw error;
+}
+
+/** Sair da empresa por conta própria. */
+export async function sairDaEmpresa(): Promise<void> {
+  const { error } = await db.rpc("produto_sair");
+  if (error) throw error;
 }
 
 /** Só a pergunta "esta pessoa tem empresa no produto?", para o login decidir aonde levar. */
@@ -258,7 +269,7 @@ export async function mudarMembro(membroId: string, p: { papel?: PapelNaConta; r
 }
 
 /** Assina (abre o checkout) ou, em teste e cortesia, só guarda o plano e os usuários (`so_guardar`). */
-export const assinar = (p: { plano_id: string; usuarios: number; so_guardar?: boolean }) => chamar<{ link?: string; atualizado?: boolean; valor?: number }>({ acao: "assinar", ...p });
+export const assinar = (p: { plano_id: string; usuarios: number; so_guardar?: boolean }) => chamar<{ link?: string; atualizado?: boolean; agendado?: boolean; a_partir_de?: string | null; valor?: number }>({ acao: "assinar", ...p });
 export const cancelarAssinatura = () => chamar<{ cancelada: boolean; acesso_ate: string }>({ acao: "cancelar" });
 export const pedirEmail = (p: { dominio?: string; caixas?: number; observacao?: string }) => chamar<{ ok: boolean }>({ acao: "pedir_email", ...p });
 
@@ -319,6 +330,28 @@ export async function listarPlanos(todos = false): Promise<PlanoDoProduto[]> {
   }));
 }
 
+/** Os preços que a empresa vê (sem os custos da casa, que ficam só para o admin). */
+export async function lerPrecos(): Promise<ConfigDoProduto> {
+  const { data, error } = await db.rpc("produto_precos");
+  if (error) throw error;
+  const c = data || {};
+  return {
+    pagamentos_ativos: !!c.pagamentos_ativos,
+    teste_dias: numero(c.teste_dias),
+    tolerancia_dias: numero(c.tolerancia_dias),
+    email_migracao: numero(c.email_migracao),
+    email_mensal: numero(c.email_mensal),
+    email_caixas_no_mensal: numero(c.email_caixas_no_mensal),
+    email_caixa_extra: numero(c.email_caixa_extra),
+    custo_fixo_mensal: 0,
+    custo_email_caixa_extra: 0,
+    custo_lugar_google_usd: 0,
+    dolar: 0,
+    imposto_pct: 0,
+  };
+}
+
+/** A configuração inteira, com os custos da casa: só o admin da Aceleriq lê. */
 export async function lerConfig(): Promise<ConfigDoProduto> {
   const { data, error } = await db.from("produto_config").select("*").maybeSingle();
   if (error) throw error;
@@ -436,6 +469,20 @@ export const ROTULO_DO_ESTADO_DO_DOMINIO: Record<EstadoDoDominio, string> = {
 const checagemValida = (c: unknown): ChecagemDoDominio | null =>
   c && typeof c === "object" && Array.isArray((c as { itens?: unknown }).itens) ? (c as ChecagemDoDominio) : null;
 
+/** O e-mail da própria empresa, como ela pode ver (sem as anotações internas da casa). */
+export async function carregarEmailDaEmpresa(): Promise<{ dominios: DominioDeEmail[]; caixas: CaixaDeEmail[]; etapas: EtapaDaMigracao[] }> {
+  const { data, error } = await db.rpc("produto_email_da_conta");
+  if (error) throw error;
+  const d = data || {};
+  const vazio = { provedor_antigo: null, dns_em: null, registro_em: null, dkim_seletor: null, observacao: null };
+  return {
+    dominios: lista<any>(d.dominios).map((x) => ({ ...vazio, ...x, checagem: checagemValida(x.checagem) })),
+    caixas: lista<any>(d.caixas).map((c) => ({ tamanho_origem: null, observacao: null, ...c })),
+    etapas: lista<any>(d.etapas).map((e) => ({ ajuda: "", nota: null, ...e })),
+  };
+}
+
+/** A casa lê tudo, de todas as empresas ou de uma. */
 export async function carregarEmail(contaId?: string): Promise<{ dominios: DominioDeEmail[]; caixas: CaixaDeEmail[]; etapas: EtapaDaMigracao[] }> {
   let d = db.from("produto_email_dominios").select("*").order("criado_em", { ascending: true });
   let c = db.from("produto_email_caixas").select("*").neq("estado", "removida").order("endereco", { ascending: true });

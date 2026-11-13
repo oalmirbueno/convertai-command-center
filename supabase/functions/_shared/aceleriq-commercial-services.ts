@@ -703,7 +703,7 @@ export async function comercialMaquinaBuscar(input: { nicho: string; cidade: str
   const limite = Math.min(Math.max(Math.round(Number(input.limite) || 50), 1), 300);
   const fontes = (Array.isArray(input.fontes) ? input.fontes : ['osm', 'sites']).map((f) => String(f).trim().toLowerCase()).filter((f) => /^[a-z_]{2,20}$/.test(f)).slice(0, 5);
   if (input.campanha_id && !isUuid(input.campanha_id)) throw new Error('campanha_id must be a UUID');
-  const { data: igual } = await comPrazo(db().from('leads_buscas').select('*').ilike('nicho', nicho).ilike('cidade', cidade).in('situacao', ['na_fila', 'rodando']).limit(1));
+  const { data: igual } = await comPrazo(db().from('leads_buscas').select('*').is('conta_id', null).ilike('nicho', nicho).ilike('cidade', cidade).in('situacao', ['na_fila', 'rodando']).limit(1));
   if (igual && igual.length) return { busca: igual[0], criada: false, duplicada: true, observacao: 'Ja existe uma busca igual na fila.' };
   const { data, error } = await comPrazo(db().from('leads_buscas').insert({
     nicho, cidade, uf, limite, fontes: fontes.length ? fontes : ['osm', 'sites'],
@@ -718,12 +718,12 @@ export async function comercialMaquinaCandidatos(input: { busca_id?: string; sit
   soDaCasa(ctx);
   const limit = Math.min(Math.max(Number(input.limit) || 100, 1), 300);
   if (!input.busca_id) {
-    const { data, error } = await comPrazo(db().from('leads_buscas').select('id, nicho, cidade, uf, situacao, encontrados, limite, erro, entregar_ao_mercurio, created_at, terminado_em').order('created_at', { ascending: false }).limit(20));
+    const { data, error } = await comPrazo(db().from('leads_buscas').select('id, nicho, cidade, uf, situacao, encontrados, limite, erro, entregar_ao_mercurio, created_at, terminado_em').is('conta_id', null).order('created_at', { ascending: false }).limit(20));
     if (error) throw new Error(`leads_buscas: ${error.message}`);
     return { buscas: data ?? [], total: (data ?? []).length };
   }
   if (!isUuid(input.busca_id)) throw new Error('busca_id must be a UUID');
-  const { data: busca, error: e1 } = await comPrazo(db().from('leads_buscas').select('*').eq('id', input.busca_id).maybeSingle());
+  const { data: busca, error: e1 } = await comPrazo(db().from('leads_buscas').select('*').eq('id', input.busca_id).is('conta_id', null).maybeSingle());
   if (e1) throw new Error(`leads_buscas: ${e1.message}`);
   if (!busca) throw new Error('Busca nao encontrada.');
   let qb = db().from('leads_candidatos').select('*').eq('busca_id', input.busca_id).order('nota', { ascending: false, nullsFirst: false }).order('created_at', { ascending: true }).limit(limit);

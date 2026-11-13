@@ -37,6 +37,7 @@ import {
   totalDosItens,
 } from "./modulos/asaas.ts";
 import { conferirDominio, type Provedor } from "./modulos/dns.ts";
+import { comPedido, ehReducao, fimDoAcessoAoCancelar } from "./modulos/regras.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -193,6 +194,10 @@ async function reenviarConvite(ch: Chamador, corpo: Record<string, unknown>) {
   const { data: m } = await servico().from("produto_membros").select("conta_id").eq("id", id).maybeSingle();
   const contaDoMembro = (m as { conta_id?: string } | null)?.conta_id || "";
   if (!contaDoMembro || !(ch.dono || (ch.adminDaConta && ch.contaId === contaDoMembro))) throw new ErroHttp(403, "sem_permissao", "Só quem administra a empresa reenvia o convite.");
+  // No máximo três reenvios por hora para a mesma pessoa: o e-mail sai do domínio da casa.
+  const { count } = await servico().from("produto_historico").select("id", { count: "exact", head: true }).eq("conta_id", contaDoMembro).eq("acao", "convite_reenviado").eq("detalhe->>membro", id).gte("criado_em", new Date(Date.now() - 3600 * 1000).toISOString());
+  if ((count || 0) >= 3) throw new ErroHttp(429, "muitos_reenvios", "O convite já foi reenviado há pouco. Espere um pouco antes de tentar de novo.");
+  await registrar(contaDoMembro, ch.userId, "convite_reenviado", { membro: id });
   return json({ enviado: await enviarConvite(id, ch.userId) });
 }
 
@@ -259,7 +264,7 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
   const [{ data: plano }, { count: ocupados }, { data: ass }] = await Promise.all([
     servico().from("produto_planos").select("id, ativo, minimo_usuarios").eq("id", planoId).maybeSingle(),
     servico().from("produto_membros").select("id", { count: "exact", head: true }).eq("conta_id", contaId).neq("estado", "removido"),
-    servico().from("produto_assinaturas").select("asaas_assinatura_id, asaas_cliente_id, estado").eq("conta_id", contaId).maybeSingle(),
+    servico().from("produto_assinaturas").select("asaas_assinatura_id, asaas_cliente_id, estado, valor_mensal, proximo_vencimento, pedidos").eq("conta_id", contaId).maybeSingle(),
   ]);
   const p = plano as { id: string; ativo: boolean; minimo_usuarios: number } | null;
   if (!p || !p.ativo) throw new ErroHttp(400, "plano_indisponivel", "Esse plano não está disponível.");
@@ -267,12 +272,15 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
   if (usuarios < p.minimo_usuarios) throw new ErroHttp(400, "abaixo_do_minimo", `Esse plano começa com ${p.minimo_usuarios} usuários.`);
   if (usuarios < (ocupados || 0)) throw new ErroHttp(400, "lugares_em_uso", `A empresa tem ${ocupados} pessoas na equipe. Remova alguém antes de diminuir os usuários.`);
 
-  const a = (ass || {}) as { asaas_assinatura_id?: string | null; asaas_cliente_id?: string | null; estado?: string };
+  const a = (ass || {}) as { asaas_assinatura_id?: string | null; asaas_cliente_id?: string | null; estado?: string; valor_mensal?: number; proximo_vencimento?: string | null; pedidos?: Record<string, unknown> };
   const antes = { plano_id: conta.plano_id, usuarios_contratados: conta.usuarios_contratados };
   const gravar = (v: { plano_id: string; usuarios_contratados: number }) => servico().from("produto_contas").update({ ...v, atualizado_em: new Date().toISOString() }).eq("id", contaId);
 
-  // Empresa em cortesia não paga: muda o plano e pronto. Em teste, dá para guardar a escolha sem pagar ainda.
-  if (conta.estado === "cortesia" || (conta.estado === "teste" && corpo.so_guardar === true && !a.asaas_assinatura_id)) {
+  // Em cortesia quem paga é a casa: plano e usuários só mudam por ela.
+  if (conta.estado === "cortesia") throw new ErroHttp(409, "cortesia", "A empresa está em cortesia. Para mudar o plano ou os usuários, fale com a Aceleriq.");
+  const assinando = !!a.asaas_assinatura_id && (a.estado === "ativa" || a.estado === "atrasada");
+  // Em teste dá para guardar a escolha sem pagar ainda. O que vai valer depois é o que for pago no checkout.
+  if (conta.estado === "teste" && corpo.so_guardar === true && !assinando) {
     await gravar({ plano_id: planoId, usuarios_contratados: usuarios });
     await registrar(contaId, ch.userId, "plano_mudou", { plano: planoId, usuarios });
     return json({ atualizado: true });
@@ -288,9 +296,16 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
     const token = await tokenDoAsaas();
     const valor = totalDosItens(itens);
 
-    if (a.asaas_assinatura_id && (a.estado === "ativa" || a.estado === "atrasada")) {
+    if (assinando && a.asaas_assinatura_id) {
+      // Baixar o valor no meio do ciclo espera a próxima cobrança: senão dava para subir, usar e descer sem pagar.
+      if (ehReducao(valor, Number(a.valor_mensal) || 0)) {
+        await gravar(antes);
+        await servico().from("produto_assinaturas").update({ troca_agendada: { plano_id: planoId, usuarios, valor, pedida_em: new Date().toISOString() }, atualizado_em: new Date().toISOString() }).eq("conta_id", contaId);
+        await registrar(contaId, ch.userId, "troca_agendada", { plano: planoId, usuarios, valor });
+        return json({ agendado: true, valor, a_partir_de: a.proximo_vencimento || null });
+      }
       const nova = await mudarValorDaAssinatura(token, fetch, a.asaas_assinatura_id, { valor, descricao: descricaoDosItens(itens) });
-      await servico().from("produto_assinaturas").update({ valor_mensal: nova.valor, itens, proximo_vencimento: nova.proximo_vencimento, atualizado_em: new Date().toISOString() }).eq("conta_id", contaId);
+      await servico().from("produto_assinaturas").update({ valor_mensal: nova.valor, itens, proximo_vencimento: nova.proximo_vencimento, troca_agendada: null, atualizado_em: new Date().toISOString() }).eq("conta_id", contaId);
       await registrar(contaId, ch.userId, "plano_mudou", { plano: planoId, usuarios, valor });
       return json({ atualizado: true, valor });
     }
@@ -306,6 +321,8 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
       estado: "aguardando",
       valor_mensal: valor,
       itens,
+      // O que foi pedido NESTE checkout: se ele for pago, é isto que a empresa leva (mesmo que a tela mude depois).
+      pedidos: comPedido(a.pedidos, checkout.id, { plano_id: planoId, usuarios, valor }, new Date()),
       atualizado_em: new Date().toISOString(),
     }, { onConflict: "conta_id" });
     if (error) throw new ErroHttp(500, "banco", "O checkout foi criado, mas não consegui guardar. Tente de novo.");
@@ -320,22 +337,23 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
 
 async function cancelar(ch: Chamador) {
   const contaId = exigirAdminDaConta(ch);
-  const { data: ass } = await servico().from("produto_assinaturas").select("asaas_assinatura_id, proximo_vencimento").eq("conta_id", contaId).maybeSingle();
-  const a = (ass || {}) as { asaas_assinatura_id?: string | null; proximo_vencimento?: string | null };
-  if (a.asaas_assinatura_id) {
-    try {
-      await cancelarAssinaturaNoAsaas(await tokenDoAsaas(), fetch, a.asaas_assinatura_id);
-    } catch (e) {
-      throw erroDoPagamento(e);
-    }
+  const contaAtual = await lerConta(contaId);
+  const { data: ass } = await servico().from("produto_assinaturas").select("asaas_assinatura_id, proximo_vencimento, estado").eq("conta_id", contaId).maybeSingle();
+  const a = (ass || {}) as { asaas_assinatura_id?: string | null; proximo_vencimento?: string | null; estado?: string };
+  // Só se cancela o que existe: cortesia e teste sem assinatura continuam como estão.
+  if (contaAtual.estado === "cortesia") throw new ErroHttp(409, "cortesia", "A empresa está em cortesia: não há assinatura para cancelar.");
+  if (!a.asaas_assinatura_id || (a.estado !== "ativa" && a.estado !== "atrasada")) throw new ErroHttp(409, "sem_assinatura", "A empresa não tem assinatura ativa para cancelar.");
+  try {
+    await cancelarAssinaturaNoAsaas(await tokenDoAsaas(), fetch, a.asaas_assinatura_id);
+  } catch (e) {
+    throw erroDoPagamento(e);
   }
-  // O que já foi pago vale até o fim do período.
-  const hoje = diaEmSaoPaulo(new Date());
-  const ate = a.proximo_vencimento && a.proximo_vencimento > hoje ? `${a.proximo_vencimento}T23:59:59-03:00` : new Date().toISOString();
-  await servico().from("produto_assinaturas").update({ estado: "cancelada", checkout_link: null, atualizado_em: new Date().toISOString() }).eq("conta_id", contaId);
+  // Quem está em dia usa até o fim do período pago; em atraso, o acesso termina agora.
+  const ate = fimDoAcessoAoCancelar({ estadoDaConta: contaAtual.estado, proximoVencimento: a.proximo_vencimento, agora: new Date() });
+  await servico().from("produto_assinaturas").update({ estado: "cancelada", checkout_link: null, troca_agendada: null, atualizado_em: new Date().toISOString() }).eq("conta_id", contaId);
   await servico().from("produto_contas").update({ estado: "cancelada", acesso_ate: ate, atualizado_em: new Date().toISOString() }).eq("id", contaId);
   await registrar(contaId, ch.userId, "assinatura_cancelada", { acesso_ate: ate });
-  await servico().rpc("produto_avisar_casa", { _mensagem: `CRM: ${(await lerConta(contaId)).nome} cancelou a assinatura.`, _link: "/produto" });
+  await servico().rpc("produto_avisar_casa", { _mensagem: `CRM: ${contaAtual.nome} cancelou a assinatura.`, _link: "/produto" });
   return json({ cancelada: true, acesso_ate: ate });
 }
 

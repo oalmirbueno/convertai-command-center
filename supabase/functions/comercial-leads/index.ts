@@ -188,7 +188,8 @@ async function criarBuscaDaConta(ch: Chamador, conta: ContaDoChamador, b: BuscaN
   if (conta.buscasNoMes <= 0) throw new ErroHttp(402, "plano_sem_maquina", "O plano da empresa não inclui a Máquina de leads.");
   if (b.fontes.indexOf("google_maps") >= 0 && !conta.googleMaps) throw new ErroHttp(402, "plano_sem_google", "A busca no Google Maps faz parte do plano Pro.");
   const [{ count: noMes }, { count: andando }] = await Promise.all([
-    servico().from("leads_buscas").select("id", { count: "exact", head: true }).eq("conta_id", conta.id).neq("situacao", "cancelada").gte("created_at", inicioDoMesEmSaoPaulo()),
+    // Cancelar depois que a máquina começou não devolve a busca ao plano (os candidatos já vieram).
+    servico().from("leads_buscas").select("id", { count: "exact", head: true }).eq("conta_id", conta.id).or("situacao.neq.cancelada,pego_em.not.is.null").gte("created_at", inicioDoMesEmSaoPaulo()),
     servico().from("leads_buscas").select("id", { count: "exact", head: true }).eq("conta_id", conta.id).in("situacao", ["na_fila", "rodando"]),
   ]);
   if ((noMes || 0) >= conta.buscasNoMes) throw new ErroHttp(402, "limite_do_mes", `As ${conta.buscasNoMes} buscas do mês já foram usadas. O contador zera no dia 1.`);

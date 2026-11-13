@@ -147,7 +147,9 @@ async function mcp(req: Request, chaveDoEndereco: string | undefined): Promise<R
   }
   let pedido: unknown;
   try {
-    pedido = JSON.parse(await req.text());
+    const bruto = await req.text();
+    if (bruto.length > 64_000) return json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Pedido grande demais." } }, 413);
+    pedido = JSON.parse(bruto);
   } catch {
     return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON inválido." } }, 400);
   }

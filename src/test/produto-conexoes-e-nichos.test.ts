@@ -222,3 +222,65 @@ describe("arquivos novos", () => {
     expect(css).toContain("prefers-reduced-motion");
   });
 });
+
+describe("cobrança depois da revisão", () => {
+  it("o pagamento vale pelo pedido do checkout pago, e pedido incompleto não vale", async () => {
+    const { pedidoDoCheckout, comPedido } = await import("../../supabase/functions/produto/modulos/regras");
+    const agora = new Date("2026-11-13T12:00:00Z");
+    let pedidos = comPedido({}, "chk_barato", { plano_id: "starter", usuarios: 1, valor: 49.9 }, agora);
+    pedidos = comPedido(pedidos, "chk_caro", { plano_id: "pro", usuarios: 10, valor: 799 }, new Date(agora.getTime() + 60000));
+    expect(pedidoDoCheckout(pedidos, "chk_barato")).toEqual({ plano_id: "starter", usuarios: 1, valor: 49.9 });
+    expect(pedidoDoCheckout(pedidos, "chk_caro")).toMatchObject({ plano_id: "pro", usuarios: 10 });
+    expect(pedidoDoCheckout(pedidos, "outro")).toBeNull();
+    expect(pedidoDoCheckout({ x: { plano_id: "pro", usuarios: 0 } }, "x")).toBeNull();
+    expect(pedidoDoCheckout({ x: { plano_id: "PRO; drop", usuarios: 2 } }, "x")).toBeNull();
+  });
+
+  it("guarda só os oito pedidos mais novos", async () => {
+    const { comPedido } = await import("../../supabase/functions/produto/modulos/regras");
+    let pedidos: Record<string, unknown> = {};
+    for (let i = 0; i < 12; i++) pedidos = comPedido(pedidos, `chk_${i}`, { plano_id: "starter", usuarios: 1, valor: 49.9 }, new Date(Date.UTC(2026, 10, 13, 12, i)));
+    expect(Object.keys(pedidos)).toEqual(["chk_4", "chk_5", "chk_6", "chk_7", "chk_8", "chk_9", "chk_10", "chk_11"]);
+  });
+
+  it("reduzir espera a próxima cobrança; subir vale na hora", async () => {
+    const { ehReducao } = await import("../../supabase/functions/produto/modulos/regras");
+    expect(ehReducao(49.9, 149.7)).toBe(true);
+    expect(ehReducao(199.6, 149.7)).toBe(false);
+    expect(ehReducao(149.7, 149.7)).toBe(false);
+  });
+
+  it("cancelar em dia usa até o fim do período pago; em atraso, termina agora", async () => {
+    const { fimDoAcessoAoCancelar } = await import("../../supabase/functions/produto/modulos/regras");
+    const agora = new Date("2026-11-13T15:00:00Z");
+    expect(fimDoAcessoAoCancelar({ estadoDaConta: "ativa", proximoVencimento: "2026-12-05", agora })).toBe("2026-12-05T23:59:59-03:00");
+    expect(fimDoAcessoAoCancelar({ estadoDaConta: "atrasada", proximoVencimento: "2026-12-05", agora })).toBe(agora.toISOString());
+    expect(fimDoAcessoAoCancelar({ estadoDaConta: "ativa", proximoVencimento: "2026-11-01", agora })).toBe(agora.toISOString());
+  });
+
+  it("o aviso do Asaas marca o evento antes de processar e confere o valor pago", () => {
+    const w = ler("supabase/functions/produto-asaas-webhook/index.ts");
+    expect(w.indexOf('from("produto_eventos").insert(')).toBeGreaterThan(-1);
+    expect(w.indexOf('from("produto_eventos").insert(')).toBeLessThan(w.indexOf("await tratarPagamento("));
+    expect(w).toContain("pagamento_divergente");
+    expect(w).toContain('"assinatura_substituida"');
+  });
+
+  it("em cortesia a empresa não muda o próprio plano nem cancela", () => {
+    const f = ler("supabase/functions/produto/index.ts");
+    expect(f).toContain('throw new ErroHttp(409, "cortesia", "A empresa está em cortesia. Para mudar');
+    expect(f).toContain('throw new ErroHttp(409, "cortesia", "A empresa está em cortesia: não há assinatura');
+  });
+
+  it("o MCP da casa e a tela da casa não veem as buscas das empresas", () => {
+    const mcp = ler("supabase/functions/_shared/aceleriq-commercial-services.ts");
+    expect((mcp.match(/from\('leads_buscas'\)\.select\([^)]*\)\.is\('conta_id', null\)/g) || []).length).toBe(2);
+    expect(mcp).toContain(".eq('id', input.busca_id).is('conta_id', null)");
+    expect(ler("supabase/migrations/20261113120000_produto_crm_e_email.sql")).toContain("using (conta_id is null and (public.has_role(auth.uid(), 'admin'::public.app_role)");
+  });
+
+  it("e-mail que não é e-mail não entra no filtro de repetido", () => {
+    expect(camposDoNegocio({ email: "x,stage.neq.zzz" })).toEqual({ email: null });
+    expect(camposDoNegocio({ email: "Maria@Exemplo.com" })).toEqual({ email: "maria@exemplo.com" });
+  });
+});

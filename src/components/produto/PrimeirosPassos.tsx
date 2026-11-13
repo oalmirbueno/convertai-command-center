@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { type EstadoDoProduto } from "@/lib/produto/api";
+import { toast } from "sonner";
+import { aceitarConvite, fraseDoErro, recusarConvite, type EstadoDoProduto } from "@/lib/produto/api";
 import { useRelerProduto } from "@/hooks/useProduto";
-import { EstadoVazio, botao, texto } from "@/components/sistema";
+import { EstadoVazio, botao, juntar, texto } from "@/components/sistema";
 import OnboardingDoProduto from "./OnboardingDoProduto";
 
 /**
@@ -13,13 +15,33 @@ import OnboardingDoProduto from "./OnboardingDoProduto";
 export default function PrimeirosPassos({ estado }: { estado: EstadoDoProduto }) {
   const reler = useRelerProduto();
   const navigate = useNavigate();
+  const [decidindo, setDecidindo] = useState(false);
 
+  // O convite só vale se a pessoa aceitar: ninguém entra numa empresa sem querer.
   if (estado.convite) {
+    const decidir = async (aceitar: boolean) => {
+      setDecidindo(true);
+      try {
+        if (aceitar) await aceitarConvite();
+        else await recusarConvite();
+        await reler();
+        toast.success(aceitar ? `Bem-vindo à ${estado.convite ? estado.convite.conta : "empresa"}.` : "Convite recusado.");
+      } catch (e) {
+        toast.error(fraseDoErro(e, "Não foi possível concluir. Confirme o seu e-mail e tente de novo."));
+      } finally {
+        setDecidindo(false);
+      }
+    };
     return (
       <EstadoVazio
         titulo={`Você foi convidado para ${estado.convite.conta}`}
-        descricao="Confirme o seu e-mail pelo link que enviamos e entre de novo."
-        acao={<button type="button" className={botao.secundario} onClick={() => void reler()}>Já confirmei</button>}
+        descricao={estado.convite.papel === "admin" ? "Para administrar a empresa no CRM." : "Para usar o CRM com a equipe."}
+        acao={
+          <div className="flex flex-wrap items-center justify-center">
+            <button type="button" className={juntar(botao.secundario, "m-1")} onClick={() => void decidir(false)} disabled={decidindo} data-recusar-convite="">Recusar</button>
+            <button type="button" className={juntar(botao.primario, "m-1")} onClick={() => void decidir(true)} disabled={decidindo} data-aceitar-convite="">Aceitar e entrar</button>
+          </div>
+        }
       />
     );
   }

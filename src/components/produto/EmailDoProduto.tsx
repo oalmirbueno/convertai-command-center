@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, ExternalLink, Mail, Plus } from "lucide-react";
 import {
-  carregarEmail,
+  carregarEmailDaEmpresa,
   fraseDoErro,
-  lerConfig,
+  lerPrecos,
   pedirCaixa,
   pedirEmail,
   reais,
@@ -69,7 +69,7 @@ export default function EmailDoProduto({ estado }: { estado: EstadoDoProduto }) 
 
 function OfertaDeEmail({ estado }: { estado: EstadoDoProduto }) {
   const admin = !!estado.eu && estado.eu.papel === "admin";
-  const config = useQuery({ queryKey: ["produto", "config"], queryFn: lerConfig, staleTime: 300_000 });
+  const config = useQuery({ queryKey: ["produto", "precos"], queryFn: lerPrecos, staleTime: 300_000 });
   const [dominio, setDominio] = useState("");
   const [caixas, setCaixas] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -165,7 +165,7 @@ function EmailContratado({ estado }: { estado: EstadoDoProduto }) {
   const admin = !!estado.eu && estado.eu.papel === "admin";
   const qc = useQueryClient();
   const chave = ["produto", "email", conta.id];
-  const email = useQuery({ queryKey: chave, queryFn: () => carregarEmail(conta.id) });
+  const email = useQuery({ queryKey: chave, queryFn: carregarEmailDaEmpresa });
   const [escolhido, setEscolhido] = useState<string | null>(null);
 
   if (email.isLoading) return <Carregando forma="aba" rotulo="Abrindo o e-mail" />;

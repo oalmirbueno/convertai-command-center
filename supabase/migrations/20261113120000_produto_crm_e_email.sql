@@ -140,6 +140,12 @@ create table if not exists public.produto_assinaturas (
   atualizado_em timestamptz not null default now()
 );
 
+-- pedidos: para cada checkout aberto, o plano e os usuarios daquele pedido (o pagamento vale pelo que foi pago).
+-- troca_agendada: reducao de plano ou de usuarios pedida no meio do ciclo, aplicada depois da proxima cobranca.
+alter table public.produto_assinaturas
+  add column if not exists pedidos jsonb not null default '{}'::jsonb,
+  add column if not exists troca_agendada jsonb;
+
 create table if not exists public.produto_cobrancas (
   id uuid primary key default gen_random_uuid(),
   conta_id uuid not null references public.produto_contas(id) on delete cascade,
@@ -416,34 +422,39 @@ begin
       for all to authenticated using (public.produto_dono()) with check (public.produto_dono())$p$, _t);
   end loop;
 
+  -- A casa LE a equipe das empresas, mas nao escreve nela direto: entrar numa empresa daria o CRM dela.
+  -- Convite e mudanca de equipe passam pelas funcoes, que deixam historico.
+  drop policy if exists "produto dono administra" on public.produto_membros;
+  drop policy if exists "produto dono le a equipe" on public.produto_membros;
+  create policy "produto dono le a equipe" on public.produto_membros
+    for select to authenticated using (public.produto_dono());
+
   -- Os planos a venda sao publicos (a pagina de venda mostra o preco sem login).
   grant select on public.produto_planos to anon;
   drop policy if exists "produto planos leitura" on public.produto_planos;
   create policy "produto planos leitura" on public.produto_planos
     for select to anon, authenticated using (ativo);
+  -- A configuracao guarda os custos da casa: o cliente le os precos por produto_precos().
   drop policy if exists "produto config leitura" on public.produto_config;
-  create policy "produto config leitura" on public.produto_config
-    for select to authenticated using (true);
 
+  -- A empresa NAO le produto_contas direto: a linha guarda a anotacao interna da casa.
+  -- O que e dela chega por produto_estado().
   drop policy if exists "produto conta da pessoa" on public.produto_contas;
-  create policy "produto conta da pessoa" on public.produto_contas
-    for select to authenticated using (id = (select public.produto_minha_conta()));
 
+  -- A equipe chega por produto_estado(), que esconde o e-mail dos colegas de quem nao administra.
   drop policy if exists "produto colegas" on public.produto_membros;
-  create policy "produto colegas" on public.produto_membros
-    for select to authenticated using (conta_id = (select public.produto_minha_conta()));
 
-  -- Assinatura, cobrancas e historico: so quem administra a empresa.
-  foreach _t in array array['produto_assinaturas', 'produto_cobrancas', 'produto_historico'] loop
+  -- Assinatura e cobrancas: so quem administra a empresa. O historico e da casa.
+  drop policy if exists "produto admin da conta le" on public.produto_historico;
+  foreach _t in array array['produto_assinaturas', 'produto_cobrancas'] loop
     execute format('drop policy if exists "produto admin da conta le" on public.%I', _t);
     execute format($p$create policy "produto admin da conta le" on public.%I
       for select to authenticated using (public.produto_sou_admin_da_conta(conta_id))$p$, _t);
   end loop;
 
+  -- Dominio, caixas e etapas guardam anotacoes da casa: a empresa le por produto_email_da_conta().
   foreach _t in array array['produto_email_dominios', 'produto_email_caixas', 'produto_email_etapas'] loop
     execute format('drop policy if exists "produto email da conta" on public.%I', _t);
-    execute format($p$create policy "produto email da conta" on public.%I
-      for select to authenticated using (conta_id = (select public.produto_minha_conta()))$p$, _t);
   end loop;
 end;
 $$;
@@ -547,6 +558,10 @@ declare
   _org uuid;
   _contato uuid;
 begin
+  -- Numa alteracao a empresa e a que ja estava gravada: este gatilho roda antes do que trava o conta_id.
+  if tg_op = 'UPDATE' then
+    new.conta_id := old.conta_id;
+  end if;
   if new.organization_id is null and _empresa is not null then
     select o.id into _org from public.crm_organizations o
      where o.conta_id = new.conta_id and lower(btrim(o.name)) = lower(_empresa) and o.archived_at is null
@@ -588,6 +603,49 @@ drop trigger if exists crm_lead_liga_empresa_trg on public.crm_leads;
 create trigger crm_lead_liga_empresa_trg
   before insert or update of company, organization_id, name, email, whatsapp on public.crm_leads
   for each row execute function public.crm_lead_liga_empresa();
+
+-- Um registro do CRM so aponta para registro da MESMA empresa (negocio, ficha, contato, campanha).
+-- A chave estrangeira sozinha deixaria apontar para o id de outra conta.
+create or replace function public.crm_mesma_conta()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _linha jsonb := to_jsonb(new);
+  _par text[];
+  _id uuid;
+  _dona uuid;
+begin
+  foreach _par slice 1 in array array[
+    array['lead_id', 'crm_leads'], array['organization_id', 'crm_organizations'],
+    array['contact_id', 'crm_contacts'], array['campaign_id', 'crm_campaigns']
+  ] loop
+    if _linha ? _par[1] and nullif(_linha ->> _par[1], '') is not null then
+      _id := (_linha ->> _par[1])::uuid;
+      execute format('select conta_id from public.%I where id = $1', _par[2]) into _dona using _id;
+      if _dona is distinct from new.conta_id then
+        raise exception 'Registro de outra empresa.' using errcode = '42501';
+      end if;
+    end if;
+  end loop;
+  return new;
+end;
+$$;
+
+revoke all on function public.crm_mesma_conta() from public, anon, authenticated;
+
+do $$
+declare _t text;
+begin
+  foreach _t in array array['crm_leads', 'crm_contacts', 'crm_activities', 'crm_lead_events', 'crm_lead_messages'] loop
+    -- O nome comeca com zz para rodar por ultimo: depois de o conta_id ser travado e de a ficha ser ligada.
+    execute format('drop trigger if exists %I on public.%I', 'zz_' || _t || '_mesma_conta', _t);
+    execute format('create trigger %I before insert or update on public.%I for each row execute function public.crm_mesma_conta()', 'zz_' || _t || '_mesma_conta', _t);
+  end loop;
+end;
+$$;
 
 -- Ninguem muda um registro de empresa: o conta_id gravado e o que vale.
 create or replace function public.crm_conta_nao_muda()
@@ -657,6 +715,21 @@ alter table public.leads_candidatos
 
 create index if not exists leads_buscas_da_conta on public.leads_buscas (conta_id, created_at desc) where conta_id is not null;
 
+-- A regra antiga (admin e manager veem tudo) passaria a mostrar a prospeccao das empresas: fica so com a da casa.
+drop policy if exists "comercial admin e manager" on public.leads_buscas;
+create policy "comercial admin e manager" on public.leads_buscas
+  for all to authenticated
+  using (conta_id is null and (public.has_role(auth.uid(), 'admin'::public.app_role) or public.has_role(auth.uid(), 'manager'::public.app_role)))
+  with check (conta_id is null and (public.has_role(auth.uid(), 'admin'::public.app_role) or public.has_role(auth.uid(), 'manager'::public.app_role)));
+
+drop policy if exists "comercial admin e manager" on public.leads_candidatos;
+create policy "comercial admin e manager" on public.leads_candidatos
+  for all to authenticated
+  using ((public.has_role(auth.uid(), 'admin'::public.app_role) or public.has_role(auth.uid(), 'manager'::public.app_role))
+         and exists (select 1 from public.leads_buscas b where b.id = busca_id and b.conta_id is null))
+  with check ((public.has_role(auth.uid(), 'admin'::public.app_role) or public.has_role(auth.uid(), 'manager'::public.app_role))
+         and exists (select 1 from public.leads_buscas b where b.id = busca_id and b.conta_id is null));
+
 -- ---------------------------------------------------------------------------
 -- 8. O que a tela do produto le numa chamada
 -- ---------------------------------------------------------------------------
@@ -725,12 +798,14 @@ begin
                   'id', m.id, 'user_id', m.user_id, 'nome', m.nome, 'email', case when _admin or m.user_id = _eu then m.email end,
                   'papel', m.papel, 'estado', m.estado, 'entrou_em', m.entrou_em) order by m.papel, m.nome), '[]'::jsonb)
                  from public.produto_membros m where m.conta_id = _conta.id and m.estado <> 'removido'),
+    -- Busca cancelada so nao conta se foi cancelada antes de a maquina comecar.
     'maquina_no_mes', (select count(*) from public.leads_buscas b
-                        where b.conta_id = _conta.id and b.situacao <> 'cancelada'
+                        where b.conta_id = _conta.id and (b.situacao <> 'cancelada' or b.pego_em is not null)
                           and (b.created_at at time zone 'America/Sao_Paulo') >= _mes),
     'assinatura', case when _admin then (
         select jsonb_build_object('estado', a.estado, 'valor_mensal', a.valor_mensal, 'proximo_vencimento', a.proximo_vencimento,
                                   'cartao_final', a.cartao_final, 'cartao_bandeira', a.cartao_bandeira, 'itens', a.itens,
+                                  'troca_agendada', a.troca_agendada,
                                   'checkout_link', case when a.estado = 'aguardando' and a.checkout_expira > now() then a.checkout_link end)
           from public.produto_assinaturas a where a.conta_id = _conta.id) end
   );
@@ -880,6 +955,69 @@ begin
   values (_m.conta_id, _eu, 'membro_entrou', jsonb_build_object('membro', _m.id));
   return _m.conta_id;
 end;
+$$;
+
+-- Quem foi convidado pode recusar: o lugar volta para a empresa.
+create or replace function public.produto_recusar_convite()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _email text;
+begin
+  select lower(u.email) into _email from auth.users u where u.id = auth.uid() and u.email_confirmed_at is not null;
+  if _email is null then
+    return;
+  end if;
+  insert into public.produto_historico (conta_id, ator, acao, detalhe)
+  select m.conta_id, auth.uid(), 'convite_recusado', jsonb_build_object('membro', m.id)
+    from public.produto_membros m where m.estado = 'convidado' and m.email = _email;
+  update public.produto_membros set estado = 'removido' where estado = 'convidado' and email = _email;
+end;
+$$;
+
+-- A pessoa sai da empresa por conta propria (a ultima administradora nao sai: a empresa ficaria sem dono).
+create or replace function public.produto_sair()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  _m public.produto_membros;
+begin
+  select * into _m from public.produto_membros where user_id = auth.uid() and estado = 'ativo' limit 1 for update;
+  if _m.id is null then
+    return;
+  end if;
+  if _m.papel = 'admin' and not exists (
+    select 1 from public.produto_membros x where x.conta_id = _m.conta_id and x.estado = 'ativo' and x.papel = 'admin' and x.id <> _m.id
+  ) then
+    raise exception 'Você é a única pessoa que administra a empresa. Passe a administração para alguém antes de sair.' using errcode = 'P0001';
+  end if;
+  update public.produto_membros set estado = 'removido' where id = _m.id;
+  update public.crm_leads set owner_id = null where conta_id = _m.conta_id and owner_id = _m.user_id;
+  update public.crm_activities set owner_id = null where conta_id = _m.conta_id and owner_id = _m.user_id and done_at is null;
+  insert into public.produto_historico (conta_id, ator, acao, detalhe)
+  values (_m.conta_id, auth.uid(), 'membro_saiu', jsonb_build_object('membro', _m.id));
+end;
+$$;
+
+-- Os precos que o cliente pode ver (sem os custos da casa).
+create or replace function public.produto_precos()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'pagamentos_ativos', g.pagamentos_ativos, 'teste_dias', g.teste_dias, 'tolerancia_dias', g.tolerancia_dias,
+    'email_migracao', g.email_migracao, 'email_mensal', g.email_mensal,
+    'email_caixas_no_mensal', g.email_caixas_no_mensal, 'email_caixa_extra', g.email_caixa_extra)
+    from public.produto_config g where g.id
 $$;
 
 -- Convite: reserva o lugar. O e-mail sai pela funcao do produto.
@@ -1061,6 +1199,36 @@ begin
 end;
 $$;
 
+-- O e-mail da empresa como ela pode ver: sem as anotacoes internas da casa.
+create or replace function public.produto_email_da_conta()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  _conta uuid := public.produto_minha_conta();
+begin
+  if _conta is null then
+    raise exception 'Sem empresa.' using errcode = '42501';
+  end if;
+  return jsonb_build_object(
+    'dominios', (select coalesce(jsonb_agg(jsonb_build_object(
+        'id', d.id, 'conta_id', d.conta_id, 'dominio', d.dominio, 'provedor', d.provedor, 'webmail_url', d.webmail_url,
+        'estado', d.estado, 'checagem', d.checagem, 'checado_em', d.checado_em) order by d.criado_em), '[]'::jsonb)
+      from public.produto_email_dominios d where d.conta_id = _conta),
+    'caixas', (select coalesce(jsonb_agg(jsonb_build_object(
+        'id', c.id, 'dominio_id', c.dominio_id, 'conta_id', c.conta_id, 'endereco', c.endereco, 'pessoa', c.pessoa,
+        'tipo', c.tipo, 'estado', c.estado) order by c.endereco), '[]'::jsonb)
+      from public.produto_email_caixas c where c.conta_id = _conta and c.estado <> 'removida'),
+    'etapas', (select coalesce(jsonb_agg(jsonb_build_object(
+        'id', e.id, 'dominio_id', e.dominio_id, 'ordem', e.ordem, 'chave', e.chave, 'titulo', e.titulo, 'feito_em', e.feito_em) order by e.ordem), '[]'::jsonb)
+      from public.produto_email_etapas e where e.conta_id = _conta)
+  );
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 10. O que a casa le: contas e faturamento do produto
 -- ---------------------------------------------------------------------------
@@ -1203,7 +1371,7 @@ begin
   foreach _f in array array[
     'produto_estado()', 'produto_criar_conta(text, text, text, text, integer, jsonb)', 'produto_aceitar_convite()',
     'produto_convidar(text, text, text)', 'produto_membro_mudar(uuid, text, boolean)', 'produto_conta_salvar(jsonb)',
-    'produto_email_pedir_caixa(text, text)', 'produto_admin_contas()', 'produto_faturamento(date)'
+    'produto_email_pedir_caixa(text, text)', 'produto_email_da_conta()', 'produto_recusar_convite()', 'produto_sair()', 'produto_precos()', 'produto_admin_contas()', 'produto_faturamento(date)'
   ] loop
     execute format('revoke all on function public.%s from public, anon', _f);
     execute format('grant execute on function public.%s to authenticated', _f);
