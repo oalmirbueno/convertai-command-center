@@ -92,6 +92,7 @@ import {
   moverLead,
   realizadoDoMes,
   recebidoDoMes,
+  caixaDaCasa,
   receitaDoMes,
   resumoDoFunil,
   salvarDadosDaEmpresaDoLead,
@@ -235,6 +236,36 @@ describe("3. falha no Financeiro não vira R$ 0", () => {
       total: 3400,
       clientesRecorrentes: 2,
     });
+  });
+
+  it("saídas do mês e saldo em caixa seguem o Fluxo de Caixa do Financeiro", async () => {
+    banco.tabelas.financial_settings = [{ settings_key: "default", opening_balance: -1000 }];
+    banco.tabelas.billing = [
+      { amount: 3000, status: "paid", type: "renewal" },
+      { amount: 900, paid_amount: 400, status: "partial", type: "one_off" },
+      // Fora: recarga de anúncio, dólar do Freela e cobrança em aberto.
+      { amount: 5000, status: "paid", type: "ads_recharge" },
+      { amount: 100, status: "paid", type: "freela", currency: "USD" },
+      { amount: 800, status: "pending", type: "renewal" },
+    ];
+    banco.tabelas.payment_installments = [{ amount: 600, status: "paid" }];
+    banco.tabelas.expenses = [
+      { amount: 250, status: "paid", category: "ferramentas", paid_date: "2026-10-03", due_date: "2026-10-03" },
+      // Sem data de pagamento: vale o vencimento.
+      { amount: 150, status: "paid", category: "pro_labore", paid_date: null, due_date: "2026-10-20" },
+      // Mês anterior: conta no saldo, não no mês.
+      { amount: 300, status: "paid", category: "ferramentas", paid_date: "2026-09-28", due_date: "2026-09-28" },
+      // Aporte de investidor é capital, não saída.
+      { amount: 2000, status: "paid", category: "inv_trafego", paid_date: "2026-10-05", due_date: "2026-10-05" },
+      { amount: 999, status: "pending", category: "ferramentas", paid_date: null, due_date: "2026-10-10" },
+    ];
+    // Saldo: -1000 + (3000 + 400 + 600) − (250 + 150 + 300) = 2300.
+    await expect(caixaDaCasa("2026-10-01")).resolves.toEqual({ saiuNoMes: 400, saldo: 2300 });
+  });
+
+  it("falha no caixa sobe ErroDeLeitura, não vira saldo zero", async () => {
+    banco.falhas["expenses:select"] = { message: "permission denied" };
+    await expect(caixaDaCasa("2026-10-01")).rejects.toBeInstanceOf(ErroDeLeitura);
   });
 
   it("a tela conta essas leituras no aviso de erro", () => {

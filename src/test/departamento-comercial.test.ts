@@ -102,6 +102,14 @@ describe("o realizado vem do Financeiro, não é digitado aqui", () => {
     expect(lib).not.toContain('.from("financial_entries")');
   });
 
+  it("o CRM da empresa cliente não lê o caixa da casa", () => {
+    // Na conta da empresa a receita são os ganhos dela; cobrança, despesa e
+    // saldo da Aceleriq não aparecem nem são lidos.
+    expect(pagina).toContain("enabled: !conta");
+    expect(pagina).toContain("const receita = conta ? receitaDaConta : recebido?.total ?? 0;");
+    expect(pagina.split("{!naConta() && <DinheiroDoMes").length - 1).toBe(2);
+  });
+
   it("a métrica de receita devolve exatamente o que o Financeiro deu", () => {
     const valor = realizadoDoMes({
       metrica: "receita",

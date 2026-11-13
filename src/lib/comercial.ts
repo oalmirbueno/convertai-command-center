@@ -718,6 +718,53 @@ async function ganhosDaContaNoMes(periodo: string): Promise<{ receita: number; r
   };
 }
 
+/**
+ * O que SAIU no mês e o saldo em caixa de hoje, com a mesma conta do bloco
+ * "Caixa da Aceleriq" no Fluxo de Caixa do Financeiro (13/11/2026):
+ *
+ * - Saiu: despesa paga, no mês da data do pagamento (ou do vencimento, sem
+ *   data). Aporte de investidor (categoria `investidor` ou `inv_*`) é capital,
+ *   não despesa, e fica de fora.
+ * - Saldo: saldo inicial conciliado (`financial_settings.opening_balance`)
+ *   + tudo que já entrou − tudo que já saiu. Não depende do mês escolhido.
+ */
+export type CaixaDaCasa = { saiuNoMes: number; saldo: number };
+
+const ehAporteDeInvestidor = (categoria: unknown) => {
+  const c = typeof categoria === "string" ? categoria : "";
+  return c === "investidor" || c.startsWith("inv_");
+};
+
+export async function caixaDaCasa(periodo: string): Promise<CaixaDaCasa> {
+  const fim = proximoMes(periodo);
+  const [ajuste, cobrancas, parcelas, despesas] = await Promise.all([
+    supabase.from("financial_settings").select("opening_balance").eq("settings_key", "default").maybeSingle(),
+    supabase.from("billing").select("amount, paid_amount, status, type, currency").in("status", ["paid", "partial"]),
+    supabase.from("payment_installments").select("amount, paid_amount, status").in("status", ["paid", "partial"]),
+    supabase.from("expenses").select("amount, category, paid_date, due_date").eq("status", "paid"),
+  ]);
+  const erro = ajuste.error || cobrancas.error || parcelas.error || despesas.error;
+  if (erro) throw new ErroDeLeitura("o caixa do Financeiro", erro);
+
+  const entrou =
+    ((cobrancas.data || []) as LinhaRecebida[])
+      .filter((c) => c.type !== "ads_recharge" && c.currency !== "USD")
+      .reduce((soma, c) => soma + recebidoDe(c), 0) +
+    ((parcelas.data || []) as LinhaRecebida[]).reduce((soma, p) => soma + recebidoDe(p), 0);
+
+  let saiu = 0;
+  let saiuNoMes = 0;
+  for (const d of (despesas.data || []) as Array<{ amount: unknown; category: unknown; paid_date: string | null; due_date: string | null }>) {
+    if (ehAporteDeInvestidor(d.category)) continue;
+    const valor = numero(d.amount);
+    saiu += valor;
+    const dia = d.paid_date || d.due_date || "";
+    if (dia >= periodo && dia < fim) saiuNoMes += valor;
+  }
+  const abertura = numero((ajuste.data as { opening_balance?: unknown } | null)?.opening_balance);
+  return { saiuNoMes: centavos(saiuNoMes), saldo: centavos(abertura + entrou - saiu) };
+}
+
 export function proximoMes(periodo: string): string {
   const [ano, mes] = periodo.split("-").map(Number);
   return mes === 12

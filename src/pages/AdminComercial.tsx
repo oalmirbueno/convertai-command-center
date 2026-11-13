@@ -43,6 +43,7 @@ import { listarEventosDoFunil } from "@/components/comercial/eventosDoFunil";
 import { resumoDaOportunidade } from "@/components/comercial/resumoDaOportunidade";
 import { temperaturaDoLead, type EventoDoLead } from "@/components/comercial/temperatura";
 import { FaixaDeNumeros } from "@/components/sistema";
+import DinheiroDoMes from "@/components/comercial/DinheiroDoMes";
 import { ehTexto, umaDe, useEstadoDoComercial } from "@/components/comercial/useEstadoDoComercial";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
 import { escopoDoCrm, naConta } from "@/lib/comercial/escopo";
@@ -112,7 +113,10 @@ import {
   diaEmSaoPaulo,
   linhasDeMetaDoMes,
   recebidoDoMes,
+  receitaDoMes,
   type RecebidoDoMes,
+  caixaDaCasa,
+  type CaixaDaCasa,
   resumoDoFunil,
   rotuloDoEstagio,
   salvarCampanha,
@@ -395,12 +399,28 @@ export default function AdminComercial() {
     queryKey: ["comercial-receita", periodo],
     queryFn: () => recebidoDoMes(periodo),
     placeholderData: (anterior) => anterior,
+    // O CRM da empresa cliente não tem o Financeiro da casa.
+    enabled: !conta,
   });
-  const receita = recebido?.total ?? 0;
+  // Na empresa cliente o realizado são os ganhos dela (receitaDoMes já sabe disso).
+  const { data: receitaDaConta = 0, isError: erroNaReceitaDaConta } = useQuery({
+    queryKey: ["comercial-receita-conta", periodo],
+    queryFn: () => receitaDoMes(periodo),
+    placeholderData: (anterior) => anterior,
+    enabled: Boolean(conta),
+  });
+  const receita = conta ? receitaDaConta : recebido?.total ?? 0;
+  // O que saiu no mês e o saldo de hoje, na conta do Fluxo de Caixa do Financeiro.
+  const { data: caixaDoFinanceiro, isError: erroNoCaixa } = useQuery({
+    queryKey: ["comercial-caixa", periodo],
+    queryFn: () => caixaDaCasa(periodo),
+    placeholderData: (anterior) => anterior,
+    enabled: !conta,
+  });
 
   // Leitura que falhou não vira "lista vazia": a tela avisa e oferece tentar de novo.
   // A receita e os recorrentes do Financeiro também: falha ali mostrava "R$ 0" como dado real.
-  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas || erroNaReceita || erroNosRecorrentes;
+  const leituraFalhou = erroNosLeads || erroNasAtividades || erroNosEventos || erroNasEmpresas || erroNosContatos || erroNasCampanhas || erroNasMetas || erroNaReceita || erroNaReceitaDaConta || erroNosRecorrentes || erroNoCaixa;
 
   const recarregar = () =>
     Promise.all([
@@ -412,6 +432,8 @@ export default function AdminComercial() {
       queryClient.invalidateQueries({ queryKey: ["comercial-empresas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-contatos"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-receita"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-caixa"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-receita-conta"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-clientes-recorrentes"] }),
     ]);
 
@@ -619,6 +641,8 @@ export default function AdminComercial() {
           resumo={resumo}
           previsao={previsao}
           receita={receita}
+          recebido={recebido}
+          caixa={caixaDoFinanceiro}
           clientesRecorrentes={clientesRecorrentes}
           metas={metas}
           leads={leads}
@@ -711,6 +735,7 @@ export default function AdminComercial() {
           leads={leads}
           receita={receita}
           recebido={recebido}
+          caixa={caixaDoFinanceiro}
           clientesRecorrentes={clientesRecorrentes}
           carregando={carregandoLeads || carregandoMetas}
           onSalvo={recarregar}
@@ -776,6 +801,8 @@ function VisaoGeral({
   resumo,
   previsao,
   receita,
+  recebido,
+  caixa,
   clientesRecorrentes,
   metas,
   leads,
@@ -788,6 +815,8 @@ function VisaoGeral({
   resumo: ReturnType<typeof resumoDoFunil>;
   previsao: ReturnType<typeof previsaoDoMes>;
   receita: number;
+  recebido?: RecebidoDoMes;
+  caixa?: CaixaDaCasa;
   clientesRecorrentes: number;
   metas: Array<{ id: string; metric: string; target: number }>;
   leads: Lead[];
@@ -847,6 +876,8 @@ function VisaoGeral({
             { rotulo: "Receita do mês", valor: dinheiro(receita), apoio: naConta() ? "dos ganhos" : "do Financeiro" },
           ]}
         />
+
+        {!naConta() && <DinheiroDoMes recebido={recebido} caixa={caixa} />}
 
         {carregando ? (
           <Carregando rotulo="Carregando o resumo" linhas={5} />
@@ -992,6 +1023,7 @@ function Metas({
   leads,
   receita,
   recebido,
+  caixa,
   clientesRecorrentes,
   carregando,
   onSalvo,
@@ -1001,6 +1033,7 @@ function Metas({
   leads: Lead[];
   receita: number;
   recebido?: RecebidoDoMes;
+  caixa?: CaixaDaCasa;
   clientesRecorrentes: number;
   carregando: boolean;
   onSalvo: () => Promise<unknown>;
@@ -1023,23 +1056,7 @@ function Metas({
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Metas do mês" memoriaDaRolagem="comercial:metas">
-      {/* O que entrou no Financeiro geral no mês, por origem: é o número que
-          alimenta a meta de receita logo abaixo. */}
-      <FaixaDeNumeros
-        tamanho="compacto"
-        apoioAoLado
-        rotulo="Entrou no Financeiro neste mês"
-        itens={[
-          { rotulo: "Total recebido", valor: recebido ? dinheiro(recebido.total) : "…", apoio: "igual ao Financeiro" },
-          {
-            rotulo: "Mensalidades",
-            valor: recebido ? dinheiro(recebido.mensalidades) : "…",
-            apoio: recebido ? `${recebido.clientesRecorrentes} ${recebido.clientesRecorrentes === 1 ? "cliente" : "clientes"}` : undefined,
-          },
-          { rotulo: "Avulsos e extras", valor: recebido ? dinheiro(recebido.avulsos) : "…", apoio: "fora da mensalidade" },
-          { rotulo: "Projetos", valor: recebido ? dinheiro(recebido.projetos) : "…", apoio: "parcelas pagas" },
-        ]}
-      />
+      {!naConta() && <DinheiroDoMes recebido={recebido} caixa={caixa} />}
       {carregando ? (
         <Carregando rotulo="Carregando as metas" linhas={5} />
       ) : (
