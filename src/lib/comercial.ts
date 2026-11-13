@@ -564,7 +564,8 @@ export async function salvarMeta(input: {
       target: alvo,
       created_by: sessao?.user?.id || null,
     } as never,
-    { onConflict: "period,metric" },
+    // No CRM da empresa a meta é única por empresa, mês e métrica.
+    { onConflict: naConta() ? "conta_id,period,metric" : "period,metric" },
   );
   return !error;
 }

@@ -72,6 +72,12 @@ describe("escopo do CRM", () => {
     }
   });
 
+  it("a meta do mês é única por empresa: o salvar aponta para a chave certa em cada escopo", () => {
+    const dados = ler("src/lib/comercial.ts");
+    expect(dados).toContain('onConflict: naConta() ? "conta_id,period,metric" : "period,metric"');
+    expect(ler("supabase/migrations/20261113120000_produto_crm_e_email.sql")).toContain("on public.crm_goals (conta_id, period, metric)");
+  });
+
   it("limites do plano malformados caem no padrão fechado", () => {
     expect(limitesDoPlano(null).maquina_buscas_mes).toBe(0);
     expect(limitesDoPlano({ maquina_google_maps: "sim" }).maquina_google_maps).toBe(false);
