@@ -3033,6 +3033,14 @@
       "remote_name": "aprovacao_so_peca_que_vale",
       "remote_statements_sha256": "35e8eaf9e94227e2afe6b0b66ab82ab94c52b2d3398a7a477ec390f2875e1890",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113180000",
+      "path": "supabase/migrations/20261113180000_produto_precos_na_pagina_publica.sql",
+      "local_sha256": "4659cebd389e51d79a9fe9007857642e5a92dff188f27f8a8164c28ab5539f8e",
+      "remote_name": "produto_precos_na_pagina_publica",
+      "remote_statements_sha256": "485d3f4f34a0f1ae4dffc4b58a77e1a98fd0100ed9ae80f8bf06e2227aadd63a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

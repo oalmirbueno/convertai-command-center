@@ -52,6 +52,8 @@ const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
 const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
 const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
 const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
+const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
+const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
 const AdminProduto = rotas.lazy(() => import("@/pages/AdminProduto"));
 const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
@@ -380,6 +382,9 @@ export function AppRoutes() {
       <Route path="/crm" element={<ProdutoLanding />} />
       {/* A chegada vem antes do cadastro: ramo, objetivo, empresa e funil; o acesso é o último passo. */}
       <Route path="/crm/comecar" element={<ProdutoComecar />} />
+      {/* A venda do E-mail profissional (produto à parte do CRM) e o pedido curto que sai dela. */}
+      <Route path="/email" element={<EmailLanding />} />
+      <Route path="/email/pedir" element={<EmailPedir />} />
       <Route path="/app" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />
       <Route path="/app/:secao/:aba" element={<ProtectedRoute><ProdutoApp /></ProtectedRoute>} />

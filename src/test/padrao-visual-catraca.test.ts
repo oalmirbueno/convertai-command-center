@@ -86,6 +86,12 @@ const METRICAS = Object.keys(TETO) as Metrica[];
 const raiz = resolve(__dirname, "../..");
 const pastaSrc = resolve(raiz, "src");
 
+/**
+ * Páginas públicas de venda (13/11, pedido do dono): têm visual e copy próprios
+ * (h1 da página, parágrafo de venda) e ficam fora da catraca do painel.
+ */
+const PAGINAS_PUBLICAS_DE_VENDA = ["pages/EmailLanding.tsx", "pages/EmailPedir.tsx"];
+
 function arquivosDoPainel(): string[] {
   const saida: string[] = [];
   (function andar(pasta: string) {
@@ -94,7 +100,7 @@ function arquivosDoPainel(): string[] {
       if (statSync(caminho).isDirectory()) {
         if (caminho === resolve(pastaSrc, "test") || caminho === resolve(pastaSrc, "components", "ui")) continue;
         andar(caminho);
-      } else if (/\.tsx$/.test(nome) && !/\.(test|spec)\./.test(nome)) saida.push(caminho);
+      } else if (/\.tsx$/.test(nome) && !/\.(test|spec)\./.test(nome) && PAGINAS_PUBLICAS_DE_VENDA.indexOf(relative(pastaSrc, caminho).split(sep).join("/")) < 0) saida.push(caminho);
     }
   })(pastaSrc);
   return saida.sort();
