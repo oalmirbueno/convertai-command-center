@@ -297,11 +297,12 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
   const mudou = plano !== conta.plano_id || usuarios !== conta.usuarios_contratados;
   const assinando = !!ass && (ass.estado === "ativa" || ass.estado === "atrasada");
   const cortesia = conta.estado === "cortesia";
+  const emTeste = conta.estado === "teste" && !assinando;
 
-  const enviar = async () => {
+  const enviar = async (soGuardar = false) => {
     setEnviando(true);
     try {
-      const r = await assinar({ plano_id: plano, usuarios });
+      const r = await assinar({ plano_id: plano, usuarios, so_guardar: soGuardar });
       if (r.link) {
         window.location.assign(r.link);
         return;
@@ -399,6 +400,12 @@ function Plano({ estado }: { estado: EstadoDoProduto }) {
             <p className={juntar(texto.auxiliar, "mt-2")}>A assinatura pelo cartão ainda não foi aberta. A Aceleriq avisa quando abrir.</p>
           )}
           <div className="mt-4 flex min-w-0 justify-end">
+            {/* Em teste dá para mudar plano e usuários sem pagar ainda: convidar a equipe não depende do cartão. */}
+            {emTeste && mudou && (
+              <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={() => void enviar(true)} disabled={enviando} data-guardar-plano="">
+                Guardar escolha
+              </button>
+            )}
             <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || !podeEnviar || (!cortesia && !estado.pagamentos_ativos)} data-assinar="">
               {enviando ? "Abrindo..." : rotuloDoBotao}
             </button>

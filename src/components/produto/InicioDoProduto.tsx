@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { reais, type EstadoDoProduto } from "@/lib/produto/api";
 import { CabecalhoDePagina, FaixaDeNumeros, Secao, foco, juntar, lista, superficie, texto } from "@/components/sistema";
 
+// As tabelas crm_* ainda não estão nos tipos gerados do banco.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as unknown as { from: (t: string) => any };
 
 interface ResumoDoCrm {

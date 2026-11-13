@@ -6,7 +6,7 @@
  * Quem administra a empresa:
  *   convidar { email, nome?, papel? }                 -> { membro_id, enviado }
  *   reenviar_convite { membro_id }                    -> { enviado }
- *   assinar { plano_id, usuarios }                    -> { link } (checkout do Asaas) ou { atualizado: true }
+ *   assinar { plano_id, usuarios, so_guardar? }       -> { link } (checkout do Asaas) ou { atualizado: true }
  *   cancelar {}                                       -> { cancelada: true, acesso_ate }
  *   pedir_email { dominio?, caixas?, observacao? }    -> { ok: true }
  *   dns { dominio_id }                                -> { checagem }   (qualquer pessoa da empresa, ou a casa)
@@ -271,8 +271,8 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
   const antes = { plano_id: conta.plano_id, usuarios_contratados: conta.usuarios_contratados };
   const gravar = (v: { plano_id: string; usuarios_contratados: number }) => servico().from("produto_contas").update({ ...v, atualizado_em: new Date().toISOString() }).eq("id", contaId);
 
-  // Empresa em cortesia não paga: muda o plano e pronto.
-  if (conta.estado === "cortesia") {
+  // Empresa em cortesia não paga: muda o plano e pronto. Em teste, dá para guardar a escolha sem pagar ainda.
+  if (conta.estado === "cortesia" || (conta.estado === "teste" && corpo.so_guardar === true && !a.asaas_assinatura_id)) {
     await gravar({ plano_id: planoId, usuarios_contratados: usuarios });
     await registrar(contaId, ch.userId, "plano_mudou", { plano: planoId, usuarios });
     return json({ atualizado: true });

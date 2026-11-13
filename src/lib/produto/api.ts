@@ -7,7 +7,9 @@ import { limitesDoPlano, type LimitesDoPlano } from "@/lib/comercial/escopo";
  * O que precisa do Asaas ou de chave de serviço passa pela função `produto`.
  */
 
-// As tabelas do produto ainda não estão nos tipos gerados do banco.
+// As tabelas do produto ainda não estão nos tipos gerados do banco: o que volta
+// dele é lido como `any` e convertido, campo a campo, nas funções abaixo.
+/* eslint-disable @typescript-eslint/no-explicit-any */
 const db = supabase as unknown as {
   from: (t: string) => any;
   rpc: (f: string, a?: Record<string, unknown>) => Promise<{ data: any; error: { message: string; code?: string } | null }>;
@@ -248,7 +250,8 @@ export async function mudarMembro(membroId: string, p: { papel?: PapelNaConta; r
   if (error) throw error;
 }
 
-export const assinar = (p: { plano_id: string; usuarios: number }) => chamar<{ link?: string; atualizado?: boolean; valor?: number }>({ acao: "assinar", ...p });
+/** Assina (abre o checkout) ou, em teste e cortesia, só guarda o plano e os usuários (`so_guardar`). */
+export const assinar = (p: { plano_id: string; usuarios: number; so_guardar?: boolean }) => chamar<{ link?: string; atualizado?: boolean; valor?: number }>({ acao: "assinar", ...p });
 export const cancelarAssinatura = () => chamar<{ cancelada: boolean; acesso_ate: string }>({ acao: "cancelar" });
 export const pedirEmail = (p: { dominio?: string; caixas?: number; observacao?: string }) => chamar<{ ok: boolean }>({ acao: "pedir_email", ...p });
 
