@@ -20,13 +20,13 @@ const TRACO = 1.6;
 
 /**
  * Entrada por rolagem: liga a classe `el-anim` só quando o navegador observa a
- * rolagem e a pessoa não pediu menos movimento. Sem isso, tudo nasce visível.
+ * rolagem. Sem isso, tudo nasce visível. Quem pede menos movimento recebe a
+ * versão suave, definida no CSS.
  */
 function useEntradaPorRolagem(raiz: RefObject<HTMLDivElement>) {
   useEffect(() => {
     const el = raiz.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     el.classList.add("el-anim");
     const observador = new IntersectionObserver(
       (entradas) => {
