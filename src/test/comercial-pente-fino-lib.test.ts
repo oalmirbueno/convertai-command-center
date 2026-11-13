@@ -229,11 +229,19 @@ describe("3. falha no Financeiro não vira R$ 0", () => {
       { amount: 1347, paid_amount: 900, status: "partial", paid_date: "2026-10-13", due_date: "2026-10-13" },
       { amount: 697, status: "paid", paid_date: "2026-09-28", due_date: "2026-09-28" },
     ];
+    banco.tabelas.produto_cobrancas = [
+      // Assinatura do CRM e E-mail paga em outubro: entra pelo valor cheio.
+      { valor: 49.9, valor_liquido: 47.41, estado: "paga", pago_em: "2026-10-12T14:00:00+00:00" },
+      // Em aberto e paga em setembro ficam fora.
+      { valor: 79.9, valor_liquido: null, estado: "aberta", pago_em: null },
+      { valor: 49.9, valor_liquido: 47.41, estado: "paga", pago_em: "2026-09-12T14:00:00+00:00" },
+    ];
     await expect(recebidoDoMes("2026-10-01")).resolves.toEqual({
       mensalidades: 2200,
       avulsos: 300,
       projetos: 900,
-      total: 3400,
+      crmEmail: 49.9,
+      total: 3449.9,
       clientesRecorrentes: 2,
     });
   });
@@ -259,8 +267,13 @@ describe("3. falha no Financeiro não vira R$ 0", () => {
       { amount: 2000, status: "paid", category: "inv_trafego", paid_date: "2026-10-05", due_date: "2026-10-05" },
       { amount: 999, status: "pending", category: "ferramentas", paid_date: null, due_date: "2026-10-10" },
     ];
-    // Saldo: -1000 + (3000 + 400 + 600) − (250 + 150 + 300) = 2300.
-    await expect(caixaDaCasa("2026-10-01")).resolves.toEqual({ saiuNoMes: 400, saldo: 2300 });
+    // Do CRM e E-mail entra o líquido (o Asaas repassa sem a taxa); em aberto não entra.
+    banco.tabelas.produto_cobrancas = [
+      { valor: 49.9, valor_liquido: 47.41, estado: "paga", pago_em: "2026-09-12T14:00:00+00:00" },
+      { valor: 79.9, valor_liquido: null, estado: "aberta", pago_em: null },
+    ];
+    // Saldo: -1000 + (3000 + 400 + 600 + 47,41) − (250 + 150 + 300) = 2347,41.
+    await expect(caixaDaCasa("2026-10-01")).resolves.toEqual({ saiuNoMes: 400, saldo: 2347.41 });
   });
 
   it("falha no caixa sobe ErroDeLeitura, não vira saldo zero", async () => {

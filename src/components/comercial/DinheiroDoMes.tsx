@@ -1,16 +1,18 @@
+import { useQuery } from "@tanstack/react-query";
 import { FaixaDeNumeros } from "@/components/sistema";
-import { dinheiro, type CaixaDaCasa, type RecebidoDoMes } from "@/lib/comercial";
+import { caixaDaCasa, dinheiro, recebidoDoMes, type CaixaDaCasa, type RecebidoDoMes } from "@/lib/comercial";
 
 /**
  * O dinheiro do mês, lido do Financeiro geral (13/11/2026, pedido do dono):
  * em cima o que entrou, o que saiu e o saldo em caixa; embaixo, de onde
- * entrou. Mesmas contas da tela do Financeiro, só que à vista no Comercial.
+ * entrou (mensalidades, avulsos, projetos e o produto CRM e E-mail). Mesmas
+ * contas do Financeiro, à vista no Comercial e na Visão geral do Financeiro.
  */
 export default function DinheiroDoMes({ recebido, caixa }: { recebido?: RecebidoDoMes; caixa?: CaixaDaCasa }) {
   const ou = (v: number | undefined) => (v === undefined ? "…" : dinheiro(v));
   const resultado = recebido && caixa ? recebido.total - caixa.saiuNoMes : undefined;
   return (
-    <section aria-label="Dinheiro do mês" className="min-w-0 space-y-2">
+    <section aria-label="Dinheiro do mês" className="min-w-0 space-y-2" data-dinheiro-do-mes="">
       <FaixaDeNumeros
         rotulo="Dinheiro do mês, do Financeiro"
         itens={[
@@ -45,10 +47,29 @@ export default function DinheiroDoMes({ recebido, caixa }: { recebido?: Recebido
             valor: ou(recebido?.mensalidades),
             apoio: recebido ? `${recebido.clientesRecorrentes} ${recebido.clientesRecorrentes === 1 ? "cliente" : "clientes"}` : undefined,
           },
-          { rotulo: "Avulsos e extras", valor: ou(recebido?.avulsos), apoio: "fora da mensalidade" },
-          { rotulo: "Projetos", valor: ou(recebido?.projetos), apoio: "parcelas pagas" },
+          { rotulo: "Avulsos e extras", valor: ou(recebido?.avulsos), apoio: "à parte" },
+          { rotulo: "Projetos", valor: ou(recebido?.projetos), apoio: "parcelas" },
+          { rotulo: "CRM e E-mail", valor: ou(recebido?.crmEmail), apoio: "assinaturas" },
         ]}
       />
     </section>
   );
+}
+
+/**
+ * O mesmo bloco, lendo sozinho: é o que a Visão geral do Financeiro usa,
+ * com o mês escolhido lá em cima ("AAAA-MM-01").
+ */
+export function DinheiroDoMesLido({ periodo }: { periodo: string }) {
+  const recebido = useQuery({
+    queryKey: ["comercial-receita", periodo],
+    queryFn: () => recebidoDoMes(periodo),
+    placeholderData: (anterior) => anterior,
+  });
+  const caixa = useQuery({
+    queryKey: ["comercial-caixa", periodo],
+    queryFn: () => caixaDaCasa(periodo),
+    placeholderData: (anterior) => anterior,
+  });
+  return <DinheiroDoMes recebido={recebido.data} caixa={caixa.data} />;
 }
