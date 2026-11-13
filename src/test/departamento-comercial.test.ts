@@ -92,13 +92,14 @@ describe("acesso: gestão da casa, não da equipe inteira", () => {
 });
 
 describe("o realizado vem do Financeiro, não é digitado aqui", () => {
-  it("receita do mês lê financial_entries por competência", () => {
-    // Competência é a régua com que o Financeiro fecha o mês; usar a data de
-    // pagamento faria a mesma empresa ter dois "faturamento de agosto".
-    expect(lib).toContain('.from("financial_entries")');
-    expect(lib).toContain('.eq("direction", "in")');
-    expect(lib).toContain('.gte("competence", inicio)');
-    expect(lib).toContain('.is("cancelled_at", null)');
+  it("receita do mês lê o recebido do Financeiro geral, pela data do pagamento", () => {
+    // É a conta da tela do Financeiro (billing + parcelas de projeto pagas).
+    // financial_entries nunca recebeu receita: ler de lá dava sempre R$ 0.
+    expect(lib).toContain('recebidasNoMes("billing"');
+    expect(lib).toContain('recebidasNoMes("payment_installments"');
+    expect(lib).toContain('.in("status", ["paid", "partial"])');
+    expect(lib).toContain('.gte("paid_date", periodo)');
+    expect(lib).not.toContain('.from("financial_entries")');
   });
 
   it("a métrica de receita devolve exatamente o que o Financeiro deu", () => {
