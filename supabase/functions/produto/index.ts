@@ -311,7 +311,7 @@ async function assinar(ch: Chamador, corpo: Record<string, unknown>) {
     }
 
     const clienteId = a.asaas_cliente_id || (await clienteNoAsaas(token, fetch, { nome: conta.nome, documento, email: conta.email_cobranca, telefone: conta.telefone }));
-    const checkout = await criarCheckoutDaAssinatura(token, fetch, { clienteId, itens, referencia: `conta:${contaId}`, voltarPara: `${app()}/app/conta`, agora: new Date() });
+    const checkout = await criarCheckoutDaAssinatura(token, fetch, { clienteId, itens, referencia: `conta:${contaId}`, voltarPara: `${app()}/app/conta`, agora: new Date(), imagemBase64: Deno.env.get("PRODUTO_CHECKOUT_IMAGEM_BASE64") || undefined });
     const { error } = await servico().from("produto_assinaturas").upsert({
       conta_id: contaId,
       asaas_cliente_id: clienteId,
