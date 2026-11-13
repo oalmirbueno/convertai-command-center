@@ -92,6 +92,7 @@ export interface CheckoutCriado {
  * no Asaas, então vai curto; a descrição leva o detalhe.
  */
 export async function criarCheckoutDaAssinatura(token: string, buscar: Buscar, p: {
+  /** Vazio só no teste da conexão: o próprio checkout pede os dados de quem paga. */
   clienteId: string;
   itens: ItemDaAssinatura[];
   referencia: string;
@@ -106,7 +107,7 @@ export async function criarCheckoutDaAssinatura(token: string, buscar: Buscar, p
     chargeTypes: ["RECURRENT"],
     minutesToExpire: minutos,
     externalReference: p.referencia.slice(0, 200),
-    customer: p.clienteId,
+    ...(p.clienteId ? { customer: p.clienteId } : {}),
     callback: {
       successUrl: `${p.voltarPara}?pagamento=ok`,
       cancelUrl: `${p.voltarPara}?pagamento=cancelado`,

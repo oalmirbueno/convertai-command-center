@@ -498,6 +498,38 @@ async function adminSincronizar(ch: Chamador, corpo: Record<string, unknown>) {
   }
 }
 
+/**
+ * Teste da conexão com o Asaas, sem cobrar ninguém: abre um checkout recorrente de R$ 5, sem cliente,
+ * que vale 10 minutos. Mostra se a chave funciona e se o Asaas aceita o formato do checkout do produto.
+ * Ninguém paga: o link expira sozinho. A referência "teste:" é ignorada pelo aviso de pagamento.
+ */
+async function adminTestarAsaas(ch: Chamador) {
+  exigirDono(ch);
+  let token = "";
+  try {
+    token = await tokenDoAsaas();
+  } catch (e) {
+    return json({ ok: false, etapa: "chave", mensagem: e instanceof ErroHttp ? e.message : "Chave do Asaas não configurada." });
+  }
+  const ambiente = token.indexOf("_hmlg_") >= 0 ? "sandbox" : "producao";
+  try {
+    const checkout = await criarCheckoutDaAssinatura(token, fetch, {
+      clienteId: "",
+      itens: [{ chave: "teste", nome: "Teste do CRM", quantidade: 1, unitario: 5, total: 5 }],
+      referencia: `teste:${crypto.randomUUID()}`,
+      voltarPara: `${app()}/produto`,
+      agora: new Date(),
+      minutos: 10,
+    });
+    await registrar(null, ch.userId, "asaas_testado", { ok: true, ambiente });
+    return json({ ok: true, ambiente, link: checkout.link, expira_em: checkout.expira_em });
+  } catch (e) {
+    const mensagem = e instanceof ErroDoAsaas ? e.message : e instanceof Error ? e.message.slice(0, 240) : "Falha inesperada.";
+    await registrar(null, ch.userId, "asaas_testado", { ok: false, ambiente, mensagem });
+    return json({ ok: false, ambiente, etapa: "checkout", mensagem });
+  }
+}
+
 async function adminCobrarMigracao(ch: Chamador, corpo: Record<string, unknown>) {
   exigirDono(ch);
   const contaId = uuidDe(corpo.conta_id, "conta");
@@ -542,6 +574,7 @@ const ACOES: Record<string, Acao> = {
   admin_convidar: adminConvidar,
   admin_sincronizar: adminSincronizar,
   admin_cobrar_migracao: adminCobrarMigracao,
+  admin_testar_asaas: (ch) => adminTestarAsaas(ch),
 };
 
 if (import.meta.main) {

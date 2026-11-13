@@ -616,6 +616,7 @@ export const casa = {
   criarConta: (p: Record<string, unknown>) => chamar<{ conta_id: string; enviado: boolean }>({ acao: "admin_criar_conta", ...p }),
   convidar: (p: { conta_id: string; email: string; nome?: string; papel?: PapelNaConta }) => chamar<{ membro_id: string; enviado: boolean }>({ acao: "admin_convidar", ...p }),
   sincronizar: (contaId: string) => chamar<{ valor: number }>({ acao: "admin_sincronizar", conta_id: contaId }),
+  testarAsaas: () => chamar<{ ok: boolean; ambiente?: string; link?: string; expira_em?: string; etapa?: string; mensagem?: string }>({ acao: "admin_testar_asaas" }),
   cobrarMigracao: (contaId: string, valor?: number) => chamar<{ link: string | null; valor: number }>({ acao: "admin_cobrar_migracao", conta_id: contaId, valor }),
   async salvarConta(id: string, dados: Record<string, unknown>): Promise<void> {
     const { error } = await db.from("produto_contas").update({ ...dados, atualizado_em: new Date().toISOString() }).eq("id", id);

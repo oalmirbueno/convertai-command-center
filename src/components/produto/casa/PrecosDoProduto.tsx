@@ -38,6 +38,18 @@ export default function PrecosDoProduto() {
   const [f, setF] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
   const [confirmarCobranca, setConfirmarCobranca] = useState(false);
+  const [testando, setTestando] = useState(false);
+  const [teste, setTeste] = useState<{ ok: boolean; ambiente?: string; link?: string; mensagem?: string } | null>(null);
+  const testarAsaas = async () => {
+    setTestando(true);
+    try {
+      setTeste(await casa.testarAsaas());
+    } catch (e) {
+      setTeste({ ok: false, mensagem: fraseDoErro(e, "Não foi possível falar com o Asaas agora.") });
+    } finally {
+      setTestando(false);
+    }
+  };
 
   const c = config.data;
   useEffect(() => {
@@ -117,13 +129,26 @@ export default function PrecosDoProduto() {
         descricao={c.pagamentos_ativos ? "Ligada" : "Desligada"}
         ajuda="Com a cobrança desligada ninguém consegue abrir o checkout: as empresas ficam em teste ou em cortesia. Ligue depois de conferir a chave do Asaas em Configurações e de cadastrar no Asaas o endereço de aviso deste produto."
         acao={
-          c.pagamentos_ativos ? (
+          <>
+          <button type="button" className={juntar(botao.discreto, "mr-1 h-8")} onClick={() => void testarAsaas()} disabled={testando} data-testar-asaas="">
+            {testando ? "Testando..." : "Testar o Asaas"}
+          </button>
+          {c.pagamentos_ativos ? (
             <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void ligarCobranca(false)} data-desligar-cobranca="">Desligar</button>
           ) : (
             <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => setConfirmarCobranca(true)} data-ligar-cobranca="">Ligar</button>
-          )
+          )}
+          </>
         }
-      />
+      >
+        {teste && (
+          <p className={juntar(texto.corpo, teste.ok ? "text-primary" : "text-destructive")} data-resultado-do-teste="">
+            {teste.ok
+              ? <>O Asaas aceitou o checkout ({teste.ambiente === "sandbox" ? "ambiente de teste" : "conta de produção"}). {teste.link ? <a href={teste.link} target="_blank" rel="noreferrer" className="font-medium underline">Ver a página de pagamento</a> : null}. Ninguém foi cobrado; o link expira em 10 minutos.</>
+              : <>O Asaas recusou: {teste.mensagem}</>}
+          </p>
+        )}
+      </Secao>
 
       <Secao
         titulo="Planos"
