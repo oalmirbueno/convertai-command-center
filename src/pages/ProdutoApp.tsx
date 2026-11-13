@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, Moon, Palette, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
+import { Bell, BookOpen, CalendarClock, FileText, KanbanSquare, LayoutDashboard, LayoutGrid, LogOut, Magnet, Mail, Megaphone, Menu, Moon, Palette, PanelLeftClose, PanelLeftOpen, Plug, Radar, Settings2, Sun, Target, UserRound, Users, Workflow, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useProduto, useRelerProduto } from "@/hooks/useProduto";
@@ -188,6 +188,23 @@ export default function ProdutoApp() {
   const produto = useProduto();
   const estado = produto.data;
   const [gaveta, setGaveta] = useState(false);
+  // O menu lateral recolhe para uma faixa só de ícones; a escolha fica guardada no aparelho.
+  const [recolhida, setRecolhida] = useState(() => {
+    try {
+      return localStorage.getItem("produto:lateral") === "recolhida";
+    } catch {
+      return false;
+    }
+  });
+  const alternarLateral = () =>
+    setRecolhida((v) => {
+      try {
+        localStorage.setItem("produto:lateral", v ? "aberta" : "recolhida");
+      } catch {
+        /* sem armazenamento: vale só nesta visita */
+      }
+      return !v;
+    });
 
   const secao: Secao = SECOES.indexOf(secaoDaUrl as Secao) >= 0 ? (secaoDaUrl as Secao) : "inicio";
   const papelNoPainel = profile ? profile.role : "member";
@@ -244,32 +261,51 @@ export default function ProdutoApp() {
   const grupos = estado && estado.conta ? itensDoCrm(estado) : [];
   const euNaEquipe = estado && estado.eu ? estado.equipe.filter((m) => m.id === estado.eu!.membro_id)[0] : null;
 
-  const linkDoMenu = (item: ItemDoMenu) => {
+  const linkDoMenu = (item: ItemDoMenu, soIcone = false) => {
     const ativo = item.ativo(local.pathname);
     return (
       <Link
         key={item.para}
         to={item.para}
         aria-current={ativo ? "page" : undefined}
-        className={juntar("produto-item-do-menu flex h-9 min-w-0 items-center rounded-lg px-2.5 text-[13px] font-medium", foco, ativo ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
+        aria-label={soIcone ? item.rotulo : undefined}
+        title={soIcone ? item.rotulo : undefined}
+        className={juntar("produto-item-do-menu flex h-9 min-w-0 items-center rounded-lg text-[13px] font-medium", soIcone ? "justify-center px-0" : "px-2.5", foco, ativo ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
       >
-        <span className={juntar("mr-2.5 shrink-0", ativo && "text-primary")}>{item.icone}</span>
-        <span className="min-w-0 truncate">{item.rotulo}</span>
+        <span className={juntar("shrink-0", !soIcone && "mr-2.5", ativo && "text-primary")}>{item.icone}</span>
+        {!soIcone && <span className="min-w-0 truncate">{item.rotulo}</span>}
       </Link>
     );
   };
 
-  const lateral = (
+  const montarLateral = (soIcone: boolean, comBotao: boolean) => (
     <>
-      {grupos.map((g) => (
-        <div key={g.grupo} className="mb-5 min-w-0">
-          <p className="mb-1.5 px-2.5 text-[11px] font-medium uppercase leading-4 tracking-[0.06em] text-muted-foreground">{g.grupo}</p>
-          <div className="space-y-0.5">{g.itens.map(linkDoMenu)}</div>
-        </div>
-      ))}
-      <div className="mt-auto min-w-0 border-t border-border pt-3">
-        {linkDoMenu({ rotulo: "Configurações", para: admin ? "/app/conta?parte=plano" : "/app/conta?parte=acesso", icone: <Settings2 className={I} aria-hidden="true" />, ativo: (c) => c.indexOf("/app/conta") === 0 })}
-        {estado && estado.eu && (
+      <div className="produto-rolagem -mx-3 min-h-0 flex-1 overflow-y-auto px-3">
+        {grupos.map((g, i) => (
+          <div key={g.grupo} className={juntar("min-w-0", soIcone ? "mb-2" : "mb-5")}>
+            {soIcone ? (
+              i > 0 && <div className="mx-2 mb-2 border-t border-border" aria-hidden="true" />
+            ) : (
+              <p className="mb-1.5 px-2.5 text-[11px] font-medium uppercase leading-4 tracking-[0.06em] text-muted-foreground">{g.grupo}</p>
+            )}
+            <div className="space-y-0.5">{g.itens.map((item) => linkDoMenu(item, soIcone))}</div>
+          </div>
+        ))}
+      </div>
+      <div className="min-w-0 shrink-0 border-t border-border pt-3">
+        {linkDoMenu({ rotulo: "Configurações", para: admin ? "/app/conta?parte=plano" : "/app/conta?parte=acesso", icone: <Settings2 className={I} aria-hidden="true" />, ativo: (c) => c.indexOf("/app/conta") === 0 }, soIcone)}
+        {comBotao && (
+          <button type="button" onClick={alternarLateral} aria-label={soIcone ? "Abrir o menu" : "Recolher o menu"} title={soIcone ? "Abrir o menu" : "Recolher o menu"} aria-expanded={!soIcone} className={juntar("mt-0.5 flex h-9 w-full min-w-0 items-center rounded-lg text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground", soIcone ? "justify-center px-0" : "px-2.5", foco)} data-recolher-lateral="">
+            {soIcone ? <PanelLeftOpen className={I} aria-hidden="true" /> : <PanelLeftClose className={juntar(I, "mr-2.5 shrink-0")} aria-hidden="true" />}
+            {!soIcone && <span className="min-w-0 truncate">Recolher</span>}
+          </button>
+        )}
+        {estado && estado.eu && soIcone && (
+          <Link to="/app/equipe" className={juntar("mt-2 flex justify-center rounded-lg py-1.5 transition-colors hover:bg-muted/60", foco)} aria-label="Meu perfil" title={estado.eu.nome || estado.eu.email}>
+            <Foto nome={estado.eu.nome || estado.eu.email} foto={euNaEquipe ? euNaEquipe.foto : null} tamanho="p" />
+          </Link>
+        )}
+        {estado && estado.eu && !soIcone && (
           <Link to="/app/equipe" className={juntar("mt-2 flex min-w-0 items-center rounded-lg px-2 py-2 transition-colors hover:bg-muted/60", foco)} data-eu-no-menu="">
             <Foto nome={estado.eu.nome || estado.eu.email} foto={euNaEquipe ? euNaEquipe.foto : null} tamanho="p" />
             <span className="ml-2.5 min-w-0 flex-1">
@@ -303,7 +339,7 @@ export default function ProdutoApp() {
       {/* Não é <header>: o tema claro do painel pinta de branco os links de "header nav", e aqui o topo é claro. */}
       <div role="banner" className="produto-vidro fixed inset-x-0 top-0 z-30 border-b border-border pt-[env(safe-area-inset-top)]" data-produto-topo="">
         <div className="flex h-[52px] w-full min-w-0 items-center px-4 md:px-5">
-          <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md md:w-[204px]", foco)} aria-label="Início do CRM">
+          <Link to="/app" className={juntar("mr-4 flex min-w-0 shrink-0 items-center rounded-md", comLateral && !recolhida && "md:w-[204px]", foco)} aria-label="Início do CRM">
             {aparencia.logo ? (
               <img src={aparencia.logo} alt={nomeNoTopo} className="h-7 w-auto max-w-[140px] object-contain" data-logo-da-empresa="" />
             ) : (
@@ -324,15 +360,16 @@ export default function ProdutoApp() {
       </div>
 
       {comLateral && (
-        <nav className="fixed bottom-0 left-0 top-[calc(env(safe-area-inset-top)+52px)] z-20 hidden w-[232px] flex-col overflow-y-auto border-r border-border px-3 pb-3 pt-5 md:flex" aria-label="Áreas do CRM" data-produto-lateral="">
-          {lateral}
+        <nav className={juntar("produto-lateral fixed bottom-0 left-0 top-[calc(env(safe-area-inset-top)+52px)] z-20 hidden flex-col overflow-hidden border-r border-border px-3 pb-3 pt-5 md:flex", recolhida ? "w-[64px]" : "w-[232px]")} aria-label="Áreas do CRM" data-produto-lateral={recolhida ? "recolhida" : "aberta"}>
+          {montarLateral(recolhida, true)}
         </nav>
       )}
 
       <main
         className={juntar(
           "fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+56px)] top-[calc(env(safe-area-inset-top)+52px)] w-full overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:static md:overflow-visible md:px-7 md:pb-10 md:pt-[calc(env(safe-area-inset-top)+76px)]",
-          comLateral ? "md:pl-[260px]" : "mx-auto max-w-[1320px]",
+          "produto-conteudo",
+          comLateral ? (recolhida ? "md:pl-[92px]" : "md:pl-[260px]") : "mx-auto max-w-[1320px]",
         )}
         style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
         data-produto-conteudo=""
@@ -384,7 +421,7 @@ export default function ProdutoApp() {
               <p className={juntar(texto.tituloSecao, "flex-1")}>Todas as áreas</p>
               <button type="button" className={botao.icone} onClick={() => setGaveta(false)} aria-label="Fechar"><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
-            {lateral}
+            {montarLateral(false, false)}
             <Link to="/app/email" className={juntar("mt-3 flex h-10 items-center rounded-lg border border-border px-3 text-[13px] font-medium", foco)}>
               <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
               E-mail profissional

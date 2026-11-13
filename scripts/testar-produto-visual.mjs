@@ -206,6 +206,7 @@ const telas = [
   { nome: "04-crm-maquina", caminho: "/app/crm/leads", espera: "[data-maquina-de-leads]" },
   { nome: "05-email", caminho: "/app/email", espera: "[data-email-contratado]" },
   { nome: "06-equipe", caminho: "/app/equipe", espera: "[data-ranking]" },
+  { nome: "35-recolhida", caminho: "/app", espera: "[data-inicio-do-produto]", depois: async (p) => { const b = p.locator("[data-recolher-lateral]"); if (await b.isVisible()) { await b.click(); await p.waitForTimeout(400); } } },
   { nome: "06b-equipe-claro", caminho: "/app/equipe", espera: "[data-ranking]", tema: "light" },
   { nome: "06c-perfil", caminho: "/app/equipe", espera: "[data-ranking]", depois: async (p) => { await p.click('[data-pessoa="m4"]'); await p.waitForSelector("[data-salvar-perfil]"); } },
   { nome: "30-automacoes", caminho: "/app/automacoes", espera: "[data-produto-lateral]" },
