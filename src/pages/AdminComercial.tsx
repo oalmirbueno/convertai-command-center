@@ -111,7 +111,8 @@ import {
   realizadoDoMes,
   diaEmSaoPaulo,
   linhasDeMetaDoMes,
-  receitaDoMes,
+  recebidoDoMes,
+  type RecebidoDoMes,
   resumoDoFunil,
   rotuloDoEstagio,
   salvarCampanha,
@@ -389,11 +390,13 @@ export default function AdminComercial() {
     placeholderData: (anterior) => anterior,
   });
   // A receita realizada vem do Financeiro central, nunca daqui.
-  const { data: receita = 0, isError: erroNaReceita } = useQuery({
+  // Vem separada por origem (mensalidade, avulso, projeto) para a tela mostrar de onde entrou.
+  const { data: recebido, isError: erroNaReceita } = useQuery({
     queryKey: ["comercial-receita", periodo],
-    queryFn: () => receitaDoMes(periodo),
+    queryFn: () => recebidoDoMes(periodo),
     placeholderData: (anterior) => anterior,
   });
+  const receita = recebido?.total ?? 0;
 
   // Leitura que falhou não vira "lista vazia": a tela avisa e oferece tentar de novo.
   // A receita e os recorrentes do Financeiro também: falha ali mostrava "R$ 0" como dado real.
@@ -707,6 +710,7 @@ export default function AdminComercial() {
           metas={metas}
           leads={leads}
           receita={receita}
+          recebido={recebido}
           clientesRecorrentes={clientesRecorrentes}
           carregando={carregandoLeads || carregandoMetas}
           onSalvo={recarregar}
@@ -987,6 +991,7 @@ function Metas({
   metas,
   leads,
   receita,
+  recebido,
   clientesRecorrentes,
   carregando,
   onSalvo,
@@ -995,6 +1000,7 @@ function Metas({
   metas: Array<{ id: string; metric: string; target: number }>;
   leads: Lead[];
   receita: number;
+  recebido?: RecebidoDoMes;
   clientesRecorrentes: number;
   carregando: boolean;
   onSalvo: () => Promise<unknown>;
@@ -1017,6 +1023,23 @@ function Metas({
 
   return (
     <AreaDeTrabalho rotuloDoPrincipal="Metas do mês" memoriaDaRolagem="comercial:metas">
+      {/* O que entrou no Financeiro geral no mês, por origem: é o número que
+          alimenta a meta de receita logo abaixo. */}
+      <FaixaDeNumeros
+        tamanho="compacto"
+        apoioAoLado
+        rotulo="Entrou no Financeiro neste mês"
+        itens={[
+          { rotulo: "Total recebido", valor: recebido ? dinheiro(recebido.total) : "…", apoio: "igual ao Financeiro" },
+          {
+            rotulo: "Mensalidades",
+            valor: recebido ? dinheiro(recebido.mensalidades) : "…",
+            apoio: recebido ? `${recebido.clientesRecorrentes} ${recebido.clientesRecorrentes === 1 ? "cliente" : "clientes"}` : undefined,
+          },
+          { rotulo: "Avulsos e extras", valor: recebido ? dinheiro(recebido.avulsos) : "…", apoio: "fora da mensalidade" },
+          { rotulo: "Projetos", valor: recebido ? dinheiro(recebido.projetos) : "…", apoio: "parcelas pagas" },
+        ]}
+      />
       {carregando ? (
         <Carregando rotulo="Carregando as metas" linhas={5} />
       ) : (

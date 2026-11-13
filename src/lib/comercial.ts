@@ -502,7 +502,7 @@ export const METRICAS = [
   {
     id: "receita",
     label: "Receita do mês",
-    fonte: "Financeiro: entradas com competência no mês",
+    fonte: "Financeiro: tudo que foi recebido no mês",
     dinheiro: true,
   },
   {
@@ -526,7 +526,7 @@ export const METRICAS = [
   {
     id: "clientes_recorrentes",
     label: "Clientes recorrentes ativos",
-    fonte: "Financeiro: clientes com mensalidade recorrente lançada no mês",
+    fonte: "Financeiro: clientes com mensalidade recebida no mês",
     dinheiro: false,
   },
 ] as const;
@@ -578,56 +578,123 @@ export async function apagarMeta(id: string): Promise<boolean> {
 /* ────────────────────── A ponte com o Financeiro ────────────────────────── */
 
 /**
- * A receita REALIZADA do mês, lida do Financeiro central.
+ * O que ENTROU no mês, lido do Financeiro geral, separado por origem.
  *
- * Usa `competence` (o mês a que a receita pertence), não a data de
- * pagamento: é assim que o Financeiro fecha o mês, e usar régua diferente
- * faria a mesma empresa ter dois "faturamento de agosto". Cancelado fica de
- * fora — é lançamento que deixou de existir.
+ * É a mesma conta da tela do Financeiro (13/11/2026): cobrança de `billing`
+ * paga ou parcial, mais parcela de projeto paga ou parcial, no mês da data
+ * do pagamento (ou do vencimento, quando o pagamento ficou sem data). Antes
+ * esta leitura ia em `financial_entries`, tabela que nunca recebeu receita,
+ * e o Comercial mostrava R$ 0 com o caixa cheio. Régua diferente da do
+ * Financeiro faria a mesma empresa ter dois "recebido de novembro".
+ *
+ * Fica de fora: recarga de anúncio (dinheiro do cliente para a plataforma)
+ * e cobrança em dólar (o Freela tem caixa próprio).
  */
-export async function receitaDoMes(periodo: string): Promise<number> {
-  if (naConta()) return (await ganhosDaContaNoMes(periodo)).receita;
-  const inicio = periodo;
-  const fim = proximoMes(periodo);
-  const { data, error } = await supabase
-    .from("financial_entries")
-    .select("amount")
-    .eq("direction", "in")
-    .is("cancelled_at", null)
-    .gte("competence", inicio)
-    .lt("competence", fim);
-  // Falha nao vira "R$ 0": zero e dado, leitura que falhou e outra coisa.
-  if (error) throw new ErroDeLeitura("a receita do Financeiro", error);
-  if (!data) return 0;
-  return (data as Array<{ amount: unknown }>).reduce(
-    (soma, linha) => soma + numero(linha.amount),
-    0,
-  );
+export type RecebidoDoMes = {
+  /** Mensalidades (cobrança de renovação). */
+  mensalidades: number;
+  /** Serviço extra, avulso e qualquer outra cobrança que não é mensalidade. */
+  avulsos: number;
+  /** Parcelas de projeto fechado. */
+  projetos: number;
+  /** Tudo que entrou: a soma das três origens. */
+  total: number;
+  /** Clientes distintos com mensalidade recebida no mês. */
+  clientesRecorrentes: number;
+};
+
+type LinhaRecebida = {
+  amount?: unknown;
+  paid_amount?: unknown;
+  status?: unknown;
+  type?: unknown;
+  client_id?: unknown;
+  currency?: unknown;
+};
+
+/** Quanto entrou de fato numa cobrança ou parcela, respeitando pagamento parcial. */
+function recebidoDe(linha: LinhaRecebida): number {
+  const cheio = numero(linha.amount);
+  const pago = numero(linha.paid_amount);
+  if (linha.status === "partial") return Math.min(pago, cheio);
+  if (linha.status === "paid") return pago > 0 && pago < cheio ? pago : cheio;
+  return 0;
 }
 
 /**
- * Quantos clientes têm mensalidade RECORRENTE lançada no mês, lido do
- * Financeiro central. Conta cliente distinto com entrada gerada por regra
- * de recorrência, competência no mês e não cancelada: é quem o Financeiro
- * cobrou de verdade, não quem o comercial acha que é recorrente — a mesma
- * régua de "alvo é dado próprio, realizado é lido do Financeiro".
+ * As linhas recebidas de uma tabela no mês. São duas leituras porque o mês é
+ * o do pagamento e, só na falta dele, o do vencimento.
+ */
+async function recebidasNoMes(
+  tabela: "billing" | "payment_installments",
+  colunas: string,
+  periodo: string,
+): Promise<LinhaRecebida[]> {
+  const fim = proximoMes(periodo);
+  const [comData, semData] = await Promise.all([
+    supabase
+      .from(tabela)
+      .select(colunas)
+      .in("status", ["paid", "partial"])
+      .gte("paid_date", periodo)
+      .lt("paid_date", fim),
+    supabase
+      .from(tabela)
+      .select(colunas)
+      .in("status", ["paid", "partial"])
+      .is("paid_date", null)
+      .gte("due_date", periodo)
+      .lt("due_date", fim),
+  ]);
+  // Falha nao vira "R$ 0": zero e dado, leitura que falhou e outra coisa.
+  const erro = comData.error || semData.error;
+  if (erro) throw new ErroDeLeitura("o recebido do Financeiro", erro);
+  return [...(comData.data || []), ...(semData.data || [])] as LinhaRecebida[];
+}
+
+const centavos = (valor: number) => Math.round(valor * 100) / 100;
+
+export async function recebidoDoMes(periodo: string): Promise<RecebidoDoMes> {
+  const [cobrancas, parcelas] = await Promise.all([
+    recebidasNoMes("billing", "amount, paid_amount, status, type, client_id, currency", periodo),
+    recebidasNoMes("payment_installments", "amount, paid_amount, status", periodo),
+  ]);
+  let mensalidades = 0;
+  let avulsos = 0;
+  const recorrentes = new Set<string>();
+  for (const c of cobrancas) {
+    if (c.type === "ads_recharge" || c.currency === "USD") continue;
+    const valor = recebidoDe(c);
+    if (c.type === "renewal") {
+      mensalidades += valor;
+      if (c.client_id && valor > 0) recorrentes.add(String(c.client_id));
+    } else avulsos += valor;
+  }
+  const projetos = parcelas.reduce((soma, p) => soma + recebidoDe(p), 0);
+  return {
+    mensalidades: centavos(mensalidades),
+    avulsos: centavos(avulsos),
+    projetos: centavos(projetos),
+    total: centavos(mensalidades + avulsos + projetos),
+    clientesRecorrentes: recorrentes.size,
+  };
+}
+
+/** A receita REALIZADA do mês: o total que entrou no Financeiro geral. */
+export async function receitaDoMes(periodo: string): Promise<number> {
+  // No CRM da empresa não existe o Financeiro da casa: o realizado são os ganhos dela.
+  if (naConta()) return (await ganhosDaContaNoMes(periodo)).receita;
+  return (await recebidoDoMes(periodo)).total;
+}
+
+/**
+ * Quantos clientes pagaram mensalidade no mês, lido do Financeiro geral:
+ * é quem pagou de verdade, não quem o comercial acha que é recorrente. A
+ * mesma régua de "alvo é dado próprio, realizado é lido do Financeiro".
  */
 export async function clientesRecorrentesDoMes(periodo: string): Promise<number> {
   if (naConta()) return (await ganhosDaContaNoMes(periodo)).recorrentes;
-  const { data, error } = await supabase
-    .from("financial_entries")
-    .select("client_id")
-    .eq("direction", "in")
-    .is("cancelled_at", null)
-    .not("recurring_rule_id", "is", null)
-    .not("client_id", "is", null)
-    .gte("competence", periodo)
-    .lt("competence", proximoMes(periodo));
-  if (error) throw new ErroDeLeitura("os clientes recorrentes do Financeiro", error);
-  if (!data) return 0;
-  return new Set(
-    (data as Array<{ client_id: unknown }>).map((linha) => String(linha.client_id)),
-  ).size;
+  return (await recebidoDoMes(periodo)).clientesRecorrentes;
 }
 
 /**
