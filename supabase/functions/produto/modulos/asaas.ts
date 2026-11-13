@@ -87,9 +87,16 @@ export interface CheckoutCriado {
   expira_em: string;
 }
 
+/** O nome do item como aparece no checkout: com a marca na frente, em até 30 caracteres. */
+export const nomeNoCheckout = (nome: string) => (/^aceleriq/i.test(nome) ? nome : `Aceleriq ${nome}`).slice(0, 30);
+
 /**
  * Abre o checkout recorrente no cartão. O nome do item cabe em 30 caracteres
  * no Asaas, então vai curto; a descrição leva o detalhe.
+ *
+ * Marca: a API do checkout só aceita, por pedido, o nome, a descrição e a
+ * imagem de cada item (imageBase64). Logo e cores da página não estão na
+ * documentação da API (conferida em 13/11/2026).
  */
 export async function criarCheckoutDaAssinatura(token: string, buscar: Buscar, p: {
   /** Vazio só no teste da conexão: o próprio checkout pede os dados de quem paga. */
@@ -99,9 +106,13 @@ export async function criarCheckoutDaAssinatura(token: string, buscar: Buscar, p
   voltarPara: string;
   agora: Date;
   minutos?: number;
+  /** Imagem do item (PNG ou JPG em Base64, sem o prefixo data:). Vai só quando existir. */
+  imagemBase64?: string;
 }): Promise<CheckoutCriado> {
   if (!p.itens.length) throw new ErroDoAsaas("checkout", 400, "nada para assinar");
   const minutos = Math.max(10, Math.min(1440, p.minutos || 120));
+  const imagem = String(p.imagemBase64 || "").replace(/^data:[^,]*,/, "").replace(/\s+/g, "");
+  const comImagem = imagem.length > 100 && imagem.length <= 400000 && /^[A-Za-z0-9+/=]+$/.test(imagem);
   const corpo = {
     billingTypes: ["CREDIT_CARD"],
     chargeTypes: ["RECURRENT"],
@@ -114,8 +125,9 @@ export async function criarCheckoutDaAssinatura(token: string, buscar: Buscar, p
       expiredUrl: `${p.voltarPara}?pagamento=expirado`,
     },
     items: p.itens.map((i) => ({
-      name: i.nome.slice(0, 30),
-      description: `${i.nome}, por mês`.slice(0, 150),
+      name: nomeNoCheckout(i.nome),
+      description: `${i.nome}: assinatura mensal no cartão. Sem fidelidade, cancele quando quiser.`.slice(0, 150),
+      ...(comImagem ? { imageBase64: imagem } : {}),
       quantity: i.quantidade,
       value: i.unitario,
     })),

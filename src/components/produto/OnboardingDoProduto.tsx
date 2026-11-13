@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Briefcase, Building2, Check, Factory, GraduationCap, HeartPulse, Megaphone, Minus, Plus, Shapes, ShoppingBag, Wrench } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { criarConta, fraseDoErro, listarPlanos, reais } from "@/lib/produto/api";
+import { assinar, criarConta, fraseDoErro, lerPrecos, listarPlanos, reais } from "@/lib/produto/api";
+import { destinoDaCompra, documentoConferido, documentoLegivel, type EscolhaDeCompra } from "@/lib/produto/venda";
 import { ETAPAS_DO_FUNIL, NICHOS, NOME_PADRAO_DA_ETAPA, OBJETIVOS, perfilDoNicho, type EtapaId, type NichoId, type ObjetivoId } from "@/lib/produto/nichos";
 import { useRelerProduto } from "@/hooks/useProduto";
 import { CampoDeFormulario, botao, campo, foco, juntar, texto } from "@/components/sistema";
@@ -17,6 +18,10 @@ import "./produto.css";
  * ramo usa; o objetivo decide onde a pessoa cai depois. Quem ainda não tem
  * login cria o acesso no último passo; as respostas ficam guardadas no
  * aparelho, então confirmar o e-mail e voltar não faz perguntar de novo.
+ *
+ * Caminho direto (quem escolheu o plano na página de venda): só ramo, empresa
+ * e acesso. Criado o acesso, a empresa nasce sozinha; com a cobrança ligada a
+ * pessoa segue para o checkout do cartão, com ela desligada entra no teste.
  */
 
 const ICONE_DO_NICHO: Record<NichoId, ReactNode> = {
@@ -37,6 +42,10 @@ export interface RespostasDoOnboarding {
   usuarios: number;
   plano: string;
   etapas: Partial<Record<EtapaId, string>>;
+  /** Veio da página de venda com o plano escolhido: caminho curto, sem objetivo nem funil. */
+  direto?: boolean;
+  /** CPF ou CNPJ, só números. Pedido quando a cobrança está ligada. */
+  documento?: string;
 }
 
 const CHAVE = "aceleriq:produto:onboarding";
@@ -60,6 +69,8 @@ export function lerRespostasGuardadas(): RespostasDoOnboarding | null {
       usuarios: Math.max(1, Math.min(500, Math.floor(Number(bruto.usuarios) || 1))),
       plano: typeof bruto.plano === "string" ? bruto.plano.slice(0, 40) : "starter",
       etapas,
+      direto: bruto.direto === true,
+      documento: typeof bruto.documento === "string" ? bruto.documento.replace(/\D/g, "").slice(0, 14) : "",
     };
   } catch {
     return null;
@@ -99,11 +110,19 @@ function Opcao({ marcada, onClick, icone, titulo, linha, dado }: { marcada: bool
   );
 }
 
-export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { modo: "publico" | "logado"; testeDias?: number; aoCriar?: (destino: string) => void }) {
+export default function OnboardingDoProduto({ modo, testeDias: testeDiasDeFora, aoCriar, inicial }: { modo: "publico" | "logado"; testeDias?: number; aoCriar?: (destino: string) => void; inicial?: EscolhaDeCompra | null }) {
   const { user, signup } = useAuth();
   const reler = useRelerProduto();
   const planos = useQuery({ queryKey: ["produto", "planos", "onboarding"], queryFn: () => listarPlanos(), staleTime: 300_000, retry: 1 });
-  const [r, setR] = useState<RespostasDoOnboarding>(() => lerRespostasGuardadas() || VAZIO);
+  const precos = useQuery({ queryKey: ["produto", "precos", "onboarding"], queryFn: () => lerPrecos(), staleTime: 300_000, retry: 1 });
+  const [r, setR] = useState<RespostasDoOnboarding>(() => {
+    const guardadas = lerRespostasGuardadas() || VAZIO;
+    return inicial ? { ...guardadas, plano: inicial.plano, usuarios: inicial.usuarios, direto: true } : guardadas;
+  });
+  const [preparando, setPreparando] = useState(false);
+  const cobranca = !!(precos.data && precos.data.pagamentos_ativos);
+  const testeDias = typeof testeDiasDeFora === "number" ? testeDiasDeFora : precos.data ? precos.data.teste_dias : 7;
+  const direto = r.direto === true;
   const [passo, setPasso] = useState<Passo>("nicho");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -114,7 +133,9 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
   const criouUmaVez = useRef(false);
 
   const comAcesso = modo === "publico" && !user;
-  const passos: Passo[] = comAcesso ? ["nicho", "objetivo", "empresa", "funil", "acesso"] : ["nicho", "objetivo", "empresa", "funil"];
+  const passos: Passo[] = direto
+    ? comAcesso ? ["nicho", "empresa", "acesso"] : ["nicho", "empresa"]
+    : comAcesso ? ["nicho", "objetivo", "empresa", "funil", "acesso"] : ["nicho", "objetivo", "empresa", "funil"];
   const indice = passos.indexOf(passo);
   const mudar = (parte: Partial<RespostasDoOnboarding>) => {
     const novo = { ...r, ...parte };
@@ -130,19 +151,41 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
   const plano = listaDePlanos.filter((p) => p.id === r.plano)[0] || listaDePlanos[0] || null;
   const nomeDaEtapa = (id: EtapaId) => r.etapas[id] || (nicho && nicho.etapas[id]) || NOME_PADRAO_DA_ETAPA[id];
 
-  const criarEmpresa = async () => {
+  const criarEmpresa = async (sozinho = false) => {
     if (criouUmaVez.current) return;
     criouUmaVez.current = true;
     setEnviando(true);
+    let criada = false;
     try {
-      await criarConta(pedidoDeConta(r));
-      const destino = destinoDoObjetivo(r.objetivo);
+      const documento = documentoConferido(r.documento || "");
+      await criarConta({ ...pedidoDeConta(r), ...(documento ? { documento } : {}) });
+      criada = true;
+      let destino = destinoDoObjetivo(r.objetivo);
       guardarRespostas(null);
+      // Caminho direto com a cobrança ligada: do cadastro para o cartão, sem parar.
+      if (direto && destinoDaCompra({ pagamentosAtivos: cobranca, documento }) === "checkout") {
+        try {
+          const pedido = await assinar({ plano_id: r.plano || "starter", usuarios: r.usuarios });
+          if (pedido.link) {
+            window.location.assign(pedido.link);
+            return;
+          }
+        } catch (e) {
+          toast.error(fraseDoErro(e, "A empresa foi criada, mas o pagamento não abriu. Tente de novo em Conta, Plano."));
+          destino = "/app/conta?parte=plano";
+        }
+      } else if (direto && cobranca) {
+        toast.info("Empresa criada. Para assinar, preencha o CPF ou o CNPJ em Conta, Plano.");
+        destino = "/app/conta?parte=plano";
+      } else {
+        toast.success(testeDias > 0 ? `Empresa criada. Você tem ${testeDias} dias de teste, sem cartão.` : "Empresa criada. Bom trabalho.");
+      }
       await reler();
-      toast.success("Empresa criada. Bom trabalho.");
       if (aoCriar) aoCriar(destino);
     } catch (e) {
-      criouUmaVez.current = false;
+      if (!criada) criouUmaVez.current = false;
+      setPreparando(false);
+      if (sozinho) setPasso("empresa");
       toast.error(fraseDoErro(e, "Não foi possível criar a empresa."));
     } finally {
       setEnviando(false);
@@ -152,9 +195,17 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
   // Quem respondeu tudo antes de ter login (ou voltou depois de confirmar o e-mail) não responde de novo.
   const guardadasCompletas = !!r.nicho && r.empresa.trim().length >= 2;
   useEffect(() => {
-    if (modo === "logado" && user && guardadasCompletas && lerRespostasGuardadas() && !criouUmaVez.current) setPasso("funil");
+    if (modo === "logado" && user && guardadasCompletas && lerRespostasGuardadas() && !criouUmaVez.current && !direto) setPasso("funil");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // No caminho direto a empresa nasce sozinha assim que a pessoa entra, já sabendo se a cobrança está ligada.
+  const prontoParaConcluir = modo === "logado" && !!user && direto && guardadasCompletas && !precos.isLoading;
+  useEffect(() => {
+    if (!prontoParaConcluir || criouUmaVez.current || !lerRespostasGuardadas()) return;
+    setPreparando(true);
+    void criarEmpresa(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prontoParaConcluir]);
 
   const criarAcesso = async () => {
     if (nome.trim().length < 2) return void toast.error("Diga o seu nome.");
@@ -175,7 +226,9 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
     }
   };
 
-  const podeAvancar = passo === "nicho" ? !!r.nicho : passo === "objetivo" ? !!r.objetivo : passo === "empresa" ? r.empresa.trim().length >= 2 && !!plano : true;
+  const pedeDocumento = direto && cobranca;
+  const documentoOk = !pedeDocumento || !!documentoConferido(r.documento || "");
+  const podeAvancar = passo === "nicho" ? !!r.nicho : passo === "objetivo" ? !!r.objetivo : passo === "empresa" ? r.empresa.trim().length >= 2 && !!plano && documentoOk : true;
   const ultimo = indice === passos.length - 1;
   const TITULO: Record<Passo, string> = {
     nicho: "Qual é o ramo da empresa?",
@@ -189,14 +242,25 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
     objetivo: "Você começa pela tela que resolve isso",
     empresa: "E quantas pessoas vão usar",
     funil: "Toque num nome para trocar. Dá para mudar depois",
-    acesso: testeDias > 0 ? `${testeDias} dias de teste, sem cartão` : "Leva menos de um minuto",
+    acesso: pedeDocumento ? "Último passo antes do pagamento no cartão" : testeDias > 0 ? `${testeDias} dias de teste, sem cartão` : "Leva menos de um minuto",
   };
+
+  if (preparando) {
+    return (
+      <Moldura passo={passos.length} total={passos.length} comMarca={modo === "publico"}>
+        <div data-preparando-o-crm="" role="status">
+          <h2 className={texto.tituloPagina}>Montando o seu CRM</h2>
+          <p className={juntar(texto.corpo, "mt-2 text-muted-foreground")}>{pedeDocumento ? "Criando a empresa e abrindo o pagamento seguro no cartão." : "Criando a empresa com o funil do seu ramo. Leva poucos segundos."}</p>
+        </div>
+      </Moldura>
+    );
+  }
 
   if (esperandoEmail && !user) {
     return (
       <Moldura passo={passos.length} total={passos.length} comMarca={modo === "publico"}>
         <h2 className={texto.tituloPagina}>Confirme o seu e-mail</h2>
-        <p className={juntar(texto.corpo, "mt-2 text-muted-foreground")}>Enviamos um link para {email.trim()}. Ao confirmar, a empresa é criada com o que você já respondeu.</p>
+        <p className={juntar(texto.corpo, "mt-2 text-muted-foreground")}>Enviamos um link para {email.trim()}. Ao confirmar, a empresa é criada com o que você já respondeu{pedeDocumento ? " e você segue para o pagamento" : ""}.</p>
         <Link to="/login?next=%2Fapp" className={juntar(botao.secundario, "mt-5")}>Já confirmei, entrar</Link>
       </Moldura>
     );
@@ -211,7 +275,7 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
         {passo === "nicho" && (
           <div className="mt-5 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Ramo da empresa">
             {NICHOS.map((n) => (
-              <Opcao key={n.id} dado={n.id} marcada={r.nicho === n.id} icone={ICONE_DO_NICHO[n.id]} titulo={n.nome} linha={n.exemplo} onClick={() => { mudar({ nicho: n.id, etapas: {} }); window.setTimeout(() => ir("objetivo"), 140); }} />
+              <Opcao key={n.id} dado={n.id} marcada={r.nicho === n.id} icone={ICONE_DO_NICHO[n.id]} titulo={n.nome} linha={n.exemplo} onClick={() => { mudar({ nicho: n.id, etapas: {} }); window.setTimeout(() => ir(direto ? "empresa" : "objetivo"), 140); }} />
             ))}
           </div>
         )}
@@ -242,7 +306,12 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
                 ))}
               </div>
             )}
-            {plano && <p className={texto.auxiliar}>Depois do teste: <span className="font-semibold text-foreground tabular-nums">{reais(plano.preco_usuario * r.usuarios)}</span> por mês. Sem fidelidade.</p>}
+            {pedeDocumento && (
+              <CampoDeFormulario rotulo="CPF ou CNPJ" obrigatorio apoio="De quem vai pagar. O Asaas pede para a cobrança no cartão">
+                <input value={documentoLegivel(r.documento || "")} onChange={(e) => mudar({ documento: e.target.value.replace(/\D/g, "").slice(0, 14) })} className={campoPublico} inputMode="numeric" autoComplete="off" maxLength={18} data-documento="" />
+              </CampoDeFormulario>
+            )}
+            {plano && <p className={texto.auxiliar}>{pedeDocumento ? "Hoje no cartão" : "Depois do teste"}: <span className="font-semibold text-foreground tabular-nums">{reais(plano.preco_usuario * r.usuarios)}</span> por mês. Sem fidelidade.</p>}
           </div>
         )}
 
@@ -295,12 +364,12 @@ export default function OnboardingDoProduto({ modo, testeDias = 7, aoCriar }: { 
         <span className="min-w-0 flex-1" />
         {passo === "acesso" ? (
           <button type="button" className={botao.primario} onClick={() => void criarAcesso()} disabled={enviando} data-criar-acesso="">
-            {enviando ? "Criando..." : "Criar acesso"}
+            {enviando ? "Criando..." : pedeDocumento ? "Continuar para o pagamento" : direto ? "Criar acesso e começar" : "Criar acesso"}
           </button>
         ) : ultimo ? (
           <button type="button" className={botao.primario} onClick={() => void criarEmpresa()} disabled={enviando || r.empresa.trim().length < 2} data-criar-empresa="">
             <Briefcase className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            {enviando ? "Criando..." : testeDias > 0 ? "Começar o teste" : "Criar empresa"}
+            {enviando ? "Criando..." : pedeDocumento ? "Ir para o pagamento" : testeDias > 0 ? "Começar o teste" : "Criar empresa"}
           </button>
         ) : (
           <button type="button" className={botao.primario} onClick={avancar} disabled={!podeAvancar} data-avancar="">
