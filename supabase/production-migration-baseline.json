@@ -3017,6 +3017,14 @@
       "remote_name": "aviso_inclui_pecas_antigas",
       "remote_statements_sha256": "53ca0fc7e98a02b80208449d39de1158878367d218ef2c3611decfa88a0cb78a",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261113120000",
+      "path": "supabase/migrations/20261113120000_produto_crm_e_email.sql",
+      "local_sha256": "6cc1153633291f87af49de9692c756dbac4e728577c87f2afe8cb805ad49acbc",
+      "remote_name": "produto_crm_e_email",
+      "remote_statements_sha256": "930c648ddf757c0af6912b2e62eabc3a40d6fa0bc6dc947a1ed6b430469ae3f2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
