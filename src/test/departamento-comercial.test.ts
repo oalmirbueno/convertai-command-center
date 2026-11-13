@@ -96,7 +96,7 @@ describe("o realizado vem do Financeiro, não é digitado aqui", () => {
     // Competência é a régua com que o Financeiro fecha o mês; usar a data de
     // pagamento faria a mesma empresa ter dois "faturamento de agosto".
     expect(lib).toContain('.from("financial_entries")');
-    expect(lib).toContain('.eq("direction", "in")');
+    expect(lib).toContain('.eq("direction", "income")');
     expect(lib).toContain('.gte("competence", inicio)');
     expect(lib).toContain('.is("cancelled_at", null)');
   });

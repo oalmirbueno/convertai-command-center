@@ -589,7 +589,7 @@ export async function receitaDoMes(periodo: string): Promise<number> {
   const { data, error } = await supabase
     .from("financial_entries")
     .select("amount")
-    .eq("direction", "in")
+    .eq("direction", "income")
     .is("cancelled_at", null)
     .gte("competence", inicio)
     .lt("competence", fim);
@@ -613,7 +613,7 @@ export async function clientesRecorrentesDoMes(periodo: string): Promise<number>
   const { data, error } = await supabase
     .from("financial_entries")
     .select("client_id")
-    .eq("direction", "in")
+    .eq("direction", "income")
     .is("cancelled_at", null)
     .not("recurring_rule_id", "is", null)
     .not("client_id", "is", null)

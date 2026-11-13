@@ -200,8 +200,8 @@ describe("3. falha no Financeiro não vira R$ 0", () => {
 
   it("sem falha, continuam somando", async () => {
     banco.tabelas.financial_entries = [
-      { amount: 1000, direction: "in", cancelled_at: null, competence: "2026-10-01", client_id: "c1", recurring_rule_id: "r1" },
-      { amount: 500, direction: "in", cancelled_at: null, competence: "2026-10-01", client_id: "c2", recurring_rule_id: null },
+      { amount: 1000, direction: "income", cancelled_at: null, competence: "2026-10-01", client_id: "c1", recurring_rule_id: "r1" },
+      { amount: 500, direction: "income", cancelled_at: null, competence: "2026-10-01", client_id: "c2", recurring_rule_id: null },
     ];
     await expect(receitaDoMes("2026-10-01")).resolves.toBe(1500);
     await expect(clientesRecorrentesDoMes("2026-10-01")).resolves.toBe(1);
