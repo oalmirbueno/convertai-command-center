@@ -136,7 +136,7 @@
   height: 560px;
   margin: -280px 0 0 -280px;
   background: linear-gradient(90deg, rgba(0, 255, 106, 0) 0%, rgba(140, 255, 185, 0.95) 50%, rgba(0, 255, 106, 0) 100%) center / 100% 3px no-repeat, linear-gradient(180deg, rgba(0, 255, 106, 0) 0%, rgba(140, 255, 185, 0.95) 50%, rgba(0, 255, 106, 0) 100%) center / 3px 100% no-repeat, radial-gradient(circle, rgba(0, 255, 106, 0.42) 0%, rgba(0, 255, 106, 0) 34%);
-  animation: el-pulsa 5s ease-in-out infinite alternate;
+  animation: el-pulsa 9s ease-in-out infinite alternate;
 }
 @keyframes el-pulsa {
   from {
@@ -238,14 +238,14 @@
   height: 100%;
   background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 255, 255, 0) 100%);
   transform: translate3d(-140%, 0, 0);
-  animation: el-varre 4.6s var(--el-curva) 1.2s infinite;
+  animation: el-varre 9s ease-in-out 2s infinite;
   pointer-events: none;
 }
 @keyframes el-varre {
   0% {
     transform: translate3d(-140%, 0, 0);
   }
-  38%,
+  30%,
   100% {
     transform: translate3d(340%, 0, 0);
   }
@@ -494,15 +494,15 @@
 .el-flutua-1,
 .el-flutua-2 {
   margin: 5px;
-  animation: el-entra 900ms var(--el-curva) both;
+  animation: el-entra 1500ms var(--el-curva) both;
 }
 .el-flutua-1 {
   flex: 0 1 270px;
   min-width: 0;
-  animation-delay: 700ms;
+  animation-delay: 1100ms;
 }
 .el-flutua-2 {
-  animation-delay: 1100ms;
+  animation-delay: 1700ms;
 }
 .el-aviso {
   display: flex;
@@ -1886,7 +1886,7 @@
   display: flex;
   width: max-content;
   width: -webkit-max-content;
-  animation: el-corre 38s linear infinite;
+  animation: el-corre 90s linear infinite;
 }
 .el-faixa span {
   display: flex;
@@ -1913,7 +1913,7 @@
 }
 /* A foto do herói respira devagar. */
 .el-pessoa-foto {
-  animation: el-respira 7s ease-in-out infinite alternate;
+  animation: el-respira 11s ease-in-out infinite alternate;
 }
 @keyframes el-respira {
   from {
@@ -1925,7 +1925,7 @@
 }
 /* O valor dá um pulo curto cada vez que a conta muda. */
 .el-pulo {
-  animation: el-pulo 420ms var(--el-curva) both;
+  animation: el-pulo 650ms var(--el-curva) both;
 }
 @keyframes el-pulo {
   from {
@@ -1943,7 +1943,7 @@
 .el-anim .el-r {
   opacity: 0;
   transform: translate3d(0, 34px, 0);
-  transition: opacity 900ms var(--el-curva), transform 900ms var(--el-curva);
+  transition: opacity 1400ms var(--el-curva), transform 1400ms var(--el-curva);
 }
 .el-anim .el-r.el-in {
   opacity: 1;
@@ -1952,7 +1952,7 @@
 .el-anim .el-barras li {
   opacity: 0;
   transform: translate3d(36px, 0, 0);
-  transition: opacity 700ms var(--el-curva), transform 700ms var(--el-curva);
+  transition: opacity 1100ms var(--el-curva), transform 1100ms var(--el-curva);
 }
 .el-anim .el-in .el-barras li,
 .el-anim .el-in.el-barras li {
@@ -1960,22 +1960,22 @@
   transform: none;
 }
 .el-anim .el-in .el-barras li:nth-child(1) {
-  transition-delay: 250ms;
+  transition-delay: 375ms;
 }
 .el-anim .el-in .el-barras li:nth-child(2) {
-  transition-delay: 400ms;
+  transition-delay: 600ms;
 }
 .el-anim .el-in .el-barras li:nth-child(3) {
-  transition-delay: 550ms;
+  transition-delay: 825ms;
 }
 .el-anim .el-in .el-barras li:nth-child(4) {
-  transition-delay: 700ms;
+  transition-delay: 1050ms;
 }
 .el-anim .el-passo,
 .el-anim .el-resultado {
   opacity: 0;
   transform: translate3d(30px, 0, 0);
-  transition: opacity 700ms var(--el-curva), transform 700ms var(--el-curva);
+  transition: opacity 1100ms var(--el-curva), transform 1100ms var(--el-curva);
 }
 .el-anim .el-in .el-passo,
 .el-anim .el-in .el-resultado {
@@ -1983,56 +1983,56 @@
   transform: none;
 }
 .el-anim .el-in .el-passo:nth-child(2) {
-  transition-delay: 200ms;
+  transition-delay: 300ms;
 }
 .el-anim .el-in .el-passo:nth-child(3) {
-  transition-delay: 500ms;
+  transition-delay: 750ms;
 }
 .el-anim .el-in .el-passo:nth-child(4) {
-  transition-delay: 800ms;
+  transition-delay: 1200ms;
 }
 .el-anim .el-in .el-passo:nth-child(5) {
-  transition-delay: 1100ms;
+  transition-delay: 1650ms;
 }
 .el-anim .el-in .el-resultado {
-  transition-delay: 1500ms;
+  transition-delay: 2250ms;
 }
 .el-anim .el-passo-marca {
   transform: scale(0);
-  transition: transform 500ms var(--el-curva);
+  transition: transform 800ms var(--el-curva);
 }
 .el-anim .el-in .el-passo-marca {
   transform: scale(1);
 }
 .el-anim .el-in .el-passo:nth-child(2) .el-passo-marca {
-  transition-delay: 300ms;
+  transition-delay: 450ms;
 }
 .el-anim .el-in .el-passo:nth-child(3) .el-passo-marca {
-  transition-delay: 600ms;
-}
-.el-anim .el-in .el-passo:nth-child(4) .el-passo-marca {
   transition-delay: 900ms;
 }
+.el-anim .el-in .el-passo:nth-child(4) .el-passo-marca {
+  transition-delay: 1350ms;
+}
 .el-anim .el-in .el-passo:nth-child(5) .el-passo-marca {
-  transition-delay: 1200ms;
+  transition-delay: 1800ms;
 }
 .el-anim .el-retrato img {
   transform: scale(1.12);
-  transition: transform 1800ms var(--el-curva);
+  transition: transform 2600ms var(--el-curva);
 }
 .el-anim .el-in.el-retrato img {
   transform: scale(1);
 }
 .el-anim .el-total {
   transform: translate3d(0, 40px, 0) scale(0.96);
-  transition: transform 1000ms var(--el-curva) 250ms;
+  transition: transform 1500ms var(--el-curva) 300ms;
 }
 .el-anim .el-in .el-total {
   transform: none;
 }
 .el-anim .el-trilho span {
   transform: scaleY(0);
-  transition: transform 1600ms var(--el-curva) 200ms;
+  transition: transform 2600ms var(--el-curva) 300ms;
 }
 .el-anim .el-in .el-trilho span {
   transform: scaleY(1);
@@ -2040,14 +2040,14 @@
 /* O MacBook começa fechado e abre; a tela acende; depois o iPhone sobe, liga e o aviso chega. */
 .el-anim .el-mac-tampa {
   transform: rotateX(-88deg);
-  transition: transform 1900ms var(--el-curva) 200ms;
+  transition: transform 2800ms var(--el-curva) 300ms;
 }
 .el-anim .el-in .el-mac-tampa {
   transform: rotateX(0deg);
 }
 .el-anim .el-mac-tela > * {
   opacity: 0;
-  transition: opacity 700ms var(--el-curva) 1500ms;
+  transition: opacity 1000ms var(--el-curva) 2300ms;
 }
 .el-anim .el-in .el-mac-tela > * {
   opacity: 1;
@@ -2055,7 +2055,7 @@
 .el-anim .el-iphone {
   opacity: 0;
   transform: translate3d(0, 50px, 0);
-  transition: opacity 800ms var(--el-curva) 1000ms, transform 900ms var(--el-curva) 1000ms;
+  transition: opacity 1200ms var(--el-curva) 1800ms, transform 1400ms var(--el-curva) 1800ms;
 }
 .el-anim .el-in .el-iphone {
   opacity: 1;
@@ -2064,7 +2064,7 @@
 .el-anim .el-fone-luz,
 .el-anim .el-fone-hora {
   opacity: 0;
-  transition: opacity 700ms var(--el-curva) 2100ms;
+  transition: opacity 1000ms var(--el-curva) 3200ms;
 }
 .el-anim .el-in .el-fone-luz,
 .el-anim .el-in .el-fone-hora {
@@ -2073,7 +2073,7 @@
 .el-anim .el-fone-aviso {
   opacity: 0;
   transform: translate3d(0, 1.2em, 0) scale(0.96);
-  transition: opacity 600ms var(--el-curva) 2800ms, transform 600ms var(--el-curva) 2800ms;
+  transition: opacity 900ms var(--el-curva) 4200ms, transform 900ms var(--el-curva) 4200ms;
 }
 .el-anim .el-in .el-fone-aviso {
   opacity: 1;
@@ -2098,7 +2098,7 @@
   transition-delay: 740ms;
 }
 .el-entra {
-  animation: el-entra 1000ms var(--el-curva) both;
+  animation: el-entra 1500ms var(--el-curva) both;
 }
 @keyframes el-entra {
   from {
@@ -2135,7 +2135,7 @@
     animation: none;
   }
   .el-faixa-trilho {
-    animation-duration: 70s;
+    animation-duration: 120s;
   }
   .el-anim .el-r {
     transform: translate3d(0, 12px, 0);
