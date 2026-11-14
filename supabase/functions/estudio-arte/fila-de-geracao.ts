@@ -90,6 +90,10 @@ export const LIMITES_DA_FILA = {
   ABANDONO_S: 30 * 60,
   /** Chute com espera (fundo ocupado, nova tentativa): acima disto a retomada fica com a vigia do painel. */
   ESPERA_MAXIMA_DO_CHUTE_S: 90,
+  /** Lote encerrado fora do passo: até quando uma linha fechada sem arte ainda faz o trabalho ser conferido. */
+  JANELA_DO_ASSENTO_S: 72 * 60 * 60,
+  /** Lote encerrado fora do passo: trabalhos conferidos por volta. */
+  MAX_ASSENTOS: 50,
 } as const;
 
 /** Sem saldo, cota ou chave: nada mais do lote anda (como o "para tudo" da tela). */
@@ -503,6 +507,48 @@ export function statusDoTrabalhoEmProducao(o: { ordensDaDirecao: number[]; orden
   const completo = o.ordensDaDirecao.every((ordem) => o.ordensComArte.indexOf(ordem) >= 0);
   if (completo) return "pronto";
   return o.geracaoAtiva ? "gerando" : "dirigido";
+}
+
+/**
+ * Lote que acabou FORA do passo. A RPC estudio_fila_pegar fecha linhas sozinha e não diz de quais trabalhos:
+ * pedido há mais de 12 h na fila vira "cancelado" (expirou) e trava vencida com as tentativas no fim vira "erro".
+ * Se era a última lâmina do lote, nenhum passo fechava a linha e o trabalho ficava "gerando".
+ *
+ * Aqui só entram trabalhos com linha fechada SEM arte (erro, cancelado) dentro da janela e que ainda estão
+ * "gerando"; quem decide e grava é o mesmo assento do fim do lote (não mexe se ainda há linha na fila ou
+ * rodando, nem se alguém gravou no meio). Nunca marca erro no trabalho e nunca gera. Linha "feito" não entra:
+ * a arte dela foi gravada, e o status já é assentado na gravação da versão e no fecho do passo. Trabalho antigo
+ * em "gerando", sem linha fechada na janela, fica como está (a tela já não o mostra como geração ativa).
+ */
+export interface DependenciasDoAssento {
+  /** Trabalhos das linhas fechadas sem arte (erro, cancelado) desde este instante, as mais novas primeiro. */
+  encerrados: (desde: string) => Promise<string[]>;
+  /** Destes, os que estão com o status "gerando". */
+  gerando: (trabalhos: string[]) => Promise<string[]>;
+  /** O assento do fim do lote: sem nada na fila, o trabalho sai de "gerando" (pronto ou dirigido). */
+  assentar: (trabalhoId: string) => Promise<void>;
+  agora: () => Date;
+}
+
+/** Uma volta: devolve os trabalhos mandados para o assento. Falha num trabalho não para os outros. */
+export async function assentarLotesEncerrados(deps: DependenciasDoAssento): Promise<string[]> {
+  const desde = new Date(deps.agora().getTime() - LIMITES_DA_FILA.JANELA_DO_ASSENTO_S * 1000).toISOString();
+  const encerrados: string[] = [];
+  for (const id of await deps.encerrados(desde)) {
+    if (id && encerrados.indexOf(id) < 0) encerrados.push(id);
+    if (encerrados.length >= LIMITES_DA_FILA.MAX_ASSENTOS) break;
+  }
+  if (!encerrados.length) return [];
+  const gerando = await deps.gerando(encerrados);
+  const presos = encerrados.filter((id) => gerando.indexOf(id) >= 0);
+  for (const id of presos) {
+    try {
+      await deps.assentar(id);
+    } catch (e) {
+      registrarFalha("estudio-arte: lote encerrado não assentou", e, { trabalho_id: id });
+    }
+  }
+  return presos;
 }
 
 /** O passo fechou a linha (não vai mais andar sozinha)? */
