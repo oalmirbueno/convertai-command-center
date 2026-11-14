@@ -48,6 +48,7 @@ describe("rótulos do sino", () => {
   it("tipo novo ou desconhecido cai no sino genérico, nunca some", () => {
     expect(categoriaDoAviso("approval")).toBe("decisao");
     expect(categoriaDoAviso("agendamento_atrasado")).toBe("alerta");
+    expect(categoriaDoAviso("login_senha_errada")).toBe("alerta");
     expect(categoriaDoAviso("delivery")).toBe("entrega");
     expect(categoriaDoAviso("operator_pronto")).toBe("agente");
     expect(categoriaDoAviso("tipo_que_nao_existe")).toBe("geral");
