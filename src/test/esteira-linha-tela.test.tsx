@@ -18,11 +18,14 @@ const CLIENTES = [
   { id: "c2", company_name: null, full_name: "Beta Loja", plan_status: "active", deleted_at: null },
   { id: "c3", company_name: "Pausado Ltda", plan_status: "paused", deleted_at: null },
   { id: "c4", company_name: "Apagado Ltda", plan_status: "active", deleted_at: "2026-10-01T00:00:00Z" },
+  // Na lista temporária de pausa operacional (RD AR): plano active, mas sem dia prioritário na Esteira.
+  { id: "52f2efb6-9928-4074-b8e2-bc972baf1f6a", company_name: "Rd Ar Climatização", plan_status: "active", deleted_at: null },
 ];
 
 const DIAS = [
   { client_id: "c1", dia: 2, situacao: "confirmado" },
   { client_id: "c2", dia: 4, situacao: "confirmado" },
+  { client_id: "52f2efb6-9928-4074-b8e2-bc972baf1f6a", dia: 2, situacao: "confirmado" },
 ];
 
 const peca = (extra: Partial<PecaFato>): PecaFato => ({
@@ -93,8 +96,13 @@ describe("tela da Esteira em linha do tempo", () => {
     expect(screen.getAllByRole("rowheader").map((th) => th.textContent)).toEqual([
       "Alfa ComércioDia prioritário: terça-feira",
       "Beta LojaDia prioritário: quinta-feira",
+      "Rd Ar Climatização",
     ]);
-    expect(leituras).toEqual([{ ids: ["c1", "c2"], segunda: "2026-11-16" }]);
+    expect(leituras).toEqual([{ ids: ["52f2efb6-9928-4074-b8e2-bc972baf1f6a", "c1", "c2"], segunda: "2026-11-16" }]);
+    // RD AR (pausa operacional): a faixa fica, a terça não destaca nem alerta.
+    const tercaDaRdAr = celula(container, "52f2efb6-9928-4074-b8e2-bc972baf1f6a", "2026-11-17");
+    expect(tercaDaRdAr.getAttribute("data-prioritario")).toBeNull();
+    expect(tercaDaRdAr.getAttribute("data-alerta")).toBeNull();
 
     // Alfa: a peça caiu na terça (dia prioritário), com destaque e sem alerta.
     const tercaDaAlfa = celula(container, "c1", "2026-11-17");
@@ -133,7 +141,7 @@ describe("tela da Esteira em linha do tempo", () => {
     await waitFor(() => expect(screen.queryByText("Promoção de sexta")).toBeNull());
     // Semana sem peça: as faixas continuam e os dois dias prioritários alertam.
     await waitFor(() => expect(container.querySelectorAll('[data-alerta="sim"]')).toHaveLength(2));
-    expect(screen.getAllByRole("rowheader")).toHaveLength(2);
+    expect(screen.getAllByRole("rowheader")).toHaveLength(3);
 
     fireEvent.click(screen.getByRole("button", { name: "Semana atual" }));
     await screen.findByText("Promoção de sexta");
