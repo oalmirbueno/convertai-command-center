@@ -69,8 +69,11 @@ import {
   andamentoDosPedidos,
   AVISO_DA_ARTE_RECUPERADA,
   chamarEmSegundoPlano,
+  ESPERA_DA_TENTATIVA_MS,
+  INTERVALO_DA_LEITURA_MS,
   pedidosDaDirecao,
   SEM_PULSO_MS,
+  usePedidosEmSegundoPlano,
   type DependenciasDoAcompanhamento,
   type PedidosNaTela,
 } from "@/lib/mesa/segundoPlano";
@@ -1100,6 +1103,12 @@ function acompanhamentoDeMentira(leituras: Array<PedidosDoTrabalho | Error>, ver
   return { deps, lidas, andar: (m: number) => { agoraMs += m; } };
 }
 
+function Acompanhamento({ trabalhoId }: { trabalhoId: string }) {
+  const { andamento } = usePedidosEmSegundoPlano(trabalhoId);
+  const ordens = Object.keys(andamento);
+  return <p>{ordens.length ? ordens.map((o) => `${o}:${andamento[Number(o)].etapa}`).join(" ") : "livre"}</p>;
+}
+
 describe("ajuste em segundo plano: a função responde na hora e a tela acompanha pelo banco", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1233,6 +1242,31 @@ describe("ajuste em segundo plano: a função responde na hora e a tela acompanh
     expect(andamentoDosPedidos(pedidos, T0 + SEM_PULSO_MS + 1)).toEqual({});
   });
 
+  it("tela: a primeira leitura que falha ao reabrir não desliga o acompanhamento (tenta de novo e o indicador volta)", async () => {
+    vi.useFakeTimers();
+    try {
+      const vivo = novoPedido({ id: "p1", acao: "ajustar_card", ordem: 2, por: "u1", versoes_antes: 1 }, new Date());
+      const maybeSingle = vi.fn()
+        .mockResolvedValueOnce({ data: null, error: { message: "Failed to fetch" } })
+        .mockResolvedValue({ data: { pedidos: { l2: vivo } }, error: null });
+      mock.from.mockImplementation(() => ({ select: () => ({ eq: () => ({ maybeSingle }) }) }));
+      const vista = render(<QueryClientProvider client={new QueryClient()}><Acompanhamento trabalhoId="TA" /></QueryClientProvider>);
+      // Reabriu no meio do ajuste e a primeira leitura falhou: ainda sem indicador, mas a leitura não desistiu.
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(maybeSingle).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("livre")).toBeTruthy();
+      await act(async () => { await vi.advanceTimersByTimeAsync(ESPERA_DA_TENTATIVA_MS + 100); });
+      expect(maybeSingle).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("2:ajustando")).toBeTruthy();
+      // Com o pedido vivo, o acompanhamento segue lendo.
+      await act(async () => { await vi.advanceTimersByTimeAsync(INTERVALO_DA_LEITURA_MS + 100); });
+      expect(maybeSingle.mock.calls.length).toBeGreaterThanOrEqual(3);
+      vista.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("ligações: a função aceita em segundo plano antes do fôlego, e a tela do Estúdio ajusta, confere e corrige por ele", () => {
     const f = ler("supabase/functions/estudio-arte/index.ts");
     expect(f).toContain("if (pedeSegundoPlano(acao, corpo) && temSegundoPlano()) {");
@@ -1246,7 +1280,13 @@ describe("ajuste em segundo plano: a função responde na hora e a tela acompanh
     expect(estudio).toContain('conferir: () => chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem }),');
     expect(estudio).toContain('chamarEmSegundoPlano<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalhoId, ordem, pedido_da_equipe: pedidoDaEquipe || undefined }),');
     expect(estudio).not.toMatch(/chamarFuncao<any>\("estudio-arte", \{\s*acao: "ajustar_card"/);
-    expect(ler("src/components/mesa-ads/ArteDoCriativo.tsx")).not.toMatch(/chamarFuncao<any>\("estudio-arte", \{\s*acao: "ajustar_card"/);
+    // Mesa Ads: o mesmo padrão. Ajuste, conferência e correção em segundo plano, com o indicador vindo do banco.
+    const ads = ler("src/components/mesa-ads/ArteDoCriativo.tsx");
+    expect(ads).not.toMatch(/chamarFuncao<any>\("estudio-arte", \{\s*acao: "(ajustar_card|conferir_card|corrigir_card)"/);
+    expect(ads).toContain('chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });');
+    expect(ads).toContain('chamarEmSegundoPlano<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });');
+    expect(ads).toContain("const pedidos = usePedidosEmSegundoPlano(trabalho.id, onAtualizar);");
+    expect(ads).toContain("const andamento: Record<number, AndamentoDaLamina> = { ...filaDoServidor.andamento, ...pedidos.andamento, ...andamentoLocal };");
   });
 });
 

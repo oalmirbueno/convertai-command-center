@@ -37,6 +37,9 @@ export const FOLGA_DO_PRAZO_MS = 15_000;
 export const INTERVALO_DA_LEITURA_MS = 4_000;
 /** Entre um pedido e o seguinte da mesma lâmina (ajustar, depois conferir), a leitura segue por este tempo. */
 export const CAUDA_DA_LEITURA_MS = 20_000;
+/** Leitura dos pedidos que falha: novas tentativas na mesma leitura, com esta espera entre elas. */
+export const TENTATIVAS_DA_LEITURA = 2;
+export const ESPERA_DA_TENTATIVA_MS = 2_000;
 
 export interface PedidoNaTela {
   id: string;
@@ -256,10 +259,13 @@ export function usePedidosEmSegundoPlano(trabalhoId: string | null | undefined, 
   const q = useQuery({
     queryKey: chaveDosPedidos(id),
     enabled: !!id,
-    retry: false,
+    // Leitura que falha (rede, banco por um instante) não é "sem pedidos": antes virava mapa vazio, e a primeira
+    // leitura ao reabrir a tela no meio de um ajuste desligava o acompanhamento. Agora tenta de novo e, se não
+    // der, o que já foi lido fica (o pedido vivo sai sozinho pelo pulso); sem leitura nenhuma, a tela segue como antes.
+    retry: TENTATIVAS_DA_LEITURA,
+    retryDelay: ESPERA_DA_TENTATIVA_MS,
     staleTime: 2_000,
-    // Leitura que falha (coluna antiga, rede): sem pedidos; a tela segue como antes.
-    queryFn: () => lerPedidosDoTrabalho(id).catch(() => ({} as PedidosNaTela)),
+    queryFn: () => lerPedidosDoTrabalho(id),
     refetchInterval: (query) => {
       const d = (query.state.data || {}) as PedidosNaTela;
       const agora = Date.now();
