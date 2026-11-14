@@ -19,7 +19,7 @@ interface ClienteCadastrado {
 export const clientesAtivosDaEsteira = (clients: ClienteCadastrado[] | undefined): ClienteDaFaixa[] =>
   (clients ?? [])
     .filter((c) => c.plan_status === "active" && !c.deleted_at)
-    .map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || c.email || "Cliente") }));
+    .map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || c.email || "Cliente"), planStatus: c.plan_status ?? null }));
 
 /**
  * Esteira em linha do tempo: a carteira ativa, as peças da semana pedida e o

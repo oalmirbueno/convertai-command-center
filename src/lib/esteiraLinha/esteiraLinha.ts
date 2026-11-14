@@ -110,8 +110,15 @@ export function decidirEtapa(peca: PecaFato): EtapaDecidida | null {
   const temArte =
     Boolean(peca.trabalho) || Boolean(peca.post?.temArquivo) || peca.post?.production_status === "production";
   if (temArte) return { etapa: "arte", rotulo: reprovado ? "Ajustes na arte" : "Arte" };
+  // Tarefa de conteúdo já concluída (sem post, trabalho ou arquivo): a pauta
+  // foi feita, então não volta para "Pauta". Fica em arte, como "Concluída".
+  if (tarefaConcluida(peca)) return { etapa: "arte", rotulo: "Concluída" };
   return { etapa: "pauta", rotulo: "Pauta" };
 }
+
+/** `done` é o status de tarefa concluída neste painel; `completed` entra por defesa. */
+export const tarefaConcluida = (peca: Pick<PecaFato, "tarefa">): boolean =>
+  peca.tarefa?.status === "done" || peca.tarefa?.status === "completed";
 
 // ------------------------------------------------------------------ datas (America/Sao_Paulo)
 
@@ -156,6 +163,43 @@ export function dataDaPeca(peca: PecaFato): string | null {
 export function somarDias(data: string, dias: number): string {
   const [a, m, d] = data.split("-").map(Number);
   return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
+}
+
+/**
+ * Instante (UTC) da meia-noite de São Paulo que abre o dia civil `data`
+ * (YYYY-MM-DD). Calcula o deslocamento do fuso pelo próprio Intl, sem
+ * hardcode de -03:00: a parede de SP é lida no candidato e a diferença corrige
+ * o chute. Duas passagens cobrem uma eventual troca de deslocamento no meio.
+ */
+export function meiaNoiteEmSP(data: string): Date {
+  const [a, m, d] = data.split("-").map(Number);
+  const paredeAlvo = Date.UTC(a, m - 1, d);
+  let candidato = paredeAlvo;
+  for (let passo = 0; passo < 2; passo += 1) {
+    candidato = paredeAlvo - deslocamentoDeSPEmMs(new Date(candidato));
+  }
+  return new Date(candidato);
+}
+
+/** Quanto a parede de São Paulo está à frente do UTC naquele instante (negativo no Brasil). */
+function deslocamentoDeSPEmMs(instante: Date): number {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo", hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(instante);
+  const n = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value ?? 0);
+  const parede = Date.UTC(n("year"), n("month") - 1, n("day"), n("hour"), n("minute"), n("second"));
+  const semMs = Math.floor(instante.getTime() / 1000) * 1000;
+  return parede - semMs;
+}
+
+/**
+ * Milissegundos de `agora` até a próxima meia-noite de São Paulo (quando o
+ * "Hoje" e a semana atual mudam). Sempre maior que zero.
+ */
+export function msAteProximaMeiaNoiteSP(agora: Date = new Date()): number {
+  const amanha = somarDias(dataEmSP(agora), 1);
+  return Math.max(1, meiaNoiteEmSP(amanha).getTime() - agora.getTime());
 }
 
 /** A segunda-feira (YYYY-MM-DD) da semana em que `agora` cai, em São Paulo. */
@@ -280,6 +324,44 @@ export interface FaixaDaEsteira {
 export interface ClienteDaFaixa {
   id: string;
   nome: string;
+  /** profiles.plan_status; quando vem, um status de pausa tira o dia prioritário. */
+  planStatus?: string | null;
+}
+
+/** Status de plano que, por defesa, não contam como dia prioritário (o hook já filtra só `active`). */
+const PLANOS_SEM_DIA_PRIORITARIO = new Set(["standby", "paused", "pausado", "inactive"]);
+
+/**
+ * LISTA TEMPORÁRIA de clientes cuja pausa operacional não está no cadastro.
+ *
+ * Rd Ar Climatização (52f2efb6-...): o Almir decidiu em 13/11/2026
+ * (America/Sao_Paulo) pausar conteúdo e tráfego, e desde então o cliente NÃO
+ * deve contar como dia prioritário na Esteira. Essa pausa não foi gravada no
+ * cadastro: `plan_status` continua `active`, `cobranca_pausada` é false (e é
+ * pausa de cobrança, não de conteúdo), `services_config.social`/`trafego`
+ * continuam true e `ads_rotina` continua ligada (`pausada_em` nulo). Não
+ * existe coluna de pausa de conteúdo em `profiles`; as únicas pausas no banco
+ * (cobranca_pausada, ads_rotina.pausada_em, contracts.congelado_em,
+ * membros_licencas.suspenso_em) não registram esta decisão.
+ *
+ * A lista cobre esse buraco até o cadastro ter um sinal real de pausa. NÃO é
+ * o padrão para pausar cliente novo: o caminho certo é gravar a pausa no
+ * cadastro (e aí este Set some). A faixa do cliente continua na grade porque
+ * o plano dele ainda é `active`; só o dia prioritário e o alerta saem.
+ */
+export const CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE: ReadonlySet<string> = new Set([
+  "52f2efb6-9928-4074-b8e2-bc972baf1f6a", // Rd Ar Climatização, pausa de 13/11/2026
+]);
+
+/**
+ * Este cliente conta como dia prioritário na Esteira? Não conta quando o
+ * plano está em pausa (ramo defensivo) ou quando está na lista temporária
+ * acima. Quem não conta não recebe destaque nem alerta; a faixa pode seguir.
+ */
+export function clienteContaComoDiaPrioritario(cliente: Pick<ClienteDaFaixa, "id" | "planStatus">): boolean {
+  const status = (cliente.planStatus ?? "").trim().toLowerCase();
+  if (PLANOS_SEM_DIA_PRIORITARIO.has(status)) return false;
+  return !CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE.has(cliente.id);
 }
 
 const ORDEM_DA_ETAPA: Record<EtapaDaPeca, number> = { pauta: 0, arte: 1, revisao: 2, aprovacao: 3, agendado: 4, no_ar: 5 };
@@ -321,7 +403,9 @@ export function montarGrade(entrada: {
   return [...entrada.clientes]
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
     .map((cliente) => {
-      const diaPrioritario = diaPrioritarioDefinido(registroPorCliente.get(cliente.id));
+      const diaPrioritario = clienteContaComoDiaPrioritario(cliente)
+        ? diaPrioritarioDefinido(registroPorCliente.get(cliente.id))
+        : null;
       return {
         clientId: cliente.id,
         nome: cliente.nome,

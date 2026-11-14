@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  dataDaPeca, decidirEtapa, diaCivilEmSP, diaPrioritarioDefinido, diasDaSemana, linkDoCartao, montarGrade, rotuloDaSemana,
+  CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE, clienteContaComoDiaPrioritario, dataDaPeca, decidirEtapa, diaCivilEmSP,
+  diaPrioritarioDefinido, diasDaSemana, linkDoCartao, meiaNoiteEmSP, montarGrade, msAteProximaMeiaNoiteSP, rotuloDaSemana,
   rotuloDoFormato, segundaDaSemana, somarDias, type PecaFato,
 } from "@/lib/esteiraLinha/esteiraLinha";
 import { juntarPecas, type LinhasDaEsteiraLinha } from "@/lib/esteiraLinha/esteiraLinhaFatos";
+import { dataEmSP } from "@/lib/diaPrioritario";
 
 /**
  * Esteira em linha do tempo (fase 1): a etapa do cartão, o dia da peça no
@@ -70,6 +72,18 @@ describe("etapa do cartão", () => {
     expect(decidirEtapa(peca({ post: null, chave: "task:t1", tarefa: { id: "t1", status: "todo", due_date: "2026-11-17" } }))?.etapa).toBe("pauta");
   });
 
+  it("tarefa concluída sem post, trabalho ou arquivo não volta para a pauta: fica em arte como Concluída", () => {
+    const soTarefa = (status: string) => peca({ post: null, chave: "task:t1", tarefa: { id: "t1", status, due_date: "2026-11-17" } });
+    expect(decidirEtapa(soTarefa("done"))).toEqual({ etapa: "arte", rotulo: "Concluída" });
+    expect(decidirEtapa(soTarefa("completed"))).toEqual({ etapa: "arte", rotulo: "Concluída" });
+    expect(decidirEtapa(soTarefa("todo"))).toEqual({ etapa: "pauta", rotulo: "Pauta" });
+    expect(decidirEtapa(soTarefa("in_progress"))?.etapa).toBe("pauta");
+    // Estágios mais avançados continuam ganhando da tarefa concluída.
+    expect(decidirEtapa(peca({ post: null, chave: "task:t1", tarefa: { id: "t1", status: "done", due_date: "2026-11-17" }, trabalho: { status: "entregue", entrega_status: "aguardando_cliente", temArquivo: true } }))?.rotulo).toBe("Aguardando o cliente");
+    expect(decidirEtapa(peca({ post: null, chave: "task:t1", tarefa: { id: "t1", status: "done", due_date: "2026-11-17" }, trabalho: { status: "gerando", entrega_status: null, temArquivo: false } }))).toEqual({ etapa: "arte", rotulo: "Arte" });
+    expect(decidirEtapa(peca({ tarefa: { id: "t1", status: "done", due_date: "2026-11-17" }, publicacoes: [pub("published", null, "2026-11-17T12:00:00Z")] }))?.etapa).toBe("no_ar");
+  });
+
   it("arquivado e cancelado não têm etapa; publicação cancelada é ignorada", () => {
     expect(decidirEtapa(peca({ post: { id: "p1", production_status: "ready", archived_at: "2026-11-01T00:00:00Z", temArquivo: true } }))).toBeNull();
     expect(decidirEtapa(peca({ post: { id: "p1", production_status: "cancelled", archived_at: null, temArquivo: false } }))).toBeNull();
@@ -108,6 +122,30 @@ describe("dia da peça (America/Sao_Paulo)", () => {
     expect(somarDias("2026-11-30", 6)).toBe("2026-12-06");
     expect(rotuloDaSemana(SEGUNDA)).toBe("16 a 22 de novembro de 2026");
     expect(rotuloDaSemana("2026-11-30")).toBe("30 de novembro a 6 de dezembro de 2026");
+  });
+});
+
+describe("relógio da meia-noite em São Paulo", () => {
+  it("a meia-noite de SP é 03:00 UTC (Brasil sem horário de verão), calculada pelo fuso", () => {
+    expect(meiaNoiteEmSP("2026-11-19").toISOString()).toBe("2026-11-19T03:00:00.000Z");
+    expect(meiaNoiteEmSP("2026-01-01").toISOString()).toBe("2026-01-01T03:00:00.000Z");
+  });
+
+  it("um instante antes da meia-noite cai no dia seguinte em poucos milissegundos", () => {
+    // 23:59:59.500 de 18/11 em São Paulo.
+    const quaseMeiaNoite = new Date("2026-11-19T02:59:59.500Z");
+    expect(dataEmSP(quaseMeiaNoite)).toBe("2026-11-18");
+    const espera = msAteProximaMeiaNoiteSP(quaseMeiaNoite);
+    expect(espera).toBe(500);
+    expect(dataEmSP(new Date(quaseMeiaNoite.getTime() + espera))).toBe("2026-11-19");
+  });
+
+  it("logo após a meia-noite aponta para a meia-noite seguinte (~24h) e nunca devolve zero", () => {
+    const recemVirado = new Date("2026-11-19T03:00:00.250Z");
+    expect(dataEmSP(recemVirado)).toBe("2026-11-19");
+    expect(msAteProximaMeiaNoiteSP(recemVirado)).toBe(24 * 60 * 60_000 - 250);
+    expect(msAteProximaMeiaNoiteSP(new Date("2026-11-19T03:00:00.000Z"))).toBe(24 * 60 * 60_000);
+    expect(msAteProximaMeiaNoiteSP(new Date("2026-11-18T15:00:00Z"))).toBe(12 * 60 * 60_000);
   });
 });
 
@@ -150,6 +188,48 @@ describe("dia prioritário", () => {
     expect(beta.celulas[3].alerta).toBe(false);
     for (const faixa of [delta, gama]) {
       expect(faixa.diaPrioritario).toBeNull();
+      expect(faixa.celulas.some((c) => c.prioritario || c.alerta)).toBe(false);
+    }
+  });
+});
+
+describe("cliente pausado não conta como dia prioritário", () => {
+  const RD_AR = "52f2efb6-9928-4074-b8e2-bc972baf1f6a";
+  it("a lista temporária tem a RD AR; status de pausa também tira o dia; active fora da lista conta", () => {
+    expect(CLIENTES_COM_DIA_PRIORITARIO_SUSPENSO_TEMPORARIAMENTE.has(RD_AR)).toBe(true);
+    expect(clienteContaComoDiaPrioritario({ id: RD_AR, planStatus: "active" })).toBe(false);
+    expect(clienteContaComoDiaPrioritario({ id: "c1", planStatus: "active" })).toBe(true);
+    expect(clienteContaComoDiaPrioritario({ id: "c1" })).toBe(true);
+    for (const status of ["standby", "paused", "pausado", "inactive", "Paused "]) {
+      expect(clienteContaComoDiaPrioritario({ id: "c1", planStatus: status })).toBe(false);
+    }
+  });
+
+  it("na grade: faixa presente, sem destaque e sem alerta, mesmo com dia definido e célula vazia", () => {
+    const faixas = montarGrade({
+      segunda: SEGUNDA,
+      clientes: [
+        { id: "c1", nome: "Alfa", planStatus: "active" },
+        { id: RD_AR, nome: "Rd Ar Climatização", planStatus: "active" },
+        { id: "c5", nome: "Standby Ltda", planStatus: "standby" },
+      ],
+      diasPrioritarios: [
+        { client_id: "c1", dia: 2, situacao: "confirmado" },
+        { client_id: RD_AR, dia: 2, situacao: "confirmado" },
+        { client_id: "c5", dia: 3, situacao: "confirmado" },
+      ],
+      pecas: [],
+    });
+    expect(faixas.map((f) => f.nome)).toEqual(["Alfa", "Rd Ar Climatização", "Standby Ltda"]);
+    const [alfa, rdAr, standby] = faixas;
+    // Alfa (active, fora da lista): alerta como hoje.
+    expect(alfa.diaPrioritario).toBe(2);
+    expect(alfa.celulas[1]).toMatchObject({ prioritario: true, alerta: true });
+    // RD AR e standby: a faixa continua, mas sem dia prioritário, destaque ou alerta.
+    for (const faixa of [rdAr, standby]) {
+      expect(faixa.celulas).toHaveLength(7);
+      expect(faixa.diaPrioritario).toBeNull();
+      expect(faixa.nomeDoDiaPrioritario).toBe("");
       expect(faixa.celulas.some((c) => c.prioritario || c.alerta)).toBe(false);
     }
   });

@@ -1,11 +1,31 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, botao, espaco, juntar, larguraDaMesa } from "@/components/sistema";
 import GradeDaEsteira from "@/components/esteira-linha/GradeDaEsteira";
 import LegendaDasEtapas from "@/components/esteira-linha/LegendaDasEtapas";
 import { useEsteiraLinha } from "@/hooks/useEsteiraLinha";
 import { dataEmSP } from "@/lib/diaPrioritario";
-import { diasDaSemana, rotuloDaSemana, segundaDaSemana, somarDias } from "@/lib/esteiraLinha/esteiraLinha";
+import { diasDaSemana, msAteProximaMeiaNoiteSP, rotuloDaSemana, segundaDaSemana, somarDias } from "@/lib/esteiraLinha/esteiraLinha";
+
+/** Teto do cochilo do relógio: aba em segundo plano pode adiar o timeout, então ele reconfere de poucos em poucos minutos. */
+const RECONFERIR_A_CADA_MS = 5 * 60_000;
+
+/**
+ * O instante de referência da tela. Com a prop `agora` (testes), é só ela.
+ * Sem a prop, é um relógio que acorda na próxima meia-noite de São Paulo (ou
+ * em poucos minutos, o que vier antes) para o "Hoje" e o alvo de "Semana
+ * atual" não congelarem numa aba aberta de um dia para o outro.
+ */
+function useAgoraEmSP(agora?: Date): Date {
+  const [relogio, setRelogio] = useState(() => new Date());
+  useEffect(() => {
+    if (agora) return;
+    const espera = Math.min(msAteProximaMeiaNoiteSP(relogio), RECONFERIR_A_CADA_MS);
+    const timer = window.setTimeout(() => setRelogio(new Date()), espera);
+    return () => window.clearTimeout(timer);
+  }, [agora, relogio]);
+  return agora ?? relogio;
+}
 
 /*
  * Esteira (fase 1, 14/11/2026): linha do tempo só de leitura. Os dias da
@@ -16,8 +36,11 @@ import { diasDaSemana, rotuloDaSemana, segundaDaSemana, somarDias } from "@/lib/
  * Não é a tela do Ciclo (/ciclo, AdminEsteira): aquela continua como está.
  */
 export default function EsteiraLinhaDoTempo({ agora }: { agora?: Date }) {
-  const hoje = useMemo(() => dataEmSP(agora ?? new Date()), [agora]);
-  const semanaAtual = useMemo(() => segundaDaSemana(agora ?? new Date()), [agora]);
+  const referencia = useAgoraEmSP(agora);
+  const hoje = useMemo(() => dataEmSP(referencia), [referencia]);
+  const semanaAtual = useMemo(() => segundaDaSemana(referencia), [referencia]);
+  // A semana visível é do usuário: o relógio não a avança sozinho. Se ela
+  // deixar de ser a atual, o botão "Semana atual" fica habilitado para o clique.
   const [segunda, setSegunda] = useState(semanaAtual);
   const dias = useMemo(() => diasDaSemana(segunda), [segunda]);
   const { faixas, carregando, atualizando, erro, semClientes, recarregar } = useEsteiraLinha(segunda);
