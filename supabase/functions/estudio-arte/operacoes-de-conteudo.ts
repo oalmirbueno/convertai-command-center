@@ -68,6 +68,14 @@ export function intencaoDeConteudo(mensagem: string): IntencaoDeConteudo | null 
 const VERBO_DE_TIRAR = "(tir|retir|remov|apag|exclu|delet)[a-z]*";
 const NOME_DA_LAMINA = "(laminas?|cards?|slides?)";
 const NUMERO_DA_LAMINA = "(\\d{1,2})(?!\\d)";
+/**
+ * Negação logo antes do verbo de tirar: "não tira", "não precisa mais tirar", "não quero mais tirar", "nunca vamos
+ * tirar", "sem tirar", "nem precisa tirar". Só palavras de apoio conhecidas entre a negação e o verbo (vírgula corta:
+ * "não, tira a lâmina 3" vale como pedido).
+ */
+const APOIO_DA_NEGACAO = "(e|pode|podes|podem|precisa|precisam|precisamos|preciso|quero|queria|quer|querem|queremos|deve|devo|devemos|deveria|vai|vou|vamos|para|pra|de|mais|mesmo|ainda|tem|temos|que|e pra|e para|precisar|voce|voces|a gente|eu|nos|se|e necessario|faz sentido|da|consigo|e preciso)";
+const NEGACAO_ANTES_DO_VERBO = new RegExp(`(^|[^a-z])(nao|nunca|sem|nem|jamais)( ${APOIO_DA_NEGACAO})* $`);
+
 /** Depois do número, o que mostra que ele não é uma lâmina ("3 fotos", "2x", "50%"). */
 const NAO_E_LAMINA = /^([a-z%]| ?(fotos?|imagem|imagens|versao|versoes|vez|vezes|linhas?|palavras?|itens|item|logos?|textos?|opcoes|opcao|por cento)\b)/;
 
@@ -86,11 +94,13 @@ export function laminasParaTirar(mensagem: string, ordens: number[]): number[] {
   const frases = m.replace(/([!?\n;]+|\.(?!\d)(?! ?\d))/g, "$1\u0001").split("\u0001");
   for (const frase of frases) {
     if (/\?\s*$/.test(frase)) continue;
+    // Escolha ("tira a lâmina 3 ou tira a lâmina 4", "a 3 ou a 4"): a frase inteira não monta lista; a equipe decide.
+    if (/(^|[^a-z])ou([^a-z]|$)/.test(frase) && new RegExp(`(^|[^a-z])${VERBO_DE_TIRAR}`).test(frase)) continue;
     const verbo = new RegExp(`(^|[^a-z])${VERBO_DE_TIRAR} (fora )?(as? |os? |ess[ae]s? |est[ae]s? )?`, "g");
     let v: RegExpExecArray | null;
     while ((v = verbo.exec(frase))) {
       const antes = frase.slice(0, v.index + v[1].length);
-      if (/(^|[^a-z])(nao|nunca|sem|nem|jamais)( (e|pode|podes|podem|precisa|quero|queria|deve|devo|vai|vamos|para|pra|de))* $/.test(antes)) continue;
+      if (NEGACAO_ANTES_DO_VERBO.test(antes)) continue;
       const resto = frase.slice(v.index + v[0].length);
       // "a 3ª lâmina", "o 2o card".
       const ordinal = new RegExp(`^${NUMERO_DA_LAMINA}[ªºa-z]{0,2} ${NOME_DA_LAMINA}\\b`).exec(resto);

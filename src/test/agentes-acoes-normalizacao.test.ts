@@ -273,25 +273,34 @@ describe("diretor do Estúdio: tirar várias lâminas no mesmo pedido", () => {
 
   it("reserva em código: sem ação do modelo, a proposta sai dos números do pedido", () => {
     const t = carrossel(7);
-    const a = comReservaDeTirarLaminas(null, "tirar lâmina 7 e tirar lâmina 6", t)!;
+    const a = comReservaDeTirarLaminas(null, undefined, "tirar lâmina 7 e tirar lâmina 6", t)!;
     expect(a.itens.map((i) => [i.operacao, i.ref])).toEqual([["tirar_lamina", "l7"], ["tirar_lamina", "l6"]]);
     expect(a.resumo).toBe("Tirar as lâminas 6 e 7 do carrossel (ficam guardadas; o Desfazer devolve).");
     expect(a.contexto).toMatchObject({ trabalho_id: "trab-n" });
     expect(podeExecutarDireto(a, regrasDoDiretor(t), { pedidoClaro: true, maxItens: 12 }).direto).toBe(true);
-    const b = comReservaDeTirarLaminas(null, "Confirmo: pode tirar as lâminas 6 e 7 agora. Não gerar nada.", t)!;
+    const b = comReservaDeTirarLaminas(null, undefined, "Confirmo: pode tirar as lâminas 6 e 7 agora. Não gerar nada.", t)!;
     expect(b.itens.map((i) => i.ref)).toEqual(["l7", "l6"]);
-    const uma = comReservaDeTirarLaminas(null, "tira a lâmina 3", t)!;
+    const uma = comReservaDeTirarLaminas(null, undefined, "tira a lâmina 3", t)!;
     expect(uma.itens.map((i) => i.ref)).toEqual(["l3"]);
     expect(uma.resumo).toBe("Tirar a lâmina 3 do carrossel (fica guardada; o Desfazer devolve).");
     // Lâmina que não existe fica de fora; sem nenhuma que exista, nada é montado.
-    expect(comReservaDeTirarLaminas(null, "tira as lâminas 6 e 9", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
-    expect(comReservaDeTirarLaminas(null, "tira a lâmina 9", t)).toBeNull();
-    expect(comReservaDeTirarLaminas(null, "muda a cor da lâmina 3", t)).toBeNull();
+    expect(comReservaDeTirarLaminas(null, undefined, "tira as lâminas 6 e 9", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
+    expect(comReservaDeTirarLaminas(null, undefined, "tira a lâmina 9", t)).toBeNull();
+    expect(comReservaDeTirarLaminas(null, undefined, "muda a cor da lâmina 3", t)).toBeNull();
     // O que o modelo devolveu de aproveitável vale: a reserva não mexe.
     const doModelo = normalizarAcoesDoDiretor(tirar("l2"), t)!;
-    expect(comReservaDeTirarLaminas(doModelo, "tira a lâmina 3", t)).toBe(doModelo);
+    expect(comReservaDeTirarLaminas(doModelo, tirar("l2"), "tira a lâmina 3", t)).toBe(doModelo);
+    // Reserva não desfaz o descarte por mistura: o modelo trouxe tirar l6 + duplicar l2, a normalização zerou, fica nulo.
+    const misturado = { resumo: "", itens: [...tirar("l6").itens, { operacao: "duplicar_lamina", ref: "l2", para: "" }] };
+    const msgMista = "tira a lâmina 6 e duplica a lâmina 2";
+    expect(normalizarAcoesDoDiretor(misturado, t)).toBeNull();
+    expect(comReservaDeTirarLaminas(normalizarAcoesDoDiretor(misturado, t), misturado, msgMista, t)).toBeNull();
+    // Bruto sem item de numeração (vazio, sem itens, ou com outra operação descartada): a reserva entra.
+    expect(comReservaDeTirarLaminas(null, { resumo: "", itens: [] }, "tira a lâmina 6", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
+    expect(comReservaDeTirarLaminas(null, null, "tira a lâmina 6", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
+    expect(comReservaDeTirarLaminas(null, [{ operacao: "duplicar_lamina", ref: "l2", para: "" }], "tira a lâmina 6", t)).toBeNull();
     // As travas de sempre continuam: trabalho entregue recusa com o motivo, nada entra na lista.
-    const entregue = comReservaDeTirarLaminas(null, "tira a lâmina 3", carrossel(7, { status: "entregue" }))!;
+    const entregue = comReservaDeTirarLaminas(null, undefined, "tira a lâmina 3", carrossel(7, { status: "entregue" }))!;
     expect(entregue.itens).toEqual([]);
     expect(entregue.recusados[0].motivo).toBe(MOTIVO_ENTREGUE);
   });
@@ -301,8 +310,8 @@ describe("diretor do Estúdio: tirar várias lâminas no mesmo pedido", () => {
     expect(bloco).toContain("UM item por lâmina");
     expect(bloco).not.toContain("Sozinha no pedido");
     const fonte = readFileSync(resolve(process.cwd(), "supabase/functions/estudio-arte/index.ts"), "utf8");
-    expect(fonte).toContain("comReservaDeTirarLaminas(acaoDoModelo, mensagem");
-    expect(fonte).toContain("resumo: resumoDoQueFoiFeito(executada.resumo)");
+    expect(fonte).toContain("comReservaDeTirarLaminas(acaoDoModelo, acoesBrutas, mensagem");
+    expect(fonte).toContain("resumo: resumoDoQueFoiFeito(executada.resumo, executada.resultados)");
   });
 });
 

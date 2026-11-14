@@ -10670,8 +10670,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const memoriaNova = limparTexto(bruto.memoria, 400);
   // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer...).
   // Pedido de tirar lâmina (uma ou várias) sem ação aproveitável do modelo: a proposta sai dos números do pedido.
+  // Se o modelo trouxe tirar/duplicar/adicionar que a normalização descartou (mistura), a reserva não entra.
   const acaoDoModelo = normalizarAcoesDoDiretor(acoesBrutas, t as unknown as TrabalhoParaAcoes);
-  const acaoNormalizada = intencao === "tirar_lamina" && !reescreverTudo ? comReservaDeTirarLaminas(acaoDoModelo, mensagem, t as unknown as TrabalhoParaAcoes) : acaoDoModelo;
+  const acaoNormalizada = intencao === "tirar_lamina" && !reescreverTudo ? comReservaDeTirarLaminas(acaoDoModelo, acoesBrutas, mensagem, t as unknown as TrabalhoParaAcoes) : acaoDoModelo;
   const acaoProposta = comCaminhoDoDiretor(acaoNormalizada, t, mensagem);
   // Frente RO, fase 2: na dúvida real (ambíguo, lâmina que o pedido não diz, diretor e Jev discordando), uma pergunta
   // curta com opções clicáveis, e nada muda.
@@ -10860,7 +10861,7 @@ async function executarOQueNaoCusta(
     if (pode.direto) {
       const executada = await executarDireto(junta, (item, acao) => executarItemDoDiretor(t.id, item, acao), { userId: ch.userId, lote: 1 });
       // O resumo foi escrito antes da execução: feito na hora, não fica "a lista aguarda confirmação" no cartão.
-      const feita: AcaoDoAgente = { ...executada, resumo: resumoDoQueFoiFeito(executada.resumo) };
+      const feita: AcaoDoAgente = { ...executada, resumo: resumoDoQueFoiFeito(executada.resumo, executada.resultados) };
       const aplicadas = (feita.resultados || []).filter((r) => r.ok && r.operacao === OPERACAO_DA_MUDANCA).map((r) => String(junta.itens.find((i) => i.ref === r.ref && i.operacao === r.operacao)?.para || "")).filter(Boolean);
       const feitas = e.mudancas.filter((m) => aplicadas.indexOf(m.id) >= 0);
       const plano = montarPlano({ id: planoId, itens: comCusto, mudancasFeitas: feitas, comArte, claro: true });

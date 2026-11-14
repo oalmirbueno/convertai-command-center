@@ -171,5 +171,12 @@ describe("fala honesta depois de executar", () => {
     // Resumo que não promete confirmação fica como está (nada de frase a mais em todo cartão).
     expect(resumoDoQueFoiFeito("Vou aplicar 2 mudanças.")).toBe("Vou aplicar 2 mudanças.");
     expect(resumoDoQueFoiFeito("")).toBe("");
+    // Com resultados: "Feito agora" só se pelo menos um item deu certo.
+    expect(resumoDoQueFoiFeito(resumo, [{ ok: false }, { ok: true }])).toBe("Vou tirar a lâmina 7 do carrossel. Feito agora; o Desfazer fica no cartão.");
+    const falhou = resumoDoQueFoiFeito(resumo, [{ ok: false }, { ok: false }]);
+    expect(falhou).not.toMatch(/Feito agora|aguarda confirma/i);
+    expect(falhou).toBe("Vou tirar a lâmina 7 do carrossel. Não deu para fazer agora; o motivo fica no cartão.");
+    expect(resumoDoQueFoiFeito(resumo, [])).not.toMatch(/Feito agora/);
+    expect(resumoDoQueFoiFeito("Vou aplicar 2 mudanças.", [{ ok: false }])).toBe("Vou aplicar 2 mudanças.");
   });
 });

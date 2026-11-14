@@ -426,14 +426,25 @@ export function normalizarAcoesDoDiretor(bruto: unknown, t: TrabalhoParaAcoes, i
   return acao;
 }
 
+/** Se o campo `acoes` bruto do modelo (objeto com `itens`, ou a própria lista) traz tirar, duplicar ou adicionar lâmina. */
+function temItemDeNumeracao(bruto: unknown): boolean {
+  const itens = Array.isArray(bruto) ? bruto : bruto && typeof bruto === "object" ? (bruto as { itens?: unknown }).itens : null;
+  if (!Array.isArray(itens)) return false;
+  return itens.some((i) => !!i && typeof i === "object" && ["tirar_lamina", "duplicar_lamina", "adicionar_lamina"].indexOf(String((i as { operacao?: unknown }).operacao)) >= 0);
+}
+
 /**
  * Reserva em código do pedido de tirar lâminas (o código leu tirar_lamina no pedido): quando o modelo não
  * devolve ação aproveitável, a proposta sai dos números citados na mensagem (laminasParaTirar), um item por
  * lâmina que existe, pelas mesmas regras e travas de sempre. Nada é feito aqui: quem decide entre fazer na hora
- * e pedir Confirmar é o fluxo da conversa. Sem número citado que exista, fica como o modelo deixou.
+ * e pedir Confirmar é o fluxo da conversa. Sem número citado que exista, fica como o modelo deixou. Se o bruto do
+ * modelo tinha item de numeração (descartado por mistura), também fica nulo: a reserva não contorna a regra.
  */
-export function comReservaDeTirarLaminas(acao: AcaoDoAgente | null, mensagem: string, t: TrabalhoParaAcoes, id?: string): AcaoDoAgente | null {
+export function comReservaDeTirarLaminas(acao: AcaoDoAgente | null, bruto: unknown, mensagem: string, t: TrabalhoParaAcoes, id?: string): AcaoDoAgente | null {
   if (acao) return acao;
+  // O modelo trouxe tirar/duplicar/adicionar e a normalização descartou (mistura de numeração, por exemplo):
+  // a reserva não recria o que a regra tirou. Ela só entra quando o bruto não tinha item de numeração.
+  if (temItemDeNumeracao(bruto)) return null;
   const ordens = laminasParaTirar(mensagem, t.direcao.cards.map((c) => c.ordem));
   if (!ordens.length) return null;
   const lista = ordens.slice().sort((a, b) => a - b);

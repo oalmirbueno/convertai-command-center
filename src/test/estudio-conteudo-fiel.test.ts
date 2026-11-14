@@ -445,6 +445,14 @@ describe("F. operações de conteúdo na conversa", () => {
     expect(laminasParaTirar("muda a cor sem tirar a lâmina 3", sete)).toEqual([]);
     expect(laminasParaTirar("posso tirar a lâmina 3?", sete)).toEqual([]);
     expect(laminasParaTirar("tira a lâmina 3 ou 4", sete)).toEqual([]);
+    // Escolha entre dois verbos: a frase inteira não monta lista.
+    expect(laminasParaTirar("Tira a lâmina 3 ou tira a lâmina 4", [1, 2, 3, 4])).toEqual([]);
+    expect(laminasParaTirar("tira a lâmina 3 ou a 4", sete)).toEqual([]);
+    // Negação com palavras de apoio ("precisa mais", "quero mais").
+    expect(laminasParaTirar("Não precisa mais tirar a lâmina 3", [1, 2, 3])).toEqual([]);
+    expect(laminasParaTirar("não quero mais tirar a lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("nem precisa tirar a lâmina 3", sete)).toEqual([]);
+    expect(laminasParaTirar("Não, tira a lâmina 3", sete)).toEqual([3]);
     // Número depois da lista que não é lâmina: na dúvida, a frase inteira fica de fora.
     expect(laminasParaTirar("tira a lâmina 3 e 2 fotos", sete)).toEqual([]);
     // Só o que está ligado ao verbo de tirar: o resto do pedido não entra.

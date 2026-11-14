@@ -338,11 +338,23 @@ export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
 
 /**
  * O `resumo` do cartão de uma ação feita na hora: o modelo também o escreve antes da execução ("a lista aguarda
- * confirmação"). Só o resumo que promete confirmação é reescrito (falaDoQueFoiFeito), numa linha; o resto fica.
+ * confirmação"). Só o resumo que promete confirmação é reescrito, numa linha; o resto fica. Com `resultados`, o
+ * "Feito agora" só entra se pelo menos um item deu certo; se todos falharam, a promessa sai e o resumo diz que
+ * não deu (o motivo de cada item fica no cartão).
  */
-export function resumoDoQueFoiFeito(resumo: string): string {
+export function resumoDoQueFoiFeito(resumo: string, resultados?: Array<{ ok?: boolean }> | null): string {
   const r = String(resumo || "");
-  return PROMETE_CONFIRMACAO.test(r) ? falaDoQueFoiFeito(r, true).replace(/\s*\n+\s*/g, " ") : r;
+  if (!PROMETE_CONFIRMACAO.test(r)) return r;
+  const algumDeuCerto = !Array.isArray(resultados) || resultados.some((x) => !!(x && x.ok));
+  if (algumDeuCerto) return falaDoQueFoiFeito(r, true).replace(/\s*\n+\s*/g, " ");
+  const sem = r
+    .replace(/([.!?])\s+/g, "$1\u0001")
+    .split("\u0001")
+    .filter((f) => !PROMETE_CONFIRMACAO.test(f))
+    .join(" ")
+    .replace(/\s*\n+\s*/g, " ")
+    .trim();
+  return `${sem}${sem ? " " : ""}Não deu para fazer agora; o motivo fica no cartão.`;
 }
 
 /**
