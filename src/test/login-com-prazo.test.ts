@@ -292,6 +292,33 @@ describe("renovação do token não é cancelada (14/11: 'context canceled' derr
     expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r2");
   });
 
+  it("gravações concorrentes: o par novo ganha e o velho não fica por último", async () => {
+    const agora = Math.floor(Date.now() / 1000);
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a0", refresh_token: "r0", expires_at: agora + 100, user: { id: "u1" } }));
+    const s = protegerSessaoGuardada({
+      getItem: (k: string) => localStorage.getItem(k),
+      setItem: (k: string, v: string) => localStorage.setItem(k, v),
+      removeItem: (k: string) => void localStorage.removeItem(k),
+    })!;
+    await Promise.all([
+      s.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: agora + 3600, user: { id: "u1" } })),
+      s.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a0", refresh_token: "r0", expires_at: agora + 100, user: { id: "u1" } })),
+    ]);
+    expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r1");
+  });
+
+  it("sessão nova com o mesmo expires_at (login) não é descartada", async () => {
+    const agora = Math.floor(Date.now() / 1000);
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: agora + 3600, user: { id: "u1" } }));
+    const s = protegerSessaoGuardada({
+      getItem: (k: string) => localStorage.getItem(k),
+      setItem: (k: string, v: string) => localStorage.setItem(k, v),
+      removeItem: (k: string) => void localStorage.removeItem(k),
+    })!;
+    await s.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a9", refresh_token: "r9", expires_at: agora + 3600, user: { id: "u2" } }));
+    expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r9");
+  });
+
   it("o mesmo vale para /oauth/token com grant_type=refresh_token", () => {
     expect(ehPedidoDeRenovacao("https://x.supabase.co/auth/v1/oauth/token", { method: "POST", body: "grant_type=refresh_token&refresh_token=r" })).toBe(true);
     expect(ehPedidoDeRenovacao(RENOVAR)).toBe(true);

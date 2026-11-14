@@ -655,9 +655,15 @@ export function tokenAindaVale(sessao: SessaoGuardada | null | undefined, folgaM
  */
 export function protegerSessaoGuardada(storage: PreviewAuthStorage | undefined): PreviewAuthStorage | undefined {
   if (!storage) return storage;
+  let filaDeGravacao: Promise<unknown> = Promise.resolve();
+  const enfileirar = <T,>(trabalho: () => Promise<T>): Promise<T> => {
+    const vez = filaDeGravacao.then(trabalho, trabalho);
+    filaDeGravacao = vez.catch(() => undefined);
+    return vez;
+  };
   const protegido: PreviewAuthStorage = {
     getItem: (chave) => storage.getItem(chave),
-    setItem: async (chave, valor) => {
+    setItem: (chave, valor) => enfileirar(async () => {
       if (/-auth-token$/.test(chave)) {
         const nova = sessaoDoValor(valor);
         const tokenNovo = nova?.refresh_token || refreshTokenDoValor(valor);
@@ -673,14 +679,14 @@ export function protegerSessaoGuardada(storage: PreviewAuthStorage | undefined):
           sessaoEstaViva(atual) &&
           typeof nova?.expires_at === "number" &&
           typeof atual.expires_at === "number" &&
-          nova.expires_at <= atual.expires_at
+          nova.expires_at < atual.expires_at
         ) {
           console.warn("[Auth] par velho não sobrescreve a sessão mais nova no storage.");
           return;
         }
       }
       return storage.setItem(chave, valor);
-    },
+    }),
     removeItem: async (chave) => {
       const morte = ultimaMorte;
       if (morte && /-auth-token$/.test(chave) && Date.now() - morte.quando < JANELA_DA_PROTECAO_MS) {

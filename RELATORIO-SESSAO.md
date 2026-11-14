@@ -79,6 +79,8 @@ Testes unitários cobrem os dois casos.
 
 Testes: aba suspensa sem pulso/marca, outra aba não manda POST; `setItem` do par velho depois de limpar a lista compartilhada não sobrescreve. O P2 sem `navigator.locks` continua residual (aí valem a marca e o pulso).
 
+**P1-7 e P2 do login (terceira revisão):** `setItem` passou a ser enfileirado nesta aba, para duas gravações concorrentes não deixarem o par velho por último. A comparação de `expires_at` é estrita (`<`), então um login novo com a mesma expiração não é descartado.
+
 ## O que muda (só front e testes)
 
 1. **A abertura não força mais renovação.** O `getSession()` já renova sozinho, com a trava, quando faltam menos de 90 s, e o `autoRefreshToken` cuida do resto. O refresh "por precaução de JWKS" saiu.
