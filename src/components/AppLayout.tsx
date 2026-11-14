@@ -19,7 +19,7 @@ import {
   LayoutGrid, GraduationCap, BookOpen, Boxes, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign,
+  HeartPulse, Megaphone, Newspaper, MessagesSquare, Sunrise, Briefcase, Target, KanbanSquare, CalendarClock, Timer, FlaskConical, CircleDollarSign, CalendarRange,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContagemDeMensagensProntas } from "@/hooks/useMensagensDaSemana";
@@ -191,6 +191,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       // Laboratório (19/10/2026): trabalhos avulsos com ou sem cliente (admin, gestor e design).
       { title: "Laboratório", url: "/laboratorio", icon: FlaskConical, soCriacao: true },
       { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
+      // 14/11/2026: linha do tempo das peças por cliente e por dia (só leitura).
+      { title: "Esteira", url: "/esteira", icon: CalendarRange },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
       { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
       { title: "Briefings", url: "/briefings", icon: FileText },

@@ -97,6 +97,7 @@ describe("onde conta", () => {
     expect(areaDaRota("/mesa-edicao")).toBe("mesa-edicao");
     expect(areaDaRota("/central")).toBe("central");
     expect(areaDaRota("/ciclo/revisao")).toBe("ciclo");
+    expect(areaDaRota("/esteira")).toBe("esteira");
     expect(areaDaRota("/workspace")).toBe("workspace");
     expect(areaDaRota("/arquivos")).toBe("arquivos");
     expect(areaDaRota("/calendario")).toBe("agenda");
