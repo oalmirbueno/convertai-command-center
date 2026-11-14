@@ -96,6 +96,8 @@ const MetaUsuarioDoSistema = rotas.lazy(() => import("@/pages/MetaUsuarioDoSiste
 const Hoje = rotas.lazy(() => import("@/pages/Hoje"));
 const AdminCiclo = rotas.lazy(() => import("@/pages/AdminCiclo"));
 const AdminEsteira = rotas.lazy(() => import("@/pages/AdminEsteira"));
+// 14/11/2026: Esteira em linha do tempo (fase 1, só leitura). Não é a tela do Ciclo acima.
+const EsteiraLinhaDoTempo = rotas.lazy(() => import("@/pages/EsteiraLinhaDoTempo"));
 const ClientFinanceiro = rotas.lazy(() => import("@/pages/ClientFinanceiro"));
 const AdminReports = rotas.lazy(() => import("@/pages/AdminReports"));
 const ClientReports = rotas.lazy(() => import("@/pages/ClientReports"));
@@ -425,6 +427,7 @@ export function AppRoutes() {
         {/* 26/10: boletim do Hermes, mudanças nas contas e o que precisa do dono, numa página só. */}
         <Route path="/anuncios/hoje" element={<StaffRoute><AnunciosHoje /></StaffRoute>} />
         <Route path="/hoje" element={<StaffRoute><Hoje /></StaffRoute>} />
+        <Route path="/esteira" element={<StaffRoute><EsteiraLinhaDoTempo /></StaffRoute>} />
         <Route path="/calendario" element={<EditorialCalendar />} />
         <Route path="/clientes" element={<StaffRoute><Clients /></StaffRoute>} />
         <Route path="/equipe" element={<StaffRoute><Team /></StaffRoute>} />
