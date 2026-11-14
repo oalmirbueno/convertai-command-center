@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Lock, Minus, Plus, ShieldCheck, Smartphone } from "lucide-react";
+import { ArrowRight, Check, Lock, Minus, Plus, ShieldCheck, Smartphone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lerPrecos, listarPlanos, reais } from "@/lib/produto/api";
 import { ETAPAS_DO_FUNIL, NICHOS, NOME_PADRAO_DA_ETAPA, type EtapaId } from "@/lib/produto/nichos";
@@ -19,9 +19,9 @@ import "@/components/venda/venda.css";
 
 /**
  * A página de venda do CRM (endereço /crm e crm.aceleriq.online).
- * Visual no padrão das referências do dono: fundo de ladrilhos com brilhos
- * verdes, herói com pessoa, cartão claro sobreposto, painéis de vidro verde e
- * oferta com faixas laterais. Preços e dias de teste vêm do banco. As telas
+ * Visual no padrão das referências do dono, na versão limpa que ele pediu
+ * depois (14/11): fundo de ladrilhos discreto, herói com pessoa, cartão claro
+ * sobreposto e painéis verdes, sem selos em pílula e com poucos brilhos. Preços e dias de teste vêm do banco. As telas
  * são capturas reais do CRM com dados de exemplo; as fotos são de banco de
  * imagem gerado (pessoas ilustrativas, sem nenhuma fala atribuída a elas).
  * Cada botão de compra leva a escolha para o cadastro (/crm/comecar).
@@ -55,12 +55,6 @@ const RECURSOS: Array<[string, string]> = [
   ["Máquina de leads", " que busca empresas do seu ramo"],
   ["Captação rastreada", " com UTM e Pixel da Meta"],
   ["Claude e ChatGPT", " conectados ao seu CRM"],
-];
-
-const COMO_COMECA: Array<[string, string]> = [
-  ["Para começar", "Três passos, sem implantação"],
-  ["Sua equipe", "Entra por convite no e-mail"],
-  ["Onde funciona", "No computador e no celular"],
 ];
 
 const UM_DIA: Array<[string, string]> = [
@@ -98,17 +92,12 @@ function Elo({ base, to, children, ...resto }: { base: string; to: string; child
   return base ? <a href={base + to} {...resto}>{children}</a> : <Link to={to} {...resto}>{children}</Link>;
 }
 
-/** O rótulo verde das seções, com a marca e o texto espaçado, como nas referências. */
+/** O rótulo das seções: uma linha pequena de texto, sem caixa. */
 function Rotulo({ children, escuro = false }: { children: ReactNode; escuro?: boolean }) {
-  return (
-    <span className={escuro ? "vd-rotulo vd-rotulo-escuro" : "vd-rotulo"}>
-      <b>CRM</b>
-      {children}
-    </span>
-  );
+  return <span className={escuro ? "vd-rotulo vd-rotulo-escuro" : "vd-rotulo"}>{children}</span>;
 }
 
-/** O botão de compra em pílula, com o círculo escuro da seta. */
+/** A seta que acompanha o texto do botão. */
 function Seta() {
   return <i className="vd-bola" aria-hidden="true"><ArrowRight /></i>;
 }
@@ -182,10 +171,9 @@ export default function ProdutoLanding() {
         {/* herói: texto à esquerda, pessoa à direita com avisos flutuando */}
         <section className="vd-heroi vd-ladrilhos">
           <i className="vd-cruz vd-cruz-1" aria-hidden="true" />
-          <i className="vd-cruz vd-cruz-2" aria-hidden="true" />
           <div className="vd-dentro vd-heroi-grade">
             <div className="vd-heroi-texto">
-              <Revela><Rotulo>de vendas para pequenas e médias empresas</Rotulo></Revela>
+              <Revela><Rotulo>CRM de vendas para pequenas e médias empresas</Rotulo></Revela>
               <Revela atraso={1} como="h1" className="vd-h1">Transforme cada conversa em negócio e <strong>cada negócio em venda</strong></Revela>
               <Revela atraso={2}><p className="vd-heroi-linha">{COPY.heroi}</p></Revela>
               <Revela atraso={3}>
@@ -194,33 +182,21 @@ export default function ProdutoLanding() {
                 </div>
                 <ul className="vd-fichas">
                   {garantias.map((g) => (
-                    <li key={g}><ChevronRight aria-hidden="true" />{g}</li>
+                    <li key={g}><Check aria-hidden="true" />{g}</li>
                   ))}
                 </ul>
               </Revela>
             </div>
             <Revela atraso={2} className="vd-retrato">
-              <span className="vd-orbita" aria-hidden="true" />
               <img src={fotoDono} alt="Dono de empresa sorrindo, sentado com o notebook aberto" width={896} height={1120} decoding="async" draggable={false} />
               <div className="vd-aviso vd-aviso-1" aria-hidden="true"><b>CRM</b><span><strong>Negócio fechado</strong>Padaria Sol Nascente, R$ 3.200</span></div>
               <div className="vd-aviso vd-aviso-2" aria-hidden="true"><b>CRM</b><span><strong>Retorno às 14h15</strong>Clínica Vida, enviar o orçamento</span></div>
-              <div className="vd-aviso vd-aviso-3" aria-hidden="true"><b>CRM</b><span><strong>Lead novo do anúncio</strong>Já entrou no funil, com dono</span></div>
             </Revela>
           </div>
-          {menorPreco !== null && (
-            <div className="vd-dentro">
-              <div className="vd-etiqueta">
-                <span>A partir de <strong>{reais(menorPreco)}</strong> por usuário</span>
-                <a href="#precos" className="vd-botao vd-botao-p"><Seta />Ver planos</a>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* cartão claro sobreposto: por que a venda trava */}
         <section className="vd-sobe">
-          <span className="vd-letra vd-letra-e" aria-hidden="true">c</span>
-          <span className="vd-letra vd-letra-d" aria-hidden="true">m</span>
           <div className="vd-dentro">
             <Revela className="vd-claro">
               <div className="vd-claro-grade">
@@ -232,16 +208,9 @@ export default function ProdutoLanding() {
                 </div>
                 <ul className="vd-vidro vd-dores">
                   {DORES.map((d) => (
-                    <li key={d[1]}><i className="vd-bola" aria-hidden="true"><ChevronRight /></i><span>{d[0]}<strong>{d[1]}</strong>{d[2]}</span></li>
+                    <li key={d[1]}><i className="vd-bola" aria-hidden="true"><Check /></i><span>{d[0]}<strong>{d[1]}</strong>{d[2]}</span></li>
                   ))}
                 </ul>
-              </div>
-              <div className="vd-faixa" aria-hidden="true">
-                <div className="vd-faixa-anda">
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => (
-                    <span key={i}><MarcaAceleriq altura={18} /><em>CRM de vendas</em></span>
-                  ))}
-                </div>
               </div>
             </Revela>
           </div>
@@ -249,7 +218,6 @@ export default function ProdutoLanding() {
 
         {/* o notebook que abre com a rolagem */}
         <section className="vd-secao vd-ladrilhos" id="produto">
-          <i className="vd-cruz vd-cruz-3" aria-hidden="true" />
           <div className="vd-dentro vd-centro">
             <Revela>
               <Rotulo>o produto por dentro</Rotulo>
@@ -275,27 +243,18 @@ export default function ProdutoLanding() {
           </div>
         </section>
 
-        {/* recursos: nove cartões claros numerados e três de vidro */}
+        {/* recursos: nove cartões numerados */}
         <section className="vd-secao vd-ladrilhos" id="recursos">
-          <i className="vd-cruz vd-cruz-4" aria-hidden="true" />
           <div className="vd-dentro vd-centro">
             <Revela>
               <Rotulo>o que vem no seu CRM</Rotulo>
-              <h2 className="vd-h2">Um CRM direto ao ponto, para a equipe <strong>abrir e vender</strong>. Sem tela sobrando: cadastra, acompanha e fecha</h2>
+              <h2 className="vd-h2">Um CRM direto ao ponto, para a equipe <strong>abrir e vender</strong></h2>
             </Revela>
             <ol className="vd-passos">
               {RECURSOS.map((r, i) => (
                 <Revela key={r[0]} como="li" atraso={((i % 3) + 1) as 1 | 2 | 3}><b>{i + 1}</b><span><strong>{r[0]}</strong>{r[1]}</span></Revela>
               ))}
             </ol>
-            <div className="vd-trio">
-              {COMO_COMECA.map((c, i) => (
-                <Revela key={c[0]} atraso={(i + 1) as 1 | 2 | 3} className="vd-vidro vd-trio-item">
-                  <em>{c[0]}</em>
-                  <span>{c[1]}</span>
-                </Revela>
-              ))}
-            </div>
           </div>
         </section>
 
@@ -319,7 +278,7 @@ export default function ProdutoLanding() {
                     <Revela key={d[0]} como="li" atraso={((i % 4) + 1) as 1 | 2 | 3 | 4}><strong>{d[0]}:</strong> {d[1]}</Revela>
                   ))}
                 </ol>
-                <Revela className="vd-resultado"><i className="vd-bola" aria-hidden="true"><ChevronRight /></i><span><strong>Resultado:</strong> nenhum cliente sem resposta, e você sabe quem está vendendo</span></Revela>
+                <Revela className="vd-resultado"><i className="vd-bola" aria-hidden="true"><Check /></i><span><strong>Resultado:</strong> nenhum cliente sem resposta, e você sabe quem está vendendo</span></Revela>
               </div>
             </div>
           </div>
@@ -327,7 +286,6 @@ export default function ProdutoLanding() {
 
         {/* para quem é: o funil do ramo numa curva */}
         <section className="vd-secao vd-ladrilhos" id="ramos">
-          <i className="vd-cruz vd-cruz-5" aria-hidden="true" />
           <div className="vd-dentro vd-centro">
             <Revela>
               <Rotulo>feito para o seu ramo</Rotulo>
@@ -380,13 +338,11 @@ export default function ProdutoLanding() {
           </div>
         </section>
 
-        {/* oferta: painel verde com faixas laterais e o cartão do preço */}
+        {/* oferta: painel verde com o cartão do preço */}
         <section className="vd-secao vd-ladrilhos" id="precos">
           <i className="vd-cruz vd-cruz-6" aria-hidden="true" />
           <div className="vd-dentro">
             <Revela className="vd-oferta">
-              <span className="vd-lateral vd-lateral-e" aria-hidden="true"><em>CADA NEGÓCIO NO FUNIL • NENHUM CLIENTE SEM RESPOSTA • CADA NEGÓCIO NO FUNIL • NENHUM CLIENTE SEM RESPOSTA • CADA NEGÓCIO NO FUNIL • NENHUM CLIENTE SEM RESPOSTA •</em></span>
-              <span className="vd-lateral vd-lateral-d" aria-hidden="true"><em>CADA NEGÓCIO NO FUNIL • NENHUM CLIENTE SEM RESPOSTA • CADA NEGÓCIO NO FUNIL • NENHUM CLIENTE SEM RESPOSTA • CADA NEGÓCIO NO FUNIL • NENHUM CLIENTE SEM RESPOSTA •</em></span>
               <div className="vd-oferta-grade">
                 <div>
                   <Rotulo>escolha o seu plano</Rotulo>
@@ -395,7 +351,7 @@ export default function ProdutoLanding() {
                   {plano && (
                     <ul className="vd-inclui" key={plano.id}>
                       {plano.recursos.map((r) => (
-                        <li key={r}><i className="vd-bola" aria-hidden="true"><ChevronRight /></i><span>{r.replace(/\.$/, "")}</span></li>
+                        <li key={r}><i className="vd-bola" aria-hidden="true"><Check /></i><span>{r.replace(/\.$/, "")}</span></li>
                       ))}
                     </ul>
                   )}
@@ -463,7 +419,6 @@ export default function ProdutoLanding() {
 
         {/* chamada final */}
         <section className="vd-final vd-ladrilhos">
-          <i className="vd-cruz vd-cruz-7" aria-hidden="true" />
           <div className="vd-dentro vd-centro">
             <Revela>
               <h2 className="vd-h2">O cliente de hoje não espera <strong>até segunda</strong></h2>
@@ -473,7 +428,7 @@ export default function ProdutoLanding() {
               </div>
               <ul className="vd-fichas vd-no-centro">
                 {garantias.map((g) => (
-                  <li key={g}><ChevronRight aria-hidden="true" />{g}</li>
+                  <li key={g}><Check aria-hidden="true" />{g}</li>
                 ))}
               </ul>
             </Revela>
