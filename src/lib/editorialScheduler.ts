@@ -10,6 +10,15 @@ export interface EditorialSchedulePayloadInput {
   postIdempotencyKey: string;
   mutationId: string;
   existingPost?: EditorialScheduleExistingPost | null;
+  /**
+   * Formato escolhido no agendamento (ex.: "story"). Story é escolha
+   * explícita de quem agenda: a mídia nunca vira story sozinha. No caminho
+   * de conteúdo aprovado o banco não lê este campo: o post que já existe
+   * mantém o próprio formato (a tela ajusta ANTES de agendar com
+   * ajustar_formato_publicacao_aprovada) e o post que nasce usa o formato da
+   * mídia (a tela confere depois e acusa erro se a troca falhar).
+   */
+  contentType?: string | null;
 }
 
 export interface EditorialSchedulePublicationTarget {
@@ -180,7 +189,8 @@ export function buildEditorialSchedulePayload(
     project_id: input.projectId,
     primary_file_id: input.asset.root.id,
     title: input.existingPost?.title.trim() || input.asset.root.file_name.trim(),
-    content_type: input.existingPost?.contentType || input.asset.contentType,
+    content_type:
+      input.contentType || input.existingPost?.contentType || input.asset.contentType,
     objective:
       input.existingPost?.objective === undefined
         ? objective

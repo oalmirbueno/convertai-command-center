@@ -74,6 +74,11 @@ import {
   type EditorialSchedulePublicationTarget,
 } from "@/lib/editorialScheduler";
 import { PLATFORM_LABELS, isFilePublishable } from "@/lib/editorial";
+import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
+import {
+  ehFormatoDePecaUnica,
+  opcoesDeFormatoNoAgendamento,
+} from "@/lib/editorialAjustesAprovados";
 import { cn } from "@/lib/utils";
 
 interface Option {
@@ -107,6 +112,8 @@ interface PendingAttempt {
     payload: Record<string, unknown>;
     expectedVersion: number | null;
   };
+  /** O post nasce neste agendamento com formato diferente do da mídia: confere depois do save. */
+  conferirFormatoDepois?: boolean;
 }
 
 interface SelectedExistingPlanSnapshot {
@@ -164,6 +171,19 @@ function isSchedulablePost(bundle: EditorialPostBundle) {
   );
 }
 
+/** Formato de feed da peça: o do post que já existe (reel, vídeo) ou o da mídia. */
+function formatoDoFeed(
+  asset: EditorialApprovedMediaAsset,
+  formatoDoPost: string | null | undefined,
+) {
+  return formatoDoPost && formatoDoPost !== "story" && ehFormatoDePecaUnica(formatoDoPost)
+    ? formatoDoPost
+    : asset.contentType;
+}
+
+/** O agendamento foi gravado, mas a troca de formato pedida não. */
+class FormatoNaoConfirmadoError extends Error {}
+
 const stepItems = [
   { label: "Cliente", icon: CheckCircle2 },
   { label: "Conteúdo", icon: FileCheck2 },
@@ -181,7 +201,11 @@ export default function EditorialScheduleDialog({
   onOpenChange,
   onScheduled,
 }: EditorialScheduleDialogProps) {
-  const { savePost } = useEditorialMutations();
+  const { savePost, ajustarFormatoAprovado } = useEditorialMutations();
+  // Formato do agendamento: o da mídia (feed) ou Story, sempre por escolha.
+  const [formatoEscolhido, setFormatoEscolhido] = useState("");
+  // A troca de formato roda antes do save: os dois travam a tela.
+  const ocupado = savePost.isPending || ajustarFormatoAprovado.isPending;
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [selectedAsset, setSelectedAsset] =
@@ -226,6 +250,7 @@ export default function EditorialScheduleDialog({
     setSelectedAsset(null);
     setSelectedExistingPlan(null);
     setSelectedAccountIds([]);
+    setFormatoEscolhido("");
     setScheduledAt(defaultScheduledAt || nextHourLocal());
     setAccountSearch("");
     setShowLibrary(true);
@@ -339,6 +364,13 @@ export default function EditorialScheduleDialog({
   const selectAsset = (asset: EditorialApprovedMediaAsset) => {
     setSelectedAsset(asset);
     const existing = existingPostByRootId.get(asset.id);
+    setFormatoEscolhido(
+      opcoesDeFormatoNoAgendamento(asset.contentType).length === 0
+        ? ""
+        : existing?.post.content_type === "story"
+          ? "story"
+          : formatoDoFeed(asset, existing?.post.content_type),
+    );
     const activePlans = existing
       ? activeEditorialSchedulePlans(existing.publications)
       : [];
@@ -402,7 +434,7 @@ export default function EditorialScheduleDialog({
   });
 
   const requestOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && savePost.isPending) return false;
+    if (!nextOpen && ocupado) return false;
     if (!nextOpen && dirty) {
       setDiscardConfirmOpen(true);
       return false;
@@ -443,20 +475,23 @@ export default function EditorialScheduleDialog({
       return;
     }
 
-    const fingerprint = JSON.stringify({
-      clientId,
-      projectId,
-      assetId: selectedAsset.id,
-      accountIds: [...selectedAccountIds].sort(),
-      scheduledAtIso,
-      existingPlan: selectedExistingPlan
-        ? {
-            postId: selectedExistingPlan.postId,
-            postVersion: selectedExistingPlan.postVersion,
-            planFingerprint: selectedExistingPlan.planFingerprint,
-          }
-        : null,
-    });
+    const impressaoDaTentativa = (versaoDoPost?: number) =>
+      JSON.stringify({
+        clientId,
+        projectId,
+        assetId: selectedAsset.id,
+        formatoEscolhido,
+        accountIds: [...selectedAccountIds].sort(),
+        scheduledAtIso,
+        existingPlan: selectedExistingPlan
+          ? {
+              postId: selectedExistingPlan.postId,
+              postVersion: versaoDoPost ?? selectedExistingPlan.postVersion,
+              planFingerprint: selectedExistingPlan.planFingerprint,
+            }
+          : null,
+      });
+    const fingerprint = impressaoDaTentativa();
     if (attemptRef.current?.fingerprint !== fingerprint) {
       attemptRef.current = {
         fingerprint,
@@ -467,7 +502,74 @@ export default function EditorialScheduleDialog({
     }
     const attempt = attemptRef.current;
 
-    const finishSchedule = (postId: string) => {
+    const formatoPedido = ehFormatoDePecaUnica(formatoEscolhido)
+      ? formatoEscolhido
+      : null;
+    const nomeDoFormato = formatoPedido === "story" ? "Story" : "o formato escolhido";
+
+    // Post que já existe: o formato (Story ou a volta para o feed) muda ANTES
+    // de agendar, pela RPC estreita, sem derrubar a aprovação. Se o ajuste
+    // falhar, nada é agendado: o erro sobe e o agendamento não acontece.
+    const ajustarFormatoAntesDeAgendar = async (post: EditorialPostBundle) => {
+      if (!formatoPedido || post.post.content_type === formatoPedido) {
+        return post.post.version;
+      }
+      let ajuste: { version: number };
+      try {
+        ajuste = await ajustarFormatoAprovado.mutateAsync({
+          postId: post.post.id,
+          expectedVersion: post.post.version,
+          contentType: formatoPedido,
+        });
+      } catch (error) {
+        throw new Error(
+          `Nada foi agendado: o formato não mudou para ${nomeDoFormato}. ${editorialErrorMessage(error, "Tente de novo.")}`,
+        );
+      }
+      // A versão do post subiu por causa do próprio ajuste: a seleção e a
+      // tentativa acompanham, para um novo clique não acusar "plano mudou".
+      setSelectedExistingPlan((atual) =>
+        atual && atual.postId === post.post.id
+          ? { ...atual, postVersion: ajuste.version }
+          : atual,
+      );
+      attempt.fingerprint = impressaoDaTentativa(ajuste.version);
+      return ajuste.version;
+    };
+
+    // Post que nasce neste agendamento com formato diferente do da mídia
+    // (Story): o banco cria o conteúdo aprovado no formato da mídia, no mesmo
+    // passo que agenda, então a escolha só pode ser conferida depois. Falha
+    // aqui nunca vira sucesso: o erro sobe, a tela fica aberta e um novo
+    // clique repete só a conferência e a troca (o save é idempotente).
+    const confirmarFormato = async (postId: string) => {
+      if (!formatoPedido) return;
+      const comoResolver =
+        "Toque em Agendar de novo para repetir só a troca de formato, ou abra o conteúdo e use Mudar formato antes do horário.";
+      let gravado: EditorialPostBundle;
+      try {
+        gravado = await loadEditorialPostForMutation(postId, clientId);
+      } catch (error) {
+        throw new FormatoNaoConfirmadoError(
+          `A publicação entrou na agenda, mas não deu para conferir se ficou como ${nomeDoFormato}. ${comoResolver} ${editorialErrorMessage(error, "Tente de novo.")}`,
+        );
+      }
+      if (gravado.post.content_type === formatoPedido) return;
+      try {
+        await ajustarFormatoAprovado.mutateAsync({
+          postId,
+          expectedVersion: gravado.post.version,
+          contentType: formatoPedido,
+        });
+      } catch (error) {
+        throw new FormatoNaoConfirmadoError(
+          `A publicação entrou na agenda, mas NÃO como ${nomeDoFormato}: continua no formato da mídia. ${comoResolver} ${editorialErrorMessage(error, "Tente de novo.")}`,
+        );
+      }
+    };
+
+    const finishSchedule = async (postId: string) => {
+      if (attempt.conferirFormatoDepois) await confirmarFormato(postId);
       setDirty(false);
       attemptRef.current = null;
       toast.success(
@@ -482,7 +584,7 @@ export default function EditorialScheduleDialog({
     try {
       if (attempt.prepared) {
         const recoveredResult = await savePost.mutateAsync(attempt.prepared);
-        finishSchedule(recoveredResult.post_id);
+        await finishSchedule(recoveredResult.post_id);
         return;
       }
 
@@ -509,6 +611,9 @@ export default function EditorialScheduleDialog({
           );
         }
       }
+      const versaoParaAgendar = completePost
+        ? await ajustarFormatoAntesDeAgendar(completePost)
+        : null;
 
       const existingPublicationByAccountId = new Map(
         activeEditorialSchedulePlans(
@@ -588,12 +693,13 @@ export default function EditorialScheduleDialog({
         timezone: EDITORIAL_DEFAULT_TIME_ZONE,
         postIdempotencyKey: attempt.postIdempotencyKey,
         mutationId: attempt.mutationId,
+        contentType: formatoPedido,
         existingPost: completePost
           ? {
               id: completePost.post.id,
               idempotencyKey: completePost.internal!.idempotency_key,
               title: completePost.post.title,
-              contentType: completePost.post.content_type,
+              contentType: formatoPedido || completePost.post.content_type,
               objective: completePost.post.objective,
               defaultCaption: completePost.post.default_caption,
               taskId: completePost.internal?.task_id,
@@ -605,13 +711,25 @@ export default function EditorialScheduleDialog({
           : null,
       });
 
+      // Post que já existe sai daqui com o formato certo (ajuste acima). Só o
+      // que nasce agora, com formato diferente do da mídia, confere depois.
+      attempt.conferirFormatoDepois =
+        !completePost &&
+        formatoPedido !== null &&
+        formatoPedido !== selectedAsset.contentType;
       attempt.prepared = {
         payload,
-        expectedVersion: completePost?.post.version || null,
+        expectedVersion: versaoParaAgendar,
       };
       const result = await savePost.mutateAsync(attempt.prepared);
-      finishSchedule(result.post_id);
+      await finishSchedule(result.post_id);
     } catch (error: unknown) {
+      if (error instanceof FormatoNaoConfirmadoError) {
+        // Já está na agenda, no formato errado. Sem sucesso e sem fechar: a
+        // tentativa fica guardada para o próximo clique repetir só a troca.
+        toast.error("O formato não mudou", { description: error.message });
+        return;
+      }
       const message =
         error instanceof Error
           ? error.message
@@ -850,6 +968,53 @@ export default function EditorialScheduleDialog({
                         )}
                       </span>
                     </div>
+                    {opcoesDeFormatoNoAgendamento(selectedAsset.contentType).length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          Onde vai sair
+                        </p>
+                        <div
+                          className="mt-1.5 grid grid-cols-2 gap-2"
+                          role="radiogroup"
+                          aria-label="Formato da publicação"
+                        >
+                          {opcoesDeFormatoNoAgendamento(selectedAsset.contentType).map((opcao) => {
+                            const valor =
+                              opcao.value === "story"
+                                ? "story"
+                                : formatoDoFeed(
+                                    selectedAsset,
+                                    selectedExistingPlan
+                                      ? existingPostByRootId.get(selectedAsset.id)?.post.content_type
+                                      : null,
+                                  );
+                            const ativo = formatoEscolhido === valor;
+                            return (
+                              <button
+                                key={opcao.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={ativo}
+                                data-formato={opcao.value}
+                                onClick={() => {
+                                  setFormatoEscolhido(valor);
+                                  setDirty(true);
+                                  attemptRef.current = null;
+                                }}
+                                className={cn(
+                                  "h-10 rounded-lg border px-3 text-[13px] font-medium",
+                                  ativo
+                                    ? "border-primary bg-primary/10 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:bg-muted/40",
+                                )}
+                              >
+                                {opcao.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {/* Empilhados no aparelho estreito: lado a lado, "Trocar
                         conteúdo" quebrava dentro do próprio botão. */}
                     <div className="mt-3 grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
@@ -1145,7 +1310,7 @@ export default function EditorialScheduleDialog({
             variant="outline"
             className="h-11 w-full sm:h-10 sm:w-auto"
             onClick={() => requestOpenChange(false)}
-            disabled={savePost.isPending}
+            disabled={ocupado}
           >
             Cancelar
           </Button>
@@ -1154,13 +1319,13 @@ export default function EditorialScheduleDialog({
             className="h-11 w-full sm:h-10 sm:w-auto"
             onClick={handleSchedule}
             disabled={
-              savePost.isPending ||
+              ocupado ||
               missingFields.length > 0 ||
               hasUnavailableSelection
               || hasMissingSelectedAccounts
             }
           >
-            {savePost.isPending ? (
+            {ocupado ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : (
               <CalendarCheck2 className="mr-2 h-4 w-4" />

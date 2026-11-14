@@ -21,6 +21,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
+import { useConfirm } from "@/components/shared/confirmDialog";
+import {
+  aprovadosDoFiltro,
+  confirmacaoDeAgendarAprovados,
+  horarioDoAgendamentoEmLote,
+  resumoPorCliente,
+} from "@/lib/editorialAjustesAprovados";
 import {
   AjudaRecolhida,
   CabecalhoDePagina,
@@ -473,6 +480,18 @@ export default function EditorialCalendar() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [batchScheduling, setBatchScheduling] = useState(false);
 
+  const clientNames = useMemo(
+    () =>
+      new Map(
+        clientRows.map((client) => [
+          client.id,
+          client.company_name || client.full_name || "Cliente",
+        ]),
+      ),
+    [clientRows],
+  );
+  const confirmDialog = useConfirm();
+
   // Fluxo sincronizado: publicações PLANEJADAS cujo conteúdo o cliente já
   // aprovou ficam prontas para confirmar o agendamento em um clique.
   // Data/horário planejados são mantidos; se o horário já passou, vai para
@@ -480,11 +499,12 @@ export default function EditorialCalendar() {
   const approvedReadyToSchedule = useMemo(() => {
     if (!canUseTeamData || !permissions.canPublish) return [] as {
       bundle: EditorialPostBundle;
+      clientId: string;
       publicationId: string;
       version: number;
       scheduledAt: string;
     }[];
-    const out: { bundle: EditorialPostBundle; publicationId: string; version: number; scheduledAt: string }[] = [];
+    const out: { bundle: EditorialPostBundle; clientId: string; publicationId: string; version: number; scheduledAt: string }[] = [];
     posts.forEach((bundle) => {
       if (getEditorialApprovalStage(bundle) !== "approved") return;
       bundle.publications.forEach((publicationBundle) => {
@@ -492,6 +512,7 @@ export default function EditorialCalendar() {
         if (publication.status === "planned" && publication.scheduled_at) {
           out.push({
             bundle,
+            clientId: publication.client_id || bundle.post.client_id,
             publicationId: publication.id,
             version: publication.version,
             scheduledAt: publication.scheduled_at,
@@ -499,22 +520,37 @@ export default function EditorialCalendar() {
         }
       });
     });
-    return out;
-  }, [posts, canUseTeamData, permissions.canPublish]);
+    // 14/11/2026: com um cliente filtrado na tela, só entram as publicações
+    // dele. O lote chegou a agendar posts de outros clientes.
+    return aprovadosDoFiltro(out, forcedClientId || requestedClientId);
+  }, [posts, canUseTeamData, permissions.canPublish, forcedClientId, requestedClientId]);
 
   const scheduleApprovedNow = useCallback(async () => {
     if (batchScheduling || approvedReadyToSchedule.length === 0) return;
+    // Nunca agenda em silêncio: o diálogo diz quantos posts e de quais
+    // clientes. Em "todos os clientes", lista cada cliente com a quantidade.
+    const lote = aprovadosDoFiltro(approvedReadyToSchedule, forcedClientId || requestedClientId);
+    if (lote.length === 0) return;
+    const resumo = resumoPorCliente(lote, (id) => clientNames.get(id) || "Cliente");
+    const textoDoAviso = confirmacaoDeAgendarAprovados(
+      resumo,
+      !(forcedClientId || (requestedClientId !== "all" ? requestedClientId : "")),
+    );
+    const confirmou = await confirmDialog({
+      title: textoDoAviso.title,
+      description: textoDoAviso.description,
+      confirmLabel: textoDoAviso.confirmLabel,
+      cancelLabel: "Não agendar",
+    });
+    if (!confirmou) return;
     setBatchScheduling(true);
     let scheduled = 0;
     let failed = 0;
     // O primeiro erro e o que explica a falha; sem ele o aviso final mandava
     // "tente novamente" sem dizer o motivo.
     let firstError: string | null = null;
-    for (const item of approvedReadyToSchedule) {
-      const planned = new Date(item.scheduledAt);
-      const target = planned.getTime() > Date.now()
-        ? item.scheduledAt
-        : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    for (const item of lote) {
+      const target = horarioDoAgendamentoEmLote(item.scheduledAt);
       try {
         await transitionPublication.mutateAsync({
           publicationId: item.publicationId,
@@ -546,7 +582,7 @@ export default function EditorialCalendar() {
       });
     }
     setBatchScheduling(false);
-  }, [approvedReadyToSchedule, batchScheduling, queryClient, transitionPublication]);
+  }, [approvedReadyToSchedule, batchScheduling, clientNames, confirmDialog, forcedClientId, queryClient, requestedClientId, transitionPublication]);
   const [scheduleDefaultAt, setScheduleDefaultAt] = useState("");
   const [editingPost, setEditingPost] = useState<EditorialPostBundle | null>(
     null,
@@ -569,16 +605,6 @@ export default function EditorialCalendar() {
     useSensor(KeyboardSensor),
   );
 
-  const clientNames = useMemo(
-    () =>
-      new Map(
-        clientRows.map((client) => [
-          client.id,
-          client.company_name || client.full_name || "Cliente",
-        ]),
-      ),
-    [clientRows],
-  );
   const projectNames = useMemo(
     () =>
       new Map(

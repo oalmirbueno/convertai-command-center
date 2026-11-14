@@ -201,6 +201,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_ads_registrar_acao',
     'aceleriq_agent_conversations',
     'aceleriq_agent_handoff',
+    'aceleriq_ajustar_formato_publicacao',
     'aceleriq_archive_file',
     'aceleriq_archive_opportunity',
     'aceleriq_archive_project',
@@ -225,12 +226,19 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_comercial_avisar_caixa',
     'aceleriq_comercial_bolso_liberar',
     'aceleriq_comercial_bolso_pedir',
+    'aceleriq_comercial_cobrar',
+    'aceleriq_comercial_entrada_nova',
+    'aceleriq_comercial_falar',
     'aceleriq_comercial_fila',
+    'aceleriq_comercial_horarios',
     'aceleriq_comercial_maquina_buscar',
     'aceleriq_comercial_maquina_candidatos',
+    'aceleriq_comercial_marcar_reuniao',
     'aceleriq_comercial_pedir_proposta',
     'aceleriq_comercial_registrar_fato',
     'aceleriq_comercial_registrar_mensagem',
+    'aceleriq_comercial_repasse_marcar',
+    'aceleriq_comercial_repasses',
     'aceleriq_complete_commercial_activity',
     'aceleriq_complete_task',
     'aceleriq_create_commercial_activity',
@@ -245,6 +253,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_delete_task',
     'aceleriq_dia_prioritario',
     'aceleriq_dia_prioritario_registrar',
+    'aceleriq_editar_legenda_publicacao',
     'aceleriq_estudio_trabalhos',
     'aceleriq_fetch',
     'aceleriq_finalize_file_upload',
@@ -1285,4 +1294,79 @@ Deno.test('AB2: GET sem Bearer desafia, GET pedindo stream e 405, o resto e a de
   assertEquals(d.toolCount, TOOLS.length);
   assertEquals(d.serverTime, '2026-09-26T12:00:00.000Z');
   assertEquals(Object.keys(d.secondBrain), ['configured']);
+});
+
+Deno.test('editar legenda aprovada: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
+  const { editarLegendaSchema, LIMITE_DA_LEGENDA } = await import('./modulos/editar-legenda-publicacao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const tool = TOOL_MAP.get('aceleriq_editar_legenda_publicacao');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('editorial:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['caption', 'confirmar', 'expected_version', 'idempotency_key', 'publication_id']);
+  assertEquals(schema.properties.confirmar.const, true);
+  assertEquals(schema.properties.caption.maxLength, LIMITE_DA_LEGENDA);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_editar_legenda_publicacao'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('editar_legenda_publicacao_aprovada'));
+
+  const base = {
+    publication_id: '11111111-1111-4111-8111-111111111111',
+    expected_version: 3,
+    caption: 'Legenda nova',
+    confirmar: true,
+    idempotency_key: 'legenda-0001',
+  };
+  assert(editarLegendaSchema.safeParse(base).success);
+  assert(!editarLegendaSchema.safeParse({ ...base, confirmar: false }).success, 'sem confirmar não edita');
+  assert(!editarLegendaSchema.safeParse({ ...base, caption: '   ' }).success, 'legenda vazia não passa');
+  assert(!editarLegendaSchema.safeParse({ ...base, caption: 'x'.repeat(LIMITE_DA_LEGENDA + 1) }).success);
+  assert(!editarLegendaSchema.safeParse({ ...base, content_type: 'story' }).success, 'não aceita mudar formato por aqui');
+  assert(!editarLegendaSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  // Sem escopo de escrita não chama.
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(adminCtx, tool));
+});
+
+Deno.test('ajustar formato aprovado: ferramenta no catálogo, escopo editorial:write e schema fechado', async () => {
+  const { ajustarFormatoSchema, FORMATOS_DE_PECA_UNICA } = await import('./modulos/editar-legenda-publicacao.ts');
+  const { CLIENT_SCOPED_LEGACY_TOOLS } = await import('../_shared/mcp-security.ts');
+  const { RPCS_DA_PONTE } = await import('../_shared/mcp-mesas-ponte.ts');
+  const { FERRAMENTAS_POR_AREA } = await import('./modulos/guia-do-painel.ts');
+  const tool = TOOL_MAP.get('aceleriq_ajustar_formato_publicacao');
+  assert(tool, 'ferramenta no catálogo');
+  assert(tool.scopes.includes('editorial:write'));
+  assertEquals(tool.annotations?.readOnlyHint, false);
+  const schema = tool.inputSchema as { required: string[]; additionalProperties: boolean; properties: Record<string, Record<string, unknown>> };
+  assertEquals(schema.additionalProperties, false);
+  assertEquals([...schema.required].sort(), ['confirmar', 'content_type', 'expected_version', 'idempotency_key', 'post_id']);
+  assertEquals(schema.properties.confirmar.const, true);
+  assertEquals(schema.properties.content_type.enum, ['static', 'story', 'reel', 'video']);
+  assertEquals([...FORMATOS_DE_PECA_UNICA], ['static', 'story', 'reel', 'video']);
+  assert((CLIENT_SCOPED_LEGACY_TOOLS as readonly string[]).includes('aceleriq_ajustar_formato_publicacao'));
+  assert((RPCS_DA_PONTE as readonly string[]).includes('ajustar_formato_publicacao_aprovada'));
+  assert(FERRAMENTAS_POR_AREA.calendario.includes('aceleriq_ajustar_formato_publicacao'));
+
+  const base = {
+    post_id: '22222222-2222-4222-8222-222222222222',
+    expected_version: 5,
+    content_type: 'story',
+    confirmar: true,
+    idempotency_key: 'formato-0001',
+  };
+  assert(ajustarFormatoSchema.safeParse(base).success);
+  for (const formato of ['static', 'reel', 'video']) {
+    assert(ajustarFormatoSchema.safeParse({ ...base, content_type: formato }).success, formato);
+  }
+  assert(!ajustarFormatoSchema.safeParse({ ...base, content_type: 'carousel' }).success, 'carrossel não troca por aqui');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, confirmar: false }).success, 'sem confirmar não ajusta');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, expected_version: undefined }).success, 'versão é obrigatória');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, idempotency_key: 'curta' }).success);
+  assert(!ajustarFormatoSchema.safeParse({ ...base, caption: 'x' }).success, 'não aceita mudar legenda por aqui');
+  assert(!ajustarFormatoSchema.safeParse({ ...base, publication_id: base.post_id }).success, 'é o conteúdo, não a publicação');
+  // Sem escopo de escrita não chama.
+  assert(!canInvoke(readCtx, tool));
+  assert(canInvoke(adminCtx, tool));
 });
