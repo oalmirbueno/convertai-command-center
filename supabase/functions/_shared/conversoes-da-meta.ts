@@ -61,7 +61,7 @@ export interface ConversaoDaFila {
   id: string;
   conta_id: string;
   lead_id: string;
-  evento: "Lead" | "Purchase";
+  evento: "Lead" | "Purchase" | "QualifiedLead" | "SimulationCompleted";
   valor: number | string;
   dados: Record<string, unknown> | null;
   tentativas: number;
@@ -73,9 +73,38 @@ export interface ConversaoDaFila {
 
 const textoDe = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
+/** O nome do CRM em custom_data.lead_event_source (a Meta mostra esse nome no Gerenciador de Eventos). */
+export const NOME_DO_CRM = "Aceleriq CRM";
+
+/** Eventos que carregam valor em reais. */
+const COM_VALOR = ["Purchase", "SimulationCompleted"];
+
+/**
+ * O leadgen_id de um lead que veio do formulário da Meta (Lead Ads): 15 a 17 dígitos, segundo a Meta;
+ * aceita de 10 a 20 para não recusar um id fora do costume. Vazio quando o negócio não veio de lá
+ * (ou quando é lead de teste, que tem id com letras).
+ */
+export function leadgenDaConversao(dados: unknown): string {
+  const o = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
+  const bruto = typeof o.leadgen_id === "number" && Number.isSafeInteger(o.leadgen_id) ? String(o.leadgen_id) : typeof o.leadgen_id === "string" ? o.leadgen_id.trim() : "";
+  return /^[0-9]{10,20}$/.test(bruto) ? bruto : "";
+}
+
+/** O negócio nasceu de um lead simulado pela tela (leadgen_id que não é número): nenhum evento dele vai para a Meta. */
+export function conversaoDeTeste(dados: unknown): boolean {
+  const o = dados && typeof dados === "object" ? (dados as Record<string, unknown>) : {};
+  return typeof o.leadgen_id === "string" && o.leadgen_id.trim() !== "" && !leadgenDaConversao(dados);
+}
+
 /**
  * O evento no formato da API de Conversões. Só entra o que existe: identificador
  * sem valor fica de fora (a Meta recusa hash de texto vazio).
+ *
+ * Negócio que veio do formulário da Meta (dados.leadgen_id): sai como evento de CRM
+ * ("Conversion Leads", documentação conferida em 13/11/2026): action_source
+ * "system_generated", user_data.lead_id com o leadgen_id SEM hash,
+ * custom_data.event_source "crm" e lead_event_source com o nome do CRM. O
+ * event_name é a etapa (QualifiedLead, SimulationCompleted, Purchase).
  */
 export async function montarEventoDaMeta(c: ConversaoDaFila, agora = Date.now()): Promise<Record<string, unknown>> {
   const dados = c.dados && typeof c.dados === "object" ? c.dados : {};
@@ -91,6 +120,9 @@ export async function montarEventoDaMeta(c: ConversaoDaFila, agora = Date.now())
   if (nome.primeiro) usuario.fn = [await sha256Hex(nome.primeiro)];
   if (nome.ultimo) usuario.ln = [await sha256Hex(nome.ultimo)];
   if (c.lead_id) usuario.external_id = [await sha256Hex(String(c.lead_id))];
+  const leadgen = leadgenDaConversao(dados);
+  // A Meta mostra o lead_id como inteiro; id que não cabe inteiro sem perder dígito vai como texto.
+  if (leadgen) usuario.lead_id = Number.isSafeInteger(Number(leadgen)) ? Number(leadgen) : leadgen;
   const fbc = montarFbc(dados.fbclid, dados.clicado_em || instante);
   if (fbc) usuario.fbc = fbc;
   const fbp = textoDe(dados.fbp, 100);
@@ -100,7 +132,7 @@ export async function montarEventoDaMeta(c: ConversaoDaFila, agora = Date.now())
   const ip = textoDe(dados.ip, 45);
   const pagina = textoDe(dados.pagina, 300);
   // Evento de site pede o navegador de quem preencheu. A venda acontece dentro do CRM, sem navegador.
-  const doSite = c.evento === "Lead" && !!navegador;
+  const doSite = c.evento === "Lead" && !!navegador && !leadgen;
   if (doSite) {
     usuario.client_user_agent = navegador;
     if (ip) usuario.client_ip_address = ip;
@@ -114,12 +146,12 @@ export async function montarEventoDaMeta(c: ConversaoDaFila, agora = Date.now())
     user_data: usuario,
   };
   if (doSite && /^https?:\/\//.test(pagina)) evento.event_source_url = pagina;
-  if (c.evento === "Purchase") {
+  if (COM_VALOR.indexOf(c.evento) >= 0) {
     const valor = Number(c.valor);
-    evento.custom_data = { currency: "BRL", value: isFinite(valor) && valor > 0 ? Math.round(valor * 100) / 100 : 0, event_source: "crm", lead_event_source: "Aceleriq CRM" };
+    evento.custom_data = { currency: "BRL", value: isFinite(valor) && valor > 0 ? Math.round(valor * 100) / 100 : 0, event_source: "crm", lead_event_source: NOME_DO_CRM };
   } else {
     const formulario = textoDe(dados.formulario, 80);
-    evento.custom_data = { event_source: "crm", lead_event_source: "Aceleriq CRM", ...(formulario ? { content_name: formulario } : {}) };
+    evento.custom_data = { event_source: "crm", lead_event_source: NOME_DO_CRM, ...(formulario ? { content_name: formulario } : {}) };
   }
   return evento;
 }

@@ -112,6 +112,29 @@ const avisos = [
   { id: "v2", titulo: "Parado há 5 dias", texto: "Clínica Vida", lead_id: null, lido_em: null, criado_em: dia(-1) },
 ];
 
+const integracao = {
+  existe: true, ativo: true, modo: "teste", webhook_chave: "0123456789abcdef0123456789abcdef", verify_token: "abcdef0123456789abcdef01", pagina_id: "102938475610", formularios: [],
+  tem_app_secret: true, tem_token: true, token_final: "xYz9", wa_phone_id: "556677889900", wa_waba_id: "112233445566", wa_numero: "5541988880000", tem_wa_token: false, wa_token_final: null,
+  templates: { lead: "crm_boas_vindas", vendedor: "crm_aviso_vendedor", followup: "crm_retomada" }, idioma: "pt_BR", pontuacao: {}, followup_horas: [24, 72], ultimo_erro: null,
+  numeros: { leads_7_dias: 18, na_fila: 2, em_nutricao: 5, envios_pendentes: 1, envios_com_erro: 0 },
+};
+const vendedores = [
+  { membro_id: "m4", user_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome: "Marina Alves", papel: "usuario", cargo: "Corretora", estado: "ativo", recebe_leads: true, bens: ["imovel"], expediente: { inicio: "09:00", fim: "18:00", dias: [1, 2, 3, 4, 5] }, whatsapp: "5541999990001", no_expediente: true, ultimo_lead_em: dia(0) },
+  { membro_id: "m2", user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nome: "Rafael Lima", papel: "gerente", cargo: "Gerente comercial", estado: "ativo", recebe_leads: true, bens: ["carro", "moto"], expediente: {}, whatsapp: "5541999990002", no_expediente: true, ultimo_lead_em: dia(-1) },
+  { membro_id: "m1", user_id: EU, nome: "Priscila Souza", papel: "admin", cargo: "Diretora", estado: "ativo", recebe_leads: false, bens: [], expediente: {}, whatsapp: null, no_expediente: true, ultimo_lead_em: null },
+];
+const atividadeDaIntegracao = {
+  leads: [
+    { id: "ml1", leadgen_id: "9988776655", form_id: "7001", situacao: "criado", de_teste: false, erro: null, criado_em: dia(0), lead_id: "x1", nome: "João Batista", faixa: "quente", nota: 82, fila_desde: null, nutricao: false, vendedor: "Marina Alves", campanha: "Consórcio imóvel novembro" },
+    { id: "ml2", leadgen_id: "9988776656", form_id: "7001", situacao: "criado", de_teste: false, erro: null, criado_em: dia(0), lead_id: "x2", nome: "Carla Mendes", faixa: "morno", nota: 55, fila_desde: dia(0), nutricao: false, vendedor: null, campanha: "Consórcio carro" },
+    { id: "ml3", leadgen_id: "teste_1", form_id: null, situacao: "criado", de_teste: true, erro: null, criado_em: dia(-1), lead_id: "x3", nome: "Lead de teste", faixa: "frio", nota: 18, fila_desde: null, nutricao: true, vendedor: null, campanha: null },
+  ],
+  envios: [
+    { id: "e1", destino: "lead", situacao: "simulado", erro: null, criado_em: dia(0), enviado_em: null, lead_id: "x1", tipo: "template", resumo: "crm_boas_vindas" },
+    { id: "e2", destino: "vendedor", situacao: "simulado", erro: null, criado_em: dia(0), enviado_em: null, lead_id: "x1", tipo: "template", resumo: "crm_aviso_vendedor" },
+  ],
+};
+
 const tabelas = {
   crm_campos: camposDaEmpresa, crm_automacoes: automacoes, crm_avisos: avisos, crm_paginas: [], crm_formularios: [], crm_conversoes: [], crm_automacao_execucoes: [],
   crm_leads: leads, crm_organizations: organizacoes, crm_contacts: [], crm_activities: atividades, crm_lead_events: eventos, crm_campaigns: campanhas, crm_goals: metas, crm_lead_messages: [],
@@ -157,6 +180,9 @@ async function abrir({ nome, caminho, largura, papel = "member", estado = estado
       if (rpc[1] === "produto_admin_contas") return json(contasDaCasa);
       if (rpc[1] === "produto_faturamento") return json(faturamento);
       if (rpc[1] === "crm_ranking") return json(ranking);
+      if (rpc[1] === "crm_integracao_ler" || rpc[1] === "crm_integracao_salvar") return json(integracao);
+      if (rpc[1] === "crm_vendedores_ler") return json(vendedores);
+      if (rpc[1] === "crm_integracao_atividade") return json(atividadeDaIntegracao);
       if (rpc[1] === "crm_origens") return json([]);
       return json(null);
     }
@@ -209,6 +235,11 @@ const telas = [
   { nome: "35-recolhida", caminho: "/app", espera: "[data-inicio-do-produto]", depois: async (p) => { const b = p.locator("[data-recolher-lateral]"); if (await b.isVisible()) { await b.click(); await p.waitForTimeout(400); } } },
   { nome: "06b-equipe-claro", caminho: "/app/equipe", espera: "[data-ranking]", tema: "light" },
   { nome: "06c-perfil", caminho: "/app/equipe", espera: "[data-ranking]", depois: async (p) => { await p.click('[data-pessoa="m4"]'); await p.waitForSelector("[data-salvar-perfil]"); } },
+  { nome: "40-integracoes", caminho: "/app/integracoes", espera: "[data-parte]" },
+  { nome: "41-integ-meta", caminho: "/app/integracoes?parte=meta", espera: "[data-parte]" },
+  { nome: "42-integ-whatsapp", caminho: "/app/integracoes?parte=whatsapp", espera: "[data-parte]" },
+  { nome: "43-integ-pontuacao", caminho: "/app/integracoes?parte=pontuacao", espera: "[data-parte]" },
+  { nome: "44-integ-vendedores", caminho: "/app/integracoes?parte=vendedores", espera: "[data-parte]" },
   { nome: "30-automacoes", caminho: "/app/automacoes", espera: "[data-produto-lateral]" },
   { nome: "31-captacao", caminho: "/app/captacao", espera: "[data-produto-lateral]" },
   { nome: "32-espaco", caminho: "/app/espaco", espera: "[data-produto-conteudo]" },

@@ -232,3 +232,7 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.produto-conversoes]
     verify_jwt = true
+  [functions.produto-meta-rotina]
+    verify_jwt = true
+  [functions.produto-meta]
+    verify_jwt = false

@@ -603,7 +603,16 @@ function Cartao({
           )}
           {naConta() ? (
             <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.owner_id ? "text-muted-foreground" : "font-medium text-warning")} data-responsavel-no-cartao="">
-              {nomeDoResponsavelNaConta(lead.owner_id)}
+              {lead.faixa && (
+                <span
+                  className={juntar("mr-1.5 inline-flex h-4 items-center rounded px-1 text-[10px] font-semibold uppercase leading-none", lead.faixa === "quente" ? "bg-destructive/15 text-destructive" : lead.faixa === "morno" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground")}
+                  title={`Nota ${lead.nota ?? 0} de 100${lead.nota_motivos && lead.nota_motivos.length ? `: ${lead.nota_motivos.join("; ")}` : ""}`}
+                  data-faixa-do-lead={lead.faixa}
+                >
+                  {lead.faixa}
+                </span>
+              )}
+              {lead.fila_desde && !lead.owner_id ? "Na fila do rodízio" : lead.nutricao && !lead.owner_id ? "Em nutrição" : nomeDoResponsavelNaConta(lead.owner_id)}
             </p>
           ) : (
           <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
