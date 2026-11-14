@@ -634,11 +634,70 @@ describe("vigia: o que ficou preso em rodando (função morta por limite de CPU)
     banco.pedir({ client: "A", trabalho: "T", ordens: [1], usuario: "u1" });
     const p = banco.pegar("morto", "u1") as ItemDaFila;
     banco.gravar(p, "morto", { versoes_antes: 0 });
+    banco.gravarArte("T", 1); // a arte saiu (e foi cobrada) e a função morreu sem fechar o passo
     banco.relogio += TRAVA_MS + 1000;
-    const deps = { ...banco.deps("u1", iaDeMentira(banco, chamadas)), versoes: async () => { throw new Error("banco fora do ar"); } };
-    const r = await processarUmPasso(deps, "novo");
+    const deps = banco.deps("u1", iaDeMentira(banco, chamadas));
+    const semLeitura = { ...deps, versoes: async () => { throw new Error("banco fora do ar"); } };
+    const r = await processarUmPasso(semLeitura, "novo");
     expect(chamadas).toEqual([]);
     expect(r && r.mudanca).toMatchObject({ status: "fila", etapa: "gerar", tentativas: 2 });
+    // O gerar continua aberto: a contagem de antes dele fica na linha (sem ela, a arte já gravada viraria o ponto de partida).
+    expect(r && r.mudanca.versoes_antes).toBe(0);
+    expect(banco.linhas[0]).toMatchObject({ status: "fila", etapa: "gerar", versoes_antes: 0, trava_token: null });
+
+    // Tentativa seguinte, com a leitura de volta: a arte já existe, então confere. Nenhum gerar (nenhuma cobrança) a mais.
+    banco.relogio = banco.linhas[0].proxima_em;
+    const r2 = await processarUmPasso(deps, "novo-2");
+    expect(r2 && r2.etapa).toBe("conferir");
+    expect(chamadas).toEqual(["conferir:T#1"]);
+    expect(banco.versoes["T#1"]).toBe(1);
+    expect(banco.linhas[0]).toMatchObject({ status: "feito", versoes_antes: null });
+  });
+
+  it("o gerar aberto guarda a contagem enquanto repete no gerar; fechar ou avançar de etapa zera", () => {
+    const aberto = item({ versoes_antes: 2 });
+    const falha = (codigo: string, extra: Partial<ItemDaFila> = {}) => proximoPasso({ ...aberto, ...extra }, "gerar", { ok: false, codigo, mensagem: "" }, agora).mudanca;
+    // Repete no gerar (leitura que falhou, espera da capa): a contagem fica.
+    for (const codigo of ["trabalho_indisponivel", "acesso_indisponivel", "arquivo_indisponivel", "capa_pendente"]) {
+      expect(falha(codigo)).toMatchObject({ status: "fila", etapa: "gerar", versoes_antes: 2 });
+    }
+    // Sem contagem (gerar novo), nada é inventado.
+    expect(falha("capa_pendente", { versoes_antes: null }).versoes_antes).toBeNull();
+    // Avançou de verdade (conferir) ou mudou de etapa (preparar o fundo): zera.
+    expect(proximoPasso(aberto, "gerar", { ok: true, corpo: {} }, agora).mudanca).toMatchObject({ etapa: "conferir", versoes_antes: null });
+    expect(falha("fundo_pendente")).toMatchObject({ etapa: "fundo", versoes_antes: null });
+    // Fechou (erro depois da IA, tentativas no fim, teto de passos): zera.
+    expect(falha("erro_interno")).toMatchObject({ status: "erro", versoes_antes: null });
+    expect(falha("trabalho_indisponivel", { tentativas: 2 })).toMatchObject({ status: "erro", versoes_antes: null });
+    expect(falha("capa_pendente", { passos: LIMITES_DA_FILA.MAX_PASSOS - 1 })).toMatchObject({ status: "erro", versoes_antes: null });
+    // Fora do gerar a contagem nunca fica (conferência que repete não carrega nada).
+    expect(proximoPasso(item({ etapa: "fundo", versoes_antes: 2 }), "fundo", { ok: false, codigo: "fundo_em_andamento", mensagem: "" }, agora).mudanca.versoes_antes).toBeNull();
+  });
+
+  it("gerar aberto que cai na espera da capa: a arte que o passo antigo gravou atrasado não é gerada (nem cobrada) de novo", async () => {
+    const banco = new BancoDaFila();
+    const chamadas: string[] = [];
+    banco.pedir({ client: "A", trabalho: "T", ordens: [3], usuario: "u1" });
+    // Passo lento: abriu o gerar (contagem 0), a trava venceu e ele segue gerando do lado dele.
+    const lento = banco.pegar("lento", "u1") as ItemDaFila;
+    banco.gravar(lento, "lento", { versoes_antes: 0 });
+    banco.relogio += TRAVA_MS + 1000;
+    // Retomada: ainda sem arte nova, e a capa do trabalho voltou a gerar. A lâmina espera, com a contagem do gerar aberto.
+    const ia = iaDeMentira(banco, chamadas);
+    let capaPronta = false;
+    const deps = banco.deps("u1", async (etapa, i) => (etapa === "gerar" && !capaPronta ? { ok: false, codigo: "capa_pendente", mensagem: "" } : ia(etapa, i)));
+    await processarUmPasso(deps, "t2");
+    expect(banco.linhas[0]).toMatchObject({ status: "fila", etapa: "gerar", aviso: AVISO_ESPERANDO_A_CAPA, versoes_antes: 0 });
+    // O passo lento termina agora: grava a arte, mas não fecha a linha (a trava já é de outro).
+    banco.gravarArte("T", 3);
+    expect(banco.gravar(lento, "lento", { status: "fila", etapa: "conferir", versoes_antes: null })).toBe(false);
+    // Volta seguinte, com a capa pronta: a arte daquele gerar já existe, então confere. Nenhum gerar a mais.
+    capaPronta = true;
+    banco.relogio = banco.linhas[0].proxima_em;
+    const r = await processarUmPasso(deps, "t3");
+    expect(r && r.etapa).toBe("conferir");
+    expect(chamadas).toEqual(["conferir:T#3"]);
+    expect(banco.versoes["T#3"]).toBe(1);
   });
 
   it("trava vencida sem arte nova: volta para a fila com a tentativa contada e espera crescente; no teto vira erro", () => {
@@ -746,9 +805,9 @@ describe("vigia: o que ficou preso em rodando (função morta por limite de CPU)
 });
 
 describe("espera da capa, novas tentativas e a corrente", () => {
-  it("capa_pendente espera 15 s com o motivo gravado; o passo que fecha zera a contagem do gerar", () => {
+  it("capa_pendente espera 15 s com o motivo gravado e a contagem do gerar aberto; o passo que avança zera a contagem", () => {
     const m = proximoPasso(item({ ordem: 3, versoes_antes: 0 }), "gerar", { ok: false, codigo: "capa_pendente", mensagem: "" }, agora).mudanca;
-    expect(m).toMatchObject({ status: "fila", etapa: "gerar", tentativas: 0, aviso: AVISO_ESPERANDO_A_CAPA, versoes_antes: null });
+    expect(m).toMatchObject({ status: "fila", etapa: "gerar", tentativas: 0, aviso: AVISO_ESPERANDO_A_CAPA, versoes_antes: 0 });
     expect(Date.parse(m.proxima_em) - agora.getTime()).toBe(LIMITES_DA_FILA.ESPERA_DA_CAPA_S * 1000);
     // A espera da capa não ganha chute próprio: é a capa que solta as outras ao sair do gerar.
     expect(esperaDoChute(m, agora)).toBeNull();

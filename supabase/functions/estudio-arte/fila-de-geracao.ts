@@ -34,8 +34,10 @@
  * preso, de QUALQUER pessoa (decidirPreso): arte já gravada segue para a
  * conferência (nunca gera de novo), trava vencida volta para a fila com
  * espera e tentativa contada, tentativas esgotadas ou abandono viram erro
- * registrado. O status do trabalho deixa de ficar "gerando" quando o lote
- * acaba (statusDoTrabalhoEmProducao).
+ * registrado. A contagem de antes do gerar (versoes_antes) fica na linha
+ * enquanto o gerar aberto não foi conferido, inclusive na nova tentativa. O
+ * status do trabalho deixa de ficar "gerando" quando o lote acaba
+ * (statusDoTrabalhoEmProducao).
  */
 
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
@@ -119,8 +121,11 @@ export interface MudancaDoItem {
   aviso: string | null;
   concluido_em: string | null;
   atualizado_em: string;
-  /** Passo fechado: a contagem de versões de antes do "gerar" sai (só fica enquanto um gerar está aberto). */
-  versoes_antes: null;
+  /**
+   * Contagem de versões de antes do "gerar". Fica enquanto o gerar segue aberto (nova tentativa ou espera que
+   * continua no gerar); sai (null) quando a linha fecha ou muda de etapa.
+   */
+  versoes_antes: number | null;
 }
 
 /** Texto que a linha leva enquanto espera (a tela mostra "na fila" com este motivo, sem zerar o tempo). */
@@ -177,7 +182,11 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
         ? feito("A conferência ficou para depois: a lâmina passou do limite de passos.")
         : falhou("passos_esgotados", "A lâmina passou do limite de passos na fila. Gere de novo.");
     }
-    return { ...base, etapa: proxima, proxima_em: depois(agora, esperaS), ...extra };
+    // Repetição que continua no gerar (leitura que falhou, espera da capa): o gerar aberto não foi conferido,
+    // então a contagem de antes dele fica. Zerar aqui fazia a tentativa seguinte tomar a arte já gravada como
+    // ponto de partida e gerar (e cobrar) de novo.
+    const versoes_antes = etapa === "gerar" && proxima === "gerar" ? item.versoes_antes : null;
+    return { ...base, etapa: proxima, proxima_em: depois(agora, esperaS), versoes_antes, ...extra };
   };
 
   if (r.ok) {
@@ -233,9 +242,10 @@ export function proximoPasso(item: ItemDaFila, etapa: EtapaDaFila, r: ResultadoD
  * queda; segue para a conferência em vez de gerar e cobrar de novo.
  *
  * 14/11/2026: não depende mais de `tentativas > 0`. A contagem `versoes_antes`
- * só existe enquanto um "gerar" está aberto (todo passo que fecha a zera), então
- * versão a mais com ela preenchida já é a prova de que a arte saiu, mesmo quando
- * a função morreu na primeira tentativa (SKC, lâmina 5: tentativas 0, arte gravada).
+ * só existe enquanto um "gerar" está aberto (a linha que fecha ou muda de etapa
+ * a zera; a repetição que continua no gerar a mantém), então versão a mais com
+ * ela preenchida já é a prova de que a arte saiu, mesmo quando a função morreu
+ * na primeira tentativa (SKC, lâmina 5: tentativas 0, arte gravada).
  */
 export function etapaNaRetomada(item: ItemDaFila, versoesAgora: number): EtapaDaFila {
   if (item.etapa === "gerar" && item.versoes_antes !== null && versoesAgora > item.versoes_antes) return "conferir";
@@ -267,6 +277,8 @@ export interface PassoProcessado {
 export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, token: string): Promise<PassoProcessado> {
   let etapa = item.etapa;
   let semLeitura = false;
+  // O item como o passo o deixa: com a contagem que este gerar acabou de guardar (a repetição no gerar a mantém).
+  let aberto = item;
   if (etapa === "gerar") {
     const versoes = await deps.versoes(item).catch((e) => (registrarFalha("estudio-arte: versoes falhou", e), null));
     if (versoes !== null) {
@@ -274,6 +286,7 @@ export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, 
       // Guarda quantas versões havia antes de gerar. Preenchida = um gerar anterior não fechou: fica a contagem dele.
       if (etapa === "gerar" && item.versoes_antes === null) {
         await deps.gravar(item, token, { versoes_antes: versoes });
+        aberto = { ...item, versoes_antes: versoes };
       }
     } else if (item.versoes_antes !== null) {
       // Retomada de um gerar que não fechou e o trabalho não pôde ser lido: sem saber se a arte já saiu, não gera (não cobra) às cegas.
@@ -290,7 +303,7 @@ export async function processarItem(deps: DependenciasDaFila, item: ItemDaFila, 
       r = { ok: false, codigo: "erro_interno", mensagem: e instanceof Error && e.message ? e.message.slice(0, 300) : "Erro inesperado no estúdio." };
     }
   }
-  const { mudanca, pararLote } = proximoPasso(item, etapa, r, deps.agora());
+  const { mudanca, pararLote } = proximoPasso(aberto, etapa, r, deps.agora());
   const gravou = await deps.gravar(item, token, mudanca as unknown as Record<string, unknown>);
   if (pararLote) await deps.pararLote(item, pararLote).catch((e) => (registrarFalha("estudio-arte: pararLote falhou", e), undefined));
   return { item, etapa, mudanca, gravou };
