@@ -101,3 +101,12 @@ export function documentoLegivel(v: string): string {
 export function destinoDaCompra(p: { pagamentosAtivos: boolean; documento: string }): "teste" | "checkout" {
   return p.pagamentosAtivos && !!documentoConferido(p.documento) ? "checkout" : "teste";
 }
+
+/** Onde o produto mora. A página de venda também abre num subdomínio só dela. */
+export const ENDERECO_DO_APP = "https://aceleriq.online";
+export const SUBDOMINIO_DE_VENDA = "crm.aceleriq.online";
+
+export const ehSubdominioDeVenda = (host: string) => String(host || "").toLowerCase() === SUBDOMINIO_DE_VENDA;
+
+/** No subdomínio de venda, cadastro, login e produto abrem no endereço do produto; fora dele, o caminho é relativo. */
+export const baseDoApp = (host: string) => (ehSubdominioDeVenda(host) ? ENDERECO_DO_APP : "");

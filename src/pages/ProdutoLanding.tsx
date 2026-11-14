@@ -1,19 +1,25 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Bot, Check, FileText, Link2, Minus, Plus, Radar, SlidersHorizontal, Trophy, Users, Zap } from "lucide-react";
+import { ArrowRight, Bot, CalendarClock, Check, FileText, Link2, Minus, Plus, Radar, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { lerPrecos, listarPlanos, reais } from "@/lib/produto/api";
 import { ETAPAS_DO_FUNIL, NICHOS, NOME_PADRAO_DA_ETAPA, type EtapaId } from "@/lib/produto/nichos";
-import { enderecoDeCompra, usuariosValidos } from "@/lib/produto/venda";
+import { baseDoApp, enderecoDeCompra, usuariosValidos } from "@/lib/produto/venda";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
-import { Revela, TelaDaAgenda, TelaDoFunil, TelaDoPainel, TelaDoRanking } from "@/components/venda/Cenas";
+import { Revela, TelaNoCelular, TelaReal } from "@/components/venda/Cenas";
+import telaPainel from "@/assets/venda/painel.webp";
+import telaPainelCelular from "@/assets/venda/painel-celular.webp";
+import telaFunil from "@/assets/venda/funil.webp";
+import telaEquipe from "@/assets/venda/equipe.webp";
+import telaAutomacoes from "@/assets/venda/automacoes.webp";
 import "@/components/venda/venda.css";
 
 /**
  * A página de venda do CRM (endereço /crm), pronta para receber tráfego.
  * Ordem da conversa: promessa, problema, o produto funcionando, recursos, para
- * quem é, preço, objeções, perguntas e a chamada final. Os preços e os dias de
+ * quem é, preço, objeções, perguntas e a chamada final. As imagens são telas
+ * reais do CRM, capturadas com dados de exemplo (src/assets/venda). Os preços e os dias de
  * teste vêm do banco. Nenhuma prova inventada: o que convence é o
  * produto e o teste. Cada botão de plano leva a escolha para o cadastro
  * (/crm/comecar), que termina no teste ou no checkout, conforme a cobrança
@@ -25,10 +31,10 @@ const COMECAR = "/crm/comecar";
 /** A copy longa fica aqui, fora da tela, para ser editada num lugar só. */
 const COPY = {
   heroi: "O CRM da Aceleriq põe cada negócio num funil que você enxerga, avisa a hora de cada retorno e mostra quem da equipe está vendendo. Já chega montado para o seu ramo.",
-  produto: "Três telas que o seu time abre todo dia. O que aparece aqui é demonstração, com dados de exemplo.",
-  retornos: "Todo negócio aberto tem um próximo passo com dia e hora. Você abre o CRM de manhã e já sabe para quem ligar.",
-  painel: "Quanto já entrou, quanto falta para a meta e em que etapa o dinheiro está parado. Sem pedir relatório para ninguém.",
-  ranking: "O ranking muda a cada negócio fechado. O gerente vê quem precisa de ajuda e repassa contatos para quem tem espaço.",
+  produto: "Estas são telas do próprio CRM, do jeito que a sua equipe vai abrir todo dia. Os nomes e valores são dados de exemplo.",
+  funil: "Arraste o cartão quando o cliente avança. Cada negócio mostra o valor, o responsável e o próximo passo, e o que está atrasado aparece na hora.",
+  equipe: "O ranking muda a cada negócio fechado. O gerente acompanha a equipe dele, vê quem precisa de ajuda e repassa contatos para quem tem espaço.",
+  automacoes: "Negócio novo já entra com dono. Proposta enviada vira retorno marcado. Negócio parado avisa o gerente. Você liga a receita pronta, não programa nada.",
   semPrecos: "Não consegui carregar os preços agora. Você pode começar mesmo assim e escolher o plano no cadastro.",
 };
 
@@ -49,11 +55,11 @@ const DORES = [
 ];
 
 const RECURSOS = [
-  { icone: Users, titulo: "Equipe com hierarquia", linha: "Administrador, gerente e vendedor. Cada um vê o que precisa, e o gerente repassa contatos sem sair da tela." },
-  { icone: Trophy, titulo: "Ranking de vendedores", linha: "Quem vendeu mais, quem está parado, quem precisa de ajuda. Atualiza a cada negócio fechado." },
   { icone: Radar, titulo: "Máquina de leads", linha: "Diga o ramo e a cidade. Ela devolve empresas com o contato, prontas para entrar no funil." },
-  { icone: Link2, titulo: "Captação com rastreamento", linha: "Um link de captação seu. Cada contato chega com a origem do anúncio (UTM), e o Pixel da Meta marca a conversão." },
+  { icone: Link2, titulo: "Captação com rastreamento", linha: "Um formulário seu, com link para o anúncio. Cada contato chega com a origem (UTM), e o Pixel da Meta marca a conversão." },
+  { icone: Bot, titulo: "Claude e ChatGPT conectados", linha: "Ligue o seu assistente ao CRM e peça em português: crie o negócio, mude de etapa, marque o retorno. Para o resto, tem API." },
   { icone: SlidersHorizontal, titulo: "Campos do seu ramo", linha: "Consórcio pede carta e grupo. Imobiliária pede imóvel e visita. O CRM já chega com os campos certos." },
+  { icone: CalendarClock, titulo: "Agenda e retornos", linha: "Todo negócio aberto tem um próximo passo com dia e hora. Você abre o CRM de manhã e já sabe para quem ligar." },
   { icone: FileText, titulo: "Páginas internas", linha: "Roteiro de venda, tabela de preços, processo da equipe. Escrito dentro do CRM, ao lado do negócio." },
 ];
 
@@ -76,6 +82,11 @@ const PERGUNTAS = (dias: number | null, cobranca: boolean) => [
   { p: "Posso mudar de plano depois?", r: "Pode. Plano e número de usuários mudam na tela da conta, sem falar com ninguém." },
   { p: "Como conecto o Claude ou o ChatGPT?", r: "Na conta, em Conexões, você cria uma chave e cola o endereço no assistente. Ele passa a ler o funil, criar e mover negócios e marcar compromissos. Nenhuma ferramenta apaga dados." },
 ];
+
+/** Elo para o produto: dentro do painel navega sem recarregar; no subdomínio de venda abre o endereço do produto. */
+function Elo({ base, to, children, ...resto }: { base: string; to: string; children: ReactNode; className?: string; tabIndex?: number; "data-comecar"?: string; "data-comprar"?: string }) {
+  return base ? <a href={base + to} {...resto}>{children}</a> : <Link to={to} {...resto}>{children}</Link>;
+}
 
 export default function ProdutoLanding() {
   const { user } = useAuth();
@@ -107,6 +118,7 @@ export default function ProdutoLanding() {
     return () => window.removeEventListener("scroll", ver);
   }, []);
 
+  const base = baseDoApp(typeof window !== "undefined" ? window.location.hostname : "");
   const comprar = (plano: string, n: number) => (user ? "/app" : enderecoDeCompra({ plano, usuarios: n }, search));
   const principal = user ? "/app" : primeiro ? comprar(primeiro.id, primeiro.minimo_usuarios) : COMECAR;
   const chamada = user ? "Abrir o meu CRM" : cobranca ? "Assinar agora" : dias ? `Testar ${dias} dias grátis` : "Começar o teste grátis";
@@ -121,7 +133,7 @@ export default function ProdutoLanding() {
     <div className="vd" data-pagina-de-venda="" data-cobranca={cobranca ? "ligada" : "desligada"}>
       <header className="vd-topo">
         <div className="vd-dentro vd-topo-linha">
-          <Link to="/crm" aria-label="Aceleriq CRM"><MarcaAceleriq altura={22} /></Link>
+          <Link to={base ? "/" : "/crm"} aria-label="Aceleriq CRM"><MarcaAceleriq altura={22} /></Link>
           <nav className="vd-topo-elos" aria-label="Seções">
             <a href="#produto">Produto</a>
             <a href="#recursos">Recursos</a>
@@ -129,8 +141,8 @@ export default function ProdutoLanding() {
             <a href="#duvidas">Dúvidas</a>
           </nav>
           <span className="vd-vao" />
-          {!user && <Link to="/login?next=%2Fapp" className="vd-topo-entrar">Entrar</Link>}
-          <Link to={principal} className="vd-botao vd-botao-p" data-comecar="topo">{user ? "Abrir o CRM" : cobranca ? "Assinar" : "Testar grátis"}</Link>
+          {!user && <Elo base={base} to="/login?next=%2Fapp" className="vd-topo-entrar">Entrar</Elo>}
+          <Elo base={base} to={principal} className="vd-botao vd-botao-p" data-comecar="topo">{user ? "Abrir o CRM" : cobranca ? "Assinar" : "Testar grátis"}</Elo>
         </div>
       </header>
 
@@ -138,17 +150,16 @@ export default function ProdutoLanding() {
         <section className="vd-heroi">
           <div className="vd-grade" aria-hidden="true" />
           <div className="vd-aurora" aria-hidden="true" />
-          <div className="vd-aurora vd-aurora-2" aria-hidden="true" />
           <div className="vd-dentro">
             <div className="vd-heroi-texto">
-              <Revela><span className="vd-selo"><i />CRM de vendas para pequenas e médias empresas</span></Revela>
+              <Revela><span className="vd-olho">CRM de vendas para pequenas e médias empresas</span></Revela>
               <Revela atraso={1} como="h1" className="vd-h1">Sua próxima venda está <em>esquecida no WhatsApp.</em></Revela>
               <Revela atraso={2}>
                 <p className="vd-heroi-linha">{COPY.heroi}</p>
               </Revela>
               <Revela atraso={3}>
                 <div className="vd-heroi-acoes">
-                  <Link to={principal} className="vd-botao" data-comecar="heroi">{chamada}<ArrowRight aria-hidden="true" /></Link>
+                  <Elo base={base} to={principal} className="vd-botao" data-comecar="heroi">{chamada}<ArrowRight aria-hidden="true" /></Elo>
                   <a href="#precos" className="vd-fantasma">Ver os preços</a>
                 </div>
                 <ul className="vd-garantias">
@@ -159,8 +170,10 @@ export default function ProdutoLanding() {
               </Revela>
             </div>
             <div className="vd-palco">
-              <TelaDoFunil />
+              <TelaReal src={telaPainel} alt="Painel do CRM: vendido no mês, funil por etapa, vendas por mês e ranking da equipe" endereco="aceleriq.online/app" cedo />
+              <TelaNoCelular src={telaPainelCelular} alt="O mesmo painel do CRM aberto no celular" cedo />
             </div>
+            <p className="vd-legenda">Tela real do CRM, no computador e no celular.</p>
           </div>
         </section>
 
@@ -193,44 +206,44 @@ export default function ProdutoLanding() {
 
             <div className="vd-cena">
               <Revela className="vd-cena-texto">
-                <span className="vd-numero-da-cena">01 · Retornos</span>
-                <h3>Nenhum cliente fica sem resposta.</h3>
-                <p>{COPY.retornos}</p>
+                <span className="vd-olho">Funil</span>
+                <h3>Cada negócio numa etapa. Cada etapa numa cor.</h3>
+                <p>{COPY.funil}</p>
                 <ul className="vd-pontos">
-                  <li><Check aria-hidden="true" />Próximo passo marcado em todo negócio aberto</li>
-                  <li><Check aria-hidden="true" />Lembrete antes do retorno vencer</li>
-                  <li><Check aria-hidden="true" />A história de cada cliente guardada na ficha</li>
+                  <li><Check aria-hidden="true" />Etapas com os nomes que o seu ramo usa</li>
+                  <li><Check aria-hidden="true" />Valor em jogo e previsão do mês no topo</li>
+                  <li><Check aria-hidden="true" />Atrasado e sem próximo passo em destaque</li>
                 </ul>
               </Revela>
-              <TelaDaAgenda />
+              <TelaReal src={telaFunil} alt="Funil do CRM com as etapas coloridas e os negócios em cartões" endereco="aceleriq.online/app/crm" className="vd-janela-recorte" />
             </div>
 
             <div className="vd-cena vd-cena-invertida">
               <Revela className="vd-cena-texto">
-                <span className="vd-numero-da-cena">02 · Painel</span>
-                <h3>O mês inteiro numa tela.</h3>
-                <p>{COPY.painel}</p>
+                <span className="vd-olho">Equipe e ranking</span>
+                <h3>Todo mundo sabe quem está vendendo.</h3>
+                <p>{COPY.equipe}</p>
                 <ul className="vd-pontos">
-                  <li><Check aria-hidden="true" />Funil colorido, etapa por etapa</li>
-                  <li><Check aria-hidden="true" />Gráfico das vendas no tempo</li>
-                  <li><Check aria-hidden="true" />Meta do mês e quanto já saiu</li>
+                  <li><Check aria-hidden="true" />Administrador, gerente e vendedor, cada um com a sua visão</li>
+                  <li><Check aria-hidden="true" />Meta de cada vendedor e quanto já saiu</li>
+                  <li><Check aria-hidden="true" />Você escolhe: todos veem tudo ou cada um vê os seus</li>
                 </ul>
               </Revela>
-              <TelaDoPainel />
+              <TelaReal src={telaEquipe} alt="Tela da equipe com o ranking do mês e a estrutura de gerente e vendedores" endereco="aceleriq.online/app/equipe" className="vd-janela-recorte" />
             </div>
 
             <div className="vd-cena">
               <Revela className="vd-cena-texto">
-                <span className="vd-numero-da-cena">03 · Ranking</span>
-                <h3>Todo mundo sabe quem está vendendo.</h3>
-                <p>{COPY.ranking}</p>
+                <span className="vd-olho">Automações</span>
+                <h3>O trabalho repetido acontece sozinho.</h3>
+                <p>{COPY.automacoes}</p>
                 <ul className="vd-pontos">
-                  <li><Check aria-hidden="true" />Administrador, gerente e vendedor, cada um com a sua visão</li>
-                  <li><Check aria-hidden="true" />Repasse de contatos entre a equipe</li>
-                  <li><Check aria-hidden="true" />No Pro, cada vendedor vê só os próprios negócios</li>
+                  <li><Check aria-hidden="true" />Rodízio de negócios novos entre a equipe</li>
+                  <li><Check aria-hidden="true" />Tarefa criada quando o negócio muda de etapa</li>
+                  <li><Check aria-hidden="true" />Aviso de negócio parado e de proposta sem resposta</li>
                 </ul>
               </Revela>
-              <TelaDoRanking />
+              <TelaReal src={telaAutomacoes} alt="Tela de automações com as receitas prontas para ligar" endereco="aceleriq.online/app/automacoes" className="vd-janela-recorte" />
             </div>
           </div>
         </section>
@@ -242,23 +255,6 @@ export default function ProdutoLanding() {
               <h2 className="vd-h2">Tudo o que uma equipe de vendas precisa. <em>Nada que ela não usa.</em></h2>
             </Revela>
             <div className="vd-recursos">
-              <Revela className="vd-recurso vd-recurso-largo">
-                <span className="vd-icone"><Zap aria-hidden="true" /></span>
-                <h3>Automações prontas</h3>
-                <p>Você liga, não programa. O trabalho repetido acontece sozinho.</p>
-                <div className="vd-fichas">
-                  <span className="vd-ficha">Lead novo</span><span className="vd-ficha vd-ficha-verde">ganha dono e próximo passo</span>
-                  <span className="vd-ficha">Negócio parado</span><span className="vd-ficha vd-ficha-verde">vira lembrete</span>
-                  <span className="vd-ficha">Proposta enviada</span><span className="vd-ficha vd-ficha-verde">marca o retorno</span>
-                </div>
-              </Revela>
-              <Revela atraso={1} className="vd-recurso vd-recurso-largo">
-                <span className="vd-icone"><Bot aria-hidden="true" /></span>
-                <h3>Claude e ChatGPT dentro do seu CRM</h3>
-                <p>Conecte o assistente e peça em português. Para o resto, tem API.</p>
-                <p className="vd-fala">Mova a Clínica Vida para Proposta e marque o retorno para quinta, às 10h.</p>
-                <p className="vd-fala">Pronto. Negócio em Proposta e retorno marcado para quinta, 10h.</p>
-              </Revela>
               {RECURSOS.map((r, i) => (
                 <Revela key={r.titulo} atraso={((i % 3) + 1) as 1 | 2 | 3} className="vd-recurso">
                   <span className="vd-icone"><r.icone aria-hidden="true" /></span>
@@ -329,9 +325,9 @@ export default function ProdutoLanding() {
                           <li key={r}><Check aria-hidden="true" />{r}</li>
                         ))}
                       </ul>
-                      <Link to={comprar(p.id, n)} className={p.destaque ? "vd-botao vd-botao-largo" : "vd-fantasma vd-fantasma-largo"} data-comprar={p.id}>
+                      <Elo base={base} to={comprar(p.id, n)} className={p.destaque ? "vd-botao vd-botao-largo" : "vd-fantasma vd-fantasma-largo"} data-comprar={p.id}>
                         {user ? "Abrir o meu CRM" : cobranca ? `Assinar o ${p.nome}` : dias ? `Testar o ${p.nome} por ${dias} dias` : `Testar o ${p.nome}`}
-                      </Link>
+                      </Elo>
                     </Revela>
                   );
                 })}
@@ -339,7 +335,7 @@ export default function ProdutoLanding() {
             ) : (
               <div style={{ marginTop: 32 }}>
                 <p className="vd-nota">{COPY.semPrecos}</p>
-                <p style={{ marginTop: 16 }}><Link to={user ? "/app" : COMECAR} className="vd-botao" data-comecar="sem-planos">Começar agora</Link></p>
+                <p style={{ marginTop: 16 }}><Elo base={base} to={user ? "/app" : COMECAR} className="vd-botao" data-comecar="sem-planos">Começar agora</Elo></p>
               </div>
             )}
             <p className="vd-nota">
@@ -394,7 +390,7 @@ export default function ProdutoLanding() {
               <h2 className="vd-h2">O cliente de hoje não espera <em>até segunda.</em></h2>
               <p className="vd-sub" style={{ marginLeft: "auto", marginRight: "auto" }}>Monte o seu funil agora e pare de perder venda por esquecimento.</p>
               <div className="vd-heroi-acoes">
-                <Link to={principal} className="vd-botao" data-comecar="final">{chamada}<ArrowRight aria-hidden="true" /></Link>
+                <Elo base={base} to={principal} className="vd-botao" data-comecar="final">{chamada}<ArrowRight aria-hidden="true" /></Elo>
               </div>
               <ul className="vd-garantias">
                 {garantias.map((g) => (
@@ -411,7 +407,7 @@ export default function ProdutoLanding() {
           <MarcaAceleriq altura={18} />
           <span className="vd-vao" />
           <span>Aceleriq, {new Date().getFullYear()}</span>
-          {!user && <Link to="/login?next=%2Fapp">Entrar</Link>}
+          {!user && <Elo base={base} to="/login?next=%2Fapp">Entrar</Elo>}
         </div>
       </footer>
 
@@ -420,7 +416,7 @@ export default function ProdutoLanding() {
           <strong>{menorPreco ? `A partir de ${reais(menorPreco)}` : "CRM da Aceleriq"}</strong>
           {cobranca ? "por usuário, sem fidelidade" : "por usuário, teste sem cartão"}
         </span>
-        <Link to={principal} className="vd-botao vd-botao-p" tabIndex={rolou ? 0 : -1} data-comecar="barra">{user ? "Abrir" : cobranca ? "Assinar" : "Testar grátis"}</Link>
+        <Elo base={base} to={principal} className="vd-botao vd-botao-p" tabIndex={rolou ? 0 : -1} data-comecar="barra">{user ? "Abrir" : cobranca ? "Assinar" : "Testar grátis"}</Elo>
       </div>
     </div>
   );

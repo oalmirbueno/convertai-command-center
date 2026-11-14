@@ -141,7 +141,7 @@ async function verPagina({ largura, ligada, parado }) {
       await semTransbordo(pagina, `${nome} (rolagem ${y})`, largura);
     }
     await pagina.waitForTimeout(1900);
-    const escondidos = await pagina.evaluate(() => Array.prototype.filter.call(document.querySelectorAll(".vd-rev"), (e) => !e.classList.contains("vd-on")).length);
+    const escondidos = await pagina.evaluate(() => Array.prototype.filter.call(document.querySelectorAll(".vd-rev"), (e) => !e.classList.contains("vd-on") && e.offsetParent !== null).length);
     exigir(escondidos === 0, `${nome}@${largura}: ${escondidos} bloco(s) não apareceram ao rolar`);
     await pagina.evaluate(() => window.scrollTo(0, 0));
     await pagina.waitForTimeout(300);

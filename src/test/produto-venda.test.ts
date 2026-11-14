@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { destinoDaCompra, documentoConferido, documentoLegivel, enderecoDeCompra, lerEscolhaDeCompra } from "@/lib/produto/venda";
 import { lerRespostasGuardadas } from "@/components/produto/OnboardingDoProduto";
@@ -136,5 +136,30 @@ describe("arquivos da página de venda", () => {
     expect(pagina).toContain("listarPlanos()");
     expect(pagina).toContain("lerPrecos()");
     expect(/49,90|79,90/.test(pagina)).toBe(false);
+  });
+});
+
+describe("subdomínio de venda", () => {
+  it("em crm.aceleriq.online os botões abrem o endereço do produto; fora dele o caminho é relativo", async () => {
+    const { baseDoApp, ehSubdominioDeVenda } = await import("@/lib/produto/venda");
+    expect(baseDoApp("crm.aceleriq.online")).toBe("https://aceleriq.online");
+    expect(baseDoApp("CRM.aceleriq.online")).toBe("https://aceleriq.online");
+    expect(baseDoApp("aceleriq.online")).toBe("");
+    expect(baseDoApp("localhost")).toBe("");
+    expect(ehSubdominioDeVenda("crm.aceleriq.online.exemplo.com")).toBe(false);
+  });
+
+  it("a raiz do subdomínio abre a página de venda e o Worker atende esse endereço", () => {
+    expect(ler("src/App.tsx")).toContain("NO_SUBDOMINIO_DE_VENDA ? <ProdutoLanding />");
+    expect(ler("wrangler.jsonc")).toContain('"pattern": "crm.aceleriq.online"');
+  });
+
+  it("as imagens são telas reais leves, com medida reservada", () => {
+    const cenas = ler("src/components/venda/Cenas.tsx");
+    expect(cenas).toContain("width={1800}");
+    expect(cenas).toContain('loading={cedo ? "eager" : "lazy"}');
+    for (const nome of ["painel", "funil", "equipe", "automacoes", "painel-celular"]) {
+      expect(statSync(resolve(raiz, `src/assets/venda/${nome}.webp`)).size, nome).toBeLessThan(120000);
+    }
   });
 });

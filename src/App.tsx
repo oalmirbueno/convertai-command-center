@@ -1,4 +1,5 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { ENDERECO_DO_APP, ehSubdominioDeVenda } from "@/lib/produto/venda";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { agendarPreCargaEmSegundoPlano } from "@/lib/appRefresh";
 import { preCarregarModulo } from "@/lib/lazyComPreCarga";
@@ -52,6 +53,11 @@ const SolucoesAceleriq = rotas.lazy(() => import("@/pages/SolucoesAceleriq"));
 const ProdutoApp = rotas.lazy(() => import("@/pages/ProdutoApp"));
 const ProdutoFormulario = rotas.lazy(() => import("@/pages/ProdutoFormulario"));
 const ProdutoLanding = rotas.lazy(() => import("@/pages/ProdutoLanding"));
+// crm.aceleriq.online mostra só a página de venda; qualquer outro caminho abre no endereço do produto.
+const NO_SUBDOMINIO_DE_VENDA = typeof window !== "undefined" && ehSubdominioDeVenda(window.location.hostname);
+if (NO_SUBDOMINIO_DE_VENDA && window.location.pathname !== "/") {
+  window.location.replace(ENDERECO_DO_APP + window.location.pathname + window.location.search + window.location.hash);
+}
 const ProdutoComecar = rotas.lazy(() => import("@/pages/ProdutoComecar"));
 const EmailLanding = rotas.lazy(() => import("@/pages/EmailLanding"));
 const EmailPedir = rotas.lazy(() => import("@/pages/EmailPedir"));
@@ -489,7 +495,7 @@ export function AppRoutes() {
         <Route path="/contratos" element={<StaffRoute><AdminContracts /></StaffRoute>} />
       </Route>
 
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={NO_SUBDOMINIO_DE_VENDA ? <ProdutoLanding /> : <Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       </RouteErrorBoundary>
