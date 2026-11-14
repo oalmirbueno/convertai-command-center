@@ -679,3 +679,29 @@ describe("contratos", () => {
     expect(sql).not.toMatch(/drop table|truncate/i);
   });
 });
+
+describe("lead que já chega quente", () => {
+  it("o vendedor é avisado na hora, sem esperar o robô, e o frio nunca gera aviso", () => {
+    const vendedor = { nome: "Vic Souza", whatsapp: "5541999990001", na_janela: false };
+    const [quente] = conversa([[0, { tipo: "lead_criado", faixa: "quente" }, { vendedor }]]);
+    expect(quente.avisarVendedor).toBe(true);
+    expect(quente.envios.some((e) => e.destino === "vendedor")).toBe(true);
+    expect(quente.envios.some((e) => e.destino === "lead")).toBe(true);
+    expect(quente.estado.etapa).toBe("inicio");
+    const [morno] = conversa([[0, { tipo: "lead_criado", faixa: "morno" }, { vendedor }]]);
+    expect(morno.envios.some((e) => e.destino === "vendedor")).toBe(false);
+    const [frio] = conversa([[0, { tipo: "lead_criado", faixa: "frio", nutricao: true }, { vendedor }]]);
+    expect(frio.envios.some((e) => e.destino === "vendedor")).toBe(false);
+  });
+
+  it("quente que estava na fila avisa o vendedor assim que o rodízio entrega", () => {
+    const vendedor = { nome: "Val Lima", whatsapp: "5541999990002", na_janela: false };
+    const passos = conversa([
+      [0, { tipo: "lead_criado", faixa: "quente" }],
+      [10, { tipo: "distribuido", vendedor }],
+    ]);
+    expect(passos[0].envios.some((e) => e.destino === "vendedor")).toBe(false);
+    expect(passos[1].avisarVendedor).toBe(true);
+    expect(passos[1].envios.some((e) => e.destino === "vendedor")).toBe(true);
+  });
+});

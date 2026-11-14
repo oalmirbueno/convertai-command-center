@@ -124,7 +124,7 @@ function bancoFalso(integracao: Integracao) {
     },
   };
   const novoLead = (id: string, telefone: string, comVendedor: boolean) => {
-    leads[id] = { id, conta_id: CONTA, nome: "João da Carta", telefone, nota: 76, faixa: "quente", etapa: "novo", owner_id: comVendedor ? vendedor.user_id : null, na_fila: !comVendedor, nutricao: false, valor_mensal: 1800, valor_avulso: 300000, campanha: "HS Imóvel Nov", formulario: "Consórcio imóvel", arquivado: false };
+    leads[id] = { id, conta_id: CONTA, nome: "João da Carta", telefone, nota: 76, faixa: "morno", etapa: "novo", owner_id: comVendedor ? vendedor.user_id : null, na_fila: !comVendedor, nutricao: false, valor_mensal: 1800, valor_avulso: 300000, campanha: "HS Imóvel Nov", formulario: "Consórcio imóvel", arquivado: false };
   };
   return { db, leads, conversas, envios, mensagens, chamadas, avancos, novoLead, porNaFila: (leadId: string) => filaParaDistribuir.push({ lead_id: leadId, conta_id: CONTA }) };
 }
@@ -136,7 +136,7 @@ const integracao = (modo: "teste" | "real", extra: Partial<Integracao> = {}): In
 });
 
 const leadCriado = (id: string, telefone: string, comVendedor: boolean): LeadCriado => ({
-  lead_id: id, nome: "João da Carta", whatsapp: telefone, faixa: "quente", nota: 76, motivos: [], respostas: { bem: "imovel", valor_carta: 300000, parcela: 1800, prazo: "de_3_a_12_meses" },
+  lead_id: id, nome: "João da Carta", whatsapp: telefone, faixa: "morno", nota: 76, motivos: [], respostas: { bem: "imovel", valor_carta: 300000, parcela: 1800, prazo: "de_3_a_12_meses" },
   repetido: false, na_fila: !comVendedor, nutricao: false, vendedor: comVendedor ? { user_id: "v1", nome: "Vic Souza", whatsapp: FONE_DO_VENDEDOR } : null, origem: { campanha: "HS Imóvel Nov", formulario: "Consórcio imóvel" },
 });
 

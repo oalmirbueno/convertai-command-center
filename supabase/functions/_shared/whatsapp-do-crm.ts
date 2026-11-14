@@ -609,6 +609,8 @@ interface MemoriaDoRobo {
   rotulos: Record<string, string>;
   /** Já avisou o lead de que quem atende agora é o consultor. */
   redirecionou: boolean;
+  /** O lead já chegou quente pelo formulário (o vendedor é avisado sem esperar as perguntas). */
+  quente?: boolean;
   /** Pediu para parar. */
   parou: boolean;
   /** Respondeu só uma parte das perguntas e sumiu. */
@@ -623,7 +625,7 @@ function lerRobo(respostas: Record<string, unknown> | null | undefined): Memoria
     inicio: typeof b.inicio === "string" ? b.inicio : null,
     fila: Array.isArray(b.fila) ? (b.fila as unknown[]).map(String).slice(0, MAXIMO_DE_PERGUNTAS) : [],
     tentativas: typeof b.tentativas === "number" ? b.tentativas : 0,
-    retomar: b.retomar === true, rotulos, redirecionou: b.redirecionou === true, parou: b.parou === true, incompleto: b.incompleto === true,
+    retomar: b.retomar === true, rotulos, redirecionou: b.redirecionou === true, quente: b.quente === true, parou: b.parou === true, incompleto: b.incompleto === true,
   };
 }
 
@@ -825,6 +827,17 @@ export function proximoPasso(estadoAtual: EstadoDaConversa | null, evento: Event
       aoLead("boas-vindas", corpoDeTemplate(para, config.templates.lead, config.idioma, [nome, config.empresa, interesse]), `Template de boas-vindas (${config.templates.lead}): olá, ${nome}, aqui é da ${config.empresa}.`);
       estado.proximo_followup_em = maisHoras(agora, horas[0] || ESPERA_FINAL_HORAS);
     }
+    // Lead que já chega quente pelo formulário não espera o robô: o vendedor é avisado na hora (decisão do
+    // dono, 14/11). O robô segue perguntando; a chave do aviso é única, então ele não se repete na passagem.
+    robo.quente = evento.faixa === "quente";
+    if (evento.faixa === "quente" && config.vendedor) {
+      const avisoNaHora = envioAoVendedor(config, { ...respostas, _robo: robo }, regras);
+      if (avisoNaHora) {
+        envios.push(avisoNaHora);
+        estado.vendedor_avisado_em = agora;
+        return fechar({ avisarVendedor: true });
+      }
+    }
     return fechar();
   }
 
@@ -914,7 +927,18 @@ export function proximoPasso(estadoAtual: EstadoDaConversa | null, evento: Event
   }
 
   if (evento.tipo === "distribuido") {
-    if (estado.etapa !== "qualificado" || !evento.vendedor) return fechar();
+    if (!evento.vendedor) return fechar();
+    // Quente que estava na fila do rodízio e ainda não terminou as perguntas: o vendedor que recebeu é avisado já.
+    if ((estado.etapa === "inicio" || estado.etapa === "perguntando") && robo.quente === true && !estado.vendedor_avisado_em) {
+      const avisoDaFila = envioAoVendedor({ ...config, vendedor: evento.vendedor }, { ...respostas, _robo: robo }, regras);
+      if (avisoDaFila) {
+        envios.push(avisoDaFila);
+        estado.vendedor_avisado_em = agora;
+        return fechar({ avisarVendedor: true });
+      }
+      return fechar();
+    }
+    if (estado.etapa !== "qualificado") return fechar();
     return passar(evento.vendedor);
   }
 
