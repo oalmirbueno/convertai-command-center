@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   alvosDoTrabalho,
   arquivarVersoesDaLamina,
+  blocoDasAcoesDoDiretor,
+  comReservaDeTirarLaminas,
+  devolverLaminaAoTrabalho,
   devolverVersoesDaLamina,
   MOTIVO_CONTINUO,
   MOTIVO_ENTREGUE,
@@ -12,12 +15,14 @@ import {
   ordemPedida,
   ordensParaGerarDeNovo,
   reordenarTrabalho,
+  tirarLaminaDoTrabalho,
   trocarTextoDaLamina,
   type TrabalhoParaAcoes,
 } from "../../supabase/functions/estudio-arte/acoes-do-diretor";
 import { alvosDoAcervo, etiquetaPedida, type FotoDoAcervo, pastaPedida } from "../../supabase/functions/_shared/acoes-do-acervo";
 import { alvosDoWorkspace, type NoDoWorkspace, regrasDoWorkspace } from "../../supabase/functions/agente-contexto/modulos/acoes-do-workspace";
-import { normalizarAcaoDoAgente } from "../../supabase/functions/_shared/acoes-do-agente";
+import { desfazerItemAItem, executarItemAItem, normalizarAcaoDoAgente, podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
+import { regrasDoDiretor } from "../../supabase/functions/estudio-arte/acoes-do-diretor";
 import { blocoDasAcoesDoContexto, normalizarAcoesDoContexto, pedeAcaoNoContexto } from "../../supabase/functions/agente-contexto/acoes-do-contexto";
 import { blocoDasAcoesDaMesaFoto, normalizarAcoesDaMesaFoto, pedeAcaoNasFotos } from "../../supabase/functions/mesa-foto/acoes-da-mesa-foto";
 import {
@@ -149,6 +154,164 @@ describe("diretor do Estúdio: ações nas lâminas", () => {
   it("as lâminas a gerar de novo são só as que deram certo", () => {
     const a = normalizarAcoesDoDiretor({ resumo: "", itens: [{ operacao: "refazer", ref: "l1", para: "" }, { operacao: "refazer", ref: "l3", para: "" }] }, trabalho())!;
     expect(ordensParaGerarDeNovo({ ...a, resultados: [{ ref: "l1", alvo_id: "1", titulo: "", operacao: "refazer", ok: true }, { ref: "l3", alvo_id: "3", titulo: "", operacao: "refazer", ok: false }] })).toEqual([1]);
+  });
+});
+
+// ------------------------------------------------------------------ Estúdio: várias lâminas no mesmo pedido
+
+/** Carrossel de `n` lâminas, cada uma com uma versão. */
+function carrossel(n: number, extra: Partial<TrabalhoParaAcoes> = {}): TrabalhoParaAcoes {
+  const ordens = Array.from({ length: n }, (_, i) => i + 1);
+  return {
+    id: "trab-n",
+    status: "pronto",
+    entrega_status: null,
+    tipo: "social",
+    direcao: { cards: ordens.map((o) => ({ ordem: o, funcao: o === 1 ? "capa" : o === n ? "cta" : "conteudo", texto_exato: `Texto da lâmina ${o}` })) },
+    cards: ordens.map((o) => ({ ordem: o, versao: 1 })),
+    ...extra,
+  };
+}
+const tirar = (...refs: string[]) => ({ resumo: "Tiro as lâminas; a lista aguarda confirmação.", itens: refs.map((ref) => ({ operacao: "tirar_lamina", ref, para: "" })) });
+
+describe("diretor do Estúdio: tirar várias lâminas no mesmo pedido", () => {
+  it("dois tirar_lamina (l6 e l7) ficam na proposta, da maior para a menor, e podem ir direto", () => {
+    const t = carrossel(7);
+    const a = normalizarAcoesDoDiretor(tirar("l6", "l7"), t)!;
+    expect(a).not.toBeNull();
+    expect(a.itens.map((i) => [i.operacao, i.ref])).toEqual([["tirar_lamina", "l7"], ["tirar_lamina", "l6"]]);
+    expect(a.ignorados).toEqual([]);
+    expect(a.recusados).toEqual([]);
+    expect(podeExecutarDireto(a, regrasDoDiretor(t), { pedidoClaro: true, maxItens: 12 }).direto).toBe(true);
+    // A ordem em que o modelo escreve não importa.
+    expect(normalizarAcoesDoDiretor(tirar("l7", "l2", "l6"), t)!.itens.map((i) => i.ref)).toEqual(["l7", "l6", "l2"]);
+  });
+
+  it("um tirar_lamina sozinho continua igual", () => {
+    const a = normalizarAcoesDoDiretor(tirar("l7"), carrossel(7))!;
+    expect(a.itens.map((i) => [i.operacao, i.ref, i.alvo_id])).toEqual([["tirar_lamina", "l7", "7"]]);
+    expect(a.ignorados).toEqual([]);
+  });
+
+  it("tirar_lamina com outra operação de lâmina no mesmo pedido: os de tirar continuam de fora", () => {
+    const t = carrossel(7);
+    const comTexto = normalizarAcoesDoDiretor({ resumo: "", itens: [...tirar("l6", "l7").itens, { operacao: "trocar_texto", ref: "l2", para: "lâmina 2 => segunda lâmina" }] }, t)!;
+    expect(comTexto.itens.map((i) => i.operacao)).toEqual(["trocar_texto"]);
+    expect(comTexto.ignorados.sort()).toEqual(["l6", "l7"]);
+    const comRefazer = normalizarAcoesDoDiretor({ resumo: "", itens: [...tirar("l6").itens, { operacao: "refazer", ref: "l2", para: "" }] }, t)!;
+    expect(comRefazer.itens.map((i) => i.operacao)).toEqual(["refazer"]);
+    expect(comRefazer.ignorados).toEqual(["l6"]);
+  });
+
+  it("tipos diferentes de numeração no mesmo pedido (tirar + duplicar, tirar + adicionar): todos de fora", () => {
+    const t = carrossel(7);
+    expect(normalizarAcoesDoDiretor({ resumo: "", itens: [...tirar("l6").itens, { operacao: "duplicar_lamina", ref: "l2", para: "" }] }, t)).toBeNull();
+    expect(normalizarAcoesDoDiretor({ resumo: "", itens: [...tirar("l6", "l7").itens, { operacao: "adicionar_lamina", ref: "l2", para: "Lâmina nova sobre preço" }] }, t)).toBeNull();
+    // Com uma operação do trabalho junto, ela fica e as de numeração saem.
+    const a = normalizarAcoesDoDiretor({ resumo: "", itens: [...tirar("l6").itens, { operacao: "duplicar_lamina", ref: "l2", para: "" }, { operacao: "mudar_qualidade", ref: "t1", para: "alta" }] }, t)!;
+    expect(a.itens.map((i) => i.operacao)).toEqual(["mudar_qualidade"]);
+    expect(a.ignorados.sort()).toEqual(["l2", "l6"]);
+  });
+
+  it("várias cópias ou lâminas novas da mesma operação também valem, da maior para a menor", () => {
+    const t = carrossel(7);
+    const dup = normalizarAcoesDoDiretor({ resumo: "", itens: [{ operacao: "duplicar_lamina", ref: "l2", para: "" }, { operacao: "duplicar_lamina", ref: "l5", para: "" }] }, t)!;
+    expect(dup.itens.map((i) => i.ref)).toEqual(["l5", "l2"]);
+    // 9 lâminas: só cabe mais uma; a outra é recusada com o motivo.
+    const cheio = normalizarAcoesDoDiretor({ resumo: "", itens: [{ operacao: "duplicar_lamina", ref: "l2", para: "" }, { operacao: "duplicar_lamina", ref: "l5", para: "" }] }, carrossel(9))!;
+    expect(cheio.itens.map((i) => i.ref)).toEqual(["l2"]);
+    expect(cheio.recusados.map((r) => r.ref)).toEqual(["l5"]);
+  });
+
+  it("tirar todas as lâminas: a de menor número fica, recusada com o motivo", () => {
+    const a = normalizarAcoesDoDiretor(tirar("l1", "l2", "l3"), carrossel(3))!;
+    expect(a.itens.map((i) => i.ref)).toEqual(["l3", "l2"]);
+    expect(a.recusados).toEqual([expect.objectContaining({ ref: "l1", operacao: "tirar_lamina", motivo: "O trabalho precisa de pelo menos uma lâmina." })]);
+  });
+
+  it("tirar a 7 e depois a 6 deixa 5 lâminas; o Desfazer de cada uma devolve na ordem inversa", () => {
+    const t0 = carrossel(7);
+    const r7 = tirarLaminaDoTrabalho(t0, 7, "2026-01-01T00:00:00.000Z");
+    const t1 = { ...t0, ...r7.patch } as TrabalhoParaAcoes;
+    const r6 = tirarLaminaDoTrabalho(t1, 6, "2026-01-01T00:00:01.000Z");
+    const t2 = { ...t1, ...r6.patch } as TrabalhoParaAcoes;
+    expect(t2.direcao.cards.map((c) => c.ordem)).toEqual([1, 2, 3, 4, 5]);
+    expect(t2.direcao.cards.map((c) => c.texto_exato)).toEqual([1, 2, 3, 4, 5].map((o) => `Texto da lâmina ${o}`));
+    expect(t2.direcao.cards[4].funcao).toBe("cta");
+    expect(t2.cards.map((v) => v.ordem)).toEqual([1, 2, 3, 4, 5]);
+    expect((t2.direcao.laminas_arquivadas || []).map((a) => a.ordem_original)).toEqual([7, 6]);
+    expect(r7.desfazer).toMatchObject({ ordem: 7, total_depois: 6 });
+    expect(r6.desfazer).toMatchObject({ ordem: 6, total_depois: 5 });
+    // Desfazer: primeiro a última tirada (a 6), depois a 7.
+    const v6 = { ...t2, ...devolverLaminaAoTrabalho(t2, r6.desfazer.chave, r6.desfazer.total_depois) } as TrabalhoParaAcoes;
+    const v7 = { ...v6, ...devolverLaminaAoTrabalho(v6, r7.desfazer.chave, r7.desfazer.total_depois) } as TrabalhoParaAcoes;
+    expect(v7.direcao.cards.map((c) => [c.ordem, c.texto_exato])).toEqual(t0.direcao.cards.map((c) => [c.ordem, c.texto_exato]));
+    expect(v7.cards.map((v) => v.ordem).sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(v7.direcao.laminas_arquivadas).toEqual([]);
+    // Na ordem errada (6 antes da 7), a 7 já teria virado 6: é o que a ordenação evita.
+    const errado = { ...t0, ...tirarLaminaDoTrabalho(t0, 6).patch } as TrabalhoParaAcoes;
+    expect(() => tirarLaminaDoTrabalho(errado, 7)).toThrow("não existe mais");
+  });
+
+  it("a proposta normalizada executa item a item (como o executor) e desfaz tudo pelo contrato", async () => {
+    let t = carrossel(7);
+    const a = normalizarAcoesDoDiretor(tirar("l6", "l7"), t)!;
+    const resultados = await executarItemAItem(a.itens, async (item) => {
+      const r = tirarLaminaDoTrabalho(t, Number(item.alvo_id));
+      t = { ...t, ...r.patch } as TrabalhoParaAcoes;
+      return { desfazer: r.desfazer };
+    }, 1);
+    expect(resultados.map((r) => [r.ref, r.ok])).toEqual([["l7", true], ["l6", true]]);
+    expect(t.direcao.cards).toHaveLength(5);
+    const volta = await desfazerItemAItem(resultados, async (r) => {
+      const d = r.desfazer as { chave: string; total_depois: number };
+      t = { ...t, ...devolverLaminaAoTrabalho(t, d.chave, d.total_depois) } as TrabalhoParaAcoes;
+    });
+    expect(volta).toEqual({ voltaram: 2, falharam: [] });
+    expect(t.direcao.cards.map((c) => c.texto_exato)).toEqual(carrossel(7).direcao.cards.map((c) => c.texto_exato));
+  });
+
+  it("reserva em código: sem ação do modelo, a proposta sai dos números do pedido", () => {
+    const t = carrossel(7);
+    const a = comReservaDeTirarLaminas(null, undefined, "tirar lâmina 7 e tirar lâmina 6", t)!;
+    expect(a.itens.map((i) => [i.operacao, i.ref])).toEqual([["tirar_lamina", "l7"], ["tirar_lamina", "l6"]]);
+    expect(a.resumo).toBe("Tirar as lâminas 6 e 7 do carrossel (ficam guardadas; o Desfazer devolve).");
+    expect(a.contexto).toMatchObject({ trabalho_id: "trab-n" });
+    expect(podeExecutarDireto(a, regrasDoDiretor(t), { pedidoClaro: true, maxItens: 12 }).direto).toBe(true);
+    const b = comReservaDeTirarLaminas(null, undefined, "Confirmo: pode tirar as lâminas 6 e 7 agora. Não gerar nada.", t)!;
+    expect(b.itens.map((i) => i.ref)).toEqual(["l7", "l6"]);
+    const uma = comReservaDeTirarLaminas(null, undefined, "tira a lâmina 3", t)!;
+    expect(uma.itens.map((i) => i.ref)).toEqual(["l3"]);
+    expect(uma.resumo).toBe("Tirar a lâmina 3 do carrossel (fica guardada; o Desfazer devolve).");
+    // Lâmina que não existe fica de fora; sem nenhuma que exista, nada é montado.
+    expect(comReservaDeTirarLaminas(null, undefined, "tira as lâminas 6 e 9", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
+    expect(comReservaDeTirarLaminas(null, undefined, "tira a lâmina 9", t)).toBeNull();
+    expect(comReservaDeTirarLaminas(null, undefined, "muda a cor da lâmina 3", t)).toBeNull();
+    // O que o modelo devolveu de aproveitável vale: a reserva não mexe.
+    const doModelo = normalizarAcoesDoDiretor(tirar("l2"), t)!;
+    expect(comReservaDeTirarLaminas(doModelo, tirar("l2"), "tira a lâmina 3", t)).toBe(doModelo);
+    // Reserva não desfaz o descarte por mistura: o modelo trouxe tirar l6 + duplicar l2, a normalização zerou, fica nulo.
+    const misturado = { resumo: "", itens: [...tirar("l6").itens, { operacao: "duplicar_lamina", ref: "l2", para: "" }] };
+    const msgMista = "tira a lâmina 6 e duplica a lâmina 2";
+    expect(normalizarAcoesDoDiretor(misturado, t)).toBeNull();
+    expect(comReservaDeTirarLaminas(normalizarAcoesDoDiretor(misturado, t), misturado, msgMista, t)).toBeNull();
+    // Bruto sem item de numeração (vazio, sem itens, ou com outra operação descartada): a reserva entra.
+    expect(comReservaDeTirarLaminas(null, { resumo: "", itens: [] }, "tira a lâmina 6", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
+    expect(comReservaDeTirarLaminas(null, null, "tira a lâmina 6", t)!.itens.map((i) => i.ref)).toEqual(["l6"]);
+    expect(comReservaDeTirarLaminas(null, [{ operacao: "duplicar_lamina", ref: "l2", para: "" }], "tira a lâmina 6", t)).toBeNull();
+    // As travas de sempre continuam: trabalho entregue recusa com o motivo, nada entra na lista.
+    const entregue = comReservaDeTirarLaminas(null, undefined, "tira a lâmina 3", carrossel(7, { status: "entregue" }))!;
+    expect(entregue.itens).toEqual([]);
+    expect(entregue.recusados[0].motivo).toBe(MOTIVO_ENTREGUE);
+  });
+
+  it("o prompt diz que tirar várias lâminas é um item por lâmina, sem misturar com outra operação", () => {
+    const bloco = blocoDasAcoesDoDiretor(carrossel(3));
+    expect(bloco).toContain("UM item por lâmina");
+    expect(bloco).not.toContain("Sozinha no pedido");
+    const fonte = readFileSync(resolve(process.cwd(), "supabase/functions/estudio-arte/index.ts"), "utf8");
+    expect(fonte).toContain("comReservaDeTirarLaminas(acaoDoModelo, acoesBrutas, mensagem");
+    expect(fonte).toContain("resumo: resumoDoQueFoiFeito(executada.resumo, executada.resultados)");
   });
 });
 

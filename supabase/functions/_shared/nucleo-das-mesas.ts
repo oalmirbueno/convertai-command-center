@@ -315,6 +315,8 @@ export async function fecharNucleo(
   return { texto: saida, recusados: conferido.recusados, encaminhado };
 }
 
+const PROMETE_CONFIRMACAO = /(pront[ao]s?|preparad[ao]s?) para (voc[eê] )?confirmar|aguarda(m)? (a sua |sua )?confirma[cç][aã]o|s[oó] muda (ap[oó]s|depois d)a confirma[cç][aã]o|est[aá] no cart[aã]o aguardando/i;
+
 /**
  * A fala do modelo é escrita antes de o servidor executar o que não tem custo: quando a ação foi
  * feita na hora, "está pronta para confirmar" vira mentira. Tira essas frases e diz o que aconteceu.
@@ -322,7 +324,7 @@ export async function fecharNucleo(
  */
 export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
   if (!feitoAgora) return texto;
-  const pendente = /(pront[ao]s?|preparad[ao]s?) para (voc[eê] )?confirmar|aguarda(m)? (a sua |sua )?confirma[cç][aã]o|s[oó] muda (ap[oó]s|depois d)a confirma[cç][aã]o|est[aá] no cart[aã]o aguardando/i;
+  const pendente = PROMETE_CONFIRMACAO;
   // Nada prometendo confirmação e a fala já diz que fez: fica como está.
   if (!pendente.test(String(texto || "")) && /\bfeit[oa]s?\b|\bregistrei\b|\bapliquei\b|\btroquei\b/i.test(String(texto || ""))) return texto;
   const sem = String(texto || "")
@@ -332,6 +334,27 @@ export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
     .join(" ")
     .trim();
   return `${sem}${sem ? "\n\n" : ""}Feito agora; o Desfazer fica no cartão.`;
+}
+
+/**
+ * O `resumo` do cartão de uma ação feita na hora: o modelo também o escreve antes da execução ("a lista aguarda
+ * confirmação"). Só o resumo que promete confirmação é reescrito, numa linha; o resto fica. Com `resultados`, o
+ * "Feito agora" só entra se pelo menos um item deu certo; se todos falharam, a promessa sai e o resumo diz que
+ * não deu (o motivo de cada item fica no cartão).
+ */
+export function resumoDoQueFoiFeito(resumo: string, resultados?: Array<{ ok?: boolean }> | null): string {
+  const r = String(resumo || "");
+  if (!PROMETE_CONFIRMACAO.test(r)) return r;
+  const algumDeuCerto = !Array.isArray(resultados) || resultados.some((x) => !!(x && x.ok));
+  if (algumDeuCerto) return falaDoQueFoiFeito(r, true).replace(/\s*\n+\s*/g, " ");
+  const sem = r
+    .replace(/([.!?])\s+/g, "$1\u0001")
+    .split("\u0001")
+    .filter((f) => !PROMETE_CONFIRMACAO.test(f))
+    .join(" ")
+    .replace(/\s*\n+\s*/g, " ")
+    .trim();
+  return `${sem}${sem ? " " : ""}Não deu para fazer agora; o motivo fica no cartão.`;
 }
 
 /**
