@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { criarTravaDoLogin } from "@/integrations/supabase/travaDoLogin";
 import { criarFetchComPrazo } from "@/integrations/supabase/fetchComPrazo";
-import { esquecerTokensMortos, protegerSessaoGuardada } from "@/integrations/supabase/renovacaoSegura";
+import { esquecerRenovacaoEmVooParaTeste, esquecerTokensMortos, protegerSessaoGuardada } from "@/integrations/supabase/renovacaoSegura";
 
 /**
  * 14/11/2026, com o supabase-js de verdade: várias abas do mesmo navegador
@@ -90,6 +90,7 @@ afterEach(() => {
   if (original) Object.defineProperty(globalThis.navigator, "locks", original);
   else delete (globalThis.navigator as unknown as { locks?: unknown }).locks;
   esquecerTokensMortos();
+  esquecerRenovacaoEmVooParaTeste();
   localStorage.removeItem(CHAVE);
 });
 
@@ -186,5 +187,151 @@ describe("duas abas, mesmo token vencido, rotação estrita", () => {
     expect(r.data.session?.refresh_token).toBe("t1");
     expect(log).toEqual(["ok:t0->t1"]);
     expect(JSON.parse(localStorage.getItem(CHAVE) || "{}").refresh_token).toBe("t1");
+  });
+});
+
+/**
+ * Revisão do Codex (14/11, P1-1): com autoRefreshToken, depois de um
+ * refresh_token_not_found o supabase-js apaga a sessão DUAS vezes
+ * (_callRefreshToken e _recoverAndRefresh). A proteção do storage precisa
+ * segurar as duas (e quantas vierem) enquanto a janela valer.
+ */
+describe("token morto com autoRefreshToken: duas remoções seguidas", () => {
+  it("a sessão nova que outra aba gravou sobrevive às remoções repetidas", async () => {
+    Object.defineProperty(globalThis.navigator, "locks", { value: lockManagerFalso(), configurable: true });
+    sessaoVencida();
+    const nova = { access_token: "a9", refresh_token: "t9", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: usuario };
+    let posts = 0;
+    const fetchFalso = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("grant_type=refresh_token")) {
+        posts++;
+        // Enquanto t0 estava no ar, outra aba renovou e gravou t9.
+        localStorage.setItem(CHAVE, JSON.stringify(nova));
+        return new Response(JSON.stringify({ code: 400, error_code: "refresh_token_not_found", msg: "Invalid Refresh Token: Refresh Token Not Found" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const armazenamento = protegerSessaoGuardada(localStorage)!;
+    const remocoes: string[] = [];
+    const contado = { ...armazenamento, removeItem: async (k: string) => (remocoes.push(k), armazenamento.removeItem(k)) };
+    const aba = createClient(URL_FALSA, "ci-public-placeholder", {
+      auth: { storageKey: CHAVE, storage: contado, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, lock: criarTravaDoLogin(8_000, contado) },
+      global: { fetch: criarFetchComPrazo(fetchFalso) },
+    });
+    try {
+      await aba.auth.initialize();
+      expect(posts).toBe(1);
+      // O SDK pediu para apagar a sessão mais de uma vez...
+      expect(remocoes.filter((k) => k === CHAVE).length).toBeGreaterThanOrEqual(2);
+      // ...e a sessão nova continua lá.
+      expect(JSON.parse(localStorage.getItem(CHAVE) || "{}").refresh_token).toBe("t9");
+      expect((await aba.auth.getSession()).data.session?.refresh_token).toBe("t9");
+    } finally {
+      await aba.auth.stopAutoRefresh();
+    }
+  });
+});
+
+/**
+ * Revisão do Codex (14/11, P1-2): renovação HTTP que não termina. O
+ * getSession() da mesma aba espera na fila interna do supabase-js, sem passar
+ * pela trava; com o access token ainda valendo, o envio de arquivo ficava
+ * preso. A renovação continua sem abort, mas solta a fila depois do prazo.
+ */
+describe("renovação pendurada não prende a aba", () => {
+  function servidorSegurado() {
+    const log: string[] = [];
+    let soltar: () => void = () => undefined;
+    const portao = new Promise<void>((ok) => (soltar = ok));
+    let sinalVisto: AbortSignal | undefined;
+    const fetchFalso = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/auth/v1/token?grant_type=refresh_token")) {
+        const { refresh_token } = JSON.parse(String(init?.body || "{}"));
+        sinalVisto = init?.signal || undefined;
+        log.push(`post:${refresh_token}`);
+        if (refresh_token !== "t0") {
+          return new Response(JSON.stringify({ code: 400, error_code: "refresh_token_not_found", msg: "x" }), { status: 400, headers: { "content-type": "application/json" } });
+        }
+        await portao; // o servidor não responde até o teste soltar
+        log.push("respondeu:t0->t1");
+        return new Response(
+          JSON.stringify({ access_token: "a1", refresh_token: "t1", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: usuario }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    return { fetchFalso, log, soltar: () => soltar(), sinal: () => sinalVisto };
+  }
+
+  function sessaoExpiraEm(segundos: number) {
+    localStorage.setItem(
+      CHAVE,
+      JSON.stringify({ access_token: "a0", refresh_token: "t0", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + segundos, user: usuario }),
+    );
+  }
+
+  function abaComPrazoCurto(fetchFalso: typeof fetch, soltarEmMs: number) {
+    const armazenamento = protegerSessaoGuardada(localStorage)!;
+    return createClient(URL_FALSA, "ci-public-placeholder", {
+      auth: { storageKey: CHAVE, storage: armazenamento, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, lock: criarTravaDoLogin(8_000, armazenamento) },
+      global: { fetch: criarFetchComPrazo(fetchFalso, undefined, { soltarRenovacaoEmMs: soltarEmMs, storage: armazenamento }) },
+    });
+  }
+
+  const comPrazo = <T,>(p: Promise<T>, ms: number) =>
+    Promise.race([p, new Promise<never>((_ok, falha) => setTimeout(() => falha(new Error(`preso por mais de ${ms} ms`)), ms))]);
+
+  it("renovação automática pendurada: getSession da mesma aba sai com o token que ainda vale, sem segunda renovação", async () => {
+    Object.defineProperty(globalThis.navigator, "locks", { value: lockManagerFalso(), configurable: true });
+    sessaoExpiraEm(100); // renovação automática dispara (<= 3 voltas), mas o token ainda vale
+    const srv = servidorSegurado();
+    const aba = abaComPrazoCurto(srv.fetchFalso, 60);
+    await aba.auth.initialize();
+    const tick = (aba.auth as unknown as { _autoRefreshTokenTick: () => Promise<void> })._autoRefreshTokenTick();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(srv.log).toEqual(["post:t0"]);
+
+    // Antes: preso para sempre na fila interna do supabase-js.
+    const r = await comPrazo(aba.auth.getSession(), 2_000);
+    expect(r.error).toBeNull();
+    expect(r.data.session?.access_token).toBe("a0");
+    await comPrazo(tick, 2_000);
+    // Nunca duas renovações juntas, e a renovação nunca é abortada.
+    expect(srv.log).toEqual(["post:t0"]);
+    expect(srv.sinal()).toBeUndefined();
+
+    // A resposta chega depois: o par novo é gravado e t0 não é renovado de novo.
+    srv.soltar();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(JSON.parse(localStorage.getItem(CHAVE) || "{}").refresh_token).toBe("t1");
+    expect((await aba.auth.getSession()).data.session?.refresh_token).toBe("t1");
+    expect(srv.log).toEqual(["post:t0", "respondeu:t0->t1"]);
+  });
+
+  it("token perto de vencer (getSession também quer renovar): sai com o token que ainda vale e sem POST repetido", async () => {
+    Object.defineProperty(globalThis.navigator, "locks", { value: lockManagerFalso(), configurable: true });
+    sessaoExpiraEm(60);
+    const srv = servidorSegurado();
+    const aba = abaComPrazoCurto(srv.fetchFalso, 60);
+    await aba.auth.initialize().catch(() => undefined);
+    const pedidos = [aba.auth.getSession(), aba.auth.getSession()];
+    const resultados = await comPrazo(Promise.all(pedidos), 3_000);
+    for (const r of resultados) {
+      expect(r.error).toBeNull();
+      expect(r.data.session?.access_token).toBe("a0");
+    }
+    expect(srv.log).toEqual(["post:t0"]);
+    srv.soltar();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(JSON.parse(localStorage.getItem(CHAVE) || "{}").refresh_token).toBe("t1");
+    // Pedido atrasado de t0 (já trocado) recebe o par novo sem ir ao servidor.
+    expect((await aba.auth.refreshSession({ refresh_token: "t0" })).data.session?.refresh_token).toBe("t1");
+    expect(srv.log).toEqual(["post:t0", "respondeu:t0->t1"]);
   });
 });

@@ -2,7 +2,7 @@
 
 PR: https://github.com/oalmirbueno/convertai-command-center/pull/134 (draft, contra `main`, sem merge)
 Branch: `infra/sessao-painel-duradoura`
-Commit: `267e766` (código e testes); este relatório vai num commit separado
+Commits: `267e766` (código e testes), `d7204a5` (este relatório) e o ajuste da revisão do Codex (seção abaixo)
 
 ## Resultado
 
@@ -39,6 +39,30 @@ Além disso, nos dois caminhos de erro o AuthContext chamava `signOut()` sem sco
 - Hipótese forte: o `referer https://aceleriq.online` nos logs é o Site URL que o GoTrue grava quando o pedido não traz Referer, e não prova que o pedido saiu do navegador. As 1109 falhas (582 do IP `168.194.162.48`, em rajadas de cerca de 12 a cada 10 min) têm cara de um cliente MCP (app ou `mcp-remote` na rede do dono) repetindo um refresh token OAuth morto, sem nunca desistir.
 - Recomendação: identificar o conector nesse IP e reconectá-lo (nova autorização OAuth). Não dá para corrigir isso no front. Mesmo assim, o fetch do painel passou a tratar `/oauth/token` com `grant_type=refresh_token` como renovação: não aborta e não reenvia token recusado.
 
+## Ajuste da revisão do Codex (14/11, depois de `d7204a5`)
+
+O Codex (gpt-6-astra) revisou `d7204a5` e barrou o merge por dois P1. Os dois foram reproduzidos com o supabase-js real antes da correção (os testes novos falhavam) e passam agora.
+
+**P1-1: a sessão nova ainda podia ser apagada.** A proteção do storage zerava `ultimaMorte` depois de segurar a primeira remoção. Com `autoRefreshToken`, o supabase-js apaga a sessão duas vezes depois de um token morto (`_callRefreshToken` e depois `_recoverAndRefresh`). A segunda apagava a sessão válida gravada por outra aba.
+- Correção (`renovacaoSegura.ts`, `protegerSessaoGuardada`): `ultimaMorte` não é mais zerada. Enquanto a janela de 30 s valer e o token gravado for outro e vivo, todas as remoções são ignoradas. A remoção só apaga quando o gravado é o próprio token morto, quando a janela passou ou quando é saída de propósito (`esquecerTokensMortos`, botão sair).
+- Testes: SDK real com `autoRefreshToken: true` (o SDK pede para apagar 2 vezes e a sessão `t9` continua lá); unitários com 3 remoções seguidas, janela vencida e saída de propósito.
+
+**P1-2: renovação pendurada travava o envio na mesma aba.** Sem prazo, um refresh HTTP que não termina prende o `getSession()` seguinte na fila interna do supabase-js (`pendingInLock`), que não passa pela trava. O envio de arquivo ficava preso mesmo com o access token valendo. Era o defeito de 26/09 voltando por outro caminho.
+- Correção (`renovacaoSegura.ts`, `renovarSemDuplicar`; `fetchComPrazo.ts`):
+  - a renovação continua **sem abort**;
+  - quando passa de 8 s no ar (`PRAZO_PARA_SOLTAR_RENOVACAO_MS`, a mesma ordem de `ESPERA_MAXIMA_MS`), quem espera é solto com `TypeError: Failed to fetch`, que o SDK trata como retryable;
+  - o retry do SDK, 200 ms depois, não manda outro POST. Se o access token gravado ainda vale (com folga de 10 s), recebe a sessão gravada sem ir à rede, e o SDK solta a fila. Se não vale, recebe falha de rede de novo e o SDK tenta mais tarde. Sem isso, só a falha de rede deixaria o SDK repetindo com backoff por uns 20 s dentro da fila, e o `getSession` perto do vencimento terminaria sem sessão;
+  - o pedido segue em segundo plano. Quando a resposta chega, o par novo é gravado, mas só se o storage ainda tiver o token enviado (se a pessoa saiu ou outra aba renovou, não mexe). O token velho fica registrado como trocado: um pedido atrasado com ele recebe o par novo sem rede, e o storage nunca volta a gravá-lo;
+  - nunca saem duas renovações juntas deste navegador. Na mesma aba, um segundo pedido espera o primeiro (até o prazo) e decide de novo. Entre abas, quem solta por prazo deixa uma marca no `localStorage` (`aceleriq-auth-renovacao-em-voo`, só com uma impressão curta do token e validade de 60 s). Outra aba com o mesmo token não renova enquanto a marca vale;
+  - a abertura continua sem refresh forçado e o `signOut` continua com scope local.
+- Testes: SDK real, renovação automática pendurada (o `getSession` sai com o token que vale, 1 POST só, sem sinal de abort; depois a resposta chega e `t1` é gravado); token perto de vencer, em que o próprio `getSession` quer renovar; unitários de prazo, de segundo POST, de token vencido, de marca entre abas e de não regravar token trocado.
+
+**Risco residual P2 (documentado, não corrigido):** sem `navigator.locks` (Safari muito antigo), a trava do login roda sem exclusão entre abas e a renovação pode sair sem trava. É o comportamento herdado do supabase-js. Na mesma aba, o controle de renovação em voo continua valendo; entre abas, só a marca do `localStorage` (que só aparece quando uma renovação passa do prazo). É aceitável nos navegadores que o painel usa hoje (Chrome, Edge e Safari atuais têm `navigator.locks`).
+
+**Limites conhecidos do ajuste:**
+- Se a resposta atrasada chegar depois de o SDK desistir, o storage recebe o par novo, mas esta aba não dispara `TOKEN_REFRESHED`. O cliente do supabase-js lê o storage a cada chamada e já usa o token novo. O estado do React só se atualiza no próximo evento.
+- Se a aba que renovava fechar com o pedido no ar, as outras abas esperam a marca vencer (até 60 s) antes de renovar aquele token. Enquanto isso, usam o access token que ainda vale.
+
 ## O que muda (só front e testes)
 
 1. **A abertura não força mais renovação.** O `getSession()` já renova sozinho, com a trava, quando faltam menos de 90 s, e o `autoRefreshToken` cuida do resto. O refresh "por precaução de JWKS" saiu.
@@ -65,11 +89,12 @@ Além disso, nos dois caminhos de erro o AuthContext chamava `signOut()` sem sco
 
 ## Testes
 
-- Auth/trava/login (com `abertura-do-painel`): 5 arquivos, 38 testes, todos passando.
+- Auth/trava/login (com `abertura-do-painel`): 5 arquivos, 38 testes, todos passando. Depois do ajuste do Codex: 5 arquivos, 49 testes, todos passando.
 - Contra o código antigo, `sessao-duas-abas` falha nos dois cenários do incidente (`ok:t0->t1`, depois `morto:t0`, e `refresh_token_not_found` após o abort). Com a correção, passa.
 - Suíte inteira: 6 falhas, todas iguais no `main` sem este lote (baseline): `mcc-motor-claude-code`, `biblioteca-da-casa`, `compartilhados-no-limite-do-lovable`, `mcp-erros-que-ensinam`, `mesa-campanha-completa`, `padrao-visual-catraca`.
 - Typecheck: `tsconfig.app` e `tsconfig.node` limpos. Em `tsconfig.test`, 3 erros antigos em arquivos não tocados (`src/test/produto-crm-email.test.tsx` e `workers/motor-codigo/lib/opencode.ts`).
 - Build: `npm run build` ok (só o aviso antigo de chunk grande). `git diff --check` ok.
+- Depois do ajuste do Codex: suíte inteira com as mesmas 6 falhas de baseline e nenhuma nova (12324 testes passando). `tsconfig.app`, `tsconfig.node` e `tsconfig.test` sem erros. Build ok. Lint dos arquivos tocados limpo.
 - Lint dos arquivos tocados: nenhum erro novo. Os que aparecem (`any` em linhas antigas e `only-export-components`) já existiam.
 
 ## O que NÃO entra no ar ainda

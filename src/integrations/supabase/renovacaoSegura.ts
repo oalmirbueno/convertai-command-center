@@ -18,7 +18,13 @@
  * - tokens mortos: refresh token que o servidor recusou não é reenviado, para
  *   não virar a rajada de "refresh_token_not_found" que vimos nos logs.
  * - proteção do storage: se o token que morreu não é mais o que está gravado
- *   (outra aba gravou um novo), o pedido de apagar a sessão é ignorado.
+ *   (outra aba gravou um novo), o pedido de apagar a sessão é ignorado. Vale
+ *   para TODOS os pedidos de apagar dentro da janela: com autoRefreshToken o
+ *   supabase-js apaga duas vezes seguidas (revisão do Codex, 14/11).
+ * - renovação em voo: só uma por vez neste navegador. Se ela passa do prazo,
+ *   quem espera é solto (falha de rede, ou o token que ainda vale) e o pedido
+ *   continua em segundo plano, sem abort; quando a resposta chega, o par novo
+ *   é gravado e o token velho nunca mais é enviado (revisão do Codex, 14/11).
  */
 
 import type { PreviewAuthStorage } from "./previewAuthStorage";
@@ -80,6 +86,7 @@ export function tokenEstaMorto(token: string | null | undefined): boolean {
 export function esquecerTokensMortos(): void {
   tokensMortos.clear();
   ultimaMorte = null;
+  trocados.clear();
 }
 
 // --------------------------------------------------------- pedido de renovação
@@ -175,14 +182,25 @@ function respostaComSessao(sessao: SessaoGuardada): Response {
   );
 }
 
-async function gravarSessaoDaResposta(storage: PreviewAuthStorage, chave: string, resposta: Response): Promise<void> {
+/** Sessão (com expires_at) a partir da resposta de renovação bem-sucedida. */
+async function sessaoDaResposta(resposta: Response): Promise<SessaoGuardada | null> {
   try {
     const dados = (await resposta.clone().json()) as SessaoGuardada & { expires_in?: number };
-    if (!dados?.access_token || !dados?.refresh_token) return;
+    if (!dados?.access_token || !dados?.refresh_token) return null;
     const expires_at = dados.expires_at || (dados.expires_in ? Math.floor(Date.now() / 1000) + dados.expires_in : undefined);
-    await storage.setItem(chave, JSON.stringify({ ...dados, expires_at }));
+    return { ...dados, expires_at };
   } catch {
-    // o supabase-js grava logo em seguida de qualquer jeito
+    return null;
+  }
+}
+
+async function gravarSessaoDaResposta(storage: PreviewAuthStorage, chave: string, resposta: Response): Promise<void> {
+  const sessao = await sessaoDaResposta(resposta);
+  if (!sessao) return; // o supabase-js grava logo em seguida de qualquer jeito
+  try {
+    await storage.setItem(chave, JSON.stringify(sessao));
+  } catch {
+    // idem
   }
 }
 
@@ -229,6 +247,237 @@ export async function renovarDentroDaTrava(
   }
 }
 
+// --------------------------------------------------------- renovação em voo
+
+/**
+ * Quanto uma renovação pode ficar no ar antes de soltar quem espera por ela.
+ * Mesma ordem da espera da trava (ESPERA_MAXIMA_MS, 8 s). O pedido NÃO é
+ * abortado: só deixa de segurar a fila do supabase-js.
+ */
+export const PRAZO_PARA_SOLTAR_RENOVACAO_MS = 8_000;
+
+/** Marca para as outras abas: renovação solta por prazo e ainda no ar. */
+export const CHAVE_DA_MARCA_EM_VOO = "aceleriq-auth-renovacao-em-voo";
+/** Validade da marca (se a aba que renovava fechar, as outras voltam a renovar). */
+export const VALIDADE_DA_MARCA_MS = 60_000;
+/** Folga mínima do access token para responder com ele sem ir ao servidor. */
+const FOLGA_DO_TOKEN_MS = 10_000;
+
+type Voo = { token: string; desde: number; fim: Promise<void>; soltou: boolean };
+let vooAtual: Voo | null = null;
+
+/** Token velho -> par novo que a renovação devolveu (neste navegador). */
+const trocados = new Map<string, SessaoGuardada>();
+const MAXIMO_DE_TROCAS = 20;
+
+function registrarTroca(velho: string, nova: SessaoGuardada): void {
+  if (!velho || !nova.refresh_token || velho === nova.refresh_token) return;
+  trocados.delete(velho);
+  trocados.set(velho, nova);
+  while (trocados.size > MAXIMO_DE_TROCAS) trocados.delete(trocados.keys().next().value as string);
+}
+
+export function tokenJaFoiTrocado(token: string | null | undefined): boolean {
+  return !!token && trocados.has(token);
+}
+
+/** Par mais novo da corrente de trocas que começa em `token`. */
+function sessaoQueSubstituiu(token: string): SessaoGuardada | null {
+  let atual = trocados.get(token) || null;
+  for (let passos = 0; atual?.refresh_token && trocados.has(atual.refresh_token) && passos < MAXIMO_DE_TROCAS; passos++) {
+    atual = trocados.get(atual.refresh_token) || atual;
+  }
+  return atual;
+}
+
+function refreshTokenDoValor(valor: string): string {
+  try {
+    const v = JSON.parse(valor) as { refresh_token?: unknown };
+    return typeof v?.refresh_token === "string" ? v.refresh_token : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Impressão curta do token (a marca entre abas não guarda o token). */
+function impressao(token: string): string {
+  let h = 5381;
+  for (let i = 0; i < token.length; i++) h = ((h << 5) + h + token.charCodeAt(i)) | 0;
+  return `${(h >>> 0).toString(36)}.${token.length}`;
+}
+
+function localStorageOuNada(): Storage | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function marcarParaOutrasAbas(token: string): void {
+  try {
+    localStorageOuNada()?.setItem(CHAVE_DA_MARCA_EM_VOO, JSON.stringify({ impressao: impressao(token), ate: Date.now() + VALIDADE_DA_MARCA_MS }));
+  } catch {
+    // sem localStorage: só a proteção desta aba
+  }
+}
+
+function limparMarca(token: string): void {
+  try {
+    const ls = localStorageOuNada();
+    const marca = ls?.getItem(CHAVE_DA_MARCA_EM_VOO);
+    if (marca && (JSON.parse(marca) as { impressao?: string }).impressao === impressao(token)) ls?.removeItem(CHAVE_DA_MARCA_EM_VOO);
+  } catch {
+    // idem
+  }
+}
+
+/** Outra aba soltou a trava com uma renovação deste mesmo token ainda no ar? */
+export function outraAbaRenovando(token: string): boolean {
+  try {
+    const marca = localStorageOuNada()?.getItem(CHAVE_DA_MARCA_EM_VOO);
+    if (!marca) return false;
+    const m = JSON.parse(marca) as { impressao?: string; ate?: number };
+    return m.impressao === impressao(token) && typeof m.ate === "number" && m.ate > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+/** Há uma renovação no ar neste navegador agora? */
+export function haRenovacaoEmVoo(): boolean {
+  return !!vooAtual;
+}
+
+/** Só para testes: esquece a renovação em voo (o pedido em si segue como estiver). */
+export function esquecerRenovacaoEmVooParaTeste(): void {
+  vooAtual = null;
+  trocados.clear();
+  try {
+    localStorageOuNada()?.removeItem(CHAVE_DA_MARCA_EM_VOO);
+  } catch {
+    // idem
+  }
+}
+
+async function gravarSeAindaForOVelho(storage: PreviewAuthStorage | null | undefined, chave: string, velho: string, nova: SessaoGuardada): Promise<void> {
+  const fonte = storage || localStorageOuNada();
+  if (!fonte || !chave) return;
+  try {
+    const atual = await lerSessaoGuardada(fonte, chave);
+    // Só troca se o gravado ainda é o token que foi enviado. Sem sessão (saiu)
+    // ou com outro token (outra aba renovou), não mexe.
+    if (atual?.refresh_token === velho) await fonte.setItem(chave, JSON.stringify(nova));
+  } catch {
+    // a próxima renovação do supabase-js recebe o par novo de qualquer jeito (sessaoQueSubstituiu)
+  }
+}
+
+/**
+ * Enquanto outra renovação está no ar: nada de segundo pedido. Se o access
+ * token gravado ainda vale, devolve a sessão gravada (sem rede) para o
+ * supabase-js soltar a fila e o envio seguir com ela. Senão, falha como rede
+ * (o supabase-js mantém a sessão e tenta de novo depois).
+ */
+async function responderSemRede(storage: PreviewAuthStorage | null | undefined, chave: string): Promise<Response> {
+  const atual = await lerSessaoGuardada(storage, chave);
+  if (atual?.access_token && sessaoEstaViva(atual) && !tokenJaFoiTrocado(atual.refresh_token) && tokenAindaVale(atual, FOLGA_DO_TOKEN_MS)) {
+    return respostaComSessao(atual);
+  }
+  throw new TypeError("Failed to fetch: renovação anterior ainda no ar; tenta de novo depois");
+}
+
+export type PedidoDeRenovacao = {
+  token: string;
+  /** Manda o POST de verdade (sem prazo e sem sinal de abort). */
+  mandar: (token: string) => Promise<Response>;
+  storage?: PreviewAuthStorage | null;
+  chave: string;
+  /** Prazo para soltar quem espera; 0 ou menos = espera a resposta. */
+  soltarEmMs?: number;
+};
+
+/**
+ * Renovação sem duplicar e sem prender a aba:
+ *  - token recusado: resposta local de token morto;
+ *  - token já trocado neste navegador: devolve o par novo, sem rede;
+ *  - outra renovação no ar (esta aba): espera ela até o prazo e decide de
+ *    novo; passou do prazo, responde sem rede (responderSemRede);
+ *  - outra aba soltou a trava com este token no ar: responde sem rede;
+ *  - senão manda. Se passar do prazo, solta quem espera com falha de rede e
+ *    o pedido continua; quando a resposta chegar, grava o par novo (se o
+ *    storage ainda tiver o token velho) e registra a troca.
+ */
+export async function renovarSemDuplicar(p: PedidoDeRenovacao): Promise<Response> {
+  const prazo = p.soltarEmMs ?? PRAZO_PARA_SOLTAR_RENOVACAO_MS;
+  for (;;) {
+    if (tokenEstaMorto(p.token)) return respostaDeTokenMorto();
+    const nova = sessaoQueSubstituiu(p.token);
+    if (nova) return respostaComSessao(nova);
+    const voo = vooAtual;
+    if (voo) {
+      const restante = prazo > 0 ? voo.desde + prazo - Date.now() : Infinity;
+      if (restante > 0) {
+        let relogio: ReturnType<typeof setTimeout> | undefined;
+        const terminou = await Promise.race([
+          voo.fim.then(() => true),
+          new Promise<boolean>((ok) => {
+            if (restante !== Infinity) relogio = setTimeout(() => ok(false), restante);
+          }),
+        ]);
+        if (relogio) clearTimeout(relogio);
+        if (terminou) continue;
+      }
+      return responderSemRede(p.storage, p.chave);
+    }
+    if (outraAbaRenovando(p.token)) return responderSemRede(p.storage, p.chave);
+    return enviarUmaRenovacao(p, prazo);
+  }
+}
+
+function enviarUmaRenovacao(p: PedidoDeRenovacao, prazo: number): Promise<Response> {
+  let terminar: () => void = () => undefined;
+  const voo: Voo = { token: p.token, desde: Date.now(), fim: new Promise<void>((ok) => (terminar = ok)), soltou: false };
+  vooAtual = voo;
+  const pedido = Promise.resolve()
+    .then(() => p.mandar(p.token))
+    .then(async (resposta) => {
+      await observarRespostaDeRenovacao(p.token, resposta);
+      if (resposta.ok) {
+        const nova = await sessaoDaResposta(resposta);
+        if (nova) {
+          registrarTroca(p.token, nova);
+          if (voo.soltou) await gravarSeAindaForOVelho(p.storage, p.chave, p.token, nova);
+        }
+      }
+      return resposta;
+    })
+    .finally(() => {
+      if (vooAtual === voo) vooAtual = null;
+      if (voo.soltou) limparMarca(p.token);
+      terminar();
+    });
+  if (!(prazo > 0)) return pedido;
+  return new Promise<Response>((ok, falha) => {
+    const relogio = setTimeout(() => {
+      voo.soltou = true;
+      marcarParaOutrasAbas(p.token);
+      console.warn("[Auth] renovação no ar há mais que o prazo; segue em segundo plano e a aba usa o token que ainda vale.");
+      falha(new TypeError("Failed to fetch: renovação demorando; segue em segundo plano"));
+    }, prazo);
+    pedido.then(
+      (r) => {
+        clearTimeout(relogio);
+        ok(r);
+      },
+      (e) => {
+        clearTimeout(relogio);
+        falha(e);
+      },
+    );
+  });
+}
+
 // ----------------------------------------------------------- sessão guardada
 
 export type SessaoGuardada = {
@@ -266,23 +515,36 @@ export function tokenAindaVale(sessao: SessaoGuardada | null | undefined, folgaM
 }
 
 /**
- * Storage do login com uma proteção: depois de um "refresh_token_not_found",
- * o supabase-js apaga a sessão guardada. Se o que está gravado já é OUTRO
- * token, vivo (outra aba renovou antes), apagar derrubaria todas as abas por
- * causa de um token velho. Nesse caso o pedido de apagar é ignorado.
- * Fora dessa janela (saída normal, botão sair) o storage apaga como sempre.
+ * Storage do login com duas proteções:
+ *  - depois de um "refresh_token_not_found", o supabase-js apaga a sessão
+ *    guardada (com autoRefreshToken, duas vezes seguidas). Se o que está
+ *    gravado já é OUTRO token, vivo (outra aba renovou antes), apagar
+ *    derrubaria todas as abas por causa de um token velho. Enquanto a janela
+ *    (JANELA_DA_PROTECAO_MS) valer, todos esses pedidos são ignorados. Apaga de
+ *    verdade se o gravado for o próprio token morto, se a janela passou ou se
+ *    for saída de propósito (esquecerTokensMortos, botão sair);
+ *  - nunca volta a gravar um refresh token que este navegador já viu ser
+ *    trocado por um novo (resposta atrasada de uma renovação solta por prazo).
  */
 export function protegerSessaoGuardada(storage: PreviewAuthStorage | undefined): PreviewAuthStorage | undefined {
   if (!storage) return storage;
   const protegido: PreviewAuthStorage = {
     getItem: (chave) => storage.getItem(chave),
-    setItem: (chave, valor) => storage.setItem(chave, valor),
+    setItem: (chave, valor) => {
+      if (/-auth-token$/.test(chave) && tokenJaFoiTrocado(refreshTokenDoValor(valor))) {
+        console.warn("[Auth] gravação de token já trocado ignorada; o par novo continua no storage.");
+        return;
+      }
+      return storage.setItem(chave, valor);
+    },
     removeItem: async (chave) => {
       const morte = ultimaMorte;
       if (morte && /-auth-token$/.test(chave) && Date.now() - morte.quando < JANELA_DA_PROTECAO_MS) {
         const atual = await lerSessaoGuardada(storage, chave);
         if (atual?.refresh_token && atual.refresh_token !== morte.token && sessaoEstaViva(atual)) {
-          ultimaMorte = null;
+          // NÃO zera ultimaMorte: o supabase-js pede para apagar de novo logo em
+          // seguida (_callRefreshToken e depois _recoverAndRefresh). Todas as
+          // remoções da janela são ignoradas enquanto o gravado for outro e vivo.
           console.warn("[Auth] token recusado era velho; outra aba já gravou um novo. Sessão mantida.");
           return;
         }

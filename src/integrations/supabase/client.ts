@@ -24,6 +24,6 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     // Trava entre abas: nunca prende o envio (26/09) e nunca renova sem trava (14/11). Ver travaDoLogin.ts.
     lock: criarTravaDoLogin(ESPERA_MAXIMA_MS, armazenamentoDoLogin),
   },
-  // Prazo nas chamadas de login, menos na renovação do token (fetchComPrazo.ts, 14/11).
-  global: { fetch: criarFetchComPrazo() },
+  // Prazo nas chamadas de login; a renovação não é abortada, mas solta a fila se pendurar (fetchComPrazo.ts, 14/11).
+  global: { fetch: criarFetchComPrazo(undefined, undefined, { storage: armazenamentoDoLogin }) },
 });
