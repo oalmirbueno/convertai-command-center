@@ -193,5 +193,9 @@ describe("página no padrão das referências", () => {
     const bloco = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
     expect(bloco).toContain("transition: opacity 500ms ease");
     expect(/\.vd-rev[^}]*opacity:\s*1/.test(bloco)).toBe(false);
+    // Sem a marca no <html>, a regra global do painel deixa toda transição com 0,01 ms.
+    expect(pagina).toContain('classList.add("venda-com-movimento")');
+    expect(pagina).toContain('classList.remove("venda-com-movimento")');
+    expect(ler("src/index.css")).toContain("html:not(.venda-com-movimento) *");
   });
 });
