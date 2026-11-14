@@ -183,11 +183,12 @@ async function erroDaFuncao(error: any, funcao: FuncaoDaMesa): Promise<ErroDaMes
   return new ErroDaMesa("falha_interna", mensagemDoCodigo("falha_interna", {}, funcao));
 }
 
-/** Chama uma função da Mesa e devolve o corpo; erro vira ErroDaMesa. */
-export async function chamarFuncao<T = any>(funcao: FuncaoDaMesa, corpo: Record<string, unknown>): Promise<T> {
-  // Marca escolhida na casca (Acerbi ou CME): vai como marca_id; cliente sem marca, corpo igual.
-  const { data, error } = await supabase.functions.invoke(funcao, { body: corpoComMarca(funcao, corpo) });
-  if (error) throw await erroDaFuncao(error, funcao);
+/**
+ * O corpo que a função devolveu vira o resultado ou o ErroDaMesa (campo `error`), com o aviso da rota de
+ * reserva. Vale para a resposta direta e para o corpo guardado de uma ação em segundo plano
+ * (src/lib/mesa/segundoPlano.ts): o mesmo código de erro, a mesma frase, os mesmos detalhes.
+ */
+export function corpoOuErro<T = unknown>(funcao: FuncaoDaMesa, data: unknown): T {
   if (data && typeof data === "object" && typeof (data as any).error === "string") {
     const codigo = String((data as any).error);
     throw new ErroDaMesa(codigo, mensagemDoCodigo(codigo, data as any, funcao), data as any);
@@ -204,6 +205,14 @@ export async function chamarFuncao<T = any>(funcao: FuncaoDaMesa, corpo: Record<
     );
   }
   return data as T;
+}
+
+/** Chama uma função da Mesa e devolve o corpo; erro vira ErroDaMesa. */
+export async function chamarFuncao<T = any>(funcao: FuncaoDaMesa, corpo: Record<string, unknown>): Promise<T> {
+  // Marca escolhida na casca (Acerbi ou CME): vai como marca_id; cliente sem marca, corpo igual.
+  const { data, error } = await supabase.functions.invoke(funcao, { body: corpoComMarca(funcao, corpo) });
+  if (error) throw await erroDaFuncao(error, funcao);
+  return corpoOuErro<T>(funcao, data);
 }
 
 /** Converte qualquer erro (de RPC, de storage, da função) em frase. */

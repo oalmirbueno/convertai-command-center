@@ -372,7 +372,10 @@ describe("Estúdio", () => {
   });
 
   it("contagem de lâminas com arte só olha a direção atual", () => {
-    expect(estudio).toContain("const laminasComArte = cardsDaDirecao.length - semImagem.length;");
+    // 14/11/2026: a mesma conta (direção atual menos as sem imagem), agora dentro do progresso que só avança
+    // (releitura atrasada do trabalho não recua a contagem; regra em andamentoEstavel.ts).
+    expect(estudio).toContain("const laminasComArte = useProgressoQueSoAvanca(");
+    expect(estudio).toContain("    cardsDaDirecao.length - semImagem.length,\n    cardsDaDirecao.length,\n");
     expect(estudio).toContain("laminasFeitas={laminasComArte}");
     expect(estudio).not.toContain("ultimas.size / cardsDaDirecao.length");
   });

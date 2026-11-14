@@ -536,6 +536,9 @@ describe("o andamento da geração é um indicador só por lâmina", () => {
     expect(estudio).not.toContain("Cronometro");
     expect(estudio).not.toContain("gerando ${");
     // O cronômetro não recomeça entre as etapas (gerando -> conferindo).
-    expect(estudio).toContain('const desde = antes && antes.etapa !== "fila" && etapa !== "fila" ? antes.desde : Date.now();');
+    // 14/11/2026: a regra saiu para desdeDaEtapa (andamentoEstavel.ts): além de não recomeçar entre etapas,
+    // não recomeça quando o servidor já conhece o início nem na nova tentativa depois de um erro.
+    expect(estudio).toContain("const desde = desdeDaEtapa({ antes: a[ordem], etapa, servidor, retomada: retomadas.current[ordem] || null, agora: Date.now() });");
+    expect(ler("src/components/mesa/andamentoEstavel.ts")).toContain('if (o.antes && o.antes.etapa !== "fila") return o.antes.desde;');
   });
 });

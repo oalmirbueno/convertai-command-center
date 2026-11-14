@@ -38,14 +38,29 @@ export function trabalhoEntregue(t: Trabalho | null | undefined): boolean {
   return t.status === "entregue" || !!(entrega && Array.isArray(entrega.file_ids) && entrega.file_ids.length);
 }
 
+/** Status "gerando" sem nenhuma gravação no trabalho há mais que isto não é geração em andamento. */
+export const GERANDO_SEM_SINAL_MS = 10 * 60_000;
+
+/**
+ * O trabalho está gerando de verdade? 14/11/2026: até aqui o status "gerando" ficava para sempre no trabalho com
+ * lâmina faltando (33 assim), e a tela mostrava "gerando" e relia a cada 8 s sem fim. A função passou a tirar o
+ * status quando o lote acaba; para os trabalhos antigos, "gerando" só vale com gravação recente (toda lâmina
+ * gerada renova o atualizado_em; a trava de um passo é de 7 minutos).
+ */
+export function gerandoDeVerdade(t: Pick<Trabalho, "status" | "atualizado_em"> | null | undefined, agora = Date.now()): boolean {
+  if (!t || t.status !== "gerando") return false;
+  const lido = t.atualizado_em ? Date.parse(t.atualizado_em) : NaN;
+  return !isFinite(lido) || agora - lido <= GERANDO_SEM_SINAL_MS;
+}
+
 /** Situação do criativo: o andamento local (lote) vale mais que o trabalho gravado. */
-export function situacaoDoTrabalho(t: Trabalho | null | undefined, local?: EtapaDoLote | null): SituacaoDoCriativo {
+export function situacaoDoTrabalho(t: Trabalho | null | undefined, local?: EtapaDoLote | null, agora = Date.now()): SituacaoDoCriativo {
   if (local === "gerando" || local === "fila") return "gerando";
   if (local === "conferindo") return "conferindo";
   if (local === "corrigindo") return "corrigindo";
   if (!t) return "sem_arte";
   if (trabalhoEntregue(t)) return "entregue";
-  if (t.status === "gerando") return "gerando";
+  if (gerandoDeVerdade(t, agora)) return "gerando";
   const cards = (t.direcao && t.direcao.cards) || [];
   if (cards.length && laminasSemArte(t).length === 0) return "pronto";
   return "sem_arte";

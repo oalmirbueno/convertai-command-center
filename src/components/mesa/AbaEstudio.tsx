@@ -113,6 +113,9 @@ import AgendarDoEstudio from "./AgendarDoEstudio";
 import { entregarComModo, entregarVarias, prontaParaEntregar, resumoDoLote, type ModoDeEntrega, type ResultadoDaEntrega } from "@/lib/mesa/entregaComOpcoes";
 import PedidoDoCliente from "./PedidoDoCliente";
 import { erroDoItem, useFilaDoTrabalho } from "@/lib/mesa/filaDeGeracao";
+// 14/11/2026: ajuste, conferência e correção em segundo plano (a tela acompanha pelo banco) e progresso que só avança.
+import { chamarEmSegundoPlano, usePedidosEmSegundoPlano } from "@/lib/mesa/segundoPlano";
+import { desdeDaEtapa, useProgressoQueSoAvanca, type RetomadaDaLamina } from "./andamentoEstavel";
 // Frente T2: sem tipografia no kit da marca aberta, a geração fica bloqueada (não inventa).
 import EstudioSemTipografia, { TEXTO_SEM_TIPOGRAFIA } from "./EstudioSemTipografia";
 import { useSemTipografia } from "@/lib/mesa/tipografiaDoCliente";
@@ -519,7 +522,14 @@ export function DetalheDoItem({
     aoMudar: atualizar,
     aoFalhar: (i) => avisarErro(erroDoItem(i), `Lâmina ${i.ordem} não foi gerada`),
   });
-  const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...andamentoLocal };
+  /**
+   * 14/11/2026: ajuste, conferência e correção pedidos em segundo plano ficam registrados no trabalho; o
+   * andamento deles vem do banco (com o início do pedido) e sobrevive a fechar e reabrir a tela.
+   */
+  const pedidos = usePedidosEmSegundoPlano(trabalho?.id, atualizar);
+  const andamento: Record<number, AndamentoDaLamina> = { ...fila.andamento, ...pedidos.andamento, ...andamentoLocal };
+  // Início da tentativa que falhou, por lâmina: a nova tentativa continua o cronômetro (andamentoEstavel.ts).
+  const retomadas = useRef<Record<number, RetomadaDaLamina>>({});
 
   const diretor = padraoPara(catalogo, "diretor_arte");
   // 23/10 (dono): seletores por escopo, lembrados por cliente. A copy do conteúdo escreve a direção (texto exato e
@@ -558,20 +568,31 @@ export function DetalheDoItem({
     parteDaConferenciaDoJev(),
   ];
 
-  /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
+  /**
+   * Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas, nem quando o
+   * servidor já conhece o início (fila ou pedido em segundo plano), nem na nova tentativa logo depois de um erro.
+   */
   const marcar = (ordem: number, etapa: EtapaDaLamina, detalhe?: string) =>
     setAndamento((a) => {
-      const antes = a[ordem];
-      const desde = antes && antes.etapa !== "fila" && etapa !== "fila" ? antes.desde : Date.now();
+      const daFila = fila.andamento[ordem];
+      const servidor = daFila && daFila.etapa !== "fila" ? daFila.desde : pedidos.andamento[ordem] ? pedidos.andamento[ordem].desde : null;
+      const desde = desdeDaEtapa({ antes: a[ordem], etapa, servidor, retomada: retomadas.current[ordem] || null, agora: Date.now() });
       return { ...a, [ordem]: { etapa, desde, detalhe } };
     });
-  const soltar = (ordem: number) => setAndamento((a) => semOrdem(a, ordem));
+  /** A lâmina fica livre. `comErro`: guarda o início para a nova tentativa não zerar o cronômetro. */
+  const soltar = (ordem: number, comErro = false) =>
+    setAndamento((a) => {
+      const antes = a[ordem];
+      if (comErro && antes && antes.etapa !== "fila") retomadas.current[ordem] = { desde: antes.desde, em: Date.now() };
+      else if (!comErro) delete retomadas.current[ordem];
+      return semOrdem(a, ordem);
+    });
 
   /** Conferência de uma lâmina; é a última etapa: no fim a lâmina fica livre. */
   const conferir = async (trabalhoId: string, ordem: number) => {
     marcar(ordem, "conferindo");
     try {
-      return await chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
+      return await chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
     } finally {
       soltar(ordem);
       atualizar();
@@ -588,9 +609,9 @@ export function DetalheDoItem({
    */
   const conferirDepois = async (trabalhoId: string, ordem: number, comecarCorrigindo: DecisaoDeAutocorrecao | null = null): Promise<number> => {
     const r = await conferirECorrigir({
-      conferir: () => chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem }),
+      conferir: () => chamarEmSegundoPlano<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem }),
       corrigir: (pedidoDaEquipe) =>
-        chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalhoId, ordem, pedido_da_equipe: pedidoDaEquipe || undefined }),
+        chamarEmSegundoPlano<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalhoId, ordem, pedido_da_equipe: pedidoDaEquipe || undefined }),
       corrigirSozinho,
       comecarCorrigindo,
       aoMudarEtapa: (etapa, detalhe) => {
@@ -678,7 +699,7 @@ export function DetalheDoItem({
       if (g && typeof g.aviso_da_acao === "string" && g.aviso_da_acao) toast.warning(avisoDaPeca(`Lâmina ${ordem} gerada com aviso`), { description: g.aviso_da_acao, duration: 12000 });
       return (custoDaResposta(g) || 0) + custoFundo;
     } catch (e) {
-      soltar(ordem);
+      soltar(ordem, true);
       throw e;
     }
   };
@@ -692,7 +713,7 @@ export function DetalheDoItem({
     try {
       return await conferirDepois(trabalhoId, ordem);
     } catch (e) {
-      soltar(ordem);
+      soltar(ordem, true);
       avisarErro(e, `Lâmina ${ordem} pronta, mas a conferência falhou`);
       return 0;
     }
@@ -715,7 +736,14 @@ export function DetalheDoItem({
   const semImagem = cardsDaDirecao.filter((c) => !ultimas.has(c.ordem));
   // Lâminas da direção ATUAL com arte. ultimas.size contava também versões de
   // ordens que saíram (nova direção com menos lâminas): "7 de 5 com arte".
-  const laminasComArte = cardsDaDirecao.length - semImagem.length;
+  // 14/11/2026: a contagem mostrada não recua por releitura atrasada do trabalho (andamentoEstavel.ts); as
+  // decisões (o que falta gerar, se está tudo pronto) seguem na leitura real, logo abaixo.
+  const laminasComArte = useProgressoQueSoAvanca(
+    `${trabalho?.id || ""}:${cardsDaDirecao.map((c) => c.ordem).join(",")}`,
+    cardsDaDirecao.length - semImagem.length,
+    cardsDaDirecao.length,
+    trabalho?.atualizado_em,
+  );
   const filaDeGeracao = semImagem.length ? semImagem : cardsDaDirecao;
   const todosComImagem = cardsDaDirecao.length > 0 && semImagem.length === 0;
   const algoGerando = emLote || Object.keys(andamento).length > 0;
@@ -890,7 +918,9 @@ export function DetalheDoItem({
     marcar(ordem, "ajustando");
     let custo = 0;
     try {
-      const a = await chamarFuncao<any>("estudio-arte", {
+      // 14/11/2026: o ajuste roda em segundo plano na função (202 na hora) e a tela acompanha pelo banco. Antes a
+      // tela esperava o corpo da resposta e a função morta por limite de CPU virava "a função parou no meio".
+      const a = await chamarEmSegundoPlano<any>("estudio-arte", {
         acao: "ajustar_card",
         trabalho_id: trabalho.id,
         ordem,
@@ -907,7 +937,7 @@ export function DetalheDoItem({
       // Frente FS: ajuste feito, mas algo no caminho falhou e mudou a arte (fica também na lâmina).
       if (a && typeof a.aviso_da_acao === "string" && a.aviso_da_acao) toast.warning(`Lâmina ${ordem} ajustada com aviso`, { description: a.aviso_da_acao, duration: 12000 });
     } catch (e) {
-      soltar(ordem);
+      soltar(ordem, true);
       throw e;
     }
     const custoConferencia = await conferirSemDerrubar(trabalho.id, ordem);
@@ -2001,7 +2031,7 @@ export function DetalheDoItem({
   const executarPassoDoPlano: ExecutorDoPasso = async (p) => {
     if (!trabalho) throw new Error("Abra o trabalho antes.");
     if (p.operacao === "ajustar_texto" && p.ordem) {
-      const r = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_texto", trabalho_id: trabalho.id, ordem: p.ordem });
+      const r = await chamarEmSegundoPlano<any>("estudio-arte", { acao: "ajustar_texto", trabalho_id: trabalho.id, ordem: p.ordem });
       atualizar();
       const c = await conferirSemDerrubar(trabalho.id, p.ordem);
       atualizar();
