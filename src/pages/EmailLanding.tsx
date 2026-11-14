@@ -264,24 +264,27 @@ export default function EmailLanding() {
             </div>
 
             <div className="el-pessoa el-entra" style={{ animationDelay: "180ms" }}>
+              {/* Os dois avisos ficam acima da cabeça, fora da pessoa, e entram uma vez só. */}
+              <div className="el-pessoa-avisos" aria-hidden="true">
+                <div className="el-flutua-1 el-aviso">
+                  <span className="el-aviso-icone">
+                    <Mail size={18} strokeWidth={TRACO} />
+                  </span>
+                  <div>
+                    <strong>marina@suaempresa.com.br</strong>
+                    <span>Proposta comercial enviada</span>
+                  </div>
+                  <time>agora</time>
+                </div>
+                <div className="el-flutua-2 el-selo-ok">
+                  <i>
+                    <Check size={15} strokeWidth={3} />
+                  </i>
+                  Entregue na caixa de entrada
+                </div>
+              </div>
               <div className="el-pessoa-luz" aria-hidden="true" />
               <img className="el-pessoa-foto" src={fotoDaDona} width={900} height={958} alt="Dona de empresa sorrindo com o celular na mão" />
-              <div className="el-flutua-1 el-aviso" aria-hidden="true">
-                <span className="el-aviso-icone">
-                  <Mail size={18} strokeWidth={TRACO} />
-                </span>
-                <div>
-                  <strong>marina@suaempresa.com.br</strong>
-                  <span>Proposta comercial enviada</span>
-                </div>
-                <time>agora</time>
-              </div>
-              <div className="el-flutua-2 el-selo-ok" aria-hidden="true">
-                <i>
-                  <Check size={15} strokeWidth={3} />
-                </i>
-                Entregue na caixa de entrada
-              </div>
             </div>
           </div>
         </section>
