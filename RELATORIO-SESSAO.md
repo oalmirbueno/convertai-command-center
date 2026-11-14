@@ -53,7 +53,7 @@ O Codex (gpt-6-astra) revisou `d7204a5` e barrou o merge por dois P1. Os dois fo
   - quando passa de 8 s no ar (`PRAZO_PARA_SOLTAR_RENOVACAO_MS`, a mesma ordem de `ESPERA_MAXIMA_MS`), quem espera é solto com `TypeError: Failed to fetch`, que o SDK trata como retryable;
   - o retry do SDK, 200 ms depois, não manda outro POST. Se o access token gravado ainda vale (com folga de 10 s), recebe a sessão gravada sem ir à rede, e o SDK solta a fila. Se não vale, recebe falha de rede de novo e o SDK tenta mais tarde. Sem isso, só a falha de rede deixaria o SDK repetindo com backoff por uns 20 s dentro da fila, e o `getSession` perto do vencimento terminaria sem sessão;
   - o pedido segue em segundo plano. Quando a resposta chega, o par novo é gravado, mas só se o storage ainda tiver o token enviado (se a pessoa saiu ou outra aba renovou, não mexe). O token velho fica registrado como trocado: um pedido atrasado com ele recebe o par novo sem rede, e o storage nunca volta a gravá-lo;
-  - nunca saem duas renovações juntas deste navegador. Na mesma aba, um segundo pedido espera o primeiro (até o prazo) e decide de novo. Entre abas, quem solta por prazo deixa uma marca no `localStorage` (`aceleriq-auth-renovacao-em-voo`, só com uma impressão curta do token e validade de 60 s). Outra aba com o mesmo token não renova enquanto a marca vale;
+  - nunca saem duas renovações juntas deste navegador. Na mesma aba, um segundo pedido espera o primeiro (até o prazo) e decide de novo. Entre abas, quem solta por prazo deixa uma marca no `localStorage` (`aceleriq-auth-renovacao-em-voo`, só com uma impressão curta do token). A marca é regravada a cada 20 s enquanto o HTTP segue; se a aba fechar, vale por 60 s após o último pulso. Outra aba com o mesmo token não renova enquanto a marca vale;
   - a abertura continua sem refresh forçado e o `signOut` continua com scope local.
 - Testes: SDK real, renovação automática pendurada (o `getSession` sai com o token que vale, 1 POST só, sem sinal de abort; depois a resposta chega e `t1` é gravado); token perto de vencer, em que o próprio `getSession` quer renovar; unitários de prazo, de segundo POST, de token vencido, de marca entre abas e de não regravar token trocado.
 
@@ -61,7 +61,17 @@ O Codex (gpt-6-astra) revisou `d7204a5` e barrou o merge por dois P1. Os dois fo
 
 **Limites conhecidos do ajuste:**
 - Se a resposta atrasada chegar depois de o SDK desistir, o storage recebe o par novo, mas esta aba não dispara `TOKEN_REFRESHED`. O cliente do supabase-js lê o storage a cada chamada e já usa o token novo. O estado do React só se atualiza no próximo evento.
-- Se a aba que renovava fechar com o pedido no ar, as outras abas esperam a marca vencer (até 60 s) antes de renovar aquele token. Enquanto isso, usam o access token que ainda vale.
+- Se a aba que renovava fechar com o pedido no ar, as outras abas esperam a marca vencer (até 60 s após o último pulso) antes de renovar aquele token. Enquanto isso, usam o access token que ainda vale.
+
+## Segundo ajuste da revisão do Codex (14/11, depois de `1215682`)
+
+O Codex revisou `1215682` e confirmou que os dois P1 anteriores foram corrigidos, mas barrou o merge por dois P1 novos (reproduzidos com estados separados por aba):
+
+**P1-3: a marca de 60 s expirava com o HTTP ainda no ar.** Depois de ~68 s, outra aba podia reenviar o mesmo refresh token, mesmo com `navigator.locks` (a primeira aba já tinha solto a trava aos 8 s). Correção: enquanto o pedido segue, a marca é regravada a cada 20 s (`INTERVALO_DA_MARCA_MS`). Só some quando a resposta chega ou a aba fecha (aí vale os 60 s do último pulso).
+
+**P1-4: a aba B podia gravar o par velho por cima do novo.** B recebia a sessão `t0` sem rede; A terminava e gravava `t1`; o SDK de B gravava `t0` de novo. A proteção só olhava o mapa `trocados` da própria aba. Correção: ao registrar a troca, grava também uma impressão curta do token velho no `localStorage` (`aceleriq-auth-tokens-trocados`, sem o token em si, validade de 10 min). Qualquer aba recusa gravar um token já trocado.
+
+Testes unitários cobrem os dois casos. O P2 sem `navigator.locks` continua residual.
 
 ## O que muda (só front e testes)
 

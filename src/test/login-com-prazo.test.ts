@@ -4,15 +4,20 @@ import { resolve } from "node:path";
 import { criarFetchComPrazo } from "@/integrations/supabase/fetchComPrazo";
 import {
   CHAVE_DA_MARCA_EM_VOO,
+  CHAVE_DOS_TROCADOS,
   JANELA_DA_PROTECAO_MS,
   PRAZO_PARA_SOLTAR_RENOVACAO_MS,
+  VALIDADE_DA_MARCA_MS,
   ehPedidoDeRenovacao,
+  esquecerMapaDeTrocasParaTeste,
   esquecerRenovacaoEmVooParaTeste,
   esquecerTokensMortos,
   haRenovacaoEmVoo,
+  outraAbaRenovando,
   protegerSessaoGuardada,
   registrarTokenMorto,
   tokenEstaMorto,
+  tokenJaFoiTrocado,
 } from "@/integrations/supabase/renovacaoSegura";
 
 const CHAVE_PADRAO = "sb-x-auth-token";
@@ -162,6 +167,68 @@ describe("renovação do token não é cancelada (14/11: 'context canceled' derr
     // Token diferente do marcado segue normal.
     await f(RENOVAR, corpo("r9"));
     expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it("marca em voo é renovada enquanto o HTTP segue: depois de 68 s outra aba ainda não manda POST", async () => {
+    vi.useFakeTimers();
+    const agora = Math.floor(Date.now() / 1000);
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: agora + 600, user: { id: "u1" } }));
+    const base = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    const f = criarFetchComPrazo(base, 30);
+    const primeira = f(RENOVAR, corpo("r1")).catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(PRAZO_PARA_SOLTAR_RENOVACAO_MS + 10);
+    expect(await primeira).toBeInstanceOf(TypeError);
+    const ateInicial = JSON.parse(localStorage.getItem(CHAVE_DA_MARCA_EM_VOO) || "{}").ate as number;
+    expect(ateInicial).toBeGreaterThan(Date.now());
+
+    await vi.advanceTimersByTimeAsync(VALIDADE_DA_MARCA_MS + 8_000);
+    expect(outraAbaRenovando("r1")).toBe(true);
+    const marca = localStorage.getItem(CHAVE_DA_MARCA_EM_VOO);
+    expect(JSON.parse(marca || "{}").ate).toBeGreaterThan(Date.now());
+    expect(JSON.parse(marca || "{}").ate).toBeGreaterThan(ateInicial);
+
+    esquecerRenovacaoEmVooParaTeste();
+    localStorage.setItem(CHAVE_DA_MARCA_EM_VOO, marca!);
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify({ access_token: "a1", refresh_token: "r1", expires_at: Math.floor(Date.now() / 1000) + 600, user: { id: "u1" } }));
+    const outra = criarFetchComPrazo(vi.fn(async () => new Response("{}", { status: 500 })) as unknown as typeof fetch);
+    const r = await outra(RENOVAR, corpo("r1"));
+    expect((await r.json()).access_token).toBe("a1");
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it("aba B não sobrescreve com o par velho depois que A gravou o novo (lista compartilhada)", async () => {
+    vi.useFakeTimers();
+    const agora = Math.floor(Date.now() / 1000);
+    const velha = { access_token: "a1", refresh_token: "r1", expires_at: agora + 100, user: { id: "u1" } };
+    localStorage.setItem(CHAVE_PADRAO, JSON.stringify(velha));
+    let responder: (r: Response) => void = () => undefined;
+    const base = vi.fn(() => new Promise<Response>((ok) => (responder = ok))) as unknown as typeof fetch;
+    const f = criarFetchComPrazo(base, 30);
+    const primeira = f(RENOVAR, corpo("r1")).catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(PRAZO_PARA_SOLTAR_RENOVACAO_MS + 10);
+    expect(await primeira).toBeInstanceOf(TypeError);
+
+    // Aba B recebe a sessão velha sem rede e o SDK tentaria gravá-la depois.
+    const sintetica = await f(RENOVAR, corpo("r1"));
+    expect((await sintetica.json()).refresh_token).toBe("r1");
+
+    responder(new Response(JSON.stringify({ access_token: "a2", refresh_token: "r2", expires_in: 3600, user: { id: "u1" } }), { status: 200 }));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r2");
+    expect(tokenJaFoiTrocado("r1")).toBe(true);
+
+    // Outra aba: mapa local vazio, só a lista compartilhada.
+    esquecerMapaDeTrocasParaTeste();
+    expect(localStorage.getItem(CHAVE_DOS_TROCADOS)).toBeTruthy();
+    expect(tokenJaFoiTrocado("r1")).toBe(true);
+
+    const storageB = protegerSessaoGuardada({
+      getItem: (k: string) => localStorage.getItem(k),
+      setItem: (k: string, v: string) => localStorage.setItem(k, v),
+      removeItem: (k: string) => void localStorage.removeItem(k),
+    })!;
+    storageB.setItem(CHAVE_PADRAO, JSON.stringify(velha));
+    expect(JSON.parse(localStorage.getItem(CHAVE_PADRAO) || "{}").refresh_token).toBe("r2");
   });
 
   it("o mesmo vale para /oauth/token com grant_type=refresh_token", () => {

@@ -260,6 +260,12 @@ export const PRAZO_PARA_SOLTAR_RENOVACAO_MS = 8_000;
 export const CHAVE_DA_MARCA_EM_VOO = "aceleriq-auth-renovacao-em-voo";
 /** Validade da marca (se a aba que renovava fechar, as outras voltam a renovar). */
 export const VALIDADE_DA_MARCA_MS = 60_000;
+/** Enquanto o HTTP segue no ar, a marca é regravada neste intervalo para não expirar. */
+export const INTERVALO_DA_MARCA_MS = 20_000;
+/** Impressões de tokens já trocados, compartilhadas entre abas (nunca o token em si). */
+export const CHAVE_DOS_TROCADOS = "aceleriq-auth-tokens-trocados";
+/** Depois disso, a impressão some; se a aba morreu, as outras voltam a poder gravar. */
+export const VALIDADE_DO_TROCADO_MS = 10 * 60 * 1000;
 /** Folga mínima do access token para responder com ele sem ir ao servidor. */
 const FOLGA_DO_TOKEN_MS = 10_000;
 
@@ -275,10 +281,14 @@ function registrarTroca(velho: string, nova: SessaoGuardada): void {
   trocados.delete(velho);
   trocados.set(velho, nova);
   while (trocados.size > MAXIMO_DE_TROCAS) trocados.delete(trocados.keys().next().value as string);
+  registrarTrocaCompartilhada(velho);
 }
 
 export function tokenJaFoiTrocado(token: string | null | undefined): boolean {
-  return !!token && trocados.has(token);
+  if (!token) return false;
+  if (trocados.has(token)) return true;
+  const imp = impressao(token);
+  return lerTrocadosCompartilhados().some((item) => item.impressao === imp);
 }
 
 /** Par mais novo da corrente de trocas que começa em `token`. */
@@ -322,7 +332,24 @@ function marcarParaOutrasAbas(token: string): void {
   }
 }
 
+let pulsoDaMarca: ReturnType<typeof setInterval> | null = null;
+
+function pararPulsoDaMarca(): void {
+  if (pulsoDaMarca) {
+    clearInterval(pulsoDaMarca);
+    pulsoDaMarca = null;
+  }
+}
+
+/** Regrava a marca enquanto o HTTP segue, para ela não expirar aos 60 s com o pedido ainda no ar. */
+function iniciarPulsoDaMarca(token: string): void {
+  pararPulsoDaMarca();
+  marcarParaOutrasAbas(token);
+  pulsoDaMarca = setInterval(() => marcarParaOutrasAbas(token), INTERVALO_DA_MARCA_MS);
+}
+
 function limparMarca(token: string): void {
+  pararPulsoDaMarca();
   try {
     const ls = localStorageOuNada();
     const marca = ls?.getItem(CHAVE_DA_MARCA_EM_VOO);
@@ -330,6 +357,42 @@ function limparMarca(token: string): void {
   } catch {
     // idem
   }
+}
+
+type ItemTrocado = { impressao: string; ate: number };
+
+function lerTrocadosCompartilhados(): ItemTrocado[] {
+  try {
+    const bruto = localStorageOuNada()?.getItem(CHAVE_DOS_TROCADOS);
+    if (!bruto) return [];
+    const v = JSON.parse(bruto) as { itens?: { impressao?: unknown; ate?: unknown }[] };
+    const agora = Date.now();
+    return (Array.isArray(v?.itens) ? v.itens : []).filter(
+      (item): item is ItemTrocado =>
+        !!item && typeof item.impressao === "string" && typeof item.ate === "number" && item.ate > agora,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function registrarTrocaCompartilhada(velho: string): void {
+  try {
+    const ls = localStorageOuNada();
+    if (!ls || !velho) return;
+    const imp = impressao(velho);
+    const itens = lerTrocadosCompartilhados().filter((item) => item.impressao !== imp);
+    itens.push({ impressao: imp, ate: Date.now() + VALIDADE_DO_TROCADO_MS });
+    while (itens.length > MAXIMO_DE_TROCAS) itens.shift();
+    ls.setItem(CHAVE_DOS_TROCADOS, JSON.stringify({ itens }));
+  } catch {
+    // sem localStorage: só o mapa desta aba
+  }
+}
+
+/** Só para testes: esquece o mapa desta aba, mas deixa a lista compartilhada (simula outra aba). */
+export function esquecerMapaDeTrocasParaTeste(): void {
+  trocados.clear();
 }
 
 /** Outra aba soltou a trava com uma renovação deste mesmo token ainda no ar? */
@@ -351,10 +414,13 @@ export function haRenovacaoEmVoo(): boolean {
 
 /** Só para testes: esquece a renovação em voo (o pedido em si segue como estiver). */
 export function esquecerRenovacaoEmVooParaTeste(): void {
+  pararPulsoDaMarca();
   vooAtual = null;
   trocados.clear();
   try {
-    localStorageOuNada()?.removeItem(CHAVE_DA_MARCA_EM_VOO);
+    const ls = localStorageOuNada();
+    ls?.removeItem(CHAVE_DA_MARCA_EM_VOO);
+    ls?.removeItem(CHAVE_DOS_TROCADOS);
   } catch {
     // idem
   }
@@ -461,7 +527,7 @@ function enviarUmaRenovacao(p: PedidoDeRenovacao, prazo: number): Promise<Respon
   return new Promise<Response>((ok, falha) => {
     const relogio = setTimeout(() => {
       voo.soltou = true;
-      marcarParaOutrasAbas(p.token);
+      iniciarPulsoDaMarca(p.token);
       console.warn("[Auth] renovação no ar há mais que o prazo; segue em segundo plano e a aba usa o token que ainda vale.");
       falha(new TypeError("Failed to fetch: renovação demorando; segue em segundo plano"));
     }, prazo);
@@ -524,7 +590,9 @@ export function tokenAindaVale(sessao: SessaoGuardada | null | undefined, folgaM
  *    verdade se o gravado for o próprio token morto, se a janela passou ou se
  *    for saída de propósito (esquecerTokensMortos, botão sair);
  *  - nunca volta a gravar um refresh token que este navegador já viu ser
- *    trocado por um novo (resposta atrasada de uma renovação solta por prazo).
+ *    trocado por um novo (resposta atrasada ou outra aba gravou o par novo).
+ *    A lista de impressões é compartilhada no localStorage, para a aba que
+ *    recebeu a sessão antiga sem rede não sobrescrever o par novo.
  */
 export function protegerSessaoGuardada(storage: PreviewAuthStorage | undefined): PreviewAuthStorage | undefined {
   if (!storage) return storage;
