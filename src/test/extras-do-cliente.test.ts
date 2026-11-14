@@ -6,7 +6,7 @@ import { andamentoDoUnico, conferirExtra, montarParcelas, resumoDosExtras, somar
 // 14/11/2026 (dono): order bumps e upsells por cliente, com entrada livre e o restante parcelado, mensal
 // que começa depois da entrega, comissão em percentual, e tudo no financeiro sem duplicar.
 const ler = (c: string) => readFileSync(resolve(process.cwd(), c), "utf8");
-const MIG = ler("supabase/migrations/20261114120000_extras_do_cliente.sql");
+const MIG = ler("supabase/migrations/20261114190000_extras_do_cliente.sql");
 const TELA = ler("src/components/clientes/ExtrasDoCliente.tsx");
 const soma = (l: { valor: number }[]) => Math.round(l.reduce((s, p) => s + p.valor, 0) * 100) / 100;
 
@@ -84,7 +84,7 @@ describe("regras no banco", () => {
     expect(MIG.match(/ON CONFLICT \(extra_id, competencia\)/g)?.length).toBe(2);
   });
   it("só o admin cria, edita, inicia, encerra, lança comissão e mexe em cobrança", () => {
-    expect(MIG.match(/PERFORM app_private\.extras_so_admin\(\);/g)?.length).toBe(4);
+    expect(MIG.match(/PERFORM app_private\.extras_so_admin\(\);/g)?.length).toBe(7);
     expect(MIG).toContain("REVOKE ALL ON public.client_extras FROM anon;");
   });
   it("encerrar não apaga o que foi pago", () => {

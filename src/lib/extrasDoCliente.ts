@@ -1,7 +1,7 @@
 /**
  * Extras do cliente (14/11/2026): o que ele comprou além da mensalidade base. Aqui ficam só as contas
  * e os nomes; a tela está em src/components/clientes/ExtrasDoCliente.tsx e as regras de cobrança no
- * banco (supabase/migrations/20261114120000_extras_do_cliente.sql).
+ * banco (supabase/migrations/20261114190000_extras_do_cliente.sql).
  */
 
 export type CobrancaDoExtra = "mensal" | "unico" | "comissao";
