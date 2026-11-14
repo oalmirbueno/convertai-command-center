@@ -482,21 +482,27 @@
   background: linear-gradient(180deg, rgba(4, 9, 6, 0) 0%, #040906 92%);
   pointer-events: none;
 }
+/* Os avisos do herói: acima da cabeça, sem cobrir a pessoa. Entram uma vez e ficam. */
+.el-pessoa-avisos {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0 -5px 6px;
+}
 .el-flutua-1,
 .el-flutua-2 {
-  position: absolute;
-  z-index: 2;
+  margin: 5px;
+  animation: el-entra 900ms var(--el-curva) both;
 }
 .el-flutua-1 {
-  left: 0;
-  bottom: 12%;
-  width: 250px;
-  animation: el-acende 9s var(--el-curva) 0.6s infinite backwards;
+  flex: 0 1 270px;
+  min-width: 0;
+  animation-delay: 700ms;
 }
 .el-flutua-2 {
-  top: 12%;
-  right: 0;
-  animation: el-acende 9s var(--el-curva) 2.2s infinite backwards;
+  animation-delay: 1100ms;
 }
 .el-aviso {
   display: flex;
@@ -594,13 +600,19 @@
   .el-heroi-texto {
     padding-bottom: 150px;
   }
-  .el-flutua-1 {
+  .el-pessoa-avisos {
+    position: absolute;
+    top: 0;
     left: -70px;
-    bottom: 36%;
-    width: 290px;
+    right: -10px;
+    justify-content: space-between;
+    margin: 0;
   }
-  .el-flutua-2 {
-    right: -8px;
+  .el-pessoa-luz {
+    top: 12%;
+  }
+  .el-pessoa-foto {
+    margin-top: 6%;
   }
 }
 
@@ -2124,10 +2136,6 @@
   }
   .el-faixa-trilho {
     animation-duration: 70s;
-  }
-  .el-flutua-1,
-  .el-flutua-2 {
-    animation-name: el-chega-suave;
   }
   .el-anim .el-r {
     transform: translate3d(0, 12px, 0);
